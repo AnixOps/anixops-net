@@ -33,6 +33,8 @@ final class TunnelController: ObservableObject {
     @Published private(set) var updatingGroups: Set<String> = []
     /// The saved tunnel's mode: by rules, everything through the selected node, or everything direct.
     @Published private(set) var mode = ProxyMode.global
+    /// DNS servers, hosts and per-domain servers, from `dns-settings.json`; the saved profile carries a copy.
+    @Published private(set) var dns = DnsSettings()
 
     private var manager: NETunnelProviderManager?
     private var statusObserver: NSObjectProtocol?
@@ -68,6 +70,9 @@ final class TunnelController: ObservableObject {
             message = nil
         } catch {
             message = String(localized: "无法读取 VPN 配置")
+        }
+        if let saved = try? DnsSettings.load(from: DnsSettings.defaultURL) {
+            dns = saved
         }
         switch Result(catching: { try NodeSecretStore.value(account: SubscriptionGroups.keychainAccount) }) {
         case let .success(.some(value)):
@@ -613,6 +618,9 @@ final class TunnelController: ObservableObject {
         }
         let savedMode: ProxyMode = mode == .direct ? .direct : (routed ? .rule : .global)
         providerConfiguration[TunnelProfileKeys.mode] = savedMode.rawValue
+        if let value = try? dns.profileValue() {
+            providerConfiguration[TunnelProfileKeys.dns] = value
+        }
         let library = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)) ?? MitmPluginLibrary()
         if let plugins = try? MitmPluginLibrary.profileValue(library.activeTexts), !library.activeTexts.isEmpty {
             providerConfiguration[TunnelProfileKeys.mitmPlugins] = plugins
@@ -686,6 +694,48 @@ final class TunnelController: ObservableObject {
             try await manager.loadFromPreferences()
         } catch {
             message = String(localized: "保存插件到 VPN 配置失败")
+            refresh()
+            return false
+        }
+        refresh()
+        if isConnected {
+            restart()
+        }
+        return true
+    }
+
+    /// Saves the DNS settings and puts them in the saved profile. A running tunnel reconnects to use them.
+    /// Returns whether they were saved.
+    @discardableResult
+    func applyDns(_ next: DnsSettings) async -> Bool {
+        do {
+            try next.save(to: DnsSettings.defaultURL)
+        } catch {
+            message = String(localized: "无法保存 DNS 设置")
+            return false
+        }
+        dns = next
+        guard let manager, let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol else {
+            // The next import picks them up.
+            return true
+        }
+        var configuration = tunnelProtocol.providerConfiguration ?? [:]
+        let value = try? next.profileValue()
+        guard configuration[TunnelProfileKeys.dns] as? Data != value else {
+            return true
+        }
+        if let value {
+            configuration[TunnelProfileKeys.dns] = value
+        } else {
+            configuration.removeValue(forKey: TunnelProfileKeys.dns)
+        }
+        tunnelProtocol.providerConfiguration = configuration
+        manager.protocolConfiguration = tunnelProtocol
+        do {
+            try await manager.saveToPreferences()
+            try await manager.loadFromPreferences()
+        } catch {
+            message = String(localized: "保存 DNS 设置到 VPN 配置失败")
             refresh()
             return false
         }

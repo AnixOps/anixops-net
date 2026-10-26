@@ -1,7 +1,7 @@
 import NetworkCoreBridge
 import SwiftUI
 
-/// Rules: the proxy mode (rules, global or direct) and the subscription's policy groups. Only subscriptions that
+/// Rules: the proxy mode (rules, global or direct), the subscription's policy groups and the DNS settings. Only subscriptions that
 /// carry rules and groups (Clash, Surge or Loon profiles) have groups to show here.
 struct RulesView: View {
     @ObservedObject var tunnel: TunnelController
@@ -15,6 +15,7 @@ struct RulesView: View {
                 } else if tunnel.nodeName != nil {
                     List {
                         modeSection(hasRules: false)
+                        DnsSection(tunnel: tunnel)
                     }
                     .scrollContentBackground(.hidden)
                 } else {
@@ -51,6 +52,8 @@ struct RulesView: View {
             .disabled(tunnel.mode != .rule)
 
             RuleSetsSection(tunnel: tunnel, rules: routing.rules, defined: routing.ruleSets)
+
+            DnsSection(tunnel: tunnel)
         }
         .scrollContentBackground(.hidden)
     }

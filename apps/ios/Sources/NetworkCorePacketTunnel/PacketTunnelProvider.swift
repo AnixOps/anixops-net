@@ -72,8 +72,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
         // The subscription's rules and groups go in whatever the mode, so the app can switch modes without a restart.
         let mode = ProxyMode.saved(in: tunnelProtocol.providerConfiguration)
-        config = withSubscriptionRules(config).withMode(mode)
+        let dns = DnsSettings.fromProfileValue(tunnelProtocol.providerConfiguration?[TunnelProfileKeys.dns] as? Data)
+        config = withSubscriptionRules(config).withMode(mode).withDns(dns)
         events.record("mode \(mode.rawValue)")
+        if let dns {
+            events.record("dns \(dns.servers.count) servers, \(dns.rules.count) rules, \(dns.hosts.count) hosts")
+        }
         events.record("profile loaded, mtu \(interface.mtu), \(interface.addresses.count) addresses, \(interface.includedRoutes.count) routes, \(interface.dnsServers.count) dns servers")
 
         let session: EmbeddedRuntimeSession
