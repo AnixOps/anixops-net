@@ -180,6 +180,30 @@ final class SubscriptionGroupTests: XCTestCase {
         XCTAssertEqual(groups.activeLibrary()?.nodes.count, 64)
     }
 
+    func testLinkedNodesKeepTheirViaUnderThePrefix() throws {
+        let routed = SubscriptionGroup(report: try report(routedReport), url: "https://rules.example/s", response: .init(), at: start)
+        let lines = SubscriptionGroup(report: try report("""
+        {"nodes":[
+        {"id":"line","name":"iWAN","protocol":"iwan","server":"203.0.113.10","port":4567,
+         "outbound":{"type":"iwan","server":"203.0.113.10","port":4567,"username":"u","password":"p"}},
+        {"id":"land","name":"US","protocol":"trojan","server":"land.example","port":443,
+         "outbound":{"type":"trojan","server":"land.example","port":443,"password":"pl","via":"line"}},
+        {"id":"lost","name":"","protocol":"trojan","server":"x.example","port":443,
+         "outbound":{"type":"trojan","server":"x.example","port":443,"password":"px","via":"bad id"}},
+        {"id":"behind-lost","name":"","protocol":"trojan","server":"y.example","port":443,
+         "outbound":{"type":"trojan","server":"y.example","port":443,"password":"py","via":"lost"}}],
+        "unsupported":[]}
+        """), url: "https://lines.example/s", response: .init(), at: start)
+        let groups = SubscriptionGroups(groups: [routed, lines], activeID: routed.id)
+
+        let library = try XCTUnwrap(groups.activeLibrary())
+        // A node behind a node the engine cannot take is left out too, rather than connecting directly.
+        XCTAssertEqual(library.nodes.map(\.id), ["a", "s1.line", "s1.land"])
+        let runtime = try XCTUnwrap(library.runtimeRouting())
+        XCTAssertEqual(runtime.outbounds["s1.land"]?["via"], .string("s1.line"))
+        XCTAssertNil(runtime.outbounds["s1.line"]?["via"])
+    }
+
     func testMigrationTurnsTheOldLibraryIntoTheActiveGroup() throws {
         let old = NodeLibrary(report: try report(plainReport), subscriptionURL: "https://sub.example/x", keeping: "b", at: start)
         let groups = SubscriptionGroups.migrating(old, name: "Imported")

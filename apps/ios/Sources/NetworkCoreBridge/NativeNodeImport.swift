@@ -89,6 +89,50 @@ public struct NativeImportReport: Decodable, Equatable {
     }
 }
 
+extension NativeImportReport.Node {
+    /// The node id this node connects through (its outbound's `via`), when it names one.
+    public var via: String? {
+        if case let .string(id) = outbound["via"] {
+            return id
+        }
+        return nil
+    }
+
+    /// The same node under another id, with its `via` renamed the same way.
+    func renamed(_ rename: (String) -> String) -> NativeImportReport.Node {
+        var outbound = outbound
+        if let via {
+            outbound["via"] = .string(rename(via))
+        }
+        return NativeImportReport.Node(id: rename(id), name: name, protocol: self.protocol, server: server, port: port,
+                                       outbound: outbound)
+    }
+
+    /// The node ready to run on its own (one-node mode, delay tests): a `via` that names another node becomes
+    /// that node's outbound inline, since the engine resolves node ids only inside `routing.outbounds`. A `via`
+    /// naming a node that is not in `nodes`, or a loop, is left as it is, so the engine refuses the node instead of
+    /// letting it connect directly.
+    public func standalone(among nodes: [NativeImportReport.Node]) -> NativeImportReport.Node {
+        NativeImportReport.Node(id: id, name: name, protocol: self.protocol, server: server, port: port,
+                                outbound: Self.inlined(outbound, among: nodes, seen: [id]))
+    }
+
+    private static func inlined(
+        _ outbound: [String: JSONValue],
+        among nodes: [NativeImportReport.Node],
+        seen: Set<String>
+    ) -> [String: JSONValue] {
+        guard case let .string(id) = outbound["via"], !seen.contains(id),
+              let next = nodes.first(where: { $0.id == id })
+        else {
+            return outbound
+        }
+        var outbound = outbound
+        outbound["via"] = .object(inlined(next.outbound, among: nodes, seen: seen.union([id])))
+        return outbound
+    }
+}
+
 /// Why the Rust importer returned no runnable node.
 public enum NativeImportFailure: Error, Equatable {
     /// The text is not a format the importer knows.
@@ -113,10 +157,10 @@ extension TunnelProfile {
                 reasons: Array(Set(report.unsupported.map(\.reason))).sorted()
             )
         }
-        return try TunnelProfile(node: node, profileID: profileID)
+        return try TunnelProfile(node: node.standalone(among: report.nodes), profileID: profileID)
     }
 
-    /// The profile that runs one imported node.
+    /// The profile that runs one imported node; a node with a `via` must be `standalone(among:)` first.
     public init(node: NativeImportReport.Node, profileID: String) throws {
         // Shadowsocks and VLESS + REALITY land in their own cases, so their secrets are split as for pasted links;
         // everything else becomes a native outbound.

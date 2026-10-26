@@ -304,7 +304,7 @@ public struct SubscriptionGroups: Codable, Equatable {
         var linked: [LinkedGroup] = []
         for (index, group) in groups.enumerated() where group.id != active.id {
             let prefix = "s\(index)."
-            let nodes = group.library.nodes.filter { Self.isOutboundID(prefix + $0.id) }
+            let nodes = Self.linkedNodes(of: group.library.nodes, prefix: prefix)
             guard !nodes.isEmpty,
                   nodeCount + nodes.count <= Self.maxRoutedOutbounds,
                   groupCount + 1 <= Self.maxPolicyGroups
@@ -346,18 +346,7 @@ public struct SubscriptionGroups: Codable, Equatable {
             guard let group = self.group(id: link.groupID) else {
                 continue
             }
-            let members = group.library.nodes
-                .filter { Self.isOutboundID(link.prefix + $0.id) }
-                .map { node in
-                    NativeImportReport.Node(
-                        id: link.prefix + node.id,
-                        name: node.name,
-                        protocol: node.protocol,
-                        server: node.server,
-                        port: node.port,
-                        outbound: node.outbound
-                    )
-                }
+            let members = Self.linkedNodes(of: group.library.nodes, prefix: link.prefix)
             nodes += members
             extraGroups.append(NativeImportReport.Routing.Group(
                 id: link.policyID,
@@ -394,6 +383,20 @@ public struct SubscriptionGroups: Codable, Equatable {
     // Same limits as the engine's routing section (crates/node-import).
     static let maxRoutedOutbounds = 64
     static let maxPolicyGroups = 64
+
+    /// A linked group's nodes under `prefix + node id`, each `via` renamed to match. A node whose id does not fit
+    /// the engine's rule is left out, and so is every node that connects through a node left out.
+    static func linkedNodes(of nodes: [NativeImportReport.Node], prefix: String) -> [NativeImportReport.Node] {
+        var linked = nodes.map { node in node.renamed { prefix + $0 } }.filter { isOutboundID($0.id) }
+        while true {
+            let ids = Set(linked.map(\.id))
+            let kept = linked.filter { node in node.via.map { ids.contains($0) } ?? true }
+            if kept.count == linked.count {
+                return linked
+            }
+            linked = kept
+        }
+    }
 
     /// The engine's outbound id rule: 1-128 of `[A-Za-z0-9._-]`.
     static func isOutboundID(_ id: String) -> Bool {
