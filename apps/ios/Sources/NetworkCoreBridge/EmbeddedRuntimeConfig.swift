@@ -104,17 +104,61 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         /// Where the global mode sends everything: a group id, a node id or `DIRECT`. The engine defaults to the
         /// first group, otherwise the first node.
         public var global: String?
+        /// The lists `RULE-SET,<name>` rules name; `geosite-<category>` and `geoip-<cc>` back `GEOSITE` and `GEOIP`.
+        public var ruleSets: [String: RuleSet]?
+
+        enum CodingKeys: String, CodingKey {
+            case outbounds
+            case rules
+            case groups
+            case global
+            case ruleSets = "rule_sets"
+        }
 
         public init(
             outbounds: [String: [String: JSONValue]],
             rules: [String],
             groups: [NativeImportReport.Routing.Group],
-            global: String? = nil
+            global: String? = nil,
+            ruleSets: [String: RuleSet]? = nil
         ) {
             self.outbounds = outbounds
             self.rules = rules
             self.groups = groups
             self.global = global
+            self.ruleSets = ruleSets
+        }
+    }
+
+    /// One rule set: inline entries, or a list the engine downloads from `url` every `intervalSecs` (at least 600,
+    /// one day by default) through `via` (a group, node or `DIRECT`, the default).
+    public struct RuleSet: Codable, Equatable {
+        public var domain: [String]?
+        public var domainSuffix: [String]?
+        public var domainKeyword: [String]?
+        public var ipCidr: [String]?
+        public var url: String?
+        /// How a bare domain line of a downloaded list matches: `suffix` (the default) or `domain`.
+        public var format: String?
+        public var intervalSecs: UInt32?
+        public var via: String?
+
+        enum CodingKeys: String, CodingKey {
+            case domain
+            case domainSuffix = "domain_suffix"
+            case domainKeyword = "domain_keyword"
+            case ipCidr = "ip_cidr"
+            case url
+            case format
+            case intervalSecs = "interval_secs"
+            case via
+        }
+
+        public init(url: String, format: String? = nil, intervalSecs: UInt32? = nil, via: String? = nil) {
+            self.url = url
+            self.format = format
+            self.intervalSecs = intervalSecs
+            self.via = via
         }
     }
 

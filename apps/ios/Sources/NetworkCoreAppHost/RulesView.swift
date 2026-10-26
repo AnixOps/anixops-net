@@ -49,6 +49,8 @@ struct RulesView: View {
                 Text("自动选择和故障转移的组由内核按延迟和可用性挑选节点。")
             }
             .disabled(tunnel.mode != .rule)
+
+            RuleSetsSection(tunnel: tunnel, rules: routing.rules, defined: routing.ruleSets)
         }
         .scrollContentBackground(.hidden)
     }
