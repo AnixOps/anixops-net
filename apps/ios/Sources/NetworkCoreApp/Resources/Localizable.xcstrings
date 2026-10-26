@@ -997,12 +997,12 @@
         }
       }
     },
-    "已保存，重新连接后生效。": {
+    "已保存，隧道正在重新连接。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Saved. Reconnect to apply."
+            "value": "Saved. The tunnel is reconnecting."
           }
         }
       }

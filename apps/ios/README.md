@@ -106,8 +106,8 @@ turns on only once the root is trusted. The enabled plugin texts go into the tun
 `TunnelProfileKeys.mitmPlugins`; the extension adds the root from the Keychain and passes both to the runtime as
 the config's `mitm` section, where `mitm_policy::loon_plugin` translates and merges them (see
 `crates/engine-embedded/README.md`). The root key never enters the profile. If the root is missing or the runtime
-refuses the plugins, the tunnel starts without decryption and says why in developer-mode diagnostics. Changes reach
-a running tunnel when it reconnects. Plugin `[Rule]` lines are listed but not applied yet.
+refuses the plugins, the tunnel starts without decryption and says why in developer-mode diagnostics. A change restarts
+a running tunnel, since the extension reads them only at start. Plugin `[Rule]` lines are listed but not applied yet.
 
 Scripts never run on import. The "脚本" section lists each `script-path` of the enabled plugins (relative paths
 resolve against a remote plugin's address; anything that is not `https` cannot be allowed). Allowing one shows its

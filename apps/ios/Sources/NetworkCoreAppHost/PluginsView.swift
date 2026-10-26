@@ -434,7 +434,7 @@ final class PluginsModel: ObservableObject {
         library = next
         scripts = nextScripts
         let changed = await tunnel.applyMitmPlugins(next.activeTexts, scripts: sources)
-        note = changed && tunnel.isConnected ? String(localized: "已保存，重新连接后生效。") : nil
+        note = changed && tunnel.isConnected ? String(localized: "已保存，隧道正在重新连接。") : nil
     }
 
     private static func describe(_ error: Error) -> String {
