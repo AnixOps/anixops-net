@@ -61,6 +61,45 @@ export interface NativeGroupSummary {
   outboundLabels?: string[];
 }
 
+/** Totals since the engine started and the current rates, in bytes and bytes per second. */
+export interface TrafficSnapshot {
+  upload_total: number;
+  download_total: number;
+  upload_rate: number;
+  download_rate: number;
+  active: number;
+}
+
+/** One connection as the engine tracks it. */
+export interface ConnectionSnapshot {
+  id: number;
+  network: "tcp" | "udp";
+  /** The requested domain, or the sniffed TLS SNI or HTTP Host. */
+  host?: string | null;
+  /** The local program that opened it, when the engine looked it up. */
+  process?: string;
+  /** `address:port` or `domain:port` as requested. */
+  destination: string;
+  rule: string;
+  chain: string[];
+  outbound: string;
+  /** Unix milliseconds. */
+  started_at_ms: number;
+  ended_at_ms?: number | null;
+  upload: number;
+  download: number;
+  /** `rejected` or `connect_failed`. */
+  error?: string | null;
+}
+
+export interface ConnectionsSnapshot {
+  traffic: TrafficSnapshot;
+  /** Oldest first. */
+  active: ConnectionSnapshot[];
+  /** Newest first. */
+  closed: ConnectionSnapshot[];
+}
+
 export interface OperationResult {
   message: string;
 }
@@ -122,6 +161,11 @@ export const desktop = {
   switchNode: (nodeId: string) => invoke<OperationResult>("switch_node", { nodeId }),
   selectNativeGroupOutbound: (groupTag: string, outboundTag: string) =>
     invoke<OperationResult>("select_native_group_outbound", { groupTag, outboundTag }),
+  /** Only while this window runs the engine (desktop mode on Windows); rejects otherwise. */
+  traffic: () => invoke<TrafficSnapshot>("runtime_control", { request: { cmd: "traffic" } }),
+  connections: () => invoke<ConnectionsSnapshot>("runtime_control", { request: { cmd: "connections" } }),
+  closeConnection: (id: number) => invoke<{ closed: boolean }>("runtime_control", { request: { cmd: "close_connection", id } }),
+  closeAllConnections: () => invoke<{ closed: number }>("runtime_control", { request: { cmd: "close_all" } }),
   testDelay: (nodeId: string, url: string) =>
     invoke<OperationResult>("test_node_delay", { nodeId, url }),
   selectFastestNode: () => invoke<OperationResult>("select_fastest_node"),

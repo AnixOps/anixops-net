@@ -685,6 +685,14 @@ impl Backend {
         }
     }
 
+    /// Live traffic and connections from the running engine.
+    pub fn runtime_control(
+        &self,
+        request: &serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        self.engine.control(request)
+    }
+
     /// Stops the engine and puts the proxy settings back; called when the window closes.
     pub fn shutdown(&mut self) {
         self.engine.stop();

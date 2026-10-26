@@ -266,6 +266,10 @@ input[type="checkbox"] { width: auto; height: auto; }
 .search svg { position: absolute; top: 10px; left: 10px; color: var(--text3); }
 .search input { padding-left: 32px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.toolbar .segmented { width: 220px; }
+.rate { display: inline-flex; gap: 4px; align-items: center; color: var(--text2); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hero-rate { display: flex; gap: 14px; margin-top: 6px; color: var(--text2); font-size: 12px; font-variant-numeric: tabular-nums; }
+.hero-rate span { display: inline-flex; gap: 4px; align-items: center; }
 .count { margin-left: auto; color: var(--text3); font-size: 12px; font-variant-numeric: tabular-nums; }
 .node-section + .node-section { margin-top: 14px; }
 .node-section-title { display: flex; gap: 8px; align-items: baseline; margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--text2); }

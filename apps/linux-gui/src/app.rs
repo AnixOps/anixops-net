@@ -229,6 +229,14 @@ async fn switch_node(
 }
 
 #[tauri::command]
+async fn runtime_control(
+    state: State<'_, AppState>,
+    request: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    with_backend(&state, move |backend| backend.runtime_control(&request)).await
+}
+
+#[tauri::command]
 async fn test_node_delay(
     state: State<'_, AppState>,
     node_id: String,
@@ -465,6 +473,7 @@ pub fn run() -> Result<(), String> {
             validate_configuration,
             check_profile_runtime,
             switch_node,
+            runtime_control,
             test_node_delay,
             select_fastest_node,
             save_preferences,
