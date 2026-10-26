@@ -781,6 +781,21 @@ impl Backend {
         engine::share_link(node)
     }
 
+    /// The listed nodes, for a batch delay test run outside the lock; `None` for an id no source has.
+    pub fn delay_nodes(&self, ids: &[String]) -> Vec<(String, Option<NodeDescriptor>)> {
+        ids.iter()
+            .map(|id| {
+                let node = self
+                    .nodes
+                    .iter()
+                    .find(|node| node.id == *id)
+                    .or_else(|| self.other_node(id).map(|(_, node)| node))
+                    .cloned();
+                (id.clone(), node)
+            })
+            .collect()
+    }
+
     /// The current nodes, for delay tests run outside the lock.
     pub fn node_list(&self) -> Vec<NodeDescriptor> {
         self.nodes.clone()

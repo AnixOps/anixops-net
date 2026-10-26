@@ -217,4 +217,13 @@ export const english: Record<string, string> = {
   "实时速度": "Live speed",
   "复制 {node} 的分享链接": "Copy the share link of {node}",
   "已复制 {node} 的分享链接": "Copied the share link of {node}",
+  "{node}：{ms} ms": "{node}: {ms} ms",
+  "{node} 测速失败": "Delay test of {node} failed",
+  "{ok} / {total} 个节点有响应": "{ok} of {total} nodes answered",
+  "节点排序": "Sort nodes",
+  "默认顺序": "Default order",
+  "按名称": "By name",
+  "按延迟": "By delay",
+  "全部测速": "Test all",
+  "失败": "Failed",
 };

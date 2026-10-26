@@ -100,6 +100,13 @@ export interface ConnectionsSnapshot {
   closed: ConnectionSnapshot[];
 }
 
+/** One node's result in a batch delay test. */
+export interface NodeDelay {
+  nodeId: string;
+  delayMs?: number | null;
+  error?: string | null;
+}
+
 export interface OperationResult {
   message: string;
 }
@@ -168,6 +175,8 @@ export const desktop = {
   closeAllConnections: () => invoke<{ closed: number }>("runtime_control", { request: { cmd: "close_all" } }),
   testDelay: (nodeId: string, url: string) =>
     invoke<OperationResult>("test_node_delay", { nodeId, url }),
+  /** Tests each node on its own and reports every result; failures do not reject. */
+  testDelays: (nodeIds: string[], url: string) => invoke<NodeDelay[]>("test_node_delays", { nodeIds, url }),
   /** The node's share link, or a Surge line for Snell. */
   shareLink: (nodeId: string) => invoke<string>("node_share_link", { nodeId }),
   selectFastestNode: () => invoke<OperationResult>("select_fastest_node"),
