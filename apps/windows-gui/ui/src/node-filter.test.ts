@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { delayTone, filterNodes, groupNodes, sortNodes } from "./node-filter";
+import { delayLabel, delayTone, filterNodes, groupNodes, sortNodes } from "./node-filter";
 
 const nodes = [
   { id: "a", label: "Tokyo Primary", protocol: "Shadowsocks", selected: true },
@@ -48,5 +48,6 @@ describe("sortNodes", () => {
     expect(delayTone({ nodeId: "b", delayMs: 320 })).toBe("fast");
     expect(delayTone({ nodeId: "b", delayMs: 900 })).toBe("slow");
     expect(delayTone({ nodeId: "c", error: "timed out" })).toBe("failed");
+    expect(delayLabel({ nodeId: "b", delayMs: 320 })).toBe("320 ms");
   });
 });

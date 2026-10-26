@@ -1,4 +1,5 @@
 import type { NodeDelay, NodeSummary } from "./bridge";
+import { t } from "./i18n";
 
 export function filterNodes(nodes: NodeSummary[], query: string, protocol: string): NodeSummary[] {
   const normalizedQuery = query.trim().toLowerCase();
@@ -46,4 +47,10 @@ export function sortNodes(nodes: NodeSummary[], sort: NodeSort, delays: Record<s
 export function delayTone(delay: NodeDelay): "fast" | "slow" | "failed" {
   if (delay.delayMs == null) return "failed";
   return delay.delayMs < 500 ? "fast" : "slow";
+}
+
+/** `123 ms`, or that the test failed. */
+export function delayLabel(delay: NodeDelay): string {
+  if (delay.delayMs == null) return t("失败");
+  return `${delay.delayMs} ms`;
 }

@@ -2,7 +2,7 @@ import { Activity, Check, CloudDownload, Globe, Pencil, RefreshCw, Search, Share
 import { useEffect, useState } from "react";
 import { desktop, NodeDelay, NodeSummary, RuntimeSnapshot, SubscriptionSummary } from "../bridge";
 import { protocolAbbreviation } from "../labels";
-import { delayTone, filterNodes, groupNodes, NodeSort, sortNodes } from "../node-filter";
+import { delayLabel, delayTone, filterNodes, groupNodes, NodeSort, sortNodes } from "../node-filter";
 import { Card, EmptyState, IconButton, Run, StatusPill } from "../ui";
 import { t } from "../i18n";
 import { formatBytes, formatDay, updateIntervalChoices, updateIntervalLabel, usedFraction } from "../subscription-format";
@@ -74,7 +74,7 @@ export function ProxiesPage({ snapshot, nodes, busy, run }: {
                       <span className="node-name">{node.label}</span>
                       <span className="node-meta">
                         <span className="protocol-badge">{protocolAbbreviation(node.protocol)}</span>
-                        {delays[node.id] && <span className={`delay ${delayTone(delays[node.id])}`} title={delays[node.id].error ?? undefined}>{delays[node.id].delayMs != null ? `${delays[node.id].delayMs} ms` : t("失败")}</span>}
+                        {delays[node.id] && <span className={`delay ${delayTone(delays[node.id])}`} title={delays[node.id].error ?? undefined}>{delayLabel(delays[node.id])}</span>}
                         {node.selected && <span className="current-dot" aria-label={t("当前节点")} />}
                       </span>
                     </button>
