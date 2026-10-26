@@ -17,6 +17,11 @@ struct NetworkCoreMacApp: App {
                 .preferredColorScheme(appearance.colorScheme)
                 .task {
                     await tunnel.load()
+                    // Subscription groups update on their own while the app runs; a Mac app stays open for long.
+                    while !Task.isCancelled {
+                        await tunnel.refreshDueSubscriptions()
+                        try? await Task.sleep(for: .seconds(15 * 60))
+                    }
                 }
         }
         .defaultSize(width: 980, height: 680)

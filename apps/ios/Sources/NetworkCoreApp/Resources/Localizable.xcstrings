@@ -2546,6 +2546,16 @@
           }
         }
       }
+    },
+    "更新全部订阅": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update All"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -70,11 +70,7 @@ struct MacRootView: View {
         case .proxies:
             MacProxiesPage(tunnel: tunnel, state: state)
         case .rules:
-            MacPlaceholderPage(
-                systemImage: "arrow.triangle.branch",
-                title: "规则与分流",
-                message: "按域名和 IP 分流、规则集和规则测试会放在这里。当前版本按节点配置转发全部流量。"
-            )
+            MacRulesPage(tunnel: tunnel)
         case .extensions:
             MacPlaceholderPage(
                 systemImage: "puzzlepiece.extension",

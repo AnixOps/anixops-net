@@ -143,6 +143,7 @@ targets:
       - path: Sources/NetworkCoreAppHost/TunnelController.swift
       - path: Sources/NetworkCoreAppHost/NativeNodeImporterFFI.swift
       - path: Sources/NetworkCoreAppHost/NodeDelayFFI.swift
+      - path: Sources/NetworkCoreAppHost/SubscriptionGroupViews.swift
     info:
       path: Generated/NetworkCoreMac-Info.plist
       properties:
