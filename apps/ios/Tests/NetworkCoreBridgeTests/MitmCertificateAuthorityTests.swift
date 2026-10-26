@@ -26,6 +26,15 @@ final class MitmCertificateAuthorityTests: XCTestCase {
         XCTAssertEqual(authority.trustState(anchors: [other.certificate]), .notTrusted)
     }
 
+    func testRefusedProbeCarriesTheSystemReason() throws {
+        let authority = try MitmCertificateAuthority.generate()
+
+        XCTAssertNil(authority.evaluateTrust(anchors: [authority.certificate]).failureReason)
+        let refused = authority.evaluateTrust(anchors: [MitmCertificateAuthority.generate().certificate])
+        XCTAssertEqual(refused.state, .notTrusted)
+        XCTAssertFalse(refused.failureReason?.isEmpty ?? true)
+    }
+
     func testRootIsNotTrustedBySystemStoreUntilTheUserEnablesIt() throws {
         let authority = try MitmCertificateAuthority.generate()
 

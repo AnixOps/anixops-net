@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 /// The plugin part of the "扩展" tab: the HTTPS decryption switch, local Loon plugin import and the list.
 struct PluginsSection: View {
     @Environment(\.brand) private var brand
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject var tunnel: TunnelController
     @ObservedObject var model: PluginsModel
     @State private var importingFile = false
@@ -16,7 +17,6 @@ struct PluginsSection: View {
                 get: { model.library.isEnabled },
                 set: { enabled in Task { await model.setMasterEnabled(enabled, tunnel: tunnel) } }
             ))
-            .disabled(!model.library.isEnabled && model.trustState != .trusted)
             .listRowBackground(brand.surface)
 
             ForEach(model.library.plugins) { plugin in
@@ -55,6 +55,16 @@ struct PluginsSection: View {
         }
         .task {
             model.load()
+        }
+        .onAppear {
+            // Coming back from the certificate page.
+            model.refreshTrust()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Returning from Settings is when trust usually changes.
+            if phase == .active {
+                model.refreshTrust()
+            }
         }
     }
 }
@@ -103,7 +113,20 @@ final class PluginsModel: ObservableObject {
         } catch {
             note = String(localized: "读取插件列表失败")
         }
+        refreshTrust()
+    }
+
+    /// The trust state was read once when the tab opened, so trusting the root in Settings left the switch
+    /// locked. Re-read it whenever the section shows again or the app comes back to the foreground.
+    func refreshTrust() {
         trustState = (try? MitmCertificateStore.load())?.trustState() ?? .notGenerated
+        if trustState == .trusted, note == Self.untrustedNote {
+            note = nil
+        }
+    }
+
+    private static var untrustedNote: String {
+        String(localized: "证书尚未被信任，请先完成证书设置。")
     }
 
     var footer: String {
@@ -120,9 +143,9 @@ final class PluginsModel: ObservableObject {
 
     func setMasterEnabled(_ enabled: Bool, tunnel: TunnelController) async {
         if enabled {
-            trustState = (try? MitmCertificateStore.load())?.trustState() ?? .notGenerated
+            refreshTrust()
             guard trustState == .trusted else {
-                note = String(localized: "证书尚未被信任，请先完成证书设置。")
+                note = Self.untrustedNote
                 return
             }
         }
