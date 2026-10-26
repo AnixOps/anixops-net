@@ -12,6 +12,9 @@ struct ProxiesView: View {
     @State private var renaming: SubscriptionGroup?
     @State private var newName = ""
     @State private var deleting: SubscriptionGroup?
+    @State private var query = ""
+    @AppStorage("proxies.sort") private var sort = NodeSort.original
+    @State private var editing: EditingNode?
 
     var body: some View {
         NavigationStack {
@@ -42,6 +45,20 @@ struct ProxiesView: View {
                         .accessibilityLabel("测试延迟")
                     }
                 }
+                if !tunnel.subscriptions.groups.isEmpty {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            Picker("排序", selection: $sort) {
+                                Text("订阅顺序").tag(NodeSort.original)
+                                Text("按名称").tag(NodeSort.name)
+                                Text("按延迟").tag(NodeSort.latency)
+                            }
+                        } label: {
+                            Image(systemName: "arrow.up.arrow.down")
+                        }
+                        .accessibilityLabel("排序")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         importing = true
@@ -66,6 +83,13 @@ struct ProxiesView: View {
                     }
                     renaming = nil
                 }
+            }
+            .sheet(item: $editing) { item in
+                NodeEditSheet(node: item.node) { edited in
+                    await tunnel.updateNode(edited, inGroup: item.groupID)
+                }
+                .environment(\.brand, brand)
+                .tint(brand.primary)
             }
             .confirmationDialog(
                 "删除订阅组“\(deleting?.name ?? "")”？",
@@ -100,7 +124,10 @@ struct ProxiesView: View {
                 }
             }
             ForEach(tunnel.subscriptions.groups) { group in
-                groupSection(group)
+                let nodes = shownNodes(group)
+                if filter.isEmpty || !nodes.isEmpty {
+                    groupSection(group, nodes: nodes)
+                }
             }
             Section {
             } footer: {
@@ -113,21 +140,25 @@ struct ProxiesView: View {
             }
         }
         .scrollContentBackground(.hidden)
+        .searchable(text: $query, prompt: Text("筛选节点，/正则/ 匹配名称"))
         .refreshable {
             await tunnel.refreshAllSubscriptions()
         }
     }
 
     @ViewBuilder
-    private func groupSection(_ group: SubscriptionGroup) -> some View {
+    private func groupSection(_ group: SubscriptionGroup, nodes: [NativeImportReport.Node]) -> some View {
         let isActive = tunnel.subscriptions.activeID == group.id
         let routed = isActive && group.library.routesByRules
         Section {
             SubscriptionGroupSummary(group: group, updating: tunnel.updatingGroups.contains(group.id))
                 .listRowBackground(brand.surface)
-            if !collapsed.contains(group.id) {
-                ForEach(group.library.nodes) { node in
+            if !collapsed.contains(group.id) || !filter.isEmpty {
+                ForEach(nodes) { node in
                     Button {
+                        guard !routed else {
+                            return
+                        }
                         Task {
                             await tunnel.selectNode(node.id, inGroup: group.id)
                         }
@@ -139,8 +170,20 @@ struct ProxiesView: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    .disabled(routed)
+                    // Not `.disabled`: nodes the rules pick stay editable from the menu and swipe actions.
+                    .opacity(routed ? 0.6 : 1)
                     .listRowBackground(brand.surface)
+                    .contextMenu {
+                        nodeMenu(node, in: group)
+                    }
+                    .swipeActions(edge: .trailing) {
+                        Button {
+                            editing = EditingNode(groupID: group.id, node: node)
+                        } label: {
+                            Label("编辑", systemImage: "pencil")
+                        }
+                        .tint(brand.primary)
+                    }
                 }
             }
         } header: {
@@ -172,6 +215,39 @@ struct ProxiesView: View {
                 .accessibilityLabel(collapsed.contains(group.id) ? "展开 \(group.name)" : "收起 \(group.name)")
                 Spacer()
                 groupMenu(group)
+            }
+        }
+    }
+
+    private var filter: NodeFilter {
+        NodeFilter(query)
+    }
+
+    /// A group's nodes in the chosen order, narrowed by the search box.
+    private func shownNodes(_ group: SubscriptionGroup) -> [NativeImportReport.Node] {
+        let sorted = sort.sorted(group.library.nodes) { node in
+            if case let .millis(value)? = tunnel.latencies[TunnelController.latencyKey(group: group.id, node: node.id)] {
+                return value
+            }
+            return nil
+        }
+        return filter.apply(sorted)
+    }
+
+    @ViewBuilder
+    private func nodeMenu(_ node: NativeImportReport.Node, in group: SubscriptionGroup) -> some View {
+        Button {
+            editing = EditingNode(groupID: group.id, node: node)
+        } label: {
+            Label("编辑", systemImage: "pencil")
+        }
+        if group.library.canRemove(node.id) {
+            Button(role: .destructive) {
+                Task {
+                    await tunnel.deleteNode(node.id, inGroup: group.id)
+                }
+            } label: {
+                Label("删除节点", systemImage: "trash")
             }
         }
     }
@@ -267,3 +343,96 @@ struct ProxiesView: View {
     }
 }
 
+
+/// The node an edit sheet is open for.
+private struct EditingNode: Identifiable {
+    let groupID: String
+    let node: NativeImportReport.Node
+
+    var id: String {
+        "\(groupID)\u{1F}\(node.id)"
+    }
+}
+
+/// Edits a node's name, server and port. Credentials and transport settings stay as imported.
+private struct NodeEditSheet: View {
+    let node: NativeImportReport.Node
+    let save: (NativeImportReport.Node) async -> Bool
+    @Environment(\.brand) private var brand
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String
+    @State private var server: String
+    @State private var port: String
+    @State private var error: String?
+    @State private var saving = false
+
+    init(node: NativeImportReport.Node, save: @escaping (NativeImportReport.Node) async -> Bool) {
+        self.node = node
+        self.save = save
+        _name = State(initialValue: node.name)
+        _server = State(initialValue: node.server)
+        _port = State(initialValue: String(node.port))
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("名称", text: $name)
+                    TextField("服务器", text: $server)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                    TextField("端口", text: $port)
+                        .keyboardType(.numberPad)
+                } header: {
+                    Text(ProtocolBadge.spokenName(for: node.protocol))
+                } footer: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if let error {
+                            Label(error, systemImage: "exclamationmark.circle.fill")
+                                .foregroundStyle(brand.danger)
+                        }
+                        Text("密码、密钥和传输设置保持导入时的值。订阅更新后会恢复为订阅里的节点。")
+                    }
+                }
+                .listRowBackground(brand.surface)
+            }
+            .scrollContentBackground(.hidden)
+            .background(brand.bg.ignoresSafeArea())
+            .navigationTitle("编辑节点")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        submit()
+                    }
+                    .disabled(saving)
+                }
+            }
+        }
+    }
+
+    private func submit() {
+        switch NodeEdit.apply(to: node, name: name, server: server, port: port) {
+        case let .failure(failure):
+            error = failure.message
+        case let .success(edited):
+            saving = true
+            Task {
+                let saved = await save(edited)
+                saving = false
+                if saved {
+                    dismiss()
+                } else {
+                    error = String(localized: "保存失败")
+                }
+            }
+        }
+    }
+}
