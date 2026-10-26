@@ -603,8 +603,8 @@ final class TunnelController: ObservableObject {
     }
 
     /// Puts the enabled HTTPS decryption plugins and the scripts the user allowed in them into the saved profile.
-    /// Without a profile there is nothing to update: the next import picks them up. A running tunnel keeps its
-    /// plugins until it reconnects. Returns whether the profile changed.
+    /// Without a profile there is nothing to update: the next import picks them up. The extension reads them only
+    /// at start, so a running tunnel restarts on them. Returns whether the profile changed.
     @discardableResult
     func applyMitmPlugins(_ texts: [String], scripts: [String: String] = [:]) async -> Bool {
         guard let manager,
@@ -648,6 +648,9 @@ final class TunnelController: ObservableObject {
             return false
         }
         refresh()
+        if isConnected {
+            restart()
+        }
         return true
     }
 
