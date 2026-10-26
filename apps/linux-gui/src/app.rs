@@ -13,8 +13,8 @@ use networkcore_linux_gui::backend::engine;
 use networkcore_linux_gui::backend::state::Store;
 use networkcore_linux_gui::backend::system_proxy::Desktop;
 use networkcore_linux_gui::backend::{
-    autostart, format_delay, Backend, GroupSummary, NodeSummary, OperationResult, PreferencesInput,
-    RuntimeSnapshot, SubscriptionSummary, PASTED_LOCATION,
+    autostart, format_delay, Backend, DnsPreset, GroupSummary, NodeSummary, OperationResult,
+    PreferencesInput, RuntimeSnapshot, SubscriptionSummary, PASTED_LOCATION,
 };
 use subscription_meta::ResponseMeta;
 use tauri::{RunEvent, State};
@@ -178,6 +178,15 @@ async fn set_routing_mode(
     let mode = RoutingMode::parse(&mode).ok_or("unknown routing mode")?;
     download_rule_lists(&state, mode, false).await?;
     with_backend(&state, move |backend| backend.set_routing_mode(mode)).await
+}
+
+#[tauri::command]
+async fn set_dns_preset(
+    state: State<'_, AppState>,
+    preset: String,
+) -> Result<OperationResult, String> {
+    let preset = DnsPreset::parse(&preset).ok_or("unknown DNS choice")?;
+    with_backend(&state, move |backend| backend.set_dns_preset(preset)).await
 }
 
 /// Downloads the current mode's public rule lists again; they apply on the next connection.
@@ -529,6 +538,7 @@ pub fn run() -> Result<(), String> {
             restore_network_settings,
             select_native_group_outbound,
             set_routing_mode,
+            set_dns_preset,
             refresh_routing_rules,
             install_service,
             start_service,

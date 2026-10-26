@@ -39,9 +39,13 @@ export interface RuntimeSnapshot {
   darkTheme: boolean;
   runtimeMode: "desktop" | "service";
   routingMode: "bypass_china" | "gfw_list" | "direct" | "return_china" | "rule";
+  /** How the engine resolves names; older backends leave it out. */
+  dnsPreset?: DnsPreset;
   /** The imported profile runs on the embedded engine (Windows). */
   embeddedEngine?: boolean;
 }
+
+export type DnsPreset = "system" | "encrypted" | "split";
 
 export interface NodeSummary {
   id: string;
@@ -213,6 +217,7 @@ export const desktop = {
   stopService: () => invoke<OperationResult>("stop_service"),
   restoreNetworkSettings: () => invoke<OperationResult>("restore_network_settings"),
   setRoutingMode: (mode: RuntimeSnapshot["routingMode"]) => invoke<OperationResult>("set_routing_mode", { mode }),
+  setDnsPreset: (preset: DnsPreset) => invoke<OperationResult>("set_dns_preset", { preset }),
   refreshRoutingRules: () => invoke<OperationResult>("refresh_routing_rules"),
   configureScriptRuntime: (scriptRuntimeJson: string) =>
     invoke<OperationResult>("configure_script_runtime", { scriptRuntimeJson }),

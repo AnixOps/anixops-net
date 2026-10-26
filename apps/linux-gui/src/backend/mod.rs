@@ -15,6 +15,8 @@ use engine_embedded::profile::{self, RoutingMode, RuleList};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+pub use desktop_dns::DnsPreset;
+
 use self::engine::{Engine, OtherSource};
 use self::state::{SavedSource, SavedState, Store};
 use self::system_proxy::Desktop;
@@ -75,6 +77,7 @@ pub struct RuntimeSnapshot {
     pub dark_theme: bool,
     pub runtime_mode: &'static str,
     pub routing_mode: &'static str,
+    pub dns_preset: &'static str,
     /// Always true: the interface then offers the subscription rules mode and explains the engine's DNS.
     pub embedded_engine: bool,
 }
@@ -286,12 +289,13 @@ impl Backend {
                 engine::envelope(&self.nodes, &node.id)?
             }
         };
-        profile::envelope_for_mode(&profile, self.state.routing_mode, |list| {
+        let envelope = profile::envelope_for_mode(&profile, self.state.routing_mode, |list| {
             self.store.read_rule_list(list).ok_or_else(|| {
                 "the routing rules have not been downloaded yet; refresh them on the Rules page"
                     .to_string()
             })
-        })
+        })?;
+        desktop_dns::apply(&envelope, self.state.dns_preset)
     }
 
     /// Public rule lists the routing mode needs: the missing ones, or all of them with `force`. The window
@@ -423,6 +427,7 @@ impl Backend {
             dark_theme: false,
             runtime_mode: "desktop",
             routing_mode: self.state.routing_mode.as_str(),
+            dns_preset: self.state.dns_preset.as_str(),
             embedded_engine: true,
         }
     }
@@ -518,6 +523,18 @@ impl Backend {
         }
         self.save();
         done(format!("Routing mode set to {}", mode.as_str()))
+    }
+
+    /// Switches the DNS choice. A running engine restarts on it.
+    pub fn set_dns_preset(&mut self, preset: DnsPreset) -> Result<OperationResult, String> {
+        let previous = self.state.dns_preset;
+        self.state.dns_preset = preset;
+        if let Err(error) = self.restart_if_running() {
+            self.state.dns_preset = previous;
+            return Err(error);
+        }
+        self.save();
+        done(format!("DNS set to {}", preset.as_str()))
     }
 
     pub fn subscriptions(&self) -> Vec<SubscriptionSummary> {
