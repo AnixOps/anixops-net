@@ -447,12 +447,12 @@
         }
       }
     },
-    "从上到下第一条命中的规则生效。RULE-SET 使用规则页的规则集，例如 geosite-cn。": {
+    "从上到下第一条命中的规则生效。RULE-SET 使用规则页的规则集，例如 geosite-cn；只有单个节点、没有订阅规则时它不会命中。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The first matching rule from the top wins. RULE-SET uses the rule sets on the rules page, such as geosite-cn."
+            "value": "The first matching rule from the top wins. RULE-SET uses the rule sets on the rules page, such as geosite-cn; it never matches with a single node and no subscription rules."
           }
         }
       }

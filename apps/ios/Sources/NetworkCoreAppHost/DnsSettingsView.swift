@@ -233,7 +233,7 @@ struct DnsSettingsView: View {
         } header: {
             Text("按域名选择服务器")
         } footer: {
-            Text("从上到下第一条命中的规则生效。RULE-SET 使用规则页的规则集，例如 geosite-cn。")
+            Text("从上到下第一条命中的规则生效。RULE-SET 使用规则页的规则集，例如 geosite-cn；只有单个节点、没有订阅规则时它不会命中。")
         }
     }
 
