@@ -400,7 +400,9 @@ final class TunnelController: ObservableObject {
     /// HTTP delay test of every node of every group through its own protocol, a few at a time (`NodeDelayFFI`).
     func testLatency() async {
         let nodes = subscriptions.groups.flatMap { group in
-            group.library.nodes.map { (Self.latencyKey(group: group.id, node: $0.id), $0) }
+            group.library.nodes.map { node in
+                (Self.latencyKey(group: group.id, node: node.id), node.standalone(among: group.library.nodes))
+            }
         }
         guard !nodes.isEmpty else {
             return
@@ -524,7 +526,7 @@ final class TunnelController: ObservableObject {
         }
         let profile: TunnelProfile
         do {
-            profile = try TunnelProfile(node: selected, profileID: Self.profileID)
+            profile = try TunnelProfile(node: selected.standalone(among: library.nodes), profileID: Self.profileID)
         } catch {
             message = String(localized: "无法生成隧道配置")
             return false

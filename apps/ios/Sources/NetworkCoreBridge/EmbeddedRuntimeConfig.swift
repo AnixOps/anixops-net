@@ -403,8 +403,10 @@ extension EmbeddedRuntimeConfig.Outbound: Codable {
         let type = try container.decode(String.self, forKey: .type)
         let server = try container.decode(String.self, forKey: .server)
         let port = try container.decode(UInt16.self, forKey: .port)
+        // The dedicated cases have no `via`, so a node that connects through another one stays native.
+        let hasVia = try decoder.container(keyedBy: DynamicCodingKey.self).contains(DynamicCodingKey("via"))
         switch type {
-        case "shadowsocks":
+        case "shadowsocks" where !hasVia:
             self = .shadowsocks(
                 server: server,
                 port: port,
@@ -423,7 +425,7 @@ extension EmbeddedRuntimeConfig.Outbound: Codable {
                 )
             )
         // VLESS over TLS or a transport is a native outbound; only REALITY has its own case.
-        case "vless" where container.contains(.reality):
+        case "vless" where container.contains(.reality) && !hasVia:
             self = .vless(
                 EmbeddedRuntimeConfig.VlessOutbound(
                     server: server,

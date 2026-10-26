@@ -47,6 +47,44 @@ final class NodeLibraryTests: XCTestCase {
         XCTAssertFalse(NodeLibrary.usesUDP("trojan"))
     }
 
+    private let lineReport = """
+    {"nodes":[
+    {"id":"line","name":"iWAN HK","protocol":"iwan","server":"203.0.113.10","port":4567,
+     "outbound":{"type":"iwan","server":"203.0.113.10","port":4567,"username":"u","password":"p"}},
+    {"id":"land","name":"US","protocol":"shadowsocks","server":"land.example","port":8388,
+     "outbound":{"type":"shadowsocks","server":"land.example","port":8388,
+     "method":"2022-blake3-aes-128-gcm","password":"AAECAwQFBgcICQoLDA0ODw==","via":"line"}},
+    {"id":"loop","name":"","protocol":"trojan","server":"l.example","port":443,
+     "outbound":{"type":"trojan","server":"l.example","port":443,"password":"pl","via":"loop"}}],
+    "unsupported":[]}
+    """
+
+    func testANodeBehindALineRunsOnItsOwnWithTheLineInline() throws {
+        let library = NodeLibrary(
+            report: try NativeImportReport.decoded(from: Data(lineReport.utf8)),
+            subscriptionURL: nil,
+            keeping: "land"
+        )
+        let land = try XCTUnwrap(library.selected)
+        XCTAssertEqual(land.via, "line")
+        let line = try XCTUnwrap(library.node(id: "line"))
+        let standalone = land.standalone(among: library.nodes)
+        XCTAssertEqual(standalone.outbound["via"], .object(line.outbound))
+        XCTAssertEqual(line.standalone(among: library.nodes), line)
+
+        // Shadowsocks with a via stays a native outbound, so the via reaches the engine.
+        let profile = try TunnelProfile(node: standalone, profileID: "default")
+        guard case let .native(native) = profile.config.outbound else {
+            return XCTFail("expected a native outbound")
+        }
+        XCTAssertEqual(native.type, "shadowsocks")
+        XCTAssertEqual(native.settings["via"], .object(line.outbound))
+
+        // A loop is left for the engine to refuse rather than dropped.
+        let loop = try XCTUnwrap(library.node(id: "loop"))
+        XCTAssertEqual(loop.standalone(among: library.nodes).outbound["via"], .string("loop"))
+    }
+
     func testKeychainValueRoundTrips() throws {
         let library = NodeLibrary(
             report: try decoded(),
