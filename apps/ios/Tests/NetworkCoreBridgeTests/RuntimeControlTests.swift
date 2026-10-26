@@ -49,3 +49,49 @@ final class RuntimeControlTests: XCTestCase {
         XCTAssertNil(RuntimeControl.decodeTraffic(Data("not json".utf8)))
     }
 }
+
+final class ProxyModeTests: XCTestCase {
+    func testModeRequestsAndAnswers() {
+        XCTAssertEqual(
+            String(decoding: RuntimeControl.setMode(.direct).request, as: UTF8.self),
+            #"{"cmd":"set_mode","mode":"direct"}"#
+        )
+        XCTAssertEqual(
+            String(decoding: RuntimeControl.select(group: "Proxy", member: "hk-1").request, as: UTF8.self),
+            #"{"cmd":"select","group":"Proxy","member":"hk-1"}"#
+        )
+        XCTAssertEqual(RuntimeControl.decode(RuntimeControl.ModeAnswer.self, from: Data(#"{"mode":"global"}"#.utf8))?.mode, .global)
+        XCTAssertNil(RuntimeControl.decode(RuntimeControl.ModeAnswer.self, from: nil))
+        let groups = RuntimeControl.decode(RuntimeControl.Groups.self, from: Data(
+            #"{"groups":[{"id":"Proxy","type":"select","now":"hk-1","members":[{"name":"hk-1","latency_ms":120},{"name":"DIRECT","latency_ms":null}]}]}"#.utf8
+        ))
+        XCTAssertEqual(groups?.groups.first?.now, "hk-1")
+        XCTAssertEqual(groups?.groups.first?.members.map(\.latencyMs), [120, nil])
+    }
+
+    func testSavedModeFallsBackToTheRulesFlag() {
+        XCTAssertEqual(ProxyMode.saved(in: nil), .global)
+        XCTAssertEqual(ProxyMode.saved(in: [TunnelProfileKeys.routing: true]), .rule)
+        XCTAssertEqual(ProxyMode.saved(in: [TunnelProfileKeys.routing: true, TunnelProfileKeys.mode: "direct"]), .direct)
+        XCTAssertEqual(ProxyMode.saved(in: [TunnelProfileKeys.mode: "bogus"]), .global)
+    }
+
+    func testConfigCarriesTheModeAndTheGlobalTarget() throws {
+        let profile = try TunnelProfile(
+            node: try JSONDecoder().decode(NativeImportReport.Node.self, from: Data(
+                #"{"id":"a","name":"A","protocol":"trojan","server":"a.example","port":443,"outbound":{"type":"trojan","server":"a.example","port":443,"password":"p"}}"#.utf8
+            )),
+            profileID: "default"
+        )
+        let direct = try XCTUnwrap(JSONSerialization.jsonObject(with: profile.config.withMode(.direct).encoded()) as? [String: Any])
+        XCTAssertEqual(direct["mode"] as? String, "direct")
+        XCTAssertNotNil(direct["outbound"])
+        XCTAssertNil(try XCTUnwrap(JSONSerialization.jsonObject(with: profile.config.encoded()) as? [String: Any])["mode"])
+        let stored = String(decoding: try profile.config.withMode(.global).withoutSecret().encoded(), as: UTF8.self)
+        XCTAssertFalse(stored.contains("mode"))
+
+        let routing = EmbeddedRuntimeConfig.Routing(outbounds: ["a": [:]], rules: ["FINAL,a"], groups: [], global: "a")
+        let routed = try XCTUnwrap(JSONSerialization.jsonObject(with: profile.config.withRouting(routing).encoded()) as? [String: Any])
+        XCTAssertEqual((routed["routing"] as? [String: Any])?["global"] as? String, "a")
+    }
+}

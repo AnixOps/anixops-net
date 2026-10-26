@@ -1,6 +1,16 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "%@ · 当前": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Current"
+          }
+        }
+      }
+    },
     "%lld ms": {
       "localizations": {
         "en": {
@@ -383,6 +393,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Proxies"
+          }
+        }
+      }
+    },
+    "代理模式": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proxy mode"
           }
         }
       }
@@ -3083,6 +3103,156 @@
           "stringUnit": {
             "state": "translated",
             "value": "Edit node"
+          }
+        }
+      }
+    },
+    "当前节点没有订阅规则，无法按规则分流": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This node has no subscription rules to route by"
+          }
+        }
+      }
+    },
+    "保存模式到 VPN 配置失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't save the mode to the VPN configuration"
+          }
+        }
+      }
+    },
+    "全局": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Global"
+          }
+        }
+      }
+    },
+    "策略组 · %lld 条规则": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Policy groups · %lld rules"
+          }
+        }
+      }
+    },
+    "按订阅规则和策略组分流。连接中切换立即生效，已有连接会重新建立。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Routes by the subscription's rules and policy groups. Switching while connected takes effect at once; open connections reconnect."
+          }
+        }
+      }
+    },
+    "全部流量走代理页选中的节点。连接中切换立即生效，已有连接会重新建立。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sends everything through the node selected on the Proxies page. Switching while connected takes effect at once; open connections reconnect."
+          }
+        }
+      }
+    },
+    "全部流量直连，不经过代理节点。连接中切换立即生效，已有连接会重新建立。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sends everything directly, without a proxy node. Switching while connected takes effect at once; open connections reconnect."
+          }
+        }
+      }
+    },
+    "切换 AnixOps Net 代理模式": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch AnixOps Net proxy mode"
+          }
+        }
+      }
+    },
+    "切换到规则、全局或直连模式。连接中立即生效。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch to rule, global or direct mode. Takes effect at once while connected."
+          }
+        }
+      }
+    },
+    "模式": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mode"
+          }
+        }
+      }
+    },
+    "规则模式": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rule mode"
+          }
+        }
+      }
+    },
+    "全局模式": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Global mode"
+          }
+        }
+      }
+    },
+    "直连模式": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Direct mode"
+          }
+        }
+      }
+    },
+    "在控制中心切换到规则、全局或直连模式。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch to rule, global or direct mode from Control Center."
+          }
+        }
+      }
+    },
+    "切换代理模式": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch proxy mode"
           }
         }
       }

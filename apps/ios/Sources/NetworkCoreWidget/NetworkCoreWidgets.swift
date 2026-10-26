@@ -7,6 +7,7 @@ struct NetworkCoreWidgets: WidgetBundle {
         StatusWidget()
         if #available(iOS 18.0, *) {
             ConnectControl()
+            ProxyModeControl()
         }
     }
 }
@@ -77,5 +78,63 @@ struct ConnectControl: ControlWidget {
         func currentValue() async throws -> Bool {
             await TunnelSnapshot.load().isOn
         }
+    }
+}
+
+/// Control Center button that switches to the mode the user picked when adding it (iOS 18). It shows whether that
+/// mode is the current one.
+@available(iOS 18.0, *)
+struct ProxyModeControl: ControlWidget {
+    static let kind = "io.anixops.net.mode"
+
+    var body: some ControlWidgetConfiguration {
+        AppIntentControlConfiguration(kind: Self.kind, provider: Provider()) { value in
+            ControlWidgetButton(action: SetProxyModeIntent(mode: value.mode)) {
+                Label(value.isCurrent ? String(localized: "\(value.title) · 当前") : value.title, systemImage: value.mode.symbol)
+            }
+            .tint(Brand.iconTeal)
+        }
+        .displayName("代理模式")
+        .description("在控制中心切换到规则、全局或直连模式。")
+        .promptsForUserConfiguration()
+    }
+
+    struct Value: Sendable {
+        let mode: ProxyModeOption
+        let isCurrent: Bool
+
+        var title: String {
+            switch mode {
+            case .rule:
+                return String(localized: "规则模式")
+            case .global:
+                return String(localized: "全局模式")
+            case .direct:
+                return String(localized: "直连模式")
+            }
+        }
+    }
+
+    struct Provider: AppIntentControlValueProvider {
+        func previewValue(configuration: ProxyModeControlConfiguration) -> Value {
+            Value(mode: configuration.mode, isCurrent: false)
+        }
+
+        func currentValue(configuration: ProxyModeControlConfiguration) async throws -> Value {
+            Value(mode: configuration.mode, isCurrent: await TunnelSwitch.currentMode() == configuration.mode.mode)
+        }
+    }
+}
+
+/// Which mode a Control Center mode button switches to.
+@available(iOS 18.0, *)
+struct ProxyModeControlConfiguration: ControlConfigurationIntent {
+    static let title: LocalizedStringResource = "代理模式"
+
+    @Parameter(title: "模式", default: .global)
+    var mode: ProxyModeOption
+
+    func perform() async throws -> some IntentResult {
+        .result()
     }
 }

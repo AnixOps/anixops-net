@@ -70,9 +70,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             completionHandler(PacketTunnelFailure(reason: "tunnel profile is malformed"))
             return
         }
-        if tunnelProtocol.providerConfiguration?[TunnelProfileKeys.routing] as? Bool == true {
-            config = withSubscriptionRules(config)
-        }
+        // The subscription's rules and groups go in whatever the mode, so the app can switch modes without a restart.
+        let mode = ProxyMode.saved(in: tunnelProtocol.providerConfiguration)
+        config = withSubscriptionRules(config).withMode(mode)
+        events.record("mode \(mode.rawValue)")
         events.record("profile loaded, mtu \(interface.mtu), \(interface.addresses.count) addresses, \(interface.includedRoutes.count) routes, \(interface.dnsServers.count) dns servers")
 
         let session: EmbeddedRuntimeSession
@@ -171,7 +172,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private func withSubscriptionRules(_ config: EmbeddedRuntimeConfig) -> EmbeddedRuntimeConfig {
         do {
             guard let value = try NodeSecretStore.value(account: NodeLibrary.keychainAccount),
-                  let routing = try NodeLibrary.fromKeychainValue(value).runtimeRouting()
+                  let routing = try NodeLibrary.fromKeychainValue(value).routingForModes()
             else {
                 events.record("subscription rules off: no node list with rules")
                 return config
