@@ -3817,6 +3817,26 @@
         }
       }
     },
+    "负载均衡": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Load balance"
+          }
+        }
+      }
+    },
+    "轮询": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Round robin"
+          }
+        }
+      }
+    },
     "保存失败": {
       "localizations": {
         "en": {

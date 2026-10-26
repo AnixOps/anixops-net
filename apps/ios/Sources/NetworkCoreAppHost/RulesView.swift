@@ -107,7 +107,7 @@ struct RulesView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(verbatim: group.id)
                         .foregroundStyle(brand.text)
-                    Text(group.type == "fallback" ? String(localized: "故障转移") : String(localized: "自动选择"))
+                    Text(group.typeTitle)
                         .font(.footnote)
                         .foregroundStyle(brand.text2)
                 }
