@@ -60,9 +60,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-        with:
-          # mitm-policy builds the mitm_anixops C core from this submodule.
-          submodules: true
 
       - name: Check secrets and variables are present
         shell: bash
@@ -170,12 +167,14 @@ jobs:
           APP_PROFILE_NAME: ${{ steps.signing.outputs.app_profile_name }}
           TUNNEL_PROFILE_NAME: ${{ steps.signing.outputs.tunnel_profile_name }}
           WIDGET_PROFILE_NAME: ${{ steps.signing.outputs.widget_profile_name }}
-          BUILD_NUMBER: ${{ github.run_number }}
+          # Builds 1..999 were uploaded from AnixOps/networkcore_anixops before the client moved here;
+          # the offset keeps CFBundleVersion increasing for App Store Connect.
+          BUILD_NUMBER_RUN: ${{ github.run_number }}
         run: |
           set -euo pipefail
           ruby -ryaml -e '
             spec = YAML.load_file("project.yml")
-            spec["settings"]["base"]["CURRENT_PROJECT_VERSION"] = ENV.fetch("BUILD_NUMBER")
+            spec["settings"]["base"]["CURRENT_PROJECT_VERSION"] = (ENV.fetch("BUILD_NUMBER_RUN").to_i + 1000).to_s
             # This upload is iOS only; the macOS targets would need their own profiles.
             %w[NetworkCoreMac NetworkCoreMacTunnel].each { |name| spec["targets"].delete(name) }
             spec["schemes"].delete("NetworkCoreMac")
@@ -257,7 +256,7 @@ jobs:
           {
             echo "## iOS internal TestFlight upload"
             echo ""
-            echo "- build-number: ${{ github.run_number }}"
+            echo "- build-number: $(( ${{ github.run_number }} + 1000 ))"
             echo "- commit: ${GITHUB_SHA}"
             echo "- scope: internal-testflight-only"
             echo "- release-asset: blocked"

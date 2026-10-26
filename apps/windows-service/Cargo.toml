@@ -7,12 +7,12 @@ repository.workspace = true
 description = "Windows service host for the AnixOps NetworkCore managed client."
 
 [dependencies]
-control-domain = { path = "../../crates/control-domain" }
-engine-embedded = { path = "../../crates/engine-embedded" }
-engine-native = { path = "../../crates/engine-native" }
-inbound-mixed = { path = "../../crates/inbound-mixed" }
-mitm-policy = { path = "../../crates/mitm-policy" }
-platform-windows = { path = "../../crates/platform-windows" }
+control-domain = { workspace = true }
+engine-embedded = { workspace = true }
+engine-native = { workspace = true }
+inbound-mixed = { workspace = true }
+mitm-policy = { workspace = true }
+platform-windows = { workspace = true }
 serde_json = "1"
 
 [dev-dependencies]
