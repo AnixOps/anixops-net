@@ -82,12 +82,12 @@ struct DnsSettingsView: View {
         }
         .sheet(isPresented: $addingRule) {
             DnsRuleSheet(servers: dns.servers.map(\.name)) { text, server in
-                commit(try dns.addingRule(text, server: server))
+                commit { try dns.addingRule(text, server: server) }
             }
         }
         .sheet(isPresented: $addingHost) {
             DnsHostSheet { name, addresses in
-                commit(try dns.settingHost(name, addresses: addresses))
+                commit { try dns.settingHost(name, addresses: addresses) }
             }
         }
         .confirmationDialog("用推荐分流替换现有 DNS 设置？", isPresented: $confirmingSplit, titleVisibility: .visible) {
@@ -148,7 +148,7 @@ struct DnsSettingsView: View {
                 Menu {
                     ForEach(DnsSettings.presets.filter { preset in !dns.servers.contains { $0.name == preset.server.name } }) { preset in
                         Button(preset.title) {
-                            commit(try dns.saving(preset.server))
+                            commit { try dns.saving(preset.server) }
                         }
                     }
                     Button("自定义…") {
@@ -276,13 +276,16 @@ struct DnsSettingsView: View {
         commit(next)
     }
 
-    /// Applies `next`, or shows why it was refused.
-    private func commit(_ next: @autoclosure () throws -> DnsSettings) {
+    private func commit(_ next: DnsSettings) {
+        Task {
+            await tunnel.applyDns(next)
+        }
+    }
+
+    /// Applies what `make` returns, or shows why it was refused.
+    private func commit(_ make: () throws -> DnsSettings) {
         do {
-            let value = try next()
-            Task {
-                await tunnel.applyDns(value)
-            }
+            commit(try make())
         } catch let error as DnsSettingsError {
             failure = error.message
         } catch {
