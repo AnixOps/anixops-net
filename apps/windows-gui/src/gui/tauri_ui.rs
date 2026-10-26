@@ -662,7 +662,7 @@ fn rename_subscription(
     state: State<'_, DesktopAppState>,
 ) -> Result<OperationResult, String> {
     let name = subscription_meta::clean_name(&name).ok_or("Enter a name.")?;
-    update_subscription_source(&state, &id, |source| source.name = Some(name))?;
+    change_subscription_source(&state, &id, |source| source.name = Some(name))?;
     Ok(OperationResult {
         message: "Subscription renamed.".to_string(),
     })
@@ -675,7 +675,7 @@ fn set_subscription_interval(
     state: State<'_, DesktopAppState>,
 ) -> Result<OperationResult, String> {
     let hours = hours.min(subscription_meta::MAX_UPDATE_INTERVAL_HOURS);
-    update_subscription_source(&state, &id, |source| {
+    change_subscription_source(&state, &id, |source| {
         source.update_interval_hours = Some(hours)
     })?;
     Ok(OperationResult {
@@ -687,7 +687,7 @@ fn set_subscription_interval(
     })
 }
 
-fn update_subscription_source(
+fn change_subscription_source(
     state: &DesktopAppState,
     id: &str,
     change: impl FnOnce(&mut DesktopSubscriptionSource),
