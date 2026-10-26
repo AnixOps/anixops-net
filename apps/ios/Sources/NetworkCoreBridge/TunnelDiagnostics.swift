@@ -7,8 +7,11 @@ import Foundation
 public enum TunnelAppMessage: Equatable {
     case runtimeStatus
     case diagnostics
+    /// A runtime control request (`RuntimeControl`), answered with the runtime's JSON.
+    case control(Data)
 
     private static let diagnosticsPayload = Data("diagnostics".utf8)
+    private static let controlPrefix = Data("control:".utf8)
 
     public var encoded: Data {
         switch self {
@@ -16,11 +19,19 @@ public enum TunnelAppMessage: Equatable {
             return Data()
         case .diagnostics:
             return Self.diagnosticsPayload
+        case let .control(request):
+            return Self.controlPrefix + request
         }
     }
 
     public static func decode(_ data: Data) -> TunnelAppMessage {
-        data == diagnosticsPayload ? .diagnostics : .runtimeStatus
+        if data == diagnosticsPayload {
+            return .diagnostics
+        }
+        if data.starts(with: controlPrefix) {
+            return .control(Data(data.dropFirst(controlPrefix.count)))
+        }
+        return .runtimeStatus
     }
 }
 

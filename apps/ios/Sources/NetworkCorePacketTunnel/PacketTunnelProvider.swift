@@ -151,6 +151,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         switch TunnelAppMessage.decode(messageData) {
         case .runtimeStatus:
             completionHandler?(session?.statusJSON())
+        case let .control(request):
+            completionHandler?(session?.control(request))
         case .diagnostics:
             let diagnostics = TunnelDiagnostics(
                 runtimeStatus: session?.statusJSON().flatMap { String(data: $0, encoding: .utf8) },

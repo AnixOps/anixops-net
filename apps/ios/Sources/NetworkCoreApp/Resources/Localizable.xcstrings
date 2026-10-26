@@ -81,6 +81,16 @@
         }
       }
     },
+    "App 会自动重新建立需要的连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apps reconnect on their own when they need to."
+          }
+        }
+      }
+    },
     "HTTPS 解密": {
       "localizations": {
         "en": {
@@ -237,6 +247,26 @@
         }
       }
     },
+    "上传": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upload"
+          }
+        }
+      }
+    },
+    "上传、下载为该连接经隧道的字节数。目标域名来自请求本身或 TLS SNI / HTTP Host，只保存在内存里，断开隧道即清空。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upload and download are the bytes this connection moved through the tunnel. Host names come from the request or the TLS SNI / HTTP Host, are kept in memory only and are cleared when the tunnel stops."
+          }
+        }
+      }
+    },
     "上次停止原因": {
       "localizations": {
         "en": {
@@ -263,6 +293,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pull down to update every subscription. Delay is the time of a real HTTP request to http://www.gstatic.com/generate_204 through the node; no answer in 5 seconds shows Timeout. Switching nodes while connected reconnects automatically."
+          }
+        }
+      }
+    },
+    "下载": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download"
           }
         }
       }
@@ -417,6 +457,16 @@
         }
       }
     },
+    "全部断开": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close all"
+          }
+        }
+      }
+    },
     "关于": {
       "localizations": {
         "en": {
@@ -543,6 +593,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "There's no text on the clipboard"
+          }
+        }
+      }
+    },
+    "协议": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Protocol"
           }
         }
       }
@@ -977,6 +1037,16 @@
         }
       }
     },
+    "已结束 %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Closed %lld"
+          }
+        }
+      }
+    },
     "已连接": {
       "localizations": {
         "en": {
@@ -1033,6 +1103,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Turn On Full Trust"
+          }
+        }
+      }
+    },
+    "开始": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Started"
           }
         }
       }
@@ -1287,6 +1367,26 @@
         }
       }
     },
+    "断开全部 %lld 个连接？": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close all %lld connections?"
+          }
+        }
+      }
+    },
+    "断开全部连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close all connections"
+          }
+        }
+      }
+    },
     "断开，当前已连接": {
       "localizations": {
         "en": {
@@ -1437,12 +1537,42 @@
         }
       }
     },
+    "时长": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duration"
+          }
+        }
+      }
+    },
     "暂不支持带插件的节点": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Nodes with plugins aren't supported yet"
+          }
+        }
+      }
+    },
+    "暂停刷新": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause"
+          }
+        }
+      }
+    },
+    "暂无活跃连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No active connections"
           }
         }
       }
@@ -2633,6 +2763,176 @@
           "stringUnit": {
             "state": "translated",
             "value": "The link contains the node's password. Share it only with people you trust."
+          }
+        }
+      }
+    },
+    "本次已用 ↑%@ ↓%@ · %lld 个连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This session ↑%1$@ ↓%2$@ · %3$lld connections"
+          }
+        }
+      }
+    },
+    "连接记录": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connections"
+          }
+        }
+      }
+    },
+    "活跃 %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Active %lld"
+          }
+        }
+      }
+    },
+    "筛选域名、规则或节点": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filter by host, rule or node"
+          }
+        }
+      }
+    },
+    "继续刷新": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resume"
+          }
+        }
+      }
+    },
+    "连接后显示经过隧道的每个连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to see every connection through the tunnel."
+          }
+        }
+      }
+    },
+    "没有匹配的连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No matching connections"
+          }
+        }
+      }
+    },
+    "还没有结束的连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No closed connections yet"
+          }
+        }
+      }
+    },
+    "正在读取…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading…"
+          }
+        }
+      }
+    },
+    "目标": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Target"
+          }
+        }
+      }
+    },
+    "请求地址": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requested address"
+          }
+        }
+      }
+    },
+    "线路": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Route"
+          }
+        }
+      }
+    },
+    "错误": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Error"
+          }
+        }
+      }
+    },
+    "被规则拒绝": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rejected by a rule"
+          }
+        }
+      }
+    },
+    "连接失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection failed"
+          }
+        }
+      }
+    },
+    "结束": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ended"
+          }
+        }
+      }
+    },
+    "连接详情": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection"
           }
         }
       }

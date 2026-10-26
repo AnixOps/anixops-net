@@ -671,6 +671,23 @@ final class TunnelController: ObservableObject {
         }
     }
 
+    /// Sends a control request to the running engine (live traffic, the connection list). Nil while the tunnel is
+    /// not connected, or when the engine refused the request.
+    func control(_ command: RuntimeControl) async -> Data? {
+        guard let session = manager?.connection as? NETunnelProviderSession, connection == .connected else {
+            return nil
+        }
+        return await withCheckedContinuation { continuation in
+            do {
+                try session.sendProviderMessage(TunnelAppMessage.control(command.request).encoded) { data in
+                    continuation.resume(returning: data)
+                }
+            } catch {
+                continuation.resume(returning: nil)
+            }
+        }
+    }
+
     /// Asks the running extension for its sanitized runtime status.
     func refreshRuntimeStatus() {
         guard let session = manager?.connection as? NETunnelProviderSession, connection == .connected else {

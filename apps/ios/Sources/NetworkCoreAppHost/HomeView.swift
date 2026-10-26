@@ -18,6 +18,9 @@ struct HomeView: View {
                     header
                     ConnectCard(tunnel: tunnel, phase: phase, importing: $importing)
                     nodeCard
+                    if tunnel.connection == .connected {
+                        TrafficCard(tunnel: tunnel)
+                    }
                     if let message = tunnel.message {
                         MessageCard(text: message) {
                             tunnel.clearMessage()
