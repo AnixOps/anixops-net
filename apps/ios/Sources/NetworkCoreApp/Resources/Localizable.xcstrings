@@ -287,6 +287,16 @@
         }
       }
     },
+    "二维码": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR code"
+          }
+        }
+      }
+    },
     "从剪贴板导入": {
       "localizations": {
         "en": {
@@ -313,6 +323,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Import WireGuard Config from File"
+          }
+        }
+      }
+    },
+    "从相册识别": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read from Photos"
           }
         }
       }
@@ -477,6 +497,16 @@
         }
       }
     },
+    "分享": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share"
+          }
+        }
+      }
+    },
     "删除": {
       "localizations": {
         "en": {
@@ -547,6 +577,16 @@
         }
       }
     },
+    "可以在“设置”里允许 AnixOps Net 使用相机，或者从相册里的截图识别二维码。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow AnixOps Net to use the camera in Settings, or read the QR code from a screenshot in Photos."
+          }
+        }
+      }
+    },
     "可以解密 MITM 主机列表中的 HTTPS 流量。": {
       "localizations": {
         "en": {
@@ -587,6 +627,16 @@
         }
       }
     },
+    "图片里没有找到二维码": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No QR code found in the picture"
+          }
+        }
+      }
+    },
     "在 Safari 中允许下载，然后到 设置 > 已下载描述文件 安装。": {
       "localizations": {
         "en": {
@@ -613,6 +663,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copy Diagnostics"
+          }
+        }
+      }
+    },
+    "复制链接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy link"
           }
         }
       }
@@ -817,6 +877,16 @@
         }
       }
     },
+    "导出": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export"
+          }
+        }
+      }
+    },
     "导出证书（.cer）": {
       "localizations": {
         "en": {
@@ -1017,6 +1087,16 @@
         }
       }
     },
+    "打开设置": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Settings"
+          }
+        }
+      }
+    },
     "扩展": {
       "localizations": {
         "en": {
@@ -1043,6 +1123,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The extension isn't responding"
+          }
+        }
+      }
+    },
+    "扫描二维码": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan QR code"
           }
         }
       }
@@ -1323,6 +1413,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't read the file"
+          }
+        }
+      }
+    },
+    "无法读取这张图片": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't read this picture"
           }
         }
       }
@@ -2503,6 +2603,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reconnecting"
+          }
+        }
+      }
+    },
+    "没有相机权限": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No camera access"
+          }
+        }
+      }
+    },
+    "链接太长，无法生成二维码，请复制或分享链接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The link is too long for a QR code. Copy or share the link instead."
+          }
+        }
+      }
+    },
+    "链接里含有节点密码，只分享给信任的人。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The link contains the node's password. Share it only with people you trust."
           }
         }
       }

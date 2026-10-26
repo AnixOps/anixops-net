@@ -18,6 +18,7 @@ struct ImportView: View {
     @State private var error: String?
     @State private var saving = false
     @State private var pickingFile = false
+    @State private var scanning = false
 
     var body: some View {
         NavigationStack {
@@ -54,6 +55,14 @@ struct ImportView: View {
             .fileImporter(isPresented: $pickingFile, allowedContentTypes: [.plainText, .data]) { result in
                 readFile(result)
             }
+            #if os(iOS)
+            .fullScreenCover(isPresented: $scanning) {
+                QRScannerSheet { scanned in
+                    text = scanned
+                    recognize()
+                }
+            }
+            #endif
         }
     }
 
@@ -113,6 +122,15 @@ struct ImportView: View {
                 }
                 .buttonBorderShape(.capsule)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+                #if os(iOS)
+                Button {
+                    scanning = true
+                } label: {
+                    Label("扫描二维码", systemImage: "qrcode.viewfinder")
+                        .font(.body.weight(.medium))
+                }
+                #endif
 
                 Button {
                     pickingFile = true
