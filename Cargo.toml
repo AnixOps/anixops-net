@@ -1,0 +1,35 @@
+[workspace]
+members = [
+    "apps/linux-gui",
+    "apps/windows-gui",
+    "apps/windows-service",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.2.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/AnixOps/anixops-net"
+
+# The kernel lives in AnixOps/networkcore_anixops and is pinned to one commit here.
+# Upgrading the kernel = change every rev below to the new commit (or tag) and refresh Cargo.lock.
+# CI also builds the iOS runtime and the Windows CLI from this same checkout (.github/scripts/kernel-root.sh).
+# For local kernel work, uncomment the [patch] section at the end and point it at a kernel checkout.
+[workspace.dependencies]
+config-core = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "f93d78dd187946845c22d3c5cf90b5c0753f93fb" }
+control-domain = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "f93d78dd187946845c22d3c5cf90b5c0753f93fb" }
+engine-embedded = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "f93d78dd187946845c22d3c5cf90b5c0753f93fb" }
+engine-native = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "f93d78dd187946845c22d3c5cf90b5c0753f93fb" }
+inbound-mixed = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "f93d78dd187946845c22d3c5cf90b5c0753f93fb" }
+mitm-policy = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "f93d78dd187946845c22d3c5cf90b5c0753f93fb" }
+platform-windows = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "f93d78dd187946845c22d3c5cf90b5c0753f93fb" }
+
+# [patch."https://github.com/AnixOps/networkcore_anixops"]
+# config-core = { path = "../networkcore_anixops/crates/config-core" }
+# control-domain = { path = "../networkcore_anixops/crates/control-domain" }
+# engine-embedded = { path = "../networkcore_anixops/crates/engine-embedded" }
+# engine-native = { path = "../networkcore_anixops/crates/engine-native" }
+# inbound-mixed = { path = "../networkcore_anixops/crates/inbound-mixed" }
+# mitm-policy = { path = "../networkcore_anixops/crates/mitm-policy" }
+# platform-windows = { path = "../networkcore_anixops/crates/platform-windows" }

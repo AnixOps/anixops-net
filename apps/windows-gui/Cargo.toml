@@ -11,11 +11,11 @@ default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
 
 [dependencies]
-config-core = { path = "../../crates/config-core" }
-control-domain = { path = "../../crates/control-domain" }
-engine-embedded = { path = "../../crates/engine-embedded" }
-inbound-mixed = { path = "../../crates/inbound-mixed" }
-platform-windows = { path = "../../crates/platform-windows" }
+config-core = { workspace = true }
+control-domain = { workspace = true }
+engine-embedded = { workspace = true }
+inbound-mixed = { workspace = true }
+platform-windows = { workspace = true }
 rcgen = { version = "0.14.8", features = ["x509-parser"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

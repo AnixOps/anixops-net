@@ -1,0 +1,705 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Superseded pull request runs are cancelled. Runs on main and manual dispatch
+# always finish so every merged commit has a complete result.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Kernel tests (protocols, engine, MITM, scripts, interop, fuzz) run in AnixOps/networkcore_anixops.
+# This workflow only builds and tests the clients against the kernel commit pinned in Cargo.toml.
+jobs:
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      rust: ${{ steps.changes.outputs.rust }}
+      ui: ${{ steps.changes.outputs.ui }}
+      windows: ${{ steps.changes.outputs.windows }}
+      linux: ${{ steps.changes.outputs.linux }}
+      apple: ${{ steps.changes.outputs.apple }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Pull requests run only the platforms their paths touch. Pushes to main, manual runs and any change to
+      # the workspace, lockfile, workflows or scripts run everything.
+      - name: Classify changed paths
+        id: changes
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          rust=false; ui=false; windows=false; linux=false; apple=false
+          all() { rust=true; ui=true; windows=true; linux=true; apple=true; }
+          if [[ "${EVENT_NAME}" != pull_request ]]; then
+            all
+          else
+            while IFS= read -r path; do
+              case "${path}" in
+                Cargo.toml | Cargo.lock | .github/*) all ;;
+                apps/windows-gui/ui/*) ui=true; windows=true; linux=true ;;
+                apps/windows-gui/* | apps/windows-service/* | installer/*) rust=true; windows=true ;;
+                apps/linux-gui/*) rust=true; linux=true ;;
+                apps/ios/*) apple=true ;;
+                *) ;;
+              esac
+            done < <(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")
+          fi
+          {
+            echo "rust=${rust}"
+            echo "ui=${ui}"
+            echo "windows=${windows}"
+            echo "linux=${linux}"
+            echo "apple=${apple}"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  ui:
+    name: Shared UI lint, test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: changes
+    if: ${{ needs.changes.outputs.ui == 'true' || needs.changes.outputs.windows == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/windows-gui/ui/pnpm-lock.yaml
+
+      - name: Install dependencies
+        shell: bash
+        run: pnpm --dir apps/windows-gui/ui install --frozen-lockfile
+
+      - name: Lint
+        shell: bash
+        run: pnpm --dir apps/windows-gui/ui run lint
+
+      - name: Test
+        shell: bash
+        run: pnpm --dir apps/windows-gui/ui test
+
+      - name: Build
+        shell: bash
+        run: pnpm --dir apps/windows-gui/ui run build
+
+      - name: Upload the built interface
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-gui-ui-${{ github.sha }}
+          path: apps/windows-gui/ui/dist
+          if-no-files-found: error
+          retention-days: 1
+
+  rust-linux:
+    name: Rust build and test (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      CARGO_INCREMENTAL: "0"
+    needs: changes
+    if: ${{ needs.changes.outputs.rust == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Rust
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup component add rustfmt clippy
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      - name: Format
+        shell: bash
+        run: cargo fmt --all -- --check
+
+      - name: Lint
+        shell: bash
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+      - name: Test
+        shell: bash
+        run: cargo test --locked --workspace --all-targets
+
+  linux-gui:
+    name: Linux GUI build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      CARGO_INCREMENTAL: "0"
+    needs: changes
+    if: ${{ needs.changes.outputs.linux == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Tauri on Linux renders through WebKitGTK.
+      - name: Install WebKitGTK
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/windows-gui/ui/pnpm-lock.yaml
+
+      # The Linux window shares the Windows React interface.
+      - name: Build the shared interface
+        shell: bash
+        run: |
+          pnpm --dir apps/windows-gui/ui install --frozen-lockfile
+          pnpm --dir apps/windows-gui/ui run build
+
+      - name: Setup Rust
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy
+          rustup default stable
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: linux-gui
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      - name: Lint, test and build the Linux GUI
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo clippy --locked -p networkcore-linux-gui --features gui --all-targets -- -D warnings
+          cargo test --locked -p networkcore-linux-gui
+          cargo build --locked -p networkcore-linux-gui --features gui --release
+          test -x target/release/anixops-net
+
+  windows:
+    name: Windows build, test and MSI
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: "0"
+    needs:
+      - changes
+      - ui
+    if: >-
+      ${{
+        always() &&
+        needs.changes.result == 'success' &&
+        needs.changes.outputs.windows == 'true' &&
+        needs.ui.result == 'success'
+      }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download the built interface
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-gui-ui-${{ github.sha }}
+          path: apps/windows-gui/ui/dist
+
+      - name: Verify the built interface
+        shell: bash
+        run: test -s apps/windows-gui/ui/dist/index.html
+
+      - name: Setup Windows C toolchain
+        uses: msys2/setup-msys2@v2
+        id: msys2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-binutils
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-libsystre
+
+      - name: Configure Windows Rust GNU target
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $MsysRoot = "${{ steps.msys2.outputs.msys2-location }}"
+          $MingwPrefix = Join-Path $MsysRoot "mingw64"
+          "${{ github.workspace }}\.github\scripts" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "$MingwPrefix\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "MSYS2_LOCATION=$MsysRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MINGW_PREFIX=$MingwPrefix" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RC_x86_64_pc_windows_gnu=${{ github.workspace }}\.github\scripts\rc.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CARGO_BUILD_TARGET=x86_64-pc-windows-gnu" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CC_x86_64_pc_windows_gnu=$MingwPrefix\bin\gcc.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "AR_x86_64_pc_windows_gnu=$MingwPrefix\bin\ar.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=$MingwPrefix\bin\gcc.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Setup Rust
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup component add clippy
+          rustup target add x86_64-pc-windows-gnu
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: windows-gnu
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      # A restored cache can hold webview2-com-sys outputs from an older Cargo.lock.
+      # Drop them so the WebView2Loader.dll uniqueness check below sees only this build.
+      - name: Clear stale WebView2 build outputs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $releaseDir = "target\x86_64-pc-windows-gnu\debug"
+          foreach ($subDir in @("build", ".fingerprint")) {
+            $outputDir = Join-Path $releaseDir $subDir
+            if (Test-Path $outputDir) {
+              Get-ChildItem -Path $outputDir -Directory -Filter "webview2-com-sys-*" |
+                Remove-Item -Recurse -Force
+            }
+          }
+
+      - name: Restore windres compatibility shim
+        id: windres-shim-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .github/scripts/windres.exe
+            .github/scripts/rc.exe
+          key: windres-shim-${{ runner.os }}-${{ hashFiles('.github/scripts/windres_compat.rs', '.github/scripts/rc_compat.rs') }}
+
+      - name: Build windres compatibility shim
+        if: steps.windres-shim-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          rustc .github/scripts/windres_compat.rs -o .github/scripts/windres.exe
+          rustc .github/scripts/rc_compat.rs -o .github/scripts/rc.exe
+
+      - name: Lint
+        shell: bash
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+      - name: Test
+        shell: bash
+        run: cargo test --locked --workspace --all-targets
+
+      - name: Build the GUI and service
+        shell: bash
+        run: cargo build --locked -p networkcore-windows-gui -p networkcore-windows-service
+
+      # The MSI also ships the kernel's Windows CLI, built from the pinned kernel checkout with its own lockfile.
+      - name: Build the kernel Windows CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          kernel="$(bash .github/scripts/kernel-root.sh)"
+          echo "Kernel checkout: ${kernel}"
+          cargo build --locked --manifest-path "${kernel}/Cargo.toml" --target-dir target -p networkcore-windows
+          test -s target/x86_64-pc-windows-gnu/debug/networkcore-windows.exe
+
+      - name: Build and validate WiX MSI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          dotnet tool install --global wix --version 4.0.6
+          wix extension add -g WixToolset.UI.wixext/4.0.6
+          New-Item -ItemType Directory -Force -Path dist\windows-ci | Out-Null
+          $releaseDir = (Resolve-Path "target\x86_64-pc-windows-gnu\debug").Path
+          $webView2LoaderCandidates = @(
+            Get-ChildItem -Path (Join-Path $releaseDir "build") -Recurse -Filter "WebView2Loader.dll" |
+              Where-Object {
+                $_.Directory.Name -eq "x64" -and
+                $_.Directory.Parent.Name -eq "out" -and
+                $_.Directory.Parent.Parent.Name -like "webview2-com-sys-*"
+              }
+          )
+          if ($webView2LoaderCandidates.Count -ne 1) {
+            $candidatePaths = $webView2LoaderCandidates.FullName -join ", "
+            throw "Expected exactly one x64 WebView2Loader.dll generated by webview2-com-sys; found $($webView2LoaderCandidates.Count): $candidatePaths"
+          }
+          $webView2LoaderPath = $webView2LoaderCandidates[0].FullName
+          if ((Get-Item $webView2LoaderPath).Length -le 0) {
+            throw "WebView2Loader.dll is empty: $webView2LoaderPath"
+          }
+          $defaultConfig = (Resolve-Path "installer\windows\default-managed-config.json").Path
+          wix build installer/windows/Package.wxs `
+            -ext WixToolset.UI.wixext `
+            -arch x64 `
+            -d "ProductVersion=0.2.1" `
+            -d "CliExe=$releaseDir\networkcore-windows.exe" `
+            -d "GuiExe=$releaseDir\networkcore-windows-gui.exe" `
+            -d "WebView2LoaderDll=$webView2LoaderPath" `
+            -d "ServiceExe=$releaseDir\networkcore-windows-service.exe" `
+            -d "DefaultConfig=$defaultConfig" `
+            -o dist\windows-ci\networkcore-windows-ci.msi
+          wix msi validate dist\windows-ci\networkcore-windows-ci.msi
+          if ((Get-Item dist\windows-ci\networkcore-windows-ci.msi).Length -le 0) {
+            throw "Windows managed client MSI is empty."
+          }
+
+      - name: Install and uninstall Windows managed client MSI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $msiPath = (Resolve-Path "dist\windows-ci\networkcore-windows-ci.msi").Path
+          $installLog = Join-Path $env:RUNNER_TEMP "networkcore-msi-install.log"
+          $uninstallLog = Join-Path $env:RUNNER_TEMP "networkcore-msi-uninstall.log"
+
+          function Invoke-MsiTransaction {
+            param(
+              [string[]]$Arguments,
+              [string]$LogPath,
+              [string]$Operation
+            )
+
+            $process = Start-Process -FilePath "msiexec.exe" -ArgumentList $Arguments -PassThru
+            if (-not $process.WaitForExit(120000)) {
+              Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+              if (Test-Path $LogPath) {
+                Get-Content $LogPath -Tail 200
+              }
+              throw "Windows managed client MSI $Operation exceeded 120 seconds."
+            }
+            if ($process.ExitCode -notin @(0, 3010)) {
+              if (Test-Path $LogPath) {
+                Get-Content $LogPath -Tail 200
+              }
+              throw "Windows managed client MSI $Operation failed with exit code $($process.ExitCode)."
+            }
+          }
+
+          Invoke-MsiTransaction `
+            -Arguments @("/i", "`"$msiPath`"", "/qn", "/norestart", "/l*v", "`"$installLog`"") `
+            -LogPath $installLog `
+            -Operation "install"
+
+          $service = Get-Service -Name "AnixOpsNetworkCore" -ErrorAction SilentlyContinue
+          if ($null -eq $service) {
+            throw "Windows managed client MSI did not register AnixOpsNetworkCore."
+          }
+
+          $serviceExe = Join-Path $env:ProgramFiles "AnixOps\NetworkCore\networkcore-windows-service.exe"
+          $guiExe = Join-Path $env:ProgramFiles "AnixOps\NetworkCore\networkcore-windows-gui.exe"
+          $webView2Loader = Join-Path $env:ProgramFiles "AnixOps\NetworkCore\WebView2Loader.dll"
+          $managedConfigPath = Join-Path $env:ProgramData "AnixOps\NetworkCore\managed-config.json"
+          if (-not (Test-Path $serviceExe -PathType Leaf)) {
+            throw "Windows managed client MSI did not install the service executable."
+          }
+          if (-not (Test-Path $managedConfigPath -PathType Leaf)) {
+            throw "Windows managed client MSI did not install managed-config.json."
+          }
+          if (-not (Test-Path $guiExe -PathType Leaf)) {
+            throw "Windows managed client MSI did not install the GUI executable."
+          }
+          if (-not (Test-Path $webView2Loader -PathType Leaf)) {
+            throw "Windows managed client MSI did not install WebView2Loader.dll beside the GUI executable."
+          }
+
+          # GitHub-hosted Windows runners have no dependable interactive desktop session for
+          # WebView2 navigation. Verify the installed binary through its non-windowed entrypoint;
+          # the real page-load assertion remains an explicit Windows beta acceptance step.
+          $guiProcess = Start-Process -FilePath $guiExe -ArgumentList "--cleanup-startup" -PassThru
+          if (-not $guiProcess.WaitForExit(15000)) {
+            Stop-Process -Id $guiProcess.Id -Force -ErrorAction SilentlyContinue
+            throw "Windows GUI cleanup entrypoint did not exit within 15 seconds."
+          }
+          if ($guiProcess.ExitCode -ne 0) {
+            throw "Windows GUI cleanup entrypoint exited with code $($guiProcess.ExitCode)."
+          }
+
+          $startupKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+          New-Item -Path $startupKey -Force | Out-Null
+          $startupCommand = "`"$guiExe`" --start-after-login"
+          New-ItemProperty -Path $startupKey -Name "AnixOpsNetworkCore" -Value $startupCommand -PropertyType String -Force | Out-Null
+
+          $service = Get-Service -Name "AnixOpsNetworkCore" -ErrorAction Stop
+          if ($service.Status -ne "Stopped") {
+            Stop-Service -Name "AnixOpsNetworkCore" -ErrorAction Stop
+            $service.WaitForStatus("Stopped", [TimeSpan]::FromSeconds(30))
+          }
+
+          $originalManagedConfig = Get-Content -Path $managedConfigPath -Raw
+          try {
+            Set-Content -Path $managedConfigPath -Value "{ invalid managed configuration" -Encoding utf8
+            $startOutput = Join-Path $env:RUNNER_TEMP "networkcore-service-start-invalid-config.out"
+            $startError = Join-Path $env:RUNNER_TEMP "networkcore-service-start-invalid-config.err"
+            $startProcess = Start-Process -FilePath $serviceExe -ArgumentList "start" -PassThru -RedirectStandardOutput $startOutput -RedirectStandardError $startError
+            if (-not $startProcess.WaitForExit(10000)) {
+              Stop-Process -Id $startProcess.Id -Force -ErrorAction SilentlyContinue
+              if (Test-Path $startOutput) { Get-Content $startOutput }
+              if (Test-Path $startError) { Get-Content $startError }
+              throw "Windows service start waited for an invalid managed configuration."
+            }
+            if ($startProcess.ExitCode -ne 0) {
+              if (Test-Path $startOutput) { Get-Content $startOutput }
+              if (Test-Path $startError) { Get-Content $startError }
+              throw "Windows service start request failed for an invalid managed configuration."
+            }
+
+            $deadline = [DateTime]::UtcNow.AddSeconds(15)
+            do {
+              $service = Get-Service -Name "AnixOpsNetworkCore" -ErrorAction Stop
+              if ($service.Status -eq "Stopped") { break }
+              Start-Sleep -Milliseconds 250
+            } while ([DateTime]::UtcNow -lt $deadline)
+            if ($service.Status -ne "Stopped") {
+              throw "Windows service did not report failure after invalid managed configuration."
+            }
+          } finally {
+            Set-Content -Path $managedConfigPath -Value $originalManagedConfig -Encoding utf8
+          }
+          $serviceLog = Join-Path $env:ProgramData "AnixOps\NetworkCore\logs\service.log"
+          if (-not (Test-Path $serviceLog -PathType Leaf)) {
+            throw "Windows service did not write a startup diagnostic log."
+          }
+          if (-not (Select-String -Path $serviceLog -SimpleMatch "runtime start failed" -Quiet)) {
+            throw "Windows service did not record the invalid managed configuration failure."
+          }
+
+          Invoke-MsiTransaction `
+            -Arguments @("/x", "`"$msiPath`"", "/qn", "/norestart", "/l*v", "`"$uninstallLog`"") `
+            -LogPath $uninstallLog `
+            -Operation "uninstall"
+
+          if ($null -ne (Get-Service -Name "AnixOpsNetworkCore" -ErrorAction SilentlyContinue)) {
+            throw "Windows managed client MSI uninstall left AnixOpsNetworkCore registered."
+          }
+          if ($null -ne (Get-ItemProperty -Path $startupKey -Name "AnixOpsNetworkCore" -ErrorAction SilentlyContinue)) {
+            throw "Windows managed client MSI uninstall left the current-user NetworkCore startup entry."
+          }
+
+  swift:
+    name: Swift package build, test and manifest validation
+    runs-on: macos-26
+    timeout-minutes: 45
+    needs: changes
+    if: ${{ needs.changes.outputs.apple == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Validate Package.swift against the activation gate
+        shell: bash
+        run: bash .github/scripts/verify-ios-package-manifest.sh source
+
+      - name: Test
+        shell: bash
+        working-directory: apps/ios
+        run: swift test
+
+      - name: Build
+        shell: bash
+        working-directory: apps/ios
+        run: swift build
+
+  ios-xcode-build:
+    name: iOS and macOS Xcode build
+    runs-on: macos-26
+    timeout-minutes: 60
+    needs: changes
+    if: ${{ needs.changes.outputs.apple == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Rust
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ios-runtime
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      - name: Build the embedded runtime XCFramework
+        shell: bash
+        run: bash .github/scripts/build-ios-runtime-xcframework.sh all
+
+      - name: Install XcodeGen
+        shell: bash
+        run: brew install xcodegen
+
+      - name: Generate the Xcode project from apps/ios/project.yml
+        shell: bash
+        working-directory: apps/ios
+        run: |
+          set -euo pipefail
+          xcodegen generate --spec project.yml
+          # XcodeGen must not rewrite the committed entitlements, and both targets must sign with them.
+          git diff --exit-code -- Entitlements
+          grep -q 'CODE_SIGN_ENTITLEMENTS = Entitlements/NetworkCoreApp.entitlements;' NetworkCore.xcodeproj/project.pbxproj
+          grep -q 'CODE_SIGN_ENTITLEMENTS = Entitlements/NetworkCorePacketTunnel.entitlements;' NetworkCore.xcodeproj/project.pbxproj
+          grep -q 'CODE_SIGN_ENTITLEMENTS = Entitlements/NetworkCoreWidget.entitlements;' NetworkCore.xcodeproj/project.pbxproj
+          grep -q 'CODE_SIGN_ENTITLEMENTS = Entitlements/NetworkCoreMac.entitlements;' NetworkCore.xcodeproj/project.pbxproj
+          grep -q 'CODE_SIGN_ENTITLEMENTS = Entitlements/NetworkCoreMacTunnel.entitlements;' NetworkCore.xcodeproj/project.pbxproj
+
+      - name: Build the app without signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project apps/ios/NetworkCore.xcodeproj \
+            -scheme NetworkCoreApp \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath apps/ios/build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Check bundled privacy manifests and the tunnel extension point
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=apps/ios/build/Build/Products/Debug-iphonesimulator/NetworkCoreApp.app
+          appex="${app}/PlugIns/NetworkCorePacketTunnel.appex"
+          test -f "${app}/PrivacyInfo.xcprivacy"
+          test -f "${appex}/PrivacyInfo.xcprivacy"
+          /usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "${appex}/Info.plist" \
+            | grep -qx 'com.apple.networkextension.packet-tunnel'
+          /usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "${app}/PlugIns/NetworkCoreWidget.appex/Info.plist" \
+            | grep -qx 'com.apple.widgetkit-extension'
+          # App Store Connect rejects uploads without an asset-catalog icon or declared orientations.
+          # actool records the icon under CFBundleIcons:CFBundlePrimaryIcon; some Xcode versions also add it at the top level.
+          icon="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "${app}/Info.plist" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "${app}/Info.plist" 2>/dev/null || true)"
+          if [ "${icon}" != "AppIcon" ]; then
+            echo "::error::the built app has no compiled AppIcon"
+            plutil -p "${app}/Info.plist"
+            ls "${app}"
+            exit 1
+          fi
+          /usr/libexec/PlistBuddy -c 'Print :UISupportedInterfaceOrientations' "${app}/Info.plist" | grep -q 'UIInterfaceOrientationPortrait'
+          test -f "${app}/Assets.car"
+
+      - name: Check the tunnel extension links the embedded runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          products=apps/ios/build/Build/Products/Debug-iphonesimulator
+          # Debug builds may move code into <name>.debug.dylib, so read every Mach-O next to the executable.
+          symbols() {
+            local dir="$1" name="$2" out="$3"
+            : > "${out}"
+            find "${dir}" -maxdepth 1 -type f -name "${name}*" -print0 | while IFS= read -r -d '' file; do
+              nm "${file}" >> "${out}" 2>/dev/null || true
+            done
+          }
+          symbols "${products}/NetworkCoreApp.app/PlugIns/NetworkCorePacketTunnel.appex" NetworkCorePacketTunnel "${RUNNER_TEMP}/appex-symbols.txt"
+          symbols "${products}/NetworkCoreApp.app" NetworkCoreApp "${RUNNER_TEMP}/app-symbols.txt"
+          grep -q '_networkcore_ios_runtime_init$' "${RUNNER_TEMP}/appex-symbols.txt"
+          if grep -q '_networkcore_ios_runtime_init$' "${RUNNER_TEMP}/app-symbols.txt"; then
+            echo "::error::the containing app must not link the embedded runtime"
+            exit 1
+          fi
+          grep -q '_networkcore_import_nodes$' "${RUNNER_TEMP}/app-symbols.txt"
+
+      - name: Build the macOS app without signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project apps/ios/NetworkCore.xcodeproj \
+            -scheme NetworkCoreMac \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath apps/ios/build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Check the macOS app bundle and its tunnel extension
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="apps/ios/build/Build/Products/Debug/AnixOps Net.app"
+          appex="${app}/Contents/PlugIns/NetworkCoreMacTunnel.appex"
+          test -f "${app}/Contents/Resources/PrivacyInfo.xcprivacy"
+          test -f "${app}/Contents/Resources/Assets.car"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "${app}/Contents/Info.plist" | grep -qx 'AppIcon'
+          /usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "${appex}/Contents/Info.plist" \
+            | grep -qx 'com.apple.networkextension.packet-tunnel'
+          test -d "${app}/Contents/Resources/en.lproj"
+          symbols() {
+            local dir="$1" name="$2" out="$3"
+            : > "${out}"
+            find "${dir}" -maxdepth 1 -type f -name "${name}*" -print0 | while IFS= read -r -d '' file; do
+              nm "${file}" >> "${out}" 2>/dev/null || true
+            done
+          }
+          symbols "${appex}/Contents/MacOS" NetworkCoreMacTunnel "${RUNNER_TEMP}/mac-appex-symbols.txt"
+          symbols "${app}/Contents/MacOS" "AnixOps Net" "${RUNNER_TEMP}/mac-app-symbols.txt"
+          grep -q '_networkcore_ios_runtime_init$' "${RUNNER_TEMP}/mac-appex-symbols.txt"
+          if grep -q '_networkcore_ios_runtime_init$' "${RUNNER_TEMP}/mac-app-symbols.txt"; then
+            echo "::error::the macOS app must not link the embedded runtime"
+            exit 1
+          fi
+          grep -q '_networkcore_import_nodes$' "${RUNNER_TEMP}/mac-app-symbols.txt"
+          lipo -archs "${appex}/Contents/MacOS/NetworkCoreMacTunnel" | tee "${RUNNER_TEMP}/mac-archs.txt"
+          grep -q arm64 "${RUNNER_TEMP}/mac-archs.txt"
+
+  ci-summary:
+    name: CI summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: ${{ always() }}
+    needs:
+      - changes
+      - ui
+      - rust-linux
+      - linux-gui
+      - windows
+      - swift
+      - ios-xcode-build
+    steps:
+      - name: Check required jobs
+        shell: bash
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          echo "${RESULTS}" | jq -r 'to_entries[] | "\(.key)=\(.value.result)"' | tee "${RUNNER_TEMP}/results.txt"
+          if grep -Eq '=(failure|cancelled)$' "${RUNNER_TEMP}/results.txt"; then
+            echo "::error::one or more CI jobs failed or were cancelled"
+            exit 1
+          fi

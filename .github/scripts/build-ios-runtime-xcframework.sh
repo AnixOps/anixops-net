@@ -2,7 +2,8 @@
 # Builds engine-embedded as a static XCFramework for the iOS and macOS packet tunnels,
 # and node-import as a second one for the iOS containing app (subscription import
 # without the tunnel engine). Runs only in GitHub Actions on macos-26; the output is
-# never committed.
+# never committed. Both crates come from the kernel commit pinned in Cargo.toml and are built
+# inside that kernel checkout with the kernel's own Cargo.lock (see kernel-root.sh).
 #
 # Usage: build-ios-runtime-xcframework.sh [device|all]
 #   device: iPhone slice only (archive and upload)
@@ -24,6 +25,9 @@ case "${slices}" in
 esac
 
 root="$(git rev-parse --show-toplevel)"
+kernel="$(bash "${root}/.github/scripts/kernel-root.sh")"
+target_dir="${root}/target/kernel"
+echo "Kernel checkout: ${kernel}"
 
 device_target=aarch64-apple-ios
 sim_targets=(aarch64-apple-ios-sim x86_64-apple-ios)
@@ -43,7 +47,8 @@ export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
 export CARGO_PROFILE_RELEASE_DEBUG=0
 
 for target in "${targets[@]}"; do
-  cargo build --locked --release -p engine-embedded -p node-import --lib --target "${target}"
+  cargo build --locked --release --manifest-path "${kernel}/Cargo.toml" --target-dir "${target_dir}" \
+    -p engine-embedded -p node-import --lib --target "${target}"
 done
 
 # package <crate dir> <library file> <header> <module> <xcframework name>
@@ -55,17 +60,17 @@ package() {
   # Each module map sits in a directory named after its module: Xcode copies every linked
   # XCFramework's headers into the same include/ directory, so two top-level module maps collide.
   mkdir -p "${work}/headers/${module}" "${work}/device" "$(dirname "${out}")"
-  cp "${root}/crates/${crate}/include/${header}" "${work}/headers/${module}/"
+  cp "${kernel}/crates/${crate}/include/${header}" "${work}/headers/${module}/"
   printf 'module %s {\n    header "%s"\n    export *\n}\n' "${module}" "${header}" > "${work}/headers/${module}/module.modulemap"
 
-  cp "${root}/target/${device_target}/release/${lib}" "${work}/device/${lib}"
+  cp "${target_dir}/${device_target}/release/${lib}" "${work}/device/${lib}"
   local args=(-library "${work}/device/${lib}" -headers "${work}/headers")
 
   if [[ "${slices}" == all ]]; then
     mkdir -p "${work}/simulator"
     local sim_libs=()
     for target in "${sim_targets[@]}"; do
-      sim_libs+=("${root}/target/${target}/release/${lib}")
+      sim_libs+=("${target_dir}/${target}/release/${lib}")
     done
     lipo -create "${sim_libs[@]}" -output "${work}/simulator/${lib}"
     args+=(-library "${work}/simulator/${lib}" -headers "${work}/headers")
@@ -73,7 +78,7 @@ package() {
     mkdir -p "${work}/macos"
     local mac_libs=()
     for target in "${mac_targets[@]}"; do
-      mac_libs+=("${root}/target/${target}/release/${lib}")
+      mac_libs+=("${target_dir}/${target}/release/${lib}")
     done
     lipo -create "${mac_libs[@]}" -output "${work}/macos/${lib}"
     args+=(-library "${work}/macos/${lib}" -headers "${work}/headers")
