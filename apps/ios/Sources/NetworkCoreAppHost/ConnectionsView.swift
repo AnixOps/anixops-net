@@ -140,10 +140,10 @@ struct ConnectionsView: View {
         .scrollContentBackground(.hidden)
         .background(brand.bg.ignoresSafeArea())
         .navigationTitle("连接")
-        .navigationBarTitleDisplayMode(.inline)
+        .inlineNavigationTitle()
         .searchable(text: $query, prompt: Text("筛选域名、规则或节点"))
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .primaryAction) {
                 Button {
                     paused.toggle()
                 } label: {
@@ -285,7 +285,7 @@ private struct ConnectionDetail: View {
         .scrollContentBackground(.hidden)
         .background(brand.bg.ignoresSafeArea())
         .navigationTitle("连接详情")
-        .navigationBarTitleDisplayMode(.inline)
+        .inlineNavigationTitle()
     }
 
     private func item(_ title: LocalizedStringKey, _ value: String) -> some View {

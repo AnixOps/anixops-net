@@ -263,8 +263,8 @@ struct MacProxiesPage: View {
     }
 }
 
-/// Rules: whether the tunnel follows the active subscription's rules, and its policy groups, including the other
-/// subscription groups as "订阅·名称" groups.
+/// Rules: the proxy mode (rules, global or direct), the active subscription's policy groups (including the other
+/// subscription groups as "订阅·名称" groups), its rules and rule sets, and the DNS settings.
 struct MacRulesPage: View {
     @ObservedObject var tunnel: TunnelController
     @Environment(\.brand) private var brand
@@ -273,22 +273,7 @@ struct MacRulesPage: View {
         if let library = tunnel.library, let routing = library.routing {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    MacCard(title: "按订阅规则分流") {
-                        Toggle(isOn: Binding(
-                            get: { library.followsRules },
-                            set: { on in
-                                Task {
-                                    await tunnel.setFollowsRules(on)
-                                }
-                            }
-                        )) {
-                            Text("\(routing.rules.count) 条规则 · \(routing.groups.count) 个策略组")
-                        }
-                        .toggleStyle(.switch)
-                        Text("关闭后全部流量走代理页选中的节点。连接中修改会自动重连。")
-                            .font(.caption)
-                            .foregroundStyle(brand.text2)
-                    }
+                    modeCard(hasRules: true)
                     MacCard(title: "策略组") {
                         ForEach(routing.groups) { group in
                             groupRow(group, library: library)
@@ -300,7 +285,38 @@ struct MacRulesPage: View {
                             .font(.caption)
                             .foregroundStyle(brand.text2)
                     }
-                    .disabled(!library.followsRules)
+                    .disabled(tunnel.mode != .rule)
+                    MacCard(title: "规则与 DNS") {
+                        NavigationLink {
+                            RuleListView(rules: routing.rules)
+                        } label: {
+                            LabeledContent("全部规则", value: "\(routing.rules.count)")
+                        }
+                        Divider()
+                        NavigationLink {
+                            MacRuleSetsPage(tunnel: tunnel, rules: routing.rules, defined: routing.ruleSets)
+                        } label: {
+                            LabeledContent("规则集", value: "\(RuleSetCatalog.referencedNames(in: routing.rules).count)")
+                        }
+                        Divider()
+                        dnsLink
+                    }
+                }
+                .padding(24)
+                .frame(maxWidth: 860)
+                .frame(maxWidth: .infinity)
+            }
+        } else if tunnel.nodeName != nil {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    modeCard(hasRules: false)
+                    MacCard(title: "DNS") {
+                        dnsLink
+                    }
+                    Text("导入带规则和策略组的订阅（Clash、Surge、Loon 配置）后，可以按订阅规则分流和切换策略组。")
+                        .font(.caption)
+                        .foregroundStyle(brand.text2)
+                        .padding(.horizontal, 4)
                 }
                 .padding(24)
                 .frame(maxWidth: 860)
@@ -312,6 +328,38 @@ struct MacRulesPage: View {
                 title: "规则与分流",
                 message: "导入带规则和策略组的订阅（Clash、Surge、Loon 配置）后，可以在这里按订阅规则分流和切换策略组。现在全部流量走所选节点。"
             )
+        }
+    }
+
+    private func modeCard(hasRules: Bool) -> some View {
+        MacCard(title: "代理模式") {
+            Picker("代理模式", selection: Binding(
+                get: { tunnel.mode },
+                set: { mode in
+                    Task {
+                        await tunnel.setMode(mode)
+                    }
+                }
+            )) {
+                if hasRules {
+                    Text("规则").tag(ProxyMode.rule)
+                }
+                Text("全局").tag(ProxyMode.global)
+                Text("直连").tag(ProxyMode.direct)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            Text(ProxyModeText.footer(tunnel.mode))
+                .font(.caption)
+                .foregroundStyle(brand.text2)
+        }
+    }
+
+    private var dnsLink: some View {
+        NavigationLink {
+            DnsSettingsView(tunnel: tunnel)
+        } label: {
+            LabeledContent("DNS", value: tunnel.dns.isEmpty ? String(localized: "默认") : (tunnel.dns.effectiveDefault ?? String(localized: "Hosts")))
         }
     }
 
@@ -360,5 +408,22 @@ struct MacRulesPage: View {
         default:
             return library.displayName(ofMember: member)
         }
+    }
+}
+
+/// The rule sets the active subscription's rules use, with what the engine loaded.
+private struct MacRuleSetsPage: View {
+    @ObservedObject var tunnel: TunnelController
+    let rules: [String]
+    let defined: [String: EmbeddedRuntimeConfig.RuleSet]?
+    @Environment(\.brand) private var brand
+
+    var body: some View {
+        List {
+            RuleSetsSection(tunnel: tunnel, rules: rules, defined: defined)
+        }
+        .scrollContentBackground(.hidden)
+        .background(brand.bg)
+        .navigationTitle("规则集")
     }
 }

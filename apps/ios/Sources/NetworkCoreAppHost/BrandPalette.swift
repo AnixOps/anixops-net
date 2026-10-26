@@ -131,6 +131,41 @@ extension EnvironmentValues {
     }
 }
 
+extension View {
+    /// A compact navigation title on iOS; macOS has one title style.
+    @ViewBuilder
+    func inlineNavigationTitle() -> some View {
+        #if os(iOS)
+        navigationBarTitleDisplayMode(.inline)
+        #else
+        self
+        #endif
+    }
+
+    /// A form sheet's size on macOS, where a sheet otherwise shrinks to its content; iOS sizes sheets itself.
+    @ViewBuilder
+    func formSheetFrame() -> some View {
+        #if os(macOS)
+        frame(minWidth: 460, minHeight: 420)
+        #else
+        self
+        #endif
+    }
+
+    /// Entry for names, addresses and domains: no capitalization or autocorrection, and the URL keyboard on iOS
+    /// when `url` is set.
+    @ViewBuilder
+    func plainTextEntry(url: Bool = false) -> some View {
+        #if os(iOS)
+        textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .keyboardType(url ? .URL : .default)
+        #else
+        autocorrectionDisabled()
+        #endif
+    }
+}
+
 /// A rounded surface card in the current palette.
 struct BrandCard<Content: View>: View {
     @Environment(\.brand) private var brand

@@ -1,3 +1,4 @@
+import NetworkExtension
 import ServiceManagement
 import SwiftUI
 
@@ -11,6 +12,9 @@ struct MacHomePage: View {
         ScrollView {
             VStack(spacing: 16) {
                 MacHeroCard(tunnel: tunnel, state: state)
+                if tunnel.connection == .connected {
+                    TrafficCard(tunnel: tunnel)
+                }
                 if let message = tunnel.message {
                     MacNotice(text: message) {
                         tunnel.clearMessage()
@@ -187,7 +191,7 @@ struct MacPlaceholderPage: View {
     }
 }
 
-/// Activity: the current session as the system and the tunnel extension report it.
+/// Activity: the current session as the system and the tunnel extension report it, and the connection list.
 struct MacActivityPage: View {
     @ObservedObject var tunnel: TunnelController
     @Environment(\.brand) private var brand
@@ -211,11 +215,17 @@ struct MacActivityPage: View {
                         refresh()
                     }
                 }
-                BrandEmptyState(
-                    systemImage: "list.bullet.rectangle",
-                    title: "请求记录还没开放",
-                    message: "每条连接命中的规则、策略和插件标记需要内核提供数据，会在后续版本显示在这里。"
-                )
+                MacCard(title: "连接记录") {
+                    NavigationLink {
+                        ConnectionsView(tunnel: tunnel)
+                    } label: {
+                        Label("查看每个连接的目标、命中规则和线路", systemImage: "list.bullet.rectangle")
+                    }
+                    .disabled(tunnel.connection != .connected)
+                    Text("连接后可用。只保存在内存里，断开隧道即清空。")
+                        .font(.caption)
+                        .foregroundStyle(brand.text2)
+                }
             }
             .padding(24)
             .frame(maxWidth: 860)

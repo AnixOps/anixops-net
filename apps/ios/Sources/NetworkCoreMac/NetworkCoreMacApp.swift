@@ -1,4 +1,5 @@
 import AppKit
+import NetworkCoreBridge
 import NetworkExtension
 import SwiftUI
 
@@ -146,7 +147,7 @@ private struct OpenSectionButton: View {
     }
 }
 
-/// The menu bar item: the status, one connect switch and a way back to the window.
+/// The menu bar item: the status, one connect switch, the proxy mode and a way back to the window.
 private struct MenuBarContent: View {
     @Environment(\.openWindow) private var openWindow
     @ObservedObject var tunnel: TunnelController
@@ -168,6 +169,21 @@ private struct MenuBarContent: View {
                 tunnel.toggle()
             }
             .disabled(tunnel.phase == .disconnecting)
+            Picker("代理模式", selection: Binding(
+                get: { tunnel.mode },
+                set: { mode in
+                    Task {
+                        await tunnel.setMode(mode)
+                    }
+                }
+            )) {
+                if tunnel.library?.routing != nil {
+                    Text("规则").tag(ProxyMode.rule)
+                }
+                Text("全局").tag(ProxyMode.global)
+                Text("直连").tag(ProxyMode.direct)
+            }
+            .pickerStyle(.inline)
         }
         Divider()
         Button("打开 AnixOps Net") {
