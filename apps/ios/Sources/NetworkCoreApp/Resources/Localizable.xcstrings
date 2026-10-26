@@ -3947,6 +3947,36 @@
         }
       }
     },
+    "编辑…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit…"
+          }
+        }
+      }
+    },
+    "复制分享链接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy share link"
+          }
+        }
+      }
+    },
+    "已复制分享链接。链接里含有节点密码，只分享给信任的人。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share link copied. It contains the node password, so share it only with people you trust."
+          }
+        }
+      }
+    },
     "保存失败": {
       "localizations": {
         "en": {

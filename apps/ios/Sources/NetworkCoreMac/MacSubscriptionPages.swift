@@ -1,3 +1,4 @@
+import AppKit
 import NetworkCoreBridge
 import SwiftUI
 
@@ -13,6 +14,10 @@ struct MacProxiesPage: View {
     @State private var renaming: SubscriptionGroup?
     @State private var newName = ""
     @State private var deleting: SubscriptionGroup?
+    @State private var query = ""
+    @AppStorage("proxies.sort") private var sort = NodeSort.original
+    @State private var editing: MacEditingNode?
+    @State private var notice: String?
 
     var body: some View {
         Group {
@@ -83,6 +88,17 @@ struct MacProxiesPage: View {
         } message: {
             Text("会删除这个订阅组的全部节点。正在使用它时，会切换到下一个订阅组。")
         }
+        .sheet(item: $editing) { item in
+            NodeEditSheet(node: item.node) { edited in
+                await tunnel.updateNode(edited, inGroup: item.groupID)
+            }
+            .formSheetFrame()
+            .environment(\.brand, brand)
+            .tint(brand.primary)
+        }
+        .alert(notice ?? "", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
+            Button("好", role: .cancel) {}
+        }
     }
 
     private var groups: some View {
@@ -110,6 +126,13 @@ struct MacProxiesPage: View {
                     }
                     .disabled(updatingAll)
                     Spacer()
+                    Picker("排序", selection: $sort) {
+                        Text("订阅顺序").tag(NodeSort.original)
+                        Text("按名称").tag(NodeSort.name)
+                        Text("按延迟").tag(NodeSort.latency)
+                    }
+                    .pickerStyle(.menu)
+                    .fixedSize()
                 }
 
                 if tunnel.subscriptions.activeID == nil, let name = tunnel.nodeName {
@@ -136,6 +159,7 @@ struct MacProxiesPage: View {
             .frame(maxWidth: 860)
             .frame(maxWidth: .infinity)
         }
+        .searchable(text: $query, prompt: Text("筛选节点，/正则/ 匹配名称"))
     }
 
     private func groupCard(_ group: SubscriptionGroup) -> some View {
@@ -191,8 +215,11 @@ struct MacProxiesPage: View {
             if !isCollapsed {
                 Divider()
                 VStack(spacing: 0) {
-                    ForEach(group.library.nodes) { node in
+                    ForEach(shownNodes(group)) { node in
                         Button {
+                            guard !routed else {
+                                return
+                            }
                             Task {
                                 await tunnel.selectNode(node.id, inGroup: group.id)
                             }
@@ -204,7 +231,11 @@ struct MacProxiesPage: View {
                             )
                         }
                         .buttonStyle(.plain)
-                        .disabled(routed)
+                        // Not `.disabled`: nodes the rules pick stay editable from the menu.
+                        .opacity(routed ? 0.6 : 1)
+                        .contextMenu {
+                            nodeMenu(node, in: group)
+                        }
                     }
                 }
             }
@@ -216,6 +247,44 @@ struct MacProxiesPage: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(isActive ? brand.primary.opacity(0.6) : brand.border.opacity(0.6))
         )
+    }
+
+    /// A group's nodes in the chosen order, narrowed by the search field.
+    private func shownNodes(_ group: SubscriptionGroup) -> [NativeImportReport.Node] {
+        let sorted = sort.sorted(group.library.nodes) { node in
+            if case let .millis(value)? = tunnel.latencies[TunnelController.latencyKey(group: group.id, node: node.id)] {
+                return value
+            }
+            return nil
+        }
+        return NodeFilter(query).apply(sorted)
+    }
+
+    @ViewBuilder
+    private func nodeMenu(_ node: NativeImportReport.Node, in group: SubscriptionGroup) -> some View {
+        Button("编辑…") {
+            editing = MacEditingNode(groupID: group.id, node: node)
+        }
+        Button("复制分享链接") {
+            do {
+                let link = try NativeNodeImporterFFI.shareLink(for: node)
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(link, forType: .string)
+                notice = String(localized: "已复制分享链接。链接里含有节点密码，只分享给信任的人。")
+            } catch let failure as NodeShareFailure {
+                notice = failure.message
+            } catch {
+                notice = NodeShareFailure.unavailable.message
+            }
+        }
+        if group.library.canRemove(node.id) {
+            Divider()
+            Button("删除节点", role: .destructive) {
+                Task {
+                    await tunnel.deleteNode(node.id, inGroup: group.id)
+                }
+            }
+        }
     }
 
     private func nodeRow(_ node: NativeImportReport.Node, latency: NodeLatency?, selected: Bool) -> some View {
@@ -425,5 +494,15 @@ private struct MacRuleSetsPage: View {
         .scrollContentBackground(.hidden)
         .background(brand.bg)
         .navigationTitle("规则集")
+    }
+}
+
+/// The node an edit sheet is open for.
+private struct MacEditingNode: Identifiable {
+    let groupID: String
+    let node: NativeImportReport.Node
+
+    var id: String {
+        "\(groupID)\u{1F}\(node.id)"
     }
 }
