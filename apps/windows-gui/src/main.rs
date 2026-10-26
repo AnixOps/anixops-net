@@ -25,6 +25,7 @@ fn main() {
 #[allow(dead_code)]
 mod gui {
     mod actions;
+    mod linked_sources;
     mod runtime_status;
     mod startup;
     mod tauri_ui;
