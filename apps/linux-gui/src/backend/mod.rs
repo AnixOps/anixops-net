@@ -15,7 +15,7 @@ use engine_embedded::profile::{self, RoutingMode, RuleList};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use self::engine::Engine;
+use self::engine::{Engine, OtherSource};
 use self::state::{SavedSource, SavedState, Store};
 use self::system_proxy::Desktop;
 
@@ -86,6 +86,9 @@ pub struct NodeSummary {
     pub label: String,
     pub protocol: String,
     pub selected: bool,
+    /// The subscription the node comes from.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
 }
 
 /// A policy group in the interface's `NativeGroupSummary` shape.
@@ -152,8 +155,11 @@ pub struct Backend {
     engine: Engine,
     /// Nodes of the selected source.
     nodes: Vec<NodeDescriptor>,
-    /// The selected source's envelope with every node, rules and policy groups, when it has them.
+    /// The selected source's envelope with every node, rules and policy groups, when it has them, with the
+    /// other sources linked in as policy groups.
     routed_profile: Option<String>,
+    /// The other sources' runnable nodes, listed after the selected source's.
+    others: Vec<OtherSource>,
     desktop: Option<Desktop>,
     autostart_dir: Option<PathBuf>,
     executable: PathBuf,
@@ -176,6 +182,7 @@ impl Backend {
             engine: Engine::default(),
             nodes: Vec::new(),
             routed_profile: None,
+            others: Vec::new(),
             desktop,
             autostart_dir,
             executable,
@@ -201,6 +208,26 @@ impl Backend {
         self.nodes.clear();
         self.routed_profile = None;
         self.configuration_error = None;
+        self.others = self
+            .state
+            .sources
+            .iter()
+            .filter(|source| !source.selected)
+            .filter_map(|source| {
+                let content = self.store.read_source(&source.id).ok()?;
+                let nodes: Vec<NodeDescriptor> = engine::parse_nodes(&content)
+                    .ok()?
+                    .into_iter()
+                    .filter(engine::is_supported)
+                    .collect();
+                Some(OtherSource {
+                    id: source.id.clone(),
+                    name: subscription_meta::display_name(source.name.as_deref(), &source.location),
+                    nodes,
+                })
+            })
+            .filter(|other| !other.nodes.is_empty())
+            .collect();
         let Some(source) = self.state.selected_source() else {
             return;
         };
@@ -211,11 +238,21 @@ impl Backend {
             .and_then(|content| engine::parse_nodes(&content).map(|nodes| (content, nodes)))
         {
             Ok((content, nodes)) => {
-                self.routed_profile = engine::subscription_routing(&content, &nodes);
+                self.routed_profile = engine::subscription_routing(&content, &nodes)
+                    .map(|profile| engine::link_sources(&profile, &self.others));
                 self.nodes = nodes;
             }
             Err(error) => self.configuration_error = Some(error),
         }
+    }
+
+    /// The other source and its node behind a listed id `{source}.{node}`.
+    fn other_node(&self, id: &str) -> Option<(&OtherSource, &NodeDescriptor)> {
+        self.others.iter().find_map(|other| {
+            let node_id = id.strip_prefix(&other.id)?.strip_prefix('.')?;
+            let node = other.nodes.iter().find(|node| node.id == node_id)?;
+            Some((other, node))
+        })
     }
 
     /// The selected source's routed profile with the saved group choices, if it has rules and groups.
@@ -390,18 +427,33 @@ impl Backend {
         }
     }
 
+    /// The selected source's nodes, then every other source's, each with its subscription's name.
     pub fn nodes(&self) -> Vec<NodeSummary> {
         let selected = self.current_node_id();
-        self.nodes
+        let group = self.state.selected_source().map(|source| {
+            subscription_meta::display_name(source.name.as_deref(), &source.location)
+        });
+        let summary = |id: String, node: &NodeDescriptor, group: &Option<String>| NodeSummary {
+            selected: selected.as_deref() == Some(id.as_str()),
+            id,
+            label: node.name.clone(),
+            protocol: engine::protocol_name(&node.protocol),
+            group: group.clone(),
+        };
+        let own = self
+            .nodes
             .iter()
             .filter(|node| engine::is_supported(node))
-            .map(|node| NodeSummary {
-                id: node.id.clone(),
-                label: node.name.clone(),
-                protocol: engine::protocol_name(&node.protocol),
-                selected: selected.as_deref() == Some(node.id.as_str()),
-            })
-            .collect()
+            .map(|node| summary(node.id.clone(), node, &group));
+        let others = self.others.iter().flat_map(|other| {
+            let group = Some(other.name.clone());
+            other
+                .nodes
+                .iter()
+                .map(move |node| summary(other.outbound_id(&node.id), node, &group))
+                .collect::<Vec<_>>()
+        });
+        own.chain(others).collect()
     }
 
     /// The routed profile's policy groups, members labelled with node names.
@@ -522,6 +574,8 @@ impl Backend {
         let name = subscription_meta::clean_name(name).ok_or("enter a name")?;
         self.source_mut(id)?.name = Some(name);
         self.save();
+        // Linked policy groups are named after their subscriptions.
+        self.reload_nodes();
         done("Subscription renamed")
     }
 
@@ -638,12 +692,14 @@ impl Backend {
     }
 
     pub fn switch_node(&mut self, node_id: &str) -> Result<OperationResult, String> {
-        let node = self
+        let Some(node) = self
             .nodes
             .iter()
             .find(|node| node.id == node_id && engine::is_supported(node))
-            .ok_or("the node is not in the current subscription")?
-            .clone();
+            .cloned()
+        else {
+            return self.switch_to_other_source(node_id);
+        };
         // In a routed profile a node switch picks the node in the main select group.
         if let Some(profile) = self.routed() {
             let group = profile::switch_group_for_node(&profile, &node.id).ok_or(
@@ -657,6 +713,55 @@ impl Backend {
         done(format!("Switched to {}", node.name))
     }
 
+    /// Switches to a node of another source: through its linked policy group when the selected source's rules
+    /// include it, else by selecting that source and its node.
+    fn switch_to_other_source(&mut self, id: &str) -> Result<OperationResult, String> {
+        let (other, node) = self
+            .other_node(id)
+            .ok_or("the node is not in any subscription")?;
+        let (source_id, node_id, name, group_id) = (
+            other.id.clone(),
+            node.id.clone(),
+            node.name.clone(),
+            other.group_id(),
+        );
+        if let Some(mut profile) = self.routed() {
+            if profile::set_group_default(&mut profile, &group_id, id).is_ok() {
+                let mut choices = vec![(group_id.clone(), id.to_string())];
+                if let Some(main) = profile::switch_group_for_node(&profile, &group_id) {
+                    profile::set_group_default(&mut profile, &main, &group_id)?;
+                    choices.push((main, group_id));
+                }
+                self.state.group_choices.extend(choices);
+                self.save();
+                self.restart_if_running()?;
+                return done(format!("Switched to {name}"));
+            }
+        }
+        self.state.select_source(&source_id);
+        self.state.selected_node = None;
+        self.state.group_choices.clear();
+        self.save();
+        self.reload_nodes();
+        // A routed subscription whose main group cannot pick the node still runs, on its own choices.
+        self.switch_node(&node_id).or_else(|_| {
+            self.restart_if_running()?;
+            done(format!(
+                "Switched to the subscription with {name}; its policy groups choose the node"
+            ))
+        })
+    }
+
+    /// The nodes to build node `id`'s delay test from, its id among them and its name, for tests run
+    /// outside the lock.
+    pub fn delay_target(&self, id: &str) -> Option<(Vec<NodeDescriptor>, String, String)> {
+        if let Some(node) = self.nodes.iter().find(|node| node.id == id) {
+            return Some((self.nodes.clone(), node.id.clone(), node.name.clone()));
+        }
+        let (other, node) = self.other_node(id)?;
+        Some((other.nodes.clone(), node.id.clone(), node.name.clone()))
+    }
+
     /// The current nodes, for delay tests run outside the lock.
     pub fn node_list(&self) -> Vec<NodeDescriptor> {
         self.nodes.clone()
@@ -666,6 +771,7 @@ impl Backend {
         self.nodes
             .iter()
             .find(|node| node.id == node_id)
+            .or_else(|| self.other_node(node_id).map(|(_, node)| node))
             .map(|node| node.name.clone())
     }
 
@@ -1015,6 +1121,76 @@ rules:
         // Choices belong to the subscription they were made in.
         let _ = backend.import(PASTED_LOCATION, LINK);
         assert!(backend.state.group_choices.is_empty());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn other_subscriptions_are_listed_and_linked_as_policy_groups() {
+        let (mut backend, dir) = backend("linked");
+        backend.import("https://two.example/sub", LINK).unwrap();
+        backend.import("https://example.com/sub", CLASH).unwrap();
+        let nodes = backend.nodes();
+        assert_eq!(
+            nodes
+                .iter()
+                .map(|node| (node.label.as_str(), node.group.as_deref()))
+                .collect::<Vec<_>>(),
+            [
+                ("HK", Some("example.com")),
+                ("JP", Some("example.com")),
+                ("HK", Some("two.example"))
+            ]
+        );
+        let other = nodes[2].id.clone();
+        assert!(other.starts_with("s1."), "{other}");
+
+        // The other subscription joins the rules as a select group and every select group can pick it.
+        let groups = backend.groups();
+        let linked = groups.last().unwrap();
+        assert_eq!(linked.tag, "订阅·two.example");
+        assert_eq!(linked.outbounds, [other.clone()]);
+        assert_eq!(linked.outbound_labels, ["HK"]);
+        assert!(groups[0].outbounds.contains(&linked.tag));
+        assert!(!groups[1].outbounds.contains(&linked.tag));
+
+        // Picking its node routes the main group through it.
+        backend.switch_node(&other).unwrap();
+        assert_eq!(
+            backend.snapshot().selected_node.as_deref(),
+            Some(other.as_str())
+        );
+        assert_eq!(
+            backend.groups()[0].selected.as_deref(),
+            Some("订阅·two.example")
+        );
+        let (delay_nodes, delay_id, name) = backend.delay_target(&other).unwrap();
+        assert_eq!(name, "HK");
+        assert!(delay_nodes.iter().any(|node| node.id == delay_id));
+        assert!(backend.delay_target("s9.missing").is_none());
+        let routed: serde_json::Value = serde_json::from_str(&backend.envelope().unwrap()).unwrap();
+        assert!(routed["routing"]["outbounds"].get(&other).is_some());
+
+        // From the plain subscription, a node of the routed one selects that subscription.
+        backend.select_subscription("s1").unwrap();
+        let nodes = backend.nodes();
+        assert_eq!(nodes[0].group.as_deref(), Some("two.example"));
+        assert!(nodes[0].selected);
+        let hk = nodes
+            .iter()
+            .find(|node| node.label == "HK" && node.group.as_deref() == Some("example.com"))
+            .unwrap()
+            .id
+            .clone();
+        assert!(hk.starts_with("s2."), "{hk}");
+        backend.switch_node(&hk).unwrap();
+        assert_eq!(backend.state.selected_source().unwrap().id, "s2");
+        let selected = backend.snapshot().selected_node.unwrap();
+        assert_eq!(backend.node_name(&selected).as_deref(), Some("HK"));
+        assert!(backend.switch_node("s9.missing").is_err());
+
+        // Linked groups follow a rename.
+        backend.rename_subscription("s1", "Two, B").unwrap();
+        assert_eq!(backend.groups().last().unwrap().tag, "订阅·Two  B");
         let _ = std::fs::remove_dir_all(dir);
     }
 

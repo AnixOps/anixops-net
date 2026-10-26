@@ -234,16 +234,10 @@ async fn test_node_delay(
     node_id: String,
     url: String,
 ) -> Result<OperationResult, String> {
-    let (nodes, name) = {
-        let backend = lock(&state.0);
-        (
-            backend.node_list(),
-            backend
-                .node_name(&node_id)
-                .unwrap_or_else(|| node_id.clone()),
-        )
-    };
-    let delay = off_lock(move || engine::node_delay(&nodes, &node_id, &url)).await?;
+    let (nodes, id, name) = lock(&state.0)
+        .delay_target(&node_id)
+        .ok_or("the node is not in any subscription")?;
+    let delay = off_lock(move || engine::node_delay(&nodes, &id, &url)).await?;
     Ok(OperationResult {
         message: format!("{name}: {}", format_delay(delay)),
     })

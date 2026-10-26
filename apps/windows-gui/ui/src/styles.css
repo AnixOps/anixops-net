@@ -267,6 +267,8 @@ input[type="checkbox"] { width: auto; height: auto; }
 .search input { padding-left: 32px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .count { margin-left: auto; color: var(--text3); font-size: 12px; font-variant-numeric: tabular-nums; }
+.node-section + .node-section { margin-top: 14px; }
+.node-section-title { display: flex; gap: 8px; align-items: baseline; margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--text2); }
 .node-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
 .node-card { display: flex; gap: 6px; align-items: center; padding: 4px 6px 4px 4px; background: transparent; border: 1.5px solid var(--border); border-radius: 8px; transition: border-color var(--fast), background var(--fast); }
 .node-card:hover { border-color: var(--text3); }

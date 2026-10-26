@@ -15,6 +15,7 @@ use engine_embedded::delay::measure_delay;
 use engine_embedded::local_proxy::LocalProxy;
 use engine_embedded::nodes::{outbound_for_node, routing_envelope, single_node_envelope};
 use inbound_mixed::MixedSettings;
+use serde_json::{json, Value};
 
 const PROFILE_ID: &str = "linux-gui";
 pub const DELAY_TIMEOUT: Duration = Duration::from_secs(5);
@@ -79,6 +80,82 @@ pub fn subscription_routing(content: &str, nodes: &[NodeDescriptor]) -> Option<S
     routing_envelope(PROFILE_ID, nodes, &spec)
         .ok()
         .filter(|envelope| RuntimeConfig::from_json(envelope.as_bytes()).is_ok())
+}
+
+/// A saved source other than the selected one, with the nodes the engine can run.
+#[derive(Debug, Clone)]
+pub struct OtherSource {
+    pub id: String,
+    pub name: String,
+    pub nodes: Vec<NodeDescriptor>,
+}
+
+impl OtherSource {
+    /// The id node `node_id` of this source has in a linked profile and in the node list.
+    pub fn outbound_id(&self, node_id: &str) -> String {
+        format!("{}.{node_id}", self.id)
+    }
+
+    /// The select policy group this source becomes in the selected source's rules.
+    pub fn group_id(&self) -> String {
+        format!("订阅·{}", self.name.replace(',', " "))
+    }
+}
+
+/// Adds every other source to a routed envelope as a select policy group of its nodes, and that group to
+/// every select group, as Loon does with subscription groups. A source is left out when its ids clash or the
+/// engine would reject the result (it allows 64 nodes and 64 groups).
+pub fn link_sources(envelope: &str, others: &[OtherSource]) -> String {
+    let Ok(mut profile) = serde_json::from_str::<Value>(envelope) else {
+        return envelope.to_string();
+    };
+    for other in others {
+        if let Some(linked) = linked(&profile, other) {
+            profile = linked;
+        }
+    }
+    profile.to_string()
+}
+
+fn linked(profile: &Value, other: &OtherSource) -> Option<Value> {
+    let mut profile = profile.clone();
+    let group_id = other.group_id();
+    let routing = profile.get_mut("routing")?.as_object_mut()?;
+    let outbounds = routing.get_mut("outbounds")?.as_object_mut()?;
+    if outbounds.contains_key(&group_id) {
+        return None;
+    }
+    let mut members = Vec::new();
+    for node in &other.nodes {
+        let id = other.outbound_id(&node.id);
+        if outbounds.contains_key(&id) {
+            return None;
+        }
+        outbounds.insert(id.clone(), outbound_for_node(node).ok()?);
+        members.push(Value::String(id));
+    }
+    if members.is_empty() {
+        return None;
+    }
+    let groups = routing.get_mut("groups")?.as_array_mut()?;
+    if groups
+        .iter()
+        .any(|group| group.get("id").and_then(Value::as_str) == Some(group_id.as_str()))
+    {
+        return None;
+    }
+    for group in groups.iter_mut() {
+        if group.get("type").and_then(Value::as_str) == Some("select") {
+            group
+                .get_mut("members")?
+                .as_array_mut()?
+                .push(Value::String(group_id.clone()));
+        }
+    }
+    groups.push(json!({ "id": group_id, "type": "select", "members": members }));
+    RuntimeConfig::from_json(profile.to_string().as_bytes())
+        .is_ok()
+        .then_some(profile)
 }
 
 /// The running local proxy, if any.

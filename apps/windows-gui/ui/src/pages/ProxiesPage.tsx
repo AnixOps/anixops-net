@@ -2,7 +2,7 @@ import { Activity, Check, CloudDownload, Globe, Pencil, RefreshCw, Search, Trash
 import { useEffect, useState } from "react";
 import { desktop, NodeSummary, RuntimeSnapshot, SubscriptionSummary } from "../bridge";
 import { protocolAbbreviation } from "../labels";
-import { filterNodes } from "../node-filter";
+import { filterNodes, groupNodes } from "../node-filter";
 import { Card, EmptyState, IconButton, Run, StatusPill } from "../ui";
 import { t } from "../i18n";
 import { formatBytes, formatDay, updateIntervalChoices, updateIntervalLabel, usedFraction } from "../subscription-format";
@@ -17,6 +17,7 @@ export function ProxiesPage({ snapshot, nodes, busy, run }: {
   const [protocol, setProtocol] = useState("All");
   const protocols = ["All", ...new Set(nodes.map((node) => node.protocol))];
   const visible = filterNodes(nodes, query, protocol);
+  const sections = groupNodes(visible);
 
   return (
     <div className="page-stack">
@@ -40,24 +41,29 @@ export function ProxiesPage({ snapshot, nodes, busy, run }: {
             </div>
             <span className="count">{visible.length} / {nodes.length}</span>
           </div>
-          <div className="node-grid">
-            {visible.map((node) => (
-              <div className={`node-card ${node.selected ? "selected" : ""}`} key={node.id}>
-                <button
-                  className="node-pick"
-                  aria-pressed={node.selected}
-                  disabled={Boolean(busy) || node.selected}
-                  onClick={() => void run("switch", () => desktop.switchNode(node.id))}
-                >
-                  <span className="node-name">{node.label}</span>
-                  <span className="node-meta"><span className="protocol-badge">{protocolAbbreviation(node.protocol)}</span>{node.selected && <span className="current-dot" aria-label={t("当前节点")} />}</span>
-                </button>
-                <IconButton label={t("测试 {node} 的延迟", { node: node.label })} disabled={Boolean(busy)} onClick={() => void run("delay", () => desktop.testDelay(node.id, delayUrl))}>
-                  <Activity size={15} />
-                </IconButton>
+          {sections.map((section) => (
+            <section className="node-section" key={section.group ?? ""} aria-label={section.group}>
+              {sections.length > 1 && section.group && <h3 className="node-section-title">{section.group}<span className="count">{section.nodes.length}</span></h3>}
+              <div className="node-grid">
+                {section.nodes.map((node) => (
+                  <div className={`node-card ${node.selected ? "selected" : ""}`} key={node.id}>
+                    <button
+                      className="node-pick"
+                      aria-pressed={node.selected}
+                      disabled={Boolean(busy) || node.selected}
+                      onClick={() => void run("switch", () => desktop.switchNode(node.id))}
+                    >
+                      <span className="node-name">{node.label}</span>
+                      <span className="node-meta"><span className="protocol-badge">{protocolAbbreviation(node.protocol)}</span>{node.selected && <span className="current-dot" aria-label={t("当前节点")} />}</span>
+                    </button>
+                    <IconButton label={t("测试 {node} 的延迟", { node: node.label })} disabled={Boolean(busy)} onClick={() => void run("delay", () => desktop.testDelay(node.id, delayUrl))}>
+                      <Activity size={15} />
+                    </IconButton>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </section>
+          ))}
           {visible.length === 0 && <p className="muted center">{t("没有符合条件的节点。")}</p>}
         </Card>
       )}
