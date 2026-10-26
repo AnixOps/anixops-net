@@ -251,6 +251,40 @@ async fn test_node_delay(
     })
 }
 
+/// One node's result in a batch delay test, as the Windows backend reports it.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NodeDelay {
+    node_id: String,
+    delay_ms: Option<u64>,
+    error: Option<String>,
+}
+
+#[tauri::command]
+async fn test_node_delays(
+    state: State<'_, AppState>,
+    node_ids: Vec<String>,
+    url: String,
+) -> Result<Vec<NodeDelay>, String> {
+    let nodes = lock(&state.0).delay_nodes(&node_ids);
+    let results = off_lock(move || Ok(engine::node_delays(&nodes, &url))).await?;
+    Ok(results
+        .into_iter()
+        .map(|(node_id, delay)| match delay {
+            Ok(delay) => NodeDelay {
+                node_id,
+                delay_ms: Some(u64::try_from(delay.as_millis()).unwrap_or(u64::MAX)),
+                error: None,
+            },
+            Err(error) => NodeDelay {
+                node_id,
+                delay_ms: None,
+                error: Some(error),
+            },
+        })
+        .collect())
+}
+
 #[tauri::command]
 async fn node_share_link(state: State<'_, AppState>, node_id: String) -> Result<String, String> {
     lock(&state.0).share_link(&node_id)
@@ -480,6 +514,7 @@ pub fn run() -> Result<(), String> {
             switch_node,
             runtime_control,
             test_node_delay,
+            test_node_delays,
             node_share_link,
             select_fastest_node,
             save_preferences,

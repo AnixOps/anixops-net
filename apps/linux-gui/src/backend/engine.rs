@@ -247,6 +247,37 @@ pub fn share_link(node: &NodeDescriptor) -> Result<String, String> {
         .map_err(|error| format!("This node cannot be shared: {error}"))
 }
 
+/// Tests each listed node on its own, `DELAY_BATCH` at a time, in the order given.
+pub fn node_delays(
+    nodes: &[(String, Option<NodeDescriptor>)],
+    url: &str,
+) -> Vec<(String, Result<Duration, String>)> {
+    let mut results = Vec::with_capacity(nodes.len());
+    for batch in nodes.chunks(DELAY_BATCH) {
+        let delays: Vec<_> = thread::scope(|scope| {
+            let handles: Vec<_> = batch
+                .iter()
+                .map(|(_, node)| {
+                    scope.spawn(move || {
+                        let node = node.as_ref().ok_or("the node is not in any subscription")?;
+                        node_delay(std::slice::from_ref(node), &node.id, url)
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .map(|handle| {
+                    handle
+                        .join()
+                        .unwrap_or_else(|_| Err("delay test stopped".to_string()))
+                })
+                .collect()
+        });
+        results.extend(batch.iter().map(|(id, _)| id.clone()).zip(delays));
+    }
+    results
+}
+
 /// Tests every supported node and returns the fastest one with its delay.
 pub fn fastest_node(nodes: &[NodeDescriptor], url: &str) -> Option<(String, Duration)> {
     let candidates: Vec<&NodeDescriptor> = nodes.iter().filter(|node| is_supported(node)).collect();
@@ -279,6 +310,14 @@ mod tests {
     use super::*;
 
     const LINK: &str = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@82.47.34.99:11111#HK";
+
+    #[test]
+    fn reports_a_missing_node_in_a_batch_delay_test() {
+        let results = node_delays(&[("gone".to_string(), None)], "http://127.0.0.1:9/");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].0, "gone");
+        assert!(results[0].1.is_err());
+    }
 
     #[test]
     fn shares_a_node_as_the_link_it_came_from() {

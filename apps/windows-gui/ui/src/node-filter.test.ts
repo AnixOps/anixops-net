@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterNodes, groupNodes } from "./node-filter";
+import { delayTone, filterNodes, groupNodes, sortNodes } from "./node-filter";
 
 const nodes = [
   { id: "a", label: "Tokyo Primary", protocol: "Shadowsocks", selected: true },
@@ -28,5 +28,25 @@ describe("groupNodes", () => {
     expect(filterNodes(listed, "two", "All")).toEqual([listed[2]]);
     expect(groupNodes(nodes)).toEqual([{ group: undefined, nodes }]);
     expect(groupNodes([])).toEqual([]);
+  });
+});
+
+describe("sortNodes", () => {
+  const three = [...nodes, { id: "c", label: "Amsterdam", protocol: "Trojan", selected: false }];
+  const delays = {
+    b: { nodeId: "b", delayMs: 320 },
+    c: { nodeId: "c", error: "timed out" },
+  };
+
+  it("orders by name or by delay with failed and untested nodes last", () => {
+    expect(sortNodes(three, "default", delays)).toBe(three);
+    expect(sortNodes(three, "name", delays).map((node) => node.id)).toEqual(["c", "b", "a"]);
+    expect(sortNodes(three, "delay", delays).map((node) => node.id)).toEqual(["b", "c", "a"]);
+  });
+
+  it("colours delays", () => {
+    expect(delayTone({ nodeId: "b", delayMs: 320 })).toBe("fast");
+    expect(delayTone({ nodeId: "b", delayMs: 900 })).toBe("slow");
+    expect(delayTone({ nodeId: "c", error: "timed out" })).toBe("failed");
   });
 });

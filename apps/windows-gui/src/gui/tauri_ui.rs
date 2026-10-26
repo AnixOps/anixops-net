@@ -258,6 +258,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             select_native_group_outbound,
             runtime_control,
             test_node_delay,
+            test_node_delays,
             node_share_link,
             select_fastest_node,
             save_preferences,
@@ -1220,23 +1221,89 @@ fn test_node_delay_blocking(
         .map_err(|_| "desktop state lock failed")?
         .clone();
     require_embedded_config()?;
-    let delay = match selected_catalog_node(&desktop, &node_id) {
-        Ok(node) => measure_embedded_node_delay(&node.id, &url)?,
-        Err(error) => {
-            let other = other_sources(&desktop);
-            let node = other
-                .iter()
-                .find_map(|other| other.node(&node_id))
-                .ok_or(error)?;
-            let profile =
-                linked_sources::node_profile(EMBEDDED_PROFILE_ID, CONFIG_SCHEMA_VERSION, node);
-            measure_delay(profile.as_bytes(), &url, EMBEDDED_DELAY_TIMEOUT)
-                .map_err(|error| error.to_string())?
-        }
-    };
+    let delay = listed_node_delay(&desktop, &node_id, &url)?;
     Ok(OperationResult {
         message: format!("{} ms via {url}", delay.as_millis()),
     })
+}
+
+/// Delay through a node of the profile or of another subscription.
+fn listed_node_delay(desktop: &DesktopState, node_id: &str, url: &str) -> Result<Duration, String> {
+    match selected_catalog_node(desktop, node_id) {
+        Ok(node) => measure_embedded_node_delay(&node.id, url),
+        Err(error) => {
+            let other = other_sources(desktop);
+            let node = other
+                .iter()
+                .find_map(|other| other.node(node_id))
+                .ok_or(error)?;
+            let profile =
+                linked_sources::node_profile(EMBEDDED_PROFILE_ID, CONFIG_SCHEMA_VERSION, node);
+            measure_delay(profile.as_bytes(), url, EMBEDDED_DELAY_TIMEOUT)
+                .map_err(|error| error.to_string())
+        }
+    }
+}
+
+/// One node's result in a batch delay test.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NodeDelay {
+    node_id: String,
+    delay_ms: Option<u64>,
+    error: Option<String>,
+}
+
+/// Tests the listed nodes, up to 16 at a time, and reports each one.
+#[tauri::command]
+async fn test_node_delays(
+    node_ids: Vec<String>,
+    url: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<Vec<NodeDelay>, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let desktop = state
+            .desktop
+            .lock()
+            .map_err(|_| "desktop state lock failed")?
+            .clone();
+        require_embedded_config()?;
+        let (desktop, url) = (&desktop, url.as_str());
+        let mut results = Vec::with_capacity(node_ids.len());
+        for chunk in node_ids.chunks(EMBEDDED_DELAY_PARALLELISM) {
+            let delays: Vec<_> = std::thread::scope(|scope| {
+                let handles: Vec<_> = chunk
+                    .iter()
+                    .map(|id| scope.spawn(move || listed_node_delay(desktop, id, url)))
+                    .collect();
+                handles
+                    .into_iter()
+                    .map(|handle| {
+                        handle
+                            .join()
+                            .unwrap_or_else(|_| Err("delay test stopped".to_string()))
+                    })
+                    .collect()
+            });
+            for (node_id, delay) in chunk.iter().zip(delays) {
+                results.push(match delay {
+                    Ok(delay) => NodeDelay {
+                        node_id: node_id.clone(),
+                        delay_ms: Some(u64::try_from(delay.as_millis()).unwrap_or(u64::MAX)),
+                        error: None,
+                    },
+                    Err(error) => NodeDelay {
+                        node_id: node_id.clone(),
+                        delay_ms: None,
+                        error: Some(error),
+                    },
+                });
+            }
+        }
+        Ok(results)
+    })
+    .await
 }
 
 /// The embedded engine config when an imported profile runs on it.

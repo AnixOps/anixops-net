@@ -1,8 +1,8 @@
 import { Activity, Check, CloudDownload, Globe, Pencil, RefreshCw, Search, Share2, Trash2, X, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
-import { desktop, NodeSummary, RuntimeSnapshot, SubscriptionSummary } from "../bridge";
+import { desktop, NodeDelay, NodeSummary, RuntimeSnapshot, SubscriptionSummary } from "../bridge";
 import { protocolAbbreviation } from "../labels";
-import { filterNodes, groupNodes } from "../node-filter";
+import { delayTone, filterNodes, groupNodes, NodeSort, sortNodes } from "../node-filter";
 import { Card, EmptyState, IconButton, Run, StatusPill } from "../ui";
 import { t } from "../i18n";
 import { formatBytes, formatDay, updateIntervalChoices, updateIntervalLabel, usedFraction } from "../subscription-format";
@@ -16,8 +16,20 @@ export function ProxiesPage({ snapshot, nodes, busy, run }: {
   const [query, setQuery] = useState("");
   const [protocol, setProtocol] = useState("All");
   const protocols = ["All", ...new Set(nodes.map((node) => node.protocol))];
+  const [sort, setSort] = useState<NodeSort>("default");
+  const [delays, setDelays] = useState<Record<string, NodeDelay>>({});
   const visible = filterNodes(nodes, query, protocol);
-  const sections = groupNodes(visible);
+  const sections = groupNodes(visible).map((section) => ({ ...section, nodes: sortNodes(section.nodes, sort, delays) }));
+
+  const testDelays = (targets: NodeSummary[]) => void run("delay", async () => {
+    const results = await desktop.testDelays(targets.map((node) => node.id), delayUrl);
+    setDelays((current) => ({ ...current, ...Object.fromEntries(results.map((result) => [result.nodeId, result])) }));
+    if (targets.length === 1) {
+      const result = results[0];
+      return { message: result?.delayMs != null ? t("{node}：{ms} ms", { node: targets[0].label, ms: result.delayMs }) : t("{node} 测速失败", { node: targets[0].label }) };
+    }
+    return { message: t("{ok} / {total} 个节点有响应", { ok: results.filter((result) => result.delayMs != null).length, total: results.length }) };
+  });
 
   return (
     <div className="page-stack">
@@ -39,6 +51,12 @@ export function ProxiesPage({ snapshot, nodes, busy, run }: {
                 </button>
               ))}
             </div>
+            <select className="interval-select" aria-label={t("节点排序")} value={sort} onChange={(event) => setSort(event.target.value as NodeSort)}>
+              <option value="default">{t("默认顺序")}</option>
+              <option value="name">{t("按名称")}</option>
+              <option value="delay">{t("按延迟")}</option>
+            </select>
+            <button className="secondary compact" disabled={Boolean(busy) || visible.length === 0} onClick={() => testDelays(visible)}><Activity size={14} />{t("全部测速")}</button>
             <span className="count">{visible.length} / {nodes.length}</span>
           </div>
           {sections.map((section) => (
@@ -54,9 +72,13 @@ export function ProxiesPage({ snapshot, nodes, busy, run }: {
                       onClick={() => void run("switch", () => desktop.switchNode(node.id))}
                     >
                       <span className="node-name">{node.label}</span>
-                      <span className="node-meta"><span className="protocol-badge">{protocolAbbreviation(node.protocol)}</span>{node.selected && <span className="current-dot" aria-label={t("当前节点")} />}</span>
+                      <span className="node-meta">
+                        <span className="protocol-badge">{protocolAbbreviation(node.protocol)}</span>
+                        {delays[node.id] && <span className={`delay ${delayTone(delays[node.id])}`} title={delays[node.id].error ?? undefined}>{delays[node.id].delayMs != null ? `${delays[node.id].delayMs} ms` : t("失败")}</span>}
+                        {node.selected && <span className="current-dot" aria-label={t("当前节点")} />}
+                      </span>
                     </button>
-                    <IconButton label={t("测试 {node} 的延迟", { node: node.label })} disabled={Boolean(busy)} onClick={() => void run("delay", () => desktop.testDelay(node.id, delayUrl))}>
+                    <IconButton label={t("测试 {node} 的延迟", { node: node.label })} disabled={Boolean(busy)} onClick={() => testDelays([node])}>
                       <Activity size={15} />
                     </IconButton>
                     <IconButton label={t("复制 {node} 的分享链接", { node: node.label })} disabled={Boolean(busy)} onClick={() => void run("share", () => copyShareLink(node))}>

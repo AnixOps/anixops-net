@@ -283,6 +283,10 @@ input[type="checkbox"] { width: auto; height: auto; }
 .node-name { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .node-meta { display: flex; gap: 8px; align-items: center; }
 .protocol-badge { padding: 1px 6px; color: var(--text2); font-size: 11px; font-weight: 700; letter-spacing: .02em; background: var(--raised); border-radius: 4px; }
+.delay { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.delay.fast { color: var(--success); }
+.delay.slow { color: var(--warning); }
+.delay.failed { color: var(--danger); }
 .node-card.selected .protocol-badge { color: var(--primary); background: var(--surface); }
 .current-dot { width: 7px; height: 7px; background: #f59e0b; border-radius: 50%; }
 
