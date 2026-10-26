@@ -223,7 +223,7 @@ mod tests {
         assert!(RuntimeConfig::from_json(routed().to_string().as_bytes()).is_ok());
         let mut profile = routed();
         let two = other("source-2", "Two, B", &["fr", "de"]);
-        link(&mut profile, &[two.clone()]);
+        link(&mut profile, std::slice::from_ref(&two));
 
         let groups = profile["routing"]["groups"].as_array().unwrap();
         assert_eq!(

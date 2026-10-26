@@ -1148,7 +1148,7 @@ rules:
         let groups = backend.groups();
         let linked = groups.last().unwrap();
         assert_eq!(linked.tag, "订阅·two.example");
-        assert_eq!(linked.outbounds, [other.clone()]);
+        assert_eq!(linked.outbounds, [other.as_str()]);
         assert_eq!(linked.outbound_labels, ["HK"]);
         assert!(groups[0].outbounds.contains(&linked.tag));
         assert!(!groups[1].outbounds.contains(&linked.tag));
