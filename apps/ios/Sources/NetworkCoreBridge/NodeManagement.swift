@@ -3,15 +3,6 @@ import Foundation
 /// Editing, sorting and filtering the node list. Edits change the saved node only: a subscription update brings back
 /// what the provider serves.
 extension NativeImportReport.Node {
-    public init(id: String, name: String, protocol: String, server: String, port: UInt16, outbound: [String: JSONValue]) {
-        self.id = id
-        self.name = name
-        self.protocol = `protocol`
-        self.server = server
-        self.port = port
-        self.outbound = outbound
-    }
-
     /// The same node with a new name, server and port; the runtime outbound gets the same server and port.
     public func edited(name: String, server: String, port: UInt16) -> NativeImportReport.Node {
         var outbound = outbound

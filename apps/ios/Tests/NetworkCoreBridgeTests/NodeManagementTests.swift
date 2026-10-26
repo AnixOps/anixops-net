@@ -4,14 +4,11 @@ import XCTest
 
 final class NodeManagementTests: XCTestCase {
     private func node(_ id: String, _ name: String, server: String = "s.example", protocol kind: String = "trojan") -> NativeImportReport.Node {
-        NativeImportReport.Node(
-            id: id,
-            name: name,
-            protocol: kind,
-            server: server,
-            port: 443,
-            outbound: ["type": .string(kind), "server": .string(server), "port": .int(443), "password": .string("p")]
-        )
+        let json = """
+        {"id":"\(id)","name":"\(name)","protocol":"\(kind)","server":"\(server)","port":443,
+         "outbound":{"type":"\(kind)","server":"\(server)","port":443,"password":"p"}}
+        """
+        return try! JSONDecoder().decode(NativeImportReport.Node.self, from: Data(json.utf8))
     }
 
     func testEditChangesTheOutboundServerAndPortToo() throws {
