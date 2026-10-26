@@ -25,7 +25,9 @@ esac
 
 root="$(git rev-parse --show-toplevel)"
 kernel="$(bash "${root}/.github/scripts/kernel-root.sh")"
-target_dir="${root}/target/kernel"
+# One target dir per kernel commit: a restored cache from an older pin can otherwise leave stale
+# artifacts of unchanged-looking kernel crates next to the new checkout.
+target_dir="${root}/target/kernel-$(basename "${kernel}")"
 echo "Kernel checkout: ${kernel}"
 
 device_target=aarch64-apple-ios
