@@ -38,6 +38,8 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
+        # Scanning node and subscription QR codes in the import sheet; nothing is recorded or uploaded.
+        NSCameraUsageDescription: 扫描节点或订阅二维码时使用相机，画面不会保存或上传。
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         ITSAppUsesNonExemptEncryption: false
