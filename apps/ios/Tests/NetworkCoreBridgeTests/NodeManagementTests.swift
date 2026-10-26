@@ -22,6 +22,19 @@ final class NodeManagementTests: XCTestCase {
         XCTAssertEqual(edited.outbound["password"], .string("p"))
     }
 
+    func testShareRequestCarriesTheNameAndFullOutbound() throws {
+        let request = try node("a", "Tokyo").shareLinkRequest()
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: request) as? [String: Any])
+        XCTAssertEqual(Set(json.keys), ["name", "outbound"])
+        XCTAssertEqual(json["name"] as? String, "Tokyo")
+        let outbound = try XCTUnwrap(json["outbound"] as? [String: Any])
+        XCTAssertEqual(outbound["password"] as? String, "p")
+        XCTAssertEqual(outbound["port"] as? Int, 443)
+        // A node without a name is shared under its server.
+        let unnamed = try XCTUnwrap(JSONSerialization.jsonObject(with: node("b", "").shareLinkRequest()) as? [String: Any])
+        XCTAssertEqual(unnamed["name"] as? String, "s.example")
+    }
+
     func testEditRejectsBadServersAndPorts() {
         let base = node("a", "Tokyo")
         XCTAssertEqual(NodeEdit.apply(to: base, name: "", server: " ", port: "443"), .failure(.emptyServer))
