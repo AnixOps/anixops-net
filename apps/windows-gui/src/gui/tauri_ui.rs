@@ -256,6 +256,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             validate_configuration,
             switch_node,
             select_native_group_outbound,
+            runtime_control,
             test_node_delay,
             select_fastest_node,
             save_preferences,
@@ -751,6 +752,26 @@ fn select_native_group_outbound_blocking(
 ) -> Result<OperationResult, String> {
     let embedded = require_embedded_config()?;
     select_embedded_group_member(&state, &embedded, &group_tag, &outbound_tag)
+}
+
+/// Live traffic and connections from the engine this window runs; the
+/// service-mode core is in another process and answers nothing here.
+#[tauri::command]
+async fn runtime_control(
+    request: Value,
+    state: State<'_, DesktopAppState>,
+) -> Result<Value, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let request = connection::activity_request(&request)?;
+        let answer = state
+            .direct_core
+            .lock()
+            .map_err(|_| "desktop core lock failed")?
+            .control(&request)?;
+        serde_json::from_slice(&answer).map_err(|error| error.to_string())
+    })
+    .await
 }
 
 #[tauri::command]

@@ -158,6 +158,24 @@ fn linked(profile: &Value, other: &OtherSource) -> Option<Value> {
         .then_some(profile)
 }
 
+/// Kernel control commands the activity page may send: reading traffic and connections and closing them. Mode
+/// and group changes go through the saved profile instead.
+const ACTIVITY_COMMANDS: [&str; 4] = ["traffic", "connections", "close_connection", "close_all"];
+
+/// The request bytes for an activity page command, or why it is refused.
+pub fn activity_request(request: &serde_json::Value) -> Result<Vec<u8>, String> {
+    let command = request
+        .get("cmd")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    if !ACTIVITY_COMMANDS.contains(&command) {
+        return Err(format!(
+            "runtime control command {command:?} is not available"
+        ));
+    }
+    serde_json::to_vec(request).map_err(|error| error.to_string())
+}
+
 /// The running local proxy, if any.
 #[derive(Default)]
 pub struct Engine {
@@ -191,6 +209,20 @@ impl Engine {
 
     pub fn is_running(&self) -> bool {
         self.proxy.as_ref().is_some_and(LocalProxy::is_running)
+    }
+
+    /// Answers one activity page request (see [`activity_request`]) while the engine runs.
+    pub fn control(&self, request: &serde_json::Value) -> Result<serde_json::Value, String> {
+        let request = activity_request(request)?;
+        let proxy = self
+            .proxy
+            .as_ref()
+            .filter(|proxy| proxy.is_running())
+            .ok_or("the engine is not running")?;
+        let answer = proxy
+            .control_json(&request)
+            .map_err(|error| error.message.to_string())?;
+        serde_json::from_slice(&answer).map_err(|error| error.to_string())
     }
 
     pub fn address(&self) -> Option<SocketAddr> {
@@ -240,6 +272,16 @@ mod tests {
     use super::*;
 
     const LINK: &str = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@82.47.34.99:11111#HK";
+
+    #[test]
+    fn activity_requests_only_read_and_close_connections() {
+        assert!(activity_request(&serde_json::json!({"cmd": "connections"})).is_ok());
+        assert!(activity_request(&serde_json::json!({"cmd": "close_all"})).is_ok());
+        assert!(activity_request(&serde_json::json!({"cmd": "select", "group": "a"})).is_err());
+        assert!(Engine::default()
+            .control(&serde_json::json!({"cmd": "traffic"}))
+            .is_err());
+    }
 
     #[test]
     fn parses_pasted_links_and_names_protocols() {

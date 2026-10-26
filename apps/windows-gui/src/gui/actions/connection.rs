@@ -62,6 +62,18 @@ impl DesktopCore {
         Ok(())
     }
 
+    /// Answers one kernel control request while this window runs the engine.
+    pub fn control(&self, request: &[u8]) -> Result<Vec<u8>, String> {
+        let proxy = self
+            .embedded
+            .as_ref()
+            .filter(|proxy| proxy.is_running())
+            .ok_or("the embedded engine is not running in this window")?;
+        proxy
+            .control_json(request)
+            .map_err(|error| error.message.to_string())
+    }
+
     fn stop_embedded(&mut self) {
         if let Some(mut proxy) = self.embedded.take() {
             proxy.stop();
@@ -71,6 +83,25 @@ impl DesktopCore {
     fn stop(&mut self) {
         self.stop_embedded();
     }
+}
+
+/// Kernel control commands the activity page may send: reading traffic and
+/// connections and closing them. Mode and group changes go through the
+/// saved profile instead.
+const ACTIVITY_COMMANDS: [&str; 4] = ["traffic", "connections", "close_connection", "close_all"];
+
+/// The request bytes for an activity page command, or why it is refused.
+pub fn activity_request(request: &serde_json::Value) -> Result<Vec<u8>, String> {
+    let command = request
+        .get("cmd")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    if !ACTIVITY_COMMANDS.contains(&command) {
+        return Err(format!(
+            "runtime control command {command:?} is not available"
+        ));
+    }
+    serde_json::to_vec(request).map_err(|error| error.to_string())
 }
 
 pub const fn can_connect(connection: ConnectionState) -> bool {
@@ -408,6 +439,21 @@ mod tests {
             native_mitm: None,
             embedded: None,
         }
+    }
+
+    #[test]
+    fn activity_requests_only_read_and_close_connections() {
+        let request = activity_request(&serde_json::json!({"cmd": "close_connection", "id": 7}))
+            .expect("closing one connection is allowed");
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&request).unwrap(),
+            serde_json::json!({"cmd": "close_connection", "id": 7})
+        );
+        assert!(activity_request(&serde_json::json!({"cmd": "traffic"})).is_ok());
+        assert!(
+            activity_request(&serde_json::json!({"cmd": "set_mode", "mode": "global"})).is_err()
+        );
+        assert!(activity_request(&serde_json::json!({"id": 7})).is_err());
     }
 
     #[test]

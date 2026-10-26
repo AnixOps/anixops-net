@@ -1,9 +1,11 @@
-import { Cable, ChevronRight, CloudDownload, Cpu, Gauge, Layers, ShieldCheck } from "lucide-react";
+import { ArrowDown, ArrowUp, Cable, ChevronRight, CloudDownload, Cpu, Gauge, Layers, ShieldCheck } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Page } from "../App";
 import { desktop, NativeGroupSummary, NodeSummary, RuntimeSnapshot, StatusFact } from "../bridge";
+import { formatRate } from "../activity-format";
 import { RouteLine } from "../brand";
+import { liveEngine, usePolling } from "../live";
 import { availableRoutingModes, ConnectPhase, connectionTitle, factLabel, groupMemberLabel, routingLabel } from "../labels";
 import { Card, Run, StatusDot } from "../ui";
 import { t } from "../i18n";
@@ -18,6 +20,7 @@ export function HomePage({ snapshot, nodes, phase, busy, run, toggle, goTo }: {
   goTo: (page: Page) => void;
 }) {
   const [groups, setGroups] = useState<NativeGroupSummary[]>([]);
+  const [traffic] = usePolling(desktop.traffic, liveEngine(snapshot));
   useEffect(() => {
     void desktop.nativeGroups().then(setGroups).catch(() => setGroups([]));
   }, [snapshot?.subscription]);
@@ -61,6 +64,12 @@ export function HomePage({ snapshot, nodes, phase, busy, run, toggle, goTo }: {
         <div className="hero-text" aria-live="polite">
           <div className="hero-title">{connectionTitle(snapshot?.connection, phase)}</div>
           <div className="hero-subtitle">{subtitle}</div>
+          {phase === "on" && traffic && (
+            <div className="hero-rate" aria-label={t("实时速度")}>
+              <span><ArrowUp size={13} />{formatRate(traffic.upload_rate)}</span>
+              <span><ArrowDown size={13} />{formatRate(traffic.download_rate)}</span>
+            </div>
+          )}
         </div>
         <div className="hero-modes" role="radiogroup" aria-label={t("分流模式")}>
           {availableRoutingModes(snapshot).map((mode) => (
