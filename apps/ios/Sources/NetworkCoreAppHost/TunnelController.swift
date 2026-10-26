@@ -232,6 +232,46 @@ final class TunnelController: ObservableObject {
         }
     }
 
+    /// Saves an edited node into its group. A running tunnel that may use the node, because its group is active or
+    /// the active rules reach other groups, restarts on the edit.
+    func updateNode(_ node: NativeImportReport.Node, inGroup groupID: String) async -> Bool {
+        guard var group = subscriptions.group(id: groupID), let old = group.library.node(id: node.id) else {
+            return false
+        }
+        guard old != node else {
+            return true
+        }
+        group.library = group.library.replacing(node)
+        return await changeGroup(group)
+    }
+
+    /// Deletes a node that the group's rules do not name (`NodeLibrary.canRemove`).
+    func deleteNode(_ nodeID: String, inGroup groupID: String) async {
+        guard var group = subscriptions.group(id: groupID), group.library.canRemove(nodeID) else {
+            return
+        }
+        group.library = group.library.removing(nodeID)
+        latencies.removeValue(forKey: Self.latencyKey(group: groupID, node: nodeID))
+        _ = await changeGroup(group)
+    }
+
+    private func changeGroup(_ group: SubscriptionGroup) async -> Bool {
+        var groups = subscriptions
+        groups.upsert(group)
+        let affectsTunnel = groups.activeID == group.id || library?.routesByRules == true
+        let wasRunning = isConnected
+        if affectsTunnel, groups.active != nil {
+            guard await saveActiveProfile(groups) else {
+                return false
+            }
+        }
+        store(groups)
+        if affectsTunnel, wasRunning {
+            restart()
+        }
+        return true
+    }
+
     /// Switches between the active group's rules and groups and its selected node alone. A running tunnel
     /// restarts on the new setting.
     func setFollowsRules(_ on: Bool) async {
