@@ -770,6 +770,17 @@ impl Backend {
         Some((other.nodes.clone(), node.id.clone(), node.name.clone()))
     }
 
+    /// The share link of a node of the selected source or of another source.
+    pub fn share_link(&self, id: &str) -> Result<String, String> {
+        let node = self
+            .nodes
+            .iter()
+            .find(|node| node.id == id)
+            .or_else(|| self.other_node(id).map(|(_, node)| node))
+            .ok_or("the node is not in any subscription")?;
+        engine::share_link(node)
+    }
+
     /// The current nodes, for delay tests run outside the lock.
     pub fn node_list(&self) -> Vec<NodeDescriptor> {
         self.nodes.clone()

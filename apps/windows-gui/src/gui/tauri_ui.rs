@@ -258,6 +258,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             select_native_group_outbound,
             runtime_control,
             test_node_delay,
+            node_share_link,
             select_fastest_node,
             save_preferences,
             create_diagnostics,
@@ -1154,6 +1155,40 @@ async fn test_node_delay(
     run_blocking(move || test_node_delay_blocking(state, node_id, url)).await
 }
 
+/// The link other clients import for a node of the profile or of another
+/// subscription; Snell gives a Surge proxy line.
+#[tauri::command]
+async fn node_share_link(
+    node_id: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<String, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let desktop = state
+            .desktop
+            .lock()
+            .map_err(|_| "desktop state lock failed")?
+            .clone();
+        let (label, outbound) = match selected_catalog_node(&desktop, &node_id) {
+            Ok(node) => {
+                let outbound = embedded_node_outbound(&node.id)?;
+                (node.label, outbound)
+            }
+            Err(error) => {
+                let other = other_sources(&desktop);
+                let node = other
+                    .iter()
+                    .find_map(|other| other.node(&node_id))
+                    .ok_or(error)?;
+                (node.label.clone(), node.outbound.clone())
+            }
+        };
+        node_import::share_link(&label, &outbound)
+            .map_err(|error| format!("This node cannot be shared: {error}"))
+    })
+    .await
+}
+
 #[tauri::command]
 async fn select_fastest_node(state: State<'_, DesktopAppState>) -> Result<OperationResult, String> {
     let state = state.inner().clone();
@@ -1439,14 +1474,19 @@ fn select_embedded_group_member(
 }
 
 /// Envelope with the one outbound saved for `node_id` at import.
-fn embedded_node_profile(node_id: &str) -> Result<String, String> {
+/// The engine outbound entry of one node of the imported profile.
+fn embedded_node_outbound(node_id: &str) -> Result<Value, String> {
     let content = fs::read_to_string(embedded_nodes_path())
         .map_err(|error| format!("Import the profile again before using its nodes: {error}"))?;
     let mut nodes: serde_json::Map<String, Value> =
         serde_json::from_str(&content).map_err(|error| error.to_string())?;
-    let outbound = nodes
+    nodes
         .remove(node_id)
-        .ok_or_else(|| "Selected node is not part of the current imported profile.".to_string())?;
+        .ok_or_else(|| "Selected node is not part of the current imported profile.".to_string())
+}
+
+fn embedded_node_profile(node_id: &str) -> Result<String, String> {
+    let outbound = embedded_node_outbound(node_id)?;
     Ok(json!({
         "schema_version": CONFIG_SCHEMA_VERSION,
         "profile_id": EMBEDDED_PROFILE_ID,

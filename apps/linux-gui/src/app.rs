@@ -252,6 +252,11 @@ async fn test_node_delay(
 }
 
 #[tauri::command]
+async fn node_share_link(state: State<'_, AppState>, node_id: String) -> Result<String, String> {
+    lock(&state.0).share_link(&node_id)
+}
+
+#[tauri::command]
 async fn select_fastest_node(state: State<'_, AppState>) -> Result<OperationResult, String> {
     let nodes = lock(&state.0).node_list();
     let (id, delay) = off_lock(move || {
@@ -475,6 +480,7 @@ pub fn run() -> Result<(), String> {
             switch_node,
             runtime_control,
             test_node_delay,
+            node_share_link,
             select_fastest_node,
             save_preferences,
             create_diagnostics,
