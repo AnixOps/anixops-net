@@ -141,6 +141,16 @@
         }
       }
     },
+    "DNS": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DNS"
+          }
+        }
+      }
+    },
     "GEOIP,CN、GEOSITE,cn 和 GEOSITE,gfw 没有订阅自带的规则集时，使用公开列表（Loyalsoldier、gaoyifan），由内核每天直连下载一次。": {
       "localizations": {
         "en": {
@@ -187,6 +197,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "HTTPS Decryption Certificate"
+          }
+        }
+      }
+    },
+    "Hosts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hosts"
           }
         }
       }
@@ -3873,6 +3893,56 @@
           "stringUnit": {
             "state": "translated",
             "value": "Share node"
+          }
+        }
+      }
+    },
+    "查看每个连接的目标、命中规则和线路": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "See each connection's target, matched rule and route"
+          }
+        }
+      }
+    },
+    "连接后可用。只保存在内存里，断开隧道即清空。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Available while connected. Kept in memory only and cleared when the tunnel disconnects."
+          }
+        }
+      }
+    },
+    "规则与 DNS": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rules and DNS"
+          }
+        }
+      }
+    },
+    "规则集": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rule sets"
+          }
+        }
+      }
+    },
+    "导入带规则和策略组的订阅（Clash、Surge、Loon 配置）后，可以按订阅规则分流和切换策略组。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import a subscription with rules and policy groups (Clash, Surge or Loon profiles) to route by its rules and switch policy groups."
           }
         }
       }

@@ -140,10 +140,14 @@ targets:
       - path: Sources/NetworkCoreApp/Resources/Localizable.xcstrings
       - path: Sources/NetworkCoreApp/Resources/PrivacyInfo.xcprivacy
       - path: Sources/NetworkCoreAppHost/BrandPalette.swift
+      - path: Sources/NetworkCoreAppHost/ConnectionsView.swift
+      - path: Sources/NetworkCoreAppHost/DnsSettingsView.swift
       - path: Sources/NetworkCoreAppHost/ImportView.swift
       - path: Sources/NetworkCoreAppHost/MitmTrustPresentation.swift
       - path: Sources/NetworkCoreAppHost/PluginsView.swift
+      - path: Sources/NetworkCoreAppHost/ProxyModeText.swift
       - path: Sources/NetworkCoreAppHost/RouteLine.swift
+      - path: Sources/NetworkCoreAppHost/RuleSetsView.swift
       - path: Sources/NetworkCoreAppHost/TunnelController.swift
       - path: Sources/NetworkCoreAppHost/NativeNodeImporterFFI.swift
       - path: Sources/NetworkCoreAppHost/NodeDelayFFI.swift

@@ -137,7 +137,7 @@ struct RuleListView: View {
         .scrollContentBackground(.hidden)
         .background(brand.bg.ignoresSafeArea())
         .navigationTitle("全部规则")
-        .navigationBarTitleDisplayMode(.inline)
+        .inlineNavigationTitle()
         .searchable(text: $query, prompt: Text("筛选规则"))
     }
 }

@@ -74,21 +74,24 @@ struct DnsSettingsView: View {
         .scrollContentBackground(.hidden)
         .background(brand.bg.ignoresSafeArea())
         .navigationTitle("DNS")
-        .navigationBarTitleDisplayMode(.inline)
+        .inlineNavigationTitle()
         .sheet(item: $editing) { edit in
             DnsServerSheet(edit: edit) { server in
                 try save(server, replacing: edit.original?.name)
             }
+            .formSheetFrame()
         }
         .sheet(isPresented: $addingRule) {
             DnsRuleSheet(servers: dns.servers.map(\.name)) { text, server in
                 commit { try dns.addingRule(text, server: server) }
             }
+            .formSheetFrame()
         }
         .sheet(isPresented: $addingHost) {
             DnsHostSheet { name, addresses in
                 commit { try dns.settingHost(name, addresses: addresses) }
             }
+            .formSheetFrame()
         }
         .confirmationDialog("用推荐分流替换现有 DNS 设置？", isPresented: $confirmingSplit, titleVisibility: .visible) {
             Button("替换", role: .destructive) {
@@ -316,15 +319,11 @@ private struct DnsServerSheet: View {
             Form {
                 Section {
                     TextField("名称", text: $name)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                        .plainTextEntry()
                     TextField("地址", text: $url, prompt: Text(verbatim: "https://1.1.1.1/dns-query"))
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
+                        .plainTextEntry(url: true)
                     TextField("TLS 名称（可选）", text: $serverName, prompt: Text(verbatim: "cloudflare-dns.com"))
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                        .plainTextEntry()
                 } footer: {
                     Text("地址可写 1.1.1.1、tcp://、tls://（DoT）或 https://（DoH）。用 IP 地址写 DoT/DoH 时填写证书上的 TLS 名称。")
                 }
@@ -348,7 +347,7 @@ private struct DnsServerSheet: View {
             .scrollContentBackground(.hidden)
             .background(brand.bg.ignoresSafeArea())
             .navigationTitle(edit.original == nil ? "添加 DNS 服务器" : "编辑 DNS 服务器")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") {
@@ -402,8 +401,7 @@ private struct DnsRuleSheet: View {
                 Section {
                     TextEditor(text: $text)
                         .font(.footnote.monospaced())
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                        .plainTextEntry()
                         .frame(minHeight: 120)
                 } header: {
                     Text("域名")
@@ -424,7 +422,7 @@ private struct DnsRuleSheet: View {
             .scrollContentBackground(.hidden)
             .background(brand.bg.ignoresSafeArea())
             .navigationTitle("添加规则")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") {
@@ -458,12 +456,9 @@ private struct DnsHostSheet: View {
             Form {
                 Section {
                     TextField("域名", text: $name, prompt: Text(verbatim: "nas.lan"))
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
+                        .plainTextEntry(url: true)
                     TextField("IP 地址", text: $addresses, prompt: Text(verbatim: "192.168.1.10"))
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                        .plainTextEntry()
                 } footer: {
                     Text("多个地址用逗号或空格分隔，最多 8 个。")
                 }
@@ -472,7 +467,7 @@ private struct DnsHostSheet: View {
             .scrollContentBackground(.hidden)
             .background(brand.bg.ignoresSafeArea())
             .navigationTitle("添加 Hosts")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") {
