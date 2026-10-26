@@ -1,4 +1,5 @@
 use super::actions::connection;
+use super::linked_sources::{self, CachedNode, OtherSource};
 use super::runtime_status::{read_runtime_status, ManagedCoreStatus, WindowsRuntimeStatus};
 use super::startup::{
     load_desktop_state, owns_current_proxy, save_desktop_state, DesktopProfileNode,
@@ -148,6 +149,9 @@ struct NodeSummary {
     label: String,
     protocol: String,
     selected: bool,
+    /// The subscription the node comes from.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    group: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -557,16 +561,145 @@ fn list_nodes(state: State<'_, DesktopAppState>) -> Result<Vec<NodeSummary>, Str
         .desktop
         .lock()
         .map_err(|_| "desktop state lock failed")?;
-    Ok(desktop
+    let selected = |id: &str| desktop.profile_node_id.as_deref() == Some(id);
+    let group = active_source_id(&desktop).and_then(|id| {
+        desktop
+            .subscription_sources
+            .iter()
+            .find(|source| source.id == id)
+            .map(|source| subscription_meta::display_name(source.name.as_deref(), &source.location))
+    });
+    let mut nodes: Vec<NodeSummary> = desktop
         .profile_node_catalog
         .iter()
         .map(|node| NodeSummary {
             id: node.id.clone(),
             label: node.label.clone(),
             protocol: node.protocol.clone(),
-            selected: desktop.profile_node_id.as_deref() == Some(node.id.as_str()),
+            selected: selected(&node.id),
+            group: group.clone(),
         })
-        .collect())
+        .collect();
+    // Other subscriptions follow, each under its own name.
+    for other in other_sources(&desktop) {
+        for node in &other.nodes {
+            let id = other.outbound_id(&node.id);
+            nodes.push(NodeSummary {
+                selected: selected(&id),
+                id,
+                label: node.label.clone(),
+                protocol: node.protocol.clone(),
+                group: Some(other.name.clone()),
+            });
+        }
+    }
+    Ok(nodes)
+}
+
+fn source_cache_directory() -> PathBuf {
+    embedded_directory().join("sources")
+}
+
+/// The saved subscription the imported profile came from.
+fn active_source_id(desktop: &DesktopState) -> Option<String> {
+    desktop
+        .profile_source_url
+        .clone()
+        .or_else(|| {
+            desktop
+                .profile_source_path
+                .as_ref()
+                .map(|path| path.display().to_string())
+        })
+        .map(|location| subscription_source_id(&location))
+}
+
+/// Every other saved subscription whose nodes were cached when it was last imported.
+fn other_sources(desktop: &DesktopState) -> Vec<OtherSource> {
+    let active = active_source_id(desktop);
+    let directory = source_cache_directory();
+    desktop
+        .subscription_sources
+        .iter()
+        .filter(|source| Some(&source.id) != active.as_ref())
+        .filter_map(|source| {
+            Some(OtherSource {
+                id: source.id.clone(),
+                name: subscription_meta::display_name(source.name.as_deref(), &source.location),
+                nodes: linked_sources::read_cache(&directory, &source.id)?,
+            })
+        })
+        .filter(|other| !other.nodes.is_empty())
+        .collect()
+}
+
+/// Caches the just imported profile's nodes under subscription `location`, so they can be listed and linked
+/// while another subscription is in use.
+fn cache_imported_nodes(location: &str, desktop: &DesktopState) -> Result<(), String> {
+    let content = fs::read_to_string(embedded_nodes_path()).map_err(|error| error.to_string())?;
+    let outbounds: serde_json::Map<String, Value> =
+        serde_json::from_str(&content).map_err(|error| error.to_string())?;
+    let nodes: Vec<CachedNode> = desktop
+        .profile_node_catalog
+        .iter()
+        .filter_map(|node| {
+            Some(CachedNode {
+                id: node.id.clone(),
+                label: node.label.clone(),
+                protocol: node.protocol.clone(),
+                outbound: outbounds.get(&node.id)?.clone(),
+            })
+        })
+        .collect();
+    linked_sources::write_cache(
+        &source_cache_directory(),
+        &subscription_source_id(location),
+        &nodes,
+    )
+}
+
+/// Links the other subscriptions into the imported profile again, when it routes by rules, and rewrites its
+/// envelope. Group choices of the profile, then of `previous` (the profile an import replaced), are kept
+/// where the group and member still exist.
+fn relink_active_profile(
+    desktop: &mut DesktopState,
+    previous: Option<&Value>,
+) -> Result<(), String> {
+    let Some(embedded) = active_embedded_config()? else {
+        return Ok(());
+    };
+    let Ok(current) = read_embedded_profile() else {
+        return Ok(());
+    };
+    if current.get("routing").is_none() {
+        return Ok(());
+    }
+    let mut profile = current.clone();
+    linked_sources::unlink(&mut profile);
+    linked_sources::link(&mut profile, &other_sources(desktop));
+    carry_routed_group_defaults(&current, &mut profile);
+    if let Some(previous) = previous {
+        carry_routed_group_defaults(previous, &mut profile);
+    }
+    let rendered = profile.to_string();
+    write_managed_text_atomic(&embedded_profile_path(), &rendered)
+        .map_err(|error| error.to_string())?;
+    let envelope = embedded_envelope_or_profile(rendered, desktop.routing_mode);
+    write_managed_text_atomic(&embedded.envelope_path, &envelope)
+        .map_err(|error| error.to_string())?;
+    desktop.profile_node_id = routed_selected_node(&profile);
+    Ok(())
+}
+
+/// Relinks after a saved subscription changed (renamed or removed); a running core picks it up when it
+/// next connects.
+fn relink_saved_profile(state: &DesktopAppState) -> Result<(), String> {
+    let mut desktop = state
+        .desktop
+        .lock()
+        .map_err(|_| "desktop state lock failed")?;
+    relink_active_profile(&mut desktop, None)?;
+    save_desktop_state(&desktop)
 }
 
 #[tauri::command]
@@ -588,7 +721,16 @@ fn list_native_groups_blocking(state: DesktopAppState) -> Result<Vec<NativeGroup
         .desktop
         .lock()
         .map_err(|_| "desktop state lock failed")?;
-    Ok(embedded_groups(&profile, &desktop.profile_node_catalog))
+    let mut nodes = desktop.profile_node_catalog.clone();
+    for other in other_sources(&desktop) {
+        nodes.extend(other.nodes.iter().map(|node| DesktopProfileNode {
+            id: other.outbound_id(&node.id),
+            label: node.label.clone(),
+            protocol: node.protocol.clone(),
+            outbound_tag: other.outbound_id(&node.id),
+        }));
+    }
+    Ok(embedded_groups(&profile, &nodes))
 }
 
 #[tauri::command]
@@ -663,6 +805,8 @@ fn rename_subscription(
 ) -> Result<OperationResult, String> {
     let name = subscription_meta::clean_name(&name).ok_or("Enter a name.")?;
     change_subscription_source(&state, &id, |source| source.name = Some(name))?;
+    // Linked policy groups are named after their subscriptions.
+    relink_saved_profile(&state)?;
     Ok(OperationResult {
         message: "Subscription renamed.".to_string(),
     })
@@ -888,6 +1032,20 @@ fn switch_node_blocking(
         .map_err(|_| "desktop state lock failed")?
         .clone();
     let update_running_core = node_operations_runtime_running(&state, &desktop)?;
+    if selected_catalog_node(&desktop, &node_id).is_err() {
+        if let Some(other) = other_sources(&desktop)
+            .into_iter()
+            .find(|other| other.node(&node_id).is_some())
+        {
+            return switch_other_source_node(
+                &state,
+                &desktop,
+                &other,
+                &node_id,
+                update_running_core,
+            );
+        }
+    }
     let node = selected_catalog_node(&desktop, &node_id)?;
     let embedded = require_embedded_config()?;
     switch_embedded_node(&state, &desktop, &embedded, &node.id, update_running_core)?;
@@ -898,6 +1056,71 @@ fn switch_node_blocking(
             "Active node saved. It will be applied when the core next connects.".to_string()
         },
     })
+}
+
+/// Switches to a node of another subscription: through its linked policy group when the imported profile
+/// has one, otherwise by importing that subscription (disconnected only, as every import).
+fn switch_other_source_node(
+    state: &DesktopAppState,
+    desktop: &DesktopState,
+    other: &OtherSource,
+    listed_id: &str,
+    update_running_core: bool,
+) -> Result<OperationResult, String> {
+    let node = other
+        .node(listed_id)
+        .ok_or_else(|| "The node is not in any subscription.".to_string())?;
+    let group = other.group_id();
+    if let Ok(mut profile) = read_embedded_profile() {
+        if set_routed_group_default(&mut profile, &group, listed_id).is_ok() {
+            if let Some(main) = routed_switch_group_for_node(&profile, &group) {
+                set_routed_group_default(&mut profile, &main, &group)?;
+            }
+            let embedded = require_embedded_config()?;
+            let rendered = profile.to_string();
+            let envelope = embedded_envelope_for_mode(&rendered, desktop.routing_mode, false)?;
+            write_managed_text_atomic(&embedded_profile_path(), &rendered)
+                .map_err(|error| error.to_string())?;
+            write_managed_text_atomic(&embedded.envelope_path, &envelope)
+                .map_err(|error| error.to_string())?;
+            {
+                let mut persisted = state
+                    .desktop
+                    .lock()
+                    .map_err(|_| "desktop state lock failed")?;
+                persisted.profile_node_id = routed_selected_node(&profile);
+                save_desktop_state(&persisted)?;
+            }
+            if update_running_core {
+                restart_service_blocking(state.clone())?;
+            }
+            return Ok(OperationResult {
+                message: format!("Switched to {} through policy group {group}.", node.label),
+            });
+        }
+    }
+    if update_running_core {
+        return Err(format!(
+            "Disconnect first to use {}: its subscription is not part of the current profile's policy groups.",
+            node.label
+        ));
+    }
+    let location = desktop
+        .subscription_sources
+        .iter()
+        .find(|source| source.id == other.id)
+        .map(|source| source.location.clone())
+        .ok_or_else(|| "The subscription was not found.".to_string())?;
+    import_subscription_blocking(state.clone(), location, "Subscription selected.")?;
+    // A routed subscription whose main group cannot pick the node runs on its own choices.
+    Ok(
+        switch_node_blocking(node.id.clone(), state.clone()).unwrap_or_else(|_| OperationResult {
+            message: format!(
+                "Switched to {}; its policy groups choose the node.",
+                other.name
+            ),
+        }),
+    )
 }
 
 #[tauri::command]
@@ -940,9 +1163,21 @@ fn test_node_delay_blocking(
         .lock()
         .map_err(|_| "desktop state lock failed")?
         .clone();
-    let node = selected_catalog_node(&desktop, &node_id)?;
     require_embedded_config()?;
-    let delay = measure_embedded_node_delay(&node.id, &url)?;
+    let delay = match selected_catalog_node(&desktop, &node_id) {
+        Ok(node) => measure_embedded_node_delay(&node.id, &url)?,
+        Err(error) => {
+            let other = other_sources(&desktop);
+            let node = other
+                .iter()
+                .find_map(|other| other.node(&node_id))
+                .ok_or(error)?;
+            let profile =
+                linked_sources::node_profile(EMBEDDED_PROFILE_ID, CONFIG_SCHEMA_VERSION, node);
+            measure_delay(profile.as_bytes(), &url, EMBEDDED_DELAY_TIMEOUT)
+                .map_err(|error| error.to_string())?
+        }
+    };
     Ok(OperationResult {
         message: format!("{} ms via {url}", delay.as_millis()),
     })
@@ -1489,6 +1724,8 @@ fn remove_subscription_blocking(
     if desktop.subscription_sources.len() == before {
         return Err("Selected subscription source was not found.".to_string());
     }
+    linked_sources::remove_cache(&source_cache_directory(), &id);
+    relink_active_profile(&mut desktop, None)?;
     save_desktop_state(&desktop)?;
     Ok(OperationResult {
         message: "Subscription source removed from the catalog.".to_string(),
@@ -1828,8 +2065,12 @@ fn import_subscription_at(
                 .to_string(),
         );
     }
+    let previous = read_embedded_profile().ok();
     let (payload, source_path, source_url, meta) = read_subscription(location)?;
     import_embedded_subscription(&payload, source_path, source_url, desktop)?;
+    // Listing and linking work without this subscription's cache, so a failed write only leaves it out.
+    let _ = cache_imported_nodes(location, desktop);
+    relink_active_profile(desktop, previous.as_ref())?;
     Ok(meta)
 }
 

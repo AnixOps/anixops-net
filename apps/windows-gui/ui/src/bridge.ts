@@ -48,6 +48,8 @@ export interface NodeSummary {
   label: string;
   protocol: string;
   selected: boolean;
+  /** The subscription the node comes from, when the backend lists several. */
+  group?: string;
 }
 
 export interface NativeGroupSummary {
