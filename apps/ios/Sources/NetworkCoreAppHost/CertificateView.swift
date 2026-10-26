@@ -161,32 +161,6 @@ struct CertificateView: View {
     }
 }
 
-extension MitmTrustState {
-    var title: String {
-        switch self {
-        case .notGenerated: String(localized: "尚未生成证书")
-        case .notTrusted: String(localized: "证书未被信任")
-        case .trusted: String(localized: "证书已信任")
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .notGenerated: String(localized: "生成本机专属的根证书后才能解密 HTTPS。")
-        case .notTrusted: String(localized: "描述文件可能未安装，或尚未在证书信任设置中开启完全信任。")
-        case .trusted: String(localized: "可以解密 MITM 主机列表中的 HTTPS 流量。")
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .notGenerated: "lock.open"
-        case .notTrusted: "exclamationmark.shield"
-        case .trusted: "checkmark.shield"
-        }
-    }
-}
-
 @MainActor
 final class CertificateModel: ObservableObject {
     @Published private(set) var authority: MitmCertificateAuthority?
@@ -317,16 +291,5 @@ final class ProfileServer {
         head += "Cache-Control: no-store\r\n"
         head += "Connection: close\r\n\r\n"
         return Data(head.utf8) + body
-    }
-}
-
-/// The root certificate as a shareable `.cer` file.
-struct CertificateFile: Transferable {
-    let data: Data
-    let name: String
-
-    static var transferRepresentation: some TransferRepresentation {
-        DataRepresentation(exportedContentType: .x509Certificate) { $0.data }
-            .suggestedFileName { "\($0.name).cer" }
     }
 }

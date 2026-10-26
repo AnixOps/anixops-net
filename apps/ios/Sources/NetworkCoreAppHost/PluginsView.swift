@@ -1,10 +1,15 @@
 import NetworkCoreBridge
 import SwiftUI
-import UIKit
 import UniformTypeIdentifiers
+#if os(iOS)
+import UIKit
+#else
+import AppKit
+#endif
 
 /// The plugin part of the "扩展" tab: the HTTPS decryption switch, Loon plugin import (file, clipboard or
-/// address), the list, and the scripts those plugins name, each run only after the user allows it.
+/// address), the list, and the scripts those plugins name, each run only after the user allows it. The macOS
+/// extensions page shows the same section.
 struct PluginsSection: View {
     @Environment(\.brand) private var brand
     @Environment(\.scenePhase) private var scenePhase
@@ -34,6 +39,12 @@ struct PluginsSection: View {
                 PluginRow(plugin: plugin) { enabled in
                     Task { await model.setEnabled(enabled, for: plugin.id, tunnel: tunnel) }
                 }
+                // macOS has no swipe to delete.
+                .contextMenu {
+                    Button("删除", role: .destructive) {
+                        Task { await model.remove([plugin.id], tunnel: tunnel) }
+                    }
+                }
                 .listRowBackground(brand.surface)
             }
             .onDelete { offsets in
@@ -48,7 +59,7 @@ struct PluginsSection: View {
                     Label("从文件导入", systemImage: "doc")
                 }
                 Button {
-                    Task { await model.importText(UIPasteboard.general.string, name: nil, tunnel: tunnel) }
+                    Task { await model.importText(Self.clipboardText, name: nil, tunnel: tunnel) }
                 } label: {
                     Label("从剪贴板导入", systemImage: "doc.on.clipboard")
                 }
@@ -73,8 +84,10 @@ struct PluginsSection: View {
         }
         .alert("从网址导入插件", isPresented: $enteringAddress) {
             TextField("https://", text: $address)
+                #if os(iOS)
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
+                #endif
                 .autocorrectionDisabled()
             Button("取消", role: .cancel) {}
             Button("导入") {
@@ -112,12 +125,19 @@ struct PluginsSection: View {
                         }
                     }
                 }
+                .contextMenu {
+                    if model.scripts.scripts[reference.path] != nil {
+                        Button("撤销", role: .destructive) {
+                            Task { await model.revoke(reference.path, tunnel: tunnel) }
+                        }
+                    }
+                }
                 .listRowBackground(brand.surface)
             }
         } header: {
             Text("脚本")
         } footer: {
-            Text("脚本在隧道内的 QuickJS 中运行，可以读取和修改所在插件 [MITM] 主机的请求和响应，不能自行联网。只运行允许时下载的那一份；左滑撤销。")
+            Text("脚本在隧道内的 QuickJS 中运行，可以读取和修改所在插件 [MITM] 主机的请求和响应，不能自行联网。只运行允许时下载的那一份；\(Self.revokeHint)")
         }
         .confirmationDialog(
             "允许运行这个脚本？",
@@ -132,6 +152,24 @@ struct PluginsSection: View {
         } message: { reference in
             Text("将从 \(reference.url?.absoluteString ?? reference.path) 下载。脚本可以查看和改写解密后的流量，请只允许你信任的来源。地址上的内容之后变了，需要重新允许。")
         }
+    }
+}
+
+extension PluginsSection {
+    fileprivate static var clipboardText: String? {
+        #if os(iOS)
+        UIPasteboard.general.string
+        #else
+        NSPasteboard.general.string(forType: .string)
+        #endif
+    }
+
+    fileprivate static var revokeHint: String {
+        #if os(iOS)
+        String(localized: "左滑撤销。")
+        #else
+        String(localized: "右键撤销。")
+        #endif
     }
 }
 

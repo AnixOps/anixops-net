@@ -91,6 +91,12 @@ serves a `com.apple.security.root` configuration profile on `127.0.0.1` for Safa
 Trust is detected by asking `SecTrust` to accept a probe leaf with the system store: `notGenerated`, `notTrusted`
 (profile missing or full trust off; iOS does not tell these apart) or `trusted`.
 
+On macOS the "扩展" page (`MacExtensionsPage`) shows the same plugin and script section. There is no profile step:
+"信任证书…" adds the root to the login keychain and sets user trust settings to always trust
+(`SecTrustSettingsSetTrustSettings`, macOS asks for the login password), with "在“钥匙串访问”中打开" as the manual
+fallback. The root and key stay in the data protection keychain under the shared access group, the only macOS
+keychain the tunnel extension can read. Firefox keeps its own certificate list.
+
 ## Plugins
 
 The same tab imports Loon plugins from a file, the clipboard or an `https` address the user types (D4: remote
