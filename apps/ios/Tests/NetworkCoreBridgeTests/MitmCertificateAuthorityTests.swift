@@ -30,7 +30,8 @@ final class MitmCertificateAuthorityTests: XCTestCase {
         let authority = try MitmCertificateAuthority.generate()
 
         XCTAssertNil(authority.evaluateTrust(anchors: [authority.certificate]).failureReason)
-        let refused = authority.evaluateTrust(anchors: [MitmCertificateAuthority.generate().certificate])
+        let other = try MitmCertificateAuthority.generate()
+        let refused = authority.evaluateTrust(anchors: [other.certificate])
         XCTAssertEqual(refused.state, .notTrusted)
         XCTAssertFalse(refused.failureReason?.isEmpty ?? true)
     }
