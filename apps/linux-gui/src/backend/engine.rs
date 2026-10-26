@@ -158,9 +158,16 @@ fn linked(profile: &Value, other: &OtherSource) -> Option<Value> {
         .then_some(profile)
 }
 
-/// Kernel control commands the activity page may send: reading traffic and connections and closing them. Mode
-/// and group changes go through the saved profile instead.
-const ACTIVITY_COMMANDS: [&str; 4] = ["traffic", "connections", "close_connection", "close_all"];
+/// Kernel control commands the client may send: reading traffic, connections and rule sets, closing
+/// connections and refreshing remote rule sets. Mode and group changes go through the saved profile instead.
+const ACTIVITY_COMMANDS: [&str; 6] = [
+    "traffic",
+    "connections",
+    "close_connection",
+    "close_all",
+    "rule_sets",
+    "update_rule_sets",
+];
 
 /// The request bytes for an activity page command, or why it is refused.
 pub fn activity_request(request: &serde_json::Value) -> Result<Vec<u8>, String> {
@@ -331,6 +338,7 @@ mod tests {
     fn activity_requests_only_read_and_close_connections() {
         assert!(activity_request(&serde_json::json!({"cmd": "connections"})).is_ok());
         assert!(activity_request(&serde_json::json!({"cmd": "close_all"})).is_ok());
+        assert!(activity_request(&serde_json::json!({"cmd": "rule_sets"})).is_ok());
         assert!(activity_request(&serde_json::json!({"cmd": "select", "group": "a"})).is_err());
         assert!(Engine::default()
             .control(&serde_json::json!({"cmd": "traffic"}))

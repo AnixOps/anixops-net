@@ -1,7 +1,8 @@
-import { Check, Layers, RefreshCw } from "lucide-react";
+import { Check, Layers, ListChecks, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { desktop, NativeGroupSummary, RuntimeSnapshot } from "../bridge";
+import { desktop, NativeGroupSummary, RuleSetStatus, RuntimeSnapshot } from "../bridge";
 import { availableRoutingModes, groupMemberLabel } from "../labels";
+import { liveEngine, usePolling } from "../live";
 import { Card, Run, StatusPill } from "../ui";
 import { t } from "../i18n";
 
@@ -33,6 +34,7 @@ export function RulesPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot |
         </div>
       </Card>
       <PolicyGroups busy={busy} run={run} />
+      <RuleSets snapshot={snapshot} busy={busy} run={run} />
       <DnsCard />
     </div>
   );
@@ -81,6 +83,44 @@ function PolicyGroups({ busy, run }: { busy: string | null; run: Run }) {
         </ul>}
     </Card>
   );
+}
+
+/** The running engine's rule sets: size, source and the last download of remote ones. */
+function RuleSets({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
+  const [answer, reload] = usePolling(desktop.ruleSets, liveEngine(snapshot));
+  const sets = answer?.rule_sets ?? [];
+  if (sets.length === 0) return null;
+  const remote = sets.some((set) => set.source === "remote");
+
+  return (
+    <Card
+      title={t("规则集")}
+      description={t("当前连接正在使用的规则集。")}
+      actions={remote && <button className="secondary" disabled={Boolean(busy)} onClick={() => void run("rule sets", async () => {
+        const result = await desktop.updateRuleSets();
+        reload();
+        return { message: t("已开始更新 {count} 个远程规则集", { count: result.scheduled }) };
+      })}><RefreshCw size={15} />{t("更新远程规则集")}</button>}
+    >
+      <ul className="list">
+        {sets.map((set) => (
+          <li key={set.name}>
+            <ListChecks size={16} className="list-icon" />
+            <span className="list-main"><strong>{set.name}</strong><small>{ruleSetDetail(set)}</small></span>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+function ruleSetDetail(set: RuleSetStatus): string {
+  return [
+    set.source === "remote" ? t("远程") : t("内置"),
+    t("{count} 条", { count: set.entries }),
+    set.updated_at_ms ? t("更新于 {time}", { time: new Date(set.updated_at_ms).toLocaleString() }) : set.source === "remote" ? t("尚未下载") : null,
+    set.last_error ? t("上次下载失败：{error}", { error: set.last_error }) : null,
+  ].filter(Boolean).join(" · ");
 }
 
 function DnsCard() {
