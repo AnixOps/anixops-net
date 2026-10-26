@@ -56,6 +56,12 @@ struct CertificateView: View {
                         Text(model.state.detail)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+                        if model.state == .notTrusted, let reason = model.failureReason {
+                            Text("系统返回：\(reason)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
                     }
                 }
                 .listRowBackground(brand.surface)
@@ -64,7 +70,7 @@ struct CertificateView: View {
             Section("步骤") {
                 step(1, "生成根证书", done: model.authority != nil)
                 step(2, "安装描述文件", done: model.state == .trusted, note: "在 Safari 中允许下载，然后到 设置 > 已下载描述文件 安装。")
-                step(3, "开启完全信任", done: model.state == .trusted, note: "设置 > 通用 > 关于本机 > 证书信任设置，打开这张证书的开关。")
+                step(3, "开启完全信任", done: model.state == .trusted, note: "设置 > 通用 > 关于本机 > 证书信任设置，打开这张证书的开关。名称需与下方一致，旧证书的开关不算。")
             }
 
             Section {
@@ -185,6 +191,7 @@ extension MitmTrustState {
 final class CertificateModel: ObservableObject {
     @Published private(set) var authority: MitmCertificateAuthority?
     @Published private(set) var state = MitmTrustState.notGenerated
+    @Published private(set) var failureReason: String?
     @Published private(set) var error: String?
     private let server = ProfileServer()
 
@@ -211,7 +218,9 @@ final class CertificateModel: ObservableObject {
     }
 
     func refresh() {
-        state = authority?.trustState() ?? .notGenerated
+        let evaluation = authority?.evaluateTrust()
+        state = evaluation?.state ?? .notGenerated
+        failureReason = evaluation?.failureReason
     }
 
     /// Serves the profile on loopback and returns the URL for Safari, which hands it to Settings.

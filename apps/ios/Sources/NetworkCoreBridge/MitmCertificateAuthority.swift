@@ -7,8 +7,8 @@ import Security
 /// The app creates it once with a P-256 key from the Security framework, so no Rust code runs in the app. The
 /// packet tunnel extension later reads the same key from the shared Keychain group to issue per-host leaf
 /// certificates. iOS only uses the root for TLS after the user installs its configuration profile and turns on
-/// full trust in Settings > General > About > Certificate Trust Settings; `trustState(certificate:signingKey:)`
-/// detects that last step.
+/// full trust in Settings > General > About > Certificate Trust Settings; `evaluateTrust(anchors:now:)` detects
+/// that last step.
 public struct MitmCertificateAuthority {
     public enum Failure: Error, Equatable {
         case keyGeneration(String)
@@ -216,30 +216,53 @@ public enum MitmTrustState: String, Codable, Equatable {
     case trusted
 }
 
+/// The result of one trust probe: the state, and the reason iOS gave when it refused the probe leaf.
+public struct MitmTrustEvaluation: Equatable {
+    public let state: MitmTrustState
+    public let failureReason: String?
+
+    public init(state: MitmTrustState, failureReason: String? = nil) {
+        self.state = state
+        self.failureReason = failureReason
+    }
+}
+
 extension MitmCertificateAuthority {
     static let trustProbeHost = "trust-probe.networkcore.test"
 
+    public func trustState(anchors: [SecCertificate]? = nil, now: Date = Date()) -> MitmTrustState {
+        evaluateTrust(anchors: anchors, now: now).state
+    }
+
     /// Issues a probe leaf and asks iOS whether it would accept it for TLS. Pass `anchors` only in tests; in the
     /// app the system trust store decides, which includes user roots with full trust turned on.
-    public func trustState(anchors: [SecCertificate]? = nil, now: Date = Date()) -> MitmTrustState {
-        guard let leaf = try? issueLeaf(host: Self.trustProbeHost, now: now),
-              let leafCertificate = SecCertificateCreateWithData(nil, leaf.certificateDER as CFData)
-        else {
-            return .notTrusted
+    public func evaluateTrust(anchors: [SecCertificate]? = nil, now: Date = Date()) -> MitmTrustEvaluation {
+        let leaf: (certificateDER: Data, privateKey: SecKey)
+        do {
+            leaf = try issueLeaf(host: Self.trustProbeHost, now: now)
+        } catch {
+            return MitmTrustEvaluation(state: .notTrusted, failureReason: "probe leaf: \(error)")
+        }
+        guard let leafCertificate = SecCertificateCreateWithData(nil, leaf.certificateDER as CFData) else {
+            return MitmTrustEvaluation(state: .notTrusted, failureReason: "probe leaf does not parse")
         }
         var trust: SecTrust?
         let policy = SecPolicyCreateSSL(true, Self.trustProbeHost as CFString)
-        guard SecTrustCreateWithCertificates([leafCertificate, certificate] as CFArray, policy, &trust) == errSecSuccess,
-              let trust
-        else {
-            return .notTrusted
+        let status = SecTrustCreateWithCertificates([leafCertificate, certificate] as CFArray, policy, &trust)
+        guard status == errSecSuccess, let trust else {
+            return MitmTrustEvaluation(state: .notTrusted, failureReason: "SecTrustCreateWithCertificates \(status)")
         }
         SecTrustSetNetworkFetchAllowed(trust, false)
         SecTrustSetVerifyDate(trust, now as CFDate)
         if let anchors {
             SecTrustSetAnchorCertificates(trust, anchors as CFArray)
         }
-        return SecTrustEvaluateWithError(trust, nil) ? .trusted : .notTrusted
+        var error: CFError?
+        if SecTrustEvaluateWithError(trust, &error) {
+            return MitmTrustEvaluation(state: .trusted)
+        }
+        let reason = error.map { CFErrorCopyDescription($0) as String? ?? String(describing: $0) }
+        return MitmTrustEvaluation(state: .notTrusted, failureReason: reason)
     }
 }
 
