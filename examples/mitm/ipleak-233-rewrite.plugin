@@ -1,0 +1,10 @@
+#!name = ipleak 233 测试（重写）
+#!desc = 不用脚本，用 Body Rewrite 把 ipleak.net 显示的 IPv4 地址全部改成 233.333.333.333。
+#!author = AnixOps Net
+#!homepage = https://github.com/AnixOps/anixops-net/tree/main/examples/mitm
+
+[Body Rewrite]
+http-response ^https?:\/\/([^\/]+\.)?ipleak\.net\/ [0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3} 233.333.333.333
+
+[MITM]
+hostname = ipleak.net, *.ipleak.net
