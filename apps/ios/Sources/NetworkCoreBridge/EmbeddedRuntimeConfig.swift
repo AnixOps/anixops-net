@@ -101,11 +101,20 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         public var outbounds: [String: [String: JSONValue]]
         public var rules: [String]
         public var groups: [NativeImportReport.Routing.Group]
+        /// Where the global mode sends everything: a group id, a node id or `DIRECT`. The engine defaults to the
+        /// first group, otherwise the first node.
+        public var global: String?
 
-        public init(outbounds: [String: [String: JSONValue]], rules: [String], groups: [NativeImportReport.Routing.Group]) {
+        public init(
+            outbounds: [String: [String: JSONValue]],
+            rules: [String],
+            groups: [NativeImportReport.Routing.Group],
+            global: String? = nil
+        ) {
             self.outbounds = outbounds
             self.rules = rules
             self.groups = groups
+            self.global = global
         }
     }
 
@@ -117,6 +126,9 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
     public private(set) var outbound: Outbound
     public private(set) var routing: Routing?
     public private(set) var mitm: Mitm?
+    /// The mode the engine starts in; absent is `rule`. The app switches it later without a restart
+    /// (`RuntimeControl.setMode`).
+    public private(set) var mode: ProxyMode?
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
@@ -125,6 +137,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         case outbound
         case routing
         case mitm
+        case mode
     }
 
     /// Only the extension encodes a routed config, and only for the runtime; nothing decodes one.
@@ -139,6 +152,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
             try container.encode(outbound, forKey: .outbound)
         }
         try container.encodeIfPresent(mitm, forKey: .mitm)
+        try container.encodeIfPresent(mode, forKey: .mode)
     }
 
     public init(node: ShadowsocksNode, profileID: String, mtu: Int = 1500) {
@@ -213,6 +227,14 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         var copy = withSecret(NodeSecret())
         copy.mitm = nil
         copy.routing = nil
+        copy.mode = nil
+        return copy
+    }
+
+    /// The same config starting in `mode`.
+    public func withMode(_ mode: ProxyMode?) -> EmbeddedRuntimeConfig {
+        var copy = self
+        copy.mode = mode
         return copy
     }
 
@@ -465,4 +487,7 @@ public enum TunnelProfileKeys {
     /// `Data` holding a JSON object of `script-path` to source for the scripts the user allowed in the enabled
     /// plugins (`MitmScriptLibrary.profileValue`). Scripts left out do nothing.
     public static let mitmScripts = "networkcore.mitm-scripts"
+    /// The `ProxyMode` raw value the tunnel starts in. Profiles saved before it existed use `rule` when
+    /// `routing` is set and `global` otherwise (`ProxyMode.saved(in:)`).
+    public static let mode = "networkcore.mode"
 }

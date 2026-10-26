@@ -122,7 +122,13 @@ public struct NodeLibrary: Codable, Equatable {
     /// The runtime `routing` section: every node by id, the rules, and the groups with each `select` group starting
     /// on its current selection. Nil when the tunnel does not follow rules.
     public func runtimeRouting() -> EmbeddedRuntimeConfig.Routing? {
-        guard followsRules, let routing else {
+        followsRules ? routingForModes() : nil
+    }
+
+    /// The `routing` section whatever the rules switch says, so the engine can move between the rule, global and
+    /// direct modes without a restart: the global mode goes to the selected node. Nil without subscription rules.
+    public func routingForModes() -> EmbeddedRuntimeConfig.Routing? {
+        guard let routing else {
             return nil
         }
         let groups = routing.groups.map { group -> NativeImportReport.Routing.Group in
@@ -135,7 +141,8 @@ public struct NodeLibrary: Codable, Equatable {
         return EmbeddedRuntimeConfig.Routing(
             outbounds: Dictionary(nodes.map { ($0.id, $0.outbound) }) { first, _ in first },
             rules: routing.rules,
-            groups: groups
+            groups: groups,
+            global: selected?.id
         )
     }
 

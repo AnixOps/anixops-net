@@ -31,6 +31,8 @@ final class TunnelController: ObservableObject {
     @Published private(set) var latencies: [String: NodeLatency] = [:]
     /// Groups being downloaded now.
     @Published private(set) var updatingGroups: Set<String> = []
+    /// The saved tunnel's mode: by rules, everything through the selected node, or everything direct.
+    @Published private(set) var mode = ProxyMode.global
 
     private var manager: NETunnelProviderManager?
     private var statusObserver: NSObjectProtocol?
@@ -275,18 +277,52 @@ final class TunnelController: ObservableObject {
     /// Switches between the active group's rules and groups and its selected node alone. A running tunnel
     /// restarts on the new setting.
     func setFollowsRules(_ on: Bool) async {
-        guard var group = subscriptions.active, group.library.routing != nil, group.library.followsRules != on else {
+        await setMode(on ? .rule : .global)
+    }
+
+    /// Switches between the rule, global and direct modes. A running engine switches in place and drops its open
+    /// connections so they reconnect in the new mode; an older engine restarts the tunnel instead.
+    func setMode(_ next: ProxyMode) async {
+        guard next != mode, let manager, let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol else {
             return
         }
-        group.library.followsRules = on
-        var groups = subscriptions
-        groups.upsert(group)
-        let wasRunning = isConnected
-        guard await saveActiveProfile(groups) else {
+        if next == .rule, library?.routing == nil {
+            message = String(localized: "当前节点没有订阅规则，无法按规则分流")
             return
         }
-        store(groups)
-        if wasRunning {
+        // The rule and global modes are also the active subscription's rules switch.
+        if next != .direct, var group = subscriptions.active, group.library.routing != nil,
+           group.library.followsRules != (next == .rule) {
+            group.library.followsRules = next == .rule
+            var groups = subscriptions
+            groups.upsert(group)
+            store(groups)
+        }
+        var configuration = tunnelProtocol.providerConfiguration ?? [:]
+        configuration[TunnelProfileKeys.mode] = next.rawValue
+        if next == .rule {
+            configuration[TunnelProfileKeys.routing] = true
+        } else if next == .global {
+            configuration.removeValue(forKey: TunnelProfileKeys.routing)
+        }
+        tunnelProtocol.providerConfiguration = configuration
+        manager.protocolConfiguration = tunnelProtocol
+        do {
+            try await manager.saveToPreferences()
+            try await manager.loadFromPreferences()
+        } catch {
+            message = String(localized: "保存模式到 VPN 配置失败")
+            refresh()
+            return
+        }
+        refresh()
+        guard isConnected else {
+            return
+        }
+        let answer = RuntimeControl.decode(RuntimeControl.ModeAnswer.self, from: await control(.setMode(next)))
+        if answer?.mode == next {
+            _ = await control(.closeAll)
+        } else {
             restart()
         }
     }
@@ -313,7 +349,11 @@ final class TunnelController: ObservableObject {
         }
         store(groups)
         if current.routesByRules, isConnected {
-            restart()
+            // The engine switches select groups in place; an older one restarts on the new pick.
+            let answer = RuntimeControl.decode(RuntimeControl.SelectAnswer.self, from: await control(.select(group: groupID, member: member)))
+            if answer?.now != member {
+                restart()
+            }
         }
     }
 
@@ -571,6 +611,8 @@ final class TunnelController: ObservableObject {
         if routed {
             providerConfiguration[TunnelProfileKeys.routing] = true
         }
+        let savedMode: ProxyMode = mode == .direct ? .direct : (routed ? .rule : .global)
+        providerConfiguration[TunnelProfileKeys.mode] = savedMode.rawValue
         let library = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)) ?? MitmPluginLibrary()
         if let plugins = try? MitmPluginLibrary.profileValue(library.activeTexts), !library.activeTexts.isEmpty {
             providerConfiguration[TunnelProfileKeys.mitmPlugins] = plugins
@@ -759,7 +801,9 @@ final class TunnelController: ObservableObject {
         let configuration = (manager?.protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration
         let previousNode = nodeName
         nodeName = configuration?[TunnelProfileKeys.nodeName] as? String
-        if connection != previous || nodeName != previousNode {
+        let previousMode = mode
+        mode = ProxyMode.saved(in: configuration)
+        if connection != previous || nodeName != previousNode || mode != previousMode {
             Self.reloadWidgets()
         }
     }

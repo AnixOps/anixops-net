@@ -1,8 +1,8 @@
 import NetworkCoreBridge
 import SwiftUI
 
-/// Rules: whether the tunnel follows the subscription's rules, and its policy groups. Only subscriptions that carry
-/// rules and groups (Clash, Surge or Loon profiles) have anything to show here.
+/// Rules: the proxy mode (rules, global or direct) and the subscription's policy groups. Only subscriptions that
+/// carry rules and groups (Clash, Surge or Loon profiles) have groups to show here.
 struct RulesView: View {
     @ObservedObject var tunnel: TunnelController
     @Environment(\.brand) private var brand
@@ -12,6 +12,11 @@ struct RulesView: View {
             Group {
                 if let library = tunnel.library, let routing = library.routing {
                     rules(library, routing)
+                } else if tunnel.nodeName != nil {
+                    List {
+                        modeSection(hasRules: false)
+                    }
+                    .scrollContentBackground(.hidden)
                 } else {
                     ScrollView {
                         BrandEmptyState(
@@ -31,21 +36,7 @@ struct RulesView: View {
 
     private func rules(_ library: NodeLibrary, _ routing: NativeImportReport.Routing) -> some View {
         List {
-            Section {
-                Toggle("按订阅规则分流", isOn: Binding(
-                    get: { library.followsRules },
-                    set: { on in
-                        Task {
-                            await tunnel.setFollowsRules(on)
-                        }
-                    }
-                ))
-                .listRowBackground(brand.surface)
-            } header: {
-                Text("\(routing.rules.count) 条规则 · \(routing.groups.count) 个策略组")
-            } footer: {
-                Text("关闭后全部流量走代理页选中的节点。连接中修改会自动重连。")
-            }
+            modeSection(hasRules: true)
 
             Section {
                 ForEach(routing.groups) { group in
@@ -53,13 +44,38 @@ struct RulesView: View {
                         .listRowBackground(brand.surface)
                 }
             } header: {
-                Text("策略组")
+                Text("策略组 · \(routing.rules.count) 条规则")
             } footer: {
                 Text("自动选择和故障转移的组由内核按延迟和可用性挑选节点。")
             }
-            .disabled(!library.followsRules)
+            .disabled(tunnel.mode != .rule)
         }
         .scrollContentBackground(.hidden)
+    }
+
+    private func modeSection(hasRules: Bool) -> some View {
+        Section {
+            Picker("代理模式", selection: Binding(
+                get: { tunnel.mode },
+                set: { mode in
+                    Task {
+                        await tunnel.setMode(mode)
+                    }
+                }
+            )) {
+                if hasRules {
+                    Text("规则").tag(ProxyMode.rule)
+                }
+                Text("全局").tag(ProxyMode.global)
+                Text("直连").tag(ProxyMode.direct)
+            }
+            .pickerStyle(.segmented)
+            .listRowBackground(brand.surface)
+        } header: {
+            Text("代理模式")
+        } footer: {
+            Text(ProxyModeText.footer(tunnel.mode))
+        }
     }
 
     @ViewBuilder
@@ -106,6 +122,31 @@ struct RulesView: View {
             return String(localized: "拒绝")
         default:
             return library.displayName(ofMember: member)
+        }
+    }
+}
+
+/// What each mode does, for the rules page.
+enum ProxyModeText {
+    static func title(_ mode: ProxyMode) -> String {
+        switch mode {
+        case .rule:
+            return String(localized: "规则")
+        case .global:
+            return String(localized: "全局")
+        case .direct:
+            return String(localized: "直连")
+        }
+    }
+
+    static func footer(_ mode: ProxyMode) -> String {
+        switch mode {
+        case .rule:
+            return String(localized: "按订阅规则和策略组分流。连接中切换立即生效，已有连接会重新建立。")
+        case .global:
+            return String(localized: "全部流量走代理页选中的节点。连接中切换立即生效，已有连接会重新建立。")
+        case .direct:
+            return String(localized: "全部流量直连，不经过代理节点。连接中切换立即生效，已有连接会重新建立。")
         }
     }
 }

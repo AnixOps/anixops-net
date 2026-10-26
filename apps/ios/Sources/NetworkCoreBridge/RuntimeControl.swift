@@ -8,6 +8,12 @@ public enum RuntimeControl {
     case connections
     case closeConnection(UInt64)
     case closeAll
+    case mode
+    /// New connections only; open ones keep their route until `closeAll`.
+    case setMode(ProxyMode)
+    case groups
+    /// Picks the member of a `select` group.
+    case select(group: String, member: String)
 
     public var request: Data {
         let object: [String: Any]
@@ -20,6 +26,14 @@ public enum RuntimeControl {
             object = ["cmd": "close_connection", "id": id]
         case .closeAll:
             object = ["cmd": "close_all"]
+        case .mode:
+            object = ["cmd": "mode"]
+        case let .setMode(mode):
+            object = ["cmd": "set_mode", "mode": mode.rawValue]
+        case .groups:
+            object = ["cmd": "groups"]
+        case let .select(group, member):
+            object = ["cmd": "select", "group": group, "member": member]
         }
         return (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
     }
@@ -145,6 +159,43 @@ public enum RuntimeControl {
             self.active = active
             self.closed = closed
         }
+    }
+
+    /// The `mode` and `set_mode` answers.
+    public struct ModeAnswer: Decodable, Equatable {
+        public let mode: ProxyMode
+    }
+
+    /// The `select` answer: the member the group uses now.
+    public struct SelectAnswer: Decodable, Equatable {
+        public let now: String
+    }
+
+    /// The `groups` answer: every policy group with the member it uses now and the members' last measured delay.
+    public struct Groups: Decodable, Equatable {
+        public struct Group: Decodable, Equatable, Identifiable {
+            public struct Member: Decodable, Equatable {
+                public let name: String
+                public let latencyMs: UInt32?
+
+                enum CodingKeys: String, CodingKey {
+                    case name
+                    case latencyMs = "latency_ms"
+                }
+            }
+
+            public let id: String
+            /// `select`, `url-test` or `fallback`.
+            public let type: String
+            public let now: String?
+            public let members: [Member]
+        }
+
+        public let groups: [Group]
+    }
+
+    public static func decode<Answer: Decodable>(_ type: Answer.Type, from data: Data?) -> Answer? {
+        data.flatMap { try? JSONDecoder().decode(type, from: $0) }
     }
 
     public static func decodeTraffic(_ data: Data) -> Traffic? {
