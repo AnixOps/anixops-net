@@ -13,6 +13,7 @@ use engine_embedded::profile::{RoutingMode, RuleList};
 use serde::{Deserialize, Serialize};
 
 use super::system_proxy::ProxyBackup;
+use desktop_dns::DnsPreset;
 
 pub const DEFAULT_LISTEN_PORT: u16 = 7890;
 
@@ -24,6 +25,7 @@ pub struct SavedState {
     pub preferences: Preferences,
     pub listen_port: u16,
     pub routing_mode: RoutingMode,
+    pub dns_preset: DnsPreset,
     /// The member picked in each select policy group of the selected source, by group id.
     pub group_choices: BTreeMap<String, String>,
     /// Set while the client has changed the desktop's proxy settings; cleared once they are restored.
@@ -39,6 +41,7 @@ impl Default for SavedState {
             preferences: Preferences::default(),
             listen_port: DEFAULT_LISTEN_PORT,
             routing_mode: RoutingMode::default(),
+            dns_preset: DnsPreset::default(),
             group_choices: BTreeMap::new(),
             proxy_backup: None,
             next_source: 1,

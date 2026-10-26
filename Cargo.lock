@@ -1128,6 +1128,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "desktop-dns"
+version = "0.2.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2870,6 +2878,7 @@ version = "0.2.0"
 dependencies = [
  "config-core",
  "control-domain",
+ "desktop-dns",
  "engine-embedded",
  "inbound-mixed",
  "node-import",
@@ -2887,6 +2896,7 @@ version = "0.2.0"
 dependencies = [
  "config-core",
  "control-domain",
+ "desktop-dns",
  "engine-embedded",
  "inbound-mixed",
  "node-import",

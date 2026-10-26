@@ -1,9 +1,9 @@
 import { Check, Layers, ListChecks, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { desktop, NativeGroupSummary, RuleSetStatus, RuntimeSnapshot } from "../bridge";
+import { desktop, DnsPreset, NativeGroupSummary, RuleSetStatus, RuntimeSnapshot } from "../bridge";
 import { availableRoutingModes, groupMemberLabel } from "../labels";
 import { liveEngine, usePolling } from "../live";
-import { Card, Run, StatusPill } from "../ui";
+import { Card, Run, Segmented, StatusPill } from "../ui";
 import { t } from "../i18n";
 
 export function RulesPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
@@ -35,7 +35,7 @@ export function RulesPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot |
       </Card>
       <PolicyGroups busy={busy} run={run} />
       <RuleSets snapshot={snapshot} busy={busy} run={run} />
-      <DnsCard />
+      <DnsCard snapshot={snapshot} busy={busy} run={run} />
     </div>
   );
 }
@@ -123,10 +123,30 @@ function ruleSetDetail(set: RuleSetStatus): string {
   ].filter(Boolean).join(" · ");
 }
 
-function DnsCard() {
+const dnsChoices: Array<{ value: DnsPreset; label: string; hint: string }> = [
+  { value: "system", label: "系统 DNS", hint: "内置引擎用系统 DNS 解析规则里需要 IP 的域名；经节点的连接由节点服务器解析域名。" },
+  { value: "encrypted", label: "加密 DNS", hint: "所有域名经节点用 Cloudflare DNS over HTTPS 解析，本地网络看不到查询内容。" },
+  { value: "split", label: "国内外分流", hint: "国内域名直连阿里 DNS over HTTPS 解析，其余经节点用 Cloudflare 解析，国内网站拿到就近的地址。" },
+];
+
+/** The DNS choice; Windows applies it on the next connection, Linux restarts a running engine. */
+function DnsCard({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
+  const current = snapshot?.dnsPreset ?? "system";
+  const choice = dnsChoices.find((item) => item.value === current) ?? dnsChoices[0];
+  const locked = snapshot?.platform !== "linux" && snapshot?.connection === "Connected";
+
   return (
-    <Card title="DNS" actions={<StatusPill label={t("系统 DNS")} tone="success" />}>
-      <p className="muted">{t("内置引擎用系统 DNS 解析规则里需要 IP 的域名；经节点的连接由节点服务器解析域名。")}</p>
+    <Card title="DNS" description={locked ? t("断开后才能更改 DNS。") : undefined} actions={<StatusPill label={t(choice.label)} tone="success" />}>
+      {snapshot?.dnsPreset !== undefined && (
+        <Segmented
+          label="DNS"
+          options={dnsChoices.map((item) => ({ value: item.value, label: t(item.label) }))}
+          value={current}
+          disabled={Boolean(busy) || locked}
+          onChange={(preset) => void run("dns", () => desktop.setDnsPreset(preset))}
+        />
+      )}
+      <p className="muted">{t(choice.hint)}</p>
     </Card>
   );
 }

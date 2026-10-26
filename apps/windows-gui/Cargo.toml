@@ -13,6 +13,7 @@ custom-protocol = ["tauri/custom-protocol"]
 [dependencies]
 config-core = { workspace = true }
 control-domain = { workspace = true }
+desktop-dns = { path = "../../crates/desktop-dns" }
 engine-embedded = { workspace = true }
 inbound-mixed = { workspace = true }
 node-import = { workspace = true }

@@ -12,6 +12,7 @@ use super::{
 use config_core::routing_import::import_subscription_routing;
 use config_core::CoreSubscriptionService;
 use control_domain::{NodeDescriptor, SubscriptionService, SubscriptionSource};
+use desktop_dns::DnsPreset;
 use engine_embedded::config::{RuntimeConfig, CONFIG_SCHEMA_VERSION};
 use engine_embedded::delay::measure_delay;
 use engine_embedded::nodes::{outbound_for_node, routing_envelope, single_node_envelope};
@@ -130,6 +131,7 @@ struct RuntimeSnapshot {
     dark_theme: bool,
     runtime_mode: String,
     routing_mode: String,
+    dns_preset: &'static str,
     /// The imported profile runs on the embedded engine.
     embedded_engine: bool,
 }
@@ -276,6 +278,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             stop_service,
             restore_network_settings,
             set_routing_mode,
+            set_dns_preset,
             refresh_routing_rules,
             configure_script_runtime,
             clear_script_runtime,
@@ -687,7 +690,7 @@ fn relink_active_profile(
     let rendered = profile.to_string();
     write_managed_text_atomic(&embedded_profile_path(), &rendered)
         .map_err(|error| error.to_string())?;
-    let envelope = embedded_envelope_or_profile(rendered, desktop.routing_mode);
+    let envelope = embedded_envelope_or_profile(rendered, desktop.routing_mode, desktop.dns_preset);
     write_managed_text_atomic(&embedded.envelope_path, &envelope)
         .map_err(|error| error.to_string())?;
     desktop.profile_node_id = routed_selected_node(&profile);
@@ -1101,7 +1104,12 @@ fn switch_other_source_node(
             }
             let embedded = require_embedded_config()?;
             let rendered = profile.to_string();
-            let envelope = embedded_envelope_for_mode(&rendered, desktop.routing_mode, false)?;
+            let envelope = embedded_envelope_for_mode(
+                &rendered,
+                desktop.routing_mode,
+                desktop.dns_preset,
+                false,
+            )?;
             write_managed_text_atomic(&embedded_profile_path(), &rendered)
                 .map_err(|error| error.to_string())?;
             write_managed_text_atomic(&embedded.envelope_path, &envelope)
@@ -1512,7 +1520,8 @@ fn select_embedded_group_member(
     let mut profile = read_embedded_profile()?;
     set_routed_group_default(&mut profile, group_id, member)?;
     let rendered = profile.to_string();
-    let envelope = embedded_envelope_for_mode(&rendered, desktop.routing_mode, false)?;
+    let envelope =
+        embedded_envelope_for_mode(&rendered, desktop.routing_mode, desktop.dns_preset, false)?;
     write_managed_text_atomic(&embedded_profile_path(), &rendered)
         .map_err(|error| error.to_string())?;
     write_managed_text_atomic(&embedded.envelope_path, &envelope)
@@ -1595,7 +1604,7 @@ fn switch_embedded_node(
     };
     write_managed_text_atomic(&embedded_profile_path(), &profile)
         .map_err(|error| error.to_string())?;
-    let envelope = embedded_envelope_or_profile(profile, desktop.routing_mode);
+    let envelope = embedded_envelope_or_profile(profile, desktop.routing_mode, desktop.dns_preset);
     write_managed_text_atomic(&embedded.envelope_path, &envelope)
         .map_err(|error| error.to_string())?;
     {
@@ -2295,7 +2304,7 @@ fn import_embedded_subscription(
         // A profile with its own rules runs them by default.
         desktop.routing_mode = DesktopRoutingMode::Rule;
     }
-    let envelope = embedded_envelope_or_profile(envelope, desktop.routing_mode);
+    let envelope = embedded_envelope_or_profile(envelope, desktop.routing_mode, desktop.dns_preset);
     let envelope_path = embedded_directory().join("envelope.json");
     write_managed_text_atomic(&envelope_path, &envelope).map_err(|error| error.to_string())?;
     let mut managed = managed_config_or_default()?;
@@ -2356,8 +2365,12 @@ fn embedded_nodes_path() -> PathBuf {
 
 /// The profile with the routing mode applied, or the profile alone (logged)
 /// when the mode's rules are unavailable.
-fn embedded_envelope_or_profile(profile: String, mode: DesktopRoutingMode) -> String {
-    match embedded_envelope_for_mode(&profile, mode, false) {
+fn embedded_envelope_or_profile(
+    profile: String,
+    mode: DesktopRoutingMode,
+    dns: DnsPreset,
+) -> String {
+    match embedded_envelope_for_mode(&profile, mode, dns, false) {
         Ok(routed) => routed,
         Err(error) => {
             let _ = append_managed_log(
@@ -2369,10 +2382,25 @@ fn embedded_envelope_or_profile(profile: String, mode: DesktopRoutingMode) -> St
     }
 }
 
+/// The envelope for `mode` with the DNS choice in it.
+fn embedded_envelope_for_mode(
+    profile: &str,
+    mode: DesktopRoutingMode,
+    dns: DnsPreset,
+    force_refresh: bool,
+) -> Result<String, String> {
+    let envelope = desktop_dns::apply(&mode_envelope(profile, mode, force_refresh)?, dns)?;
+    if dns != DnsPreset::System {
+        RuntimeConfig::from_json(envelope.as_bytes())
+            .map_err(|error| format!("the DNS choice was rejected: {}", error.message))?;
+    }
+    Ok(envelope)
+}
+
 /// The imported envelope with `mode`'s rules in place of its own: the
 /// profile's FINAL target (or its single outbound) is the proxy, and the
 /// mode's lists become rule sets.
-fn embedded_envelope_for_mode(
+fn mode_envelope(
     profile: &str,
     mode: DesktopRoutingMode,
     force_refresh: bool,
@@ -2653,7 +2681,7 @@ fn set_routing_mode_blocking(
     let profile = fs::read_to_string(embedded_profile_path()).map_err(|error| {
         format!("Import the profile again before applying a routing mode: {error}")
     })?;
-    let envelope = embedded_envelope_for_mode(&profile, mode, force_refresh)?;
+    let envelope = embedded_envelope_for_mode(&profile, mode, desktop.dns_preset, force_refresh)?;
     write_managed_text_atomic(&embedded.envelope_path, &envelope)
         .map_err(|error| error.to_string())?;
     desktop.routing_mode = mode;
@@ -2663,6 +2691,40 @@ fn set_routing_mode_blocking(
             "{} routing mode saved. Connect to apply the updated route.",
             routing_mode_label(mode)
         ),
+    })
+}
+
+#[tauri::command]
+async fn set_dns_preset(
+    preset: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || set_dns_preset_blocking(&preset, state)).await
+}
+
+fn set_dns_preset_blocking(
+    preset: &str,
+    state: DesktopAppState,
+) -> Result<OperationResult, String> {
+    let preset =
+        DnsPreset::parse(preset).ok_or_else(|| format!("unknown DNS choice {preset:?}"))?;
+    ensure_routing_configuration_stopped(&state)?;
+    let mut desktop = state
+        .desktop
+        .lock()
+        .map_err(|_| "desktop state lock failed")?;
+    if let Some(embedded) = active_embedded_config()? {
+        let profile = fs::read_to_string(embedded_profile_path())
+            .map_err(|error| format!("Import the profile again before changing DNS: {error}"))?;
+        let envelope = embedded_envelope_for_mode(&profile, desktop.routing_mode, preset, false)?;
+        write_managed_text_atomic(&embedded.envelope_path, &envelope)
+            .map_err(|error| error.to_string())?;
+    }
+    desktop.dns_preset = preset;
+    save_desktop_state(&desktop)?;
+    Ok(OperationResult {
+        message: "DNS choice saved. Connect to apply it.".to_string(),
     })
 }
 
@@ -3224,6 +3286,7 @@ fn snapshot(
             DesktopRuntimeMode::Service => "service".to_string(),
         },
         routing_mode: routing_mode_name(desktop.routing_mode).to_string(),
+        dns_preset: desktop.dns_preset.as_str(),
         embedded_engine: active_embedded_config().ok().flatten().is_some(),
     }
 }

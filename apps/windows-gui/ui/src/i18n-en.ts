@@ -235,4 +235,9 @@ export const english: Record<string, string> = {
   "{count} 条": "{count} entries",
   "尚未下载": "Not downloaded yet",
   "上次下载失败：{error}": "Last download failed: {error}",
+  "加密 DNS": "Encrypted DNS",
+  "国内外分流": "Split by region",
+  "所有域名经节点用 Cloudflare DNS over HTTPS 解析，本地网络看不到查询内容。": "Every name is resolved with Cloudflare DNS over HTTPS through the node, so the local network cannot see the queries.",
+  "国内域名直连阿里 DNS over HTTPS 解析，其余经节点用 Cloudflare 解析，国内网站拿到就近的地址。": "Mainland names go directly to AliDNS over HTTPS and the rest to Cloudflare through the node, so mainland sites get nearby addresses.",
+  "断开后才能更改 DNS。": "Disconnect to change DNS.",
 };

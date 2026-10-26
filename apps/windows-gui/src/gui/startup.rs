@@ -89,6 +89,8 @@ pub struct DesktopState {
     #[serde(default)]
     pub routing_mode: DesktopRoutingMode,
     #[serde(default)]
+    pub dns_preset: desktop_dns::DnsPreset,
+    #[serde(default)]
     pub bilibili_web_ad_block_enabled: bool,
     pub proxy_snapshot: Option<WindowsProxySnapshot>,
     #[serde(default)]
