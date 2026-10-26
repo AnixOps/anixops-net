@@ -168,6 +168,8 @@ export const desktop = {
   closeAllConnections: () => invoke<{ closed: number }>("runtime_control", { request: { cmd: "close_all" } }),
   testDelay: (nodeId: string, url: string) =>
     invoke<OperationResult>("test_node_delay", { nodeId, url }),
+  /** The node's share link, or a Surge line for Snell. */
+  shareLink: (nodeId: string) => invoke<string>("node_share_link", { nodeId }),
   selectFastestNode: () => invoke<OperationResult>("select_fastest_node"),
   savePreferences: (preferences: Preferences) =>
     invoke<OperationResult>("save_preferences", {

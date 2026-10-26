@@ -240,6 +240,13 @@ pub fn node_delay(nodes: &[NodeDescriptor], node_id: &str, url: &str) -> Result<
     measure_delay(envelope.as_bytes(), url, DELAY_TIMEOUT).map_err(|error| error.to_string())
 }
 
+/// The link other clients import for `node`; Snell gives a Surge proxy line.
+pub fn share_link(node: &NodeDescriptor) -> Result<String, String> {
+    node_import::outbound_json(node)
+        .and_then(|outbound| node_import::share_link(&node.name, &outbound))
+        .map_err(|error| format!("This node cannot be shared: {error}"))
+}
+
 /// Tests every supported node and returns the fastest one with its delay.
 pub fn fastest_node(nodes: &[NodeDescriptor], url: &str) -> Option<(String, Duration)> {
     let candidates: Vec<&NodeDescriptor> = nodes.iter().filter(|node| is_supported(node)).collect();
@@ -272,6 +279,14 @@ mod tests {
     use super::*;
 
     const LINK: &str = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@82.47.34.99:11111#HK";
+
+    #[test]
+    fn shares_a_node_as_the_link_it_came_from() {
+        let node = &parse_nodes(LINK).unwrap()[0];
+        let link = share_link(node).unwrap();
+        assert!(link.starts_with("ss://"), "{link}");
+        assert_eq!(parse_nodes(&link).unwrap()[0].endpoint, node.endpoint);
+    }
 
     #[test]
     fn activity_requests_only_read_and_close_connections() {

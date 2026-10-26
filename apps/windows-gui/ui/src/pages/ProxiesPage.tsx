@@ -1,4 +1,4 @@
-import { Activity, Check, CloudDownload, Globe, Pencil, RefreshCw, Search, Trash2, X, Zap } from "lucide-react";
+import { Activity, Check, CloudDownload, Globe, Pencil, RefreshCw, Search, Share2, Trash2, X, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { desktop, NodeSummary, RuntimeSnapshot, SubscriptionSummary } from "../bridge";
 import { protocolAbbreviation } from "../labels";
@@ -59,6 +59,9 @@ export function ProxiesPage({ snapshot, nodes, busy, run }: {
                     <IconButton label={t("测试 {node} 的延迟", { node: node.label })} disabled={Boolean(busy)} onClick={() => void run("delay", () => desktop.testDelay(node.id, delayUrl))}>
                       <Activity size={15} />
                     </IconButton>
+                    <IconButton label={t("复制 {node} 的分享链接", { node: node.label })} disabled={Boolean(busy)} onClick={() => void run("share", () => copyShareLink(node))}>
+                      <Share2 size={15} />
+                    </IconButton>
                   </div>
                 ))}
               </div>
@@ -73,6 +76,17 @@ export function ProxiesPage({ snapshot, nodes, busy, run }: {
 }
 
 const delayUrl = "https://www.gstatic.com/generate_204";
+
+async function copyShareLink(node: NodeSummary) {
+  const link = await desktop.shareLink(node.id);
+  try {
+    await navigator.clipboard.writeText(link);
+  } catch {
+    // Some webviews refuse the clipboard after an await; show the link instead.
+    return { message: link };
+  }
+  return { message: t("已复制 {node} 的分享链接", { node: node.label }) };
+}
 
 function Subscriptions({ snapshot, empty, busy, run }: { snapshot: RuntimeSnapshot | null; empty: boolean; busy: string | null; run: Run }) {
   const [location, setLocation] = useState("");

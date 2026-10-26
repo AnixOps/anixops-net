@@ -215,4 +215,6 @@ export const english: Record<string, string> = {
   "正在读取连接记录": "Reading connections",
   "被规则拒绝": "Rejected by a rule",
   "实时速度": "Live speed",
+  "复制 {node} 的分享链接": "Copy the share link of {node}",
+  "已复制 {node} 的分享链接": "Copied the share link of {node}",
 };

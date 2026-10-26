@@ -24,6 +24,7 @@ engine-embedded = { git = "https://github.com/AnixOps/networkcore_anixops", rev 
 engine-native = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "ffd2236365262fa65b51f573eec4d1b16d1bdf76" }
 inbound-mixed = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "ffd2236365262fa65b51f573eec4d1b16d1bdf76" }
 mitm-policy = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "ffd2236365262fa65b51f573eec4d1b16d1bdf76" }
+node-import = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "ffd2236365262fa65b51f573eec4d1b16d1bdf76" }
 platform-windows = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "ffd2236365262fa65b51f573eec4d1b16d1bdf76" }
 
 # [patch."https://github.com/AnixOps/networkcore_anixops"]
@@ -33,4 +34,5 @@ platform-windows = { git = "https://github.com/AnixOps/networkcore_anixops", rev
 # engine-native = { path = "../networkcore_anixops/crates/engine-native" }
 # inbound-mixed = { path = "../networkcore_anixops/crates/inbound-mixed" }
 # mitm-policy = { path = "../networkcore_anixops/crates/mitm-policy" }
+# node-import = { path = "../networkcore_anixops/crates/node-import" }
 # platform-windows = { path = "../networkcore_anixops/crates/platform-windows" }
