@@ -29,7 +29,8 @@ public struct NativeImportReport: Decodable, Equatable {
     public struct Routing: Codable, Equatable {
         public struct Group: Codable, Equatable, Identifiable {
             public let id: String
-            /// `select`, `url-test` or `fallback`.
+            /// `select`, `url-test`, `fallback`, `load-balance` (one healthy member per destination host) or
+            /// `round-robin` (healthy members in turn).
             public let type: String
             public let members: [String]
             /// The member a `select` group starts on.
@@ -50,6 +51,20 @@ public struct NativeImportReport: Decodable, Equatable {
 
             public var isSelectable: Bool {
                 type == "select"
+            }
+
+            /// How the engine picks the member of a group that is not `select`.
+            public var typeTitle: String {
+                switch type {
+                case "fallback":
+                    return String(localized: "故障转移")
+                case "load-balance":
+                    return String(localized: "负载均衡")
+                case "round-robin":
+                    return String(localized: "轮询")
+                default:
+                    return String(localized: "自动选择")
+                }
             }
         }
 

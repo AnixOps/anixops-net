@@ -11,6 +11,16 @@
         }
       }
     },
+    "%@ 等 %lld 个": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ (%2$lld servers)"
+          }
+        }
+      }
+    },
     "%lld ms": {
       "localizations": {
         "en": {
@@ -71,6 +81,16 @@
         }
       }
     },
+    "%lld 条 Hosts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld hosts"
+          }
+        }
+      }
+    },
     "%lld 条规则 · %lld 个策略组": {
       "localizations": {
         "en": {
@@ -111,12 +131,32 @@
         }
       }
     },
+    "Cloudflare（DoH，经代理）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cloudflare (DoH, via proxy)"
+          }
+        }
+      }
+    },
     "GEOIP,CN、GEOSITE,cn 和 GEOSITE,gfw 没有订阅自带的规则集时，使用公开列表（Loyalsoldier、gaoyifan），由内核每天直连下载一次。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "When the subscription has no rule set for GEOIP,CN, GEOSITE,cn or GEOSITE,gfw, public lists (Loyalsoldier, gaoyifan) are used; the engine downloads them directly once a day."
+          }
+        }
+      }
+    },
+    "Google（DoH，经代理）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google (DoH, via proxy)"
           }
         }
       }
@@ -151,6 +191,36 @@
         }
       }
     },
+    "Hosts 会保留。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hosts are kept."
+          }
+        }
+      }
+    },
+    "IP 地址": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "IP addresses"
+          }
+        }
+      }
+    },
+    "Quad9（DoT，经代理）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quad9 (DoT, via proxy)"
+          }
+        }
+      }
+    },
     "REALITY 参数（sni、pbk、sid）不正确": {
       "localizations": {
         "en": {
@@ -167,6 +237,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "SHA-256 Fingerprint"
+          }
+        }
+      }
+    },
+    "TLS 名称（可选）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TLS name (optional)"
           }
         }
       }
@@ -367,6 +447,16 @@
         }
       }
     },
+    "从上到下第一条命中的规则生效。RULE-SET 使用规则页的规则集，例如 geosite-cn；只有单个节点、没有订阅规则时它不会命中。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The first matching rule from the top wins. RULE-SET uses the rule sets on the rules page, such as geosite-cn; it never matches with a single node and no subscription rules."
+          }
+        }
+      }
+    },
     "从剪贴板导入": {
       "localizations": {
         "en": {
@@ -447,12 +537,32 @@
         }
       }
     },
+    "使用推荐的国内外分流": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use the recommended domestic/overseas split"
+          }
+        }
+      }
+    },
     "保存": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Save"
+          }
+        }
+      }
+    },
+    "保存 DNS 设置到 VPN 配置失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't save the DNS settings to the VPN configuration"
           }
         }
       }
@@ -3333,6 +3443,396 @@
           "stringUnit": {
             "state": "translated",
             "value": "The subscription doesn't provide this rule set, so its rules are skipped"
+          }
+        }
+      }
+    },
+    "默认": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default"
+          }
+        }
+      }
+    },
+    "恢复默认": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore defaults"
+          }
+        }
+      }
+    },
+    "推荐分流：国内域名（.cn 和 geosite-cn 列表）直连阿里 DNS，其余经代理用 Cloudflare 解析。默认设置下所有查询经代理发往 1.1.1.1。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recommended split: domestic names (.cn and the geosite-cn list) go directly to AliDNS, everything else to Cloudflare through the proxy. By default every query goes to 1.1.1.1 through the proxy."
+          }
+        }
+      }
+    },
+    "用推荐分流替换现有 DNS 设置？": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace the current DNS settings with the recommended split?"
+          }
+        }
+      }
+    },
+    "替换": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace"
+          }
+        }
+      }
+    },
+    "清除所有 DNS 设置？": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear all DNS settings?"
+          }
+        }
+      }
+    },
+    "无法保存": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't save"
+          }
+        }
+      }
+    },
+    "好": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        }
+      }
+    },
+    "设为默认": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set as default"
+          }
+        }
+      }
+    },
+    "自定义…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom…"
+          }
+        }
+      }
+    },
+    "添加 DNS 服务器": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add DNS server"
+          }
+        }
+      }
+    },
+    "没有规则命中的域名由默认服务器解析，长按服务器可设为默认。经代理的服务器在直连模式下也直连。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Names no rule picks go to the default server; long-press a server to make it the default. Servers set to go through the proxy are reached directly in direct mode."
+          }
+        }
+      }
+    },
+    "直连 · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Direct · %@"
+          }
+        }
+      }
+    },
+    "经代理 · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Via proxy · %@"
+          }
+        }
+      }
+    },
+    "添加规则": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add rule"
+          }
+        }
+      }
+    },
+    "按域名选择服务器": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servers by domain"
+          }
+        }
+      }
+    },
+    "添加 Hosts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add host"
+          }
+        }
+      }
+    },
+    "这些域名直接返回填写的地址，不查询服务器。*.example.com 匹配它的所有子域名。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "These names answer with the addresses given, without asking a server. *.example.com matches all of its subdomains."
+          }
+        }
+      }
+    },
+    "地址": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Address"
+          }
+        }
+      }
+    },
+    "地址可写 1.1.1.1、tcp://、tls://（DoT）或 https://（DoH）。用 IP 地址写 DoT/DoH 时填写证书上的 TLS 名称。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter 1.1.1.1, tcp://, tls:// (DoT) or https:// (DoH). For DoT/DoH by IP address, enter the TLS name on the certificate."
+          }
+        }
+      }
+    },
+    "经代理": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Via proxy"
+          }
+        }
+      }
+    },
+    "国内的 DNS 服务器建议直连。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Domestic DNS servers are best reached directly."
+          }
+        }
+      }
+    },
+    "编辑 DNS 服务器": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit DNS server"
+          }
+        }
+      }
+    },
+    "域名": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Domain"
+          }
+        }
+      }
+    },
+    "添加": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add"
+          }
+        }
+      }
+    },
+    "多个地址用逗号或空格分隔，最多 8 个。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Separate addresses with commas or spaces, up to 8."
+          }
+        }
+      }
+    },
+    "无法保存 DNS 设置": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't save the DNS settings"
+          }
+        }
+      }
+    },
+    "名称只能用字母、数字和 . _ -": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Names may only use letters, digits and . _ -"
+          }
+        }
+      }
+    },
+    "已有同名的 DNS 服务器": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A DNS server with this name already exists"
+          }
+        }
+      }
+    },
+    "地址应为 IP，或 tcp://、tls://、https:// 开头": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The address must be an IP, or start with tcp://, tls:// or https://"
+          }
+        }
+      }
+    },
+    "域名格式不正确": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The domain name is invalid"
+          }
+        }
+      }
+    },
+    "请填写 1–8 个 IP 地址": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter 1–8 IP addresses"
+          }
+        }
+      }
+    },
+    "每行写一个域名后缀，或 DOMAIN、DOMAIN-KEYWORD、RULE-SET、GEOSITE 开头的条件": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter one domain suffix per line, or a condition starting with DOMAIN, DOMAIN-KEYWORD, RULE-SET or GEOSITE"
+          }
+        }
+      }
+    },
+    "请先添加 DNS 服务器": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a DNS server first"
+          }
+        }
+      }
+    },
+    "已达到数量上限": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The limit has been reached"
+          }
+        }
+      }
+    },
+    "阿里 DNS（DoH，直连）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AliDNS (DoH, direct)"
+          }
+        }
+      }
+    },
+    "腾讯 DNSPod（DoH，直连）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tencent DNSPod (DoH, direct)"
+          }
+        }
+      }
+    },
+    "负载均衡": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Load balance"
+          }
+        }
+      }
+    },
+    "轮询": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Round robin"
           }
         }
       }

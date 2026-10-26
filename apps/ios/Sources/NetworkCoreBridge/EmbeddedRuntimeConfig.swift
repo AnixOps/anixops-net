@@ -173,6 +173,9 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
     /// The mode the engine starts in; absent is `rule`. The app switches it later without a restart
     /// (`RuntimeControl.setMode`).
     public private(set) var mode: ProxyMode?
+    /// The `dns` section; absent keeps the engine's default resolver. The profile stores it apart
+    /// (`TunnelProfileKeys.dns`) and the extension adds it with `withDns(_:)`.
+    public private(set) var dns: DnsSettings?
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
@@ -182,6 +185,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         case routing
         case mitm
         case mode
+        case dns
     }
 
     /// Only the extension encodes a routed config, and only for the runtime; nothing decodes one.
@@ -197,6 +201,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         }
         try container.encodeIfPresent(mitm, forKey: .mitm)
         try container.encodeIfPresent(mode, forKey: .mode)
+        try container.encodeIfPresent(dns, forKey: .dns)
     }
 
     public init(node: ShadowsocksNode, profileID: String, mtu: Int = 1500) {
@@ -272,6 +277,23 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         copy.mitm = nil
         copy.routing = nil
         copy.mode = nil
+        copy.dns = nil
+        return copy
+    }
+
+    /// The same config resolving with `dns`. Rule sets its rules name that the routing section lacks come from
+    /// the catalog when it knows them; a name nothing defines simply never matches.
+    public func withDns(_ dns: DnsSettings?) -> EmbeddedRuntimeConfig {
+        var copy = self
+        copy.dns = dns.flatMap { $0.isEmpty ? nil : $0 }
+        if let dns = copy.dns, var routing = copy.routing {
+            var sets = routing.ruleSets ?? [:]
+            for name in dns.ruleSetNames where sets[name] == nil {
+                sets[name] = RuleSetCatalog.known[name]
+            }
+            routing.ruleSets = sets.isEmpty ? nil : sets
+            copy.routing = routing
+        }
         return copy
     }
 
@@ -534,4 +556,6 @@ public enum TunnelProfileKeys {
     /// The `ProxyMode` raw value the tunnel starts in. Profiles saved before it existed use `rule` when
     /// `routing` is set and `global` otherwise (`ProxyMode.saved(in:)`).
     public static let mode = "networkcore.mode"
+    /// `Data` holding the encoded `DnsSettings`. Absent keeps the engine's default resolver.
+    public static let dns = "networkcore.dns"
 }
