@@ -61,6 +61,16 @@
         }
       }
     },
+    "%lld 条": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld entries"
+          }
+        }
+      }
+    },
     "%lld 条规则 · %lld 个策略组": {
       "localizations": {
         "en": {
@@ -97,6 +107,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Apps reconnect on their own when they need to."
+          }
+        }
+      }
+    },
+    "GEOIP,CN、GEOSITE,cn 和 GEOSITE,gfw 没有订阅自带的规则集时，使用公开列表（Loyalsoldier、gaoyifan），由内核每天直连下载一次。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When the subscription has no rule set for GEOIP,CN, GEOSITE,cn or GEOSITE,gfw, public lists (Loyalsoldier, gaoyifan) are used; the engine downloads them directly once a day."
           }
         }
       }
@@ -263,6 +283,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Upload and download are the bytes this connection moved through the tunnel. Host names come from the request or the TLS SNI / HTTP Host, are kept in memory only and are cleared when the tunnel stops."
+          }
+        }
+      }
+    },
+    "上次下载失败：%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last download failed: %@"
           }
         }
       }
@@ -3243,6 +3273,66 @@
           "stringUnit": {
             "state": "translated",
             "value": "Switch proxy mode"
+          }
+        }
+      }
+    },
+    "全部规则": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All rules"
+          }
+        }
+      }
+    },
+    "立即更新规则集": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update rule sets now"
+          }
+        }
+      }
+    },
+    "规则与规则集": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rules and rule sets"
+          }
+        }
+      }
+    },
+    "订阅没有提供这个规则集，相关规则不会命中": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The subscription doesn't provide this rule set, so its rules won't match"
+          }
+        }
+      }
+    },
+    "筛选规则": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filter rules"
+          }
+        }
+      }
+    },
+    "订阅没有提供这个规则集，已跳过相关规则": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The subscription doesn't provide this rule set, so its rules are skipped"
           }
         }
       }

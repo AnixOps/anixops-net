@@ -387,7 +387,7 @@ public struct SubscriptionGroups: Codable, Equatable {
             )
         }
         library.nodes = nodes
-        library.routing = NativeImportReport.Routing(rules: routing.rules, groups: groups + extraGroups)
+        library.routing = NativeImportReport.Routing(rules: routing.rules, groups: groups + extraGroups, ruleSets: routing.ruleSets)
         return library
     }
 

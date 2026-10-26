@@ -138,11 +138,13 @@ public struct NodeLibrary: Codable, Equatable {
             }
             return group
         }
+        let ruleSets = RuleSetCatalog.ruleSets(for: routing.rules, defined: routing.ruleSets)
         return EmbeddedRuntimeConfig.Routing(
             outbounds: Dictionary(nodes.map { ($0.id, $0.outbound) }) { first, _ in first },
-            rules: routing.rules,
+            rules: RuleSetCatalog.runnableRules(routing.rules, sets: ruleSets),
             groups: groups,
-            global: selected?.id
+            global: selected?.id,
+            ruleSets: ruleSets
         )
     }
 

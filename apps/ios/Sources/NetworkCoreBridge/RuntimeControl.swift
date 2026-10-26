@@ -14,6 +14,9 @@ public enum RuntimeControl {
     case groups
     /// Picks the member of a `select` group.
     case select(group: String, member: String)
+    case ruleSets
+    /// Downloads every remote rule set now.
+    case updateRuleSets
 
     public var request: Data {
         let object: [String: Any]
@@ -34,6 +37,10 @@ public enum RuntimeControl {
             object = ["cmd": "groups"]
         case let .select(group, member):
             object = ["cmd": "select", "group": group, "member": member]
+        case .ruleSets:
+            object = ["cmd": "rule_sets"]
+        case .updateRuleSets:
+            object = ["cmd": "update_rule_sets"]
         }
         return (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
     }
@@ -192,6 +199,46 @@ public enum RuntimeControl {
         }
 
         public let groups: [Group]
+    }
+
+    /// The `rule_sets` answer.
+    public struct RuleSets: Decodable, Equatable {
+        public struct Status: Decodable, Equatable, Identifiable {
+            public let name: String
+            /// `inline` or `remote`.
+            public let source: String
+            public let entries: Int
+            public let updatedAt: Date?
+            public let lastError: String?
+
+            public var id: String {
+                name
+            }
+
+            enum CodingKeys: String, CodingKey {
+                case name
+                case source
+                case entries
+                case updatedAtMs = "updated_at_ms"
+                case lastError = "last_error"
+            }
+
+            public init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                name = try container.decode(String.self, forKey: .name)
+                source = try container.decode(String.self, forKey: .source)
+                entries = try container.decode(Int.self, forKey: .entries)
+                updatedAt = try container.decodeIfPresent(UInt64.self, forKey: .updatedAtMs)
+                    .map { Date(timeIntervalSince1970: Double($0) / 1000) }
+                lastError = try container.decodeIfPresent(String.self, forKey: .lastError)
+            }
+        }
+
+        public let ruleSets: [Status]
+
+        enum CodingKeys: String, CodingKey {
+            case ruleSets = "rule_sets"
+        }
     }
 
     public static func decode<Answer: Decodable>(_ type: Answer.Type, from data: Data?) -> Answer? {

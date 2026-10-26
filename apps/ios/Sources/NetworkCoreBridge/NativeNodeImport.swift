@@ -55,6 +55,14 @@ public struct NativeImportReport: Decodable, Equatable {
 
         public let rules: [String]
         public let groups: [Group]
+        /// Lists that `RULE-SET`, `GEOSITE` and `GEOIP` rules name, when the subscription defines them.
+        public var ruleSets: [String: EmbeddedRuntimeConfig.RuleSet]? = nil
+
+        enum CodingKeys: String, CodingKey {
+            case rules
+            case groups
+            case ruleSets = "rule_sets"
+        }
     }
 
     public let nodes: [Node]
