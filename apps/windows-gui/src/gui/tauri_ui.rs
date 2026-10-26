@@ -165,6 +165,15 @@ struct SubscriptionSummary {
     changed_node_count: usize,
     error_code: Option<String>,
     last_update_error: Option<String>,
+    name: String,
+    node_count: Option<usize>,
+    upload: Option<u64>,
+    download: Option<u64>,
+    total: Option<u64>,
+    /// Unix seconds.
+    expire: Option<u64>,
+    update_interval_hours: u32,
+    refreshable: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -251,6 +260,9 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             update_subscription,
             select_subscription,
             remove_subscription,
+            update_subscription_source,
+            rename_subscription,
+            set_subscription_interval,
             check_profile_runtime,
             install_service,
             start_service,
@@ -419,22 +431,33 @@ fn start_core_recovery_monitor(state: DesktopAppState) {
 
 fn start_subscription_refresh_monitor(state: DesktopAppState) {
     std::thread::spawn(move || {
-        let mut next_refresh = Instant::now() + SUBSCRIPTION_REFRESH_INTERVAL;
+        let mut last_refresh = Instant::now();
         loop {
             std::thread::sleep(Duration::from_secs(30));
-            if Instant::now() < next_refresh {
-                continue;
-            }
-            next_refresh = Instant::now() + SUBSCRIPTION_REFRESH_INTERVAL;
-            let location = match state.desktop.lock() {
+            // The subscription in use updates at its own interval (0 = by hand only).
+            let due = match state.desktop.lock() {
                 Ok(desktop) if desktop.auto_subscription_refresh => {
-                    desktop.profile_source_url.clone()
+                    desktop.profile_source_url.clone().map(|location| {
+                        let hours = desktop
+                            .subscription_sources
+                            .iter()
+                            .find(|source| source.location == location)
+                            .map_or(
+                                subscription_meta::DEFAULT_UPDATE_INTERVAL_HOURS,
+                                DesktopSubscriptionSource::effective_interval_hours,
+                            );
+                        (location, hours)
+                    })
                 }
                 _ => None,
             };
-            let Some(location) = location else {
+            let Some((location, hours)) = due else {
                 continue;
             };
+            if hours == 0 || last_refresh.elapsed() < Duration::from_secs(u64::from(hours) * 3600) {
+                continue;
+            }
+            last_refresh = Instant::now();
             match import_subscription_blocking(
                 state.clone(),
                 location,
@@ -616,8 +639,70 @@ fn list_subscriptions(
             changed_node_count: source.changed_node_count,
             error_code: source.error_code.clone(),
             last_update_error: source.last_update_error.clone(),
+            name: subscription_meta::display_name(source.name.as_deref(), &source.location),
+            node_count: source.node_count,
+            upload: source.user_info.and_then(|info| info.upload),
+            download: source.user_info.and_then(|info| info.download),
+            total: source.user_info.and_then(|info| info.total),
+            expire: source.user_info.and_then(|info| info.expire),
+            update_interval_hours: source.effective_interval_hours(),
+            refreshable: is_subscription_url(&source.location),
         })
         .collect())
+}
+
+fn is_subscription_url(location: &str) -> bool {
+    location.starts_with("https://") || location.starts_with("http://")
+}
+
+#[tauri::command]
+fn rename_subscription(
+    id: String,
+    name: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let name = subscription_meta::clean_name(&name).ok_or("Enter a name.")?;
+    update_subscription_source(&state, &id, |source| source.name = Some(name))?;
+    Ok(OperationResult {
+        message: "Subscription renamed.".to_string(),
+    })
+}
+
+#[tauri::command]
+fn set_subscription_interval(
+    id: String,
+    hours: u32,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let hours = hours.min(subscription_meta::MAX_UPDATE_INTERVAL_HOURS);
+    update_subscription_source(&state, &id, |source| {
+        source.update_interval_hours = Some(hours)
+    })?;
+    Ok(OperationResult {
+        message: if hours == 0 {
+            "Automatic updates are off for this subscription.".to_string()
+        } else {
+            format!("This subscription updates every {hours} hours while it is in use.")
+        },
+    })
+}
+
+fn update_subscription_source(
+    state: &DesktopAppState,
+    id: &str,
+    change: impl FnOnce(&mut DesktopSubscriptionSource),
+) -> Result<(), String> {
+    let mut desktop = state
+        .desktop
+        .lock()
+        .map_err(|_| "desktop state lock failed")?;
+    let source = desktop
+        .subscription_sources
+        .iter_mut()
+        .find(|source| source.id == id)
+        .ok_or("The subscription was not found.")?;
+    change(source);
+    save_desktop_state(&desktop)
 }
 
 #[tauri::command]
@@ -1329,6 +1414,36 @@ async fn update_subscription(state: State<'_, DesktopAppState>) -> Result<Operat
     .await
 }
 
+/// Windows runs one subscription at a time, so only the one in use can be updated in place.
+#[tauri::command]
+async fn update_subscription_source(
+    id: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let location = {
+            let desktop = state
+                .desktop
+                .lock()
+                .map_err(|_| "desktop state lock failed")?;
+            let source = desktop
+                .subscription_sources
+                .iter()
+                .find(|source| source.id == id)
+                .ok_or_else(|| "The subscription was not found.".to_string())?;
+            if desktop.profile_source_url.as_deref() != Some(source.location.as_str()) {
+                return Err(
+                    "Use this subscription first; it is updated when it is used.".to_string(),
+                );
+            }
+            source.location.clone()
+        };
+        import_subscription_blocking(state, location, "Subscription updated.")
+    })
+    .await
+}
+
 #[tauri::command]
 async fn select_subscription(
     id: String,
@@ -1471,7 +1586,7 @@ fn record_subscription_import(location: &str, desktop: &mut DesktopState) -> Res
     save_desktop_state(desktop)?;
     let previous_nodes = desktop.profile_node_catalog.clone();
     match import_subscription_at(location, desktop) {
-        Ok(()) => {
+        Ok(meta) => {
             let timestamp = super::current_local_timestamp();
             let (added_node_count, removed_node_count, changed_node_count) =
                 subscription_node_change_counts(&previous_nodes, &desktop.profile_node_catalog);
@@ -1492,6 +1607,7 @@ fn record_subscription_import(location: &str, desktop: &mut DesktopState) -> Res
                 (added_node_count, removed_node_count, changed_node_count),
                 None,
             );
+            record_subscription_meta(desktop, location, meta);
             save_desktop_state(desktop)
         }
         Err(error) => {
@@ -1518,6 +1634,33 @@ fn record_subscription_import(location: &str, desktop: &mut DesktopState) -> Res
             let _ = save_desktop_state(desktop);
             Err(format!("Subscription refresh failed ({error_code})."))
         }
+    }
+}
+
+/// Keeps what the server said about the subscription. The server's title names it only until the user
+/// renames it, and its traffic figures stay when a later download leaves the header out.
+fn record_subscription_meta(
+    desktop: &mut DesktopState,
+    location: &str,
+    meta: subscription_meta::ResponseMeta,
+) {
+    let id = subscription_source_id(location);
+    let node_count = desktop.profile_node_catalog.len();
+    if let Some(source) = desktop
+        .subscription_sources
+        .iter_mut()
+        .find(|source| source.id == id)
+    {
+        if source.name.is_none() {
+            source.name = meta.title;
+        }
+        if meta.user_info.is_some() {
+            source.user_info = meta.user_info;
+        }
+        if meta.update_interval_hours.is_some() {
+            source.suggested_interval_hours = meta.update_interval_hours;
+        }
+        source.node_count = Some(node_count);
     }
 }
 
@@ -1549,6 +1692,11 @@ fn record_subscription_attempt(desktop: &mut DesktopState, location: &str, attem
                 changed_node_count: 0,
                 error_code: None,
                 last_update_error: None,
+                name: None,
+                user_info: None,
+                node_count: None,
+                update_interval_hours: None,
+                suggested_interval_hours: None,
             });
     }
 }
@@ -1593,6 +1741,11 @@ fn record_subscription_result(
             changed_node_count,
             error_code: error_code.clone(),
             last_update_error: error_code.map(|_| "refresh_failed".to_string()),
+            name: None,
+            user_info: None,
+            node_count: None,
+            update_interval_hours: None,
+            suggested_interval_hours: None,
         });
 }
 
@@ -1659,7 +1812,10 @@ fn subscription_source_id(location: &str) -> String {
     )
 }
 
-fn import_subscription_at(location: &str, desktop: &mut DesktopState) -> Result<(), String> {
+fn import_subscription_at(
+    location: &str,
+    desktop: &mut DesktopState,
+) -> Result<subscription_meta::ResponseMeta, String> {
     let service = NativeWindowsSystemIntegration::new()
         .service_status()
         .map_err(|error| error.to_string())?;
@@ -1672,8 +1828,9 @@ fn import_subscription_at(location: &str, desktop: &mut DesktopState) -> Result<
                 .to_string(),
         );
     }
-    let (payload, source_path, source_url) = read_subscription(location)?;
-    import_embedded_subscription(&payload, source_path, source_url, desktop)
+    let (payload, source_path, source_url, meta) = read_subscription(location)?;
+    import_embedded_subscription(&payload, source_path, source_url, desktop)?;
+    Ok(meta)
 }
 
 /// Runs a subscription whose nodes the embedded engine supports in-process:
@@ -1959,24 +2116,43 @@ fn read_rule_set_asset(path: &Path) -> Result<(Vec<String>, Vec<String>), String
     Ok((domain_suffix, ip_cidr))
 }
 
-fn read_subscription(location: &str) -> Result<(String, Option<PathBuf>, Option<String>), String> {
-    if location.starts_with("https://") || location.starts_with("http://") {
+/// The subscription text, where it came from, and what the server's headers said about it.
+type SubscriptionRead = (
+    String,
+    Option<PathBuf>,
+    Option<String>,
+    subscription_meta::ResponseMeta,
+);
+
+fn read_subscription(location: &str) -> Result<SubscriptionRead, String> {
+    if is_subscription_url(location) {
         let client = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(30))
             .build()
             .map_err(|error| error.to_string())?;
-        let payload = client
+        let response = client
             .get(location)
             .send()
             .and_then(reqwest::blocking::Response::error_for_status)
-            .map_err(|error| error.to_string())?
-            .text()
             .map_err(|error| error.to_string())?;
-        return Ok((payload, None, Some(location.to_string())));
+        let meta = subscription_meta::ResponseMeta::from_headers(|name| {
+            response
+                .headers()
+                .get(name)
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_string)
+        });
+        let payload = response.text().map_err(|error| error.to_string())?;
+        return Ok((payload, None, Some(location.to_string()), meta));
     }
     let path = PathBuf::from(location);
     let payload = fs::read_to_string(&path).map_err(|error| error.to_string())?;
-    Ok((payload, Some(path), None))
+    Ok((
+        payload,
+        Some(path),
+        None,
+        subscription_meta::ResponseMeta::default(),
+    ))
 }
 
 #[tauri::command]

@@ -57,6 +57,7 @@ jobs:
                 apps/windows-gui/ui/*) ui=true; windows=true; linux=true ;;
                 apps/windows-gui/* | apps/windows-service/* | installer/*) rust=true; windows=true ;;
                 apps/linux-gui/*) rust=true; linux=true ;;
+                crates/*) rust=true; windows=true; linux=true ;;
                 apps/ios/*) apple=true ;;
                 *) ;;
               esac

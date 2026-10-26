@@ -3,6 +3,7 @@ members = [
     "apps/linux-gui",
     "apps/windows-gui",
     "apps/windows-service",
+    "crates/subscription-meta",
 ]
 resolver = "2"
 

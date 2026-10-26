@@ -1,10 +1,11 @@
-import { Activity, CloudDownload, Globe, Search, Trash2, Zap } from "lucide-react";
+import { Activity, Check, CloudDownload, Globe, Pencil, RefreshCw, Search, Trash2, X, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { desktop, NodeSummary, RuntimeSnapshot, SubscriptionSummary } from "../bridge";
 import { protocolAbbreviation } from "../labels";
 import { filterNodes } from "../node-filter";
 import { Card, EmptyState, IconButton, Run, StatusPill } from "../ui";
 import { t } from "../i18n";
+import { formatBytes, formatDay, updateIntervalChoices, updateIntervalLabel, usedFraction } from "../subscription-format";
 
 export function ProxiesPage({ snapshot, nodes, busy, run }: {
   snapshot: RuntimeSnapshot | null;
@@ -127,23 +128,107 @@ function Subscriptions({ snapshot, empty, busy, run }: { snapshot: RuntimeSnapsh
       {sources.length > 0 && (
         <ul className="list sources">
           {sources.map((source) => (
-            <li key={source.id}>
-              <CloudDownload size={16} className="list-icon" />
-              <span className="list-main">
-                <strong className="truncate" title={source.location}>{source.location}</strong>
-                <small>{source.lastSuccessfulUpdate ? t("更新于 {time}", { time: source.lastSuccessfulUpdate }) : source.lastAttempt ? t("尝试于 {time}", { time: source.lastAttempt }) : t("从未更新")}{source.lastUpdateError ? ` · ${source.lastUpdateError}` : ""}</small>
-              </span>
-              <StatusPill label={source.selected ? t("使用中") : source.result === "failed" ? t("更新失败") : t("已保存")} tone={source.selected ? "success" : source.result === "failed" ? "danger" : "neutral"} />
-              <button className="secondary compact" disabled={Boolean(busy) || source.selected} onClick={() => void run("subscription", () => desktop.selectSubscription(source.id))}>{t("使用")}</button>
-              <IconButton label={t("删除 {name}", { name: source.location })} disabled={Boolean(busy)} onClick={() => void run("subscription", async () => {
-                const result = await desktop.removeSubscription(source.id);
-                refreshSources();
-                return result;
-              })}><Trash2 size={15} /></IconButton>
-            </li>
+            <SubscriptionRow
+              key={source.id}
+              source={source}
+              canUpdate={source.refreshable && (source.selected || snapshot?.platform === "linux")}
+              busy={busy}
+              run={run}
+              changed={refreshSources}
+            />
           ))}
         </ul>
       )}
     </Card>
+  );
+}
+
+/** One subscription group: its name, nodes, traffic, expiry and update settings. */
+function SubscriptionRow({ source, canUpdate, busy, run, changed }: {
+  source: SubscriptionSummary;
+  canUpdate: boolean;
+  busy: string | null;
+  run: Run;
+  changed: () => void;
+}) {
+  const [renaming, setRenaming] = useState(false);
+  const [name, setName] = useState(source.name);
+  const used = source.upload == null && source.download == null ? undefined : (source.upload ?? 0) + (source.download ?? 0);
+  const fraction = usedFraction(used, source.total ?? undefined);
+  const then = (action: () => Promise<{ message: string }>) => async () => {
+    const result = await action();
+    changed();
+    return result;
+  };
+  const saveName = () => {
+    setRenaming(false);
+    if (name.trim() && name.trim() !== source.name) void run("subscription", then(() => desktop.renameSubscription(source.id, name.trim())));
+  };
+  const status = [
+    source.nodeCount != null ? t("{count} 个节点", { count: source.nodeCount }) : null,
+    source.lastSuccessfulUpdate ? t("更新于 {time}", { time: source.lastSuccessfulUpdate }) : source.lastAttempt ? t("尝试于 {time}", { time: source.lastAttempt }) : t("从未更新"),
+    source.lastUpdateError,
+  ].filter(Boolean).join(" · ");
+  const traffic = [
+    used != null ? (source.total ? t("已用 {used} / {total}", { used: formatBytes(used), total: formatBytes(source.total) }) : t("已用 {used}", { used: formatBytes(used) })) : null,
+    source.expire != null ? t("到期 {date}", { date: formatDay(source.expire) }) : null,
+  ].filter(Boolean).join(" · ");
+  const expired = source.expire != null && source.expire * 1000 < Date.now();
+
+  return (
+    <li className="subscription-row">
+      <CloudDownload size={16} className="list-icon" />
+      <span className="list-main">
+        {renaming ? (
+          <span className="rename-row">
+            <input
+              aria-label={t("名称")}
+              autoFocus
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") saveName();
+                if (event.key === "Escape") { setName(source.name); setRenaming(false); }
+              }}
+            />
+            <IconButton label={t("保存")} onClick={saveName}><Check size={15} /></IconButton>
+            <IconButton label={t("取消")} onClick={() => { setName(source.name); setRenaming(false); }}><X size={15} /></IconButton>
+          </span>
+        ) : (
+          <strong className="truncate" title={source.location}>{source.name}</strong>
+        )}
+        <small>{status}</small>
+        {traffic && <small className={expired || (fraction ?? 0) > 0.9 ? "danger-text" : undefined}>{traffic}</small>}
+        {fraction != null && (
+          <span className="usage-bar" role="progressbar" aria-label={t("已用流量")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fraction * 100)}>
+            <span className={fraction > 0.9 ? "danger" : undefined} style={{ width: `${fraction * 100}%` }} />
+          </span>
+        )}
+      </span>
+      {source.refreshable && (
+        <select
+          className="interval-select"
+          aria-label={t("自动更新")}
+          value={source.updateIntervalHours}
+          disabled={Boolean(busy)}
+          onChange={(event) => void run("subscription", then(() => desktop.setSubscriptionInterval(source.id, Number(event.target.value))))}
+        >
+          {updateIntervalChoices(source.updateIntervalHours).map((hours) => <option key={hours} value={hours}>{updateIntervalLabel(hours)}</option>)}
+        </select>
+      )}
+      <StatusPill label={source.selected ? t("使用中") : source.result === "failed" ? t("更新失败") : t("已保存")} tone={source.selected ? "success" : source.result === "failed" ? "danger" : "neutral"} />
+      {canUpdate && (
+        <IconButton label={t("更新 {name}", { name: source.name })} disabled={Boolean(busy)} onClick={() => void run("subscription", then(() => desktop.updateSubscriptionSource(source.id)))}>
+          <RefreshCw size={15} />
+        </IconButton>
+      )}
+      <IconButton label={t("重命名 {name}", { name: source.name })} disabled={Boolean(busy)} onClick={() => { setName(source.name); setRenaming(true); }}>
+        <Pencil size={15} />
+      </IconButton>
+      <button className="secondary compact" disabled={Boolean(busy) || source.selected} onClick={() => void run("subscription", then(() => desktop.selectSubscription(source.id)))}>{t("使用")}</button>
+      <IconButton label={t("删除 {name}", { name: source.name })} disabled={Boolean(busy)} onClick={() => void run("subscription", then(() => desktop.removeSubscription(source.id)))}>
+        <Trash2 size={15} />
+      </IconButton>
+    </li>
   );
 }
