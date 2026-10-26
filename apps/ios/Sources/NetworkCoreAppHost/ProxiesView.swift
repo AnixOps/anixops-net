@@ -15,6 +15,8 @@ struct ProxiesView: View {
     @State private var query = ""
     @AppStorage("proxies.sort") private var sort = NodeSort.original
     @State private var editing: EditingNode?
+    @State private var sharing: SharedNode?
+    @State private var shareFailure: String?
 
     var body: some View {
         NavigationStack {
@@ -83,6 +85,16 @@ struct ProxiesView: View {
                     }
                     renaming = nil
                 }
+            }
+            .sheet(item: $sharing) { item in
+                QRShareSheet(title: item.title, link: item.link)
+                    .environment(\.brand, brand)
+                    .tint(brand.primary)
+            }
+            .alert("无法分享", isPresented: Binding(get: { shareFailure != nil }, set: { if !$0 { shareFailure = nil } })) {
+                Button("好", role: .cancel) {}
+            } message: {
+                Text(shareFailure ?? "")
             }
             .sheet(item: $editing) { item in
                 NodeEditSheet(node: item.node) { edited in
@@ -241,6 +253,11 @@ struct ProxiesView: View {
         } label: {
             Label("编辑", systemImage: "pencil")
         }
+        Button {
+            share(node)
+        } label: {
+            Label("分享节点", systemImage: "qrcode")
+        }
         if group.library.canRemove(node.id) {
             Button(role: .destructive) {
                 Task {
@@ -249,6 +266,16 @@ struct ProxiesView: View {
             } label: {
                 Label("删除节点", systemImage: "trash")
             }
+        }
+    }
+
+    private func share(_ node: NativeImportReport.Node) {
+        do {
+            sharing = SharedNode(title: node.displayName, link: try NativeNodeImporterFFI.shareLink(for: node))
+        } catch let failure as NodeShareFailure {
+            shareFailure = failure.message
+        } catch {
+            shareFailure = NodeShareFailure.unavailable.message
         }
     }
 
@@ -345,6 +372,13 @@ struct ProxiesView: View {
 
 
 /// The node an edit sheet is open for.
+/// A node's share link on the QR code sheet.
+private struct SharedNode: Identifiable {
+    let id = UUID()
+    let title: String
+    let link: String
+}
+
 private struct EditingNode: Identifiable {
     let groupID: String
     let node: NativeImportReport.Node

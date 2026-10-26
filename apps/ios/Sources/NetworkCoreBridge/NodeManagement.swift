@@ -22,6 +22,34 @@ extension NativeImportReport.Node {
     public var displayName: String {
         name.isEmpty ? server : name
     }
+
+    /// The input of the importer's share-link export (`networkcore_import_share_link`): the name and the full
+    /// outbound, credentials included.
+    public func shareLinkRequest() throws -> Data {
+        struct Request: Encodable {
+            let name: String
+            let outbound: [String: JSONValue]
+        }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try encoder.encode(Request(name: displayName, outbound: outbound))
+    }
+}
+
+/// Why a node could not be shared. The messages are fixed text without node values.
+public enum NodeShareFailure: Error, Equatable {
+    /// The protocol has no share-link form the importer writes, such as Mieru.
+    case unsupported
+    case unavailable
+
+    public var message: String {
+        switch self {
+        case .unsupported:
+            return String(localized: "这个协议没有通用的分享链接格式，无法导出")
+        case .unavailable:
+            return String(localized: "无法生成分享链接")
+        }
+    }
 }
 
 /// Why a node edit was refused. The messages are fixed text without node values.

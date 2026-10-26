@@ -3837,6 +3837,46 @@
         }
       }
     },
+    "这个协议没有通用的分享链接格式，无法导出": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This protocol has no common share link format, so it can't be exported"
+          }
+        }
+      }
+    },
+    "无法生成分享链接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't create a share link"
+          }
+        }
+      }
+    },
+    "无法分享": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't share"
+          }
+        }
+      }
+    },
+    "分享节点": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share node"
+          }
+        }
+      }
+    },
     "保存失败": {
       "localizations": {
         "en": {
