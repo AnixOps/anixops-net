@@ -630,11 +630,9 @@ jobs:
           symbols "${products}/NetworkCoreApp.app/PlugIns/NetworkCorePacketTunnel.appex" NetworkCorePacketTunnel "${RUNNER_TEMP}/appex-symbols.txt"
           symbols "${products}/NetworkCoreApp.app" NetworkCoreApp "${RUNNER_TEMP}/app-symbols.txt"
           grep -q '_networkcore_ios_runtime_init$' "${RUNNER_TEMP}/appex-symbols.txt"
-          if grep -q '_networkcore_ios_runtime_init$' "${RUNNER_TEMP}/app-symbols.txt"; then
-            echo "::error::the containing app must not link the embedded runtime"
-            exit 1
-          fi
+          # The app links the runtime library for subscription import and the HTTP delay test.
           grep -q '_networkcore_import_nodes$' "${RUNNER_TEMP}/app-symbols.txt"
+          grep -q '_networkcore_ios_measure_delay$' "${RUNNER_TEMP}/app-symbols.txt"
 
       - name: Build the macOS app without signing
         shell: bash
@@ -670,11 +668,9 @@ jobs:
           symbols "${appex}/Contents/MacOS" NetworkCoreMacTunnel "${RUNNER_TEMP}/mac-appex-symbols.txt"
           symbols "${app}/Contents/MacOS" "AnixOps Net" "${RUNNER_TEMP}/mac-app-symbols.txt"
           grep -q '_networkcore_ios_runtime_init$' "${RUNNER_TEMP}/mac-appex-symbols.txt"
-          if grep -q '_networkcore_ios_runtime_init$' "${RUNNER_TEMP}/mac-app-symbols.txt"; then
-            echo "::error::the macOS app must not link the embedded runtime"
-            exit 1
-          fi
+          # The app links the runtime library for subscription import and the HTTP delay test.
           grep -q '_networkcore_import_nodes$' "${RUNNER_TEMP}/mac-app-symbols.txt"
+          grep -q '_networkcore_ios_measure_delay$' "${RUNNER_TEMP}/mac-app-symbols.txt"
           lipo -archs "${appex}/Contents/MacOS/NetworkCoreMacTunnel" | tee "${RUNNER_TEMP}/mac-archs.txt"
           grep -q arm64 "${RUNNER_TEMP}/mac-archs.txt"
 

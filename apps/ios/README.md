@@ -20,8 +20,10 @@ their own gates pass.
   `Generated/NetworkCoreRuntime.xcframework`, which GitHub Actions builds with
   `.github/scripts/build-ios-runtime-xcframework.sh` and never commits. The extension imports the C ABI as the Clang
   module `NetworkCoreRuntimeC` and fails closed when the runtime handshake or the tunnel profile is invalid. The containing
-  app does not link the runtime; it links only `Generated/NetworkCoreImport.xcframework` (crates/node-import, Clang
-  module `NetworkCoreImportC`), built by the same script, to turn pasted text into nodes.
+  app links the same library but never starts a tunnel with it: it uses the node importer (crates/node-import, Clang
+  module `NetworkCoreImportC`, shipped in the same XCFramework) to turn pasted text into nodes, and
+  `networkcore_ios_measure_delay` for the delay test, an HTTP request to `http://www.gstatic.com/generate_204` through
+  each node's own protocol.
 - Tunnel profile: the app imports one node (`TunnelNodeImport`). Shadowsocks-2022 `ss://`, VLESS REALITY `vless://`
   links and single-peer WireGuard `wg-quick` configs are read in Swift; any other share link the engine runs (Trojan,
   VMess, VLESS over TLS/WebSocket/gRPC, Shadowsocks AEAD, Hysteria2, TUIC) and subscription texts (base64 link lists,

@@ -206,33 +206,32 @@ final class TunnelController: ObservableObject {
         manager?.connection.stopVPNTunnel()
     }
 
-    /// Measures every listed node's TCP connect time, a few at a time.
+    /// HTTP delay test of every listed node through its own protocol, a few at a time (`NodeDelayFFI`).
     func testLatency() async {
         guard let nodes = library?.nodes, !nodes.isEmpty else {
             return
         }
         for node in nodes {
-            latencies[node.id] = NodeLibrary.usesUDP(node.protocol) ? .notMeasurable : .measuring
+            latencies[node.id] = .measuring
         }
-        let targets = nodes.filter { !NodeLibrary.usesUDP($0.protocol) }
+        let profileID = Self.profileID
         let batch = 8
-        for start in stride(from: 0, to: targets.count, by: batch) {
-            let slice = targets[start..<min(start + batch, targets.count)]
-            let probes = slice.map { (id: $0.id, host: $0.server, port: $0.port) }
-            let results = await withTaskGroup(of: (String, TimeInterval?).self, returning: [(String, TimeInterval?)].self) { group in
-                for probe in probes {
+        for start in stride(from: 0, to: nodes.count, by: batch) {
+            let slice = nodes[start..<min(start + batch, nodes.count)]
+            let results = await withTaskGroup(of: (String, NodeLatency).self, returning: [(String, NodeLatency)].self) { group in
+                for node in slice {
                     group.addTask {
-                        (probe.id, await NodeLatencyProbe.tcpConnect(host: probe.host, port: probe.port))
+                        (node.id, await NodeDelayFFI.measureOffPool(node, profileID: profileID))
                     }
                 }
-                var results: [(String, TimeInterval?)] = []
+                var results: [(String, NodeLatency)] = []
                 for await result in group {
                     results.append(result)
                 }
                 return results
             }
-            for (id, seconds) in results {
-                latencies[id] = seconds.map { .millis(Int(($0 * 1000).rounded())) } ?? .failed
+            for (id, result) in results {
+                latencies[id] = result
             }
         }
     }
@@ -635,12 +634,15 @@ final class TunnelController: ObservableObject {
 }
 
 /// A delay test result for one node.
-enum NodeLatency: Equatable {
+enum NodeLatency: Equatable, Sendable {
     case measuring
     case millis(Int)
+    /// No HTTP answer within `NodeDelayFFI.timeoutMillis`.
+    case timeout
+    /// The node refused, the handshake failed or the answer was not HTTP.
     case failed
-    /// QUIC nodes: the app cannot measure them without the tunnel engine.
-    case notMeasurable
+    /// The outbound cannot carry one HTTP request, for example WireGuard.
+    case unsupported
 }
 
 /// What the import sheet shows before saving: no password, key or full server address.

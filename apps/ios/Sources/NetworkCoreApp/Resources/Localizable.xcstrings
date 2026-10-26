@@ -757,16 +757,6 @@
         }
       }
     },
-    "延迟为到服务器端口的 TCP 连接时间；Hysteria2、TUIC 走 UDP，不在此测量。连接中切换节点会自动重连。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Delay is the TCP connect time to the server port; Hysteria2 and TUIC use UDP and are not measured here. Switching nodes while connected reconnects automatically."
-          }
-        }
-      }
-    },
     "开发者模式": {
       "localizations": {
         "en": {
@@ -2253,6 +2243,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Home"
+          }
+        }
+      }
+    },
+    "延迟为经该节点请求 http://www.gstatic.com/generate_204 的 HTTP 真连接时间，5 秒无响应显示超时。连接中切换节点会自动重连。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delay is the time for a real HTTP request to http://www.gstatic.com/generate_204 through the node; no answer in 5 seconds shows Timeout. Switching nodes while connected reconnects automatically."
+          }
+        }
+      }
+    },
+    "失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed"
+          }
+        }
+      }
+    },
+    "不支持": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unsupported"
           }
         }
       }
