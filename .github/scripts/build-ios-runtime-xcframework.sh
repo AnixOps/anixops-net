@@ -25,7 +25,9 @@ esac
 
 root="$(git rev-parse --show-toplevel)"
 kernel="$(bash "${root}/.github/scripts/kernel-root.sh")"
-target_dir="${root}/target/kernel"
+# One target dir per kernel commit: a restored cache from an older pin can otherwise leave stale
+# artifacts of unchanged-looking kernel crates next to the new checkout.
+target_dir="${root}/target/kernel-$(basename "${kernel}")"
 echo "Kernel checkout: ${kernel}"
 
 device_target=aarch64-apple-ios
@@ -44,6 +46,11 @@ export MACOSX_DEPLOYMENT_TARGET=14.0
 export CARGO_PROFILE_RELEASE_LTO=thin
 export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
 export CARGO_PROFILE_RELEASE_DEBUG=0
+# rquickjs (MITM scripts) ships no iOS bindings; bindgen generates them against the matching SDK.
+export BINDGEN_EXTRA_CLANG_ARGS_aarch64_apple_ios="-isysroot $(xcrun --sdk iphoneos --show-sdk-path)"
+simulator_sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+export BINDGEN_EXTRA_CLANG_ARGS_aarch64_apple_ios_sim="-isysroot ${simulator_sdk}"
+export BINDGEN_EXTRA_CLANG_ARGS_x86_64_apple_ios="-isysroot ${simulator_sdk}"
 
 for target in "${targets[@]}"; do
   cargo build --locked --release --manifest-path "${kernel}/Cargo.toml" --target-dir "${target_dir}" \

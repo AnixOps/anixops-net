@@ -77,9 +77,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
         let session: EmbeddedRuntimeSession
         do {
-            session = try makeSession(config, mitmPlugins: MitmPluginLibrary.texts(
-                fromProfileValue: tunnelProtocol.providerConfiguration?[TunnelProfileKeys.mitmPlugins] as? Data
-            ))
+            session = try makeSession(
+                config,
+                mitmPlugins: MitmPluginLibrary.texts(
+                    fromProfileValue: tunnelProtocol.providerConfiguration?[TunnelProfileKeys.mitmPlugins] as? Data
+                ),
+                mitmScripts: MitmScriptLibrary.sources(
+                    fromProfileValue: tunnelProtocol.providerConfiguration?[TunnelProfileKeys.mitmScripts] as? Data
+                )
+            )
             events.record("runtime initialized")
         } catch let failure as EmbeddedRuntimeSession.Failure {
             completionHandler(PacketTunnelFailure(reason: "embedded runtime rejected the tunnel profile (code \(failure.code))"))
@@ -179,27 +185,55 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     /// Creates the runtime. When it refuses the subscription's rules, the selected node runs alone.
-    private func makeSession(_ config: EmbeddedRuntimeConfig, mitmPlugins: [String]) throws -> EmbeddedRuntimeSession {
+    private func makeSession(
+        _ config: EmbeddedRuntimeConfig,
+        mitmPlugins: [String],
+        mitmScripts: [String: String]
+    ) throws -> EmbeddedRuntimeSession {
         guard config.routing != nil else {
-            return try makeRuntimeSession(config, mitmPlugins: mitmPlugins)
+            return try makeRuntimeSession(config, mitmPlugins: mitmPlugins, mitmScripts: mitmScripts)
         }
         do {
-            return try makeRuntimeSession(config, mitmPlugins: mitmPlugins)
+            return try makeRuntimeSession(config, mitmPlugins: mitmPlugins, mitmScripts: mitmScripts)
         } catch let failure as EmbeddedRuntimeSession.Failure {
             events.record("subscription rules off: runtime refused them (code \(failure.code))")
         } catch {
             events.record("subscription rules off: runtime refused them")
         }
-        return try makeRuntimeSession(config.withRouting(nil), mitmPlugins: mitmPlugins)
+        return try makeRuntimeSession(config.withRouting(nil), mitmPlugins: mitmPlugins, mitmScripts: mitmScripts)
     }
 
-    /// Creates the runtime, decrypting HTTPS for the enabled plugins when the device root is in the Keychain.
-    /// HTTPS decryption is an extra: when the root is missing or the runtime refuses the plugins, the tunnel
-    /// starts without it and the reason goes to the diagnostics.
-    private func makeRuntimeSession(_ config: EmbeddedRuntimeConfig, mitmPlugins: [String]) throws -> EmbeddedRuntimeSession {
+    /// Creates the runtime, decrypting HTTPS for the enabled plugins when the device root is in the Keychain and
+    /// running the scripts the user allowed. HTTPS decryption is an extra: when the scripts are refused the tunnel
+    /// retries without them, when the root is missing or the runtime refuses the plugins it starts without
+    /// decryption, and the reason goes to the diagnostics.
+    private func makeRuntimeSession(
+        _ config: EmbeddedRuntimeConfig,
+        mitmPlugins: [String],
+        mitmScripts: [String: String]
+    ) throws -> EmbeddedRuntimeSession {
         if !mitmPlugins.isEmpty {
             do {
                 if let authority = try MitmCertificateStore.load() {
+                    if !mitmScripts.isEmpty {
+                        do {
+                            let session = try EmbeddedRuntimeSession(
+                                config: config.withMitm(
+                                    plugins: mitmPlugins,
+                                    authority: authority,
+                                    scriptAssets: try Self.scriptAssets(mitmScripts),
+                                    scriptStorePath: try Self.scriptStoreURL().path
+                                ).encoded(),
+                                packetFlow: packetFlow
+                            )
+                            events.record("https decryption on, \(mitmPlugins.count) plugins, \(mitmScripts.count) scripts")
+                            return session
+                        } catch let failure as EmbeddedRuntimeSession.Failure {
+                            events.record("scripts off: runtime refused them (code \(failure.code))")
+                        } catch {
+                            events.record("scripts off: could not write them")
+                        }
+                    }
                     let session = try EmbeddedRuntimeSession(
                         config: config.withMitm(plugins: mitmPlugins, authority: authority).encoded(),
                         packetFlow: packetFlow
@@ -217,6 +251,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             }
         }
         return try EmbeddedRuntimeSession(config: config.withoutMitm().encoded(), packetFlow: packetFlow)
+    }
+
+    /// Writes the allowed scripts where the runtime reads them (it pins each file by SHA-256 at start).
+    private static func scriptAssets(_ sources: [String: String]) throws -> [String: String] {
+        let caches = try FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        return try MitmScriptLibrary.writeAssets(sources, to: caches.appendingPathComponent("mitm-scripts", isDirectory: true))
+    }
+
+    /// `$persistentStore`, kept in the extension's own container across connections.
+    private static func scriptStoreURL() throws -> URL {
+        try FileManager.default
+            .url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+            .appendingPathComponent("mitm-script-store.json")
     }
 
     /// Records system memory pressure, the usual warning before iOS kills an extension over its memory limit.
