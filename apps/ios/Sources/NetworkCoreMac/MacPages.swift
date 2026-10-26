@@ -174,62 +174,6 @@ private struct MacHeroCard: View {
     }
 }
 
-/// Proxies: the saved node today; subscriptions and policy groups join this list when the kernel supports them.
-struct MacProxiesPage: View {
-    @ObservedObject var tunnel: TunnelController
-    @ObservedObject var state: MacAppState
-    @Environment(\.brand) private var brand
-
-    var body: some View {
-        if let name = tunnel.nodeName {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    MacCard(title: "节点") {
-                        HStack(spacing: 12) {
-                            ProtocolBadge(outboundKind: tunnel.outboundKind)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(name)
-                                    .font(.body.weight(.semibold))
-                                    .foregroundStyle(brand.text)
-                                Text(ProtocolBadge.spokenName(for: tunnel.outboundKind))
-                                    .font(.caption)
-                                    .foregroundStyle(brand.text2)
-                            }
-                            Spacer()
-                            Circle()
-                                .fill(Brand.amber)
-                                .frame(width: 8, height: 8)
-                                .accessibilityLabel("当前节点")
-                        }
-                    }
-                    Text("导入新节点会替换当前节点。多节点、订阅和策略组会在内核支持后开放。")
-                        .font(.caption)
-                        .foregroundStyle(brand.text2)
-                        .padding(.horizontal, 4)
-                }
-                .padding(24)
-                .frame(maxWidth: 860)
-                .frame(maxWidth: .infinity)
-            }
-        } else {
-            BrandEmptyState(
-                systemImage: "globe",
-                title: "还没有节点",
-                message: "粘贴 ss://、vless:// 链接，或导入 WireGuard 配置。"
-            ) {
-                Button("导入节点") {
-                    state.importing = true
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .padding(.top, 6)
-            }
-            .frame(maxWidth: 520)
-            .padding(.top, 80)
-        }
-    }
-}
-
 /// A section whose kernel or platform support is still on the roadmap: says what will live here.
 struct MacPlaceholderPage: View {
     let systemImage: String
