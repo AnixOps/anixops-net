@@ -41,6 +41,16 @@
         }
       }
     },
+    "%lld 个节点": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld nodes"
+          }
+        }
+      }
+    },
     "%lld 条规则 · %lld 个策略组": {
       "localizations": {
         "en": {
@@ -237,6 +247,36 @@
         }
       }
     },
+    "上次更新失败（%@）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last update failed (%@)"
+          }
+        }
+      }
+    },
+    "下拉更新全部订阅。延迟为经该节点请求 http://www.gstatic.com/generate_204 的 HTTP 真连接时间，5 秒无响应显示超时。连接中切换节点会自动重连。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull down to update every subscription. Delay is the time of a real HTTP request to http://www.gstatic.com/generate_204 through the node; no answer in 5 seconds shows Timeout. Switching nodes while connected reconnects automatically."
+          }
+        }
+      }
+    },
+    "不支持": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unsupported"
+          }
+        }
+      }
+    },
     "不收集你的流量和浏览记录": {
       "localizations": {
         "en": {
@@ -283,6 +323,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Proxies"
+          }
+        }
+      }
+    },
+    "会删除这个订阅组的全部节点。正在使用它时，会切换到下一个订阅组。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All nodes of this subscription are removed. If it is in use, the next subscription takes over."
+          }
+        }
+      }
+    },
+    "使用中": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Use"
+          }
+        }
+      }
+    },
+    "保存": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save"
           }
         }
       }
@@ -407,6 +477,36 @@
         }
       }
     },
+    "删除": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete"
+          }
+        }
+      }
+    },
+    "删除订阅组“%@”？": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete subscription “%@”?"
+          }
+        }
+      }
+    },
+    "到期 %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expires %@"
+          }
+        }
+      }
+    },
     "剪贴板里没有文本": {
       "localizations": {
         "en": {
@@ -527,6 +627,16 @@
         }
       }
     },
+    "失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed"
+          }
+        }
+      }
+    },
     "安全隧道已建立": {
       "localizations": {
         "en": {
@@ -627,6 +737,16 @@
         }
       }
     },
+    "导入的节点": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported Nodes"
+          }
+        }
+      }
+    },
     "导入第一个节点后即可连接": {
       "localizations": {
         "en": {
@@ -677,6 +797,16 @@
         }
       }
     },
+    "导入订阅链接后，每个订阅是一个订阅组，可以测延迟、切换节点、手动或自动更新。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import a subscription link and each subscription becomes a group you can test, switch, and update by hand or automatically."
+          }
+        }
+      }
+    },
     "导入订阅链接或多个节点后，这里会列出全部节点，可以测延迟和切换。": {
       "localizations": {
         "en": {
@@ -717,6 +847,16 @@
         }
       }
     },
+    "展开 %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expand %@"
+          }
+        }
+      }
+    },
     "已保存，重新连接后生效。": {
       "localizations": {
         "en": {
@@ -747,12 +887,42 @@
         }
       }
     },
+    "已用 %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Used %@"
+          }
+        }
+      }
+    },
+    "已用 %@ / %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Used %1$@ / %2$@"
+          }
+        }
+      }
+    },
     "已连接": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Connected"
+          }
+        }
+      }
+    },
+    "延迟为经该节点请求 http://www.gstatic.com/generate_204 的 HTTP 真连接时间，5 秒无响应显示超时。连接中切换节点会自动重连。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delay is the time for a real HTTP request to http://www.gstatic.com/generate_204 through the node; no answer in 5 seconds shows Timeout. Switching nodes while connected reconnects automatically."
           }
         }
       }
@@ -823,6 +993,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Or type it in"
+          }
+        }
+      }
+    },
+    "手动更新": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manual Update"
           }
         }
       }
@@ -953,6 +1133,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Supports subscription links; Clash / Surge / Loon / Quantumult X subscription content; Trojan, VMess, VLESS, Shadowsocks, Hysteria2 and TUIC links; and WireGuard configs with one peer."
+          }
+        }
+      }
+    },
+    "收起 %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collapse %@"
           }
         }
       }
@@ -1157,6 +1347,16 @@
         }
       }
     },
+    "更新于 %@前": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updated %@ ago"
+          }
+        }
+      }
+    },
     "未启动": {
       "localizations": {
         "en": {
@@ -1287,6 +1487,16 @@
         }
       }
     },
+    "正在按订阅规则分流，节点由策略组决定；可以在“规则”页切换策略组或关闭规则。其他订阅组会作为“订阅·名称”策略组出现在规则的选择组里。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Routing by the subscription's rules; policy groups pick the nodes. Switch groups or turn the rules off on the Rules tab. Other subscriptions appear as “订阅·name” policy groups in the rules' select groups."
+          }
+        }
+      }
+    },
     "正在断开": {
       "localizations": {
         "en": {
@@ -1303,6 +1513,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Disconnecting…"
+          }
+        }
+      }
+    },
+    "正在更新": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updating"
           }
         }
       }
@@ -1327,12 +1547,42 @@
         }
       }
     },
+    "每 %lld 天自动更新": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updates every %lld days"
+          }
+        }
+      }
+    },
+    "每 %lld 小时自动更新": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updates every %lld hours"
+          }
+        }
+      }
+    },
     "每 2 秒自动刷新": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Refresh every 2 seconds"
+          }
+        }
+      }
+    },
+    "每周自动更新": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updates weekly"
           }
         }
       }
@@ -1577,6 +1827,16 @@
         }
       }
     },
+    "立即更新": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update Now"
+          }
+        }
+      }
+    },
     "第 %lld 步，共 3 步": {
       "localizations": {
         "en": {
@@ -1673,6 +1933,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Network changed, reconnecting"
+          }
+        }
+      }
+    },
+    "自动更新": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto Update"
           }
         }
       }
@@ -1813,6 +2083,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The subscription content is too large"
+          }
+        }
+      }
+    },
+    "订阅组操作": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscription Actions"
           }
         }
       }
@@ -2147,6 +2427,26 @@
         }
       }
     },
+    "重命名": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename"
+          }
+        }
+      }
+    },
+    "重命名订阅组": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Subscription"
+          }
+        }
+      }
+    },
     "重新检测信任状态": {
       "localizations": {
         "en": {
@@ -2243,36 +2543,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Home"
-          }
-        }
-      }
-    },
-    "延迟为经该节点请求 http://www.gstatic.com/generate_204 的 HTTP 真连接时间，5 秒无响应显示超时。连接中切换节点会自动重连。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Delay is the time for a real HTTP request to http://www.gstatic.com/generate_204 through the node; no answer in 5 seconds shows Timeout. Switching nodes while connected reconnects automatically."
-          }
-        }
-      }
-    },
-    "失败": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Failed"
-          }
-        }
-      }
-    },
-    "不支持": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Unsupported"
           }
         }
       }

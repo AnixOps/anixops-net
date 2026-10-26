@@ -8,6 +8,7 @@ import SwiftUI
 struct NetworkCoreAppMain: App {
     @StateObject private var tunnel = TunnelController()
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -15,7 +16,24 @@ struct NetworkCoreAppMain: App {
                 .preferredColorScheme(appearance.colorScheme)
                 .task {
                     await tunnel.load()
+                    await tunnel.refreshDueSubscriptions()
                 }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .active:
+                Task {
+                    await tunnel.refreshDueSubscriptions()
+                }
+            case .background:
+                tunnel.scheduleBackgroundRefresh()
+            default:
+                break
+            }
+        }
+        // Subscription groups that are due update in the background too (`TunnelController.scheduleBackgroundRefresh`).
+        .backgroundTask(.appRefresh(TunnelController.backgroundRefreshID)) {
+            await tunnel.refreshDueSubscriptions()
         }
     }
 }
