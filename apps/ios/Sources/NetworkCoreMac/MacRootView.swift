@@ -72,11 +72,7 @@ struct MacRootView: View {
         case .rules:
             MacRulesPage(tunnel: tunnel)
         case .extensions:
-            MacPlaceholderPage(
-                systemImage: "puzzlepiece.extension",
-                title: "HTTPS 解密与插件",
-                message: "Mac 版的根证书信任和插件管理还在开发中，目前请在 iPhone 上使用。"
-            )
+            MacExtensionsPage(tunnel: tunnel)
         case .activity:
             MacActivityPage(tunnel: tunnel)
         case .settings:

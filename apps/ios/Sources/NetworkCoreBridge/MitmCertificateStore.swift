@@ -24,7 +24,7 @@ public enum MitmCertificateStore {
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecReturnData as String: true,
-        ]
+        ].merging(platformAttributes) { _, new in new }
         var result: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         if status == errSecItemNotFound {
@@ -46,7 +46,7 @@ public enum MitmCertificateStore {
             kSecValueData as String: data,
             // The tunnel can start on demand while the device is locked, after the first unlock since boot.
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-        ]
+        ].merging(platformAttributes) { _, new in new }
         let status = SecItemAdd(attributes as CFDictionary, nil)
         guard status == errSecSuccess else {
             throw Failure(status: status)
@@ -58,11 +58,21 @@ public enum MitmCertificateStore {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
-        ]
+        ].merging(platformAttributes) { _, new in new }
         let status = SecItemDelete(identity as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw Failure(status: status)
         }
+    }
+
+    /// As in `NodeSecretStore`: on macOS only the data protection keychain honors the `keychain-access-groups`
+    /// the app shares with the tunnel extension, which issues the leaf certificates.
+    private static var platformAttributes: [String: Any] {
+        #if os(macOS)
+        return [kSecUseDataProtectionKeychain as String: true]
+        #else
+        return [:]
+        #endif
     }
 
     static func encode(_ authority: MitmCertificateAuthority) throws -> Data {

@@ -121,16 +121,6 @@
         }
       }
     },
-    "Mac 版的根证书信任和插件管理还在开发中，目前请在 iPhone 上使用。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Root certificate trust and plugin management are still in progress on Mac. Use them on iPhone for now."
-          }
-        }
-      }
-    },
     "REALITY 参数（sni、pbk、sid）不正确": {
       "localizations": {
         "en": {

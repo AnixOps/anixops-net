@@ -141,6 +141,8 @@ targets:
       - path: Sources/NetworkCoreApp/Resources/PrivacyInfo.xcprivacy
       - path: Sources/NetworkCoreAppHost/BrandPalette.swift
       - path: Sources/NetworkCoreAppHost/ImportView.swift
+      - path: Sources/NetworkCoreAppHost/MitmTrustPresentation.swift
+      - path: Sources/NetworkCoreAppHost/PluginsView.swift
       - path: Sources/NetworkCoreAppHost/RouteLine.swift
       - path: Sources/NetworkCoreAppHost/TunnelController.swift
       - path: Sources/NetworkCoreAppHost/NativeNodeImporterFFI.swift
