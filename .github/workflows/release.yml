@@ -1,0 +1,1172 @@
+name: Release
+
+# Packages the Windows (MSI + portable ZIP) and Linux (tarball + .deb) desktop clients.
+# A tag push publishes a GitHub Release; workflow_dispatch from main only builds and attests.
+# iOS ships through ios-testflight.yml. Kernel CLI releases stay in AnixOps/networkcore_anixops.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version, for example v0.3.0-beta.1
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  LINUX_TARGET: x86_64-unknown-linux-gnu
+  LINUX_RUST_TOOLCHAIN: stable
+  LINUX_RUST_PROFILE: minimal
+  WINDOWS_TARGET: x86_64-pc-windows-gnu
+  WINDOWS_RUST_TOOLCHAIN: stable
+  WINDOWS_RUST_PROFILE: minimal
+  WINDOWS_WIX_VERSION: 4.0.6
+
+jobs:
+  release-policy:
+    name: Release policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.policy.outputs.version }}
+      is_tag_release: ${{ steps.policy.outputs.is_tag_release }}
+      release_kind: ${{ steps.policy.outputs.release_kind }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Verify release source
+        id: policy
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+          RELEASE_EVENT: ${{ github.event_name }}
+          RELEASE_REF_TYPE: ${{ github.ref_type }}
+          RELEASE_REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version_pattern='^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[1-9][0-9]*)?$'
+          if [[ ! "${RELEASE_VERSION}" =~ ${version_pattern} ]]; then
+            echo "::error::Release version must match vMAJOR.MINOR.PATCH, vMAJOR.MINOR.PATCH-alpha.N, vMAJOR.MINOR.PATCH-beta.N, or vMAJOR.MINOR.PATCH-rc.N."
+            exit 1
+          fi
+
+          release_kind=stable
+          if [[ "${RELEASE_VERSION}" =~ -(alpha|beta|rc)\. ]]; then
+            release_kind=prerelease
+          fi
+
+          if [[ "${RELEASE_VERSION}" =~ -(alpha|beta|rc)\.([1-9][0-9]*)$ ]]; then
+            release_channel="${BASH_REMATCH[1]}"
+            release_sequence=$((10#${BASH_REMATCH[2]}))
+            case "${release_channel}" in
+              alpha) max_sequence=499 ;;
+              beta) max_sequence=399 ;;
+              rc) max_sequence=98 ;;
+            esac
+            if (( release_sequence < 1 || release_sequence > max_sequence )); then
+              echo "::error::${release_channel} release sequence must be between 1 and ${max_sequence} to preserve Windows Installer version ordering."
+              exit 1
+            fi
+          fi
+
+          case "${RELEASE_EVENT}" in
+            workflow_dispatch)
+              if [ "${RELEASE_REF_TYPE}" != "branch" ] || [ "${RELEASE_REF_NAME}" != "main" ]; then
+                echo "::error::workflow_dispatch release validation must run from main."
+                exit 1
+              fi
+              echo "is_tag_release=false" >> "${GITHUB_OUTPUT}"
+              ;;
+            push)
+              if [ "${RELEASE_REF_TYPE}" != "tag" ]; then
+                echo "::error::push releases must be triggered by a tag ref."
+                exit 1
+              fi
+              if [ "${RELEASE_VERSION}" != "${RELEASE_REF_NAME}" ]; then
+                echo "::error::Tag-triggered release version must match the tag name."
+                exit 1
+              fi
+              echo "is_tag_release=true" >> "${GITHUB_OUTPUT}"
+              ;;
+            *)
+              echo "::error::Unsupported release event: ${RELEASE_EVENT}."
+              exit 1
+              ;;
+          esac
+
+          echo "version=${RELEASE_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "release_kind=${release_kind}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "### Release Policy"
+            echo
+            echo "| Item | Value |"
+            echo "| --- | --- |"
+            echo "| Version | ${RELEASE_VERSION} |"
+            echo "| Event | ${RELEASE_EVENT} |"
+            echo "| Ref type | ${RELEASE_REF_TYPE} |"
+            echo "| Ref name | ${RELEASE_REF_NAME} |"
+            echo "| Release kind | ${release_kind} |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  release-ci-gate:
+    name: Release CI gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs:
+      - release-policy
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      ci_workflow_name: ${{ steps.validate.outputs.ci_workflow_name }}
+      ci_workflow_file: ${{ steps.validate.outputs.ci_workflow_file }}
+      ci_run_id: ${{ steps.validate.outputs.ci_run_id }}
+      ci_run_attempt: ${{ steps.validate.outputs.ci_run_attempt }}
+      ci_run_url: ${{ steps.validate.outputs.ci_run_url }}
+      ci_run_status: ${{ steps.validate.outputs.ci_run_status }}
+      ci_run_conclusion: ${{ steps.validate.outputs.ci_run_conclusion }}
+      ci_head_sha: ${{ steps.validate.outputs.ci_head_sha }}
+      ci_head_branch: ${{ steps.validate.outputs.ci_head_branch }}
+      ci_event: ${{ steps.validate.outputs.ci_event }}
+      ci_repository: ${{ steps.validate.outputs.ci_repository }}
+      ci_checked_at: ${{ steps.validate.outputs.ci_checked_at }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Validate same-commit CI success
+        id: validate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          runs_json="$(gh api --method GET "repos/${RELEASE_REPOSITORY}/actions/workflows/ci.yml/runs" \
+            -f branch=main \
+            -f status=completed \
+            -f head_sha="${RELEASE_SHA}" \
+            -f per_page=20)"
+          run_total="$(jq -r '.total_count // 0' <<< "${runs_json}")"
+          run_count="$(jq -r '.workflow_runs | length' <<< "${runs_json}")"
+          if [ "${run_total}" -gt "${run_count}" ]; then
+            echo "::error::CI workflow runs query returned paginated results."
+            exit 1
+          fi
+
+          ci_run_json="$(jq -c --arg sha "${RELEASE_SHA}" --arg repo "${RELEASE_REPOSITORY}" '
+            [
+              .workflow_runs[]
+              | select(.name == "CI")
+              | select(.path == ".github/workflows/ci.yml")
+              | select(.head_branch == "main")
+              | select(.head_sha == $sha)
+              | select(.status == "completed")
+              | select(.conclusion == "success")
+              | select(.event == "push" or .event == "workflow_dispatch")
+              | select(.repository.full_name == $repo)
+            ]
+            | sort_by(.created_at, .run_attempt)
+            | last // empty
+          ' <<< "${runs_json}")"
+          if [ -z "${ci_run_json}" ]; then
+            echo "::error::No successful completed CI run on main was found for ${RELEASE_REPOSITORY}@${RELEASE_SHA}."
+            exit 1
+          fi
+
+          ci_run_id="$(jq -r '.id' <<< "${ci_run_json}")"
+          ci_run_attempt="$(jq -r '.run_attempt' <<< "${ci_run_json}")"
+          ci_run_url="$(jq -r '.html_url' <<< "${ci_run_json}")"
+          ci_run_status="$(jq -r '.status' <<< "${ci_run_json}")"
+          ci_run_conclusion="$(jq -r '.conclusion' <<< "${ci_run_json}")"
+          ci_head_sha="$(jq -r '.head_sha' <<< "${ci_run_json}")"
+          ci_head_branch="$(jq -r '.head_branch' <<< "${ci_run_json}")"
+          ci_event="$(jq -r '.event' <<< "${ci_run_json}")"
+          ci_repository="$(jq -r '.repository.full_name' <<< "${ci_run_json}")"
+
+          jobs_json="$(gh api --method GET "repos/${RELEASE_REPOSITORY}/actions/runs/${ci_run_id}/jobs" \
+            -f filter=latest \
+            -f per_page=100)"
+          job_total="$(jq -r '.total_count // 0' <<< "${jobs_json}")"
+          job_count="$(jq -r '.jobs | length' <<< "${jobs_json}")"
+          if [ "${job_total}" -gt "${job_count}" ]; then
+            echo "::error::CI workflow jobs query returned paginated results."
+            exit 1
+          fi
+          if ! jq -e '[.jobs[] | select(.name == "CI summary") | select(.status == "completed") | select(.conclusion == "success")] | length > 0' <<< "${jobs_json}" >/dev/null; then
+            echo "::error::Selected CI run does not contain a successful CI summary job."
+            exit 1
+          fi
+
+          ci_checked_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          {
+            echo "ci_workflow_name=CI"
+            echo "ci_workflow_file=.github/workflows/ci.yml"
+            echo "ci_run_id=${ci_run_id}"
+            echo "ci_run_attempt=${ci_run_attempt}"
+            echo "ci_run_url=${ci_run_url}"
+            echo "ci_run_status=${ci_run_status}"
+            echo "ci_run_conclusion=${ci_run_conclusion}"
+            echo "ci_head_sha=${ci_head_sha}"
+            echo "ci_head_branch=${ci_head_branch}"
+            echo "ci_event=${ci_event}"
+            echo "ci_repository=${ci_repository}"
+            echo "ci_checked_at=${ci_checked_at}"
+          } >> "${GITHUB_OUTPUT}"
+
+          {
+            echo "### Release CI Gate"
+            echo
+            echo "| Item | Value |"
+            echo "| --- | --- |"
+            echo "| CI run | ${ci_run_id} |"
+            echo "| CI URL | ${ci_run_url} |"
+            echo "| CI branch | ${ci_head_branch} |"
+            echo "| CI commit | ${ci_head_sha} |"
+            echo "| CI conclusion | ${ci_run_conclusion} |"
+            echo "| CI summary job | success |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+
+  package-linux-gui:
+    name: Package Linux desktop client
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs:
+      - release-policy
+      - release-ci-gate
+    permissions:
+      contents: read
+    outputs:
+      bundle_name: ${{ steps.package.outputs.bundle_name }}
+      archive_name: ${{ steps.package.outputs.archive_name }}
+      archive_checksum_value: ${{ steps.package.outputs.archive_checksum_value }}
+      archive_manifest_name: ${{ steps.package.outputs.archive_manifest_name }}
+      deb_name: ${{ steps.package.outputs.deb_name }}
+      deb_checksum_value: ${{ steps.package.outputs.deb_checksum_value }}
+      deb_manifest_name: ${{ steps.package.outputs.deb_manifest_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Tauri on Linux renders through WebKitGTK.
+      - name: Install WebKitGTK
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/windows-gui/ui/pnpm-lock.yaml
+
+      # The Linux window shares the Windows React interface.
+      - name: Build the shared interface
+        shell: bash
+        run: |
+          pnpm --dir apps/windows-gui/ui install --frozen-lockfile
+          pnpm --dir apps/windows-gui/ui run build
+
+      - name: Build and package the Linux desktop client
+        id: package
+        shell: bash
+        env:
+          VERSION: ${{ needs.release-policy.outputs.version }}
+          TARGET: ${{ env.LINUX_TARGET }}
+          RUST_TOOLCHAIN: ${{ env.LINUX_RUST_TOOLCHAIN }}
+          RUST_PROFILE: ${{ env.LINUX_RUST_PROFILE }}
+          CI_RUN_URL: ${{ needs.release-ci-gate.outputs.ci_run_url }}
+          RELEASE_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RELEASE_SHA: ${{ github.sha }}
+          SOURCE_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          checkout_sha="$(git rev-parse HEAD)"
+          if [ "${checkout_sha}" != "${RELEASE_SHA}" ]; then
+            echo "::error::Checkout SHA ${checkout_sha} does not match release SHA ${RELEASE_SHA}."
+            exit 1
+          fi
+
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile "${RUST_PROFILE}"
+          rustup default "${RUST_TOOLCHAIN}"
+          rustup target add "${TARGET}" --toolchain "${RUST_TOOLCHAIN}"
+          test -f Cargo.lock
+          cargo build --locked --release --package networkcore-linux-gui --features gui --bin anixops-net --target "${TARGET}"
+          binary_path="target/${TARGET}/release/anixops-net"
+          test -x "${binary_path}"
+
+          version="${VERSION}"
+          stem="anixops-net-linux-${version}-${TARGET}"
+          dist_dir="dist/linux-gui"
+          output_dir="${dist_dir}/artifacts"
+          rm -rf "${dist_dir}"
+          mkdir -p "${output_dir}"
+
+          desktop_entry() {
+            cat <<EOF
+          [Desktop Entry]
+          Type=Application
+          Name=AnixOps Net
+          Comment=Proxy client with subscriptions, node switching and delay tests
+          Exec=$1
+          Icon=anixops-net
+          Terminal=false
+          Categories=Network;
+          EOF
+          }
+
+          # Tarball: run in place from a versioned directory.
+          staging="${dist_dir}/staging/${stem}"
+          mkdir -p "${staging}/bin" "${staging}/share/applications" "${staging}/share/icons/hicolor/256x256/apps"
+          install -m 0755 "${binary_path}" "${staging}/bin/anixops-net"
+          install -m 0644 apps/linux-gui/icons/networkcore.png "${staging}/share/icons/hicolor/256x256/apps/anixops-net.png"
+          desktop_entry anixops-net > "${staging}/share/applications/anixops-net.desktop"
+          install -m 0644 LICENSE "${staging}/LICENSE"
+          cat > "${staging}/INSTALL.md" <<EOF
+          # AnixOps Net for Linux ${version}
+
+          Needs WebKitGTK 4.1 (Ubuntu 22.04+/Debian 12+: libwebkit2gtk-4.1-0) and a GNOME or KDE desktop.
+
+          Extract this archive into a directory you control and run bin/anixops-net. To add a menu entry,
+          copy share/applications/anixops-net.desktop to ~/.local/share/applications (set Exec to the full
+          path of bin/anixops-net) and share/icons to ~/.local/share/icons. The .deb package of the same
+          release installs these for you.
+
+          Connecting points the desktop proxy setting at 127.0.0.1:7890 and restores the previous setting
+          on disconnect, exit or next start. Settings live in \$XDG_CONFIG_HOME/anixops-net.
+
+          Uninstall: quit the app, delete this directory and ~/.config/autostart/anixops-net.desktop if
+          you enabled start after login. Rollback: run the previous version's extracted directory.
+          EOF
+          archive_name="${stem}.tar.gz"
+          tar -czf "${output_dir}/${archive_name}" -C "${dist_dir}/staging" "${stem}"
+
+          # Debian package: system install with a menu entry.
+          # Debian sorts "~" before release, so 0.2.0~rc.1 < 0.2.0.
+          deb_version="$(printf '%s' "${version#v}" | tr '-' '~')"
+          deb_root="${dist_dir}/deb"
+          mkdir -p "${deb_root}/DEBIAN" "${deb_root}/usr/bin" "${deb_root}/usr/share/applications" \
+            "${deb_root}/usr/share/icons/hicolor/256x256/apps" "${deb_root}/usr/share/doc/anixops-net"
+          install -m 0755 "${binary_path}" "${deb_root}/usr/bin/anixops-net"
+          install -m 0644 apps/linux-gui/icons/networkcore.png "${deb_root}/usr/share/icons/hicolor/256x256/apps/anixops-net.png"
+          desktop_entry /usr/bin/anixops-net > "${deb_root}/usr/share/applications/anixops-net.desktop"
+          install -m 0644 LICENSE "${deb_root}/usr/share/doc/anixops-net/copyright"
+          installed_size="$(du -sk "${deb_root}/usr" | cut -f1)"
+          cat > "${deb_root}/DEBIAN/control" <<EOF
+          Package: anixops-net
+          Version: ${deb_version}
+          Section: net
+          Priority: optional
+          Architecture: amd64
+          Depends: libwebkit2gtk-4.1-0, libgtk-3-0
+          Installed-Size: ${installed_size}
+          Maintainer: AnixOps <noreply@github.com>
+          Homepage: https://github.com/AnixOps/anixops-net
+          Description: AnixOps Net desktop proxy client
+           Imports subscriptions and share links, switches nodes, runs delay tests and
+           points the desktop proxy setting at a local SOCKS5/HTTP port while connected.
+          EOF
+          deb_name="anixops-net_${deb_version}_amd64.deb"
+          dpkg-deb --root-owner-group --build "${deb_root}" "${output_dir}/${deb_name}"
+          dpkg-deb --info "${output_dir}/${deb_name}" >/dev/null
+
+          manifest() {
+            local file="$1" kind="$2" format="$3" checksum="$4"
+            jq -n \
+              --arg artifact_name "${file}" --arg artifact_kind "${kind}" --arg package_format "${format}" \
+              --arg target_triple "${TARGET}" --arg version "${version}" --arg commit_sha "${RELEASE_SHA}" \
+              --arg source_ref "${SOURCE_REF}" --arg ci_run_url "${CI_RUN_URL}" \
+              --arg release_run_url "${RELEASE_RUN_URL}" --arg rust_toolchain "${RUST_TOOLCHAIN}" \
+              --arg checksum_value "${checksum}" \
+              '{
+                schema_version: 1,
+                artifact_kind: $artifact_kind,
+                package_format: $package_format,
+                artifact_name: $artifact_name,
+                target_triple: $target_triple,
+                version: $version,
+                commit_sha: $commit_sha,
+                source_ref: $source_ref,
+                ci_run_url: $ci_run_url,
+                release_run_url: $release_run_url,
+                runner: "ubuntu-latest",
+                rust_toolchain: $rust_toolchain,
+                source: "apps/linux-gui+apps/windows-gui/ui",
+                checksum: {algorithm: "sha256", file_name: ($artifact_name + ".sha256"), value: $checksum_value},
+                runtime_dependencies: ["libwebkit2gtk-4.1-0", "libgtk-3-0"],
+                system_mutation_policy: "desktop-proxy-setting-while-connected-restored-on-disconnect",
+                signing: {
+                  signing_policy: "unsigned-no-detached-signature",
+                  attestation_policy: "github-artifact-attestation-required",
+                  provenance_file: "github-artifact-attestation"
+                },
+                rollback: {
+                  rollback_scope: "linux-desktop-client",
+                  rollback_steps: "withdraw-release-asset-and-publish-replacement-version",
+                  replacement_version: "next-version-required",
+                  rollback_owner: "maintainer"
+                }
+              }'
+          }
+
+          (
+            cd "${output_dir}"
+            sha256sum "${archive_name}" > "${archive_name}.sha256"
+            sha256sum "${deb_name}" > "${deb_name}.sha256"
+          )
+          archive_checksum_value="$(cut -d' ' -f1 "${output_dir}/${archive_name}.sha256")"
+          deb_checksum_value="$(cut -d' ' -f1 "${output_dir}/${deb_name}.sha256")"
+          archive_manifest_name="${stem}.manifest.json"
+          deb_manifest_name="anixops-net_${deb_version}_amd64.manifest.json"
+          manifest "${archive_name}" linux-desktop-tarball tar.gz "${archive_checksum_value}" > "${output_dir}/${archive_manifest_name}"
+          manifest "${deb_name}" linux-desktop-deb deb "${deb_checksum_value}" > "${output_dir}/${deb_manifest_name}"
+          (
+            cd "${output_dir}"
+            sha256sum "${archive_manifest_name}" > "${archive_manifest_name}.sha256"
+            sha256sum "${deb_manifest_name}" > "${deb_manifest_name}.sha256"
+            sha256sum -c ./*.sha256
+          )
+          file_count="$(find "${output_dir}" -maxdepth 1 -type f | wc -l | tr -d ' ')"
+          if [ "${file_count}" != "8" ]; then
+            echo "::error::Linux desktop output must hold the tarball and deb four-file sets."
+            find "${output_dir}" -maxdepth 1 -type f -print
+            exit 1
+          fi
+
+          {
+            echo "bundle_name=${stem}-release-bundle"
+            echo "output_dir=${output_dir}"
+            echo "archive_name=${archive_name}"
+            echo "archive_checksum_value=${archive_checksum_value}"
+            echo "archive_manifest_name=${archive_manifest_name}"
+            echo "deb_name=${deb_name}"
+            echo "deb_checksum_value=${deb_checksum_value}"
+            echo "deb_manifest_name=${deb_manifest_name}"
+          } >> "${GITHUB_OUTPUT}"
+          {
+            echo "### Linux Desktop Client"
+            echo
+            echo "| Item | Value |"
+            echo "| --- | --- |"
+            echo "| Tarball | ${archive_name} |"
+            echo "| Tarball sha256 | ${archive_checksum_value} |"
+            echo "| Debian package | ${deb_name} |"
+            echo "| Debian package sha256 | ${deb_checksum_value} |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload Linux desktop release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.bundle_name }}
+          path: ${{ steps.package.outputs.output_dir }}/*
+          retention-days: 14
+          if-no-files-found: error
+
+  package-windows:
+    name: Package Windows managed client
+    runs-on: windows-latest
+    timeout-minutes: 45
+    needs:
+      - release-policy
+      - release-ci-gate
+    permissions:
+      contents: read
+    outputs:
+      artifact_name: ${{ steps.package.outputs.artifact_name }}
+      artifact_path: ${{ steps.package.outputs.artifact_path }}
+      checksum_algorithm: ${{ steps.package.outputs.checksum_algorithm }}
+      checksum_file: ${{ steps.package.outputs.checksum_file }}
+      checksum_value: ${{ steps.package.outputs.checksum_value }}
+      artifact_manifest_name: ${{ steps.package.outputs.artifact_manifest_name }}
+      artifact_manifest_path: ${{ steps.package.outputs.artifact_manifest_path }}
+      artifact_manifest_checksum_file: ${{ steps.package.outputs.artifact_manifest_checksum_file }}
+      artifact_manifest_checksum_value: ${{ steps.package.outputs.artifact_manifest_checksum_value }}
+      portable_artifact_name: ${{ steps.package.outputs.portable_artifact_name }}
+      portable_artifact_path: ${{ steps.package.outputs.portable_artifact_path }}
+      portable_checksum_file: ${{ steps.package.outputs.portable_checksum_file }}
+      portable_checksum_value: ${{ steps.package.outputs.portable_checksum_value }}
+      portable_manifest_name: ${{ steps.package.outputs.portable_manifest_name }}
+      portable_manifest_path: ${{ steps.package.outputs.portable_manifest_path }}
+      portable_manifest_checksum_file: ${{ steps.package.outputs.portable_manifest_checksum_file }}
+      portable_manifest_checksum_value: ${{ steps.package.outputs.portable_manifest_checksum_value }}
+      bundle_name: ${{ steps.package.outputs.bundle_name }}
+      output_dir: ${{ steps.package.outputs.output_dir }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm for Windows GUI assets
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - name: Setup Node for Windows GUI assets
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Setup Windows C toolchain
+        uses: msys2/setup-msys2@v2
+        id: msys2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-binutils
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-libsystre
+
+      - name: Configure Windows Rust GNU target
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $MsysRoot = "${{ steps.msys2.outputs.msys2-location }}"
+          $MingwPrefix = Join-Path $MsysRoot "mingw64"
+          "${{ github.workspace }}\.github\scripts" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "$MingwPrefix\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "MSYS2_LOCATION=$MsysRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MINGW_PREFIX=$MingwPrefix" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RC_x86_64_pc_windows_gnu=${{ github.workspace }}\.github\scripts\rc.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CARGO_BUILD_TARGET=${{ env.WINDOWS_TARGET }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CC_x86_64_pc_windows_gnu=$MingwPrefix\bin\gcc.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "AR_x86_64_pc_windows_gnu=$MingwPrefix\bin\ar.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=$MingwPrefix\bin\gcc.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install pinned WiX toolset
+        shell: pwsh
+        env:
+          WIX_VERSION: ${{ env.WINDOWS_WIX_VERSION }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          dotnet tool install --global wix --version $env:WIX_VERSION
+          wix extension add -g "WixToolset.UI.wixext/$env:WIX_VERSION"
+          wix --version
+
+      - name: Build, validate, checksum, and manifest Windows managed client
+        id: package
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.release-policy.outputs.version }}
+          TARGET: ${{ env.WINDOWS_TARGET }}
+          RUST_TOOLCHAIN: ${{ env.WINDOWS_RUST_TOOLCHAIN }}
+          RUST_PROFILE: ${{ env.WINDOWS_RUST_PROFILE }}
+          WIX_VERSION: ${{ env.WINDOWS_WIX_VERSION }}
+          CI_RUN_URL: ${{ needs.release-ci-gate.outputs.ci_run_url }}
+          RELEASE_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RELEASE_SHA: ${{ github.sha }}
+          SOURCE_REF: ${{ github.ref }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          pnpm --dir apps/windows-gui/ui install --frozen-lockfile
+          pnpm --dir apps/windows-gui/ui run build
+          $checkoutSha = (git rev-parse HEAD).Trim()
+          if ($checkoutSha -ne $env:RELEASE_SHA) {
+            throw "Checkout SHA $checkoutSha does not match release SHA $env:RELEASE_SHA."
+          }
+
+          rustup toolchain install $env:RUST_TOOLCHAIN --profile $env:RUST_PROFILE
+          rustup default $env:RUST_TOOLCHAIN
+          rustup target add $env:TARGET --toolchain $env:RUST_TOOLCHAIN
+          rustc .github/scripts/windres_compat.rs -o .github/scripts/windres.exe
+          rustc .github/scripts/rc_compat.rs -o .github/scripts/rc.exe
+
+          if (-not (Test-Path -Path Cargo.lock -PathType Leaf)) {
+            throw "Cargo.lock must be checked in before creating release artifacts."
+          }
+          # The CLI is the kernel's: build it from the pinned kernel checkout with the kernel's own lockfile.
+          # Same lookup as .github/scripts/kernel-root.sh: <kernel>/crates/engine-embedded/Cargo.toml.
+          $metadata = cargo metadata --format-version 1 --locked | ConvertFrom-Json
+          $engineManifest = ($metadata.packages | Where-Object { $_.name -eq "engine-embedded" }).manifest_path
+          if (-not $engineManifest -or -not (Test-Path $engineManifest -PathType Leaf)) {
+            throw "Could not locate the pinned kernel checkout."
+          }
+          $kernelRoot = Split-Path (Split-Path (Split-Path $engineManifest))
+          Write-Output "Kernel checkout: $kernelRoot"
+          cargo build --locked --release `
+            --manifest-path (Join-Path $kernelRoot "Cargo.toml") `
+            --target-dir target `
+            --package networkcore-windows `
+            --target $env:TARGET
+          if ($LASTEXITCODE -ne 0) { throw "Kernel Windows CLI build failed." }
+          cargo build --locked --release `
+            --package networkcore-windows-gui `
+            --package networkcore-windows-service `
+            --target $env:TARGET
+
+          $releaseDir = "target\$env:TARGET\release"
+          $cliPath = Join-Path $releaseDir "networkcore-windows.exe"
+          $guiPath = Join-Path $releaseDir "networkcore-windows-gui.exe"
+          $servicePath = Join-Path $releaseDir "networkcore-windows-service.exe"
+          foreach ($binaryPath in @($cliPath, $guiPath, $servicePath)) {
+            if (-not (Test-Path -Path $binaryPath -PathType Leaf)) {
+              throw "Windows release binary not found: $binaryPath"
+            }
+          }
+          $cliPath = (Resolve-Path $cliPath).Path
+          $guiPath = (Resolve-Path $guiPath).Path
+          $servicePath = (Resolve-Path $servicePath).Path
+          $webView2LoaderCandidates = @(
+            Get-ChildItem -Path (Join-Path $releaseDir "build") -Recurse -Filter "WebView2Loader.dll" |
+              Where-Object {
+                $_.Directory.Name -eq "x64" -and
+                $_.Directory.Parent.Name -eq "out" -and
+                $_.Directory.Parent.Parent.Name -like "webview2-com-sys-*"
+              }
+          )
+          if ($webView2LoaderCandidates.Count -ne 1) {
+            $candidatePaths = $webView2LoaderCandidates.FullName -join ", "
+            throw "Expected exactly one x64 WebView2Loader.dll generated by webview2-com-sys; found $($webView2LoaderCandidates.Count): $candidatePaths"
+          }
+          $webView2LoaderPath = $webView2LoaderCandidates[0].FullName
+          if ((Get-Item $webView2LoaderPath).Length -le 0) {
+            throw "WebView2Loader.dll is empty: $webView2LoaderPath"
+          }
+          $defaultConfigPath = (Resolve-Path "installer\windows\default-managed-config.json").Path
+          $portableReadmePath = (Resolve-Path "installer\windows\PORTABLE-README.txt").Path
+
+          $version = $env:VERSION
+          $target = $env:TARGET
+          if ($version -notmatch '^v([0-9]+)\.([0-9]+)\.([0-9]+)(?:-(alpha|beta|rc)\.([1-9][0-9]*))?$') {
+            throw "Windows MSI version source is invalid: $version"
+          }
+          $major = [int]$Matches[1]
+          $minor = [int]$Matches[2]
+          $patch = [int]$Matches[3]
+          $channel = $Matches[4]
+          $sequence = if ($Matches[5]) { [int]$Matches[5] } else { 0 }
+          if ($channel) {
+            $maxSequence = switch ($channel) {
+              "alpha" { 499 }
+              "beta" { 399 }
+              "rc" { 98 }
+            }
+            if ($sequence -lt 1 -or $sequence -gt $maxSequence) {
+              throw "$channel release sequence must be between 1 and $maxSequence to preserve Windows Installer version ordering."
+            }
+          }
+          $msiBuild = $patch * 1000
+          if ($channel -eq "alpha") {
+            $msiBuild += $sequence
+          } elseif ($channel -eq "beta") {
+            $msiBuild += 500 + $sequence
+          } elseif ($channel -eq "rc") {
+            $msiBuild += 900 + $sequence
+          } else {
+            $msiBuild += 999
+          }
+          if ($major -gt 255 -or $minor -gt 255 -or $msiBuild -gt 65535) {
+            throw "Mapped MSI product version exceeds Windows Installer limits."
+          }
+          $productVersion = "$major.$minor.$msiBuild"
+          $artifactStem = "networkcore-windows-$version-$target"
+          $distDir = "dist\windows\$target"
+          $outputDir = Join-Path $distDir "artifacts"
+          $archiveName = "$artifactStem.msi"
+          $archivePath = Join-Path $outputDir $archiveName
+          $archiveChecksumName = "$archiveName.sha256"
+          $archiveChecksumPath = Join-Path $outputDir $archiveChecksumName
+          $manifestName = "$artifactStem.manifest.json"
+          $manifestPath = Join-Path $outputDir $manifestName
+          $manifestChecksumName = "$manifestName.sha256"
+          $manifestChecksumPath = Join-Path $outputDir $manifestChecksumName
+          $portableStem = "networkcore-windows-portable-$version-$target"
+          $portableArchiveName = "$portableStem.zip"
+          $portableArchivePath = Join-Path $outputDir $portableArchiveName
+          $portableChecksumName = "$portableArchiveName.sha256"
+          $portableChecksumPath = Join-Path $outputDir $portableChecksumName
+          $portableManifestName = "$portableStem.manifest.json"
+          $portableManifestPath = Join-Path $outputDir $portableManifestName
+          $portableManifestChecksumName = "$portableManifestName.sha256"
+          $portableManifestChecksumPath = Join-Path $outputDir $portableManifestChecksumName
+          $portableStageDir = Join-Path $distDir "portable\$portableStem"
+          $bundleName = "$artifactStem-release-bundle"
+
+          Remove-Item -Recurse -Force $distDir -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+          wix build installer/windows/Package.wxs `
+            -ext WixToolset.UI.wixext `
+            -arch x64 `
+            -d "ProductVersion=$productVersion" `
+            -d "CliExe=$cliPath" `
+            -d "GuiExe=$guiPath" `
+            -d "WebView2LoaderDll=$webView2LoaderPath" `
+            -d "ServiceExe=$servicePath" `
+            -d "DefaultConfig=$defaultConfigPath" `
+            -o $archivePath
+          wix msi validate $archivePath
+          # WiX emits a .wixpdb beside the MSI; it is a build symbol, not a release asset.
+          $wixPdbPath = [System.IO.Path]::ChangeExtension($archivePath, ".wixpdb")
+          Remove-Item -Force $wixPdbPath -ErrorAction SilentlyContinue
+
+          New-Item -ItemType Directory -Force -Path $portableStageDir | Out-Null
+          Copy-Item -Path $cliPath -Destination (Join-Path $portableStageDir "networkcore-windows.exe")
+          Copy-Item -Path $guiPath -Destination (Join-Path $portableStageDir "networkcore-windows-gui.exe")
+          Copy-Item -Path $webView2LoaderPath -Destination (Join-Path $portableStageDir "WebView2Loader.dll")
+          Copy-Item -Path $servicePath -Destination (Join-Path $portableStageDir "networkcore-windows-service.exe")
+          Copy-Item -Path $defaultConfigPath -Destination (Join-Path $portableStageDir "managed-config.json")
+          Copy-Item -Path $portableReadmePath -Destination (Join-Path $portableStageDir "README.txt")
+          Compress-Archive -Path $portableStageDir -DestinationPath $portableArchivePath -CompressionLevel Optimal
+          $portableInspectionDir = Join-Path $distDir "portable-inspection"
+          Expand-Archive -Path $portableArchivePath -DestinationPath $portableInspectionDir
+          $portableLoaderPath = Join-Path $portableInspectionDir "$portableStem\WebView2Loader.dll"
+          if (-not (Test-Path -Path $portableLoaderPath -PathType Leaf)) {
+            throw "Portable ZIP does not contain WebView2Loader.dll beside the GUI executable."
+          }
+          if ((Get-Item $portableLoaderPath).Length -le 0) {
+            throw "Portable ZIP contains an empty WebView2Loader.dll."
+          }
+
+          $checksumValue = (Get-FileHash -Algorithm SHA256 -Path $archivePath).Hash.ToLowerInvariant()
+          if ($checksumValue -notmatch '^[0-9a-f]{64}$') {
+            throw "MSI checksum is not a sha256 digest."
+          }
+          "$checksumValue  $archiveName" | Set-Content -Path $archiveChecksumPath -Encoding ascii
+          $archiveSize = (Get-Item $archivePath).Length
+          $manifest = [ordered]@{
+            schema_version = 2
+            artifact_kind = "windows-managed-client-msi"
+            package_format = "msi"
+            artifact_name = $archiveName
+            target_triple = $target
+            version = $version
+            commit_sha = $env:RELEASE_SHA
+            source_ref = $env:SOURCE_REF
+            ci_run_url = $env:CI_RUN_URL
+            release_run_url = $env:RELEASE_RUN_URL
+            runner = "windows-latest"
+            rust_toolchain = $env:RUST_TOOLCHAIN
+            wix_version = $env:WIX_VERSION
+            product_version = $productVersion
+            installer = [ordered]@{
+              file_name = $archiveName
+              relative_path = "dist/windows/$target/artifacts/$archiveName"
+              size_bytes = $archiveSize
+            }
+            checksum = [ordered]@{
+              algorithm = "sha256"
+              file_name = $archiveChecksumName
+              value = $checksumValue
+            }
+            included_files = @(
+              [ordered]@{ path = "networkcore-windows-gui.exe"; kind = "binary"; required = $true; source = "apps/windows-gui" },
+              [ordered]@{ path = "WebView2Loader.dll"; kind = "runtime"; required = $true; source = "webview2-com-sys@0.38.2/x64" },
+              [ordered]@{ path = "networkcore-windows-service.exe"; kind = "binary"; required = $true; source = "apps/windows-service" },
+              [ordered]@{ path = "networkcore-windows.exe"; kind = "binary"; required = $true; source = "AnixOps/networkcore_anixops:apps/windows-cli" },
+              [ordered]@{ path = "managed-config.json"; kind = "configuration"; required = $true; source = "installer/windows/default-managed-config.json" }
+            )
+            install_model = "wix-per-machine-msi"
+            system_mutation_policy = "managed-apply-and-rollback"
+            source_identity = "apps/windows-gui+apps/windows-service+apps/windows-cli+platform-windows+installer/windows"
+            capability_anchor = "windows-release-assets"
+            subscription_compatibility = "parser-gates-active-run-compat-deferred"
+            active_operations = @(
+              "install-windows-service",
+              "install-signed-inf-driver-package",
+              "run-wix-installer",
+              "mutate-system-proxy",
+              "mutate-system-trust-store",
+              "managed-daemon-lifecycle"
+            )
+            blocked_operations = @(
+              "execute-javascript-dispatch"
+            )
+            signing = [ordered]@{
+              signing_policy = "unsigned-no-authenticode-with-github-attestation"
+              signing_status = "not-signed-by-policy"
+              attestation_policy = "github-artifact-attestation-required"
+              attestation_status = "required-before-publish"
+              provenance_policy = "github-build-provenance-required"
+              provenance_file = "github-artifact-attestation"
+            }
+            rollback = [ordered]@{
+              rollback_policy = "msi-uninstall-purge-and-version-reinstall"
+              rollback_status = "summarized-before-publish"
+              rollback_scope = "windows-managed-client"
+              rollback_trigger = "checksum-install-runtime-security-or-provenance-defect"
+              rollback_steps = "withdraw-release-asset-and-publish-replacement-version"
+              replacement_version = "next-version-required"
+              rollback_owner = "maintainer"
+            }
+          }
+          $manifest | ConvertTo-Json -Depth 20 | Set-Content -Path $manifestPath -Encoding utf8
+          $manifestChecksumValue = (Get-FileHash -Algorithm SHA256 -Path $manifestPath).Hash.ToLowerInvariant()
+          "$manifestChecksumValue  $manifestName" | Set-Content -Path $manifestChecksumPath -Encoding ascii
+
+          $portableChecksumValue = (Get-FileHash -Algorithm SHA256 -Path $portableArchivePath).Hash.ToLowerInvariant()
+          if ($portableChecksumValue -notmatch '^[0-9a-f]{64}$') {
+            throw "Portable ZIP checksum is not a sha256 digest."
+          }
+          "$portableChecksumValue  $portableArchiveName" | Set-Content -Path $portableChecksumPath -Encoding ascii
+          $portableArchiveSize = (Get-Item $portableArchivePath).Length
+          $portableManifest = [ordered]@{
+            schema_version = 2
+            artifact_kind = "windows-managed-client-portable-zip"
+            package_format = "zip"
+            artifact_name = $portableArchiveName
+            target_triple = $target
+            version = $version
+            commit_sha = $env:RELEASE_SHA
+            source_ref = $env:SOURCE_REF
+            ci_run_url = $env:CI_RUN_URL
+            release_run_url = $env:RELEASE_RUN_URL
+            runner = "windows-latest"
+            rust_toolchain = $env:RUST_TOOLCHAIN
+            archive = [ordered]@{
+              file_name = $portableArchiveName
+              relative_path = "dist/windows/$target/artifacts/$portableArchiveName"
+              size_bytes = $portableArchiveSize
+            }
+            checksum = [ordered]@{
+              algorithm = "sha256"
+              file_name = $portableChecksumName
+              value = $portableChecksumValue
+            }
+            included_files = @(
+              [ordered]@{ path = "$portableStem/networkcore-windows-gui.exe"; kind = "binary"; required = $true; source = "apps/windows-gui" },
+              [ordered]@{ path = "$portableStem/WebView2Loader.dll"; kind = "runtime"; required = $true; source = "webview2-com-sys@0.38.2/x64" },
+              [ordered]@{ path = "$portableStem/networkcore-windows-service.exe"; kind = "binary"; required = $true; source = "apps/windows-service" },
+              [ordered]@{ path = "$portableStem/networkcore-windows.exe"; kind = "binary"; required = $true; source = "AnixOps/networkcore_anixops:apps/windows-cli" },
+              [ordered]@{ path = "$portableStem/managed-config.json"; kind = "configuration"; required = $true; source = "installer/windows/default-managed-config.json" },
+              [ordered]@{ path = "$portableStem/README.txt"; kind = "documentation"; required = $true; source = "installer/windows/PORTABLE-README.txt" }
+            )
+            install_model = "manual-extract"
+            system_mutation_policy = "explicit-gui-or-service-command-only"
+            source_identity = "apps/windows-gui+apps/windows-service+apps/windows-cli+platform-windows+installer/windows"
+            capability_anchor = "windows-portable-release-assets"
+            active_operations = @(
+              "run-native-gui",
+              "explicit-install-windows-service",
+              "explicit-system-proxy-mutation",
+              "explicit-system-trust-store-mutation",
+              "explicit-managed-daemon-lifecycle"
+            )
+            blocked_operations = @(
+              "automatic-service-registration-on-extract",
+              "automatic-service-start-on-extract",
+              "execute-javascript-dispatch"
+            )
+            signing = [ordered]@{
+              signing_policy = "unsigned-no-authenticode-with-github-attestation"
+              signing_status = "not-signed-by-policy"
+              attestation_policy = "github-artifact-attestation-required"
+              attestation_status = "required-before-publish"
+              provenance_policy = "github-build-provenance-required"
+              provenance_file = "github-artifact-attestation"
+            }
+            rollback = [ordered]@{
+              rollback_policy = "purge-uninstall-service-delete-extracted-directory"
+              rollback_status = "summarized-before-publish"
+              rollback_scope = "windows-managed-client-portable"
+              rollback_trigger = "checksum-runtime-security-or-provenance-defect"
+              rollback_steps = "purge-uninstall-delete-and-publish-replacement-version"
+              replacement_version = "next-version-required"
+              rollback_owner = "maintainer"
+            }
+          }
+          $portableManifest | ConvertTo-Json -Depth 20 | Set-Content -Path $portableManifestPath -Encoding utf8
+          $portableManifestChecksumValue = (Get-FileHash -Algorithm SHA256 -Path $portableManifestPath).Hash.ToLowerInvariant()
+          "$portableManifestChecksumValue  $portableManifestName" | Set-Content -Path $portableManifestChecksumPath -Encoding ascii
+
+          foreach ($file in @(
+            $archivePath,
+            $archiveChecksumPath,
+            $manifestPath,
+            $manifestChecksumPath,
+            $portableArchivePath,
+            $portableChecksumPath,
+            $portableManifestPath,
+            $portableManifestChecksumPath
+          )) {
+            if (-not (Test-Path -Path $file -PathType Leaf)) {
+              throw "Missing Windows artifact output file: $file"
+            }
+            if ((Get-Item $file).Length -le 0) {
+              throw "Empty Windows artifact output file: $file"
+            }
+          }
+          $fileCount = @(Get-ChildItem -Path $outputDir -File).Count
+          if ($fileCount -ne 8) {
+            $fileNames = @(Get-ChildItem -Path $outputDir -File | Select-Object -ExpandProperty Name) -join ", "
+            throw "Windows artifact output dir must contain exactly eight files. Found: $fileNames"
+          }
+
+          @(
+            "artifact_name=$archiveName",
+            "artifact_path=$archivePath",
+            "checksum_algorithm=sha256",
+            "checksum_file=$archiveChecksumPath",
+            "checksum_value=$checksumValue",
+            "artifact_manifest_name=$manifestName",
+            "artifact_manifest_path=$manifestPath",
+            "artifact_manifest_checksum_file=$manifestChecksumPath",
+            "artifact_manifest_checksum_value=$manifestChecksumValue",
+            "portable_artifact_name=$portableArchiveName",
+            "portable_artifact_path=$portableArchivePath",
+            "portable_checksum_file=$portableChecksumPath",
+            "portable_checksum_value=$portableChecksumValue",
+            "portable_manifest_name=$portableManifestName",
+            "portable_manifest_path=$portableManifestPath",
+            "portable_manifest_checksum_file=$portableManifestChecksumPath",
+            "portable_manifest_checksum_value=$portableManifestChecksumValue",
+            "bundle_name=$bundleName",
+            "output_dir=$outputDir"
+          ) | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+          @(
+            "### Windows Managed Client MSI",
+            "",
+            "| Item | Value |",
+            "| --- | --- |",
+            "| Installer | $archiveName |",
+            "| Installer sha256 | $checksumValue |",
+            "| Manifest | $manifestName |",
+            "| Manifest sha256 | $manifestChecksumValue |",
+            "| Target | $target |",
+            "| Source identity | GUI + service + CLI + platform + WiX |",
+            "| Install model | wix-per-machine-msi |",
+            "| System mutation policy | managed-apply-and-rollback |",
+            "",
+            "### Windows Portable ZIP",
+            "",
+            "| Item | Value |",
+            "| --- | --- |",
+            "| Archive | $portableArchiveName |",
+            "| Archive sha256 | $portableChecksumValue |",
+            "| Manifest | $portableManifestName |",
+            "| Manifest sha256 | $portableManifestChecksumValue |",
+            "| Install model | manual-extract |",
+            "| System mutation policy | explicit-gui-or-service-command-only |"
+          ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Upload Windows release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.bundle_name }}
+          path: |
+            ${{ steps.package.outputs.artifact_path }}
+            ${{ steps.package.outputs.checksum_file }}
+            ${{ steps.package.outputs.artifact_manifest_path }}
+            ${{ steps.package.outputs.artifact_manifest_checksum_file }}
+            ${{ steps.package.outputs.portable_artifact_path }}
+            ${{ steps.package.outputs.portable_checksum_file }}
+            ${{ steps.package.outputs.portable_manifest_path }}
+            ${{ steps.package.outputs.portable_manifest_checksum_file }}
+          retention-days: 14
+          if-no-files-found: error
+
+  attest-linux-gui:
+    name: Attest Linux desktop client bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs:
+      - release-policy
+      - package-linux-gui
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    outputs:
+      attestation_status: ${{ steps.attestation-output.outputs.attestation_status }}
+    steps:
+      - name: Download Linux desktop release bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.package-linux-gui.outputs.bundle_name }}
+          path: dist/linux-gui-attestation
+
+      - name: Validate attestation subjects
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find dist/linux-gui-attestation -maxdepth 1 -type f | wc -l | tr -d ' ')" = "8"
+          (
+            cd dist/linux-gui-attestation
+            sha256sum -c ./*.sha256
+          )
+
+      - name: Generate Linux desktop artifact attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/linux-gui-attestation/*
+
+      - name: Emit attestation status
+        id: attestation-output
+        shell: bash
+        run: echo "attestation_status=attested" >> "${GITHUB_OUTPUT}"
+
+  attest-windows:
+    name: Attest Windows managed client bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs:
+      - release-policy
+      - package-windows
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    outputs:
+      attestation_status: ${{ steps.attestation-output.outputs.attestation_status }}
+      provenance_file: ${{ steps.attestation-output.outputs.provenance_file }}
+    steps:
+      - name: Download Windows release bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.package-windows.outputs.bundle_name }}
+          path: dist/windows-attestation
+
+      - name: Validate Windows attestation subjects
+        shell: bash
+        env:
+          ARCHIVE_NAME: ${{ needs.package-windows.outputs.artifact_name }}
+          ARCHIVE_CHECKSUM_NAME: ${{ needs.package-windows.outputs.artifact_name }}.sha256
+          MANIFEST_NAME: ${{ needs.package-windows.outputs.artifact_manifest_name }}
+          MANIFEST_CHECKSUM_NAME: ${{ needs.package-windows.outputs.artifact_manifest_name }}.sha256
+          PORTABLE_ARCHIVE_NAME: ${{ needs.package-windows.outputs.portable_artifact_name }}
+          PORTABLE_ARCHIVE_CHECKSUM_NAME: ${{ needs.package-windows.outputs.portable_artifact_name }}.sha256
+          PORTABLE_MANIFEST_NAME: ${{ needs.package-windows.outputs.portable_manifest_name }}
+          PORTABLE_MANIFEST_CHECKSUM_NAME: ${{ needs.package-windows.outputs.portable_manifest_name }}.sha256
+        run: |
+          set -euo pipefail
+          for file in \
+            "${ARCHIVE_NAME}" \
+            "${ARCHIVE_CHECKSUM_NAME}" \
+            "${MANIFEST_NAME}" \
+            "${MANIFEST_CHECKSUM_NAME}" \
+            "${PORTABLE_ARCHIVE_NAME}" \
+            "${PORTABLE_ARCHIVE_CHECKSUM_NAME}" \
+            "${PORTABLE_MANIFEST_NAME}" \
+            "${PORTABLE_MANIFEST_CHECKSUM_NAME}"; do
+            test -f "dist/windows-attestation/${file}"
+            test -s "dist/windows-attestation/${file}"
+          done
+          test "$(find dist/windows-attestation -maxdepth 1 -type f | wc -l | tr -d ' ')" = "8"
+          (
+            cd dist/windows-attestation
+            sha256sum -c "${ARCHIVE_CHECKSUM_NAME}"
+            sha256sum -c "${MANIFEST_CHECKSUM_NAME}"
+            sha256sum -c "${PORTABLE_ARCHIVE_CHECKSUM_NAME}"
+            sha256sum -c "${PORTABLE_MANIFEST_CHECKSUM_NAME}"
+          )
+
+      - name: Generate Windows artifact attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            dist/windows-attestation/${{ needs.package-windows.outputs.artifact_name }}
+            dist/windows-attestation/${{ needs.package-windows.outputs.artifact_name }}.sha256
+            dist/windows-attestation/${{ needs.package-windows.outputs.artifact_manifest_name }}
+            dist/windows-attestation/${{ needs.package-windows.outputs.artifact_manifest_name }}.sha256
+            dist/windows-attestation/${{ needs.package-windows.outputs.portable_artifact_name }}
+            dist/windows-attestation/${{ needs.package-windows.outputs.portable_artifact_name }}.sha256
+            dist/windows-attestation/${{ needs.package-windows.outputs.portable_manifest_name }}
+            dist/windows-attestation/${{ needs.package-windows.outputs.portable_manifest_name }}.sha256
+
+      - name: Emit Windows attestation status
+        id: attestation-output
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "attestation_status=attested" >> "${GITHUB_OUTPUT}"
+          echo "provenance_file=github-artifact-attestation" >> "${GITHUB_OUTPUT}"
+          echo "windows-package-artifact-attestation-execution-status=attested"
+
+  publish-github-release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs:
+      - release-policy
+      - release-ci-gate
+      - package-linux-gui
+      - package-windows
+      - attest-linux-gui
+      - attest-windows
+    if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download Linux desktop release bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.package-linux-gui.outputs.bundle_name }}
+          path: dist/release
+
+      - name: Download Windows release bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.package-windows.outputs.bundle_name }}
+          path: dist/release
+
+      - name: Create GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.release-policy.outputs.version }}
+          RELEASE_KIND: ${{ needs.release-policy.outputs.release_kind }}
+          CI_RUN_URL: ${{ needs.release-ci-gate.outputs.ci_run_url }}
+          LINUX_GUI_ATTESTATION_STATUS: ${{ needs.attest-linux-gui.outputs.attestation_status }}
+          WINDOWS_ATTESTATION_STATUS: ${{ needs.attest-windows.outputs.attestation_status }}
+          KERNEL_REV_SOURCE: Cargo.toml
+        run: |
+          set -euo pipefail
+          test "${LINUX_GUI_ATTESTATION_STATUS}" = "attested"
+          test "${WINDOWS_ATTESTATION_STATUS}" = "attested"
+          assets=()
+          while IFS= read -r file; do
+            assets+=("${file}")
+          done < <(find dist/release -maxdepth 1 -type f | sort)
+          test "${#assets[@]}" = "16"
+          (
+            cd dist/release
+            sha256sum -c ./*.sha256
+          )
+          if gh release view "${VERSION}" >/dev/null 2>&1; then
+            echo "::error::Release ${VERSION} already exists. Asset overwrite is forbidden."
+            exit 1
+          fi
+          kernel_rev="$(grep -m1 -oE 'rev = "[0-9a-f]{40}"' "${KERNEL_REV_SOURCE}" | cut -d'"' -f2)"
+          cat > release-body.md <<EOF
+          # AnixOps Net ${VERSION}
+
+          - Kernel: [AnixOps/networkcore_anixops@${kernel_rev:0:7}](https://github.com/AnixOps/networkcore_anixops/commit/${kernel_rev})
+          - CI: ${CI_RUN_URL}
+          - Windows: MSI installer and portable ZIP (GUI, service and the kernel CLI), unsigned, GitHub artifact attestation
+          - Linux: tarball and .deb desktop client, needs WebKitGTK 4.1, GitHub artifact attestation
+          - Every asset has a manifest and a sha256 file.
+
+          No local build, test, package, or release verification was used.
+          EOF
+          prerelease_args=()
+          if [ "${RELEASE_KIND}" = "prerelease" ]; then
+            prerelease_args+=(--prerelease)
+          fi
+          gh release create "${VERSION}" "${assets[@]}" \
+            --title "AnixOps Net ${VERSION}" \
+            --notes-file release-body.md \
+            --verify-tag \
+            "${prerelease_args[@]}"
+          echo "Published $(gh release view "${VERSION}" --json url -q '.url')"
