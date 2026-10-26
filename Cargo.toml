@@ -18,13 +18,13 @@ repository = "https://github.com/AnixOps/anixops-net"
 # CI also builds the iOS runtime and the Windows CLI from this same checkout (.github/scripts/kernel-root.sh).
 # For local kernel work, uncomment the [patch] section at the end and point it at a kernel checkout.
 [workspace.dependencies]
-config-core = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "528b01d310b7a00023552a53050ba57a96306be7" }
-control-domain = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "528b01d310b7a00023552a53050ba57a96306be7" }
-engine-embedded = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "528b01d310b7a00023552a53050ba57a96306be7" }
-engine-native = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "528b01d310b7a00023552a53050ba57a96306be7" }
-inbound-mixed = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "528b01d310b7a00023552a53050ba57a96306be7" }
-mitm-policy = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "528b01d310b7a00023552a53050ba57a96306be7" }
-platform-windows = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "528b01d310b7a00023552a53050ba57a96306be7" }
+config-core = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "ffd2236365262fa65b51f573eec4d1b16d1bdf76" }
+control-domain = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "ffd2236365262fa65b51f573eec4d1b16d1bdf76" }
+engine-embedded = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "ffd2236365262fa65b51f573eec4d1b16d1bdf76" }
+engine-native = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "ffd2236365262fa65b51f573eec4d1b16d1bdf76" }
+inbound-mixed = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "ffd2236365262fa65b51f573eec4d1b16d1bdf76" }
+mitm-policy = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "ffd2236365262fa65b51f573eec4d1b16d1bdf76" }
+platform-windows = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "ffd2236365262fa65b51f573eec4d1b16d1bdf76" }
 
 # [patch."https://github.com/AnixOps/networkcore_anixops"]
 # config-core = { path = "../networkcore_anixops/crates/config-core" }
