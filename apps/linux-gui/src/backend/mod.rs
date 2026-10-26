@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use self::engine::Engine;
-use self::state::{SavedState, Store};
+use self::state::{SavedSource, SavedState, Store};
 use self::system_proxy::Desktop;
 
 /// The source label for share links pasted into the import field.
@@ -116,6 +116,15 @@ pub struct SubscriptionSummary {
     pub changed_node_count: u32,
     pub error_code: Option<String>,
     pub last_update_error: Option<String>,
+    pub name: String,
+    pub node_count: Option<usize>,
+    pub upload: Option<u64>,
+    pub download: Option<u64>,
+    pub total: Option<u64>,
+    /// Unix seconds.
+    pub expire: Option<u64>,
+    pub update_interval_hours: u32,
+    pub refreshable: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -481,7 +490,81 @@ impl Backend {
                 changed_node_count: 0,
                 error_code: None,
                 last_update_error: source.last_error.clone(),
+                name: subscription_meta::display_name(source.name.as_deref(), &source.location),
+                node_count: source.node_count,
+                upload: source.user_info.and_then(|info| info.upload),
+                download: source.user_info.and_then(|info| info.download),
+                total: source.user_info.and_then(|info| info.total),
+                expire: source.user_info.and_then(|info| info.expire),
+                update_interval_hours: source.effective_interval_hours(),
+                refreshable: source.refreshable(),
             })
+            .collect()
+    }
+
+    /// Records what the server's headers said about source `id` (the selected one when `None`).
+    pub fn record_response(&mut self, id: Option<&str>, meta: subscription_meta::ResponseMeta) {
+        let id = id
+            .map(str::to_string)
+            .or_else(|| self.state.selected_source().map(|source| source.id.clone()));
+        if let Some(source) = self
+            .state
+            .sources
+            .iter_mut()
+            .find(|source| Some(&source.id) == id.as_ref())
+        {
+            source.record_response(meta);
+            self.save();
+        }
+    }
+
+    pub fn rename_subscription(&mut self, id: &str, name: &str) -> Result<OperationResult, String> {
+        let name = subscription_meta::clean_name(name).ok_or("enter a name")?;
+        self.source_mut(id)?.name = Some(name);
+        self.save();
+        done("Subscription renamed")
+    }
+
+    pub fn set_subscription_interval(
+        &mut self,
+        id: &str,
+        hours: u32,
+    ) -> Result<OperationResult, String> {
+        let hours = hours.min(subscription_meta::MAX_UPDATE_INTERVAL_HOURS);
+        self.source_mut(id)?.update_interval_hours = Some(hours);
+        self.save();
+        if hours == 0 {
+            done("Automatic updates are off for this subscription")
+        } else {
+            done(format!("This subscription updates every {hours} hours"))
+        }
+    }
+
+    fn source_mut(&mut self, id: &str) -> Result<&mut SavedSource, String> {
+        self.state
+            .sources
+            .iter_mut()
+            .find(|source| source.id == id)
+            .ok_or_else(|| "the subscription was not found".to_string())
+    }
+
+    /// Source `id`'s URL when it can be fetched again.
+    pub fn source_location(&self, id: &str) -> Option<String> {
+        self.state
+            .sources
+            .iter()
+            .find(|source| source.id == id && source.refreshable())
+            .map(|source| source.location.clone())
+    }
+
+    /// Sources whose automatic update is due now, as (id, URL).
+    pub fn due_sources(&self) -> Vec<(String, String)> {
+        let time = now();
+        self.state
+            .sources
+            .iter()
+            .filter(|source| source.update_due(time))
+            .map(|source| (source.id.clone(), source.location.clone()))
             .collect()
     }
 
@@ -597,6 +680,9 @@ impl Backend {
             return Err("none of the nodes can run on the embedded engine yet".to_string());
         }
         let id = self.state.add_source(location, now());
+        if let Some(source) = self.state.sources.iter_mut().find(|source| source.id == id) {
+            source.node_count = Some(nodes.len());
+        }
         if let Err(error) = self.store.write_source(&id, content) {
             self.state.remove_source(&id);
             return Err(format!("the subscription could not be saved: {error}"));
@@ -636,9 +722,10 @@ impl Backend {
         if let Some(source) = self.state.sources.iter_mut().find(|source| source.id == id) {
             source.last_attempt = Some(time);
             match &result {
-                Ok(_) => {
+                Ok(count) => {
                     source.last_success = Some(time);
                     source.last_error = None;
+                    source.node_count = Some(*count);
                 }
                 Err(error) => source.last_error = Some(error.clone()),
             }

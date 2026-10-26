@@ -76,6 +76,19 @@ export interface SubscriptionSummary {
   changedNodeCount: number;
   errorCode?: string;
   lastUpdateError?: string;
+  /** The user's name, the server's title, or the host. */
+  name: string;
+  nodeCount?: number;
+  /** Bytes, from the server's subscription-userinfo header. */
+  upload?: number;
+  download?: number;
+  total?: number;
+  /** Unix seconds. */
+  expire?: number;
+  /** 0 updates by hand only. */
+  updateIntervalHours: number;
+  /** A link that can be downloaded again, not a file or pasted links. */
+  refreshable: boolean;
 }
 
 export type Preferences = Pick<RuntimeSnapshot, "startAfterLogin" | "autoConnect" | "autoRecoverCore" | "autoSubscriptionRefresh" | "autoSelectFastestNode" | "bilibiliWebAdBlockEnabled" | "darkTheme" | "runtimeMode">;
@@ -120,6 +133,10 @@ export const desktop = {
   updateSubscription: () => invoke<OperationResult>("update_subscription"),
   selectSubscription: (id: string) => invoke<OperationResult>("select_subscription", { id }),
   removeSubscription: (id: string) => invoke<OperationResult>("remove_subscription", { id }),
+  updateSubscriptionSource: (id: string) => invoke<OperationResult>("update_subscription_source", { id }),
+  renameSubscription: (id: string, name: string) => invoke<OperationResult>("rename_subscription", { id, name }),
+  setSubscriptionInterval: (id: string, hours: number) =>
+    invoke<OperationResult>("set_subscription_interval", { id, hours }),
   checkProfileRuntime: () => invoke<OperationResult>("check_profile_runtime"),
   installService: () => invoke<OperationResult>("install_service"),
   startService: () => invoke<OperationResult>("start_service"),

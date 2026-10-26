@@ -16,6 +16,7 @@ use networkcore_linux_gui::backend::{
     autostart, format_delay, Backend, GroupSummary, NodeSummary, OperationResult, PreferencesInput,
     RuntimeSnapshot, SubscriptionSummary, PASTED_LOCATION,
 };
+use subscription_meta::ResponseMeta;
 use tauri::{RunEvent, State};
 
 /// The URL the delay tests fetch, as on Windows.
@@ -53,23 +54,35 @@ where
 }
 
 fn http_get(url: &str) -> Result<String, reqwest::Error> {
-    reqwest::blocking::Client::builder()
+    http_get_with_meta(url).map(|(body, _)| body)
+}
+
+/// The body and what the subscription headers say about it.
+fn http_get_with_meta(url: &str) -> Result<(String, ResponseMeta), reqwest::Error> {
+    let response = reqwest::blocking::Client::builder()
         .timeout(FETCH_TIMEOUT)
         .build()?
         .get(url)
         .send()
-        .and_then(reqwest::blocking::Response::error_for_status)?
-        .text()
+        .and_then(reqwest::blocking::Response::error_for_status)?;
+    let meta = ResponseMeta::from_headers(|name| {
+        response
+            .headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string)
+    });
+    Ok((response.text()?, meta))
 }
 
-/// A URL's body, a local file, or the pasted share links themselves.
-fn fetch(location: &str) -> Result<String, String> {
+/// A URL's body with its headers' meta, a local file, or the pasted share links themselves.
+fn fetch(location: &str) -> Result<(String, ResponseMeta), String> {
     if location.starts_with("https://") || location.starts_with("http://") {
-        return http_get(location)
+        return http_get_with_meta(location)
             .map_err(|error| format!("the subscription could not be downloaded: {error}"));
     }
     if location.contains("://") {
-        return Ok(location.to_string());
+        return Ok((location.to_string(), ResponseMeta::default()));
     }
     let path = match location.strip_prefix("~/") {
         Some(rest) => std::env::var_os("HOME").map_or_else(
@@ -79,6 +92,7 @@ fn fetch(location: &str) -> Result<String, String> {
         None => PathBuf::from(location),
     };
     fs::read_to_string(&path)
+        .map(|content| (content, ResponseMeta::default()))
         .map_err(|error| format!("{} could not be read: {error}", path.display()))
 }
 
@@ -279,8 +293,13 @@ async fn import_subscription(
     } else {
         location.clone()
     };
-    let content = off_lock(move || fetch(&location)).await?;
-    with_backend(&state, move |backend| backend.import(&label, &content)).await
+    let (content, meta) = off_lock(move || fetch(&location)).await?;
+    with_backend(&state, move |backend| {
+        let result = backend.import(&label, &content)?;
+        backend.record_response(None, meta);
+        Ok(result)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -288,8 +307,84 @@ async fn update_subscription(state: State<'_, AppState>) -> Result<OperationResu
     let (id, location) = lock(&state.0)
         .refreshable_location()
         .ok_or("the current subscription is not a link that can be updated")?;
+    refresh_source(&state.0, id, location).await
+}
+
+#[tauri::command]
+async fn update_subscription_source(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<OperationResult, String> {
+    let location = lock(&state.0)
+        .source_location(&id)
+        .ok_or("this subscription is not a link that can be updated")?;
+    refresh_source(&state.0, id, location).await
+}
+
+/// Downloads source `id` again outside the lock and records the result.
+async fn refresh_source(
+    backend: &Arc<Mutex<Backend>>,
+    id: String,
+    location: String,
+) -> Result<OperationResult, String> {
     let fetched = off_lock(move || Ok(fetch(&location))).await?;
-    with_backend(&state, move |backend| backend.finish_refresh(&id, fetched)).await
+    let backend = backend.clone();
+    off_lock(move || {
+        let mut backend = lock(&backend);
+        let (content, meta) = match fetched {
+            Ok((content, meta)) => (Ok(content), Some(meta)),
+            Err(error) => (Err(error), None),
+        };
+        let result = backend.finish_refresh(&id, content);
+        if let (Ok(_), Some(meta)) = (&result, meta) {
+            backend.record_response(Some(&id), meta);
+        }
+        result
+    })
+    .await
+}
+
+#[tauri::command]
+async fn rename_subscription(
+    state: State<'_, AppState>,
+    id: String,
+    name: String,
+) -> Result<OperationResult, String> {
+    with_backend(&state, move |backend| {
+        backend.rename_subscription(&id, &name)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn set_subscription_interval(
+    state: State<'_, AppState>,
+    id: String,
+    hours: u32,
+) -> Result<OperationResult, String> {
+    with_backend(&state, move |backend| {
+        backend.set_subscription_interval(&id, hours)
+    })
+    .await
+}
+
+/// Updates every subscription whose interval has passed, checking once a minute.
+fn start_subscription_updates(backend: Arc<Mutex<Backend>>) {
+    thread::spawn(move || loop {
+        thread::sleep(Duration::from_secs(60));
+        let due = lock(&backend).due_sources();
+        for (id, location) in due {
+            let fetched = fetch(&location);
+            let mut backend = lock(&backend);
+            let (content, meta) = match fetched {
+                Ok((content, meta)) => (Ok(content), Some(meta)),
+                Err(error) => (Err(error), None),
+            };
+            if let (Ok(_), Some(meta)) = (backend.finish_refresh(&id, content), meta) {
+                backend.record_response(Some(&id), meta);
+            }
+        }
+    });
 }
 
 #[tauri::command]
@@ -361,6 +456,8 @@ pub fn run() -> Result<(), String> {
         });
     }
 
+    start_subscription_updates(shared.clone());
+
     let app = tauri::Builder::default()
         .manage(AppState(shared.clone()))
         .invoke_handler(tauri::generate_handler![
@@ -382,6 +479,9 @@ pub fn run() -> Result<(), String> {
             update_subscription,
             select_subscription,
             remove_subscription,
+            update_subscription_source,
+            rename_subscription,
+            set_subscription_interval,
             restore_network_settings,
             select_native_group_outbound,
             set_routing_mode,

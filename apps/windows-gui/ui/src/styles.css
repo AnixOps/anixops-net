@@ -240,6 +240,15 @@ input[type="checkbox"] { width: auto; height: auto; }
 .list-main small { overflow: hidden; color: var(--text2); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .groups li { align-items: flex-start; }
 .groups .list-icon { margin-top: 2px; }
+.subscription-row { flex-wrap: wrap; }
+.subscription-row .list-main { min-width: 220px; }
+.interval-select { width: auto; max-width: 180px; height: 28px; font-size: 12px; }
+.rename-row { display: flex; gap: 6px; align-items: center; }
+.rename-row input { height: 28px; }
+.usage-bar { display: block; height: 4px; margin-top: 4px; overflow: hidden; background: var(--border); border-radius: 2px; }
+.usage-bar > span { display: block; height: 100%; background: var(--primary); }
+.usage-bar > span.danger { background: var(--danger); }
+.danger-text { color: var(--danger); }
 .group-options { display: flex; flex-wrap: wrap; flex: 0 1 60%; gap: 6px; justify-content: flex-end; }
 .editor { margin-top: 8px; padding-top: 4px; border-top: 1px solid var(--border); }
 .details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px; margin: 0; }

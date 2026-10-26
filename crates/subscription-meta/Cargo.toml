@@ -1,0 +1,10 @@
+[package]
+name = "subscription-meta"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "What a subscription server says besides the node list: traffic, expiry, title and update interval."
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }

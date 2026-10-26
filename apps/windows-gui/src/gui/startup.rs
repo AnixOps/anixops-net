@@ -58,6 +58,28 @@ pub struct DesktopSubscriptionSource {
     pub error_code: Option<String>,
     #[serde(default)]
     pub last_update_error: Option<String>,
+    /// The user's name for it, else the server's title; the UI falls back to the host.
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Traffic and expiry from the last successful download's `subscription-userinfo` header.
+    #[serde(default)]
+    pub user_info: Option<subscription_meta::UserInfo>,
+    #[serde(default)]
+    pub node_count: Option<usize>,
+    /// Hours between automatic updates while this subscription is in use; 0 updates by hand only. Unset
+    /// follows the server's `profile-update-interval`, else the default.
+    #[serde(default)]
+    pub update_interval_hours: Option<u32>,
+    #[serde(default)]
+    pub suggested_interval_hours: Option<u32>,
+}
+
+impl DesktopSubscriptionSource {
+    pub fn effective_interval_hours(&self) -> u32 {
+        self.update_interval_hours
+            .or(self.suggested_interval_hours)
+            .unwrap_or(subscription_meta::DEFAULT_UPDATE_INTERVAL_HOURS)
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

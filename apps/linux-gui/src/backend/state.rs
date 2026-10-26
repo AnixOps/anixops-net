@@ -74,11 +74,51 @@ pub struct SavedSource {
     pub last_success: Option<u64>,
     pub last_attempt: Option<u64>,
     pub last_error: Option<String>,
+    /// The user's name for it, else the server's title; shown as the host when unset.
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Traffic and expiry from the last download's `subscription-userinfo` header.
+    #[serde(default)]
+    pub user_info: Option<subscription_meta::UserInfo>,
+    #[serde(default)]
+    pub node_count: Option<usize>,
+    /// Hours between automatic updates; 0 updates by hand only. Unset follows the server's
+    /// `profile-update-interval`, else the default.
+    #[serde(default)]
+    pub update_interval_hours: Option<u32>,
+    #[serde(default)]
+    pub suggested_interval_hours: Option<u32>,
 }
 
 impl SavedSource {
     pub fn refreshable(&self) -> bool {
         self.location.starts_with("https://") || self.location.starts_with("http://")
+    }
+
+    pub fn effective_interval_hours(&self) -> u32 {
+        self.update_interval_hours
+            .or(self.suggested_interval_hours)
+            .unwrap_or(subscription_meta::DEFAULT_UPDATE_INTERVAL_HOURS)
+    }
+
+    /// Whether an automatic update is due at `now` (Unix seconds).
+    pub fn update_due(&self, now: u64) -> bool {
+        self.refreshable()
+            && subscription_meta::is_due(self.last_success, self.effective_interval_hours(), now)
+    }
+
+    /// Keeps what the server said: its title names the source until the user renames it, and traffic
+    /// figures stay when a later download leaves the header out.
+    pub fn record_response(&mut self, meta: subscription_meta::ResponseMeta) {
+        if self.name.is_none() {
+            self.name = meta.title;
+        }
+        if meta.user_info.is_some() {
+            self.user_info = meta.user_info;
+        }
+        if meta.update_interval_hours.is_some() {
+            self.suggested_interval_hours = meta.update_interval_hours;
+        }
     }
 }
 
@@ -101,6 +141,11 @@ impl SavedState {
             last_success: Some(now),
             last_attempt: Some(now),
             last_error: None,
+            name: None,
+            user_info: None,
+            node_count: None,
+            update_interval_hours: None,
+            suggested_interval_hours: None,
         });
         id
     }
@@ -268,6 +313,50 @@ mod tests {
         assert!(!state.select_source("missing"));
         let third = state.add_source("ss://example", 3);
         assert_ne!(third, first, "ids are never reused");
+    }
+
+    #[test]
+    fn sources_keep_server_meta_and_update_on_their_interval() {
+        let mut state = SavedState::default();
+        let id = state.add_source("https://example.com/sub", 1000);
+        let source = state
+            .sources
+            .iter_mut()
+            .find(|source| source.id == id)
+            .unwrap();
+        assert_eq!(
+            source.effective_interval_hours(),
+            subscription_meta::DEFAULT_UPDATE_INTERVAL_HOURS
+        );
+        source.record_response(subscription_meta::ResponseMeta {
+            user_info: subscription_meta::UserInfo::parse("upload=1; download=2; total=10"),
+            update_interval_hours: Some(6),
+            title: Some("Airport".to_string()),
+        });
+        assert_eq!(source.name.as_deref(), Some("Airport"));
+        assert_eq!(source.user_info.and_then(|info| info.used()), Some(3));
+        assert_eq!(source.effective_interval_hours(), 6);
+        assert!(!source.update_due(1000 + 6 * 3600 - 1));
+        assert!(source.update_due(1000 + 6 * 3600));
+
+        // A rename and the last known traffic survive a download without those headers.
+        source.name = Some("Mine".to_string());
+        source.record_response(subscription_meta::ResponseMeta {
+            title: Some("Other".to_string()),
+            ..Default::default()
+        });
+        assert_eq!(source.name.as_deref(), Some("Mine"));
+        assert_eq!(source.user_info.and_then(|info| info.total), Some(10));
+
+        source.update_interval_hours = Some(0);
+        assert!(!source.update_due(u64::MAX));
+        let pasted = state.add_source("ss://example", 1);
+        assert!(!state
+            .sources
+            .iter()
+            .find(|source| source.id == pasted)
+            .unwrap()
+            .update_due(u64::MAX));
     }
 
     #[test]
