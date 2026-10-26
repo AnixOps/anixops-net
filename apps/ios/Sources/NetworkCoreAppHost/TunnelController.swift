@@ -2,6 +2,7 @@ import Foundation
 import NetworkCoreBridge
 import NetworkExtension
 #if os(iOS)
+import BackgroundTasks
 import WidgetKit
 #endif
 
@@ -21,11 +22,15 @@ final class TunnelController: ObservableObject {
     @Published private(set) var lastDisconnectError: String?
     /// When the current connection came up, for the elapsed time on the home screen.
     @Published private(set) var connectedSince: Date?
-    /// Every node of the last subscription or multi-node import, from the Keychain. Nil after a single-node import.
+    /// The library the tunnel runs: the active subscription group's nodes and rules, with the other groups its
+    /// rules can use (`SubscriptionGroups.activeLibrary()`). Nil while a single pasted node is in use.
     @Published private(set) var library: NodeLibrary?
-    /// Delay test results by node id.
+    /// Every subscription group, from the Keychain.
+    @Published private(set) var subscriptions = SubscriptionGroups()
+    /// Delay test results by `latencyKey(group:node:)`.
     @Published private(set) var latencies: [String: NodeLatency] = [:]
-    @Published private(set) var refreshingSubscription = false
+    /// Groups being downloaded now.
+    @Published private(set) var updatingGroups: Set<String> = []
 
     private var manager: NETunnelProviderManager?
     private var statusObserver: NSObjectProtocol?
@@ -62,9 +67,22 @@ final class TunnelController: ObservableObject {
         } catch {
             message = String(localized: "无法读取 VPN 配置")
         }
-        library = (try? NodeSecretStore.value(account: NodeLibrary.keychainAccount))
-            .flatMap { $0 }
-            .flatMap { try? NodeLibrary.fromKeychainValue($0) }
+        switch Result(catching: { try NodeSecretStore.value(account: SubscriptionGroups.keychainAccount) }) {
+        case let .success(.some(value)):
+            if let saved = try? SubscriptionGroups.fromKeychainValue(value) {
+                subscriptions = saved
+                library = saved.activeLibrary()
+            }
+        case .failure:
+            // The Keychain is not readable now (for example before the first unlock); keep what is shown.
+            break
+        case .success(.none):
+            // A library saved before subscription groups existed becomes the first group.
+            let previous = (try? NodeSecretStore.value(account: NodeLibrary.keychainAccount))
+                .flatMap { $0 }
+                .flatMap { try? NodeLibrary.fromKeychainValue($0) }
+            store(SubscriptionGroups.migrating(previous, name: String(localized: "导入的节点")))
+        }
         refresh()
     }
 
@@ -97,12 +115,13 @@ final class TunnelController: ObservableObject {
         message = nil
     }
 
-    /// Saves the node as the tunnel profile; a subscription link is downloaded first and every node goes to the
-    /// node list. Returns whether it was saved; on failure `message` says why.
+    /// Saves the node as the tunnel profile. A subscription link is downloaded into its own subscription group (an
+    /// existing group for that link is updated instead), and pasted multi-node text becomes a group too; either
+    /// group becomes active. Returns whether it was saved; on failure `message` says why.
     @discardableResult
     func importLink(_ link: String) async -> Bool {
         if let url = SubscriptionLink.url(from: link) {
-            return await importSubscription(url, refreshing: nil)
+            return await updateSubscription(url, groupID: subscriptions.group(url: url.absoluteString)?.id, activate: true)
         }
         let imported: TunnelImport
         do {
@@ -118,84 +137,166 @@ final class TunnelController: ObservableObject {
             message = String(localized: "无法解析节点")
             return false
         }
-        let nodes = imported.report.map { NodeLibrary(report: $0, subscriptionURL: nil, keeping: nil) }
-        guard await save(imported.profile, routed: nodes?.routesByRules == true) else {
+        var groups = subscriptions
+        if let report = imported.report {
+            let group = SubscriptionGroup(
+                name: String(localized: "导入的节点"),
+                library: NodeLibrary(report: report, subscriptionURL: nil, keeping: nil),
+                updateIntervalHours: 0
+            )
+            groups.upsert(group)
+            groups.activeID = group.id
+        } else {
+            // A single node runs on its own; the subscription groups stay for switching back.
+            groups.activeID = nil
+        }
+        guard await save(imported.profile, routed: groups.activeLibrary()?.routesByRules == true) else {
             return false
         }
-        storeLibrary(nodes)
+        store(groups)
         return true
     }
 
-    /// Re-downloads the current subscription and keeps the selected node, the rules switch and the group picks
-    /// where they still apply.
+    /// Downloads one subscription group again. The selected node, the rules switch and the group picks carry
+    /// over where they still apply.
     @discardableResult
-    func refreshSubscription() async -> Bool {
-        guard let current = library, let link = current.subscriptionURL, let url = URL(string: link) else {
+    func refreshSubscription(_ groupID: String) async -> Bool {
+        guard let group = subscriptions.group(id: groupID), let link = group.url, let url = URL(string: link) else {
             return false
         }
-        refreshingSubscription = true
-        defer { refreshingSubscription = false }
-        return await importSubscription(url, refreshing: current)
+        return await updateSubscription(url, groupID: groupID, activate: false)
     }
 
-    /// Switches between the subscription's rules and groups and the selected node alone. A running tunnel
+    /// Downloads every group that has a link, one after another.
+    func refreshAllSubscriptions() async {
+        for group in subscriptions.groups where group.isUpdatable {
+            await refreshSubscription(group.id)
+        }
+    }
+
+    /// Automatic update: downloads the groups whose interval has passed. Failures only mark the group, so a
+    /// background run never leaves a message on screen.
+    func refreshDueSubscriptions(at date: Date = Date()) async {
+        let shown = message
+        for group in subscriptions.due(at: date) {
+            await refreshSubscription(group.id)
+        }
+        message = shown
+        scheduleBackgroundRefresh()
+    }
+
+    func renameSubscription(_ groupID: String, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard var group = subscriptions.group(id: groupID), !trimmed.isEmpty else {
+            return
+        }
+        group.name = String(trimmed.prefix(SubscriptionGroup.maxNameLength))
+        var groups = subscriptions
+        groups.upsert(group)
+        store(groups)
+    }
+
+    /// `hours` 0 updates by hand only.
+    func setUpdateInterval(_ groupID: String, hours: Int) {
+        guard let group = subscriptions.group(id: groupID) else {
+            return
+        }
+        var groups = subscriptions
+        groups.upsert(SubscriptionGroup(
+            id: group.id,
+            name: group.name,
+            library: group.library,
+            userInfo: group.userInfo,
+            updateIntervalHours: hours,
+            lastFailureAt: group.lastFailureAt
+        ))
+        store(groups)
+        scheduleBackgroundRefresh()
+    }
+
+    /// Deletes a group. When it was active, the next group takes over and a running tunnel restarts on it.
+    func deleteSubscription(_ groupID: String) async {
+        var groups = subscriptions
+        let wasActive = groups.activeID == groupID
+        groups.remove(id: groupID)
+        let wasRunning = isConnected
+        if wasActive, groups.active != nil {
+            guard await saveActiveProfile(groups) else {
+                return
+            }
+        }
+        store(groups)
+        latencies = latencies.filter { !$0.key.hasPrefix(Self.latencyKey(group: groupID, node: "")) }
+        if wasActive, wasRunning, groups.active != nil {
+            restart()
+        }
+    }
+
+    /// Switches between the active group's rules and groups and its selected node alone. A running tunnel
     /// restarts on the new setting.
     func setFollowsRules(_ on: Bool) async {
-        guard var nodes = library, nodes.routing != nil, nodes.followsRules != on, let selected = nodes.selected else {
+        guard var group = subscriptions.active, group.library.routing != nil, group.library.followsRules != on else {
             return
         }
-        let profile: TunnelProfile
-        do {
-            profile = try TunnelProfile(node: selected, profileID: Self.profileID)
-        } catch {
-            message = String(localized: "无法生成隧道配置")
-            return
-        }
-        nodes.followsRules = on
+        group.library.followsRules = on
+        var groups = subscriptions
+        groups.upsert(group)
         let wasRunning = isConnected
-        guard await save(profile, routed: nodes.routesByRules) else {
+        guard await saveActiveProfile(groups) else {
             return
         }
-        storeLibrary(nodes)
+        store(groups)
         if wasRunning {
             restart()
         }
     }
 
-    /// Picks the member a `select` group uses. A tunnel running by the rules restarts on it.
+    /// Picks the member a `select` group uses. In the policy group of another subscription group this picks that
+    /// group's selected node. A tunnel running by the rules restarts on it.
     func selectMember(_ member: String, inGroup groupID: String) async {
-        guard var nodes = library,
-              let group = nodes.routing?.groups.first(where: { $0.id == groupID }),
-              group.isSelectable, group.members.contains(member), nodes.selection(in: group) != member
+        guard let current = library,
+              let group = current.routing?.groups.first(where: { $0.id == groupID }),
+              group.isSelectable, group.members.contains(member), current.selection(in: group) != member
         else {
             return
         }
-        nodes.groupSelections[groupID] = member
-        storeLibrary(nodes)
-        if nodes.routesByRules, isConnected {
+        var groups = subscriptions
+        if let link = groups.linkedGroups().first(where: { $0.policyID == groupID }),
+           var linked = groups.group(id: link.groupID), member.hasPrefix(link.prefix) {
+            linked.library.selectedID = String(member.dropFirst(link.prefix.count))
+            groups.upsert(linked)
+        } else if var active = groups.active {
+            active.library.groupSelections[groupID] = member
+            groups.upsert(active)
+        } else {
+            return
+        }
+        store(groups)
+        if current.routesByRules, isConnected {
             restart()
         }
     }
 
-    /// Makes `id` the tunnel's node. A running tunnel restarts on it unless the subscription's rules pick the nodes.
-    func selectNode(_ id: String) async {
-        guard var nodes = library, let node = nodes.node(id: id), nodes.selectedID != id else {
+    /// Makes a node of any group the tunnel's node; its group becomes active. A running tunnel restarts on it
+    /// unless that group's rules pick the nodes.
+    func selectNode(_ nodeID: String, inGroup groupID: String) async {
+        guard var group = subscriptions.group(id: groupID), group.library.node(id: nodeID) != nil else {
             return
         }
-        let profile: TunnelProfile
-        do {
-            profile = try TunnelProfile(node: node, profileID: Self.profileID)
-        } catch {
-            message = String(localized: "无法生成隧道配置")
+        let sameGroup = subscriptions.activeID == groupID
+        if sameGroup, group.library.selectedID == nodeID {
             return
         }
+        group.library.selectedID = nodeID
+        var groups = subscriptions
+        groups.upsert(group)
+        groups.activeID = groupID
         let wasRunning = isConnected
-        guard await save(profile, routed: nodes.routesByRules) else {
+        guard await saveActiveProfile(groups) else {
             return
         }
-        nodes.selectedID = id
-        storeLibrary(nodes)
-        if wasRunning, !nodes.routesByRules {
+        store(groups)
+        if wasRunning, !(sameGroup && group.library.routesByRules) {
             restart()
         }
     }
@@ -206,22 +307,30 @@ final class TunnelController: ObservableObject {
         manager?.connection.stopVPNTunnel()
     }
 
-    /// HTTP delay test of every listed node through its own protocol, a few at a time (`NodeDelayFFI`).
+    /// The `latencies` key of a node in a group; node ids repeat across subscriptions.
+    static func latencyKey(group: String, node: String) -> String {
+        "\(group)\u{1F}\(node)"
+    }
+
+    /// HTTP delay test of every node of every group through its own protocol, a few at a time (`NodeDelayFFI`).
     func testLatency() async {
-        guard let nodes = library?.nodes, !nodes.isEmpty else {
+        let nodes = subscriptions.groups.flatMap { group in
+            group.library.nodes.map { (Self.latencyKey(group: group.id, node: $0.id), $0) }
+        }
+        guard !nodes.isEmpty else {
             return
         }
-        for node in nodes {
-            latencies[node.id] = .measuring
+        for (key, _) in nodes {
+            latencies[key] = .measuring
         }
         let profileID = Self.profileID
         let batch = 8
         for start in stride(from: 0, to: nodes.count, by: batch) {
             let slice = nodes[start..<min(start + batch, nodes.count)]
             let results = await withTaskGroup(of: (String, NodeLatency).self, returning: [(String, NodeLatency)].self) { group in
-                for node in slice {
+                for (key, node) in slice {
                     group.addTask {
-                        (node.id, await NodeDelayFFI.measureOffPool(node, profileID: profileID))
+                        (key, await NodeDelayFFI.measureOffPool(node, profileID: profileID))
                     }
                 }
                 var results: [(String, NodeLatency)] = []
@@ -230,18 +339,34 @@ final class TunnelController: ObservableObject {
                 }
                 return results
             }
-            for (id, result) in results {
-                latencies[id] = result
+            for (key, result) in results {
+                latencies[key] = result
             }
         }
     }
 
-    /// Downloads and imports a subscription; `refreshing` is the library it replaces, nil for a new subscription.
-    private func importSubscription(_ url: URL, refreshing previous: NodeLibrary?) async -> Bool {
+    /// Downloads a subscription into the group `groupID`, or a new group when nil. `activate` makes the group the
+    /// tunnel's; a refresh of the active group saves the profile only when its node or rules switch changed.
+    private func updateSubscription(_ url: URL, groupID: String?, activate: Bool) async -> Bool {
+        if let groupID {
+            guard !updatingGroups.contains(groupID) else {
+                return false
+            }
+            updatingGroups.insert(groupID)
+        }
+        defer {
+            if let groupID {
+                updatingGroups.remove(groupID)
+            }
+        }
         let text: String
+        let response: SubscriptionResponseInfo
         do {
-            text = try await Self.download(url)
+            let downloaded = try await Self.download(url)
+            text = downloaded.0
+            response = downloaded.1
         } catch {
+            markFailure(groupID)
             message = String(localized: "订阅下载失败，请检查链接和网络")
             return false
         }
@@ -249,19 +374,67 @@ final class TunnelController: ObservableObject {
         do {
             report = try NativeImportReport.decoded(from: NativeNodeImporterFFI.importNodes(text))
         } catch let failure as NativeImportFailure {
+            markFailure(groupID)
             message = Self.describe(.native(failure))
             return false
         } catch {
+            markFailure(groupID)
             message = Self.describe(.native(.unavailable))
             return false
         }
-        let nodes = previous?.refreshed(with: report)
-            ?? NodeLibrary(report: report, subscriptionURL: url.absoluteString, keeping: nil)
-        guard let selected = nodes.selected else {
+        var groups = subscriptions
+        let previous = groups.activeLibrary()
+        let previousActiveID = groups.activeID
+        let group = groupID.flatMap { groups.group(id: $0) }?.refreshed(with: report, response: response)
+            ?? SubscriptionGroup(report: report, url: url.absoluteString, response: response)
+        guard group.library.selected != nil else {
+            markFailure(groupID)
             message = Self.describe(.native(.noSupportedNode(
                 protocols: report.unsupported.map(\.protocol),
                 reasons: []
             )))
+            return false
+        }
+        groups.upsert(group)
+        if activate {
+            groups.activeID = group.id
+        }
+        if groups.activeID == group.id {
+            // A refresh that keeps the same node and rules switch leaves the saved profile and the running tunnel
+            // alone.
+            let next = groups.activeLibrary()
+            let unchanged = previousActiveID == group.id
+                && previous?.selected == next?.selected
+                && previous?.routesByRules == next?.routesByRules
+            if !unchanged {
+                guard await saveActiveProfile(groups) else {
+                    return false
+                }
+            }
+        }
+        // Other groups may have changed while this one downloaded.
+        var latest = subscriptions
+        latest.upsert(group)
+        latest.activeID = groups.activeID
+        store(latest)
+        latencies = latencies.filter { !$0.key.hasPrefix(Self.latencyKey(group: group.id, node: "")) }
+        return true
+    }
+
+    private func markFailure(_ groupID: String?) {
+        guard let groupID, var group = subscriptions.group(id: groupID) else {
+            return
+        }
+        group.lastFailureAt = Date()
+        var groups = subscriptions
+        groups.upsert(group)
+        store(groups)
+    }
+
+    /// Saves the profile for the active group's selected node, routed when that group follows its rules.
+    private func saveActiveProfile(_ groups: SubscriptionGroups) async -> Bool {
+        guard let library = groups.activeLibrary(), let selected = library.selected else {
+            message = String(localized: "没有可用的节点")
             return false
         }
         let profile: TunnelProfile
@@ -271,21 +444,13 @@ final class TunnelController: ObservableObject {
             message = String(localized: "无法生成隧道配置")
             return false
         }
-        // A refresh that keeps the same node and rules switch leaves the saved profile and the running tunnel alone.
-        let unchanged = previous?.selected == selected && previous?.routesByRules == nodes.routesByRules
-        if !unchanged {
-            guard await save(profile, routed: nodes.routesByRules) else {
-                return false
-            }
-        }
-        storeLibrary(nodes)
-        return true
+        return await save(profile, routed: library.routesByRules)
     }
 
     /// Subscription bodies are text; the importer refuses anything larger than this.
     private static let maxSubscriptionBytes = 4 * 1024 * 1024
 
-    private static func download(_ url: URL) async throws -> String {
+    private static func download(_ url: URL) async throws -> (String, SubscriptionResponseInfo) {
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
         request.setValue("AnixOpsNet/1.0", forHTTPHeaderField: "User-Agent")
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -294,20 +459,40 @@ final class TunnelController: ObservableObject {
         else {
             throw URLError(.badServerResponse)
         }
-        return String(decoding: data, as: UTF8.self)
+        return (String(decoding: data, as: UTF8.self), SubscriptionResponseInfo(header: { http.value(forHTTPHeaderField: $0) }))
     }
 
-    private func storeLibrary(_ nodes: NodeLibrary?) {
-        if library?.nodes != nodes?.nodes {
-            latencies = [:]
+    /// Saves the groups and the library the extension reads, both to the Keychain.
+    private func store(_ groups: SubscriptionGroups) {
+        let next = groups.activeLibrary()
+        subscriptions = groups
+        library = next
+        if let value = try? groups.keychainValue() {
+            _ = try? NodeSecretStore.save(value, account: SubscriptionGroups.keychainAccount)
         }
-        library = nodes
-        if let nodes, let value = try? nodes.keychainValue() {
+        if let next, let value = try? next.keychainValue() {
             _ = try? NodeSecretStore.save(value, account: NodeLibrary.keychainAccount)
         } else {
             try? NodeSecretStore.delete(account: NodeLibrary.keychainAccount)
         }
     }
+
+    /// iOS runs `refreshDueSubscriptions` in the background around the next group's update time
+    /// (`NetworkCoreAppMain`). Nothing to schedule when every group updates by hand.
+    func scheduleBackgroundRefresh() {
+        #if os(iOS)
+        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.backgroundRefreshID)
+        guard let next = subscriptions.nextUpdate else {
+            return
+        }
+        let request = BGAppRefreshTaskRequest(identifier: Self.backgroundRefreshID)
+        request.earliestBeginDate = max(next, Date().addingTimeInterval(15 * 60))
+        try? BGTaskScheduler.shared.submit(request)
+        #endif
+    }
+
+    /// Listed under `BGTaskSchedulerPermittedIdentifiers` in project.yml.
+    static let backgroundRefreshID = "net.anixops.subscriptions.refresh"
 
     /// Saves `profile` as the tunnel profile; `routed` makes the extension follow the node library's rules.
     private func save(_ profile: TunnelProfile, routed: Bool = false) async -> Bool {

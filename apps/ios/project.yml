@@ -41,6 +41,11 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         ITSAppUsesNonExemptEncryption: false
+        # Subscription groups update in the background (TunnelController.scheduleBackgroundRefresh).
+        UIBackgroundModes:
+          - fetch
+        BGTaskSchedulerPermittedIdentifiers:
+          - net.anixops.subscriptions.refresh
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.networkcore.ios

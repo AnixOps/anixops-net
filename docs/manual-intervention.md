@@ -71,3 +71,14 @@ ios-upload-internal-workflow-secrets=APP_STORE_CONNECT_API_KEY_ID,APP_STORE_CONN
 前台隧道原有的人工验收要求随功能一并移除（历史见内核仓库
 `docs/archive/2026-10-removed-engines/windows-stage-4-pop-peer-manual-acceptance.md`）。SD-WAN 组网将在
 ANX 私有协议中重新提供。
+
+## iOS 订阅组与自动更新真机验收
+
+CI 只能编译和跑单元测试，以下需在 TestFlight 真机上确认：
+
+- 旧版本升级后，原来的订阅变成第一个订阅组且仍是当前节点。
+- 导入两个订阅链接后，代理页出现两个订阅组，各自显示节点数、更新时间；机场返回 `subscription-userinfo` 时显示已用/总流量和到期日。
+- 订阅组菜单的“立即更新”、“自动更新”间隔、重命名、删除可用；下拉刷新更新全部订阅。
+- 点另一个订阅组的节点会切到该组并重连。
+- 带规则的订阅按规则分流时，“规则”页的选择组里出现“订阅·名称”成员，选它后流量走另一个订阅组的节点。
+- 后台刷新：设置 > 通用 > 后台 App 刷新打开时，把间隔设为 1 小时，一段时间后不打开 App 也能看到更新时间变化（iOS 调度时间不保证）。
