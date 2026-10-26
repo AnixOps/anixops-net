@@ -13,7 +13,7 @@
 - [ ] 在仓库或 environment Variables 中写入 `IOS_APP_BUNDLE_ID`、`IOS_TUNNEL_BUNDLE_ID`、`IOS_WIDGET_BUNDLE_ID`。
 - [ ] 手动运行一次 `iOS internal TestFlight`，确认能上传。迁移后 build number = 本仓库 workflow run number + 1000，
   保证比内核仓库上传过的 build 大。
-- [ ] Windows MSI 与 Linux GUI 的正式发布 workflow 尚未迁入，目前仍由内核仓库 `release.yml` 打包；迁入后再从内核仓库移除。
+- [x] Windows MSI / 便携 ZIP 与 Linux GUI tarball / .deb 的发布 workflow 已迁入本仓库 `release.yml`（`v*` tag 发布，手动触发只打包和证明）。推送发布 tag 需要维护者明确同意。
 
 ## iOS TestFlight/App Store Connect Upload Workflow
 
