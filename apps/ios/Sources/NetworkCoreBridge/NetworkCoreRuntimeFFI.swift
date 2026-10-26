@@ -9,7 +9,7 @@
 public enum NetworkCoreRuntimeFFI {
     public static let abiVersion: UInt32 = 1
     public static let dtoSchemaVersion: UInt32 = 1
-    public static let featureSetVersion: UInt32 = 1
+    public static let featureSetVersion: UInt32 = 2
 
     public struct Handshake: Sendable, Equatable {
         public let abiVersion: UInt32

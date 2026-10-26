@@ -105,6 +105,30 @@ final class EmbeddedRuntimeSession {
         return Data(bytes: pointer, count: buffer.len)
     }
 
+    /// Answers a runtime control request (`RuntimeControl`) with the runtime's JSON; nil when it refuses it.
+    func control(_ request: Data) -> Data? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let handle = handle else {
+            return nil
+        }
+        var buffer = NetworkCoreBuffer(ptr: nil, len: 0, cap: 0)
+        let code = request.withUnsafeBytes { raw -> Int32 in
+            guard let base = raw.bindMemory(to: UInt8.self).baseAddress else {
+                return NetworkCoreRuntimeFFI.Code.invalidArgument
+            }
+            return networkcore_ios_runtime_control(handle, base, raw.count, &buffer)
+        }
+        guard code == NetworkCoreRuntimeFFI.Code.ok else {
+            return nil
+        }
+        defer { networkcore_ios_runtime_free_buffer(buffer) }
+        guard let pointer = buffer.ptr, buffer.len > 0 else {
+            return nil
+        }
+        return Data(bytes: pointer, count: buffer.len)
+    }
+
     private func runningHandle() -> OpaquePointer? {
         lock.lock()
         defer { lock.unlock() }
