@@ -226,4 +226,13 @@ export const english: Record<string, string> = {
   "按延迟": "By delay",
   "全部测速": "Test all",
   "失败": "Failed",
+  "规则集": "Rule sets",
+  "当前连接正在使用的规则集。": "The rule sets the current connection uses.",
+  "已开始更新 {count} 个远程规则集": "Updating {count} remote rule sets",
+  "更新远程规则集": "Update remote rule sets",
+  "远程": "Remote",
+  "内置": "Built in",
+  "{count} 条": "{count} entries",
+  "尚未下载": "Not downloaded yet",
+  "上次下载失败：{error}": "Last download failed: {error}",
 };

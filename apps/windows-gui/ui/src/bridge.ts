@@ -100,6 +100,16 @@ export interface ConnectionsSnapshot {
   closed: ConnectionSnapshot[];
 }
 
+/** One rule set of the running engine. */
+export interface RuleSetStatus {
+  name: string;
+  source: "inline" | "remote";
+  entries: number;
+  /** Unix milliseconds of the last successful download. */
+  updated_at_ms?: number | null;
+  last_error?: string | null;
+}
+
 /** One node's result in a batch delay test. */
 export interface NodeDelay {
   nodeId: string;
@@ -172,6 +182,9 @@ export const desktop = {
   traffic: () => invoke<TrafficSnapshot>("runtime_control", { request: { cmd: "traffic" } }),
   connections: () => invoke<ConnectionsSnapshot>("runtime_control", { request: { cmd: "connections" } }),
   closeConnection: (id: number) => invoke<{ closed: boolean }>("runtime_control", { request: { cmd: "close_connection", id } }),
+  ruleSets: () => invoke<{ rule_sets: RuleSetStatus[] }>("runtime_control", { request: { cmd: "rule_sets" } }),
+  /** Downloads the remote rule sets again in the background; answers how many were scheduled. */
+  updateRuleSets: () => invoke<{ scheduled: number }>("runtime_control", { request: { cmd: "update_rule_sets" } }),
   closeAllConnections: () => invoke<{ closed: number }>("runtime_control", { request: { cmd: "close_all" } }),
   testDelay: (nodeId: string, url: string) =>
     invoke<OperationResult>("test_node_delay", { nodeId, url }),
