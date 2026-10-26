@@ -76,7 +76,7 @@ struct ProxiesView: View {
                     if library.routesByRules {
                         Text("正在按订阅规则分流，节点由策略组决定；可以在“规则”页切换策略组或关闭规则。")
                     }
-                    Text("延迟为到服务器端口的 TCP 连接时间；Hysteria2、TUIC 走 UDP，不在此测量。连接中切换节点会自动重连。")
+                    Text("延迟为经该节点请求 http://www.gstatic.com/generate_204 的 HTTP 真连接时间，5 秒无响应显示超时。连接中切换节点会自动重连。")
                 }
             }
         }
@@ -125,12 +125,16 @@ struct ProxiesView: View {
             Text("\(value) ms")
                 .font(.footnote.monospacedDigit())
                 .foregroundStyle(value < 300 ? brand.text2 : brand.danger)
-        case .failed:
+        case .timeout:
             Text("超时")
                 .font(.footnote)
                 .foregroundStyle(brand.danger)
-        case .notMeasurable:
-            Text("UDP")
+        case .failed:
+            Text("失败")
+                .font(.footnote)
+                .foregroundStyle(brand.danger)
+        case .unsupported:
+            Text("不支持")
                 .font(.footnote)
                 .foregroundStyle(brand.text3)
         }

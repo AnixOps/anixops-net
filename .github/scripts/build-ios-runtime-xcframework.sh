@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
-# Builds engine-embedded as a static XCFramework for the iOS and macOS packet tunnels,
-# and node-import as a second one for the iOS containing app (subscription import
-# without the tunnel engine). Runs only in GitHub Actions on macos-26; the output is
-# never committed. Both crates come from the kernel commit pinned in Cargo.toml and are built
-# inside that kernel checkout with the kernel's own Cargo.lock (see kernel-root.sh).
+# Builds engine-embedded (which includes node-import) as one static XCFramework. The iOS and
+# macOS packet tunnels run the tunnel with it; the containing apps use it for subscription import
+# and the HTTP delay test. Runs only in GitHub Actions on macos-26; the output is never committed.
+# The crate comes from the kernel commit pinned in Cargo.toml and is built inside that kernel
+# checkout with the kernel's own Cargo.lock (see kernel-root.sh).
 #
 # Usage: build-ios-runtime-xcframework.sh [device|all]
 #   device: iPhone slice only (archive and upload)
 #   all:    iPhone, simulator and universal macOS slices (default, CI Xcode build)
 #
-# Output: apps/ios/Generated/NetworkCoreRuntime.xcframework, whose headers expose the
-# Clang module NetworkCoreRuntimeC to the NetworkCorePacketTunnel and NetworkCoreMacTunnel targets,
-# and apps/ios/Generated/NetworkCoreImport.xcframework (module NetworkCoreImportC) for
-# the NetworkCoreApp target.
+# Output: apps/ios/Generated/NetworkCoreRuntime.xcframework, whose headers expose two Clang
+# modules: NetworkCoreRuntimeC (tunnel runtime and delay test) and NetworkCoreImportC (the
+# node-import C ABI, whose symbols the engine-embedded library carries).
 set -euo pipefail
 
 slices="${1:-all}"
@@ -48,20 +47,26 @@ export CARGO_PROFILE_RELEASE_DEBUG=0
 
 for target in "${targets[@]}"; do
   cargo build --locked --release --manifest-path "${kernel}/Cargo.toml" --target-dir "${target_dir}" \
-    -p engine-embedded -p node-import --lib --target "${target}"
+    -p engine-embedded --lib --target "${target}"
 done
 
-# package <crate dir> <library file> <header> <module> <xcframework name>
+# package <library file> <xcframework name> <crate dir>:<header>:<module>...
 package() {
-  local crate="$1" lib="$2" header="$3" module="$4" name="$5"
+  local lib="$1" name="$2"
+  shift 2
   local out="${root}/apps/ios/Generated/${name}.xcframework"
   local work="${RUNNER_TEMP:-${root}/target}/networkcore-ios-${name}"
   rm -rf "${work}" "${out}"
-  # Each module map sits in a directory named after its module: Xcode copies every linked
-  # XCFramework's headers into the same include/ directory, so two top-level module maps collide.
-  mkdir -p "${work}/headers/${module}" "${work}/device" "$(dirname "${out}")"
-  cp "${kernel}/crates/${crate}/include/${header}" "${work}/headers/${module}/"
-  printf 'module %s {\n    header "%s"\n    export *\n}\n' "${module}" "${header}" > "${work}/headers/${module}/module.modulemap"
+  mkdir -p "${work}/device" "$(dirname "${out}")"
+  # Each module map sits in a directory named after its module, so the module maps of one
+  # XCFramework (and of any other linked one, which Xcode copies into the same include/) never collide.
+  local spec crate header module
+  for spec in "$@"; do
+    IFS=: read -r crate header module <<< "${spec}"
+    mkdir -p "${work}/headers/${module}"
+    cp "${kernel}/crates/${crate}/include/${header}" "${work}/headers/${module}/"
+    printf 'module %s {\n    header "%s"\n    export *\n}\n' "${module}" "${header}" > "${work}/headers/${module}/module.modulemap"
+  done
 
   cp "${target_dir}/${device_target}/release/${lib}" "${work}/device/${lib}"
   local args=(-library "${work}/device/${lib}" -headers "${work}/headers")
@@ -92,5 +97,6 @@ package() {
   echo "Built ${out} (${slices})"
 }
 
-package engine-embedded libengine_embedded.a networkcore_ios_runtime.h NetworkCoreRuntimeC NetworkCoreRuntime
-package node-import libnode_import.a networkcore_import.h NetworkCoreImportC NetworkCoreImport
+package libengine_embedded.a NetworkCoreRuntime \
+  engine-embedded:networkcore_ios_runtime.h:NetworkCoreRuntimeC \
+  node-import:networkcore_import.h:NetworkCoreImportC
