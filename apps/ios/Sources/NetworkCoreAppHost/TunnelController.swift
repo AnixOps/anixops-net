@@ -785,6 +785,25 @@ final class TunnelController: ObservableObject {
         }
     }
 
+    /// The extension's hourly traffic by host and policy (`clear` empties it first). Nil while the tunnel is not
+    /// running, or when the extension is older than the statistics page.
+    func trafficStats(clear: Bool = false) async -> TrafficStats? {
+        guard let session = manager?.connection as? NETunnelProviderSession, isConnected else {
+            return nil
+        }
+        let message: TunnelAppMessage = clear ? .clearTrafficStats : .trafficStats
+        let data: Data? = await withCheckedContinuation { continuation in
+            do {
+                try session.sendProviderMessage(message.encoded) { data in
+                    continuation.resume(returning: data)
+                }
+            } catch {
+                continuation.resume(returning: nil)
+            }
+        }
+        return data.flatMap { try? TrafficStats.decoded(from: $0) }
+    }
+
     /// Asks the running extension for its sanitized runtime status.
     func refreshRuntimeStatus() {
         guard let session = manager?.connection as? NETunnelProviderSession, connection == .connected else {
