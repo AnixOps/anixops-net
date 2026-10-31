@@ -41,6 +41,14 @@ final class DashboardLayoutTests: XCTestCase {
         let layout = DashboardLayout(order: [.usage, .speed, .network, .dns, .exitIP, .groups], hidden: [.topHosts, .events])
         XCTAssertEqual(layout.rows, [[.usage], [.speed], [.network, .dns], [.exitIP], [.groups]])
     }
+
+    func testWideRowsFillFourSlots() {
+        let layout = DashboardLayout(order: [.usage, .speed, .network, .dns, .exitIP, .groups], hidden: [.topHosts, .events])
+        XCTAssertEqual(layout.rows(columns: 4), [[.usage, .speed, .network], [.dns, .exitIP, .groups]])
+        XCTAssertEqual(layout.rows(columns: 1), [[.usage], [.speed], [.network], [.dns], [.exitIP], [.groups]])
+        XCTAssertEqual(DashboardLayout.span(of: .speed, columns: 4), 2)
+        XCTAssertEqual(DashboardLayout.span(of: .speed, columns: 1), 1)
+    }
 }
 
 final class DashboardDataTests: XCTestCase {
