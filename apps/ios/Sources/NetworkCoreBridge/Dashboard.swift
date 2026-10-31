@@ -177,30 +177,7 @@ public struct HostTraffic: Equatable, Identifiable, Sendable {
     /// The hosts that moved the most bytes over the active and recently closed connections, largest first.
     /// Connections without a host name count under their destination address without the port.
     public static func top(_ list: RuntimeControl.Connections, limit: Int = 5) -> [HostTraffic] {
-        struct Sum {
-            var bytes: UInt64 = 0
-            var connections = 0
-            var byOutbound: [String: UInt64] = [:]
-        }
-        var sums: [String: Sum] = [:]
-        for connection in list.active + list.closed {
-            let host = hostName(of: connection)
-            let bytes = connection.upload &+ connection.download
-            var sum = sums[host, default: Sum()]
-            sum.bytes &+= bytes
-            sum.connections += 1
-            sum.byOutbound[connection.outbound, default: 0] &+= bytes
-            sums[host] = sum
-        }
-        let hosts = sums.map { host, sum in
-            let outbound = sum.byOutbound.max { lhs, rhs in
-                lhs.value == rhs.value ? lhs.key > rhs.key : lhs.value < rhs.value
-            }?.key ?? ""
-            return HostTraffic(host: host, bytes: sum.bytes, connections: sum.connections, outbound: outbound)
-        }
-        return Array(hosts.filter { $0.bytes > 0 }
-            .sorted { $0.bytes == $1.bytes ? $0.host < $1.host : $0.bytes > $1.bytes }
-            .prefix(max(0, limit)))
+        Array(summarize(list.active + list.closed).filter { $0.bytes > 0 }.prefix(max(0, limit)))
     }
 
     static func hostName(of connection: RuntimeControl.Connection) -> String {

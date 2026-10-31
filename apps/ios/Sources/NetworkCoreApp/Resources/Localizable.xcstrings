@@ -1,6 +1,16 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    " · 已暂停刷新": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " · paused"
+          }
+        }
+      }
+    },
     "%@ · 当前": {
       "localizations": {
         "en": {
@@ -71,12 +81,32 @@
         }
       }
     },
+    "%lld 个请求 · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld requests · %2$@"
+          }
+        }
+      }
+    },
     "%lld 个连接": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "%lld connections"
+          }
+        }
+      }
+    },
+    "%lld 个连接 · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld connections · %2$@"
           }
         }
       }
@@ -467,6 +497,16 @@
         }
       }
     },
+    "不到 1 秒": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "<1 s"
+          }
+        }
+      }
+    },
     "不支持": {
       "localizations": {
         "en": {
@@ -793,6 +833,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Outbound protocol"
+          }
+        }
+      }
+    },
+    "出错": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed"
           }
         }
       }
@@ -1297,6 +1347,16 @@
         }
       }
     },
+    "已拦截": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blocked"
+          }
+        }
+      }
+    },
     "已断开": {
       "localizations": {
         "en": {
@@ -1323,6 +1383,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Used %1$@ / %2$@"
+          }
+        }
+      }
+    },
+    "已结束": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ended"
           }
         }
       }
@@ -1573,6 +1643,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Drag the handles to reorder. Cards switched off don't show on Home."
+          }
+        }
+      }
+    },
+    "按主机": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "By host"
           }
         }
       }
@@ -1903,6 +1983,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Duration"
+          }
+        }
+      }
+    },
+    "显示这个主机的连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shows this host's connections"
           }
         }
       }
@@ -2517,6 +2607,16 @@
         }
       }
     },
+    "站点标识是本机按主机名生成的字母，不联网取图标。HTTPS、QUIC 等标签按端口推断。上传、下载为该连接经隧道的字节数。目标域名来自请求本身或 TLS SNI / HTTP Host，只保存在内存里，断开隧道即清空。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Site badges are letters made on this device from the host name; no icons are fetched. Tags such as HTTPS and QUIC are inferred from the port. Upload and download are the bytes each connection moved through the tunnel. Target names come from the request itself or its TLS SNI / HTTP Host, are kept only in memory and are cleared when the tunnel disconnects."
+          }
+        }
+      }
+    },
     "第 %lld 步，共 3 步": {
       "localizations": {
         "en": {
@@ -2957,6 +3057,16 @@
         }
       }
     },
+    "请求": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requests"
+          }
+        }
+      }
+    },
     "请求记录还没开放": {
       "localizations": {
         "en": {
@@ -3103,6 +3213,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No nodes yet"
+          }
+        }
+      }
+    },
+    "进行中": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Active"
           }
         }
       }
