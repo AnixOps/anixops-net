@@ -9,8 +9,14 @@ public enum TunnelAppMessage: Equatable {
     case diagnostics
     /// A runtime control request (`RuntimeControl`), answered with the runtime's JSON.
     case control(Data)
+    /// The extension's `TrafficStats`, answered as JSON.
+    case trafficStats
+    /// Clears the extension's `TrafficStats`; answered with the empty stats.
+    case clearTrafficStats
 
     private static let diagnosticsPayload = Data("diagnostics".utf8)
+    private static let trafficStatsPayload = Data("traffic-stats".utf8)
+    private static let clearTrafficStatsPayload = Data("traffic-stats-clear".utf8)
     private static let controlPrefix = Data("control:".utf8)
 
     public var encoded: Data {
@@ -21,12 +27,22 @@ public enum TunnelAppMessage: Equatable {
             return Self.diagnosticsPayload
         case let .control(request):
             return Self.controlPrefix + request
+        case .trafficStats:
+            return Self.trafficStatsPayload
+        case .clearTrafficStats:
+            return Self.clearTrafficStatsPayload
         }
     }
 
     public static func decode(_ data: Data) -> TunnelAppMessage {
         if data == diagnosticsPayload {
             return .diagnostics
+        }
+        if data == trafficStatsPayload {
+            return .trafficStats
+        }
+        if data == clearTrafficStatsPayload {
+            return .clearTrafficStats
         }
         if data.starts(with: controlPrefix) {
             return .control(Data(data.dropFirst(controlPrefix.count)))

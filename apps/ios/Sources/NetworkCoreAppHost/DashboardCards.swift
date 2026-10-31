@@ -249,7 +249,21 @@ private struct UsageTile: View {
     @Environment(\.brand) private var brand
 
     var body: some View {
-        Tile(card: .usage) {
+        NavigationLink {
+            TrafficStatsView(tunnel: tunnel)
+        } label: {
+            Tile(card: .usage) {
+                Disclosure()
+            } content: {
+                usage
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var usage: some View {
+        Group {
             if let traffic = model.traffic, tunnel.connection == .connected {
                 Text(TrafficFormat.bytes(traffic.uploadTotal &+ traffic.downloadTotal))
                     .font(.title3.weight(.semibold).monospacedDigit())
@@ -268,7 +282,7 @@ private struct UsageTile: View {
                     .font(.caption)
                     .foregroundStyle(brand.text2)
             } else {
-                TilePlaceholder(text: "连接后统计")
+                TilePlaceholder(text: "轻点查看 7 天统计")
             }
         }
     }

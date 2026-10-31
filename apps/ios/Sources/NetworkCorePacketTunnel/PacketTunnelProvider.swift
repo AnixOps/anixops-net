@@ -13,6 +13,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var memoryPressure: DispatchSourceMemoryPressure?
     /// Recent events for the app's developer mode. Same rule as the system log: fixed reasons and codes only.
     private let events = TunnelDiagnosticLog()
+    /// Hourly traffic by host and policy for the app's statistics page.
+    private let trafficStats = TrafficStatsRecorder()
 
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         Self.log.notice("startTunnel")
@@ -118,6 +120,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 try session.start()
                 self.session = session
                 self.startedAt = Date()
+                self.trafficStats.start { [weak session] request in
+                    session?.control(request)
+                }
                 completionHandler(nil)
             } catch let failure as EmbeddedRuntimeSession.Failure {
                 completionHandler(PacketTunnelFailure(reason: "embedded runtime could not start (code \(failure.code))"))
@@ -130,6 +135,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
         Self.log.notice("stopTunnel reason \(reason.rawValue, privacy: .public)")
         events.record("stopTunnel reason \(reason.rawValue)")
+        trafficStats.stop()
         session?.stop()
         session = nil
         startedAt = nil
@@ -158,6 +164,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             completionHandler?(session?.statusJSON())
         case let .control(request):
             completionHandler?(session?.control(request))
+        case .trafficStats:
+            completionHandler?(trafficStats.snapshot())
+        case .clearTrafficStats:
+            completionHandler?(trafficStats.clear())
         case .diagnostics:
             let diagnostics = TunnelDiagnostics(
                 runtimeStatus: session?.statusJSON().flatMap { String(data: $0, encoding: .utf8) },
