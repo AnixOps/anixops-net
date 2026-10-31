@@ -110,9 +110,19 @@ public struct TrafficStats: Codable, Equatable, Sendable {
                 sums[name, default: 0] &+= bytes
             }
         }
-        return Array(sums.map { Share(name: $0.key, bytes: $0.value) }
-            .sorted { $0.bytes == $1.bytes ? $0.name < $1.name : $0.bytes > $1.bytes }
-            .prefix(max(0, limit)))
+        let rows: [Share] = sums.map { name, bytes in
+            Share(name: name, bytes: bytes)
+        }
+        let sorted = rows.sorted(by: Self.isLarger)
+        return Array(sorted.prefix(max(0, limit)))
+    }
+
+    /// More bytes first; equal counts by name.
+    private static func isLarger(_ lhs: Share, _ rhs: Share) -> Bool {
+        if lhs.bytes != rhs.bytes {
+            return lhs.bytes > rhs.bytes
+        }
+        return lhs.name < rhs.name
     }
 
     public func encoded() throws -> Data {
@@ -146,8 +156,8 @@ public struct TrafficStatsCounter: Sendable {
         for connection in list.active + list.closed {
             let before = seen[connection.id]
             // A smaller count than before means the engine restarted and reused the id: count it from zero.
-            let upload = connection.upload >= (before?.upload ?? 0) ? connection.upload - (before?.upload ?? 0) : connection.upload
-            let download = connection.download >= (before?.download ?? 0) ? connection.download - (before?.download ?? 0) : connection.download
+            let upload = Self.delta(connection.upload, since: before?.upload)
+            let download = Self.delta(connection.download, since: before?.download)
             stats.add(
                 host: connection.hostName,
                 policy: connection.chain.first ?? connection.outbound,
@@ -158,6 +168,13 @@ public struct TrafficStatsCounter: Sendable {
             next[connection.id] = Seen(upload: connection.upload, download: connection.download)
         }
         seen = next
+    }
+
+    private static func delta(_ now: UInt64, since before: UInt64?) -> UInt64 {
+        guard let before, now >= before else {
+            return now
+        }
+        return now - before
     }
 
     /// Forgets the connections seen so far, for a new engine.
