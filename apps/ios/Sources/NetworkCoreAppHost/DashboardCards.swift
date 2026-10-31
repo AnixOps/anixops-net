@@ -51,16 +51,22 @@ struct DashboardGrid: View {
     @ObservedObject var model: DashboardModel
     let layout: DashboardLayout
     @Binding var tab: AppTab
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    /// Two slots a row on iPhone, four on a regular-width iPad window.
+    private var columns: Int {
+        sizeClass == .regular ? 4 : 2
+    }
 
     var body: some View {
         VStack(spacing: 12) {
-            ForEach(layout.rows, id: \.self) { row in
-                HStack(alignment: .top, spacing: 12) {
+            ForEach(layout.rows(columns: columns), id: \.self) { row in
+                SpanRow(spacing: 12) {
                     ForEach(row) { card in
                         cardView(card)
+                            .layoutValue(key: SlotSpan.self, value: DashboardLayout.span(of: card, columns: columns))
                     }
                 }
-                .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -84,6 +90,48 @@ struct DashboardGrid: View {
             ExitAddressTile(tunnel: tunnel, model: model)
         case .events:
             EventsTile(model: model)
+        }
+    }
+}
+
+/// How many slots a card takes in its `SpanRow`.
+private struct SlotSpan: LayoutValueKey {
+    static let defaultValue = 1
+}
+
+/// One dashboard row: the cards share the width in proportion to their slots and all take the height of the
+/// tallest, so a row of tiles lines up on both edges.
+private struct SpanRow: Layout {
+    var spacing: CGFloat
+
+    private func widths(_ subviews: Subviews, total: CGFloat) -> [CGFloat] {
+        let spans = subviews.map { CGFloat(max(1, $0[SlotSpan.self])) }
+        let slots = spans.reduce(0, +)
+        let free = max(0, total - spacing * CGFloat(max(0, subviews.count - 1)))
+        return spans.map { slots > 0 ? free * $0 / slots : 0 }
+    }
+
+    private func height(_ subviews: Subviews, widths: [CGFloat]) -> CGFloat {
+        zip(subviews, widths).map { subview, width in
+            subview.sizeThatFits(ProposedViewSize(width: width, height: nil)).height
+        }.max() ?? 0
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let total = proposal.width ?? 320
+        return CGSize(width: total, height: height(subviews, widths: widths(subviews, total: total)))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let widths = widths(subviews, total: bounds.width)
+        var x = bounds.minX
+        for (subview, width) in zip(subviews, widths) {
+            subview.place(
+                at: CGPoint(x: x, y: bounds.minY),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(width: width, height: bounds.height)
+            )
+            x += width + spacing
         }
     }
 }

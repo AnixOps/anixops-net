@@ -42,6 +42,12 @@ targets:
         NSCameraUsageDescription: 扫描节点或订阅二维码时使用相机，画面不会保存或上传。
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+        # iPad takes every orientation, which Split View and Stage Manager require.
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         ITSAppUsesNonExemptEncryption: false
         # Subscription groups update in the background (TunnelController.scheduleBackgroundRefresh).
         UIBackgroundModes:
@@ -53,8 +59,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.networkcore.ios
         # Not the XcodeGen `entitlements:` key: without `properties` it rewrites the committed file as an empty plist.
         CODE_SIGN_ENTITLEMENTS: Entitlements/NetworkCoreApp.entitlements
-        # iPhone only for internal TestFlight; iPad would need all four orientations and iPad icons.
-        TARGETED_DEVICE_FAMILY: "1"
+        # iPhone and iPad; on a regular-width iPad window RootView shows a sidebar instead of tabs.
+        TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     dependencies:
       - package: NetworkCoreIOS
@@ -88,7 +94,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.networkcore.ios.packettunnel
         CODE_SIGN_ENTITLEMENTS: Entitlements/NetworkCorePacketTunnel.entitlements
-        TARGETED_DEVICE_FAMILY: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
     dependencies:
       - package: NetworkCoreIOS
         product: NetworkCoreIOS
@@ -121,7 +127,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.networkcore.ios.widget
         CODE_SIGN_ENTITLEMENTS: Entitlements/NetworkCoreWidget.entitlements
-        TARGETED_DEVICE_FAMILY: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
     dependencies:
       - package: NetworkCoreIOS
         product: NetworkCoreIOS

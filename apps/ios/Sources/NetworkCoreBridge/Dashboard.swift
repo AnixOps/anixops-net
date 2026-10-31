@@ -93,29 +93,43 @@ public struct DashboardLayout: Equatable, Sendable {
         order = rest
     }
 
-    /// The visible cards laid out in rows: a wide card alone, narrow cards two at a time in order. A narrow card
-    /// followed by a wide one, or last, has a row of its own.
+    /// The visible cards laid out in rows of two: a wide card alone, narrow cards two at a time in order. A narrow
+    /// card followed by a wide one, or last, has a row of its own.
     public var rows: [[DashboardCard]] {
+        rows(columns: 2)
+    }
+
+    /// The visible cards laid out in rows of `columns` slots, in order: a narrow card takes one slot and a wide card
+    /// two. A card that does not fit closes the row; a row may end with free slots.
+    public func rows(columns: Int) -> [[DashboardCard]] {
+        let columns = max(1, columns)
         var rows: [[DashboardCard]] = []
-        var pending: DashboardCard?
+        var row: [DashboardCard] = []
+        var used = 0
         for card in visible {
-            if card.isWide {
-                if let narrow = pending {
-                    rows.append([narrow])
-                    pending = nil
-                }
-                rows.append([card])
-            } else if let narrow = pending {
-                rows.append([narrow, card])
-                pending = nil
-            } else {
-                pending = card
+            let span = Self.span(of: card, columns: columns)
+            if used + span > columns, !row.isEmpty {
+                rows.append(row)
+                row = []
+                used = 0
+            }
+            row.append(card)
+            used += span
+            if used >= columns {
+                rows.append(row)
+                row = []
+                used = 0
             }
         }
-        if let narrow = pending {
-            rows.append([narrow])
+        if !row.isEmpty {
+            rows.append(row)
         }
         return rows
+    }
+
+    /// The slots a card takes in a row of `columns`.
+    public static func span(of card: DashboardCard, columns: Int) -> Int {
+        card.isWide ? min(2, max(1, columns)) : 1
     }
 }
 
