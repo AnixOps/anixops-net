@@ -71,6 +71,16 @@
         }
       }
     },
+    "%lld 个连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld connections"
+          }
+        }
+      }
+    },
     "%lld 条": {
       "localizations": {
         "en": {
@@ -87,6 +97,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld hosts"
+          }
+        }
+      }
+    },
+    "%lld 条分流规则": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld routing rules"
           }
         }
       }
@@ -367,6 +387,16 @@
         }
       }
     },
+    "↑%@ ↓%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "↑%1$@ ↓%2$@"
+          }
+        }
+      }
+    },
     "上传": {
       "localizations": {
         "en": {
@@ -453,6 +483,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your traffic and browsing aren't collected"
+          }
+        }
+      }
+    },
+    "事件": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Events"
           }
         }
       }
@@ -547,6 +587,16 @@
         }
       }
     },
+    "低数据模式": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Low Data Mode"
+          }
+        }
+      }
+    },
     "使用中": {
       "localizations": {
         "en": {
@@ -627,12 +677,32 @@
         }
       }
     },
+    "全部": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All"
+          }
+        }
+      }
+    },
     "全部断开": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Close all"
+          }
+        }
+      }
+    },
+    "全部请求": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All requests"
           }
         }
       }
@@ -707,6 +777,16 @@
         }
       }
     },
+    "出口 IP": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exit IP"
+          }
+        }
+      }
+    },
     "出站协议": {
       "localizations": {
         "en": {
@@ -723,6 +803,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Share"
+          }
+        }
+      }
+    },
+    "分流模式": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Routing mode"
           }
         }
       }
@@ -793,6 +883,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cancel"
+          }
+        }
+      }
+    },
+    "只在你点按时查询，按当前模式和规则发出": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Looked up only when you tap, sent by the current mode and rules"
           }
         }
       }
@@ -883,6 +983,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connect or disconnect from Control Center."
+          }
+        }
+      }
+    },
+    "在线 %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Online %@"
           }
         }
       }
@@ -1187,6 +1297,16 @@
         }
       }
     },
+    "已断开": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disconnected"
+          }
+        }
+      }
+    },
     "已用 %@": {
       "localizations": {
         "en": {
@@ -1217,12 +1337,32 @@
         }
       }
     },
+    "已联网": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Online"
+          }
+        }
+      }
+    },
     "已连接": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Connected"
+          }
+        }
+      }
+    },
+    "已连接 · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected · %@"
           }
         }
       }
@@ -1303,6 +1443,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Current node"
+          }
+        }
+      }
+    },
+    "当前节点 %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current node %@"
+          }
+        }
+      }
+    },
+    "当前节点没有策略组": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The current node has no policy groups"
           }
         }
       }
@@ -1407,12 +1567,32 @@
         }
       }
     },
+    "拖动右侧把手调整顺序，关掉的卡片不在首页显示。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag the handles to reorder. Cards switched off don't show on Home."
+          }
+        }
+      }
+    },
     "按域名和 IP 分流、规则集和规则测试会放在这里。当前版本按节点配置转发全部流量。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Routing by domain and IP, rule sets and rule testing will live here. This version sends all traffic through the node."
+          }
+        }
+      }
+    },
+    "按流量计费的网络": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metered network"
           }
         }
       }
@@ -1697,6 +1877,16 @@
         }
       }
     },
+    "无网络": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No network"
+          }
+        }
+      }
+    },
     "无记录": {
       "localizations": {
         "en": {
@@ -1737,6 +1927,16 @@
         }
       }
     },
+    "暂无事件": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No events yet"
+          }
+        }
+      }
+    },
     "暂无活跃连接": {
       "localizations": {
         "en": {
@@ -1753,6 +1953,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Updated %@ ago"
+          }
+        }
+      }
+    },
+    "最近 60 秒": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last 60 s"
+          }
+        }
+      }
+    },
+    "有线网络": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wired"
           }
         }
       }
@@ -1837,6 +2057,26 @@
         }
       }
     },
+    "本次切换 %lld 次": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld switches this session"
+          }
+        }
+      }
+    },
+    "本次用量": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This session"
+          }
+        }
+      }
+    },
     "查看": {
       "localizations": {
         "en": {
@@ -1853,6 +2093,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "See whether you're connected and tap to connect or disconnect."
+          }
+        }
+      }
+    },
+    "查询中…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Looking up…"
+          }
+        }
+      }
+    },
+    "查询失败，轻点重试": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lookup failed, tap to retry"
           }
         }
       }
@@ -2047,6 +2307,16 @@
         }
       }
     },
+    "流量排行": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Top hosts"
+          }
+        }
+      }
+    },
     "浅色": {
       "localizations": {
         "en": {
@@ -2073,6 +2343,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dark"
+          }
+        }
+      }
+    },
+    "清空": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear"
           }
         }
       }
@@ -2287,6 +2567,16 @@
         }
       }
     },
+    "系统 DNS": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System DNS"
+          }
+        }
+      }
+    },
     "纯黑": {
       "localizations": {
         "en": {
@@ -2313,6 +2603,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "Import Another"
+          }
+        }
+      }
+    },
+    "编辑首页": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit Home"
+          }
+        }
+      }
+    },
+    "网络": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Network"
+          }
+        }
+      }
+    },
+    "网络切换到%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Network switched to %@"
+          }
+        }
+      }
+    },
+    "网络变化，正在恢复隧道": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Network changed, restoring the tunnel"
           }
         }
       }
@@ -2413,6 +2743,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The node link isn't valid"
+          }
+        }
+      }
+    },
+    "蜂窝网络": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cellular"
           }
         }
       }
@@ -2687,6 +3027,16 @@
         }
       }
     },
+    "轻点查询": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap to look up"
+          }
+        }
+      }
+    },
     "轻点连接": {
       "localizations": {
         "en": {
@@ -2737,6 +3087,16 @@
         }
       }
     },
+    "还没有流量": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No traffic yet"
+          }
+        }
+      }
+    },
     "还没有节点": {
       "localizations": {
         "en": {
@@ -2773,6 +3133,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connecting"
+          }
+        }
+      }
+    },
+    "连接后按主机统计流量": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Traffic by host shows once connected"
+          }
+        }
+      }
+    },
+    "连接后显示各策略组当前选择": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Each group's current choice shows once connected"
+          }
+        }
+      }
+    },
+    "连接后显示实时速度": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live speed shows once connected"
+          }
+        }
+      }
+    },
+    "连接后统计": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Counted once connected"
           }
         }
       }
@@ -2823,6 +3223,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Quit AnixOps Net"
+          }
+        }
+      }
+    },
+    "速度": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speed"
           }
         }
       }
