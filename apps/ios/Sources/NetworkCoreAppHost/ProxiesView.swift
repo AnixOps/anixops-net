@@ -167,23 +167,37 @@ struct ProxiesView: View {
                 .listRowBackground(brand.surface)
             if !collapsed.contains(group.id) || !filter.isEmpty {
                 ForEach(nodes) { node in
-                    Button {
-                        guard !routed else {
-                            return
+                    HStack(spacing: 4) {
+                        Button {
+                            guard !routed else {
+                                return
+                            }
+                            Task {
+                                await tunnel.selectNode(node.id, inGroup: group.id)
+                            }
+                        } label: {
+                            row(
+                                node,
+                                latency: tunnel.latencies[TunnelController.latencyKey(group: group.id, node: node.id)],
+                                selected: isActive && !routed && node.id == group.library.selectedID
+                            )
                         }
-                        Task {
-                            await tunnel.selectNode(node.id, inGroup: group.id)
+                        .buttonStyle(.plain)
+                        // Not `.disabled`: nodes the rules pick stay editable from the menu and swipe actions.
+                        .opacity(routed ? 0.6 : 1)
+                        // The node's actions open where the button is tapped, not only on a long press.
+                        Menu {
+                            nodeMenu(node, in: group)
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(brand.text2)
+                                .frame(width: 32, height: 32)
+                                .contentShape(Rectangle())
                         }
-                    } label: {
-                        row(
-                            node,
-                            latency: tunnel.latencies[TunnelController.latencyKey(group: group.id, node: node.id)],
-                            selected: isActive && !routed && node.id == group.library.selectedID
-                        )
+                        .menuOrder(.fixed)
+                        .accessibilityLabel(Text("\(node.displayName) 的操作"))
                     }
-                    .buttonStyle(.plain)
-                    // Not `.disabled`: nodes the rules pick stay editable from the menu and swipe actions.
-                    .opacity(routed ? 0.6 : 1)
                     .listRowBackground(brand.surface)
                     .contextMenu {
                         nodeMenu(node, in: group)

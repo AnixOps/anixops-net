@@ -100,7 +100,7 @@ struct HomeView: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(brand.primary)
                     .frame(width: 40, height: 40)
-                    .background(brand.raised, in: Circle())
+                    .brandGlass(Circle(), fallback: brand.raised)
             }
             .accessibilityLabel("编辑首页")
             Button {
@@ -110,7 +110,7 @@ struct HomeView: View {
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(brand.primary)
                     .frame(width: 40, height: 40)
-                    .background(brand.raised, in: Circle())
+                    .brandGlass(Circle(), fallback: brand.raised)
             }
             .accessibilityLabel("导入节点")
         }

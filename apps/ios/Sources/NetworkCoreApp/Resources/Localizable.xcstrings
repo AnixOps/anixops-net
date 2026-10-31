@@ -21,6 +21,16 @@
         }
       }
     },
+    "%@ 的操作": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actions for %@"
+          }
+        }
+      }
+    },
     "%@ 等 %lld 个": {
       "localizations": {
         "en": {
@@ -57,6 +67,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld members"
+          }
+        }
+      }
+    },
+    "%lld 个成员 · %lld 个有延迟": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld members · %2$lld with a delay"
+          }
+        }
+      }
+    },
+    "%lld 个成员 · 连接后显示延迟": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld members · delays show once connected"
+          }
+        }
+      }
+    },
+    "%lld 个成员中 %lld 个有延迟": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%2$lld of %1$lld members have a delay"
           }
         }
       }
@@ -807,6 +847,16 @@
         }
       }
     },
+    "内核自动选择": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Picked by the engine"
+          }
+        }
+      }
+    },
     "再点 %lld 次开启开发者模式": {
       "localizations": {
         "en": {
@@ -863,6 +913,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Routing mode"
+          }
+        }
+      }
+    },
+    "切换": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch"
+          }
+        }
+      }
+    },
+    "切换 %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch %@"
           }
         }
       }
@@ -2137,6 +2207,16 @@
         }
       }
     },
+    "未选择": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not selected"
+          }
+        }
+      }
+    },
     "未配置": {
       "localizations": {
         "en": {
@@ -2793,6 +2873,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Auto-select and fallback groups pick their node by latency and availability."
+          }
+        }
+      }
+    },
+    "色条是每个成员最近一次测得的延迟：青色低于 120 ms，琥珀色低于 250 ms，橙色更慢，灰色没有数据。自动选择和故障转移的组由内核按延迟和可用性挑选节点。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The strip shows each member's last measured delay: teal under 120 ms, amber under 250 ms, orange slower, gray no data. Auto-select and fallback groups are picked by the engine by delay and availability."
           }
         }
       }
