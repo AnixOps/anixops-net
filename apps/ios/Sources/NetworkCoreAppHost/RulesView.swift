@@ -6,6 +6,8 @@ import SwiftUI
 struct RulesView: View {
     @ObservedObject var tunnel: TunnelController
     @Environment(\.brand) private var brand
+    /// The running engine's groups by id: what each group uses now and its members' last delay.
+    @State private var runtime: [String: RuntimeControl.Groups.Group] = [:]
 
     var body: some View {
         NavigationStack {
@@ -32,6 +34,19 @@ struct RulesView: View {
             .background(brand.bg.ignoresSafeArea())
             .navigationTitle("规则")
             .brandBars(brand)
+            .task(id: tunnel.connection) {
+                while !Task.isCancelled, tunnel.connection == .connected {
+                    await loadRuntime()
+                    try? await Task.sleep(for: .seconds(5))
+                }
+                runtime = [:]
+            }
+        }
+    }
+
+    private func loadRuntime() async {
+        if let answer = RuntimeControl.decode(RuntimeControl.Groups.self, from: await tunnel.control(.groups)) {
+            runtime = Dictionary(answer.groups.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         }
     }
 
@@ -47,7 +62,7 @@ struct RulesView: View {
             } header: {
                 Text("策略组 · \(routing.rules.count) 条规则")
             } footer: {
-                Text("自动选择和故障转移的组由内核按延迟和可用性挑选节点。")
+                Text("色条是每个成员最近一次测得的延迟：青色低于 120 ms，琥珀色低于 250 ms，橙色更慢，灰色没有数据。自动选择和故障转移的组由内核按延迟和可用性挑选节点。")
             }
             .disabled(tunnel.mode != .rule)
 
@@ -83,40 +98,19 @@ struct RulesView: View {
         }
     }
 
-    @ViewBuilder
     private func groupRow(_ group: NativeImportReport.Routing.Group, library: NodeLibrary) -> some View {
-        if group.isSelectable {
-            Picker(selection: Binding(
-                get: { library.selection(in: group) ?? "" },
-                set: { member in
-                    Task {
-                        await tunnel.selectMember(member, inGroup: group.id)
-                    }
+        PolicyGroupCard(
+            group: group,
+            selected: library.selection(in: group),
+            runtime: runtime[group.id],
+            name: { name(of: $0, in: library) },
+            select: { member in
+                Task {
+                    await tunnel.selectMember(member, inGroup: group.id)
+                    await loadRuntime()
                 }
-            )) {
-                ForEach(group.members, id: \.self) { member in
-                    Text(verbatim: name(of: member, in: library))
-                        .tag(member)
-                }
-            } label: {
-                Text(verbatim: group.id)
             }
-            .pickerStyle(.menu)
-        } else {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(verbatim: group.id)
-                        .foregroundStyle(brand.text)
-                    Text(group.typeTitle)
-                        .font(.footnote)
-                        .foregroundStyle(brand.text2)
-                }
-                Spacer()
-                Text("\(group.members.count) 个成员")
-                    .font(.footnote)
-                    .foregroundStyle(brand.text2)
-            }
-        }
+        )
     }
 
     private func name(of member: String, in library: NodeLibrary) -> String {
