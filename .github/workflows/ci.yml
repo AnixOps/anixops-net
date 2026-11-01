@@ -97,6 +97,11 @@ jobs:
         shell: bash
         run: pnpm --dir apps/windows-gui/ui install --frozen-lockfile
 
+      - name: Audit production dependencies
+        # 打进安装包的前端依赖有 high 及以上公告就失败；开发依赖不进安装包。
+        shell: bash
+        run: pnpm --dir apps/windows-gui/ui audit --prod --audit-level high
+
       - name: Lint
         shell: bash
         run: pnpm --dir apps/windows-gui/ui run lint
@@ -116,6 +121,25 @@ jobs:
           path: apps/windows-gui/ui/dist
           if-no-files-found: error
           retention-days: 1
+
+  rust-deps:
+    name: Rust dependency advisories and licenses
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: changes
+    if: ${{ needs.changes.outputs.rust == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+
+      - name: cargo deny check
+        shell: bash
+        run: cargo deny --locked check advisories licenses sources
 
   rust-linux:
     name: Rust build and test (Linux)
@@ -683,6 +707,7 @@ jobs:
     needs:
       - changes
       - ui
+      - rust-deps
       - rust-linux
       - linux-gui
       - windows
