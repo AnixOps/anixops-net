@@ -102,7 +102,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             return
         }
 
-        guard let settings = Self.networkSettings(interface, remoteAddress: tunnelProtocol.serverAddress ?? "127.0.0.1") else {
+        guard let settings = Self.networkSettings(interface, remoteAddress: IPAddressText.tunnelRemoteAddress(for: tunnelProtocol.serverAddress)) else {
             completionHandler(PacketTunnelFailure(reason: "tunnel profile has invalid interface addresses"))
             return
         }
