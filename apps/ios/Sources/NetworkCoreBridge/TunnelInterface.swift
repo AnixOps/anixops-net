@@ -111,4 +111,16 @@ public enum IPAddressText {
         var address = in6_addr()
         return inet_pton(AF_INET6, text, &address) == 1
     }
+
+    /// The value for `NEPacketTunnelNetworkSettings(tunnelRemoteAddress:)`, which must be a numeric address:
+    /// iOS refuses the whole settings object ("Invalid NETunnelNetworkSettings tunnelRemoteAddress") for a host
+    /// name. The value is informational only (the provider's own sockets bypass the tunnel regardless), so a
+    /// domain, an empty string or a missing server falls back to the loopback address.
+    public static func tunnelRemoteAddress(for server: String?) -> String {
+        var text = (server ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("["), text.hasSuffix("]") {
+            text = String(text.dropFirst().dropLast())
+        }
+        return isIPv4(text) || isIPv6(text) ? text : "127.0.0.1"
+    }
 }
