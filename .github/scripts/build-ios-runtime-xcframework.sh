@@ -9,6 +9,11 @@
 #   device: iPhone slice only (archive and upload)
 #   all:    iPhone, simulator and universal macOS slices (default, CI Xcode build)
 #
+# NETWORKCORE_RUNTIME_PREBUILT_DIR (optional): skip the cargo build and package
+# <dir>/<target>/release/libengine_embedded.a instead. A downstream build uses it for a runtime
+# library that links engine-embedded from the same kernel commit and adds outbounds with
+# engine_embedded::protocols::register_extra_outbound; the C ABI and headers stay the kernel's.
+#
 # Output: apps/ios/Generated/NetworkCoreRuntime.xcframework, whose headers expose two Clang
 # modules: NetworkCoreRuntimeC (tunnel runtime and delay test) and NetworkCoreImportC (the
 # node-import C ABI, whose symbols the engine-embedded library carries).
@@ -52,10 +57,21 @@ simulator_sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
 export BINDGEN_EXTRA_CLANG_ARGS_aarch64_apple_ios_sim="-isysroot ${simulator_sdk}"
 export BINDGEN_EXTRA_CLANG_ARGS_x86_64_apple_ios="-isysroot ${simulator_sdk}"
 
-for target in "${targets[@]}"; do
-  cargo build --locked --release --manifest-path "${kernel}/Cargo.toml" --target-dir "${target_dir}" \
-    -p engine-embedded --lib --target "${target}"
-done
+if [[ -n "${NETWORKCORE_RUNTIME_PREBUILT_DIR:-}" ]]; then
+  target_dir="${NETWORKCORE_RUNTIME_PREBUILT_DIR}"
+  for target in "${targets[@]}"; do
+    if [[ ! -f "${target_dir}/${target}/release/libengine_embedded.a" ]]; then
+      echo "::error::prebuilt runtime library missing for ${target} in ${target_dir}"
+      exit 1
+    fi
+  done
+  echo "Using prebuilt runtime libraries from ${target_dir}"
+else
+  for target in "${targets[@]}"; do
+    cargo build --locked --release --manifest-path "${kernel}/Cargo.toml" --target-dir "${target_dir}" \
+      -p engine-embedded --lib --target "${target}"
+  done
+fi
 
 # package <library file> <xcframework name> <crate dir>:<header>:<module>...
 package() {
