@@ -164,8 +164,14 @@ private final class PacketWriter {
         self.packetFlow = packetFlow
     }
 
+    /// Called on the runtime's own long-lived thread, which has no autorelease pool of its own: without the
+    /// explicit pool every packet's bridged array, number and data objects stay alive until the thread exits, so
+    /// memory grows with traffic and a heavy download pushes the extension past the system memory limit
+    /// ("The VPN session failed because an internal error occurred").
     func write(_ packet: UnsafePointer<UInt8>, _ length: Int) {
-        let family = (packet.pointee >> 4) == 6 ? ipv6 : ipv4
-        packetFlow.writePackets([Data(bytes: packet, count: length)], withProtocols: [family])
+        autoreleasepool {
+            let family = (packet.pointee >> 4) == 6 ? ipv6 : ipv4
+            packetFlow.writePackets([Data(bytes: packet, count: length)], withProtocols: [family])
+        }
     }
 }
