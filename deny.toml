@@ -10,7 +10,19 @@ all-features = true
 version = 2
 # RustSec 公告直接让 CI 失败。确实不可达或已缓解的公告，在这里加
 # { id = "RUSTSEC-xxxx-xxxx", reason = "..." }，写清楚原因。
-ignore = []
+# 下面都是"unmaintained"（不再维护）公告，不是漏洞，且都经 Tauri 间接引入、上游没有可升级版本。
+# Tauri 换掉这些依赖后删掉对应条目；出现新的 unmaintained 公告仍会让 CI 失败。
+ignore = [
+    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error: gtk-rs 0.18 via tauri (Linux GUI), build-time proc macro, no upgrade" },
+    { id = "RUSTSEC-2025-0075", reason = "unic-char-range: urlpattern via tauri-utils, no upgrade" },
+    { id = "RUSTSEC-2025-0080", reason = "unic-common: urlpattern via tauri-utils, no upgrade" },
+    { id = "RUSTSEC-2025-0081", reason = "unic-char-property: urlpattern via tauri-utils, no upgrade" },
+    { id = "RUSTSEC-2025-0098", reason = "unic-ucd-version: urlpattern via tauri-utils, no upgrade" },
+    { id = "RUSTSEC-2025-0100", reason = "unic-ucd-ident: urlpattern via tauri-utils, no upgrade" },
+    { id = "RUSTSEC-2026-0370", reason = "zvariant: merged into zbus 6; zbus 5 via tauri-plugin-single-instance, no upgrade" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names: merged into zbus 6; zbus 5 via tauri-plugin-single-instance, no upgrade" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive: merged into zbus 6; zbus 5 via tauri-plugin-single-instance, no upgrade" },
+]
 
 [licenses]
 version = 2
@@ -49,7 +61,4 @@ unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 # 内核 crate 来自 networkcore_anixops（Apache-2.0），按 Cargo.toml 固定的 rev 引用。
-allow-git = [
-    "https://github.com/AnixOps/networkcore_anixops",
-    "https://github.com/AnixOps/networkcore_anixops.git",
-]
+allow-git = ["https://github.com/AnixOps/networkcore_anixops"]
