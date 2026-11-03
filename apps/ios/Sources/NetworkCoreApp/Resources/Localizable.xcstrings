@@ -1787,6 +1787,16 @@
         }
       }
     },
+    "技术详情": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Technical Details"
+          }
+        }
+      }
+    },
     "拒绝": {
       "localizations": {
         "en": {
@@ -1873,6 +1883,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Route by subscription rules"
+          }
+        }
+      }
+    },
+    "换个节点": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch Node"
           }
         }
       }
@@ -3227,6 +3247,16 @@
         }
       }
     },
+    "订阅下载失败：链接可能已失效，或当前网络连不上订阅服务器。现有节点仍可使用。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't download the subscription: the link may have expired, or this network can't reach the server. Your current nodes still work."
+          }
+        }
+      }
+    },
     "订阅内容过大": {
       "localizations": {
         "en": {
@@ -3637,6 +3667,16 @@
         }
       }
     },
+    "连接已断开：节点没有响应、被干扰，或网络刚切换。可以重试，或换一个节点。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disconnected: the node stopped answering, was interfered with, or the network just changed. Retry, or switch to another node."
+          }
+        }
+      }
+    },
     "连接或断开 AnixOps Net": {
       "localizations": {
         "en": {
@@ -3737,6 +3777,16 @@
         }
       }
     },
+    "重新下载订阅": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download Again"
+          }
+        }
+      }
+    },
     "重新检测信任状态": {
       "localizations": {
         "en": {
@@ -3803,6 +3853,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No camera access"
+          }
+        }
+      }
+    },
+    "重试": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retry"
           }
         }
       }
