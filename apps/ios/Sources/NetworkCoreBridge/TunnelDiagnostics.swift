@@ -95,6 +95,10 @@ public struct TunnelDiagnostics: Codable, Equatable {
     /// The runtime's sanitized status JSON as text, nil while no runtime session exists.
     public var runtimeStatus: String?
     public var memoryFootprintBytes: UInt64?
+    /// Highest footprint since the extension started.
+    public var peakMemoryFootprintBytes: UInt64?
+    /// Remaining headroom before the system memory limit, nil where the system does not report it.
+    public var memoryAvailableBytes: UInt64?
     public var uptimeSeconds: Double?
     public var runtimeABIVersion: UInt32
     public var runtimeSchemaVersion: UInt32
@@ -104,6 +108,8 @@ public struct TunnelDiagnostics: Codable, Equatable {
     enum CodingKeys: String, CodingKey {
         case runtimeStatus = "runtime_status"
         case memoryFootprintBytes = "memory_footprint_bytes"
+        case peakMemoryFootprintBytes = "peak_memory_footprint_bytes"
+        case memoryAvailableBytes = "memory_available_bytes"
         case uptimeSeconds = "uptime_seconds"
         case runtimeABIVersion = "runtime_abi_version"
         case runtimeSchemaVersion = "runtime_schema_version"
@@ -114,12 +120,16 @@ public struct TunnelDiagnostics: Codable, Equatable {
     public init(
         runtimeStatus: String?,
         memoryFootprintBytes: UInt64?,
+        peakMemoryFootprintBytes: UInt64? = nil,
+        memoryAvailableBytes: UInt64? = nil,
         uptimeSeconds: Double?,
         handshake: NetworkCoreRuntimeFFI.Handshake,
         events: [TunnelDiagnosticEvent]
     ) {
         self.runtimeStatus = runtimeStatus
         self.memoryFootprintBytes = memoryFootprintBytes
+        self.peakMemoryFootprintBytes = peakMemoryFootprintBytes
+        self.memoryAvailableBytes = memoryAvailableBytes
         self.uptimeSeconds = uptimeSeconds
         runtimeABIVersion = handshake.abiVersion
         runtimeSchemaVersion = handshake.dtoSchemaVersion
@@ -211,6 +221,8 @@ public struct DeveloperReport: Equatable {
             "runtime abi/schema/features: \(diagnostics.runtimeABIVersion)/\(diagnostics.runtimeSchemaVersion)/\(diagnostics.runtimeFeatureSetVersion)"
         )
         lines.append("extension memory: \(diagnostics.memoryFootprintBytes.map(Self.megabytes) ?? "unknown")")
+        lines.append("extension memory peak: \(diagnostics.peakMemoryFootprintBytes.map(Self.megabytes) ?? "unknown")")
+        lines.append("extension memory headroom: \(diagnostics.memoryAvailableBytes.map(Self.megabytes) ?? "unknown")")
         lines.append("extension uptime: \(diagnostics.uptimeSeconds.map(Self.duration) ?? "unknown")")
         lines.append("runtime status:")
         lines.append(diagnostics.runtimeStatus.map(Self.prettyJSON) ?? "none")

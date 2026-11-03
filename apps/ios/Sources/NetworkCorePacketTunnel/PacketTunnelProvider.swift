@@ -175,6 +175,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             let diagnostics = TunnelDiagnostics(
                 runtimeStatus: session?.statusJSON().flatMap { String(data: $0, encoding: .utf8) },
                 memoryFootprintBytes: Self.memoryFootprint(),
+                peakMemoryFootprintBytes: Self.peakMemoryFootprint(),
+                memoryAvailableBytes: Self.memoryAvailable(),
                 uptimeSeconds: startedAt.map { Date().timeIntervalSince($0) },
                 handshake: EmbeddedRuntimeSession.reportedHandshake(),
                 events: events.snapshot()
@@ -325,8 +327,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             }
             let level = source.data.contains(.critical) ? "critical" : "warning"
             let footprint = Self.memoryFootprint().map(DeveloperReport.megabytes) ?? "unknown"
+            let available = Self.memoryAvailable().map(DeveloperReport.megabytes) ?? "unknown"
             Self.log.notice("memory pressure \(level, privacy: .public)")
-            self.events.record("memory pressure \(level), footprint \(footprint)")
+            self.events.record("memory pressure \(level), footprint \(footprint), headroom \(available)")
         }
         source.resume()
         memoryPressure = source
@@ -334,6 +337,29 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     /// The extension's physical memory footprint, the figure iOS compares against the extension memory limit.
     static func memoryFootprint() -> UInt64? {
+        vmInfo()?.phys_footprint
+    }
+
+    /// The highest footprint since the extension started: a spike past the limit ends the session even when the
+    /// current footprint looks small.
+    static func peakMemoryFootprint() -> UInt64? {
+        // The ledger field is a signed int64_t, unlike phys_footprint.
+        guard let peak = vmInfo()?.ledger_phys_footprint_peak, peak >= 0 else {
+            return nil
+        }
+        return UInt64(peak)
+    }
+
+    /// How far the extension is from its memory limit (iOS only; nil elsewhere).
+    static func memoryAvailable() -> UInt64? {
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+            return UInt64(os_proc_available_memory())
+        #else
+            return nil
+        #endif
+    }
+
+    private static func vmInfo() -> task_vm_info_data_t? {
         var info = task_vm_info_data_t()
         var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
         let result = withUnsafeMutablePointer(to: &info) { pointer in
@@ -341,7 +367,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
             }
         }
-        return result == KERN_SUCCESS ? info.phys_footprint : nil
+        return result == KERN_SUCCESS ? info : nil
     }
 
     /// Interface settings from the saved profile. The provider's own sockets (to the proxy server or the

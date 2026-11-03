@@ -23,6 +23,8 @@ final class TunnelDiagnosticsTests: XCTestCase {
         let diagnostics = TunnelDiagnostics(
             runtimeStatus: #"{"dns_queries":3}"#,
             memoryFootprintBytes: 12_582_912,
+            peakMemoryFootprintBytes: 20_971_520,
+            memoryAvailableBytes: 31_457_280,
             uptimeSeconds: 61.5,
             handshake: .current,
             events: [TunnelDiagnosticEvent(time: Date(timeIntervalSince1970: 1_700_000_000.25), message: "startTunnel")]
@@ -53,6 +55,7 @@ final class TunnelDiagnosticsTests: XCTestCase {
             diagnostics: TunnelDiagnostics(
                 runtimeStatus: #"{"tcp_last_failure":"timeout","dns_queries":3}"#,
                 memoryFootprintBytes: 12_582_912,
+                peakMemoryFootprintBytes: 20_971_520,
                 uptimeSeconds: 3725,
                 handshake: .current,
                 events: [TunnelDiagnosticEvent(time: Date(timeIntervalSince1970: 0), message: "startTunnel succeeded")]
@@ -64,6 +67,8 @@ final class TunnelDiagnosticsTests: XCTestCase {
         XCTAssertTrue(text.contains("app: 0.1.0 (7)"))
         XCTAssertTrue(text.contains("outbound: wireguard"))
         XCTAssertTrue(text.contains("extension memory: 12.0 MB"))
+        XCTAssertTrue(text.contains("extension memory peak: 20.0 MB"))
+        XCTAssertTrue(text.contains("extension memory headroom: unknown"))
         XCTAssertTrue(text.contains("extension uptime: 1h 2m 5s"))
         XCTAssertTrue(text.contains("\"dns_queries\" : 3,\n  \"tcp_last_failure\" : \"timeout\""))
         XCTAssertTrue(text.contains("1970-01-01T00:00:00.000Z startTunnel succeeded"))
