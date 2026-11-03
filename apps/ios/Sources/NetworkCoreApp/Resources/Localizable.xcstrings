@@ -1277,6 +1277,16 @@
         }
       }
     },
+    "导入你的订阅，就能按规则把需要的流量走代理，其余直连。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import your subscription to send the traffic you choose through a proxy by rules, and everything else direct."
+          }
+        }
+      }
+    },
     "导入失败": {
       "localizations": {
         "en": {
@@ -1383,6 +1393,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Import Node (⌘I)"
+          }
+        }
+      }
+    },
+    "导入订阅": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Subscription"
           }
         }
       }
@@ -1787,6 +1807,16 @@
         }
       }
     },
+    "技术详情": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Technical Details"
+          }
+        }
+      }
+    },
     "拒绝": {
       "localizations": {
         "en": {
@@ -1877,6 +1907,16 @@
         }
       }
     },
+    "换个节点": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch Node"
+          }
+        }
+      }
+    },
     "描述文件可能未安装，或尚未在证书信任设置中开启完全信任。": {
       "localizations": {
         "en": {
@@ -1923,6 +1963,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Search nodes, /regex/ matches names"
+          }
+        }
+      }
+    },
+    "支持订阅链接、节点链接、二维码，以及 Clash / Surge / Loon 配置。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Works with subscription links, node links, QR codes, and Clash / Surge / Loon configs."
           }
         }
       }
@@ -2457,6 +2507,16 @@
         }
       }
     },
+    "欢迎使用\nAnixOps Net": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welcome to\nAnixOps Net"
+          }
+        }
+      }
+    },
     "正在建立安全隧道": {
       "localizations": {
         "en": {
@@ -2877,6 +2937,16 @@
         }
       }
     },
+    "稍后再说": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not Now"
+          }
+        }
+      }
+    },
     "立即刷新": {
       "localizations": {
         "en": {
@@ -2913,6 +2983,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Step %lld of 3"
+          }
+        }
+      }
+    },
+    "第一次连接时，iOS 会请求添加 VPN 配置。它只用来把流量交给本 App 分流，不收集你的浏览记录。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The first time you connect, iOS asks to add a VPN configuration. It only hands traffic to this app for routing; your browsing is not collected."
           }
         }
       }
@@ -3117,6 +3197,16 @@
         }
       }
     },
+    "节点密码只保存在本机钥匙串里。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Node passwords stay in this device's Keychain."
+          }
+        }
+      }
+    },
     "节点密码和密钥只保存在本机钥匙串": {
       "localizations": {
         "en": {
@@ -3223,6 +3313,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The subscription could not be downloaded. Check the link and the network."
+          }
+        }
+      }
+    },
+    "订阅下载失败：链接可能已失效，或当前网络连不上订阅服务器。现有节点仍可使用。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't download the subscription: the link may have expired, or this network can't reach the server. Your current nodes still work."
           }
         }
       }
@@ -3637,6 +3737,16 @@
         }
       }
     },
+    "连接已断开：节点没有响应、被干扰，或网络刚切换。可以重试，或换一个节点。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disconnected: the node stopped answering, was interfered with, or the network just changed. Retry, or switch to another node."
+          }
+        }
+      }
+    },
     "连接或断开 AnixOps Net": {
       "localizations": {
         "en": {
@@ -3737,6 +3847,16 @@
         }
       }
     },
+    "重新下载订阅": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download Again"
+          }
+        }
+      }
+    },
     "重新检测信任状态": {
       "localizations": {
         "en": {
@@ -3803,6 +3923,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No camera access"
+          }
+        }
+      }
+    },
+    "重试": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retry"
           }
         }
       }

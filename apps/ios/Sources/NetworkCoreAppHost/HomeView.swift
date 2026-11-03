@@ -36,8 +36,8 @@ struct HomeView: View {
                                 )
                             }
                         )
-                    if let message = tunnel.message {
-                        MessageCard(text: message) {
+                    if let notice = tunnel.notice {
+                        NoticeCard(notice: notice, perform: perform) {
                             tunnel.clearMessage()
                         }
                     }
@@ -88,6 +88,24 @@ struct HomeView: View {
             .onChange(of: tunnel.message) { _, message in
                 dashboard.messageShown(message)
             }
+        }
+    }
+
+    private func perform(_ action: AppNotice.Action) {
+        switch action {
+        case .retry:
+            tunnel.clearMessage()
+            tunnel.toggle()
+        case .chooseNode:
+            picking = true
+        case let .refreshSubscription(groupID):
+            tunnel.clearMessage()
+            Task {
+                await tunnel.refreshSubscription(groupID)
+            }
+        case .importNode:
+            tunnel.clearMessage()
+            importing = true
         }
     }
 
@@ -338,31 +356,87 @@ struct PressableStyle: ButtonStyle {
     }
 }
 
-/// An error or notice: what happened, with a dismiss button. Developer mode has the full diagnostics.
-private struct MessageCard: View {
+/// An error or notice: what happened in one plain sentence, the buttons that fix it, and the raw error folded
+/// under 技术详情. Developer mode has the full diagnostics.
+private struct NoticeCard: View {
     @Environment(\.brand) private var brand
-    let text: String
+    let notice: AppNotice
+    let perform: (AppNotice.Action) -> Void
     let dismiss: () -> Void
 
     var body: some View {
         BrandCard {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(brand.warning)
-                    .accessibilityHidden(true)
-                Text(text)
-                    .font(.subheadline)
-                    .foregroundStyle(brand.text)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-                Button(action: dismiss) {
-                    Image(systemName: "xmark")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(brand.text3)
-                        .frame(width: 28, height: 28)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(brand.warning)
+                        .accessibilityHidden(true)
+                    Text(notice.text)
+                        .font(.subheadline)
+                        .foregroundStyle(brand.text)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                    Button(action: dismiss) {
+                        Image(systemName: "xmark")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(brand.text3)
+                            .frame(width: 28, height: 28)
+                    }
+                    .accessibilityLabel("关闭提示")
                 }
-                .accessibilityLabel("关闭提示")
+                if !notice.actions.isEmpty {
+                    HStack(spacing: 8) {
+                        ForEach(Array(notice.actions.enumerated()), id: \.offset) { index, action in
+                            actionButton(action, primary: index == 0)
+                        }
+                    }
+                }
+                if let detail = notice.detail {
+                    DisclosureGroup {
+                        Text(detail)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(brand.text2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                            .background(brand.raised, in: RoundedRectangle(cornerRadius: BrandRadius.chip, style: .continuous))
+                            .textSelection(.enabled)
+                    } label: {
+                        Text("技术详情")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(brand.text2)
+                    }
+                    .tint(brand.text2)
+                }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func actionButton(_ action: AppNotice.Action, primary: Bool) -> some View {
+        let button = Button {
+            perform(action)
+        } label: {
+            Text(Self.title(action))
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity, minHeight: 36)
+        }
+        if primary {
+            button.buttonStyle(.borderedProminent).tint(brand.primary)
+        } else {
+            button.buttonStyle(.bordered).tint(brand.primary)
+        }
+    }
+
+    private static func title(_ action: AppNotice.Action) -> LocalizedStringKey {
+        switch action {
+        case .retry:
+            return "重试"
+        case .chooseNode:
+            return "换个节点"
+        case .refreshSubscription:
+            return "重新下载订阅"
+        case .importNode:
+            return "导入节点"
         }
     }
 }

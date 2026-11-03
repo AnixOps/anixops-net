@@ -20,7 +20,16 @@ final class TunnelController {
     private(set) var coordinator: AppCoordinator
     private(set) var nodeName: String?
     private(set) var connection: NEVPNStatus = .invalid
-    private(set) var message: String?
+    /// Set once `load()` has read the saved profile and node library, so first-run screens do not flash for a
+    /// user who already has nodes.
+    private(set) var loaded = false
+    /// The notice the home screen shows: what happened, optional technical detail, and what the user can do.
+    private(set) var notice: AppNotice?
+    /// The notice's text. Setting it shows a plain notice with no actions.
+    private(set) var message: String? {
+        get { notice?.text }
+        set { notice = newValue.map { AppNotice(text: $0) } }
+    }
     private(set) var runtimeStatus: String?
     /// Developer mode: the extension's diagnostics and the last stop error, kept after the message is replaced.
     private(set) var diagnostics: TunnelDiagnostics?
@@ -96,6 +105,12 @@ final class TunnelController {
             store(SubscriptionGroups.migrating(previous, name: String(localized: "导入的节点")))
         }
         refresh()
+        loaded = true
+    }
+
+    /// Nothing imported yet: no saved profile and no subscription groups.
+    var hasNoNodes: Bool {
+        nodeName == nil && subscriptions.groups.isEmpty
     }
 
     /// Parses pasted text for the import preview without saving anything. A subscription link is downloaded only
@@ -459,7 +474,11 @@ final class TunnelController {
             response = downloaded.1
         } catch {
             markFailure(groupID)
-            message = String(localized: "订阅下载失败，请检查链接和网络")
+            notice = AppNotice(
+                text: String(localized: "订阅下载失败：链接可能已失效，或当前网络连不上订阅服务器。现有节点仍可使用。"),
+                detail: error.localizedDescription,
+                actions: groupID.map { [.refreshSubscription($0)] } ?? []
+            )
             return false
         }
         let report: NativeImportReport
@@ -773,7 +792,7 @@ final class TunnelController {
 
     func toggle() {
         guard let manager = manager else {
-            message = String(localized: "请先导入节点")
+            notice = AppNotice(text: String(localized: "请先导入节点"), actions: [.importNode])
             return
         }
         if isConnected {
@@ -924,7 +943,11 @@ final class TunnelController {
             }
             let text = Self.describe(disconnectError: error as NSError)
             Task { @MainActor in
-                self?.message = text
+                self?.notice = AppNotice(
+                    text: String(localized: "连接已断开：节点没有响应、被干扰，或网络刚切换。可以重试，或换一个节点。"),
+                    detail: text,
+                    actions: [.retry, .chooseNode]
+                )
                 self?.lastDisconnectError = text
             }
         }
@@ -1065,4 +1088,23 @@ struct ImportPreview: Equatable {
 
 struct ImportFailure: Error, Equatable {
     let message: String
+}
+
+/// A notice on the home screen: one plain sentence on what happened and what it means, the raw error behind it
+/// for the curious (shown folded), and the actions that fix it.
+struct AppNotice: Equatable {
+    enum Action: Equatable, Hashable {
+        /// Start the tunnel again.
+        case retry
+        /// Open the node picker.
+        case chooseNode
+        /// Download this subscription group again.
+        case refreshSubscription(String)
+        /// Open the import sheet.
+        case importNode
+    }
+
+    var text: String
+    var detail: String?
+    var actions: [Action] = []
 }
