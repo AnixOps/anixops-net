@@ -10,6 +10,7 @@ import { HomePage } from "./pages/HomePage";
 import { ProxiesPage } from "./pages/ProxiesPage";
 import { RulesPage } from "./pages/RulesPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { keepIfUnchanged, usePageVisible } from "./live";
 import { useAppearance } from "./theme";
 import { IconButton, StatusDot } from "./ui";
 import { t, useLanguage } from "./i18n";
@@ -48,17 +49,22 @@ export function App() {
   }, []);
   const showError = useCallback((error: unknown) => show(error instanceof Error ? error.message : String(error), "danger"), [show]);
 
+  const visible = usePageVisible();
+
   const refresh = useCallback(async () => {
     const [nextSnapshot, nextNodes] = await Promise.all([desktop.snapshot(), desktop.nodes()]);
-    setSnapshot(nextSnapshot);
-    setNodes(nextNodes);
+    // An unchanged answer keeps the old objects, so the open page does not redraw every two seconds.
+    setSnapshot((previous) => keepIfUnchanged(previous, nextSnapshot));
+    setNodes((previous) => keepIfUnchanged(previous, nextNodes));
   }, []);
 
+  // Polls only while the window is showing; coming back from the tray refreshes at once.
   useEffect(() => {
+    if (!visible) return;
     void refresh().catch(showError);
     const timer = window.setInterval(() => void refresh().catch(showError), 2000);
     return () => window.clearInterval(timer);
-  }, [refresh, showError]);
+  }, [refresh, showError, visible]);
 
   const run = useCallback(async (operation: string, task: () => Promise<{ message: string }>) => {
     setBusy(operation);

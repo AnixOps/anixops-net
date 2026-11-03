@@ -202,6 +202,7 @@ export const english: Record<string, string> = {
   "全部断开": "Close all",
   "连接列表": "Connection list",
   "活跃 {count}": "Active {count}",
+  "再显示 {count} 条": "Show {count} more",
   "已关闭 {count}": "Closed {count}",
   "筛选连接": "Filter connections",
   "筛选主机、规则、策略或程序": "Filter by host, rule, policy or program",

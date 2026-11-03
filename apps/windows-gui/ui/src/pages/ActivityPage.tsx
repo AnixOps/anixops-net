@@ -2,7 +2,7 @@ import { ArrowDown, ArrowUp, ClipboardList, ListTree, Search, X } from "lucide-r
 import { useState } from "react";
 import { ConnectionSnapshot, desktop, RuntimeSnapshot } from "../bridge";
 import { connectionDetail, connectionName, formatRate, matchesConnection } from "../activity-format";
-import { liveEngine, usePolling } from "../live";
+import { listPage, liveEngine, usePolling } from "../live";
 import { formatBytes } from "../subscription-format";
 import { Card, Detail, EmptyState, IconButton, Run, Segmented } from "../ui";
 import { t } from "../i18n";
@@ -40,6 +40,7 @@ function Connections({ snapshot }: { snapshot: RuntimeSnapshot | null }) {
   const [list, reload] = usePolling(desktop.connections, live);
   const [shown, setShown] = useState<"active" | "closed">("active");
   const [query, setQuery] = useState("");
+  const [limit, setLimit] = useState(listPage);
   const [failure, setFailure] = useState<string | null>(null);
 
   const close = (task: () => Promise<unknown>) => {
@@ -72,22 +73,29 @@ function Connections({ snapshot }: { snapshot: RuntimeSnapshot | null }) {
           label={t("连接列表")}
           options={[{ value: "active", label: t("活跃 {count}", { count: list.active.length }) }, { value: "closed", label: t("已关闭 {count}", { count: list.closed.length }) }]}
           value={shown}
-          onChange={setShown}
+          onChange={(next) => { setShown(next); setLimit(listPage); }}
         />
         <label className="search">
           <Search size={15} aria-hidden="true" />
-          <input aria-label={t("筛选连接")} placeholder={t("筛选主机、规则、策略或程序")} value={query} onChange={(event) => setQuery(event.target.value)} />
+          <input aria-label={t("筛选连接")} placeholder={t("筛选主机、规则、策略或程序")} value={query} onChange={(event) => { setQuery(event.target.value); setLimit(listPage); }} />
         </label>
         <span className="count">{connections.length}</span>
       </div>
       {failure && <p className="muted">{failure}</p>}
       {connections.length === 0
         ? <p className="muted">{query ? t("没有匹配的连接。") : shown === "active" ? t("现在没有活跃连接。") : t("还没有关闭的连接。")}</p>
-        : <ul className="list connections">
-          {connections.map((connection) => (
-            <ConnectionRow key={connection.id} connection={connection} onClose={shown === "active" ? () => close(() => desktop.closeConnection(connection.id)) : undefined} />
-          ))}
-        </ul>}
+        : <>
+          <ul className="list connections">
+            {connections.slice(0, limit).map((connection) => (
+              <ConnectionRow key={connection.id} connection={connection} onClose={shown === "active" ? () => close(() => desktop.closeConnection(connection.id)) : undefined} />
+            ))}
+          </ul>
+          {connections.length > limit && (
+            <button className="secondary" onClick={() => setLimit((current) => current + listPage)}>
+              {t("再显示 {count} 条", { count: Math.min(listPage, connections.length - limit) })}
+            </button>
+          )}
+        </>}
     </Card>
   );
 }
