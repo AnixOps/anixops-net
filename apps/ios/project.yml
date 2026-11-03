@@ -151,6 +151,7 @@ targets:
       - path: Sources/NetworkCoreAppHost/ConnectionsView.swift
       - path: Sources/NetworkCoreAppHost/DnsSettingsView.swift
       - path: Sources/NetworkCoreAppHost/ImportView.swift
+      - path: Sources/NetworkCoreAppHost/MitmPluginInspector.swift
       - path: Sources/NetworkCoreAppHost/MitmTrustPresentation.swift
       - path: Sources/NetworkCoreAppHost/PluginsView.swift
       - path: Sources/NetworkCoreAppHost/ProxyModeText.swift

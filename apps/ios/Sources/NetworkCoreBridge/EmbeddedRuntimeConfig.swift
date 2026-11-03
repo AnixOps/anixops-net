@@ -82,6 +82,8 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         public var caPrivateKey: String
         /// `script-path` to the local file holding the copy the user allowed.
         public var scriptAssets: [String: String]
+        /// Remote `[Map Local]` body URL to the local file holding the downloaded copy.
+        public var resourceAssets: [String: String] = [:]
         /// File backing `$persistentStore`.
         public var scriptStorePath: String?
 
@@ -90,6 +92,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
             case caCertificate = "ca_certificate"
             case caPrivateKey = "ca_private_key"
             case scriptAssets = "script_assets"
+            case resourceAssets = "resource_assets"
             case scriptStorePath = "script_store_path"
         }
     }
@@ -317,6 +320,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         plugins: [String],
         authority: MitmCertificateAuthority,
         scriptAssets: [String: String] = [:],
+        resourceAssets: [String: String] = [:],
         scriptStorePath: String? = nil
     ) throws -> EmbeddedRuntimeConfig {
         var copy = self
@@ -325,6 +329,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
             caCertificate: authority.certificateDER.base64EncodedString(),
             caPrivateKey: try authority.privateKeyRepresentation().base64EncodedString(),
             scriptAssets: scriptAssets,
+            resourceAssets: resourceAssets,
             scriptStorePath: scriptStorePath
         )
         return copy
@@ -555,6 +560,9 @@ public enum TunnelProfileKeys {
     /// `Data` holding a JSON object of `script-path` to source for the scripts the user allowed in the enabled
     /// plugins (`MitmScriptLibrary.profileValue`). Scripts left out do nothing.
     public static let mitmScripts = "networkcore.mitm-scripts"
+    /// `Data` holding a JSON object of remote `[Map Local]` body URL to its downloaded bytes for the enabled plugins
+    /// (`MitmResourceLibrary.profileValue`). Lines whose body is absent answer nothing.
+    public static let mitmResources = "networkcore.mitm-resources"
     /// The `ProxyMode` raw value the tunnel starts in. Profiles saved before it existed use `rule` when
     /// `routing` is set and `global` otherwise (`ProxyMode.saved(in:)`).
     public static let mode = "networkcore.mode"

@@ -118,4 +118,83 @@ final class MitmPluginTests: XCTestCase {
     private func json(_ config: EmbeddedRuntimeConfig) throws -> [String: Any] {
         try XCTUnwrap(JSONSerialization.jsonObject(with: config.encoded()) as? [String: Any])
     }
+
+    // MARK: - Kernel inspection
+
+    private let quantumultSnippet = """
+    #!name = QX Snippet
+    ^https?://a\\.example\\.com/s url script-response-body https://cdn.example.com/s.js
+    ^https?://a\\.example\\.com/e url echo-response text/json echo-response https://cdn.example.com/e.json
+    hostname = a.example.com
+    """
+
+    private var quantumultInspection: MitmPluginInspection {
+        MitmPluginInspection(
+            name: "QX Snippet",
+            level: "full",
+            hostnames: ["a.example.com"],
+            lines: .init(supported: 3),
+            resources: [
+                .init(kind: "script", url: "https://cdn.example.com/s.js", line: 2),
+                .init(kind: "map_local_data", url: "https://cdn.example.com/e.json", line: 3),
+            ]
+        )
+    }
+
+    func testKernelInspectionAcceptsSnippetsWithoutLoonSections() throws {
+        XCTAssertThrowsError(try MitmPlugin(text: quantumultSnippet)) {
+            XCTAssertEqual($0 as? MitmPluginError, .nothingToApply)
+        }
+        let plugin = try MitmPlugin(text: quantumultSnippet, inspection: quantumultInspection)
+        XCTAssertEqual(plugin.name, "QX Snippet")
+        XCTAssertEqual(plugin.scriptReferences.map(\.path), ["https://cdn.example.com/s.js"])
+        XCTAssertEqual(plugin.dataReferences.map(\.url), [URL(string: "https://cdn.example.com/e.json")])
+
+        let nothing = MitmPluginInspection(level: "unsupported", lines: .init(unsupported: 2))
+        XCTAssertThrowsError(try MitmPlugin(text: adBlock, inspection: nothing)) {
+            XCTAssertEqual($0 as? MitmPluginError, .nothingToApply)
+        }
+    }
+
+    func testInspectionDecodesTheKernelJSONAndOldPluginsAreInspectedOnce() throws {
+        let json = Data(#"""
+        {"name":"QX Snippet","level":"partial","hostnames":["a.example.com"],"excluded_hostnames":["b.example.com"],
+         "lines":{"supported":2,"partial":0,"unsupported":1,"deferred":0},
+         "resources":[{"url":"https://cdn.example.com/e.json","kind":"map_local_data","line":3}],"report":"r"}
+        """#.utf8)
+        let decoded = try XCTUnwrap(MitmPluginInspection.decode(json))
+        XCTAssertEqual(decoded.excludedHostnames, ["b.example.com"])
+        XCTAssertEqual(decoded.lines.unsupported, 1)
+        XCTAssertEqual(decoded.resources.first?.kind, MitmPluginInspection.Resource.mapLocalData)
+
+        var library = MitmPluginLibrary()
+        library.isEnabled = true
+        try library.add(MitmPlugin(text: adBlock))
+        XCTAssertNil(library.plugins[0].inspection)
+        XCTAssertTrue(library.inspectMissing { _ in decoded })
+        XCTAssertFalse(library.inspectMissing { _ in decoded })
+        XCTAssertEqual(library.activeDataReferences.map(\.path), ["https://cdn.example.com/e.json"])
+        XCTAssertEqual(library.allDataPaths, ["https://cdn.example.com/e.json"])
+    }
+
+    func testResourceLibrarySelectsTheEnabledBodiesWithinTheBudget() throws {
+        var resources = MitmResourceLibrary()
+        resources.store(Data("{}".utf8), for: "https://cdn.example.com/a.json")
+        resources.store(Data(count: MitmResourceLibrary.maxBytes + 1), for: "https://cdn.example.com/big.bin")
+        XCTAssertNil(resources.items["https://cdn.example.com/big.bin"])
+        XCTAssertEqual(
+            resources.data(for: ["https://cdn.example.com/a.json", "https://cdn.example.com/missing.json"]),
+            ["https://cdn.example.com/a.json": Data("{}".utf8)]
+        )
+        let value = try MitmResourceLibrary.profileValue(resources.data(for: ["https://cdn.example.com/a.json"]))
+        XCTAssertEqual(MitmResourceLibrary.data(fromProfileValue: value), ["https://cdn.example.com/a.json": Data("{}".utf8)])
+        resources.keep(only: [])
+        XCTAssertTrue(resources.items.isEmpty)
+
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let assets = try MitmResourceLibrary.writeAssets(["https://cdn.example.com/a.json": Data("{}".utf8)], to: directory)
+        let path = try XCTUnwrap(assets["https://cdn.example.com/a.json"])
+        XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: path)), Data("{}".utf8))
+    }
 }

@@ -91,6 +91,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 ),
                 mitmScripts: MitmScriptLibrary.sources(
                     fromProfileValue: tunnelProtocol.providerConfiguration?[TunnelProfileKeys.mitmScripts] as? Data
+                ),
+                mitmResources: MitmResourceLibrary.data(
+                    fromProfileValue: tunnelProtocol.providerConfiguration?[TunnelProfileKeys.mitmResources] as? Data
                 )
             )
             events.record("runtime initialized")
@@ -205,19 +208,27 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private func makeSession(
         _ config: EmbeddedRuntimeConfig,
         mitmPlugins: [String],
-        mitmScripts: [String: String]
+        mitmScripts: [String: String],
+        mitmResources: [String: Data]
     ) throws -> EmbeddedRuntimeSession {
+        let resourceAssets = Self.resourceAssets(mitmResources)
         guard config.routing != nil else {
-            return try makeRuntimeSession(config, mitmPlugins: mitmPlugins, mitmScripts: mitmScripts)
+            return try makeRuntimeSession(
+                config, mitmPlugins: mitmPlugins, mitmScripts: mitmScripts, resourceAssets: resourceAssets
+            )
         }
         do {
-            return try makeRuntimeSession(config, mitmPlugins: mitmPlugins, mitmScripts: mitmScripts)
+            return try makeRuntimeSession(
+                config, mitmPlugins: mitmPlugins, mitmScripts: mitmScripts, resourceAssets: resourceAssets
+            )
         } catch let failure as EmbeddedRuntimeSession.Failure {
             events.record("subscription rules off: runtime refused them (code \(failure.code))")
         } catch {
             events.record("subscription rules off: runtime refused them")
         }
-        return try makeRuntimeSession(config.withRouting(nil), mitmPlugins: mitmPlugins, mitmScripts: mitmScripts)
+        return try makeRuntimeSession(
+            config.withRouting(nil), mitmPlugins: mitmPlugins, mitmScripts: mitmScripts, resourceAssets: resourceAssets
+        )
     }
 
     /// Creates the runtime, decrypting HTTPS for the enabled plugins when the device root is in the Keychain and
@@ -227,7 +238,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private func makeRuntimeSession(
         _ config: EmbeddedRuntimeConfig,
         mitmPlugins: [String],
-        mitmScripts: [String: String]
+        mitmScripts: [String: String],
+        resourceAssets: [String: String]
     ) throws -> EmbeddedRuntimeSession {
         if !mitmPlugins.isEmpty {
             do {
@@ -239,6 +251,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                                     plugins: mitmPlugins,
                                     authority: authority,
                                     scriptAssets: try Self.scriptAssets(mitmScripts),
+                                    resourceAssets: resourceAssets,
                                     scriptStorePath: try Self.scriptStoreURL().path
                                 ).encoded(),
                                 packetFlow: packetFlow
@@ -252,7 +265,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                         }
                     }
                     let session = try EmbeddedRuntimeSession(
-                        config: config.withMitm(plugins: mitmPlugins, authority: authority).encoded(),
+                        config: config.withMitm(
+                            plugins: mitmPlugins, authority: authority, resourceAssets: resourceAssets
+                        ).encoded(),
                         packetFlow: packetFlow
                     )
                     events.record("https decryption on, \(mitmPlugins.count) plugins")
@@ -274,6 +289,21 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private static func scriptAssets(_ sources: [String: String]) throws -> [String: String] {
         let caches = try FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
         return try MitmScriptLibrary.writeAssets(sources, to: caches.appendingPathComponent("mitm-scripts", isDirectory: true))
+    }
+
+    /// Writes the downloaded `[Map Local]` bodies where the runtime reads them. Without them those lines answer
+    /// nothing, so a failure only costs them.
+    private static func resourceAssets(_ data: [String: Data]) -> [String: String] {
+        guard !data.isEmpty,
+              let caches = try? FileManager.default.url(
+                  for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true
+              )
+        else {
+            return [:]
+        }
+        return (try? MitmResourceLibrary.writeAssets(
+            data, to: caches.appendingPathComponent("mitm-resources", isDirectory: true)
+        )) ?? [:]
     }
 
     /// `$persistentStore`, kept in the extension's own container across connections.
