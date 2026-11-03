@@ -1,0 +1,5 @@
+[env]
+# The kernel's MITM policy core links PCRE2 through pcre2-sys. Always compile
+# it from the vendored source instead of linking a system libpcre2 found by
+# pkg-config, so the shipped binaries carry no runtime PCRE2 dependency.
+PCRE2_SYS_STATIC = "1"
