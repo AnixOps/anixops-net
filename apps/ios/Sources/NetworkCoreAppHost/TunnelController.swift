@@ -792,7 +792,13 @@ final class TunnelController {
 
     func toggle() {
         guard let manager = manager else {
-            notice = AppNotice(text: String(localized: "请先导入节点"), actions: [.importNode])
+            if let groups = Self.withSelectedNode(subscriptions) {
+                // Nodes are imported but no VPN profile is saved yet (or it was removed in Settings): save the
+                // profile for the selected node, then connect.
+                Task { await saveProfileAndStart(groups) }
+            } else {
+                notice = AppNotice(text: String(localized: "请先导入节点"), actions: [.importNode])
+            }
             return
         }
         if isConnected {
@@ -824,6 +830,38 @@ final class TunnelController {
         }
         refresh()
         start(manager)
+    }
+
+    private func saveProfileAndStart(_ groups: SubscriptionGroups) async {
+        guard await saveActiveProfile(groups) else {
+            return
+        }
+        store(groups)
+        guard let manager = manager else {
+            message = String(localized: "无法启动隧道")
+            return
+        }
+        start(manager)
+    }
+
+    /// The groups with an active group that has a selected node: the active group's selection, else the first
+    /// group that has one, else the first node of the first non-empty group. Nil when there is no node at all.
+    static func withSelectedNode(_ subscriptions: SubscriptionGroups) -> SubscriptionGroups? {
+        var groups = subscriptions
+        if groups.active?.library.selected != nil {
+            return groups
+        }
+        if let group = groups.groups.first(where: { $0.library.selected != nil }) {
+            groups.activeID = group.id
+            return groups
+        }
+        guard var group = groups.groups.first(where: { !$0.library.nodes.isEmpty }) else {
+            return nil
+        }
+        group.library.selectedID = group.library.nodes.first?.id
+        groups.upsert(group)
+        groups.activeID = group.id
+        return groups
     }
 
     private func start(_ manager: NETunnelProviderManager) {

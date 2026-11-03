@@ -23,7 +23,7 @@ struct HomeView: View {
     private static let headerHeight: CGFloat = 52
 
     private var phase: ConnectPhase {
-        ConnectPhase(status: tunnel.connection, hasNode: tunnel.nodeName != nil)
+        ConnectPhase(status: tunnel.connection, hasNode: !tunnel.hasNoNodes)
     }
 
     var body: some View {
