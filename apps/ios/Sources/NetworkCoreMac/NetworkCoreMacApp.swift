@@ -7,7 +7,7 @@ import SwiftUI
 // shared host files (TunnelController, ImportView, brand views) directly, so it uses them without imports.
 @main
 struct NetworkCoreMacApp: App {
-    @StateObject private var tunnel = TunnelController()
+    @State private var tunnel = TunnelController()
     @StateObject private var state = MacAppState()
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
 
@@ -107,7 +107,7 @@ extension TunnelController {
 
 /// The app menu additions: import, connect or disconnect, and Settings opening the Settings section.
 struct MacCommands: Commands {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @ObservedObject var state: MacAppState
 
     var body: some Commands {
@@ -150,7 +150,7 @@ private struct OpenSectionButton: View {
 /// The menu bar item: the status, one connect switch, the proxy mode and a way back to the window.
 private struct MenuBarContent: View {
     @Environment(\.openWindow) private var openWindow
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @ObservedObject var state: MacAppState
 
     var body: some View {

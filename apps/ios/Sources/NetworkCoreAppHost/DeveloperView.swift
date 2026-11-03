@@ -18,7 +18,7 @@ enum DeveloperMode {
 
 /// The "关于" section: shows the version and counts taps on it to unlock developer mode.
 struct AboutSection: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @AppStorage(DeveloperMode.storageKey) private var developerMode = false
     @State private var taps = 0
     @State private var hint: String?
@@ -67,7 +67,7 @@ struct AboutSection: View {
 
 /// Developer page: extension state, runtime status, event log and a copyable report without secrets.
 struct DeveloperView: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @AppStorage(DeveloperMode.storageKey) private var developerMode = false
     @Environment(\.dismiss) private var dismiss
     @State private var autoRefresh = true

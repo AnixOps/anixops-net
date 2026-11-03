@@ -6,11 +6,11 @@ import SwiftUI
 /// cards the user can reorder and hide. Once the connect card scrolls away a compact switch takes its place in
 /// the top bar.
 struct HomeView: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @Binding var tab: AppTab
     @Binding var importing: Bool
     @Environment(\.brand) private var brand
-    @StateObject private var dashboard = DashboardModel()
+    @State private var dashboard = DashboardModel()
     @AppStorage(DashboardLayout.storageKey) private var layoutStorage = ""
     @State private var heroVisible = true
     @State private var editing = false
@@ -137,7 +137,7 @@ private struct HeroBottomKey: PreferenceKey {
 
 /// The hero card: the route-line connect button, status, elapsed time, current node and the mode switch.
 private struct ConnectCard: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     let phase: ConnectPhase
     @Binding var importing: Bool
     @Binding var tab: AppTab
@@ -277,7 +277,7 @@ private struct ConnectCard: View {
 /// The connect switch in the top bar while the hero card is scrolled away: the route-line mark and the elapsed
 /// time or status.
 private struct CompactConnectButton: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     let phase: ConnectPhase
     @Environment(\.brand) private var brand
 

@@ -6,7 +6,7 @@ import SwiftUI
 // so this file refers to AppCoordinator without importing the NetworkCoreApp module.
 @main
 struct NetworkCoreAppMain: App {
-    @StateObject private var tunnel = TunnelController()
+    @State private var tunnel = TunnelController()
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
     @Environment(\.scenePhase) private var scenePhase
 
@@ -83,7 +83,7 @@ enum AppTab: Hashable, CaseIterable, Identifiable {
 
 /// Tabs on iPhone and in a narrow iPad window; a sidebar with the same five sections on a regular-width iPad window.
 struct RootView: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.horizontalSizeClass) private var sizeClass

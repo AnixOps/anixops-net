@@ -1,6 +1,7 @@
 import Foundation
 import NetworkCoreBridge
 import NetworkExtension
+import Observation
 #if os(iOS)
 import BackgroundTasks
 import WidgetKit
@@ -10,36 +11,40 @@ import WidgetKit
 /// subscription text or a WireGuard config), saves it as the
 /// tunnel profile, and starts or stops the packet tunnel. Node secrets go only into the Keychain; the saved
 /// profile holds a persistent reference to them and a config without them.
+///
+/// Observable (not ObservableObject): a view redraws only when a property it actually read changes, so the speed
+/// and latency updates no longer redraw every screen that holds the controller.
 @MainActor
-final class TunnelController: ObservableObject {
-    @Published private(set) var coordinator: AppCoordinator
-    @Published private(set) var nodeName: String?
-    @Published private(set) var connection: NEVPNStatus = .invalid
-    @Published private(set) var message: String?
-    @Published private(set) var runtimeStatus: String?
+@Observable
+final class TunnelController {
+    private(set) var coordinator: AppCoordinator
+    private(set) var nodeName: String?
+    private(set) var connection: NEVPNStatus = .invalid
+    private(set) var message: String?
+    private(set) var runtimeStatus: String?
     /// Developer mode: the extension's diagnostics and the last stop error, kept after the message is replaced.
-    @Published private(set) var diagnostics: TunnelDiagnostics?
-    @Published private(set) var lastDisconnectError: String?
+    private(set) var diagnostics: TunnelDiagnostics?
+    private(set) var lastDisconnectError: String?
     /// When the current connection came up, for the elapsed time on the home screen.
-    @Published private(set) var connectedSince: Date?
+    private(set) var connectedSince: Date?
     /// The library the tunnel runs: the active subscription group's nodes and rules, with the other groups its
     /// rules can use (`SubscriptionGroups.activeLibrary()`). Nil while a single pasted node is in use.
-    @Published private(set) var library: NodeLibrary?
+    private(set) var library: NodeLibrary?
     /// Every subscription group, from the Keychain.
-    @Published private(set) var subscriptions = SubscriptionGroups()
+    private(set) var subscriptions = SubscriptionGroups()
     /// Delay test results by `latencyKey(group:node:)`.
-    @Published private(set) var latencies: [String: NodeLatency] = [:]
+    private(set) var latencies: [String: NodeLatency] = [:]
     /// Groups being downloaded now.
-    @Published private(set) var updatingGroups: Set<String> = []
+    private(set) var updatingGroups: Set<String> = []
     /// The saved tunnel's mode: by rules, everything through the selected node, or everything direct.
-    @Published private(set) var mode = ProxyMode.global
+    private(set) var mode = ProxyMode.global
     /// DNS servers, hosts and per-domain servers, from `dns-settings.json`; the saved profile carries a copy.
-    @Published private(set) var dns = DnsSettings()
+    private(set) var dns = DnsSettings()
 
-    private var manager: NETunnelProviderManager?
-    private var statusObserver: NSObjectProtocol?
+    @ObservationIgnored private var manager: NETunnelProviderManager?
+    @ObservationIgnored private var statusObserver: NSObjectProtocol?
     /// Set when a node switch stopped the tunnel; the tunnel starts again once it is down.
-    private var restartAfterStop = false
+    @ObservationIgnored private var restartAfterStop = false
 
     init() {
         coordinator = AppCoordinator(status: Self.platformStatus(saved: false))

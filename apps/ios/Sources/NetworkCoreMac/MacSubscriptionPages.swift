@@ -5,7 +5,7 @@ import SwiftUI
 /// Proxies: every subscription group with its nodes, traffic, expiry and update settings, or the single saved
 /// node; delay tests, switching across groups, manual and automatic updates.
 struct MacProxiesPage: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @ObservedObject var state: MacAppState
     @Environment(\.brand) private var brand
     @State private var testing = false
@@ -335,7 +335,7 @@ struct MacProxiesPage: View {
 /// Rules: the proxy mode (rules, global or direct), the active subscription's policy groups (including the other
 /// subscription groups as "订阅·名称" groups), its rules and rule sets, and the DNS settings.
 struct MacRulesPage: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @Environment(\.brand) private var brand
 
     var body: some View {
@@ -482,7 +482,7 @@ struct MacRulesPage: View {
 
 /// The rule sets the active subscription's rules use, with what the engine loaded.
 private struct MacRuleSetsPage: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     let rules: [String]
     let defined: [String: EmbeddedRuntimeConfig.RuleSet]?
     @Environment(\.brand) private var brand

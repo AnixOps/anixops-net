@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Settings: appearance, privacy and the About section that unlocks developer mode.
 struct SettingsView: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
     @Environment(\.brand) private var brand
 

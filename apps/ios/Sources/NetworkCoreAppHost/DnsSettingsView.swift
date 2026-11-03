@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The rules page's link to the DNS settings, with what is set now.
 struct DnsSection: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @Environment(\.brand) private var brand
 
     var body: some View {
@@ -32,7 +32,7 @@ struct DnsSection: View {
 /// DNS servers (plain, DNS over TLS or over HTTPS, through the proxy or directly), which one answers by default,
 /// per-domain servers and local hosts. Saving reconnects a running tunnel.
 struct DnsSettingsView: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @Environment(\.brand) private var brand
     @State private var editing: ServerEdit?
     @State private var addingRule = false

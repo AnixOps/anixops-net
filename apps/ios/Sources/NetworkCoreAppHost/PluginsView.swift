@@ -13,7 +13,7 @@ import AppKit
 struct PluginsSection: View {
     @Environment(\.brand) private var brand
     @Environment(\.scenePhase) private var scenePhase
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @ObservedObject var model: PluginsModel
     @State private var importingFile = false
     @State private var enteringAddress = false

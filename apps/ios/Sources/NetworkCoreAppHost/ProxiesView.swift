@@ -4,7 +4,7 @@ import SwiftUI
 /// Proxies: every subscription group (Loon / Shadowrocket style) with its nodes, traffic, expiry and update
 /// settings, or the single saved node; delay tests and switching across groups.
 struct ProxiesView: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @Binding var importing: Bool
     @Environment(\.brand) private var brand
     @State private var testing = false

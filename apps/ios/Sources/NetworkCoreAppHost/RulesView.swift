@@ -4,7 +4,7 @@ import SwiftUI
 /// Rules: the proxy mode (rules, global or direct), the subscription's policy groups and the DNS settings. Only subscriptions that
 /// carry rules and groups (Clash, Surge or Loon profiles) have groups to show here.
 struct RulesView: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @Environment(\.brand) private var brand
     /// The running engine's groups by id: what each group uses now and its members' last delay.
     @State private var runtime: [String: RuntimeControl.Groups.Group] = [:]

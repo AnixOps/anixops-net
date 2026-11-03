@@ -4,7 +4,7 @@ import SwiftUI
 
 /// Overview: the hero card answers "am I connected, through which node"; the node and any notice follow.
 struct MacHomePage: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @ObservedObject var state: MacAppState
     @Environment(\.brand) private var brand
 
@@ -67,7 +67,7 @@ struct MacHomePage: View {
 
 /// The route-line connect button with the status, elapsed time and one primary action.
 private struct MacHeroCard: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @ObservedObject var state: MacAppState
     @Environment(\.brand) private var brand
 
@@ -193,7 +193,7 @@ struct MacPlaceholderPage: View {
 
 /// Activity: the current session as the system and the tunnel extension report it, and the connection list.
 struct MacActivityPage: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @Environment(\.brand) private var brand
 
     var body: some View {
