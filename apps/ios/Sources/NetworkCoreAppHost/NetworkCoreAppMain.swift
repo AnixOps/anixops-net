@@ -89,6 +89,19 @@ struct RootView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var tab = AppTab.home
     @State private var importing = false
+    @AppStorage(OnboardingView.storageKey) private var onboardingDone = false
+
+    /// First run only: after loading, with nothing imported and the welcome screen never closed.
+    private var showsOnboarding: Binding<Bool> {
+        Binding(
+            get: { tunnel.loaded && tunnel.hasNoNodes && !onboardingDone },
+            set: { shown in
+                if !shown {
+                    onboardingDone = true
+                }
+            }
+        )
+    }
 
     var body: some View {
         let brand = BrandPalette.resolve(appearance: appearance, scheme: colorScheme)
@@ -105,6 +118,26 @@ struct RootView: View {
             ImportView(tunnel: tunnel)
                 .environment(\.brand, brand)
                 .tint(brand.primary)
+        }
+        .onChange(of: tunnel.loaded) { _, loaded in
+            // Someone who already has nodes never needs the welcome screen, even after deleting them all later.
+            if loaded, !tunnel.hasNoNodes {
+                onboardingDone = true
+            }
+        }
+        .fullScreenCover(isPresented: showsOnboarding) {
+            OnboardingView {
+                onboardingDone = true
+                // The import sheet opens once the cover has gone.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(450))
+                    importing = true
+                }
+            } later: {
+                onboardingDone = true
+            }
+            .environment(\.brand, brand)
+            .tint(brand.primary)
         }
     }
 

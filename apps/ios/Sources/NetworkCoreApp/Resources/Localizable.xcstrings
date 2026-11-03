@@ -1277,6 +1277,16 @@
         }
       }
     },
+    "导入你的订阅，就能按规则把需要的流量走代理，其余直连。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import your subscription to send the traffic you choose through a proxy by rules, and everything else direct."
+          }
+        }
+      }
+    },
     "导入失败": {
       "localizations": {
         "en": {
@@ -1383,6 +1393,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Import Node (⌘I)"
+          }
+        }
+      }
+    },
+    "导入订阅": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Subscription"
           }
         }
       }
@@ -1947,6 +1967,16 @@
         }
       }
     },
+    "支持订阅链接、节点链接、二维码，以及 Clash / Surge / Loon 配置。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Works with subscription links, node links, QR codes, and Clash / Surge / Loon configs."
+          }
+        }
+      }
+    },
     "支持订阅链接，Clash / Surge / Loon / Quantumult X 订阅内容，Trojan、VMess、VLESS、Shadowsocks、Hysteria2、TUIC 链接，以及单个 Peer 的 WireGuard 配置。": {
       "localizations": {
         "en": {
@@ -2477,6 +2507,16 @@
         }
       }
     },
+    "欢迎使用\nAnixOps Net": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welcome to\nAnixOps Net"
+          }
+        }
+      }
+    },
     "正在建立安全隧道": {
       "localizations": {
         "en": {
@@ -2897,6 +2937,16 @@
         }
       }
     },
+    "稍后再说": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not Now"
+          }
+        }
+      }
+    },
     "立即刷新": {
       "localizations": {
         "en": {
@@ -2933,6 +2983,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Step %lld of 3"
+          }
+        }
+      }
+    },
+    "第一次连接时，iOS 会请求添加 VPN 配置。它只用来把流量交给本 App 分流，不收集你的浏览记录。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The first time you connect, iOS asks to add a VPN configuration. It only hands traffic to this app for routing; your browsing is not collected."
           }
         }
       }
@@ -3133,6 +3193,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nodes"
+          }
+        }
+      }
+    },
+    "节点密码只保存在本机钥匙串里。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Node passwords stay in this device's Keychain."
           }
         }
       }

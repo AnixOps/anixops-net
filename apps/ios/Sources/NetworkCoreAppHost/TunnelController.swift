@@ -20,6 +20,9 @@ final class TunnelController {
     private(set) var coordinator: AppCoordinator
     private(set) var nodeName: String?
     private(set) var connection: NEVPNStatus = .invalid
+    /// Set once `load()` has read the saved profile and node library, so first-run screens do not flash for a
+    /// user who already has nodes.
+    private(set) var loaded = false
     /// The notice the home screen shows: what happened, optional technical detail, and what the user can do.
     private(set) var notice: AppNotice?
     /// The notice's text. Setting it shows a plain notice with no actions.
@@ -102,6 +105,12 @@ final class TunnelController {
             store(SubscriptionGroups.migrating(previous, name: String(localized: "导入的节点")))
         }
         refresh()
+        loaded = true
+    }
+
+    /// Nothing imported yet: no saved profile and no subscription groups.
+    var hasNoNodes: Bool {
+        nodeName == nil && subscriptions.groups.isEmpty
     }
 
     /// Parses pasted text for the import preview without saving anything. A subscription link is downloaded only
