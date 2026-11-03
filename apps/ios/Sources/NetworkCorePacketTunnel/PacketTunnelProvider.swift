@@ -343,7 +343,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// The highest footprint since the extension started: a spike past the limit ends the session even when the
     /// current footprint looks small.
     static func peakMemoryFootprint() -> UInt64? {
-        vmInfo()?.ledger_phys_footprint_peak
+        // The ledger field is a signed int64_t, unlike phys_footprint.
+        guard let peak = vmInfo()?.ledger_phys_footprint_peak, peak >= 0 else {
+            return nil
+        }
+        return UInt64(peak)
     }
 
     /// How far the extension is from its memory limit (iOS only; nil elsewhere).
