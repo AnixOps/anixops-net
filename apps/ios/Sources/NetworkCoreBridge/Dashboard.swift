@@ -43,7 +43,17 @@ public struct DashboardLayout: Equatable, Sendable {
         self.hidden = hidden
     }
 
+    /// The cards a new install shows: speed, today's usage and the busiest hosts. The others stay one tap away in
+    /// the edit sheet.
+    public static let defaultShown: [DashboardCard] = [.speed, .usage, .topHosts]
+
+    /// The layout of a saved string; an empty string (never edited) gives the default three cards.
     public init(storage: String) {
+        if storage.trimmingCharacters(in: .whitespaces).isEmpty {
+            let rest = DashboardCard.allCases.filter { !Self.defaultShown.contains($0) }
+            self.init(order: Self.defaultShown + rest, hidden: Set(rest))
+            return
+        }
         var order: [DashboardCard] = []
         var hidden = Set<DashboardCard>()
         for item in storage.split(separator: ",") {
