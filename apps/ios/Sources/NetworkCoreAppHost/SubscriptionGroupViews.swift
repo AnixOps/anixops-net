@@ -60,6 +60,7 @@ struct NodeLatencyText: View {
         case .measuring:
             ProgressView()
                 .controlSize(.small)
+                .accessibilityLabel("正在测速")
         case let .millis(value):
             Text("\(value) ms")
                 .font(.footnote.monospacedDigit())

@@ -15,6 +15,9 @@ struct HomeView: View {
     @State private var heroVisible = true
     @State private var editing = false
     @State private var picking = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The top bar's round buttons grow with Dynamic Type.
+    @ScaledMetric(relativeTo: .body) private var headerButton: CGFloat = 40
 
     private static let scrollSpace = "home-scroll"
     private static let headerHeight: CGFloat = 52
@@ -57,7 +60,7 @@ struct HomeView: View {
                 // The card counts as gone once its bottom edge passes under the top bar.
                 let visible = bottom > Self.headerHeight + 12
                 if visible != heroVisible {
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: BrandMotion.standard)) {
                         heroVisible = visible
                     }
                 }
@@ -121,9 +124,9 @@ struct HomeView: View {
                 editing = true
             } label: {
                 Image(systemName: "square.grid.2x2")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.body.weight(.semibold))
                     .foregroundStyle(brand.primary)
-                    .frame(width: 40, height: 40)
+                    .frame(width: headerButton, height: headerButton)
                     .brandGlass(Circle(), fallback: brand.raised)
             }
             .accessibilityLabel("编辑首页")
@@ -131,14 +134,14 @@ struct HomeView: View {
                 importing = true
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.body.weight(.semibold))
                     .foregroundStyle(brand.primary)
-                    .frame(width: 40, height: 40)
+                    .frame(width: headerButton, height: headerButton)
                     .brandGlass(Circle(), fallback: brand.raised)
             }
             .accessibilityLabel("导入节点")
         }
-        .frame(height: Self.headerHeight)
+        .frame(minHeight: Self.headerHeight)
         .padding(.horizontal, 16)
         .background(brand.bg)
         .overlay(alignment: .bottom) {
@@ -167,6 +170,16 @@ private struct ConnectCard: View {
     /// Opens the node picker.
     @Binding var picking: Bool
     @Environment(\.brand) private var brand
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    /// Side by side normally; at the accessibility text sizes the status goes under the button so the node name
+    /// and elapsed time keep a full line.
+    private var heroLayout: AnyLayout {
+        typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 16))
+    }
 
     /// The rule mode needs subscription rules; a single pasted node offers global and direct only.
     private var modes: [ProxyMode] {
@@ -175,7 +188,7 @@ private struct ConnectCard: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            HStack(spacing: 16) {
+            heroLayout {
                 Button(action: tap) {
                     RouteLineMark(phase: phase, size: 60)
                         .frame(width: 92, height: 92)
@@ -224,7 +237,7 @@ private struct ConnectCard: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .animation(.easeInOut(duration: 0.22), value: phase)
+                .animation(reduceMotion ? nil : .easeInOut(duration: BrandMotion.standard), value: phase)
             }
 
             if phase != .unconfigured {
@@ -248,6 +261,8 @@ private struct ConnectCard: View {
                 } label: {
                     Text(ProxyModeText.title(mode))
                         .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                         .frame(maxWidth: .infinity, minHeight: 34)
                         .foregroundStyle(selected ? Brand.deep : Brand.line.opacity(0.85))
                         .background(selected ? Brand.line : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
@@ -348,11 +363,15 @@ enum ConnectElapsed {
 }
 
 /// Shrinks slightly while pressed, without the default list highlight.
+/// With Reduce Motion on it does not scale; the press still shows as a slight fade.
 struct PressableStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.96 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.8), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.96 : 1)
+            .opacity(configuration.isPressed && reduceMotion ? 0.8 : 1)
+            .animation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.8), value: configuration.isPressed)
     }
 }
 
@@ -381,13 +400,21 @@ private struct NoticeCard: View {
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(brand.text3)
                             .frame(width: 28, height: 28)
+                            // A 44 pt target without moving the icon.
+                            .padding(8)
+                            .contentShape(Rectangle())
                     }
+                    .padding(-8)
                     .accessibilityLabel("关闭提示")
                 }
                 if !notice.actions.isEmpty {
-                    HStack(spacing: 8) {
-                        ForEach(Array(notice.actions.enumerated()), id: \.offset) { index, action in
-                            actionButton(action, primary: index == 0)
+                    // Stacked when large text no longer fits the buttons side by side.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 8) {
+                            actionButtons
+                        }
+                        VStack(spacing: 8) {
+                            actionButtons
                         }
                     }
                 }
@@ -411,6 +438,12 @@ private struct NoticeCard: View {
         }
     }
 
+    private var actionButtons: some View {
+        ForEach(Array(notice.actions.enumerated()), id: \.offset) { index, action in
+            actionButton(action, primary: index == 0)
+        }
+    }
+
     @ViewBuilder
     private func actionButton(_ action: AppNotice.Action, primary: Bool) -> some View {
         let button = Button {
@@ -418,6 +451,7 @@ private struct NoticeCard: View {
         } label: {
             Text(Self.title(action))
                 .font(.subheadline.weight(.semibold))
+                .fixedSize(horizontal: true, vertical: false)
                 .frame(maxWidth: .infinity, minHeight: 36)
         }
         if primary {
