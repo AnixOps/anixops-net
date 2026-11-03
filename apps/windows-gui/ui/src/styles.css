@@ -1,74 +1,13 @@
-/* AnixOps Net desktop theme. Colors mirror apps/ios/Design/tokens.json; desktop radii are tighter (radiusDesktop). */
+/* AnixOps Net desktop theme. Colors, radii, type and motion come from design/tokens.css, which is generated from
+   apps/ios/Design/tokens.json by .github/scripts/design_tokens.py; change the JSON, never the generated file. */
+@import "./design/tokens.css";
+
 :root {
-  --bg: #eef3f3;
-  --side: #eef3f3;
-  --main: #f7fafa;
-  --surface: #ffffff;
-  --raised: #eaf0f0;
-  --border: #dce5e4;
-  --soft: #ccfbf1;
-  --primary: #0f766e;
-  --primary-hover: #0d6961;
-  --on-primary: #ffffff;
-  --text: #0b1f1e;
-  --text2: #4b5f5d;
-  --text3: #7a8c8a;
-  --success: #0f766e;
-  --warning: #c2410c;
-  --danger: #b91c1c;
-  --danger-soft: #fdecec;
-  --caution-border: #f2d3c2;
-  --amber: #fbbf24;
-  --hero-a: #042f2e;
-  --hero-b: #0f766e;
-  --line: #f0fdfa;
-  --mint: #5eead4;
-  --radius-control: 6px;
-  --radius-card: 10px;
-  --radius-hero: 14px;
-  --shadow: 0 1px 2px rgb(4 47 46 / 4%);
-  --fast: 120ms;
-  --standard: 220ms;
-  color-scheme: light;
-  font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  --font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  font-family: var(--font-family);
   font-size: 14px;
   color: var(--text);
   background: var(--bg);
-}
-
-:root[data-theme="dark"], :root[data-theme="oled"] {
-  --bg: #071414;
-  --side: #0a1a19;
-  --main: #0b1817;
-  --surface: #0e1f1e;
-  --raised: #142928;
-  --border: #21403e;
-  --soft: #0f3d3a;
-  --primary: #2dd4bf;
-  --primary-hover: #5eead4;
-  --on-primary: #042f2e;
-  --text: #e6f2f1;
-  --text2: #a3bab8;
-  --text3: #7f9896;
-  --success: #2dd4bf;
-  --warning: #fb923c;
-  --danger: #f87171;
-  --danger-soft: #3a1414;
-  --caution-border: #4a2a1c;
-  --shadow: none;
-  color-scheme: dark;
-}
-
-:root[data-theme="oled"] {
-  --bg: #000000;
-  --side: #000000;
-  --main: #050909;
-  --surface: #0a0f0f;
-  --raised: #121a1a;
-  --border: #1c2b2a;
-  --soft: #0b2e2b;
-  --hero-a: #021a19;
-  --hero-b: #0b5550;
 }
 
 * { box-sizing: border-box; }

@@ -36,7 +36,9 @@ enum Appearance: String, CaseIterable, Identifiable {
     }
 }
 
-/// Brand colors. The values mirror apps/ios/Design/tokens.json; change both together.
+/// Brand colors for one theme. The `light`, `dark` and `oled` values, `Brand`, `BrandRadius`, `BrandSpacing`,
+/// `BrandMotion` and `BrandFont` are generated into BrandTokens.swift from apps/ios/Design/tokens.json by
+/// .github/scripts/design_tokens.py; change the JSON and rerun the script, never the generated file.
 struct BrandPalette: Sendable {
     let bg: Color
     let surface: Color
@@ -48,37 +50,21 @@ struct BrandPalette: Sendable {
     let text: Color
     let text2: Color
     let text3: Color
+    /// Connected and healthy; the brand teal, per U3.
+    let success: Color
+    let info: Color
     let warning: Color
     let danger: Color
     let amberText: Color
+    /// Series colors for charts, in order.
+    let chart1: Color
+    let chart2: Color
+    let chart3: Color
+    let chart4: Color
     let heroStart: Color
     let heroEnd: Color
     /// OLED keeps the tab bar black instead of the system material.
     let solidBars: Bool
-
-    static let light = BrandPalette(
-        bg: Color(hex: 0xF2F6F6), surface: Color(hex: 0xFFFFFF), raised: Color(hex: 0xEAF0F0),
-        border: Color(hex: 0xDCE5E4), soft: Color(hex: 0xCCFBF1), primary: Color(hex: 0x0F766E),
-        onPrimary: Color(hex: 0xFFFFFF), text: Color(hex: 0x0B1F1E), text2: Color(hex: 0x4B5F5D),
-        text3: Color(hex: 0x7A8C8A), warning: Color(hex: 0xC2410C), danger: Color(hex: 0xB91C1C),
-        amberText: Color(hex: 0xB45309), heroStart: Brand.deep, heroEnd: Color(hex: 0x0F766E), solidBars: false
-    )
-
-    static let dark = BrandPalette(
-        bg: Color(hex: 0x071414), surface: Color(hex: 0x0E1F1E), raised: Color(hex: 0x142928),
-        border: Color(hex: 0x21403E), soft: Color(hex: 0x0F3D3A), primary: Color(hex: 0x2DD4BF),
-        onPrimary: Color(hex: 0x042F2E), text: Color(hex: 0xE6F2F1), text2: Color(hex: 0xA3BAB8),
-        text3: Color(hex: 0x7F9896), warning: Color(hex: 0xFB923C), danger: Color(hex: 0xF87171),
-        amberText: Color(hex: 0xFBBF24), heroStart: Brand.deep, heroEnd: Color(hex: 0x0F766E), solidBars: false
-    )
-
-    static let oled = BrandPalette(
-        bg: Color(hex: 0x000000), surface: Color(hex: 0x0A0F0F), raised: Color(hex: 0x121A1A),
-        border: Color(hex: 0x1C2B2A), soft: Color(hex: 0x0B2E2B), primary: Color(hex: 0x2DD4BF),
-        onPrimary: Color(hex: 0x042F2E), text: Color(hex: 0xE6F2F1), text2: Color(hex: 0xA3BAB8),
-        text3: Color(hex: 0x7F9896), warning: Color(hex: 0xFB923C), danger: Color(hex: 0xF87171),
-        amberText: Color(hex: 0xFBBF24), heroStart: Color(hex: 0x021A19), heroEnd: Color(hex: 0x0B5550), solidBars: true
-    )
 
     static func resolve(appearance: Appearance, scheme: ColorScheme) -> BrandPalette {
         switch appearance {
@@ -96,16 +82,6 @@ struct BrandPalette: Sendable {
     var heroGradient: LinearGradient {
         LinearGradient(colors: [heroStart, heroEnd], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
-}
-
-/// Colors that stay the same in every theme: they come straight from the app icon.
-enum Brand {
-    static let deep = Color(hex: 0x042F2E)
-    static let mint = Color(hex: 0x5EEAD4)
-    static let lineStart = Color(hex: 0x99F6E4)
-    static let line = Color(hex: 0xF0FDFA)
-    static let amber = Color(hex: 0xFBBF24)
-    static let iconTeal = Color(hex: 0x0F766E)
 }
 
 extension Color {
@@ -169,14 +145,14 @@ extension View {
 /// A rounded surface card in the current palette.
 struct BrandCard<Content: View>: View {
     @Environment(\.brand) private var brand
-    var padding: CGFloat = 16
+    var padding: CGFloat = BrandSpacing.md
     @ViewBuilder var content: Content
 
     var body: some View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(brand.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(brand.surface, in: RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous))
     }
 }
 

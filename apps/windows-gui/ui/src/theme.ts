@@ -1,7 +1,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useState } from "react";
 
-// Colors live in styles.css as CSS variables; they mirror apps/ios/Design/tokens.json.
+// Colors are CSS variables in design/tokens.css, generated from apps/ios/Design/tokens.json.
 export type Appearance = "system" | "light" | "dark" | "oled";
 export type Theme = "light" | "dark" | "oled";
 

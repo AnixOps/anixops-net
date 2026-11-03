@@ -35,8 +35,10 @@ their own gates pass.
   MTU) that the extension turns into `NEPacketTunnelNetworkSettings`. Shadowsocks uses the fixed full-tunnel
   interface; WireGuard uses the config's `Address`, `AllowedIPs`, `DNS` and `MTU`. Both targets list `$(AppIdentifierPrefix)networkcore.shared` first in `keychain-access-groups`, so the
   extension reads the item the app saved. The default team-prefixed profiles already allow this group.
-- UI: the app follows the AnixOps Net brand (five tabs: 首页, 代理, 规则, 扩展, 设置). Brand colors, radii and motion
-  timings live in `apps/ios/Design/tokens.json`; `Sources/NetworkCoreAppHost/BrandPalette.swift` mirrors them.
+- UI: the app follows the AnixOps Net brand (five tabs: 首页, 代理, 规则, 扩展, 设置). Brand colors, type, radii, spacing and
+  motion live only in `apps/ios/Design/tokens.json`. `python3 .github/scripts/design_tokens.py` generates
+  `Sources/NetworkCoreAppHost/BrandTokens.swift` and the desktop `apps/windows-gui/ui/src/design/tokens.css` from it;
+  CI fails when either generated file is stale, so edit the JSON and rerun the script.
 - Widgets: `Sources/NetworkCoreWidget` holds the Home Screen / Lock Screen status widget and the iOS 18 Control
   Center switch; `Sources/NetworkCoreShared` (status reader and the connect intent) is compiled into the app and the
   widget. The TestFlight upload ships the widget only once its profile is configured (see `docs/manual-intervention.md`).
