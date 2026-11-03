@@ -9,6 +9,7 @@ struct ProxiesView: View {
     @Environment(\.brand) private var brand
     @State private var testing = false
     @State private var collapsed: Set<String> = []
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var renaming: SubscriptionGroup?
     @State private var newName = ""
     @State private var deleting: SubscriptionGroup?
@@ -215,7 +216,7 @@ struct ProxiesView: View {
         } header: {
             HStack(spacing: 8) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
                         if collapsed.contains(group.id) {
                             collapsed.remove(group.id)
                         } else {

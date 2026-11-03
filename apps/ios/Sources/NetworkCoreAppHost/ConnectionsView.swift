@@ -15,6 +15,7 @@ enum TrafficFormat {
 /// Home screen card while connected: upload and download speed, totals and open connections, refreshed every
 /// second from the engine. Tapping it opens the connection list.
 struct TrafficCard: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var tunnel: TunnelController
     @Environment(\.brand) private var brand
     @State private var traffic: RuntimeControl.Traffic?
@@ -73,7 +74,7 @@ struct TrafficCard: View {
     private func poll() async {
         while !Task.isCancelled, tunnel.connection == .connected {
             if let data = await tunnel.control(.traffic), let next = RuntimeControl.decodeTraffic(data) {
-                withAnimation(.easeOut(duration: 0.2)) {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
                     traffic = next
                 }
             }
