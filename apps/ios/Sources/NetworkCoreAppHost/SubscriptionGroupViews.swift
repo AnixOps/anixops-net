@@ -6,7 +6,7 @@ import SwiftUI
 /// A group's actions: update now, the automatic update interval, rename and delete. `rename` and `delete` let the
 /// page show its own prompt.
 struct SubscriptionGroupMenu: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     let group: SubscriptionGroup
     let rename: () -> Void
     let delete: () -> Void

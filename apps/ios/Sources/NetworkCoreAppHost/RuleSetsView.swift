@@ -4,7 +4,7 @@ import SwiftUI
 /// The rules page's list of the subscription's rules and the rule sets they use. While connected each set shows
 /// what the engine loaded: entries, last download and the last error, with a button to download them all now.
 struct RuleSetsSection: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     let rules: [String]
     let defined: [String: EmbeddedRuntimeConfig.RuleSet]?
     @Environment(\.brand) private var brand

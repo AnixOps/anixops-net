@@ -2,12 +2,14 @@ import Foundation
 import Network
 import NetworkCoreBridge
 import NetworkExtension
+import Observation
 
 /// The live data behind the home screen dashboard: speed and its last minute, the busiest hosts, the policy groups,
 /// the device's network, the exit address on request, and a short event log. Polls the engine only while the
 /// tunnel is connected and the home screen is showing.
 @MainActor
-final class DashboardModel: ObservableObject {
+@Observable
+final class DashboardModel {
     enum ExitLookup: Equatable {
         case idle
         case loading
@@ -32,16 +34,16 @@ final class DashboardModel: ObservableObject {
         var switches = 0
     }
 
-    @Published private(set) var traffic: RuntimeControl.Traffic?
-    @Published private(set) var history = TrafficHistory()
-    @Published private(set) var topHosts: [HostTraffic] = []
-    @Published private(set) var groups: [RuntimeControl.Groups.Group] = []
-    @Published private(set) var network = NetworkState()
-    @Published private(set) var exitLookup = ExitLookup.idle
-    @Published private(set) var events: DashboardEventLog
+    private(set) var traffic: RuntimeControl.Traffic?
+    private(set) var history = TrafficHistory()
+    private(set) var topHosts: [HostTraffic] = []
+    private(set) var groups: [RuntimeControl.Groups.Group] = []
+    private(set) var network = NetworkState()
+    private(set) var exitLookup = ExitLookup.idle
+    private(set) var events: DashboardEventLog
 
     private static let eventsKey = "dashboard-events"
-    private var monitor: NWPathMonitor?
+    @ObservationIgnored private var monitor: NWPathMonitor?
 
     init() {
         let saved = UserDefaults.standard.data(forKey: Self.eventsKey)

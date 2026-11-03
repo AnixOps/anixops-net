@@ -6,7 +6,7 @@ import SwiftUI
 /// Extensions: the HTTPS decryption root and the same plugin and script section as on iOS. A Mac trusts the root
 /// through the login keychain instead of a configuration profile.
 struct MacExtensionsPage: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @Environment(\.brand) private var brand
     @StateObject private var certificate = MacCertificateModel()
     @StateObject private var plugins = PluginsModel()

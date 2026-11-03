@@ -16,7 +16,7 @@ struct TrafficStatsView: View {
         case policies
     }
 
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @Environment(\.brand) private var brand
     @State private var stats: TrafficStats?
     @State private var fromCache = false

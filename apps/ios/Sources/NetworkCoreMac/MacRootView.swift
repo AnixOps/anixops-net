@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The main window: a sidebar with the six sections, the page, and a toolbar with import and connect.
 struct MacRootView: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @ObservedObject var state: MacAppState
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
     @Environment(\.colorScheme) private var colorScheme
@@ -100,7 +100,7 @@ private struct SolidBackground: ViewModifier {
 /// The connection at a glance under the sidebar, so it stays visible on every page.
 private struct SidebarStatus: View {
     @Environment(\.brand) private var brand
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
 
     var body: some View {
         HStack(spacing: 10) {

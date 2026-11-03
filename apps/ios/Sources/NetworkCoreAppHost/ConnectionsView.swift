@@ -15,7 +15,7 @@ enum TrafficFormat {
 /// Home screen card while connected: upload and download speed, totals and open connections, refreshed every
 /// second from the engine. Tapping it opens the connection list.
 struct TrafficCard: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @Environment(\.brand) private var brand
     @State private var traffic: RuntimeControl.Traffic?
 
@@ -94,7 +94,7 @@ struct ConnectionsView: View {
         case hosts
     }
 
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @Environment(\.brand) private var brand
     @State private var list = RuntimeControl.Connections()
     @State private var loaded = false

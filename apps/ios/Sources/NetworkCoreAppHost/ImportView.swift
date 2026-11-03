@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 
 /// The import sheet: paste or pick a file, check the parsed node, then save it.
 struct ImportView: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @Environment(\.brand) private var brand
     @Environment(\.dismiss) private var dismiss
 

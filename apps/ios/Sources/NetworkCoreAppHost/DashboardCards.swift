@@ -47,8 +47,8 @@ extension DashboardCard {
 
 /// The dashboard cards in rows: wide cards alone, narrow cards in pairs of equal height.
 struct DashboardGrid: View {
-    @ObservedObject var tunnel: TunnelController
-    @ObservedObject var model: DashboardModel
+    var tunnel: TunnelController
+    var model: DashboardModel
     let layout: DashboardLayout
     @Binding var tab: AppTab
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -195,8 +195,8 @@ private struct TilePlaceholder: View {
 // MARK: - Speed
 
 private struct SpeedTile: View {
-    @ObservedObject var tunnel: TunnelController
-    @ObservedObject var model: DashboardModel
+    var tunnel: TunnelController
+    var model: DashboardModel
     @Environment(\.brand) private var brand
 
     var body: some View {
@@ -292,8 +292,8 @@ private struct Sparkline: View {
 // MARK: - Usage
 
 private struct UsageTile: View {
-    @ObservedObject var tunnel: TunnelController
-    @ObservedObject var model: DashboardModel
+    var tunnel: TunnelController
+    var model: DashboardModel
     @Environment(\.brand) private var brand
 
     var body: some View {
@@ -339,7 +339,7 @@ private struct UsageTile: View {
 // MARK: - Network
 
 private struct NetworkTile: View {
-    @ObservedObject var model: DashboardModel
+    var model: DashboardModel
     @Environment(\.brand) private var brand
 
     private var symbol: String {
@@ -386,8 +386,8 @@ private struct NetworkTile: View {
 // MARK: - Groups
 
 private struct GroupsTile: View {
-    @ObservedObject var tunnel: TunnelController
-    @ObservedObject var model: DashboardModel
+    var tunnel: TunnelController
+    var model: DashboardModel
     @Binding var tab: AppTab
     @Environment(\.brand) private var brand
 
@@ -460,8 +460,8 @@ enum LatencyColor {
 // MARK: - Top hosts
 
 private struct TopHostsTile: View {
-    @ObservedObject var tunnel: TunnelController
-    @ObservedObject var model: DashboardModel
+    var tunnel: TunnelController
+    var model: DashboardModel
     @Environment(\.brand) private var brand
 
     var body: some View {
@@ -518,7 +518,7 @@ private struct TopHostsTile: View {
 // MARK: - DNS
 
 private struct DnsTile: View {
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @Environment(\.brand) private var brand
 
     var body: some View {
@@ -550,8 +550,8 @@ private struct DnsTile: View {
 // MARK: - Exit address
 
 private struct ExitAddressTile: View {
-    @ObservedObject var tunnel: TunnelController
-    @ObservedObject var model: DashboardModel
+    var tunnel: TunnelController
+    var model: DashboardModel
     @Environment(\.brand) private var brand
 
     var body: some View {
@@ -601,7 +601,7 @@ private struct ExitAddressTile: View {
 // MARK: - Events
 
 private struct EventsTile: View {
-    @ObservedObject var model: DashboardModel
+    var model: DashboardModel
     @Environment(\.brand) private var brand
 
     var body: some View {

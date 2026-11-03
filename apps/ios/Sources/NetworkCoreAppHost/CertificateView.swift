@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 /// The "扩展" tab: the HTTPS decryption certificate wizard and local Loon plugins.
 struct ExtensionsView: View {
     @Environment(\.brand) private var brand
-    @ObservedObject var tunnel: TunnelController
+    var tunnel: TunnelController
     @StateObject private var plugins = PluginsModel()
 
     var body: some View {
