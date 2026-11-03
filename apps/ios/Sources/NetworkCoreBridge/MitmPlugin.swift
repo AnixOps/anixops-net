@@ -12,8 +12,17 @@ public struct MitmPlugin: Codable, Equatable, Identifiable {
     public var isEnabled: Bool
     /// Where a remote plugin was downloaded from; relative `script-path`s resolve against it.
     public var sourceURL: URL?
+    /// The kernel's import of `text`, when the app could run it. Plugins saved before it existed have none until
+    /// the app inspects them again.
+    public var inspection: MitmPluginInspection?
 
-    public init(text: String, fallbackName: String = "未命名插件", sourceURL: URL? = nil, id: UUID = UUID()) throws {
+    public init(
+        text: String,
+        fallbackName: String = "未命名插件",
+        sourceURL: URL? = nil,
+        id: UUID = UUID(),
+        inspection: MitmPluginInspection? = nil
+    ) throws {
         if text.utf8.count > Self.maxBytes {
             throw MitmPluginError.tooLarge
         }
@@ -21,18 +30,30 @@ public struct MitmPlugin: Codable, Equatable, Identifiable {
         if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             throw MitmPluginError.empty
         }
-        if summary.rewriteLines + summary.scriptLines == 0, summary.hostnames.isEmpty {
+        if let inspection {
+            if !inspection.appliesAnything {
+                throw MitmPluginError.nothingToApply
+            }
+        } else if summary.rewriteLines + summary.scriptLines == 0, summary.hostnames.isEmpty {
             throw MitmPluginError.nothingToApply
         }
         self.id = id
-        name = summary.name ?? fallbackName
+        self.inspection = inspection
+        name = inspection?.name ?? summary.name ?? fallbackName
         self.text = text
         isEnabled = true
         self.sourceURL = sourceURL
     }
 
-    /// The `script-path` of every `[Script]` line, in order and without repeats.
+    /// Every `script-path` the plugin runs, in order and without repeats: from the kernel's import when there is
+    /// one (it also finds the scripts of Quantumult X rewrites and Surge modules), else from the `[Script]` lines.
     public var scriptReferences: [MitmScriptReference] {
+        if let inspection {
+            var seen: Set<String> = []
+            return inspection.resources
+                .filter { $0.kind == MitmPluginInspection.Resource.script && seen.insert($0.url).inserted }
+                .map { MitmScriptReference(path: $0.url, tag: nil, base: sourceURL) }
+        }
         var references: [MitmScriptReference] = []
         var inScript = false
         for rawLine in text.components(separatedBy: .newlines) {
@@ -51,6 +72,14 @@ public struct MitmPlugin: Codable, Equatable, Identifiable {
             }
         }
         return references
+    }
+
+    /// Remote `[Map Local]` bodies the plugin serves, as written in it. Known only from the kernel's import.
+    public var dataReferences: [MitmScriptReference] {
+        var seen: Set<String> = []
+        return (inspection?.resources ?? [])
+            .filter { $0.kind == MitmPluginInspection.Resource.mapLocalData && seen.insert($0.url).inserted }
+            .map { MitmScriptReference(path: $0.url, tag: nil, base: sourceURL) }
     }
 
     /// The value of `name=value` (or `name = value`) in a comma-separated script line. The first item also holds
@@ -201,6 +230,32 @@ public struct MitmPluginLibrary: Codable, Equatable {
 
     public mutating func remove(_ id: UUID) {
         plugins.removeAll { $0.id == id }
+    }
+
+    /// Fills in the kernel's import for plugins saved without one. Returns whether any changed.
+    public mutating func inspectMissing(_ inspect: (String) -> MitmPluginInspection?) -> Bool {
+        var changed = false
+        for index in plugins.indices where plugins[index].inspection == nil {
+            if let inspection = inspect(plugins[index].text) {
+                plugins[index].inspection = inspection
+                changed = true
+            }
+        }
+        return changed
+    }
+
+    /// Remote `[Map Local]` bodies of the plugins handed to the tunnel, without repeats.
+    public var activeDataReferences: [MitmScriptReference] {
+        guard isEnabled else {
+            return []
+        }
+        var seen: Set<String> = []
+        return plugins.filter(\.isEnabled).flatMap(\.dataReferences).filter { seen.insert($0.path).inserted }
+    }
+
+    /// Remote `[Map Local]` bodies any imported plugin names.
+    public var allDataPaths: Set<String> {
+        Set(plugins.flatMap(\.dataReferences).map(\.path))
     }
 
     private func checkSize() throws {

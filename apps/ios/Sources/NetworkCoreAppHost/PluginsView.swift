@@ -242,14 +242,22 @@ final class PluginsModel: ObservableObject {
 
     @Published private(set) var library = MitmPluginLibrary()
     @Published private(set) var scripts = MitmScriptLibrary()
+    /// Downloaded `[Map Local]` bodies; data, so fetched on import without asking.
+    private var resources = MitmResourceLibrary()
     @Published private(set) var trustState = MitmTrustState.notGenerated
     @Published private(set) var note: String?
     @Published private(set) var isDownloading = false
 
     func load() {
         do {
-            library = try MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)
+            var loaded = try MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)
+            // Plugins imported before the kernel inspected them: inspect once and keep the result.
+            if loaded.inspectMissing(MitmPluginInspector.inspect) {
+                try? loaded.save(to: MitmPluginLibrary.defaultURL)
+            }
+            library = loaded
             scripts = try MitmScriptLibrary.load(from: MitmScriptLibrary.defaultURL)
+            resources = (try? MitmResourceLibrary.load(from: MitmResourceLibrary.defaultURL)) ?? MitmResourceLibrary()
         } catch {
             note = String(localized: "读取插件列表失败")
         }
@@ -298,6 +306,9 @@ final class PluginsModel: ObservableObject {
         var next = library
         next.isEnabled = enabled
         await commit(next, tunnel: tunnel)
+        if enabled {
+            await fetchMissingResources(tunnel: tunnel)
+        }
     }
 
     func setEnabled(_ enabled: Bool, for id: UUID, tunnel: TunnelController) async {
@@ -309,6 +320,9 @@ final class PluginsModel: ObservableObject {
             return
         }
         await commit(next, tunnel: tunnel)
+        if enabled {
+            await fetchMissingResources(tunnel: tunnel)
+        }
     }
 
     func remove(_ ids: [UUID], tunnel: TunnelController) async {
@@ -344,13 +358,38 @@ final class PluginsModel: ObservableObject {
         }
         var next = library
         do {
-            let plugin = try MitmPlugin(text: text, fallbackName: name ?? String(localized: "未命名插件"), sourceURL: sourceURL)
+            let plugin = try MitmPlugin(
+                text: text,
+                fallbackName: name ?? String(localized: "未命名插件"),
+                sourceURL: sourceURL,
+                inspection: MitmPluginInspector.inspect(text)
+            )
             try next.add(plugin)
         } catch {
             note = Self.describe(error)
             return
         }
         await commit(next, tunnel: tunnel)
+        await fetchMissingResources(tunnel: tunnel)
+    }
+
+    /// Downloads the `[Map Local]` bodies the enabled plugins name and does not have yet. A body that fails to
+    /// download leaves its line answering nothing; the note says so.
+    func fetchMissingResources(tunnel: TunnelController) async {
+        var next = resources
+        var fetched = false
+        for reference in library.activeDataReferences where next.items[reference.path] == nil {
+            guard let url = reference.url,
+                  let data = await download(url, maxBytes: MitmResourceLibrary.maxBytes, kind: String(localized: "插件数据"))
+            else {
+                continue
+            }
+            next.store(data, for: reference.path)
+            fetched = true
+        }
+        if fetched {
+            await commit(library, resources: next, tunnel: tunnel)
+        }
     }
 
     /// Downloads a plugin the user typed the address of. Its scripts are listed but not fetched.
@@ -415,8 +454,15 @@ final class PluginsModel: ObservableObject {
     }
 
     /// Saves the lists, then hands the enabled plugins and their allowed scripts to the tunnel profile.
-    private func commit(_ next: MitmPluginLibrary, scripts nextScripts: MitmScriptLibrary? = nil, tunnel: TunnelController) async {
+    private func commit(
+        _ next: MitmPluginLibrary,
+        scripts nextScripts: MitmScriptLibrary? = nil,
+        resources nextResources: MitmResourceLibrary? = nil,
+        tunnel: TunnelController
+    ) async {
         let nextScripts = nextScripts ?? scripts
+        var nextResources = nextResources ?? resources
+        nextResources.keep(only: next.allDataPaths)
         let sources: [String: String]
         do {
             sources = try nextScripts.sources(for: next.activeScriptReferences)
@@ -427,13 +473,19 @@ final class PluginsModel: ObservableObject {
         do {
             try next.save(to: MitmPluginLibrary.defaultURL)
             try nextScripts.save(to: MitmScriptLibrary.defaultURL)
+            try nextResources.save(to: MitmResourceLibrary.defaultURL)
         } catch {
             note = String(localized: "保存插件列表失败")
             return
         }
         library = next
         scripts = nextScripts
-        let changed = await tunnel.applyMitmPlugins(next.activeTexts, scripts: sources)
+        resources = nextResources
+        let changed = await tunnel.applyMitmPlugins(
+            next.activeTexts,
+            scripts: sources,
+            resources: nextResources.data(for: next.activeDataReferences.map(\.path))
+        )
         note = changed && tunnel.isConnected ? String(localized: "已保存，隧道正在重新连接。") : nil
     }
 

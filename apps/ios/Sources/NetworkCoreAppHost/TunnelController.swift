@@ -632,6 +632,11 @@ final class TunnelController: ObservableObject {
             {
                 providerConfiguration[TunnelProfileKeys.mitmScripts] = value
             }
+            let resources = (try? MitmResourceLibrary.load(from: MitmResourceLibrary.defaultURL)) ?? MitmResourceLibrary()
+            let data = resources.data(for: library.activeDataReferences.map(\.path))
+            if !data.isEmpty, let value = try? MitmResourceLibrary.profileValue(data) {
+                providerConfiguration[TunnelProfileKeys.mitmResources] = value
+            }
         }
         tunnelProtocol.providerConfiguration = providerConfiguration
 
@@ -658,7 +663,11 @@ final class TunnelController: ObservableObject {
     /// Without a profile there is nothing to update: the next import picks them up. The extension reads them only
     /// at start, so a running tunnel restarts on them. Returns whether the profile changed.
     @discardableResult
-    func applyMitmPlugins(_ texts: [String], scripts: [String: String] = [:]) async -> Bool {
+    func applyMitmPlugins(
+        _ texts: [String],
+        scripts: [String: String] = [:],
+        resources: [String: Data] = [:]
+    ) async -> Bool {
         guard let manager,
               let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol
         else {
@@ -667,8 +676,12 @@ final class TunnelController: ObservableObject {
         var configuration = tunnelProtocol.providerConfiguration ?? [:]
         let current = MitmPluginLibrary.texts(fromProfileValue: configuration[TunnelProfileKeys.mitmPlugins] as? Data)
         let currentScripts = MitmScriptLibrary.sources(fromProfileValue: configuration[TunnelProfileKeys.mitmScripts] as? Data)
+        let currentResources = MitmResourceLibrary.data(
+            fromProfileValue: configuration[TunnelProfileKeys.mitmResources] as? Data
+        )
         let scripts = texts.isEmpty ? [:] : scripts
-        guard current != texts || currentScripts != scripts else {
+        let resources = texts.isEmpty ? [:] : resources
+        guard current != texts || currentScripts != scripts || currentResources != resources else {
             return false
         }
         if texts.isEmpty {
@@ -688,6 +701,11 @@ final class TunnelController: ObservableObject {
                 return false
             }
             configuration[TunnelProfileKeys.mitmScripts] = value
+        }
+        if resources.isEmpty {
+            configuration.removeValue(forKey: TunnelProfileKeys.mitmResources)
+        } else if let value = try? MitmResourceLibrary.profileValue(resources) {
+            configuration[TunnelProfileKeys.mitmResources] = value
         }
         tunnelProtocol.providerConfiguration = configuration
         manager.protocolConfiguration = tunnelProtocol
