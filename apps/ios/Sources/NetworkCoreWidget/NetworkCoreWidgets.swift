@@ -6,6 +6,7 @@ import WidgetKit
 struct NetworkCoreWidgets: WidgetBundle {
     var body: some Widget {
         StatusWidget()
+        TunnelLiveActivity()
         if #available(iOS 18.0, *) {
             ConnectControl()
             ProxyModeControl()

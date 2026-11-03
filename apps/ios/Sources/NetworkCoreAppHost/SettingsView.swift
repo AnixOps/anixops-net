@@ -4,12 +4,13 @@ import SwiftUI
 struct SettingsView: View {
     var tunnel: TunnelController
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
+    @AppStorage(LiveActivityController.storageKey) private var liveActivity = true
     @Environment(\.brand) private var brand
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("外观") {
+                Section {
                     Picker("外观", selection: $appearance) {
                         ForEach(Appearance.allCases) { option in
                             Text(option.label).tag(option)
@@ -17,6 +18,12 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.segmented)
                     .listRowBackground(brand.surface)
+                    Toggle("锁定屏幕和灵动岛显示连接", isOn: $liveActivity)
+                        .listRowBackground(brand.surface)
+                } header: {
+                    Text("外观")
+                } footer: {
+                    Text("连接后显示节点和已连接时长，可以直接断开。")
                 }
 
                 Section {

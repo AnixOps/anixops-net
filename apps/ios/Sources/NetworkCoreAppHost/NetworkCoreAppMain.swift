@@ -90,6 +90,8 @@ struct RootView: View {
     @State private var tab = AppTab.home
     @State private var importing = false
     @AppStorage(OnboardingView.storageKey) private var onboardingDone = false
+    @AppStorage(LiveActivityController.storageKey) private var liveActivity = true
+    @Environment(\.scenePhase) private var scenePhase
 
     /// First run only: after loading, with nothing imported and the welcome screen never closed.
     private var showsOnboarding: Binding<Bool> {
@@ -125,6 +127,15 @@ struct RootView: View {
                 onboardingDone = true
             }
         }
+        .onChange(of: activityInputs, initial: true) { _, _ in
+            LiveActivityController.sync(
+                enabled: liveActivity,
+                connection: tunnel.connection,
+                nodeName: tunnel.nodeName,
+                outboundKind: tunnel.outboundKind,
+                connectedSince: tunnel.connectedSince
+            )
+        }
         .fullScreenCover(isPresented: showsOnboarding) {
             OnboardingView {
                 onboardingDone = true
@@ -139,6 +150,25 @@ struct RootView: View {
             .environment(\.brand, brand)
             .tint(brand.primary)
         }
+    }
+
+    /// What the Live Activity shows, plus the foreground state, since iOS only starts one from the open app.
+    private var activityInputs: ActivityInputs {
+        ActivityInputs(
+            enabled: liveActivity,
+            active: scenePhase == .active,
+            connection: tunnel.connection,
+            nodeName: tunnel.nodeName,
+            connectedSince: tunnel.connectedSince
+        )
+    }
+
+    private struct ActivityInputs: Equatable {
+        let enabled: Bool
+        let active: Bool
+        let connection: NEVPNStatus
+        let nodeName: String?
+        let connectedSince: Date?
     }
 
     private var tabView: some View {

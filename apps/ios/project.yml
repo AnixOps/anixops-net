@@ -49,6 +49,8 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         ITSAppUsesNonExemptEncryption: false
+        # The connection's Live Activity on the Lock Screen and in the Dynamic Island (LiveActivityController).
+        NSSupportsLiveActivities: true
         # Subscription groups update in the background (TunnelController.scheduleBackgroundRefresh).
         UIBackgroundModes:
           - fetch
