@@ -113,6 +113,7 @@ targets:
       - path: Sources/NetworkCoreWidget
       - path: Sources/NetworkCoreShared
       - path: Sources/NetworkCoreAppHost/BrandPalette.swift
+      - path: Sources/NetworkCoreAppHost/BrandTokens.swift
       - path: Sources/NetworkCoreAppHost/RouteLine.swift
       - path: Sources/NetworkCoreApp/Resources/Localizable.xcstrings
     info:
@@ -146,6 +147,7 @@ targets:
       - path: Sources/NetworkCoreApp/Resources/Localizable.xcstrings
       - path: Sources/NetworkCoreApp/Resources/PrivacyInfo.xcprivacy
       - path: Sources/NetworkCoreAppHost/BrandPalette.swift
+      - path: Sources/NetworkCoreAppHost/BrandTokens.swift
       - path: Sources/NetworkCoreAppHost/ConnectionsView.swift
       - path: Sources/NetworkCoreAppHost/DnsSettingsView.swift
       - path: Sources/NetworkCoreAppHost/ImportView.swift

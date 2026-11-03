@@ -35,6 +35,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      # apps/ios/Design/tokens.json is the only design-token source; the Swift and CSS files are generated.
+      - name: Design tokens are up to date
+        run: python3 .github/scripts/design_tokens.py --check
+
       # Pull requests run only the platforms their paths touch. Pushes to main, manual runs and any change to
       # the workspace, lockfile, workflows or scripts run everything.
       - name: Classify changed paths
