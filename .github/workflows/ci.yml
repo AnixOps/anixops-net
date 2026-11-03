@@ -630,6 +630,8 @@ jobs:
             | grep -qx 'com.apple.networkextension.packet-tunnel'
           /usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "${app}/PlugIns/NetworkCoreWidget.appex/Info.plist" \
             | grep -qx 'com.apple.widgetkit-extension'
+          # The connection's Live Activity needs the app to declare it.
+          /usr/libexec/PlistBuddy -c 'Print :NSSupportsLiveActivities' "${app}/Info.plist" | grep -qx 'true'
           # App Store Connect rejects uploads without an asset-catalog icon or declared orientations.
           # actool records the icon under CFBundleIcons:CFBundlePrimaryIcon; some Xcode versions also add it at the top level.
           icon="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "${app}/Info.plist" 2>/dev/null \

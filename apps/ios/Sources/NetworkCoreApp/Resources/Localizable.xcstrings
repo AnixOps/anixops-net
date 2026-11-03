@@ -3727,6 +3727,16 @@
         }
       }
     },
+    "连接后显示节点和已连接时长，可以直接断开。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "While connected, shows the node and how long it has been up, with a disconnect button."
+          }
+        }
+      }
+    },
     "连接后统计": {
       "localizations": {
         "en": {
@@ -4073,6 +4083,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Route"
+          }
+        }
+      }
+    },
+    "锁定屏幕和灵动岛显示连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show connection on Lock Screen and Dynamic Island"
           }
         }
       }
