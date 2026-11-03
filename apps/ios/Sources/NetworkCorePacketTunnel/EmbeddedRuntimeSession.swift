@@ -60,11 +60,13 @@ final class EmbeddedRuntimeSession {
             throw Failure(code: NetworkCoreRuntimeFFI.Code.invalidArgument)
         }
         let writer = Unmanaged.passRetained(PacketWriter(packetFlow: packetFlow))
-        let code = networkcore_ios_runtime_start_tunnel(handle, { context, packet, length in
-            guard let context = context, let packet = packet, length > 0 else {
+        // Batched writer (feature set 4): one callback and one writePackets call per burst of packets.
+        let code = networkcore_ios_runtime_start_tunnel_batched(handle, { context, packets, count in
+            guard let context = context, let packets = packets, count > 0 else {
                 return
             }
-            Unmanaged<PacketWriter>.fromOpaque(context).takeUnretainedValue().write(packet, length)
+            Unmanaged<PacketWriter>.fromOpaque(context).takeUnretainedValue()
+                .write(UnsafeBufferPointer(start: packets, count: count))
         }, writer.toOpaque())
         guard code == NetworkCoreRuntimeFFI.Code.ok else {
             writer.release()
@@ -140,16 +142,41 @@ final class EmbeddedRuntimeSession {
             guard let self = self, let handle = self.runningHandle() else {
                 return
             }
-            for packet in packets {
-                packet.withUnsafeBytes { raw in
-                    guard let base = raw.bindMemory(to: UInt8.self).baseAddress, raw.count > 0 else {
-                        return
+            // One FFI call per chunk instead of one per packet. A full queue drops packets; TCP retransmits them.
+            var start = packets.startIndex
+            while start < packets.endIndex {
+                let end = min(start + Self.inputChunk, packets.endIndex)
+                var views: [NetworkCorePacket] = []
+                views.reserveCapacity(end - start)
+                Self.withPacketViews(packets[start..<end], into: &views) { views in
+                    views.withUnsafeBufferPointer { buffer in
+                        _ = networkcore_ios_runtime_input_packets(handle, buffer.baseAddress, buffer.count, nil)
                     }
-                    // A full queue drops the packet; TCP retransmits it.
-                    _ = networkcore_ios_runtime_input_packet(handle, base, raw.count)
                 }
+                start = end
             }
             self.readPackets()
+        }
+    }
+
+    /// Packets per `input_packets` call; also bounds the recursion below.
+    private static let inputChunk = 64
+
+    /// Pins each packet's bytes for the duration of `body`, which sees one pointer/length view per non-empty packet.
+    private static func withPacketViews(
+        _ packets: ArraySlice<Data>,
+        into views: inout [NetworkCorePacket],
+        _ body: ([NetworkCorePacket]) -> Void
+    ) {
+        guard let first = packets.first else {
+            body(views)
+            return
+        }
+        first.withUnsafeBytes { raw in
+            if let base = raw.bindMemory(to: UInt8.self).baseAddress, raw.count > 0 {
+                views.append(NetworkCorePacket(ptr: base, len: raw.count))
+            }
+            withPacketViews(packets.dropFirst(), into: &views, body)
         }
     }
 }
@@ -164,14 +191,26 @@ private final class PacketWriter {
         self.packetFlow = packetFlow
     }
 
-    /// Called on the runtime's own long-lived thread, which has no autorelease pool of its own: without the
+    /// Called once per burst on the runtime's own long-lived thread, which has no autorelease pool of its own: without the
     /// explicit pool every packet's bridged array, number and data objects stay alive until the thread exits, so
     /// memory grows with traffic and a heavy download pushes the extension past the system memory limit
     /// ("The VPN session failed because an internal error occurred").
-    func write(_ packet: UnsafePointer<UInt8>, _ length: Int) {
+    func write(_ packets: UnsafeBufferPointer<NetworkCorePacket>) {
         autoreleasepool {
-            let family = (packet.pointee >> 4) == 6 ? ipv6 : ipv4
-            packetFlow.writePackets([Data(bytes: packet, count: length)], withProtocols: [family])
+            var datas: [Data] = []
+            var families: [NSNumber] = []
+            datas.reserveCapacity(packets.count)
+            families.reserveCapacity(packets.count)
+            for packet in packets {
+                guard let pointer = packet.ptr, packet.len > 0 else {
+                    continue
+                }
+                families.append((pointer.pointee >> 4) == 6 ? ipv6 : ipv4)
+                datas.append(Data(bytes: pointer, count: packet.len))
+            }
+            if !datas.isEmpty {
+                packetFlow.writePackets(datas, withProtocols: families)
+            }
         }
     }
 }
