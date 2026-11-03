@@ -799,9 +799,34 @@ final class TunnelController {
             manager.connection.stopVPNTunnel()
             return
         }
-        guard coordinator.canStartTunnel else {
+        guard manager.isEnabled else {
+            // Turning on another VPN app in Settings disables this profile. The coordinator then reports the
+            // tunnel as unavailable, and the button used to do nothing at all: re-enable the profile first, the
+            // same way the widget and Shortcuts paths do.
+            Task { await enableAndStart(manager) }
             return
         }
+        guard coordinator.canStartTunnel else {
+            message = String(localized: "无法启动隧道")
+            return
+        }
+        start(manager)
+    }
+
+    private func enableAndStart(_ manager: NETunnelProviderManager) async {
+        do {
+            manager.isEnabled = true
+            try await manager.saveToPreferences()
+            try await manager.loadFromPreferences()
+        } catch {
+            message = String(localized: "无法启动隧道")
+            return
+        }
+        refresh()
+        start(manager)
+    }
+
+    private func start(_ manager: NETunnelProviderManager) {
         do {
             try manager.connection.startVPNTunnel()
             message = nil
