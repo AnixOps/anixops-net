@@ -3,8 +3,16 @@ import NetworkCoreBridge
 import XCTest
 
 final class DashboardLayoutTests: XCTestCase {
-    func testDefaultShowsEveryCardInOrder() {
+    func testNewInstallShowsThreeCards() {
         let layout = DashboardLayout(storage: "")
+        XCTAssertEqual(layout.visible, [.speed, .usage, .topHosts])
+        XCTAssertEqual(Set(layout.order), Set(DashboardCard.allCases))
+        XCTAssertFalse(layout.isShown(.dns))
+        XCTAssertEqual(DashboardLayout(storage: layout.storage), layout)
+    }
+
+    func testEmptyInitShowsEveryCardInOrder() {
+        let layout = DashboardLayout()
         XCTAssertEqual(layout.order, DashboardCard.allCases)
         XCTAssertEqual(layout.visible, DashboardCard.allCases)
     }

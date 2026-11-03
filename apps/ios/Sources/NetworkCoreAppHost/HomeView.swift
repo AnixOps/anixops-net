@@ -14,6 +14,7 @@ struct HomeView: View {
     @AppStorage(DashboardLayout.storageKey) private var layoutStorage = ""
     @State private var heroVisible = true
     @State private var editing = false
+    @State private var picking = false
 
     private static let scrollSpace = "home-scroll"
     private static let headerHeight: CGFloat = 52
@@ -26,7 +27,7 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 12) {
-                    ConnectCard(tunnel: tunnel, phase: phase, importing: $importing, tab: $tab)
+                    ConnectCard(tunnel: tunnel, phase: phase, importing: $importing, picking: $picking)
                         .background(
                             GeometryReader { proxy in
                                 Color.clear.preference(
@@ -69,6 +70,11 @@ struct HomeView: View {
             .brandBars(brand)
             .sheet(isPresented: $editing) {
                 DashboardEditSheet(layoutStorage: $layoutStorage)
+            }
+            .sheet(isPresented: $picking) {
+                NodePickerSheet(tunnel: tunnel) {
+                    tab = .proxies
+                }
             }
             .task(id: tunnel.connection) {
                 await dashboard.poll(tunnel)
@@ -140,7 +146,8 @@ private struct ConnectCard: View {
     var tunnel: TunnelController
     let phase: ConnectPhase
     @Binding var importing: Bool
-    @Binding var tab: AppTab
+    /// Opens the node picker.
+    @Binding var picking: Bool
     @Environment(\.brand) private var brand
 
     /// The rule mode needs subscription rules; a single pasted node offers global and direct only.
@@ -175,7 +182,7 @@ private struct ConnectCard: View {
                         .foregroundStyle(Brand.line.opacity(0.75))
                     if let name = tunnel.nodeName {
                         Button {
-                            tab = .proxies
+                            picking = true
                         } label: {
                             HStack(spacing: 4) {
                                 Text(ProtocolBadge.abbreviation(for: tunnel.outboundKind))
@@ -195,6 +202,7 @@ private struct ConnectCard: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(Text("当前节点 \(name)"))
+                        .accessibilityHint(Text("选择其他节点"))
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

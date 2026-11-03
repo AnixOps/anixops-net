@@ -807,6 +807,16 @@
         }
       }
     },
+    "全部测速": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test All"
+          }
+        }
+      }
+    },
     "全部请求": {
       "localizations": {
         "en": {
@@ -1033,6 +1043,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Protocol"
+          }
+        }
+      }
+    },
+    "去代理页调整策略组": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adjust Policy Groups in Proxies"
           }
         }
       }
@@ -1367,6 +1387,16 @@
         }
       }
     },
+    "导入订阅后，可以在这里切换节点。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import a subscription to switch nodes here."
+          }
+        }
+      }
+    },
     "导入订阅链接后，每个订阅是一个订阅组，可以测延迟、切换节点、手动或自动更新。": {
       "localizations": {
         "en": {
@@ -1657,6 +1687,16 @@
         }
       }
     },
+    "当前订阅按规则分流，每条流量走哪个节点由策略组决定。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This subscription routes by rules: policy groups decide which node each connection uses."
+          }
+        }
+      }
+    },
     "或手动输入": {
       "localizations": {
         "en": {
@@ -1797,6 +1837,16 @@
         }
       }
     },
+    "按延迟排序，未测速的节点在后。连接中切换节点会自动重连。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sorted by delay, untested nodes last. Switching while connected reconnects automatically."
+          }
+        }
+      }
+    },
     "按流量计费的网络": {
       "localizations": {
         "en": {
@@ -1863,6 +1913,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The plugin is larger than 256 KB"
+          }
+        }
+      }
+    },
+    "搜索节点，/正则/ 匹配名称": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search nodes, /regex/ matches names"
           }
         }
       }
@@ -2347,6 +2407,16 @@
         }
       }
     },
+    "查看全部订阅和策略组": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All Subscriptions and Policy Groups"
+          }
+        }
+      }
+    },
     "查看是否已连接，轻点即可连接或断开。": {
       "localizations": {
         "en": {
@@ -2517,6 +2587,16 @@
         }
       }
     },
+    "没有匹配的节点。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No matching nodes."
+          }
+        }
+      }
+    },
     "没有可用的节点": {
       "localizations": {
         "en": {
@@ -2533,6 +2613,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No usable node (not supported yet: %@)"
+          }
+        }
+      }
+    },
+    "没有可选的节点": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No Nodes to Choose"
           }
         }
       }
@@ -3593,6 +3683,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Quit AnixOps Net"
+          }
+        }
+      }
+    },
+    "选择其他节点": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose another node"
+          }
+        }
+      }
+    },
+    "选择线路": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a Node"
           }
         }
       }
