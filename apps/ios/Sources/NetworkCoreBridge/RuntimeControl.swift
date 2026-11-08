@@ -17,6 +17,14 @@ public enum RuntimeControl {
     case ruleSets
     /// Downloads every remote rule set now.
     case updateRuleSets
+    /// Plugin scripts that run outside HTTP flows (`cron`, `network-changed`, `generic`).
+    case scripts
+    /// What scripts posted since the last call; each notification comes once.
+    case scriptNotifications
+    /// Runs the `network-changed` scripts; the extension sends it when the device's network changes.
+    case networkChanged
+    /// Runs one scheduled script now.
+    case runScript(tag: String)
 
     public var request: Data {
         let object: [String: Any]
@@ -41,6 +49,14 @@ public enum RuntimeControl {
             object = ["cmd": "rule_sets"]
         case .updateRuleSets:
             object = ["cmd": "update_rule_sets"]
+        case .scripts:
+            object = ["cmd": "scripts"]
+        case .scriptNotifications:
+            object = ["cmd": "script_notifications"]
+        case .networkChanged:
+            object = ["cmd": "network_changed"]
+        case let .runScript(tag):
+            object = ["cmd": "run_script", "tag": tag]
         }
         return (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
     }
@@ -239,6 +255,49 @@ public enum RuntimeControl {
         enum CodingKeys: String, CodingKey {
             case ruleSets = "rule_sets"
         }
+    }
+
+    /// The `scripts` answer.
+    public struct ScheduledScripts: Decodable, Equatable {
+        public struct Script: Decodable, Equatable, Identifiable {
+            public let tag: String
+            /// `cron`, `network-changed` or `generic`.
+            public let trigger: String
+            public let cron: String?
+            /// Local time of the next cron run, RFC 9557.
+            public let nextRun: String?
+            /// `done`, `finished_without_done` or a failure code, since the tunnel started.
+            public let lastStatus: String?
+
+            public var id: String {
+                tag
+            }
+
+            enum CodingKeys: String, CodingKey {
+                case tag, trigger, cron
+                case nextRun = "next_run"
+                case lastStatus = "last_status"
+            }
+        }
+
+        public let scripts: [Script]
+    }
+
+    /// The `script_notifications` answer.
+    public struct ScriptNotifications: Decodable, Equatable {
+        public struct Notification: Decodable, Equatable {
+            public let title: String
+            public let subtitle: String
+            public let content: String
+            public let openURL: String?
+
+            enum CodingKeys: String, CodingKey {
+                case title, subtitle, content
+                case openURL = "open_url"
+            }
+        }
+
+        public let notifications: [Notification]
     }
 
     public static func decode<Answer: Decodable>(_ type: Answer.Type, from data: Data?) -> Answer? {
