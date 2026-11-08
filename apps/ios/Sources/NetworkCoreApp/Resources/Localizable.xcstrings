@@ -191,12 +191,12 @@
         }
       }
     },
-    "%lld 条规则暂不生效": {
+    "%lld 条分流规则": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld rules not applied yet"
+            "value": "%lld routing rules"
           }
         }
       }
@@ -1087,12 +1087,12 @@
         }
       }
     },
-    "只解密插件 [MITM] 列出的主机，仅支持 HTTP/1.1。脚本和插件里的分流规则暂不生效。": {
+    "HTTPS 只解密插件 [MITM] 列出的主机，明文 HTTP 全部交给插件处理，仅支持 HTTP/1.1。使用前需要先连上 VPN。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Only hosts listed under a plugin's [MITM] are decrypted, over HTTP/1.1 only. Scripts and routing rules in plugins don't take effect yet."
+            "value": "HTTPS is decrypted only for hosts listed under a plugin's [MITM]; plain HTTP always goes through plugins. HTTP/1.1 only. Connect the VPN first."
           }
         }
       }

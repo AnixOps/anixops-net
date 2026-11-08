@@ -230,7 +230,7 @@ private struct PluginRow: View {
             parts.append(String(localized: "\(summary.scriptLines) 个脚本"))
         }
         if summary.ruleLines > 0 {
-            parts.append(String(localized: "\(summary.ruleLines) 条规则暂不生效"))
+            parts.append(String(localized: "\(summary.ruleLines) 条分流规则"))
         }
         return parts.joined(separator: " · ")
     }
@@ -290,7 +290,7 @@ final class PluginsModel: ObservableObject {
         }
         switch trustState {
         case .trusted:
-            return String(localized: "只解密插件 [MITM] 列出的主机，仅支持 HTTP/1.1。插件里的分流规则暂不生效。")
+            return String(localized: "HTTPS 只解密插件 [MITM] 列出的主机，明文 HTTP 全部交给插件处理，仅支持 HTTP/1.1。使用前需要先连上 VPN。")
         case .notTrusted, .notGenerated:
             return String(localized: "开启前请先在上面生成并信任 HTTPS 解密证书。")
         }
