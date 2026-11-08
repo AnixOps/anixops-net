@@ -1036,7 +1036,7 @@ final class TunnelController {
         )
     }
 
-    private static let profileID = "default"
+    private static let profileID = NodeSecretStore.tunnelProfileAccount
 
     private static func tunnelBundleIdentifier() -> String? {
         guard let plugins = Bundle.main.builtInPlugInsURL,

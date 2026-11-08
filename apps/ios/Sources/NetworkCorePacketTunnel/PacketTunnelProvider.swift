@@ -2,12 +2,26 @@ import Foundation
 import NetworkCoreBridge
 import NetworkExtension
 import os
+import Security
 
 /// Packet tunnel backed by the embedded Rust runtime.
 ///
 /// It re-reads platform facts and the runtime handshake on every start and fails closed when either is
 /// unavailable. It never starts another process and never logs the tunnel profile.
 final class PacketTunnelProvider: NEPacketTunnelProvider {
+    /// The key behind the profile's reference. Builds that replaced the item on every save could leave a profile
+    /// pointing at a deleted item; the item saved under the profile's account still holds the current key.
+    private static func nodeKey(for reference: Data) throws -> String {
+        do {
+            return try NodeSecretStore.password(for: reference)
+        } catch let failure as NodeSecretStore.Failure where failure.status == errSecItemNotFound {
+            guard let value = try NodeSecretStore.value(account: NodeSecretStore.tunnelProfileAccount) else {
+                throw failure
+            }
+            return value
+        }
+    }
+
     private var session: EmbeddedRuntimeSession?
     private var startedAt: Date?
     private var memoryPressure: DispatchSourceMemoryPressure?
@@ -65,7 +79,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         var config: EmbeddedRuntimeConfig
         let interface: TunnelInterface
         do {
-            let secret = NodeSecret.fromKeychainValue(try NodeSecretStore.password(for: keyReference))
+            let secret = NodeSecret.fromKeychainValue(try Self.nodeKey(for: keyReference))
             config = try EmbeddedRuntimeConfig.decoded(from: template).withSecret(secret)
             interface = try (tunnelProtocol.providerConfiguration?[TunnelProfileKeys.tunnelInterface] as? Data)
                 .map(TunnelInterface.decoded(from:)) ?? .proxy

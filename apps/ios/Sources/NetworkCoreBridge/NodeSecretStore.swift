@@ -13,8 +13,14 @@ public enum NodeSecretStore {
 
     static let service = "networkcore.node-key"
 
-    /// Replaces the key saved for `account` and returns its persistent reference, for
-    /// `NEVPNProtocol.passwordReference`.
+    /// Account of the key behind the tunnel profile's `passwordReference`. The extension falls back to it when the
+    /// reference no longer resolves.
+    public static let tunnelProfileAccount = "default"
+
+    /// Saves the key for `account` and returns its persistent reference, for `NEVPNProtocol.passwordReference`.
+    ///
+    /// An existing item is updated in place, so its persistent reference stays the same: a tunnel profile saved
+    /// earlier keeps working even when saving the new profile fails afterwards.
     public static func save(_ password: String, account: String) throws -> Data {
         var identity: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -22,9 +28,22 @@ public enum NodeSecretStore {
             kSecAttrAccount as String: account,
         ]
         identity.merge(platformAttributes) { _, new in new }
-        let deleted = SecItemDelete(identity as CFDictionary)
-        guard deleted == errSecSuccess || deleted == errSecItemNotFound else {
-            throw Failure(status: deleted)
+        let updated = SecItemUpdate(
+            identity as CFDictionary,
+            [kSecValueData as String: Data(password.utf8)] as CFDictionary
+        )
+        if updated == errSecSuccess {
+            var query = identity
+            query[kSecReturnPersistentRef as String] = true
+            var result: CFTypeRef?
+            let status = SecItemCopyMatching(query as CFDictionary, &result)
+            guard status == errSecSuccess, let reference = result as? Data else {
+                throw Failure(status: status == errSecSuccess ? errSecDecode : status)
+            }
+            return reference
+        }
+        guard updated == errSecItemNotFound else {
+            throw Failure(status: updated)
         }
 
         var attributes = identity
