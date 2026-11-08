@@ -18,7 +18,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// Network changes in, script notifications out.
     private let scriptEvents = ScriptEventRelay()
     private var pathObservation: NSKeyValueObservation?
-    private var lastPath: String?
+    private var lastPath: NWPath?
 
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         Self.log.notice("startTunnel")
@@ -180,13 +180,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             guard let path = provider.defaultPath, path.status == .satisfied else {
                 return
             }
-            let description = "\(path.isExpensive) \(path.isConstrained) \(path.gateway.map { "\($0)" } ?? "")"
             DispatchQueue.main.async {
                 guard let self else {
                     return
                 }
-                defer { self.lastPath = description }
-                guard let last = self.lastPath, last != description else {
+                defer { self.lastPath = path }
+                guard let last = self.lastPath, !path.isEqual(to: last) else {
                     return
                 }
                 self.events.record("network changed")
