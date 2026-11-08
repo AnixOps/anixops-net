@@ -62,7 +62,7 @@ final class MitmPluginTests: XCTestCase {
 
     func testLibraryCapsTheEnabledTotal() throws {
         var library = MitmPluginLibrary()
-        let body = "[MITM]\nhostname = a.example\n" + String(repeating: "#", count: 200 * 1024)
+        let body = "[MITM]\nhostname = a.example\n" + String(repeating: "#", count: 3 * 1024 * 1024)
         try library.add(MitmPlugin(text: body))
         try library.add(MitmPlugin(text: body))
         XCTAssertThrowsError(try library.add(MitmPlugin(text: body))) {
