@@ -62,7 +62,7 @@ final class MitmPluginTests: XCTestCase {
 
     func testLibraryCapsTheEnabledTotal() throws {
         var library = MitmPluginLibrary()
-        let body = "[MITM]\nhostname = a.example\n" + String(repeating: "#", count: 200 * 1024)
+        let body = "[MITM]\nhostname = a.example\n" + String(repeating: "#", count: 3 * 1024 * 1024)
         try library.add(MitmPlugin(text: body))
         try library.add(MitmPlugin(text: body))
         XCTAssertThrowsError(try library.add(MitmPlugin(text: body))) {
@@ -87,6 +87,27 @@ final class MitmPluginTests: XCTestCase {
         let value = try MitmPluginLibrary.profileValue(library.activeTexts)
         XCTAssertEqual(MitmPluginLibrary.texts(fromProfileValue: value), [adBlock])
         XCTAssertEqual(MitmPluginLibrary.texts(fromProfileValue: nil), [])
+    }
+
+    func testLargePluginsAreCompressedInTheProfile() throws {
+        var text = "#!name = Large\n[Rule]\n"
+        var index = 0
+        while text.utf8.count < 2 * 1024 * 1024 {
+            text += "DOMAIN-SUFFIX,ads\(index).example.com,REJECT\n"
+            index += 1
+        }
+        text += "[MITM]\nhostname = large.example.com\n"
+        let plugin = try MitmPlugin(text: text)
+        var library = MitmPluginLibrary()
+        library.isEnabled = true
+        try library.add(plugin)
+
+        let value = try MitmPluginLibrary.profileValue(library.activeTexts)
+        XCTAssertLessThan(value.count, text.utf8.count / 4)
+        XCTAssertEqual(MitmPluginLibrary.texts(fromProfileValue: value), [text])
+        // A profile written before compression is plain JSON.
+        let legacy = try JSONEncoder().encode([text])
+        XCTAssertEqual(MitmPluginLibrary.texts(fromProfileValue: legacy), [text])
     }
 
     func testRuntimeConfigCarriesMitmOnlyWhenAddedAndNeverInTheProfile() throws {

@@ -104,8 +104,8 @@ keychain the tunnel extension can read. Firefox keeps its own certificate list.
 The same tab imports Loon plugins from a file, the clipboard or an `https` address the user types (D4: remote
 import only on the user's request; downloads are capped and a redirect to plain HTTP is refused).
 `MitmPluginLibrary` keeps them in the app's Application Support folder with a master "HTTPS 解密" switch, which
-turns on only once the root is trusted. The enabled plugin texts go into the tunnel profile under
-`TunnelProfileKeys.mitmPlugins`; the extension adds the root from the Keychain and passes both to the runtime as
+turns on only once the root is trusted. The enabled plugin texts (up to 8 MiB each and 8 MiB together) go into the tunnel profile under
+`TunnelProfileKeys.mitmPlugins`, zlib-compressed like the scripts (`ProfileCompression`); the extension adds the root from the Keychain and passes both to the runtime as
 the config's `mitm` section, where `mitm_policy::loon_plugin` translates and merges them (see
 `crates/engine-embedded/README.md`). The root key never enters the profile. If the root is missing or the runtime
 refuses the plugins, the tunnel starts without decryption and says why in developer-mode diagnostics. A change restarts
@@ -113,9 +113,9 @@ a running tunnel, since the extension reads them only at start. Plugin `[Rule]` 
 
 Scripts never run on import. The "脚本" section lists each `script-path` of the enabled plugins (relative paths
 resolve against a remote plugin's address; anything that is not `https` cannot be allowed). Allowing one shows its
-address, downloads it (at most 1 MiB) and stores that copy with its SHA-256 in `MitmScriptLibrary`; a changed file at
+address, downloads it (at most 4 MiB) and stores that copy with its SHA-256 in `MitmScriptLibrary`; a changed file at
 the same address needs a new agreement, and a swipe revokes it. The allowed sources of the enabled plugins (at most
-2 MiB) go into the profile under `TunnelProfileKeys.mitmScripts`. The extension writes them to its Caches folder by
+8 MiB) go into the profile under `TunnelProfileKeys.mitmScripts`. The extension writes them to its Caches folder by
 digest and passes them as `script_assets`, with `$persistentStore` in its Application Support folder; scripts run in
 QuickJS inside the tunnel without `$httpClient`. If the runtime refuses the scripts, the tunnel keeps decryption
 without them.
