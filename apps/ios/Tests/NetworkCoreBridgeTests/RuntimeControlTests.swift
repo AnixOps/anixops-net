@@ -12,6 +12,29 @@ final class RuntimeControlTests: XCTestCase {
         )
     }
 
+    func testScriptCommandsAndAnswers() throws {
+        XCTAssertEqual(String(decoding: RuntimeControl.networkChanged.request, as: UTF8.self), #"{"cmd":"network_changed"}"#)
+        XCTAssertEqual(
+            String(decoding: RuntimeControl.scriptNotifications.request, as: UTF8.self),
+            #"{"cmd":"script_notifications"}"#
+        )
+        XCTAssertEqual(
+            String(decoding: RuntimeControl.runScript(tag: "checkin").request, as: UTF8.self),
+            #"{"cmd":"run_script","tag":"checkin"}"#
+        )
+        let scripts = try XCTUnwrap(RuntimeControl.decode(RuntimeControl.ScheduledScripts.self, from: Data("""
+        {"scripts":[{"tag":"checkin","trigger":"cron","cron":"0 9 * * *",
+          "next_run":"2026-11-09T09:00:00+08:00[Asia/Shanghai]","last_status":"done"},
+         {"tag":"net","trigger":"network-changed","cron":null,"next_run":null,"last_status":null}]}
+        """.utf8)))
+        XCTAssertEqual(scripts.scripts.map(\.tag), ["checkin", "net"])
+        XCTAssertEqual(scripts.scripts[0].lastStatus, "done")
+        let notifications = try XCTUnwrap(RuntimeControl.decode(RuntimeControl.ScriptNotifications.self, from: Data("""
+        {"notifications":[{"title":"Check-in","subtitle":"ok","content":"+5","open_url":null}]}
+        """.utf8)))
+        XCTAssertEqual(notifications.notifications.first?.title, "Check-in")
+    }
+
     func testControlMessagesRoundTripThroughTheExtension() {
         let request = RuntimeControl.connections.request
         XCTAssertEqual(TunnelAppMessage.decode(TunnelAppMessage.control(request).encoded), .control(request))

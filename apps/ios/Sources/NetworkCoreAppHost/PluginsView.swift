@@ -1,6 +1,7 @@
 import NetworkCoreBridge
 import SwiftUI
 import UniformTypeIdentifiers
+import UserNotifications
 #if os(iOS)
 import UIKit
 #else
@@ -428,6 +429,8 @@ final class PluginsModel: ObservableObject {
             return
         }
         await commit(library, scripts: next, tunnel: tunnel)
+        // Scripts report through notifications (sign-in results and the like); the tunnel shows them.
+        _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
     }
 
     func revoke(_ path: String, tunnel: TunnelController) async {

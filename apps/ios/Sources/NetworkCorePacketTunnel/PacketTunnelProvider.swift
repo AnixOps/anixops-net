@@ -15,6 +15,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private let events = TunnelDiagnosticLog()
     /// Hourly traffic by host and policy for the app's statistics page.
     private let trafficStats = TrafficStatsRecorder()
+    /// Network changes in, script notifications out.
+    private let scriptEvents = ScriptEventRelay()
+    private var pathObservation: NSKeyValueObservation?
+    private var lastPath: String?
 
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         Self.log.notice("startTunnel")
@@ -126,6 +130,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 self.trafficStats.start { [weak session] request in
                     session?.control(request)
                 }
+                let scheduled = self.scriptEvents.start { [weak session] request in
+                    session?.control(request)
+                }
+                if scheduled > 0 {
+                    self.events.record("\(scheduled) scheduled scripts")
+                }
+                self.watchNetworkPath()
                 completionHandler(nil)
             } catch let failure as EmbeddedRuntimeSession.Failure {
                 completionHandler(PacketTunnelFailure(reason: "embedded runtime could not start (code \(failure.code))"))
@@ -139,6 +150,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         Self.log.notice("stopTunnel reason \(reason.rawValue, privacy: .public)")
         events.record("stopTunnel reason \(reason.rawValue)")
         trafficStats.stop()
+        scriptEvents.stop()
+        pathObservation?.invalidate()
+        pathObservation = nil
+        lastPath = nil
         session?.stop()
         session = nil
         startedAt = nil
@@ -154,6 +169,30 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     override func wake() {
         events.record("device wake")
+        scriptEvents.poll()
+    }
+
+    /// Tells the engine when the network under the tunnel changes (Wi-Fi to cellular, another Wi-Fi), for the
+    /// plugins' `network-changed` scripts. The first path seen is the one the tunnel started on.
+    private func watchNetworkPath() {
+        pathObservation?.invalidate()
+        pathObservation = observe(\.defaultPath, options: [.initial, .new]) { [weak self] provider, _ in
+            guard let path = provider.defaultPath, path.status == .satisfied else {
+                return
+            }
+            let description = "\(path.isExpensive) \(path.isConstrained) \(path.gateway.map { "\($0)" } ?? "")"
+            DispatchQueue.main.async {
+                guard let self else {
+                    return
+                }
+                defer { self.lastPath = description }
+                guard let last = self.lastPath, last != description else {
+                    return
+                }
+                self.events.record("network changed")
+                self.scriptEvents.networkChanged()
+            }
+        }
     }
 
     /// Only fixed reasons and codes are logged, never the profile or keys.
