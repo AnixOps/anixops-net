@@ -4,8 +4,8 @@ import Foundation
 /// A plugin script the user allowed: the exact copy downloaded when they agreed. The tunnel runs this copy and
 /// nothing else; a newer version at the same address needs a new agreement.
 public struct MitmScript: Codable, Equatable {
-    /// Largest script accepted.
-    public static let maxBytes = 1024 * 1024
+    /// Largest script accepted; matches the kernel's QuickJS script limit.
+    public static let maxBytes = 4 * 1024 * 1024
 
     /// The `script-path` as written in the plugin.
     public var path: String
@@ -48,7 +48,7 @@ public enum MitmScriptError: Error, Equatable {
 /// this file; the tunnel gets the allowed sources of the enabled plugins through the tunnel profile.
 public struct MitmScriptLibrary: Codable, Equatable {
     /// Allowed scripts handed to one tunnel, in bytes.
-    public static let maxActiveBytes = 2 * 1024 * 1024
+    public static let maxActiveBytes = 8 * 1024 * 1024
 
     public private(set) var scripts: [String: MitmScript] = [:]
 
@@ -100,11 +100,12 @@ public struct MitmScriptLibrary: Codable, Equatable {
     public static func profileValue(_ sources: [String: String]) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        return try encoder.encode(sources)
+        return try ProfileCompression.pack(encoder.encode(sources))
     }
 
     public static func sources(fromProfileValue value: Data?) -> [String: String] {
-        value.flatMap { try? JSONDecoder().decode([String: String].self, from: $0) } ?? [:]
+        value.flatMap(ProfileCompression.unpack).flatMap { try? JSONDecoder().decode([String: String].self, from: $0) }
+            ?? [:]
     }
 
     /// Writes `sources` into `directory` as one file per script, named by its digest, and returns the

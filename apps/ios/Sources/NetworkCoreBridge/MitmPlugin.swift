@@ -4,7 +4,7 @@ import Foundation
 /// the enabled plugins (`mitm_policy::loon_plugin` in Rust). The summary here is only for the list in the app.
 public struct MitmPlugin: Codable, Equatable, Identifiable {
     /// Largest plugin text accepted from a file or the clipboard.
-    public static let maxBytes = 256 * 1024
+    public static let maxBytes = 8 * 1024 * 1024
 
     public var id: UUID
     public var name: String
@@ -198,8 +198,8 @@ public enum MitmPluginError: Error, Equatable {
 /// The plugins the user imported and the master switch, saved as JSON in the app's Application Support folder.
 /// Only the containing app reads this file; the tunnel gets the enabled texts through the tunnel profile.
 public struct MitmPluginLibrary: Codable, Equatable {
-    /// Matches `MAX_POLICY_BYTES` in crates/engine-embedded/src/mitm.
-    public static let maxActiveBytes = 512 * 1024
+    /// Matches `MAX_POLICY_BYTES` in the kernel's engine-embedded mitm module.
+    public static let maxActiveBytes = 8 * 1024 * 1024
 
     public var isEnabled = false
     public private(set) var plugins: [MitmPlugin] = []
@@ -285,11 +285,11 @@ public struct MitmPluginLibrary: Codable, Equatable {
 
     /// The tunnel profile value under `TunnelProfileKeys.mitmPlugins`.
     public static func profileValue(_ texts: [String]) throws -> Data {
-        try JSONEncoder().encode(texts)
+        try ProfileCompression.pack(JSONEncoder().encode(texts))
     }
 
     public static func texts(fromProfileValue value: Data?) -> [String] {
-        value.flatMap { try? JSONDecoder().decode([String].self, from: $0) } ?? []
+        value.flatMap(ProfileCompression.unpack).flatMap { try? JSONDecoder().decode([String].self, from: $0) } ?? []
     }
 }
 

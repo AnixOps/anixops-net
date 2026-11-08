@@ -89,6 +89,27 @@ final class MitmPluginTests: XCTestCase {
         XCTAssertEqual(MitmPluginLibrary.texts(fromProfileValue: nil), [])
     }
 
+    func testLargePluginsAreCompressedInTheProfile() throws {
+        var text = "#!name = Large\n[Rule]\n"
+        var index = 0
+        while text.utf8.count < 2 * 1024 * 1024 {
+            text += "DOMAIN-SUFFIX,ads\(index).example.com,REJECT\n"
+            index += 1
+        }
+        text += "[MITM]\nhostname = large.example.com\n"
+        let plugin = try MitmPlugin(text: text)
+        var library = MitmPluginLibrary()
+        library.isEnabled = true
+        try library.add(plugin)
+
+        let value = try MitmPluginLibrary.profileValue(library.activeTexts)
+        XCTAssertLessThan(value.count, text.utf8.count / 4)
+        XCTAssertEqual(MitmPluginLibrary.texts(fromProfileValue: value), [text])
+        // A profile written before compression is plain JSON.
+        let legacy = try JSONEncoder().encode([text])
+        XCTAssertEqual(MitmPluginLibrary.texts(fromProfileValue: legacy), [text])
+    }
+
     func testRuntimeConfigCarriesMitmOnlyWhenAddedAndNeverInTheProfile() throws {
         let node = ShadowsocksNode(
             host: "203.0.113.7",

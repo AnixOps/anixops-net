@@ -1137,12 +1137,12 @@
         }
       }
     },
-    "启用的插件合计超过 512 KB，请先停用一些插件": {
+    "启用的插件合计超过 8 MB，请先停用一些插件": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enabled plugins exceed 512 KB in total. Turn some off first."
+            "value": "Enabled plugins exceed 8 MB in total. Turn some off first."
           }
         }
       }
@@ -1947,12 +1947,12 @@
         }
       }
     },
-    "插件超过 256 KB": {
+    "插件超过 8 MB": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The plugin is larger than 256 KB"
+            "value": "The plugin is larger than 8 MB"
           }
         }
       }
@@ -2007,12 +2007,12 @@
         }
       }
     },
-    "文件不是 UTF-8 文本或超过 256 KB": {
+    "文件不是 UTF-8 文本或超过 8 MB": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The file isn't UTF-8 text or is larger than 256 KB"
+            "value": "The file isn't UTF-8 text or is larger than 8 MB"
           }
         }
       }

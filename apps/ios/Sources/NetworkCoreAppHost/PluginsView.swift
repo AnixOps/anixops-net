@@ -346,7 +346,7 @@ final class PluginsModel: ObservableObject {
         guard let data = try? Data(contentsOf: url), data.count <= MitmPlugin.maxBytes,
               let text = String(data: data, encoding: .utf8)
         else {
-            note = String(localized: "文件不是 UTF-8 文本或超过 256 KB")
+            note = String(localized: "文件不是 UTF-8 文本或超过 8 MB")
             return
         }
         await importText(text, name: url.deletingPathExtension().lastPathComponent, tunnel: tunnel)
@@ -497,17 +497,17 @@ final class PluginsModel: ObservableObject {
         case MitmPluginError.empty:
             return String(localized: "插件内容为空")
         case MitmPluginError.tooLarge:
-            return String(localized: "插件超过 256 KB")
+            return String(localized: "插件超过 8 MB")
         case MitmPluginError.nothingToApply:
             return String(localized: "没有找到可用的重写、脚本或 [MITM] 主机")
         case MitmPluginError.libraryFull:
-            return String(localized: "启用的插件合计超过 512 KB，请先停用一些插件")
+            return String(localized: "启用的插件合计超过 8 MB，请先停用一些插件")
         case MitmScriptError.tooLarge:
-            return String(localized: "脚本超过 1 MB")
+            return String(localized: "脚本超过 4 MB")
         case MitmScriptError.notText, MitmScriptError.notHTTPS:
             return String(localized: "下载到的内容不是脚本文本")
         case MitmScriptError.libraryFull:
-            return String(localized: "已允许的脚本合计超过 2 MB，请先撤销一些脚本或停用插件")
+            return String(localized: "已允许的脚本合计超过 8 MB，请先撤销一些脚本或停用插件")
         default:
             return String(localized: "导入失败")
         }
