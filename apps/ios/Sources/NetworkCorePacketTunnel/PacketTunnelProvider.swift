@@ -9,17 +9,14 @@ import Security
 /// It re-reads platform facts and the runtime handshake on every start and fails closed when either is
 /// unavailable. It never starts another process and never logs the tunnel profile.
 final class PacketTunnelProvider: NEPacketTunnelProvider {
-    /// The key behind the profile's reference. Builds that replaced the item on every save could leave a profile
-    /// pointing at a deleted item; the item saved under the profile's account still holds the current key.
+    /// The node key for this profile. The app saves it under one fixed account and updates it in place, so that
+    /// item is read first. The persistent reference is only a fallback: builds that deleted and re-added the item
+    /// on every save left references that point at nothing, or at another item once the Keychain reused its row.
     private static func nodeKey(for reference: Data) throws -> String {
-        do {
-            return try NodeSecretStore.password(for: reference)
-        } catch let failure as NodeSecretStore.Failure where failure.status == errSecItemNotFound {
-            guard let value = try NodeSecretStore.value(account: NodeSecretStore.tunnelProfileAccount) else {
-                throw failure
-            }
+        if let value = try NodeSecretStore.value(account: NodeSecretStore.tunnelProfileAccount) {
             return value
         }
+        return try NodeSecretStore.password(for: reference)
     }
 
     private var session: EmbeddedRuntimeSession?
