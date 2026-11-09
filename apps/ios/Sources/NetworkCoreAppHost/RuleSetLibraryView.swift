@@ -48,7 +48,7 @@ struct RuleSetLibraryView: View {
             Section {
                 EmptyView()
             } footer: {
-                Text("列表来自 GitHub 上的开源项目 blackmatrix7/ios_rule_script 和 Loyalsoldier/surge-rules，由内核经代理下载并每天更新。特别大的列表（例如完整的去广告和大陆域名列表）会占用过多隧道内存，没有收录。")
+                Text("列表来自 GitHub 上的开源项目 blackmatrix7/ios_rule_script 和 Loyalsoldier/surge-rules，由内核经代理下载并每天更新。内核用紧凑格式保存规则集，20 万条的完整去广告列表也只占约 5 MB 隧道内存。")
             }
         }
         .scrollContentBackground(.hidden)
