@@ -1130,16 +1130,16 @@ jobs:
           CI_RUN_URL: ${{ needs.release-ci-gate.outputs.ci_run_url }}
           LINUX_GUI_ATTESTATION_STATUS: ${{ needs.attest-linux-gui.outputs.attestation_status }}
           WINDOWS_ATTESTATION_STATUS: ${{ needs.attest-windows.outputs.attestation_status }}
+          WINDOWS_MSI: ${{ needs.package-windows.outputs.artifact_name }}
+          WINDOWS_ZIP: ${{ needs.package-windows.outputs.portable_artifact_name }}
+          LINUX_TARBALL: ${{ needs.package-linux-gui.outputs.archive_name }}
+          LINUX_DEB: ${{ needs.package-linux-gui.outputs.deb_name }}
           KERNEL_REV_SOURCE: Cargo.toml
         run: |
           set -euo pipefail
           test "${LINUX_GUI_ATTESTATION_STATUS}" = "attested"
           test "${WINDOWS_ATTESTATION_STATUS}" = "attested"
-          assets=()
-          while IFS= read -r file; do
-            assets+=("${file}")
-          done < <(find dist/release -maxdepth 1 -type f | sort)
-          test "${#assets[@]}" = "16"
+          test "$(find dist/release -maxdepth 1 -type f | wc -l | tr -d ' ')" = "16"
           (
             cd dist/release
             sha256sum -c ./*.sha256
@@ -1148,17 +1148,45 @@ jobs:
             echo "::error::Release ${VERSION} already exists. Asset overwrite is forbidden."
             exit 1
           fi
+
+          # Publish only what users download: four packages under one name scheme plus one
+          # SHA256SUMS. Manifests and per-file .sha256 stay in the workflow artifacts; the
+          # attestations are bound to the file digests, so renaming keeps them verifiable.
+          publish_dir=dist/publish
+          mkdir -p "${publish_dir}"
+          cp "dist/release/${WINDOWS_MSI}" "${publish_dir}/anixops-net-${VERSION}-windows-x64.msi"
+          cp "dist/release/${WINDOWS_ZIP}" "${publish_dir}/anixops-net-${VERSION}-windows-x64-portable.zip"
+          cp "dist/release/${LINUX_DEB}" "${publish_dir}/anixops-net-${VERSION}-linux-amd64.deb"
+          cp "dist/release/${LINUX_TARBALL}" "${publish_dir}/anixops-net-${VERSION}-linux-x64.tar.gz"
+          (
+            cd "${publish_dir}"
+            sha256sum -- anixops-net-* > SHA256SUMS
+            cat SHA256SUMS
+          )
+          assets=()
+          while IFS= read -r file; do
+            assets+=("${file}")
+          done < <(find "${publish_dir}" -maxdepth 1 -type f | sort)
+          test "${#assets[@]}" = "5"
+
           kernel_rev="$(grep -m1 -oE 'rev = "[0-9a-f]{40}"' "${KERNEL_REV_SOURCE}" | cut -d'"' -f2)"
           cat > release-body.md <<EOF
-          # AnixOps Net ${VERSION}
+          ## 下载
 
-          - Kernel: [AnixOps/networkcore_anixops@${kernel_rev:0:7}](https://github.com/AnixOps/networkcore_anixops/commit/${kernel_rev})
-          - CI: ${CI_RUN_URL}
-          - Windows: MSI installer and portable ZIP (GUI, service and the kernel CLI), unsigned, GitHub artifact attestation
-          - Linux: tarball and .deb desktop client, needs WebKitGTK 4.1, GitHub artifact attestation
-          - Every asset has a manifest and a sha256 file.
+          | 平台 | 文件 | 说明 |
+          | --- | --- | --- |
+          | Windows 10/11 | \`anixops-net-${VERSION}-windows-x64.msi\` | 安装版（推荐） |
+          | Windows 10/11 | \`anixops-net-${VERSION}-windows-x64-portable.zip\` | 便携版，解压即用 |
+          | Debian / Ubuntu | \`anixops-net-${VERSION}-linux-amd64.deb\` | \`sudo apt install ./<文件名>\` |
+          | 其他 Linux | \`anixops-net-${VERSION}-linux-x64.tar.gz\` | 解压后运行 \`bin/anixops-net\` |
 
-          No local build, test, package, or release verification was used.
+          iOS 版通过 TestFlight 分发。
+
+          - Linux 版需要 WebKitGTK 4.1。
+          - Windows 安装包未做代码签名，首次运行时 SmartScreen 可能提示，选「仍要运行」。
+          - 校验：\`sha256sum -c SHA256SUMS\`；来源证明：\`gh attestation verify <文件> --repo ${GH_REPO}\`。
+
+          <sub>内核 [networkcore_anixops@${kernel_rev:0:7}](https://github.com/AnixOps/networkcore_anixops/commit/${kernel_rev}) · [CI](${CI_RUN_URL})</sub>
           EOF
           prerelease_args=()
           if [ "${RELEASE_KIND}" = "prerelease" ]; then
