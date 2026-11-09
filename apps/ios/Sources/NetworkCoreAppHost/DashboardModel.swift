@@ -32,6 +32,20 @@ final class DashboardModel {
         var isExpensive = false
         /// Interface switches seen since the app started.
         var switches = 0
+
+        /// The network type as the panel failure report names it.
+        var reportName: String {
+            switch interface {
+            case .wifi:
+                return "wifi"
+            case .cellular:
+                return "cellular"
+            case .wired:
+                return "ethernet"
+            case .other, .none:
+                return "unknown"
+            }
+        }
     }
 
     private(set) var traffic: RuntimeControl.Traffic?
@@ -48,6 +62,8 @@ final class DashboardModel {
     private static let lastSessionKey = "dashboard-last-session"
     /// How often, in one-second ticks, the poll also refreshes the cached seven-day statistics.
     private static let statsTicks = 15
+    /// How often, in one-second ticks, the poll reads the nodes' dial health.
+    private static let healthTicks = 30
     @ObservationIgnored private var monitor: NWPathMonitor?
 
     init() {
@@ -77,6 +93,10 @@ final class DashboardModel {
                 if let answer = RuntimeControl.decode(RuntimeControl.Groups.self, from: await tunnel.control(.groups)) {
                     groups = answer.groups
                 }
+            }
+            if tick % Self.healthTicks == 0 {
+                // Nodes that stopped after repeated rejections, and the hourly failure report (F-48, F-55).
+                await tunnel.checkOutboundHealth(network: network.reportName)
             }
             if tick % Self.statsTicks == 0 {
                 // Keeps the statistics page's copy fresh, so it has something to show once the tunnel is off.
