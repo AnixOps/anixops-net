@@ -481,10 +481,14 @@ jobs:
             throw "Windows GUI cleanup entrypoint exited with code $($guiProcess.ExitCode)."
           }
 
-          $startupKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-          New-Item -Path $startupKey -Force | Out-Null
-          $startupCommand = "`"$guiExe`" --start-after-login"
-          New-ItemProperty -Path $startupKey -Name "AnixOpsNetworkCore" -Value $startupCommand -PropertyType String -Force | Out-Null
+          # Sign-in startup is a per-user elevated logon task (the GUI manifest requires
+          # administrator rights, which the Run key silently skips). Seed one the way the
+          # GUI registers it; the uninstaller, running as LocalSystem, must remove it.
+          $startupSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+          $startupTaskName = "AnixOps Net $startupSid"
+          $startupAction = New-ScheduledTaskAction -Execute $guiExe -Argument "--start-after-login"
+          $startupTrigger = New-ScheduledTaskTrigger -AtLogOn
+          Register-ScheduledTask -TaskPath "\AnixOps\" -TaskName $startupTaskName -Action $startupAction -Trigger $startupTrigger -Force | Out-Null
 
           $service = Get-Service -Name "AnixOpsNetworkCore" -ErrorAction Stop
           if ($service.Status -ne "Stopped") {
@@ -538,8 +542,8 @@ jobs:
           if ($null -ne (Get-Service -Name "AnixOpsNetworkCore" -ErrorAction SilentlyContinue)) {
             throw "Windows managed client MSI uninstall left AnixOpsNetworkCore registered."
           }
-          if ($null -ne (Get-ItemProperty -Path $startupKey -Name "AnixOpsNetworkCore" -ErrorAction SilentlyContinue)) {
-            throw "Windows managed client MSI uninstall left the current-user NetworkCore startup entry."
+          if ($null -ne (Get-ScheduledTask -TaskPath "\AnixOps\" -TaskName $startupTaskName -ErrorAction SilentlyContinue)) {
+            throw "Windows managed client MSI uninstall left the NetworkCore sign-in startup task."
           }
 
   swift:
