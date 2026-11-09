@@ -163,8 +163,8 @@ struct ImportView: View {
                             .accessibilityLabel("节点链接或配置")
                     }
                     .frame(height: 140)
-                    .background(brand.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(brand.border))
+                    .background(brand.surface, in: RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous).strokeBorder(brand.border))
                 }
 
                 if let error = error {

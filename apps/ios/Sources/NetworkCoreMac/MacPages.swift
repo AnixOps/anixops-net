@@ -90,11 +90,11 @@ private struct MacHeroCard: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text(phase.title)
-                    .font(.largeTitle.weight(.semibold))
+                    .font(.largeTitle.weight(.bold))
                     .contentTransition(.opacity)
                 subtitle
                     .font(.callout.monospacedDigit())
-                    .foregroundStyle(Brand.line.opacity(0.75))
+                    .foregroundStyle(Brand.lineMuted)
                 if let name = tunnel.nodeName {
                     Label(name, systemImage: "point.topleft.down.to.point.bottomright.curvepath")
                         .font(.callout)
@@ -107,10 +107,8 @@ private struct MacHeroCard: View {
                         .padding(.horizontal, 14)
                         .padding(.vertical, 3)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(phase == .on ? Brand.slate.opacity(0.85) : Brand.sky)
-                .foregroundStyle(phase == .on ? Brand.line : Brand.slate)
-                .controlSize(.large)
+                // A pill on the slate hero: white when connecting, a translucent white pill to disconnect.
+                .buttonStyle(MacHeroButtonStyle(filled: phase != .on))
                 .disabled(phase == .disconnecting)
                 .padding(.top, 4)
             }
@@ -120,7 +118,11 @@ private struct MacHeroCard: View {
         .foregroundStyle(Brand.line)
         .padding(28)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(brand.heroGradient, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(brand.heroGradient, in: RoundedRectangle(cornerRadius: BrandRadius.hero, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: BrandRadius.hero, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+        )
     }
 
     private var actionTitle: LocalizedStringKey {
@@ -328,8 +330,8 @@ struct MacCard<Content: View>: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(brand.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(brand.border.opacity(0.6)))
+        .background(brand.surface, in: RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous).strokeBorder(brand.border.opacity(0.6)))
     }
 }
 
@@ -356,8 +358,8 @@ private struct MacNotice: View {
             .accessibilityLabel("关闭提示")
         }
         .padding(14)
-        .background(brand.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(brand.warning.opacity(0.4)))
+        .background(brand.surface, in: RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous).strokeBorder(brand.warning.opacity(0.4)))
     }
 }
 
@@ -367,5 +369,20 @@ private struct MacPressableStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
             .animation(.spring(response: 0.25, dampingFraction: 0.8), value: configuration.isPressed)
+    }
+}
+
+/// The hero's action pill on slate: solid near-white with slate text, or a translucent white pill.
+private struct MacHeroButtonStyle: ButtonStyle {
+    let filled: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 6)
+            .frame(minHeight: 32)
+            .foregroundStyle(filled ? Brand.slate : Brand.line)
+            .background(filled ? Brand.line : Color.white.opacity(0.14), in: Capsule())
+            .contentShape(Capsule())
+            .opacity(configuration.isPressed ? 0.82 : 1)
     }
 }

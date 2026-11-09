@@ -47,8 +47,7 @@ struct MacProxiesPage: View {
                     Button("导入节点") {
                         state.importing = true
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .buttonStyle(.brandPrimary)
                     .padding(.top, 6)
                 }
                 .frame(maxWidth: 520)
@@ -242,9 +241,9 @@ struct MacProxiesPage: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(brand.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(brand.surface, in: RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous)
                 .strokeBorder(isActive ? brand.primary.opacity(0.6) : brand.border.opacity(0.6))
         )
     }
