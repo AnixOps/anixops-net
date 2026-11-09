@@ -41,20 +41,30 @@ final class DashboardModel {
     private(set) var network = NetworkState()
     private(set) var exitLookup = ExitLookup.idle
     private(set) var events: DashboardEventLog
+    /// The last connection's totals and busiest hosts, shown while the tunnel is off.
+    private(set) var lastSession: LastSessionSummary?
 
     private static let eventsKey = "dashboard-events"
+    private static let lastSessionKey = "dashboard-last-session"
+    /// How often, in one-second ticks, the poll also refreshes the cached seven-day statistics.
+    private static let statsTicks = 15
     @ObservationIgnored private var monitor: NWPathMonitor?
 
     init() {
         let saved = UserDefaults.standard.data(forKey: Self.eventsKey)
         events = saved.flatMap { try? JSONDecoder().decode(DashboardEventLog.self, from: $0) } ?? DashboardEventLog()
+        let last = UserDefaults.standard.data(forKey: Self.lastSessionKey)
+        lastSession = last.flatMap { try? JSONDecoder().decode(LastSessionSummary.self, from: $0) }
     }
 
-    /// Polls the engine once a second for speed, and every third second for connections and groups, until the
-    /// task is cancelled or the tunnel leaves the connected state.
+    /// Polls the engine once a second for speed, every third second for connections and groups, and every
+    /// fifteenth for the seven-day statistics, until the task is cancelled or the tunnel leaves the connected
+    /// state. When the tunnel goes down the session's totals and busiest hosts stay on as `lastSession`.
     func poll(_ tunnel: TunnelController) async {
         var tick = 0
+        var startedAt: Date?
         while !Task.isCancelled, tunnel.connection == .connected {
+            startedAt = tunnel.connectedSince ?? startedAt
             if let data = await tunnel.control(.traffic), let next = RuntimeControl.decodeTraffic(data) {
                 traffic = next
                 history.append(upload: next.uploadRate, download: next.downloadRate)
@@ -62,15 +72,26 @@ final class DashboardModel {
             if tick % 3 == 0 {
                 if let list = RuntimeControl.decode(RuntimeControl.Connections.self, from: await tunnel.control(.connections)) {
                     topHosts = HostTraffic.top(list)
+                    tunnel.remember(list)
                 }
                 if let answer = RuntimeControl.decode(RuntimeControl.Groups.self, from: await tunnel.control(.groups)) {
                     groups = answer.groups
                 }
             }
+            if tick % Self.statsTicks == 0 {
+                // Keeps the statistics page's copy fresh, so it has something to show once the tunnel is off.
+                _ = await tunnel.trafficStats()
+            }
             tick += 1
             try? await Task.sleep(for: .seconds(1))
         }
         if tunnel.connection != .connected {
+            if let ended = LastSessionSummary.ended(traffic: traffic, topHosts: topHosts, startedAt: startedAt) {
+                lastSession = ended
+                if let data = try? JSONEncoder().encode(ended) {
+                    UserDefaults.standard.set(data, forKey: Self.lastSessionKey)
+                }
+            }
             traffic = nil
             history.reset()
             topHosts = []

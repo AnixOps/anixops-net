@@ -24,8 +24,6 @@ struct TrafficStatsView: View {
     @State private var page = Page.hours
     @State private var confirmingClear = false
 
-    private static let cacheKey = "traffic-stats-cache"
-
     private var since: Date {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
@@ -210,16 +208,13 @@ struct TrafficStatsView: View {
     private func show(_ next: TrafficStats) {
         stats = next
         fromCache = false
-        if let data = try? next.encoded() {
-            UserDefaults.standard.set(data, forKey: Self.cacheKey)
-        }
     }
 
     private func loadCache() {
         guard stats == nil || tunnel.connection != .connected else {
             return
         }
-        if let data = UserDefaults.standard.data(forKey: Self.cacheKey), let cached = try? TrafficStats.decoded(from: data) {
+        if let cached = TrafficStatsCache.load() {
             stats = cached
             fromCache = tunnel.connection != .connected
         }

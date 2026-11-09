@@ -148,7 +148,7 @@ struct ConnectionsView: View {
                         .listRowBackground(brand.surface)
                         .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 16))
                         .swipeActions(edge: .trailing) {
-                            if connection.isActive {
+                            if connection.isActive, tunnel.connection == .connected {
                                 Button(role: .destructive) {
                                     Task {
                                         _ = await tunnel.control(.closeConnection(connection.id))
@@ -162,10 +162,15 @@ struct ConnectionsView: View {
                     }
                 }
             } header: {
-                Text(summary)
-                    .monospacedDigit()
+                VStack(alignment: .leading, spacing: 4) {
+                    if showingLast {
+                        Text("隧道已断开，显示断开前的记录")
+                    }
+                    Text(summary)
+                        .monospacedDigit()
+                }
             } footer: {
-                Text("站点标识是本机按主机名生成的字母，不联网取图标。HTTPS、QUIC 等标签按端口推断。上传、下载为该连接经隧道的字节数。目标域名来自请求本身或 TLS SNI / HTTP Host，只保存在内存里，断开隧道即清空。")
+                Text("站点标识是本机按主机名生成的字母，不联网取图标。HTTPS、QUIC 等标签按端口推断。上传、下载为该连接经隧道的字节数。目标域名来自请求本身或 TLS SNI / HTTP Host，只保存在内存里，下次连接或退出 App 时清空。")
             }
         }
         .scrollContentBackground(.hidden)
@@ -186,7 +191,7 @@ struct ConnectionsView: View {
                 } label: {
                     Image(systemName: "xmark.circle")
                 }
-                .disabled(list.active.isEmpty)
+                .disabled(list.active.isEmpty || tunnel.connection != .connected)
                 .accessibilityLabel("断开全部连接")
             }
         }
@@ -281,8 +286,13 @@ struct ConnectionsView: View {
         return paused ? count + String(localized: " · 已暂停刷新") : count
     }
 
+    /// The tunnel is off and the list is the one kept from before it stopped.
+    private var showingLast: Bool {
+        tunnel.connection != .connected && tunnel.lastConnections != nil
+    }
+
     private var emptyText: LocalizedStringKey {
-        if tunnel.connection != .connected {
+        if tunnel.connection != .connected, !showingLast {
             return "连接后显示经过隧道的每个连接。"
         }
         if !query.isEmpty || filter != .all {
@@ -304,12 +314,15 @@ struct ConnectionsView: View {
     private func load() async {
         guard let data = await tunnel.control(.connections), let next = RuntimeControl.decodeConnections(data) else {
             if tunnel.connection != .connected {
-                list = RuntimeControl.Connections()
+                // Keep showing what went through the tunnel before it stopped.
+                list = tunnel.lastConnections ?? RuntimeControl.Connections()
+                loaded = tunnel.lastConnections != nil
             }
             return
         }
         list = next
         loaded = true
+        tunnel.remember(next)
     }
 }
 

@@ -36,6 +36,9 @@ final class TunnelController {
     private(set) var lastDisconnectError: String?
     /// When the current connection came up, for the elapsed time on the home screen.
     private(set) var connectedSince: Date?
+    /// The engine's last connection list, kept after the tunnel stops so the request list still shows what went
+    /// through it. In memory only: cleared when a new connection comes up or the app quits.
+    private(set) var lastConnections: RuntimeControl.Connections?
     /// The library the tunnel runs: the active subscription group's nodes and rules, with the other groups its
     /// rules can use (`SubscriptionGroups.activeLibrary()`). Nil while a single pasted node is in use.
     private(set) var library: NodeLibrary?
@@ -996,8 +999,17 @@ final class TunnelController {
         }
     }
 
+    /// Keeps `list` as the last connection list read from the running engine.
+    func remember(_ list: RuntimeControl.Connections) {
+        guard connection == .connected, list != lastConnections else {
+            return
+        }
+        lastConnections = list
+    }
+
     /// The extension's hourly traffic by host and policy (`clear` empties it first). Nil while the tunnel is not
-    /// running, or when the extension is older than the statistics page.
+    /// running, or when the extension is older than the statistics page. Each answer is also kept as
+    /// `TrafficStatsCache`, which the statistics page shows while the tunnel is off.
     func trafficStats(clear: Bool = false) async -> TrafficStats? {
         guard let session = manager?.connection as? NETunnelProviderSession, isConnected else {
             return nil
@@ -1012,7 +1024,11 @@ final class TunnelController {
                 continuation.resume(returning: nil)
             }
         }
-        return data.flatMap { try? TrafficStats.decoded(from: $0) }
+        guard let stats = data.flatMap({ try? TrafficStats.decoded(from: $0) }) else {
+            return nil
+        }
+        TrafficStatsCache.store(stats)
+        return stats
     }
 
     /// Asks the running extension for its sanitized runtime status.
@@ -1076,6 +1092,9 @@ final class TunnelController {
         let previous = connection
         connection = manager?.connection.status ?? .invalid
         connectedSince = connection == .connected ? manager?.connection.connectedDate : nil
+        if connection == .connected, previous != .connected {
+            lastConnections = nil
+        }
         if restartAfterStop, connection == .disconnected {
             // The node switch stopped the tunnel on purpose: no error to show, just start it on the new node.
             restartAfterStop = false
