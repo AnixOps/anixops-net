@@ -1,9 +1,9 @@
 import Foundation
 
 /// Open-source rule lists on GitHub the rules page offers in one tap. Every entry is a Surge-format list the engine
-/// reads itself (`TYPE,value` lines or bare domains) and is small enough for the tunnel's memory budget; the very large
-/// lists (Loyalsoldier `reject`/`direct`/`proxy`, blackmatrix7 `ChinaMax`) are left out on purpose. Users can still add
-/// any other list by URL.
+/// reads itself (`TYPE,value` lines or bare domains). The engine keeps a list's domains in one packed table, about
+/// 25 bytes a domain (networkcore #187), so even the 200 000-domain Loyalsoldier `reject` list costs some 5 MB in the
+/// tunnel. Users can still add any other list by URL.
 public enum OpenRuleSets {
     public enum Category: String, CaseIterable, Identifiable {
         case block
@@ -45,6 +45,7 @@ public enum OpenRuleSets {
 
     public static let entries: [Entry] = [
         Entry(id: "bm7-advertising", name: "广告拦截", category: .block, url: bm7("Advertising"), policy: .reject, source: blackmatrix7),
+        Entry(id: "ls-reject", name: "广告拦截（完整，约 20 万条）", category: .block, url: ls("reject"), policy: .reject, source: loyalsoldier),
         Entry(id: "bm7-openai", name: "OpenAI", category: .ai, url: bm7("OpenAI"), policy: .proxy, source: blackmatrix7),
         Entry(id: "bm7-claude", name: "Claude", category: .ai, url: bm7("Claude"), policy: .proxy, source: blackmatrix7),
         Entry(id: "bm7-gemini", name: "Gemini", category: .ai, url: bm7("Gemini"), policy: .proxy, source: blackmatrix7),
@@ -59,6 +60,7 @@ public enum OpenRuleSets {
         Entry(id: "bm7-google", name: "Google", category: .services, url: bm7("Google"), policy: .proxy, source: blackmatrix7),
         Entry(id: "bm7-github", name: "GitHub", category: .services, url: bm7("GitHub"), policy: .proxy, source: blackmatrix7),
         Entry(id: "ls-gfw", name: "GFW 列表", category: .services, url: ls("gfw"), policy: .proxy, source: loyalsoldier),
+        Entry(id: "ls-proxy", name: "常见海外域名（约 2.7 万条）", category: .services, url: ls("proxy"), policy: .proxy, source: loyalsoldier),
         Entry(id: "bm7-apple", name: "Apple", category: .direct, url: bm7("Apple"), policy: .direct, source: blackmatrix7),
         Entry(id: "ls-icloud", name: "iCloud", category: .direct, url: ls("icloud"), policy: .direct, source: loyalsoldier),
         Entry(id: "bm7-microsoft", name: "Microsoft", category: .direct, url: bm7("Microsoft"), policy: .direct, source: blackmatrix7),
