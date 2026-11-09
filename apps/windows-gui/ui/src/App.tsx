@@ -112,7 +112,7 @@ export function App() {
               aria-current={page === item ? "page" : undefined}
               onClick={() => setPage(item)}
             >
-              <Icon size={18} strokeWidth={1.8} /><span>{t(label)}</span>
+              <Icon size={20} strokeWidth={1.5} /><span>{t(label)}</span>
             </button>
           ))}
         </nav>
