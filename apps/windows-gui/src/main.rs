@@ -39,7 +39,8 @@ mod gui {
         WindowsManagedConfig, WindowsSystemProxyOwner, WINDOWS_MANAGED_CONFIG_SCHEMA_VERSION,
     };
     use platform_windows::system_integration::{
-        disable_current_user_startup, NativeWindowsSystemIntegration, WindowsSystemIntegration,
+        disable_current_user_startup, migrate_legacy_current_user_startup,
+        remove_all_startup_tasks, NativeWindowsSystemIntegration, WindowsSystemIntegration,
     };
     use std::env;
     use std::fs;
@@ -53,6 +54,7 @@ mod gui {
     const APP_TITLE: &str = "AnixOps NetworkCore";
 
     pub fn run_tauri(debug: bool) -> Result<(), String> {
+        migrate_legacy_startup();
         tauri_ui::run(debug)
     }
 
@@ -74,8 +76,34 @@ mod gui {
         value.encode_utf16().chain(Some(0)).collect()
     }
 
+    /// Earlier builds started from the HKCU Run key, which Windows skips now
+    /// that the GUI requires administrator rights; move it to the elevated
+    /// logon task. Best effort: a failure only leaves sign-in startup off.
+    fn migrate_legacy_startup() {
+        let Ok(executable) = env::current_exe() else {
+            return;
+        };
+        match migrate_legacy_current_user_startup(&executable) {
+            Ok(true) => {
+                let _ = append_managed_log("gui", "sign-in startup moved to the logon task");
+            }
+            Ok(false) => {}
+            Err(error) => {
+                let _ = append_managed_log(
+                    "gui",
+                    &format!("sign-in startup migration failed: {}", error.message),
+                );
+            }
+        }
+    }
+
+    /// Uninstall cleanup. The MSI runs it as LocalSystem (deferred, not
+    /// impersonated) because the elevated GUI cannot start from an
+    /// unelevated custom action, so it removes every user's logon task and
+    /// then this account's own legacy Run entry, if any.
     pub fn cleanup_current_user_startup() -> Result<(), String> {
         let executable = env::current_exe().map_err(|error| error.to_string())?;
+        remove_all_startup_tasks().map_err(|error| error.to_string())?;
         disable_current_user_startup(&executable).map_err(|error| error.to_string())
     }
 

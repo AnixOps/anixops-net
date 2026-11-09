@@ -152,7 +152,7 @@ export const english: Record<string, string> = {
   "外观": "Appearance",
   "语言": "Language",
   "运行方式": "Run mode",
-  "桌面模式只为当前用户运行内核；HTTPS 解密需要 Windows 服务模式。": "Desktop mode runs the core for the current user only; HTTPS decryption needs Windows service mode.",
+  "桌面模式由客户端直接运行内核和 HTTPS 解密；Windows 服务模式在后台常驻，关掉窗口也不会断开。": "Desktop mode runs the core and HTTPS decryption inside the client; Windows service mode keeps running in the background after the window closes.",
   "启动与自动化": "Startup and automation",
   "校验配置": "Validate Configuration",
   "重启内核": "Restart Core",

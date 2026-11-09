@@ -3045,6 +3045,7 @@ dependencies = [
  "desktop-dns",
  "engine-embedded",
  "inbound-mixed",
+ "networkcore-windows-service",
  "node-import",
  "platform-windows",
  "rcgen",

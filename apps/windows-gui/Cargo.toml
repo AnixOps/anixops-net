@@ -16,6 +16,7 @@ control-domain = { workspace = true }
 desktop-dns = { path = "../../crates/desktop-dns" }
 engine-embedded = { workspace = true }
 inbound-mixed = { workspace = true }
+networkcore-windows-service = { path = "../windows-service" }
 node-import = { workspace = true }
 platform-windows = { workspace = true }
 rcgen = { version = "0.14.8", features = ["x509-parser"] }
