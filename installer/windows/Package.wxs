@@ -115,9 +115,9 @@
         Id="CleanupCurrentUserStartup"
         FileRef="GuiExe"
         ExeCommand="--cleanup-startup"
-        Execute="immediate"
-        Impersonate="yes"
-        Return="check" />
+        Execute="deferred"
+        Impersonate="no"
+        Return="ignore" />
     <InstallExecuteSequence>
       <Custom
           Action="PurgeManagedNetworkState"
