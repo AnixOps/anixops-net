@@ -191,16 +191,6 @@
         }
       }
     },
-    "%lld 条分流规则": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld routing rules"
-          }
-        }
-      }
-    },
     "%lld 条重写": {
       "localizations": {
         "en": {
@@ -2977,16 +2967,6 @@
         }
       }
     },
-    "站点标识是本机按主机名生成的字母，不联网取图标。HTTPS、QUIC 等标签按端口推断。上传、下载为该连接经隧道的字节数。目标域名来自请求本身或 TLS SNI / HTTP Host，只保存在内存里，断开隧道即清空。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Site badges are letters made on this device from the host name; no icons are fetched. Tags such as HTTPS and QUIC are inferred from the port. Upload and download are the bytes each connection moved through the tunnel. Target names come from the request itself or its TLS SNI / HTTP Host, are kept only in memory and are cleared when the tunnel disconnects."
-          }
-        }
-      }
-    },
     "第 %lld 步，共 3 步": {
       "localizations": {
         "en": {
@@ -5083,6 +5063,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "The port must be 1–65535"
+          }
+        }
+      }
+    },
+    "站点标识是本机按主机名生成的字母，不联网取图标。HTTPS、QUIC 等标签按端口推断。上传、下载为该连接经隧道的字节数。目标域名来自请求本身或 TLS SNI / HTTP Host，只保存在内存里，下次连接或退出 App 时清空。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Site badges are letters made on this device from the host name; no icons are fetched. Tags such as HTTPS and QUIC are inferred from the port. Upload and download are the bytes each connection moved through the tunnel. Target names come from the request itself or its TLS SNI / HTTP Host, are kept only in memory and are cleared on the next connection or when the app quits."
+          }
+        }
+      }
+    },
+    "上次连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last session"
+          }
+        }
+      }
+    },
+    "时长 %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duration %@"
+          }
+        }
+      }
+    },
+    "隧道已断开，显示断开前的记录": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disconnected. Showing requests from before the tunnel stopped."
           }
         }
       }

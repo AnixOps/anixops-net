@@ -329,6 +329,24 @@ private struct UsageTile: View {
                 Text("\(traffic.active) 个连接")
                     .font(.caption)
                     .foregroundStyle(brand.text2)
+            } else if tunnel.connection != .connected, let last = model.lastSession {
+                Text("上次连接")
+                    .font(.caption)
+                    .foregroundStyle(brand.text2)
+                Text(TrafficFormat.bytes(last.total))
+                    .font(.title3.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(brand.text)
+                Text("↑\(TrafficFormat.bytes(last.upload)) ↓\(TrafficFormat.bytes(last.download))")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(brand.text2)
+                if let start = last.startedAt {
+                    Text("时长 \(ConnectElapsed.text(from: start, to: last.endedAt))")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(brand.text2)
+                }
+                Text("轻点查看 7 天统计")
+                    .font(.caption)
+                    .foregroundStyle(brand.text2)
             } else {
                 TilePlaceholder(text: "轻点查看 7 天统计")
             }
@@ -475,43 +493,56 @@ private struct TopHostsTile: View {
                 Disclosure()
             } content: {
                 if tunnel.connection != .connected {
-                    TilePlaceholder(text: "连接后按主机统计流量")
+                    if let last = model.lastSession, !last.topHosts.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("上次连接")
+                                .font(.caption)
+                                .foregroundStyle(brand.text2)
+                            bars(last.topHosts)
+                        }
+                    } else {
+                        TilePlaceholder(text: "连接后按主机统计流量")
+                    }
                 } else if model.topHosts.isEmpty {
                     TilePlaceholder(text: "还没有流量")
                 } else {
-                    let peak = Double(max(1, model.topHosts.first?.bytes ?? 1))
-                    VStack(spacing: 10) {
-                        ForEach(model.topHosts) { host in
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack(spacing: 8) {
-                                    Text(host.host)
-                                        .font(.subheadline)
-                                        .foregroundStyle(brand.text)
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                    Spacer(minLength: 8)
-                                    Text(TrafficFormat.bytes(host.bytes))
-                                        .font(.footnote.monospacedDigit())
-                                        .foregroundStyle(brand.text2)
-                                }
-                                GeometryReader { proxy in
-                                    ZStack(alignment: .leading) {
-                                        Capsule().fill(brand.raised)
-                                        Capsule()
-                                            .fill(brand.primary)
-                                            .frame(width: max(4, proxy.size.width * Double(host.bytes) / peak))
-                                    }
-                                }
-                                .frame(height: 6)
-                                .accessibilityHidden(true)
-                            }
-                            .accessibilityElement(children: .combine)
-                        }
-                    }
+                    bars(model.topHosts)
                 }
             }
         }
         .buttonStyle(.plain)
+    }
+
+    private func bars(_ hosts: [HostTraffic]) -> some View {
+        let peak = Double(max(1, hosts.first?.bytes ?? 1))
+        return VStack(spacing: 10) {
+            ForEach(hosts) { host in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Text(host.host)
+                            .font(.subheadline)
+                            .foregroundStyle(brand.text)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer(minLength: 8)
+                        Text(TrafficFormat.bytes(host.bytes))
+                            .font(.footnote.monospacedDigit())
+                            .foregroundStyle(brand.text2)
+                    }
+                    GeometryReader { proxy in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(brand.raised)
+                            Capsule()
+                                .fill(brand.primary)
+                                .frame(width: max(4, proxy.size.width * Double(host.bytes) / peak))
+                        }
+                    }
+                    .frame(height: 6)
+                    .accessibilityHidden(true)
+                }
+                .accessibilityElement(children: .combine)
+            }
+        }
     }
 }
 

@@ -182,3 +182,20 @@ public struct TrafficStatsCounter: Sendable {
         seen.removeAll()
     }
 }
+
+/// The app's copy of the extension's `TrafficStats`, the last answer it got. The statistics live in the
+/// extension's own container, which the app cannot read, so this copy is what the page shows while the tunnel
+/// is off. The home screen refreshes it while connected.
+public enum TrafficStatsCache {
+    private static let key = "traffic-stats-cache"
+
+    public static func store(_ stats: TrafficStats) {
+        if let data = try? stats.encoded() {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+
+    public static func load() -> TrafficStats? {
+        UserDefaults.standard.data(forKey: key).flatMap { try? TrafficStats.decoded(from: $0) }
+    }
+}

@@ -179,8 +179,54 @@ public struct TrafficHistory: Equatable, Sendable {
     }
 }
 
+/// What the home screen keeps of a connection after it ends: its totals, how long it lasted and its busiest
+/// hosts, so the usage and top hosts cards do not go blank on disconnect. Host names and byte counts only.
+public struct LastSessionSummary: Codable, Equatable, Sendable {
+    public var upload: UInt64
+    public var download: UInt64
+    public var startedAt: Date?
+    public var endedAt: Date
+    public var topHosts: [HostTraffic]
+
+    public init(upload: UInt64, download: UInt64, startedAt: Date?, endedAt: Date, topHosts: [HostTraffic]) {
+        self.upload = upload
+        self.download = download
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.topHosts = topHosts
+    }
+
+    public var total: UInt64 {
+        upload &+ download
+    }
+
+    /// Seconds the connection lasted, when its start is known.
+    public var duration: TimeInterval? {
+        startedAt.map { max(0, endedAt.timeIntervalSince($0)) }
+    }
+
+    /// A summary of the session that just ended; nil when it moved nothing worth keeping.
+    public static func ended(
+        traffic: RuntimeControl.Traffic?,
+        topHosts: [HostTraffic],
+        startedAt: Date?,
+        endedAt: Date = Date()
+    ) -> LastSessionSummary? {
+        guard let traffic, traffic.uploadTotal &+ traffic.downloadTotal > 0 || !topHosts.isEmpty else {
+            return nil
+        }
+        return LastSessionSummary(
+            upload: traffic.uploadTotal,
+            download: traffic.downloadTotal,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            topHosts: topHosts
+        )
+    }
+}
+
 /// One host's share of this session's traffic, for the top hosts card.
-public struct HostTraffic: Equatable, Identifiable, Sendable {
+public struct HostTraffic: Codable, Equatable, Identifiable, Sendable {
     public let host: String
     public let bytes: UInt64
     public let connections: Int

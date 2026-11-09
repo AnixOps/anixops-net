@@ -70,3 +70,14 @@ final class TrafficStatsTests: XCTestCase {
         XCTAssertEqual(TunnelAppMessage.decode(Data()), .runtimeStatus)
     }
 }
+
+final class TrafficStatsCacheTests: XCTestCase {
+    func testStoresAndLoadsTheLastAnswer() {
+        let saved = UserDefaults.standard.data(forKey: "traffic-stats-cache")
+        defer { UserDefaults.standard.set(saved, forKey: "traffic-stats-cache") }
+        var stats = TrafficStats()
+        stats.add(host: "example.com", policy: "Proxy", upload: 10, download: 20, at: Date())
+        TrafficStatsCache.store(stats)
+        XCTAssertEqual(TrafficStatsCache.load(), stats)
+    }
+}

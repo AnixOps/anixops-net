@@ -119,3 +119,36 @@ final class DashboardDataTests: XCTestCase {
         XCTAssertEqual(decoded, log)
     }
 }
+
+final class LastSessionSummaryTests: XCTestCase {
+    func testKeepsTotalsDurationAndHostsOfTheEndedSession() throws {
+        let start = Date(timeIntervalSince1970: 1_000)
+        let end = Date(timeIntervalSince1970: 1_065)
+        let hosts = [HostTraffic(host: "one.one.one.one", bytes: 26_000, connections: 2, outbound: "anx")]
+        let summary = try XCTUnwrap(LastSessionSummary.ended(
+            traffic: RuntimeControl.Traffic(uploadTotal: 9_000, downloadTotal: 16_000, active: 2),
+            topHosts: hosts,
+            startedAt: start,
+            endedAt: end
+        ))
+        XCTAssertEqual(summary.total, 25_000)
+        XCTAssertEqual(summary.duration, 65)
+        XCTAssertEqual(summary.topHosts, hosts)
+        let decoded = try JSONDecoder().decode(LastSessionSummary.self, from: JSONEncoder().encode(summary))
+        XCTAssertEqual(decoded, summary)
+    }
+
+    func testNothingToKeepWithoutTraffic() {
+        XCTAssertNil(LastSessionSummary.ended(traffic: nil, topHosts: [], startedAt: nil))
+        XCTAssertNil(LastSessionSummary.ended(traffic: RuntimeControl.Traffic(), topHosts: [], startedAt: nil))
+    }
+
+    func testUnknownStartHasNoDuration() throws {
+        let summary = try XCTUnwrap(LastSessionSummary.ended(
+            traffic: RuntimeControl.Traffic(uploadTotal: 1, downloadTotal: 1),
+            topHosts: [],
+            startedAt: nil
+        ))
+        XCTAssertNil(summary.duration)
+    }
+}
