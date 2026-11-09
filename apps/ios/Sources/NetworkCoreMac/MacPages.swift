@@ -80,7 +80,7 @@ private struct MacHeroCard: View {
                     .frame(width: 136, height: 136)
                     .background(Brand.line.opacity(0.06), in: Circle())
                     .overlay(
-                        Circle().strokeBorder(phase == .on ? Brand.mint.opacity(0.7) : Brand.line.opacity(0.25), lineWidth: 1.5)
+                        Circle().strokeBorder(phase == .on ? Brand.sky.opacity(0.7) : Brand.line.opacity(0.25), lineWidth: 1.5)
                     )
                     .contentShape(Circle())
             }
@@ -108,8 +108,8 @@ private struct MacHeroCard: View {
                         .padding(.vertical, 3)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(phase == .on ? Brand.deep.opacity(0.85) : Brand.mint)
-                .foregroundStyle(phase == .on ? Brand.line : Brand.deep)
+                .tint(phase == .on ? Brand.slate.opacity(0.85) : Brand.sky)
+                .foregroundStyle(phase == .on ? Brand.line : Brand.slate)
                 .controlSize(.large)
                 .disabled(phase == .disconnecting)
                 .padding(.top, 4)
@@ -250,15 +250,12 @@ struct MacSettingsPage: View {
     var body: some View {
         Form {
             Section("外观") {
-                Picker("外观", selection: $appearance) {
-                    ForEach(Appearance.allCases) { option in
+                Picker("外观", selection: $appearance.normalized) {
+                    ForEach(Appearance.choices) { option in
                         Text(option.label).tag(option)
                     }
                 }
                 .pickerStyle(.segmented)
-                Text("纯黑主题适合 OLED 屏幕。")
-                    .font(.caption)
-                    .foregroundStyle(brand.text2)
             }
 
             Section("启动") {

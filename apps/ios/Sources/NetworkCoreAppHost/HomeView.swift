@@ -195,7 +195,7 @@ private struct ConnectCard: View {
                         .frame(width: 92, height: 92)
                         .background(Brand.line.opacity(0.06), in: Circle())
                         .overlay(
-                            Circle().strokeBorder(phase == .on ? Brand.mint.opacity(0.7) : Brand.line.opacity(0.25), lineWidth: 1.5)
+                            Circle().strokeBorder(phase == .on ? Brand.sky.opacity(0.7) : Brand.line.opacity(0.25), lineWidth: 1.5)
                         )
                         .contentShape(Circle())
                 }
@@ -265,7 +265,7 @@ private struct ConnectCard: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                         .frame(maxWidth: .infinity, minHeight: 34)
-                        .foregroundStyle(selected ? Brand.deep : Brand.line.opacity(0.85))
+                        .foregroundStyle(selected ? Brand.slate : Brand.line.opacity(0.85))
                         .background(selected ? Brand.line : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                         .contentShape(Rectangle())
                 }
@@ -274,7 +274,7 @@ private struct ConnectCard: View {
             }
         }
         .padding(4)
-        .background(Brand.deep.opacity(0.45), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(Brand.slate.opacity(0.45), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("分流模式")
     }

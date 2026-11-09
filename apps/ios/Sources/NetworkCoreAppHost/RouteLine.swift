@@ -118,7 +118,7 @@ struct RouteLineMark: View {
                 RouteLineShape()
                     .trim(from: 0, to: progress(at: context.date))
                     .stroke(lineStyle, style: stroke(dashed: phase == .off || phase == .unconfigured))
-                dot(at: CGPoint(x: 0.30, y: 0.72), color: Brand.mint)
+                dot(at: CGPoint(x: 0.30, y: 0.72), color: Brand.sky)
                 dot(at: CGPoint(x: 0.70, y: 0.28), color: phase == .on ? Brand.amber : Brand.amber.opacity(0.45))
                     .scaleEffect(pop ? 1.45 : 1)
             }
@@ -141,9 +141,9 @@ struct RouteLineMark: View {
     private var lineStyle: AnyShapeStyle {
         switch phase {
         case .on:
-            return AnyShapeStyle(LinearGradient(colors: [Brand.lineStart, Brand.line], startPoint: .bottomLeading, endPoint: .topTrailing))
+            return AnyShapeStyle(LinearGradient(colors: [Brand.sky, Brand.line], startPoint: .bottomLeading, endPoint: .topTrailing))
         case .connecting, .reasserting, .disconnecting:
-            return AnyShapeStyle(Brand.lineStart)
+            return AnyShapeStyle(Brand.sky)
         case .off, .unconfigured:
             return AnyShapeStyle(Brand.line.opacity(0.45))
         }
@@ -189,7 +189,7 @@ struct BrandMark: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: size * 0.23, style: .continuous)
-                .fill(Brand.iconTeal)
+                .fill(Brand.indigo)
             RouteLineShape()
                 .trim(from: 0, to: drawn)
                 .stroke(Brand.line, style: StrokeStyle(lineWidth: size * 0.1, lineCap: .round, lineJoin: .round))

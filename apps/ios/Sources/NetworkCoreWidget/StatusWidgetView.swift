@@ -114,7 +114,7 @@ struct StaticRouteLine: View {
                 Circle()
                     .fill(Brand.line.opacity(0.06))
                 Circle()
-                    .strokeBorder(on ? Brand.mint.opacity(0.7) : Brand.line.opacity(0.25), lineWidth: 1.5)
+                    .strokeBorder(on ? Brand.sky.opacity(0.7) : Brand.line.opacity(0.25), lineWidth: 1.5)
             }
             ZStack {
                 RouteLineShape()
@@ -123,7 +123,7 @@ struct StaticRouteLine: View {
                     .trim(from: 0, to: phase.isBusy ? 0.6 : 1)
                     .stroke(on ? Brand.line : Brand.line.opacity(0.55), style: stroke(width: line * 0.09, dashed: !on && !phase.isBusy))
                 Circle()
-                    .fill(Brand.mint)
+                    .fill(Brand.sky)
                     .frame(width: line * 0.15, height: line * 0.15)
                     .position(x: line * 0.30, y: line * 0.72)
                 Circle()
@@ -148,7 +148,7 @@ private extension View {
     func heroBackground() -> some View {
         foregroundStyle(Brand.line)
             .containerBackground(for: .widget) {
-                LinearGradient(colors: [Brand.deep, Brand.iconTeal], startPoint: .topLeading, endPoint: .bottomTrailing)
+                LinearGradient(colors: [Brand.slate, Brand.indigo], startPoint: .topLeading, endPoint: .bottomTrailing)
             }
     }
 }

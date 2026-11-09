@@ -1,9 +1,11 @@
-/* AnixOps Net desktop theme. Colors, radii, type and motion come from design/tokens.css, which is generated from
-   apps/ios/Design/tokens.json by .github/scripts/design_tokens.py; change the JSON, never the generated file. */
+/* AnixOps Net desktop theme, on AnixOps Design. design/anixops/ is the vendored design system (tokens for both
+   themes, Inter); design/tokens.css maps this stylesheet's names onto it and is generated from
+   apps/ios/Design/tokens.json by .github/scripts/design_tokens.py. Never edit either by hand. */
+@import "./design/anixops/fonts/inter/inter.css";
+@import "./design/anixops/tokens.css";
 @import "./design/tokens.css";
 
 :root {
-  --font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
   font-family: var(--font-family);
   font-size: 14px;
   color: var(--text);
@@ -23,7 +25,7 @@ h1, h2, p { margin: 0; }
 .sidebar { display: flex; flex-direction: column; gap: 2px; padding: 16px 12px; background: var(--side); }
 .sidebar-brand { padding: 4px 12px 20px; }
 .wordmark { display: inline-flex; gap: 10px; align-items: center; font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
-.wordmark em { color: var(--primary); font-style: normal; }
+.wordmark em { color: var(--text2); font-style: normal; font-weight: 400; }
 nav { display: grid; gap: 2px; }
 .nav-item { position: relative; display: flex; gap: 12px; align-items: center; height: 38px; padding: 0 12px; color: var(--text2); text-align: left; background: transparent; border: 0; border-radius: var(--radius-control); transition: background var(--fast), color var(--fast); }
 .nav-item:hover { color: var(--text); background: var(--raised); }
@@ -50,30 +52,30 @@ nav { display: grid; gap: 2px; }
 
 /* Hero */
 .hero { display: flex; gap: 28px; align-items: center; padding: 24px 28px; color: var(--line); background: linear-gradient(135deg, var(--hero-a) 0%, var(--hero-b) 100%); border-radius: var(--radius-hero); }
-.connect-button { display: grid; flex: 0 0 auto; place-items: center; width: 112px; height: 112px; padding: 0; background: rgb(240 253 250 / 6%); border: 1.5px solid rgb(240 253 250 / 25%); border-radius: 50%; transition: transform var(--fast), border-color var(--standard), background var(--standard); }
-.connect-button:hover:not(:disabled) { background: rgb(240 253 250 / 10%); }
+.connect-button { display: grid; flex: 0 0 auto; place-items: center; width: 112px; height: 112px; padding: 0; background: rgb(255 255 255 / 6%); border: 1.5px solid rgb(255 255 255 / 25%); border-radius: 50%; transition: transform var(--fast), border-color var(--standard), background var(--standard); }
+.connect-button:hover:not(:disabled) { background: rgb(255 255 255 / 10%); }
 .connect-button:active:not(:disabled) { transform: scale(.96); }
 .connect-button:disabled { opacity: 1; }
-.hero.on .connect-button { border-color: rgb(94 234 212 / 70%); }
+.hero.on .connect-button { border-color: color-mix(in srgb, var(--mint) 70%, transparent); }
 .connect-button:focus-visible { outline-color: var(--line); }
 .hero-text { flex: 1; min-width: 0; }
 .hero-title { font-size: 24px; font-weight: 600; }
-.hero-subtitle { margin-top: 6px; overflow: hidden; color: rgb(240 253 250 / 75%); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.hero-subtitle { margin-top: 6px; overflow: hidden; color: var(--net-line-muted); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 .hero.failed .hero-subtitle { white-space: normal; }
-.hero-modes { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; width: 360px; padding: 4px; background: rgb(4 47 46 / 45%); border-radius: var(--radius-card); }
-.hero-modes button { height: 32px; color: rgb(240 253 250 / 80%); font-size: 13px; font-weight: 600; background: transparent; border: 0; border-radius: 7px; transition: background var(--fast), color var(--fast); }
-.hero-modes button:hover:not(:disabled) { background: rgb(240 253 250 / 10%); }
-.hero-modes button.selected { color: #042f2e; background: var(--line); }
+.hero-modes { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; width: 360px; padding: 4px; background: rgb(255 255 255 / 6%); border-radius: var(--radius-card); }
+.hero-modes button { height: 32px; color: var(--net-line-muted); font-size: 13px; font-weight: 600; background: transparent; border: 0; border-radius: 7px; transition: background var(--fast), color var(--fast); }
+.hero-modes button:hover:not(:disabled) { background: rgb(255 255 255 / 10%); }
+.hero-modes button.selected { color: var(--net-slate); background: var(--line); }
 .hero-modes button:disabled { opacity: .7; }
 
 /* Route line */
 .route-track, .route-stroke { fill: none; stroke-width: 9; stroke-linecap: round; stroke-linejoin: round; }
-.route-track { stroke: rgb(240 253 250 / 16%); }
-.route-stroke { stroke: #ccfbf1; transition: stroke var(--standard); }
-.route-stroke.dashed { stroke: rgb(240 253 250 / 45%); stroke-dasharray: 6 7; }
-.route-stroke.drawing { stroke: #99f6e4; stroke-dasharray: 148; animation: route-draw 1.2s cubic-bezier(.2, .8, .2, 1) infinite; }
+.route-track { stroke: rgb(255 255 255 / 16%); }
+.route-stroke { stroke: var(--line); transition: stroke var(--standard); }
+.route-stroke.dashed { stroke: rgb(255 255 255 / 45%); stroke-dasharray: 6 7; }
+.route-stroke.drawing { stroke: var(--mint); stroke-dasharray: 148; animation: route-draw 1.2s cubic-bezier(.2, .8, .2, 1) infinite; }
 .route-origin { fill: var(--mint); }
-.route-dot { fill: rgb(251 191 36 / 45%); transform-origin: center; transform-box: fill-box; transition: fill var(--standard); }
+.route-dot { fill: color-mix(in srgb, var(--amber) 45%, transparent); transform-origin: center; transform-box: fill-box; transition: fill var(--standard); }
 .route-dot.lit { fill: var(--amber); animation: dot-pop .5s cubic-bezier(.2, .8, .2, 1); }
 @keyframes route-draw { 0% { stroke-dashoffset: 148; } 70%, 100% { stroke-dashoffset: 0; } }
 @keyframes dot-pop { 45% { transform: scale(1.45); } }
@@ -115,7 +117,7 @@ nav { display: grid; gap: 2px; }
 
 /* Buttons */
 .primary, .secondary { display: inline-flex; gap: 6px; align-items: center; justify-content: center; height: 34px; padding: 0 14px; font-size: 13px; font-weight: 600; white-space: nowrap; border-radius: var(--radius-control); transition: background var(--fast), border-color var(--fast); }
-.primary { color: var(--on-primary); background: var(--primary); border: 1px solid var(--primary); }
+.primary { color: var(--on-primary); background: var(--primary-fill); border: 1px solid var(--primary-fill); }
 .primary:hover:not(:disabled) { background: var(--primary-hover); border-color: var(--primary-hover); }
 .secondary { background: var(--surface); border: 1px solid var(--border); }
 .secondary:hover:not(:disabled) { background: var(--raised); }
@@ -155,7 +157,7 @@ input[type="checkbox"] { width: auto; height: auto; }
 .toggle-row input { position: absolute; opacity: 0; pointer-events: none; }
 .toggle-row i { position: relative; flex: 0 0 auto; width: 40px; height: 20px; background: transparent; border: 1px solid var(--text2); border-radius: 99px; transition: background var(--fast), border-color var(--fast); }
 .toggle-row i::after { position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; content: ""; background: var(--text2); border-radius: 50%; transition: transform var(--standard) cubic-bezier(.2, .8, .2, 1), background var(--fast); }
-.toggle-row input:checked + i { background: var(--primary); border-color: var(--primary); }
+.toggle-row input:checked + i { background: var(--primary-fill); border-color: var(--primary-fill); }
 .toggle-row input:checked + i::after { background: var(--on-primary); transform: translateX(20px); }
 .toggle-row input:focus-visible + i { outline: 2px solid var(--primary); outline-offset: 2px; }
 .toggle-row input:disabled + i { opacity: .5; }
@@ -164,7 +166,7 @@ input[type="checkbox"] { width: auto; height: auto; }
 .segmented { display: grid; gap: 2px; padding: 3px; background: var(--raised); border-radius: 8px; }
 .segmented button { height: 30px; color: var(--text2); font-size: 13px; font-weight: 600; background: transparent; border: 0; border-radius: var(--radius-control); transition: background var(--fast), color var(--fast); }
 .segmented button:hover:not(:disabled) { color: var(--text); }
-.segmented button.selected { color: var(--text); background: var(--surface); box-shadow: 0 1px 2px rgb(4 47 46 / 10%); }
+.segmented button.selected { color: var(--text); background: var(--surface); box-shadow: var(--shadow-1); }
 .setting-label { margin: 14px 0 6px; color: var(--text2); font-size: 12px; font-weight: 600; }
 
 /* Lists */
@@ -227,7 +229,7 @@ input[type="checkbox"] { width: auto; height: auto; }
 .delay.slow { color: var(--warning); }
 .delay.failed { color: var(--danger); }
 .node-card.selected .protocol-badge { color: var(--primary); background: var(--surface); }
-.current-dot { width: 7px; height: 7px; background: #f59e0b; border-radius: 50%; }
+.current-dot { width: 7px; height: 7px; background: var(--amber); border-radius: 50%; }
 
 /* Rules */
 .mode-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }

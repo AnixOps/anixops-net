@@ -35,7 +35,7 @@ export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, l
   return (
     <div className="page-stack">
       <div className="two-column">
-        <Card title={t("外观与语言")} description={t("纯黑主题适合 OLED 屏幕。")}>
+        <Card title={t("外观与语言")}>
           <Segmented label={t("外观")} options={appearances.map((option) => ({ ...option, label: t(option.label) }))} value={appearance} onChange={setAppearance} />
           <div className="setting-label">{t("语言")}</div>
           <Segmented label={t("语言")} options={languages.map((option) => ({ ...option, label: t(option.label) }))} value={language} onChange={setLanguage} />

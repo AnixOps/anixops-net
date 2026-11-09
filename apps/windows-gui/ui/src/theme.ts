@@ -1,15 +1,15 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useState } from "react";
 
-// Colors are CSS variables in design/tokens.css, generated from apps/ios/Design/tokens.json.
-export type Appearance = "system" | "light" | "dark" | "oled";
-export type Theme = "light" | "dark" | "oled";
+// Colors are AnixOps Design CSS variables (design/anixops/tokens.css), aliased in design/tokens.css.
+// AnixOps Design's dark theme is pure black, so the former "oled" choice reads as "dark".
+export type Appearance = "system" | "light" | "dark";
+export type Theme = "light" | "dark";
 
 export const appearances: Array<{ value: Appearance; label: string }> = [
   { value: "system", label: "跟随系统" },
   { value: "light", label: "浅色" },
   { value: "dark", label: "深色" },
-  { value: "oled", label: "纯黑" },
 ];
 
 const storageKey = "anixops.appearance";
@@ -22,6 +22,7 @@ export function resolveTheme(appearance: Appearance, prefersDark: boolean): Them
 function loadAppearance(): Appearance {
   try {
     const stored = window.localStorage.getItem(storageKey);
+    if (stored === "oled") return "dark";
     if (stored && appearances.some((option) => option.value === stored)) return stored as Appearance;
   } catch {
     // Storage can be unavailable; fall back to the system appearance.
@@ -44,7 +45,7 @@ export function useAppearance(): [Appearance, (next: Appearance) => void, Theme]
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    const native = appearance === "system" ? null : appearance === "light" ? "light" : "dark";
+    const native = appearance === "system" ? null : appearance;
     void getCurrentWindow().setTheme(native).catch(() => undefined);
   }, [theme, appearance]);
 

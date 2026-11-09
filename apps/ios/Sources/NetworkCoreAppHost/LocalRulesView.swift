@@ -253,7 +253,7 @@ struct LocalRulesView: View {
     private func policyColor(_ policy: LocalRules.Policy) -> Color {
         switch policy {
         case .proxy:
-            return Brand.mint
+            return Brand.sky
         case .direct:
             return .secondary
         case .reject:

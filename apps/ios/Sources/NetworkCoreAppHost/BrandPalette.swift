@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// The appearance picked in Settings. `system` follows iOS; `oled` is dark with a pure black background.
+/// The appearance picked in Settings. `system` follows iOS. AnixOps Design's dark theme is already pure black, so
+/// the former `oled` choice is kept only so a stored value still decodes; it reads as `dark`.
 enum Appearance: String, CaseIterable, Identifiable {
     case system
     case light
@@ -8,19 +9,22 @@ enum Appearance: String, CaseIterable, Identifiable {
     case oled
 
     static let storageKey = "appearance"
+    /// The choices Settings offers.
+    static let choices: [Appearance] = [.system, .light, .dark]
 
     var id: String { rawValue }
 
+    /// `oled` folds into `dark`.
+    var normalized: Appearance { self == .oled ? .dark : self }
+
     var label: String {
-        switch self {
+        switch normalized {
         case .system:
             return String(localized: "跟随系统")
         case .light:
             return String(localized: "浅色")
-        case .dark:
+        case .dark, .oled:
             return String(localized: "深色")
-        case .oled:
-            return String(localized: "纯黑")
         }
     }
 
@@ -36,41 +40,60 @@ enum Appearance: String, CaseIterable, Identifiable {
     }
 }
 
-/// Brand colors for one theme. The `light`, `dark` and `oled` values, `Brand`, `BrandRadius`, `BrandSpacing`,
-/// `BrandMotion` and `BrandFont` are generated into BrandTokens.swift from apps/ios/Design/tokens.json by
-/// .github/scripts/design_tokens.py; change the JSON and rerun the script, never the generated file.
+extension Binding where Value == Appearance {
+    /// The Settings picker's selection: a stored `oled` shows as, and is rewritten to, `dark`.
+    var normalized: Binding<Appearance> {
+        Binding(get: { wrappedValue.normalized }, set: { wrappedValue = $0 })
+    }
+}
+
+/// Brand colors for one theme, from AnixOps Design. The `light` and `dark` values, `Brand`, `BrandRadius`,
+/// `BrandSpacing`, `BrandMotion` and `BrandFont` are generated into BrandTokens.swift by
+/// .github/scripts/design_tokens.py from the vendored AnixOps Design tokens and apps/ios/Design/tokens.json;
+/// change those, never the generated file.
 struct BrandPalette: Sendable {
+    /// The screen behind grouped cards: the grouped gray in light, pure black in dark.
     let bg: Color
+    /// Cards and grouped rows.
     let surface: Color
+    /// A translucent fill for chips, wells and pressed rows.
     let raised: Color
+    /// Hairline separators and card edges.
     let border: Color
+    let borderStrong: Color
+    /// The accent at low opacity: selected rows, chips, icon wells.
     let soft: Color
+    /// The accent for text, links, icons and selection. Filled controls use `primaryFill`.
     let primary: Color
+    /// The background of filled primary buttons; white text passes AA on it in both themes.
+    let primaryFill: Color
     let onPrimary: Color
     let text: Color
     let text2: Color
+    /// Non-essential text only (placeholders, timestamps), at 14 pt and up.
     let text3: Color
-    /// Connected and healthy; the brand teal, per U3.
+    /// Connected and healthy.
     let success: Color
+    let successSoft: Color
     let info: Color
     let warning: Color
+    let warningSoft: Color
     let danger: Color
+    let dangerFill: Color
+    let dangerSoft: Color
     let amberText: Color
     /// Series colors for charts, in order.
     let chart1: Color
     let chart2: Color
     let chart3: Color
     let chart4: Color
+    /// The connect hero's slate backdrop (a brand moment).
     let heroStart: Color
     let heroEnd: Color
-    /// OLED keeps the tab bar black instead of the system material.
-    let solidBars: Bool
 
     static func resolve(appearance: Appearance, scheme: ColorScheme) -> BrandPalette {
         switch appearance {
-        case .oled:
-            return .oled
-        case .dark:
+        case .dark, .oled:
             return .dark
         case .light:
             return .light
@@ -82,16 +105,22 @@ struct BrandPalette: Sendable {
     var heroGradient: LinearGradient {
         LinearGradient(colors: [heroStart, heroEnd], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
+
+    /// The AnixOps Design brand gradient (#0EA5E9 → #6366F1 at 135°). Brand moments only: the mark, hero numbers
+    /// and the route line on the slate hero; never controls or text that must be read.
+    static var brandGradient: LinearGradient {
+        LinearGradient(colors: [Brand.sky, Brand.indigo], startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
 }
 
 extension Color {
-    init(hex: UInt32) {
+    init(hex: UInt32, opacity: Double = 1) {
         self.init(
             .sRGB,
             red: Double((hex >> 16) & 0xFF) / 255,
             green: Double((hex >> 8) & 0xFF) / 255,
             blue: Double(hex & 0xFF) / 255,
-            opacity: 1
+            opacity: opacity
         )
     }
 }
