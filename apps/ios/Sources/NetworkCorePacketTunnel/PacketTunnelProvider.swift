@@ -90,8 +90,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         // The subscription's rules and groups go in whatever the mode, so the app can switch modes without a restart.
         let mode = ProxyMode.saved(in: tunnelProtocol.providerConfiguration)
         let dns = DnsSettings.fromProfileValue(tunnelProtocol.providerConfiguration?[TunnelProfileKeys.dns] as? Data)
-        config = withSubscriptionRules(config).withMode(mode).withDns(dns)
+        let redirects = TrafficRedirects.lines(
+            fromProfileValue: tunnelProtocol.providerConfiguration?[TunnelProfileKeys.redirects] as? Data
+        )
+        config = withSubscriptionRules(config).withMode(mode).withDns(dns).withRedirects(redirects)
         events.record("mode \(mode.rawValue)")
+        if !redirects.isEmpty {
+            events.record("redirects \(redirects.count)")
+        }
         if let dns {
             events.record("dns \(dns.servers.count) servers, \(dns.rules.count) rules, \(dns.hosts.count) hosts")
         }

@@ -107,6 +107,13 @@ public enum RuntimeControl {
         public let download: UInt64
         /// `rejected` or `connect_failed`.
         public let error: String?
+        /// Where a redirect sent the connection instead (`TrafficRedirects`), and the line that matched.
+        public let redirect: Redirect?
+
+        public struct Redirect: Decodable, Equatable {
+            public let destination: String
+            public let rule: String
+        }
 
         enum CodingKeys: String, CodingKey {
             case id
@@ -121,6 +128,7 @@ public enum RuntimeControl {
             case upload
             case download
             case error
+            case redirect
         }
 
         public init(from decoder: Decoder) throws {
@@ -137,6 +145,7 @@ public enum RuntimeControl {
             upload = try container.decode(UInt64.self, forKey: .upload)
             download = try container.decode(UInt64.self, forKey: .download)
             error = try container.decodeIfPresent(String.self, forKey: .error)
+            redirect = try container.decodeIfPresent(Redirect.self, forKey: .redirect)
         }
 
         private static func date(_ millis: UInt64) -> Date {
@@ -164,7 +173,7 @@ public enum RuntimeControl {
             guard !words.isEmpty else {
                 return true
             }
-            let fields = [target, destination, rule, outbound, network] + chain
+            let fields = [target, destination, rule, outbound, network] + chain + [redirect?.destination].compactMap { $0 }
             return words.allSatisfy { word in
                 fields.contains { $0.localizedCaseInsensitiveContains(word) }
             }

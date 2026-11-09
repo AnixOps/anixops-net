@@ -179,6 +179,9 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
     /// The `dns` section; absent keeps the engine's default resolver. The profile stores it apart
     /// (`TunnelProfileKeys.dns`) and the extension adds it with `withDns(_:)`.
     public private(set) var dns: DnsSettings?
+    /// The engine's `redirects` lines (`TrafficRedirects.lines`); absent rewrites nothing. The profile stores them
+    /// apart (`TunnelProfileKeys.redirects`) and the extension adds them with `withRedirects(_:)`.
+    public private(set) var redirects: [String]?
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
@@ -189,6 +192,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         case mitm
         case mode
         case dns
+        case redirects
     }
 
     /// Only the extension encodes a routed config, and only for the runtime; nothing decodes one.
@@ -205,6 +209,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         try container.encodeIfPresent(mitm, forKey: .mitm)
         try container.encodeIfPresent(mode, forKey: .mode)
         try container.encodeIfPresent(dns, forKey: .dns)
+        try container.encodeIfPresent(redirects, forKey: .redirects)
     }
 
     public init(node: ShadowsocksNode, profileID: String, mtu: Int = 1500) {
@@ -281,6 +286,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         copy.routing = nil
         copy.mode = nil
         copy.dns = nil
+        copy.redirects = nil
         return copy
     }
 
@@ -301,6 +307,13 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
     }
 
     /// The same config starting in `mode`.
+    /// The same config rewriting destinations by `lines`; empty rewrites nothing.
+    public func withRedirects(_ lines: [String]) -> EmbeddedRuntimeConfig {
+        var copy = self
+        copy.redirects = lines.isEmpty ? nil : lines
+        return copy
+    }
+
     public func withMode(_ mode: ProxyMode?) -> EmbeddedRuntimeConfig {
         var copy = self
         copy.mode = mode
@@ -568,4 +581,7 @@ public enum TunnelProfileKeys {
     public static let mode = "networkcore.mode"
     /// `Data` holding the encoded `DnsSettings`. Absent keeps the engine's default resolver.
     public static let dns = "networkcore.dns"
+    /// `Data` holding a JSON array of the engine's `redirects` lines (`TrafficRedirects.profileValue`). Absent
+    /// rewrites nothing.
+    public static let redirects = "networkcore.redirects"
 }
