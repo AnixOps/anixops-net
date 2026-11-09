@@ -1,7 +1,7 @@
 import Foundation
 import NetworkCoreBridge
 
-/// Sends the engine's per-node dial counts to the panel about once an hour (F-55, `ClientReport`), straight from
+/// Sends the engine's per-node dial counts to the panel about once an hour (`ClientReport`), straight from
 /// the app rather than through the tunnel, so a node that is blocked still gets reported. Counts only, never
 /// destinations; only ANX nodes from our own panel. Runs while the app polls the dashboard.
 @MainActor

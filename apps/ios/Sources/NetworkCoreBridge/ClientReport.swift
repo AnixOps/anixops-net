@@ -16,7 +16,7 @@ public struct OutboundHealth: Decodable, Equatable {
     public struct Health: Decodable, Equatable {
         public let counts: Counts
         public let consecutiveFallbacks: UInt32
-        /// The server kept handing this client to its camouflage site, so the node stopped dialing.
+        /// The server kept rejecting this client, so the node stopped dialing until the user retries.
         public let stopped: Bool
         /// Server time minus device time, in seconds, when the node measured it.
         public let clockSkewSecs: Int64?
@@ -162,7 +162,7 @@ extension SubscriptionGroups {
     }
 }
 
-/// The panel report of client-side dial failures (F-55): `POST <subscription link without query and extension>/report`,
+/// The panel report of client-side dial failures: `POST <subscription link without query and extension>/report`,
 /// for example `https://panel.example.com/s/abc123/report` for `https://panel.example.com/s/abc123.yaml?flag=x`
 /// (the token is in the path). Counts only, at most one report per link every `minimumInterval`; the panel answers
 /// 204, 404 for an unknown token, or 429 when it is too soon (the report is then dropped). Only nodes of the

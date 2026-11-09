@@ -95,7 +95,7 @@ final class DashboardModel {
                 }
             }
             if tick % Self.healthTicks == 0 {
-                // Nodes that stopped after repeated rejections, and the hourly failure report (F-48, F-55).
+                // Nodes that stopped after repeated rejections, and the hourly failure report.
                 await tunnel.checkOutboundHealth(network: network.reportName)
             }
             if tick % Self.statsTicks == 0 {
