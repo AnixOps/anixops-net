@@ -584,4 +584,7 @@ public enum TunnelProfileKeys {
     /// `Data` holding a JSON array of the engine's `redirects` lines (`TrafficRedirects.profileValue`). Absent
     /// rewrites nothing.
     public static let redirects = "networkcore.redirects"
+    /// `Data` holding the encoded `LocalRules`: the rule mode of a node list without subscription rules, and the
+    /// user's rules in front of a subscription's. Absent is the default preset with no rules of the user's.
+    public static let localRules = "networkcore.local-rules"
 }

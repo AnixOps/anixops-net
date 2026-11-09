@@ -1,8 +1,9 @@
 import NetworkCoreBridge
 import SwiftUI
 
-/// Rules: the proxy mode (rules, global or direct), the subscription's policy groups and the DNS settings. Only subscriptions that
-/// carry rules and groups (Clash, Surge or Loon profiles) have groups to show here.
+/// Rules: the proxy mode (rules, global or direct), the subscription's policy groups, the local rules and the DNS
+/// settings. Only subscriptions that carry rules and groups (Clash, Surge or Loon profiles) have groups to show here;
+/// any other node list routes by the local rules' preset and the user's own rules.
 struct RulesView: View {
     var tunnel: TunnelController
     @Environment(\.brand) private var brand
@@ -16,7 +17,10 @@ struct RulesView: View {
                     rules(library, routing)
                 } else if tunnel.nodeName != nil {
                     List {
-                        modeSection(hasRules: false)
+                        modeSection(hasRules: tunnel.library != nil)
+                        if tunnel.library != nil {
+                            LocalRulesSection(tunnel: tunnel, hasSubscriptionRules: false)
+                        }
                         DnsSection(tunnel: tunnel)
                         RedirectSection(tunnel: tunnel)
                     }
@@ -26,7 +30,7 @@ struct RulesView: View {
                         BrandEmptyState(
                             systemImage: "arrow.triangle.branch",
                             title: "规则与分流",
-                            message: "导入带规则和策略组的订阅（Clash、Surge、Loon 配置）后，可以在这里按订阅规则分流和切换策略组。现在全部流量走所选节点。"
+                            message: "导入订阅或节点后，可以在这里选择规则、全局或直连模式。规则模式按内置预设（如绕过大陆）和你自己的规则分流；带规则和策略组的订阅（Clash、Surge、Loon 配置）按订阅规则分流。"
                         )
                         .padding(.top, 80)
                     }
@@ -66,6 +70,8 @@ struct RulesView: View {
                 Text("色条是每个成员最近一次测得的延迟：青色低于 120 ms，琥珀色低于 250 ms，橙色更慢，灰色没有数据。自动选择和故障转移的组由内核按延迟和可用性挑选节点。")
             }
             .disabled(tunnel.mode != .rule)
+
+            LocalRulesSection(tunnel: tunnel, hasSubscriptionRules: true)
 
             RuleSetsSection(tunnel: tunnel, rules: routing.rules, defined: routing.ruleSets)
 

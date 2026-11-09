@@ -177,7 +177,7 @@ private struct MenuBarContent: View {
                     }
                 }
             )) {
-                if tunnel.library?.routing != nil {
+                if tunnel.library != nil {
                     Text("规则").tag(ProxyMode.rule)
                 }
                 Text("全局").tag(ProxyMode.global)

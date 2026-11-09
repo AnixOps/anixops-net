@@ -51,6 +51,9 @@ final class TunnelController {
     private(set) var dns = DnsSettings()
     /// Destination rewrites, from `redirects.json`; the saved profile carries the enabled lines.
     private(set) var redirects = TrafficRedirects()
+    /// The rule mode of a node list without subscription rules and the user's own rules, from `local-rules.json`;
+    /// the saved profile carries a copy.
+    private(set) var localRules = LocalRules()
 
     @ObservationIgnored private var manager: NETunnelProviderManager?
     @ObservationIgnored private var statusObserver: NSObjectProtocol?
@@ -92,6 +95,9 @@ final class TunnelController {
         }
         if let saved = try? DnsSettings.load(from: DnsSettings.defaultURL) {
             dns = saved
+        }
+        if let saved = try? LocalRules.load(from: LocalRules.defaultURL) {
+            localRules = saved
         }
         switch Result(catching: { try NodeSecretStore.value(account: SubscriptionGroups.keychainAccount) }) {
         case let .success(.some(value)):
@@ -316,8 +322,8 @@ final class TunnelController {
         guard next != mode, let manager, let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol else {
             return
         }
-        if next == .rule, library?.routing == nil {
-            message = String(localized: "当前节点没有订阅规则，无法按规则分流")
+        if next == .rule, library == nil {
+            message = String(localized: "单个节点没有节点列表，无法按规则分流。导入订阅或多个节点后可用")
             return
         }
         // The rule and global modes are also the active subscription's rules switch.
@@ -647,13 +653,25 @@ final class TunnelController {
         if routed {
             providerConfiguration[TunnelProfileKeys.routing] = true
         }
-        let savedMode: ProxyMode = mode == .direct ? .direct : (routed ? .rule : .global)
+        // With subscription rules the rules switch decides between the rule and global modes; a node list without
+        // them keeps the mode the user picked (local rules), and a single node has no rule mode.
+        let savedMode: ProxyMode
+        if mode == .direct {
+            savedMode = .direct
+        } else if routed || (mode == .rule && library != nil && library?.routing == nil) {
+            savedMode = .rule
+        } else {
+            savedMode = .global
+        }
         providerConfiguration[TunnelProfileKeys.mode] = savedMode.rawValue
         if let value = try? dns.profileValue() {
             providerConfiguration[TunnelProfileKeys.dns] = value
         }
         if let value = try? redirects.profileValue() {
             providerConfiguration[TunnelProfileKeys.redirects] = value
+        }
+        if let value = try? localRules.profileValue() {
+            providerConfiguration[TunnelProfileKeys.localRules] = value
         }
         let library = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)) ?? MitmPluginLibrary()
         if let plugins = try? MitmPluginLibrary.profileValue(library.activeTexts), !library.activeTexts.isEmpty {
@@ -759,6 +777,44 @@ final class TunnelController {
     /// Saves the DNS settings and puts them in the saved profile. A running tunnel reconnects to use them.
     /// Returns whether they were saved.
     @discardableResult
+    /// Saves the local rules and puts them in the saved profile. A running tunnel reconnects to use them. Returns
+    /// whether they were saved.
+    func applyLocalRules(_ next: LocalRules) async -> Bool {
+        do {
+            try next.save(to: LocalRules.defaultURL)
+        } catch {
+            message = String(localized: "无法保存本地规则")
+            return false
+        }
+        localRules = next
+        guard let manager, let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol,
+              let value = try? next.profileValue()
+        else {
+            // The next import picks them up.
+            return true
+        }
+        var configuration = tunnelProtocol.providerConfiguration ?? [:]
+        guard configuration[TunnelProfileKeys.localRules] as? Data != value else {
+            return true
+        }
+        configuration[TunnelProfileKeys.localRules] = value
+        tunnelProtocol.providerConfiguration = configuration
+        manager.protocolConfiguration = tunnelProtocol
+        do {
+            try await manager.saveToPreferences()
+            try await manager.loadFromPreferences()
+        } catch {
+            message = String(localized: "保存本地规则到 VPN 配置失败")
+            refresh()
+            return false
+        }
+        refresh()
+        if isConnected {
+            restart()
+        }
+        return true
+    }
+
     func applyDns(_ next: DnsSettings) async -> Bool {
         do {
             try next.save(to: DnsSettings.defaultURL)

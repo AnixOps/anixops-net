@@ -126,10 +126,23 @@ public struct NodeLibrary: Codable, Equatable {
     }
 
     /// The `routing` section whatever the rules switch says, so the engine can move between the rule, global and
-    /// direct modes without a restart: the global mode goes to the selected node. Nil without subscription rules.
-    public func routingForModes() -> EmbeddedRuntimeConfig.Routing? {
+    /// direct modes without a restart: the global mode goes to the selected node. With subscription rules the user's
+    /// `localRules` go in front of them; without, `localRules` alone (its preset after the user's rules) make the rule
+    /// mode, sending `PROXY` to the selected node. Nil without subscription rules and without `localRules`.
+    public func routingForModes(localRules: LocalRules? = nil) -> EmbeddedRuntimeConfig.Routing? {
+        let outbounds = Dictionary(nodes.map { ($0.id, $0.outbound) }) { first, _ in first }
         guard let routing else {
-            return nil
+            guard let localRules, let selected else {
+                return nil
+            }
+            let local = localRules.engineLines(proxy: selected.id)
+            return EmbeddedRuntimeConfig.Routing(
+                outbounds: outbounds,
+                rules: local.lines,
+                groups: [],
+                global: selected.id,
+                ruleSets: local.ruleSets.isEmpty ? nil : local.ruleSets
+            )
         }
         let groups = routing.groups.map { group -> NativeImportReport.Routing.Group in
             var group = group
@@ -138,10 +151,17 @@ public struct NodeLibrary: Codable, Equatable {
             }
             return group
         }
-        let ruleSets = RuleSetCatalog.ruleSets(for: routing.rules, defined: routing.ruleSets)
+        let proxy = routing.groups.first?.id ?? selected?.id ?? "DIRECT"
+        let local = localRules?.userLines(proxy: proxy) ?? (lines: [], ruleSets: [:])
+        var defined = routing.ruleSets ?? [:]
+        for (name, set) in local.ruleSets where defined[name] == nil {
+            defined[name] = set
+        }
+        let lines = local.lines + routing.rules
+        let ruleSets = RuleSetCatalog.ruleSets(for: lines, defined: defined.isEmpty ? nil : defined)
         return EmbeddedRuntimeConfig.Routing(
-            outbounds: Dictionary(nodes.map { ($0.id, $0.outbound) }) { first, _ in first },
-            rules: RuleSetCatalog.runnableRules(routing.rules, sets: ruleSets),
+            outbounds: outbounds,
+            rules: RuleSetCatalog.runnableRules(lines, sets: ruleSets),
             groups: groups,
             global: selected?.id,
             ruleSets: ruleSets
