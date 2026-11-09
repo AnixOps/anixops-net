@@ -227,6 +227,9 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
         })
         .setup(|app| {
             install_tray(app)?;
+            if let Some(window) = app.get_webview_window("main") {
+                super::backdrop::apply(&window);
+            }
             show_main_window(app);
             let state = app.state::<DesktopAppState>().inner().clone();
             start_automatic_connection(state.clone());
@@ -235,7 +238,12 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             start_fastest_node_monitor(app.state::<DesktopAppState>().inner().clone());
             Ok(())
         })
-        .on_page_load(|_webview, payload| {
+        .on_page_load(|webview, payload| {
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                if let Some(script) = super::backdrop::page_script() {
+                    let _ = webview.eval(script);
+                }
+            }
             let _ = append_managed_log(
                 APP_LOG_SCOPE,
                 &format!("webview page load {:?}: {}", payload.event(), payload.url()),

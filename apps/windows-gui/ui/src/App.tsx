@@ -127,15 +127,8 @@ export function App() {
       <main className="workspace">
         <header className="topbar">
           <h1>{title}</h1>
-          <IconButton label={t("刷新状态")} onClick={() => void refresh().catch(showError)}><RefreshCw size={17} /></IconButton>
+          <IconButton label={t("刷新状态")} onClick={() => void refresh().catch(showError)}><RefreshCw size={16} /></IconButton>
         </header>
-        {notice && (
-          <div className={`notice ${notice.tone}`} role={notice.tone === "danger" ? "alert" : "status"}>
-            {notice.tone === "danger" ? <CircleAlert size={17} /> : <CheckCircle2 size={17} />}
-            <span>{notice.text}</span>
-            <button aria-label={t("关闭提示")} onClick={() => setNotice(null)}><X size={15} /></button>
-          </div>
-        )}
         <div className="page" key={page}>
           {page === "home" && <HomePage snapshot={snapshot} nodes={nodes} phase={phase} busy={busy} run={run} toggle={toggleConnection} goTo={setPage} />}
           {page === "proxies" && <ProxiesPage snapshot={snapshot} nodes={nodes} busy={busy} run={run} />}
@@ -145,6 +138,14 @@ export function App() {
           {page === "settings" && <SettingsPage snapshot={snapshot} busy={busy} run={run} appearance={appearance} setAppearance={setAppearance} language={language} setLanguage={setLanguage} />}
         </div>
       </main>
+      {/* Results and errors float over the window like a system toast instead of pushing the page down. */}
+      {notice && (
+        <div className={`notice ${notice.tone}`} role={notice.tone === "danger" ? "alert" : "status"}>
+          {notice.tone === "danger" ? <CircleAlert size={17} /> : <CheckCircle2 size={17} />}
+          <span>{notice.text}</span>
+          <button aria-label={t("关闭提示")} onClick={() => setNotice(null)}><X size={15} /></button>
+        </div>
+      )}
     </div>
   );
 }

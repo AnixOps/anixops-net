@@ -14,8 +14,10 @@ export function Card({ title, description, actions, children, className = "" }: 
   children?: ReactNode;
   className?: string;
 }) {
+  // An inset group, as in native settings windows: the title, description and actions sit above the rounded
+  // surface instead of inside it.
   return (
-    <section className={`card ${className}`}>
+    <section className={`group ${className}`}>
       {(title || actions) && (
         <header className="card-header">
           <div>
@@ -25,7 +27,7 @@ export function Card({ title, description, actions, children, className = "" }: 
           {actions && <div className="card-actions">{actions}</div>}
         </header>
       )}
-      {children}
+      {children && <div className="card">{children}</div>}
     </section>
   );
 }
