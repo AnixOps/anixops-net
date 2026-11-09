@@ -249,7 +249,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
                     serverName: node.serverName,
                     publicKey: node.publicKey,
                     shortID: node.shortID,
-                    fingerprint: "chrome"
+                    fingerprint: "auto"
                 )
             )
         )
