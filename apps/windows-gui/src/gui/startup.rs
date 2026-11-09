@@ -92,6 +92,9 @@ pub struct DesktopState {
     pub dns_preset: desktop_dns::DnsPreset,
     #[serde(default)]
     pub bilibili_web_ad_block_enabled: bool,
+    /// Desktop mode also captures system traffic with a Wintun adapter.
+    #[serde(default)]
+    pub tun_mode_enabled: bool,
     pub proxy_snapshot: Option<WindowsProxySnapshot>,
     #[serde(default)]
     pub applied_proxy: Option<WindowsProxySettings>,

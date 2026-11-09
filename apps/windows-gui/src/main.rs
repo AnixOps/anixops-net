@@ -29,6 +29,7 @@ mod gui {
     mod runtime_status;
     mod startup;
     mod tauri_ui;
+    mod tun_mode;
     mod ui_state;
 
     use self::startup::DesktopProfileNode;

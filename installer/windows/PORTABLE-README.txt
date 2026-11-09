@@ -7,6 +7,8 @@ AnixOps NetworkCore Windows portable package
    appears at sign-in.
    WebView2Loader.dll is included beside the GUI executable. Windows must still
    have the Microsoft Edge WebView2 Evergreen Runtime installed.
+   wintun.dll (Wintun 0.14.1, see wintun-LICENSE.txt) is included beside the
+   GUI executable for TUN mode; keep it in the same directory.
 3. In Settings, click Install sing-box when a proxy core is
    needed. This explicitly downloads the official Windows core; the ZIP itself
    does not contain a third-party core.

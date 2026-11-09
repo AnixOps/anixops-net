@@ -48,6 +48,15 @@ export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, l
             disabled={Boolean(busy)}
             onChange={(runtimeMode) => save({ runtimeMode })}
           />
+          {snapshot.runtimeMode === "desktop" && (
+            <ToggleRow
+              label={t("TUN 模式")}
+              hint={t("用虚拟网卡接管全部流量，不走系统代理的游戏和命令行程序也会经过代理。")}
+              checked={Boolean(snapshot.tunModeEnabled)}
+              disabled={Boolean(busy)}
+              onChange={() => void run("TUN", () => desktop.setTunMode(!snapshot.tunModeEnabled))}
+            />
+          )}
         </Card>}
       </div>
 

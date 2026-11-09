@@ -702,6 +702,7 @@ jobs:
 
           Remove-Item -Recurse -Force $distDir -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+          $wintunPath = & .github/scripts/fetch-wintun.ps1 -Destination (Join-Path $env:RUNNER_TEMP "wintun")
           wix build installer/windows/Package.wxs `
             -ext WixToolset.UI.wixext `
             -arch x64 `
@@ -709,6 +710,7 @@ jobs:
             -d "CliExe=$cliPath" `
             -d "GuiExe=$guiPath" `
             -d "WebView2LoaderDll=$webView2LoaderPath" `
+            -d "WintunDll=$wintunPath" `
             -d "ServiceExe=$servicePath" `
             -d "DefaultConfig=$defaultConfigPath" `
             -o $archivePath
@@ -721,6 +723,8 @@ jobs:
           Copy-Item -Path $cliPath -Destination (Join-Path $portableStageDir "networkcore-windows.exe")
           Copy-Item -Path $guiPath -Destination (Join-Path $portableStageDir "networkcore-windows-gui.exe")
           Copy-Item -Path $webView2LoaderPath -Destination (Join-Path $portableStageDir "WebView2Loader.dll")
+          Copy-Item -Path $wintunPath -Destination (Join-Path $portableStageDir "wintun.dll")
+          Copy-Item -Path (Join-Path (Split-Path $wintunPath) "wintun-LICENSE.txt") -Destination (Join-Path $portableStageDir "wintun-LICENSE.txt")
           Copy-Item -Path $servicePath -Destination (Join-Path $portableStageDir "networkcore-windows-service.exe")
           Copy-Item -Path $defaultConfigPath -Destination (Join-Path $portableStageDir "managed-config.json")
           Copy-Item -Path $portableReadmePath -Destination (Join-Path $portableStageDir "README.txt")
@@ -769,6 +773,7 @@ jobs:
             included_files = @(
               [ordered]@{ path = "networkcore-windows-gui.exe"; kind = "binary"; required = $true; source = "apps/windows-gui" },
               [ordered]@{ path = "WebView2Loader.dll"; kind = "runtime"; required = $true; source = "webview2-com-sys@0.38.2/x64" },
+              [ordered]@{ path = "wintun.dll"; kind = "runtime"; required = $true; source = "wintun.net/builds/wintun-0.14.1.zip:bin/amd64" },
               [ordered]@{ path = "networkcore-windows-service.exe"; kind = "binary"; required = $true; source = "apps/windows-service" },
               [ordered]@{ path = "networkcore-windows.exe"; kind = "binary"; required = $true; source = "AnixOps/networkcore_anixops:apps/windows-cli" },
               [ordered]@{ path = "managed-config.json"; kind = "configuration"; required = $true; source = "installer/windows/default-managed-config.json" }
@@ -843,6 +848,8 @@ jobs:
             included_files = @(
               [ordered]@{ path = "$portableStem/networkcore-windows-gui.exe"; kind = "binary"; required = $true; source = "apps/windows-gui" },
               [ordered]@{ path = "$portableStem/WebView2Loader.dll"; kind = "runtime"; required = $true; source = "webview2-com-sys@0.38.2/x64" },
+              [ordered]@{ path = "$portableStem/wintun.dll"; kind = "runtime"; required = $true; source = "wintun.net/builds/wintun-0.14.1.zip:bin/amd64" },
+              [ordered]@{ path = "$portableStem/wintun-LICENSE.txt"; kind = "documentation"; required = $true; source = "wintun.net/builds/wintun-0.14.1.zip:LICENSE.txt" },
               [ordered]@{ path = "$portableStem/networkcore-windows-service.exe"; kind = "binary"; required = $true; source = "apps/windows-service" },
               [ordered]@{ path = "$portableStem/networkcore-windows.exe"; kind = "binary"; required = $true; source = "AnixOps/networkcore_anixops:apps/windows-cli" },
               [ordered]@{ path = "$portableStem/managed-config.json"; kind = "configuration"; required = $true; source = "installer/windows/default-managed-config.json" },
