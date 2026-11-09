@@ -24,7 +24,7 @@ struct AboutSection: View {
     @State private var hint: String?
 
     var body: some View {
-        Section("关于") {
+        Section {
             HStack {
                 Text("版本")
                 Spacer()
@@ -45,6 +45,10 @@ struct AboutSection: View {
                     DeveloperView(tunnel: tunnel)
                 }
             }
+        } header: {
+            Text("关于")
+        } footer: {
+            Text("AnixOps Studio 出品")
         }
     }
 

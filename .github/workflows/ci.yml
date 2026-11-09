@@ -35,7 +35,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      # apps/ios/Design/tokens.json is the only design-token source; the Swift and CSS files are generated.
+      # AnixOps Design is vendored unmodified into apps/windows-gui/ui/src/design/anixops/ (with the app icons
+      # copied from it); apps/ios/Design/tokens.json maps it onto the client's names, and the Swift and CSS
+      # files are generated from both.
+      - name: AnixOps Design vendored copy matches its manifest
+        run: python3 .github/scripts/sync_design.py --check
+
       - name: Design tokens are up to date
         run: python3 .github/scripts/design_tokens.py --check
 

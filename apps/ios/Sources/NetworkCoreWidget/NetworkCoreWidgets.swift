@@ -68,7 +68,7 @@ struct ConnectControl: ControlWidget {
             ControlWidgetToggle("AnixOps Net", isOn: isOn, action: ToggleTunnelIntent()) { on in
                 Label(on ? "已连接" : "未连接", systemImage: on ? "network" : "network.slash")
             }
-            .tint(Brand.iconTeal)
+            .tint(Brand.indigo)
         }
         .displayName("连接 AnixOps Net")
         .description("在控制中心连接或断开。")
@@ -94,7 +94,7 @@ struct ProxyModeControl: ControlWidget {
             ControlWidgetButton(action: SetProxyModeIntent(mode: value.mode)) {
                 Label(value.isCurrent ? String(localized: "\(value.title) · 当前") : value.title, systemImage: value.mode.symbol)
             }
-            .tint(Brand.iconTeal)
+            .tint(Brand.indigo)
         }
         .displayName("代理模式")
         .description("在控制中心切换到规则、全局或直连模式。")

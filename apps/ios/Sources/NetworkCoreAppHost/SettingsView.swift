@@ -11,8 +11,8 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    Picker("外观", selection: $appearance) {
-                        ForEach(Appearance.allCases) { option in
+                    Picker("外观", selection: $appearance.normalized) {
+                        ForEach(Appearance.choices) { option in
                             Text(option.label).tag(option)
                         }
                     }

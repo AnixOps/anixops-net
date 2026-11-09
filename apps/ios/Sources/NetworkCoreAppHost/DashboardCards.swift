@@ -157,7 +157,7 @@ private struct Tile<Content: View, Trailing: View>: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(brand.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(brand.surface, in: RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous))
     }
 }
 
@@ -239,7 +239,7 @@ private struct SpeedTile: View {
     }
 }
 
-/// The last minute of download (filled teal) and upload (amber line), scaled to the window's peak.
+/// The last minute of download (filled accent) and upload (amber line), scaled to the window's peak.
 private struct Sparkline: View {
     let history: TrafficHistory
     @Environment(\.brand) private var brand
@@ -462,7 +462,7 @@ private struct GroupsTile: View {
     }
 }
 
-/// Green-teal under 120 ms, amber under 250 ms, orange above; gray when unknown.
+/// Green under 120 ms, amber under 250 ms, orange above; gray when unknown.
 enum LatencyColor {
     static func color(_ milliseconds: UInt32?, _ brand: BrandPalette) -> Color {
         guard let milliseconds else {

@@ -1,0 +1,116 @@
+{
+  "name": "AnixOps Design",
+  "repository": "https://github.com/AnixOps/anixops-design",
+  "version": "1.1.0",
+  "ref": "aa9638301b520d315d330d0856fb840bc4ef81e2",
+  "files": [
+    {
+      "path": "LICENSE",
+      "source": "LICENSE",
+      "bytes": 1271,
+      "sha256": "03a5c3a7c1610baf765c07e0acf0faf6e9bc865fd3b61fd85b26aa28e555c3d4"
+    },
+    {
+      "path": "LICENSE-BRAND.md",
+      "source": "LICENSE-BRAND.md",
+      "bytes": 1508,
+      "sha256": "e8978ef46a9d61673f3e76bb8429556de05238261ca6efa675fe75cc7435f3cc"
+    },
+    {
+      "path": "brand/app-icon-1024.png",
+      "source": "brand/assets/app-icon/app-icon-1024.png",
+      "bytes": 28718,
+      "sha256": "4ae73802a0cb643b9a0cfebc2f9953d526c137a0b97db53036ca3594d0edd38b"
+    },
+    {
+      "path": "brand/app-icon.svg",
+      "source": "brand/assets/app-icon.svg",
+      "bytes": 1751,
+      "sha256": "c57180329acb87c95a09a5e975ba9952b4e82160a9d675c73af39f7f777bf59f"
+    },
+    {
+      "path": "brand/favicon.svg",
+      "source": "brand/assets/favicon.svg",
+      "bytes": 1609,
+      "sha256": "429699913ad73e65f3e6990f74f07aadb93b839e54adbf58a637ba055ad81aa1"
+    },
+    {
+      "path": "brand/mark-glyph.svg",
+      "source": "brand/assets/mark-glyph.svg",
+      "bytes": 1457,
+      "sha256": "9a144883ab5ce160c73fdae466604599eba10ba4124eb7d1d76fd61101a8161e"
+    },
+    {
+      "path": "brand/mark.svg",
+      "source": "brand/assets/mark.svg",
+      "bytes": 1870,
+      "sha256": "4046befb4b02a0b9f452849a90dc91cd34a4bb8544d28aa2cd924489e8b4bbb8"
+    },
+    {
+      "path": "brand/tauri/128x128.png",
+      "source": "brand/assets/tauri/128x128.png",
+      "bytes": 4567,
+      "sha256": "fbe64fe9c8fa0cb3766e0dee51ecdaa0a8a77f9a782226f01bcaaec2246698e4"
+    },
+    {
+      "path": "brand/tauri/128x128@2x.png",
+      "source": "brand/assets/tauri/128x128@2x.png",
+      "bytes": 9373,
+      "sha256": "9b3f764cbb51874248960a4bebd3815fc5090730054769b25948b31cd94e5b63"
+    },
+    {
+      "path": "brand/tauri/32x32.png",
+      "source": "brand/assets/tauri/32x32.png",
+      "bytes": 1351,
+      "sha256": "698bd72ddee2fe6ce661e5e630259927831b32b0c019c9d067f292660268e9c7"
+    },
+    {
+      "path": "brand/tauri/icon.icns",
+      "source": "brand/assets/tauri/icon.icns",
+      "bytes": 114765,
+      "sha256": "5947cefdff8f9eed3d7f8bbfff6ffd8a3f22f79f3aa0c834eada4cff9f9da6f4"
+    },
+    {
+      "path": "brand/tauri/icon.ico",
+      "source": "brand/assets/tauri/icon.ico",
+      "bytes": 15987,
+      "sha256": "ce267874053dbc7012f91c9f60c348d22e3061fb14cff831b596f2481a46b165"
+    },
+    {
+      "path": "brand/tauri/icon.png",
+      "source": "brand/assets/tauri/icon.png",
+      "bytes": 20292,
+      "sha256": "ae18d1345fb8dcd018d163effd76d713d51417d16a48abb81ffcb8a5de3d2404"
+    },
+    {
+      "path": "fonts/inter/InterVariable-latin.woff2",
+      "source": "fonts/inter/InterVariable-latin.woff2",
+      "bytes": 48256,
+      "sha256": "3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62"
+    },
+    {
+      "path": "fonts/inter/OFL.txt",
+      "source": "fonts/inter/OFL.txt",
+      "bytes": 4477,
+      "sha256": "3b0a5fca3d17942cde889069889dedbbbd075e9b599968c82a95f4d944e9b345"
+    },
+    {
+      "path": "fonts/inter/inter.css",
+      "source": "fonts/inter/inter.css",
+      "bytes": 624,
+      "sha256": "5c2c09bb2da468c12c1a2877295cfb1e0bef129f235dd988c5e1ac5011f37238"
+    },
+    {
+      "path": "tokens.css",
+      "source": "tokens/css/tokens.css",
+      "bytes": 6571,
+      "sha256": "6150794a5bbceaa1318fdba5d89372de5767c8ba2546d4d2b8da58925576f458"
+    },
+    {
+      "path": "tokens.json",
+      "source": "tokens/tokens.json",
+      "bytes": 11822,
+      "sha256": "68da9c2a4d14c5d765f9173a981d49e52e4a0bcfa575a43127798eba053717fd"
+    }
+  ]
+}

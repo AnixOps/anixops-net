@@ -8,7 +8,7 @@ struct TunnelLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: TunnelActivityAttributes.self) { context in
             LockScreenActivityView(state: context.state)
-                .activityBackgroundTint(Brand.deep)
+                .activityBackgroundTint(Brand.slate)
                 .activitySystemActionForegroundColor(Brand.line)
         } dynamicIsland: { context in
             let state = context.state
@@ -20,7 +20,7 @@ struct TunnelLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.trailing) {
                     ElapsedText(state: state)
                         .font(.title3.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(Brand.mint)
+                        .foregroundStyle(Brand.sky)
                         .padding(.trailing, 4)
                 }
                 DynamicIslandExpandedRegion(.center) {
@@ -38,19 +38,19 @@ struct TunnelLiveActivity: Widget {
                 }
             } compactLeading: {
                 Image(systemName: "network")
-                    .foregroundStyle(state.phase == .connected ? Brand.mint : Brand.amber)
+                    .foregroundStyle(state.phase == .connected ? Brand.sky : Brand.amber)
                     .accessibilityLabel(state.connectPhase.title)
             } compactTrailing: {
                 ElapsedText(state: state)
                     .font(.caption.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(Brand.mint)
+                    .foregroundStyle(Brand.sky)
                     .frame(maxWidth: 52)
             } minimal: {
                 Image(systemName: "network")
-                    .foregroundStyle(state.phase == .connected ? Brand.mint : Brand.amber)
+                    .foregroundStyle(state.phase == .connected ? Brand.sky : Brand.amber)
                     .accessibilityLabel(state.connectPhase.title)
             }
-            .keylineTint(Brand.mint)
+            .keylineTint(Brand.sky)
         }
     }
 }
@@ -67,7 +67,7 @@ private struct LockScreenActivityView: View {
                         .font(.headline)
                     ElapsedText(state: state)
                         .font(.subheadline.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(Brand.mint)
+                        .foregroundStyle(Brand.sky)
                 }
                 NodeLine(state: state)
                     .font(.subheadline)
@@ -125,7 +125,7 @@ private struct DisconnectButton: View {
                 .padding(.vertical, 8)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(Brand.deep)
+        .foregroundStyle(Brand.slate)
         .background(Brand.line, in: Capsule())
     }
 }

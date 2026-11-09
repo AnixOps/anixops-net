@@ -19,12 +19,12 @@ extension View {
     }
 }
 
-/// A grade's color in the current palette: teal, amber or orange by delay, gray when unmeasured.
+/// A grade's color in the current palette: green, amber or orange by delay, gray when unmeasured.
 extension BrandPalette {
     func color(for grade: LatencyGrade) -> Color {
         switch grade {
         case .good:
-            return primary
+            return success
         case .fair:
             return amberText
         case .poor:

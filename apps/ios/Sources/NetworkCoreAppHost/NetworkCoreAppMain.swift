@@ -217,15 +217,8 @@ struct RootView: View {
 }
 
 extension View {
-    /// OLED keeps the navigation and tab bars pure black; other themes keep the system material.
-    @ViewBuilder
+    /// Navigation and tab bars keep the system material: AnixOps Design's frosted bars over `bg`, in both themes.
     func brandBars(_ brand: BrandPalette) -> some View {
-        if brand.solidBars {
-            self
-                .toolbarBackground(brand.bg, for: .navigationBar, .tabBar)
-                .toolbarBackground(.visible, for: .navigationBar, .tabBar)
-        } else {
-            self
-        }
+        self
     }
 }

@@ -195,7 +195,7 @@ private struct ConnectCard: View {
                         .frame(width: 92, height: 92)
                         .background(Brand.line.opacity(0.06), in: Circle())
                         .overlay(
-                            Circle().strokeBorder(phase == .on ? Brand.mint.opacity(0.7) : Brand.line.opacity(0.25), lineWidth: 1.5)
+                            Circle().strokeBorder(phase == .on ? Brand.sky.opacity(0.7) : Brand.line.opacity(0.25), lineWidth: 1.5)
                         )
                         .contentShape(Circle())
                 }
@@ -207,11 +207,11 @@ private struct ConnectCard: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(phase.title)
-                        .font(.title3.weight(.semibold))
+                        .font(BrandFont.title)
                         .contentTransition(.opacity)
                     subtitle
                         .font(.footnote.monospacedDigit())
-                        .foregroundStyle(Brand.line.opacity(0.75))
+                        .foregroundStyle(Brand.lineMuted)
                     if let name = tunnel.nodeName {
                         Button {
                             picking = true
@@ -221,7 +221,7 @@ private struct ConnectCard: View {
                                     .font(.caption2.weight(.bold))
                                     .padding(.horizontal, 5)
                                     .padding(.vertical, 2)
-                                    .background(Brand.line.opacity(0.14), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                                    .background(Brand.line.opacity(0.14), in: RoundedRectangle(cornerRadius: BrandRadius.badge, style: .continuous))
                                 Text(name)
                                     .lineLimit(1)
                                 Image(systemName: "chevron.right")
@@ -248,7 +248,12 @@ private struct ConnectCard: View {
         .foregroundStyle(Brand.line)
         .padding(16)
         .frame(maxWidth: .infinity)
-        .background(brand.heroGradient, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(brand.heroGradient, in: RoundedRectangle(cornerRadius: BrandRadius.hero, style: .continuous))
+        .overlay(
+            // AnixOps Design's 8 % white hairline keeps the slate tile's edge on a black background.
+            RoundedRectangle(cornerRadius: BrandRadius.hero, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+        )
     }
 
     private var modePicker: some View {
@@ -265,8 +270,8 @@ private struct ConnectCard: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                         .frame(maxWidth: .infinity, minHeight: 34)
-                        .foregroundStyle(selected ? Brand.deep : Brand.line.opacity(0.85))
-                        .background(selected ? Brand.line : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        .foregroundStyle(selected ? Brand.slate : Brand.line.opacity(0.85))
+                        .background(selected ? Brand.line : Color.clear, in: Capsule())
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -274,7 +279,7 @@ private struct ConnectCard: View {
             }
         }
         .padding(4)
-        .background(Brand.deep.opacity(0.45), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(Color.white.opacity(0.08), in: Capsule())
         .accessibilityElement(children: .contain)
         .accessibilityLabel("分流模式")
     }
@@ -456,9 +461,9 @@ private struct NoticeCard: View {
                 .frame(maxWidth: .infinity, minHeight: 36)
         }
         if primary {
-            button.buttonStyle(.borderedProminent).tint(brand.primary)
+            button.buttonStyle(.brandPrimaryCompact)
         } else {
-            button.buttonStyle(.bordered).tint(brand.primary)
+            button.buttonStyle(.brandSecondaryCompact)
         }
     }
 

@@ -1,19 +1,15 @@
 import type { ConnectPhase } from "./labels";
+import markUrl from "./design/anixops/brand/mark.svg";
 
-// The route-line "N" from the app icon: (30,72) → (30,28) → (70,72) → (70,28) on a 100-unit grid.
+// The connect button's route line: (30,72) → (30,28) → (70,72) → (70,28) on a 100-unit grid.
 const routePath = "M30 72 L30 28 L70 72 L70 28";
 
-/** The app icon at small sizes: teal tile, light route line, amber destination dot. */
+/** The AnixOps mark (slate tile, gradient orbit A) from AnixOps Design; never redrawn here. */
 export function BrandMark({ size = 22 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden="true">
-      <rect width="100" height="100" rx="22" fill="#0F766E" />
-      <path d={routePath} fill="none" stroke="#F0FDFA" strokeWidth="11" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="70" cy="28" r="7" fill="#FBBF24" />
-    </svg>
-  );
+  return <img src={markUrl} width={size} height={size} alt="" aria-hidden="true" />;
 }
 
+/** The AnixOps Design lockup: the mark, "AnixOps" in semibold and the product word in regular label-2. */
 export function Wordmark() {
   return (
     <span className="wordmark">

@@ -101,7 +101,7 @@ export function EmptyState({ icon: Icon, title, message, children }: {
 }) {
   return (
     <div className="empty-state">
-      <div className="empty-icon"><Icon size={26} strokeWidth={1.6} /></div>
+      <div className="empty-icon"><Icon size={26} strokeWidth={1.5} /></div>
       <strong>{title}</strong>
       <p>{message}</p>
       {children}

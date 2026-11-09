@@ -81,19 +81,12 @@ struct MacRootView: View {
     }
 }
 
-/// OLED keeps the sidebar pure black; other themes keep the system sidebar material.
+/// The sidebar keeps the system sidebar material (AnixOps Design's frosted sidebar) in both themes.
 private struct SolidBackground: ViewModifier {
     let brand: BrandPalette
 
-    @ViewBuilder
     func body(content: Content) -> some View {
-        if brand.solidBars {
-            content
-                .scrollContentBackground(.hidden)
-                .background(brand.bg)
-        } else {
-            content
-        }
+        content
     }
 }
 
@@ -122,16 +115,16 @@ private struct SidebarStatus: View {
             Spacer(minLength: 0)
         }
         .padding(10)
-        .background(brand.surface.opacity(0.8), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(brand.surface.opacity(0.8), in: RoundedRectangle(cornerRadius: BrandRadius.control, style: .continuous))
         .accessibilityElement(children: .combine)
     }
 
     private var dotColor: Color {
         switch tunnel.phase {
         case .on:
-            return brand.primary
+            return brand.success
         case .connecting, .reasserting, .disconnecting:
-            return Brand.amber
+            return brand.warning
         case .off, .unconfigured:
             return brand.text3
         }
