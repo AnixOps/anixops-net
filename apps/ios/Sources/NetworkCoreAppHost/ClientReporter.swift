@@ -31,7 +31,7 @@ final class ClientReporter {
         TimeInterval.random(in: ClientReport.interval)
     }
 
-    /// Reports when due. `network` is `wifi`, `cellular`, `ethernet` or `unknown`.
+    /// Reports when due. `network` is `wifi`, `cellular`, `ethernet` or `other`.
     func offer(_ health: OutboundHealth, groups: SubscriptionGroups, network: String, now: Date = Date()) {
         guard !sending, now >= nextReport, !health.outbounds.isEmpty else {
             return

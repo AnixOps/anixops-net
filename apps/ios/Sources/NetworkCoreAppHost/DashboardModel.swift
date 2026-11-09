@@ -43,7 +43,7 @@ final class DashboardModel {
             case .wired:
                 return "ethernet"
             case .other, .none:
-                return "unknown"
+                return "other"
             }
         }
     }

@@ -104,7 +104,7 @@ final class ClientReportTests: XCTestCase {
 
         // Windows outside the panel's range are clamped.
         let short = ClientReport.bodies(health: health, groups: groups, previous: [:], window: 5,
-                                        client: "c", platform: "ios", network: "unknown")
+                                        client: "c", platform: "ios", network: "other")
         XCTAssertEqual(short[endpoint]?.windowSecs, 60)
     }
 
