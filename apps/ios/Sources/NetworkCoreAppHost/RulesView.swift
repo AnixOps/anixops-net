@@ -67,7 +67,7 @@ struct RulesView: View {
             } header: {
                 Text("策略组 · \(routing.rules.count) 条规则")
             } footer: {
-                Text("色条是每个成员最近一次测得的延迟：青色低于 120 ms，琥珀色低于 250 ms，橙色更慢，灰色没有数据。自动选择和故障转移的组由内核按延迟和可用性挑选节点。")
+                Text("色条是每个成员最近一次测得的延迟：绿色低于 120 ms，琥珀色低于 250 ms，橙色更慢，灰色没有数据。自动选择和故障转移的组由内核按延迟和可用性挑选节点。")
             }
             .disabled(tunnel.mode != .rule)
 
