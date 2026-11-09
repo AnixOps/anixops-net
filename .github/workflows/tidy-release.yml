@@ -1,0 +1,94 @@
+name: Tidy release
+
+# One-off cleanup for releases published before the slim asset layout (v0.3.0-beta.2 and
+# earlier): keep only the four packages under anixops-net-* names plus one SHA256SUMS and
+# rewrite the notes for users. Manual trigger only; it edits a published release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to tidy, for example v0.3.0-beta.2
+        type: string
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tidy-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  tidy:
+    name: Tidy ${{ inputs.tag }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Rename, re-checksum and prune assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[1-9][0-9]*)?$ ]]
+          mkdir -p dist/old dist/publish
+          gh release download "${VERSION}" --dir dist/old
+          cd dist/old
+          sha256sum -c ./*.sha256
+          pick() { local f; f="$(find . -maxdepth 1 -type f -name "$1" | head -n 2)"; test "$(printf '%s\n' "${f}" | wc -l)" = 1; test -n "${f}"; printf '%s' "${f#./}"; }
+          msi="$(pick '*windows-*.msi')"
+          zip="$(pick '*windows-portable-*.zip')"
+          deb="$(pick '*.deb')"
+          tarball="$(pick '*linux-*.tar.gz')"
+          cp "${msi}" "../publish/anixops-net-${VERSION}-windows-x64.msi"
+          cp "${zip}" "../publish/anixops-net-${VERSION}-windows-x64-portable.zip"
+          cp "${deb}" "../publish/anixops-net-${VERSION}-linux-amd64.deb"
+          cp "${tarball}" "../publish/anixops-net-${VERSION}-linux-x64.tar.gz"
+          cd ../publish
+          sha256sum -- anixops-net-* > SHA256SUMS
+          cat SHA256SUMS
+          gh release upload "${VERSION}" ./* --clobber
+          keep=" $(ls | tr '\n' ' ') "
+          gh release view "${VERSION}" --json assets -q '.assets[].name' | while IFS= read -r name; do
+            if [[ "${keep}" != *" ${name} "* ]]; then
+              gh release delete-asset "${VERSION}" "${name}" --yes
+            fi
+          done
+          test "$(gh release view "${VERSION}" --json assets -q '.assets | length')" = "5"
+
+      - name: Rewrite release notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          kernel_rev="$(grep -m1 -oE 'rev = "[0-9a-f]{40}"' Cargo.toml | cut -d'"' -f2)"
+          cat > release-body.md <<EOF
+          ## 下载
+
+          | 平台 | 文件 | 说明 |
+          | --- | --- | --- |
+          | Windows 10/11 | \`anixops-net-${VERSION}-windows-x64.msi\` | 安装版（推荐） |
+          | Windows 10/11 | \`anixops-net-${VERSION}-windows-x64-portable.zip\` | 便携版，解压即用 |
+          | Debian / Ubuntu | \`anixops-net-${VERSION}-linux-amd64.deb\` | \`sudo apt install ./<文件名>\` |
+          | 其他 Linux | \`anixops-net-${VERSION}-linux-x64.tar.gz\` | 解压后运行 \`bin/anixops-net\` |
+
+          iOS 版通过 TestFlight 分发。
+
+          - Linux 版需要 WebKitGTK 4.1。
+          - Windows 安装包未做代码签名，首次运行时 SmartScreen 可能提示，选「仍要运行」。
+          - 校验：\`sha256sum -c SHA256SUMS\`；来源证明：\`gh attestation verify <文件> --repo ${GH_REPO}\`。
+
+          <sub>内核 [networkcore_anixops@${kernel_rev:0:7}](https://github.com/AnixOps/networkcore_anixops/commit/${kernel_rev})</sub>
+          EOF
+          gh release edit "${VERSION}" --notes-file release-body.md
