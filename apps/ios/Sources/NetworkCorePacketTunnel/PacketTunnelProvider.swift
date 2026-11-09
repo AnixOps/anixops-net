@@ -93,7 +93,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let redirects = TrafficRedirects.lines(
             fromProfileValue: tunnelProtocol.providerConfiguration?[TunnelProfileKeys.redirects] as? Data
         )
-        config = withSubscriptionRules(config).withMode(mode).withDns(dns).withRedirects(redirects)
+        let localRules = LocalRules.fromProfileValue(
+            tunnelProtocol.providerConfiguration?[TunnelProfileKeys.localRules] as? Data
+        )
+        config = withSubscriptionRules(config, localRules: localRules).withMode(mode).withDns(dns).withRedirects(redirects)
         events.record("mode \(mode.rawValue)")
         if !redirects.isEmpty {
             events.record("redirects \(redirects.count)")
@@ -240,15 +243,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
     }
 
-    /// Adds the subscription's rules and groups from the node library in the Keychain. They are an extra like HTTPS
-    /// decryption: without a readable library the selected node carries all traffic, and the reason goes to the
-    /// diagnostics.
-    private func withSubscriptionRules(_ config: EmbeddedRuntimeConfig) -> EmbeddedRuntimeConfig {
+    /// Adds the subscription's rules and groups from the node library in the Keychain, with the user's local rules in
+    /// front; a node list without subscription rules gets the local rules and their preset. They are an extra like
+    /// HTTPS decryption: without a readable library the selected node carries all traffic, and the reason goes to
+    /// the diagnostics.
+    private func withSubscriptionRules(_ config: EmbeddedRuntimeConfig, localRules: LocalRules) -> EmbeddedRuntimeConfig {
         do {
             guard let value = try NodeSecretStore.value(account: NodeLibrary.keychainAccount),
-                  let routing = try NodeLibrary.fromKeychainValue(value).routingForModes()
+                  let routing = try NodeLibrary.fromKeychainValue(value).routingForModes(localRules: localRules)
             else {
-                events.record("subscription rules off: no node list with rules")
+                events.record("subscription rules off: no node list")
                 return config
             }
             events.record("subscription rules on, \(routing.outbounds.count) nodes, \(routing.rules.count) rules, \(routing.groups.count) groups")

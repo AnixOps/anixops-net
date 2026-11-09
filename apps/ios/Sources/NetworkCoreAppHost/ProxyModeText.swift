@@ -17,7 +17,7 @@ enum ProxyModeText {
     static func footer(_ mode: ProxyMode) -> String {
         switch mode {
         case .rule:
-            return String(localized: "按订阅规则和策略组分流。连接中切换立即生效，已有连接会重新建立。")
+            return String(localized: "按订阅规则和策略组分流；订阅没有规则时按下方的分流规则。连接中切换立即生效，已有连接会重新建立。")
         case .global:
             return String(localized: "全部流量走代理页选中的节点。连接中切换立即生效，已有连接会重新建立。")
         case .direct:

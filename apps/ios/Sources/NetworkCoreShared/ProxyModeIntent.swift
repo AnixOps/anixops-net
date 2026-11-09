@@ -81,7 +81,7 @@ extension TunnelSwitch {
             throw Failure.notConfigured
         }
         var configuration = tunnelProtocol.providerConfiguration ?? [:]
-        // The rule mode needs the subscription's rules; the extension falls back to global without them.
+        // The rule mode needs a node list (subscription or local rules); a single node runs everything through itself.
         configuration[TunnelProfileKeys.mode] = mode.rawValue
         if mode == .rule {
             configuration[TunnelProfileKeys.routing] = true

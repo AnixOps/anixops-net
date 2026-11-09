@@ -181,9 +181,10 @@ private struct ConnectCard: View {
             : AnyLayout(HStackLayout(spacing: 16))
     }
 
-    /// The rule mode needs subscription rules; a single pasted node offers global and direct only.
+    /// The rule mode needs a node list (subscription rules or the local rules); a single pasted node offers global
+    /// and direct only.
     private var modes: [ProxyMode] {
-        tunnel.library?.routing == nil ? [.global, .direct] : ProxyMode.allCases
+        tunnel.library == nil ? [.global, .direct] : ProxyMode.allCases
     }
 
     var body: some View {
