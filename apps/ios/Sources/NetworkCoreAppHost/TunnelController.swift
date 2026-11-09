@@ -49,6 +49,8 @@ final class TunnelController {
     private(set) var mode = ProxyMode.global
     /// DNS servers, hosts and per-domain servers, from `dns-settings.json`; the saved profile carries a copy.
     private(set) var dns = DnsSettings()
+    /// Destination rewrites, from `redirects.json`; the saved profile carries the enabled lines.
+    private(set) var redirects = TrafficRedirects()
 
     @ObservationIgnored private var manager: NETunnelProviderManager?
     @ObservationIgnored private var statusObserver: NSObjectProtocol?
@@ -84,6 +86,9 @@ final class TunnelController {
             message = nil
         } catch {
             message = String(localized: "无法读取 VPN 配置")
+        }
+        if let saved = try? TrafficRedirects.load(from: TrafficRedirects.defaultURL) {
+            redirects = saved
         }
         if let saved = try? DnsSettings.load(from: DnsSettings.defaultURL) {
             dns = saved
@@ -647,6 +652,9 @@ final class TunnelController {
         if let value = try? dns.profileValue() {
             providerConfiguration[TunnelProfileKeys.dns] = value
         }
+        if let value = try? redirects.profileValue() {
+            providerConfiguration[TunnelProfileKeys.redirects] = value
+        }
         let library = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)) ?? MitmPluginLibrary()
         if let plugins = try? MitmPluginLibrary.profileValue(library.activeTexts), !library.activeTexts.isEmpty {
             providerConfiguration[TunnelProfileKeys.mitmPlugins] = plugins
@@ -780,6 +788,48 @@ final class TunnelController {
             try await manager.loadFromPreferences()
         } catch {
             message = String(localized: "保存 DNS 设置到 VPN 配置失败")
+            refresh()
+            return false
+        }
+        refresh()
+        if isConnected {
+            restart()
+        }
+        return true
+    }
+
+    /// Saves the destination rewrites and puts the enabled ones in the saved profile. A running tunnel reconnects to
+    /// use them. Returns whether they were saved.
+    @discardableResult
+    func applyRedirects(_ next: TrafficRedirects) async -> Bool {
+        do {
+            try next.save(to: TrafficRedirects.defaultURL)
+        } catch {
+            message = String(localized: "无法保存重定向")
+            return false
+        }
+        redirects = next
+        guard let manager, let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol else {
+            // The next import picks them up.
+            return true
+        }
+        var configuration = tunnelProtocol.providerConfiguration ?? [:]
+        let value = try? next.profileValue()
+        guard configuration[TunnelProfileKeys.redirects] as? Data != value else {
+            return true
+        }
+        if let value {
+            configuration[TunnelProfileKeys.redirects] = value
+        } else {
+            configuration.removeValue(forKey: TunnelProfileKeys.redirects)
+        }
+        tunnelProtocol.providerConfiguration = configuration
+        manager.protocolConfiguration = tunnelProtocol
+        do {
+            try await manager.saveToPreferences()
+            try await manager.loadFromPreferences()
+        } catch {
+            message = String(localized: "保存重定向到 VPN 配置失败")
             refresh()
             return false
         }

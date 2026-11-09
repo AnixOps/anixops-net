@@ -18,6 +18,7 @@ struct RulesView: View {
                     List {
                         modeSection(hasRules: false)
                         DnsSection(tunnel: tunnel)
+                        RedirectSection(tunnel: tunnel)
                     }
                     .scrollContentBackground(.hidden)
                 } else {
@@ -69,6 +70,8 @@ struct RulesView: View {
             RuleSetsSection(tunnel: tunnel, rules: routing.rules, defined: routing.ruleSets)
 
             DnsSection(tunnel: tunnel)
+
+            RedirectSection(tunnel: tunnel)
         }
         .scrollContentBackground(.hidden)
     }

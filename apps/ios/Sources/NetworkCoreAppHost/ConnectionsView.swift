@@ -512,6 +512,10 @@ private struct ConnectionDetail: View {
                 if connection.target != connection.destination {
                     item("请求地址", connection.destination)
                 }
+                if let redirect = connection.redirect {
+                    item("重定向到", redirect.destination)
+                    item("重定向规则", redirect.rule)
+                }
                 item("协议", connection.network.uppercased())
                 item("规则", connection.rule)
                 item("线路", Self.route(connection))
