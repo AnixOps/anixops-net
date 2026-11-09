@@ -780,25 +780,32 @@ final class TunnelController {
     /// Saves the DNS settings and puts them in the saved profile. A running tunnel reconnects to use them.
     /// Returns whether they were saved.
     @discardableResult
-    /// Saves the local rules and puts them in the saved profile. A running tunnel reconnects to use them. Returns
-    /// whether they were saved.
-    func applyLocalRules(_ next: LocalRules) async -> Bool {
+    /// Saves the local rules now, so quick edits build on each other, then puts them in the saved profile. A running
+    /// tunnel reconnects to use them.
+    func updateLocalRules(_ next: LocalRules) {
         do {
             try next.save(to: LocalRules.defaultURL)
         } catch {
             message = String(localized: "无法保存本地规则")
-            return false
+            return
         }
         localRules = next
+        Task {
+            await applyLocalRulesToProfile()
+        }
+    }
+
+    /// Puts the current local rules in the saved profile and reconnects a running tunnel when they changed.
+    private func applyLocalRulesToProfile() async {
         guard let manager, let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol,
-              let value = try? next.profileValue()
+              let value = try? localRules.profileValue()
         else {
             // The next import picks them up.
-            return true
+            return
         }
         var configuration = tunnelProtocol.providerConfiguration ?? [:]
         guard configuration[TunnelProfileKeys.localRules] as? Data != value else {
-            return true
+            return
         }
         configuration[TunnelProfileKeys.localRules] = value
         tunnelProtocol.providerConfiguration = configuration
@@ -809,13 +816,12 @@ final class TunnelController {
         } catch {
             message = String(localized: "保存本地规则到 VPN 配置失败")
             refresh()
-            return false
+            return
         }
         refresh()
         if isConnected {
             restart()
         }
-        return true
     }
 
     func applyDns(_ next: DnsSettings) async -> Bool {

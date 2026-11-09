@@ -136,12 +136,13 @@ public struct NodeLibrary: Codable, Equatable {
                 return nil
             }
             let local = localRules.engineLines(proxy: selected.id)
+            let ruleSets = Self.capped(local.ruleSets)
             return EmbeddedRuntimeConfig.Routing(
                 outbounds: outbounds,
-                rules: local.lines,
+                rules: RuleSetCatalog.runnableRules(local.lines, sets: ruleSets),
                 groups: [],
                 global: selected.id,
-                ruleSets: local.ruleSets.isEmpty ? nil : local.ruleSets
+                ruleSets: ruleSets
             )
         }
         let groups = routing.groups.map { group -> NativeImportReport.Routing.Group in
@@ -158,7 +159,10 @@ public struct NodeLibrary: Codable, Equatable {
             defined[name] = set
         }
         let lines = local.lines + routing.rules
-        let ruleSets = RuleSetCatalog.ruleSets(for: lines, defined: defined.isEmpty ? nil : defined)
+        let own = Set((routing.ruleSets ?? [:]).keys)
+        let ruleSets = RuleSetCatalog.ruleSets(for: lines, defined: defined.isEmpty ? nil : defined).flatMap { sets in
+            Self.capped(sets, keeping: own)
+        }
         return EmbeddedRuntimeConfig.Routing(
             outbounds: outbounds,
             rules: RuleSetCatalog.runnableRules(lines, sets: ruleSets),
@@ -166,6 +170,27 @@ public struct NodeLibrary: Codable, Equatable {
             global: selected?.id,
             ruleSets: ruleSets
         )
+    }
+
+    /// The engine refuses more than this many rule sets.
+    public static let maxRuleSets = 32
+
+    /// `sets` cut to `maxRuleSets`, dropping the user's own lists (`local-…`, `sub-…`) as needed, never a name in
+    /// `keeping`; the rules naming a dropped set are then left out (`RuleSetCatalog.runnableRules`).
+    static func capped(
+        _ sets: [String: EmbeddedRuntimeConfig.RuleSet],
+        keeping: Set<String> = []
+    ) -> [String: EmbeddedRuntimeConfig.RuleSet]? {
+        var sets = sets
+        if sets.count > maxRuleSets {
+            let local = sets.keys
+                .filter { !keeping.contains($0) && ($0.hasPrefix("local-") || $0.hasPrefix("sub-")) }
+                .sorted()
+            for name in local.reversed() where sets.count > maxRuleSets {
+                sets.removeValue(forKey: name)
+            }
+        }
+        return sets.isEmpty ? nil : sets
     }
 
     /// QUIC protocols: a TCP connect time to their port says nothing about them.

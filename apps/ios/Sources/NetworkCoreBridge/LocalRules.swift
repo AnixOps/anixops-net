@@ -77,21 +77,68 @@ public struct LocalRules: Codable, Equatable {
         }
     }
 
+    /// A rule list the engine downloads and refreshes itself, such as one of the open-source lists on GitHub
+    /// (`OpenRuleSets`) or any Surge, Loon or Clash list URL. Matching traffic goes to `policy`.
+    public struct Subscription: Codable, Equatable, Identifiable {
+        public var id: UUID
+        public var name: String
+        /// An `https` list URL.
+        public var url: String
+        public var policy: Policy
+        public var enabled: Bool
+        /// The `OpenRuleSets` entry it was added from, if any.
+        public var catalogID: String?
+
+        public init(
+            id: UUID = UUID(),
+            name: String,
+            url: String,
+            policy: Policy,
+            enabled: Bool = true,
+            catalogID: String? = nil
+        ) {
+            self.id = id
+            self.name = name
+            self.url = url
+            self.policy = policy
+            self.enabled = enabled
+            self.catalogID = catalogID
+        }
+
+        /// The name the engine knows the list by, stable across edits and reordering.
+        public var engineName: String {
+            "sub-" + id.uuidString.prefix(8).lowercased()
+        }
+    }
+
+    /// The engine accepts at most 32 rule sets in all, and the built-in GEOSITE/GEOIP lists and a subscription's own
+    /// sets need some of them.
+    public static let maxSubscriptions = 20
+
     public var preset: Preset
     /// Private and local networks (`10.0.0.0/8`, `192.168.0.0/16`, `*.local` and the like) go direct.
     public var bypassLAN: Bool
     public var rules: [Rule]
+    /// Downloaded rule lists, matched after `rules` and in this order.
+    public var subscriptions: [Subscription]
 
-    public init(preset: Preset = .bypassChina, bypassLAN: Bool = true, rules: [Rule] = []) {
+    public init(
+        preset: Preset = .bypassChina,
+        bypassLAN: Bool = true,
+        rules: [Rule] = [],
+        subscriptions: [Subscription] = []
+    ) {
         self.preset = preset
         self.bypassLAN = bypassLAN
         self.rules = rules
+        self.subscriptions = subscriptions
     }
 
     enum CodingKeys: String, CodingKey {
         case preset
         case bypassLAN = "bypass_lan"
         case rules
+        case subscriptions
     }
 
     public init(from decoder: Decoder) throws {
@@ -100,7 +147,8 @@ public struct LocalRules: Codable, Equatable {
         self.init(
             preset: preset ?? .bypassChina,
             bypassLAN: try container.decodeIfPresent(Bool.self, forKey: .bypassLAN) ?? true,
-            rules: try container.decodeIfPresent([Rule].self, forKey: .rules) ?? []
+            rules: try container.decodeIfPresent([Rule].self, forKey: .rules) ?? [],
+            subscriptions: try container.decodeIfPresent([Subscription].self, forKey: .subscriptions) ?? []
         )
     }
 
@@ -130,8 +178,8 @@ public struct LocalRules: Codable, Equatable {
         "local-\(index + 1)"
     }
 
-    /// The user's enabled rules as engine lines, `PROXY` replaced by `proxy`, and the rule sets their `RULE-SET` URLs
-    /// become, downloaded through `proxy`.
+    /// The user's enabled rules and then the enabled rule-list subscriptions as engine lines, `PROXY` replaced by
+    /// `proxy`, and the rule sets their URLs become, downloaded through `proxy`.
     public func userLines(proxy: String) -> (lines: [String], ruleSets: [String: EmbeddedRuntimeConfig.RuleSet]) {
         var lines: [String] = []
         var sets: [String: EmbeddedRuntimeConfig.RuleSet] = [:]
@@ -154,6 +202,12 @@ public struct LocalRules: Codable, Equatable {
                 line += ",no-resolve"
             }
             lines.append(line)
+        }
+        for subscription in subscriptions where subscription.enabled {
+            let name = subscription.engineName
+            let target = subscription.policy == .proxy ? proxy : subscription.policy.rawValue
+            sets[name] = .init(url: subscription.url, via: proxy)
+            lines.append("RULE-SET,\(name),\(target)")
         }
         return (lines, sets)
     }
@@ -376,6 +430,26 @@ public struct LocalRules: Codable, Equatable {
             rules.append(rule)
         }
         return (rules, skipped)
+    }
+
+    /// Adds `subscription`, or replaces the one with its id. The URL must be `https`.
+    public func saving(_ subscription: Subscription) throws -> LocalRules {
+        var subscription = subscription
+        subscription.name = subscription.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        subscription.url = try Self.value(subscription.url, kind: "RULE-SET")
+        if subscription.name.isEmpty {
+            subscription.name = URL(string: subscription.url)?.deletingPathExtension().lastPathComponent ?? subscription.url
+        }
+        var copy = self
+        if let index = copy.subscriptions.firstIndex(where: { $0.id == subscription.id }) {
+            copy.subscriptions[index] = subscription
+        } else {
+            guard copy.subscriptions.count < Self.maxSubscriptions else {
+                throw Failure.tooMany
+            }
+            copy.subscriptions.append(subscription)
+        }
+        return copy
     }
 
     /// The list with `incoming` appended, leaving out rules already in it and anything past `maxRules`.
