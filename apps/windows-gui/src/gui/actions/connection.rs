@@ -6,9 +6,11 @@ use crate::gui::{
 };
 use engine_embedded::local_proxy::LocalProxy;
 use inbound_mixed::MixedSettings;
+use networkcore_windows_service::DesktopNativeMitm;
 use platform_windows::managed::{
-    windows_managed_config_path, WindowsManagedConfig, WindowsManagedEmbeddedConfig,
-    WindowsProxySettings, WindowsProxySnapshot,
+    read_managed_state, windows_managed_config_path, windows_managed_state_path,
+    write_managed_state, WindowsManagedConfig, WindowsManagedEmbeddedConfig,
+    WindowsManagedNativeMitmConfig, WindowsProxySettings, WindowsProxySnapshot,
 };
 use platform_windows::system_integration::{
     managed_proxy_listener_ready, read_current_user_system_proxy, NativeWindowsSystemIntegration,
@@ -34,18 +36,54 @@ pub enum RestartedService {
 struct DesktopConnectionPlan {
     proxy: WindowsProxySettings,
     embedded: Option<WindowsManagedEmbeddedConfig>,
+    native_mitm: Option<WindowsManagedNativeMitmConfig>,
 }
 
 /// The core the GUI runs itself in desktop mode: the embedded engine inside
-/// the GUI process.
+/// the GUI process, and the native HTTPS MITM proxy in front of it when the
+/// profile enables HTTPS decryption (the GUI always runs elevated).
 #[derive(Default)]
 pub struct DesktopCore {
     embedded: Option<LocalProxy>,
+    native_mitm: Option<DesktopNativeMitm>,
 }
 
 impl DesktopCore {
     pub fn is_running(&mut self) -> Result<bool, String> {
-        Ok(self.embedded.as_ref().is_some_and(LocalProxy::is_running))
+        Ok(self.embedded.as_ref().is_some_and(LocalProxy::is_running)
+            && self
+                .native_mitm
+                .as_ref()
+                .is_none_or(DesktopNativeMitm::is_running))
+    }
+
+    /// Trusts the managed root CA, records its thumbprint where disabling
+    /// HTTPS decryption removes it, then starts the MITM listener.
+    fn start_native_mitm(&mut self, config: &WindowsManagedNativeMitmConfig) -> Result<(), String> {
+        self.stop_native_mitm();
+        let thumbprint = NativeWindowsSystemIntegration::new()
+            .install_root_certificate(&config.ca_certificate_path)
+            .map_err(|error| {
+                format!("HTTPS decryption root certificate could not be trusted: {error}")
+            })?;
+        let state_path = windows_managed_state_path();
+        let mut state = read_managed_state(&state_path).unwrap_or_default();
+        if state.native_mitm_certificate_sha1.as_deref() != Some(thumbprint.as_str()) {
+            state.native_mitm_certificate_sha1 = Some(thumbprint);
+            write_managed_state(&state_path, &state).map_err(|error| {
+                format!("HTTPS decryption certificate could not be recorded: {error}")
+            })?;
+        }
+        let mitm = DesktopNativeMitm::start(config)
+            .map_err(|error| format!("HTTPS decryption could not start: {}", error.message))?;
+        self.native_mitm = Some(mitm);
+        Ok(())
+    }
+
+    fn stop_native_mitm(&mut self) {
+        if let Some(mitm) = self.native_mitm.take() {
+            let _ = mitm.stop();
+        }
     }
 
     /// The listener is bound when this returns.
@@ -81,6 +119,7 @@ impl DesktopCore {
     }
 
     fn stop(&mut self) {
+        self.stop_native_mitm();
         self.stop_embedded();
     }
 }
@@ -166,11 +205,17 @@ pub fn connect_direct(
     desktop: DesktopState,
     core: &mut DesktopCore,
 ) -> Result<ConnectedProxy, String> {
-    let plan = load_desktop_connection_plan(&config_path)?;
+    let plan = direct_connection_plan(load_validated_daily_managed_configuration(&config_path)?)?;
     let embedded = plan.embedded.as_ref().ok_or_else(|| {
         "Desktop mode requires an imported profile. Import a subscription first.".to_string()
     })?;
     core.start_embedded(embedded)?;
+    if let Some(native_mitm) = plan.native_mitm.as_ref() {
+        if let Err(error) = core.start_native_mitm(native_mitm) {
+            core.stop();
+            return Err(error);
+        }
+    }
     apply_proxy_after_direct_readiness(&plan.proxy, desktop, core)
 }
 
@@ -253,7 +298,41 @@ fn desktop_connection_plan(managed: WindowsManagedConfig) -> Result<DesktopConne
                 .to_string()
         })?;
     let embedded = managed.embedded.filter(|embedded| embedded.enabled);
-    Ok(DesktopConnectionPlan { proxy, embedded })
+    Ok(DesktopConnectionPlan {
+        proxy,
+        embedded,
+        native_mitm: None,
+    })
+}
+
+/// Desktop mode: the GUI runs the embedded engine and, when the profile
+/// enables HTTPS decryption, the MITM listener in front of it, so a
+/// MITM-enabled profile no longer needs the Windows service.
+fn direct_connection_plan(
+    mut managed: WindowsManagedConfig,
+) -> Result<DesktopConnectionPlan, String> {
+    let Some(native_mitm) = managed.native_mitm.take().filter(|mitm| mitm.enabled) else {
+        return desktop_connection_plan(managed);
+    };
+    if native_mitm.script_runtime.is_some() {
+        return Err(
+            "Clear the legacy managed script runtime before enabling HTTPS MITM; Windows script execution requires a no-network sandbox."
+                .to_string(),
+        );
+    }
+    let proxy = managed
+        .system_proxy
+        .filter(|proxy| proxy.enabled)
+        .ok_or_else(|| {
+            "Connection requires an enabled managed system proxy. Import a profile or configure one first."
+                .to_string()
+        })?;
+    let embedded = managed.embedded.filter(|embedded| embedded.enabled);
+    Ok(DesktopConnectionPlan {
+        proxy,
+        embedded,
+        native_mitm: Some(native_mitm),
+    })
 }
 
 fn apply_proxy_after_direct_readiness(
@@ -547,5 +626,38 @@ mod tests {
             Some(proxy),
         ))
         .is_err());
+    }
+
+    #[test]
+    fn desktop_mode_runs_a_mitm_profile_itself() {
+        let proxy = WindowsProxySettings {
+            enabled: true,
+            server: "127.0.0.1:7890".to_string(),
+            bypass: "<local>".to_string(),
+        };
+        let mut managed = managed_config(WindowsSystemProxyOwner::Service, Some(proxy.clone()));
+        managed.native_mitm = Some(WindowsManagedNativeMitmConfig {
+            enabled: true,
+            listen_host: "127.0.0.1".to_string(),
+            listen_port: 7890,
+            upstream_socks_host: "127.0.0.1".to_string(),
+            upstream_socks_port: 7891,
+            ca_certificate_path: PathBuf::from("root-ca.pem"),
+            ca_private_key_path: PathBuf::from("root-ca-key.pem"),
+            log_path: PathBuf::from("native-mitm.log"),
+            bilibili_web_ad_block_enabled: false,
+            script_runtime: None,
+        });
+        assert!(desktop_connection_plan(managed.clone()).is_err());
+        let plan = direct_connection_plan(managed.clone())
+            .expect("desktop mode should accept a MITM-enabled profile");
+        assert_eq!(plan.proxy, proxy);
+        assert_eq!(
+            plan.native_mitm.map(|mitm| mitm.upstream_socks_port),
+            Some(7891)
+        );
+
+        managed.native_mitm = None;
+        assert!(direct_connection_plan(managed).is_err());
     }
 }

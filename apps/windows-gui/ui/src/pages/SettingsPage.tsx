@@ -40,7 +40,7 @@ export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, l
           <div className="setting-label">{t("语言")}</div>
           <Segmented label={t("语言")} options={languages.map((option) => ({ ...option, label: t(option.label) }))} value={language} onChange={setLanguage} />
         </Card>
-        {linux ? <LinuxProxyCard busy={busy} run={run} /> : <Card title={t("运行方式")} description={t("桌面模式只为当前用户运行内核；HTTPS 解密需要 Windows 服务模式。")}>
+        {linux ? <LinuxProxyCard busy={busy} run={run} /> : <Card title={t("运行方式")} description={t("桌面模式由客户端直接运行内核和 HTTPS 解密；Windows 服务模式在后台常驻，关掉窗口也不会断开。")}>
           <Segmented
             label={t("运行方式")}
             options={[{ value: "desktop", label: t("桌面模式") }, { value: "service", label: t("Windows 服务") }]}

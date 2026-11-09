@@ -2967,6 +2967,7 @@ fn enable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult,
             .start_service()
             .map_err(|error| error.to_string())?;
     }
+    reconnect_running_direct_core(&state)?;
     Ok(OperationResult {
         message: format!(
             "HTTPS MITM enabled with CA material at {}.",
@@ -2976,11 +2977,43 @@ fn enable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult,
 }
 
 #[tauri::command]
-async fn disable_https_mitm() -> Result<OperationResult, String> {
-    run_blocking(disable_https_mitm_blocking).await
+async fn disable_https_mitm(state: State<'_, DesktopAppState>) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || disable_https_mitm_blocking(state)).await
 }
 
-fn disable_https_mitm_blocking() -> Result<OperationResult, String> {
+/// Desktop mode runs HTTPS decryption inside this process, so a running
+/// desktop core picks up an enabled or disabled MITM only by reconnecting.
+fn reconnect_running_direct_core(state: &DesktopAppState) -> Result<(), String> {
+    let desktop = state
+        .desktop
+        .lock()
+        .map_err(|_| "desktop state lock failed")?
+        .clone();
+    if desktop.runtime_mode != DesktopRuntimeMode::Desktop {
+        return Ok(());
+    }
+    let mut core = state
+        .direct_core
+        .lock()
+        .map_err(|_| "desktop core lock failed")?;
+    if !core.is_running()? {
+        return Ok(());
+    }
+    let _ =
+        connection::disconnect_direct(windows_managed_config_path(), desktop.clone(), &mut core);
+    let connected = connection::connect_direct(windows_managed_config_path(), desktop, &mut core)?;
+    drop(core);
+    let mut persisted = state
+        .desktop
+        .lock()
+        .map_err(|_| "desktop state lock failed")?;
+    persisted.proxy_snapshot = Some(connected.snapshot);
+    persisted.applied_proxy = Some(connected.applied_proxy);
+    save_desktop_state(&persisted)
+}
+
+fn disable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult, String> {
     let mut managed = managed_config_or_default()?;
     let native_mitm = managed
         .native_mitm
@@ -3019,6 +3052,7 @@ fn disable_https_mitm_blocking() -> Result<OperationResult, String> {
             .start_service()
             .map_err(|error| error.to_string())?;
     }
+    reconnect_running_direct_core(&state)?;
     if let Some(error) = certificate_cleanup_error {
         return Err(error);
     }
