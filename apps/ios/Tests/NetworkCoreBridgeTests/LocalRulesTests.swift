@@ -134,4 +134,70 @@ final class LocalRulesTests: XCTestCase {
         XCTAssertEqual(LocalRules.fromProfileValue(nil), LocalRules())
         XCTAssertEqual(LocalRules.fromProfileValue(Data("{}".utf8)).preset, .bypassChina)
     }
+
+    func testRuleSetSubscriptionsMatchAfterTheUserRulesAndDownloadThroughTheProxy() throws {
+        let report = try NativeImportReport.decoded(from: Data(plainReport.utf8))
+        let library = NodeLibrary(report: report, subscriptionURL: nil, keeping: nil)
+        let ads = try XCTUnwrap(OpenRuleSets.entry(id: "bm7-advertising")).subscription()
+        var off = try XCTUnwrap(OpenRuleSets.entry(id: "bm7-apple")).subscription()
+        off.enabled = false
+        var rules = LocalRules(preset: .proxyAll, bypassLAN: false)
+        rules = try rules.saving(LocalRules.rule(from: "DOMAIN,a.example,DIRECT"))
+        rules = try rules.saving(ads)
+        rules = try rules.saving(off)
+
+        let routing = try XCTUnwrap(library.routingForModes(localRules: rules))
+        XCTAssertEqual(routing.rules, ["DOMAIN,a.example,DIRECT", "RULE-SET,\(ads.engineName),REJECT", "FINAL,a"])
+        XCTAssertEqual(routing.ruleSets?[ads.engineName]?.url, ads.url)
+        XCTAssertEqual(routing.ruleSets?[ads.engineName]?.via, "a")
+        XCTAssertNil(routing.ruleSets?[off.engineName])
+        XCTAssertTrue(ads.engineName.hasPrefix("sub-"))
+
+        // Kept through a profile round trip, and old values without subscriptions still load.
+        XCTAssertEqual(LocalRules.fromProfileValue(try rules.profileValue()).subscriptions, rules.subscriptions)
+    }
+
+    func testRuleSetSubscriptionsNeedHttpsAndAreCapped() throws {
+        XCTAssertThrowsError(try LocalRules().saving(LocalRules.Subscription(name: "x", url: "http://a.example/x.list", policy: .proxy)))
+        let named = try LocalRules().saving(LocalRules.Subscription(name: " ", url: "https://a.example/lists/Ads.list", policy: .reject))
+        XCTAssertEqual(named.subscriptions.first?.name, "Ads")
+
+        var full = LocalRules()
+        for index in 0..<LocalRules.maxSubscriptions {
+            full = try full.saving(LocalRules.Subscription(name: "\(index)", url: "https://a.example/\(index).list", policy: .proxy))
+        }
+        XCTAssertThrowsError(try full.saving(LocalRules.Subscription(name: "more", url: "https://a.example/more.list", policy: .proxy)))
+    }
+
+    func testTheEngineGetsAtMost32RuleSets() throws {
+        let report = try NativeImportReport.decoded(from: Data(plainReport.utf8))
+        let library = NodeLibrary(report: report, subscriptionURL: nil, keeping: nil)
+        var rules = LocalRules()
+        for index in 0..<LocalRules.maxSubscriptions {
+            rules = try rules.saving(LocalRules.Subscription(name: "\(index)", url: "https://a.example/\(index).list", policy: .proxy))
+        }
+        for index in 0..<15 {
+            rules = try rules.saving(LocalRules.rule(from: "RULE-SET,https://b.example/\(index).list,DIRECT"))
+        }
+        let routing = try XCTUnwrap(library.routingForModes(localRules: rules))
+        let sets = try XCTUnwrap(routing.ruleSets)
+        XCTAssertEqual(sets.count, NodeLibrary.maxRuleSets)
+        XCTAssertNotNil(sets["geosite-cn"])
+        XCTAssertNotNil(sets["geoip-cn"])
+        // Every remaining RULE-SET rule names a set the engine has.
+        for line in routing.rules where line.hasPrefix("RULE-SET,") {
+            XCTAssertNotNil(sets[line.split(separator: ",")[1].description], line)
+        }
+    }
+
+    func testTheOpenRuleSetCatalogIsWellFormed() throws {
+        XCTAssertEqual(Set(OpenRuleSets.entries.map(\.id)).count, OpenRuleSets.entries.count)
+        for entry in OpenRuleSets.entries {
+            XCTAssertNoThrow(try LocalRules().saving(entry.subscription()), entry.id)
+            XCTAssertTrue(entry.url.hasPrefix("https://raw.githubusercontent.com/"), entry.id)
+        }
+        for category in OpenRuleSets.Category.allCases {
+            XCTAssertFalse(OpenRuleSets.entries.filter { $0.category == category }.isEmpty, category.rawValue)
+        }
+    }
 }
