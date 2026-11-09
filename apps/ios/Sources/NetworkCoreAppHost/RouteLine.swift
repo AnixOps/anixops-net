@@ -84,7 +84,7 @@ enum ConnectPhase: Equatable {
     }
 }
 
-/// The brand's route line: the "N" of the app icon, from the mint start point to the amber end point.
+/// The connect button's route line: an "N" from the sky start point to the amber end point, drawn on the slate hero.
 struct RouteLineShape: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
@@ -141,7 +141,7 @@ struct RouteLineMark: View {
     private var lineStyle: AnyShapeStyle {
         switch phase {
         case .on:
-            return AnyShapeStyle(LinearGradient(colors: [Brand.sky, Brand.line], startPoint: .bottomLeading, endPoint: .topTrailing))
+            return AnyShapeStyle(BrandPalette.brandGradient)
         case .connecting, .reasserting, .disconnecting:
             return AnyShapeStyle(Brand.sky)
         case .off, .unconfigured:
@@ -181,37 +181,34 @@ struct RouteLineMark: View {
     }
 }
 
-/// The app icon drawn in SwiftUI, used for the wordmark and the import success screen.
+/// The AnixOps mark (slate tile with the gradient orbit A) from AnixOps Design, shipped as the BrandMark image
+/// that .github/scripts/sync_design.py copies from the vendored set; never redrawn here. `drawn` (0…1) fades and
+/// scales it in on the import success screen.
 struct BrandMark: View {
     var size: CGFloat = 30
     var drawn: CGFloat = 1
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: size * 0.23, style: .continuous)
-                .fill(Brand.indigo)
-            RouteLineShape()
-                .trim(from: 0, to: drawn)
-                .stroke(Brand.line, style: StrokeStyle(lineWidth: size * 0.1, lineCap: .round, lineJoin: .round))
-            Circle()
-                .fill(Brand.amber)
-                .frame(width: size * 0.13, height: size * 0.13)
-                .position(x: size * 0.70, y: size * 0.28)
-        }
-        .frame(width: size, height: size)
-        .accessibilityHidden(true)
+        Image("BrandMark")
+            .resizable()
+            .interpolation(.high)
+            .frame(width: size, height: size)
+            .opacity(Double(drawn))
+            .scaleEffect(0.9 + 0.1 * drawn)
+            .accessibilityHidden(true)
     }
 }
 
-/// "AnixOps Net" with "Net" in the brand color.
+/// The AnixOps Design lockup: the mark, "AnixOps" in semibold and the product word in regular secondary text.
 struct Wordmark: View {
     @Environment(\.brand) private var brand
 
     var body: some View {
         HStack(spacing: 10) {
             BrandMark(size: 30)
-            (Text("AnixOps ").foregroundColor(brand.text) + Text("Net").foregroundColor(brand.primary))
-                .font(.title2.weight(.bold))
+            (Text("AnixOps ").fontWeight(.semibold).foregroundColor(brand.text)
+                + Text("Net").fontWeight(.regular).foregroundColor(brand.text2))
+                .font(.title2)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("AnixOps Net")

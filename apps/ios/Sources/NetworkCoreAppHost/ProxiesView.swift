@@ -377,7 +377,7 @@ struct ProxiesView: View {
                         .padding(.horizontal, 24)
                         .frame(height: 44)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.brandPrimary)
                 .padding(.top, 6)
             }
             .padding(.top, 80)

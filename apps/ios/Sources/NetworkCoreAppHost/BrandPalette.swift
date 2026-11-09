@@ -196,7 +196,7 @@ struct ProtocolBadge: View {
             .foregroundStyle(brand.primary)
             .frame(minWidth: 36, minHeight: 36)
             .padding(.horizontal, 4)
-            .background(brand.soft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(brand.soft, in: RoundedRectangle(cornerRadius: BrandRadius.control, style: .continuous))
             .accessibilityLabel(Self.spokenName(for: outboundKind))
     }
 
@@ -253,13 +253,9 @@ struct BrandEmptyState<Actions: View>: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Image(systemName: systemImage)
-                .font(.system(size: 30, weight: .medium))
-                .foregroundStyle(brand.primary)
-                .frame(width: 64, height: 64)
-                .background(brand.soft, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            BrandIconWell(systemImage: systemImage, size: 64)
             Text(title)
-                .font(.title3.weight(.semibold))
+                .font(BrandFont.title)
                 .foregroundStyle(brand.text)
             Text(message)
                 .font(.subheadline)
@@ -277,5 +273,84 @@ extension BrandEmptyState where Actions == EmptyView {
         self.init(systemImage: systemImage, title: title, message: message) {
             EmptyView()
         }
+    }
+}
+
+/// AnixOps Design buttons: pills, the accent fill with white text for the one primary action on a screen, a soft
+/// accent pill for secondary actions. Labels set their own font and width; the style adds the 44 pt minimum height
+/// (36 pt for `compact`), side padding, the press state and the disabled fade.
+struct BrandButtonStyle: ButtonStyle {
+    enum Kind {
+        case primary
+        case secondary
+        case destructive
+    }
+
+    var kind: Kind = .primary
+    var compact = false
+    @Environment(\.brand) private var brand
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(compact ? BrandFont.callout.weight(.semibold) : BrandFont.headline)
+            .padding(.horizontal, compact ? BrandSpacing.sm : BrandSpacing.md)
+            .frame(minHeight: compact ? 36 : 44)
+            .foregroundStyle(foreground)
+            .background(background, in: Capsule())
+            .contentShape(Capsule())
+            .opacity(isEnabled ? (configuration.isPressed ? 0.82 : 1) : 0.4)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+            .animation(.easeOut(duration: BrandMotion.micro), value: configuration.isPressed)
+    }
+
+    private var foreground: Color {
+        switch kind {
+        case .primary:
+            return brand.onPrimary
+        case .secondary:
+            return brand.primary
+        case .destructive:
+            return brand.danger
+        }
+    }
+
+    private var background: Color {
+        switch kind {
+        case .primary:
+            return brand.primaryFill
+        case .secondary:
+            return brand.soft
+        case .destructive:
+            return brand.dangerSoft
+        }
+    }
+}
+
+extension ButtonStyle where Self == BrandButtonStyle {
+    /// The one filled pill per screen.
+    static var brandPrimary: BrandButtonStyle { BrandButtonStyle(kind: .primary) }
+    /// A soft accent pill.
+    static var brandSecondary: BrandButtonStyle { BrandButtonStyle(kind: .secondary) }
+    static var brandDestructive: BrandButtonStyle { BrandButtonStyle(kind: .destructive) }
+    static var brandPrimaryCompact: BrandButtonStyle { BrandButtonStyle(kind: .primary, compact: true) }
+    static var brandSecondaryCompact: BrandButtonStyle { BrandButtonStyle(kind: .secondary, compact: true) }
+}
+
+/// A soft icon well: an SF Symbol on the accent's soft fill, used by list rows and empty states.
+struct BrandIconWell: View {
+    @Environment(\.brand) private var brand
+    let systemImage: String
+    var size: CGFloat = 32
+    var tint: Color?
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: size * 0.47, weight: .semibold))
+            .foregroundStyle(tint ?? brand.primary)
+            .frame(width: size, height: size)
+            .background((tint ?? brand.primary).opacity(0.12), in: RoundedRectangle(cornerRadius: size * 0.3, style: .continuous))
+            .accessibilityHidden(true)
     }
 }

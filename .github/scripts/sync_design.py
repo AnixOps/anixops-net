@@ -61,6 +61,9 @@ ICONS = {
     "apps/windows-gui/icons/networkcore.png": "brand/tauri/128x128@2x.png",
     "apps/windows-gui/icons/icon.ico": "brand/tauri/icon.ico",
     "apps/linux-gui/icons/networkcore.png": "brand/tauri/128x128@2x.png",
+    # The in-app mark (BrandMark in SwiftUI): the rounded slate tile with the gradient orbit A.
+    "apps/ios/Sources/NetworkCoreApp/Resources/Assets.xcassets/BrandMark.imageset/BrandMark.png": "brand/tauri/icon.png",
+    "apps/ios/Sources/NetworkCoreMac/Resources/Assets.xcassets/BrandMark.imageset/BrandMark.png": "brand/tauri/icon.png",
 }
 
 

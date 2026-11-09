@@ -371,27 +371,17 @@ private struct RequestColors {
 /// The letter badge in place of a site icon, colored from the host name.
 private struct MonogramBadge: View {
     let host: String
-    @Environment(\.colorScheme) private var scheme
-
-    private static let light: [(Color, Color)] = [
-        (Color(hex: 0xCCFBF1), Color(hex: 0x115E59)), (Color(hex: 0xFEF3C7), Color(hex: 0x92400E)),
-        (Color(hex: 0xDBEAFE), Color(hex: 0x1E40AF)), (Color(hex: 0xFCE7F3), Color(hex: 0x9D174D)),
-        (Color(hex: 0xECFCCB), Color(hex: 0x3F6212)),
-    ]
-    private static let dark: [(Color, Color)] = [
-        (Color(hex: 0x134E4A), Color(hex: 0x99F6E4)), (Color(hex: 0x3B2F0B), Color(hex: 0xFDE68A)),
-        (Color(hex: 0x1E3A5F), Color(hex: 0xBFDBFE)), (Color(hex: 0x3F1D38), Color(hex: 0xFBCFE8)),
-        (Color(hex: 0x2E3B12), Color(hex: 0xD9F99D)),
-    ]
+    @Environment(\.brand) private var brand
 
     var body: some View {
-        let palette = scheme == .dark ? Self.dark : Self.light
-        let colors = palette[HostMonogram.colorIndex(for: host, count: palette.count)]
+        // AnixOps Design chart colors on their own soft fill, so the letters stay distinct but on-palette.
+        let palette = [brand.chart1, brand.chart2, brand.chart3, brand.chart4, brand.amberText]
+        let color = palette[HostMonogram.colorIndex(for: host, count: palette.count)]
         Text(HostMonogram.letter(for: host))
             .font(.subheadline.weight(.bold))
-            .foregroundStyle(colors.1)
+            .foregroundStyle(color)
             .frame(width: 32, height: 32)
-            .background(colors.0, in: Circle())
+            .background(color.opacity(0.14), in: Circle())
             .accessibilityHidden(true)
     }
 }
@@ -409,7 +399,7 @@ private struct RequestTag: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .foregroundStyle(foreground)
-            .background(background, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .background(background, in: RoundedRectangle(cornerRadius: BrandRadius.badge, style: .continuous))
     }
 }
 

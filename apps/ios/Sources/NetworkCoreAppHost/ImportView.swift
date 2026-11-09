@@ -183,7 +183,7 @@ struct ImportView: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: 44)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.brandPrimary)
                 .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .padding(16)
@@ -244,7 +244,7 @@ struct ImportView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.brandPrimary)
                 .disabled(saving)
 
                 Button("返回修改") {
@@ -337,7 +337,7 @@ private struct DoneStep: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.brandPrimary)
             Button("继续导入", action: again)
         }
         .padding(24)

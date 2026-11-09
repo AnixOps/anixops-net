@@ -287,13 +287,13 @@ struct QRShareSheet: View {
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 44)
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.brandSecondary)
                         ShareLink(item: link) {
                             Label("分享", systemImage: "square.and.arrow.up")
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 44)
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.brandPrimary)
                     }
                 }
                 .padding(24)

@@ -13,10 +13,7 @@ struct OnboardingView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             Spacer(minLength: 24)
-            RouteLineMark(phase: .on, size: 56)
-                .frame(width: 88, height: 88)
-                .background(brand.heroGradient, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .accessibilityHidden(true)
+            BrandMark(size: 80)
             Text("欢迎使用\nAnixOps Net")
                 .font(BrandFont.display)
                 .foregroundStyle(brand.text)
@@ -37,9 +34,7 @@ struct OnboardingView: View {
                     .font(.headline)
                     .frame(maxWidth: .infinity, minHeight: 52)
             }
-            .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.capsule)
-            .tint(brand.primary)
+            .buttonStyle(.brandPrimary)
             Button(action: later) {
                 Text("稍后再说")
                     .font(.body.weight(.semibold))
@@ -56,11 +51,7 @@ struct OnboardingView: View {
 
     private func point(_ systemImage: String, _ text: LocalizedStringKey) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(brand.primary)
-                .frame(width: 24)
-                .accessibilityHidden(true)
+            BrandIconWell(systemImage: systemImage, size: 32)
             Text(text)
                 .font(.subheadline)
                 .foregroundStyle(brand.text2)

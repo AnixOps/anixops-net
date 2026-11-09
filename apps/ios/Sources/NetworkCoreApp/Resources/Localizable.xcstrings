@@ -3037,26 +3037,6 @@
         }
       }
     },
-    "纯黑": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Black"
-          }
-        }
-      }
-    },
-    "纯黑主题适合 OLED 屏幕。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The black theme suits OLED screens."
-          }
-        }
-      }
-    },
     "统计由隧道每 5 秒读取一次连接列表累计，只记主机名和字节数，保存在本机，保留 7 天。": {
       "localizations": {
         "en": {
@@ -5103,6 +5083,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Disconnected. Showing requests from before the tunnel stopped."
+          }
+        }
+      }
+    },
+    "AnixOps Studio 出品": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Made by AnixOps Studio"
           }
         }
       }

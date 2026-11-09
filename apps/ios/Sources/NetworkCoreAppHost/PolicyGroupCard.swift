@@ -37,7 +37,7 @@ struct PolicyGroupCard: View {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .foregroundStyle(brand.text2)
-                    .background(brand.raised, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    .background(brand.raised, in: RoundedRectangle(cornerRadius: BrandRadius.badge, style: .continuous))
                 Spacer(minLength: 8)
                 if group.isSelectable {
                     switchMenu
