@@ -42,7 +42,8 @@ jobs:
           mkdir -p dist/old dist/publish
           gh release download "${VERSION}" --dir dist/old
           cd dist/old
-          sha256sum -c ./*.sha256
+          # GitHub renames '~' in asset names to '.', so the deb's .sha256 still names the '~' file.
+          cat ./*.sha256 | sed 's/~/./g' | sha256sum -c -
           pick() { local f; f="$(find . -maxdepth 1 -type f -name "$1" | head -n 2)"; test "$(printf '%s\n' "${f}" | wc -l)" = 1; test -n "${f}"; printf '%s' "${f#./}"; }
           msi="$(pick '*windows-*.msi')"
           zip="$(pick '*windows-portable-*.zip')"
