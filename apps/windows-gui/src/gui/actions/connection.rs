@@ -2,6 +2,7 @@ use crate::gui::{
     load_validated_managed_configuration,
     runtime_status::{read_runtime_status, ManagedCoreStatus},
     startup::{owns_current_proxy, save_desktop_state, DesktopState},
+    tun_mode::DesktopTun,
     ui_state::ConnectionState,
 };
 use engine_embedded::local_proxy::LocalProxy;
@@ -46,6 +47,7 @@ struct DesktopConnectionPlan {
 pub struct DesktopCore {
     embedded: Option<LocalProxy>,
     native_mitm: Option<DesktopNativeMitm>,
+    tun: Option<DesktopTun>,
 }
 
 impl DesktopCore {
@@ -54,7 +56,30 @@ impl DesktopCore {
             && self
                 .native_mitm
                 .as_ref()
-                .is_none_or(DesktopNativeMitm::is_running))
+                .is_none_or(DesktopNativeMitm::is_running)
+            && self.tun.as_ref().is_none_or(DesktopTun::is_running))
+    }
+
+    /// Whether TUN mode is capturing system traffic in this window.
+    pub fn tun_running(&self) -> bool {
+        self.tun.as_ref().is_some_and(DesktopTun::is_running)
+    }
+
+    /// Starts TUN mode on the profile's envelope. Called before the local
+    /// proxy starts, so every engine socket is pinned to the physical
+    /// interface from the first connection on.
+    fn start_tun(&mut self, config: &WindowsManagedEmbeddedConfig) -> Result<(), String> {
+        self.stop_tun();
+        let envelope = fs::read(&config.envelope_path)
+            .map_err(|error| format!("TUN mode configuration could not be read: {error}"))?;
+        self.tun = Some(DesktopTun::start(&envelope)?);
+        Ok(())
+    }
+
+    fn stop_tun(&mut self) {
+        if let Some(tun) = self.tun.take() {
+            tun.stop();
+        }
     }
 
     /// Trusts the managed root CA, records its thumbprint where disabling
@@ -120,6 +145,7 @@ impl DesktopCore {
 
     fn stop(&mut self) {
         self.stop_native_mitm();
+        self.stop_tun();
         self.stop_embedded();
     }
 }
@@ -209,7 +235,13 @@ pub fn connect_direct(
     let embedded = plan.embedded.as_ref().ok_or_else(|| {
         "Desktop mode requires an imported profile. Import a subscription first.".to_string()
     })?;
-    core.start_embedded(embedded)?;
+    if desktop.tun_mode_enabled {
+        core.start_tun(embedded)?;
+    }
+    if let Err(error) = core.start_embedded(embedded) {
+        core.stop();
+        return Err(error);
+    }
     if let Some(native_mitm) = plan.native_mitm.as_ref() {
         if let Err(error) = core.start_native_mitm(native_mitm) {
             core.stop();

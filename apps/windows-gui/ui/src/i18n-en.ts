@@ -153,6 +153,8 @@ export const english: Record<string, string> = {
   "语言": "Language",
   "运行方式": "Run mode",
   "桌面模式由客户端直接运行内核和 HTTPS 解密；Windows 服务模式在后台常驻，关掉窗口也不会断开。": "Desktop mode runs the core and HTTPS decryption inside the client; Windows service mode keeps running in the background after the window closes.",
+  "TUN 模式": "TUN mode",
+  "用虚拟网卡接管全部流量，不走系统代理的游戏和命令行程序也会经过代理。": "Captures all traffic with a virtual adapter, so games and command line tools that ignore the system proxy are proxied too.",
   "启动与自动化": "Startup and automation",
   "校验配置": "Validate Configuration",
   "重启内核": "Restart Core",

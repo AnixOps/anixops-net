@@ -127,6 +127,7 @@ struct RuntimeSnapshot {
     auto_subscription_refresh: bool,
     auto_select_fastest_node: bool,
     bilibili_web_ad_block_enabled: bool,
+    tun_mode_enabled: bool,
     script_runtime_configured: bool,
     dark_theme: bool,
     runtime_mode: String,
@@ -284,6 +285,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             clear_script_runtime,
             enable_https_mitm,
             disable_https_mitm,
+            set_tun_mode,
             install_certificate,
             remove_certificate,
             install_driver,
@@ -2982,6 +2984,54 @@ async fn disable_https_mitm(state: State<'_, DesktopAppState>) -> Result<Operati
     run_blocking(move || disable_https_mitm_blocking(state)).await
 }
 
+#[tauri::command]
+async fn set_tun_mode(
+    enabled: bool,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || set_tun_mode_blocking(enabled, state)).await
+}
+
+/// Saves the TUN mode switch and reconnects a running desktop core, which
+/// creates or removes the Wintun adapter.
+fn set_tun_mode_blocking(enabled: bool, state: DesktopAppState) -> Result<OperationResult, String> {
+    if enabled {
+        let dll = platform_windows::tun::default_wintun_dll_path()
+            .map_err(|error| format!("wintun.dll could not be located: {error}"))?;
+        if !dll.is_file() {
+            return Err(
+                "TUN mode needs wintun.dll next to the client. Reinstall the client.".to_string(),
+            );
+        }
+    }
+    let previous = {
+        let mut desktop = state
+            .desktop
+            .lock()
+            .map_err(|_| "desktop state lock failed")?;
+        let previous = desktop.tun_mode_enabled;
+        desktop.tun_mode_enabled = enabled;
+        save_desktop_state(&desktop)?;
+        previous
+    };
+    if let Err(error) = reconnect_running_direct_core(&state) {
+        if let Ok(mut desktop) = state.desktop.lock() {
+            desktop.tun_mode_enabled = previous;
+            let _ = save_desktop_state(&desktop);
+        }
+        let _ = reconnect_running_direct_core(&state);
+        return Err(error);
+    }
+    Ok(OperationResult {
+        message: if enabled {
+            "TUN mode is on.".to_string()
+        } else {
+            "TUN mode is off.".to_string()
+        },
+    })
+}
+
 /// Desktop mode runs HTTPS decryption inside this process, so a running
 /// desktop core picks up an enabled or disabled MITM only by reconnecting.
 fn reconnect_running_direct_core(state: &DesktopAppState) -> Result<(), String> {
@@ -3313,6 +3363,7 @@ fn snapshot(
         auto_subscription_refresh: desktop.auto_subscription_refresh,
         auto_select_fastest_node: desktop.auto_select_fastest_node,
         bilibili_web_ad_block_enabled: desktop.bilibili_web_ad_block_enabled,
+        tun_mode_enabled: desktop.tun_mode_enabled,
         script_runtime_configured: managed_script_runtime_configured(),
         dark_theme: desktop.dark_theme,
         runtime_mode: match desktop.runtime_mode {

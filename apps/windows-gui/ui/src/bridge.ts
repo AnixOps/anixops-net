@@ -35,6 +35,7 @@ export interface RuntimeSnapshot {
   autoSubscriptionRefresh: boolean;
   autoSelectFastestNode: boolean;
   bilibiliWebAdBlockEnabled: boolean;
+  tunModeEnabled?: boolean;
   scriptRuntimeConfigured: boolean;
   darkTheme: boolean;
   runtimeMode: "desktop" | "service";
@@ -224,6 +225,7 @@ export const desktop = {
   clearScriptRuntime: () => invoke<OperationResult>("clear_script_runtime"),
   enableHttpsMitm: () => invoke<OperationResult>("enable_https_mitm"),
   disableHttpsMitm: () => invoke<OperationResult>("disable_https_mitm"),
+  setTunMode: (enabled: boolean) => invoke<OperationResult>("set_tun_mode", { enabled }),
   installCertificate: (path: string) => invoke<OperationResult>("install_certificate", { path }),
   removeCertificate: () => invoke<OperationResult>("remove_certificate"),
   installDriver: (path: string) => invoke<OperationResult>("install_driver", { path }),
