@@ -59,8 +59,10 @@ fn http_get(url: &str) -> Result<String, reqwest::Error> {
 
 /// The body and what the subscription headers say about it.
 fn http_get_with_meta(url: &str) -> Result<(String, ResponseMeta), reqwest::Error> {
+    // The panel picks the subscription format by User-Agent (same token as the iOS app).
     let response = reqwest::blocking::Client::builder()
         .timeout(FETCH_TIMEOUT)
+        .user_agent(concat!("AnixOpsNet/", env!("CARGO_PKG_VERSION")))
         .build()?
         .get(url)
         .send()
