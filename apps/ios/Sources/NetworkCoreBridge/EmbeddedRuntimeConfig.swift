@@ -576,6 +576,10 @@ public enum TunnelProfileKeys {
     /// `Data` holding a JSON object of remote `[Map Local]` body URL to its downloaded bytes for the enabled plugins
     /// (`MitmResourceLibrary.profileValue`). Lines whose body is absent answer nothing.
     public static let mitmResources = "networkcore.mitm-resources"
+    /// `Data` pointing at the HTTPS decryption payload in the shared Keychain (`MitmProfileBundle`). Profiles
+    /// saved by this version carry it instead of `mitmPlugins`, `mitmScripts` and `mitmResources`, which made the
+    /// configuration too large for iOS to save.
+    public static let mitmBundle = "networkcore.mitm-bundle"
     /// The `ProxyMode` raw value the tunnel starts in. Profiles saved before it existed use `rule` when
     /// `routing` is set and `global` otherwise (`ProxyMode.saved(in:)`).
     public static let mode = "networkcore.mode"

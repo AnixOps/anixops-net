@@ -347,10 +347,9 @@ final class TunnelController {
         tunnelProtocol.providerConfiguration = configuration
         manager.protocolConfiguration = tunnelProtocol
         do {
-            try await manager.saveToPreferences()
-            try await manager.loadFromPreferences()
+            self.manager = try await persist(manager)
         } catch {
-            message = String(localized: "保存模式到 VPN 配置失败")
+            message = String(localized: "保存模式到 VPN 配置失败") + Self.errorCode(error)
             refresh()
             return
         }
@@ -677,19 +676,21 @@ final class TunnelController {
             providerConfiguration[TunnelProfileKeys.localRules] = value
         }
         let library = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)) ?? MitmPluginLibrary()
-        if let plugins = try? MitmPluginLibrary.profileValue(library.activeTexts), !library.activeTexts.isEmpty {
-            providerConfiguration[TunnelProfileKeys.mitmPlugins] = plugins
+        var bundle = MitmProfileBundle()
+        if !library.activeTexts.isEmpty {
             let scripts = (try? MitmScriptLibrary.load(from: MitmScriptLibrary.defaultURL)) ?? MitmScriptLibrary()
-            if let sources = try? scripts.sources(for: library.activeScriptReferences), !sources.isEmpty,
-               let value = try? MitmScriptLibrary.profileValue(sources)
-            {
-                providerConfiguration[TunnelProfileKeys.mitmScripts] = value
-            }
             let resources = (try? MitmResourceLibrary.load(from: MitmResourceLibrary.defaultURL)) ?? MitmResourceLibrary()
-            let data = resources.data(for: library.activeDataReferences.map(\.path))
-            if !data.isEmpty, let value = try? MitmResourceLibrary.profileValue(data) {
-                providerConfiguration[TunnelProfileKeys.mitmResources] = value
-            }
+            bundle = MitmProfileBundle(
+                plugins: library.activeTexts,
+                scripts: (try? scripts.sources(for: library.activeScriptReferences)) ?? [:],
+                resources: resources.data(for: library.activeDataReferences.map(\.path))
+            )
+        }
+        do {
+            try bundle.apply(to: &providerConfiguration)
+        } catch {
+            message = String(localized: "保存插件到 VPN 配置失败") + Self.errorCode(error)
+            return false
         }
         tunnelProtocol.providerConfiguration = providerConfiguration
 
@@ -698,18 +699,42 @@ final class TunnelController {
         target.localizedDescription = "AnixOps Net"
         target.isEnabled = true
         do {
-            try await target.saveToPreferences()
-            // Reload so the connection object reflects the saved profile.
-            try await target.loadFromPreferences()
-            manager = target
+            manager = try await persist(target)
             message = nil
         } catch {
-            message = String(localized: "保存 VPN 配置失败或未获授权")
+            message = String(localized: "保存 VPN 配置失败或未获授权") + Self.errorCode(error)
             refresh()
             return false
         }
         refresh()
         return true
+    }
+
+    /// Saves `target` and reloads it so its connection object reflects the saved profile. When the save fails, for
+    /// example because the object went stale after a widget, the Control Center switch or Settings changed the
+    /// configuration, or because the configuration was removed in Settings, the saved configuration is read again
+    /// and the same settings are saved once more on that fresh object. Returns the object that was saved.
+    private func persist(_ target: NETunnelProviderManager) async throws -> NETunnelProviderManager {
+        do {
+            try await target.saveToPreferences()
+            try await target.loadFromPreferences()
+            return target
+        } catch {
+            let fresh = (try? await NETunnelProviderManager.loadAllFromPreferences().first) ?? NETunnelProviderManager()
+            fresh.protocolConfiguration = target.protocolConfiguration?.copy() as? NEVPNProtocol
+            fresh.localizedDescription = target.localizedDescription
+            fresh.isEnabled = target.isEnabled
+            try await fresh.saveToPreferences()
+            try await fresh.loadFromPreferences()
+            return fresh
+        }
+    }
+
+    /// The system error's domain and code after a failed save, so a screenshot of the notice says why
+    /// (for example `NEVPNErrorDomain 5` is a read/write failure or a refused permission).
+    private static func errorCode(_ error: Error) -> String {
+        let error = error as NSError
+        return " (\(error.domain) \(error.code))"
     }
 
     /// Puts the enabled HTTPS decryption plugins and the scripts the user allowed in them into the saved profile.
@@ -727,46 +752,25 @@ final class TunnelController {
             return false
         }
         var configuration = tunnelProtocol.providerConfiguration ?? [:]
-        let current = MitmPluginLibrary.texts(fromProfileValue: configuration[TunnelProfileKeys.mitmPlugins] as? Data)
-        let currentScripts = MitmScriptLibrary.sources(fromProfileValue: configuration[TunnelProfileKeys.mitmScripts] as? Data)
-        let currentResources = MitmResourceLibrary.data(
-            fromProfileValue: configuration[TunnelProfileKeys.mitmResources] as? Data
-        )
-        let scripts = texts.isEmpty ? [:] : scripts
-        let resources = texts.isEmpty ? [:] : resources
-        guard current != texts || currentScripts != scripts || currentResources != resources else {
+        let next = MitmProfileBundle(plugins: texts, scripts: scripts, resources: resources)
+        let carriesOldKeys = configuration[TunnelProfileKeys.mitmPlugins] != nil
+            || configuration[TunnelProfileKeys.mitmScripts] != nil
+            || configuration[TunnelProfileKeys.mitmResources] != nil
+        guard carriesOldKeys || MitmProfileBundle.fromProfile(configuration) != next else {
             return false
         }
-        if texts.isEmpty {
-            configuration.removeValue(forKey: TunnelProfileKeys.mitmPlugins)
-        } else {
-            guard let value = try? MitmPluginLibrary.profileValue(texts) else {
-                message = String(localized: "无法生成插件配置")
-                return false
-            }
-            configuration[TunnelProfileKeys.mitmPlugins] = value
-        }
-        if scripts.isEmpty {
-            configuration.removeValue(forKey: TunnelProfileKeys.mitmScripts)
-        } else {
-            guard let value = try? MitmScriptLibrary.profileValue(scripts) else {
-                message = "无法生成脚本配置"
-                return false
-            }
-            configuration[TunnelProfileKeys.mitmScripts] = value
-        }
-        if resources.isEmpty {
-            configuration.removeValue(forKey: TunnelProfileKeys.mitmResources)
-        } else if let value = try? MitmResourceLibrary.profileValue(resources) {
-            configuration[TunnelProfileKeys.mitmResources] = value
+        do {
+            try next.apply(to: &configuration)
+        } catch {
+            message = String(localized: "保存插件到 VPN 配置失败") + Self.errorCode(error)
+            return false
         }
         tunnelProtocol.providerConfiguration = configuration
         manager.protocolConfiguration = tunnelProtocol
         do {
-            try await manager.saveToPreferences()
-            try await manager.loadFromPreferences()
+            self.manager = try await persist(manager)
         } catch {
-            message = String(localized: "保存插件到 VPN 配置失败")
+            message = String(localized: "保存插件到 VPN 配置失败") + Self.errorCode(error)
             refresh()
             return false
         }
@@ -811,10 +815,9 @@ final class TunnelController {
         tunnelProtocol.providerConfiguration = configuration
         manager.protocolConfiguration = tunnelProtocol
         do {
-            try await manager.saveToPreferences()
-            try await manager.loadFromPreferences()
+            self.manager = try await persist(manager)
         } catch {
-            message = String(localized: "保存本地规则到 VPN 配置失败")
+            message = String(localized: "保存本地规则到 VPN 配置失败") + Self.errorCode(error)
             refresh()
             return
         }
@@ -849,10 +852,9 @@ final class TunnelController {
         tunnelProtocol.providerConfiguration = configuration
         manager.protocolConfiguration = tunnelProtocol
         do {
-            try await manager.saveToPreferences()
-            try await manager.loadFromPreferences()
+            self.manager = try await persist(manager)
         } catch {
-            message = String(localized: "保存 DNS 设置到 VPN 配置失败")
+            message = String(localized: "保存 DNS 设置到 VPN 配置失败") + Self.errorCode(error)
             refresh()
             return false
         }
@@ -891,10 +893,9 @@ final class TunnelController {
         tunnelProtocol.providerConfiguration = configuration
         manager.protocolConfiguration = tunnelProtocol
         do {
-            try await manager.saveToPreferences()
-            try await manager.loadFromPreferences()
+            self.manager = try await persist(manager)
         } catch {
-            message = String(localized: "保存重定向到 VPN 配置失败")
+            message = String(localized: "保存重定向到 VPN 配置失败") + Self.errorCode(error)
             refresh()
             return false
         }
@@ -937,14 +938,13 @@ final class TunnelController {
     private func enableAndStart(_ manager: NETunnelProviderManager) async {
         do {
             manager.isEnabled = true
-            try await manager.saveToPreferences()
-            try await manager.loadFromPreferences()
+            let saved = try await persist(manager)
+            self.manager = saved
+            refresh()
+            start(saved)
         } catch {
-            message = String(localized: "无法启动隧道")
-            return
+            message = String(localized: "无法启动隧道") + Self.errorCode(error)
         }
-        refresh()
-        start(manager)
     }
 
     private func saveProfileAndStart(_ groups: SubscriptionGroups) async {
