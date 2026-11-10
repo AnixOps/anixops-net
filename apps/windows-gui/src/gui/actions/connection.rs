@@ -7,7 +7,7 @@ use crate::gui::{
 };
 use engine_embedded::local_proxy::LocalProxy;
 use inbound_mixed::MixedSettings;
-use networkcore_windows_service::DesktopNativeMitm;
+use networkcore_windows_service::native_mitm_policy_source;
 use platform_windows::managed::{
     read_managed_state, windows_managed_config_path, windows_managed_state_path,
     write_managed_state, WindowsManagedConfig, WindowsManagedEmbeddedConfig,
@@ -41,22 +41,18 @@ struct DesktopConnectionPlan {
 }
 
 /// The core the GUI runs itself in desktop mode: the embedded engine inside
-/// the GUI process, and the native HTTPS MITM proxy in front of it when the
-/// profile enables HTTPS decryption (the GUI always runs elevated).
+/// the GUI process. When the profile enables HTTPS decryption the engine
+/// decrypts itself, on the local proxy and in TUN mode alike, with the same
+/// MITM the iOS app uses (the GUI always runs elevated).
 #[derive(Default)]
 pub struct DesktopCore {
     embedded: Option<LocalProxy>,
-    native_mitm: Option<DesktopNativeMitm>,
     tun: Option<DesktopTun>,
 }
 
 impl DesktopCore {
     pub fn is_running(&mut self) -> Result<bool, String> {
         Ok(self.embedded.as_ref().is_some_and(LocalProxy::is_running)
-            && self
-                .native_mitm
-                .as_ref()
-                .is_none_or(DesktopNativeMitm::is_running)
             && self.tun.as_ref().is_none_or(DesktopTun::is_running))
     }
 
@@ -68,11 +64,9 @@ impl DesktopCore {
     /// Starts TUN mode on the profile's envelope. Called before the local
     /// proxy starts, so every engine socket is pinned to the physical
     /// interface from the first connection on.
-    fn start_tun(&mut self, config: &WindowsManagedEmbeddedConfig) -> Result<(), String> {
+    fn start_tun(&mut self, envelope: &[u8]) -> Result<(), String> {
         self.stop_tun();
-        let envelope = fs::read(&config.envelope_path)
-            .map_err(|error| format!("TUN mode configuration could not be read: {error}"))?;
-        self.tun = Some(DesktopTun::start(&envelope)?);
+        self.tun = Some(DesktopTun::start(envelope)?);
         Ok(())
     }
 
@@ -82,10 +76,9 @@ impl DesktopCore {
         }
     }
 
-    /// Trusts the managed root CA, records its thumbprint where disabling
-    /// HTTPS decryption removes it, then starts the MITM listener.
-    fn start_native_mitm(&mut self, config: &WindowsManagedNativeMitmConfig) -> Result<(), String> {
-        self.stop_native_mitm();
+    /// Trusts the managed root CA and records its thumbprint where disabling
+    /// HTTPS decryption removes it.
+    fn trust_mitm_root(config: &WindowsManagedNativeMitmConfig) -> Result<(), String> {
         let thumbprint = NativeWindowsSystemIntegration::new()
             .install_root_certificate(&config.ca_certificate_path)
             .map_err(|error| {
@@ -99,27 +92,13 @@ impl DesktopCore {
                 format!("HTTPS decryption certificate could not be recorded: {error}")
             })?;
         }
-        let mitm = DesktopNativeMitm::start(config)
-            .map_err(|error| format!("HTTPS decryption could not start: {}", error.message))?;
-        self.native_mitm = Some(mitm);
         Ok(())
     }
 
-    fn stop_native_mitm(&mut self) {
-        if let Some(mitm) = self.native_mitm.take() {
-            let _ = mitm.stop();
-        }
-    }
-
     /// The listener is bound when this returns.
-    fn start_embedded(&mut self, config: &WindowsManagedEmbeddedConfig) -> Result<(), String> {
+    fn start_embedded(&mut self, envelope: &[u8], listen: SocketAddr) -> Result<(), String> {
         self.stop_embedded();
-        let envelope = fs::read(&config.envelope_path)
-            .map_err(|error| format!("embedded engine configuration could not be read: {error}"))?;
-        let listen = config.listener().parse::<SocketAddr>().map_err(|_| {
-            "embedded engine listener must be a loopback socket address".to_string()
-        })?;
-        let proxy = LocalProxy::start(&envelope, listen, MixedSettings::default())
+        let proxy = LocalProxy::start(envelope, listen, MixedSettings::default())
             .map_err(|error| format!("embedded engine could not start: {}", error.message))?;
         self.embedded = Some(proxy);
         Ok(())
@@ -144,7 +123,6 @@ impl DesktopCore {
     }
 
     fn stop(&mut self) {
-        self.stop_native_mitm();
         self.stop_tun();
         self.stop_embedded();
     }
@@ -235,18 +213,18 @@ pub fn connect_direct(
     let embedded = plan.embedded.as_ref().ok_or_else(|| {
         "Desktop mode requires an imported profile. Import a subscription first.".to_string()
     })?;
-    if desktop.tun_mode_enabled {
-        core.start_tun(embedded)?;
+    let mitm = plan.native_mitm.as_ref();
+    let envelope = desktop_envelope(embedded, mitm)?;
+    let listen = desktop_listener(embedded, mitm)?;
+    if let Some(mitm) = mitm {
+        DesktopCore::trust_mitm_root(mitm)?;
     }
-    if let Err(error) = core.start_embedded(embedded) {
+    if desktop.tun_mode_enabled {
+        core.start_tun(&envelope)?;
+    }
+    if let Err(error) = core.start_embedded(&envelope, listen) {
         core.stop();
         return Err(error);
-    }
-    if let Some(native_mitm) = plan.native_mitm.as_ref() {
-        if let Err(error) = core.start_native_mitm(native_mitm) {
-            core.stop();
-            return Err(error);
-        }
     }
     apply_proxy_after_direct_readiness(&plan.proxy, desktop, core)
 }
@@ -337,9 +315,90 @@ fn desktop_connection_plan(managed: WindowsManagedConfig) -> Result<DesktopConne
     })
 }
 
-/// Desktop mode: the GUI runs the embedded engine and, when the profile
-/// enables HTTPS decryption, the MITM listener in front of it, so a
-/// MITM-enabled profile no longer needs the Windows service.
+/// The envelope the desktop engines run on: the profile's, plus a `mitm`
+/// section when HTTPS decryption is on. The root key only joins it in
+/// memory; the saved envelope never holds it.
+fn desktop_envelope(
+    embedded: &WindowsManagedEmbeddedConfig,
+    mitm: Option<&WindowsManagedNativeMitmConfig>,
+) -> Result<Vec<u8>, String> {
+    let envelope = fs::read(&embedded.envelope_path)
+        .map_err(|error| format!("embedded engine configuration could not be read: {error}"))?;
+    let Some(mitm) = mitm else {
+        return Ok(envelope);
+    };
+    let certificate = fs::read_to_string(&mitm.ca_certificate_path)
+        .map_err(|error| format!("HTTPS decryption root certificate could not be read: {error}"))?;
+    let private_key = fs::read_to_string(&mitm.ca_private_key_path)
+        .map_err(|error| format!("HTTPS decryption root key could not be read: {error}"))?;
+    envelope_with_mitm(
+        &envelope,
+        &certificate,
+        &private_key,
+        &native_mitm_policy_source(mitm.bilibili_web_ad_block_enabled),
+    )
+}
+
+/// `envelope` with a `mitm` section made of the PEM root and `policy`.
+fn envelope_with_mitm(
+    envelope: &[u8],
+    certificate_pem: &str,
+    private_key_pem: &str,
+    policy: &str,
+) -> Result<Vec<u8>, String> {
+    let mut envelope: serde_json::Value = serde_json::from_slice(envelope)
+        .map_err(|_| "embedded engine configuration is not valid JSON".to_string())?;
+    let sections = envelope
+        .as_object_mut()
+        .ok_or("embedded engine configuration is not a JSON object")?;
+    let certificate = pem_body(certificate_pem)
+        .ok_or("HTTPS decryption root certificate is not a PEM certificate")?;
+    let private_key =
+        pem_body(private_key_pem).ok_or("HTTPS decryption root key is not a PEM private key")?;
+    sections.insert(
+        "mitm".to_string(),
+        serde_json::json!({
+            "policy": policy,
+            "ca_certificate": certificate,
+            "ca_private_key": private_key,
+        }),
+    );
+    serde_json::to_vec(&envelope).map_err(|error| error.to_string())
+}
+
+/// The base64 body of the first PEM block: the DER the engine expects.
+fn pem_body(pem: &str) -> Option<String> {
+    let body = pem
+        .lines()
+        .map(str::trim)
+        .skip_while(|line| !line.starts_with("-----BEGIN "))
+        .skip(1)
+        .take_while(|line| !line.starts_with("-----END "))
+        .collect::<String>();
+    (!body.is_empty()).then_some(body)
+}
+
+/// Where the engine listens in desktop mode. With HTTPS decryption the
+/// engine takes the system proxy port the MITM listener used to hold; the
+/// profile's own port stays reserved for the Windows service layout.
+fn desktop_listener(
+    embedded: &WindowsManagedEmbeddedConfig,
+    mitm: Option<&WindowsManagedNativeMitmConfig>,
+) -> Result<SocketAddr, String> {
+    let listener = match mitm {
+        Some(mitm) => format!("{}:{}", mitm.listen_host, mitm.listen_port),
+        None => embedded.listener(),
+    };
+    listener
+        .parse::<SocketAddr>()
+        .ok()
+        .filter(|address| address.ip().is_loopback())
+        .ok_or_else(|| "embedded engine listener must be a loopback socket address".to_string())
+}
+
+/// Desktop mode: the GUI runs the embedded engine, which also decrypts HTTPS
+/// when the profile enables it, so a MITM-enabled profile no longer needs
+/// the Windows service.
 fn direct_connection_plan(
     mut managed: WindowsManagedConfig,
 ) -> Result<DesktopConnectionPlan, String> {
@@ -691,5 +750,96 @@ mod tests {
 
         managed.native_mitm = None;
         assert!(direct_connection_plan(managed).is_err());
+    }
+
+    fn mitm_config(listen_port: u16) -> WindowsManagedNativeMitmConfig {
+        WindowsManagedNativeMitmConfig {
+            enabled: true,
+            listen_host: "127.0.0.1".to_string(),
+            listen_port,
+            upstream_socks_host: "127.0.0.1".to_string(),
+            upstream_socks_port: 7891,
+            ca_certificate_path: PathBuf::from("root-ca.pem"),
+            ca_private_key_path: PathBuf::from("root-ca-key.pem"),
+            log_path: PathBuf::from("native-mitm.log"),
+            bilibili_web_ad_block_enabled: false,
+            script_runtime: None,
+        }
+    }
+
+    #[test]
+    fn desktop_engine_takes_the_system_proxy_port_when_it_decrypts() {
+        let embedded = WindowsManagedEmbeddedConfig {
+            enabled: true,
+            envelope_path: PathBuf::from("embedded.json"),
+            listen_host: "127.0.0.1".to_string(),
+            listen_port: 7891,
+        };
+        assert_eq!(
+            desktop_listener(&embedded, None).unwrap().to_string(),
+            "127.0.0.1:7891"
+        );
+        assert_eq!(
+            desktop_listener(&embedded, Some(&mitm_config(7890)))
+                .unwrap()
+                .to_string(),
+            "127.0.0.1:7890"
+        );
+        let mut exposed = mitm_config(7890);
+        exposed.listen_host = "0.0.0.0".to_string();
+        assert!(desktop_listener(&embedded, Some(&exposed)).is_err());
+    }
+
+    #[test]
+    fn pem_bodies_are_the_base64_between_the_markers() {
+        let pem = "-----BEGIN CERTIFICATE-----\r\nQUJD\r\nREVG\r\n-----END CERTIFICATE-----\r\n";
+        assert_eq!(pem_body(pem).as_deref(), Some("QUJDREVG"));
+        assert_eq!(pem_body("QUJD"), None);
+        assert_eq!(
+            pem_body("-----BEGIN CERTIFICATE-----\n-----END CERTIFICATE-----\n"),
+            None
+        );
+    }
+
+    /// The managed root, as `ensure_mitm_ca_material` writes it, is accepted
+    /// by the engine: the local proxy starts with HTTPS decryption on.
+    #[test]
+    fn the_engine_decrypts_with_the_managed_root() {
+        use rcgen::{BasicConstraints, CertificateParams, IsCa, KeyPair, KeyUsagePurpose};
+
+        let mut params = CertificateParams::default();
+        params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
+        let key = KeyPair::generate().unwrap();
+        let certificate = params.self_signed(&key).unwrap();
+        const ENVELOPE: &[u8] =
+            br#"{"schema_version":1,"profile_id":"desktop","outbound":{"type":"direct"}}"#;
+
+        let envelope = envelope_with_mitm(
+            ENVELOPE,
+            &certificate.pem(),
+            &key.serialize_pem(),
+            &native_mitm_policy_source(false),
+        )
+        .unwrap();
+        let listen = "127.0.0.1:0".parse().unwrap();
+        let proxy = LocalProxy::start(&envelope, listen, MixedSettings::default())
+            .unwrap_or_else(|error| panic!("engine refused the envelope: {}", error.message));
+        assert!(proxy.decrypts_https());
+        for bilibili in [false, true] {
+            let envelope = envelope_with_mitm(
+                ENVELOPE,
+                &certificate.pem(),
+                &key.serialize_pem(),
+                &native_mitm_policy_source(bilibili),
+            )
+            .unwrap();
+            assert!(LocalProxy::start(&envelope, listen, MixedSettings::default()).is_ok());
+        }
+
+        assert!(envelope_with_mitm(ENVELOPE, "no pem", &key.serialize_pem(), "").is_err());
+        assert!(envelope_with_mitm(b"[]", &certificate.pem(), &key.serialize_pem(), "").is_err());
+        let plain = LocalProxy::start(ENVELOPE, listen, MixedSettings::default()).unwrap();
+        assert!(!plain.decrypts_https());
     }
 }

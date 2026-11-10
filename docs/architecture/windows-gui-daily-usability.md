@@ -143,9 +143,12 @@ headless GitHub Actions Windows job and are tracked in
 - Restart after a generated local or HTTP(S) profile import with networking
   disabled: the unchanged managed config must restore node names/protocols
   locally; an externally changed config must not restore that stale catalog.
-- Enable and disable HTTPS MITM. Confirm the system proxy points at the local
-  MITM listener on 7890 while the embedded engine listens on 7891, the engine
-  returns to 7890 on disable, and the service-recorded CA is removed.
+- Enable and disable HTTPS MITM. In desktop mode the embedded engine decrypts
+  itself (the same MITM as the iOS app) and stays the system proxy on 7890;
+  only the Windows service layout still puts a separate MITM listener on 7890
+  in front of the engine on 7891. Confirm that sites outside the policy's
+  host list load normally while HTTPS MITM is on, and that the recorded CA is
+  removed on disable.
 - Select the Bilibili web trial while HTTPS MITM is disabled, enable HTTPS MITM,
   and confirm the persisted managed config selects the first-party request-only
   policy. Browse a Bilibili search page over controlled HTTP/1.1 TLS and confirm
