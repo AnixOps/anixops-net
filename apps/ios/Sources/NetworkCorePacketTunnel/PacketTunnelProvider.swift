@@ -108,17 +108,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
         let session: EmbeddedRuntimeSession
         do {
+            let mitm = MitmProfileBundle.fromProfile(tunnelProtocol.providerConfiguration)
             session = try makeSession(
                 config,
-                mitmPlugins: MitmPluginLibrary.texts(
-                    fromProfileValue: tunnelProtocol.providerConfiguration?[TunnelProfileKeys.mitmPlugins] as? Data
-                ),
-                mitmScripts: MitmScriptLibrary.sources(
-                    fromProfileValue: tunnelProtocol.providerConfiguration?[TunnelProfileKeys.mitmScripts] as? Data
-                ),
-                mitmResources: MitmResourceLibrary.data(
-                    fromProfileValue: tunnelProtocol.providerConfiguration?[TunnelProfileKeys.mitmResources] as? Data
-                )
+                mitmPlugins: mitm.plugins,
+                mitmScripts: mitm.scripts,
+                mitmResources: mitm.resources
             )
             events.record("runtime initialized")
         } catch let failure as EmbeddedRuntimeSession.Failure {

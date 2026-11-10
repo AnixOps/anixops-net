@@ -676,19 +676,21 @@ final class TunnelController {
             providerConfiguration[TunnelProfileKeys.localRules] = value
         }
         let library = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)) ?? MitmPluginLibrary()
-        if let plugins = try? MitmPluginLibrary.profileValue(library.activeTexts), !library.activeTexts.isEmpty {
-            providerConfiguration[TunnelProfileKeys.mitmPlugins] = plugins
+        var bundle = MitmProfileBundle()
+        if !library.activeTexts.isEmpty {
             let scripts = (try? MitmScriptLibrary.load(from: MitmScriptLibrary.defaultURL)) ?? MitmScriptLibrary()
-            if let sources = try? scripts.sources(for: library.activeScriptReferences), !sources.isEmpty,
-               let value = try? MitmScriptLibrary.profileValue(sources)
-            {
-                providerConfiguration[TunnelProfileKeys.mitmScripts] = value
-            }
             let resources = (try? MitmResourceLibrary.load(from: MitmResourceLibrary.defaultURL)) ?? MitmResourceLibrary()
-            let data = resources.data(for: library.activeDataReferences.map(\.path))
-            if !data.isEmpty, let value = try? MitmResourceLibrary.profileValue(data) {
-                providerConfiguration[TunnelProfileKeys.mitmResources] = value
-            }
+            bundle = MitmProfileBundle(
+                plugins: library.activeTexts,
+                scripts: (try? scripts.sources(for: library.activeScriptReferences)) ?? [:],
+                resources: resources.data(for: library.activeDataReferences.map(\.path))
+            )
+        }
+        do {
+            try bundle.apply(to: &providerConfiguration)
+        } catch {
+            message = String(localized: "保存插件到 VPN 配置失败") + Self.errorCode(error)
+            return false
         }
         tunnelProtocol.providerConfiguration = providerConfiguration
 
@@ -750,38 +752,18 @@ final class TunnelController {
             return false
         }
         var configuration = tunnelProtocol.providerConfiguration ?? [:]
-        let current = MitmPluginLibrary.texts(fromProfileValue: configuration[TunnelProfileKeys.mitmPlugins] as? Data)
-        let currentScripts = MitmScriptLibrary.sources(fromProfileValue: configuration[TunnelProfileKeys.mitmScripts] as? Data)
-        let currentResources = MitmResourceLibrary.data(
-            fromProfileValue: configuration[TunnelProfileKeys.mitmResources] as? Data
-        )
-        let scripts = texts.isEmpty ? [:] : scripts
-        let resources = texts.isEmpty ? [:] : resources
-        guard current != texts || currentScripts != scripts || currentResources != resources else {
+        let next = MitmProfileBundle(plugins: texts, scripts: scripts, resources: resources)
+        let carriesOldKeys = configuration[TunnelProfileKeys.mitmPlugins] != nil
+            || configuration[TunnelProfileKeys.mitmScripts] != nil
+            || configuration[TunnelProfileKeys.mitmResources] != nil
+        guard carriesOldKeys || MitmProfileBundle.fromProfile(configuration) != next else {
             return false
         }
-        if texts.isEmpty {
-            configuration.removeValue(forKey: TunnelProfileKeys.mitmPlugins)
-        } else {
-            guard let value = try? MitmPluginLibrary.profileValue(texts) else {
-                message = String(localized: "无法生成插件配置")
-                return false
-            }
-            configuration[TunnelProfileKeys.mitmPlugins] = value
-        }
-        if scripts.isEmpty {
-            configuration.removeValue(forKey: TunnelProfileKeys.mitmScripts)
-        } else {
-            guard let value = try? MitmScriptLibrary.profileValue(scripts) else {
-                message = "无法生成脚本配置"
-                return false
-            }
-            configuration[TunnelProfileKeys.mitmScripts] = value
-        }
-        if resources.isEmpty {
-            configuration.removeValue(forKey: TunnelProfileKeys.mitmResources)
-        } else if let value = try? MitmResourceLibrary.profileValue(resources) {
-            configuration[TunnelProfileKeys.mitmResources] = value
+        do {
+            try next.apply(to: &configuration)
+        } catch {
+            message = String(localized: "保存插件到 VPN 配置失败") + Self.errorCode(error)
+            return false
         }
         tunnelProtocol.providerConfiguration = configuration
         manager.protocolConfiguration = tunnelProtocol
