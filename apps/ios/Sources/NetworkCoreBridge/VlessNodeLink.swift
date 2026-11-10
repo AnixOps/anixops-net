@@ -56,7 +56,7 @@ public enum VlessNodeLink {
     /// Parses the Xray share-link format:
     /// `vless://uuid@host:port?security=reality&sni=…&pbk=…&sid=…&flow=xtls-rprx-vision&type=tcp#name`.
     ///
-    /// The fingerprint parameter (`fp`) is accepted but not used: the embedded engine always presents Chrome.
+    /// The fingerprint parameter (`fp`) is accepted but not used: the embedded engine picks the shape for the platform (`auto`: Safari on Apple devices).
     public static func parse(_ link: String) throws -> VlessNode {
         let trimmed = link.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.lowercased().hasPrefix("vless://") else {
