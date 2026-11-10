@@ -34,6 +34,11 @@ pub struct DesktopProfileNode {
     pub label: String,
     pub protocol: String,
     pub outbound_tag: String,
+    /// A domestic ingress on a shared trunk (the subscription's
+    /// `#anixops:path=trunk` mark): picked by default and preferred by the
+    /// fastest-node search (anx FUTURE-IMPROVEMENTS F-51).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub trunk: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -209,6 +214,7 @@ mod tests {
                 label: "Primary [primary] (Shadowsocks)".to_string(),
                 protocol: "Shadowsocks".to_string(),
                 outbound_tag: "primary".to_string(),
+                trunk: true,
             }],
             ..DesktopState::default()
         };

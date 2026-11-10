@@ -9,7 +9,10 @@ use std::time::Duration;
 
 use config_core::routing_import::import_subscription_routing;
 use config_core::CoreSubscriptionService;
-use control_domain::{NodeDescriptor, Protocol, RawSubscription, SubscriptionService};
+use control_domain::{
+    NodeDescriptor, Protocol, RawSubscription, SubscriptionService, NODE_METADATA_PATH,
+    NODE_PATH_TRUNK,
+};
 use engine_embedded::config::RuntimeConfig;
 use engine_embedded::delay::measure_delay;
 use engine_embedded::local_proxy::LocalProxy;
@@ -64,7 +67,21 @@ pub fn choose_node<'a>(
                 .iter()
                 .find(|node| node.id == id && is_supported(node))
         })
+        .or_else(|| {
+            nodes
+                .iter()
+                .find(|node| is_trunk(node) && is_supported(node))
+        })
         .or_else(|| nodes.iter().find(|node| is_supported(node)))
+}
+
+/// Whether the subscription marks the node as a domestic ingress on a shared trunk (`#anixops:path=trunk`).
+/// Such a node is the default pick and wins the fastest-node search whenever one answers (anx
+/// FUTURE-IMPROVEMENTS F-51); direct nodes stay available to pick by hand.
+pub fn is_trunk(node: &NodeDescriptor) -> bool {
+    node.metadata
+        .iter()
+        .any(|entry| entry.key == NODE_METADATA_PATH && entry.value.trim() == NODE_PATH_TRUNK)
 }
 
 pub fn envelope(nodes: &[NodeDescriptor], node_id: &str) -> Result<String, String> {
@@ -285,10 +302,12 @@ pub fn node_delays(
     results
 }
 
-/// Tests every supported node and returns the fastest one with its delay.
+/// Tests every supported node and returns the fastest one with its delay: the fastest trunk node when one
+/// answers, otherwise the fastest node.
 pub fn fastest_node(nodes: &[NodeDescriptor], url: &str) -> Option<(String, Duration)> {
     let candidates: Vec<&NodeDescriptor> = nodes.iter().filter(|node| is_supported(node)).collect();
     let mut best: Option<(String, Duration)> = None;
+    let mut best_trunk: Option<(String, Duration)> = None;
     for batch in candidates.chunks(DELAY_BATCH) {
         let (sender, receiver) = mpsc::channel();
         thread::scope(|scope| {
@@ -303,13 +322,21 @@ pub fn fastest_node(nodes: &[NodeDescriptor], url: &str) -> Option<(String, Dura
         drop(sender);
         for (id, delay) in receiver {
             if let Some(delay) = delay {
+                let trunk = nodes.iter().any(|node| node.id == id && is_trunk(node));
+                if trunk
+                    && best_trunk
+                        .as_ref()
+                        .is_none_or(|(_, current)| delay < *current)
+                {
+                    best_trunk = Some((id.clone(), delay));
+                }
                 if best.as_ref().is_none_or(|(_, current)| delay < *current) {
                     best = Some((id, delay));
                 }
             }
         }
     }
-    best
+    best_trunk.or(best)
 }
 
 #[cfg(test)]
@@ -324,6 +351,26 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, "gone");
         assert!(results[0].1.is_err());
+    }
+
+    #[test]
+    fn picks_the_marked_trunk_node_by_default() {
+        let text = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@82.47.34.99:11111#JP%20direct\n\
+            #anixops:path=trunk\n\
+            ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@203.0.113.9:11111#SH%20CN2";
+        let nodes = parse_nodes(text).unwrap();
+        let trunk: Vec<_> = nodes.iter().map(is_trunk).collect();
+        assert_eq!(trunk, [false, true]);
+        assert_eq!(choose_node(&nodes, None).unwrap().id, nodes[1].id);
+        assert_eq!(choose_node(&nodes, Some("gone")).unwrap().id, nodes[1].id);
+        // A node the user picked stays picked.
+        assert_eq!(
+            choose_node(&nodes, Some(&nodes[0].id)).unwrap().id,
+            nodes[0].id
+        );
+        // Without a mark the first node stays the default.
+        let plain = parse_nodes(LINK).unwrap();
+        assert_eq!(choose_node(&plain, None).unwrap().id, plain[0].id);
     }
 
     #[test]

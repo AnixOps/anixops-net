@@ -47,10 +47,11 @@ public struct NodeLibrary: Codable, Equatable {
         self.groupSelections = groupSelections
     }
 
-    /// A library from a fresh report. The previous selection survives a refresh when that node is still listed.
-    /// Subscription rules are followed whenever the report has them.
+    /// A library from a fresh report. The previous selection survives a refresh when that node is still listed;
+    /// otherwise the default node is selected (`defaultNode(in:)`). Subscription rules are followed whenever the
+    /// report has them.
     public init(report: NativeImportReport, subscriptionURL: String?, keeping previousID: String?, at date: Date = Date()) {
-        let selected = report.nodes.first { $0.id == previousID } ?? report.nodes.first
+        let selected = report.nodes.first { $0.id == previousID } ?? Self.defaultNode(in: report.nodes)
         self.init(
             subscriptionURL: subscriptionURL,
             nodes: report.nodes,
@@ -85,6 +86,14 @@ public struct NodeLibrary: Codable, Equatable {
             groups.first { $0.id == id }?.members.contains(member) == true
         }
         return next
+    }
+
+    /// The node picked when the user has not picked one: the first trunk node (a domestic ingress on a shared
+    /// link), otherwise the first node. A single user dialing an overseas node directly shows a cross-layer RTT
+    /// that many users on one trunk do not (anx FUTURE-IMPROVEMENTS F-51, 默认路径规则); direct nodes stay
+    /// available to pick by hand.
+    public static func defaultNode(in nodes: [NativeImportReport.Node]) -> NativeImportReport.Node? {
+        nodes.first(where: \.isTrunk) ?? nodes.first
     }
 
     public var selected: NativeImportReport.Node? {
