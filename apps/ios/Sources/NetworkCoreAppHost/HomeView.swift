@@ -106,6 +106,11 @@ struct HomeView: View {
             Task {
                 await tunnel.refreshSubscription(groupID)
             }
+        case let .resumeNode(node):
+            tunnel.clearMessage()
+            Task {
+                await tunnel.resumeNode(node)
+            }
         case .importNode:
             tunnel.clearMessage()
             importing = true
@@ -477,6 +482,8 @@ private struct NoticeCard: View {
             return "重新下载订阅"
         case .importNode:
             return "导入节点"
+        case .resumeNode:
+            return "重试"
         }
     }
 }

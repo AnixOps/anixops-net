@@ -3157,6 +3157,36 @@
         }
       }
     },
+    "节点「%@」连不上：手机时间快了约 %lld 分钟。请在设置里打开「自动设置」时间后重试。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%1$@” can't connect: this device's clock is about %2$lld minutes fast. Turn on Set Automatically in Settings › General › Date & Time, then retry."
+          }
+        }
+      }
+    },
+    "节点「%@」连不上：手机时间慢了约 %lld 分钟。请在设置里打开「自动设置」时间后重试。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%1$@” can't connect: this device's clock is about %2$lld minutes slow. Turn on Set Automatically in Settings › General › Date & Time, then retry."
+          }
+        }
+      }
+    },
+    "节点「%@」被服务器拒绝：订阅可能已到期或被重置，也可能是手机时间不准。请更新订阅，或检查时间后重试。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server rejected “%@”: the subscription may have expired or been reset, or this device's clock is off. Update the subscription, or check the time and retry."
+          }
+        }
+      }
+    },
     "节点密码只保存在本机钥匙串里。": {
       "localizations": {
         "en": {
