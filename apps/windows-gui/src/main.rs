@@ -33,7 +33,7 @@ mod gui {
     mod ui_state;
 
     use self::startup::DesktopProfileNode;
-    use control_domain::NodeDescriptor;
+    use control_domain::{NodeDescriptor, NODE_METADATA_PATH, NODE_PATH_TRUNK};
     use platform_windows::managed::{
         append_managed_log, read_managed_config, read_managed_state, windows_managed_config_path,
         windows_managed_log_directory, windows_managed_state_path, write_managed_text_atomic,
@@ -325,8 +325,17 @@ mod gui {
                 label: profile_node_label(node),
                 protocol: format!("{:?}", node.protocol),
                 outbound_tag: node.id.clone(),
+                trunk: is_trunk_node(node),
             })
             .collect()
+    }
+
+    /// Whether the subscription marks the node as a domestic ingress on a
+    /// shared trunk (`#anixops:path=trunk`, anx FUTURE-IMPROVEMENTS F-51).
+    fn is_trunk_node(node: &NodeDescriptor) -> bool {
+        node.metadata
+            .iter()
+            .any(|entry| entry.key == NODE_METADATA_PATH && entry.value.trim() == NODE_PATH_TRUNK)
     }
 
     fn profile_node_label(node: &NodeDescriptor) -> String {
@@ -369,7 +378,7 @@ mod gui {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use control_domain::{Endpoint, Protocol};
+        use control_domain::{Endpoint, MetadataEntry, Protocol};
 
         #[test]
         fn diagnostics_redact_urls_and_credential_values() {
@@ -405,6 +414,36 @@ mod gui {
                 "Primary node [primary-node] (Shadowsocks)"
             );
             assert_eq!(options[0].outbound_tag, "primary-node");
+            assert!(!options[0].trunk);
+        }
+
+        #[test]
+        fn subscription_trunk_mark_makes_a_trunk_node() {
+            let node = |id: &str, path: Option<&str>| NodeDescriptor {
+                id: id.to_string(),
+                name: id.to_string(),
+                protocol: Protocol::Shadowsocks,
+                endpoint: Endpoint {
+                    host: "edge.example.test".to_string(),
+                    port: 443,
+                },
+                tags: Vec::new(),
+                metadata: path
+                    .map(|value| {
+                        vec![MetadataEntry {
+                            key: NODE_METADATA_PATH.to_string(),
+                            value: value.to_string(),
+                        }]
+                    })
+                    .unwrap_or_default(),
+            };
+            let options = profile_node_options(&[
+                node("direct", None),
+                node("ingress", Some("trunk")),
+                node("other", Some("future-kind")),
+            ]);
+            let trunk: Vec<_> = options.iter().map(|node| node.trunk).collect();
+            assert_eq!(trunk, [false, true, false]);
         }
     }
 }

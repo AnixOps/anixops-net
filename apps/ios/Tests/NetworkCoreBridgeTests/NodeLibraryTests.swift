@@ -35,6 +35,34 @@ final class NodeLibraryTests: XCTestCase {
         XCTAssertEqual(NodeLibrary(report: report, subscriptionURL: nil, keeping: "gone").selectedID, "a")
     }
 
+    private let trunkReport = """
+    {"nodes":[
+    {"id":"direct","name":"JP direct","protocol":"trojan","server":"jp.example","port":443,
+     "outbound":{"type":"trojan","server":"jp.example","port":443,"password":"pa"}},
+    {"id":"trunk","name":"SH CN2","protocol":"trojan","server":"sh.example","port":443,"path":"trunk",
+     "outbound":{"type":"trojan","server":"sh.example","port":443,"password":"pb"}}],
+    "unsupported":[]}
+    """
+
+    /// The first trunk node is the default pick (anx F-51); a node the user picked survives a refresh, and a
+    /// removed selection falls back to the trunk node too.
+    func testTrunkNodeIsTheDefaultPick() throws {
+        let report = try NativeImportReport.decoded(from: Data(trunkReport.utf8))
+        XCTAssertEqual(report.nodes.map(\.isTrunk), [false, true])
+        XCTAssertEqual(NodeLibrary(report: report, subscriptionURL: nil, keeping: nil).selectedID, "trunk")
+        XCTAssertEqual(NodeLibrary(report: report, subscriptionURL: nil, keeping: "gone").selectedID, "trunk")
+        XCTAssertEqual(NodeLibrary(report: report, subscriptionURL: nil, keeping: "direct").selectedID, "direct")
+        let picked = NodeLibrary(report: report, subscriptionURL: nil, keeping: "trunk")
+        XCTAssertEqual(picked.removing("trunk").selectedID, "direct")
+        let imported = try TunnelNodeImport.parseImport("trojan://x", profileID: "p") { _ in Data(self.trunkReport.utf8) }
+        XCTAssertEqual(imported.profile.serverAddress, "sh.example")
+        // Without a mark the first node stays the default.
+        XCTAssertEqual(NodeLibrary(report: try decoded(), subscriptionURL: nil, keeping: nil).selectedID, "a")
+        // The mark survives the keychain round trip.
+        let saved = try JSONEncoder().encode(picked)
+        XCTAssertEqual(try JSONDecoder().decode(NodeLibrary.self, from: saved).node(id: "trunk")?.isTrunk, true)
+    }
+
     func testSwitchingBuildsTheProfileForThatNode() throws {
         let library = NodeLibrary(report: try decoded(), subscriptionURL: nil, keeping: nil)
         let node = try XCTUnwrap(library.node(id: "b"))

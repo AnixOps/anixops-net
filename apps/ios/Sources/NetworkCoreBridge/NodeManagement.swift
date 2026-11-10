@@ -14,7 +14,8 @@ extension NativeImportReport.Node {
             protocol: self.protocol,
             server: server,
             port: port,
-            outbound: outbound
+            outbound: outbound,
+            path: path
         )
     }
 
@@ -115,7 +116,7 @@ extension NodeLibrary {
         return !named
     }
 
-    /// The library without the node; the selection moves to the first node when it was the selected one.
+    /// The library without the node; the selection moves to the default node when it was the selected one.
     public func removing(_ id: String) -> NodeLibrary {
         guard canRemove(id) else {
             return self
@@ -123,7 +124,7 @@ extension NodeLibrary {
         var copy = self
         copy.nodes.removeAll { $0.id == id }
         if copy.selectedID == id {
-            copy.selectedID = copy.nodes.first?.id
+            copy.selectedID = NodeLibrary.defaultNode(in: copy.nodes)?.id
         }
         return copy
     }

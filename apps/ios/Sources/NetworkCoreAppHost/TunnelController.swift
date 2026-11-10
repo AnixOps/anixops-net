@@ -973,7 +973,7 @@ final class TunnelController {
         guard var group = groups.groups.first(where: { !$0.library.nodes.isEmpty }) else {
             return nil
         }
-        group.library.selectedID = group.library.nodes.first?.id
+        group.library.selectedID = NodeLibrary.defaultNode(in: group.library.nodes)?.id
         groups.upsert(group)
         groups.activeID = group.id
         return groups

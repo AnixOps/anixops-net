@@ -6,8 +6,8 @@ use super::startup::{
     DesktopRoutingMode, DesktopRuntimeMode, DesktopState, DesktopSubscriptionSource,
 };
 use super::{
-    append_managed_log, load_validated_managed_configuration, managed_config_or_default,
-    profile_node_options, write_diagnostic_report_at,
+    append_managed_log, is_trunk_node, load_validated_managed_configuration,
+    managed_config_or_default, profile_node_options, write_diagnostic_report_at,
 };
 use config_core::routing_import::import_subscription_routing;
 use config_core::CoreSubscriptionService;
@@ -736,6 +736,7 @@ fn list_native_groups_blocking(state: DesktopAppState) -> Result<Vec<NativeGroup
             label: node.label.clone(),
             protocol: node.protocol.clone(),
             outbound_tag: other.outbound_id(&node.id),
+            trunk: false,
         }));
     }
     Ok(embedded_groups(&profile, &nodes))
@@ -1643,7 +1644,11 @@ fn select_fastest_embedded_node(
         })
         .cloned()
         .collect();
+    // Trunk nodes win over direct ones whenever one of them answers (anx
+    // FUTURE-IMPROVEMENTS F-51); direct nodes are only picked when no trunk
+    // node does.
     let mut fastest: Option<(&DesktopProfileNode, Duration)> = None;
+    let mut fastest_trunk: Option<(&DesktopProfileNode, Duration)> = None;
     for chunk in candidates.chunks(EMBEDDED_DELAY_PARALLELISM) {
         let delays: Vec<_> = std::thread::scope(|scope| {
             let handles: Vec<_> = chunk
@@ -1660,10 +1665,14 @@ fn select_fastest_embedded_node(
             if fastest.is_none_or(|(_, best)| delay < best) {
                 fastest = Some((node, delay));
             }
+            if node.trunk && fastest_trunk.is_none_or(|(_, best)| delay < best) {
+                fastest_trunk = Some((node, delay));
+            }
         }
     }
-    let (node, delay) =
-        fastest.ok_or_else(|| "No imported node returned a successful delay test.".to_string())?;
+    let (node, delay) = fastest_trunk
+        .or(fastest)
+        .ok_or_else(|| "No imported node returned a successful delay test.".to_string())?;
     let delay_millis = delay.as_millis();
     if desktop.profile_node_id.as_deref() == Some(node.id.as_str()) {
         return Ok(OperationResult {
@@ -2267,10 +2276,20 @@ fn import_embedded_subscription(
             (profile.to_string(), selected, node_outbounds)
         }
         None => {
+            // The node picked before stays; otherwise the first trunk node
+            // (anx FUTURE-IMPROVEMENTS F-51), and without one the engine's
+            // first runnable node.
             let selected = desktop
                 .profile_node_id
                 .as_deref()
-                .filter(|id| catalog.nodes.iter().any(|node| node.id == *id));
+                .filter(|id| catalog.nodes.iter().any(|node| node.id == *id))
+                .or_else(|| {
+                    catalog
+                        .nodes
+                        .iter()
+                        .find(|node| is_trunk_node(node) && outbound_for_node(node).is_ok())
+                        .map(|node| node.id.as_str())
+                });
             let (envelope, node) =
                 single_node_envelope(EMBEDDED_PROFILE_ID, &catalog.nodes, selected).map_err(
                     |reason| format!("The embedded engine cannot run this profile: {reason}"),
@@ -3502,6 +3521,7 @@ mod tests {
             label: label.to_string(),
             protocol: "Shadowsocks".to_string(),
             outbound_tag: format!("node-{id}"),
+            trunk: false,
         }
     }
 
