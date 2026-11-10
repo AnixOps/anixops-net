@@ -608,6 +608,12 @@ fn build_native_mitm_service(
         )))
 }
 
+/// The built-in HTTPS decryption policy text for a managed profile, for a
+/// desktop engine that decrypts itself.
+pub fn native_mitm_policy_source(bilibili_web_ad_block_enabled: bool) -> String {
+    native_mitm_plugin_package(bilibili_web_ad_block_enabled).source
+}
+
 fn native_mitm_plugin_package(bilibili_web_ad_block_enabled: bool) -> PluginPackage {
     if bilibili_web_ad_block_enabled {
         builtin_bilibili_web_ad_block_plugin_package()
