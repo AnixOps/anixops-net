@@ -881,7 +881,20 @@ fn change_subscription_source(
 #[tauri::command]
 async fn connect(state: State<'_, DesktopAppState>) -> Result<OperationResult, String> {
     let state = state.inner().clone();
-    run_blocking(move || connect_blocking(state)).await
+    let result = run_blocking(move || connect_blocking(state)).await;
+    log_operation("connect", &result);
+    result
+}
+
+/// Desktop mode runs the core inside this process, so the service state file
+/// says nothing about it: record each connect / disconnect outcome in the app
+/// log that the diagnostics report includes.
+fn log_operation(operation: &str, result: &Result<OperationResult, String>) {
+    let line = match result {
+        Ok(done) => format!("{operation} ok: {}", done.message),
+        Err(error) => format!("{operation} failed: {error}"),
+    };
+    let _ = append_managed_log(APP_LOG_SCOPE, &line);
 }
 
 fn connect_blocking(state: DesktopAppState) -> Result<OperationResult, String> {
@@ -926,7 +939,9 @@ fn connect_blocking(state: DesktopAppState) -> Result<OperationResult, String> {
 #[tauri::command]
 async fn disconnect(state: State<'_, DesktopAppState>) -> Result<OperationResult, String> {
     let state = state.inner().clone();
-    run_blocking(move || disconnect_blocking(state)).await
+    let result = run_blocking(move || disconnect_blocking(state)).await;
+    log_operation("disconnect", &result);
+    result
 }
 
 fn disconnect_blocking(state: DesktopAppState) -> Result<OperationResult, String> {
