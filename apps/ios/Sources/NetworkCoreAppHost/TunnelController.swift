@@ -988,6 +988,44 @@ final class TunnelController {
         }
     }
 
+    /// Nodes whose stop the user has already been told about; a node leaves the set once it dials again.
+    @ObservationIgnored private var announcedStops: Set<String> = []
+    @ObservationIgnored private var reporter: ClientReporter?
+
+    /// Reads the engine's per-node dial health: tells the user once when a node stopped because its server kept
+    /// rejecting this client (expired subscription or wrong device time), and hands the counts to the panel
+    /// reporter. `network` is `wifi`, `cellular`, `ethernet` or `unknown`.
+    func checkOutboundHealth(network: String) async {
+        guard let health = RuntimeControl.decode(OutboundHealth.self, from: await control(.outboundHealth)) else {
+            return
+        }
+        let stopped = health.stopped
+        announcedStops.formIntersection(stopped.map(\.node))
+        if let entry = stopped.first(where: { !announcedStops.contains($0.node) }) {
+            announcedStops.insert(entry.node)
+            let origin = subscriptions.origin(ofRuntimeNode: entry.node)
+            let name = origin.map { $0.node.name.isEmpty ? $0.node.id : $0.node.name } ?? entry.node
+            var actions: [AppNotice.Action] = [.resumeNode(entry.node)]
+            if let group = origin?.group, group.url != nil {
+                actions.append(.refreshSubscription(group.id))
+            }
+            notice = AppNotice(
+                text: ClientReport.stoppedText(node: name, health: entry.health),
+                detail: "fallback=\(entry.health.counts.fallback) skew=\(entry.health.clockSkewSecs.map(String.init) ?? "-")",
+                actions: actions
+            )
+        }
+        let reporter = self.reporter ?? ClientReporter()
+        self.reporter = reporter
+        reporter.offer(health, groups: subscriptions, network: network)
+    }
+
+    /// Lets a stopped node dial again after the user fixed the time or the subscription.
+    func resumeNode(_ node: String) async {
+        announcedStops.remove(node)
+        _ = await control(.resumeOutbound(node: node))
+    }
+
     /// Sends a control request to the running engine (live traffic, the connection list). Nil while the tunnel is
     /// not connected, or when the engine refused the request.
     func control(_ command: RuntimeControl) async -> Data? {
@@ -1296,6 +1334,8 @@ struct AppNotice: Equatable {
         case refreshSubscription(String)
         /// Open the import sheet.
         case importNode
+        /// Let an engine node that stopped after repeated rejections dial again.
+        case resumeNode(String)
     }
 
     var text: String
