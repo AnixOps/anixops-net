@@ -347,10 +347,9 @@ final class TunnelController {
         tunnelProtocol.providerConfiguration = configuration
         manager.protocolConfiguration = tunnelProtocol
         do {
-            try await manager.saveToPreferences()
-            try await manager.loadFromPreferences()
+            self.manager = try await persist(manager)
         } catch {
-            message = String(localized: "保存模式到 VPN 配置失败")
+            message = String(localized: "保存模式到 VPN 配置失败") + Self.errorCode(error)
             refresh()
             return
         }
@@ -698,18 +697,42 @@ final class TunnelController {
         target.localizedDescription = "AnixOps Net"
         target.isEnabled = true
         do {
-            try await target.saveToPreferences()
-            // Reload so the connection object reflects the saved profile.
-            try await target.loadFromPreferences()
-            manager = target
+            manager = try await persist(target)
             message = nil
         } catch {
-            message = String(localized: "保存 VPN 配置失败或未获授权")
+            message = String(localized: "保存 VPN 配置失败或未获授权") + Self.errorCode(error)
             refresh()
             return false
         }
         refresh()
         return true
+    }
+
+    /// Saves `target` and reloads it so its connection object reflects the saved profile. When the save fails, for
+    /// example because the object went stale after a widget, the Control Center switch or Settings changed the
+    /// configuration, or because the configuration was removed in Settings, the saved configuration is read again
+    /// and the same settings are saved once more on that fresh object. Returns the object that was saved.
+    private func persist(_ target: NETunnelProviderManager) async throws -> NETunnelProviderManager {
+        do {
+            try await target.saveToPreferences()
+            try await target.loadFromPreferences()
+            return target
+        } catch {
+            let fresh = (try? await NETunnelProviderManager.loadAllFromPreferences().first) ?? NETunnelProviderManager()
+            fresh.protocolConfiguration = target.protocolConfiguration?.copy() as? NEVPNProtocol
+            fresh.localizedDescription = target.localizedDescription
+            fresh.isEnabled = target.isEnabled
+            try await fresh.saveToPreferences()
+            try await fresh.loadFromPreferences()
+            return fresh
+        }
+    }
+
+    /// The system error's domain and code after a failed save, so a screenshot of the notice says why
+    /// (for example `NEVPNErrorDomain 5` is a read/write failure or a refused permission).
+    private static func errorCode(_ error: Error) -> String {
+        let error = error as NSError
+        return " (\(error.domain) \(error.code))"
     }
 
     /// Puts the enabled HTTPS decryption plugins and the scripts the user allowed in them into the saved profile.
@@ -763,10 +786,9 @@ final class TunnelController {
         tunnelProtocol.providerConfiguration = configuration
         manager.protocolConfiguration = tunnelProtocol
         do {
-            try await manager.saveToPreferences()
-            try await manager.loadFromPreferences()
+            self.manager = try await persist(manager)
         } catch {
-            message = String(localized: "保存插件到 VPN 配置失败")
+            message = String(localized: "保存插件到 VPN 配置失败") + Self.errorCode(error)
             refresh()
             return false
         }
@@ -811,10 +833,9 @@ final class TunnelController {
         tunnelProtocol.providerConfiguration = configuration
         manager.protocolConfiguration = tunnelProtocol
         do {
-            try await manager.saveToPreferences()
-            try await manager.loadFromPreferences()
+            self.manager = try await persist(manager)
         } catch {
-            message = String(localized: "保存本地规则到 VPN 配置失败")
+            message = String(localized: "保存本地规则到 VPN 配置失败") + Self.errorCode(error)
             refresh()
             return
         }
@@ -849,10 +870,9 @@ final class TunnelController {
         tunnelProtocol.providerConfiguration = configuration
         manager.protocolConfiguration = tunnelProtocol
         do {
-            try await manager.saveToPreferences()
-            try await manager.loadFromPreferences()
+            self.manager = try await persist(manager)
         } catch {
-            message = String(localized: "保存 DNS 设置到 VPN 配置失败")
+            message = String(localized: "保存 DNS 设置到 VPN 配置失败") + Self.errorCode(error)
             refresh()
             return false
         }
@@ -891,10 +911,9 @@ final class TunnelController {
         tunnelProtocol.providerConfiguration = configuration
         manager.protocolConfiguration = tunnelProtocol
         do {
-            try await manager.saveToPreferences()
-            try await manager.loadFromPreferences()
+            self.manager = try await persist(manager)
         } catch {
-            message = String(localized: "保存重定向到 VPN 配置失败")
+            message = String(localized: "保存重定向到 VPN 配置失败") + Self.errorCode(error)
             refresh()
             return false
         }
@@ -937,14 +956,13 @@ final class TunnelController {
     private func enableAndStart(_ manager: NETunnelProviderManager) async {
         do {
             manager.isEnabled = true
-            try await manager.saveToPreferences()
-            try await manager.loadFromPreferences()
+            let saved = try await persist(manager)
+            self.manager = saved
+            refresh()
+            start(saved)
         } catch {
-            message = String(localized: "无法启动隧道")
-            return
+            message = String(localized: "无法启动隧道") + Self.errorCode(error)
         }
-        refresh()
-        start(manager)
     }
 
     private func saveProfileAndStart(_ groups: SubscriptionGroups) async {
