@@ -25,6 +25,10 @@ public enum RuntimeControl {
     case networkChanged
     /// Runs one scheduled script now.
     case runScript(tag: String)
+    /// Dial health of the nodes that keep it (`OutboundHealth`).
+    case outboundHealth
+    /// Lets a node that stopped after repeated rejections dial again (`{"resumed": bool}`).
+    case resumeOutbound(node: String)
 
     public var request: Data {
         let object: [String: Any]
@@ -57,6 +61,10 @@ public enum RuntimeControl {
             object = ["cmd": "network_changed"]
         case let .runScript(tag):
             object = ["cmd": "run_script", "tag": tag]
+        case .outboundHealth:
+            object = ["cmd": "outbound_health"]
+        case let .resumeOutbound(node):
+            object = ["cmd": "resume_outbound", "node": node]
         }
         return (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
     }
