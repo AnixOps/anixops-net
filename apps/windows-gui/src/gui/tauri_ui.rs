@@ -2542,10 +2542,16 @@ type SubscriptionRead = (
     subscription_meta::ResponseMeta,
 );
 
+/// Same token the iOS app sends, so the panel answers in the AnixOps Net format.
+const SUBSCRIPTION_USER_AGENT: &str = concat!("AnixOpsNet/", env!("CARGO_PKG_VERSION"));
+
 fn read_subscription(location: &str) -> Result<SubscriptionRead, String> {
     if is_subscription_url(location) {
+        // The panel picks the subscription format by User-Agent; without one it serves
+        // plain v2ray links and leaves out anx:// nodes.
         let client = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(30))
+            .user_agent(SUBSCRIPTION_USER_AGENT)
             .build()
             .map_err(|error| error.to_string())?;
         let response = client
