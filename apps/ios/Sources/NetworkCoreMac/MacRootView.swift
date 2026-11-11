@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// The main window, laid out like System Settings: a sidebar of colored glyph tiles with the connection switch at
-/// its foot, and each page as a grouped form. The toolbar keeps import and connect.
+/// its foot, and each page as a grouped form. Import sits in the sidebar's toolbar; a page's toolbar holds only that
+/// page's own actions.
 struct MacRootView: View {
     var tunnel: TunnelController
     @ObservedObject var state: MacAppState
@@ -17,16 +18,6 @@ struct MacRootView: View {
                 page
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     .navigationTitle(state.section?.title ?? "AnixOps Net")
-            }
-        }
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button {
-                    state.importing = true
-                } label: {
-                    Label("导入节点", systemImage: "plus")
-                }
-                .help("导入节点（⌘I）")
             }
         }
         .tint(brand.primary)
@@ -55,6 +46,18 @@ struct MacRootView: View {
         .listStyle(.sidebar)
         .safeAreaInset(edge: .bottom) {
             MacSidebarStatus(tunnel: tunnel, state: state)
+        }
+        // Import changes the whole client, so it sits with the sidebar on every page and never among a page's own
+        // toolbar buttons (AnixOps Design, actions S1).
+        .toolbar {
+            ToolbarItem {
+                Button {
+                    state.importing = true
+                } label: {
+                    Label("导入节点", systemImage: "plus")
+                }
+                .help("导入节点（⌘I）")
+            }
         }
         .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)
     }

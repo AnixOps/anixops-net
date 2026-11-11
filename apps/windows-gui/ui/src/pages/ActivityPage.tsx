@@ -4,7 +4,7 @@ import { ConnectionSnapshot, desktop, RuntimeSnapshot } from "../bridge";
 import { connectionDetail, connectionName, formatRate, matchesConnection } from "../activity-format";
 import { listPage, liveEngine, usePolling } from "../live";
 import { formatBytes } from "../subscription-format";
-import { Card, EmptyState, IconButton, Row, Run, Segmented } from "../ui";
+import { Card, ConfirmButton, EmptyState, IconButton, Row, Run, Segmented } from "../ui";
 import { t } from "../i18n";
 
 export function ActivityPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
@@ -60,7 +60,12 @@ function Connections({ snapshot }: { snapshot: RuntimeSnapshot | null }) {
       actions={<>
         <span className="rate"><ArrowUp size={14} />{formatRate(traffic.upload_rate)}</span>
         <span className="rate"><ArrowDown size={14} />{formatRate(traffic.download_rate)}</span>
-        <button className="link-button" disabled={list.active.length === 0} onClick={() => close(desktop.closeAllConnections)}>{t("全部断开")}</button>
+        <ConfirmButton
+          label={t("全部断开")}
+          confirm={t("确认断开 {count} 条连接", { count: list.active.length })}
+          disabled={list.active.length === 0}
+          onConfirm={() => close(desktop.closeAllConnections)}
+        />
       </>}
     >
       <div className="row toolbar">

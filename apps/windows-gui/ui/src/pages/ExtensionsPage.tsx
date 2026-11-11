@@ -1,7 +1,7 @@
 import { Ban, Download, KeyRound, LockKeyhole, Puzzle, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { desktop, MitmPlugin, preferencesFrom, RuntimeSnapshot } from "../bridge";
-import { Card, EmptyState, IconButton, Row, Run, StatusPill, Switch, ToggleRow } from "../ui";
+import { Card, EmptyState, MoreMenu, Row, Run, StatusPill, Switch, ToggleRow } from "../ui";
 import { t } from "../i18n";
 
 export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
@@ -89,7 +89,17 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
               >
                 {plugin.level !== "full" && <StatusPill label={plugin.level === "partial" ? t("部分支持") : t("不支持")} tone={plugin.level === "partial" ? "warning" : "danger"} />}
                 <span className="row-actions">
-                  <IconButton label={t("删除插件")} disabled={Boolean(busy)} onClick={() => change("plugin", () => desktop.removeMitmPlugin(plugin.id))}><Trash2 size={14} /></IconButton>
+                  <MoreMenu
+                    label={t("更多")}
+                    disabled={Boolean(busy)}
+                    items={[{
+                      label: t("删除插件"),
+                      icon: Trash2,
+                      danger: true,
+                      confirm: t("确认删除 {name}", { name: plugin.name }),
+                      onSelect: () => change("plugin", () => desktop.removeMitmPlugin(plugin.id)),
+                    }]}
+                  />
                 </span>
                 <Switch
                   label={plugin.name}
@@ -108,7 +118,11 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
           <Row icon={KeyRound} color="gray" label={t("证书 PEM 路径")}>
             <input className="inline-input" aria-label={t("证书 PEM 路径")} placeholder={"C:\\certs\\ca.pem"} value={certificatePath} onChange={(event) => setCertificatePath(event.target.value)} />
             <button className="secondary compact" disabled={Boolean(busy) || !certificatePath.trim()} onClick={() => void run("certificate", () => desktop.installCertificate(certificatePath.trim()))}>{t("安装证书")}</button>
-            <button className="secondary compact" disabled={Boolean(busy)} onClick={() => void run("certificate", desktop.removeCertificate)}>{t("移除证书")}</button>
+            <MoreMenu
+              label={t("更多")}
+              disabled={Boolean(busy)}
+              items={[{ label: t("移除证书"), danger: true, confirm: t("确认移除证书"), onSelect: () => void run("certificate", desktop.removeCertificate) }]}
+            />
           </Row>
         </Card>
       )}

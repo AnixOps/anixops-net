@@ -1,6 +1,6 @@
-import { ChevronRight, LoaderCircle } from "lucide-react";
+import { ChevronRight, Ellipsis, LoaderCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { Tone } from "./bridge";
 import { t } from "./i18n";
@@ -144,6 +144,126 @@ export function IconButton({ label, children, onClick, disabled = false }: {
   disabled?: boolean;
 }) {
   return <button className="icon-button" title={label} aria-label={label} onClick={onClick} disabled={disabled}>{children}</button>;
+}
+
+/** One entry of a `MoreMenu`. A `danger` entry is listed last, in red, and with `confirm` asks once more in place. */
+export type MenuItem = {
+  label: string;
+  icon?: LucideIcon;
+  onSelect: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+  /** Shown instead of the label after the first click; the second click runs the action. Names what is lost. */
+  confirm?: string;
+};
+
+/**
+ * The "more" menu of a row or a section header (AnixOps Design, actions S3 and D1): everything beyond the one
+ * labelled and the one icon action goes here, destructive entries last after a separator.
+ */
+export function MoreMenu({ label, items, disabled = false }: { label: string; items: MenuItem[]; disabled?: boolean }) {
+  const [place, setPlace] = useState<{ top: number; right: number } | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const root = useRef<HTMLSpanElement>(null);
+  const everyday = items.filter((item) => !item.danger);
+  const dangerous = items.filter((item) => item.danger);
+
+  useEffect(() => {
+    if (!place) return;
+    const close = () => setPlace(null);
+    const outside = (event: Event) => {
+      if (!root.current?.contains(event.target as Node)) close();
+    };
+    const key = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", key);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", key);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [place]);
+
+  const toggle = () => {
+    setConfirming(null);
+    if (place) {
+      setPlace(null);
+      return;
+    }
+    const box = root.current?.getBoundingClientRect();
+    // Fixed to the window, so a rounded group that clips its rows does not clip the menu.
+    if (box) setPlace({ top: box.bottom + 4, right: window.innerWidth - box.right });
+  };
+
+  const entry = (item: MenuItem) => {
+    const asking = confirming === item.label;
+    const Icon = item.icon;
+    return (
+      <button
+        key={item.label}
+        role="menuitem"
+        className={item.danger ? "menu-item danger" : "menu-item"}
+        disabled={item.disabled}
+        onClick={() => {
+          if (item.confirm && !asking) {
+            setConfirming(item.label);
+            return;
+          }
+          setPlace(null);
+          item.onSelect();
+        }}
+      >
+        {Icon && <Icon size={14} aria-hidden="true" />}
+        <span>{asking ? item.confirm : item.label}</span>
+      </button>
+    );
+  };
+
+  return (
+    <span className="more-menu" ref={root}>
+      <button className="icon-button" title={label} aria-label={label} aria-haspopup="menu" aria-expanded={Boolean(place)} disabled={disabled} onClick={toggle}>
+        <Ellipsis size={15} />
+      </button>
+      {place && (
+        <span className="menu" role="menu" style={{ top: place.top, right: place.right }}>
+          {everyday.map(entry)}
+          {everyday.length > 0 && dangerous.length > 0 && <span className="menu-separator" role="separator" />}
+          {dangerous.map(entry)}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/**
+ * A destructive action that stands on its own (actions D2): quiet red text that asks once more in place, naming what
+ * is lost, before it runs. It goes back to its label when the pointer or focus leaves.
+ */
+export function ConfirmButton({ label, confirm, onConfirm, disabled = false }: { label: string; confirm: string; onConfirm: () => void; disabled?: boolean }) {
+  const [asking, setAsking] = useState(false);
+  return (
+    <button
+      className="link-button danger"
+      disabled={disabled}
+      onBlur={() => setAsking(false)}
+      onMouseLeave={() => setAsking(false)}
+      onClick={() => {
+        if (!asking) {
+          setAsking(true);
+          return;
+        }
+        setAsking(false);
+        onConfirm();
+      }}
+    >
+      {asking ? confirm : label}
+    </button>
+  );
 }
 
 export function ToggleRow({ label, hint, checked, onChange, disabled = false, icon, color }: {

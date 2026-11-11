@@ -4,7 +4,7 @@ import { useState } from "react";
 import { desktop, Preferences, preferencesFrom, RuntimeSnapshot } from "../bridge";
 import { Appearance, appearances } from "../theme";
 import { factLabel } from "../labels";
-import { Card, Loading, Row, Run, Segmented, StatusDot, TileColor, ToggleRow } from "../ui";
+import { Card, Loading, MoreMenu, Row, Run, Segmented, StatusDot, TileColor, ToggleRow } from "../ui";
 import { LanguageChoice, languages, t } from "../i18n";
 
 type StartupKey = "startAfterLogin" | "autoConnect" | "autoRecoverCore" | "autoSubscriptionRefresh" | "autoSelectFastestNode";
@@ -125,13 +125,35 @@ function ServiceCard({ snapshot, busy, run }: { snapshot: RuntimeSnapshot; busy:
   return (
     <Card title={t("Windows 服务")} description={t("管理已安装的 AnixOps Net 服务。")}>
       <Row icon={ServerCog} color="gray" label={t("Windows 服务")} value={<><StatusDot tone={snapshot.service.tone} />{factLabel(snapshot.service.label)}</>}>
-        <span className="button-group">
-          <button className="secondary compact" disabled={Boolean(busy)} onClick={() => void run("service", desktop.installService)}>{t("安装")}</button>
-          <button className="secondary compact" disabled={Boolean(busy)} onClick={() => void run("service", desktop.startService)}>{t("启动")}</button>
-          <button className="secondary compact" disabled={Boolean(busy)} onClick={() => void run("service", desktop.stopService)}>{t("停止")}</button>
-        </span>
+        <ServiceAction state={snapshot.service.label} busy={busy} run={run} />
       </Row>
     </Card>
+  );
+}
+
+/**
+ * The one service action that applies now (actions V1): install when it is missing, start when it is stopped, stop
+ * when it runs. When the state is not known (desktop mode does not watch the service) all three are in the menu.
+ */
+function ServiceAction({ state, busy, run }: { state: string; busy: string | null; run: Run }) {
+  const install = () => void run("service", desktop.installService);
+  const start = () => void run("service", desktop.startService);
+  const stop = () => void run("service", desktop.stopService);
+  const disabled = Boolean(busy);
+  if (state === "NotInstalled") return <button className="secondary compact" disabled={disabled} onClick={install}>{t("安装")}</button>;
+  if (state === "Stopped" || state === "Paused") return <button className="secondary compact" disabled={disabled} onClick={start}>{t("启动")}</button>;
+  if (state === "Running") return <button className="secondary compact" disabled={disabled} onClick={stop}>{t("停止")}</button>;
+  if (state === "StartPending" || state === "StopPending") return null;
+  return (
+    <MoreMenu
+      label={t("更多")}
+      disabled={disabled}
+      items={[
+        { label: t("安装服务"), onSelect: install },
+        { label: t("启动服务"), onSelect: start },
+        { label: t("停止服务"), onSelect: stop },
+      ]}
+    />
   );
 }
 
@@ -145,7 +167,11 @@ function SystemCard({ busy, run }: { busy: string | null; run: Run }) {
       <Row icon={HardDrive} color="gray" label={t("驱动 INF 路径")}>
         <input className="inline-input" aria-label={t("驱动 INF 路径")} value={driverPath} onChange={(event) => setDriverPath(event.target.value)} />
         <button className="secondary compact" disabled={Boolean(busy) || !driverPath.trim()} onClick={() => void run("driver", () => desktop.installDriver(driverPath.trim()))}>{t("安装驱动")}</button>
-        <button className="secondary compact" disabled={Boolean(busy)} onClick={() => void run("driver", desktop.removeDriver)}>{t("移除驱动")}</button>
+        <MoreMenu
+          label={t("更多")}
+          disabled={Boolean(busy)}
+          items={[{ label: t("移除驱动"), danger: true, confirm: t("确认移除驱动"), onSelect: () => void run("driver", desktop.removeDriver) }]}
+        />
       </Row>
     </Card>
   );
