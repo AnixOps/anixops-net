@@ -76,8 +76,11 @@ export function ProxiesPage({ snapshot, nodes, busy, run, delays, setDelays }: {
             <input aria-label={t("搜索节点")} placeholder={t("搜索节点")} value={query} onChange={(event) => setQuery(event.target.value)} />
           </label>
         )}
-        <button className="secondary" disabled={Boolean(busy) || testable.length === 0} onClick={() => testDelays(testable)}><Gauge size={14} />{t("全部测速")}</button>
-        <button className="primary" disabled={Boolean(busy) || nodes.length === 0} onClick={() => void run("fastest node", desktop.selectFastestNode)}><Zap size={14} />{t("选择最快")}</button>
+        {/* Node actions belong to the node views only; the subscriptions view has its own primary action, import. */}
+        {shown.kind !== "subscriptions" && <>
+          <button className="secondary" disabled={Boolean(busy) || testable.length === 0} onClick={() => testDelays(testable)}><Gauge size={14} />{t("全部测速")}</button>
+          <button className="primary" disabled={Boolean(busy) || nodes.length === 0} onClick={() => void run("fastest node", desktop.selectFastestNode)}><Zap size={14} />{t("选择最快")}</button>
+        </>}
       </PageTools>
 
       <Panel className="side-pane">
