@@ -7,9 +7,16 @@ import SystemExtensions
 /// `Contents/Library/SystemExtensions`, and macOS loads it only after the app asks for it and the user allows it in
 /// System Settings. Asking again for an extension that is already active returns at once; a newer build in the app
 /// replaces the running one.
+///
+/// macOS keeps a request that needs the user's approval open until the user allows the extension in System Settings,
+/// which can be never. `run` therefore returns `.needsApproval` as soon as macOS asks for it, and the request stays
+/// open in the background: its final outcome goes to `later`.
+@MainActor
 final class SystemExtensionActivation: NSObject, OSSystemExtensionRequestDelegate {
     enum Outcome: Equatable {
         case activated
+        /// The user has not allowed the extension in System Settings yet; the request waits for it.
+        case needsApproval
         /// macOS finishes the activation at the next restart.
         case needsRestart
         /// The app is not in /Applications, where macOS requires it to be.
@@ -18,35 +25,43 @@ final class SystemExtensionActivation: NSObject, OSSystemExtensionRequestDelegat
     }
 
     private var continuation: CheckedContinuation<Outcome, Never>?
-    private let needsApproval: () -> Void
+    private let later: (Outcome) -> Void
 
-    private init(needsApproval: @escaping () -> Void) {
-        self.needsApproval = needsApproval
+    /// Requests still open, kept alive here because a request holds its delegate weakly.
+    private static var open: Set<SystemExtensionActivation> = []
+
+    private init(later: @escaping (Outcome) -> Void) {
+        self.later = later
     }
 
-    /// Submits the activation request and waits for its result, which waits for the user's approval when macOS asks
-    /// for it; `needsApproval` runs when it does.
-    static func run(_ identifier: String, needsApproval: @escaping () -> Void) async -> Outcome {
-        let activation = SystemExtensionActivation(needsApproval: needsApproval)
-        let outcome = await withCheckedContinuation { continuation in
-            DispatchQueue.main.async {
-                activation.continuation = continuation
-                let request = OSSystemExtensionRequest.activationRequest(forExtensionWithIdentifier: identifier, queue: .main)
-                request.delegate = activation
-                OSSystemExtensionManager.shared.submitRequest(request)
-            }
+    /// Submits the activation request and returns its outcome, or `.needsApproval` once macOS asks the user to
+    /// allow the extension. In that case the final outcome, after the user acts, goes to `later`.
+    static func run(_ identifier: String, later: @escaping (Outcome) -> Void) async -> Outcome {
+        let activation = SystemExtensionActivation(later: later)
+        open.insert(activation)
+        return await withCheckedContinuation { continuation in
+            activation.continuation = continuation
+            let request = OSSystemExtensionRequest.activationRequest(forExtensionWithIdentifier: identifier, queue: .main)
+            request.delegate = activation
+            OSSystemExtensionManager.shared.submitRequest(request)
         }
-        // The request holds its delegate weakly.
-        withExtendedLifetime(activation) {}
-        return outcome
+    }
+
+    private func deliver(_ outcome: Outcome) {
+        if let continuation {
+            continuation.resume(returning: outcome)
+            self.continuation = nil
+        } else {
+            later(outcome)
+        }
     }
 
     private func finish(_ outcome: Outcome) {
-        continuation?.resume(returning: outcome)
-        continuation = nil
+        deliver(outcome)
+        Self.open.remove(self)
     }
 
-    func request(
+    nonisolated func request(
         _ request: OSSystemExtensionRequest,
         actionForReplacingExtension existing: OSSystemExtensionProperties,
         withExtension ext: OSSystemExtensionProperties
@@ -54,19 +69,27 @@ final class SystemExtensionActivation: NSObject, OSSystemExtensionRequestDelegat
         .replace
     }
 
-    func requestNeedsUserApproval(_ request: OSSystemExtensionRequest) {
-        needsApproval()
+    nonisolated func requestNeedsUserApproval(_ request: OSSystemExtensionRequest) {
+        MainActor.assumeIsolated {
+            deliver(.needsApproval)
+        }
     }
 
-    func request(_ request: OSSystemExtensionRequest, didFinishWithResult result: OSSystemExtensionRequest.Result) {
-        finish(result == .willCompleteAfterReboot ? .needsRestart : .activated)
+    nonisolated func request(_ request: OSSystemExtensionRequest, didFinishWithResult result: OSSystemExtensionRequest.Result) {
+        MainActor.assumeIsolated {
+            finish(result == .willCompleteAfterReboot ? .needsRestart : .activated)
+        }
     }
 
-    func request(_ request: OSSystemExtensionRequest, didFailWithError error: Error) {
+    nonisolated func request(_ request: OSSystemExtensionRequest, didFailWithError error: Error) {
+        let outcome: Outcome
         if let error = error as? OSSystemExtensionError, error.code == .unsupportedParentBundleLocation {
-            finish(.notInApplications)
+            outcome = .notInApplications
         } else {
-            finish(.failed(code: (error as NSError).code))
+            outcome = .failed(code: (error as NSError).code)
+        }
+        MainActor.assumeIsolated {
+            finish(outcome)
         }
     }
 }
