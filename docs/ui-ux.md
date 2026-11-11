@@ -2,7 +2,7 @@
 
 所有平台（Windows、Linux、macOS、iOS）的界面都遵守 AnixOps Design 的规范。颜色、字体、间距以
 [AnixOps/anixops-design](https://github.com/AnixOps/anixops-design) 的 tokens 为准；按钮的层级和摆放以它的
-`guidelines/actions.md`（操作与层级）为准。本页只说明规范里的每一级在客户端里用哪个组件，以及提交界面改动前要自查什么。
+[`guidelines/actions.md`](https://github.com/AnixOps/AnixOps-design/blob/main/guidelines/actions.md)（操作与层级，条文带编号，例如 A1、S3、D1）为准。本页只说明规范里的每一级在客户端里用哪个组件，以及提交界面改动前要自查什么。
 规范本身只在 anixops-design 修改，这里不重复条文。
 
 ## 一句话原则
