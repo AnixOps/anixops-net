@@ -56,6 +56,8 @@ pub struct Preferences {
     pub auto_connect: bool,
     /// Point the desktop's proxy settings at the local proxy while connected.
     pub system_proxy: bool,
+    /// Decrypt the HTTPS hosts the enabled plugins name, with the root under `mitm/`.
+    pub https_decryption: bool,
 }
 
 impl Default for Preferences {
@@ -64,6 +66,7 @@ impl Default for Preferences {
             start_after_login: false,
             auto_connect: false,
             system_proxy: true,
+            https_decryption: false,
         }
     }
 }

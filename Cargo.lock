@@ -1149,6 +1149,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "desktop-mitm"
+version = "0.3.0"
+dependencies = [
+ "engine-embedded",
+ "rcgen",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3025,6 +3036,7 @@ dependencies = [
  "config-core",
  "control-domain",
  "desktop-dns",
+ "desktop-mitm",
  "engine-embedded",
  "inbound-mixed",
  "node-import",
@@ -3043,6 +3055,7 @@ dependencies = [
  "config-core",
  "control-domain",
  "desktop-dns",
+ "desktop-mitm",
  "engine-embedded",
  "inbound-mixed",
  "networkcore-windows-service",

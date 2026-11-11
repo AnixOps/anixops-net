@@ -11,18 +11,9 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
   const [plugins, setPlugins] = useState<MitmPlugin[]>([]);
 
   const loadPlugins = useCallback(() => {
-    if (linux) return;
     desktop.mitmPlugins().then(setPlugins).catch(() => setPlugins([]));
-  }, [linux]);
+  }, []);
   useEffect(loadPlugins, [loadPlugins]);
-
-  if (linux) {
-    return (
-      <Card>
-        <EmptyState icon={Puzzle} title={t("HTTPS 解密和插件还没开放")} message={t("Linux 版的根证书和插件管理会在后续版本提供。")} />
-      </Card>
-    );
-  }
 
   const decrypting = Boolean(snapshot?.httpsDecryptionEnabled);
   const locked = Boolean(busy) || !snapshot;
@@ -51,19 +42,21 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
           disabled={locked}
           onChange={() => change("mitm", decrypting ? desktop.disableHttpsMitm : desktop.enableHttpsMitm)}
         />
-        <ToggleRow
-          icon={Ban}
-          color="sky"
-          label={t("屏蔽哔哩哔哩网页版推广请求（试用）")}
-          hint={t("改动后需要重新开启 HTTPS 解密才会生效")}
-          checked={Boolean(snapshot?.bilibiliWebAdBlockEnabled)}
-          disabled={locked}
-          onChange={() => void run("Bilibili web trial", async () => {
-            if (!snapshot) throw new Error(t("还没有读取到客户端状态。"));
-            await desktop.savePreferences(preferencesFrom(snapshot, { bilibiliWebAdBlockEnabled: !snapshot.bilibiliWebAdBlockEnabled }));
-            return { message: t("已保存。重新开启 HTTPS 解密后生效。") };
-          })}
-        />
+        {!linux && (
+          <ToggleRow
+            icon={Ban}
+            color="sky"
+            label={t("屏蔽哔哩哔哩网页版推广请求（试用）")}
+            hint={t("改动后需要重新开启 HTTPS 解密才会生效")}
+            checked={Boolean(snapshot?.bilibiliWebAdBlockEnabled)}
+            disabled={locked}
+            onChange={() => void run("Bilibili web trial", async () => {
+              if (!snapshot) throw new Error(t("还没有读取到客户端状态。"));
+              await desktop.savePreferences(preferencesFrom(snapshot, { bilibiliWebAdBlockEnabled: !snapshot.bilibiliWebAdBlockEnabled }));
+              return { message: t("已保存。重新开启 HTTPS 解密后生效。") };
+            })}
+          />
+        )}
       </Card>
 
       <Card
@@ -110,13 +103,15 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
         )}
       </Card>
 
-      <Card title={t("根证书")} description={t("HTTPS 解密的根证书会自动生成并安装。只有要让系统信任你自己的证书时才需要在这里填写。")}>
-        <Row icon={KeyRound} color="gray" label={t("证书 PEM 路径")}>
-          <input className="inline-input" aria-label={t("证书 PEM 路径")} placeholder={"C:\\certs\\ca.pem"} value={certificatePath} onChange={(event) => setCertificatePath(event.target.value)} />
-          <button className="secondary compact" disabled={Boolean(busy) || !certificatePath.trim()} onClick={() => void run("certificate", () => desktop.installCertificate(certificatePath.trim()))}>{t("安装证书")}</button>
-          <button className="secondary compact" disabled={Boolean(busy)} onClick={() => void run("certificate", desktop.removeCertificate)}>{t("移除证书")}</button>
-        </Row>
-      </Card>
+      {!linux && (
+        <Card title={t("根证书")} description={t("HTTPS 解密的根证书会自动生成并安装。只有要让系统信任你自己的证书时才需要在这里填写。")}>
+          <Row icon={KeyRound} color="gray" label={t("证书 PEM 路径")}>
+            <input className="inline-input" aria-label={t("证书 PEM 路径")} placeholder={"C:\\certs\\ca.pem"} value={certificatePath} onChange={(event) => setCertificatePath(event.target.value)} />
+            <button className="secondary compact" disabled={Boolean(busy) || !certificatePath.trim()} onClick={() => void run("certificate", () => desktop.installCertificate(certificatePath.trim()))}>{t("安装证书")}</button>
+            <button className="secondary compact" disabled={Boolean(busy)} onClick={() => void run("certificate", desktop.removeCertificate)}>{t("移除证书")}</button>
+          </Row>
+        </Card>
+      )}
     </div>
   );
 }

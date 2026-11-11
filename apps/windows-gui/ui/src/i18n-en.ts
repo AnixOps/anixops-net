@@ -195,8 +195,6 @@ export const english: Record<string, string> = {
   // Linux client
   "本地代理": "Local proxy",
   "未启动": "Not running",
-  "HTTPS 解密和插件还没开放": "HTTPS decryption and plugins are not available yet",
-  "Linux 版的根证书和插件管理会在后续版本提供。": "Root certificates and plugin management will come to the Linux version later.",
   "登录后启动": "Start after login",
   "内核随应用一起运行，无需单独安装。": "The core runs inside the app, so there is nothing to install.",
   "连接时把 GNOME 或 KDE 的系统代理指向本地端口，断开或退出时改回原来的设置。": "Connecting points the GNOME or KDE system proxy at the local port; disconnecting or quitting puts the previous settings back.",
