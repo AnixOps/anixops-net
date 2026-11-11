@@ -1,71 +1,63 @@
+import NetworkCoreBridge
 import NetworkExtension
 import ServiceManagement
 import SwiftUI
 
-/// Overview: the hero card answers "am I connected, through which node"; the node and any notice follow.
+/// Overview, a dashboard like the Windows and Linux clients: the connection with the node and mode next to the
+/// subscription's allowance, then the live cards the iOS home screen shows (speed, usage, network, policy
+/// groups, busiest hosts, DNS, exit address, events), four slots a row.
 struct MacHomePage: View {
     var tunnel: TunnelController
     @ObservedObject var state: MacAppState
-    @Environment(\.brand) private var brand
+    @State private var dashboard = DashboardModel()
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                MacHeroCard(tunnel: tunnel, state: state)
-                if tunnel.connection == .connected {
-                    TrafficCard(tunnel: tunnel)
-                }
-                if let message = tunnel.message {
-                    MacNotice(text: message) {
-                        tunnel.clearMessage()
+        GeometryReader { window in
+            ScrollView {
+                VStack(spacing: 12) {
+                    HStack(alignment: .top, spacing: 12) {
+                        MacHeroCard(tunnel: tunnel, state: state)
+                            .frame(maxHeight: .infinity)
+                        MacSubscriptionCard(tunnel: tunnel, state: state)
+                            .frame(width: min(320, window.size.width * 0.34))
+                            .frame(maxHeight: .infinity)
                     }
-                }
-                HStack(alignment: .top, spacing: 16) {
-                    nodeCard
-                    MacCard(title: "隐私") {
-                        Label("不收集你的流量和浏览记录", systemImage: "hand.raised")
-                        Label("节点密码和密钥只保存在本机钥匙串", systemImage: "key")
+                    .fixedSize(horizontal: false, vertical: true)
+                    if let message = tunnel.message {
+                        MacNotice(text: message) {
+                            tunnel.clearMessage()
+                        }
                     }
+                    DashboardGrid(
+                        tunnel: tunnel,
+                        model: dashboard,
+                        layout: DashboardLayout(storage: ""),
+                        fixedColumns: window.size.width >= 720 ? 4 : 2,
+                        showProxies: { state.section = .proxies }
+                    )
                 }
+                .padding(20)
+                .frame(maxWidth: 1240)
+                .frame(maxWidth: .infinity)
             }
-            .padding(24)
-            .frame(maxWidth: 860)
-            .frame(maxWidth: .infinity)
         }
-    }
-
-    @ViewBuilder
-    private var nodeCard: some View {
-        MacCard(title: "当前节点") {
-            if let name = tunnel.nodeName {
-                HStack(spacing: 12) {
-                    ProtocolBadge(outboundKind: tunnel.outboundKind)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(name)
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(brand.text)
-                            .lineLimit(1)
-                        Text(ProtocolBadge.spokenName(for: tunnel.outboundKind))
-                            .font(.caption)
-                            .foregroundStyle(brand.text2)
-                    }
-                    Spacer(minLength: 8)
-                    Button("查看") {
-                        state.section = .proxies
-                    }
-                }
-            } else {
-                Text("还没有节点")
-                    .foregroundStyle(brand.text2)
-                Button("导入节点") {
-                    state.importing = true
-                }
-            }
+        .task(id: tunnel.connection) {
+            await dashboard.poll(tunnel)
+        }
+        .onAppear {
+            dashboard.startNetworkMonitor()
+        }
+        .onChange(of: tunnel.connection) { previous, status in
+            dashboard.tunnelChanged(from: previous, to: status, node: tunnel.nodeName)
+        }
+        .onChange(of: tunnel.message) { _, message in
+            dashboard.messageShown(message)
         }
     }
 }
 
-/// The route-line connect button with the status, elapsed time and one primary action.
+/// The connection on the slate hero: the route-line mark, the state with the elapsed time, the switch, and under
+/// them the current node and the proxy mode.
 private struct MacHeroCard: View {
     var tunnel: TunnelController
     @ObservedObject var state: MacAppState
@@ -74,68 +66,97 @@ private struct MacHeroCard: View {
     private var phase: ConnectPhase { tunnel.phase }
 
     var body: some View {
-        HStack(spacing: 28) {
-            Button(action: tap) {
-                RouteLineMark(phase: phase, size: 92)
-                    .frame(width: 136, height: 136)
-                    .background(Brand.line.opacity(0.06), in: Circle())
-                    .overlay(
-                        Circle().strokeBorder(phase == .on ? Brand.sky.opacity(0.7) : Brand.line.opacity(0.25), lineWidth: 1.5)
-                    )
-                    .contentShape(Circle())
-            }
-            .buttonStyle(MacPressableStyle())
-            .disabled(phase == .disconnecting)
-            .accessibilityLabel(phase.accessibilityLabel)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text(phase.title)
-                    .font(.largeTitle.weight(.bold))
-                    .contentTransition(.opacity)
-                subtitle
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(Brand.lineMuted)
-                if let name = tunnel.nodeName {
-                    Label(name, systemImage: "point.topleft.down.to.point.bottomright.curvepath")
-                        .font(.callout)
-                        .foregroundStyle(Brand.line.opacity(0.9))
-                        .lineLimit(1)
-                }
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 16) {
                 Button(action: tap) {
-                    Text(actionTitle)
-                        .font(.body.weight(.semibold))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 3)
+                    RouteLineMark(phase: phase, size: 44)
+                        .frame(width: 68, height: 68)
+                        .background(Brand.line.opacity(0.06), in: Circle())
+                        .overlay(
+                            Circle().strokeBorder(phase == .on ? Brand.sky.opacity(0.7) : Brand.line.opacity(0.25), lineWidth: 1.5)
+                        )
+                        .contentShape(Circle())
                 }
-                // A pill on the slate hero: white when connecting, a translucent white pill to disconnect.
-                .buttonStyle(MacHeroButtonStyle(filled: phase != .on))
+                .buttonStyle(MacPressableStyle())
                 .disabled(phase == .disconnecting)
-                .padding(.top, 4)
+                .accessibilityLabel(phase.accessibilityLabel)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(phase.title)
+                        .font(.title.weight(.bold))
+                        .contentTransition(.opacity)
+                    subtitle
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(Brand.lineMuted)
+                        .lineLimit(2)
+                }
+                .animation(.easeInOut(duration: 0.22), value: phase)
+                Spacer(minLength: 8)
+                if phase == .unconfigured {
+                    Button {
+                        state.importing = true
+                    } label: {
+                        Text("导入节点")
+                            .font(.body.weight(.semibold))
+                            .padding(.horizontal, 10)
+                    }
+                    .buttonStyle(MacHeroButtonStyle(filled: true))
+                } else {
+                    MacConnectSwitch(tunnel: tunnel, controlSize: .large)
+                }
             }
-            .animation(.easeInOut(duration: 0.22), value: phase)
             Spacer(minLength: 0)
+            HStack(spacing: 10) {
+                Button {
+                    state.section = .proxies
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "globe")
+                        Text(tunnel.nodeName ?? String(localized: "还没有节点"))
+                            .lineLimit(1)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.caption2.weight(.semibold))
+                            .opacity(0.6)
+                    }
+                    .font(.callout.weight(.medium))
+                    .padding(.horizontal, 12)
+                    .frame(height: 30)
+                    .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .help("切换节点")
+                Spacer(minLength: 8)
+                Picker("代理模式", selection: Binding(
+                    get: { tunnel.mode },
+                    set: { mode in
+                        Task {
+                            await tunnel.setMode(mode)
+                        }
+                    }
+                )) {
+                    if tunnel.library?.routing != nil {
+                        Text("规则").tag(ProxyMode.rule)
+                    }
+                    Text("全局").tag(ProxyMode.global)
+                    Text("直连").tag(ProxyMode.direct)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 240)
+                .disabled(phase == .unconfigured)
+                // The hero is slate in both themes, so its controls always use the dark appearance.
+                .environment(\.colorScheme, .dark)
+            }
         }
         .foregroundStyle(Brand.line)
-        .padding(28)
+        .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(brand.heroGradient, in: RoundedRectangle(cornerRadius: BrandRadius.hero, style: .continuous))
+        .background(brand.heroGradient, in: RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: BrandRadius.hero, style: .continuous)
+            RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
         )
-    }
-
-    private var actionTitle: LocalizedStringKey {
-        switch phase {
-        case .unconfigured:
-            return "导入节点"
-        case .off:
-            return "action.connect"
-        case .connecting, .reasserting, .on:
-            return "断开"
-        case .disconnecting:
-            return "正在断开…"
-        }
     }
 
     @ViewBuilder
@@ -144,7 +165,7 @@ private struct MacHeroCard: View {
         case .on:
             if let since = tunnel.connectedSince {
                 TimelineView(.periodic(from: since, by: 1)) { context in
-                    Text(Self.elapsed(from: since, to: context.date))
+                    Text(ConnectElapsed.text(from: since, to: context.date))
                 }
             } else {
                 Text("安全隧道已建立")
@@ -153,7 +174,7 @@ private struct MacHeroCard: View {
             if case let .blocked(reason, _) = tunnel.coordinator.decision {
                 Text(reason)
             } else {
-                Text("点击连接，或按 ⇧⌘C")
+                Text("打开开关连接，或按 ⇧⌘C")
             }
         case .unconfigured:
             Text("导入第一个节点后即可连接")
@@ -173,10 +194,134 @@ private struct MacHeroCard: View {
             tunnel.toggle()
         }
     }
+}
 
-    static func elapsed(from start: Date, to now: Date) -> String {
-        let seconds = max(0, Int(now.timeIntervalSince(start)))
-        return String(format: "%02d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
+/// The subscription in use: the used share of its allowance as a ring, the expiry and the last update.
+private struct MacSubscriptionCard: View {
+    var tunnel: TunnelController
+    @ObservedObject var state: MacAppState
+    @Environment(\.brand) private var brand
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Text(tunnel.subscriptions.active?.name ?? String(localized: "订阅"))
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(brand.text2)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                if let group = tunnel.subscriptions.active, group.isUpdatable {
+                    if tunnel.updatingGroups.contains(group.id) {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Button("更新") {
+                            Task {
+                                _ = await tunnel.refreshSubscription(group.id)
+                            }
+                        }
+                        .buttonStyle(.link)
+                        .font(.footnote.weight(.semibold))
+                    }
+                }
+            }
+            if let group = tunnel.subscriptions.active {
+                allowance(group)
+                Spacer(minLength: 0)
+                VStack(spacing: 0) {
+                    fact("到期") {
+                        if let expire = group.userInfo?.expire {
+                            Text(expire, format: .dateTime.year().month().day())
+                                .foregroundStyle(expire < Date() ? brand.danger : brand.text)
+                        } else {
+                            Text("长期有效")
+                        }
+                    }
+                    Divider()
+                    fact("上次更新") {
+                        Text(group.library.updatedAt, format: .relative(presentation: .named))
+                    }
+                }
+            } else {
+                Text("还没有订阅。导入后节点会出现在“代理”里。")
+                    .font(.callout)
+                    .foregroundStyle(brand.text2)
+                Spacer(minLength: 0)
+                Button("导入节点") {
+                    state.importing = true
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(brand.surface, in: RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous))
+    }
+
+    private func allowance(_ group: SubscriptionGroup) -> some View {
+        let info = group.userInfo
+        let fraction = info?.usedFraction
+        return HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .stroke(brand.border, lineWidth: 7)
+                if let fraction {
+                    Circle()
+                        .trim(from: 0, to: max(0.01, min(1, fraction)))
+                        .stroke(fraction > 0.9 ? brand.danger : brand.primary, style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                }
+                Text(fraction.map { "\(Int(($0 * 100).rounded()))%" } ?? "–")
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(brand.text)
+            }
+            .frame(width: 56, height: 56)
+            .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                if let used = info?.used {
+                    if let total = info?.total, total > 0 {
+                        Text(verbatim: "\(Self.bytes(used)) / \(Self.bytes(total))")
+                            .font(.title3.weight(.semibold).monospacedDigit())
+                            .foregroundStyle(brand.text)
+                    } else {
+                        Text("已用 \(Self.bytes(used))")
+                            .font(.title3.weight(.semibold).monospacedDigit())
+                            .foregroundStyle(brand.text)
+                    }
+                } else {
+                    Text("\(group.library.nodes.count) 个节点")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(brand.text)
+                }
+                Group {
+                    if info?.used != nil {
+                        Text("\(group.library.nodes.count) 个节点")
+                    } else {
+                        Text("订阅没有提供流量信息")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(brand.text2)
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+        }
+    }
+
+    private func fact<Value: View>(_ title: LocalizedStringKey, @ViewBuilder value: () -> Value) -> some View {
+        HStack {
+            Text(title)
+                .foregroundStyle(brand.text2)
+            Spacer(minLength: 8)
+            value()
+                .foregroundStyle(brand.text)
+                .lineLimit(1)
+        }
+        .font(.callout)
+        .frame(minHeight: 30)
+    }
+
+    private static func bytes(_ value: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: value, countStyle: .binary)
     }
 }
 

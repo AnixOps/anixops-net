@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// The main window: a sidebar with the six sections, the page, and a toolbar with import and connect.
+/// The main window, laid out like System Settings: a sidebar of colored glyph tiles with the connection switch at
+/// its foot, and each page as a grouped form. The toolbar keeps import and connect.
 struct MacRootView: View {
     var tunnel: TunnelController
     @ObservedObject var state: MacAppState
@@ -10,12 +11,11 @@ struct MacRootView: View {
     var body: some View {
         let brand = BrandPalette.resolve(appearance: appearance, scheme: colorScheme)
         NavigationSplitView {
-            sidebar(brand)
+            sidebar
         } detail: {
             NavigationStack {
                 page
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .background(brand.bg)
                     .navigationTitle(state.section?.title ?? "AnixOps Net")
             }
         }
@@ -27,13 +27,6 @@ struct MacRootView: View {
                     Label("导入节点", systemImage: "plus")
                 }
                 .help("导入节点（⌘I）")
-                Button {
-                    tunnel.toggle()
-                } label: {
-                    Label(tunnel.toggleTitle, systemImage: "power")
-                }
-                .help("连接或断开（⇧⌘C）")
-                .disabled(tunnel.phase == .unconfigured || tunnel.phase == .disconnecting)
             }
         }
         .tint(brand.primary)
@@ -46,20 +39,24 @@ struct MacRootView: View {
         }
     }
 
-    private func sidebar(_ brand: BrandPalette) -> some View {
+    private var sidebar: some View {
         List(selection: $state.section) {
-            ForEach(MacSection.allCases) { section in
-                Label(section.title, systemImage: section.systemImage)
-                    .tag(section)
+            Section {
+                ForEach(MacSection.allCases.filter { $0 != .settings }) { section in
+                    MacSidebarLabel(section: section)
+                        .tag(section)
+                }
+            }
+            Section {
+                MacSidebarLabel(section: .settings)
+                    .tag(MacSection.settings)
             }
         }
         .listStyle(.sidebar)
-        .modifier(SolidBackground(brand: brand))
         .safeAreaInset(edge: .bottom) {
-            SidebarStatus(tunnel: tunnel)
-                .padding(12)
+            MacSidebarStatus(tunnel: tunnel, state: state)
         }
-        .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
+        .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)
     }
 
     @ViewBuilder
@@ -81,52 +78,119 @@ struct MacRootView: View {
     }
 }
 
-/// The sidebar keeps the system sidebar material (AnixOps Design's frosted sidebar) in both themes.
-private struct SolidBackground: ViewModifier {
-    let brand: BrandPalette
+/// A sidebar row: the section's glyph on a colored tile, as System Settings draws its panes.
+private struct MacSidebarLabel: View {
+    let section: MacSection
 
-    func body(content: Content) -> some View {
-        content
+    var body: some View {
+        Label {
+            Text(section.title)
+        } icon: {
+            MacTile(systemImage: section.systemImage, color: section.tileColor)
+        }
     }
 }
 
-/// The connection at a glance under the sidebar, so it stays visible on every page.
-private struct SidebarStatus: View {
-    @Environment(\.brand) private var brand
-    var tunnel: TunnelController
+/// A white SF Symbol on a small rounded colored square.
+struct MacTile: View {
+    let systemImage: String
+    let color: Color
+    var size: CGFloat = 20
 
     var body: some View {
-        HStack(spacing: 10) {
-            BrandMark(size: 26)
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(dotColor)
-                        .frame(width: 7, height: 7)
+        Image(systemName: systemImage)
+            .font(.system(size: size * 0.55, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(color.gradient, in: RoundedRectangle(cornerRadius: size * 0.26, style: .continuous))
+            .accessibilityHidden(true)
+    }
+}
+
+/// A form row label with a colored tile, for the rows that lead somewhere or switch something.
+struct MacTileLabel: View {
+    let title: LocalizedStringKey
+    let systemImage: String
+    let color: Color
+
+    var body: some View {
+        Label {
+            Text(title)
+        } icon: {
+            MacTile(systemImage: systemImage, color: color)
+        }
+    }
+}
+
+/// The connection at the foot of the sidebar, on every page: the state, the node and a switch.
+private struct MacSidebarStatus: View {
+    var tunnel: TunnelController
+    @ObservedObject var state: MacAppState
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Divider()
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(tunnel.phase.dotColor)
+                    .frame(width: 8, height: 8)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 1) {
                     Text(tunnel.phase.title)
                         .font(.callout.weight(.semibold))
-                        .foregroundStyle(brand.text)
+                    Text(tunnel.nodeName ?? String(localized: "还没有节点"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-                Text(tunnel.nodeName ?? String(localized: "还没有节点"))
-                    .font(.caption)
-                    .foregroundStyle(brand.text2)
-                    .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    state.section = .home
+                }
+                MacConnectSwitch(tunnel: tunnel, controlSize: .small)
             }
-            Spacer(minLength: 0)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
         }
-        .padding(10)
-        .background(brand.surface.opacity(0.8), in: RoundedRectangle(cornerRadius: BrandRadius.control, style: .continuous))
-        .accessibilityElement(children: .combine)
     }
+}
 
-    private var dotColor: Color {
-        switch tunnel.phase {
+/// The connect switch: on while connected or connecting; turning it on or off starts the change.
+struct MacConnectSwitch: View {
+    var tunnel: TunnelController
+    var controlSize: ControlSize = .regular
+
+    var body: some View {
+        Toggle(isOn: Binding(
+            get: { tunnel.isConnected },
+            set: { on in
+                if on != tunnel.isConnected {
+                    tunnel.toggle()
+                }
+            }
+        )) {
+            Text(tunnel.toggleTitle)
+        }
+        .toggleStyle(.switch)
+        .labelsHidden()
+        .controlSize(controlSize)
+        .tint(.green)
+        .disabled(tunnel.phase == .unconfigured || tunnel.phase == .disconnecting)
+        .help("连接或断开（⇧⌘C）")
+    }
+}
+
+extension ConnectPhase {
+    /// The status dot: green when connected, amber while it changes, gray otherwise.
+    var dotColor: Color {
+        switch self {
         case .on:
-            return brand.success
+            return .green
         case .connecting, .reasserting, .disconnecting:
-            return brand.warning
+            return .orange
         case .off, .unconfigured:
-            return brand.text3
+            return Color.secondary
         }
     }
 }
