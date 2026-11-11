@@ -694,6 +694,9 @@ final class TunnelController {
         }
         tunnelProtocol.providerConfiguration = providerConfiguration
 
+        guard await activateSystemExtension() else {
+            return false
+        }
         let target = manager ?? NETunnelProviderManager()
         target.protocolConfiguration = tunnelProtocol
         target.localizedDescription = "AnixOps Net"
@@ -980,12 +983,70 @@ final class TunnelController {
     }
 
     private func start(_ manager: NETunnelProviderManager) {
+        #if os(macOS)
+        // A newer build may carry a newer System Extension; activation replaces the running one first.
+        Task {
+            guard await activateSystemExtension() else {
+                return
+            }
+            startNow(manager)
+        }
+        #else
+        startNow(manager)
+        #endif
+    }
+
+    private func startNow(_ manager: NETunnelProviderManager) {
         do {
-            try manager.connection.startVPNTunnel()
+            try manager.connection.startVPNTunnel(options: Self.startOptions())
             message = nil
         } catch {
             message = String(localized: "无法启动隧道")
         }
+    }
+
+    /// Set once this run of the app has activated the tunnel System Extension.
+    @ObservationIgnored private var systemExtensionActive = false
+
+    /// On macOS the tunnel may be a System Extension, which runs as root and cannot read the user's Keychain, so
+    /// the app hands over the node key, node library and MITM root at start (`TunnelStartSecrets`). iOS shares the
+    /// Keychain with the extension and passes nothing.
+    private static func startOptions() -> [String: NSObject]? {
+        #if os(macOS)
+        return TunnelStartSecrets.fromKeychain().options
+        #else
+        return nil
+        #endif
+    }
+
+    /// Developer ID builds carry the tunnel as a System Extension, which macOS loads only after the app asks and the
+    /// user allows it. Returns false, with the reason in `message`, when it is not active. Builds whose tunnel is
+    /// an app extension (iOS, Mac App Store) have nothing to activate.
+    private func activateSystemExtension() async -> Bool {
+        #if os(macOS)
+        guard !systemExtensionActive, let identifier = Self.systemExtensionIdentifier() else {
+            return true
+        }
+        let outcome = await SystemExtensionActivation.run(identifier) { [weak self] in
+            Task { @MainActor in
+                self?.message = String(localized: "请在“系统设置 › 通用 › 登录项与扩展 › 网络扩展”中允许 AnixOps Net，然后再连接")
+            }
+        }
+        switch outcome {
+        case .activated:
+            systemExtensionActive = true
+            return true
+        case .needsRestart:
+            message = String(localized: "网络扩展将在重启 Mac 后生效")
+        case .notInApplications:
+            message = String(localized: "请先把 AnixOps Net 拖进“应用程序”文件夹，从那里打开后再连接")
+        case let .failed(code):
+            message = String(localized: "无法启用网络扩展") + " (\(code))"
+        }
+        return false
+        #else
+        return true
+        #endif
     }
 
     /// Nodes whose stop the user has already been told about; a node leaves the set once it dials again.
@@ -1147,7 +1208,7 @@ final class TunnelController {
         if restartAfterStop, connection == .disconnected {
             // The node switch stopped the tunnel on purpose: no error to show, just start it on the new node.
             restartAfterStop = false
-            try? manager?.connection.startVPNTunnel()
+            try? manager?.connection.startVPNTunnel(options: Self.startOptions())
         } else if connection == .disconnected, previous != .disconnected, previous != .invalid {
             showLastDisconnectError()
         }
@@ -1213,6 +1274,9 @@ final class TunnelController {
     private static let profileID = NodeSecretStore.tunnelProfileAccount
 
     private static func tunnelBundleIdentifier() -> String? {
+        if let identifier = systemExtensionIdentifier() {
+            return identifier
+        }
         guard let plugins = Bundle.main.builtInPlugInsURL,
               let urls = try? FileManager.default.contentsOfDirectory(at: plugins, includingPropertiesForKeys: nil)
         else {
@@ -1228,6 +1292,29 @@ final class TunnelController {
             return bundle.bundleIdentifier
         }
         return nil
+    }
+
+    /// The packet tunnel System Extension in `Contents/Library/SystemExtensions` of a Developer ID build, or nil.
+    private static func systemExtensionIdentifier() -> String? {
+        #if os(macOS)
+        let folder = Bundle.main.bundleURL.appendingPathComponent("Contents/Library/SystemExtensions", isDirectory: true)
+        guard let urls = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) else {
+            return nil
+        }
+        for url in urls where url.pathExtension == "systemextension" {
+            guard let bundle = Bundle(url: url),
+                  let info = bundle.object(forInfoDictionaryKey: "NetworkExtension") as? [String: Any],
+                  let providers = info["NEProviderClasses"] as? [String: Any],
+                  providers["com.apple.networkextension.packet-tunnel"] != nil
+            else {
+                continue
+            }
+            return bundle.bundleIdentifier
+        }
+        return nil
+        #else
+        return nil
+        #endif
     }
 
     private static func describe(_ error: TunnelNodeImportError) -> String {

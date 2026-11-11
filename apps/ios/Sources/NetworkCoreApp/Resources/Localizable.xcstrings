@@ -5206,6 +5206,46 @@
           }
         }
       }
+    },
+    "请在“系统设置 › 通用 › 登录项与扩展 › 网络扩展”中允许 AnixOps Net，然后再连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow AnixOps Net under System Settings › General › Login Items & Extensions › Network Extensions, then connect again"
+          }
+        }
+      }
+    },
+    "网络扩展将在重启 Mac 后生效": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The network extension takes effect after you restart your Mac"
+          }
+        }
+      }
+    },
+    "请先把 AnixOps Net 拖进“应用程序”文件夹，从那里打开后再连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move AnixOps Net to the Applications folder and open it from there, then connect"
+          }
+        }
+      }
+    },
+    "无法启用网络扩展": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not enable the network extension"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
