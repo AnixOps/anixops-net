@@ -1,25 +1,41 @@
-import { Activity, Check, CloudDownload, FileText, Gauge, Globe, Pencil, RefreshCw, Search, Share2, Trash2, X, Zap } from "lucide-react";
-import { useEffect, useState } from "react";
-import { desktop, NodeDelay, NodeSummary, RuntimeSnapshot, SubscriptionSummary } from "../bridge";
-import { protocolAbbreviation } from "../labels";
+import { Activity, Bot, Check, CloudDownload, FileText, Gauge, Globe, Layers, Pencil, Plus, RefreshCw, Search, Share2, Trash2, X, Zap } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { desktop, NativeGroupSummary, NodeDelay, NodeSummary, RuntimeSnapshot, SubscriptionSummary } from "../bridge";
+import { memberNode } from "../dashboard";
+import { groupMemberLabel, protocolAbbreviation } from "../labels";
 import { delayLabel, delayTone, filterNodes, groupNodes, NodeSort, sortNodes } from "../node-filter";
-import { Card, EmptyState, IconButton, PageTools, Run, StatusPill, Tile } from "../ui";
+import { Card, EmptyState, IconButton, PageTools, Panel, Run, StatusPill, Tile, TileColor } from "../ui";
 import { t } from "../i18n";
 import { formatBytes, formatDay, updateIntervalChoices, updateIntervalLabel, usedFraction } from "../subscription-format";
+import type { Delays, SetDelays } from "./HomePage";
 
-export function ProxiesPage({ snapshot, nodes, busy, run }: {
+/** What the right pane shows: every node, one policy group's members, or the subscriptions. */
+type View = { kind: "nodes" } | { kind: "group"; tag: string } | { kind: "subscriptions" };
+
+/**
+ * Two panes: on the left the node list, the profile's policy groups and the subscriptions; on the right the nodes
+ * of the chosen one as cards colored by delay, or the subscription settings.
+ */
+export function ProxiesPage({ snapshot, nodes, busy, run, delays, setDelays }: {
   snapshot: RuntimeSnapshot | null;
   nodes: NodeSummary[];
   busy: string | null;
   run: Run;
+  delays: Delays;
+  setDelays: SetDelays;
 }) {
+  const [view, setView] = useState<View>({ kind: "nodes" });
   const [query, setQuery] = useState("");
   const [protocol, setProtocol] = useState("All");
-  const protocols = ["All", ...new Set(nodes.map((node) => node.protocol))];
   const [sort, setSort] = useState<NodeSort>("default");
-  const [delays, setDelays] = useState<Record<string, NodeDelay>>({});
-  const visible = filterNodes(nodes, query, protocol);
-  const sections = groupNodes(visible).map((section) => ({ ...section, nodes: sortNodes(section.nodes, sort, delays) }));
+  const [groups, setGroups] = useState<NativeGroupSummary[]>([]);
+  const [sources, setSources] = useState<SubscriptionSummary[]>([]);
+  const refreshSources = useCallback(() => void desktop.subscriptions().then(setSources).catch(() => setSources([])), []);
+  useEffect(() => {
+    refreshSources();
+    void desktop.nativeGroups().then(setGroups).catch(() => setGroups([]));
+  }, [refreshSources, snapshot?.subscription, snapshot?.subscriptionLastUpdated]);
 
   const testDelays = (targets: NodeSummary[]) => void run("delay", async () => {
     const results = await desktop.testDelays(targets.map((node) => node.id), delayUrl);
@@ -31,71 +47,216 @@ export function ProxiesPage({ snapshot, nodes, busy, run }: {
     return { message: t("{ok} / {total} 个节点有响应", { ok: results.filter((result) => result.delayMs != null).length, total: results.length }) };
   });
 
-  const tested = (node: NodeSummary) => delays[node.id];
+  if (nodes.length === 0 && sources.length === 0) {
+    return <Subscriptions snapshot={snapshot} sources={sources} refreshSources={refreshSources} empty busy={busy} run={run} />;
+  }
+
+  const group = view.kind === "group" ? groups.find((item) => item.tag === view.tag) : undefined;
+  const shown: View = view.kind === "group" && !group ? { kind: "nodes" } : view;
+  const protocols = ["All", ...new Set(nodes.map((node) => node.protocol))];
+  const visible = filterNodes(nodes, query, protocol);
+  const sections = groupNodes(visible).map((section) => ({ ...section, nodes: sortNodes(section.nodes, sort, delays) }));
+  const needle = query.trim().toLowerCase();
+  const members = (group?.outbounds ?? [])
+    .map((outbound) => {
+      const label = groupMemberLabel(group!, outbound) ?? outbound;
+      return { outbound, label, node: memberNode(nodes, outbound, label) };
+    })
+    .filter((member) => !needle || member.label.toLowerCase().includes(needle));
+  const testable = shown.kind === "group" ? members.flatMap((member) => member.node ? [member.node] : []) : visible;
+  const current = nodes.find((node) => node.selected);
+  const available = visible.filter((node) => delays[node.id]?.delayMs != null).length;
 
   return (
-    <div className="page-stack">
-      {nodes.length > 0 && (
-        <PageTools>
+    <div className="panes">
+      <PageTools>
+        {shown.kind !== "subscriptions" && (
           <label className="search">
             <Search size={14} aria-hidden="true" />
             <input aria-label={t("搜索节点")} placeholder={t("搜索节点")} value={query} onChange={(event) => setQuery(event.target.value)} />
           </label>
-          <button className="secondary" disabled={Boolean(busy) || visible.length === 0} onClick={() => testDelays(visible)}><Gauge size={14} />{t("全部测速")}</button>
-          <button className="primary" disabled={Boolean(busy)} onClick={() => void run("fastest node", desktop.selectFastestNode)}><Zap size={14} />{t("选择最快")}</button>
-        </PageTools>
-      )}
-      {nodes.length > 0 && (
-        <section className="card">
-          <header className="card-header">
-            <h2>{t("节点")}<span className="count">{visible.length} / {nodes.length}</span></h2>
-            <div className="card-actions">
-              <select className="pop-up" aria-label={t("按协议筛选")} value={protocol} onChange={(event) => setProtocol(event.target.value)}>
-                {protocols.map((value) => <option key={value} value={value}>{value === "All" ? t("全部协议") : protocolAbbreviation(value)}</option>)}
-              </select>
-              <select className="pop-up" aria-label={t("节点排序")} value={sort} onChange={(event) => setSort(event.target.value as NodeSort)}>
-                <option value="default">{t("默认顺序")}</option>
-                <option value="name">{t("按名称")}</option>
-                <option value="delay">{t("按延迟")}</option>
-              </select>
-            </div>
-          </header>
+        )}
+        <button className="secondary" disabled={Boolean(busy) || testable.length === 0} onClick={() => testDelays(testable)}><Gauge size={14} />{t("全部测速")}</button>
+        <button className="primary" disabled={Boolean(busy) || nodes.length === 0} onClick={() => void run("fastest node", desktop.selectFastestNode)}><Zap size={14} />{t("选择最快")}</button>
+      </PageTools>
+
+      <Panel className="side-pane">
+        <nav aria-label={t("节点和订阅")}>
+          <h3 className="pane-caption">{t("节点")}</h3>
+          <PaneItem
+            icon={Globe}
+            color="sky"
+            title={t("全部节点")}
+            detail={[current?.label, t("{count} 个节点", { count: nodes.length })].filter(Boolean).join(" · ")}
+            active={shown.kind === "nodes"}
+            onClick={() => setView({ kind: "nodes" })}
+          />
+          {groups.length > 0 && <h3 className="pane-caption">{t("策略组")}</h3>}
+          {groups.map((item) => (
+            <PaneItem
+              key={item.tag}
+              {...groupLook(item)}
+              title={item.tag}
+              detail={[groupMemberLabel(item, item.selected), groupTypeLabel(item.groupType)].filter(Boolean).join(" · ")}
+              active={shown.kind === "group" && shown.tag === item.tag}
+              onClick={() => setView({ kind: "group", tag: item.tag })}
+            />
+          ))}
+          <h3 className="pane-caption">{t("订阅")}</h3>
+          {sources.map((source) => (
+            <PaneItem
+              key={source.id}
+              icon={source.refreshable ? CloudDownload : FileText}
+              color={source.refreshable ? "indigo" : "gray"}
+              title={source.name}
+              detail={sourceDetail(source)}
+              badge={source.selected ? t("使用中") : undefined}
+              active={false}
+              onClick={() => setView({ kind: "subscriptions" })}
+            />
+          ))}
+          <button className={`pane-item add ${shown.kind === "subscriptions" ? "active" : ""}`} onClick={() => setView({ kind: "subscriptions" })}>
+            <Plus size={14} />{sources.length > 0 ? t("管理和导入订阅") : t("导入订阅")}
+          </button>
+        </nav>
+      </Panel>
+
+      {shown.kind === "subscriptions" && <Subscriptions snapshot={snapshot} sources={sources} refreshSources={refreshSources} empty={false} busy={busy} run={run} />}
+
+      {shown.kind === "nodes" && (
+        <Panel
+          className="main-pane"
+          title={<>{t("全部节点")}<span className="count">{[t("{count} 个节点", { count: visible.length }), available > 0 ? t("{count} 个可用", { count: available }) : null].filter(Boolean).join(" · ")}</span></>}
+          action={<>
+            <select className="pop-up" aria-label={t("按协议筛选")} value={protocol} onChange={(event) => setProtocol(event.target.value)}>
+              {protocols.map((value) => <option key={value} value={value}>{value === "All" ? t("全部协议") : protocolAbbreviation(value)}</option>)}
+            </select>
+            <select className="pop-up" aria-label={t("节点排序")} value={sort} onChange={(event) => setSort(event.target.value as NodeSort)}>
+              <option value="default">{t("默认顺序")}</option>
+              <option value="name">{t("按名称")}</option>
+              <option value="delay">{t("按延迟")}</option>
+            </select>
+          </>}
+        >
           {sections.map((section) => (
             <div className="node-section" key={section.group ?? ""}>
               {sections.length > 1 && section.group && <h3 className="subhead">{section.group}<span className="count">{section.nodes.length}</span></h3>}
-              <div className="group" role="list" aria-label={section.group ?? t("节点")}>
+              <div className="node-grid" role="list" aria-label={section.group ?? t("节点")}>
                 {section.nodes.map((node) => (
-                  <div className={`row node-row ${node.selected ? "selected" : ""}`} role="listitem" key={node.id}>
-                    <button
-                      className="node-pick"
-                      aria-pressed={node.selected}
-                      disabled={Boolean(busy) || node.selected}
-                      onClick={() => void run("switch", () => desktop.switchNode(node.id))}
-                    >
-                      <span className="node-name">{node.label}</span>
-                    </button>
-                    <span className="row-actions">
-                      <IconButton label={t("测试 {node} 的延迟", { node: node.label })} disabled={Boolean(busy)} onClick={() => testDelays([node])}>
-                        <Activity size={14} />
-                      </IconButton>
-                      <IconButton label={t("复制 {node} 的分享链接", { node: node.label })} disabled={Boolean(busy)} onClick={() => void run("share", () => copyShareLink(node))}>
-                        <Share2 size={14} />
-                      </IconButton>
-                    </span>
-                    <span className="protocol-badge">{protocolAbbreviation(node.protocol)}</span>
-                    <span className={`delay ${tested(node) ? delayTone(tested(node)) : ""}`} title={tested(node)?.error ?? undefined}>{tested(node) ? delayLabel(tested(node)) : ""}</span>
-                    <span className="check" aria-label={node.selected ? t("当前节点") : undefined}>{node.selected && <Check size={15} strokeWidth={2.25} />}</span>
-                  </div>
+                  <NodeCard
+                    key={node.id}
+                    label={node.label}
+                    protocol={node.protocol}
+                    delay={delays[node.id]}
+                    selected={node.selected}
+                    disabled={Boolean(busy)}
+                    onPick={() => void run("switch", () => desktop.switchNode(node.id))}
+                    onTest={() => testDelays([node])}
+                    onShare={() => void run("share", () => copyShareLink(node))}
+                  />
                 ))}
               </div>
             </div>
           ))}
-          {visible.length === 0 && <div className="group"><p className="muted center">{t("没有符合条件的节点。")}</p></div>}
-        </section>
+          {visible.length === 0 && <p className="panel-empty">{t("没有符合条件的节点。")}</p>}
+        </Panel>
       )}
-      <Subscriptions snapshot={snapshot} empty={nodes.length === 0} busy={busy} run={run} />
+
+      {shown.kind === "group" && group && (
+        <Panel
+          className="main-pane"
+          title={<>{group.tag}<span className="count">{[groupTypeLabel(group.groupType), t("{count} 个成员", { count: group.outbounds.length })].join(" · ")}</span></>}
+        >
+          <div className="node-grid" role="list" aria-label={group.tag}>
+            {members.map(({ outbound, label, node }) => (
+              <NodeCard
+                key={outbound}
+                label={label}
+                protocol={node?.protocol}
+                delay={node ? delays[node.id] : undefined}
+                selected={group.selected === outbound}
+                disabled={Boolean(busy)}
+                onPick={group.groupType === "selector" ? () => void run("native selector", async () => {
+                  const result = await desktop.selectNativeGroupOutbound(group.tag, outbound);
+                  setGroups((list) => list.map((item) => item.tag === group.tag ? { ...item, selected: outbound } : item));
+                  return result;
+                }) : undefined}
+                onTest={node ? () => testDelays([node]) : undefined}
+              />
+            ))}
+          </div>
+          {members.length === 0 && <p className="panel-empty">{t("没有符合条件的节点。")}</p>}
+          {group.groupType !== "selector" && <p className="panel-note">{t("这个策略组自动选择出口，不能手动切换。")}</p>}
+        </Panel>
+      )}
     </div>
   );
+}
+
+function PaneItem({ icon, color, title, detail, badge, active, onClick }: {
+  icon: LucideIcon;
+  color: TileColor;
+  title: string;
+  detail?: string;
+  badge?: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button className={`pane-item ${active ? "active" : ""}`} aria-current={active ? "true" : undefined} onClick={onClick}>
+      <Tile icon={icon} color={color} />
+      <span className="pane-text"><strong>{title}</strong>{detail && <small>{detail}</small>}</span>
+      {badge && <span className="chip">{badge}</span>}
+    </button>
+  );
+}
+
+/** One node as a card: its name, protocol and delay; the whole card picks it. */
+function NodeCard({ label, protocol, delay, selected, disabled, onPick, onTest, onShare }: {
+  label: string;
+  protocol?: string;
+  delay?: NodeDelay;
+  selected: boolean;
+  disabled: boolean;
+  onPick?: () => void;
+  onTest?: () => void;
+  onShare?: () => void;
+}) {
+  return (
+    <div className={`node-card ${selected ? "selected" : ""} ${onPick ? "" : "fixed"}`} role="listitem">
+      <button className="node-card-pick" aria-pressed={selected} disabled={disabled || selected || !onPick} onClick={onPick} title={label}>
+        <strong>{label}</strong>
+        <span className="node-card-meta">
+          {protocol && <span className="protocol-badge">{protocolAbbreviation(protocol)}</span>}
+          <span className={`delay ${delay ? delayTone(delay) : ""}`} title={delay?.error ?? undefined}>{delay ? delayLabel(delay) : ""}</span>
+        </span>
+      </button>
+      {selected && <Check className="node-card-check" size={14} strokeWidth={2.5} aria-label={t("当前节点")} />}
+      <span className="node-card-actions">
+        {onTest && <IconButton label={t("测试 {node} 的延迟", { node: label })} disabled={disabled} onClick={onTest}><Activity size={13} /></IconButton>}
+        {onShare && <IconButton label={t("复制 {node} 的分享链接", { node: label })} disabled={disabled} onClick={onShare}><Share2 size={13} /></IconButton>}
+      </span>
+    </div>
+  );
+}
+
+function groupLook(group: NativeGroupSummary): { icon: LucideIcon; color: TileColor } {
+  if (/ai|gpt|openai|claude/i.test(group.tag)) return { icon: Bot, color: "teal" };
+  if (group.groupType === "urltest") return { icon: Zap, color: "green" };
+  return { icon: Layers, color: "orange" };
+}
+
+function groupTypeLabel(type: string): string {
+  return type === "selector" ? t("手动选择") : type === "urltest" ? t("自动测速") : type;
+}
+
+/** `42 nodes · 128 GB / 500 GB`, as much of it as the subscription reports. */
+function sourceDetail(source: SubscriptionSummary): string {
+  const used = source.upload == null && source.download == null ? undefined : (source.upload ?? 0) + (source.download ?? 0);
+  return [
+    source.nodeCount != null ? t("{count} 个节点", { count: source.nodeCount }) : null,
+    used != null ? (source.total ? [formatBytes(used), formatBytes(source.total)].join(" / ") : formatBytes(used)) : source.refreshable ? null : t("本地文件"),
+  ].filter(Boolean).join(" · ");
 }
 
 const delayUrl = "https://www.gstatic.com/generate_204";
@@ -111,11 +272,15 @@ async function copyShareLink(node: NodeSummary) {
   return { message: t("已复制 {node} 的分享链接", { node: node.label }) };
 }
 
-function Subscriptions({ snapshot, empty, busy, run }: { snapshot: RuntimeSnapshot | null; empty: boolean; busy: string | null; run: Run }) {
+function Subscriptions({ snapshot, sources, refreshSources, empty, busy, run }: {
+  snapshot: RuntimeSnapshot | null;
+  sources: SubscriptionSummary[];
+  refreshSources: () => void;
+  empty: boolean;
+  busy: string | null;
+  run: Run;
+}) {
   const [location, setLocation] = useState("");
-  const [sources, setSources] = useState<SubscriptionSummary[]>([]);
-  const refreshSources = () => void desktop.subscriptions().then(setSources).catch(() => setSources([]));
-  useEffect(refreshSources, [snapshot?.subscription]);
 
   const importSource = () => void run("subscription", async () => {
     const result = await desktop.importSubscription(location.trim());
@@ -160,6 +325,7 @@ function Subscriptions({ snapshot, empty, busy, run }: { snapshot: RuntimeSnapsh
 
   return (
     <Card
+      className="main-pane"
       title={t("订阅")}
       description={refreshDetail ?? t("支持 HTTPS 订阅链接和本地配置文件。")}
       actions={<>

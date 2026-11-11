@@ -1,7 +1,8 @@
-import { Activity, CheckCircle2, CircleAlert, Globe, House, Puzzle, Route, Settings, X } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, CheckCircle2, CircleAlert, Globe, House, Puzzle, Route, Settings, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { desktop, NodeSummary, RuntimeSnapshot } from "./bridge";
+import { formatRate } from "./activity-format";
+import { desktop, NodeDelay, NodeSummary, RuntimeSnapshot } from "./bridge";
 import { Wordmark } from "./brand";
 import { connectionTitle, connectPhase, routingLabel } from "./labels";
 import { ActivityPage } from "./pages/ActivityPage";
@@ -10,7 +11,8 @@ import { HomePage } from "./pages/HomePage";
 import { ProxiesPage } from "./pages/ProxiesPage";
 import { RulesPage } from "./pages/RulesPage";
 import { SettingsPage } from "./pages/SettingsPage";
-import { keepIfUnchanged, usePageVisible } from "./live";
+import { keepIfUnchanged, liveEngine, usePageVisible } from "./live";
+import { TrafficSource, useTraffic } from "./traffic-feed";
 import { useAppearance } from "./theme";
 import { StatusDot, Switch, Tile, TileColor, ToolbarSlot } from "./ui";
 import { t, useLanguage } from "./i18n";
@@ -27,8 +29,8 @@ const navigation: Array<{ page: Page; label: string; icon: LucideIcon; color: Ti
 
 const settingsItem = { page: "settings" as const, label: "设置", icon: Settings, color: "gray" as const };
 
-// Lists read better wider; settings-style pages keep the narrow System Settings column.
-const widePages: Page[] = ["proxies", "activity"];
+// The dashboards use the whole window, lists read better wider, and settings-style pages keep a narrow column.
+const pageWidths: Partial<Record<Page, "full" | "wide">> = { home: "full", proxies: "full", activity: "wide" };
 
 interface Notice {
   text: string;
@@ -40,6 +42,8 @@ export function App() {
   const [snapshot, setSnapshot] = useState<RuntimeSnapshot | null>(null);
   const [nodes, setNodes] = useState<NodeSummary[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  // Delay results stay for the session, so the overview can show the current node's delay.
+  const [delays, setDelays] = useState<Record<string, NodeDelay>>({});
   const [notice, setNotice] = useState<Notice | null>(null);
   const [toolbar, setToolbar] = useState<HTMLElement | null>(null);
   const [appearance, setAppearance] = useAppearance();
@@ -109,7 +113,7 @@ export function App() {
     ? [node?.label ?? snapshot?.selectedNode, routingLabel(snapshot?.routingMode)].filter(Boolean).join(" · ")
     : phase === "off" ? "Ctrl+Shift+C" : "";
   const moving = phase === "connecting" || phase === "disconnecting";
-  const width = widePages.includes(page) ? "wide" : "narrow";
+  const width = pageWidths[page] ?? "narrow";
 
   const navButton = ({ page: item, label, icon, color }: typeof navigation[number]) => (
     <button
@@ -119,11 +123,14 @@ export function App() {
       onClick={() => setPage(item)}
     >
       <Tile icon={icon} color={color} /><span>{t(label)}</span>
+      {item === "proxies" && nodes.length > 0 && <span className="nav-count">{nodes.length}</span>}
+      {item === "activity" && <ActiveCount />}
     </button>
   );
 
   return (
     <div className="app-shell">
+      <TrafficSource enabled={liveEngine(snapshot)} />
       <aside className="sidebar">
         <div className="sidebar-brand"><Wordmark /></div>
         <nav aria-label={t("主导航")}>
@@ -131,20 +138,23 @@ export function App() {
           <div className="nav-gap" />
           {navButton(settingsItem)}
         </nav>
-        <div className="sidebar-status">
-          <StatusDot tone={dotTone} />
-          <button className="sidebar-status-text" onClick={() => setPage("home")}>
-            <strong>{connectionTitle(snapshot?.connection, phase)}</strong>
-            {sideDetail && <small className="truncate">{sideDetail}</small>}
-          </button>
-          <Switch
-            label={phase === "on" ? t("断开") : t("连接")}
-            tone="go"
-            checked={phase === "on" || phase === "connecting"}
-            busy={moving}
-            disabled={phase === "loading" || moving || (snapshot !== null && !snapshot.subscription && nodes.length === 0)}
-            onChange={toggleConnection}
-          />
+        <div className="sidebar-foot">
+          <SidebarRates />
+          <div className="sidebar-status">
+            <StatusDot tone={dotTone} />
+            <button className="sidebar-status-text" onClick={() => setPage("home")}>
+              <strong>{connectionTitle(snapshot?.connection, phase)}</strong>
+              {sideDetail && <small className="truncate">{sideDetail}</small>}
+            </button>
+            <Switch
+              label={phase === "on" ? t("断开") : t("连接")}
+              tone="go"
+              checked={phase === "on" || phase === "connecting"}
+              busy={moving}
+              disabled={phase === "loading" || moving || (snapshot !== null && !snapshot.subscription && nodes.length === 0)}
+              onChange={toggleConnection}
+            />
+          </div>
         </div>
       </aside>
       <main className="workspace">
@@ -154,8 +164,8 @@ export function App() {
         </header>
         <div className={`page ${width}`} key={page}>
           <ToolbarSlot.Provider value={toolbar}>
-            {page === "home" && <HomePage snapshot={snapshot} nodes={nodes} phase={phase} busy={busy} run={run} toggle={toggleConnection} goTo={setPage} />}
-            {page === "proxies" && <ProxiesPage snapshot={snapshot} nodes={nodes} busy={busy} run={run} />}
+            {page === "home" && <HomePage snapshot={snapshot} nodes={nodes} phase={phase} busy={busy} run={run} toggle={toggleConnection} goTo={setPage} delays={delays} setDelays={setDelays} />}
+            {page === "proxies" && <ProxiesPage snapshot={snapshot} nodes={nodes} busy={busy} run={run} delays={delays} setDelays={setDelays} />}
             {page === "rules" && <RulesPage snapshot={snapshot} busy={busy} run={run} />}
             {page === "extensions" && <ExtensionsPage snapshot={snapshot} busy={busy} run={run} />}
             {page === "activity" && <ActivityPage snapshot={snapshot} busy={busy} run={run} />}
@@ -172,4 +182,22 @@ export function App() {
       </main>
     </div>
   );
+}
+
+/** The live upload and download rates above the connection switch; nothing while disconnected. */
+function SidebarRates() {
+  const { traffic } = useTraffic();
+  if (!traffic) return null;
+  return (
+    <div className="sidebar-rates" aria-label={t("实时速度")}>
+      <span><ArrowUp size={11} />{formatRate(traffic.upload_rate)}</span>
+      <span><ArrowDown size={11} />{formatRate(traffic.download_rate)}</span>
+    </div>
+  );
+}
+
+/** How many connections are open, next to "Activity" in the sidebar. */
+function ActiveCount() {
+  const { traffic } = useTraffic();
+  return traffic?.active ? <span className="nav-count">{traffic.active}</span> : null;
 }
