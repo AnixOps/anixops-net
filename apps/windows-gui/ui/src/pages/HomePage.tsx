@@ -388,7 +388,7 @@ function DelayPanel({ snapshot, busy, run, goTo, setDelays }: {
             <dd><Switch label={t("TUN 模式")} checked={Boolean(snapshot?.tunModeEnabled)} disabled={Boolean(busy)} onChange={() => void run("TUN", () => desktop.setTunMode(!snapshot?.tunModeEnabled))} /></dd>
           </div>
         )}
-        {windows && (
+        {snapshot?.httpsDecryptionEnabled !== undefined && (
           <div>
             <dt><button className="plain-link" onClick={() => goTo("extensions")}>{t("HTTPS 解密")}<ChevronRight size={12} /></button></dt>
             <dd><Switch label={t("HTTPS 解密")} checked={decrypting} disabled={Boolean(busy)} onChange={() => void run("mitm", decrypting ? desktop.disableHttpsMitm : desktop.enableHttpsMitm)} /></dd>
