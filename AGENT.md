@@ -10,3 +10,5 @@ AI 编码助手与贡献者在本仓库工作时必须遵守：
   `rev` 引用内核。需要内核改动时，先在内核仓库合并，再在本仓库升级 `rev`。
 - 不得在本仓库依赖私有仓库（例如 anx）：本仓库公开，cargo 会解析所有依赖，包括可选依赖。
 - 无法自动完成的事项记录到 `docs/manual-intervention.md`。
+- 所有平台的界面改动都必须遵守 AnixOps Design 的操作与层级规范（`guidelines/actions.md`），客户端的组件对照和自查清单见
+  [`docs/ui-ux.md`](docs/ui-ux.md)。界面 PR 的描述里写明自查结果；要破例先改规范。

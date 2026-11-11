@@ -186,13 +186,19 @@ struct ConnectionsView: View {
                     Image(systemName: paused ? "play.fill" : "pause.fill")
                 }
                 .accessibilityLabel(paused ? "继续刷新" : "暂停刷新")
-                Button(role: .destructive) {
-                    confirmingCloseAll = true
+                // The destructive action is not a neighbour of pause: it sits in the "more" menu and is confirmed
+                // (AnixOps Design, actions D1 and D2).
+                Menu {
+                    Button(role: .destructive) {
+                        confirmingCloseAll = true
+                    } label: {
+                        Label("断开全部连接", systemImage: "xmark.circle")
+                    }
+                    .disabled(list.active.isEmpty || tunnel.connection != .connected)
                 } label: {
-                    Image(systemName: "xmark.circle")
+                    Image(systemName: "ellipsis.circle")
                 }
-                .disabled(list.active.isEmpty || tunnel.connection != .connected)
-                .accessibilityLabel("断开全部连接")
+                .accessibilityLabel("更多")
             }
         }
         .confirmationDialog("断开全部 \(list.active.count) 个连接？", isPresented: $confirmingCloseAll, titleVisibility: .visible) {

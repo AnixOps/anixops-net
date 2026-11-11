@@ -5,7 +5,7 @@ import { desktop, NativeGroupSummary, NodeDelay, NodeSummary, RuntimeSnapshot, S
 import { memberNode } from "../dashboard";
 import { groupMemberLabel, protocolAbbreviation } from "../labels";
 import { delayLabel, delayTone, filterNodes, groupNodes, NodeSort, sortNodes } from "../node-filter";
-import { Card, EmptyState, IconButton, PageTools, Panel, Run, StatusPill, Tile, TileColor } from "../ui";
+import { Card, EmptyState, IconButton, MoreMenu, PageTools, Panel, Run, StatusPill, Tile, TileColor } from "../ui";
 import { t } from "../i18n";
 import { formatBytes, formatDay, updateIntervalChoices, updateIntervalLabel, usedFraction } from "../subscription-format";
 import type { Delays, SetDelays } from "./HomePage";
@@ -76,8 +76,11 @@ export function ProxiesPage({ snapshot, nodes, busy, run, delays, setDelays }: {
             <input aria-label={t("搜索节点")} placeholder={t("搜索节点")} value={query} onChange={(event) => setQuery(event.target.value)} />
           </label>
         )}
-        <button className="secondary" disabled={Boolean(busy) || testable.length === 0} onClick={() => testDelays(testable)}><Gauge size={14} />{t("全部测速")}</button>
-        <button className="primary" disabled={Boolean(busy) || nodes.length === 0} onClick={() => void run("fastest node", desktop.selectFastestNode)}><Zap size={14} />{t("选择最快")}</button>
+        {/* Node actions belong to the node views only; the subscriptions view has its own primary action, import. */}
+        {shown.kind !== "subscriptions" && <>
+          <button className="secondary" disabled={Boolean(busy) || testable.length === 0} onClick={() => testDelays(testable)}><Gauge size={14} />{t("全部测速")}</button>
+          <button className="primary" disabled={Boolean(busy) || nodes.length === 0} onClick={() => void run("fastest node", desktop.selectFastestNode)}><Zap size={14} />{t("选择最快")}</button>
+        </>}
       </PageTools>
 
       <Panel className="side-pane">
@@ -431,13 +434,23 @@ function SubscriptionRow({ source, canUpdate, busy, run, changed }: {
           <RefreshCw size={15} />
         </IconButton>
       )}
-      <IconButton label={t("重命名 {name}", { name: source.name })} disabled={Boolean(busy)} onClick={() => { setName(source.name); setRenaming(true); }}>
-        <Pencil size={15} />
-      </IconButton>
-      <button className="secondary compact" disabled={Boolean(busy) || source.selected} onClick={() => void run("subscription", then(() => desktop.selectSubscription(source.id)))}>{t("使用")}</button>
-      <IconButton label={t("删除 {name}", { name: source.name })} disabled={Boolean(busy)} onClick={() => void run("subscription", then(() => desktop.removeSubscription(source.id)))}>
-        <Trash2 size={15} />
-      </IconButton>
+      {!source.selected && (
+        <button className="secondary compact" disabled={Boolean(busy)} onClick={() => void run("subscription", then(() => desktop.selectSubscription(source.id)))}>{t("使用")}</button>
+      )}
+      <MoreMenu
+        label={t("更多")}
+        disabled={Boolean(busy)}
+        items={[
+          { label: t("重命名"), icon: Pencil, onSelect: () => { setName(source.name); setRenaming(true); } },
+          {
+            label: t("删除订阅"),
+            icon: Trash2,
+            danger: true,
+            confirm: t("确认删除 {name}", { name: source.name }),
+            onSelect: () => void run("subscription", then(() => desktop.removeSubscription(source.id))),
+          },
+        ]}
+      />
     </li>
   );
 }

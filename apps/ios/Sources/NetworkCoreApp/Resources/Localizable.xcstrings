@@ -5246,6 +5246,16 @@
           }
         }
       }
+    },
+    "更多": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

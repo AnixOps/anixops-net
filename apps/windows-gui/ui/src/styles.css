@@ -128,7 +128,6 @@ button.row { width: calc(100% + 2 * var(--row-pad)); color: inherit; }
 .row-value { display: inline-flex; flex: 0 1 auto; gap: 6px; align-items: center; max-width: 60%; min-width: 0; overflow: hidden; color: var(--text2); text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .chevron { flex: 0 0 auto; margin-right: -4px; color: var(--text3); }
 .row .check { display: grid; flex: 0 0 16px; place-items: center; color: var(--accent); }
-.button-group { display: inline-flex; gap: 6px; }
 .row.toolbar { flex-wrap: wrap; padding-block: 8px; }
 
 /* Switches */
@@ -188,6 +187,17 @@ label.toggle-row input:disabled + i { opacity: .5; }
 .link-button { display: inline-flex; gap: 4px; align-items: center; padding: 2px 4px; color: var(--accent); font-size: 12px; font-weight: 500; background: none; border: 0; border-radius: 5px; }
 .link-button:hover:not(:disabled) { background: var(--accent-soft); }
 .link-button.more { margin: 0 auto; }
+.link-button.danger { color: var(--danger); }
+.link-button.danger:hover:not(:disabled) { background: var(--danger-soft); }
+/* The "more" menu of a row or header: fixed to the window so a clipping group does not cut it. */
+.more-menu { position: relative; display: inline-flex; flex: 0 0 auto; }
+.menu { position: fixed; z-index: var(--z-dropdown); display: flex; flex-direction: column; min-width: 168px; max-width: 280px; padding: 4px; background: var(--group); border-radius: 9px; box-shadow: 0 0 0 .5px var(--separator-strong), var(--shadow-2); }
+.menu-item { display: flex; gap: 8px; align-items: center; min-height: 26px; padding: 0 8px; color: var(--text); font-size: 12px; text-align: left; background: none; border: 0; border-radius: 6px; }
+.menu-item:hover:not(:disabled) { background: var(--fill-2); }
+.menu-item > svg { flex: 0 0 auto; color: var(--text2); }
+.menu-item.danger, .menu-item.danger > svg { color: var(--danger); }
+.menu-item.danger:hover:not(:disabled) { background: var(--danger-soft); }
+.menu-separator { height: 1px; margin: 4px 6px; background: var(--separator); }
 .button-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip-button { height: 24px; padding: 0 10px; color: var(--text2); font-size: 12px; font-weight: 500; background: var(--fill-1); border: 0; border-radius: var(--radius-pill); }
 .chip-button.selected { color: var(--accent); background: var(--accent-soft); }
