@@ -3596,7 +3596,10 @@ mod tests {
     #[test]
     fn trace_gives_the_exit_address_and_country() {
         let body = "fl=1f2\nh=www.cloudflare.com\nip=203.0.113.7\nts=1.5\nloc=HK\ntls=TLSv1.3\n";
-        assert_eq!(parse_trace(body), (Some("203.0.113.7".to_string()), Some("HK".to_string())));
+        assert_eq!(
+            parse_trace(body),
+            (Some("203.0.113.7".to_string()), Some("HK".to_string()))
+        );
         assert_eq!(parse_trace("ipx=1\nloc=\n"), (None, None));
     }
 
