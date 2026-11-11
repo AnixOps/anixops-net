@@ -136,8 +136,9 @@ targets:
         product: NetworkCoreIOS
 
   # The macOS app: the same tunnel controller, import flow and brand views as iOS, with a sidebar window and a
-  # menu bar item. Distributed through the Mac App Store / TestFlight, where a Network Extension ships as an app
-  # extension inside the app (Developer ID distribution would need a System Extension instead).
+  # menu bar item. Distributed outside the Mac App Store with a Developer ID signature and notarization, so the
+  # Network Extension ships as a System Extension (Contents/Library/SystemExtensions) that the app activates
+  # (SystemExtensionActivation) and the user allows in System Settings.
   NetworkCoreMac:
     type: application
     platform: macOS
@@ -181,6 +182,7 @@ targets:
       base:
         PRODUCT_NAME: AnixOps Net
         PRODUCT_MODULE_NAME: NetworkCoreMac
+        # The tunnel's bundle ID (com.example.networkcore.macos.packettunnel) starts with this one.
         PRODUCT_BUNDLE_IDENTIFIER: com.example.networkcore.macos
         CODE_SIGN_ENTITLEMENTS: Entitlements/NetworkCoreMac.entitlements
         ENABLE_HARDENED_RUNTIME: YES
@@ -195,12 +197,16 @@ targets:
       - framework: Generated/NetworkCoreRuntime.xcframework
         embed: false
 
-  # The packet tunnel for macOS: the same provider sources as iOS, linked with the macOS slice of the runtime.
+  # The packet tunnel for macOS: the same provider sources as iOS, linked with the macOS slice of the runtime, run as
+  # a System Extension (Sources/NetworkCoreMacTunnel/main.swift). It runs as root and cannot read the user's
+  # Keychain, so the app hands the node key, node library and MITM root over at start (TunnelStartSecrets).
+  # Its bundle ID must start with the app's, and macOS requires the bundle to be named after its bundle ID.
   NetworkCoreMacTunnel:
-    type: app-extension
+    type: system-extension
     platform: macOS
     sources:
       - path: Sources/NetworkCorePacketTunnel
+      - path: Sources/NetworkCoreMacTunnel
     info:
       path: Generated/NetworkCoreMacTunnel-Info.plist
       properties:
@@ -209,12 +215,19 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
         ITSAppUsesNonExemptEncryption: false
-        NSExtension:
-          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
-          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+        # XcodeGen does not add the package type for system extensions; macOS only loads a SYSX bundle.
+        CFBundlePackageType: SYSX
+        NSSystemExtensionUsageDescription: AnixOps Net 用这个网络扩展建立 VPN 隧道。
+        NetworkExtension:
+          # Must start with an app group of the extension's entitlements (Entitlements/NetworkCoreMacTunnel.entitlements).
+          NEMachServiceName: $(TeamIdentifierPrefix)net.anixops.networkcore.tunnel
+          NEProviderClasses:
+            com.apple.networkextension.packet-tunnel: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.networkcore.macos.packettunnel
+        PRODUCT_NAME: $(PRODUCT_BUNDLE_IDENTIFIER)
+        PRODUCT_MODULE_NAME: NetworkCoreMacTunnel
         CODE_SIGN_ENTITLEMENTS: Entitlements/NetworkCoreMacTunnel.entitlements
         ENABLE_HARDENED_RUNTIME: YES
     dependencies:

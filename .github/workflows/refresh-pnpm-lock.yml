@@ -35,3 +35,4 @@ jobs:
           name: pnpm-lock
           path: apps/windows-gui/ui/pnpm-lock.yaml
           if-no-files-found: error
+          retention-days: 1

@@ -112,3 +112,15 @@ GUI 清单改为 `requireAdministrator`，登录后启动从 HKCU Run 改为按�
 - [ ] 代理服务器连接不回环：连接稳定、CPU 正常，`netstat -ano` 中客户端到节点的连接本地地址是物理网卡 IP。
 - [ ] 关闭 TUN 模式或断开后，`AnixOps Net` 网卡和路由消失，网络恢复正常。
 - [ ] 已知限制：DNS 服务器在本地网段（如路由器 192.168.1.1）时 Windows 可能并发向它查询；切换 Wi-Fi/有线后需要重连一次。
+
+## macOS Developer ID 版真机验收
+
+macOS 客户端改为官网分发（Developer ID 签名 + 公证），隧道从 App 扩展改成 System Extension。签名、公证在私有 anx 仓库的
+「macOS with ANX」workflow 里完成；CI 只能做不签名构建，以下只能真机验收（macOS 14+）：
+
+- [ ] 解开 ZIP / 挂载 DMG，把 AnixOps Net 拖进「应用程序」后打开，Gatekeeper 不报「无法验证开发者」；`spctl -a -vv` 显示 `Notarized Developer ID`。
+- [ ] 第一次连接时提示允许网络扩展；在「系统设置 › 通用 › 登录项与扩展 › 网络扩展」允许后，再连接成功。
+- [ ] 不在「应用程序」里直接打开时，连接给出「请先把 AnixOps Net 拖进应用程序文件夹」的提示。
+- [ ] 订阅规则、HTTPS 解密（根证书已信任）、脚本插件在 Mac 上照常生效（隧道读的是 App 启动时交给它的密钥副本）。
+- [ ] 睡眠唤醒、从系统设置的 VPN 开关直接连接（不经 App）也能连上。
+- [ ] 安装新版本后再连接，系统扩展被替换为新版本（`systemextensionsctl list` 版本号更新）。

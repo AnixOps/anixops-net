@@ -12,7 +12,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// The node key for this profile. The app saves it under one fixed account and updates it in place, so that
     /// item is read first. The persistent reference is only a fallback: builds that deleted and re-added the item
     /// on every save left references that point at nothing, or at another item once the Keychain reused its row.
-    private static func nodeKey(for reference: Data) throws -> String {
+    private func nodeKey(for reference: Data) throws -> String {
+        if let value = startSecrets?.nodeKey {
+            return value
+        }
         if let value = try NodeSecretStore.value(account: NodeSecretStore.tunnelProfileAccount) {
             return value
         }
@@ -20,6 +23,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     private var session: EmbeddedRuntimeSession?
+    /// What the macOS app handed over at start (`TunnelStartSecrets`); nil on iOS, where the Keychain is shared.
+    private var startSecrets: TunnelStartSecrets?
     private var startedAt: Date?
     private var memoryPressure: DispatchSourceMemoryPressure?
     /// Recent events for the app's developer mode. Same rule as the system log: fixed reasons and codes only.
@@ -35,6 +40,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         Self.log.notice("startTunnel")
         events.record("startTunnel")
         watchMemoryPressure()
+        startSecrets = Self.resolveStartSecrets(options: options, events: events)
         let completionHandler: (Error?) -> Void = { [events] error in
             if let error = error {
                 Self.log.error("startTunnel failed: \(error.localizedDescription, privacy: .public)")
@@ -76,7 +82,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         var config: EmbeddedRuntimeConfig
         let interface: TunnelInterface
         do {
-            let secret = NodeSecret.fromKeychainValue(try Self.nodeKey(for: keyReference))
+            let secret = NodeSecret.fromKeychainValue(try nodeKey(for: keyReference))
             config = try EmbeddedRuntimeConfig.decoded(from: template).withSecret(secret)
             interface = try (tunnelProtocol.providerConfiguration?[TunnelProfileKeys.tunnelInterface] as? Data)
                 .map(TunnelInterface.decoded(from:)) ?? .proxy
@@ -108,7 +114,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
         let session: EmbeddedRuntimeSession
         do {
-            let mitm = MitmProfileBundle.fromProfile(tunnelProtocol.providerConfiguration)
+            let mitm = MitmProfileBundle.fromProfile(
+                tunnelProtocol.providerConfiguration, chunks: startSecrets?.mitmBundleChunks
+            )
             session = try makeSession(
                 config,
                 mitmPlugins: mitm.plugins,
@@ -244,7 +252,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// the diagnostics.
     private func withSubscriptionRules(_ config: EmbeddedRuntimeConfig, localRules: LocalRules) -> EmbeddedRuntimeConfig {
         do {
-            guard let value = try NodeSecretStore.value(account: NodeLibrary.keychainAccount),
+            guard let value = try startSecrets?.nodeLibrary ?? NodeSecretStore.value(account: NodeLibrary.keychainAccount),
                   let routing = try NodeLibrary.fromKeychainValue(value).routingForModes(localRules: localRules)
             else {
                 events.record("subscription rules off: no node list")
@@ -299,7 +307,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     ) throws -> EmbeddedRuntimeSession {
         if !mitmPlugins.isEmpty {
             do {
-                if let authority = try MitmCertificateStore.load() {
+                if let authority = try mitmAuthority() {
                     if !mitmScripts.isEmpty {
                         do {
                             let session = try EmbeddedRuntimeSession(
@@ -339,6 +347,43 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             }
         }
         return try EmbeddedRuntimeSession(config: config.withoutMitm().encoded(), packetFlow: packetFlow)
+    }
+
+    /// The MITM root: the one the macOS app handed over, else the shared Keychain's.
+    private func mitmAuthority() throws -> MitmCertificateAuthority? {
+        if let stored = startSecrets?.mitmAuthority {
+            return try MitmCertificateStore.authority(fromStoredValue: stored)
+        }
+        return try MitmCertificateStore.load()
+    }
+
+    /// On macOS the tunnel may run as a System Extension, a root process that cannot read the user's Keychain, so
+    /// the app passes the Keychain values in the start options. They are kept in the extension's own container for
+    /// starts without options (on demand, after sleep). iOS shares the Keychain and never passes them.
+    private static func resolveStartSecrets(options: [String: NSObject]?, events: TunnelDiagnosticLog) -> TunnelStartSecrets? {
+        #if os(macOS)
+        let url = try? FileManager.default
+            .url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+            .appendingPathComponent(TunnelStartSecrets.fileName)
+        if let handed = TunnelStartSecrets(options: options) {
+            if let url {
+                do {
+                    try handed.save(to: url)
+                } catch {
+                    events.record("start secrets not kept: could not write them")
+                }
+            }
+            events.record("start secrets from the app")
+            return handed
+        }
+        if let url, let kept = TunnelStartSecrets.load(from: url) {
+            events.record("start secrets from the last start")
+            return kept
+        }
+        return nil
+        #else
+        return nil
+        #endif
     }
 
     /// Writes the allowed scripts where the runtime reads them (it pins each file by SHA-256 at start).
