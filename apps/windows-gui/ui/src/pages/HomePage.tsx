@@ -140,7 +140,7 @@ export function HomePage({ snapshot, nodes, phase, busy, run, toggle, goTo }: {
               onChange={() => void run("TUN", () => desktop.setTunMode(!snapshot?.tunModeEnabled))}
             />
           )}
-          <Row icon={LockKeyhole} color="pink" label={t("HTTPS 解密与插件")} onClick={() => goTo("extensions")} />
+          <Row icon={LockKeyhole} color="pink" label={t("HTTPS 解密与插件")} value={snapshot?.httpsDecryptionEnabled ? t("已开启") : t("未开启")} onClick={() => goTo("extensions")} />
         </Card>
       )}
     </div>

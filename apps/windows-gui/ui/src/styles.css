@@ -98,7 +98,7 @@ nav { display: grid; gap: 1px; }
 .card-footer { margin: 6px var(--row-pad) 0; color: var(--text3); font-size: 12px; line-height: 1.45; }
 .group { padding: 0 var(--row-pad); overflow: hidden; background: var(--group); border-radius: 10px; box-shadow: 0 0 0 .5px var(--hairline), var(--shadow-1); }
 .group + .group, .node-section + .node-section { margin-top: 14px; }
-.group > :not(.row):not([role="radiogroup"]):not(.list) { padding-block: 12px; }
+.group > :not(.row):not([role="radiogroup"]):not(.list):not(.rows) { padding-block: 12px; }
 .group > * + :not(.row), .group > :not(.row) + .row { border-top: 1px solid var(--hairline); }
 .subhead { display: flex; gap: 8px; align-items: baseline; margin: 0 var(--row-pad) 6px; color: var(--text3); font-size: 12px; font-weight: 500; }
 .count { color: var(--text3); font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
@@ -214,8 +214,6 @@ select option { color: var(--label-1); background: var(--bg-elevated); }
 .list-main strong { overflow: hidden; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .list-main small { overflow: hidden; color: var(--text2); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .subscription-row { flex-wrap: wrap; }
-.plugin-row .toggle-row.compact { min-height: 0; padding: 0; border-top: 0; }
-.import-row + .empty-state { padding-bottom: 8px; }
 .subscription-row .list-main { min-width: 220px; }
 .plugin-row .toggle-row.compact { min-height: 0; padding: 0; border-top: 0; }
 .rename-row { display: flex; gap: 4px; align-items: center; }
