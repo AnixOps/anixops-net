@@ -335,7 +335,7 @@ mod tests {
         assert!(summary.enabled);
         // The same address replaces the plugin instead of adding a second one.
         import(&directory, PLUGIN_URL, fetch).unwrap();
-        assert_eq!(list(&directory).unwrap(), [summary.clone()]);
+        assert_eq!(list(&directory).unwrap(), std::slice::from_ref(&summary));
 
         let mut mitm = Map::new();
         apply(&directory, &mut mitm);
