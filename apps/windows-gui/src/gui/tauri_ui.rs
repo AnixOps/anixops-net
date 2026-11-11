@@ -1,5 +1,6 @@
 use super::actions::connection;
 use super::linked_sources::{self, CachedNode, OtherSource};
+use super::mitm_plugins::{self, PluginSummary};
 use super::runtime_status::{read_runtime_status, ManagedCoreStatus, WindowsRuntimeStatus};
 use super::startup::{
     load_desktop_state, owns_current_proxy, save_desktop_state, DesktopProfileNode,
@@ -129,6 +130,8 @@ struct RuntimeSnapshot {
     bilibili_web_ad_block_enabled: bool,
     tun_mode_enabled: bool,
     script_runtime_configured: bool,
+    /// HTTPS decryption is on for the managed profile.
+    https_decryption_enabled: bool,
     dark_theme: bool,
     runtime_mode: String,
     routing_mode: String,
@@ -285,6 +288,10 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             clear_script_runtime,
             enable_https_mitm,
             disable_https_mitm,
+            list_mitm_plugins,
+            import_mitm_plugin,
+            set_mitm_plugin_enabled,
+            remove_mitm_plugin,
             set_tun_mode,
             install_certificate,
             remove_certificate,
@@ -2907,6 +2914,74 @@ fn routing_mode_label(mode: DesktopRoutingMode) -> &'static str {
 }
 
 #[tauri::command]
+async fn list_mitm_plugins() -> Result<Vec<PluginSummary>, String> {
+    run_blocking(|| mitm_plugins::list(&mitm_plugins::directory())).await
+}
+
+#[tauri::command]
+async fn import_mitm_plugin(
+    url: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let plugin =
+            mitm_plugins::import(&mitm_plugins::directory(), &url, mitm_plugins::download)?;
+        let applied = apply_mitm_plugins(&state);
+        Ok(OperationResult {
+            message: format!(
+                "Plugin imported: {} ({} scripts). {applied}",
+                plugin.name, plugin.script_count
+            ),
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn set_mitm_plugin_enabled(
+    id: String,
+    enabled: bool,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        mitm_plugins::set_enabled(&mitm_plugins::directory(), &id, enabled)?;
+        Ok(OperationResult {
+            message: apply_mitm_plugins(&state),
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn remove_mitm_plugin(
+    id: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        mitm_plugins::remove(&mitm_plugins::directory(), &id)?;
+        Ok(OperationResult {
+            message: apply_mitm_plugins(&state),
+        })
+    })
+    .await
+}
+
+/// Restarts a running desktop core so a plugin change takes effect, and
+/// says what the user still has to do when it cannot.
+fn apply_mitm_plugins(state: &DesktopAppState) -> String {
+    if !managed_https_decryption_enabled() {
+        return "Turn on HTTPS decryption for plugins to take effect.".to_string();
+    }
+    match reconnect_running_direct_core(state) {
+        Ok(()) => "Plugins are applied to the running connection.".to_string(),
+        Err(error) => format!("Reconnect to apply plugins: {error}"),
+    }
+}
+
+#[tauri::command]
 async fn configure_script_runtime(script_runtime_json: String) -> Result<OperationResult, String> {
     run_blocking(move || configure_script_runtime_blocking(script_runtime_json)).await
 }
@@ -3405,6 +3480,7 @@ fn snapshot(
         bilibili_web_ad_block_enabled: desktop.bilibili_web_ad_block_enabled,
         tun_mode_enabled: desktop.tun_mode_enabled,
         script_runtime_configured: managed_script_runtime_configured(),
+        https_decryption_enabled: managed_https_decryption_enabled(),
         dark_theme: desktop.dark_theme,
         runtime_mode: match desktop.runtime_mode {
             DesktopRuntimeMode::Desktop => "desktop".to_string(),
@@ -3414,6 +3490,13 @@ fn snapshot(
         dns_preset: desktop.dns_preset.as_str(),
         embedded_engine: active_embedded_config().ok().flatten().is_some(),
     }
+}
+
+fn managed_https_decryption_enabled() -> bool {
+    managed_config_or_default()
+        .ok()
+        .and_then(|managed| managed.native_mitm)
+        .is_some_and(|native_mitm| native_mitm.enabled)
 }
 
 fn managed_script_runtime_configured() -> bool {

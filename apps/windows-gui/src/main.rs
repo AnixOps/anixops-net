@@ -26,6 +26,7 @@ fn main() {
 mod gui {
     mod actions;
     mod linked_sources;
+    mod mitm_plugins;
     mod runtime_status;
     mod startup;
     mod tauri_ui;
