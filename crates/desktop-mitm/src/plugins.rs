@@ -290,6 +290,7 @@ fn write_library(directory: &Path, library: &Library) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     const PLUGIN_URL: &str = "https://plugins.example/ipleak.plugin";
     const SCRIPT_URL: &str = "https://plugins.example/ipleak.js";
