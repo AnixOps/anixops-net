@@ -33,3 +33,4 @@ jobs:
           name: windows-gui-icon
           path: apps/windows-gui/icons/icon.ico
           if-no-files-found: error
+          retention-days: 1
