@@ -69,6 +69,15 @@ public struct MitmProfileBundle: Codable, Equatable {
         return try JSONEncoder().encode(Reference(digest: Self.digest(packed), chunks: chunks.count))
     }
 
+    /// The saved chunks in order, as Keychain values, for `TunnelStartSecrets`; nil when there are none.
+    public static func storedChunks() -> [String]? {
+        var chunks: [String] = []
+        while let text = try? NodeSecretStore.value(account: accountPrefix + String(chunks.count)) {
+            chunks.append(text)
+        }
+        return chunks.isEmpty ? nil : chunks
+    }
+
     /// Removes every saved chunk, for a profile without HTTPS decryption.
     public static func clear() {
         removeChunks(from: 0)
@@ -84,14 +93,23 @@ public struct MitmProfileBundle: Codable, Equatable {
 
     /// Reads the payload a profile value points at. Nil when the value is absent or malformed, or when the
     /// Keychain no longer holds what the digest names.
-    public static func load(fromProfileValue value: Data?) -> MitmProfileBundle? {
+    ///
+    /// `chunks` replaces the Keychain read with the chunks a macOS app handed to its System Extension
+    /// (`TunnelStartSecrets`), which cannot read the user's Keychain.
+    public static func load(fromProfileValue value: Data?, chunks: [String]? = nil) -> MitmProfileBundle? {
         guard let value, let reference = try? JSONDecoder().decode(Reference.self, from: value), reference.chunks > 0
         else {
             return nil
         }
         var packed = Data()
         for index in 0..<reference.chunks {
-            guard let text = try? NodeSecretStore.value(account: accountPrefix + String(index)),
+            let text: String?
+            if let chunks {
+                text = index < chunks.count ? chunks[index] : nil
+            } else {
+                text = try? NodeSecretStore.value(account: accountPrefix + String(index))
+            }
+            guard let text,
                   let chunk = Data(base64Encoded: text)
             else {
                 return nil
@@ -105,9 +123,9 @@ public struct MitmProfileBundle: Codable, Equatable {
     }
 
     /// The payload of a saved profile: the Keychain bundle, or the plugin keys profiles carried before it existed.
-    public static func fromProfile(_ configuration: [String: Any]?) -> MitmProfileBundle {
+    public static func fromProfile(_ configuration: [String: Any]?, chunks: [String]? = nil) -> MitmProfileBundle {
         if let value = configuration?[TunnelProfileKeys.mitmBundle] as? Data {
-            return load(fromProfileValue: value) ?? MitmProfileBundle()
+            return load(fromProfileValue: value, chunks: chunks) ?? MitmProfileBundle()
         }
         return MitmProfileBundle(
             plugins: MitmPluginLibrary.texts(fromProfileValue: configuration?[TunnelProfileKeys.mitmPlugins] as? Data),

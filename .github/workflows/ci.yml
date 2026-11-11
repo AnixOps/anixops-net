@@ -696,12 +696,19 @@ jobs:
         run: |
           set -euo pipefail
           app="apps/ios/build/Build/Products/Debug/AnixOps Net.app"
-          appex="${app}/Contents/PlugIns/NetworkCoreMacTunnel.appex"
+          # Developer ID distribution: the tunnel is a System Extension named after its bundle ID.
+          tunnel_id=com.example.networkcore.macos.packettunnel
+          appex="${app}/Contents/Library/SystemExtensions/${tunnel_id}.systemextension"
           test -f "${app}/Contents/Resources/PrivacyInfo.xcprivacy"
           test -f "${app}/Contents/Resources/Assets.car"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "${app}/Contents/Info.plist" | grep -qx 'AppIcon'
-          /usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "${appex}/Contents/Info.plist" \
-            | grep -qx 'com.apple.networkextension.packet-tunnel'
+          /usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "${appex}/Contents/Info.plist" | grep -qx 'SYSX'
+          /usr/libexec/PlistBuddy -c 'Print :NetworkExtension:NEProviderClasses:com.apple.networkextension.packet-tunnel' \
+            "${appex}/Contents/Info.plist" | grep -qx 'NetworkCoreMacTunnel.PacketTunnelProvider'
+          /usr/libexec/PlistBuddy -c 'Print :NetworkExtension:NEMachServiceName' "${appex}/Contents/Info.plist" \
+            | grep -q 'net.anixops.networkcore.tunnel$'
+          /usr/libexec/PlistBuddy -c 'Print :NSSystemExtensionUsageDescription' "${appex}/Contents/Info.plist" > /dev/null
+          test ! -d "${app}/Contents/PlugIns/NetworkCoreMacTunnel.appex"
           test -d "${app}/Contents/Resources/en.lproj"
           symbols() {
             local dir="$1" name="$2" out="$3"
@@ -710,13 +717,13 @@ jobs:
               nm "${file}" >> "${out}" 2>/dev/null || true
             done
           }
-          symbols "${appex}/Contents/MacOS" NetworkCoreMacTunnel "${RUNNER_TEMP}/mac-appex-symbols.txt"
+          symbols "${appex}/Contents/MacOS" "${tunnel_id}" "${RUNNER_TEMP}/mac-appex-symbols.txt"
           symbols "${app}/Contents/MacOS" "AnixOps Net" "${RUNNER_TEMP}/mac-app-symbols.txt"
           grep -q '_networkcore_ios_runtime_init$' "${RUNNER_TEMP}/mac-appex-symbols.txt"
           # The app links the runtime library for subscription import and the HTTP delay test.
           grep -q '_networkcore_import_nodes$' "${RUNNER_TEMP}/mac-app-symbols.txt"
           grep -q '_networkcore_ios_measure_delay$' "${RUNNER_TEMP}/mac-app-symbols.txt"
-          lipo -archs "${appex}/Contents/MacOS/NetworkCoreMacTunnel" | tee "${RUNNER_TEMP}/mac-archs.txt"
+          lipo -archs "${appex}/Contents/MacOS/${tunnel_id}" | tee "${RUNNER_TEMP}/mac-archs.txt"
           grep -q arm64 "${RUNNER_TEMP}/mac-archs.txt"
 
       # The unsigned debug build opens with made-up data (`-AnixOpsDemo YES`), so the pictures need no account,
