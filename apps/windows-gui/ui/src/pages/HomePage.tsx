@@ -1,8 +1,8 @@
-import { Activity, AppWindow, ChevronRight, ChevronsUpDown, CloudDownload, Globe, Layers, ListTree, Play, RefreshCw, RotateCw, Search, Timer, Waypoints, Zap } from "lucide-react";
+import { Activity, AppWindow, ChevronRight, ChevronsUpDown, CloudDownload, Globe, House, Layers, ListTree, Play, RefreshCw, RotateCw, Search, Timer, Waypoints, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { Page } from "../App";
-import { ConnectionSnapshot, desktop, NativeGroupSummary, NodeDelay, NodeSummary, RuntimeSnapshot, SubscriptionSummary } from "../bridge";
+import { ConnectionSnapshot, desktop, NativeGroupSummary, NetworkProbe, NodeDelay, NodeSummary, RuntimeSnapshot, SubscriptionSummary } from "../bridge";
 import { connectionName, formatRate } from "../activity-format";
 import { BrandMark } from "../brand";
 import { chartCeiling, chartPoints, colorFor, daysLeft, siteOf, topUsage, UsageRow } from "../dashboard";
@@ -42,15 +42,23 @@ export function HomePage({ snapshot, nodes, phase, busy, run, toggle, goTo, dela
     void desktop.subscriptions().then(setSources).catch(() => setSources([]));
   }, [snapshot?.subscription, snapshot?.subscriptionLastUpdated]);
 
+  // The exit address and the direct delay; backends without the probe leave both out.
+  const [probe, setProbe] = useState<NetworkProbe | null>(null);
+  const connected = phase === "on";
+  const reprobe = useCallback(() => {
+    void desktop.networkProbe(connected).then(setProbe).catch(() => setProbe(null));
+  }, [connected]);
+  useEffect(reprobe, [reprobe, snapshot?.selectedNode, snapshot?.routingMode]);
+
   const waiting = phase === "on" && !live ? t("Windows 服务模式下不提供实时数据") : t("连接后显示");
   const programs = topUsage(connections, (item) => item.process?.split(/[\\/]/).pop(), 5);
 
   return (
     <div className="dash">
-      <Hero snapshot={snapshot} nodes={nodes} phase={phase} busy={busy} run={run} toggle={toggle} goTo={goTo} delays={delays} />
+      <Hero snapshot={snapshot} nodes={nodes} phase={phase} busy={busy} run={run} toggle={toggle} goTo={goTo} delays={delays} probe={probe} />
       <SubscriptionPanel snapshot={snapshot} source={sources.find((item) => item.selected) ?? sources[0]} nodeCount={nodes.length} busy={busy} run={run} goTo={goTo} />
       <TrafficPanel waiting={waiting} goTo={goTo} />
-      <DelayPanel snapshot={snapshot} busy={busy} run={run} goTo={goTo} setDelays={setDelays} />
+      <DelayPanel snapshot={snapshot} busy={busy} run={run} goTo={goTo} setDelays={setDelays} probe={probe} reprobe={reprobe} />
       <UsagePanel
         icon={ListTree}
         title={t("流量最多的网站")}
@@ -76,7 +84,7 @@ export function HomePage({ snapshot, nodes, phase, busy, run, toggle, goTo, dela
   );
 }
 
-function Hero({ snapshot, nodes, phase, busy, run, toggle, goTo, delays }: {
+function Hero({ snapshot, nodes, phase, busy, run, toggle, goTo, delays, probe }: {
   snapshot: RuntimeSnapshot | null;
   nodes: NodeSummary[];
   phase: ConnectPhase;
@@ -85,6 +93,7 @@ function Hero({ snapshot, nodes, phase, busy, run, toggle, goTo, delays }: {
   toggle: () => void;
   goTo: (page: Page) => void;
   delays: Delays;
+  probe: NetworkProbe | null;
 }) {
   const { traffic } = useTraffic();
   const node = nodes.find((item) => item.id === snapshot?.selectedNode);
@@ -101,6 +110,7 @@ function Hero({ snapshot, nodes, phase, busy, run, toggle, goTo, delays }: {
           snapshot?.tunModeEnabled ? t("TUN 模式") : snapshot?.runtimeMode === "service" ? t("Windows 服务") : t("系统代理"),
           routingLabel(snapshot?.routingMode),
           traffic ? t("{count} 个连接", { count: traffic.active ?? 0 }) : null,
+          probe?.exitIp ? t("出口 {address}", { address: [probe.exitIp, probe.exitLocation].filter(Boolean).join(" ") }) : null,
         ].filter(Boolean).join(" · ");
       case "connecting":
         return t("正在建立安全隧道");
@@ -323,12 +333,14 @@ let delayCache: { node: string; at: number; results: Record<string, NodeDelay> }
 const delayMaxAge = 120_000;
 
 /** Delays through the current node to a few well-known sites, and the switches for how traffic is taken over. */
-function DelayPanel({ snapshot, busy, run, goTo, setDelays }: {
+function DelayPanel({ snapshot, busy, run, goTo, setDelays, probe, reprobe }: {
   snapshot: RuntimeSnapshot | null;
   busy: string | null;
   run: Run;
   goTo: (page: Page) => void;
   setDelays: SetDelays;
+  probe: NetworkProbe | null;
+  reprobe: () => void;
 }) {
   const nodeId = snapshot?.selectedNode;
   const [results, setResults] = useState<Record<string, NodeDelay>>(() => (delayCache && delayCache.node === nodeId ? delayCache.results : {}));
@@ -364,7 +376,7 @@ function DelayPanel({ snapshot, busy, run, goTo, setDelays }: {
       className="span-4"
       icon={Timer}
       title={t("延迟")}
-      action={<button className="link-button" disabled={!nodeId || testing} onClick={() => nodeId && void test(nodeId)}>{t("重新测试")}<RotateCw size={11} className={testing ? "spin" : undefined} /></button>}
+      action={<button className="link-button" disabled={testing} onClick={() => { reprobe(); if (nodeId) void test(nodeId); }}>{t("重新测试")}<RotateCw size={11} className={testing ? "spin" : undefined} /></button>}
     >
       <div className="delays">
         {delayTargets.map(({ key, label, icon: Icon }) => {
@@ -380,6 +392,13 @@ function DelayPanel({ snapshot, busy, run, goTo, setDelays }: {
             </div>
           );
         })}
+        {probe?.directMs != null && (
+          <div className="delay-row" title="baidu.com">
+            <span className="delay-name"><House size={13} aria-hidden="true" />{t("国内直连")}</span>
+            <span className="delay-bar"><span className={delayTone({ nodeId: "", delayMs: probe.directMs })} style={{ width: `${Math.max(4, Math.min(100, probe.directMs / 4))}%` }} /></span>
+            <span className="delay-value">{probe.directMs} <em>ms</em></span>
+          </div>
+        )}
       </div>
       <dl className="facts">
         {windows && snapshot?.runtimeMode !== "service" && (

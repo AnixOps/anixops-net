@@ -136,6 +136,14 @@ export interface MitmPlugin {
   scriptCount: number;
 }
 
+/** What the exit looks like from outside and how fast a mainland site answers around the proxy. */
+export interface NetworkProbe {
+  exitIp?: string | null;
+  /** Two-letter country code of the exit. */
+  exitLocation?: string | null;
+  directMs?: number | null;
+}
+
 export interface OperationResult {
   message: string;
 }
@@ -209,6 +217,8 @@ export const desktop = {
     invoke<OperationResult>("test_node_delay", { nodeId, url }),
   /** Tests each node on its own and reports every result; failures do not reject. */
   testDelays: (nodeIds: string[], url: string) => invoke<NodeDelay[]>("test_node_delays", { nodeIds, url }),
+  /** The exit address through the local proxy (only while `connected`) and the delay of a direct mainland request. */
+  networkProbe: (connected: boolean) => invoke<NetworkProbe>("network_probe", { connected }),
   /** The node's share link, or a Surge line for Snell. */
   shareLink: (nodeId: string) => invoke<string>("node_share_link", { nodeId }),
   selectFastestNode: () => invoke<OperationResult>("select_fastest_node"),

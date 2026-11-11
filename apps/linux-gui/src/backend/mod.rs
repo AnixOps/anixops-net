@@ -329,6 +329,11 @@ impl Backend {
         Root::ensure(&self.mitm_dir())
     }
 
+    /// The local port the mixed proxy listens on.
+    pub fn listen_port(&self) -> u16 {
+        self.state.listen_port
+    }
+
     pub fn https_decryption(&self) -> bool {
         self.state.preferences.https_decryption
     }
