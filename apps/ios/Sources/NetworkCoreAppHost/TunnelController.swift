@@ -1384,7 +1384,8 @@ extension TunnelController {
                 latencies[Self.latencyKey(group: group.id, node: node.id)] = .millis(delays[index % delays.count])
             }
         }
-        mode = .rule
+        // The made-up subscription has no rules, so the mode switch offers global and direct.
+        mode = .global
         connection = .connected
         connectedSince = Date().addingTimeInterval(-4521)
         loaded = true

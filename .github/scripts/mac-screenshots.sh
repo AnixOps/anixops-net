@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Opens the unsigned debug build of the macOS app with demo data and saves one picture per page.
-# Usage: mac-screenshots.sh <path to AnixOps Net.app> <output directory>
+# Usage: mac-screenshots.sh <path to AnixOps Net.app> <output directory> [language, default zh-Hans]
 set -euo pipefail
 
 app="$1"
 out="$2"
 name="AnixOps Net"
+language="${3:-zh-Hans}"
 mkdir -p "${out}"
 
 finder="${out}/window-id.swift"
@@ -29,7 +30,8 @@ SWIFT
 shoot() {
     local section="$1" appearance="$2"
     local file="${out}/${section}-${appearance}.png"
-    open -n "${app}" --args -AnixOpsDemo YES -AnixOpsSection "${section}" -appearance "${appearance}"
+    open -n "${app}" --args -AnixOpsDemo YES -AnixOpsSection "${section}" -appearance "${appearance}" \
+        -AppleLanguages "(${language})"
     local id=""
     for _ in 1 2 3 4 5 6 7 8 9 10; do
         sleep 2
