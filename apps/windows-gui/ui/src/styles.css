@@ -214,6 +214,8 @@ select option { color: var(--label-1); background: var(--bg-elevated); }
 .list-main strong { overflow: hidden; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .list-main small { overflow: hidden; color: var(--text2); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .subscription-row { flex-wrap: wrap; }
+.plugin-row .toggle-row.compact { min-height: 0; padding: 0; border-top: 0; }
+.import-row + .empty-state { padding-bottom: 8px; }
 .subscription-row .list-main { min-width: 220px; }
 .plugin-row .toggle-row.compact { min-height: 0; padding: 0; border-top: 0; }
 .rename-row { display: flex; gap: 4px; align-items: center; }

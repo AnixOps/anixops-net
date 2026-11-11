@@ -149,6 +149,11 @@ headless GitHub Actions Windows job and are tracked in
   in front of the engine on 7891. Confirm that sites outside the policy's
   host list load normally while HTTPS MITM is on, and that the recorded CA is
   removed on disable.
+- Import an HTTPS decryption plugin from an https address on the Extensions
+  page (for example `examples/mitm/ipleak-233.plugin`). Confirm it is listed
+  with its hosts and script count, that it applies to a running desktop
+  connection without a manual reconnect, and that disabling or removing it
+  stops the rewrite.
 - Select the Bilibili web trial while HTTPS MITM is disabled, enable HTTPS MITM,
   and confirm the persisted managed config selects the first-party request-only
   policy. Browse a Bilibili search page over controlled HTTP/1.1 TLS and confirm

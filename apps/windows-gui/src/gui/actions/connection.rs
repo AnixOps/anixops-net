@@ -1,5 +1,5 @@
 use crate::gui::{
-    load_validated_managed_configuration,
+    load_validated_managed_configuration, mitm_plugins,
     runtime_status::{read_runtime_status, ManagedCoreStatus},
     startup::{owns_current_proxy, save_desktop_state, DesktopState},
     tun_mode::DesktopTun,
@@ -336,15 +336,18 @@ fn desktop_envelope(
         &certificate,
         &private_key,
         &native_mitm_policy_source(mitm.bilibili_web_ad_block_enabled),
+        Some(&mitm_plugins::directory()),
     )
 }
 
-/// `envelope` with a `mitm` section made of the PEM root and `policy`.
+/// `envelope` with a `mitm` section made of the PEM root, `policy` and the
+/// enabled plugins of the library in `plugins`.
 fn envelope_with_mitm(
     envelope: &[u8],
     certificate_pem: &str,
     private_key_pem: &str,
     policy: &str,
+    plugins: Option<&Path>,
 ) -> Result<Vec<u8>, String> {
     let mut envelope: serde_json::Value = serde_json::from_slice(envelope)
         .map_err(|_| "embedded engine configuration is not valid JSON".to_string())?;
@@ -355,14 +358,14 @@ fn envelope_with_mitm(
         .ok_or("HTTPS decryption root certificate is not a PEM certificate")?;
     let private_key =
         pem_body(private_key_pem).ok_or("HTTPS decryption root key is not a PEM private key")?;
-    sections.insert(
-        "mitm".to_string(),
-        serde_json::json!({
-            "policy": policy,
-            "ca_certificate": certificate,
-            "ca_private_key": private_key,
-        }),
-    );
+    let mut mitm = serde_json::Map::new();
+    mitm.insert("policy".to_string(), policy.into());
+    mitm.insert("ca_certificate".to_string(), certificate.into());
+    mitm.insert("ca_private_key".to_string(), private_key.into());
+    if let Some(plugins) = plugins {
+        mitm_plugins::apply(plugins, &mut mitm);
+    }
+    sections.insert("mitm".to_string(), mitm.into());
     serde_json::to_vec(&envelope).map_err(|error| error.to_string())
 }
 
@@ -820,6 +823,7 @@ mod tests {
             &certificate.pem(),
             &key.serialize_pem(),
             &native_mitm_policy_source(false),
+            None,
         )
         .unwrap();
         let listen = "127.0.0.1:0".parse().unwrap();
@@ -832,14 +836,57 @@ mod tests {
                 &certificate.pem(),
                 &key.serialize_pem(),
                 &native_mitm_policy_source(bilibili),
+                None,
             )
             .unwrap();
             assert!(LocalProxy::start(&envelope, listen, MixedSettings::default()).is_ok());
         }
 
-        assert!(envelope_with_mitm(ENVELOPE, "no pem", &key.serialize_pem(), "").is_err());
-        assert!(envelope_with_mitm(b"[]", &certificate.pem(), &key.serialize_pem(), "").is_err());
+        assert!(envelope_with_mitm(ENVELOPE, "no pem", &key.serialize_pem(), "", None).is_err());
+        assert!(
+            envelope_with_mitm(b"[]", &certificate.pem(), &key.serialize_pem(), "", None).is_err()
+        );
         let plain = LocalProxy::start(ENVELOPE, listen, MixedSettings::default()).unwrap();
         assert!(!plain.decrypts_https());
+
+        // An imported plugin with a script: the engine pins the script file
+        // and starts its QuickJS runtime.
+        let plugins =
+            std::env::temp_dir().join(format!("anixops-desktop-plugins-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&plugins);
+        let fetch = |url: &str, _limit: usize| -> Result<Vec<u8>, String> {
+            Ok(if url.ends_with(".js") {
+                b"$done({});".to_vec()
+            } else {
+                concat!(
+                    "#!name = scripted\n",
+                    "[Script]\n",
+                    "http-response ^https?:\\/\\/ipleak\\.net\\/ script-path=https://plugins.example/a.js, requires-body=true, tag=a\n",
+                    "[MITM]\n",
+                    "hostname = ipleak.net\n",
+                )
+                .as_bytes()
+                .to_vec()
+            })
+        };
+        mitm_plugins::import(&plugins, "https://plugins.example/a.plugin", fetch).unwrap();
+        let envelope = envelope_with_mitm(
+            ENVELOPE,
+            &certificate.pem(),
+            &key.serialize_pem(),
+            &native_mitm_policy_source(false),
+            Some(&plugins),
+        )
+        .unwrap();
+        let section: serde_json::Value = serde_json::from_slice(&envelope).unwrap();
+        assert_eq!(
+            section["mitm"]["script_assets"].as_object().unwrap().len(),
+            1
+        );
+        let scripted = LocalProxy::start(&envelope, listen, MixedSettings::default())
+            .unwrap_or_else(|error| panic!("engine refused the plugin: {}", error.message));
+        assert!(scripted.decrypts_https());
+        drop(scripted);
+        let _ = fs::remove_dir_all(&plugins);
     }
 }
