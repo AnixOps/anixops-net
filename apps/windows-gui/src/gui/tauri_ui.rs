@@ -265,6 +265,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             runtime_control,
             test_node_delay,
             test_node_delays,
+            network_probe,
             node_share_link,
             select_fastest_node,
             save_preferences,
@@ -1285,6 +1286,74 @@ struct NodeDelay {
     node_id: String,
     delay_ms: Option<u64>,
     error: Option<String>,
+}
+
+/// What the overview shows about the path: the address websites see through the proxy, and how long a mainland
+/// site takes to answer without it.
+#[derive(Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NetworkProbe {
+    exit_ip: Option<String>,
+    /// The exit's two-letter country code.
+    exit_location: Option<String>,
+    direct_ms: Option<u64>,
+}
+
+const PROBE_TIMEOUT: Duration = Duration::from_secs(6);
+const EXIT_TRACE_URL: &str = "https://www.cloudflare.com/cdn-cgi/trace";
+const DIRECT_PROBE_URL: &str = "https://www.baidu.com/";
+
+/// `ip` and `loc` from Cloudflare's `key=value` trace lines.
+fn parse_trace(body: &str) -> (Option<String>, Option<String>) {
+    let field = |name: &str| {
+        body.lines()
+            .find_map(|line| line.strip_prefix(name)?.strip_prefix('='))
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    };
+    (field("ip"), field("loc"))
+}
+
+/// Asks through the local proxy on `proxy_port` (when connected) which address the exit has, and times one
+/// request to a mainland site that goes around the proxy. A probe that fails leaves its fields empty.
+fn probe_network(proxy_port: Option<u16>) -> NetworkProbe {
+    let (exit_ip, exit_location) = proxy_port
+        .and_then(|port| {
+            let proxy = reqwest::Proxy::all(format!("http://127.0.0.1:{port}")).ok()?;
+            let body = reqwest::blocking::Client::builder()
+                .timeout(PROBE_TIMEOUT)
+                .proxy(proxy)
+                .build()
+                .ok()?
+                .get(EXIT_TRACE_URL)
+                .send()
+                .ok()?
+                .text()
+                .ok()?;
+            Some(parse_trace(&body))
+        })
+        .unwrap_or((None, None));
+    let direct_ms = reqwest::blocking::Client::builder()
+        .timeout(PROBE_TIMEOUT)
+        .no_proxy()
+        .build()
+        .ok()
+        .and_then(|client| {
+            let started = std::time::Instant::now();
+            client.head(DIRECT_PROBE_URL).send().ok()?;
+            Some(u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX))
+        });
+    NetworkProbe {
+        exit_ip,
+        exit_location,
+        direct_ms,
+    }
+}
+
+/// The exit address and the direct delay for the overview; `connected` says whether the local proxy is up.
+#[tauri::command]
+async fn network_probe(connected: bool) -> Result<NetworkProbe, String> {
+    run_blocking(move || Ok(probe_network(connected.then_some(EMBEDDED_LISTEN_PORT)))).await
 }
 
 /// Tests the listed nodes, up to 16 at a time, and reports each one.
@@ -3523,6 +3592,16 @@ fn core_status(status: &ManagedCoreStatus) -> StatusFact {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn trace_gives_the_exit_address_and_country() {
+        let body = "fl=1f2\nh=www.cloudflare.com\nip=203.0.113.7\nts=1.5\nloc=HK\ntls=TLSv1.3\n";
+        assert_eq!(
+            parse_trace(body),
+            (Some("203.0.113.7".to_string()), Some("HK".to_string()))
+        );
+        assert_eq!(parse_trace("ipx=1\nloc=\n"), (None, None));
+    }
 
     fn routed_profile() -> Value {
         json!({

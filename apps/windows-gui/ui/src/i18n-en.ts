@@ -300,4 +300,6 @@ export const english: Record<string, string> = {
   "管理和导入订阅": "Manage and import subscriptions",
   "节点和订阅": "Nodes and subscriptions",
   "这个策略组自动选择出口，不能手动切换。": "This policy group picks its outbound by itself; it cannot be switched by hand.",
+  "出口 {address}": "exit {address}",
+  "国内直连": "Mainland, direct",
 };
