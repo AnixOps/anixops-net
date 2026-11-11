@@ -1,9 +1,9 @@
-import { Activity, Check, CloudDownload, Globe, Pencil, RefreshCw, Search, Share2, Trash2, X, Zap } from "lucide-react";
+import { Activity, Check, CloudDownload, FileText, Gauge, Globe, Pencil, RefreshCw, Search, Share2, Trash2, X, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { desktop, NodeDelay, NodeSummary, RuntimeSnapshot, SubscriptionSummary } from "../bridge";
 import { protocolAbbreviation } from "../labels";
 import { delayLabel, delayTone, filterNodes, groupNodes, NodeSort, sortNodes } from "../node-filter";
-import { Card, EmptyState, IconButton, Run, StatusPill } from "../ui";
+import { Card, EmptyState, IconButton, PageTools, Run, StatusPill, Tile } from "../ui";
 import { t } from "../i18n";
 import { formatBytes, formatDay, updateIntervalChoices, updateIntervalLabel, usedFraction } from "../subscription-format";
 
@@ -31,40 +31,41 @@ export function ProxiesPage({ snapshot, nodes, busy, run }: {
     return { message: t("{ok} / {total} 个节点有响应", { ok: results.filter((result) => result.delayMs != null).length, total: results.length }) };
   });
 
+  const tested = (node: NodeSummary) => delays[node.id];
+
   return (
     <div className="page-stack">
       {nodes.length > 0 && (
-        <Card
-          title={t("节点")}
-          description={t("切换节点会先校验生成的配置，再应用到当前连接。")}
-          actions={<button className="secondary" disabled={Boolean(busy)} onClick={() => void run("fastest node", desktop.selectFastestNode)}><Zap size={15} />{t("选择最快")}</button>}
-        >
-          <div className="toolbar">
-            <label className="search">
-              <Search size={15} aria-hidden="true" />
-              <input aria-label={t("搜索节点")} placeholder={t("搜索节点")} value={query} onChange={(event) => setQuery(event.target.value)} />
-            </label>
-            <div className="chips" role="radiogroup" aria-label={t("按协议筛选")}>
-              {protocols.map((value) => (
-                <button key={value} role="radio" aria-checked={protocol === value} className={`chip-button ${protocol === value ? "selected" : ""}`} onClick={() => setProtocol(value)}>
-                  {value === "All" ? t("全部") : protocolAbbreviation(value)}
-                </button>
-              ))}
+        <PageTools>
+          <label className="search">
+            <Search size={14} aria-hidden="true" />
+            <input aria-label={t("搜索节点")} placeholder={t("搜索节点")} value={query} onChange={(event) => setQuery(event.target.value)} />
+          </label>
+          <button className="secondary" disabled={Boolean(busy) || visible.length === 0} onClick={() => testDelays(visible)}><Gauge size={14} />{t("全部测速")}</button>
+          <button className="primary" disabled={Boolean(busy)} onClick={() => void run("fastest node", desktop.selectFastestNode)}><Zap size={14} />{t("选择最快")}</button>
+        </PageTools>
+      )}
+      {nodes.length > 0 && (
+        <section className="card">
+          <header className="card-header">
+            <h2>{t("节点")}<span className="count">{visible.length} / {nodes.length}</span></h2>
+            <div className="card-actions">
+              <select className="pop-up" aria-label={t("按协议筛选")} value={protocol} onChange={(event) => setProtocol(event.target.value)}>
+                {protocols.map((value) => <option key={value} value={value}>{value === "All" ? t("全部协议") : protocolAbbreviation(value)}</option>)}
+              </select>
+              <select className="pop-up" aria-label={t("节点排序")} value={sort} onChange={(event) => setSort(event.target.value as NodeSort)}>
+                <option value="default">{t("默认顺序")}</option>
+                <option value="name">{t("按名称")}</option>
+                <option value="delay">{t("按延迟")}</option>
+              </select>
             </div>
-            <select className="interval-select" aria-label={t("节点排序")} value={sort} onChange={(event) => setSort(event.target.value as NodeSort)}>
-              <option value="default">{t("默认顺序")}</option>
-              <option value="name">{t("按名称")}</option>
-              <option value="delay">{t("按延迟")}</option>
-            </select>
-            <button className="secondary compact" disabled={Boolean(busy) || visible.length === 0} onClick={() => testDelays(visible)}><Activity size={14} />{t("全部测速")}</button>
-            <span className="count">{visible.length} / {nodes.length}</span>
-          </div>
+          </header>
           {sections.map((section) => (
-            <section className="node-section" key={section.group ?? ""} aria-label={section.group}>
-              {sections.length > 1 && section.group && <h3 className="node-section-title">{section.group}<span className="count">{section.nodes.length}</span></h3>}
-              <div className="node-grid">
+            <div className="node-section" key={section.group ?? ""}>
+              {sections.length > 1 && section.group && <h3 className="subhead">{section.group}<span className="count">{section.nodes.length}</span></h3>}
+              <div className="group" role="list" aria-label={section.group ?? t("节点")}>
                 {section.nodes.map((node) => (
-                  <div className={`node-card ${node.selected ? "selected" : ""}`} key={node.id}>
+                  <div className={`row node-row ${node.selected ? "selected" : ""}`} role="listitem" key={node.id}>
                     <button
                       className="node-pick"
                       aria-pressed={node.selected}
@@ -72,25 +73,25 @@ export function ProxiesPage({ snapshot, nodes, busy, run }: {
                       onClick={() => void run("switch", () => desktop.switchNode(node.id))}
                     >
                       <span className="node-name">{node.label}</span>
-                      <span className="node-meta">
-                        <span className="protocol-badge">{protocolAbbreviation(node.protocol)}</span>
-                        {delays[node.id] && <span className={`delay ${delayTone(delays[node.id])}`} title={delays[node.id].error ?? undefined}>{delayLabel(delays[node.id])}</span>}
-                        {node.selected && <span className="current-dot" aria-label={t("当前节点")} />}
-                      </span>
                     </button>
-                    <IconButton label={t("测试 {node} 的延迟", { node: node.label })} disabled={Boolean(busy)} onClick={() => testDelays([node])}>
-                      <Activity size={15} />
-                    </IconButton>
-                    <IconButton label={t("复制 {node} 的分享链接", { node: node.label })} disabled={Boolean(busy)} onClick={() => void run("share", () => copyShareLink(node))}>
-                      <Share2 size={15} />
-                    </IconButton>
+                    <span className="row-actions">
+                      <IconButton label={t("测试 {node} 的延迟", { node: node.label })} disabled={Boolean(busy)} onClick={() => testDelays([node])}>
+                        <Activity size={14} />
+                      </IconButton>
+                      <IconButton label={t("复制 {node} 的分享链接", { node: node.label })} disabled={Boolean(busy)} onClick={() => void run("share", () => copyShareLink(node))}>
+                        <Share2 size={14} />
+                      </IconButton>
+                    </span>
+                    <span className="protocol-badge">{protocolAbbreviation(node.protocol)}</span>
+                    <span className={`delay ${tested(node) ? delayTone(tested(node)) : ""}`} title={tested(node)?.error ?? undefined}>{tested(node) ? delayLabel(tested(node)) : ""}</span>
+                    <span className="check" aria-label={node.selected ? t("当前节点") : undefined}>{node.selected && <Check size={15} strokeWidth={2.25} />}</span>
                   </div>
                 ))}
               </div>
-            </section>
+            </div>
           ))}
-          {visible.length === 0 && <p className="muted center">{t("没有符合条件的节点。")}</p>}
-        </Card>
+          {visible.length === 0 && <div className="group"><p className="muted center">{t("没有符合条件的节点。")}</p></div>}
+        </section>
       )}
       <Subscriptions snapshot={snapshot} empty={nodes.length === 0} busy={busy} run={run} />
     </div>
@@ -143,7 +144,7 @@ function Subscriptions({ snapshot, empty, busy, run }: { snapshot: RuntimeSnapsh
         onChange={(event) => setLocation(event.target.value)}
         onKeyDown={(event) => { if (event.key === "Enter" && location.trim() && !busy) importSource(); }}
       />
-      <button className="primary" disabled={Boolean(busy) || !location.trim()} onClick={importSource}><CloudDownload size={16} />{t("导入")}</button>
+      <button className="primary" disabled={Boolean(busy) || !location.trim()} onClick={importSource}><CloudDownload size={14} />{t("导入")}</button>
     </div>
   );
 
@@ -162,8 +163,8 @@ function Subscriptions({ snapshot, empty, busy, run }: { snapshot: RuntimeSnapsh
       title={t("订阅")}
       description={refreshDetail ?? t("支持 HTTPS 订阅链接和本地配置文件。")}
       actions={<>
-        <button className="secondary" disabled={Boolean(busy) || !snapshot?.subscription?.startsWith("http")} onClick={() => void run("subscription", desktop.updateSubscription)}>{t("更新当前订阅")}</button>
-        <button className="secondary" disabled={Boolean(busy) || !snapshot?.subscription} onClick={() => void run("selector", desktop.checkProfileRuntime)}>{t("检查配置")}</button>
+        <button className="link-button" disabled={Boolean(busy) || !snapshot?.subscription} onClick={() => void run("selector", desktop.checkProfileRuntime)}>{t("检查配置")}</button>
+        <button className="link-button" disabled={Boolean(busy) || !snapshot?.subscription?.startsWith("http")} onClick={() => void run("subscription", desktop.updateSubscription)}>{t("更新当前订阅")}</button>
       </>}
     >
       {form}
@@ -219,7 +220,7 @@ function SubscriptionRow({ source, canUpdate, busy, run, changed }: {
 
   return (
     <li className="subscription-row">
-      <CloudDownload size={16} className="list-icon" />
+      <Tile icon={source.refreshable ? CloudDownload : FileText} color={source.refreshable ? "indigo" : "gray"} />
       <span className="list-main">
         {renaming ? (
           <span className="rename-row">
@@ -249,7 +250,7 @@ function SubscriptionRow({ source, canUpdate, busy, run, changed }: {
       </span>
       {source.refreshable && (
         <select
-          className="interval-select"
+          className="pop-up"
           aria-label={t("自动更新")}
           value={source.updateIntervalHours}
           disabled={Boolean(busy)}
