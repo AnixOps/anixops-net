@@ -215,6 +215,8 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
         ITSAppUsesNonExemptEncryption: false
+        # XcodeGen does not add the package type for system extensions; macOS only loads a SYSX bundle.
+        CFBundlePackageType: SYSX
         NSSystemExtensionUsageDescription: AnixOps Net 用这个网络扩展建立 VPN 隧道。
         NetworkExtension:
           # Must start with an app group of the extension's entitlements (Entitlements/NetworkCoreMacTunnel.entitlements).
