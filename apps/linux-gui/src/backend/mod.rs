@@ -6,11 +6,13 @@ pub mod autostart;
 pub mod engine;
 pub mod state;
 pub mod system_proxy;
+pub mod trust;
 
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use control_domain::NodeDescriptor;
+use desktop_mitm::Root;
 use engine_embedded::profile::{self, RoutingMode, RuleList};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -74,6 +76,7 @@ pub struct RuntimeSnapshot {
     pub auto_select_fastest_node: bool,
     pub bilibili_web_ad_block_enabled: bool,
     pub script_runtime_configured: bool,
+    pub https_decryption_enabled: bool,
     pub dark_theme: bool,
     pub runtime_mode: &'static str,
     pub routing_mode: &'static str,
@@ -295,7 +298,66 @@ impl Backend {
                     .to_string()
             })
         })?;
-        desktop_dns::apply(&envelope, self.state.dns_preset)
+        let envelope = desktop_dns::apply(&envelope, self.state.dns_preset)?;
+        if !self.state.preferences.https_decryption {
+            return Ok(envelope);
+        }
+        // Linux has no built-in policy: only the hosts of the enabled plugins are decrypted.
+        let envelope =
+            self.mitm_root()
+                .envelope(envelope.as_bytes(), "", Some(&self.plugins_dir()))?;
+        String::from_utf8(envelope).map_err(|error| error.to_string())
+    }
+
+    fn mitm_dir(&self) -> PathBuf {
+        self.store.dir().join("mitm")
+    }
+
+    /// Where the HTTPS decryption root is kept, whether or not it exists yet.
+    pub fn mitm_root(&self) -> Root {
+        Root::at(&self.mitm_dir())
+    }
+
+    /// The folder of the imported plugin library.
+    pub fn plugins_dir(&self) -> PathBuf {
+        self.mitm_dir().join("plugins")
+    }
+
+    /// The HTTPS decryption root, generated on first use. The window installs it in the trust stores before
+    /// turning decryption on.
+    pub fn ensure_mitm_root(&self) -> Result<Root, String> {
+        Root::ensure(&self.mitm_dir())
+    }
+
+    pub fn https_decryption(&self) -> bool {
+        self.state.preferences.https_decryption
+    }
+
+    /// Turns HTTPS decryption on or off and restarts a running engine with it.
+    pub fn set_https_decryption(&mut self, enabled: bool) -> Result<OperationResult, String> {
+        if enabled {
+            self.ensure_mitm_root()?;
+        }
+        self.state.preferences.https_decryption = enabled;
+        self.save();
+        let restarted = self.restart_if_running()?;
+        done(match (enabled, restarted) {
+            (true, true) => "HTTPS decryption is on",
+            (true, false) => "HTTPS decryption is on; it starts with the next connection",
+            (false, _) => "HTTPS decryption is off",
+        })
+    }
+
+    /// Restarts a running engine after the plugin library changed, when it decrypts.
+    pub fn plugins_changed(&mut self) -> Result<&'static str, String> {
+        if !self.state.preferences.https_decryption {
+            return Ok("turn on HTTPS decryption for it to take effect");
+        }
+        Ok(if self.restart_if_running()? {
+            "applied to the running connection"
+        } else {
+            "it applies with the next connection"
+        })
     }
 
     /// Public rule lists the routing mode needs: the missing ones, or all of them with `force`. The window
@@ -424,6 +486,7 @@ impl Backend {
             auto_select_fastest_node: false,
             bilibili_web_ad_block_enabled: false,
             script_runtime_configured: false,
+            https_decryption_enabled: self.state.preferences.https_decryption,
             dark_theme: false,
             runtime_mode: "desktop",
             routing_mode: self.state.routing_mode.as_str(),
@@ -1050,6 +1113,71 @@ mod tests {
         assert_eq!(format_time(0), "1970-01-01 00:00 UTC");
         assert_eq!(format_time(1_761_300_000), "2025-10-24 10:00 UTC");
         assert_eq!(format_delay(Duration::from_millis(123)), "123 ms");
+    }
+
+    #[test]
+    fn https_decryption_adds_the_root_and_plugins_to_the_envelope() {
+        use engine_embedded::config::RuntimeConfig;
+
+        const PLUGIN: &str = concat!(
+            "#!name = ipleak test\n",
+            "[Script]\n",
+            "http-response ^https?:\\/\\/ipleak\\.net\\/ script-path=https://plugins.example/a.js, requires-body=true, tag=ipleak\n",
+            "[MITM]\n",
+            "hostname = ipleak.net\n",
+        );
+        let (mut backend, dir) = backend("mitm");
+        backend.import(PASTED_LOCATION, LINK).unwrap();
+        assert!(!backend.snapshot().https_decryption_enabled);
+        assert!(!backend.envelope().unwrap().contains("\"mitm\""));
+        assert_eq!(
+            backend.plugins_changed().unwrap(),
+            "turn on HTTPS decryption for it to take effect"
+        );
+
+        backend.set_https_decryption(true).unwrap();
+        assert!(backend.mitm_root().exists());
+        assert!(backend.snapshot().https_decryption_enabled);
+        desktop_mitm::plugins::import(
+            &backend.plugins_dir(),
+            "https://plugins.example/a.plugin",
+            |url, _| {
+                Ok(if url.ends_with(".plugin") {
+                    PLUGIN.as_bytes().to_vec()
+                } else {
+                    b"$done({});".to_vec()
+                })
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            backend.plugins_changed().unwrap(),
+            "it applies with the next connection"
+        );
+        let envelope = backend.envelope().unwrap();
+        let parsed: Value = serde_json::from_str(&envelope).unwrap();
+        assert_eq!(parsed["mitm"]["plugins"], serde_json::json!([PLUGIN]));
+        assert_eq!(
+            parsed["mitm"]["script_assets"].as_object().unwrap().len(),
+            1
+        );
+        assert!(
+            RuntimeConfig::from_json(envelope.as_bytes()).is_ok(),
+            "the engine accepts the envelope"
+        );
+
+        // The choice is saved, and turning it off leaves the root for the next time.
+        let reopened = Backend::open(
+            Store::new(dir.join("config")),
+            None,
+            None,
+            PathBuf::from("/usr/bin/anixops-net"),
+        );
+        assert!(reopened.https_decryption());
+        backend.set_https_decryption(false).unwrap();
+        assert!(!backend.envelope().unwrap().contains("\"mitm\""));
+        assert!(backend.mitm_root().exists());
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

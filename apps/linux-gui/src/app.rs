@@ -8,10 +8,12 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::Duration;
 
+use desktop_mitm::plugins::{self, PluginSummary};
 use engine_embedded::profile::RoutingMode;
 use networkcore_linux_gui::backend::engine;
 use networkcore_linux_gui::backend::state::Store;
 use networkcore_linux_gui::backend::system_proxy::Desktop;
+use networkcore_linux_gui::backend::trust;
 use networkcore_linux_gui::backend::{
     autostart, format_delay, Backend, DnsPreset, GroupSummary, NodeSummary, OperationResult,
     PreferencesInput, RuntimeSnapshot, SubscriptionSummary, PASTED_LOCATION,
@@ -460,6 +462,88 @@ async fn restore_network_settings(state: State<'_, AppState>) -> Result<Operatio
     with_backend(&state, Backend::restore_network_settings).await
 }
 
+/// Generates the root on first use, has the browsers and the system trust it (polkit asks for the system
+/// store), then restarts a running engine with decryption on.
+#[tauri::command]
+async fn enable_https_mitm(state: State<'_, AppState>) -> Result<OperationResult, String> {
+    let root = lock(&state.0).ensure_mitm_root()?;
+    let trusted = off_lock(move || Ok(trust::install(&root.certificate_path))).await?;
+    let result = with_backend(&state, |backend| backend.set_https_decryption(true)).await?;
+    Ok(OperationResult {
+        message: format!("{}. {}", result.message, trusted.summary("trusted")),
+    })
+}
+
+#[tauri::command]
+async fn disable_https_mitm(state: State<'_, AppState>) -> Result<OperationResult, String> {
+    let result = with_backend(&state, |backend| backend.set_https_decryption(false)).await?;
+    let removed = off_lock(|| Ok(trust::remove())).await?;
+    Ok(OperationResult {
+        message: format!("{}. {}", result.message, removed.summary("removed")),
+    })
+}
+
+#[tauri::command]
+async fn list_mitm_plugins(state: State<'_, AppState>) -> Result<Vec<PluginSummary>, String> {
+    let directory = lock(&state.0).plugins_dir();
+    off_lock(move || plugins::list(&directory)).await
+}
+
+/// Changes the plugin library outside the lock, then applies it to a running engine.
+async fn change_plugins<F>(state: &AppState, change: F) -> Result<OperationResult, String>
+where
+    F: FnOnce(&std::path::Path) -> Result<String, String> + Send + 'static,
+{
+    let directory = lock(&state.0).plugins_dir();
+    let message = off_lock(move || change(&directory)).await?;
+    let applied = with_backend(state, |backend| backend.plugins_changed()).await?;
+    Ok(OperationResult {
+        message: format!("{message}; {applied}"),
+    })
+}
+
+#[tauri::command]
+async fn import_mitm_plugin(
+    state: State<'_, AppState>,
+    url: String,
+) -> Result<OperationResult, String> {
+    change_plugins(&state, move |directory| {
+        let plugin = plugins::import(directory, &url, plugins::download)?;
+        Ok(format!("Plugin imported: {}", plugin.name))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn set_mitm_plugin_enabled(
+    state: State<'_, AppState>,
+    id: String,
+    enabled: bool,
+) -> Result<OperationResult, String> {
+    change_plugins(&state, move |directory| {
+        plugins::set_enabled(directory, &id, enabled)?;
+        Ok(if enabled {
+            "Plugin enabled"
+        } else {
+            "Plugin disabled"
+        }
+        .to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn remove_mitm_plugin(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<OperationResult, String> {
+    change_plugins(&state, move |directory| {
+        plugins::remove(directory, &id)?;
+        Ok("Plugin removed".to_string())
+    })
+    .await
+}
+
 /// Commands the Windows client has and Linux does not yet; the interface hides their controls.
 macro_rules! unavailable {
     ($($name:ident),* $(,)?) => {
@@ -478,8 +562,6 @@ unavailable!(
     stop_service,
     configure_script_runtime,
     clear_script_runtime,
-    enable_https_mitm,
-    disable_https_mitm,
     install_certificate,
     remove_certificate,
     install_driver,
@@ -549,6 +631,10 @@ pub fn run() -> Result<(), String> {
             clear_script_runtime,
             enable_https_mitm,
             disable_https_mitm,
+            list_mitm_plugins,
+            import_mitm_plugin,
+            set_mitm_plugin_enabled,
+            remove_mitm_plugin,
             install_certificate,
             remove_certificate,
             install_driver,

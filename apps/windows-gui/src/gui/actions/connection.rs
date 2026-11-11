@@ -5,6 +5,7 @@ use crate::gui::{
     tun_mode::DesktopTun,
     ui_state::ConnectionState,
 };
+use desktop_mitm::envelope_with_mitm;
 use engine_embedded::local_proxy::LocalProxy;
 use inbound_mixed::MixedSettings;
 use networkcore_windows_service::native_mitm_policy_source;
@@ -338,47 +339,6 @@ fn desktop_envelope(
         &native_mitm_policy_source(mitm.bilibili_web_ad_block_enabled),
         Some(&mitm_plugins::directory()),
     )
-}
-
-/// `envelope` with a `mitm` section made of the PEM root, `policy` and the
-/// enabled plugins of the library in `plugins`.
-fn envelope_with_mitm(
-    envelope: &[u8],
-    certificate_pem: &str,
-    private_key_pem: &str,
-    policy: &str,
-    plugins: Option<&Path>,
-) -> Result<Vec<u8>, String> {
-    let mut envelope: serde_json::Value = serde_json::from_slice(envelope)
-        .map_err(|_| "embedded engine configuration is not valid JSON".to_string())?;
-    let sections = envelope
-        .as_object_mut()
-        .ok_or("embedded engine configuration is not a JSON object")?;
-    let certificate = pem_body(certificate_pem)
-        .ok_or("HTTPS decryption root certificate is not a PEM certificate")?;
-    let private_key =
-        pem_body(private_key_pem).ok_or("HTTPS decryption root key is not a PEM private key")?;
-    let mut mitm = serde_json::Map::new();
-    mitm.insert("policy".to_string(), policy.into());
-    mitm.insert("ca_certificate".to_string(), certificate.into());
-    mitm.insert("ca_private_key".to_string(), private_key.into());
-    if let Some(plugins) = plugins {
-        mitm_plugins::apply(plugins, &mut mitm);
-    }
-    sections.insert("mitm".to_string(), mitm.into());
-    serde_json::to_vec(&envelope).map_err(|error| error.to_string())
-}
-
-/// The base64 body of the first PEM block: the DER the engine expects.
-fn pem_body(pem: &str) -> Option<String> {
-    let body = pem
-        .lines()
-        .map(str::trim)
-        .skip_while(|line| !line.starts_with("-----BEGIN "))
-        .skip(1)
-        .take_while(|line| !line.starts_with("-----END "))
-        .collect::<String>();
-    (!body.is_empty()).then_some(body)
 }
 
 /// Where the engine listens in desktop mode. With HTTPS decryption the
@@ -791,17 +751,6 @@ mod tests {
         let mut exposed = mitm_config(7890);
         exposed.listen_host = "0.0.0.0".to_string();
         assert!(desktop_listener(&embedded, Some(&exposed)).is_err());
-    }
-
-    #[test]
-    fn pem_bodies_are_the_base64_between_the_markers() {
-        let pem = "-----BEGIN CERTIFICATE-----\r\nQUJD\r\nREVG\r\n-----END CERTIFICATE-----\r\n";
-        assert_eq!(pem_body(pem).as_deref(), Some("QUJDREVG"));
-        assert_eq!(pem_body("QUJD"), None);
-        assert_eq!(
-            pem_body("-----BEGIN CERTIFICATE-----\n-----END CERTIFICATE-----\n"),
-            None
-        );
     }
 
     /// The managed root, as `ensure_mitm_ca_material` writes it, is accepted
