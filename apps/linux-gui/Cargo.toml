@@ -18,6 +18,7 @@ gui = ["dep:tauri", "dep:tauri-build", "dep:reqwest", "tauri/custom-protocol"]
 config-core = { workspace = true }
 control-domain = { workspace = true }
 desktop-dns = { path = "../../crates/desktop-dns" }
+desktop-mitm = { path = "../../crates/desktop-mitm" }
 engine-embedded = { workspace = true }
 inbound-mixed = { workspace = true }
 node-import = { workspace = true }

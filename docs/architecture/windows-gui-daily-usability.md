@@ -154,6 +154,12 @@ headless GitHub Actions Windows job and are tracked in
   with its hosts and script count, that it applies to a running desktop
   connection without a manual reconnect, and that disabling or removing it
   stops the rewrite.
+- The Linux client shares the decryption and the plugin library
+  (`crates/desktop-mitm`). It generates its root under
+  `~/.config/anixops-net/mitm/` on first use, adds it to the Chrome/Chromium
+  and Firefox NSS databases with `certutil` and to the system store through
+  `pkexec`, and removes it on disable. Linux has no built-in policy: only the
+  hosts of enabled plugins are decrypted.
 - Select the Bilibili web trial while HTTPS MITM is disabled, enable HTTPS MITM,
   and confirm the persisted managed config selects the first-party request-only
   policy. Browse a Bilibili search page over controlled HTTP/1.1 TLS and confirm
