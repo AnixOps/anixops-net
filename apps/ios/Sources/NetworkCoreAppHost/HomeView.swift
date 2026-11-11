@@ -48,7 +48,7 @@ struct HomeView: View {
                         tunnel: tunnel,
                         model: dashboard,
                         layout: DashboardLayout(storage: layoutStorage),
-                        tab: $tab
+                        showProxies: { tab = .proxies }
                     )
                 }
                 .padding(.horizontal, 16)
@@ -363,13 +363,6 @@ private struct CompactConnectButton: View {
         } else {
             Text(phase.title)
         }
-    }
-}
-
-enum ConnectElapsed {
-    static func text(from start: Date, to now: Date) -> String {
-        let seconds = max(0, Int(now.timeIntervalSince(start)))
-        return String(format: "%02d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
     }
 }
 

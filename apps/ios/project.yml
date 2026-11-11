@@ -152,6 +152,8 @@ targets:
       - path: Sources/NetworkCoreAppHost/BrandTokens.swift
       - path: Sources/NetworkCoreAppHost/ClientReporter.swift
       - path: Sources/NetworkCoreAppHost/ConnectionsView.swift
+      - path: Sources/NetworkCoreAppHost/DashboardCards.swift
+      - path: Sources/NetworkCoreAppHost/DashboardModel.swift
       - path: Sources/NetworkCoreAppHost/DnsSettingsView.swift
       - path: Sources/NetworkCoreAppHost/ImportView.swift
       - path: Sources/NetworkCoreAppHost/MitmPluginInspector.swift
@@ -165,6 +167,7 @@ targets:
       - path: Sources/NetworkCoreAppHost/NodeDelayFFI.swift
       - path: Sources/NetworkCoreAppHost/NodeEditSheet.swift
       - path: Sources/NetworkCoreAppHost/SubscriptionGroupViews.swift
+      - path: Sources/NetworkCoreAppHost/TrafficStatsView.swift
     info:
       path: Generated/NetworkCoreMac-Info.plist
       properties:

@@ -50,12 +50,15 @@ struct DashboardGrid: View {
     var tunnel: TunnelController
     var model: DashboardModel
     let layout: DashboardLayout
-    @Binding var tab: AppTab
+    /// Slots a row when the caller knows its width (the Mac window); otherwise by size class.
+    var fixedColumns: Int?
+    /// Opens the page that lists every policy group.
+    let showProxies: () -> Void
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     /// Two slots a row on iPhone, four on a regular-width iPad window.
     private var columns: Int {
-        sizeClass == .regular ? 4 : 2
+        fixedColumns ?? (sizeClass == .regular ? 4 : 2)
     }
 
     var body: some View {
@@ -81,7 +84,7 @@ struct DashboardGrid: View {
         case .network:
             NetworkTile(model: model)
         case .groups:
-            GroupsTile(tunnel: tunnel, model: model, tab: $tab)
+            GroupsTile(tunnel: tunnel, model: model, showProxies: showProxies)
         case .topHosts:
             TopHostsTile(tunnel: tunnel, model: model)
         case .dns:
@@ -406,13 +409,13 @@ private struct NetworkTile: View {
 private struct GroupsTile: View {
     var tunnel: TunnelController
     var model: DashboardModel
-    @Binding var tab: AppTab
+    let showProxies: () -> Void
     @Environment(\.brand) private var brand
 
     var body: some View {
         Tile(card: .groups) {
             Button {
-                tab = .proxies
+                showProxies()
             } label: {
                 Text("全部")
                     .font(.footnote.weight(.semibold))
@@ -692,8 +695,17 @@ private struct EventsTile: View {
     }
 }
 
+/// `hh:mm:ss` since the tunnel connected.
+enum ConnectElapsed {
+    static func text(from start: Date, to now: Date) -> String {
+        let seconds = max(0, Int(now.timeIntervalSince(start)))
+        return String(format: "%02d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
+    }
+}
+
 // MARK: - Edit sheet
 
+#if os(iOS)
 /// Shows, hides and reorders the dashboard cards.
 struct DashboardEditSheet: View {
     @Binding var layoutStorage: String
@@ -755,3 +767,4 @@ struct DashboardEditSheet: View {
         }
     }
 }
+#endif
