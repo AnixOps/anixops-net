@@ -33,6 +33,36 @@ export function Card({ title, description, actions, children, className = "" }: 
   );
 }
 
+/**
+ * One card of a dashboard: a small caption with its icon and an optional action on the right, then the content.
+ * Unlike `Card` it has no rows; the overview and the proxies page lay several of them out in a grid.
+ */
+export function Panel({ icon: Icon, title, action, children, className = "" }: {
+  icon?: LucideIcon;
+  title?: ReactNode;
+  action?: ReactNode;
+  children?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`panel ${className}`}>
+      {(title || action) && (
+        <header className="panel-head">
+          {Icon && <Icon size={12} aria-hidden="true" />}
+          {title && <h2>{title}</h2>}
+          {action && <span className="panel-action">{action}</span>}
+        </header>
+      )}
+      {children}
+    </section>
+  );
+}
+
+/** A name's first letter on a colored tile, for sites and programs that have no icon of their own. */
+export function LetterTile({ name, color }: { name: string; color: TileColor }) {
+  return <span className={`tile letter ${color}`} aria-hidden="true">{[...name][0]?.toUpperCase() ?? "?"}</span>;
+}
+
 /** The tile colors for row and sidebar icons, after the colored glyph tiles of macOS System Settings. */
 export type TileColor = "indigo" | "sky" | "green" | "orange" | "purple" | "pink" | "teal" | "gray" | "red";
 
