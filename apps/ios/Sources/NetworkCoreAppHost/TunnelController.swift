@@ -694,7 +694,9 @@ final class TunnelController {
         }
         tunnelProtocol.providerConfiguration = providerConfiguration
 
-        guard await activateSystemExtension() else {
+        // Saving the profile does not need the extension to be running, only connecting does. While macOS waits for
+        // the user to allow it, the import goes on and the notice says what to do.
+        guard await activateSystemExtension(allowPending: true) else {
             return false
         }
         let target = manager ?? NETunnelProviderManager()
@@ -703,7 +705,8 @@ final class TunnelController {
         target.isEnabled = true
         do {
             manager = try await persist(target)
-            message = nil
+            // Keep the hint to allow the extension: the profile is saved, but connecting still needs it.
+            message = systemExtensionPending ? Self.systemExtensionApprovalText : nil
         } catch {
             message = String(localized: "保存 VPN 配置失败或未获授权") + Self.errorCode(error)
             refresh()
@@ -986,7 +989,10 @@ final class TunnelController {
         #if os(macOS)
         // A newer build may carry a newer System Extension; activation replaces the running one first.
         Task {
-            guard await activateSystemExtension() else {
+            // When the user still has to allow the extension, the tunnel starts by itself once they do.
+            guard await activateSystemExtension(afterApproval: { [weak self] in
+                self?.startNow(manager)
+            }) else {
                 return
             }
             startNow(manager)
@@ -1007,6 +1013,15 @@ final class TunnelController {
 
     /// Set once this run of the app has activated the tunnel System Extension.
     @ObservationIgnored private var systemExtensionActive = false
+    /// Set while an activation request waits for the user to allow the extension in System Settings.
+    @ObservationIgnored private var systemExtensionPending = false
+    /// Runs once the waiting request is allowed; the last connect attempt sets it.
+    @ObservationIgnored private var afterSystemExtensionApproval: (() -> Void)?
+
+    /// Shown while macOS waits for the user to allow the extension.
+    static let systemExtensionApprovalText = String(
+        localized: "请在“系统设置 › 通用 › 登录项与扩展 › 网络扩展”中允许 AnixOps Net，然后再连接"
+    )
 
     /// On macOS the tunnel may be a System Extension, which runs as root and cannot read the user's Keychain, so
     /// the app hands over the node key, node library and MITM root at start (`TunnelStartSecrets`). iOS shares the
@@ -1020,22 +1035,59 @@ final class TunnelController {
     }
 
     /// Developer ID builds carry the tunnel as a System Extension, which macOS loads only after the app asks and the
-    /// user allows it. Returns false, with the reason in `message`, when it is not active. Builds whose tunnel is
-    /// an app extension (iOS, Mac App Store) have nothing to activate.
-    private func activateSystemExtension() async -> Bool {
+    /// user allows it. Returns false, with the reason in `message`, when it is not active. While the user has not
+    /// allowed it yet the request stays open: `allowPending` returns true anyway (saving a profile does not need
+    /// the extension), and `afterApproval` runs once the user allows it. Builds whose tunnel is an app extension
+    /// (iOS, Mac App Store) have nothing to activate.
+    private func activateSystemExtension(allowPending: Bool = false, afterApproval: (() -> Void)? = nil) async -> Bool {
         #if os(macOS)
         guard !systemExtensionActive, let identifier = Self.systemExtensionIdentifier() else {
             return true
         }
-        let outcome = await SystemExtensionActivation.run(identifier) { [weak self] in
-            Task { @MainActor in
-                self?.message = String(localized: "请在“系统设置 › 通用 › 登录项与扩展 › 网络扩展”中允许 AnixOps Net，然后再连接")
-            }
+        if afterApproval != nil {
+            afterSystemExtensionApproval = afterApproval
         }
+        if systemExtensionPending {
+            message = Self.systemExtensionApprovalText
+            return allowPending
+        }
+        let outcome = await SystemExtensionActivation.run(identifier) { [weak self] late in
+            self?.systemExtensionFinished(late)
+        }
+        if outcome == .needsApproval {
+            systemExtensionPending = true
+            message = Self.systemExtensionApprovalText
+            return allowPending
+        }
+        return systemExtensionFinished(outcome)
+        #else
+        return true
+        #endif
+    }
+
+    #if os(macOS)
+    /// Records the activation's final outcome, with the reason in `message` when it failed, and starts the tunnel
+    /// when a connect waited for the user's approval. Returns whether the extension is active.
+    @discardableResult
+    private func systemExtensionFinished(_ outcome: SystemExtensionActivation.Outcome) -> Bool {
+        let waited = systemExtensionPending
+        systemExtensionPending = false
+        let next = afterSystemExtensionApproval
+        afterSystemExtensionApproval = nil
         switch outcome {
         case .activated:
             systemExtensionActive = true
+            if message == Self.systemExtensionApprovalText {
+                message = nil
+            }
+            if waited {
+                next?()
+            }
             return true
+        case .needsApproval:
+            systemExtensionPending = true
+            afterSystemExtensionApproval = next
+            message = Self.systemExtensionApprovalText
         case .needsRestart:
             message = String(localized: "网络扩展将在重启 Mac 后生效")
         case .notInApplications:
@@ -1044,10 +1096,8 @@ final class TunnelController {
             message = String(localized: "无法启用网络扩展") + " (\(code))"
         }
         return false
-        #else
-        return true
-        #endif
     }
+    #endif
 
     /// Nodes whose stop the user has already been told about; a node leaves the set once it dials again.
     @ObservationIgnored private var announcedStops: Set<String> = []
