@@ -1123,6 +1123,11 @@ final class TunnelController {
 
     /// The saved profile's outbound protocol, without address or key.
     var outboundKind: String? {
+        #if DEBUG
+        if Self.isDemo {
+            return "shadowsocks"
+        }
+        #endif
         let configuration = (manager?.protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration
         guard let data = configuration?[TunnelProfileKeys.runtimeConfig] as? Data else {
             return nil
@@ -1388,7 +1393,57 @@ extension TunnelController {
         mode = .global
         connection = .connected
         connectedSince = Date().addingTimeInterval(-4521)
+        lastConnections = Self.demoConnections()
         loaded = true
+    }
+
+    /// A request list as the engine would answer it: some connections still open, some ended, one rejected.
+    private static func demoConnections() -> RuntimeControl.Connections? {
+        let rows: [(host: String, port: Int, network: String, rule: String, outbound: String, bytes: Int, ended: Bool)] = [
+            ("www.youtube.com", 443, "udp", "DOMAIN-SUFFIX,youtube.com", "香港 01", 412_000_000, false),
+            ("rr3---sn.googlevideo.com", 443, "udp", "DOMAIN-SUFFIX,googlevideo.com", "香港 01", 828_000_000, false),
+            ("github.com", 443, "tcp", "DOMAIN-SUFFIX,github.com", "日本 01", 96_000_000, false),
+            ("objects.githubusercontent.com", 443, "tcp", "DOMAIN-SUFFIX,githubusercontent.com", "日本 01", 216_000_000, false),
+            ("gateway.icloud.com", 443, "tcp", "DOMAIN-SUFFIX,icloud.com", "DIRECT", 148_000_000, false),
+            ("api.openai.com", 443, "tcp", "DOMAIN-SUFFIX,openai.com", "美国 01", 96_000_000, false),
+            ("web.telegram.org", 443, "tcp", "DOMAIN-KEYWORD,telegram", "新加坡 01", 41_000_000, false),
+            ("www.apple.com", 443, "tcp", "DOMAIN-SUFFIX,apple.com", "DIRECT", 3_200_000, false),
+            ("ads.example.net", 443, "tcp", "DOMAIN-SUFFIX,example.net", "REJECT", 0, true),
+            ("www.google.com", 443, "tcp", "DOMAIN-SUFFIX,google.com", "香港 01", 1_800_000, true),
+            ("api.github.com", 443, "tcp", "DOMAIN-SUFFIX,github.com", "日本 01", 640_000, true),
+            ("time.apple.com", 123, "udp", "FINAL", "DIRECT", 96, true),
+        ]
+        let now = Int(Date().timeIntervalSince1970 * 1000)
+        let list = rows.enumerated().map { index, row -> [String: Any] in
+            var entry: [String: Any] = [
+                "id": index + 1,
+                "network": row.network,
+                "host": row.host,
+                "destination": "\(row.host):\(row.port)",
+                "rule": row.rule,
+                "chain": row.outbound == "DIRECT" || row.outbound == "REJECT" ? [row.outbound] : ["节点选择", row.outbound],
+                "outbound": row.outbound,
+                "started_at_ms": now - (index + 1) * 47_000,
+                "upload": row.bytes / 24,
+                "download": row.bytes,
+            ]
+            if row.ended {
+                entry["ended_at_ms"] = now - (index + 1) * 9_000
+            }
+            if row.outbound == "REJECT" {
+                entry["error"] = "rejected"
+            }
+            return entry
+        }
+        let answer: [String: Any] = [
+            "traffic": ["upload_total": 86_400_000, "download_total": 1_932_000_000, "upload_rate": 184_000, "download_rate": 3_870_000, "active": 8],
+            "active": list.filter { $0["ended_at_ms"] == nil },
+            "closed": list.filter { $0["ended_at_ms"] != nil },
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: answer) else {
+            return nil
+        }
+        return RuntimeControl.decodeConnections(data)
     }
 }
 #endif

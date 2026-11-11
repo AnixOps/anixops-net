@@ -343,47 +343,57 @@ struct MacPlaceholderPage: View {
     }
 }
 
-/// Activity: the current session as the system and the tunnel extension report it, and the connection list.
+/// Activity: the session's facts in one strip, and under it the request list itself (what the tunnel carries now,
+/// what just ended, and the totals by host) instead of a link to it.
 struct MacActivityPage: View {
     var tunnel: TunnelController
     @Environment(\.brand) private var brand
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                MacCard(title: "当前会话") {
-                    LabeledContent("连接", value: ConnectPhase.describe(tunnel.connection))
-                    LabeledContent("节点", value: tunnel.nodeName ?? String(localized: "未导入"))
-                    LabeledContent("出站协议", value: ProtocolBadge.spokenName(for: tunnel.outboundKind))
-                    LabeledContent("上次停止原因", value: tunnel.lastDisconnectError ?? String(localized: "无记录"))
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    fact("连接", ConnectPhase.describe(tunnel.connection))
+                    fact("节点", tunnel.nodeName ?? String(localized: "未导入"))
+                    fact("出站协议", ProtocolBadge.spokenName(for: tunnel.outboundKind))
+                    fact("上次停止原因", tunnel.lastDisconnectError ?? String(localized: "无记录"))
                 }
-                MacCard(title: "运行状态") {
+                Divider()
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
                     Text(tunnel.runtimeStatus ?? String(localized: "隧道未运行"))
-                        .font(.callout.monospaced())
+                        .font(.caption.monospaced())
                         .foregroundStyle(brand.text2)
                         .textSelection(.enabled)
+                        .lineLimit(3)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Button("立即刷新") {
                         refresh()
                     }
-                }
-                MacCard(title: "连接记录") {
-                    NavigationLink {
-                        ConnectionsView(tunnel: tunnel)
-                    } label: {
-                        Label("查看每个连接的目标、命中规则和线路", systemImage: "list.bullet.rectangle")
-                    }
-                    .disabled(tunnel.connection != .connected)
-                    Text("连接后可用。只保存在内存里，断开隧道即清空。")
-                        .font(.caption)
-                        .foregroundStyle(brand.text2)
+                    .controlSize(.small)
                 }
             }
-            .padding(24)
-            .frame(maxWidth: 860)
-            .frame(maxWidth: .infinity)
+            .padding(16)
+            .background(brand.surface, in: RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous).strokeBorder(brand.border.opacity(0.6)))
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            ConnectionsView(tunnel: tunnel)
         }
+        .background(brand.bg)
         .onAppear(perform: refresh)
+    }
+
+    private func fact(_ title: LocalizedStringKey, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(brand.text2)
+            Text(value)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(brand.text)
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func refresh() {
