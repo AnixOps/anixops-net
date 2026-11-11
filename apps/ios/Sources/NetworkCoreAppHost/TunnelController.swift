@@ -1123,6 +1123,11 @@ final class TunnelController {
 
     /// The saved profile's outbound protocol, without address or key.
     var outboundKind: String? {
+        #if DEBUG
+        if Self.isDemo {
+            return "shadowsocks"
+        }
+        #endif
         let configuration = (manager?.protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration
         guard let data = configuration?[TunnelProfileKeys.runtimeConfig] as? Data else {
             return nil
@@ -1342,3 +1347,103 @@ struct AppNotice: Equatable {
     var detail: String?
     var actions: [Action] = []
 }
+
+#if DEBUG
+/// Demo data for screenshots: a debug build launched with `-AnixOpsDemo YES` shows a connected client with a
+/// made-up subscription instead of reading the VPN configuration and the Keychain. Nothing is saved and no
+/// tunnel starts, so it runs unsigned on a CI machine.
+extension TunnelController {
+    static var isDemo: Bool {
+        UserDefaults.standard.bool(forKey: "AnixOpsDemo")
+    }
+
+    func loadDemo() {
+        let credentials = "YWVzLTI1Ni1nY206ZGVtby1wYXNzd29yZA"
+        let names = [("hk1", "香港 01"), ("hk2", "香港 02"), ("jp1", "日本 01"), ("sg1", "新加坡 01"), ("us1", "美国 01"), ("de1", "德国 01")]
+        let links = names.map { host, name in
+            "ss://\(credentials)@\(host).example.com:8388#\(name.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? host)"
+        }
+        let delays = [38, 45, 72, 86, 164, 213]
+        if let data = try? NativeNodeImporterFFI.importNodes(links.joined(separator: "\n")),
+           let report = try? NativeImportReport.decoded(from: data) {
+            let day: TimeInterval = 24 * 3600
+            let group = SubscriptionGroup(
+                name: "AnixOps",
+                library: NodeLibrary(
+                    report: report,
+                    subscriptionURL: "https://example.com/subscription",
+                    keeping: nil,
+                    at: Date().addingTimeInterval(-2 * 3600)
+                ),
+                userInfo: SubscriptionUserInfo(
+                    upload: 6_400_000_000,
+                    download: 61_800_000_000,
+                    total: 200_000_000_000,
+                    expire: Date().addingTimeInterval(23 * day)
+                )
+            )
+            subscriptions = SubscriptionGroups(groups: [group], activeID: group.id)
+            library = subscriptions.activeLibrary()
+            nodeName = group.library.selected?.name
+            for (index, node) in group.library.nodes.enumerated() {
+                latencies[Self.latencyKey(group: group.id, node: node.id)] = .millis(delays[index % delays.count])
+            }
+        }
+        // The made-up subscription has no rules, so the mode switch offers global and direct.
+        mode = .global
+        connection = .connected
+        connectedSince = Date().addingTimeInterval(-4521)
+        lastConnections = Self.demoConnections()
+        loaded = true
+    }
+
+    /// A request list as the engine would answer it: some connections still open, some ended, one rejected.
+    private static func demoConnections() -> RuntimeControl.Connections? {
+        let rows: [(host: String, port: Int, network: String, rule: String, outbound: String, bytes: Int, ended: Bool)] = [
+            ("www.youtube.com", 443, "udp", "DOMAIN-SUFFIX,youtube.com", "香港 01", 412_000_000, false),
+            ("rr3---sn.googlevideo.com", 443, "udp", "DOMAIN-SUFFIX,googlevideo.com", "香港 01", 828_000_000, false),
+            ("github.com", 443, "tcp", "DOMAIN-SUFFIX,github.com", "日本 01", 96_000_000, false),
+            ("objects.githubusercontent.com", 443, "tcp", "DOMAIN-SUFFIX,githubusercontent.com", "日本 01", 216_000_000, false),
+            ("gateway.icloud.com", 443, "tcp", "DOMAIN-SUFFIX,icloud.com", "DIRECT", 148_000_000, false),
+            ("api.openai.com", 443, "tcp", "DOMAIN-SUFFIX,openai.com", "美国 01", 96_000_000, false),
+            ("web.telegram.org", 443, "tcp", "DOMAIN-KEYWORD,telegram", "新加坡 01", 41_000_000, false),
+            ("www.apple.com", 443, "tcp", "DOMAIN-SUFFIX,apple.com", "DIRECT", 3_200_000, false),
+            ("ads.example.net", 443, "tcp", "DOMAIN-SUFFIX,example.net", "REJECT", 0, true),
+            ("www.google.com", 443, "tcp", "DOMAIN-SUFFIX,google.com", "香港 01", 1_800_000, true),
+            ("api.github.com", 443, "tcp", "DOMAIN-SUFFIX,github.com", "日本 01", 640_000, true),
+            ("time.apple.com", 123, "udp", "FINAL", "DIRECT", 96, true),
+        ]
+        let now = Int(Date().timeIntervalSince1970 * 1000)
+        let list = rows.enumerated().map { index, row -> [String: Any] in
+            var entry: [String: Any] = [
+                "id": index + 1,
+                "network": row.network,
+                "host": row.host,
+                "destination": "\(row.host):\(row.port)",
+                "rule": row.rule,
+                "chain": row.outbound == "DIRECT" || row.outbound == "REJECT" ? [row.outbound] : ["节点选择", row.outbound],
+                "outbound": row.outbound,
+                "started_at_ms": now - (index + 1) * 47_000,
+                "upload": row.bytes / 24,
+                "download": row.bytes,
+            ]
+            if row.ended {
+                entry["ended_at_ms"] = now - (index + 1) * 9_000
+            }
+            if row.outbound == "REJECT" {
+                entry["error"] = "rejected"
+            }
+            return entry
+        }
+        let answer: [String: Any] = [
+            "traffic": ["upload_total": 86_400_000, "download_total": 1_932_000_000, "upload_rate": 184_000, "download_rate": 3_870_000, "active": 8],
+            "active": list.filter { $0["ended_at_ms"] == nil },
+            "closed": list.filter { $0["ended_at_ms"] != nil },
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: answer) else {
+            return nil
+        }
+        return RuntimeControl.decodeConnections(data)
+    }
+}
+#endif

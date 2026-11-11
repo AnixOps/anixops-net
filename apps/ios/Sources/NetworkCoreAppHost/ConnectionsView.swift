@@ -312,6 +312,13 @@ struct ConnectionsView: View {
     }
 
     private func load() async {
+        #if DEBUG
+        if TunnelController.isDemo {
+            list = tunnel.lastConnections ?? list
+            loaded = true
+            return
+        }
+        #endif
         guard let data = await tunnel.control(.connections), let next = RuntimeControl.decodeConnections(data) else {
             if tunnel.connection != .connected {
                 // Keep showing what went through the tunnel before it stopped.

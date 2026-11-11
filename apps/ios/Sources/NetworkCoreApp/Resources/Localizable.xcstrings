@@ -5126,6 +5126,86 @@
           }
         }
       }
+    },
+    "切换节点": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch node"
+          }
+        }
+      }
+    },
+    "打开开关连接，或按 ⇧⌘C": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn the switch on to connect, or press ⇧⌘C"
+          }
+        }
+      }
+    },
+    "更新": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update"
+          }
+        }
+      }
+    },
+    "到期": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expires"
+          }
+        }
+      }
+    },
+    "长期有效": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No expiry"
+          }
+        }
+      }
+    },
+    "上次更新": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last updated"
+          }
+        }
+      }
+    },
+    "还没有订阅。导入后节点会出现在“代理”里。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No subscription yet. Imported nodes appear under Proxies."
+          }
+        }
+      }
+    },
+    "订阅没有提供流量信息": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The subscription reports no traffic allowance"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
