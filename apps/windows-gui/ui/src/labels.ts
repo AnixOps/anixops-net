@@ -97,6 +97,7 @@ export function factLabel(label: string | undefined): string {
 }
 
 const protocolAbbreviations: Record<string, string> = {
+  anx: "ANX",
   shadowsocks: "SS",
   vless: "VLESS",
   vmess: "VMess",

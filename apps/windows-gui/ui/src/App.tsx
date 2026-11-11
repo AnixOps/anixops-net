@@ -1,9 +1,9 @@
-import { Activity, CheckCircle2, CircleAlert, Globe, House, Puzzle, RefreshCw, Route, SlidersHorizontal, X } from "lucide-react";
+import { Activity, CheckCircle2, CircleAlert, Globe, House, Puzzle, Route, Settings, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { desktop, NodeSummary, RuntimeSnapshot } from "./bridge";
 import { Wordmark } from "./brand";
-import { connectionTitle, connectPhase } from "./labels";
+import { connectionTitle, connectPhase, routingLabel } from "./labels";
 import { ActivityPage } from "./pages/ActivityPage";
 import { ExtensionsPage } from "./pages/ExtensionsPage";
 import { HomePage } from "./pages/HomePage";
@@ -12,19 +12,23 @@ import { RulesPage } from "./pages/RulesPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { keepIfUnchanged, usePageVisible } from "./live";
 import { useAppearance } from "./theme";
-import { IconButton, StatusDot } from "./ui";
+import { StatusDot, Switch, Tile, TileColor, ToolbarSlot } from "./ui";
 import { t, useLanguage } from "./i18n";
 
 export type Page = "home" | "proxies" | "rules" | "extensions" | "activity" | "settings";
 
-const navigation: Array<{ page: Page; label: string; icon: LucideIcon }> = [
-  { page: "home", label: "概览", icon: House },
-  { page: "proxies", label: "代理", icon: Globe },
-  { page: "rules", label: "规则", icon: Route },
-  { page: "extensions", label: "扩展", icon: Puzzle },
-  { page: "activity", label: "活动", icon: Activity },
-  { page: "settings", label: "设置", icon: SlidersHorizontal },
+const navigation: Array<{ page: Page; label: string; icon: LucideIcon; color: TileColor }> = [
+  { page: "home", label: "概览", icon: House, color: "indigo" },
+  { page: "proxies", label: "代理", icon: Globe, color: "sky" },
+  { page: "rules", label: "规则", icon: Route, color: "orange" },
+  { page: "extensions", label: "扩展", icon: Puzzle, color: "purple" },
+  { page: "activity", label: "活动", icon: Activity, color: "pink" },
 ];
+
+const settingsItem = { page: "settings" as const, label: "设置", icon: Settings, color: "gray" as const };
+
+// Lists read better wider; settings-style pages keep the narrow System Settings column.
+const widePages: Page[] = ["proxies", "activity"];
 
 interface Notice {
   text: string;
@@ -37,6 +41,7 @@ export function App() {
   const [nodes, setNodes] = useState<NodeSummary[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [toolbar, setToolbar] = useState<HTMLElement | null>(null);
   const [appearance, setAppearance] = useAppearance();
   const [language, setLanguage] = useLanguage();
   const noticeTimer = useRef<number>();
@@ -45,7 +50,7 @@ export function App() {
     window.clearTimeout(noticeTimer.current);
     setNotice({ text, tone });
     // Results fade on their own; errors stay until dismissed.
-    if (tone === "success") noticeTimer.current = window.setTimeout(() => setNotice(null), 5000);
+    if (tone === "success") noticeTimer.current = window.setTimeout(() => setNotice(null), 4000);
   }, []);
   const showError = useCallback((error: unknown) => show(error instanceof Error ? error.message : String(error), "danger"), [show]);
 
@@ -97,53 +102,73 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [toggleConnection]);
 
-  const title = t(navigation.find((item) => item.page === page)?.label ?? "");
+  const title = t([...navigation, settingsItem].find((item) => item.page === page)?.label ?? "");
   const dotTone = phase === "on" ? "success" : phase === "failed" ? "danger" : phase === "connecting" || phase === "disconnecting" ? "warning" : "neutral";
+  const node = nodes.find((item) => item.id === snapshot?.selectedNode);
+  const sideDetail = phase === "on"
+    ? [node?.label ?? snapshot?.selectedNode, routingLabel(snapshot?.routingMode)].filter(Boolean).join(" · ")
+    : phase === "off" ? "Ctrl+Shift+C" : "";
+  const moving = phase === "connecting" || phase === "disconnecting";
+  const width = widePages.includes(page) ? "wide" : "narrow";
+
+  const navButton = ({ page: item, label, icon, color }: typeof navigation[number]) => (
+    <button
+      className={`nav-item ${page === item ? "active" : ""}`}
+      key={item}
+      aria-current={page === item ? "page" : undefined}
+      onClick={() => setPage(item)}
+    >
+      <Tile icon={icon} color={color} /><span>{t(label)}</span>
+    </button>
+  );
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-brand"><Wordmark /></div>
         <nav aria-label={t("主导航")}>
-          {navigation.map(({ page: item, label, icon: Icon }) => (
-            <button
-              className={`nav-item ${page === item ? "active" : ""}`}
-              key={item}
-              aria-current={page === item ? "page" : undefined}
-              onClick={() => setPage(item)}
-            >
-              <Icon size={20} strokeWidth={1.5} /><span>{t(label)}</span>
-            </button>
-          ))}
+          {navigation.map(navButton)}
+          <div className="nav-gap" />
+          {navButton(settingsItem)}
         </nav>
-        <button className="sidebar-status" onClick={() => setPage("home")}>
+        <div className="sidebar-status">
           <StatusDot tone={dotTone} />
-          <span>
+          <button className="sidebar-status-text" onClick={() => setPage("home")}>
             <strong>{connectionTitle(snapshot?.connection, phase)}</strong>
-            <small>{snapshot?.runtimeMode === "service" ? t("Windows 服务模式") : t("桌面模式")}</small>
-          </span>
-        </button>
+            {sideDetail && <small className="truncate">{sideDetail}</small>}
+          </button>
+          <Switch
+            label={phase === "on" ? t("断开") : t("连接")}
+            tone="go"
+            checked={phase === "on" || phase === "connecting"}
+            busy={moving}
+            disabled={phase === "loading" || moving || (snapshot !== null && !snapshot.subscription && nodes.length === 0)}
+            onChange={toggleConnection}
+          />
+        </div>
       </aside>
       <main className="workspace">
-        <header className="topbar">
+        <header className={`topbar ${width}`}>
           <h1>{title}</h1>
-          <IconButton label={t("刷新状态")} onClick={() => void refresh().catch(showError)}><RefreshCw size={17} /></IconButton>
+          <div className="topbar-tools" ref={setToolbar} />
         </header>
+        <div className={`page ${width}`} key={page}>
+          <ToolbarSlot.Provider value={toolbar}>
+            {page === "home" && <HomePage snapshot={snapshot} nodes={nodes} phase={phase} busy={busy} run={run} toggle={toggleConnection} goTo={setPage} />}
+            {page === "proxies" && <ProxiesPage snapshot={snapshot} nodes={nodes} busy={busy} run={run} />}
+            {page === "rules" && <RulesPage snapshot={snapshot} busy={busy} run={run} />}
+            {page === "extensions" && <ExtensionsPage snapshot={snapshot} busy={busy} run={run} />}
+            {page === "activity" && <ActivityPage snapshot={snapshot} busy={busy} run={run} />}
+            {page === "settings" && <SettingsPage snapshot={snapshot} busy={busy} run={run} appearance={appearance} setAppearance={setAppearance} language={language} setLanguage={setLanguage} />}
+          </ToolbarSlot.Provider>
+        </div>
         {notice && (
-          <div className={`notice ${notice.tone}`} role={notice.tone === "danger" ? "alert" : "status"}>
-            {notice.tone === "danger" ? <CircleAlert size={17} /> : <CheckCircle2 size={17} />}
+          <div className={`toast ${notice.tone}`} role={notice.tone === "danger" ? "alert" : "status"}>
+            {notice.tone === "danger" ? <CircleAlert size={16} /> : <CheckCircle2 size={16} />}
             <span>{notice.text}</span>
-            <button aria-label={t("关闭提示")} onClick={() => setNotice(null)}><X size={15} /></button>
+            <button aria-label={t("关闭提示")} onClick={() => setNotice(null)}><X size={14} /></button>
           </div>
         )}
-        <div className="page" key={page}>
-          {page === "home" && <HomePage snapshot={snapshot} nodes={nodes} phase={phase} busy={busy} run={run} toggle={toggleConnection} goTo={setPage} />}
-          {page === "proxies" && <ProxiesPage snapshot={snapshot} nodes={nodes} busy={busy} run={run} />}
-          {page === "rules" && <RulesPage snapshot={snapshot} busy={busy} run={run} />}
-          {page === "extensions" && <ExtensionsPage snapshot={snapshot} busy={busy} run={run} />}
-          {page === "activity" && <ActivityPage snapshot={snapshot} busy={busy} run={run} />}
-          {page === "settings" && <SettingsPage snapshot={snapshot} busy={busy} run={run} appearance={appearance} setAppearance={setAppearance} language={language} setLanguage={setLanguage} />}
-        </div>
       </main>
     </div>
   );
