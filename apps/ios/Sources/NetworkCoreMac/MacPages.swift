@@ -42,6 +42,11 @@ struct MacHomePage: View {
             }
         }
         .task(id: tunnel.connection) {
+            #if DEBUG
+            if TunnelController.isDemo, tunnel.connection == .connected {
+                dashboard.loadDemo()
+            }
+            #endif
             await dashboard.poll(tunnel)
         }
         .onAppear {

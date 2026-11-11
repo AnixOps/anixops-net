@@ -719,6 +719,22 @@ jobs:
           lipo -archs "${appex}/Contents/MacOS/NetworkCoreMacTunnel" | tee "${RUNNER_TEMP}/mac-archs.txt"
           grep -q arm64 "${RUNNER_TEMP}/mac-archs.txt"
 
+      # The unsigned debug build opens with made-up data (`-AnixOpsDemo YES`), so the pictures need no account,
+      # no certificate and no tunnel. A machine without a screen session must not fail the build.
+      - name: Take macOS screenshots with demo data
+        continue-on-error: true
+        shell: bash
+        run: .github/scripts/mac-screenshots.sh "apps/ios/build/Build/Products/Debug/AnixOps Net.app" "${RUNNER_TEMP}/mac-screenshots"
+
+      - name: Upload the macOS screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-screenshots-${{ github.sha }}
+          path: ${{ runner.temp }}/mac-screenshots
+          if-no-files-found: ignore
+          retention-days: 3
+
   ci-summary:
     name: CI summary
     runs-on: ubuntu-latest

@@ -17,6 +17,13 @@ struct NetworkCoreMacApp: App {
             MacRootView(tunnel: tunnel, state: state)
                 .preferredColorScheme(appearance.colorScheme)
                 .task {
+                    #if DEBUG
+                    // Screenshots: made-up data instead of the saved configuration (`-AnixOpsDemo YES`).
+                    if TunnelController.isDemo {
+                        tunnel.loadDemo()
+                        return
+                    }
+                    #endif
                     await tunnel.load()
                     // Subscription groups update on their own while the app runs; a Mac app stays open for long.
                     while !Task.isCancelled {

@@ -1342,3 +1342,52 @@ struct AppNotice: Equatable {
     var detail: String?
     var actions: [Action] = []
 }
+
+#if DEBUG
+/// Demo data for screenshots: a debug build launched with `-AnixOpsDemo YES` shows a connected client with a
+/// made-up subscription instead of reading the VPN configuration and the Keychain. Nothing is saved and no
+/// tunnel starts, so it runs unsigned on a CI machine.
+extension TunnelController {
+    static var isDemo: Bool {
+        UserDefaults.standard.bool(forKey: "AnixOpsDemo")
+    }
+
+    func loadDemo() {
+        let credentials = "YWVzLTI1Ni1nY206ZGVtby1wYXNzd29yZA"
+        let names = [("hk1", "香港 01"), ("hk2", "香港 02"), ("jp1", "日本 01"), ("sg1", "新加坡 01"), ("us1", "美国 01"), ("de1", "德国 01")]
+        let links = names.map { host, name in
+            "ss://\(credentials)@\(host).example.com:8388#\(name.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? host)"
+        }
+        let delays = [38, 45, 72, 86, 164, 213]
+        if let data = try? NativeNodeImporterFFI.importNodes(links.joined(separator: "\n")),
+           let report = try? NativeImportReport.decoded(from: data) {
+            let day: TimeInterval = 24 * 3600
+            let group = SubscriptionGroup(
+                name: "AnixOps",
+                library: NodeLibrary(
+                    report: report,
+                    subscriptionURL: "https://example.com/subscription",
+                    keeping: nil,
+                    at: Date().addingTimeInterval(-2 * 3600)
+                ),
+                userInfo: SubscriptionUserInfo(
+                    upload: 6_400_000_000,
+                    download: 61_800_000_000,
+                    total: 200_000_000_000,
+                    expire: Date().addingTimeInterval(23 * day)
+                )
+            )
+            subscriptions = SubscriptionGroups(groups: [group], activeID: group.id)
+            library = subscriptions.activeLibrary()
+            nodeName = group.library.selected?.name
+            for (index, node) in group.library.nodes.enumerated() {
+                latencies[Self.latencyKey(group: group.id, node: node.id)] = .millis(delays[index % delays.count])
+            }
+        }
+        mode = .rule
+        connection = .connected
+        connectedSince = Date().addingTimeInterval(-4521)
+        loaded = true
+    }
+}
+#endif

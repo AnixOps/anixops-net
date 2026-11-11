@@ -246,3 +246,41 @@ final class DashboardModel {
         }
     }
 }
+
+#if DEBUG
+/// Demo data for screenshots (`TunnelController.loadDemo()`): a minute of traffic, the busiest hosts and three
+/// policy groups, as the engine would answer.
+extension DashboardModel {
+    func loadDemo() {
+        traffic = RuntimeControl.Traffic(
+            uploadTotal: 86_400_000,
+            downloadTotal: 1_932_000_000,
+            uploadRate: 184_000,
+            downloadRate: 3_870_000,
+            active: 27
+        )
+        history.reset()
+        for step in 0..<history.capacity {
+            let wave = sin(Double(step) / 5) + sin(Double(step) / 2.3) * 0.5
+            let download = 2_600_000 + wave * 1_300_000
+            let upload = 150_000 + sin(Double(step) / 3.1) * 90_000
+            history.append(upload: UInt64(max(20_000, upload)), download: UInt64(max(200_000, download)))
+        }
+        topHosts = [
+            HostTraffic(host: "youtube.com", bytes: 1_240_000_000, connections: 9, outbound: "香港 01"),
+            HostTraffic(host: "github.com", bytes: 312_000_000, connections: 6, outbound: "日本 01"),
+            HostTraffic(host: "icloud.com", bytes: 148_000_000, connections: 4, outbound: "DIRECT"),
+            HostTraffic(host: "openai.com", bytes: 96_000_000, connections: 5, outbound: "美国 01"),
+            HostTraffic(host: "telegram.org", bytes: 41_000_000, connections: 3, outbound: "新加坡 01"),
+        ]
+        let answer = """
+        {"groups":[
+        {"id":"节点选择","type":"select","now":"香港 01","members":[{"name":"香港 01","latency_ms":38},{"name":"日本 01","latency_ms":72},{"name":"新加坡 01","latency_ms":86}]},
+        {"id":"自动选择","type":"url-test","now":"香港 02","members":[{"name":"香港 02","latency_ms":45},{"name":"香港 01","latency_ms":38}]},
+        {"id":"流媒体","type":"select","now":"美国 01","members":[{"name":"美国 01","latency_ms":164},{"name":"德国 01","latency_ms":213}]}
+        ]}
+        """
+        groups = RuntimeControl.decode(RuntimeControl.Groups.self, from: Data(answer.utf8))?.groups ?? []
+    }
+}
+#endif
