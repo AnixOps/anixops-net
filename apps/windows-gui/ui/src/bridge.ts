@@ -37,6 +37,8 @@ export interface RuntimeSnapshot {
   bilibiliWebAdBlockEnabled: boolean;
   tunModeEnabled?: boolean;
   scriptRuntimeConfigured: boolean;
+  /** HTTPS decryption is on (Windows); the Linux client leaves it out. */
+  httpsDecryptionEnabled?: boolean;
   darkTheme: boolean;
   runtimeMode: "desktop" | "service";
   routingMode: "bypass_china" | "gfw_list" | "direct" | "return_china" | "rule";
@@ -120,6 +122,18 @@ export interface NodeDelay {
   nodeId: string;
   delayMs?: number | null;
   error?: string | null;
+}
+
+/** An HTTPS decryption plugin imported from a URL. */
+export interface MitmPlugin {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+  /** How much of the plugin the engine supports. */
+  level: "full" | "partial" | "unsupported" | string;
+  hostnames: string[];
+  scriptCount: number;
 }
 
 export interface OperationResult {
@@ -220,11 +234,13 @@ export const desktop = {
   setRoutingMode: (mode: RuntimeSnapshot["routingMode"]) => invoke<OperationResult>("set_routing_mode", { mode }),
   setDnsPreset: (preset: DnsPreset) => invoke<OperationResult>("set_dns_preset", { preset }),
   refreshRoutingRules: () => invoke<OperationResult>("refresh_routing_rules"),
-  configureScriptRuntime: (scriptRuntimeJson: string) =>
-    invoke<OperationResult>("configure_script_runtime", { scriptRuntimeJson }),
-  clearScriptRuntime: () => invoke<OperationResult>("clear_script_runtime"),
   enableHttpsMitm: () => invoke<OperationResult>("enable_https_mitm"),
   disableHttpsMitm: () => invoke<OperationResult>("disable_https_mitm"),
+  mitmPlugins: () => invoke<MitmPlugin[]>("list_mitm_plugins"),
+  importMitmPlugin: (url: string) => invoke<OperationResult>("import_mitm_plugin", { url }),
+  setMitmPluginEnabled: (id: string, enabled: boolean) =>
+    invoke<OperationResult>("set_mitm_plugin_enabled", { id, enabled }),
+  removeMitmPlugin: (id: string) => invoke<OperationResult>("remove_mitm_plugin", { id }),
   setTunMode: (enabled: boolean) => invoke<OperationResult>("set_tun_mode", { enabled }),
   installCertificate: (path: string) => invoke<OperationResult>("install_certificate", { path }),
   removeCertificate: () => invoke<OperationResult>("remove_certificate"),
