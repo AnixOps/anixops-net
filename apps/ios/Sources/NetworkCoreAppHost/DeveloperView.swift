@@ -178,7 +178,8 @@ struct DeveloperView: View {
             outboundKind: tunnel.outboundKind,
             lastDisconnectError: tunnel.lastDisconnectError,
             diagnostics: tunnel.diagnostics,
-            generatedAt: Date()
+            generatedAt: Date(),
+            health: ClientHealthMonitor.shared.reportText
         )
     }
 

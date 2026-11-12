@@ -244,6 +244,21 @@ jobs:
           cargo build --locked -p networkcore-linux-gui --features gui --release
           test -x target/release/anixops-net
 
+      # F4 cold start (median of 7 launches to the window's first page load, budget 1.5 s), the loopback
+      # Prometheus endpoint and the install integrity check, on the release binary under Xvfb.
+      - name: Cold start and client health
+        shell: bash
+        env:
+          # Xvfb has no GPU: WebKitGTK renders in software.
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          set -euo pipefail
+          bash .github/scripts/apt-install.sh xvfb xauth dbus
+          chmod +x .github/scripts/linux-client-health.sh
+          xvfb-run -a --server-args="-screen 0 1280x800x24" \
+            dbus-run-session -- .github/scripts/linux-client-health.sh target/release/anixops-net
+
   windows:
     name: Windows build, test and MSI
     runs-on: windows-latest
@@ -396,6 +411,14 @@ jobs:
           }
           $defaultConfig = (Resolve-Path "installer\windows\default-managed-config.json").Path
           $wintunPath = & .github/scripts/fetch-wintun.ps1 -Destination (Join-Path $env:RUNNER_TEMP "wintun")
+          $integrityPath = Join-Path $env:RUNNER_TEMP "integrity\integrity.sha256"
+          & .github/scripts/write-integrity.ps1 -Output $integrityPath -Entry @(
+            "networkcore-windows-gui.exe=$releaseDir\networkcore-windows-gui.exe",
+            "networkcore-windows-service.exe=$releaseDir\networkcore-windows-service.exe",
+            "networkcore-windows.exe=$releaseDir\networkcore-windows.exe",
+            "WebView2Loader.dll=$webView2LoaderPath",
+            "wintun.dll=$wintunPath"
+          )
           wix build installer/windows/Package.wxs `
             -ext WixToolset.UI.wixext `
             -arch x64 `
@@ -406,6 +429,7 @@ jobs:
             -d "WintunDll=$wintunPath" `
             -d "ServiceExe=$releaseDir\networkcore-windows-service.exe" `
             -d "DefaultConfig=$defaultConfig" `
+            -d "IntegrityList=$integrityPath" `
             -o dist\windows-ci\networkcore-windows-ci.msi
           wix msi validate dist\windows-ci\networkcore-windows-ci.msi
           if ((Get-Item dist\windows-ci\networkcore-windows-ci.msi).Length -le 0) {
@@ -471,6 +495,20 @@ jobs:
           }
           if (-not (Test-Path (Join-Path $env:ProgramFiles "AnixOps\NetworkCore\wintun.dll") -PathType Leaf)) {
             throw "Windows managed client MSI did not install wintun.dll beside the GUI executable."
+          }
+          # The integrity list the client checks at start must match the installed files.
+          $installDir = Join-Path $env:ProgramFiles "AnixOps\NetworkCore"
+          $integrityList = Join-Path $installDir "integrity.sha256"
+          if (-not (Test-Path $integrityList -PathType Leaf)) {
+            throw "Windows managed client MSI did not install integrity.sha256."
+          }
+          foreach ($line in Get-Content $integrityList) {
+            if (-not $line.Trim()) { continue }
+            $expected, $name = $line -split "  ", 2
+            $actual = (Get-FileHash -Algorithm SHA256 -Path (Join-Path $installDir $name)).Hash.ToLowerInvariant()
+            if ($actual -ne $expected) {
+              throw "Installed $name does not match integrity.sha256."
+            }
           }
 
           # GitHub-hosted Windows runners have no dependable interactive desktop session for

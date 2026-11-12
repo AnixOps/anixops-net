@@ -10,6 +10,10 @@ struct NetworkCoreAppMain: App {
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
     @Environment(\.scenePhase) private var scenePhase
 
+    init() {
+        ClientHealthMonitor.shared.start()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView(tunnel: tunnel)

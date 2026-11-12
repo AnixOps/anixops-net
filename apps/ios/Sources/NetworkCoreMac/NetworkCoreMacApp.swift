@@ -11,6 +11,10 @@ struct NetworkCoreMacApp: App {
     @StateObject private var state = MacAppState()
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
 
+    init() {
+        ClientHealthMonitor.shared.start()
+    }
+
     var body: some Scene {
         // One window: a VPN client has a single connection, so a second window would only repeat it.
         Window("AnixOps Net", id: MacAppState.mainWindowID) {

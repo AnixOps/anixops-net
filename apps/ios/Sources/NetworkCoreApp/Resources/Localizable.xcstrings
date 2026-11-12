@@ -5256,6 +5256,26 @@
           }
         }
       }
+    },
+    "崩溃报告": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crash reports"
+          }
+        }
+      }
+    },
+    "崩溃时记录脱敏后的信息（不含网址、账号和节点地址），只保存在本机，复制诊断信息时附上。关闭会删除已保存的报告。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keeps a redacted record when the app crashes (no URLs, accounts or node addresses) on this device only and adds it to the diagnostics you copy. Turning this off deletes saved reports."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

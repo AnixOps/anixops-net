@@ -29,6 +29,9 @@ public enum RuntimeControl {
     case outboundHealth
     /// Lets a node that stopped after repeated rejections dial again (`{"resumed": bool}`).
     case resumeOutbound(node: String)
+    /// The engine's metrics in the Prometheus text format (`{"content_type", "text"}`). `anonymous` replaces
+    /// policy group, member and rule set names with their positions, for text that leaves the device.
+    case metrics(anonymous: Bool)
 
     public var request: Data {
         let object: [String: Any]
@@ -65,8 +68,21 @@ public enum RuntimeControl {
             object = ["cmd": "outbound_health"]
         case let .resumeOutbound(node):
             object = ["cmd": "resume_outbound", "node": node]
+        case let .metrics(anonymous):
+            object = ["cmd": "metrics", "anonymous": anonymous]
         }
         return (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
+    }
+
+    /// The `metrics` answer.
+    public struct Metrics: Decodable, Equatable {
+        public let contentType: String
+        public let text: String
+
+        enum CodingKeys: String, CodingKey {
+            case contentType = "content_type"
+            case text
+        }
     }
 
     /// The `traffic` answer: totals since the tunnel started and the current rates in bytes per second.

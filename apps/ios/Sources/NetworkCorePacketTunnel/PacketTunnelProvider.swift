@@ -260,7 +260,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 memoryAvailableBytes: Self.memoryAvailable(),
                 uptimeSeconds: startedAt.map { Date().timeIntervalSince($0) },
                 handshake: EmbeddedRuntimeSession.reportedHandshake(),
-                events: events.snapshot()
+                events: events.snapshot(),
+                engineMetrics: RuntimeControl.decode(
+                    RuntimeControl.Metrics.self,
+                    from: session?.control(RuntimeControl.metrics(anonymous: true).request)
+                )?.text
             )
             completionHandler?(try? diagnostics.encoded())
         }

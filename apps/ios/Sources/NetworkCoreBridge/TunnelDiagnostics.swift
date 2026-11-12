@@ -104,6 +104,9 @@ public struct TunnelDiagnostics: Codable, Equatable {
     public var runtimeSchemaVersion: UInt32
     public var runtimeFeatureSetVersion: UInt32
     public var events: [TunnelDiagnosticEvent]
+    /// The engine's metrics with anonymous labels (Prometheus text), nil before a runtime starts or from an older
+    /// extension.
+    public var engineMetrics: String?
 
     enum CodingKeys: String, CodingKey {
         case runtimeStatus = "runtime_status"
@@ -115,6 +118,7 @@ public struct TunnelDiagnostics: Codable, Equatable {
         case runtimeSchemaVersion = "runtime_schema_version"
         case runtimeFeatureSetVersion = "runtime_feature_set_version"
         case events
+        case engineMetrics = "engine_metrics"
     }
 
     public init(
@@ -124,7 +128,8 @@ public struct TunnelDiagnostics: Codable, Equatable {
         memoryAvailableBytes: UInt64? = nil,
         uptimeSeconds: Double?,
         handshake: NetworkCoreRuntimeFFI.Handshake,
-        events: [TunnelDiagnosticEvent]
+        events: [TunnelDiagnosticEvent],
+        engineMetrics: String? = nil
     ) {
         self.runtimeStatus = runtimeStatus
         self.memoryFootprintBytes = memoryFootprintBytes
@@ -135,6 +140,29 @@ public struct TunnelDiagnostics: Codable, Equatable {
         runtimeSchemaVersion = handshake.dtoSchemaVersion
         runtimeFeatureSetVersion = handshake.featureSetVersion
         self.events = events
+        self.engineMetrics = engineMetrics
+    }
+
+    /// The extension's gauges and the engine's metrics in the Prometheus text format, for the diagnostics export.
+    public var prometheusText: String {
+        var lines: [String] = []
+        func gauge(_ name: String, _ help: String, _ value: String?) {
+            guard let value = value else {
+                return
+            }
+            lines.append("# HELP \(name) \(help)")
+            lines.append("# TYPE \(name) gauge")
+            lines.append("\(name) \(value)")
+        }
+        gauge("anixops_extension_memory_bytes", "Memory footprint of the packet tunnel extension.", memoryFootprintBytes.map(String.init))
+        gauge("anixops_extension_memory_peak_bytes", "Highest memory footprint since the extension started.", peakMemoryFootprintBytes.map(String.init))
+        gauge("anixops_extension_memory_available_bytes", "Headroom before the system memory limit.", memoryAvailableBytes.map(String.init))
+        gauge("anixops_extension_uptime_seconds", "Seconds since the extension started.", uptimeSeconds.map { String(format: "%.3f", $0) })
+        var text = lines.joined(separator: "\n") + "\n"
+        if let engineMetrics = engineMetrics, !engineMetrics.isEmpty {
+            text += engineMetrics.hasSuffix("\n") ? engineMetrics : engineMetrics + "\n"
+        }
+        return text
     }
 
     public func encoded() throws -> Data {
@@ -179,6 +207,8 @@ public struct DeveloperReport: Equatable {
     public var lastDisconnectError: String?
     public var diagnostics: TunnelDiagnostics?
     public var generatedAt: Date
+    /// The client health section: install integrity and the redacted crash reports (`ClientHealth`).
+    public var health: String?
 
     public init(
         appVersion: String,
@@ -188,7 +218,8 @@ public struct DeveloperReport: Equatable {
         outboundKind: String?,
         lastDisconnectError: String?,
         diagnostics: TunnelDiagnostics?,
-        generatedAt: Date
+        generatedAt: Date,
+        health: String? = nil
     ) {
         self.appVersion = appVersion
         self.appBuild = appBuild
@@ -198,6 +229,7 @@ public struct DeveloperReport: Equatable {
         self.lastDisconnectError = lastDisconnectError
         self.diagnostics = diagnostics
         self.generatedAt = generatedAt
+        self.health = health
     }
 
     public var text: String {
@@ -212,6 +244,9 @@ public struct DeveloperReport: Equatable {
         if let lastDisconnectError = lastDisconnectError {
             lines.append("last disconnect error:")
             lines.append(lastDisconnectError)
+        }
+        if let health = health, !health.isEmpty {
+            lines.append(health.hasSuffix("\n") ? String(health.dropLast()) : health)
         }
         guard let diagnostics = diagnostics else {
             lines.append("extension: not reachable")
@@ -233,6 +268,8 @@ public struct DeveloperReport: Equatable {
         for event in diagnostics.events {
             lines.append("\(Self.timestamp(event.time)) \(event.message)")
         }
+        lines.append("metrics:")
+        lines.append(diagnostics.prometheusText.trimmingCharacters(in: .newlines))
         return lines.joined(separator: "\n")
     }
 

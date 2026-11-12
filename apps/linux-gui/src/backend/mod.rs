@@ -778,6 +778,11 @@ impl Backend {
         self.engine.control(request)
     }
 
+    /// The engine's metrics text while it runs, and whether the client is connected.
+    pub fn metrics(&self) -> (Option<String>, bool) {
+        (self.engine.metrics(), self.engine.is_running())
+    }
+
     /// Stops the engine and puts the proxy settings back; called when the window closes.
     pub fn shutdown(&mut self) {
         self.engine.stop();
@@ -1024,8 +1029,9 @@ impl Backend {
         ))
     }
 
-    /// Writes a report without node addresses, names or credentials.
-    pub fn diagnostics(&self) -> Result<OperationResult, String> {
+    /// Writes a report without node addresses, names or credentials. `health` is the client health section
+    /// (integrity, cold start, redacted crash reports), appended as it is.
+    pub fn diagnostics(&self, health: &str) -> Result<OperationResult, String> {
         let snapshot = self.snapshot();
         let mut protocols: Vec<String> = self
             .nodes
@@ -1049,6 +1055,7 @@ impl Backend {
             snapshot.last_error.as_deref().unwrap_or("none"),
             snapshot.configuration_error.as_deref().unwrap_or("none"),
         );
+        let report = format!("{report}\n{health}");
         let path = self
             .store
             .write_report(&format!("diagnostics-{}.txt", now()), &report)

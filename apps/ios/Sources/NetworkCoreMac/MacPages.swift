@@ -425,7 +425,8 @@ struct MacActivityPage: View {
                 outboundKind: tunnel.outboundKind,
                 lastDisconnectError: tunnel.lastDisconnectError,
                 diagnostics: tunnel.diagnostics,
-                generatedAt: Date()
+                generatedAt: Date(),
+                health: ClientHealthMonitor.shared.reportText
             )
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(report.text, forType: .string)
@@ -440,6 +441,7 @@ struct MacSettingsPage: View {
     @Environment(\.brand) private var brand
     @State private var opensAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
+    @State private var crashReports = ClientHealthMonitor.shared.crashReports.isEnabled
 
     var body: some View {
         Form {
@@ -467,9 +469,17 @@ struct MacSettingsPage: View {
                 }
             }
 
-            Section("隐私") {
+            Section {
                 Label("不收集你的流量和浏览记录", systemImage: "hand.raised")
                 Label("节点密码和密钥只保存在本机钥匙串", systemImage: "key")
+                Toggle("崩溃报告", isOn: $crashReports)
+                    .onChange(of: crashReports) { _, enabled in
+                        ClientHealthMonitor.shared.crashReports.isEnabled = enabled
+                    }
+            } header: {
+                Text("隐私")
+            } footer: {
+                Text("崩溃时记录脱敏后的信息（不含网址、账号和节点地址），只保存在本机，复制诊断信息时附上。关闭会删除已保存的报告。")
             }
 
             Section("关于") {

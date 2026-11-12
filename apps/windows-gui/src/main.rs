@@ -8,6 +8,7 @@ fn main() {
 
 #[cfg(windows)]
 fn main() {
+    client_health::startup::mark_process_start();
     if std::env::args().any(|argument| argument == "--cleanup-startup") {
         if let Err(error) = gui::cleanup_current_user_startup() {
             gui::show_fatal_error(&error);
@@ -115,7 +116,8 @@ mod gui {
         read_managed_config(path).map_err(|error| error.to_string())
     }
 
-    fn write_diagnostic_report_at(config_path: &Path) -> Result<PathBuf, String> {
+    /// `health` is the client health section (integrity, cold start, redacted crash reports), appended as it is.
+    fn write_diagnostic_report_at(config_path: &Path, health: &str) -> Result<PathBuf, String> {
         let mut report = String::from("AnixOps NetworkCore Windows diagnostics\n");
         report.push_str("managed_config_path=redacted\n");
 
@@ -208,6 +210,9 @@ mod gui {
                 )),
             }
         }
+
+        report.push_str("\n--- client health ---\n");
+        report.push_str(health);
 
         let path = windows_managed_log_directory().join("diagnostics.txt");
         write_managed_text_atomic(&path, &report).map_err(|error| error.to_string())?;
