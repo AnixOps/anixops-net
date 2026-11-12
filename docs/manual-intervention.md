@@ -124,3 +124,17 @@ macOS 客户端改为官网分发（Developer ID 签名 + 公证），隧道从 
 - [ ] 订阅规则、HTTPS 解密（根证书已信任）、脚本插件在 Mac 上照常生效（隧道读的是 App 启动时交给它的密钥副本）。
 - [ ] 睡眠唤醒、从系统设置的 VPN 开关直接连接（不经 App）也能连上。
 - [ ] 安装新版本后再连接，系统扩展被替换为新版本（`systemextensionsctl list` 版本号更新）。
+
+## 稳定性与自愈真机验收（S3 / S4 / S6）
+
+客户端打开“设置 › 连接 › 自动重连”（默认开）后，VPN 配置带 On Demand 规则；内核 `reset_network` 在切网和唤醒时重建出站连接。
+CI 只能跑规则与重建逻辑的单元测试（`OnDemandSettingsTests`、`NetworkRecoveryTests`，内核
+`reset_network_twenty_times_leaks_nothing`），以下需要真机：
+
+- [ ] S3 崩溃自愈（iOS、macOS）：连接后强杀扩展（iOS 用 Xcode Debug › Attach 后 kill，或 `kill -9` macOS 的
+  `com.example.networkcore.macos.packettunnel` 进程），记录到重新显示“已连接”的时间，目标 ≤ 5 s；手动断开后不应自己连上。
+- [ ] S4 唤醒/切网（iOS）：Wi-Fi ↔ 蜂窝、两个 Wi-Fi 之间各切 20 次，每次切换后网页和 Hysteria2/TUIC 节点都能在几秒内恢复；
+  开发者模式的事件里每次有一条 `network change: reset … sessions, closed … connections`，扩展内存（诊断里的
+  footprint）20 次后不持续增长。锁屏超过 1 分钟再解锁，应有 `wake: … closed …`。
+- [ ] S6 SSID 规则（iOS、macOS）：把家里 Wi-Fi 设为“断开”，加入该 Wi-Fi 后隧道在 300 ms 内断开（用系统 VPN 状态栏图标或
+  `log stream --predicate 'subsystem == "com.apple.networkextension"'` 的时间戳计时），离开后自动连接。

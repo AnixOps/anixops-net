@@ -57,6 +57,9 @@ final class TunnelController {
     /// The rule mode of a node list without subscription rules and the user's own rules, from `local-rules.json`;
     /// the saved profile carries a copy.
     private(set) var localRules = LocalRules()
+    /// Reconnecting by itself and the Wi-Fi rules (`OnDemandSettings`), from the app's defaults; the saved profile
+    /// carries the rules.
+    private(set) var onDemand = OnDemandSettings.load()
 
     @ObservationIgnored private var manager: NETunnelProviderManager?
     @ObservationIgnored private var statusObserver: NSObjectProtocol?
@@ -703,6 +706,8 @@ final class TunnelController {
         target.protocolConfiguration = tunnelProtocol
         target.localizedDescription = "AnixOps Net"
         target.isEnabled = true
+        // A saved profile keeps running On Demand while it is on; a new one starts it with the first connect.
+        onDemand.apply(to: target, active: target.isOnDemandEnabled)
         do {
             manager = try await persist(target)
             // Keep the hint to allow the extension: the profile is saved, but connecting still needs it.
@@ -730,6 +735,8 @@ final class TunnelController {
             fresh.protocolConfiguration = target.protocolConfiguration?.copy() as? NEVPNProtocol
             fresh.localizedDescription = target.localizedDescription
             fresh.isEnabled = target.isEnabled
+            fresh.onDemandRules = target.onDemandRules
+            fresh.isOnDemandEnabled = target.isOnDemandEnabled
             try await fresh.saveToPreferences()
             try await fresh.loadFromPreferences()
             return fresh
@@ -924,7 +931,8 @@ final class TunnelController {
             return
         }
         if isConnected {
-            manager.connection.stopVPNTunnel()
+            // On Demand would start the tunnel again right away: the user's disconnect turns it off first.
+            Task { await disconnect(manager) }
             return
         }
         guard manager.isEnabled else {
@@ -941,9 +949,42 @@ final class TunnelController {
         start(manager)
     }
 
+    private func disconnect(_ manager: NETunnelProviderManager) async {
+        if manager.isOnDemandEnabled {
+            manager.isOnDemandEnabled = false
+            do {
+                self.manager = try await persist(manager)
+            } catch {
+                message = String(localized: "无法关闭自动重连") + Self.errorCode(error)
+            }
+        }
+        self.manager?.connection.stopVPNTunnel()
+    }
+
+    /// Saves new reconnect and Wi-Fi settings and puts them in the VPN configuration. On Demand stays as it was: on
+    /// while the user keeps the tunnel up, off after they disconnected.
+    func setOnDemand(_ next: OnDemandSettings) async {
+        guard next != onDemand else {
+            return
+        }
+        onDemand = next
+        next.save()
+        guard let manager else {
+            return
+        }
+        next.apply(to: manager, active: manager.isOnDemandEnabled || isConnected)
+        do {
+            self.manager = try await persist(manager)
+        } catch {
+            message = String(localized: "保存自动重连设置失败") + Self.errorCode(error)
+        }
+        refresh()
+    }
+
     private func enableAndStart(_ manager: NETunnelProviderManager) async {
         do {
             manager.isEnabled = true
+            onDemand.apply(to: manager, active: true)
             let saved = try await persist(manager)
             self.manager = saved
             refresh()
@@ -1003,6 +1044,26 @@ final class TunnelController {
     }
 
     private func startNow(_ manager: NETunnelProviderManager) {
+        // The user wants the tunnel up: On Demand keeps it up from here, including after the extension crashes.
+        if onDemand.rules != nil, !manager.isOnDemandEnabled {
+            onDemand.apply(to: manager, active: true)
+            Task {
+                var target = manager
+                do {
+                    target = try await persist(manager)
+                    self.manager = target
+                } catch {
+                    // Connecting still works; only the automatic reconnect is missing.
+                    message = String(localized: "无法开启自动重连") + Self.errorCode(error)
+                }
+                startTunnel(target)
+            }
+            return
+        }
+        startTunnel(manager)
+    }
+
+    private func startTunnel(_ manager: NETunnelProviderManager) {
         do {
             try manager.connection.startVPNTunnel(options: Self.startOptions())
             message = nil
