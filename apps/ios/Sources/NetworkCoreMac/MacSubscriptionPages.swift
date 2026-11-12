@@ -427,7 +427,7 @@ struct MacRulesPage: View {
         NavigationLink {
             DnsSettingsView(tunnel: tunnel)
         } label: {
-            LabeledContent("DNS", value: tunnel.dns.isEmpty ? String(localized: "默认") : (tunnel.dns.effectiveDefault ?? String(localized: "Hosts")))
+            LabeledContent("DNS", value: tunnel.dns.isEmpty ? String(localized: "默认") : (tunnel.dns.effectiveDefault ?? (tunnel.dns.hosts.isEmpty ? "Fake-IP" : String(localized: "Hosts"))))
         }
     }
 

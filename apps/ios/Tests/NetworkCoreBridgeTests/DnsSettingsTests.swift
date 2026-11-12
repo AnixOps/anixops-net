@@ -85,4 +85,32 @@ final class DnsSettingsTests: XCTestCase {
         XCTAssertNil(config.withoutSecret().dns)
         XCTAssertNil(config.withDns(DnsSettings()).dns)
     }
+
+    func testFakeIPIsWrittenOnlyWhenOn() throws {
+        let off = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(DnsSettings.split)) as? [String: Any])
+        XCTAssertNil(off["fake_ip"])
+        let on = try DnsSettings().settingFakeIP(true)
+        XCTAssertFalse(on.isEmpty)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(on)) as? [String: Any])
+        XCTAssertEqual(Set(json.keys), ["fake_ip"])
+        XCTAssertEqual((json["fake_ip"] as? [String: Any])?["enabled"] as? Bool, true)
+        XCTAssertEqual(DnsSettings.fromProfileValue(try on.profileValue())?.fakeIP, true)
+        XCTAssertNil(DnsSettings.fromProfileValue(try on.settingFakeIP(false).profileValue()))
+    }
+
+    func testFakeIPRefusesHostsInItsRange() throws {
+        XCTAssertTrue(DnsSettings.isFakeIPAddress("198.18.0.2"))
+        XCTAssertTrue(DnsSettings.isFakeIPAddress("198.19.255.255"))
+        XCTAssertFalse(DnsSettings.isFakeIPAddress("198.20.0.1"))
+        XCTAssertFalse(DnsSettings.isFakeIPAddress("fd00::1"))
+        let withHost = try DnsSettings().settingHost("nas.lan", addresses: "198.18.5.5")
+        XCTAssertThrowsError(try withHost.settingFakeIP(true)) { error in
+            XCTAssertEqual(error as? DnsSettingsError, .fakeIPRange)
+        }
+        let on = try DnsSettings().settingFakeIP(true)
+        XCTAssertThrowsError(try on.settingHost("nas.lan", addresses: "198.19.0.9")) { error in
+            XCTAssertEqual(error as? DnsSettingsError, .fakeIPRange)
+        }
+        XCTAssertEqual(try on.settingHost("nas.lan", addresses: "192.168.1.2").hosts["nas.lan"], ["192.168.1.2"])
+    }
 }
