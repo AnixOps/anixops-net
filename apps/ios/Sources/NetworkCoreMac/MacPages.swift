@@ -434,8 +434,9 @@ struct MacActivityPage: View {
     }
 }
 
-/// Settings: appearance, login item, privacy and the version.
+/// Settings: appearance, login item, notifications, privacy and the version.
 struct MacSettingsPage: View {
+    var tunnel: TunnelController
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
     @Environment(\.brand) private var brand
     @State private var opensAtLogin = SMAppService.mainApp.status == .enabled
@@ -466,6 +467,8 @@ struct MacSettingsPage: View {
                         .foregroundStyle(brand.danger)
                 }
             }
+
+            NotificationSettingsSection(tunnel: tunnel)
 
             Section("隐私") {
                 Label("不收集你的流量和浏览记录", systemImage: "hand.raised")

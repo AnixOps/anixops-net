@@ -11,11 +11,19 @@ struct NetworkCoreMacApp: App {
     @StateObject private var state = MacAppState()
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
 
+    init() {
+        AppNotifications.install()
+    }
+
     var body: some Scene {
         // One window: a VPN client has a single connection, so a second window would only repeat it.
         Window("AnixOps Net", id: MacAppState.mainWindowID) {
             MacRootView(tunnel: tunnel, state: state)
                 .preferredColorScheme(appearance.colorScheme)
+                // The System Extension cannot post notifications; the app posts what scripts posted.
+                .task {
+                    await tunnel.relayScriptNotifications()
+                }
                 // `anixops://` links from Shortcuts, other apps and web pages (`AppURLCommand`).
                 .onOpenURL { url in
                     Task {

@@ -141,3 +141,16 @@ NetworkCoreBridge parses a link and `TunnelController.handle(url:)` runs it:
 Parameters are percent-encoded. `anixops:///connect` and `anixops://x-callback-url/connect` work too. An import
 link never saves anything by itself: the sheet shows the preview and the user confirms. A link the app cannot run
 shows a notice with the action or parameter it could not use. Links longer than 8 KiB are refused.
+
+## Notifications
+
+Settings › 通知 has three switches, all on by default (`NotificationSettings`): plugin script notifications
+(`$notification.post`, `$notify`), unexpected disconnects (the provider stopped with a failure reason, never a
+user disconnect, sleep or another VPN) and failed automatic subscription updates. The app keeps the choice in its
+defaults and copies it into the tunnel profile (`TunnelProfileKeys.notifications`); a change while connected reaches
+the running extension as `TunnelAppMessage.notificationSettings`, without a restart.
+
+On iOS the extension posts script and disconnect notifications itself. The macOS tunnel is a System Extension
+running as root, which cannot post, so the macOS app reads script notifications from the engine every 15 seconds
+while connected and posts the disconnect notice from the stop error. Tapping a script notification opens its
+`open-url` (http, https or `anixops://` only).

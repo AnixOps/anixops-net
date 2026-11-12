@@ -8454,6 +8454,150 @@
           }
         }
       }
+    },
+    "AnixOps Net 已断开": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AnixOps Net disconnected"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AnixOps Net 已中斷連線"
+          }
+        }
+      }
+    },
+    "节点没有响应、被干扰，或网络刚切换。打开 App 重试或换一个节点。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The node stopped responding, was interfered with, or the network just changed. Open the app to retry or pick another node."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "節點沒有回應、受到干擾，或網路剛切換。開啟 App 重試或換一個節點。"
+          }
+        }
+      }
+    },
+    "订阅更新失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscription update failed"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "訂閱更新失敗"
+          }
+        }
+      }
+    },
+    "%@ 没有更新成功，仍在使用上次的节点。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ did not update; the last nodes are still in use."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 沒有更新成功，仍在使用上次的節點。"
+          }
+        }
+      }
+    },
+    "插件脚本的通知": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugin script notifications"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "外掛腳本的通知"
+          }
+        }
+      }
+    },
+    "连接意外断开": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unexpected disconnects"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線意外中斷"
+          }
+        }
+      }
+    },
+    "订阅自动更新失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed automatic subscription updates"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "訂閱自動更新失敗"
+          }
+        }
+      }
+    },
+    "通知": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifications"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通知"
+          }
+        }
+      }
+    },
+    "关掉后不再发出这类系统通知；也可以在系统设置里关闭 AnixOps Net 的全部通知。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turned off, the app posts no system notifications of that kind. You can also turn off all AnixOps Net notifications in System Settings."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉後不再發出這類系統通知；也可以在系統設定裡關閉 AnixOps Net 的全部通知。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

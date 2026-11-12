@@ -13,11 +13,14 @@ public enum TunnelAppMessage: Equatable {
     case trafficStats
     /// Clears the extension's `TrafficStats`; answered with the empty stats.
     case clearTrafficStats
+    /// New `NotificationSettings` (`profileValue`) for the running extension; answered with `ok`.
+    case notificationSettings(Data)
 
     private static let diagnosticsPayload = Data("diagnostics".utf8)
     private static let trafficStatsPayload = Data("traffic-stats".utf8)
     private static let clearTrafficStatsPayload = Data("traffic-stats-clear".utf8)
     private static let controlPrefix = Data("control:".utf8)
+    private static let notificationsPrefix = Data("notifications:".utf8)
 
     public var encoded: Data {
         switch self {
@@ -31,6 +34,8 @@ public enum TunnelAppMessage: Equatable {
             return Self.trafficStatsPayload
         case .clearTrafficStats:
             return Self.clearTrafficStatsPayload
+        case let .notificationSettings(settings):
+            return Self.notificationsPrefix + settings
         }
     }
 
@@ -43,6 +48,9 @@ public enum TunnelAppMessage: Equatable {
         }
         if data == clearTrafficStatsPayload {
             return .clearTrafficStats
+        }
+        if data.starts(with: notificationsPrefix) {
+            return .notificationSettings(Data(data.dropFirst(notificationsPrefix.count)))
         }
         if data.starts(with: controlPrefix) {
             return .control(Data(data.dropFirst(controlPrefix.count)))

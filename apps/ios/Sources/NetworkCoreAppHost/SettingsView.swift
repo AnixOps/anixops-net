@@ -26,6 +26,9 @@ struct SettingsView: View {
                     Text("连接后显示节点和已连接时长，可以直接断开。")
                 }
 
+                NotificationSettingsSection(tunnel: tunnel)
+                    .listRowBackground(brand.surface)
+
                 Section {
                     Label("不收集你的流量和浏览记录", systemImage: "hand.raised")
                         .listRowBackground(brand.surface)
