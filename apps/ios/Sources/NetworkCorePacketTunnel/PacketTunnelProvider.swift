@@ -36,7 +36,24 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var pathObservation: NSKeyValueObservation?
     private var lastPath: NWPath?
 
+    #if os(macOS)
+    /// Pins the engine's sockets to the physical interface (see `BoundInterfaceMonitor`).
+    private let boundInterface = BoundInterfaceMonitor()
+    #endif
+
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
+        #if os(macOS)
+        // A macOS packet tunnel's own sockets follow the routing table, so with the default route in the tunnel
+        // the engine's connections would loop back into it. Pin them to the physical interface first.
+        boundInterface.start(events: events) { [weak self] in
+            self?.beginTunnel(options: options, completionHandler: completionHandler)
+        }
+        #else
+        beginTunnel(options: options, completionHandler: completionHandler)
+        #endif
+    }
+
+    private func beginTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         Self.log.notice("startTunnel")
         events.record("startTunnel")
         watchMemoryPressure()
@@ -180,6 +197,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         session?.stop()
         session = nil
         startedAt = nil
+        #if os(macOS)
+        boundInterface.stop()
+        #endif
         memoryPressure?.cancel()
         memoryPressure = nil
         completionHandler()
