@@ -1,3 +1,4 @@
+import AppKit
 import NetworkCoreBridge
 import NetworkExtension
 import ServiceManagement
@@ -348,6 +349,7 @@ struct MacPlaceholderPage: View {
 struct MacActivityPage: View {
     var tunnel: TunnelController
     @Environment(\.brand) private var brand
+    @State private var copied = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -368,6 +370,12 @@ struct MacActivityPage: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Button("立即刷新") {
                         refresh()
+                    }
+                    .controlSize(.small)
+                    // The extension's event log, runtime status and versions, without node names, addresses or
+                    // keys: the Mac counterpart of the iOS developer page's report.
+                    Button(copied ? "已复制" : "复制诊断信息") {
+                        copyDiagnostics()
                     }
                     .controlSize(.small)
                 }
@@ -397,8 +405,32 @@ struct MacActivityPage: View {
     }
 
     private func refresh() {
+        copied = false
         tunnel.refreshRuntimeStatus()
         tunnel.refreshLastDisconnectError()
+        tunnel.refreshDiagnostics()
+    }
+
+    /// Asks the extension for its diagnostics, then copies the report once the answer is in.
+    private func copyDiagnostics() {
+        tunnel.refreshDiagnostics()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
+            let info = Bundle.main.infoDictionary
+            let report = DeveloperReport(
+                appVersion: info?["CFBundleShortVersionString"] as? String ?? "unknown",
+                appBuild: info?["CFBundleVersion"] as? String ?? "unknown",
+                systemVersion: "macOS \(ProcessInfo.processInfo.operatingSystemVersionString)",
+                connection: ConnectPhase.describe(tunnel.connection),
+                outboundKind: tunnel.outboundKind,
+                lastDisconnectError: tunnel.lastDisconnectError,
+                diagnostics: tunnel.diagnostics,
+                generatedAt: Date()
+            )
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(report.text, forType: .string)
+            copied = true
+        }
     }
 }
 
