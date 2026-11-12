@@ -232,6 +232,33 @@ final class UpdateFeedTests: XCTestCase {
         XCTAssertEqual(signer.publicKey, "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=")
     }
 
+    /// The anix-kit (`anixsign`) key formats: PKCS#8 PEM private keys, PEM SPKI public keys, 16-digit key ids.
+    func testAnixKitKeyFormats() throws {
+        let pkcs8 = """
+        -----BEGIN PRIVATE KEY-----
+        MC4CAQAwBQYDK2VwBCIEIJ1hsZ3v/VpguoRK9JLsLMREScVpezJpGXA7rAMcrn9g
+        -----END PRIVATE KEY-----
+
+        """
+        let spki = """
+        -----BEGIN PUBLIC KEY-----
+        MCowBQYDK2VwAyEA11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=
+        -----END PUBLIC KEY-----
+        """
+        let signer = try UpdateSigner(privateKey: pkcs8)
+        XCTAssertEqual(signer.publicKey, "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=")
+        XCTAssertEqual(signer.keyID, "21fe31dfa154a261")
+        XCTAssertEqual(try UpdateSigner.pem(privateKey: "nWGxne/9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A="), pkcs8)
+
+        let verifier = try UpdateVerifier(product: product, publicKeys: [spki])
+        XCTAssertEqual(verifier.keyIDs, ["21fe31dfa154a261"])
+        XCTAssertNoThrow(try verifier.verifyFeed(Data(Self.foreignFeed.utf8)))
+
+        // A PEM of another algorithm or a truncated one is not a key.
+        XCTAssertThrowsError(try UpdateSigner(privateKey: "-----BEGIN PRIVATE KEY-----\nMC4CAQAw\n-----END PRIVATE KEY-----"))
+        XCTAssertThrowsError(try UpdateVerifier(product: product, publicKeys: ["-----BEGIN PUBLIC KEY-----\nMCow\n-----END PUBLIC KEY-----"]))
+    }
+
     // MARK: Helpers
 
     private func pair() throws -> (UpdateSigner, UpdateVerifier) {

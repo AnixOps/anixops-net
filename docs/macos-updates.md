@@ -39,8 +39,10 @@ feed URL 上放的是一个 JSON 信封：
   `signature`、`notes`、`publishedAt`。
 - 安装包签名覆盖的字节：`"anixops-update-archive-v1\n<product>\n<build>\n<length>\n<sha256>"`。把产品和 build 一起签进去，
   别的 build 的签名不能挪用；前缀不同，feed 签名和安装包签名也不能互换。
-- 密钥是标准 Ed25519：私钥是 32 字节种子的 base64，公钥是 32 字节的 base64。任何标准实现（CryptoKit、OpenSSL、
-  Python `cryptography`）都能签，单元测试里有一份 Python 签的 feed。
+- 密钥是标准 Ed25519，编码与 AnixOps/anix-kit 的 `anixsign` 一致：私钥是 PKCS#8 PEM（也接受 32 字节种子的 base64），
+  公钥是 32 字节的 base64（也接受 PEM SPKI），key id 是原始公钥 SHA-256 的前 16 个十六进制字符（`keygen` 和 `verify`
+  会打印）。任何标准实现（CryptoKit、OpenSSL、Python `cryptography`、`anixsign`）都能签，单元测试里有一份 Python 签的
+  feed 和一对 PKCS#8 / SPKI 的 PEM。
 
 ## 防住什么
 

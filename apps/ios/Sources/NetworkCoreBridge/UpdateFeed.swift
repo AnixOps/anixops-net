@@ -180,16 +180,65 @@ public enum UpdateSigning {
     }
 }
 
+/// Key encodings shared with AnixOps/anix-kit (`anixsign`): public keys as base64 raw 32 bytes or PEM SPKI,
+/// private keys as PKCS#8 PEM or base64 raw 32-byte seed, key id = first 16 hex digits of SHA-256(raw public key).
+public enum UpdateKeys {
+    /// DER prefix of an Ed25519 SubjectPublicKeyInfo; the raw key follows.
+    private static let spkiPrefix: [UInt8] = [0x30, 0x2A, 0x30, 0x05, 0x06, 0x03, 0x2B, 0x65, 0x70, 0x03, 0x21, 0x00]
+    /// DER prefix of an Ed25519 PKCS#8 private key without the optional public key; the seed follows.
+    private static let pkcs8Prefix: [UInt8] = [
+        0x30, 0x2E, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2B, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20,
+    ]
+
+    /// Raw 32-byte public key from base64 raw or PEM SPKI text.
+    public static func rawPublicKey(_ text: String) -> Data? {
+        rawKey(text, pemLabel: "PUBLIC KEY", prefix: spkiPrefix)
+    }
+
+    /// Raw 32-byte seed from PKCS#8 PEM or base64 raw text.
+    public static func rawPrivateKey(_ text: String) -> Data? {
+        rawKey(text, pemLabel: "PRIVATE KEY", prefix: pkcs8Prefix)
+    }
+
+    /// First 16 hex digits of the SHA-256 of the raw public key.
+    public static func keyID(rawPublicKey: Data) -> String {
+        String(SHA256.hash(data: rawPublicKey).map { String(format: "%02x", $0) }.joined().prefix(16))
+    }
+
+    private static func rawKey(_ text: String, pemLabel: String, prefix: [UInt8]) -> Data? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let begin = "-----BEGIN \(pemLabel)-----"
+        let end = "-----END \(pemLabel)-----"
+        guard trimmed.hasPrefix(begin) else {
+            guard let raw = Data(base64Encoded: trimmed), raw.count == 32 else {
+                return nil
+            }
+            return raw
+        }
+        guard let endRange = trimmed.range(of: end) else {
+            return nil
+        }
+        let body = trimmed[trimmed.index(trimmed.startIndex, offsetBy: begin.count)..<endRange.lowerBound]
+            .filter { !$0.isWhitespace }
+        guard let der = Data(base64Encoded: String(body)), der.count == prefix.count + 32,
+              Array(der.prefix(prefix.count)) == prefix
+        else {
+            return nil
+        }
+        return Data(der.suffix(32))
+    }
+}
+
 /// Checks feeds and archives against the public keys the app ships.
 public struct UpdateVerifier: Sendable {
     public let product: String
     /// Raw 32-byte Ed25519 public keys. More than one lets a new key roll out before the old one is retired.
     private let keys: [Data]
 
-    /// `publicKeys` are base64 raw Ed25519 keys; at least one is required.
+    /// `publicKeys` are Ed25519 keys as base64 raw 32 bytes or PEM SPKI; at least one is required.
     public init(product: String, publicKeys: [String]) throws {
         let keys = try publicKeys.map { text -> Data in
-            guard let raw = Data(base64Encoded: text.trimmingCharacters(in: .whitespacesAndNewlines)),
+            guard let raw = UpdateKeys.rawPublicKey(text),
                   (try? Curve25519.Signing.PublicKey(rawRepresentation: raw)) != nil
             else {
                 throw UpdateVerificationError.invalidPublicKey
@@ -201,6 +250,11 @@ public struct UpdateVerifier: Sendable {
         }
         self.product = product
         self.keys = keys
+    }
+
+    /// The key ids of the trusted keys, for logs and the release tool.
+    public var keyIDs: [String] {
+        keys.map { UpdateKeys.keyID(rawPublicKey: $0) }
     }
 
     /// Verifies a downloaded feed and returns it. `lastAccepted` is the highest `sequence` accepted before; an older
@@ -319,9 +373,9 @@ public struct UpdateVerifier: Sendable {
 public struct UpdateSigner {
     private let key: Curve25519.Signing.PrivateKey
 
-    /// `privateKey` is the base64 raw 32-byte Ed25519 seed that `generate()` prints.
+    /// `privateKey` is a PKCS#8 PEM Ed25519 key (`anixsign keygen`) or the base64 raw 32-byte seed.
     public init(privateKey: String) throws {
-        guard let raw = Data(base64Encoded: privateKey.trimmingCharacters(in: .whitespacesAndNewlines)),
+        guard let raw = UpdateKeys.rawPrivateKey(privateKey),
               let key = try? Curve25519.Signing.PrivateKey(rawRepresentation: raw)
         else {
             throw UpdateVerificationError.invalidPrivateKey
@@ -337,6 +391,19 @@ public struct UpdateSigner {
 
     public var publicKey: String {
         key.publicKey.rawRepresentation.base64EncodedString()
+    }
+
+    public var keyID: String {
+        UpdateKeys.keyID(rawPublicKey: key.publicKey.rawRepresentation)
+    }
+
+    /// The private key as PKCS#8 PEM, the format `anixsign` uses.
+    public static func pem(privateKey: String) throws -> String {
+        guard let raw = UpdateKeys.rawPrivateKey(privateKey) else {
+            throw UpdateVerificationError.invalidPrivateKey
+        }
+        let der = Data([0x30, 0x2E, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2B, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20]) + raw
+        return "-----BEGIN PRIVATE KEY-----\n\(der.base64EncodedString())\n-----END PRIVATE KEY-----\n"
     }
 
     /// The archive signature for an item of `product` with this build, size and digest.

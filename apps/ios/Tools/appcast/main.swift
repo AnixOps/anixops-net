@@ -8,8 +8,9 @@
 // Subcommands (exit codes: 0 ok, 1 verification failed, 64 usage, 65 bad input data, 66 missing input file):
 //
 //   keygen [--out FILE]
-//       New Ed25519 key. Writes the private seed to FILE (mode 0600), or to stdout when no FILE is given;
-//       prints the public key (for ANIXOPS_UPDATE_PUBLIC_KEYS) to stderr.
+//       New Ed25519 key. Writes the private key as PKCS#8 PEM (as `anixsign keygen` does) to FILE (mode 0600), or to
+//       stdout when no FILE is given; prints the public key (for ANIXOPS_UPDATE_PUBLIC_KEYS) and its key id to stderr.
+//       Private keys may also be given as a base64 raw seed; public keys as base64 raw or PEM SPKI.
 //   item --product P --version V --build N --min-system 14.0 --url URL --file ARCHIVE [--notes-file F]
 //       Prints the signed feed item of an archive as JSON.
 //   feed --product P --channel C --sequence N --items ITEMS.json [--out FILE]
@@ -93,7 +94,7 @@ func makeSigner(_ options: Options) throws -> UpdateSigner {
     do {
         return try UpdateSigner(privateKey: text)
     } catch {
-        throw ToolError(code: .dataError, message: "the signing key is not a base64 Ed25519 seed")
+        throw ToolError(code: .dataError, message: "the signing key is not an Ed25519 PKCS#8 PEM key or base64 seed")
     }
 }
 
@@ -109,7 +110,10 @@ func output(_ data: Data, to path: String?) throws {
 }
 
 func runKeygen(_ options: Options) throws {
-    let (privateKey, publicKey) = UpdateSigner.generate()
+    let (seed, publicKey) = UpdateSigner.generate()
+    // PKCS#8 PEM, the same format as anix-kit's `anixsign keygen`.
+    let privateKey = try UpdateSigner.pem(privateKey: seed)
+    let keyID = try UpdateSigner(privateKey: seed).keyID
     if let path = options.optional("out") {
         guard FileManager.default.createFile(
             atPath: path,
@@ -119,9 +123,9 @@ func runKeygen(_ options: Options) throws {
             throw ToolError(code: .dataError, message: "cannot write \(path)")
         }
     } else {
-        print(privateKey)
+        print(privateKey, terminator: "")
     }
-    FileHandle.standardError.write(Data("public key: \(publicKey)\n".utf8))
+    FileHandle.standardError.write(Data("public key: \(publicKey)\nkey id: \(keyID)\n".utf8))
 }
 
 func runItem(_ options: Options) throws {
@@ -197,7 +201,7 @@ func runVerify(_ options: Options) throws {
     } catch {
         throw ToolError(code: .verificationFailed, message: "feed refused: \(error)")
     }
-    print("feed ok: \(feed.product) \(feed.channel) sequence \(feed.sequence), \(feed.items.count) item(s)")
+    print("feed ok: \(feed.product) \(feed.channel) sequence \(feed.sequence), \(feed.items.count) item(s); trusted key ids \(verifier.keyIDs.joined(separator: ","))")
     guard let archive = options.optional("archive") else {
         return
     }
