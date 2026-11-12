@@ -52,6 +52,8 @@ export const english: Record<string, string> = {
   "浅色": "Light",
   "深色": "Dark",
   "中文": "中文",
+  "简体中文": "简体中文",
+  "繁體中文": "繁體中文",
   "等待中": "Waiting",
   "还没有自动更新记录": "No automatic updates yet",
   "当前会话": "Current session",
