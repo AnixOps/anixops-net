@@ -173,6 +173,7 @@ targets:
       - path: Sources/NetworkCoreAppHost/TunnelController.swift
       - path: Sources/NetworkCoreAppHost/URLCommandHandler.swift
       - path: Sources/NetworkCoreAppHost/AppNotifications.swift
+      - path: Sources/NetworkCoreAppHost/DiagnosticEventsView.swift
       - path: Sources/NetworkCoreAppHost/NativeNodeImporterFFI.swift
       - path: Sources/NetworkCoreAppHost/NodeDelayFFI.swift
       - path: Sources/NetworkCoreAppHost/NodeEditSheet.swift

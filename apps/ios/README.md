@@ -154,3 +154,11 @@ On iOS the extension posts script and disconnect notifications itself. The macOS
 running as root, which cannot post, so the macOS app reads script notifications from the engine every 15 seconds
 while connected and posts the disconnect notice from the stop error. Tapping a script notification opens its
 `open-url` (http, https or `anixops://` only).
+
+## Extension log levels and modules
+
+Every line of the extension's event log (`TunnelDiagnosticLog`) has a level (调试, 信息, 警告, 错误) and a module
+(隧道, 内核, 网络, 规则, DNS, HTTPS 解密, 脚本, 内存). `record` can set them; otherwise
+`DiagnosticModule.classify` derives them from the fixed message, which also covers lines from older extensions.
+iOS developer mode and the macOS Activity page's "扩展日志…" filter by level-and-above and by module, and remember the
+choice. The copied diagnostics report adds `[level module]` to each line.

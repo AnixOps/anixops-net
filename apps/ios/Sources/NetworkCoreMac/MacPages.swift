@@ -350,6 +350,7 @@ struct MacActivityPage: View {
     var tunnel: TunnelController
     @Environment(\.brand) private var brand
     @State private var copied = false
+    @State private var showsLog = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -378,6 +379,11 @@ struct MacActivityPage: View {
                         copyDiagnostics()
                     }
                     .controlSize(.small)
+                    Button("扩展日志…") {
+                        tunnel.refreshDiagnostics()
+                        showsLog = true
+                    }
+                    .controlSize(.small)
                 }
             }
             .padding(16)
@@ -389,6 +395,9 @@ struct MacActivityPage: View {
         }
         .background(brand.bg)
         .onAppear(perform: refresh)
+        .sheet(isPresented: $showsLog) {
+            MacDiagnosticLogSheet(tunnel: tunnel)
+        }
     }
 
     private func fact(_ title: LocalizedStringKey, _ value: String) -> some View {
@@ -579,5 +588,44 @@ private struct MacHeroButtonStyle: ButtonStyle {
             .background(filled ? Brand.line : Color.white.opacity(0.14), in: Capsule())
             .contentShape(Capsule())
             .opacity(configuration.isPressed ? 0.82 : 1)
+    }
+}
+
+/// The extension's event log with the level and module filters, newest first.
+private struct MacDiagnosticLogSheet: View {
+    var tunnel: TunnelController
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage(DiagnosticFilterKeys.minimum) private var minimum = DiagnosticLevel.info
+    @AppStorage(DiagnosticFilterKeys.module) private var module = ""
+
+    var body: some View {
+        let events = (tunnel.diagnostics?.events ?? [])
+            .filtered(minimum: minimum, modules: DiagnosticFilterKeys.modules(module))
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                DiagnosticFilterPickers(minimum: $minimum, module: $module)
+                    .fixedSize()
+                Spacer()
+                Button("立即刷新") {
+                    tunnel.refreshDiagnostics()
+                }
+                Button("完成") {
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(12)
+            Divider()
+            if events.isEmpty {
+                Text(tunnel.diagnostics == nil ? "隧道未运行" : "没有符合条件的日志")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List(Array(events.reversed().enumerated()), id: \.offset) { _, event in
+                    DiagnosticEventRow(event: event)
+                }
+            }
+        }
+        .frame(width: 640, height: 480)
     }
 }
