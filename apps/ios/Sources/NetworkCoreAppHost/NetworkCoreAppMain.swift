@@ -121,6 +121,14 @@ struct RootView: View {
                 .environment(\.brand, brand)
                 .tint(brand.primary)
         }
+        // `anixops://` links from Shortcuts, other apps and web pages (`AppURLCommand`).
+        .onOpenURL { url in
+            Task {
+                if await tunnel.handle(url: url) == .openImport {
+                    importing = true
+                }
+            }
+        }
         .onChange(of: tunnel.loaded) { _, loaded in
             // Someone who already has nodes never needs the welcome screen, even after deleting them all later.
             if loaded, !tunnel.hasNoNodes {

@@ -41,6 +41,13 @@ struct ImportView: View {
                 }
             }
             .background(brand.bg.ignoresSafeArea())
+            .onAppear {
+                // Opened by an `anixops://import` link: show its preview, which the user still confirms.
+                if let link = tunnel.takePendingImportLink() {
+                    text = link
+                    recognize()
+                }
+            }
             .navigationTitle(title)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
