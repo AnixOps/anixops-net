@@ -124,3 +124,17 @@ macOS 客户端改为官网分发（Developer ID 签名 + 公证），隧道从 
 - [ ] 订阅规则、HTTPS 解密（根证书已信任）、脚本插件在 Mac 上照常生效（隧道读的是 App 启动时交给它的密钥副本）。
 - [ ] 睡眠唤醒、从系统设置的 VPN 开关直接连接（不经 App）也能连上。
 - [ ] 安装新版本后再连接，系统扩展被替换为新版本（`systemextensionsctl list` 版本号更新）。
+
+## macOS 应用内更新
+
+应用内更新的代码、发布工具和 CI 篡改检查已经就绪（`docs/macos-updates.md`），但对外更新通道默认关闭：没有 feed URL
+和公钥的构建不会检查更新。启用需要维护者同意并完成：
+
+- [ ] 在可信的机器上生成签名密钥：`anixops-appcast keygen --out update-signing.key`，私钥存进 anx 仓库 Environment
+  `apple-anx` 的 secret `MACOS_UPDATE_SIGNING_KEY`，公钥存为 variable `MACOS_UPDATE_PUBLIC_KEYS`；本机副本离线保存后删除。
+- [ ] 决定 feed 和安装包放在哪个 HTTPS 地址（官网或对象存储），存为 variable `MACOS_UPDATE_FEED_URL`。
+- [ ] 让「macOS with ANX」workflow 出带签名 `.pkg` 的版本（需要 Developer ID Installer 证书），并生成 `appcast.json`。
+- [ ] 上传第一份 `appcast.json` 与安装包，真机验收：
+  - [ ] 旧版本在「设置 › 软件更新」点「检查更新」，看到新版本和说明；下载后「安装并退出」打开 Installer，装完版本号更新。
+  - [ ] 把服务器上的 `appcast.json` 改一个字节，检查更新提示「更新信息未通过签名校验，已忽略」。
+  - [ ] 把服务器上的 `.pkg` 换成别的文件，下载后提示「更新安装包未通过校验，已删除」，下载目录里没有留下文件。

@@ -9,12 +9,14 @@ import SwiftUI
 struct NetworkCoreMacApp: App {
     @State private var tunnel = TunnelController()
     @StateObject private var state = MacAppState()
+    @State private var updater = AppUpdater()
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
 
     var body: some Scene {
         // One window: a VPN client has a single connection, so a second window would only repeat it.
         Window("AnixOps Net", id: MacAppState.mainWindowID) {
             MacRootView(tunnel: tunnel, state: state)
+                .environment(updater)
                 .preferredColorScheme(appearance.colorScheme)
                 .task {
                     #if DEBUG
@@ -28,6 +30,8 @@ struct NetworkCoreMacApp: App {
                     // Subscription groups update on their own while the app runs; a Mac app stays open for long.
                     while !Task.isCancelled {
                         await tunnel.refreshDueSubscriptions()
+                        // Once a day at most, and only in a build with an update feed (AppUpdater).
+                        await updater.checkIfDue()
                         try? await Task.sleep(for: .seconds(15 * 60))
                     }
                 }

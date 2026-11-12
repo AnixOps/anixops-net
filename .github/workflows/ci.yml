@@ -574,6 +574,11 @@ jobs:
         working-directory: apps/ios
         run: swift build
 
+      # The release tool signs with the app's own verifier; every tampered feed or archive must be refused.
+      - name: Signed update feed refuses tampering
+        shell: bash
+        run: bash .github/scripts/appcast-tamper-check.sh
+
   ios-xcode-build:
     name: iOS and macOS Xcode build
     runs-on: macos-26
@@ -707,6 +712,9 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Print :NetworkExtension:NEMachServiceName' "${appex}/Contents/Info.plist" \
             | grep -q 'net.anixops.networkcore.tunnel$'
           /usr/libexec/PlistBuddy -c 'Print :NSSystemExtensionUsageDescription' "${appex}/Contents/Info.plist" > /dev/null
+          # In-app updates are off unless the release build sets the feed URL and public keys (docs/macos-updates.md).
+          /usr/libexec/PlistBuddy -c 'Print :AnixOpsUpdateFeedURL' "${app}/Contents/Info.plist" > /dev/null
+          /usr/libexec/PlistBuddy -c 'Print :AnixOpsUpdatePublicKeys' "${app}/Contents/Info.plist" > /dev/null
           test ! -d "${app}/Contents/PlugIns/NetworkCoreMacTunnel.appex"
           test -d "${app}/Contents/Resources/en.lproj"
           symbols() {
