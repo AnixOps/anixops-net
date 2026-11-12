@@ -3030,6 +3030,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "network-watch"
+version = "0.3.0"
+
+[[package]]
 name = "networkcore-linux-gui"
 version = "0.3.0"
 dependencies = [
@@ -3039,6 +3043,7 @@ dependencies = [
  "desktop-mitm",
  "engine-embedded",
  "inbound-mixed",
+ "network-watch",
  "node-import",
  "reqwest 0.12.28",
  "serde",
@@ -3058,6 +3063,7 @@ dependencies = [
  "desktop-mitm",
  "engine-embedded",
  "inbound-mixed",
+ "network-watch",
  "networkcore-windows-service",
  "node-import",
  "platform-windows",
