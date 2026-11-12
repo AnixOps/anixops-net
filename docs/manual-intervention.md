@@ -165,3 +165,14 @@ CI 只能跑规则与重建逻辑的单元测试（`OnDemandSettingsTests`、`Ne
 - [ ] S4 桌面（Windows、Linux，本机代理模式）：拔插网线或换 Wi-Fi、睡眠 2 分钟后唤醒，网页几秒内恢复；Windows 日志
   （`tauri-gui`）里有 `network change: engine reset {...}` / `wake: engine reset {...}`。TUN 模式和服务模式的内核不在本窗口进程里，
   这一项不覆盖。
+
+## macOS 命令行工具
+
+`anixops` 的解析、退出码和套接字通道有单元测试，CI 还在构建好的 App 里运行工具检查帮助、版本和退出码
+（`docs/macos-cli.md`）。签名后的真实行为只能真机验收（macOS 14+，Developer ID 版）：
+
+- [ ] 「macOS with ANX」workflow 给 `Contents/MacOS/anixops` 用 Developer ID 签名并开 Hardened Runtime，公证通过。
+- [ ] App 运行时 `anixops status` 显示状态；macOS 15 上不弹「想要访问其他 App 的数据」。
+- [ ] App 未运行时 `anixops connect` 在后台打开 App 并连上；`anixops status -q; echo $?` 未连接为 3、已连接为 0。
+- [ ] `anixops mode rule`、`anixops select <节点>`、`anixops test`、`anixops import <订阅链接>` 与窗口里同样的操作效果一致，窗口实时更新。
+- [ ] 另一个用户（或 `sudo -u nobody`）运行 `anixops status` 连不上（退出码 69 或 71）。

@@ -543,6 +543,8 @@ struct MacSettingsPage: View {
 
             MacUpdateSection()
 
+            MacCommandLineSection()
+
             Section("关于") {
                 LabeledContent("版本", value: Self.version)
             }
@@ -575,6 +577,36 @@ struct MacSettingsPage: View {
         let short = info?["CFBundleShortVersionString"] as? String ?? "—"
         let build = info?["CFBundleVersion"] as? String ?? "—"
         return "\(short) (\(build))"
+    }
+}
+
+/// Settings > Command Line: how to put the bundled `anixops` tool on the PATH (docs/macos-cli.md). The app is
+/// sandboxed and cannot write /usr/local/bin itself, so it shows the command to copy.
+private struct MacCommandLineSection: View {
+    @State private var copied = false
+
+    private var command: String {
+        let tool = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/anixops").path
+        return "sudo mkdir -p /usr/local/bin && sudo ln -sf '\(tool)' /usr/local/bin/anixops"
+    }
+
+    var body: some View {
+        Section("命令行") {
+            Text("在终端用 anixops 查看状态、连接、切换节点、测速和导入。在终端运行下面的命令后即可使用：")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(alignment: .top) {
+                Text(command)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                Spacer()
+                Button(copied ? "已复制" : "复制") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(command, forType: .string)
+                    copied = true
+                }
+            }
+        }
     }
 }
 

@@ -9558,6 +9558,36 @@
           }
         }
       }
+    },
+    "命令行": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command Line"
+          }
+        }
+      }
+    },
+    "在终端用 anixops 查看状态、连接、切换节点、测速和导入。在终端运行下面的命令后即可使用：": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use anixops in Terminal to check status, connect, switch nodes, test delays and import. Run this command in Terminal to set it up:"
+          }
+        }
+      }
+    },
+    "复制": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
