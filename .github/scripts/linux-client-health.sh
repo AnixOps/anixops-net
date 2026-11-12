@@ -69,7 +69,8 @@ pid=$!
 metrics=""
 for _ in $(seq 1 60); do
   if metrics="$(curl -fsS "http://127.0.0.1:${port}/metrics" 2>/dev/null)" &&
-    grep -q 'anixops_client_integrity{state="verified"} 1' <<< "${metrics}"; then
+    grep -q 'anixops_client_integrity{state="verified"} 1' <<< "${metrics}" &&
+    grep -q '^anixops_client_cold_start_seconds ' <<< "${metrics}"; then
     break
   fi
   metrics=""
@@ -79,7 +80,7 @@ root_status="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}/
 kill "${pid}" 2>/dev/null || true
 wait "${pid}" 2>/dev/null || true
 if [ -z "${metrics}" ]; then
-  echo "::error::the metrics endpoint did not report a verified install"
+  echo "::error::the metrics endpoint did not report a verified install and a cold start"
   curl -sS "http://127.0.0.1:${port}/metrics" || true
   cat "${work}/health.log"
   exit 1
