@@ -305,8 +305,11 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          rustup toolchain install stable --profile minimal
-          rustup default stable
+          # Pinned: Rust 1.100 lays build script outputs out as build/<crate>/<hash>/out, and tauri-build 2.6
+          # walks up from OUT_DIR to find the target directory, so the GUI build script fails with
+          # "The system cannot find the path specified". Move back to stable once tauri-build handles it.
+          rustup toolchain install 1.99.0 --profile minimal
+          rustup default 1.99.0
           rustup component add clippy
           rustup target add x86_64-pc-windows-gnu
 

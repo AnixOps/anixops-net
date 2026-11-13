@@ -234,6 +234,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             show_main_window(app);
             let state = app.state::<DesktopAppState>().inner().clone();
             start_automatic_connection(state.clone());
+            start_network_watch(state.clone());
             start_core_recovery_monitor(state);
             start_subscription_refresh_monitor(app.state::<DesktopAppState>().inner().clone());
             start_fastest_node_monitor(app.state::<DesktopAppState>().inner().clone());
@@ -382,6 +383,37 @@ fn start_automatic_connection(state: DesktopAppState) {
                     &format!("automatic connection failed: {error}"),
                 );
             }
+        }
+    });
+}
+
+/// Rebuilds the connections of the engine this window runs when the network
+/// changes or the computer wakes (`network_watch`). The service-mode core and
+/// the TUN core are in another process or keep their own sockets; they are
+/// left alone.
+fn start_network_watch(state: DesktopAppState) {
+    std::thread::spawn(move || {
+        let mut watch = network_watch::NetworkWatch::new();
+        loop {
+            let path = network_watch::current_path();
+            if let Some(reset) = watch.observe(std::time::SystemTime::now(), path) {
+                let answer = state
+                    .direct_core
+                    .lock()
+                    .map_err(|_| "desktop core lock failed".to_string())
+                    .and_then(|core| core.control(&reset.request()));
+                if let Ok(answer) = answer {
+                    let _ = append_managed_log(
+                        APP_LOG_SCOPE,
+                        &format!(
+                            "{}: engine reset {}",
+                            reset.reason.as_str(),
+                            String::from_utf8_lossy(&answer)
+                        ),
+                    );
+                }
+            }
+            std::thread::sleep(network_watch::POLL);
         }
     });
 }

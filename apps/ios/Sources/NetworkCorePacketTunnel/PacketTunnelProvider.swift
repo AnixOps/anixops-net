@@ -46,6 +46,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private let scriptEvents = ScriptEventRelay()
     private var pathObservation: NSKeyValueObservation?
     private var lastPath: NWPath?
+    /// Rebuilds the engine's connections when the physical network changes (`NetworkRecovery`).
+    private let physicalNetwork = PhysicalNetworkMonitor()
+    /// When the device went to sleep, to decide on wake whether open connections are still worth keeping.
+    private var sleptAt: Date?
 
     #if os(macOS)
     /// Pins the engine's sockets to the physical interface (see `BoundInterfaceMonitor`).
@@ -191,6 +195,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                     self.events.record("\(scheduled) scheduled scripts")
                 }
                 self.watchNetworkPath()
+                self.watchPhysicalNetwork(session)
                 completionHandler(nil)
             } catch let failure as EmbeddedRuntimeSession.Failure {
                 completionHandler(PacketTunnelFailure(reason: "embedded runtime could not start (code \(failure.code))"))
@@ -208,6 +213,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         pathObservation?.invalidate()
         pathObservation = nil
         lastPath = nil
+        physicalNetwork.stop()
         session?.stop()
         session = nil
         startedAt = nil
@@ -223,12 +229,47 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     override func sleep(completionHandler: @escaping () -> Void) {
         events.record("device sleep")
+        sleptAt = Date()
         completionHandler()
     }
 
+    /// Connections from before the sleep may point at a path that is gone (the NAT mapping expired, the device
+    /// moved): pooled sessions are always dropped, open connections too after a long sleep.
     override func wake() {
-        events.record("device wake")
+        let slept = sleptAt.map { Date().timeIntervalSince($0) } ?? 0
+        sleptAt = nil
+        events.record("device wake after \(Int(slept)) s")
+        resetEngine(NetworkRecovery.afterWake(sleptFor: slept), reason: "wake")
         scriptEvents.poll()
+    }
+
+    /// Resets the engine's connections whenever the network under the tunnel changes (another Wi-Fi, Wi-Fi to
+    /// cellular, back online), so the next flows dial on the new path instead of stalling on the old one.
+    private func watchPhysicalNetwork(_ session: EmbeddedRuntimeSession) {
+        var recovery = NetworkRecovery()
+        physicalNetwork.start { [weak self, weak session] key in
+            guard let request = recovery.pathChanged(to: key) else {
+                return
+            }
+            guard let self, let session else {
+                return
+            }
+            self.resetEngine(request, reason: "network change", session: session)
+        }
+    }
+
+    private func resetEngine(_ request: RuntimeControl, reason: String, session: EmbeddedRuntimeSession? = nil) {
+        guard let session = session ?? self.session else {
+            return
+        }
+        let began = Date()
+        let answer = RuntimeControl.decode(RuntimeControl.NetworkReset.self, from: session.control(request.request))
+        let millis = Int(Date().timeIntervalSince(began) * 1000)
+        if let answer {
+            events.record("\(reason): reset \(answer.reset) sessions, closed \(answer.closed) connections in \(millis) ms")
+        } else {
+            events.record("\(reason): engine has no network reset")
+        }
     }
 
     /// Tells the engine when the network under the tunnel changes (Wi-Fi to cellular, another Wi-Fi), for the

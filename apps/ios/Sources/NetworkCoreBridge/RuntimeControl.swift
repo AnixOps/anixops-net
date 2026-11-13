@@ -23,6 +23,10 @@ public enum RuntimeControl {
     case scriptNotifications
     /// Runs the `network-changed` scripts; the extension sends it when the device's network changes.
     case networkChanged
+    /// Drops the sessions the outbounds keep (shared QUIC connections, idle pools) and, with `closeConnections`, the
+    /// open connections, after the network under the tunnel changed or the device woke from a long sleep
+    /// (`{"reset": count, "closed": count}`).
+    case resetNetwork(closeConnections: Bool)
     /// Runs one scheduled script now.
     case runScript(tag: String)
     /// Dial health of the nodes that keep it (`OutboundHealth`).
@@ -62,6 +66,8 @@ public enum RuntimeControl {
             object = ["cmd": "script_notifications"]
         case .networkChanged:
             object = ["cmd": "network_changed"]
+        case let .resetNetwork(closeConnections):
+            object = ["cmd": "reset_network", "close_connections": closeConnections]
         case let .runScript(tag):
             object = ["cmd": "run_script", "tag": tag]
         case .outboundHealth:
@@ -72,6 +78,17 @@ public enum RuntimeControl {
             object = ["cmd": "reload_rules", "rules": rules, "dry_run": dryRun]
         }
         return (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
+    }
+
+    /// The `reset_network` answer.
+    public struct NetworkReset: Decodable, Equatable {
+        public let reset: Int
+        public let closed: Int
+
+        public init(reset: Int, closed: Int) {
+            self.reset = reset
+            self.closed = closed
+        }
     }
 
     /// The `traffic` answer: totals since the tunnel started and the current rates in bytes per second.

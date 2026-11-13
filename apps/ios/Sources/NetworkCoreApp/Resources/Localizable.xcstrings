@@ -5456,6 +5456,116 @@
           }
         }
       }
+    },
+    "自动重连": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnect automatically"
+          }
+        }
+      }
+    },
+    "保持不变": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave as is"
+          }
+        }
+      }
+    },
+    "隧道意外退出（崩溃、内存超限、系统更新）后由系统几秒内重新连接。手动断开时会一并关闭，下次连接再打开。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If the tunnel quits unexpectedly (a crash, the memory limit, a system update), the system reconnects within seconds. Disconnecting by hand turns this off until you connect again."
+          }
+        }
+      }
+    },
+    "Wi-Fi 名称": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wi-Fi name"
+          }
+        }
+      }
+    },
+    "其他 Wi-Fi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other Wi-Fi"
+          }
+        }
+      }
+    },
+    "Wi-Fi 规则": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wi-Fi rules"
+          }
+        }
+      }
+    },
+    "加入网络时由系统立即执行，不需要打开 App。设为“断开”的网络下，手动连接也会被断开。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The system applies these as soon as you join a network, without opening the app. On a network set to Disconnect, a manual connection is disconnected too."
+          }
+        }
+      }
+    },
+    "删除 %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete %@"
+          }
+        }
+      }
+    },
+    "无法关闭自动重连": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't turn off automatic reconnect"
+          }
+        }
+      }
+    },
+    "无法开启自动重连": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't turn on automatic reconnect"
+          }
+        }
+      }
+    },
+    "保存自动重连设置失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't save the reconnect settings"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
