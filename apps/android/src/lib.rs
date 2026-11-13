@@ -46,6 +46,15 @@ mod android {
         fn close(&self, app: &AppHandle) {
             let _ = app.state::<Vpn<Wry>>().stop();
         }
+
+        fn save_to_downloads(
+            &self,
+            app: &AppHandle,
+            name: &str,
+            contents: &str,
+        ) -> Result<String, String> {
+            app.state::<Vpn<Wry>>().save_to_downloads(name, contents)
+        }
     }
 
     pub fn run() {

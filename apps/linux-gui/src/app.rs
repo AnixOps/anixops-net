@@ -73,6 +73,18 @@ impl TunnelInterface {
 pub trait TunnelHost: Send + Sync + 'static {
     fn open(&self, app: &AppHandle, interface: &TunnelInterface) -> Result<i32, String>;
     fn close(&self, app: &AppHandle);
+
+    /// Puts a text file where the user can open it from the system settings (Android: Downloads) and returns
+    /// where it went.
+    fn save_to_downloads(
+        &self,
+        app: &AppHandle,
+        name: &str,
+        contents: &str,
+    ) -> Result<String, String> {
+        let _ = (app, name, contents);
+        Err("this platform has no shared Downloads folder".to_string())
+    }
 }
 
 struct TunnelHostState(Box<dyn TunnelHost>);
@@ -740,17 +752,39 @@ async fn disable_https_mitm(state: State<'_, AppState>) -> Result<OperationResul
     })
 }
 
-/// Android has no trust store an app may change: the user installs the root in the system settings, and only
-/// apps that trust user certificates (most browsers) accept it.
+/// The name the decryption root gets in Downloads.
+#[cfg(target_os = "android")]
+const ROOT_DOWNLOAD_NAME: &str = "AnixOps-Net-HTTPS-root.crt";
+
+/// Android has no trust store an app may change: the root is saved to Downloads, the user installs it in the
+/// system settings, and only apps that trust user certificates (most browsers) accept it.
 #[cfg(target_os = "android")]
 #[tauri::command]
-async fn enable_https_mitm(state: State<'_, AppState>) -> Result<OperationResult, String> {
-    lock(&state.0).ensure_mitm_root()?;
+async fn enable_https_mitm(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<OperationResult, String> {
+    let root = lock(&state.0).ensure_mitm_root()?;
+    let saved = off_lock(move || {
+        let pem = fs::read_to_string(&root.certificate_path)
+            .map_err(|error| format!("the root certificate could not be read: {error}"))?;
+        let host = app
+            .try_state::<TunnelHostState>()
+            .ok_or("this platform has no shared Downloads folder")?;
+        host.0.save_to_downloads(&app, ROOT_DOWNLOAD_NAME, &pem)
+    })
+    .await;
     let result = with_backend(&state, |backend| backend.set_https_decryption(true)).await?;
+    let install = match saved {
+        Ok(location) => format!(
+            "The root certificate is saved as {location}; install it under Settings > Security > \
+             Encryption & credentials > Install a certificate > CA certificate"
+        ),
+        Err(error) => format!("The root certificate could not be saved to Downloads: {error}"),
+    };
     Ok(OperationResult {
         message: format!(
-            "{}. Install the root certificate under Settings > Security > Encryption & credentials; \
-             apps that ignore user certificates are not decrypted",
+            "{}. {install}. Apps that ignore user certificates are not decrypted",
             result.message
         ),
     })
