@@ -134,3 +134,20 @@ macOS 客户端改为官网分发（Developer ID 签名 + 公证），隧道从 
 - [ ] 关闭「崩溃报告」后 `crashes` 目录被删除；重新打开后开关状态在重启后保持。
 - [ ] iOS / macOS：设置 › 隐私 有「崩溃报告」开关；开发者模式（macOS 为活动页）复制的诊断信息里有 `install integrity: verified` 与 `metrics:` 段，`metrics:` 段里没有节点名、策略组名。
 - [ ] iOS：发生过崩溃的设备次日打开 App 后，诊断信息里出现 `kind: metrickit crash diagnostic` 的报告，且没有网址与 IP。
+
+## 稳定性与自愈真机验收（S3 / S4 / S6）
+
+客户端打开“设置 › 连接 › 自动重连”（默认开）后，VPN 配置带 On Demand 规则；内核 `reset_network` 在切网和唤醒时重建出站连接。
+CI 只能跑规则与重建逻辑的单元测试（`OnDemandSettingsTests`、`NetworkRecoveryTests`，内核
+`reset_network_twenty_times_leaks_nothing`），以下需要真机：
+
+- [ ] S3 崩溃自愈（iOS、macOS）：连接后强杀扩展（iOS 用 Xcode Debug › Attach 后 kill，或 `kill -9` macOS 的
+  `com.example.networkcore.macos.packettunnel` 进程），记录到重新显示“已连接”的时间，目标 ≤ 5 s；手动断开后不应自己连上。
+- [ ] S4 唤醒/切网（iOS）：Wi-Fi ↔ 蜂窝、两个 Wi-Fi 之间各切 20 次，每次切换后网页和 Hysteria2/TUIC 节点都能在几秒内恢复；
+  开发者模式的事件里每次有一条 `network change: reset … sessions, closed … connections`，扩展内存（诊断里的
+  footprint）20 次后不持续增长。锁屏超过 1 分钟再解锁，应有 `wake: … closed …`。
+- [ ] S6 SSID 规则（iOS、macOS）：把家里 Wi-Fi 设为“断开”，加入该 Wi-Fi 后隧道在 300 ms 内断开（用系统 VPN 状态栏图标或
+  `log stream --predicate 'subsystem == "com.apple.networkextension"'` 的时间戳计时），离开后自动连接。
+- [ ] S4 桌面（Windows、Linux，本机代理模式）：拔插网线或换 Wi-Fi、睡眠 2 分钟后唤醒，网页几秒内恢复；Windows 日志
+  （`tauri-gui`）里有 `network change: engine reset {...}` / `wake: engine reset {...}`。TUN 模式和服务模式的内核不在本窗口进程里，
+  这一项不覆盖。

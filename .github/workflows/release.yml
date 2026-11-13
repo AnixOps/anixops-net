@@ -27,7 +27,8 @@ env:
   LINUX_RUST_TOOLCHAIN: stable
   LINUX_RUST_PROFILE: minimal
   WINDOWS_TARGET: x86_64-pc-windows-gnu
-  WINDOWS_RUST_TOOLCHAIN: stable
+  # Pinned like the CI Windows job: tauri-build 2.6 fails with Rust 1.100's build directory layout.
+  WINDOWS_RUST_TOOLCHAIN: 1.99.0
   WINDOWS_RUST_PROFILE: minimal
   WINDOWS_WIX_VERSION: 4.0.6
 

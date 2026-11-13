@@ -65,12 +65,41 @@ final class DashboardModel {
     /// How often, in one-second ticks, the poll reads the nodes' dial health.
     private static let healthTicks = 30
     @ObservationIgnored private var monitor: NWPathMonitor?
+    /// Views showing this model through `observe(_:)`; the one shared poll runs while there is at least one.
+    @ObservationIgnored private var viewers = 0
+    @ObservationIgnored private var sampler: Task<Void, Never>?
 
     init() {
         let saved = UserDefaults.standard.data(forKey: Self.eventsKey)
         events = saved.flatMap { try? JSONDecoder().decode(DashboardEventLog.self, from: $0) } ?? DashboardEventLog()
         let last = UserDefaults.standard.data(forKey: Self.lastSessionKey)
         lastSession = last.flatMap { try? JSONDecoder().decode(LastSessionSummary.self, from: $0) }
+    }
+
+    /// Shows this model in one more view until the calling task is cancelled. However many views (the Mac's main
+    /// window and its dashboard window) observe it, one poll reads the engine: the first view starts it and the
+    /// last one to go stops it. While the tunnel is down the poll waits for it to connect again.
+    func observe(_ tunnel: TunnelController) async {
+        viewers += 1
+        if sampler == nil {
+            sampler = Task { [weak self] in
+                while !Task.isCancelled {
+                    guard let self else {
+                        return
+                    }
+                    await self.poll(tunnel)
+                    try? await Task.sleep(for: .seconds(1))
+                }
+            }
+        }
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(3600))
+        }
+        viewers -= 1
+        if viewers == 0 {
+            sampler?.cancel()
+            sampler = nil
+        }
     }
 
     /// Polls the engine once a second for speed, every third second for connections and groups, and every

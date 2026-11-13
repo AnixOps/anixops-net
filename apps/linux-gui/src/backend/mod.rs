@@ -783,6 +783,11 @@ impl Backend {
         (self.engine.metrics(), self.engine.is_running())
     }
 
+    /// Rebuilds the engine's connections after a network change or a wake; nothing while it is stopped.
+    pub fn reset_network(&self, reset: network_watch::Reset) {
+        let _ = self.engine.reset_network(reset);
+    }
+
     /// Stops the engine and puts the proxy settings back; called when the window closes.
     pub fn shutdown(&mut self) {
         self.engine.stop();

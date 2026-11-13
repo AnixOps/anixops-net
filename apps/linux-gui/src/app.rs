@@ -526,6 +526,20 @@ async fn set_subscription_interval(
     .await
 }
 
+/// Rebuilds the engine's connections when the network changes or the computer wakes (`network_watch`).
+fn start_network_watch(backend: Arc<Mutex<Backend>>) {
+    thread::spawn(move || {
+        let mut watch = network_watch::NetworkWatch::new();
+        loop {
+            let path = network_watch::current_path();
+            if let Some(reset) = watch.observe(std::time::SystemTime::now(), path) {
+                lock(&backend).reset_network(reset);
+            }
+            thread::sleep(network_watch::POLL);
+        }
+    });
+}
+
 /// Updates every subscription whose interval has passed, checking once a minute.
 fn start_subscription_updates(backend: Arc<Mutex<Backend>>) {
     thread::spawn(move || loop {
@@ -713,6 +727,7 @@ pub fn run() -> Result<(), String> {
     }
 
     start_subscription_updates(shared.clone());
+    start_network_watch(shared.clone());
 
     let app = tauri::Builder::default()
         .manage(AppState(shared.clone()))
