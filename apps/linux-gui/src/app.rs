@@ -1,6 +1,9 @@
 //! The Tauri window: the shared React interface (`apps/windows-gui/ui`) over the Linux backend. Command names
 //! and argument shapes match the interface's `bridge.ts`; Windows-only commands answer that they are not
 //! available, and the snapshot's `platform` field hides them in the interface.
+//!
+//! The Android app (`apps/android`) runs this same window and backend. There the engine carries the system
+//! VPN's TUN interface instead of a local proxy, and [`TunnelHost`] opens and closes that VPN.
 
 use std::fs;
 use std::path::PathBuf;
@@ -8,25 +11,74 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::Duration;
 
-use client_health::{startup, Health};
-use desktop_mitm::plugins::{self, PluginSummary};
-use engine_embedded::profile::RoutingMode;
-use networkcore_linux_gui::backend::engine;
-use networkcore_linux_gui::backend::state::Store;
-use networkcore_linux_gui::backend::system_proxy::Desktop;
-use networkcore_linux_gui::backend::trust;
-use networkcore_linux_gui::backend::{
+use crate::backend::engine;
+use crate::backend::state::Store;
+use crate::backend::system_proxy::Desktop;
+#[cfg(not(target_os = "android"))]
+use crate::backend::trust;
+use crate::backend::{
     autostart, format_delay, Backend, DnsPreset, GroupSummary, NodeSummary, OperationResult,
     PreferencesInput, RuntimeSnapshot, SubscriptionSummary, PASTED_LOCATION,
 };
+use client_health::{startup, Health};
+use desktop_mitm::plugins::{self, PluginSummary};
+use engine_embedded::profile::RoutingMode;
 use subscription_meta::ResponseMeta;
+use tauri::plugin::TauriPlugin;
 use tauri::webview::PageLoadEvent;
-use tauri::{Manager, RunEvent, State};
+use tauri::{AppHandle, Context, Manager, RunEvent, State, Wry};
 
 /// The URL the delay tests fetch, as on Windows.
 const DELAY_URL: &str = "https://www.gstatic.com/generate_204";
 const FETCH_TIMEOUT: Duration = Duration::from_secs(30);
-const UNAVAILABLE: &str = "Not available on Linux yet";
+const UNAVAILABLE: &str = if cfg!(target_os = "android") {
+    "Not available on Android yet"
+} else {
+    "Not available on Linux yet"
+};
+
+/// Where the window runs: the data directory, the program autostart starts, extra plugins, and the system VPN
+/// when the platform carries traffic through one.
+pub struct Host {
+    pub dir: PathBuf,
+    pub executable: PathBuf,
+    pub plugins: Vec<TauriPlugin<Wry>>,
+    pub tunnel: Option<Box<dyn TunnelHost>>,
+}
+
+/// Addresses, routes, DNS and MTU of the VPN interface, as the iOS client's `TunnelInterface.proxy`: the
+/// userspace stack answers on any address, and DNS to 198.18.0.2 is answered by the engine.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TunnelInterface {
+    pub addresses: Vec<String>,
+    pub routes: Vec<String>,
+    pub dns_servers: Vec<String>,
+    pub mtu: u32,
+}
+
+impl TunnelInterface {
+    pub fn proxy() -> Self {
+        let owned = |values: &[&str]| values.iter().map(|value| value.to_string()).collect();
+        Self {
+            addresses: owned(&["198.18.0.1/24", "fd00:4e43::1/64"]),
+            routes: owned(&["0.0.0.0/0", "::/0"]),
+            dns_servers: owned(&["198.18.0.2"]),
+            mtu: 1500,
+        }
+    }
+}
+
+/// Opens the system VPN and hands back its TUN descriptor (Android's VpnService), and closes it again.
+/// `open` may wait for the user to allow the VPN, so it is called off the async runtime.
+pub trait TunnelHost: Send + Sync + 'static {
+    fn open(&self, app: &AppHandle, interface: &TunnelInterface) -> Result<i32, String>;
+    fn close(&self, app: &AppHandle);
+}
+
+struct TunnelHostState(Box<dyn TunnelHost>);
+
+/// For the cold start measurement; call first thing in `main`.
+pub use client_health::startup::mark_process_start;
 
 struct AppState(Arc<Mutex<Backend>>);
 
@@ -235,20 +287,81 @@ async fn refresh_routing_rules(state: State<'_, AppState>) -> Result<OperationRe
     })
 }
 
-#[tauri::command]
-async fn connect(state: State<'_, AppState>) -> Result<OperationResult, String> {
-    connect_with_rules(&state).await
+/// Where the platform carries traffic through a system VPN (Android), opens it first so the engine has its TUN
+/// descriptor.
+async fn open_tunnel(app: &AppHandle, state: &AppState) -> Result<(), String> {
+    if app.try_state::<TunnelHostState>().is_none() {
+        return Ok(());
+    }
+    open_system_tunnel(app, state).await
+}
+
+/// Keeps a live descriptor; one whose VPN was taken away (another VPN, or the system settings) is dropped and
+/// the VPN opened again.
+#[cfg(target_os = "android")]
+async fn open_system_tunnel(app: &AppHandle, state: &AppState) -> Result<(), String> {
+    if engine::tunnel_attached() {
+        return Ok(());
+    }
+    lock(&state.0).stop_engine();
+    let app = app.clone();
+    off_lock(move || {
+        let host = app.state::<TunnelHostState>();
+        let fd = host.0.open(&app, &TunnelInterface::proxy())?;
+        engine::attach_tunnel(fd);
+        Ok(())
+    })
+    .await
+}
+
+#[cfg(not(target_os = "android"))]
+async fn open_system_tunnel(_app: &AppHandle, _state: &AppState) -> Result<(), String> {
+    Err("this platform has no system VPN".to_string())
+}
+
+/// Stops the engine and closes the system VPN, if the platform has one.
+fn close_tunnel(app: &AppHandle, state: &AppState) {
+    if let Some(host) = app.try_state::<TunnelHostState>() {
+        lock(&state.0).stop_engine();
+        host.0.close(app);
+    }
+}
+
+/// Connects, through the system VPN where the platform has one; a failed start closes that VPN again.
+async fn connect_through_tunnel(
+    app: &AppHandle,
+    state: &AppState,
+) -> Result<OperationResult, String> {
+    if let Err(error) = open_tunnel(app, state).await {
+        lock(&state.0).record_error(&error);
+        return Err(error);
+    }
+    let result = connect_with_rules(state).await;
+    if result.is_err() {
+        close_tunnel(app, state);
+    }
+    result
 }
 
 #[tauri::command]
-async fn disconnect(state: State<'_, AppState>) -> Result<OperationResult, String> {
-    with_backend(&state, Backend::disconnect).await
+async fn connect(app: AppHandle, state: State<'_, AppState>) -> Result<OperationResult, String> {
+    connect_through_tunnel(&app, &state).await
+}
+
+#[tauri::command]
+async fn disconnect(app: AppHandle, state: State<'_, AppState>) -> Result<OperationResult, String> {
+    let result = with_backend(&state, Backend::disconnect).await;
+    close_tunnel(&app, &state);
+    result
 }
 
 /// "Restart core": starts the engine again with the current node.
 #[tauri::command]
-async fn restart_service(state: State<'_, AppState>) -> Result<OperationResult, String> {
-    connect_with_rules(&state).await
+async fn restart_service(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<OperationResult, String> {
+    connect_through_tunnel(&app, &state).await
 }
 
 #[tauri::command]
@@ -606,6 +719,7 @@ async fn restore_network_settings(state: State<'_, AppState>) -> Result<Operatio
 
 /// Generates the root on first use, has the browsers and the system trust it (polkit asks for the system
 /// store), then restarts a running engine with decryption on.
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn enable_https_mitm(state: State<'_, AppState>) -> Result<OperationResult, String> {
     let root = lock(&state.0).ensure_mitm_root()?;
@@ -616,6 +730,7 @@ async fn enable_https_mitm(state: State<'_, AppState>) -> Result<OperationResult
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn disable_https_mitm(state: State<'_, AppState>) -> Result<OperationResult, String> {
     let result = with_backend(&state, |backend| backend.set_https_decryption(false)).await?;
@@ -623,6 +738,28 @@ async fn disable_https_mitm(state: State<'_, AppState>) -> Result<OperationResul
     Ok(OperationResult {
         message: format!("{}. {}", result.message, removed.summary("removed")),
     })
+}
+
+/// Android has no trust store an app may change: the user installs the root in the system settings, and only
+/// apps that trust user certificates (most browsers) accept it.
+#[cfg(target_os = "android")]
+#[tauri::command]
+async fn enable_https_mitm(state: State<'_, AppState>) -> Result<OperationResult, String> {
+    lock(&state.0).ensure_mitm_root()?;
+    let result = with_backend(&state, |backend| backend.set_https_decryption(true)).await?;
+    Ok(OperationResult {
+        message: format!(
+            "{}. Install the root certificate under Settings > Security > Encryption & credentials; \
+             apps that ignore user certificates are not decrypted",
+            result.message
+        ),
+    })
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+async fn disable_https_mitm(state: State<'_, AppState>) -> Result<OperationResult, String> {
+    with_backend(&state, |backend| backend.set_https_decryption(false)).await
 }
 
 #[tauri::command]
@@ -710,23 +847,31 @@ unavailable!(
     remove_driver,
 );
 
-pub fn run() -> Result<(), String> {
-    let dir = Store::default_dir().ok_or("HOME is not set")?;
-    // Inside an AppImage the running file is a temporary mount; autostart must point at the image itself.
-    let executable = std::env::var_os("APPIMAGE")
-        .map(PathBuf::from)
-        .map_or_else(std::env::current_exe, Ok)
-        .map_err(|error| error.to_string())?;
+pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
+    let Host {
+        dir,
+        executable,
+        plugins,
+        tunnel,
+    } = host;
     let health = Health::start(
         &dir,
-        "linux",
+        if cfg!(target_os = "android") {
+            "android"
+        } else {
+            "linux"
+        },
         env!("CARGO_PKG_VERSION"),
         std::env::current_exe().unwrap_or_else(|_| executable.clone()),
     );
     let backend = Backend::open(
         Store::new(dir),
         Desktop::from_env(),
-        autostart::autostart_dir(),
+        if cfg!(target_os = "android") {
+            None
+        } else {
+            autostart::autostart_dir()
+        },
         executable,
     );
     let auto_connect = backend.auto_connect();
@@ -743,7 +888,8 @@ pub fn run() -> Result<(), String> {
             Err(_) => (None, false),
         }
     }));
-    if auto_connect {
+    // The system VPN asks the user for consent in the window, so a platform with one connects from the window.
+    if auto_connect && tunnel.is_none() {
         let state = AppState(shared.clone());
         thread::spawn(move || {
             let _ = tauri::async_runtime::block_on(connect_with_rules(&state));
@@ -753,7 +899,14 @@ pub fn run() -> Result<(), String> {
     start_subscription_updates(shared.clone());
     start_network_watch(shared.clone());
 
-    let app = tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    for plugin in plugins {
+        builder = builder.plugin(plugin);
+    }
+    if let Some(tunnel) = tunnel {
+        builder = builder.manage(TunnelHostState(tunnel));
+    }
+    let app = builder
         .manage(AppState(shared.clone()))
         .manage(HealthState(health))
         .on_page_load(|webview, payload| {
@@ -816,7 +969,7 @@ pub fn run() -> Result<(), String> {
             health_status,
             set_crash_reports,
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .map_err(|error| error.to_string())?;
     app.run(move |_, event| {
         // Put the desktop's proxy settings back when the window closes; a crash leaves them for the next start.

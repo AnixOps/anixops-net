@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Linux desktop client for AnixOps Net: the shared Tauri + React interface over the embedded engine."
+description = "Linux desktop client for AnixOps Net: the shared Tauri + React interface over the embedded engine; also the backend of the Android app."
 
 # The window needs WebKitGTK, which plain workspace builds do not install, so the Tauri layer sits behind the
 # `gui` feature. Without it the crate builds only the backend (state, engine control, system proxy, autostart),
@@ -30,6 +30,10 @@ network-watch = { path = "../../crates/network-watch" }
 subscription-meta = { path = "../../crates/subscription-meta" }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"], optional = true }
 tauri = { version = "2", optional = true }
+
+# Android (apps/android builds this crate with `gui`): the VPN's TUN descriptor is read and written directly.
+[target.'cfg(target_os = "android")'.dependencies]
+libc = "0.2"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [], optional = true }

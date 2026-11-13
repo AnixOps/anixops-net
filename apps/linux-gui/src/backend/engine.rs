@@ -15,9 +15,16 @@ use control_domain::{
 };
 use engine_embedded::config::RuntimeConfig;
 use engine_embedded::delay::measure_delay;
+#[cfg(not(target_os = "android"))]
 use engine_embedded::local_proxy::LocalProxy;
 use engine_embedded::nodes::{outbound_for_node, routing_envelope, single_node_envelope};
+#[cfg(not(target_os = "android"))]
 use inbound_mixed::MixedSettings;
+
+#[cfg(target_os = "android")]
+use super::tun::{self, TunEngine};
+#[cfg(target_os = "android")]
+pub use super::tun::{attach as attach_tunnel, attached as tunnel_attached};
 use serde_json::{json, Value};
 
 const PROFILE_ID: &str = "linux-gui";
@@ -228,59 +235,104 @@ pub fn activity_request(request: &serde_json::Value) -> Result<Vec<u8>, String> 
     serde_json::to_vec(request).map_err(|error| error.to_string())
 }
 
-/// The running local proxy, if any.
+/// The running engine, if any: a local proxy on the desktop, the VPN's TUN interface on Android.
 #[derive(Default)]
 pub struct Engine {
+    #[cfg(not(target_os = "android"))]
     proxy: Option<LocalProxy>,
+    #[cfg(target_os = "android")]
+    tunnel: Option<TunEngine>,
     node_id: Option<String>,
 }
 
 impl Engine {
+    /// Starts (or restarts) the engine. The desktop listens on `port`; Android runs on the kept VPN descriptor
+    /// and returns the interface address.
     pub fn start(
         &mut self,
         envelope: &str,
         node_id: &str,
         port: u16,
     ) -> Result<SocketAddr, String> {
-        self.stop();
-        let listen = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
-        let proxy = LocalProxy::start(envelope.as_bytes(), listen, MixedSettings::default())
-            .map_err(|error| error.message.to_string())?;
-        let address = proxy.local_addr();
-        self.proxy = Some(proxy);
+        self.stop_runtime();
+        #[cfg(not(target_os = "android"))]
+        let address = {
+            let listen = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
+            let proxy = LocalProxy::start(envelope.as_bytes(), listen, MixedSettings::default())
+                .map_err(|error| error.message.to_string())?;
+            let address = proxy.local_addr();
+            self.proxy = Some(proxy);
+            address
+        };
+        #[cfg(target_os = "android")]
+        let address = {
+            let _ = port;
+            self.tunnel = Some(TunEngine::start(envelope)?);
+            SocketAddr::from((Ipv4Addr::new(198, 18, 0, 1), 0))
+        };
         self.node_id = Some(node_id.to_string());
         Ok(address)
     }
 
-    pub fn stop(&mut self) {
+    fn stop_runtime(&mut self) {
+        #[cfg(not(target_os = "android"))]
         if let Some(mut proxy) = self.proxy.take() {
             proxy.stop();
         }
+        #[cfg(target_os = "android")]
+        if let Some(mut tunnel) = self.tunnel.take() {
+            tunnel.stop();
+        }
+    }
+
+    /// Stops the engine; on Android this also closes the VPN interface.
+    pub fn stop(&mut self) {
+        self.stop_runtime();
+        #[cfg(target_os = "android")]
+        tun::detach();
         self.node_id = None;
     }
 
+    #[cfg(not(target_os = "android"))]
     pub fn is_running(&self) -> bool {
         self.proxy.as_ref().is_some_and(LocalProxy::is_running)
+    }
+
+    #[cfg(target_os = "android")]
+    pub fn is_running(&self) -> bool {
+        self.tunnel.as_ref().is_some_and(TunEngine::is_running)
+    }
+
+    /// One kernel control request to the running engine.
+    #[cfg(not(target_os = "android"))]
+    fn control_bytes(&self, request: &[u8]) -> Result<Vec<u8>, String> {
+        self.proxy
+            .as_ref()
+            .filter(|proxy| proxy.is_running())
+            .ok_or("the engine is not running")?
+            .control_json(request)
+            .map_err(|error| error.message.to_string())
+    }
+
+    #[cfg(target_os = "android")]
+    fn control_bytes(&self, request: &[u8]) -> Result<Vec<u8>, String> {
+        self.tunnel
+            .as_ref()
+            .filter(|tunnel| tunnel.is_running())
+            .ok_or("the engine is not running")?
+            .control_json(request)
     }
 
     /// Answers one activity page request (see [`activity_request`]) while the engine runs.
     pub fn control(&self, request: &serde_json::Value) -> Result<serde_json::Value, String> {
         let request = activity_request(request)?;
-        let proxy = self
-            .proxy
-            .as_ref()
-            .filter(|proxy| proxy.is_running())
-            .ok_or("the engine is not running")?;
-        let answer = proxy
-            .control_json(&request)
-            .map_err(|error| error.message.to_string())?;
+        let answer = self.control_bytes(&request)?;
         serde_json::from_slice(&answer).map_err(|error| error.to_string())
     }
 
     /// The engine's Prometheus text (the kernel's `metrics` command) while it runs.
     pub fn metrics(&self) -> Option<String> {
-        let proxy = self.proxy.as_ref().filter(|proxy| proxy.is_running())?;
-        let answer = proxy.control_json(br#"{"cmd":"metrics"}"#).ok()?;
+        let answer = self.control_bytes(br#"{"cmd":"metrics"}"#).ok()?;
         let answer: serde_json::Value = serde_json::from_slice(&answer).ok()?;
         answer
             .get("text")
@@ -291,19 +343,19 @@ impl Engine {
     /// Sends the engine a `reset_network` request (see `network_watch`) while it runs; not an activity page
     /// command, so it skips [`activity_request`].
     pub fn reset_network(&self, reset: network_watch::Reset) -> Result<(), String> {
-        let proxy = self
-            .proxy
-            .as_ref()
-            .filter(|proxy| proxy.is_running())
-            .ok_or("the engine is not running")?;
-        proxy
-            .control_json(&reset.request())
-            .map(|_| ())
-            .map_err(|error| error.message.to_string())
+        self.control_bytes(&reset.request()).map(|_| ())
     }
 
+    /// The local proxy's address.
+    #[cfg(not(target_os = "android"))]
     pub fn address(&self) -> Option<SocketAddr> {
         self.proxy.as_ref().map(LocalProxy::local_addr)
+    }
+
+    /// Android has no local proxy: traffic comes in through the VPN.
+    #[cfg(target_os = "android")]
+    pub fn address(&self) -> Option<SocketAddr> {
+        None
     }
 
     pub fn node_id(&self) -> Option<&str> {

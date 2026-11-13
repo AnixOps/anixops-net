@@ -8,9 +8,14 @@ export interface StatusFact {
   tone: Tone;
 }
 
+/** The Linux and Android clients run the engine in the app itself, with no Windows service or driver. */
+export function inProcessEngine(snapshot: { platform?: string } | null | undefined): boolean {
+  return snapshot?.platform === "linux" || snapshot?.platform === "android";
+}
+
 export interface RuntimeSnapshot {
-  /** Sent by the Linux client; the Windows client leaves it out. */
-  platform?: "windows" | "linux";
+  /** Sent by the Linux and Android clients; the Windows client leaves it out. */
+  platform?: "windows" | "linux" | "android";
   connection: string;
   connectionLabel: string;
   service: StatusFact;
