@@ -582,16 +582,52 @@ final class TunnelController {
     /// Subscription bodies are text; the importer refuses anything larger than this.
     private static let maxSubscriptionBytes = 4 * 1024 * 1024
 
+    /// A subscription body and its headers. A panel that licenses ANX (anx spec §2.4.1) gets this device's key and
+    /// answers with its license (`AnxLicense`); the first time it says so, the request goes once more. A license
+    /// problem never fails the subscription.
     private static func download(_ url: URL) async throws -> (String, SubscriptionResponseInfo) {
+        let stored = (try? NodeSecretStore.value(account: AnxLicense.keychainAccount)).flatMap { try? AnxLicense.fromKeychainValue($0) }
+        var license = stored
+        var (data, http) = try await fetch(url, device: license?.requestHeader(for: url))
+        if recordAnxLicense(&license, url: url, http: http),
+           let retried = try? await fetch(url, device: license?.requestHeader(for: url))
+        {
+            (data, http) = retried
+            _ = recordAnxLicense(&license, url: url, http: http)
+        }
+        if license != stored, let value = try? license?.keychainValue() {
+            _ = try? NodeSecretStore.save(value, account: AnxLicense.keychainAccount)
+        }
+        let response = http
+        return (String(decoding: data, as: UTF8.self), SubscriptionResponseInfo(header: { response.value(forHTTPHeaderField: $0) }))
+    }
+
+    private static func fetch(_ url: URL, device: String?) async throws -> (Data, HTTPURLResponse) {
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
         request.setValue("AnixOpsNet/1.0", forHTTPHeaderField: "User-Agent")
+        if let device {
+            request.setValue(device, forHTTPHeaderField: AnxLicense.headerDevice)
+        }
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
               data.count <= maxSubscriptionBytes
         else {
             throw URLError(.badServerResponse)
         }
-        return (String(decoding: data, as: UTF8.self), SubscriptionResponseInfo(header: { http.value(forHTTPHeaderField: $0) }))
+        return (data, http)
+    }
+
+    /// Takes in the license headers; the device key is made the first time a server offers licensing. True when
+    /// this origin offered it for the first time.
+    private static func recordAnxLicense(_ license: inout AnxLicense?, url: URL, http: HTTPURLResponse) -> Bool {
+        let header = { (name: String) in http.value(forHTTPHeaderField: name) }
+        if license == nil {
+            guard let ca = header(AnxLicense.headerCA), !ca.trimmingCharacters(in: .whitespaces).isEmpty else {
+                return false
+            }
+            license = AnxLicense.generate()
+        }
+        return license?.record(url: url, header: header) ?? false
     }
 
     /// Saves the groups and the library the extension reads, both to the Keychain.

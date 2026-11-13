@@ -16,17 +16,21 @@ public struct TunnelStartSecrets: Codable, Equatable {
     public var mitmAuthority: Data?
     /// The HTTPS decryption payload's Keychain chunks (`MitmProfileBundle`), in order.
     public var mitmBundleChunks: [String]?
+    /// This device's ANX license state (`AnxLicense.keychainAccount`).
+    public var anxLicense: String?
 
     public init(
         nodeKey: String? = nil,
         nodeLibrary: String? = nil,
         mitmAuthority: Data? = nil,
-        mitmBundleChunks: [String]? = nil
+        mitmBundleChunks: [String]? = nil,
+        anxLicense: String? = nil
     ) {
         self.nodeKey = nodeKey
         self.nodeLibrary = nodeLibrary
         self.mitmAuthority = mitmAuthority
         self.mitmBundleChunks = mitmBundleChunks
+        self.anxLicense = anxLicense
     }
 
     static let optionsKey = "networkcore.start-secrets"
@@ -35,17 +39,18 @@ public struct TunnelStartSecrets: Codable, Equatable {
     public static let fileName = "start-secrets.json"
 
     public var isEmpty: Bool {
-        nodeKey == nil && nodeLibrary == nil && mitmAuthority == nil && mitmBundleChunks == nil
+        nodeKey == nil && nodeLibrary == nil && mitmAuthority == nil && mitmBundleChunks == nil && anxLicense == nil
     }
 
-    /// Reads the three values from the Keychain; a value that cannot be read is left out, and the extension reports
+    /// Reads the values from the Keychain; a value that cannot be read is left out, and the extension reports
     /// what is missing the same way as when its own Keychain read fails.
     public static func fromKeychain() -> TunnelStartSecrets {
         TunnelStartSecrets(
             nodeKey: try? NodeSecretStore.value(account: NodeSecretStore.tunnelProfileAccount),
             nodeLibrary: try? NodeSecretStore.value(account: NodeLibrary.keychainAccount),
             mitmAuthority: try? MitmCertificateStore.storedValue(),
-            mitmBundleChunks: MitmProfileBundle.storedChunks()
+            mitmBundleChunks: MitmProfileBundle.storedChunks(),
+            anxLicense: try? NodeSecretStore.value(account: AnxLicense.keychainAccount)
         )
     }
 

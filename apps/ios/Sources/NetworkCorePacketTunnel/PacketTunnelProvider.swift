@@ -120,6 +120,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             tunnelProtocol.providerConfiguration?[TunnelProfileKeys.localRules] as? Data
         )
         config = withSubscriptionRules(config, localRules: localRules).withMode(mode).withDns(dns).withRedirects(redirects)
+        config = withAnxLicense(config)
         events.record("mode \(mode.rawValue)")
         if !redirects.isEmpty {
             events.record("redirects \(redirects.count)")
@@ -286,6 +287,34 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             events.record("subscription rules off: node list is malformed")
         }
         return config
+    }
+
+    /// Gives every ANX outbound this device's key and license (anx spec §2.4.1) once a subscription offered ANX
+    /// licensing. The license goes to a file in the extension's own container, which the outbound reads at each
+    /// connection. Without a license state the config is unchanged, as are the nodes that do not require one.
+    private func withAnxLicense(_ config: EmbeddedRuntimeConfig) -> EmbeddedRuntimeConfig {
+        guard let value = startSecrets?.anxLicense ?? (try? NodeSecretStore.value(account: AnxLicense.keychainAccount)),
+              let state = try? AnxLicense.fromKeychainValue(value),
+              state.offered,
+              let url = try? FileManager.default
+                  .url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+                  .appendingPathComponent(AnxLicense.licenseFileName),
+              let fields = state.outboundFields(licensePath: url.path)
+        else {
+            return config
+        }
+        do {
+            if let license = state.license {
+                try Data(license.utf8).write(to: url, options: .atomic)
+                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+            } else if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
+        } catch {
+            events.record("anx license not written")
+        }
+        events.record("anx license \(state.license == nil ? "missing" : "present")\(state.status.map { " (\($0))" } ?? "")")
+        return config.withAnxLicense(fields)
     }
 
     /// Creates the runtime. When it refuses the subscription's rules, the selected node runs alone.
