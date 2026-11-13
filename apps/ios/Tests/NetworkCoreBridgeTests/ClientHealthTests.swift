@@ -3,14 +3,14 @@ import NetworkCoreBridge
 import XCTest
 
 final class ClientHealthTests: XCTestCase {
+    // The same cases as crates/client-health/src/redact.rs, which is the reference for these rules.
+
     func testRedactionRemovesUrlsHostsAddressesAndKeys() {
-        let text = """
-        fetch https://sub.example.com/api/v1/client/subscribe?token=abc123 failed via hk.example.net:443 \
-        (203.0.113.7:8443, [2001:db8::1]:443, 2001:db8::2) for a@b.cn \
-        key Zm9vYmFyYmF6cXV4MTIzNDU2Nzg5MA== id 3F2504E0-4F89-11D3-9A0C-0305E82C3301
-        """
-        let redacted = Redaction.redact(text)
-        for gone in ["example", "203.0.113.7", "2001:db8", "a@b.cn", "Zm9v", "3F2504E0", "token"] {
+        let text = "failed to fetch https://sub.example.com/api/v1/client/subscribe?token=abc123 from node "
+            + "hk.example.net:443 (203.0.113.7:8443, [2001:db8::1]:443) for a@b.cn "
+            + "key=Zm9vYmFyYmF6cXV4MTIzNDU2Nzg5MA== id 3f2504e0-4f89-11d3-9a0c-0305e82c3301"
+        let redacted = Redaction.redact(text, environment: [:])
+        for gone in ["example", "203.0.113.7", "2001:db8", "a@b.cn", "Zm9v", "3f2504e0", "token"] {
             XCTAssertFalse(redacted.contains(gone), "\(gone) in \(redacted)")
         }
         for mark in ["<url>", "<host>", "<ip>", "<email>", "<secret>", "<id>"] {
@@ -18,9 +18,42 @@ final class ClientHealthTests: XCTestCase {
         }
     }
 
-    func testRedactionKeepsSourceLocationsAndPlainText() {
-        let text = "Fatal error at PacketTunnelProvider.swift:120 after 1500 ms, version 0.3.0 build 5022"
-        XCTAssertEqual(Redaction.redact(text), text)
+    func testRedactionMarksEachTokenLikeRust() {
+        let cases: [(String, String)] = [
+            ("node hk.example.net:443.", "node <host>."),
+            ("dial [2001:db8::1]:443 and 2001:db8::2", "dial <ip> and <ip>"),
+            ("peer 203.0.113.7:8443, done", "peer <ip>, done"),
+            ("key=Zm9vYmFyYmF6cXV4MTIzNDU2Nzg5MA==", "<secret>"),
+            ("id 3F2504E0-4F89-11D3-9A0C-0305E82C3301", "id <id>"),
+            ("mail a@b.cn", "mail <email>"),
+            ("see ss://YWVzLTI1Ni1nY20@host:8388#name", "see <url>"),
+        ]
+        for (input, expected) in cases {
+            XCTAssertEqual(Redaction.redact(input, environment: [:]), expected)
+        }
+    }
+
+    func testRedactionKeepsCodeLocationsAndSymbols() {
+        let text = "panicked at crates/client-health/src/lib.rs:42:7:\nindex out of bounds\n"
+            + "   3: std::panicking::begin_panic::h1a2b3c4d5e6f7a8b\n   4: core::fmt::write"
+        XCTAssertEqual(Redaction.redact(text, environment: [:]), text)
+    }
+
+    func testRedactionKeepsPlainWordsAndNumbers() {
+        for text in [
+            "connection reset after 1500 ms; version 0.3.0-beta.4",
+            "Fatal error at PacketTunnelProvider.swift:120 after 1500 ms, version 0.3.0 build 5022",
+        ] {
+            XCTAssertEqual(Redaction.redact(text, environment: [:]), text)
+        }
+    }
+
+    func testRedactionReplacesHomeAndAccount() {
+        let environment = ["HOME": "/Users/alice", "USER": "alice"]
+        XCTAssertEqual(
+            Redaction.redact("open /Users/alice/Library/x failed for alice, not malice", environment: environment),
+            "open ~/Library/x failed for <user>, not malice"
+        )
     }
 
     func testCrashReportsAreRedactedTrimmedAndDeletedWhenOff() throws {

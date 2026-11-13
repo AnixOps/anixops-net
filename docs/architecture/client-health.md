@@ -29,6 +29,9 @@
   只捕获 Rust panic，系统库里的原生崩溃没有报告。
 - iOS / macOS：MetricKit 的崩溃诊断（通常在下次启动时送达）与未捕获的 Objective-C 异常，经 `Redaction` 脱敏后存在
   App 的 Application Support/crashes。
+- 脱敏规则只有一套：以 `crates/client-health/src/redact.rs` 为准，Swift 的 `Redaction` 是它的逐行移植（按 token 判断，
+  同样的文件扩展名表，`key=…` 整个算密钥）。改规则时两边一起改，两边测试里的用例保持一致；anix-kit 发布共享用例
+  `redact/testdata/vectors.json` 后，两边测试改为读取它。
 - 设置页「崩溃报告」开关默认开启；关闭即停止记录并删除已保存的报告。报告只在本机，生成 / 复制诊断报告时附上。
 - 上传：桌面构建时设置 `ANIXOPS_CRASH_REPORT_URL` 才会在启动后发送（`CrashReports::upload`）；目前官方构建不设置，
   没有收集端。iOS / macOS 不上传。

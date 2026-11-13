@@ -1,32 +1,260 @@
 import Foundation
 
-/// Removes personal data from text that leaves the user's hands (crash reports, diagnostics): URLs, e-mail
-/// addresses, IP addresses, host names, UUIDs and long key-like tokens. Same rules as the desktop clients'
-/// `client-health` crate. Source locations (`App.swift:12`) and symbol names are kept.
+/// Removes personal data from text that leaves the user's hands (crash reports, diagnostics). A line-for-line port
+/// of the desktop clients' `client-health/src/redact.rs`, which is the reference: each run of "word" characters is
+/// looked at on its own and replaced when it is a URL (`<url>`), an e-mail address (`<email>`), an IPv4 or IPv6
+/// address (`<ip>`), a host name (`<host>`), a UUID (`<id>`) or a long key-like token (`<secret>`, including a
+/// `key=` prefix). The home directory and account name become `~` and `<user>` first. Source file names
+/// (`App.swift:12`) and symbol paths (`std::panicking`) are kept.
 public enum Redaction {
-    private static let patterns: [(String, String)] = [
-        (#"[A-Za-z][A-Za-z0-9+.\-]*://[^\s"'<>()]+"#, "<url>"),
-        (#"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}"#, "<email>"),
-        (#"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"#, "<id>"),
-        (#"\[[0-9A-Fa-f:.]*:[0-9A-Fa-f:.]*\](:\d+)?"#, "<ip>"),
-        (#"\b(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}\b"#, "<ip>"),
-        (#"(?<![\w:])(?:[0-9A-Fa-f]{1,4}:){1,6}:(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?"#, "<ip>"),
-        (#"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b"#, "<ip>"),
-        (#"(?<![A-Za-z0-9+/=_\-])(?=[A-Za-z0-9+/=_\-]*\d)(?=[A-Za-z0-9+/=_\-]*[A-Za-z])[A-Za-z0-9+/=_\-]{20,}"#, "<secret>"),
-        (#"\b(?:[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?\.)+(?!(?:swift|m|h|c|mm|json|plist|txt|log|dylib|framework|appex|app)\b)[A-Za-z]{2,24}(?::\d+)?\b"#, "<host>"),
+    /// File extensions that mark a token as a file name rather than a host. Same list as redact.rs.
+    static let fileExtensions: Set<String> = [
+        "rs", "toml", "json", "txt", "swift", "so", "dll", "exe", "dylib", "md", "log", "ts", "tsx", "js", "c", "h",
     ]
 
-    private static let rules: [(NSRegularExpression, String)] = patterns.compactMap { pattern, template in
-        (try? NSRegularExpression(pattern: pattern)).map { ($0, template) }
+    private static let extraTokenScalars = Set(".-_:/@%+=?&#~[]".unicodeScalars)
+    private static let secretSeparators = Set("/:?&#@[]".unicodeScalars)
+
+    /// `text` with personal data replaced, using this process's environment for the home directory and account.
+    public static func redact(_ text: String) -> String {
+        redact(text, environment: ProcessInfo.processInfo.environment)
     }
 
-    public static func redact(_ text: String) -> String {
-        var result = text
-        for (expression, template) in rules {
-            let range = NSRange(result.startIndex..., in: result)
-            result = expression.stringByReplacingMatches(in: result, range: range, withTemplate: template)
+    /// `text` with personal data replaced; `environment` supplies HOME, USERPROFILE, USER, USERNAME and LOGNAME.
+    public static func redact(_ text: String, environment: [String: String]) -> String {
+        let text = redactAccount(text, environment: environment)
+        var out = String.UnicodeScalarView()
+        var token = String.UnicodeScalarView()
+        func flush() {
+            if !token.isEmpty {
+                out.append(contentsOf: redactToken(String(token)).unicodeScalars)
+                token.removeAll(keepingCapacity: true)
+            }
         }
-        return result
+        for scalar in text.unicodeScalars {
+            if isTokenScalar(scalar) {
+                token.append(scalar)
+            } else {
+                flush()
+                out.append(scalar)
+            }
+        }
+        flush()
+        return String(out)
+    }
+
+    /// Rust's `char::is_alphanumeric`: the Alphabetic property or a Nd, Nl or No general category.
+    static func isAlphanumeric(_ scalar: Unicode.Scalar) -> Bool {
+        if scalar.properties.isAlphabetic {
+            return true
+        }
+        switch scalar.properties.generalCategory {
+        case .decimalNumber, .letterNumber, .otherNumber:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Characters that belong to one token. `:` stays inside so `host:port`, `[v6]:port` and URLs stay whole.
+    static func isTokenScalar(_ scalar: Unicode.Scalar) -> Bool {
+        isAlphanumeric(scalar) || extraTokenScalars.contains(scalar)
+    }
+
+    private static func isASCIIAlphanumeric(_ byte: UInt8) -> Bool {
+        isASCIIDigit(byte) || isASCIIAlphabetic(byte)
+    }
+
+    private static func isASCIIDigit(_ byte: UInt8) -> Bool {
+        (0x30...0x39).contains(byte)
+    }
+
+    private static func isASCIIAlphabetic(_ byte: UInt8) -> Bool {
+        (0x41...0x5A).contains(byte) || (0x61...0x7A).contains(byte)
+    }
+
+    private static func isASCIIHexDigit(_ byte: UInt8) -> Bool {
+        isASCIIDigit(byte) || (0x41...0x46).contains(byte) || (0x61...0x66).contains(byte)
+    }
+
+    private static func trimStart(_ text: String, _ characters: Set<Unicode.Scalar>) -> String {
+        String(String.UnicodeScalarView(text.unicodeScalars.drop { characters.contains($0) }))
+    }
+
+    private static func trimEnd(_ text: String, _ characters: Set<Unicode.Scalar>) -> String {
+        var scalars = Array(text.unicodeScalars)
+        while let last = scalars.last, characters.contains(last) {
+            scalars.removeLast()
+        }
+        return String(String.UnicodeScalarView(scalars))
+    }
+
+    /// Splits at the first `separator`, like Rust's `split_once`.
+    private static func splitOnce(_ text: String, _ separator: Unicode.Scalar) -> (String, String)? {
+        let scalars = text.unicodeScalars
+        guard let at = scalars.firstIndex(of: separator) else {
+            return nil
+        }
+        return (String(scalars[..<at]), String(scalars[scalars.index(after: at)...]))
+    }
+
+    /// Splits at the last `separator`, like Rust's `rsplit_once`.
+    private static func rsplitOnce(_ text: String, _ separator: Unicode.Scalar) -> (String, String)? {
+        let scalars = text.unicodeScalars
+        guard let at = scalars.lastIndex(of: separator) else {
+            return nil
+        }
+        return (String(scalars[..<at]), String(scalars[scalars.index(after: at)...]))
+    }
+
+    /// Splits at every scalar in `separators`, keeping empty parts, like Rust's `split`.
+    private static func split(_ text: String, _ separators: Set<Unicode.Scalar>) -> [String] {
+        text.unicodeScalars
+            .split(omittingEmptySubsequences: false, whereSeparator: { separators.contains($0) })
+            .map { String(String.UnicodeScalarView($0)) }
+    }
+
+    /// The home directory and the account name.
+    static func redactAccount(_ text: String, environment: [String: String]) -> String {
+        var text = text
+        for key in ["HOME", "USERPROFILE"] {
+            if let home = environment[key], home.utf8.count > 3 {
+                text = text.replacingOccurrences(of: home, with: "~", options: .literal)
+            }
+        }
+        for key in ["USER", "USERNAME", "LOGNAME"] {
+            if let user = environment[key], user.utf8.count >= 3 {
+                text = replaceWord(text, user, with: "<user>")
+            }
+        }
+        return text
+    }
+
+    /// Replaces `word` where it is not part of a longer alphanumeric run.
+    static func replaceWord(_ text: String, _ word: String, with replacement: String) -> String {
+        var out = ""
+        var rest = Substring(text)
+        while let range = rest.range(of: word, options: .literal) {
+            let before = rest[..<range.lowerBound].unicodeScalars.last
+            let after = rest[range.upperBound...].unicodeScalars.first
+            let bounded = !(before.map(isAlphanumeric) ?? false) && !(after.map(isAlphanumeric) ?? false)
+            out += rest[..<range.lowerBound]
+            out += bounded ? replacement : word
+            rest = rest[range.upperBound...]
+        }
+        out += rest
+        return out
+    }
+
+    static func redactToken(_ token: String) -> String {
+        // Keep trailing sentence punctuation outside the token.
+        let core = trimEnd(token, [".", ":", ","])
+        let tail = String(String.UnicodeScalarView(token.unicodeScalars.dropFirst(core.unicodeScalars.count)))
+        return (classify(core) ?? core) + tail
+    }
+
+    static func classify(_ token: String) -> String? {
+        if token.isEmpty {
+            return nil
+        }
+        if token.contains("://") {
+            return "<url>"
+        }
+        if isEmail(token) {
+            return "<email>"
+        }
+        if isIPLike(token) {
+            return "<ip>"
+        }
+        if isUUID(token) {
+            return "<id>"
+        }
+        if isSecret(token) {
+            return "<secret>"
+        }
+        if isHost(token) {
+            return "<host>"
+        }
+        return nil
+    }
+
+    static func isEmail(_ token: String) -> Bool {
+        guard let parts = splitOnce(token, "@") else {
+            return false
+        }
+        let (user, domain) = parts
+        return !user.isEmpty && domain.contains(".") && !domain.hasPrefix(".")
+    }
+
+    /// IPv4 with an optional port, IPv6 (bracketed or bare) with an optional port.
+    static func isIPLike(_ token: String) -> Bool {
+        let host = trimEnd(trimStart(stripPort(token), ["["]), ["]"])
+        return parsesAsAddress(host)
+    }
+
+    /// Strict dotted-quad IPv4 or IPv6, as Rust's `Ipv4Addr` and `Ipv6Addr` parse them.
+    static func parsesAsAddress(_ text: String) -> Bool {
+        var v4 = in_addr()
+        var v6 = in6_addr()
+        return text.withCString { inet_pton(AF_INET, $0, &v4) == 1 || inet_pton(AF_INET6, $0, &v6) == 1 }
+    }
+
+    static func stripPort(_ token: String) -> String {
+        if token.hasPrefix("[") {
+            let rest = String(token.unicodeScalars.dropFirst())
+            return splitOnce(rest, "]").map { $0.0 } ?? token
+        }
+        if let parts = rsplitOnce(token, ":"),
+           !parts.0.unicodeScalars.contains(":"),
+           !parts.1.isEmpty,
+           parts.1.utf8.allSatisfy(isASCIIDigit) {
+            return parts.0
+        }
+        return token
+    }
+
+    static func isUUID(_ token: String) -> Bool {
+        let groups = split(token, ["-"])
+        return groups.count == 5
+            && zip([8, 4, 4, 4, 12], groups).allSatisfy { length, group in
+                group.utf8.count == length && group.utf8.allSatisfy(isASCIIHexDigit)
+            }
+    }
+
+    /// 20 or more base64/hex-like characters mixing letters and digits: keys, passwords, tokens.
+    static func isSecret(_ token: String) -> Bool {
+        let core = trimStart(token, ["/", "="])
+        let run = split(core, secretSeparators).first { $0.utf8.count >= 20 } ?? ""
+        let bytes = run.utf8
+        return bytes.count >= 20
+            && bytes.allSatisfy { isASCIIAlphanumeric($0) || "+=_-.".utf8.contains($0) }
+            && bytes.contains(where: isASCIIDigit)
+            && bytes.contains(where: isASCIIAlphabetic)
+            && !run.contains("..")
+            && !looksLikeRustSymbol(run)
+    }
+
+    /// Mangled or hashed Rust symbols in backtraces (`h1a2b3c4d5e6f7a8b`) are kept.
+    static func looksLikeRustSymbol(_ run: String) -> Bool {
+        let bytes = Array(run.utf8)
+        return bytes.count == 17 && bytes[0] == UInt8(ascii: "h") && bytes.dropFirst().allSatisfy(isASCIIHexDigit)
+    }
+
+    /// `name.tld` or `name.tld:port`, where the last label is alphabetic and not a file extension.
+    static func isHost(_ token: String) -> Bool {
+        if token.contains("::") || token.unicodeScalars.contains("/") || token.unicodeScalars.contains("@") {
+            return false
+        }
+        let labels = split(stripPort(token), ["."])
+        guard labels.count >= 2, !labels.contains(where: \.isEmpty), let tld = labels.last else {
+            return false
+        }
+        return tld.utf8.count >= 2
+            && tld.utf8.allSatisfy(isASCIIAlphabetic)
+            && !fileExtensions.contains(tld.lowercased())
+            && labels.allSatisfy { label in
+                label.unicodeScalars.allSatisfy { isAlphanumeric($0) || $0 == "-" || $0 == "_" }
+            }
     }
 }
 
