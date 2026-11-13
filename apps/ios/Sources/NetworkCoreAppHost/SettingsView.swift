@@ -28,6 +28,8 @@ struct SettingsView: View {
                 }
 
                 OnDemandSections(tunnel: tunnel)
+                BlockQuicSection(tunnel: tunnel)
+                    .listRowBackground(brand.surface)
                 NotificationSettingsSection(tunnel: tunnel)
                     .listRowBackground(brand.surface)
 

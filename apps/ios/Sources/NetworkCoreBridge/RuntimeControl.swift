@@ -11,6 +11,8 @@ public enum RuntimeControl {
     case mode
     /// New connections only; open ones keep their route until `closeAll`.
     case setMode(ProxyMode)
+    /// Refuses UDP to port 443 for new flows when on, so apps fall back from QUIC to TCP (`{"block_quic": bool}`).
+    case setBlockQuic(Bool)
     case groups
     /// Picks the member of a `select` group.
     case select(group: String, member: String)
@@ -55,6 +57,8 @@ public enum RuntimeControl {
             object = ["cmd": "mode"]
         case let .setMode(mode):
             object = ["cmd": "set_mode", "mode": mode.rawValue]
+        case let .setBlockQuic(on):
+            object = ["cmd": "set_block_quic", "enabled": on]
         case .groups:
             object = ["cmd": "groups"]
         case let .select(group, member):
@@ -242,6 +246,15 @@ public enum RuntimeControl {
     /// The `mode` and `set_mode` answers.
     public struct ModeAnswer: Decodable, Equatable {
         public let mode: ProxyMode
+    }
+
+    /// The `set_block_quic` answer; an engine without the command answers nothing.
+    public struct BlockQuicAnswer: Decodable, Equatable {
+        public let blockQuic: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case blockQuic = "block_quic"
+        }
     }
 
     /// The `reload_rules` answer. `reloaded` is true once the new rules are in force; a refused list carries the

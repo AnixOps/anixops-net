@@ -37,6 +37,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let mode: ProxyMode
         let dns: DnsSettings?
         let redirects: [String]
+        let blockQuic: Bool
         /// The fields every ANX outbound gets (`AnxLicense.outboundFields`), or nil without a license state.
         let anxLicense: [String: JSONValue]?
     }
@@ -142,11 +143,17 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         applyNotificationSettings(NotificationSettings.fromProfileValue(
             tunnelProtocol.providerConfiguration?[TunnelProfileKeys.notifications] as? Data
         ))
-        let base = ReloadBase(config: config, mode: mode, dns: dns, redirects: redirects, anxLicense: anxLicenseFields())
+        let blockQuic = tunnelProtocol.providerConfiguration?[TunnelProfileKeys.blockQuic] as? Bool == true
+        let base = ReloadBase(
+            config: config, mode: mode, dns: dns, redirects: redirects, blockQuic: blockQuic, anxLicense: anxLicenseFields()
+        )
         config = Self.assemble(base, routing: withSubscriptionRules(base.config, localRules: localRules))
         events.record("mode \(mode.rawValue)")
         if !redirects.isEmpty {
             events.record("redirects \(redirects.count)")
+        }
+        if blockQuic {
+            events.record("block quic")
         }
         if let dns {
             events.record("dns \(dns.servers.count) servers, \(dns.rules.count) rules, \(dns.hosts.count) hosts")
@@ -367,9 +374,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     /// The engine config of a start: the subscription and local rules (`withRouting` already applied by
-    /// `withSubscriptionRules`), then the mode, DNS and destination rewrites.
+    /// `withSubscriptionRules`), then the mode, DNS, destination rewrites and QUIC blocking.
     private static func assemble(_ base: ReloadBase, routing config: EmbeddedRuntimeConfig) -> EmbeddedRuntimeConfig {
         let assembled = config.withMode(base.mode).withDns(base.dns).withRedirects(base.redirects)
+            .withBlockQuic(base.blockQuic)
         return base.anxLicense.map { assembled.withAnxLicense($0) } ?? assembled
     }
 

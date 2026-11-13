@@ -92,6 +92,28 @@ final class ProxyModeTests: XCTestCase {
         XCTAssertEqual(groups?.groups.first?.members.map(\.latencyMs), [120, nil])
     }
 
+    func testBlockQuicRequestAndConfig() throws {
+        XCTAssertEqual(
+            String(decoding: RuntimeControl.setBlockQuic(true).request, as: UTF8.self),
+            #"{"cmd":"set_block_quic","enabled":true}"#
+        )
+        XCTAssertEqual(
+            RuntimeControl.decode(RuntimeControl.BlockQuicAnswer.self, from: Data(#"{"block_quic":true}"#.utf8))?.blockQuic,
+            true
+        )
+        // An engine without the command answers nothing the app can read, so the app restarts instead.
+        XCTAssertNil(RuntimeControl.decode(RuntimeControl.BlockQuicAnswer.self, from: nil))
+
+        let node = ShadowsocksNode(host: "203.0.113.1", port: 8388, method: "2022-blake3-aes-128-gcm", password: "key", name: nil)
+        let config = EmbeddedRuntimeConfig(node: node, profileID: "test")
+        let off = try XCTUnwrap(JSONSerialization.jsonObject(with: config.withBlockQuic(false).encoded()) as? [String: Any])
+        XCTAssertNil(off["block_quic"])
+        let blocked = config.withBlockQuic(true)
+        let on = try XCTUnwrap(JSONSerialization.jsonObject(with: blocked.encoded()) as? [String: Any])
+        XCTAssertEqual(on["block_quic"] as? Bool, true)
+        XCTAssertNil(blocked.withoutSecret().blockQuic)
+    }
+
     func testSavedModeFallsBackToTheRulesFlag() {
         XCTAssertEqual(ProxyMode.saved(in: nil), .global)
         XCTAssertEqual(ProxyMode.saved(in: [TunnelProfileKeys.routing: true]), .rule)

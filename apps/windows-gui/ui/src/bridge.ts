@@ -44,6 +44,8 @@ export interface RuntimeSnapshot {
   routingMode: "bypass_china" | "gfw_list" | "direct" | "return_china" | "rule";
   /** How the engine resolves names; older backends leave it out. */
   dnsPreset?: DnsPreset;
+  /** UDP to port 443 is refused so apps fall back from QUIC to TCP; older backends leave it out. */
+  blockQuic?: boolean;
   /** The imported profile runs on the embedded engine (Windows). */
   embeddedEngine?: boolean;
 }
@@ -259,6 +261,7 @@ export const desktop = {
   restoreNetworkSettings: () => invoke<OperationResult>("restore_network_settings"),
   setRoutingMode: (mode: RuntimeSnapshot["routingMode"]) => invoke<OperationResult>("set_routing_mode", { mode }),
   setDnsPreset: (preset: DnsPreset) => invoke<OperationResult>("set_dns_preset", { preset }),
+  setBlockQuic: (enabled: boolean) => invoke<OperationResult>("set_block_quic", { enabled }),
   refreshRoutingRules: () => invoke<OperationResult>("refresh_routing_rules"),
   enableHttpsMitm: () => invoke<OperationResult>("enable_https_mitm"),
   disableHttpsMitm: () => invoke<OperationResult>("disable_https_mitm"),

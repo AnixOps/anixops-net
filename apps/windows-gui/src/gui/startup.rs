@@ -95,6 +95,9 @@ pub struct DesktopState {
     pub routing_mode: DesktopRoutingMode,
     #[serde(default)]
     pub dns_preset: desktop_dns::DnsPreset,
+    /// Refuse UDP to port 443 so apps fall back from QUIC to TCP (the engine's `block_quic`).
+    #[serde(default)]
+    pub block_quic: bool,
     #[serde(default)]
     pub bilibili_web_ad_block_enabled: bool,
     /// Desktop mode also captures system traffic with a Wintun adapter.

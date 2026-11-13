@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "The DNS choices of the desktop clients and the engine `dns` section each one writes."
+description = "The DNS choices of the desktop clients and the engine `dns` section each one writes, plus the `block_quic` switch."
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

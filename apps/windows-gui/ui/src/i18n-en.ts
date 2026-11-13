@@ -326,4 +326,7 @@ export const english: Record<string, string> = {
   "确认移除驱动": "Confirm: remove the driver",
   "确认移除证书": "Confirm: remove the certificate",
   "确认断开 {count} 条连接": "Confirm: close {count} connections",
+  "网络": "Network",
+  "屏蔽 QUIC": "Block QUIC",
+  "拒绝发往 UDP 443 端口的 QUIC（HTTP/3）流量，浏览器和应用会改用 TCP，这样 MITM 插件和按域名分流的规则都能生效。": "Refuses QUIC (HTTP/3) on UDP port 443 so browsers and apps use TCP instead, where MITM plugins and domain rules apply.",
 };
