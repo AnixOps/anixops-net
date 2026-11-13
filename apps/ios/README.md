@@ -122,3 +122,22 @@ the same address needs a new agreement, and a swipe revokes it. The allowed sour
 digest and passes them as `script_assets`, with `$persistentStore` in its Application Support folder; scripts run in
 QuickJS inside the tunnel without `$httpClient`. If the runtime refuses the scripts, the tunnel keeps decryption
 without them.
+
+## URL scheme
+
+The iOS and macOS apps register `anixops://` (`CFBundleURLTypes` in `project.yml`). `AppURLCommand` in
+NetworkCoreBridge parses a link and `TunnelController.handle(url:)` runs it:
+
+| Link | Action |
+| --- | --- |
+| `anixops://connect` | Connect with the selected node (aliases `start`, `on`) |
+| `anixops://disconnect` | Disconnect (aliases `stop`, `off`) |
+| `anixops://toggle` | Connect or disconnect |
+| `anixops://mode?set=rule\|global\|direct` | Switch the proxy mode |
+| `anixops://select?node=<name>[&group=<subscription>]` | Use a node of a subscription group (the active one by default); `group` matches an id or a name |
+| `anixops://select?policy=<policy group>&node=<member>` | Pick a member of a `select` policy group in the subscription's rules |
+| `anixops://import?url=<link>` | Open the import sheet with that subscription or node link (alias `install-config`) |
+
+Parameters are percent-encoded. `anixops:///connect` and `anixops://x-callback-url/connect` work too. An import
+link never saves anything by itself: the sheet shows the preview and the user confirms. A link the app cannot run
+shows a notice with the action or parameter it could not use. Links longer than 8 KiB are refused.

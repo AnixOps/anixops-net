@@ -16,6 +16,14 @@ struct NetworkCoreMacApp: App {
         Window("AnixOps Net", id: MacAppState.mainWindowID) {
             MacRootView(tunnel: tunnel, state: state)
                 .preferredColorScheme(appearance.colorScheme)
+                // `anixops://` links from Shortcuts, other apps and web pages (`AppURLCommand`).
+                .onOpenURL { url in
+                    Task {
+                        if await tunnel.handle(url: url) == .openImport {
+                            state.importing = true
+                        }
+                    }
+                }
                 .task {
                     #if DEBUG
                     // Screenshots: made-up data instead of the saved configuration (`-AnixOpsDemo YES`).
