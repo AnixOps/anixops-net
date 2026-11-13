@@ -182,6 +182,11 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
     /// The engine's `redirects` lines (`TrafficRedirects.lines`); absent rewrites nothing. The profile stores them
     /// apart (`TunnelProfileKeys.redirects`) and the extension adds them with `withRedirects(_:)`.
     public private(set) var redirects: [String]?
+    /// The engine's `block_quic`: refuse UDP to port 443 so apps fall back from QUIC to TCP. Written only when on,
+    /// so profiles still suit engines without it. The profile stores it apart (`TunnelProfileKeys.blockQuic`) and the
+    /// extension adds it with `withBlockQuic(_:)`; the app switches it later without a restart
+    /// (`RuntimeControl.setBlockQuic`).
+    public private(set) var blockQuic: Bool?
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
@@ -193,6 +198,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         case mode
         case dns
         case redirects
+        case blockQuic = "block_quic"
     }
 
     /// Only the extension encodes a routed config, and only for the runtime; nothing decodes one.
@@ -210,6 +216,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         try container.encodeIfPresent(mode, forKey: .mode)
         try container.encodeIfPresent(dns, forKey: .dns)
         try container.encodeIfPresent(redirects, forKey: .redirects)
+        try container.encodeIfPresent(blockQuic, forKey: .blockQuic)
     }
 
     public init(node: ShadowsocksNode, profileID: String, mtu: Int = 1500) {
@@ -287,6 +294,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         copy.mode = nil
         copy.dns = nil
         copy.redirects = nil
+        copy.blockQuic = nil
         return copy
     }
 
@@ -311,6 +319,13 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
     public func withRedirects(_ lines: [String]) -> EmbeddedRuntimeConfig {
         var copy = self
         copy.redirects = lines.isEmpty ? nil : lines
+        return copy
+    }
+
+    /// The same config refusing UDP to port 443 when `on`; off leaves the key out.
+    public func withBlockQuic(_ on: Bool) -> EmbeddedRuntimeConfig {
+        var copy = self
+        copy.blockQuic = on ? true : nil
         return copy
     }
 
@@ -603,6 +618,9 @@ public enum TunnelProfileKeys {
     /// `Data` holding a JSON array of the engine's `redirects` lines (`TrafficRedirects.profileValue`). Absent
     /// rewrites nothing.
     public static let redirects = "networkcore.redirects"
+    /// `true` when the tunnel refuses UDP to port 443 so apps fall back from QUIC (HTTP/3) to TCP, where HTTPS
+    /// decryption and domain rules see them. Absent is off.
+    public static let blockQuic = "networkcore.block-quic"
     /// `Data` holding the encoded `LocalRules`: the rule mode of a node list without subscription rules, and the
     /// user's rules in front of a subscription's. Absent is the default preset with no rules of the user's.
     public static let localRules = "networkcore.local-rules"

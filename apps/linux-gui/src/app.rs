@@ -285,6 +285,14 @@ async fn set_dns_preset(
     with_backend(&state, move |backend| backend.set_dns_preset(preset)).await
 }
 
+#[tauri::command]
+async fn set_block_quic(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<OperationResult, String> {
+    with_backend(&state, move |backend| backend.set_block_quic(enabled)).await
+}
+
 /// Downloads the current mode's public rule lists again; they apply on the next connection.
 #[tauri::command]
 async fn refresh_routing_rules(state: State<'_, AppState>) -> Result<OperationResult, String> {
@@ -984,6 +992,7 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             select_native_group_outbound,
             set_routing_mode,
             set_dns_preset,
+            set_block_quic,
             refresh_routing_rules,
             install_service,
             start_service,

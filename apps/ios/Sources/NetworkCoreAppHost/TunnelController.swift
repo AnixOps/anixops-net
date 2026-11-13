@@ -60,6 +60,10 @@ final class TunnelController {
     /// Reconnecting by itself and the Wi-Fi rules (`OnDemandSettings`), from the app's defaults; the saved profile
     /// carries the rules.
     private(set) var onDemand = OnDemandSettings.load()
+    /// Whether the tunnel refuses UDP to port 443 so apps fall back from QUIC to TCP, where HTTPS decryption and
+    /// domain rules see them. Kept in the app's defaults; the saved profile carries a copy
+    /// (`TunnelProfileKeys.blockQuic`). Off by default.
+    private(set) var blockQuic = UserDefaults.standard.bool(forKey: TunnelController.blockQuicKey)
     /// When the running tunnel last took new local rules in place, without a restart.
     private(set) var lastRulesReload: Date?
 
@@ -386,6 +390,51 @@ final class TunnelController {
             _ = await control(.closeAll)
         } else {
             restart()
+        }
+    }
+
+    /// The app's defaults key of `blockQuic`.
+    static let blockQuicKey = "networkcore.block-quic"
+
+    /// Turns QUIC blocking on or off. A running engine switches in place and closes its open UDP flows to port 443,
+    /// so apps already on QUIC fall back to TCP at once; an older engine restarts the tunnel instead.
+    func setBlockQuic(_ on: Bool) async {
+        guard on != blockQuic else {
+            return
+        }
+        blockQuic = on
+        UserDefaults.standard.set(on, forKey: Self.blockQuicKey)
+        guard let manager, let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol else {
+            return
+        }
+        var configuration = tunnelProtocol.providerConfiguration ?? [:]
+        if on {
+            configuration[TunnelProfileKeys.blockQuic] = true
+        } else {
+            configuration.removeValue(forKey: TunnelProfileKeys.blockQuic)
+        }
+        tunnelProtocol.providerConfiguration = configuration
+        manager.protocolConfiguration = tunnelProtocol
+        do {
+            self.manager = try await persist(manager)
+        } catch {
+            message = String(localized: "保存 QUIC 设置到 VPN 配置失败") + Self.errorCode(error)
+            refresh()
+            return
+        }
+        refresh()
+        guard isConnected else {
+            return
+        }
+        let answer = RuntimeControl.decode(RuntimeControl.BlockQuicAnswer.self, from: await control(.setBlockQuic(on)))
+        guard answer?.blockQuic == on else {
+            restart()
+            return
+        }
+        if on, let list = RuntimeControl.decode(RuntimeControl.Connections.self, from: await control(.connections)) {
+            for flow in list.active where flow.network == "udp" && flow.destination.hasSuffix(":443") {
+                _ = await control(.closeConnection(flow.id))
+            }
         }
     }
 
@@ -731,6 +780,9 @@ final class TunnelController {
         }
         if let value = try? redirects.profileValue() {
             providerConfiguration[TunnelProfileKeys.redirects] = value
+        }
+        if blockQuic {
+            providerConfiguration[TunnelProfileKeys.blockQuic] = true
         }
         if let value = try? localRules.profileValue() {
             providerConfiguration[TunnelProfileKeys.localRules] = value

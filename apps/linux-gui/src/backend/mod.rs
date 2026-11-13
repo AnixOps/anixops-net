@@ -90,6 +90,8 @@ pub struct RuntimeSnapshot {
     pub runtime_mode: &'static str,
     pub routing_mode: &'static str,
     pub dns_preset: &'static str,
+    /// UDP to port 443 is refused so apps fall back from QUIC to TCP.
+    pub block_quic: bool,
     /// Always true: the interface then offers the subscription rules mode and explains the engine's DNS.
     pub embedded_engine: bool,
 }
@@ -308,6 +310,7 @@ impl Backend {
             })
         })?;
         let envelope = desktop_dns::apply(&envelope, self.state.dns_preset)?;
+        let envelope = desktop_dns::apply_block_quic(&envelope, self.state.block_quic)?;
         if !self.state.preferences.https_decryption {
             return Ok(envelope);
         }
@@ -505,6 +508,7 @@ impl Backend {
             runtime_mode: "desktop",
             routing_mode: self.state.routing_mode.as_str(),
             dns_preset: self.state.dns_preset.as_str(),
+            block_quic: self.state.block_quic,
             embedded_engine: true,
         }
     }
@@ -612,6 +616,22 @@ impl Backend {
         }
         self.save();
         done(format!("DNS set to {}", preset.as_str()))
+    }
+
+    /// Turns QUIC blocking on or off. A running engine restarts on it.
+    pub fn set_block_quic(&mut self, on: bool) -> Result<OperationResult, String> {
+        let previous = self.state.block_quic;
+        self.state.block_quic = on;
+        if let Err(error) = self.restart_if_running() {
+            self.state.block_quic = previous;
+            return Err(error);
+        }
+        self.save();
+        done(if on {
+            "QUIC is blocked"
+        } else {
+            "QUIC is allowed"
+        })
     }
 
     pub fn subscriptions(&self) -> Vec<SubscriptionSummary> {

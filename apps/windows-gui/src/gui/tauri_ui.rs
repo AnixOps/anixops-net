@@ -142,6 +142,8 @@ struct RuntimeSnapshot {
     runtime_mode: String,
     routing_mode: String,
     dns_preset: &'static str,
+    /// UDP to port 443 is refused so apps fall back from QUIC to TCP.
+    block_quic: bool,
     /// The imported profile runs on the embedded engine.
     embedded_engine: bool,
 }
@@ -328,6 +330,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             restore_network_settings,
             set_routing_mode,
             set_dns_preset,
+            set_block_quic,
             refresh_routing_rules,
             configure_script_runtime,
             clear_script_runtime,
@@ -775,7 +778,12 @@ fn relink_active_profile(
     let rendered = profile.to_string();
     write_managed_text_atomic(&embedded_profile_path(), &rendered)
         .map_err(|error| error.to_string())?;
-    let envelope = embedded_envelope_or_profile(rendered, desktop.routing_mode, desktop.dns_preset);
+    let envelope = embedded_envelope_or_profile(
+        rendered,
+        desktop.routing_mode,
+        desktop.dns_preset,
+        desktop.block_quic,
+    );
     write_managed_text_atomic(&embedded.envelope_path, &envelope)
         .map_err(|error| error.to_string())?;
     desktop.profile_node_id = routed_selected_node(&profile);
@@ -1209,6 +1217,7 @@ fn switch_other_source_node(
                 &rendered,
                 desktop.routing_mode,
                 desktop.dns_preset,
+                desktop.block_quic,
                 false,
             )?;
             write_managed_text_atomic(&embedded_profile_path(), &rendered)
@@ -1689,8 +1698,13 @@ fn select_embedded_group_member(
     let mut profile = read_embedded_profile()?;
     set_routed_group_default(&mut profile, group_id, member)?;
     let rendered = profile.to_string();
-    let envelope =
-        embedded_envelope_for_mode(&rendered, desktop.routing_mode, desktop.dns_preset, false)?;
+    let envelope = embedded_envelope_for_mode(
+        &rendered,
+        desktop.routing_mode,
+        desktop.dns_preset,
+        desktop.block_quic,
+        false,
+    )?;
     write_managed_text_atomic(&embedded_profile_path(), &rendered)
         .map_err(|error| error.to_string())?;
     write_managed_text_atomic(&embedded.envelope_path, &envelope)
@@ -1773,7 +1787,12 @@ fn switch_embedded_node(
     };
     write_managed_text_atomic(&embedded_profile_path(), &profile)
         .map_err(|error| error.to_string())?;
-    let envelope = embedded_envelope_or_profile(profile, desktop.routing_mode, desktop.dns_preset);
+    let envelope = embedded_envelope_or_profile(
+        profile,
+        desktop.routing_mode,
+        desktop.dns_preset,
+        desktop.block_quic,
+    );
     write_managed_text_atomic(&embedded.envelope_path, &envelope)
         .map_err(|error| error.to_string())?;
     {
@@ -2517,7 +2536,12 @@ fn import_embedded_subscription(
         // A profile with its own rules runs them by default.
         desktop.routing_mode = DesktopRoutingMode::Rule;
     }
-    let envelope = embedded_envelope_or_profile(envelope, desktop.routing_mode, desktop.dns_preset);
+    let envelope = embedded_envelope_or_profile(
+        envelope,
+        desktop.routing_mode,
+        desktop.dns_preset,
+        desktop.block_quic,
+    );
     let envelope_path = embedded_directory().join("envelope.json");
     write_managed_text_atomic(&envelope_path, &envelope).map_err(|error| error.to_string())?;
     let mut managed = managed_config_or_default()?;
@@ -2582,8 +2606,9 @@ fn embedded_envelope_or_profile(
     profile: String,
     mode: DesktopRoutingMode,
     dns: DnsPreset,
+    block_quic: bool,
 ) -> String {
-    match embedded_envelope_for_mode(&profile, mode, dns, false) {
+    match embedded_envelope_for_mode(&profile, mode, dns, block_quic, false) {
         Ok(routed) => routed,
         Err(error) => {
             let _ = append_managed_log(
@@ -2595,14 +2620,16 @@ fn embedded_envelope_or_profile(
     }
 }
 
-/// The envelope for `mode` with the DNS choice in it.
+/// The envelope for `mode` with the DNS choice and QUIC blocking in it.
 fn embedded_envelope_for_mode(
     profile: &str,
     mode: DesktopRoutingMode,
     dns: DnsPreset,
+    block_quic: bool,
     force_refresh: bool,
 ) -> Result<String, String> {
     let envelope = desktop_dns::apply(&mode_envelope(profile, mode, force_refresh)?, dns)?;
+    let envelope = desktop_dns::apply_block_quic(&envelope, block_quic)?;
     if dns != DnsPreset::System {
         RuntimeConfig::from_json(envelope.as_bytes())
             .map_err(|error| format!("the DNS choice was rejected: {}", error.message))?;
@@ -2946,7 +2973,13 @@ fn set_routing_mode_blocking(
     let profile = fs::read_to_string(embedded_profile_path()).map_err(|error| {
         format!("Import the profile again before applying a routing mode: {error}")
     })?;
-    let envelope = embedded_envelope_for_mode(&profile, mode, desktop.dns_preset, force_refresh)?;
+    let envelope = embedded_envelope_for_mode(
+        &profile,
+        mode,
+        desktop.dns_preset,
+        desktop.block_quic,
+        force_refresh,
+    )?;
     write_managed_text_atomic(&embedded.envelope_path, &envelope)
         .map_err(|error| error.to_string())?;
     desktop.routing_mode = mode;
@@ -2982,7 +3015,13 @@ fn set_dns_preset_blocking(
     if let Some(embedded) = active_embedded_config()? {
         let profile = fs::read_to_string(embedded_profile_path())
             .map_err(|error| format!("Import the profile again before changing DNS: {error}"))?;
-        let envelope = embedded_envelope_for_mode(&profile, desktop.routing_mode, preset, false)?;
+        let envelope = embedded_envelope_for_mode(
+            &profile,
+            desktop.routing_mode,
+            preset,
+            desktop.block_quic,
+            false,
+        )?;
         write_managed_text_atomic(&embedded.envelope_path, &envelope)
             .map_err(|error| error.to_string())?;
     }
@@ -2991,6 +3030,53 @@ fn set_dns_preset_blocking(
     Ok(OperationResult {
         message: "DNS choice saved. Connect to apply it.".to_string(),
     })
+}
+
+#[tauri::command]
+async fn set_block_quic(
+    enabled: bool,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || set_block_quic_blocking(enabled, state)).await
+}
+
+/// Saves QUIC blocking into the envelope and the desktop state. A core this
+/// window runs reconnects on it; the Windows service takes it on its next
+/// start.
+fn set_block_quic_blocking(
+    enabled: bool,
+    state: DesktopAppState,
+) -> Result<OperationResult, String> {
+    {
+        let mut desktop = state
+            .desktop
+            .lock()
+            .map_err(|_| "desktop state lock failed")?;
+        if let Some(embedded) = active_embedded_config()? {
+            let profile = fs::read_to_string(embedded_profile_path()).map_err(|error| {
+                format!("Import the profile again before changing QUIC blocking: {error}")
+            })?;
+            let envelope = embedded_envelope_for_mode(
+                &profile,
+                desktop.routing_mode,
+                desktop.dns_preset,
+                enabled,
+                false,
+            )?;
+            write_managed_text_atomic(&embedded.envelope_path, &envelope)
+                .map_err(|error| error.to_string())?;
+        }
+        desktop.block_quic = enabled;
+        save_desktop_state(&desktop)?;
+    }
+    let message = match reconnect_running_direct_core(&state) {
+        Ok(()) => {
+            "QUIC setting saved. It applies to the running connection, or the next one.".to_string()
+        }
+        Err(error) => format!("QUIC setting saved. Reconnect to apply it: {error}"),
+    };
+    Ok(OperationResult { message })
 }
 
 fn ensure_routing_configuration_stopped(state: &DesktopAppState) -> Result<(), String> {
@@ -3704,6 +3790,7 @@ fn snapshot(
         },
         routing_mode: routing_mode_name(desktop.routing_mode).to_string(),
         dns_preset: desktop.dns_preset.as_str(),
+        block_quic: desktop.block_quic,
         embedded_engine: active_embedded_config().ok().flatten().is_some(),
     }
 }

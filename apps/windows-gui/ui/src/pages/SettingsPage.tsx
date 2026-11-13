@@ -1,4 +1,4 @@
-import { AppWindow, BadgeCheck, Bug, Cpu, FileCheck, Gauge, Timer, HardDrive, HeartPulse, Languages, LifeBuoy, Network, ScrollText, PlugZap, Power, RefreshCw, RotateCcw, ServerCog, ShieldCheck, SunMoon, Zap } from "lucide-react";
+import { AppWindow, Ban, BadgeCheck, Bug, Cpu, FileCheck, Gauge, Timer, HardDrive, HeartPulse, Languages, LifeBuoy, Network, ScrollText, PlugZap, Power, RefreshCw, RotateCcw, ServerCog, ShieldCheck, SunMoon, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { desktop, HealthStatus, inProcessEngine, Preferences, preferencesFrom, RuntimeSnapshot } from "../bridge";
@@ -89,6 +89,18 @@ export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, l
             />
           )}
         </Card>}
+
+      <Card title={t("网络")}>
+        <ToggleRow
+          icon={Ban}
+          color="red"
+          label={t("屏蔽 QUIC")}
+          hint={t("拒绝发往 UDP 443 端口的 QUIC（HTTP/3）流量，浏览器和应用会改用 TCP，这样 MITM 插件和按域名分流的规则都能生效。")}
+          checked={Boolean(snapshot.blockQuic)}
+          disabled={Boolean(busy) || snapshot.blockQuic === undefined}
+          onChange={() => void run("QUIC", () => desktop.setBlockQuic(!snapshot.blockQuic))}
+        />
+      </Card>
 
       <Card title={t("代理内核")} description={t("内核随应用一起运行，无需单独安装。")}>
         <Row icon={Cpu} color="gray" label={t("代理内核")} value={<><StatusDot tone={snapshot.core.tone} />{factLabel(snapshot.core.label)}</>} />

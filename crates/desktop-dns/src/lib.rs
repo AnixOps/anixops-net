@@ -58,6 +58,23 @@ pub fn apply(envelope: &str, preset: DnsPreset) -> Result<String, String> {
     Ok(envelope.to_string())
 }
 
+/// `envelope` refusing UDP to port 443 (the engine's `block_quic`) when
+/// `on`, so apps fall back from QUIC to TCP where HTTPS decryption and domain
+/// rules see them. Off removes the key, so the envelope still suits engines
+/// without it.
+pub fn apply_block_quic(envelope: &str, on: bool) -> Result<String, String> {
+    let mut value: Value = serde_json::from_str(envelope).map_err(|error| error.to_string())?;
+    let object = value
+        .as_object_mut()
+        .ok_or("the envelope must be a JSON object")?;
+    if on {
+        object.insert("block_quic".to_string(), Value::Bool(true));
+    } else if object.remove("block_quic").is_none() {
+        return Ok(envelope.to_string());
+    }
+    Ok(value.to_string())
+}
+
 fn section(preset: DnsPreset, has_china: bool) -> Value {
     let cloudflare = json!({
         "name": "cloudflare",
@@ -125,5 +142,16 @@ mod tests {
             assert_eq!(DnsPreset::parse(preset.as_str()), Some(preset));
         }
         assert_eq!(DnsPreset::parse("custom"), None);
+    }
+
+    #[test]
+    fn block_quic_is_written_only_when_on() {
+        assert_eq!(apply_block_quic(SINGLE, false).unwrap(), SINGLE);
+        let on: Value = serde_json::from_str(&apply_block_quic(SINGLE, true).unwrap()).unwrap();
+        assert_eq!(on["block_quic"], Value::Bool(true));
+        let off: Value =
+            serde_json::from_str(&apply_block_quic(&on.to_string(), false).unwrap()).unwrap();
+        assert!(off.get("block_quic").is_none());
+        assert!(apply_block_quic("[]", true).is_err());
     }
 }
