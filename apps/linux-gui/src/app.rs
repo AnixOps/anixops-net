@@ -59,24 +59,48 @@ fn http_get(url: &str) -> Result<String, reqwest::Error> {
     http_get_with_meta(url).map(|(body, _)| body)
 }
 
-/// The body and what the subscription headers say about it.
+/// The body and what the subscription headers say about it. A panel that licenses ANX gets this device's
+/// key and answers with its license (`anx_license`); the first time it says so, the request goes once more.
 fn http_get_with_meta(url: &str) -> Result<(String, ResponseMeta), reqwest::Error> {
+    let licenses = engine::license_store();
+    let (body, meta, offered) = http_get_once(url, licenses.as_ref())?;
+    if offered {
+        if let Ok((body, meta, _)) = http_get_once(url, licenses.as_ref()) {
+            return Ok((body, meta));
+        }
+    }
+    Ok((body, meta))
+}
+
+fn http_get_once(
+    url: &str,
+    licenses: Option<&anx_license::LicenseStore>,
+) -> Result<(String, ResponseMeta, bool), reqwest::Error> {
     // The panel picks the subscription format by User-Agent (same token as the iOS app).
-    let response = reqwest::blocking::Client::builder()
+    let mut request = reqwest::blocking::Client::builder()
         .timeout(FETCH_TIMEOUT)
         .user_agent(concat!("AnixOpsNet/", env!("CARGO_PKG_VERSION")))
         .build()?
-        .get(url)
+        .get(url);
+    if let Some(device) = licenses.and_then(|store| store.request_header(url).ok().flatten()) {
+        request = request.header(anx_license::HEADER_DEVICE, device);
+    }
+    let response = request
         .send()
         .and_then(reqwest::blocking::Response::error_for_status)?;
-    let meta = ResponseMeta::from_headers(|name| {
+    let header = |name: &str| {
         response
             .headers()
             .get(name)
             .and_then(|value| value.to_str().ok())
             .map(str::to_string)
-    });
-    Ok((response.text()?, meta))
+    };
+    let meta = ResponseMeta::from_headers(header);
+    // A license problem never fails the subscription.
+    let offered = licenses
+        .and_then(|store| store.record(url, header).ok())
+        .unwrap_or(false);
+    Ok((response.text()?, meta, offered))
 }
 
 /// A URL's body with its headers' meta, a local file, or the pasted share links themselves.

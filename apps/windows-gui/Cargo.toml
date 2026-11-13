@@ -18,6 +18,7 @@ desktop-mitm = { path = "../../crates/desktop-mitm" }
 engine-embedded = { workspace = true }
 inbound-mixed = { workspace = true }
 networkcore-windows-service = { path = "../windows-service" }
+anx-license = { path = "../../crates/anx-license" }
 node-import = { workspace = true }
 platform-windows = { workspace = true }
 rcgen = { version = "0.14.8", features = ["x509-parser"] }

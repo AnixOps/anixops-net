@@ -99,6 +99,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000"
 
 [[package]]
+name = "anx-license"
+version = "0.3.0"
+dependencies = [
+ "ring",
+]
+
+[[package]]
 name = "anyhow"
 version = "1.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3033,6 +3040,7 @@ dependencies = [
 name = "networkcore-linux-gui"
 version = "0.3.0"
 dependencies = [
+ "anx-license",
  "config-core",
  "control-domain",
  "desktop-dns",
@@ -3052,6 +3060,7 @@ dependencies = [
 name = "networkcore-windows-gui"
 version = "0.3.0"
 dependencies = [
+ "anx-license",
  "config-core",
  "control-domain",
  "desktop-dns",

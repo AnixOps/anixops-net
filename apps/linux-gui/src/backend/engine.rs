@@ -84,6 +84,12 @@ pub fn is_trunk(node: &NodeDescriptor) -> bool {
         .any(|entry| entry.key == NODE_METADATA_PATH && entry.value.trim() == NODE_PATH_TRUNK)
 }
 
+/// This device's ANX license directory (`anx_license`), beside the saved state.
+pub fn license_store() -> Option<anx_license::LicenseStore> {
+    super::state::Store::default_dir()
+        .map(|dir| anx_license::LicenseStore::new(dir.join("anx-license")))
+}
+
 pub fn envelope(nodes: &[NodeDescriptor], node_id: &str) -> Result<String, String> {
     single_node_envelope(PROFILE_ID, nodes, Some(node_id))
         .map(|(envelope, _)| envelope)

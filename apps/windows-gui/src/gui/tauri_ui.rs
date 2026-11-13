@@ -2633,31 +2633,58 @@ type SubscriptionRead = (
     subscription_meta::ResponseMeta,
 );
 
+/// This device's ANX license directory (`anx_license`), beside the desktop state.
+fn anx_license_store() -> anx_license::LicenseStore {
+    anx_license::LicenseStore::new(windows_managed_data_directory().join("anx-license"))
+}
+
+fn download_subscription(
+    location: &str,
+    licenses: &anx_license::LicenseStore,
+) -> Result<(String, subscription_meta::ResponseMeta, bool), String> {
+    // The panel picks the subscription format by User-Agent; without one it serves
+    // plain v2ray links and leaves out anx:// nodes.
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .user_agent(SUBSCRIPTION_USER_AGENT)
+        .build()
+        .map_err(|error| error.to_string())?;
+    let mut request = client.get(location);
+    if let Ok(Some(device)) = licenses.request_header(location) {
+        request = request.header(anx_license::HEADER_DEVICE, device);
+    }
+    let response = request
+        .send()
+        .and_then(reqwest::blocking::Response::error_for_status)
+        .map_err(|error| error.to_string())?;
+    let header = |name: &str| {
+        response
+            .headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string)
+    };
+    let meta = subscription_meta::ResponseMeta::from_headers(header);
+    // A license problem never fails the subscription.
+    let offered = licenses.record(location, header).unwrap_or(false);
+    let payload = response.text().map_err(|error| error.to_string())?;
+    Ok((payload, meta, offered))
+}
+
 /// Same token the iOS app sends, so the panel answers in the AnixOps Net format.
 const SUBSCRIPTION_USER_AGENT: &str = concat!("AnixOpsNet/", env!("CARGO_PKG_VERSION"));
 
 fn read_subscription(location: &str) -> Result<SubscriptionRead, String> {
     if is_subscription_url(location) {
-        // The panel picks the subscription format by User-Agent; without one it serves
-        // plain v2ray links and leaves out anx:// nodes.
-        let client = reqwest::blocking::Client::builder()
-            .timeout(Duration::from_secs(30))
-            .user_agent(SUBSCRIPTION_USER_AGENT)
-            .build()
-            .map_err(|error| error.to_string())?;
-        let response = client
-            .get(location)
-            .send()
-            .and_then(reqwest::blocking::Response::error_for_status)
-            .map_err(|error| error.to_string())?;
-        let meta = subscription_meta::ResponseMeta::from_headers(|name| {
-            response
-                .headers()
-                .get(name)
-                .and_then(|value| value.to_str().ok())
-                .map(str::to_string)
-        });
-        let payload = response.text().map_err(|error| error.to_string())?;
+        // A panel that licenses ANX gets this device's key and answers with its license
+        // (`anx_license`); the first time it says so, the request goes once more.
+        let licenses = anx_license_store();
+        let (payload, meta, offered) = download_subscription(location, &licenses)?;
+        if offered {
+            if let Ok((payload, meta, _)) = download_subscription(location, &licenses) {
+                return Ok((payload, None, Some(location.to_string()), meta));
+            }
+        }
         return Ok((payload, None, Some(location.to_string()), meta));
     }
     let path = PathBuf::from(location);
