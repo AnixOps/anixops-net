@@ -10,7 +10,9 @@ import SwiftUI
 struct MacHomePage: View {
     var tunnel: TunnelController
     @ObservedObject var state: MacAppState
-    @State private var dashboard = DashboardModel()
+
+    /// Shared with the dashboard window, so both show one sampler's numbers.
+    private var dashboard: DashboardModel { state.dashboard }
 
     var body: some View {
         GeometryReader { window in
@@ -48,16 +50,60 @@ struct MacHomePage: View {
                 dashboard.loadDemo()
             }
             #endif
-            await dashboard.poll(tunnel)
         }
-        .onAppear {
-            dashboard.startNetworkMonitor()
+        .task {
+            await dashboard.observe(tunnel)
         }
-        .onChange(of: tunnel.connection) { previous, status in
-            dashboard.tunnelChanged(from: previous, to: status, node: tunnel.nodeName)
+    }
+}
+
+/// The dashboard on its own: every live card in a window that can stay open beside other apps while the main
+/// window is closed or on another page. It reads the same `DashboardModel` as the overview, so the two never
+/// poll the engine twice.
+struct MacDashboardWindow: View {
+    var tunnel: TunnelController
+    @ObservedObject var state: MacAppState
+    @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        let brand = BrandPalette.resolve(appearance: appearance, scheme: colorScheme)
+        GeometryReader { window in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(tunnel.isConnected ? MacTileColor.green : MacTileColor.gray)
+                            .frame(width: 8, height: 8)
+                        Text(tunnel.phase.title)
+                            .font(.headline)
+                        if let name = tunnel.nodeName {
+                            Text(verbatim: name)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    DashboardGrid(
+                        tunnel: tunnel,
+                        model: state.dashboard,
+                        layout: DashboardLayout(storage: ""),
+                        fixedColumns: window.size.width >= 720 ? 4 : 2,
+                        showProxies: {
+                            state.section = .proxies
+                            openWindow(id: MacAppState.mainWindowID)
+                        }
+                    )
+                }
+                .padding(16)
+            }
         }
-        .onChange(of: tunnel.message) { _, message in
-            dashboard.messageShown(message)
+        .background(brand.bg)
+        .tint(brand.primary)
+        .environment(\.brand, brand)
+        .preferredColorScheme(appearance.colorScheme)
+        .task {
+            await state.dashboard.observe(tunnel)
         }
     }
 }

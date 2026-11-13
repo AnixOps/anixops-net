@@ -5287,6 +5287,176 @@
         }
       }
     },
+    "编辑规则文本": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit rules as text"
+          }
+        }
+      }
+    },
+    "已保存，隧道已热重载规则": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved; the tunnel reloaded the rules in place"
+          }
+        }
+      }
+    },
+    "已保存": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved"
+          }
+        }
+      }
+    },
+    "没有错误": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No errors"
+          }
+        }
+      }
+    },
+    "一行一条，写法同 Surge / Loon：类型,值,策略[,no-resolve]。策略写 DIRECT、REJECT，其他名字都当作代理。以 # 开头的整条规则表示停用，其余注释保存时不保留。连接中保存会直接在隧道里换上新规则，已有连接不断开；新增规则列表 URL 时会重新连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One rule a line, written as in Surge / Loon: type,value,policy[,no-resolve]. DIRECT and REJECT are kept; any other policy name means the proxy. A whole rule after # is switched off; other comments are not kept. Saving while connected swaps the rules in the running tunnel without dropping connections; adding a rule list URL reconnects."
+          }
+        }
+      }
+    },
+    "第 %lld 行": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Line %lld"
+          }
+        }
+      }
+    },
+    "%lld 处错误，改好后才能保存": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld errors; fix them to save"
+          }
+        }
+      }
+    },
+    "不支持的规则类型 %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unsupported rule type %@"
+          }
+        }
+      }
+    },
+    "缺少规则的值": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The rule has no value"
+          }
+        }
+      }
+    },
+    "值的写法不对，内核不会接受": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The value is not valid; the engine would refuse it"
+          }
+        }
+      }
+    },
+    "FINAL 由预设或订阅决定，这里不能写": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FINAL comes from the preset or the subscription and cannot be written here"
+          }
+        }
+      }
+    },
+    "最多 %lld 条规则": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "At most %lld rules"
+          }
+        }
+      }
+    },
+    "仪表盘": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dashboard"
+          }
+        }
+      }
+    },
+    "打开仪表盘": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Dashboard"
+          }
+        }
+      }
+    },
+    "我的规则": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My Rules"
+          }
+        }
+      }
+    },
+    "排在订阅规则前面，从上到下匹配。连接中保存会直接换上新规则，已有连接不断开。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Matched top to bottom before the subscription's rules. Saving while connected swaps them in without dropping connections."
+          }
+        }
+      }
+    },
+    "规则模式下排在预设前面，从上到下匹配。连接中保存会直接换上新规则，已有连接不断开。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In rule mode, matched top to bottom before the preset. Saving while connected swaps them in without dropping connections."
+          }
+        }
+      }
+    },
     "自动重连": {
       "localizations": {
         "en": {

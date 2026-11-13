@@ -26,6 +26,17 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// What the macOS app handed over at start (`TunnelStartSecrets`); nil on iOS, where the Keychain is shared.
     private var startSecrets: TunnelStartSecrets?
     private var startedAt: Date?
+    /// What the running config was built from before the subscription and local rules went in, and the config the
+    /// engine runs, so new local rules can be swapped in place (`reloadLocalRules`).
+    private var reloadBase: ReloadBase?
+    private var runningConfig: EmbeddedRuntimeConfig?
+
+    private struct ReloadBase {
+        let config: EmbeddedRuntimeConfig
+        let mode: ProxyMode
+        let dns: DnsSettings?
+        let redirects: [String]
+    }
     private var memoryPressure: DispatchSourceMemoryPressure?
     /// Recent events for the app's developer mode. Same rule as the system log: fixed reasons and codes only.
     private let events = TunnelDiagnosticLog()
@@ -123,7 +134,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let localRules = LocalRules.fromProfileValue(
             tunnelProtocol.providerConfiguration?[TunnelProfileKeys.localRules] as? Data
         )
-        config = withSubscriptionRules(config, localRules: localRules).withMode(mode).withDns(dns).withRedirects(redirects)
+        let base = ReloadBase(config: config, mode: mode, dns: dns, redirects: redirects)
+        config = Self.assemble(base, routing: withSubscriptionRules(base.config, localRules: localRules))
         events.record("mode \(mode.rawValue)")
         if !redirects.isEmpty {
             events.record("redirects \(redirects.count)")
@@ -171,6 +183,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 try session.start()
                 self.session = session
                 self.startedAt = Date()
+                self.reloadBase = base
+                self.runningConfig = config
                 self.trafficStats.start { [weak session] request in
                     session?.control(request)
                 }
@@ -203,6 +217,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         session?.stop()
         session = nil
         startedAt = nil
+        reloadBase = nil
+        runningConfig = nil
         #if os(macOS)
         boundInterface.stop()
         #endif
@@ -293,6 +309,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             completionHandler?(trafficStats.snapshot())
         case .clearTrafficStats:
             completionHandler?(trafficStats.clear())
+        case let .reloadLocalRules(value):
+            completionHandler?(reloadLocalRules(value))
         case .diagnostics:
             let diagnostics = TunnelDiagnostics(
                 runtimeStatus: session?.statusJSON().flatMap { String(data: $0, encoding: .utf8) },
@@ -305,6 +323,43 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             )
             completionHandler?(try? diagnostics.encoded())
         }
+    }
+
+    /// The engine config of a start: the subscription and local rules (`withRouting` already applied by
+    /// `withSubscriptionRules`), then the mode, DNS and destination rewrites.
+    private static func assemble(_ base: ReloadBase, routing config: EmbeddedRuntimeConfig) -> EmbeddedRuntimeConfig {
+        config.withMode(base.mode).withDns(base.dns).withRedirects(base.redirects)
+    }
+
+    /// Builds the config a start with `value` (new local rules) would run. When only its rule lines differ from the
+    /// running config, swaps them into the engine in place (`reload_rules`, a double-buffered swap that keeps every
+    /// open connection); otherwise, or when the engine refuses them, answers `restart` so the app restarts the
+    /// tunnel as before.
+    private func reloadLocalRules(_ value: Data) -> Data? {
+        func answer(_ reply: RuntimeControl.ReloadAnswer) -> Data? {
+            try? JSONEncoder().encode(reply)
+        }
+        guard let session, let base = reloadBase, let running = runningConfig else {
+            return answer(.init(reloaded: false, restart: true))
+        }
+        let next = Self.assemble(base, routing: withSubscriptionRules(base.config, localRules: LocalRules.fromProfileValue(value)))
+        guard let rules = running.reloadableRules(to: next) else {
+            events.record("local rules changed beyond the rule lines: restart")
+            return answer(.init(reloaded: false, restart: true))
+        }
+        if rules == running.routing?.rules {
+            runningConfig = next
+            return answer(.init(reloaded: true, rules: rules.count))
+        }
+        let reply = session.control(RuntimeControl.reloadRules(rules, dryRun: false).request)
+        guard let done = RuntimeControl.decode(RuntimeControl.ReloadAnswer.self, from: reply), done.reloaded else {
+            let code = RuntimeControl.decode(RuntimeControl.ReloadAnswer.self, from: reply)?.error?.code ?? "unavailable"
+            events.record("rules reload refused (\(code)): restart")
+            return answer(.init(reloaded: false, error: RuntimeControl.decode(RuntimeControl.ReloadAnswer.self, from: reply)?.error, restart: true))
+        }
+        runningConfig = next
+        events.record("rules reloaded in place, \(rules.count) rules, generation \(done.generation ?? 0)")
+        return reply
     }
 
     /// Adds the subscription's rules and groups from the node library in the Keychain, with the user's local rules in

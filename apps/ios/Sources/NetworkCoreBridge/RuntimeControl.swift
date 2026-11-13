@@ -33,6 +33,9 @@ public enum RuntimeControl {
     case outboundHealth
     /// Lets a node that stopped after repeated rejections dial again (`{"resumed": bool}`).
     case resumeOutbound(node: String)
+    /// Swaps the engine's rule lines in place (`reload_rules`): the whole new list ending with `FINAL`, naming only
+    /// the running nodes, groups and rule sets. Open connections keep going; `dryRun` only checks the list.
+    case reloadRules([String], dryRun: Bool)
 
     public var request: Data {
         let object: [String: Any]
@@ -71,6 +74,8 @@ public enum RuntimeControl {
             object = ["cmd": "outbound_health"]
         case let .resumeOutbound(node):
             object = ["cmd": "resume_outbound", "node": node]
+        case let .reloadRules(rules, dryRun):
+            object = ["cmd": "reload_rules", "rules": rules, "dry_run": dryRun]
         }
         return (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
     }
@@ -221,6 +226,37 @@ public enum RuntimeControl {
     /// The `mode` and `set_mode` answers.
     public struct ModeAnswer: Decodable, Equatable {
         public let mode: ProxyMode
+    }
+
+    /// The `reload_rules` answer. `reloaded` is true once the new rules are in force; a refused list carries the
+    /// 0-based index of its first bad line and a code (`syntax`, `unknown_target`, `unknown_rule_set`,
+    /// `final_not_last`, `final_missing`, `too_many_rules`, `line_too_long`, `invalid`) and leaves the running rules.
+    public struct ReloadAnswer: Codable, Equatable {
+        public struct Rejection: Codable, Equatable {
+            public let line: Int?
+            public let code: String
+
+            public init(line: Int?, code: String) {
+                self.line = line
+                self.code = code
+            }
+        }
+
+        public let reloaded: Bool
+        public let rules: Int?
+        public let generation: UInt64?
+        public let error: Rejection?
+        /// Set by the extension, never by the engine: the change needs a restart (nodes, groups or rule sets
+        /// differ, or the running engine has no rules to swap).
+        public let restart: Bool?
+
+        public init(reloaded: Bool, rules: Int? = nil, generation: UInt64? = nil, error: Rejection? = nil, restart: Bool? = nil) {
+            self.reloaded = reloaded
+            self.rules = rules
+            self.generation = generation
+            self.error = error
+            self.restart = restart
+        }
     }
 
     /// The `select` answer: the member the group uses now.
