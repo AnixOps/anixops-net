@@ -8798,6 +8798,12 @@
             "state": "translated",
             "value": "Edit rules as text"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "編輯規則文字"
+          }
         }
       }
     },
@@ -8807,6 +8813,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Saved; the tunnel reloaded the rules in place"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已儲存，隧道已熱重新載入規則"
           }
         }
       }
@@ -8818,6 +8830,12 @@
             "state": "translated",
             "value": "Saved"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已儲存"
+          }
         }
       }
     },
@@ -8827,6 +8845,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "No errors"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有錯誤"
           }
         }
       }
@@ -8838,6 +8862,12 @@
             "state": "translated",
             "value": "One rule a line, written as in Surge / Loon: type,value,policy[,no-resolve]. DIRECT and REJECT are kept; any other policy name means the proxy. A whole rule after # is switched off; other comments are not kept. Saving while connected swaps the rules in the running tunnel without dropping connections; adding a rule list URL reconnects."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一行一條，寫法同 Surge / Loon：類型,值,策略[,no-resolve]。策略寫 DIRECT、REJECT，其他名稱都當作代理。以 # 開頭的整條規則表示停用，其餘註解儲存時不保留。連線中儲存會直接在隧道裡換上新規則，現有連線不中斷；新增規則列表 URL 時會重新連線。"
+          }
         }
       }
     },
@@ -8847,6 +8877,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Line %lld"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "第 %lld 行"
           }
         }
       }
@@ -8858,6 +8894,12 @@
             "state": "translated",
             "value": "%lld errors; fix them to save"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 處錯誤，改好後才能儲存"
+          }
         }
       }
     },
@@ -8867,6 +8909,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Unsupported rule type %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不支援的規則類型 %@"
           }
         }
       }
@@ -8878,6 +8926,12 @@
             "state": "translated",
             "value": "The rule has no value"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "缺少規則的值"
+          }
         }
       }
     },
@@ -8887,6 +8941,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The value is not valid; the engine would refuse it"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "值的寫法不對，核心不會接受"
           }
         }
       }
@@ -8898,6 +8958,12 @@
             "state": "translated",
             "value": "FINAL comes from the preset or the subscription and cannot be written here"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FINAL 由預設或訂閱決定，這裡不能寫"
+          }
         }
       }
     },
@@ -8907,6 +8973,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "At most %lld rules"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最多 %lld 條規則"
           }
         }
       }
@@ -8918,6 +8990,12 @@
             "state": "translated",
             "value": "Dashboard"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儀表板"
+          }
         }
       }
     },
@@ -8927,6 +9005,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open Dashboard"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開啟儀表板"
           }
         }
       }
@@ -8938,6 +9022,12 @@
             "state": "translated",
             "value": "My Rules"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我的規則"
+          }
         }
       }
     },
@@ -8948,6 +9038,12 @@
             "state": "translated",
             "value": "Matched top to bottom before the subscription's rules. Saving while connected swaps them in without dropping connections."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "排在訂閱規則前面，從上到下比對。連線中儲存會直接換上新規則，現有連線不中斷。"
+          }
         }
       }
     },
@@ -8957,6 +9053,188 @@
           "stringUnit": {
             "state": "translated",
             "value": "In rule mode, matched top to bottom before the preset. Saving while connected swaps them in without dropping connections."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "規則模式下排在預設前面，從上到下比對。連線中儲存會直接換上新規則，現有連線不中斷。"
+          }
+        }
+      }
+    },
+    "自动重连": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnect automatically"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動重新連線"
+          }
+        }
+      }
+    },
+    "保持不变": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave as is"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保持不變"
+          }
+        }
+      }
+    },
+    "隧道意外退出（崩溃、内存超限、系统更新）后由系统几秒内重新连接。手动断开时会一并关闭，下次连接再打开。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If the tunnel quits unexpectedly (a crash, the memory limit, a system update), the system reconnects within seconds. Disconnecting by hand turns this off until you connect again."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隧道意外結束（當機、記憶體超出上限、系統更新）後由系統在幾秒內重新連線。手動斷開時會一併關閉，下次連線再開啟。"
+          }
+        }
+      }
+    },
+    "Wi-Fi 名称": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wi-Fi name"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wi-Fi 名稱"
+          }
+        }
+      }
+    },
+    "其他 Wi-Fi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other Wi-Fi"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "其他 Wi-Fi"
+          }
+        }
+      }
+    },
+    "Wi-Fi 规则": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wi-Fi rules"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wi-Fi 規則"
+          }
+        }
+      }
+    },
+    "加入网络时由系统立即执行，不需要打开 App。设为“断开”的网络下，手动连接也会被断开。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The system applies these as soon as you join a network, without opening the app. On a network set to Disconnect, a manual connection is disconnected too."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加入網路時由系統立即執行，不需要開啟 App。設為「斷開」的網路下，手動連線也會被斷開。"
+          }
+        }
+      }
+    },
+    "删除 %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刪除 %@"
+          }
+        }
+      }
+    },
+    "无法关闭自动重连": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't turn off automatic reconnect"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法關閉自動重新連線"
+          }
+        }
+      }
+    },
+    "无法开启自动重连": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't turn on automatic reconnect"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法開啟自動重新連線"
+          }
+        }
+      }
+    },
+    "保存自动重连设置失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't save the reconnect settings"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存自動重新連線設定失敗"
           }
         }
       }

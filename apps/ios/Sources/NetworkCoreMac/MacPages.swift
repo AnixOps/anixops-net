@@ -489,7 +489,7 @@ struct MacActivityPage: View {
     }
 }
 
-/// Settings: appearance, login item, notifications, privacy and the version.
+/// Settings: appearance, login item, reconnecting and Wi-Fi rules, notifications, privacy and the version.
 struct MacSettingsPage: View {
     var tunnel: TunnelController
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
@@ -523,6 +523,7 @@ struct MacSettingsPage: View {
                 }
             }
 
+            OnDemandSections(tunnel: tunnel)
             NotificationSettingsSection(tunnel: tunnel)
 
             Section("隐私") {

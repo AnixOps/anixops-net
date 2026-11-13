@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Settings: appearance, privacy and the About section that unlocks developer mode.
+/// Settings: appearance, reconnecting and Wi-Fi rules, privacy and the About section that unlocks developer mode.
 struct SettingsView: View {
     var tunnel: TunnelController
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
@@ -26,6 +26,7 @@ struct SettingsView: View {
                     Text("连接后显示节点和已连接时长，可以直接断开。")
                 }
 
+                OnDemandSections(tunnel: tunnel)
                 NotificationSettingsSection(tunnel: tunnel)
                     .listRowBackground(brand.surface)
 

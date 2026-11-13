@@ -53,10 +53,17 @@ enum TunnelSwitch {
             throw Failure.notConfigured
         }
         guard on else {
+            // On Demand would start the tunnel again right away: a disconnect turns it off first.
+            if manager.isOnDemandEnabled {
+                manager.isOnDemandEnabled = false
+                try? await manager.saveToPreferences()
+            }
             manager.connection.stopVPNTunnel()
             return
         }
-        if !manager.isEnabled {
+        // The app's reconnect setting lives in the saved rules; a connect from here turns them on again.
+        let resumed = manager.resumeOnDemand()
+        if !manager.isEnabled || resumed {
             manager.isEnabled = true
             try await manager.saveToPreferences()
             try await manager.loadFromPreferences()
