@@ -54,6 +54,8 @@ struct NetworkCoreMacApp: App {
                     }
                     #endif
                     await tunnel.load()
+                    // The `anixops` command-line tool talks to this app (MacControlService).
+                    state.startControl(tunnel)
                     // Subscription groups update on their own while the app runs; a Mac app stays open for long.
                     while !Task.isCancelled {
                         await tunnel.refreshDueSubscriptions()
@@ -97,6 +99,16 @@ final class MacAppState: ObservableObject {
     @Published var importing = false
     /// The one dashboard sampler every window shows (the overview page and the dashboard window).
     let dashboard = DashboardModel()
+
+    /// Serves the command-line tool for the life of the app, also while the window is closed.
+    private var control: MacControlService?
+
+    func startControl(_ tunnel: TunnelController) {
+        if control == nil {
+            control = MacControlService(tunnel: tunnel)
+        }
+        control?.start()
+    }
 
     init() {
         #if DEBUG
