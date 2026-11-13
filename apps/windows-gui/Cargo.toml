@@ -11,6 +11,7 @@ default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
 
 [dependencies]
+client-health = { path = "../../crates/client-health" }
 config-core = { workspace = true }
 control-domain = { workspace = true }
 desktop-dns = { path = "../../crates/desktop-dns" }

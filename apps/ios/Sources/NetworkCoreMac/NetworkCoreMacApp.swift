@@ -12,12 +12,21 @@ struct NetworkCoreMacApp: App {
     @State private var updater = AppUpdater()
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
 
+    init() {
+        ClientHealthMonitor.shared.start()
+        AppNotifications.install()
+    }
+
     var body: some Scene {
         // One main window: a VPN client has a single connection, so a second one would only repeat it.
         Window("AnixOps Net", id: MacAppState.mainWindowID) {
             MacRootView(tunnel: tunnel, state: state)
                 .environment(updater)
                 .preferredColorScheme(appearance.colorScheme)
+                // The System Extension cannot post notifications; the app posts what scripts posted.
+                .task {
+                    await tunnel.relayScriptNotifications()
+                }
                 .onAppear {
                     state.dashboard.startNetworkMonitor()
                 }

@@ -396,6 +396,7 @@ struct MacActivityPage: View {
     var tunnel: TunnelController
     @Environment(\.brand) private var brand
     @State private var copied = false
+    @State private var showsLog = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -424,6 +425,11 @@ struct MacActivityPage: View {
                         copyDiagnostics()
                     }
                     .controlSize(.small)
+                    Button("扩展日志…") {
+                        tunnel.refreshDiagnostics()
+                        showsLog = true
+                    }
+                    .controlSize(.small)
                 }
             }
             .padding(16)
@@ -435,6 +441,9 @@ struct MacActivityPage: View {
         }
         .background(brand.bg)
         .onAppear(perform: refresh)
+        .sheet(isPresented: $showsLog) {
+            MacDiagnosticLogSheet(tunnel: tunnel)
+        }
     }
 
     private func fact(_ title: LocalizedStringKey, _ value: String) -> some View {
@@ -471,7 +480,8 @@ struct MacActivityPage: View {
                 outboundKind: tunnel.outboundKind,
                 lastDisconnectError: tunnel.lastDisconnectError,
                 diagnostics: tunnel.diagnostics,
-                generatedAt: Date()
+                generatedAt: Date(),
+                health: ClientHealthMonitor.shared.reportText
             )
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(report.text, forType: .string)
@@ -480,13 +490,14 @@ struct MacActivityPage: View {
     }
 }
 
-/// Settings: appearance, login item, reconnecting and Wi-Fi rules, privacy and the version.
+/// Settings: appearance, login item, reconnecting and Wi-Fi rules, notifications, privacy and the version.
 struct MacSettingsPage: View {
     var tunnel: TunnelController
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
     @Environment(\.brand) private var brand
     @State private var opensAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
+    @State private var crashReports = ClientHealthMonitor.shared.crashReports.isEnabled
 
     var body: some View {
         Form {
@@ -515,10 +526,19 @@ struct MacSettingsPage: View {
             }
 
             OnDemandSections(tunnel: tunnel)
+            NotificationSettingsSection(tunnel: tunnel)
 
-            Section("隐私") {
+            Section {
                 Label("不收集你的流量和浏览记录", systemImage: "hand.raised")
                 Label("节点密码和密钥只保存在本机钥匙串", systemImage: "key")
+                Toggle("崩溃报告", isOn: $crashReports)
+                    .onChange(of: crashReports) { _, enabled in
+                        ClientHealthMonitor.shared.crashReports.isEnabled = enabled
+                    }
+            } header: {
+                Text("隐私")
+            } footer: {
+                Text("崩溃时记录脱敏后的信息（不含网址、账号和节点地址），只保存在本机，复制诊断信息时附上。关闭会删除已保存的报告。")
             }
 
             MacUpdateSection()
@@ -725,5 +745,44 @@ private struct MacHeroButtonStyle: ButtonStyle {
             .background(filled ? Brand.line : Color.white.opacity(0.14), in: Capsule())
             .contentShape(Capsule())
             .opacity(configuration.isPressed ? 0.82 : 1)
+    }
+}
+
+/// The extension's event log with the level and module filters, newest first.
+private struct MacDiagnosticLogSheet: View {
+    var tunnel: TunnelController
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage(DiagnosticFilterKeys.minimum) private var minimum = DiagnosticLevel.info
+    @AppStorage(DiagnosticFilterKeys.module) private var module = ""
+
+    var body: some View {
+        let events = (tunnel.diagnostics?.events ?? [])
+            .filtered(minimum: minimum, modules: DiagnosticFilterKeys.modules(module))
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                DiagnosticFilterPickers(minimum: $minimum, module: $module)
+                    .fixedSize()
+                Spacer()
+                Button("立即刷新") {
+                    tunnel.refreshDiagnostics()
+                }
+                Button("完成") {
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(12)
+            Divider()
+            if events.isEmpty {
+                Text(tunnel.diagnostics == nil ? "隧道未运行" : "没有符合条件的日志")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List(Array(events.reversed().enumerated()), id: \.offset) { _, event in
+                    DiagnosticEventRow(event: event)
+                }
+            }
+        }
+        .frame(width: 640, height: 480)
     }
 }

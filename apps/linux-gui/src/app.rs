@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::Duration;
 
+use client_health::{startup, Health};
 use desktop_mitm::plugins::{self, PluginSummary};
 use engine_embedded::profile::RoutingMode;
 use networkcore_linux_gui::backend::engine;
@@ -19,7 +20,8 @@ use networkcore_linux_gui::backend::{
     PreferencesInput, RuntimeSnapshot, SubscriptionSummary, PASTED_LOCATION,
 };
 use subscription_meta::ResponseMeta;
-use tauri::{RunEvent, State};
+use tauri::webview::PageLoadEvent;
+use tauri::{Manager, RunEvent, State};
 
 /// The URL the delay tests fetch, as on Windows.
 const DELAY_URL: &str = "https://www.gstatic.com/generate_204";
@@ -27,6 +29,8 @@ const FETCH_TIMEOUT: Duration = Duration::from_secs(30);
 const UNAVAILABLE: &str = "Not available on Linux yet";
 
 struct AppState(Arc<Mutex<Backend>>);
+
+struct HealthState(Arc<Health>);
 
 fn lock(backend: &Mutex<Backend>) -> MutexGuard<'_, Backend> {
     backend.lock().unwrap_or_else(PoisonError::into_inner)
@@ -401,8 +405,36 @@ async fn save_preferences(
 }
 
 #[tauri::command]
-async fn create_diagnostics(state: State<'_, AppState>) -> Result<OperationResult, String> {
-    with_backend(&state, |backend| backend.diagnostics()).await
+async fn create_diagnostics(
+    state: State<'_, AppState>,
+    health: State<'_, HealthState>,
+) -> Result<OperationResult, String> {
+    let section = health.0.diagnostics();
+    with_backend(&state, move |backend| backend.diagnostics(&section)).await
+}
+
+/// Crash reports, the metrics endpoint, the install check and the cold start, for the settings page.
+#[tauri::command]
+fn health_status(health: State<'_, HealthState>) -> serde_json::Value {
+    health.0.status()
+}
+
+#[tauri::command]
+fn set_crash_reports(
+    health: State<'_, HealthState>,
+    enabled: bool,
+) -> Result<OperationResult, String> {
+    health
+        .0
+        .set_crash_reports(enabled)
+        .map_err(|error| format!("the setting could not be saved: {error}"))?;
+    Ok(OperationResult {
+        message: if enabled {
+            "Crash reports on".to_string()
+        } else {
+            "Crash reports off; kept reports deleted".to_string()
+        },
+    })
 }
 
 #[tauri::command]
@@ -661,6 +693,12 @@ pub fn run() -> Result<(), String> {
         .map(PathBuf::from)
         .map_or_else(std::env::current_exe, Ok)
         .map_err(|error| error.to_string())?;
+    let health = Health::start(
+        &dir,
+        "linux",
+        env!("CARGO_PKG_VERSION"),
+        std::env::current_exe().unwrap_or_else(|_| executable.clone()),
+    );
     let backend = Backend::open(
         Store::new(dir),
         Desktop::from_env(),
@@ -669,6 +707,18 @@ pub fn run() -> Result<(), String> {
     );
     let auto_connect = backend.auto_connect();
     let shared = Arc::new(Mutex::new(backend));
+    // The endpoint skips the engine while another command holds the backend, rather than waiting on it.
+    let probe = Arc::downgrade(&shared);
+    health.serve_metrics(Arc::new(move || {
+        let Some(backend) = probe.upgrade() else {
+            return (None, false);
+        };
+        let guard = backend.try_lock();
+        match guard {
+            Ok(backend) => backend.metrics(),
+            Err(_) => (None, false),
+        }
+    }));
     if auto_connect {
         let state = AppState(shared.clone());
         thread::spawn(move || {
@@ -681,6 +731,18 @@ pub fn run() -> Result<(), String> {
 
     let app = tauri::Builder::default()
         .manage(AppState(shared.clone()))
+        .manage(HealthState(health))
+        .on_page_load(|webview, payload| {
+            if payload.event() != PageLoadEvent::Finished {
+                return;
+            }
+            let ready = startup::first_page_loaded();
+            // CI's cold start job: record the time and quit.
+            if let Some(path) = startup::probe_path() {
+                let _ = startup::write_probe(&path, ready);
+                webview.app_handle().exit(0);
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             runtime_snapshot,
             list_nodes,
@@ -727,6 +789,8 @@ pub fn run() -> Result<(), String> {
             remove_certificate,
             install_driver,
             remove_driver,
+            health_status,
+            set_crash_reports,
         ])
         .build(tauri::generate_context!())
         .map_err(|error| error.to_string())?;

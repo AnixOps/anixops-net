@@ -139,6 +139,16 @@ macOS 客户端改为官网分发（Developer ID 签名 + 公证），隧道从 
   - [ ] 把服务器上的 `appcast.json` 改一个字节，检查更新提示「更新信息未通过签名校验，已忽略」。
   - [ ] 把服务器上的 `.pkg` 换成别的文件，下载后提示「更新安装包未通过校验，已删除」，下载目录里没有留下文件。
 
+## 客户端可观测性真机验收
+
+见 [`docs/architecture/client-health.md`](architecture/client-health.md)。Linux 的冷启动、指标端点与完整性由 CI 验证，其余需真机：
+
+- [ ] Windows：连接后浏览器打开 `http://127.0.0.1:9477/metrics`，有 `networkcore_upload_bytes_total` 与 `anixops_client_integrity{state="verified"} 1`（MSI 安装版）。
+- [ ] Windows：设置 › 诊断与隐私 显示「安装完整性：完整」；改动安装目录里的 `wintun.dll` 后重启客户端显示「文件缺失或被改动」。
+- [ ] 关闭「崩溃报告」后 `crashes` 目录被删除；重新打开后开关状态在重启后保持。
+- [ ] iOS / macOS：设置 › 隐私 有「崩溃报告」开关；开发者模式（macOS 为活动页）复制的诊断信息里有 `install integrity: verified` 与 `metrics:` 段，`metrics:` 段里没有节点名、策略组名。
+- [ ] iOS：发生过崩溃的设备次日打开 App 后，诊断信息里出现 `kind: metrickit crash diagnostic` 的报告，且没有网址与 IP。
+
 ## 稳定性与自愈真机验收（S3 / S4 / S6）
 
 客户端打开“设置 › 连接 › 自动重连”（默认开）后，VPN 配置带 On Demand 规则；内核 `reset_network` 在切网和唤醒时重建出站连接。
