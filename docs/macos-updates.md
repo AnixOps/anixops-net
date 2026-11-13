@@ -5,6 +5,8 @@ Developer ID 版（官网分发）的 AnixOps Net 自己检查、下载并安装
 代码：`apps/ios/Sources/NetworkCoreBridge/UpdateFeed.swift`（格式与校验）、`apps/ios/Sources/NetworkCoreMac/AppUpdater.swift`
 （检查、下载、安装）、`apps/ios/Tools/appcast/main.swift`（发布工具）。CI 的「Signed update feed refuses tampering」步骤
 （`.github/scripts/appcast-tamper-check.sh`）每次都用发布工具签一份 feed 和安装包，再要求每一种篡改都被拒绝。
+「Update feed interoperates with anix-kit」步骤（`.github/scripts/appcast-anixkit-interop.sh`）用 AnixOps/anix-kit v0.1.0 的
+`anixsign` / `anixupdate` 签 feed 和安装包让 Swift 校验，反过来用发布工具签、`anixupdate verify` 校验，篡改过的安装包两边都要拒绝。
 
 ## 流程
 
