@@ -1,0 +1,10 @@
+[package]
+name = "anx-license"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "This device's ANX license: the device key, the subscription headers that ask for a license, and the license file the ANX outbound reads."
+
+[dependencies]
+ring = "0.17"

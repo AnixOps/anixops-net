@@ -3,6 +3,7 @@ members = [
     "apps/linux-gui",
     "apps/windows-gui",
     "apps/windows-service",
+    "crates/anx-license",
     "crates/client-health",
     "crates/desktop-dns",
     "crates/desktop-mitm",
@@ -22,14 +23,14 @@ repository = "https://github.com/AnixOps/anixops-net"
 # CI also builds the iOS runtime and the Windows CLI from this same checkout (.github/scripts/kernel-root.sh).
 # For local kernel work, uncomment the [patch] section at the end and point it at a kernel checkout.
 [workspace.dependencies]
-config-core = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "b792fa08a3b3386694b7e17dcdc348ebe38ddc36" }
-control-domain = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "b792fa08a3b3386694b7e17dcdc348ebe38ddc36" }
-engine-embedded = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "b792fa08a3b3386694b7e17dcdc348ebe38ddc36" }
-engine-native = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "b792fa08a3b3386694b7e17dcdc348ebe38ddc36" }
-inbound-mixed = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "b792fa08a3b3386694b7e17dcdc348ebe38ddc36" }
-mitm-policy = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "b792fa08a3b3386694b7e17dcdc348ebe38ddc36" }
-node-import = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "b792fa08a3b3386694b7e17dcdc348ebe38ddc36" }
-platform-windows = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "b792fa08a3b3386694b7e17dcdc348ebe38ddc36" }
+config-core = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "4e903b3feac208f71c3273f376307900c8b8778d" }
+control-domain = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "4e903b3feac208f71c3273f376307900c8b8778d" }
+engine-embedded = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "4e903b3feac208f71c3273f376307900c8b8778d" }
+engine-native = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "4e903b3feac208f71c3273f376307900c8b8778d" }
+inbound-mixed = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "4e903b3feac208f71c3273f376307900c8b8778d" }
+mitm-policy = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "4e903b3feac208f71c3273f376307900c8b8778d" }
+node-import = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "4e903b3feac208f71c3273f376307900c8b8778d" }
+platform-windows = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "4e903b3feac208f71c3273f376307900c8b8778d" }
 
 # [patch."https://github.com/AnixOps/networkcore_anixops"]
 # config-core = { path = "../networkcore_anixops/crates/config-core" }

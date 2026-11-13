@@ -37,6 +37,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let mode: ProxyMode
         let dns: DnsSettings?
         let redirects: [String]
+        /// The fields every ANX outbound gets (`AnxLicense.outboundFields`), or nil without a license state.
+        let anxLicense: [String: JSONValue]?
     }
     private var memoryPressure: DispatchSourceMemoryPressure?
     /// Recent events for the app's developer mode. Same rule as the system log: fixed reasons and codes only.
@@ -140,7 +142,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         applyNotificationSettings(NotificationSettings.fromProfileValue(
             tunnelProtocol.providerConfiguration?[TunnelProfileKeys.notifications] as? Data
         ))
-        let base = ReloadBase(config: config, mode: mode, dns: dns, redirects: redirects)
+        let base = ReloadBase(config: config, mode: mode, dns: dns, redirects: redirects, anxLicense: anxLicenseFields())
         config = Self.assemble(base, routing: withSubscriptionRules(base.config, localRules: localRules))
         events.record("mode \(mode.rawValue)")
         if !redirects.isEmpty {
@@ -367,7 +369,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// The engine config of a start: the subscription and local rules (`withRouting` already applied by
     /// `withSubscriptionRules`), then the mode, DNS and destination rewrites.
     private static func assemble(_ base: ReloadBase, routing config: EmbeddedRuntimeConfig) -> EmbeddedRuntimeConfig {
-        config.withMode(base.mode).withDns(base.dns).withRedirects(base.redirects)
+        let assembled = config.withMode(base.mode).withDns(base.dns).withRedirects(base.redirects)
+        return base.anxLicense.map { assembled.withAnxLicense($0) } ?? assembled
     }
 
     /// Builds the config a start with `value` (new local rules) would run. When only its rule lines differ from the
@@ -421,6 +424,35 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             events.record("subscription rules off: node list is malformed")
         }
         return config
+    }
+
+    /// Gives every ANX outbound this device's key and license (anx spec §2.4.1) once a subscription offered ANX
+    /// licensing. The license goes to a file in the extension's own container, which the outbound reads at each
+    /// connection. Without a license state there are no fields and the config stays unchanged; nodes that do not
+    /// require a license ignore them.
+    private func anxLicenseFields() -> [String: JSONValue]? {
+        guard let value = startSecrets?.anxLicense ?? (try? NodeSecretStore.value(account: AnxLicense.keychainAccount)),
+              let state = try? AnxLicense.fromKeychainValue(value),
+              state.offered,
+              let url = try? FileManager.default
+                  .url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+                  .appendingPathComponent(AnxLicense.licenseFileName),
+              let fields = state.outboundFields(licensePath: url.path)
+        else {
+            return nil
+        }
+        do {
+            if let license = state.license {
+                try Data(license.utf8).write(to: url, options: .atomic)
+                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+            } else if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
+        } catch {
+            events.record("anx license not written")
+        }
+        events.record("anx license \(state.license == nil ? "missing" : "present")\(state.status.map { " (\($0))" } ?? "")")
+        return fields
     }
 
     /// Creates the runtime. When it refuses the subscription's rules, the selected node runs alone.
