@@ -1,0 +1,18 @@
+[package]
+name = "tauri-plugin-anixops-vpn"
+version = "0.3.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/AnixOps/anixops-net"
+description = "Android VpnService for AnixOps Net: asks for the VPN consent, brings up the interface and hands its TUN descriptor to the engine."
+publish = false
+# Tauri finds the plugin's Android library (android/) through this key.
+links = "tauri-plugin-anixops-vpn"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

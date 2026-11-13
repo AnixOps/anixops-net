@@ -2,7 +2,7 @@ import { Activity, AppWindow, ChevronRight, ChevronsUpDown, CloudDownload, Globe
 import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { Page } from "../App";
-import { ConnectionSnapshot, desktop, NativeGroupSummary, NetworkProbe, NodeDelay, NodeSummary, RuntimeSnapshot, SubscriptionSummary } from "../bridge";
+import { ConnectionSnapshot, desktop, inProcessEngine, NativeGroupSummary, NetworkProbe, NodeDelay, NodeSummary, RuntimeSnapshot, SubscriptionSummary } from "../bridge";
 import { connectionName, formatRate } from "../activity-format";
 import { BrandMark } from "../brand";
 import { chartCeiling, chartPoints, colorFor, daysLeft, siteOf, topUsage, UsageRow } from "../dashboard";
@@ -368,7 +368,7 @@ function DelayPanel({ snapshot, busy, run, goTo, setDelays, probe, reprobe }: {
     void test(nodeId);
   }, [nodeId, test]);
 
-  const windows = snapshot !== null && snapshot.platform !== "linux";
+  const windows = snapshot !== null && !inProcessEngine(snapshot);
   const decrypting = Boolean(snapshot?.httpsDecryptionEnabled);
 
   return (

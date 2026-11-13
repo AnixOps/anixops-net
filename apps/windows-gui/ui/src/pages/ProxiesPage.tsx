@@ -1,7 +1,7 @@
 import { Activity, Bot, Check, CloudDownload, FileText, Gauge, Globe, Layers, Pencil, Plus, RefreshCw, Search, Share2, Trash2, X, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { desktop, NativeGroupSummary, NodeDelay, NodeSummary, RuntimeSnapshot, SubscriptionSummary } from "../bridge";
+import { desktop, inProcessEngine, NativeGroupSummary, NodeDelay, NodeSummary, RuntimeSnapshot, SubscriptionSummary } from "../bridge";
 import { memberNode } from "../dashboard";
 import { groupMemberLabel, protocolAbbreviation } from "../labels";
 import { delayLabel, delayTone, filterNodes, groupNodes, NodeSort, sortNodes } from "../node-filter";
@@ -343,7 +343,7 @@ function Subscriptions({ snapshot, sources, refreshSources, empty, busy, run }: 
             <SubscriptionRow
               key={source.id}
               source={source}
-              canUpdate={source.refreshable && (source.selected || snapshot?.platform === "linux")}
+              canUpdate={source.refreshable && (source.selected || inProcessEngine(snapshot))}
               busy={busy}
               run={run}
               changed={refreshSources}

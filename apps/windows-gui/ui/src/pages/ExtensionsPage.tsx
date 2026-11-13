@@ -1,11 +1,11 @@
 import { Ban, Download, KeyRound, LockKeyhole, Puzzle, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { desktop, MitmPlugin, preferencesFrom, RuntimeSnapshot } from "../bridge";
+import { desktop, inProcessEngine, MitmPlugin, preferencesFrom, RuntimeSnapshot } from "../bridge";
 import { Card, EmptyState, MoreMenu, Row, Run, StatusPill, Switch, ToggleRow } from "../ui";
 import { t } from "../i18n";
 
 export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
-  const linux = snapshot?.platform === "linux";
+  const linux = inProcessEngine(snapshot);
   const [certificatePath, setCertificatePath] = useState("");
   const [pluginUrl, setPluginUrl] = useState("");
   const [plugins, setPlugins] = useState<MitmPlugin[]>([]);

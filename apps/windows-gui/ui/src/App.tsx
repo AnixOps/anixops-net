@@ -16,6 +16,7 @@ import { TrafficSource, useTraffic } from "./traffic-feed";
 import { useAppearance } from "./theme";
 import { StatusDot, Switch, Tile, TileColor, ToolbarSlot } from "./ui";
 import { t, useLanguage } from "./i18n";
+import { TermsConsent, useTermsConsent } from "./terms";
 
 export type Page = "home" | "proxies" | "rules" | "extensions" | "activity" | "settings";
 
@@ -48,6 +49,7 @@ export function App() {
   const [toolbar, setToolbar] = useState<HTMLElement | null>(null);
   const [appearance, setAppearance] = useAppearance();
   const [language, setLanguage] = useLanguage();
+  const [needsTerms, acceptTerms] = useTermsConsent();
   const noticeTimer = useRef<number>();
 
   const show = useCallback((text: string, tone: Notice["tone"]) => {
@@ -127,6 +129,9 @@ export function App() {
       {item === "activity" && <ActiveCount />}
     </button>
   );
+
+  // Nothing else is usable until the user agreement is accepted (TERMS.md).
+  if (needsTerms) return <TermsConsent onAccept={acceptTerms} />;
 
   return (
     <div className="app-shell">

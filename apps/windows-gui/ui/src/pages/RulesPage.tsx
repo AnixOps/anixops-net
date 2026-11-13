@@ -1,6 +1,6 @@
 import { Check, Layers, ListChecks, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { desktop, DnsPreset, NativeGroupSummary, RuleSetStatus, RuntimeSnapshot } from "../bridge";
+import { desktop, DnsPreset, inProcessEngine, NativeGroupSummary, RuleSetStatus, RuntimeSnapshot } from "../bridge";
 import { availableRoutingModes, groupMemberLabel } from "../labels";
 import { liveEngine, usePolling } from "../live";
 import { Card, Row, Run } from "../ui";
@@ -130,7 +130,7 @@ const dnsChoices: Array<{ value: DnsPreset; label: string; hint: string }> = [
 /** The DNS choice; Windows applies it on the next connection, Linux restarts a running engine. */
 function DnsCard({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
   const current = snapshot?.dnsPreset ?? "system";
-  const locked = snapshot?.platform !== "linux" && snapshot?.connection === "Connected";
+  const locked = !inProcessEngine(snapshot) && snapshot?.connection === "Connected";
 
   return (
     <Card title="DNS" description={locked ? t("断开后才能更改 DNS。") : undefined}>

@@ -1,0 +1,11 @@
+{
+  "name": "networkcore-android",
+  "private": true,
+  "description": "Only the Tauri CLI: the generated Gradle project calls it back through node_modules to build the Rust library.",
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

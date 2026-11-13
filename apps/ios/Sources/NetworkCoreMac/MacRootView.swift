@@ -1,3 +1,4 @@
+import NetworkCoreBridge
 import SwiftUI
 
 /// The main window, laid out like System Settings: a sidebar of colored glyph tiles with the connection switch at
@@ -7,17 +8,28 @@ struct MacRootView: View {
     var tunnel: TunnelController
     @ObservedObject var state: MacAppState
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
+    @AppStorage(TermsConsent.storageKey) private var acceptedTerms = ""
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         let brand = BrandPalette.resolve(appearance: appearance, scheme: colorScheme)
-        NavigationSplitView {
-            sidebar
-        } detail: {
-            NavigationStack {
-                page
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .navigationTitle(state.section?.title ?? "AnixOps Net")
+        Group {
+            // Nothing else is usable until the user agreement is accepted (`TermsConsent`).
+            if TermsConsent.needsConsent(accepted: acceptedTerms) {
+                TermsConsentView {
+                    acceptedTerms = TermsConsent.version
+                }
+                .frame(minWidth: 520, minHeight: 600)
+            } else {
+                NavigationSplitView {
+                    sidebar
+                } detail: {
+                    NavigationStack {
+                        page
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                            .navigationTitle(state.section?.title ?? "AnixOps Net")
+                    }
+                }
             }
         }
         .tint(brand.primary)

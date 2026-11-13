@@ -548,6 +548,9 @@ struct MacSettingsPage: View {
 
             Section("关于") {
                 LabeledContent("版本", value: Self.version)
+                LabeledContent("用户协议") {
+                    Link("查看", destination: TermsConsent.url)
+                }
             }
         }
         .formStyle(.grouped)

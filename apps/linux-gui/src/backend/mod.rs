@@ -7,6 +7,8 @@ pub mod engine;
 pub mod state;
 pub mod system_proxy;
 pub mod trust;
+#[cfg(target_os = "android")]
+pub mod tun;
 
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -25,6 +27,13 @@ use self::system_proxy::Desktop;
 
 /// The source label for share links pasted into the import field.
 pub const PASTED_LOCATION: &str = "粘贴的链接";
+
+/// The snapshot's `platform`: the interface hides what the platform does not have.
+pub const PLATFORM: &str = if cfg!(target_os = "android") {
+    "android"
+} else {
+    "linux"
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -453,7 +462,7 @@ impl Backend {
         };
         let source = self.state.selected_source();
         RuntimeSnapshot {
-            platform: "linux",
+            platform: PLATFORM,
             connection: connection.to_string(),
             connection_label: connection.to_string(),
             service: StatusFact::new("Not used", None, "neutral"),
@@ -754,7 +763,16 @@ impl Backend {
                 }
             }
         }
+        if cfg!(target_os = "android") {
+            return done(format!("Connected through {label}"));
+        }
         done(format!("Connected through {label} on {address}"))
+    }
+
+    /// Stops the engine without touching the saved state or the last error; on Android this also lets go of
+    /// the VPN's TUN descriptor.
+    pub fn stop_engine(&mut self) {
+        self.engine.stop();
     }
 
     pub fn disconnect(&mut self) -> Result<OperationResult, String> {

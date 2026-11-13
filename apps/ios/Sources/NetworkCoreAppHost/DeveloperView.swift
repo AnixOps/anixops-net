@@ -40,6 +40,9 @@ struct AboutSection: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+            Link(destination: TermsConsent.url) {
+                Label("用户协议", systemImage: "doc.text")
+            }
             if developerMode {
                 NavigationLink("开发者模式") {
                     DeveloperView(tunnel: tunnel)

@@ -3061,6 +3061,7 @@ dependencies = [
  "desktop-mitm",
  "engine-embedded",
  "inbound-mixed",
+ "libc",
  "network-watch",
  "node-import",
  "reqwest 0.12.28",
