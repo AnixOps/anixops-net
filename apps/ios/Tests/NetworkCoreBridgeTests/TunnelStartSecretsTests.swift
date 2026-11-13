@@ -4,7 +4,8 @@ import XCTest
 final class TunnelStartSecretsTests: XCTestCase {
     func testOptionsRoundTrip() {
         let secrets = TunnelStartSecrets(
-            nodeKey: "key", nodeLibrary: "{}", mitmAuthority: Data([1, 2, 3]), mitmBundleChunks: ["a", "b"]
+            nodeKey: "key", nodeLibrary: "{}", mitmAuthority: Data([1, 2, 3]), mitmBundleChunks: ["a", "b"],
+            anxLicense: "{}"
         )
         XCTAssertEqual(TunnelStartSecrets(options: secrets.options), secrets)
         XCTAssertFalse(secrets.isEmpty)
@@ -14,6 +15,7 @@ final class TunnelStartSecretsTests: XCTestCase {
         XCTAssertNil(TunnelStartSecrets(options: nil))
         XCTAssertNil(TunnelStartSecrets(options: ["other": NSString(string: "x")]))
         XCTAssertTrue(TunnelStartSecrets().isEmpty)
+        XCTAssertFalse(TunnelStartSecrets(anxLicense: "{}").isEmpty)
     }
 
     func testSavedCopyIsOwnerOnly() throws {
