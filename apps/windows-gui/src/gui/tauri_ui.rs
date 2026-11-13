@@ -2321,6 +2321,7 @@ fn import_embedded_subscription(
     source_url: Option<String>,
     desktop: &mut DesktopState,
 ) -> Result<(), String> {
+    sync_anx_license();
     let service = CoreSubscriptionService::new();
     let source = SubscriptionSource {
         id: EMBEDDED_PROFILE_ID.to_string(),
@@ -2636,6 +2637,25 @@ type SubscriptionRead = (
 /// This device's ANX license directory (`anx_license`), beside the desktop state.
 fn anx_license_store() -> anx_license::LicenseStore {
     anx_license::LicenseStore::new(windows_managed_data_directory().join("anx-license"))
+}
+
+/// Hands this device's key and license file to the ANX outbounds built from now on, once a
+/// subscription offers ANX licensing (`anx_license`); until then ANX outbounds stay as before.
+fn sync_anx_license() {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs());
+    let store = anx_license_store();
+    let license = if store.state(now) == anx_license::LicenseState::NotOffered {
+        None
+    } else {
+        store.device().ok().map(|device| node_import::AnxLicense {
+            device_key: device.private_key_hex(),
+            device_alg: device.alg().to_string(),
+            license_cert_path: store.license_path().to_string_lossy().into_owned(),
+        })
+    };
+    node_import::set_anx_license(license);
 }
 
 fn download_subscription(

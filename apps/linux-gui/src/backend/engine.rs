@@ -90,7 +90,28 @@ pub fn license_store() -> Option<anx_license::LicenseStore> {
         .map(|dir| anx_license::LicenseStore::new(dir.join("anx-license")))
 }
 
+/// Hands this device's key and license file to the ANX outbounds the engine builds, once a subscription
+/// offers ANX licensing (`anx_license`); until then ANX outbounds stay exactly as before.
+pub fn sync_anx_license() {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs());
+    let license = license_store().and_then(|store| {
+        if store.state(now) == anx_license::LicenseState::NotOffered {
+            return None;
+        }
+        let device = store.device().ok()?;
+        Some(node_import::AnxLicense {
+            device_key: device.private_key_hex(),
+            device_alg: device.alg().to_string(),
+            license_cert_path: store.license_path().to_string_lossy().into_owned(),
+        })
+    });
+    node_import::set_anx_license(license);
+}
+
 pub fn envelope(nodes: &[NodeDescriptor], node_id: &str) -> Result<String, String> {
+    sync_anx_license();
     single_node_envelope(PROFILE_ID, nodes, Some(node_id))
         .map(|(envelope, _)| envelope)
         .map_err(str::to_string)
@@ -100,6 +121,7 @@ pub fn envelope(nodes: &[NodeDescriptor], node_id: &str) -> Result<String, Strin
 /// every node can run on the engine and the engine accepts the result. Otherwise one node runs at a time.
 pub fn subscription_routing(content: &str, nodes: &[NodeDescriptor]) -> Option<String> {
     let spec = import_subscription_routing(content, nodes).spec?;
+    sync_anx_license();
     routing_envelope(PROFILE_ID, nodes, &spec)
         .ok()
         .filter(|envelope| RuntimeConfig::from_json(envelope.as_bytes()).is_ok())
