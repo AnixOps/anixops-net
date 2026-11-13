@@ -232,10 +232,21 @@ final class TunnelController {
     /// background run never leaves a message on screen.
     func refreshDueSubscriptions(at date: Date = Date()) async {
         let shown = message
+        var failed: [String] = []
         for group in subscriptions.due(at: date) {
-            await refreshSubscription(group.id)
+            if !(await refreshSubscription(group.id)) {
+                failed.append(group.name)
+            }
         }
         message = shown
+        if !failed.isEmpty, AppNotifications.settings.subscriptions {
+            AppNotifications.post(
+                title: String(localized: "订阅更新失败"),
+                body: String(localized: "\(failed.joined(separator: "、")) 没有更新成功，仍在使用上次的节点。"),
+                thread: "subscriptions",
+                id: "subscriptions-failed"
+            )
+        }
         scheduleBackgroundRefresh()
     }
 
@@ -688,6 +699,7 @@ final class TunnelController {
         if let value = try? localRules.profileValue() {
             providerConfiguration[TunnelProfileKeys.localRules] = value
         }
+        providerConfiguration[TunnelProfileKeys.notifications] = AppNotifications.settings.profileValue
         let library = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)) ?? MitmPluginLibrary()
         var bundle = MitmProfileBundle()
         if !library.activeTexts.isEmpty {
@@ -855,6 +867,30 @@ final class TunnelController {
         } else {
             restart()
         }
+    }
+
+    /// The running tunnel's session, for messages that need no answer.
+    var tunnelSession: NETunnelProviderSession? {
+        manager?.connection as? NETunnelProviderSession
+    }
+
+    /// Puts the notification settings in the saved profile for the next start. No restart: a running extension
+    /// gets them as a message (`applyNotificationSettings`).
+    func saveNotificationSettingsToProfile(_ next: NotificationSettings) async {
+        guard let manager, let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol else {
+            return
+        }
+        var configuration = tunnelProtocol.providerConfiguration ?? [:]
+        guard configuration[TunnelProfileKeys.notifications] as? Data != next.profileValue else {
+            return
+        }
+        configuration[TunnelProfileKeys.notifications] = next.profileValue
+        tunnelProtocol.providerConfiguration = configuration
+        manager.protocolConfiguration = tunnelProtocol
+        if let saved = try? await persist(manager) {
+            self.manager = saved
+        }
+        refresh()
     }
 
     /// Hands new local rules to the running extension (`TunnelAppMessage.reloadLocalRules`). Nil when the tunnel is
@@ -1386,6 +1422,17 @@ final class TunnelController {
                 return
             }
             let text = Self.describe(disconnectError: error as NSError)
+            #if os(macOS)
+            // The System Extension cannot post; on iOS the extension posts this itself.
+            if AppNotifications.settings.connection {
+                AppNotifications.post(
+                    title: String(localized: "AnixOps Net 已断开"),
+                    body: String(localized: "节点没有响应、被干扰，或网络刚切换。打开 App 重试或换一个节点。"),
+                    thread: "connection",
+                    id: "connection-stopped"
+                )
+            }
+            #endif
             Task { @MainActor in
                 self?.notice = AppNotice(
                     text: String(localized: "连接已断开：节点没有响应、被干扰，或网络刚切换。可以重试，或换一个节点。"),

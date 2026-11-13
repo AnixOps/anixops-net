@@ -763,6 +763,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "client-health"
+version = "0.3.0"
+dependencies = [
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "combine"
 version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3037,6 +3045,7 @@ version = "0.3.0"
 name = "networkcore-linux-gui"
 version = "0.3.0"
 dependencies = [
+ "client-health",
  "config-core",
  "control-domain",
  "desktop-dns",
@@ -3057,6 +3066,7 @@ dependencies = [
 name = "networkcore-windows-gui"
 version = "0.3.0"
 dependencies = [
+ "client-health",
  "config-core",
  "control-domain",
  "desktop-dns",

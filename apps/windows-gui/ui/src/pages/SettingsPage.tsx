@@ -1,7 +1,7 @@
-import { AppWindow, BadgeCheck, Cpu, HardDrive, HeartPulse, Languages, LifeBuoy, Network, PlugZap, Power, RefreshCw, RotateCcw, ServerCog, ShieldCheck, SunMoon, Zap } from "lucide-react";
+import { AppWindow, BadgeCheck, Bug, Cpu, FileCheck, Gauge, Timer, HardDrive, HeartPulse, Languages, LifeBuoy, Network, PlugZap, Power, RefreshCw, RotateCcw, ServerCog, ShieldCheck, SunMoon, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useState } from "react";
-import { desktop, Preferences, preferencesFrom, RuntimeSnapshot } from "../bridge";
+import { useEffect, useState } from "react";
+import { desktop, HealthStatus, Preferences, preferencesFrom, RuntimeSnapshot } from "../bridge";
 import { Appearance, appearances } from "../theme";
 import { factLabel } from "../labels";
 import { Card, Loading, MoreMenu, Row, Run, Segmented, StatusDot, TileColor, ToggleRow } from "../ui";
@@ -96,6 +96,8 @@ export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, l
         </Row>
       </Card>
 
+      <HealthCard busy={busy} run={run} />
+
       {!linux && <ServiceCard snapshot={snapshot} busy={busy} run={run} />}
       {!linux && <SystemCard busy={busy} run={run} />}
     </div>
@@ -109,6 +111,52 @@ const startupIcons: Record<StartupKey, { icon: LucideIcon; color: TileColor }> =
   autoSubscriptionRefresh: { icon: RefreshCw, color: "orange" },
   autoSelectFastestNode: { icon: Zap, color: "orange" },
 };
+
+const integrityLabels: Record<HealthStatus["integrity"], { label: string; tone: "success" | "warning" | "danger" | "neutral" }> = {
+  checking: { label: "检查中", tone: "neutral" },
+  verified: { label: "完整", tone: "success" },
+  unverified: { label: "未校验（开发版本）", tone: "neutral" },
+  damaged: { label: "文件缺失或被改动", tone: "danger" },
+  invalid: { label: "校验清单无法读取", tone: "warning" },
+};
+
+/** Crash reports (off deletes the kept ones), the local Prometheus endpoint, the install check and the cold start. */
+function HealthCard({ busy, run }: { busy: string | null; run: Run }) {
+  const [health, setHealth] = useState<HealthStatus | null>(null);
+  useEffect(() => {
+    let active = true;
+    const load = () => void desktop.health().then((status) => { if (active) setHealth(status); }, () => undefined);
+    load();
+    // The install check finishes in the background shortly after start.
+    const timer = window.setInterval(load, 5000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
+  if (!health) return null;
+  const integrity = integrityLabels[health.integrity] ?? integrityLabels.checking;
+  const toggle = () => void run("crash reports", async () => {
+    const result = await desktop.setCrashReports(!health.crashReports);
+    setHealth(await desktop.health());
+    return result;
+  });
+  return (
+    <Card title={t("诊断与隐私")}>
+      <ToggleRow
+        icon={Bug}
+        color="red"
+        label={t("崩溃报告")}
+        hint={health.crashUploadConfigured
+          ? t("崩溃时记录脱敏后的信息（不含网址、账号和节点地址），下次启动时发送。关闭会删除已保存的报告。")
+          : t("崩溃时记录脱敏后的信息（不含网址、账号和节点地址），只保存在本机，生成诊断报告时附上。关闭会删除已保存的报告。")}
+        checked={health.crashReports}
+        disabled={Boolean(busy)}
+        onChange={toggle}
+      />
+      <Row icon={Gauge} color="indigo" label={t("Prometheus 指标")} hint={t("只监听本机回环地址。")} value={health.metricsAddress ?? (health.metricsError ? t("端口被占用") : t("已关闭"))} />
+      <Row icon={FileCheck} color="green" label={t("安装完整性")} hint={health.integrityDetail ?? undefined} value={<><StatusDot tone={integrity.tone} />{t(integrity.label)}</>} />
+      {health.coldStartMs != null && <Row icon={Timer} color="gray" label={t("启动耗时")} value={`${health.coldStartMs} ms`} />}
+    </Card>
+  );
+}
 
 /** Linux: the desktop's proxy settings, which connecting points at the local listener. */
 function LinuxProxyCard({ busy, run }: { busy: string | null; run: Run }) {

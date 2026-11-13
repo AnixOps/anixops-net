@@ -1,6 +1,7 @@
 import Foundation
 import NetworkCoreBridge
 import NetworkExtension
+import UserNotifications
 import os
 import Security
 
@@ -44,6 +45,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private let trafficStats = TrafficStatsRecorder()
     /// Network changes in, script notifications out.
     private let scriptEvents = ScriptEventRelay()
+    /// Which notifications to post (`NotificationSettings`), from the profile and then from the app's messages.
+    private var notificationSettings = NotificationSettings()
     private var pathObservation: NSKeyValueObservation?
     private var lastPath: NWPath?
     /// Rebuilds the engine's connections when the physical network changes (`NetworkRecovery`).
@@ -134,6 +137,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let localRules = LocalRules.fromProfileValue(
             tunnelProtocol.providerConfiguration?[TunnelProfileKeys.localRules] as? Data
         )
+        applyNotificationSettings(NotificationSettings.fromProfileValue(
+            tunnelProtocol.providerConfiguration?[TunnelProfileKeys.notifications] as? Data
+        ))
         let base = ReloadBase(config: config, mode: mode, dns: dns, redirects: redirects)
         config = Self.assemble(base, routing: withSubscriptionRules(base.config, localRules: localRules))
         events.record("mode \(mode.rawValue)")
@@ -208,6 +214,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
         Self.log.notice("stopTunnel reason \(reason.rawValue, privacy: .public)")
         events.record("stopTunnel reason \(reason.rawValue)")
+        postStopNotification(reason)
         trafficStats.stop()
         scriptEvents.stop()
         pathObservation?.invalidate()
@@ -294,6 +301,31 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
     }
 
+    private func applyNotificationSettings(_ settings: NotificationSettings) {
+        notificationSettings = settings
+        scriptEvents.setPostsNotifications(settings.scripts)
+        events.record("notifications scripts \(settings.scripts) connection \(settings.connection)")
+    }
+
+    /// Tells the user the tunnel stopped on its own (`NotificationSettings.notifiesStop`). Only on iOS: the macOS
+    /// System Extension runs as root and cannot post, so the macOS app posts this from the stop error instead.
+    private func postStopNotification(_ reason: NEProviderStopReason) {
+        #if os(iOS)
+        guard notificationSettings.connection, startedAt != nil,
+              NotificationSettings.notifiesStop(reasonCode: reason.rawValue)
+        else {
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "AnixOps Net 已断开")
+        content.body = String(localized: "节点没有响应、被干扰，或网络刚切换。打开 App 重试或换一个节点。")
+        content.threadIdentifier = "connection"
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: "connection-stopped", content: content, trigger: nil)
+        )
+        #endif
+    }
+
     /// Only fixed reasons and codes are logged, never the profile or keys.
     private static let log = Logger(subsystem: "networkcore.packet-tunnel", category: "tunnel")
 
@@ -309,6 +341,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             completionHandler?(trafficStats.snapshot())
         case .clearTrafficStats:
             completionHandler?(trafficStats.clear())
+        case let .notificationSettings(data):
+            applyNotificationSettings(NotificationSettings.fromProfileValue(data))
+            completionHandler?(Data("ok".utf8))
         case let .reloadLocalRules(value):
             completionHandler?(reloadLocalRules(value))
         case .diagnostics:
@@ -319,7 +354,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 memoryAvailableBytes: Self.memoryAvailable(),
                 uptimeSeconds: startedAt.map { Date().timeIntervalSince($0) },
                 handshake: EmbeddedRuntimeSession.reportedHandshake(),
-                events: events.snapshot()
+                events: events.snapshot(),
+                engineMetrics: RuntimeControl.decode(
+                    RuntimeControl.Metrics.self,
+                    from: session?.control(RuntimeControl.metrics(anonymous: true).request)
+                )?.text
             )
             completionHandler?(try? diagnostics.encoded())
         }

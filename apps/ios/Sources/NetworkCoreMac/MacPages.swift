@@ -396,6 +396,7 @@ struct MacActivityPage: View {
     var tunnel: TunnelController
     @Environment(\.brand) private var brand
     @State private var copied = false
+    @State private var showsLog = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -424,6 +425,11 @@ struct MacActivityPage: View {
                         copyDiagnostics()
                     }
                     .controlSize(.small)
+                    Button("扩展日志…") {
+                        tunnel.refreshDiagnostics()
+                        showsLog = true
+                    }
+                    .controlSize(.small)
                 }
             }
             .padding(16)
@@ -435,6 +441,9 @@ struct MacActivityPage: View {
         }
         .background(brand.bg)
         .onAppear(perform: refresh)
+        .sheet(isPresented: $showsLog) {
+            MacDiagnosticLogSheet(tunnel: tunnel)
+        }
     }
 
     private func fact(_ title: LocalizedStringKey, _ value: String) -> some View {
@@ -471,7 +480,8 @@ struct MacActivityPage: View {
                 outboundKind: tunnel.outboundKind,
                 lastDisconnectError: tunnel.lastDisconnectError,
                 diagnostics: tunnel.diagnostics,
-                generatedAt: Date()
+                generatedAt: Date(),
+                health: ClientHealthMonitor.shared.reportText
             )
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(report.text, forType: .string)
@@ -480,13 +490,14 @@ struct MacActivityPage: View {
     }
 }
 
-/// Settings: appearance, login item, reconnecting and Wi-Fi rules, privacy and the version.
+/// Settings: appearance, login item, reconnecting and Wi-Fi rules, notifications, privacy and the version.
 struct MacSettingsPage: View {
     var tunnel: TunnelController
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
     @Environment(\.brand) private var brand
     @State private var opensAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
+    @State private var crashReports = ClientHealthMonitor.shared.crashReports.isEnabled
 
     var body: some View {
         Form {
@@ -515,11 +526,24 @@ struct MacSettingsPage: View {
             }
 
             OnDemandSections(tunnel: tunnel)
+            NotificationSettingsSection(tunnel: tunnel)
 
-            Section("隐私") {
+            Section {
                 Label("不收集你的流量和浏览记录", systemImage: "hand.raised")
                 Label("节点密码和密钥只保存在本机钥匙串", systemImage: "key")
+                Toggle("崩溃报告", isOn: $crashReports)
+                    .onChange(of: crashReports) { _, enabled in
+                        ClientHealthMonitor.shared.crashReports.isEnabled = enabled
+                    }
+            } header: {
+                Text("隐私")
+            } footer: {
+                Text("崩溃时记录脱敏后的信息（不含网址、账号和节点地址），只保存在本机，复制诊断信息时附上。关闭会删除已保存的报告。")
             }
+
+            MacUpdateSection()
+
+            MacCommandLineSection()
 
             Section("关于") {
                 LabeledContent("版本", value: Self.version)
@@ -553,6 +577,134 @@ struct MacSettingsPage: View {
         let short = info?["CFBundleShortVersionString"] as? String ?? "—"
         let build = info?["CFBundleVersion"] as? String ?? "—"
         return "\(short) (\(build))"
+    }
+}
+
+/// Settings > Command Line: how to put the bundled `anixops` tool on the PATH (docs/macos-cli.md). The app is
+/// sandboxed and cannot write /usr/local/bin itself, so it shows the command to copy.
+private struct MacCommandLineSection: View {
+    @State private var copied = false
+
+    private var command: String {
+        let tool = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/anixops").path
+        return "sudo mkdir -p /usr/local/bin && sudo ln -sf '\(tool)' /usr/local/bin/anixops"
+    }
+
+    var body: some View {
+        Section("命令行") {
+            Text("在终端用 anixops 查看状态、连接、切换节点、测速和导入。在终端运行下面的命令后即可使用：")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(alignment: .top) {
+                Text(command)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                Spacer()
+                Button(copied ? "已复制" : "复制") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(command, forType: .string)
+                    copied = true
+                }
+            }
+        }
+    }
+}
+
+/// Settings > Software Update: check, download, verify and install a signed update (AppUpdater). Only the action
+/// that applies to the current step is shown.
+private struct MacUpdateSection: View {
+    @Environment(AppUpdater.self) private var updater
+    @Environment(\.brand) private var brand
+
+    var body: some View {
+        Section("软件更新") {
+            if updater.isEnabled {
+                Toggle("自动检查更新", isOn: Binding(
+                    get: { updater.automatic },
+                    set: { updater.setAutomatic($0) }
+                ))
+                status
+            } else {
+                Text("这个版本没有配置更新源，请从发布页下载新版本。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var status: some View {
+        switch updater.state {
+        case .disabled:
+            EmptyView()
+        case .idle:
+            checkRow(detail: nil)
+        case .checking:
+            HStack {
+                Text("正在检查更新…")
+                Spacer()
+                ProgressView()
+                    .controlSize(.small)
+            }
+        case let .upToDate(date):
+            checkRow(detail: String(localized: "已是最新版本") + " · " + date.formatted(date: .omitted, time: .shortened))
+        case let .available(item):
+            available(item)
+            HStack {
+                Spacer()
+                Button("下载更新") {
+                    Task { await updater.download() }
+                }
+                .buttonStyle(.brandPrimary)
+            }
+        case let .downloading(item, fraction):
+            VStack(alignment: .leading, spacing: 6) {
+                Text("正在下载 \(item.version)…")
+                ProgressView(value: fraction)
+            }
+        case let .ready(item, _):
+            available(item)
+            Text("安装包已下载并通过签名校验。安装程序打开后 AnixOps Net 会退出，安装完成后重新打开即可。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("安装并退出") {
+                    updater.install()
+                }
+                .buttonStyle(.brandPrimary)
+            }
+        case let .failed(message):
+            checkRow(detail: message, failed: true)
+        }
+    }
+
+    private func checkRow(detail: String?, failed: Bool = false) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("当前版本 \(updater.currentVersion)")
+                if let detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(failed ? brand.danger : .secondary)
+                }
+            }
+            Spacer()
+            Button("检查更新") {
+                Task { await updater.check() }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func available(_ item: UpdateItem) -> some View {
+        LabeledContent("新版本", value: "\(item.version) (\(item.build))")
+        if let notes = item.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+            Text(notes)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+        }
     }
 }
 
@@ -625,5 +777,44 @@ private struct MacHeroButtonStyle: ButtonStyle {
             .background(filled ? Brand.line : Color.white.opacity(0.14), in: Capsule())
             .contentShape(Capsule())
             .opacity(configuration.isPressed ? 0.82 : 1)
+    }
+}
+
+/// The extension's event log with the level and module filters, newest first.
+private struct MacDiagnosticLogSheet: View {
+    var tunnel: TunnelController
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage(DiagnosticFilterKeys.minimum) private var minimum = DiagnosticLevel.info
+    @AppStorage(DiagnosticFilterKeys.module) private var module = ""
+
+    var body: some View {
+        let events = (tunnel.diagnostics?.events ?? [])
+            .filtered(minimum: minimum, modules: DiagnosticFilterKeys.modules(module))
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                DiagnosticFilterPickers(minimum: $minimum, module: $module)
+                    .fixedSize()
+                Spacer()
+                Button("立即刷新") {
+                    tunnel.refreshDiagnostics()
+                }
+                Button("完成") {
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(12)
+            Divider()
+            if events.isEmpty {
+                Text(tunnel.diagnostics == nil ? "隧道未运行" : "没有符合条件的日志")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List(Array(events.reversed().enumerated()), id: \.offset) { _, event in
+                    DiagnosticEventRow(event: event)
+                }
+            }
+        }
+        .frame(width: 640, height: 480)
     }
 }

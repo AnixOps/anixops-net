@@ -244,6 +244,21 @@ jobs:
           cargo build --locked -p networkcore-linux-gui --features gui --release
           test -x target/release/anixops-net
 
+      # F4 cold start (median of 7 launches to the window's first page load, budget 1.5 s), the loopback
+      # Prometheus endpoint and the install integrity check, on the release binary under Xvfb.
+      - name: Cold start and client health
+        shell: bash
+        env:
+          # Xvfb has no GPU: WebKitGTK renders in software.
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          set -euo pipefail
+          bash .github/scripts/apt-install.sh xvfb xauth dbus
+          chmod +x .github/scripts/linux-client-health.sh
+          xvfb-run -a --server-args="-screen 0 1280x800x24" \
+            dbus-run-session -- .github/scripts/linux-client-health.sh target/release/anixops-net
+
   windows:
     name: Windows build, test and MSI
     runs-on: windows-latest
@@ -399,6 +414,14 @@ jobs:
           }
           $defaultConfig = (Resolve-Path "installer\windows\default-managed-config.json").Path
           $wintunPath = & .github/scripts/fetch-wintun.ps1 -Destination (Join-Path $env:RUNNER_TEMP "wintun")
+          $integrityPath = Join-Path $env:RUNNER_TEMP "integrity\integrity.sha256"
+          & .github/scripts/write-integrity.ps1 -Output $integrityPath -Entry @(
+            "networkcore-windows-gui.exe=$releaseDir\networkcore-windows-gui.exe",
+            "networkcore-windows-service.exe=$releaseDir\networkcore-windows-service.exe",
+            "networkcore-windows.exe=$releaseDir\networkcore-windows.exe",
+            "WebView2Loader.dll=$webView2LoaderPath",
+            "wintun.dll=$wintunPath"
+          )
           wix build installer/windows/Package.wxs `
             -ext WixToolset.UI.wixext `
             -arch x64 `
@@ -409,6 +432,7 @@ jobs:
             -d "WintunDll=$wintunPath" `
             -d "ServiceExe=$releaseDir\networkcore-windows-service.exe" `
             -d "DefaultConfig=$defaultConfig" `
+            -d "IntegrityList=$integrityPath" `
             -o dist\windows-ci\networkcore-windows-ci.msi
           wix msi validate dist\windows-ci\networkcore-windows-ci.msi
           if ((Get-Item dist\windows-ci\networkcore-windows-ci.msi).Length -le 0) {
@@ -474,6 +498,20 @@ jobs:
           }
           if (-not (Test-Path (Join-Path $env:ProgramFiles "AnixOps\NetworkCore\wintun.dll") -PathType Leaf)) {
             throw "Windows managed client MSI did not install wintun.dll beside the GUI executable."
+          }
+          # The integrity list the client checks at start must match the installed files.
+          $installDir = Join-Path $env:ProgramFiles "AnixOps\NetworkCore"
+          $integrityList = Join-Path $installDir "integrity.sha256"
+          if (-not (Test-Path $integrityList -PathType Leaf)) {
+            throw "Windows managed client MSI did not install integrity.sha256."
+          }
+          foreach ($line in Get-Content $integrityList) {
+            if (-not $line.Trim()) { continue }
+            $expected, $name = $line -split "  ", 2
+            $actual = (Get-FileHash -Algorithm SHA256 -Path (Join-Path $installDir $name)).Hash.ToLowerInvariant()
+            if ($actual -ne $expected) {
+              throw "Installed $name does not match integrity.sha256."
+            }
           }
 
           # GitHub-hosted Windows runners have no dependable interactive desktop session for
@@ -577,6 +615,22 @@ jobs:
         working-directory: apps/ios
         run: swift build
 
+      # The release tool signs with the app's own verifier; every tampered feed or archive must be refused.
+      - name: Signed update feed refuses tampering
+        shell: bash
+        run: bash .github/scripts/appcast-tamper-check.sh
+
+      - name: Setup Go for the anix-kit interop check
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: false
+
+      # Feeds signed by AnixOps/anix-kit (anixsign / anixupdate) verify in the app, and the reverse.
+      - name: Update feed interoperates with anix-kit
+        shell: bash
+        run: bash .github/scripts/appcast-anixkit-interop.sh
+
   ios-xcode-build:
     name: iOS and macOS Xcode build
     runs-on: macos-26
@@ -621,6 +675,7 @@ jobs:
           grep -q 'CODE_SIGN_ENTITLEMENTS = Entitlements/NetworkCoreWidget.entitlements;' NetworkCore.xcodeproj/project.pbxproj
           grep -q 'CODE_SIGN_ENTITLEMENTS = Entitlements/NetworkCoreMac.entitlements;' NetworkCore.xcodeproj/project.pbxproj
           grep -q 'CODE_SIGN_ENTITLEMENTS = Entitlements/NetworkCoreMacTunnel.entitlements;' NetworkCore.xcodeproj/project.pbxproj
+          grep -q 'CODE_SIGN_ENTITLEMENTS = Entitlements/NetworkCoreCLI.entitlements;' NetworkCore.xcodeproj/project.pbxproj
 
       - name: Build the app without signing
         shell: bash
@@ -710,6 +765,9 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Print :NetworkExtension:NEMachServiceName' "${appex}/Contents/Info.plist" \
             | grep -q 'net.anixops.networkcore.tunnel$'
           /usr/libexec/PlistBuddy -c 'Print :NSSystemExtensionUsageDescription' "${appex}/Contents/Info.plist" > /dev/null
+          # In-app updates are off unless the release build sets the feed URL and public keys (docs/macos-updates.md).
+          /usr/libexec/PlistBuddy -c 'Print :AnixOpsUpdateFeedURL' "${app}/Contents/Info.plist" > /dev/null
+          /usr/libexec/PlistBuddy -c 'Print :AnixOpsUpdatePublicKeys' "${app}/Contents/Info.plist" > /dev/null
           test ! -d "${app}/Contents/PlugIns/NetworkCoreMacTunnel.appex"
           test -d "${app}/Contents/Resources/en.lproj"
           symbols() {
@@ -727,6 +785,38 @@ jobs:
           grep -q '_networkcore_ios_measure_delay$' "${RUNNER_TEMP}/mac-app-symbols.txt"
           lipo -archs "${appex}/Contents/MacOS/${tunnel_id}" | tee "${RUNNER_TEMP}/mac-archs.txt"
           grep -q arm64 "${RUNNER_TEMP}/mac-archs.txt"
+
+      # The command-line tool ships in the app and must parse, report its version and use the documented exit codes
+      # without the app running (docs/macos-cli.md).
+      - name: Check the macOS command-line tool
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="apps/ios/build/Build/Products/Debug/AnixOps Net.app"
+          cli="${app}/Contents/MacOS/anixops"
+          test -x "${cli}"
+          /usr/libexec/PlistBuddy -c 'Print :AnixOpsAppGroup' "${app}/Contents/Info.plist" | grep -q 'net.anixops.networkcore$'
+          "${cli}" --help | grep -q '退出码'
+          "${cli}" version | grep -q '^anixops '
+          expect() {
+            local want="$1"
+            shift
+            set +e
+            "${cli}" "$@" > /dev/null 2>&1
+            local got=$?
+            set -e
+            if [ "${got}" -ne "${want}" ]; then
+              echo "::error::anixops $*: expected exit code ${want}, got ${got}"
+              exit 1
+            fi
+          }
+          expect 64 frobnicate
+          expect 64 mode fast
+          expect 64
+          expect 66 import /nonexistent/nodes.txt
+          # Nothing listens on this socket: the app is "not running", and status never launches the app.
+          expect 69 status --socket "${RUNNER_TEMP}/none.sock"
+          expect 69 nodes --socket "${RUNNER_TEMP}/none.sock"
 
       # The unsigned debug build opens with made-up data (`-AnixOpsDemo YES`), so the pictures need no account,
       # no certificate and no tunnel. A machine without a screen session must not fail the build.
