@@ -11,6 +11,7 @@ struct NetworkCoreAppMain: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        ClientHealthMonitor.shared.start()
         AppNotifications.install()
     }
 

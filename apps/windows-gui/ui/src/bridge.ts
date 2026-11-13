@@ -176,6 +176,20 @@ export interface SubscriptionSummary {
   refreshable: boolean;
 }
 
+/** Crash reports, the local metrics endpoint, the install check and the cold start (`health_status`). */
+export interface HealthStatus {
+  crashReports: boolean;
+  crashReportsKept: number;
+  /** The build sends reports to an address; otherwise they stay on this computer. */
+  crashUploadConfigured: boolean;
+  /** `http://127.0.0.1:9477/metrics` while the endpoint runs. */
+  metricsAddress?: string | null;
+  metricsError?: string | null;
+  integrity: "checking" | "verified" | "unverified" | "damaged" | "invalid";
+  integrityDetail?: string | null;
+  coldStartMs?: number | null;
+}
+
 export type Preferences = Pick<RuntimeSnapshot, "startAfterLogin" | "autoConnect" | "autoRecoverCore" | "autoSubscriptionRefresh" | "autoSelectFastestNode" | "bilibiliWebAdBlockEnabled" | "darkTheme" | "runtimeMode">;
 
 /** The saved preferences from a snapshot with some of them changed. */
@@ -227,6 +241,8 @@ export const desktop = {
       preferences,
     }),
   diagnostics: () => invoke<OperationResult>("create_diagnostics"),
+  health: () => invoke<HealthStatus>("health_status"),
+  setCrashReports: (enabled: boolean) => invoke<OperationResult>("set_crash_reports", { enabled }),
   importSubscription: (location: string) =>
     invoke<OperationResult>("import_subscription", { location }),
   updateSubscription: () => invoke<OperationResult>("update_subscription"),

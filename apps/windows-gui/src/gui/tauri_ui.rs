@@ -3,13 +3,15 @@ use super::linked_sources::{self, CachedNode, OtherSource};
 use super::mitm_plugins::{self, PluginSummary};
 use super::runtime_status::{read_runtime_status, ManagedCoreStatus, WindowsRuntimeStatus};
 use super::startup::{
-    load_desktop_state, owns_current_proxy, save_desktop_state, DesktopProfileNode,
-    DesktopRoutingMode, DesktopRuntimeMode, DesktopState, DesktopSubscriptionSource,
+    desktop_state_path, load_desktop_state, owns_current_proxy, save_desktop_state,
+    DesktopProfileNode, DesktopRoutingMode, DesktopRuntimeMode, DesktopState,
+    DesktopSubscriptionSource,
 };
 use super::{
     append_managed_log, is_trunk_node, load_validated_managed_configuration,
     managed_config_or_default, profile_node_options, write_diagnostic_report_at,
 };
+use client_health::{startup as cold_start, Health};
 use config_core::routing_import::import_subscription_routing;
 use config_core::CoreSubscriptionService;
 use control_domain::{NodeDescriptor, SubscriptionService, SubscriptionSource};
@@ -45,6 +47,7 @@ use std::{
 };
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
+use tauri::webview::PageLoadEvent;
 use tauri::{Manager, Runtime, State, WindowEvent};
 
 const APP_LOG_SCOPE: &str = "tauri-gui";
@@ -77,6 +80,9 @@ struct DesktopAppState {
     lifecycle: Arc<RuntimeLifecycle>,
     direct_core: Arc<Mutex<connection::DesktopCore>>,
 }
+
+/// Crash reports, the metrics endpoint, the install check and the cold start.
+struct HealthState(Arc<Health>);
 
 struct DesktopTray {
     _icon: TrayIcon,
@@ -219,6 +225,32 @@ struct PreferenceValues {
 pub(super) fn run(debug: bool) -> Result<(), String> {
     let desktop = load_desktop_state()?;
     let _ = append_managed_log(APP_LOG_SCOPE, &format!("startup debug={debug}"));
+    let health_dir = desktop_state_path()
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(std::env::temp_dir);
+    let health = Health::start(
+        &health_dir,
+        "windows",
+        env!("CARGO_PKG_VERSION"),
+        std::env::current_exe().unwrap_or_default(),
+    );
+    let direct_core = Arc::new(Mutex::new(connection::DesktopCore::default()));
+    // The endpoint skips the engine while another command holds the core, rather than waiting on it.
+    let probe = Arc::downgrade(&direct_core);
+    health.serve_metrics(Arc::new(move || {
+        let text = probe.upgrade().and_then(|core| {
+            let answer = core
+                .try_lock()
+                .ok()?
+                .control(br#"{"cmd":"metrics"}"#)
+                .ok()?;
+            let answer: Value = serde_json::from_slice(&answer).ok()?;
+            client_health::metrics::engine_text(&answer)
+        });
+        let connected = text.is_some();
+        (text, connected)
+    }));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -227,8 +259,9 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
         .manage(DesktopAppState {
             desktop: Arc::new(Mutex::new(desktop)),
             lifecycle: Arc::new(RuntimeLifecycle::default()),
-            direct_core: Arc::new(Mutex::new(connection::DesktopCore::default())),
+            direct_core,
         })
+        .manage(HealthState(health))
         .setup(|app| {
             install_tray(app)?;
             show_main_window(app);
@@ -240,11 +273,19 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             start_fastest_node_monitor(app.state::<DesktopAppState>().inner().clone());
             Ok(())
         })
-        .on_page_load(|_webview, payload| {
+        .on_page_load(|webview, payload| {
             let _ = append_managed_log(
                 APP_LOG_SCOPE,
                 &format!("webview page load {:?}: {}", payload.event(), payload.url()),
             );
+            if payload.event() == PageLoadEvent::Finished {
+                let ready = cold_start::first_page_loaded();
+                // CI's cold start job: record the time and quit.
+                if let Some(path) = cold_start::probe_path() {
+                    let _ = cold_start::write_probe(&path, ready);
+                    webview.app_handle().exit(0);
+                }
+            }
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -271,6 +312,8 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             select_fastest_node,
             save_preferences,
             create_diagnostics,
+            health_status,
+            set_crash_reports,
             import_subscription,
             update_subscription,
             select_subscription,
@@ -1881,12 +1924,37 @@ fn save_preferences_blocking(
 }
 
 #[tauri::command]
-async fn create_diagnostics() -> Result<OperationResult, String> {
-    run_blocking(create_diagnostics_blocking).await
+async fn create_diagnostics(health: State<'_, HealthState>) -> Result<OperationResult, String> {
+    let section = health.0.diagnostics();
+    run_blocking(move || create_diagnostics_blocking(&section)).await
 }
 
-fn create_diagnostics_blocking() -> Result<OperationResult, String> {
-    let path = write_diagnostic_report_at(&windows_managed_config_path())?;
+/// Crash reports, the metrics endpoint, the install check and the cold start, for the settings page.
+#[tauri::command]
+fn health_status(health: State<'_, HealthState>) -> Value {
+    health.0.status()
+}
+
+#[tauri::command]
+fn set_crash_reports(
+    health: State<'_, HealthState>,
+    enabled: bool,
+) -> Result<OperationResult, String> {
+    health
+        .0
+        .set_crash_reports(enabled)
+        .map_err(|error| format!("The setting could not be saved: {error}"))?;
+    Ok(OperationResult {
+        message: if enabled {
+            "Crash reports on.".to_string()
+        } else {
+            "Crash reports off; kept reports deleted.".to_string()
+        },
+    })
+}
+
+fn create_diagnostics_blocking(health: &str) -> Result<OperationResult, String> {
+    let path = write_diagnostic_report_at(&windows_managed_config_path(), health)?;
     Ok(OperationResult {
         message: format!("Diagnostics written to {}", path.display()),
     })

@@ -49,6 +49,15 @@
                 KeyPath="yes" />
           </Component>
 
+          <!-- The install integrity list the client checks at start (crates/client-health). -->
+          <Component Id="IntegrityListComponent" Guid="*">
+            <File
+                Id="IntegrityList"
+                Source="$(IntegrityList)"
+                Name="integrity.sha256"
+                KeyPath="yes" />
+          </Component>
+
           <Component Id="CliComponent" Guid="*">
             <File
                 Id="CliExe"
@@ -109,6 +118,7 @@
       <ComponentRef Id="WebView2LoaderComponent" />
       <ComponentRef Id="WintunComponent" />
       <ComponentRef Id="CliComponent" />
+      <ComponentRef Id="IntegrityListComponent" />
       <ComponentRef Id="ServiceComponent" />
       <ComponentRef Id="ManagedConfigurationComponent" />
     </Feature>

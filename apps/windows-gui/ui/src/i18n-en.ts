@@ -1,6 +1,20 @@
 // English for every Chinese UI string, keyed by the Chinese source text. i18n.test.ts checks that each
 // string the UI shows has an entry here.
 export const english: Record<string, string> = {
+  "诊断与隐私": "Diagnostics and privacy",
+  "崩溃报告": "Crash reports",
+  "崩溃时记录脱敏后的信息（不含网址、账号和节点地址），下次启动时发送。关闭会删除已保存的报告。": "Keeps a redacted record when the app crashes (no URLs, accounts or node addresses) and sends it at the next start. Turning this off deletes saved reports.",
+  "崩溃时记录脱敏后的信息（不含网址、账号和节点地址），只保存在本机，生成诊断报告时附上。关闭会删除已保存的报告。": "Keeps a redacted record when the app crashes (no URLs, accounts or node addresses) on this computer only and adds it to diagnostics reports. Turning this off deletes saved reports.",
+  "Prometheus 指标": "Prometheus metrics",
+  "只监听本机回环地址。": "Listens on the loopback address only.",
+  "端口被占用": "Port in use",
+  "安装完整性": "Install integrity",
+  "检查中": "Checking",
+  "完整": "Intact",
+  "未校验（开发版本）": "Not checked (development build)",
+  "文件缺失或被改动": "Files missing or changed",
+  "校验清单无法读取": "Integrity list unreadable",
+  "启动耗时": "Startup time",
   "主导航": "Main navigation",
   "Windows 服务模式": "Windows service mode",
   "桌面模式": "Desktop mode",

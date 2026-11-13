@@ -1,0 +1,11 @@
+[package]
+name = "client-health"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Desktop client health: the local Prometheus endpoint, redacted crash reports, the install integrity check and the cold start probe."
+
+[dependencies]
+serde_json = "1"
+sha2 = "0.10"

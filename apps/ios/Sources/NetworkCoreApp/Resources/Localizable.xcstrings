@@ -9238,6 +9238,38 @@
           }
         }
       }
+    },
+    "崩溃报告": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crash reports"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "當機報告"
+          }
+        }
+      }
+    },
+    "崩溃时记录脱敏后的信息（不含网址、账号和节点地址），只保存在本机，复制诊断信息时附上。关闭会删除已保存的报告。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keeps a redacted record when the app crashes (no URLs, accounts or node addresses) on this device only and adds it to the diagnostics you copy. Turning this off deletes saved reports."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "當機時記錄去識別化後的資訊（不含網址、帳號和節點位址），只儲存在本機，複製診斷資訊時附上。關閉會刪除已儲存的報告。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

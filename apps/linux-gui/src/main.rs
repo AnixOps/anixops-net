@@ -3,6 +3,7 @@ mod app;
 
 #[cfg(all(feature = "gui", target_os = "linux"))]
 fn main() {
+    client_health::startup::mark_process_start();
     if let Err(error) = app::run() {
         eprintln!("anixops-net: {error}");
         std::process::exit(1);
