@@ -58,6 +58,7 @@ public enum TunnelAppMessage: Equatable {
         }
         if data.starts(with: notificationsPrefix) {
             return .notificationSettings(Data(data.dropFirst(notificationsPrefix.count)))
+        }
         if data.starts(with: reloadLocalRulesPrefix) {
             return .reloadLocalRules(Data(data.dropFirst(reloadLocalRulesPrefix.count)))
         }

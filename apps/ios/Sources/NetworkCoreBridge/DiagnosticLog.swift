@@ -62,6 +62,8 @@ public enum DiagnosticModule: String, Codable, CaseIterable, Sendable, Identifia
             ("subscription rules", .rules),
             ("mode ", .rules),
             ("redirects", .rules),
+            ("rules reload", .rules),
+            ("local rules", .rules),
             ("dns ", .dns),
             ("memory pressure", .memory),
             ("network changed", .network),
@@ -87,7 +89,7 @@ public enum DiagnosticModule: String, Codable, CaseIterable, Sendable, Identifia
         if errors.contains(where: text.contains) {
             return .error
         }
-        let warnings = [" off", ": none", "not kept", "memory pressure", "unpinned", "stoptunnel reason"]
+        let warnings = [" off", ": none", "not kept", ": restart", "memory pressure", "unpinned", "stoptunnel reason"]
         if warnings.contains(where: text.contains) {
             // A user stop (reason 1) is routine; every other reason is worth a look.
             if text.hasPrefix("stoptunnel reason ") {
