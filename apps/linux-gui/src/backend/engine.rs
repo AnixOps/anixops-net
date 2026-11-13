@@ -277,6 +277,31 @@ impl Engine {
         serde_json::from_slice(&answer).map_err(|error| error.to_string())
     }
 
+    /// The engine's Prometheus text (the kernel's `metrics` command) while it runs.
+    pub fn metrics(&self) -> Option<String> {
+        let proxy = self.proxy.as_ref().filter(|proxy| proxy.is_running())?;
+        let answer = proxy.control_json(br#"{"cmd":"metrics"}"#).ok()?;
+        let answer: serde_json::Value = serde_json::from_slice(&answer).ok()?;
+        answer
+            .get("text")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+    }
+
+    /// Sends the engine a `reset_network` request (see `network_watch`) while it runs; not an activity page
+    /// command, so it skips [`activity_request`].
+    pub fn reset_network(&self, reset: network_watch::Reset) -> Result<(), String> {
+        let proxy = self
+            .proxy
+            .as_ref()
+            .filter(|proxy| proxy.is_running())
+            .ok_or("the engine is not running")?;
+        proxy
+            .control_json(&reset.request())
+            .map(|_| ())
+            .map_err(|error| error.message.to_string())
+    }
+
     pub fn address(&self) -> Option<SocketAddr> {
         self.proxy.as_ref().map(LocalProxy::local_addr)
     }

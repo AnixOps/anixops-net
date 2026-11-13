@@ -76,7 +76,7 @@ struct MacRootView: View {
         case .activity:
             MacActivityPage(tunnel: tunnel)
         case .settings:
-            MacSettingsPage()
+            MacSettingsPage(tunnel: tunnel)
         }
     }
 }

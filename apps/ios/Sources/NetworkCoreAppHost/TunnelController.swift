@@ -57,6 +57,11 @@ final class TunnelController {
     /// The rule mode of a node list without subscription rules and the user's own rules, from `local-rules.json`;
     /// the saved profile carries a copy.
     private(set) var localRules = LocalRules()
+    /// Reconnecting by itself and the Wi-Fi rules (`OnDemandSettings`), from the app's defaults; the saved profile
+    /// carries the rules.
+    private(set) var onDemand = OnDemandSettings.load()
+    /// When the running tunnel last took new local rules in place, without a restart.
+    private(set) var lastRulesReload: Date?
 
     /// The link an `anixops://import` asked for, until the import sheet takes it (`takePendingImportLink()`).
     @ObservationIgnored var pendingImportLink: String?
@@ -227,10 +232,21 @@ final class TunnelController {
     /// background run never leaves a message on screen.
     func refreshDueSubscriptions(at date: Date = Date()) async {
         let shown = message
+        var failed: [String] = []
         for group in subscriptions.due(at: date) {
-            await refreshSubscription(group.id)
+            if !(await refreshSubscription(group.id)) {
+                failed.append(group.name)
+            }
         }
         message = shown
+        if !failed.isEmpty, AppNotifications.settings.subscriptions {
+            AppNotifications.post(
+                title: String(localized: "订阅更新失败"),
+                body: String(localized: "\(failed.joined(separator: "、")) 没有更新成功，仍在使用上次的节点。"),
+                thread: "subscriptions",
+                id: "subscriptions-failed"
+            )
+        }
         scheduleBackgroundRefresh()
     }
 
@@ -719,6 +735,7 @@ final class TunnelController {
         if let value = try? localRules.profileValue() {
             providerConfiguration[TunnelProfileKeys.localRules] = value
         }
+        providerConfiguration[TunnelProfileKeys.notifications] = AppNotifications.settings.profileValue
         let library = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)) ?? MitmPluginLibrary()
         var bundle = MitmProfileBundle()
         if !library.activeTexts.isEmpty {
@@ -747,6 +764,8 @@ final class TunnelController {
         target.protocolConfiguration = tunnelProtocol
         target.localizedDescription = "AnixOps Net"
         target.isEnabled = true
+        // A saved profile keeps running On Demand while it is on; a new one starts it with the first connect.
+        onDemand.apply(to: target, active: target.isOnDemandEnabled)
         do {
             manager = try await persist(target)
             // Keep the hint to allow the extension: the profile is saved, but connecting still needs it.
@@ -774,6 +793,8 @@ final class TunnelController {
             fresh.protocolConfiguration = target.protocolConfiguration?.copy() as? NEVPNProtocol
             fresh.localizedDescription = target.localizedDescription
             fresh.isEnabled = target.isEnabled
+            fresh.onDemandRules = target.onDemandRules
+            fresh.isOnDemandEnabled = target.isOnDemandEnabled
             try await fresh.saveToPreferences()
             try await fresh.loadFromPreferences()
             return fresh
@@ -835,7 +856,7 @@ final class TunnelController {
     /// Returns whether they were saved.
     @discardableResult
     /// Saves the local rules now, so quick edits build on each other, then puts them in the saved profile. A running
-    /// tunnel reconnects to use them.
+    /// tunnel takes them in place when only rule lines changed (see `applyLocalRulesToProfile`), else reconnects.
     func updateLocalRules(_ next: LocalRules) {
         do {
             try next.save(to: LocalRules.defaultURL)
@@ -872,9 +893,58 @@ final class TunnelController {
             return
         }
         refresh()
-        if isConnected {
+        guard isConnected else {
+            return
+        }
+        // Rule lines alone swap into the running engine without dropping a connection; anything more (a new rule
+        // list URL, an older extension, a refused line) restarts the tunnel as before.
+        if let answer = await reloadLocalRules(value), answer.reloaded {
+            lastRulesReload = Date()
+        } else {
             restart()
         }
+    }
+
+    /// The running tunnel's session, for messages that need no answer.
+    var tunnelSession: NETunnelProviderSession? {
+        manager?.connection as? NETunnelProviderSession
+    }
+
+    /// Puts the notification settings in the saved profile for the next start. No restart: a running extension
+    /// gets them as a message (`applyNotificationSettings`).
+    func saveNotificationSettingsToProfile(_ next: NotificationSettings) async {
+        guard let manager, let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol else {
+            return
+        }
+        var configuration = tunnelProtocol.providerConfiguration ?? [:]
+        guard configuration[TunnelProfileKeys.notifications] as? Data != next.profileValue else {
+            return
+        }
+        configuration[TunnelProfileKeys.notifications] = next.profileValue
+        tunnelProtocol.providerConfiguration = configuration
+        manager.protocolConfiguration = tunnelProtocol
+        if let saved = try? await persist(manager) {
+            self.manager = saved
+        }
+        refresh()
+    }
+
+    /// Hands new local rules to the running extension (`TunnelAppMessage.reloadLocalRules`). Nil when the tunnel is
+    /// not connected or the extension does not answer.
+    private func reloadLocalRules(_ value: Data) async -> RuntimeControl.ReloadAnswer? {
+        guard let session = manager?.connection as? NETunnelProviderSession, connection == .connected else {
+            return nil
+        }
+        let data: Data? = await withCheckedContinuation { continuation in
+            do {
+                try session.sendProviderMessage(TunnelAppMessage.reloadLocalRules(value).encoded) { data in
+                    continuation.resume(returning: data)
+                }
+            } catch {
+                continuation.resume(returning: nil)
+            }
+        }
+        return RuntimeControl.decode(RuntimeControl.ReloadAnswer.self, from: data)
     }
 
     func applyDns(_ next: DnsSettings) async -> Bool {
@@ -968,7 +1038,8 @@ final class TunnelController {
             return
         }
         if isConnected {
-            manager.connection.stopVPNTunnel()
+            // On Demand would start the tunnel again right away: the user's disconnect turns it off first.
+            Task { await disconnect(manager) }
             return
         }
         guard manager.isEnabled else {
@@ -985,9 +1056,42 @@ final class TunnelController {
         start(manager)
     }
 
+    private func disconnect(_ manager: NETunnelProviderManager) async {
+        if manager.isOnDemandEnabled {
+            manager.isOnDemandEnabled = false
+            do {
+                self.manager = try await persist(manager)
+            } catch {
+                message = String(localized: "无法关闭自动重连") + Self.errorCode(error)
+            }
+        }
+        self.manager?.connection.stopVPNTunnel()
+    }
+
+    /// Saves new reconnect and Wi-Fi settings and puts them in the VPN configuration. On Demand stays as it was: on
+    /// while the user keeps the tunnel up, off after they disconnected.
+    func setOnDemand(_ next: OnDemandSettings) async {
+        guard next != onDemand else {
+            return
+        }
+        onDemand = next
+        next.save()
+        guard let manager else {
+            return
+        }
+        next.apply(to: manager, active: manager.isOnDemandEnabled || isConnected)
+        do {
+            self.manager = try await persist(manager)
+        } catch {
+            message = String(localized: "保存自动重连设置失败") + Self.errorCode(error)
+        }
+        refresh()
+    }
+
     private func enableAndStart(_ manager: NETunnelProviderManager) async {
         do {
             manager.isEnabled = true
+            onDemand.apply(to: manager, active: true)
             let saved = try await persist(manager)
             self.manager = saved
             refresh()
@@ -1047,6 +1151,26 @@ final class TunnelController {
     }
 
     private func startNow(_ manager: NETunnelProviderManager) {
+        // The user wants the tunnel up: On Demand keeps it up from here, including after the extension crashes.
+        if onDemand.rules != nil, !manager.isOnDemandEnabled {
+            onDemand.apply(to: manager, active: true)
+            Task {
+                var target = manager
+                do {
+                    target = try await persist(manager)
+                    self.manager = target
+                } catch {
+                    // Connecting still works; only the automatic reconnect is missing.
+                    message = String(localized: "无法开启自动重连") + Self.errorCode(error)
+                }
+                startTunnel(target)
+            }
+            return
+        }
+        startTunnel(manager)
+    }
+
+    private func startTunnel(_ manager: NETunnelProviderManager) {
         do {
             try manager.connection.startVPNTunnel(options: Self.startOptions())
             message = nil
@@ -1334,6 +1458,17 @@ final class TunnelController {
                 return
             }
             let text = Self.describe(disconnectError: error as NSError)
+            #if os(macOS)
+            // The System Extension cannot post; on iOS the extension posts this itself.
+            if AppNotifications.settings.connection {
+                AppNotifications.post(
+                    title: String(localized: "AnixOps Net 已断开"),
+                    body: String(localized: "节点没有响应、被干扰，或网络刚切换。打开 App 重试或换一个节点。"),
+                    thread: "connection",
+                    id: "connection-stopped"
+                )
+            }
+            #endif
             Task { @MainActor in
                 self?.notice = AppNotice(
                     text: String(localized: "连接已断开：节点没有响应、被干扰，或网络刚切换。可以重试，或换一个节点。"),

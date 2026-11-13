@@ -1,6 +1,7 @@
 import Foundation
 import NetworkCoreBridge
 import NetworkExtension
+import UserNotifications
 import os
 import Security
 
@@ -26,6 +27,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// What the macOS app handed over at start (`TunnelStartSecrets`); nil on iOS, where the Keychain is shared.
     private var startSecrets: TunnelStartSecrets?
     private var startedAt: Date?
+    /// What the running config was built from before the subscription and local rules went in, and the config the
+    /// engine runs, so new local rules can be swapped in place (`reloadLocalRules`).
+    private var reloadBase: ReloadBase?
+    private var runningConfig: EmbeddedRuntimeConfig?
+
+    private struct ReloadBase {
+        let config: EmbeddedRuntimeConfig
+        let mode: ProxyMode
+        let dns: DnsSettings?
+        let redirects: [String]
+        /// The fields every ANX outbound gets (`AnxLicense.outboundFields`), or nil without a license state.
+        let anxLicense: [String: JSONValue]?
+    }
     private var memoryPressure: DispatchSourceMemoryPressure?
     /// Recent events for the app's developer mode. Same rule as the system log: fixed reasons and codes only.
     private let events = TunnelDiagnosticLog()
@@ -33,8 +47,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private let trafficStats = TrafficStatsRecorder()
     /// Network changes in, script notifications out.
     private let scriptEvents = ScriptEventRelay()
+    /// Which notifications to post (`NotificationSettings`), from the profile and then from the app's messages.
+    private var notificationSettings = NotificationSettings()
     private var pathObservation: NSKeyValueObservation?
     private var lastPath: NWPath?
+    /// Rebuilds the engine's connections when the physical network changes (`NetworkRecovery`).
+    private let physicalNetwork = PhysicalNetworkMonitor()
+    /// When the device went to sleep, to decide on wake whether open connections are still worth keeping.
+    private var sleptAt: Date?
 
     #if os(macOS)
     /// Pins the engine's sockets to the physical interface (see `BoundInterfaceMonitor`).
@@ -119,8 +139,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let localRules = LocalRules.fromProfileValue(
             tunnelProtocol.providerConfiguration?[TunnelProfileKeys.localRules] as? Data
         )
-        config = withSubscriptionRules(config, localRules: localRules).withMode(mode).withDns(dns).withRedirects(redirects)
-        config = withAnxLicense(config)
+        applyNotificationSettings(NotificationSettings.fromProfileValue(
+            tunnelProtocol.providerConfiguration?[TunnelProfileKeys.notifications] as? Data
+        ))
+        let base = ReloadBase(config: config, mode: mode, dns: dns, redirects: redirects, anxLicense: anxLicenseFields())
+        config = Self.assemble(base, routing: withSubscriptionRules(base.config, localRules: localRules))
         events.record("mode \(mode.rawValue)")
         if !redirects.isEmpty {
             events.record("redirects \(redirects.count)")
@@ -168,6 +191,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 try session.start()
                 self.session = session
                 self.startedAt = Date()
+                self.reloadBase = base
+                self.runningConfig = config
                 self.trafficStats.start { [weak session] request in
                     session?.control(request)
                 }
@@ -178,6 +203,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                     self.events.record("\(scheduled) scheduled scripts")
                 }
                 self.watchNetworkPath()
+                self.watchPhysicalNetwork(session)
                 completionHandler(nil)
             } catch let failure as EmbeddedRuntimeSession.Failure {
                 completionHandler(PacketTunnelFailure(reason: "embedded runtime could not start (code \(failure.code))"))
@@ -190,14 +216,18 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
         Self.log.notice("stopTunnel reason \(reason.rawValue, privacy: .public)")
         events.record("stopTunnel reason \(reason.rawValue)")
+        postStopNotification(reason)
         trafficStats.stop()
         scriptEvents.stop()
         pathObservation?.invalidate()
         pathObservation = nil
         lastPath = nil
+        physicalNetwork.stop()
         session?.stop()
         session = nil
         startedAt = nil
+        reloadBase = nil
+        runningConfig = nil
         #if os(macOS)
         boundInterface.stop()
         #endif
@@ -208,12 +238,47 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     override func sleep(completionHandler: @escaping () -> Void) {
         events.record("device sleep")
+        sleptAt = Date()
         completionHandler()
     }
 
+    /// Connections from before the sleep may point at a path that is gone (the NAT mapping expired, the device
+    /// moved): pooled sessions are always dropped, open connections too after a long sleep.
     override func wake() {
-        events.record("device wake")
+        let slept = sleptAt.map { Date().timeIntervalSince($0) } ?? 0
+        sleptAt = nil
+        events.record("device wake after \(Int(slept)) s")
+        resetEngine(NetworkRecovery.afterWake(sleptFor: slept), reason: "wake")
         scriptEvents.poll()
+    }
+
+    /// Resets the engine's connections whenever the network under the tunnel changes (another Wi-Fi, Wi-Fi to
+    /// cellular, back online), so the next flows dial on the new path instead of stalling on the old one.
+    private func watchPhysicalNetwork(_ session: EmbeddedRuntimeSession) {
+        var recovery = NetworkRecovery()
+        physicalNetwork.start { [weak self, weak session] key in
+            guard let request = recovery.pathChanged(to: key) else {
+                return
+            }
+            guard let self, let session else {
+                return
+            }
+            self.resetEngine(request, reason: "network change", session: session)
+        }
+    }
+
+    private func resetEngine(_ request: RuntimeControl, reason: String, session: EmbeddedRuntimeSession? = nil) {
+        guard let session = session ?? self.session else {
+            return
+        }
+        let began = Date()
+        let answer = RuntimeControl.decode(RuntimeControl.NetworkReset.self, from: session.control(request.request))
+        let millis = Int(Date().timeIntervalSince(began) * 1000)
+        if let answer {
+            events.record("\(reason): reset \(answer.reset) sessions, closed \(answer.closed) connections in \(millis) ms")
+        } else {
+            events.record("\(reason): engine has no network reset")
+        }
     }
 
     /// Tells the engine when the network under the tunnel changes (Wi-Fi to cellular, another Wi-Fi), for the
@@ -238,6 +303,31 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
     }
 
+    private func applyNotificationSettings(_ settings: NotificationSettings) {
+        notificationSettings = settings
+        scriptEvents.setPostsNotifications(settings.scripts)
+        events.record("notifications scripts \(settings.scripts) connection \(settings.connection)")
+    }
+
+    /// Tells the user the tunnel stopped on its own (`NotificationSettings.notifiesStop`). Only on iOS: the macOS
+    /// System Extension runs as root and cannot post, so the macOS app posts this from the stop error instead.
+    private func postStopNotification(_ reason: NEProviderStopReason) {
+        #if os(iOS)
+        guard notificationSettings.connection, startedAt != nil,
+              NotificationSettings.notifiesStop(reasonCode: reason.rawValue)
+        else {
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "AnixOps Net 已断开")
+        content.body = String(localized: "节点没有响应、被干扰，或网络刚切换。打开 App 重试或换一个节点。")
+        content.threadIdentifier = "connection"
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: "connection-stopped", content: content, trigger: nil)
+        )
+        #endif
+    }
+
     /// Only fixed reasons and codes are logged, never the profile or keys.
     private static let log = Logger(subsystem: "networkcore.packet-tunnel", category: "tunnel")
 
@@ -253,6 +343,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             completionHandler?(trafficStats.snapshot())
         case .clearTrafficStats:
             completionHandler?(trafficStats.clear())
+        case let .notificationSettings(data):
+            applyNotificationSettings(NotificationSettings.fromProfileValue(data))
+            completionHandler?(Data("ok".utf8))
+        case let .reloadLocalRules(value):
+            completionHandler?(reloadLocalRules(value))
         case .diagnostics:
             let diagnostics = TunnelDiagnostics(
                 runtimeStatus: session?.statusJSON().flatMap { String(data: $0, encoding: .utf8) },
@@ -261,10 +356,52 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 memoryAvailableBytes: Self.memoryAvailable(),
                 uptimeSeconds: startedAt.map { Date().timeIntervalSince($0) },
                 handshake: EmbeddedRuntimeSession.reportedHandshake(),
-                events: events.snapshot()
+                events: events.snapshot(),
+                engineMetrics: RuntimeControl.decode(
+                    RuntimeControl.Metrics.self,
+                    from: session?.control(RuntimeControl.metrics(anonymous: true).request)
+                )?.text
             )
             completionHandler?(try? diagnostics.encoded())
         }
+    }
+
+    /// The engine config of a start: the subscription and local rules (`withRouting` already applied by
+    /// `withSubscriptionRules`), then the mode, DNS and destination rewrites.
+    private static func assemble(_ base: ReloadBase, routing config: EmbeddedRuntimeConfig) -> EmbeddedRuntimeConfig {
+        let assembled = config.withMode(base.mode).withDns(base.dns).withRedirects(base.redirects)
+        return base.anxLicense.map { assembled.withAnxLicense($0) } ?? assembled
+    }
+
+    /// Builds the config a start with `value` (new local rules) would run. When only its rule lines differ from the
+    /// running config, swaps them into the engine in place (`reload_rules`, a double-buffered swap that keeps every
+    /// open connection); otherwise, or when the engine refuses them, answers `restart` so the app restarts the
+    /// tunnel as before.
+    private func reloadLocalRules(_ value: Data) -> Data? {
+        func answer(_ reply: RuntimeControl.ReloadAnswer) -> Data? {
+            try? JSONEncoder().encode(reply)
+        }
+        guard let session, let base = reloadBase, let running = runningConfig else {
+            return answer(.init(reloaded: false, restart: true))
+        }
+        let next = Self.assemble(base, routing: withSubscriptionRules(base.config, localRules: LocalRules.fromProfileValue(value)))
+        guard let rules = running.reloadableRules(to: next) else {
+            events.record("local rules changed beyond the rule lines: restart")
+            return answer(.init(reloaded: false, restart: true))
+        }
+        if rules == running.routing?.rules {
+            runningConfig = next
+            return answer(.init(reloaded: true, rules: rules.count))
+        }
+        let reply = session.control(RuntimeControl.reloadRules(rules, dryRun: false).request)
+        guard let done = RuntimeControl.decode(RuntimeControl.ReloadAnswer.self, from: reply), done.reloaded else {
+            let code = RuntimeControl.decode(RuntimeControl.ReloadAnswer.self, from: reply)?.error?.code ?? "unavailable"
+            events.record("rules reload refused (\(code)): restart")
+            return answer(.init(reloaded: false, error: RuntimeControl.decode(RuntimeControl.ReloadAnswer.self, from: reply)?.error, restart: true))
+        }
+        runningConfig = next
+        events.record("rules reloaded in place, \(rules.count) rules, generation \(done.generation ?? 0)")
+        return reply
     }
 
     /// Adds the subscription's rules and groups from the node library in the Keychain, with the user's local rules in
@@ -291,8 +428,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     /// Gives every ANX outbound this device's key and license (anx spec §2.4.1) once a subscription offered ANX
     /// licensing. The license goes to a file in the extension's own container, which the outbound reads at each
-    /// connection. Without a license state the config is unchanged, as are the nodes that do not require one.
-    private func withAnxLicense(_ config: EmbeddedRuntimeConfig) -> EmbeddedRuntimeConfig {
+    /// connection. Without a license state there are no fields and the config stays unchanged; nodes that do not
+    /// require a license ignore them.
+    private func anxLicenseFields() -> [String: JSONValue]? {
         guard let value = startSecrets?.anxLicense ?? (try? NodeSecretStore.value(account: AnxLicense.keychainAccount)),
               let state = try? AnxLicense.fromKeychainValue(value),
               state.offered,
@@ -301,7 +439,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                   .appendingPathComponent(AnxLicense.licenseFileName),
               let fields = state.outboundFields(licensePath: url.path)
         else {
-            return config
+            return nil
         }
         do {
             if let license = state.license {
@@ -314,7 +452,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             events.record("anx license not written")
         }
         events.record("anx license \(state.license == nil ? "missing" : "present")\(state.status.map { " (\($0))" } ?? "")")
-        return config.withAnxLicense(fields)
+        return fields
     }
 
     /// Creates the runtime. When it refuses the subscription's rules, the selected node runs alone.

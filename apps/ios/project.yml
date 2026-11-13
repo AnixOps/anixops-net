@@ -87,6 +87,8 @@ targets:
     platform: iOS
     sources:
       - path: Sources/NetworkCorePacketTunnel
+      # The connection-stopped notification is localized like the app.
+      - path: Sources/NetworkCoreApp/Resources/Localizable.xcstrings
     info:
       path: Generated/NetworkCorePacketTunnel-Info.plist
       properties:
@@ -156,6 +158,7 @@ targets:
       - path: Sources/NetworkCoreApp/Resources/PrivacyInfo.xcprivacy
       - path: Sources/NetworkCoreAppHost/BrandPalette.swift
       - path: Sources/NetworkCoreAppHost/BrandTokens.swift
+      - path: Sources/NetworkCoreAppHost/ClientHealthMonitor.swift
       - path: Sources/NetworkCoreAppHost/ClientReporter.swift
       - path: Sources/NetworkCoreAppHost/ConnectionsView.swift
       - path: Sources/NetworkCoreAppHost/DashboardCards.swift
@@ -168,11 +171,15 @@ targets:
       - path: Sources/NetworkCoreAppHost/ProxyModeText.swift
       - path: Sources/NetworkCoreAppHost/RouteLine.swift
       - path: Sources/NetworkCoreAppHost/RuleSetsView.swift
+      - path: Sources/NetworkCoreAppHost/RuleTextEditor.swift
       - path: Sources/NetworkCoreAppHost/TunnelController.swift
       - path: Sources/NetworkCoreAppHost/URLCommandHandler.swift
+      - path: Sources/NetworkCoreAppHost/AppNotifications.swift
+      - path: Sources/NetworkCoreAppHost/DiagnosticEventsView.swift
       - path: Sources/NetworkCoreAppHost/NativeNodeImporterFFI.swift
       - path: Sources/NetworkCoreAppHost/NodeDelayFFI.swift
       - path: Sources/NetworkCoreAppHost/NodeEditSheet.swift
+      - path: Sources/NetworkCoreAppHost/OnDemandSettingsView.swift
       - path: Sources/NetworkCoreAppHost/SubscriptionGroupViews.swift
       - path: Sources/NetworkCoreAppHost/TrafficStatsView.swift
     info:
@@ -189,8 +196,17 @@ targets:
               - anixops
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
         ITSAppUsesNonExemptEncryption: false
+        # In-app updates (Sources/NetworkCoreMac/AppUpdater.swift, docs/macos-updates.md): the HTTPS feed URL and the
+        # base64 Ed25519 public keys, comma separated. Empty in every build but the release build, which turns
+        # updates off.
+        AnixOpsUpdateFeedURL: $(ANIXOPS_UPDATE_FEED_URL)
+        AnixOpsUpdatePublicKeys: $(ANIXOPS_UPDATE_PUBLIC_KEYS)
+        # The app group whose container holds the command-line socket (MacControlService, docs/macos-cli.md).
+        AnixOpsAppGroup: $(TeamIdentifierPrefix)net.anixops.networkcore
     settings:
       base:
+        ANIXOPS_UPDATE_FEED_URL: ""
+        ANIXOPS_UPDATE_PUBLIC_KEYS: ""
         PRODUCT_NAME: AnixOps Net
         PRODUCT_MODULE_NAME: NetworkCoreMac
         # The tunnel's bundle ID (com.example.networkcore.macos.packettunnel) starts with this one.
@@ -204,6 +220,11 @@ targets:
         product: NetworkCoreIOS
       - target: NetworkCoreMacTunnel
         embed: true
+      # The `anixops` command-line tool, at Contents/MacOS/anixops.
+      - target: NetworkCoreCLI
+        embed: true
+        copy:
+          destination: executables
       # The macOS slice of the runtime, for subscription import and the HTTP delay test; the tunnel runs in the extension.
       - framework: Generated/NetworkCoreRuntime.xcframework
         embed: false
@@ -248,6 +269,38 @@ targets:
         embed: false
       - sdk: Security.framework
 
+  # `anixops`, the command-line tool of the macOS app (Sources/NetworkCoreCLI, docs/macos-cli.md). It talks to the
+  # running app over a socket in the app group container, so it needs only the app group, no Network Extension
+  # entitlement and no provisioning profile; it is not sandboxed.
+  NetworkCoreCLI:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Sources/NetworkCoreCLI
+    info:
+      path: Generated/NetworkCoreCLI-Info.plist
+      properties:
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CFBundleName: anixops
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        AnixOpsAppGroup: $(TeamIdentifierPrefix)net.anixops.networkcore
+    settings:
+      base:
+        PRODUCT_NAME: anixops
+        PRODUCT_MODULE_NAME: NetworkCoreCLI
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.networkcore.macos.cli
+        # A bare executable has no bundle: Info.plist goes into the binary, where Bundle.main reads it.
+        CREATE_INFOPLIST_SECTION_IN_BINARY: YES
+        # Debug builds would otherwise move the code into anixops.debug.dylib, which the copy into the app leaves out.
+        ENABLE_DEBUG_DYLIB: NO
+        CODE_SIGN_ENTITLEMENTS: Entitlements/NetworkCoreCLI.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        SKIP_INSTALL: YES
+    dependencies:
+      - package: NetworkCoreIOS
+        product: NetworkCoreIOS
+
 schemes:
   NetworkCoreApp:
     build:
@@ -261,3 +314,4 @@ schemes:
       targets:
         NetworkCoreMac: all
         NetworkCoreMacTunnel: all
+        NetworkCoreCLI: all
