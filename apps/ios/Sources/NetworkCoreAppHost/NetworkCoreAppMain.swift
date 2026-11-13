@@ -95,13 +95,14 @@ struct RootView: View {
     @State private var tab = AppTab.home
     @State private var importing = false
     @AppStorage(OnboardingView.storageKey) private var onboardingDone = false
+    @AppStorage(TermsConsent.storageKey) private var acceptedTerms = ""
     @AppStorage(LiveActivityController.storageKey) private var liveActivity = true
     @Environment(\.scenePhase) private var scenePhase
 
     /// First run only: after loading, with nothing imported and the welcome screen never closed.
     private var showsOnboarding: Binding<Bool> {
         Binding(
-            get: { tunnel.loaded && tunnel.hasNoNodes && !onboardingDone },
+            get: { tunnel.loaded && tunnel.hasNoNodes && !onboardingDone && !needsTerms },
             set: { shown in
                 if !shown {
                     onboardingDone = true
@@ -110,10 +111,19 @@ struct RootView: View {
         )
     }
 
+    /// Nothing else is usable until the user agreement is accepted (`TermsConsent`).
+    private var needsTerms: Bool {
+        TermsConsent.needsConsent(accepted: acceptedTerms)
+    }
+
     var body: some View {
         let brand = BrandPalette.resolve(appearance: appearance, scheme: colorScheme)
         Group {
-            if sizeClass == .regular {
+            if needsTerms {
+                TermsConsentView {
+                    acceptedTerms = TermsConsent.version
+                }
+            } else if sizeClass == .regular {
                 splitView(brand)
             } else {
                 tabView
@@ -128,6 +138,9 @@ struct RootView: View {
         }
         // `anixops://` links from Shortcuts, other apps and web pages (`AppURLCommand`).
         .onOpenURL { url in
+            guard !needsTerms else {
+                return
+            }
             Task {
                 if await tunnel.handle(url: url) == .openImport {
                     importing = true

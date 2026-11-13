@@ -68,6 +68,8 @@ jobs:
                 apps/linux-gui/*) rust=true; linux=true ;;
                 crates/*) rust=true; windows=true; linux=true ;;
                 apps/ios/*) apple=true ;;
+                # The desktop UI bundles TERMS.md and the Apple tests check its version (first-start consent).
+                TERMS.md) ui=true; windows=true; linux=true; apple=true ;;
                 *) ;;
               esac
             done < <(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")

@@ -413,3 +413,18 @@ select option { color: var(--label-1); background: var(--bg-elevated); }
 @media (prefers-contrast: more) {
   :root { --hairline: var(--separator-strong); }
 }
+
+/* User agreement: first-start consent and the copy in Settings (terms.tsx). */
+.terms-overlay { position: fixed; inset: 0; z-index: var(--z-modal); display: grid; place-items: center; padding: 24px; background: color-mix(in srgb, var(--window) 70%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+.terms-dialog { display: flex; flex-direction: column; gap: 14px; width: min(680px, 100%); max-height: calc(100vh - 48px); padding: 22px 24px 18px; background: var(--group); border-radius: var(--radius-hero); box-shadow: 0 0 0 .5px var(--separator-strong), var(--shadow-3); }
+.terms-head { display: flex; gap: 12px; align-items: flex-start; color: var(--accent); }
+.terms-head h2 { margin: 0 0 4px; font-size: 17px; color: var(--text); }
+.terms-head p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text2); }
+.terms-text { flex: 1; min-height: 160px; overflow-y: auto; padding: 12px 14px; font-size: 12.5px; line-height: 1.6; color: var(--text2); background: var(--fill-1); border-radius: var(--radius-card); }
+.terms-text h3 { margin: 4px 0 8px; font-size: 14px; color: var(--text); }
+.terms-text h4 { margin: 14px 0 6px; font-size: 13px; color: var(--text); }
+.terms-text p { margin: 0 0 6px; }
+.terms-text .terms-item { padding-left: 14px; text-indent: -10px; }
+.terms-text .terms-item::before { content: "• "; }
+.terms-declined { margin: 0; font-size: 13px; color: var(--danger); }
+.terms-actions { display: flex; gap: 8px; justify-content: flex-end; }

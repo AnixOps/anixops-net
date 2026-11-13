@@ -1,4 +1,4 @@
-import { AppWindow, BadgeCheck, Bug, Cpu, FileCheck, Gauge, Timer, HardDrive, HeartPulse, Languages, LifeBuoy, Network, PlugZap, Power, RefreshCw, RotateCcw, ServerCog, ShieldCheck, SunMoon, Zap } from "lucide-react";
+import { AppWindow, BadgeCheck, Bug, Cpu, FileCheck, Gauge, Timer, HardDrive, HeartPulse, Languages, LifeBuoy, Network, ScrollText, PlugZap, Power, RefreshCw, RotateCcw, ServerCog, ShieldCheck, SunMoon, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { desktop, HealthStatus, Preferences, preferencesFrom, RuntimeSnapshot } from "../bridge";
@@ -6,6 +6,7 @@ import { Appearance, appearances } from "../theme";
 import { factLabel } from "../labels";
 import { Card, Loading, MoreMenu, Row, Run, Segmented, StatusDot, TileColor, ToggleRow } from "../ui";
 import { LanguageChoice, languages, t } from "../i18n";
+import { TermsViewer, termsVersion } from "../terms";
 
 type StartupKey = "startAfterLogin" | "autoConnect" | "autoRecoverCore" | "autoSubscriptionRefresh" | "autoSelectFastestNode";
 
@@ -100,7 +101,22 @@ export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, l
 
       {!linux && <ServiceCard snapshot={snapshot} busy={busy} run={run} />}
       {!linux && <SystemCard busy={busy} run={run} />}
+
+      <AboutCard />
     </div>
+  );
+}
+
+/** The user agreement this build ships with, to read again at any time. */
+function AboutCard() {
+  const [reading, setReading] = useState(false);
+  return (
+    <Card title={t("关于")}>
+      <Row icon={ScrollText} color="gray" label={t("用户协议")} hint={t("用户协议、禁止用途与免责声明，版本 {version}", { version: termsVersion })}>
+        <button className="secondary compact" onClick={() => setReading(true)}>{t("查看")}</button>
+      </Row>
+      {reading && <TermsViewer onClose={() => setReading(false)} />}
+    </Card>
   );
 }
 

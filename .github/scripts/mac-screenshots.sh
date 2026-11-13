@@ -8,6 +8,8 @@ out="$2"
 name="AnixOps Net"
 language="${3:-zh-Hans}"
 mkdir -p "${out}"
+# Pages are shot with the user agreement already accepted; the "terms" shot shows the first-start consent screen.
+terms="$(grep -o '基准版本 [0-9.]*' "$(dirname "$0")/../../TERMS.md" | awk '{print $2}')"
 
 finder="${out}/window-id.swift"
 cat > "${finder}" <<'SWIFT'
@@ -30,8 +32,12 @@ SWIFT
 shoot() {
     local section="$1" appearance="$2"
     local file="${out}/${section}-${appearance}.png"
+    local accepted="${terms}"
+    if [ "${section}" = terms ]; then
+        accepted="none"
+    fi
     open -n "${app}" --args -AnixOpsDemo YES -AnixOpsSection "${section}" -appearance "${appearance}" \
-        -AppleLanguages "(${language})"
+        -AppleLanguages "(${language})" -terms-accepted-version "${accepted}"
     local id=""
     for _ in 1 2 3 4 5 6 7 8 9 10; do
         sleep 2
@@ -60,6 +66,7 @@ shoot rules light
 shoot extensions light
 shoot activity light
 shoot settings light
+shoot terms light
 
 rm -f "${finder}"
 ls -l "${out}"
