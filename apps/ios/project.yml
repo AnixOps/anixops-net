@@ -196,8 +196,15 @@ targets:
               - anixops
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
         ITSAppUsesNonExemptEncryption: false
+        # In-app updates (Sources/NetworkCoreMac/AppUpdater.swift, docs/macos-updates.md): the HTTPS feed URL and the
+        # base64 Ed25519 public keys, comma separated. Empty in every build but the release build, which turns
+        # updates off.
+        AnixOpsUpdateFeedURL: $(ANIXOPS_UPDATE_FEED_URL)
+        AnixOpsUpdatePublicKeys: $(ANIXOPS_UPDATE_PUBLIC_KEYS)
     settings:
       base:
+        ANIXOPS_UPDATE_FEED_URL: ""
+        ANIXOPS_UPDATE_PUBLIC_KEYS: ""
         PRODUCT_NAME: AnixOps Net
         PRODUCT_MODULE_NAME: NetworkCoreMac
         # The tunnel's bundle ID (com.example.networkcore.macos.packettunnel) starts with this one.

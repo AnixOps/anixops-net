@@ -541,6 +541,8 @@ struct MacSettingsPage: View {
                 Text("崩溃时记录脱敏后的信息（不含网址、账号和节点地址），只保存在本机，复制诊断信息时附上。关闭会删除已保存的报告。")
             }
 
+            MacUpdateSection()
+
             Section("关于") {
                 LabeledContent("版本", value: Self.version)
             }
@@ -573,6 +575,104 @@ struct MacSettingsPage: View {
         let short = info?["CFBundleShortVersionString"] as? String ?? "—"
         let build = info?["CFBundleVersion"] as? String ?? "—"
         return "\(short) (\(build))"
+    }
+}
+
+/// Settings > Software Update: check, download, verify and install a signed update (AppUpdater). Only the action
+/// that applies to the current step is shown.
+private struct MacUpdateSection: View {
+    @Environment(AppUpdater.self) private var updater
+    @Environment(\.brand) private var brand
+
+    var body: some View {
+        Section("软件更新") {
+            if updater.isEnabled {
+                Toggle("自动检查更新", isOn: Binding(
+                    get: { updater.automatic },
+                    set: { updater.setAutomatic($0) }
+                ))
+                status
+            } else {
+                Text("这个版本没有配置更新源，请从发布页下载新版本。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var status: some View {
+        switch updater.state {
+        case .disabled:
+            EmptyView()
+        case .idle:
+            checkRow(detail: nil)
+        case .checking:
+            HStack {
+                Text("正在检查更新…")
+                Spacer()
+                ProgressView()
+                    .controlSize(.small)
+            }
+        case let .upToDate(date):
+            checkRow(detail: String(localized: "已是最新版本") + " · " + date.formatted(date: .omitted, time: .shortened))
+        case let .available(item):
+            available(item)
+            HStack {
+                Spacer()
+                Button("下载更新") {
+                    Task { await updater.download() }
+                }
+                .buttonStyle(.brandPrimary)
+            }
+        case let .downloading(item, fraction):
+            VStack(alignment: .leading, spacing: 6) {
+                Text("正在下载 \(item.version)…")
+                ProgressView(value: fraction)
+            }
+        case let .ready(item, _):
+            available(item)
+            Text("安装包已下载并通过签名校验。安装程序打开后 AnixOps Net 会退出，安装完成后重新打开即可。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("安装并退出") {
+                    updater.install()
+                }
+                .buttonStyle(.brandPrimary)
+            }
+        case let .failed(message):
+            checkRow(detail: message, failed: true)
+        }
+    }
+
+    private func checkRow(detail: String?, failed: Bool = false) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("当前版本 \(updater.currentVersion)")
+                if let detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(failed ? brand.danger : .secondary)
+                }
+            }
+            Spacer()
+            Button("检查更新") {
+                Task { await updater.check() }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func available(_ item: UpdateItem) -> some View {
+        LabeledContent("新版本", value: "\(item.version) (\(item.build))")
+        if let notes = item.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+            Text(notes)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+        }
     }
 }
 
