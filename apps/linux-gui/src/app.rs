@@ -11,9 +11,6 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::Duration;
 
-use client_health::{startup, Health};
-use desktop_mitm::plugins::{self, PluginSummary};
-use engine_embedded::profile::RoutingMode;
 use crate::backend::engine;
 use crate::backend::state::Store;
 use crate::backend::system_proxy::Desktop;
@@ -23,6 +20,9 @@ use crate::backend::{
     autostart, format_delay, Backend, DnsPreset, GroupSummary, NodeSummary, OperationResult,
     PreferencesInput, RuntimeSnapshot, SubscriptionSummary, PASTED_LOCATION,
 };
+use client_health::{startup, Health};
+use desktop_mitm::plugins::{self, PluginSummary};
+use engine_embedded::profile::RoutingMode;
 use subscription_meta::ResponseMeta;
 use tauri::plugin::TauriPlugin;
 use tauri::webview::PageLoadEvent;
@@ -349,10 +349,7 @@ async fn connect(app: AppHandle, state: State<'_, AppState>) -> Result<Operation
 }
 
 #[tauri::command]
-async fn disconnect(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<OperationResult, String> {
+async fn disconnect(app: AppHandle, state: State<'_, AppState>) -> Result<OperationResult, String> {
     let result = with_backend(&state, Backend::disconnect).await;
     close_tunnel(&app, &state);
     result

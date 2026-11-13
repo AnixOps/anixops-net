@@ -22,9 +22,9 @@ use engine_embedded::nodes::{outbound_for_node, routing_envelope, single_node_en
 use inbound_mixed::MixedSettings;
 
 #[cfg(target_os = "android")]
-pub use super::tun::{attach as attach_tunnel, attached as tunnel_attached};
-#[cfg(target_os = "android")]
 use super::tun::{self, TunEngine};
+#[cfg(target_os = "android")]
+pub use super::tun::{attach as attach_tunnel, attached as tunnel_attached};
 use serde_json::{json, Value};
 
 const PROFILE_ID: &str = "linux-gui";
