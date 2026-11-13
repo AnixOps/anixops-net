@@ -27,6 +27,7 @@ struct SettingsView: View {
                 }
 
                 OnDemandSections(tunnel: tunnel)
+                NotificationSettingsSection(tunnel: tunnel)
                     .listRowBackground(brand.surface)
 
                 Section {

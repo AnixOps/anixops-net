@@ -87,6 +87,8 @@ targets:
     platform: iOS
     sources:
       - path: Sources/NetworkCorePacketTunnel
+      # The connection-stopped notification is localized like the app.
+      - path: Sources/NetworkCoreApp/Resources/Localizable.xcstrings
     info:
       path: Generated/NetworkCorePacketTunnel-Info.plist
       properties:
@@ -171,6 +173,8 @@ targets:
       - path: Sources/NetworkCoreAppHost/RuleTextEditor.swift
       - path: Sources/NetworkCoreAppHost/TunnelController.swift
       - path: Sources/NetworkCoreAppHost/URLCommandHandler.swift
+      - path: Sources/NetworkCoreAppHost/AppNotifications.swift
+      - path: Sources/NetworkCoreAppHost/DiagnosticEventsView.swift
       - path: Sources/NetworkCoreAppHost/NativeNodeImporterFFI.swift
       - path: Sources/NetworkCoreAppHost/NodeDelayFFI.swift
       - path: Sources/NetworkCoreAppHost/NodeEditSheet.swift

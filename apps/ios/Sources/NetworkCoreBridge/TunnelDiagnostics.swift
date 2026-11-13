@@ -13,6 +13,8 @@ public enum TunnelAppMessage: Equatable {
     case trafficStats
     /// Clears the extension's `TrafficStats`; answered with the empty stats.
     case clearTrafficStats
+    /// New `NotificationSettings` (`profileValue`) for the running extension; answered with `ok`.
+    case notificationSettings(Data)
     /// New local rules (`LocalRules.profileValue()`) for the running tunnel: the extension builds the routing it
     /// would start with and, when only the rule lines changed, swaps them in place. Answered with a
     /// `RuntimeControl.ReloadAnswer`; `restart` asks the app to restart the tunnel instead.
@@ -22,6 +24,7 @@ public enum TunnelAppMessage: Equatable {
     private static let trafficStatsPayload = Data("traffic-stats".utf8)
     private static let clearTrafficStatsPayload = Data("traffic-stats-clear".utf8)
     private static let controlPrefix = Data("control:".utf8)
+    private static let notificationsPrefix = Data("notifications:".utf8)
     private static let reloadLocalRulesPrefix = Data("local-rules:".utf8)
 
     public var encoded: Data {
@@ -36,6 +39,8 @@ public enum TunnelAppMessage: Equatable {
             return Self.trafficStatsPayload
         case .clearTrafficStats:
             return Self.clearTrafficStatsPayload
+        case let .notificationSettings(settings):
+            return Self.notificationsPrefix + settings
         case let .reloadLocalRules(value):
             return Self.reloadLocalRulesPrefix + value
         }
@@ -51,6 +56,9 @@ public enum TunnelAppMessage: Equatable {
         if data == clearTrafficStatsPayload {
             return .clearTrafficStats
         }
+        if data.starts(with: notificationsPrefix) {
+            return .notificationSettings(Data(data.dropFirst(notificationsPrefix.count)))
+        }
         if data.starts(with: reloadLocalRulesPrefix) {
             return .reloadLocalRules(Data(data.dropFirst(reloadLocalRulesPrefix.count)))
         }
@@ -62,13 +70,36 @@ public enum TunnelAppMessage: Equatable {
 }
 
 /// One line of the extension's event log. Messages are fixed strings and codes, never profile content.
+///
+/// Each line has a level and a module (`DiagnosticLevel`, `DiagnosticModule`) for filtering. The extension may set
+/// them; otherwise they follow from the message (`DiagnosticModule.classify`), which also covers lines from
+/// extensions that predate them.
 public struct TunnelDiagnosticEvent: Codable, Equatable {
     public let time: Date
     public let message: String
+    public let level: DiagnosticLevel
+    public let module: DiagnosticModule
 
-    public init(time: Date, message: String) {
+    public init(time: Date, message: String, level: DiagnosticLevel? = nil, module: DiagnosticModule? = nil) {
+        let classified = DiagnosticModule.classify(message)
         self.time = time
         self.message = message
+        self.level = level ?? classified.level
+        self.module = module ?? classified.module
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case time, message, level, module
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let time = try container.decode(Date.self, forKey: .time)
+        let message = try container.decode(String.self, forKey: .message)
+        // Unknown names from a newer extension fall back to the classification too.
+        let level = (try? container.decodeIfPresent(String.self, forKey: .level)).flatMap { $0 }.flatMap(DiagnosticLevel.init(rawValue:))
+        let module = (try? container.decodeIfPresent(String.self, forKey: .module)).flatMap { $0 }.flatMap(DiagnosticModule.init(rawValue:))
+        self.init(time: time, message: message, level: level, module: module)
     }
 }
 
@@ -84,10 +115,15 @@ public final class TunnelDiagnosticLog: @unchecked Sendable {
         self.capacity = max(1, capacity)
     }
 
-    public func record(_ message: String, at time: Date = Date()) {
+    public func record(
+        _ message: String,
+        level: DiagnosticLevel? = nil,
+        module: DiagnosticModule? = nil,
+        at time: Date = Date()
+    ) {
         lock.lock()
         defer { lock.unlock() }
-        events.append(TunnelDiagnosticEvent(time: time, message: message))
+        events.append(TunnelDiagnosticEvent(time: time, message: message, level: level, module: module))
         if events.count > capacity {
             events.removeFirst(events.count - capacity)
         }
@@ -241,7 +277,7 @@ public struct DeveloperReport: Equatable {
             lines.append("none")
         }
         for event in diagnostics.events {
-            lines.append("\(Self.timestamp(event.time)) \(event.message)")
+            lines.append("\(Self.timestamp(event.time)) \(event.message) [\(event.level.rawValue) \(event.module.rawValue)]")
         }
         return lines.joined(separator: "\n")
     }

@@ -8,6 +8,12 @@
             "state": "translated",
             "value": " · paused"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " · 已暫停重新整理"
+          }
         }
       }
     },
@@ -17,6 +23,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ · Current"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · 目前"
           }
         }
       }
@@ -28,6 +40,12 @@
             "state": "translated",
             "value": "Actions for %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 的操作"
+          }
         }
       }
     },
@@ -38,12 +56,24 @@
             "state": "translated",
             "value": "%1$@ (%2$lld servers)"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 等 %lld 個"
+          }
         }
       }
     },
     "%lld ms": {
       "localizations": {
         "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ms"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "%lld ms"
@@ -58,6 +88,12 @@
             "state": "translated",
             "value": "%lld hosts"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 個主機"
+          }
         }
       }
     },
@@ -67,6 +103,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld members"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 個成員"
           }
         }
       }
@@ -78,6 +120,12 @@
             "state": "translated",
             "value": "%1$lld members · %2$lld with a delay"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 個成員 · %lld 個有延遲"
+          }
         }
       }
     },
@@ -87,6 +135,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld members · delays show once connected"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 個成員 · 連線後顯示延遲"
           }
         }
       }
@@ -98,6 +152,12 @@
             "state": "translated",
             "value": "%2$lld of %1$lld members have a delay"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 個成員中 %lld 個有延遲"
+          }
         }
       }
     },
@@ -107,6 +167,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld scripts not run yet"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 個腳本暫不執行"
           }
         }
       }
@@ -118,6 +184,12 @@
             "state": "translated",
             "value": "%lld nodes"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 個節點"
+          }
         }
       }
     },
@@ -127,6 +199,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$lld requests · %2$@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 個請求 · %@"
           }
         }
       }
@@ -138,6 +216,12 @@
             "state": "translated",
             "value": "%lld connections"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 個連線"
+          }
         }
       }
     },
@@ -147,6 +231,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$lld connections · %2$@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 個連線 · %@"
           }
         }
       }
@@ -158,6 +248,12 @@
             "state": "translated",
             "value": "%lld entries"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 條"
+          }
         }
       }
     },
@@ -167,6 +263,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld hosts"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 條 Hosts"
           }
         }
       }
@@ -178,6 +280,12 @@
             "state": "translated",
             "value": "%lld routing rules"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 條分流規則"
+          }
         }
       }
     },
@@ -187,6 +295,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld rules · %lld policy groups"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 條規則 · %lld 個策略組"
           }
         }
       }
@@ -198,6 +312,12 @@
             "state": "translated",
             "value": "%lld rewrites"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 條重寫"
+          }
         }
       }
     },
@@ -207,6 +327,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "7 days"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "7 天"
           }
         }
       }
@@ -218,6 +344,12 @@
             "state": "translated",
             "value": "Apps reconnect on their own when they need to."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App 會自動重新建立需要的連線。"
+          }
         }
       }
     },
@@ -228,12 +360,24 @@
             "state": "translated",
             "value": "Cloudflare (DoH, via proxy)"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cloudflare（DoH，經代理）"
+          }
         }
       }
     },
     "DNS": {
       "localizations": {
         "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DNS"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "DNS"
@@ -248,6 +392,12 @@
             "state": "translated",
             "value": "When the subscription has no rule set for GEOIP,CN, GEOSITE,cn or GEOSITE,gfw, public lists (Loyalsoldier, gaoyifan) are used; the engine downloads them directly once a day."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GEOIP,CN、GEOSITE,cn 和 GEOSITE,gfw 沒有訂閱自帶的規則集時，使用公開清單（Loyalsoldier、gaoyifan），由核心每天直連下載一次。"
+          }
         }
       }
     },
@@ -257,6 +407,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Google (DoH, via proxy)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google（DoH，經代理）"
           }
         }
       }
@@ -268,6 +424,12 @@
             "state": "translated",
             "value": "HTTPS Decryption"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTPS 解密"
+          }
         }
       }
     },
@@ -277,6 +439,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "HTTPS Decryption and Plugins"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTPS 解密與外掛"
           }
         }
       }
@@ -288,12 +456,24 @@
             "state": "translated",
             "value": "HTTPS Decryption Certificate"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTPS 解密憑證"
+          }
         }
       }
     },
     "Hosts": {
       "localizations": {
         "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hosts"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "Hosts"
@@ -308,6 +488,12 @@
             "state": "translated",
             "value": "Hosts are kept."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hosts 會保留。"
+          }
         }
       }
     },
@@ -318,12 +504,24 @@
             "state": "translated",
             "value": "IP addresses"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "IP 位址"
+          }
         }
       }
     },
     "MB": {
       "localizations": {
         "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MB"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "MB"
@@ -338,6 +536,12 @@
             "state": "translated",
             "value": "Quad9 (DoT, via proxy)"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quad9（DoT，經代理）"
+          }
         }
       }
     },
@@ -347,6 +551,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The REALITY parameters (sni, pbk, sid) aren't valid"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "REALITY 參數（sni、pbk、sid）不正確"
           }
         }
       }
@@ -358,6 +568,12 @@
             "state": "translated",
             "value": "SHA-256 Fingerprint"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SHA-256 指紋"
+          }
         }
       }
     },
@@ -368,12 +584,24 @@
             "state": "translated",
             "value": "TLS name (optional)"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TLS 名稱（可選）"
+          }
         }
       }
     },
     "UDP": {
       "localizations": {
         "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "UDP"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "UDP"
@@ -388,6 +616,12 @@
             "state": "translated",
             "value": "The VLESS user ID isn't valid"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VLESS 使用者 ID 格式不正確"
+          }
         }
       }
     },
@@ -397,6 +631,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The WireGuard Endpoint isn't valid"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WireGuard Endpoint 格式不正確"
           }
         }
       }
@@ -408,6 +648,12 @@
             "state": "translated",
             "value": "A WireGuard address or AllowedIPs entry isn't valid"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WireGuard 位址或 AllowedIPs 格式不正確"
+          }
         }
       }
     },
@@ -417,6 +663,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "A WireGuard key isn't valid"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WireGuard 金鑰格式不正確"
           }
         }
       }
@@ -428,6 +680,12 @@
             "state": "translated",
             "value": "The WireGuard config isn't valid"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WireGuard 設定格式不正確"
+          }
         }
       }
     },
@@ -437,6 +695,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The WireGuard config is missing %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WireGuard 設定缺少 %@"
           }
         }
       }
@@ -454,6 +718,12 @@
             "state": "translated",
             "value": "连接"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線"
+          }
         }
       }
     },
@@ -463,6 +733,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "“%@” is now the current node."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@”已設為目前節點。"
           }
         }
       }
@@ -474,6 +750,12 @@
             "state": "translated",
             "value": "↑%1$@ ↓%2$@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "↑%@ ↓%@"
+          }
         }
       }
     },
@@ -483,6 +765,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Upload"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上傳"
           }
         }
       }
@@ -494,6 +782,12 @@
             "state": "translated",
             "value": "Upload and download are the bytes this connection moved through the tunnel. Host names come from the request or the TLS SNI / HTTP Host, are kept in memory only and are cleared when the tunnel stops."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上傳、下載為該連線經隧道的位元組數。目標網域來自請求本身或 TLS SNI / HTTP Host，只儲存在記憶體裡，斷開隧道即清空。"
+          }
         }
       }
     },
@@ -503,6 +797,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Last download failed: %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上次下載失敗：%@"
           }
         }
       }
@@ -514,6 +814,12 @@
             "state": "translated",
             "value": "Last Stop Reason"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上次停止原因"
+          }
         }
       }
     },
@@ -523,6 +829,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Last update failed (%@)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上次更新失敗（%@）"
           }
         }
       }
@@ -534,6 +846,12 @@
             "state": "translated",
             "value": "Pull down to update every subscription. Delay is the time of a real HTTP request to http://www.gstatic.com/generate_204 through the node; no answer in 5 seconds shows Timeout. Switching nodes while connected reconnects automatically."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下拉更新全部訂閱。延遲為經該節點請求 http://www.gstatic.com/generate_204 的 HTTP 真連線時間，5 秒無回應顯示逾時。連線中切換節點會自動重連。"
+          }
         }
       }
     },
@@ -543,6 +861,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Download"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載"
           }
         }
       }
@@ -554,6 +878,12 @@
             "state": "translated",
             "value": "<1 s"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不到 1 秒"
+          }
         }
       }
     },
@@ -563,6 +893,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Unsupported"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不支援"
           }
         }
       }
@@ -574,6 +910,12 @@
             "state": "translated",
             "value": "Your traffic and browsing aren't collected"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不收集你的流量和瀏覽記錄"
+          }
         }
       }
     },
@@ -583,6 +925,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Events"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "事件"
           }
         }
       }
@@ -594,6 +942,12 @@
             "state": "translated",
             "value": "QR code"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR Code"
+          }
         }
       }
     },
@@ -603,6 +957,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Today"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "今天"
           }
         }
       }
@@ -614,6 +974,12 @@
             "state": "translated",
             "value": "The first matching rule from the top wins. RULE-SET uses the rule sets on the rules page, such as geosite-cn; it never matches with a single node and no subscription rules."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "從上到下第一條命中的規則生效。RULE-SET 使用規則頁的規則集，例如 geosite-cn；只有單個節點、沒有訂閱規則時它不會命中。"
+          }
         }
       }
     },
@@ -623,6 +989,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Import from Clipboard"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "從剪貼簿匯入"
           }
         }
       }
@@ -634,6 +1006,12 @@
             "state": "translated",
             "value": "Import from File"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "從檔案匯入"
+          }
         }
       }
     },
@@ -643,6 +1021,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Import WireGuard Config from File"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "從檔案匯入 WireGuard 設定"
           }
         }
       }
@@ -654,6 +1038,12 @@
             "state": "translated",
             "value": "Read from Photos"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "從相簿識別"
+          }
         }
       }
     },
@@ -663,6 +1053,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Proxies"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "代理"
           }
         }
       }
@@ -674,6 +1070,12 @@
             "state": "translated",
             "value": "Proxy mode"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "代理模式"
+          }
         }
       }
     },
@@ -683,6 +1085,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "All nodes of this subscription are removed. If it is in use, the next subscription takes over."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "會刪除這個訂閱組的全部節點。正在使用它時，會切換到下一個訂閱組。"
           }
         }
       }
@@ -694,6 +1102,12 @@
             "state": "translated",
             "value": "Low Data Mode"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "低數據模式"
+          }
         }
       }
     },
@@ -703,6 +1117,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "In Use"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用中"
           }
         }
       }
@@ -714,6 +1134,12 @@
             "state": "translated",
             "value": "Use the recommended domestic/overseas split"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用推薦的國內外分流"
+          }
         }
       }
     },
@@ -723,6 +1149,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Save"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存"
           }
         }
       }
@@ -734,6 +1166,12 @@
             "state": "translated",
             "value": "Couldn't save the DNS settings to the VPN configuration"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存 DNS 設定到 VPN 設定失敗"
+          }
         }
       }
     },
@@ -743,6 +1181,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Saving the VPN configuration failed or wasn't allowed"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存 VPN 設定失敗或未獲授權"
           }
         }
       }
@@ -754,6 +1198,12 @@
             "state": "translated",
             "value": "Couldn't save the plugin list"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存外掛清單失敗"
+          }
         }
       }
     },
@@ -763,6 +1213,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't save plugins to the VPN configuration"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存外掛到 VPN 設定失敗"
           }
         }
       }
@@ -774,6 +1230,12 @@
             "state": "translated",
             "value": "Import a node in the app first"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "先在 App 裡匯入節點"
+          }
         }
       }
     },
@@ -783,6 +1245,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "All"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部"
           }
         }
       }
@@ -794,6 +1262,12 @@
             "state": "translated",
             "value": "Close all"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部斷開"
+          }
         }
       }
     },
@@ -803,6 +1277,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Test All"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部測速"
           }
         }
       }
@@ -814,6 +1294,12 @@
             "state": "translated",
             "value": "All requests"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部請求"
+          }
         }
       }
     },
@@ -823,6 +1309,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "About"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關於"
           }
         }
       }
@@ -834,6 +1326,12 @@
             "state": "translated",
             "value": "When off, all traffic goes through the node selected on the Proxies page. Changes while connected reconnect automatically."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉後全部流量走代理頁選中的節點。連線中修改會自動重連。"
+          }
         }
       }
     },
@@ -843,6 +1341,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Turn Off Developer Mode"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉開發者模式"
           }
         }
       }
@@ -854,6 +1358,12 @@
             "state": "translated",
             "value": "Dismiss"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉提示"
+          }
         }
       }
     },
@@ -863,6 +1373,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Other hosts"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "其他主機"
           }
         }
       }
@@ -874,6 +1390,12 @@
             "state": "translated",
             "value": "Memory"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "記憶體佔用"
+          }
         }
       }
     },
@@ -883,6 +1405,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The content is empty"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "內容為空"
           }
         }
       }
@@ -894,6 +1422,12 @@
             "state": "translated",
             "value": "Picked by the engine"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "核心自動選擇"
+          }
         }
       }
     },
@@ -903,6 +1437,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tap %lld more times to turn on developer mode"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再點 %lld 次開啟開發者模式"
           }
         }
       }
@@ -914,6 +1454,12 @@
             "state": "translated",
             "value": "Exit IP"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "出口 IP"
+          }
         }
       }
     },
@@ -923,6 +1469,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Outbound protocol"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "出站協定"
           }
         }
       }
@@ -934,6 +1486,12 @@
             "state": "translated",
             "value": "Failed"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "出錯"
+          }
         }
       }
     },
@@ -943,6 +1501,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Share"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分享"
           }
         }
       }
@@ -954,6 +1518,12 @@
             "state": "translated",
             "value": "Routing mode"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分流模式"
+          }
         }
       }
     },
@@ -963,6 +1533,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Group by"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分組"
           }
         }
       }
@@ -974,6 +1550,12 @@
             "state": "translated",
             "value": "Switch"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換"
+          }
         }
       }
     },
@@ -983,6 +1565,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Switch %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換 %@"
           }
         }
       }
@@ -994,6 +1582,12 @@
             "state": "translated",
             "value": "Delete"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刪除"
+          }
         }
       }
     },
@@ -1003,6 +1597,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Delete subscription “%@”?"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刪除訂閱組“%@”？"
           }
         }
       }
@@ -1014,6 +1614,12 @@
             "state": "translated",
             "value": "Expires %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "到期 %@"
+          }
         }
       }
     },
@@ -1023,6 +1629,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "There's no text on the clipboard"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "剪貼簿裡沒有文字"
           }
         }
       }
@@ -1034,6 +1646,12 @@
             "state": "translated",
             "value": "Protocol"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "協定"
+          }
         }
       }
     },
@@ -1043,6 +1661,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Adjust Policy Groups in Proxies"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "去代理頁調整策略組"
           }
         }
       }
@@ -1054,6 +1678,12 @@
             "state": "translated",
             "value": "Connect"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "去連線"
+          }
         }
       }
     },
@@ -1063,6 +1693,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cancel"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
           }
         }
       }
@@ -1074,6 +1710,12 @@
             "state": "translated",
             "value": "Looked up only when you tap, sent by the current mode and rules"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只在你點按時查詢，按目前模式和規則發出"
+          }
         }
       }
     },
@@ -1083,6 +1725,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "HTTPS is decrypted only for hosts listed under a plugin's [MITM]; plain HTTP always goes through plugins. HTTP/1.1 only. Connect the VPN first."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTPS 只解密外掛 [MITM] 列出的主機，明文 HTTP 全部交給外掛處理，僅支援 HTTP/1.1。使用前需要先連上 VPN。"
           }
         }
       }
@@ -1094,6 +1742,12 @@
             "state": "translated",
             "value": "Allow AnixOps Net to use the camera in Settings, or read the QR code from a screenshot in Photos."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可以在“設定”裡允許 AnixOps Net 使用相機，或者從相簿裡的截圖識別 QR Code。"
+          }
         }
       }
     },
@@ -1103,6 +1757,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "HTTPS traffic to hosts in the MITM list can be decrypted."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可以解密 MITM 主機清單中的 HTTPS 流量。"
           }
         }
       }
@@ -1114,6 +1774,12 @@
             "state": "translated",
             "value": "Name"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "名稱"
+          }
         }
       }
     },
@@ -1123,6 +1789,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Startup"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "啟動"
           }
         }
       }
@@ -1134,6 +1806,12 @@
             "state": "translated",
             "value": "Enabled plugins exceed 8 MB in total. Turn some off first."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "啟用的外掛合計超過 8 MB，請先停用一些外掛"
+          }
         }
       }
     },
@@ -1143,6 +1821,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "No QR code found in the picture"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "圖片裡沒有找到 QR Code"
           }
         }
       }
@@ -1154,6 +1838,12 @@
             "state": "translated",
             "value": "Allow the download in Safari, then install it in Settings > Profile Downloaded."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Safari 中允許下載，然後到 設定 > 已下載描述檔 安裝。"
+          }
         }
       }
     },
@@ -1163,6 +1853,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connect or disconnect from Control Center."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在控制中心連線或斷開。"
           }
         }
       }
@@ -1174,6 +1870,12 @@
             "state": "translated",
             "value": "Online %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "線上 %@"
+          }
         }
       }
     },
@@ -1183,6 +1885,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copy Diagnostics"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "複製診斷資訊"
           }
         }
       }
@@ -1194,6 +1902,12 @@
             "state": "translated",
             "value": "Copy link"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "複製連結"
+          }
         }
       }
     },
@@ -1203,6 +1917,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Appearance"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "外觀"
           }
         }
       }
@@ -1214,6 +1934,12 @@
             "state": "translated",
             "value": "Failed"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "失敗"
+          }
         }
       }
     },
@@ -1223,6 +1949,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Secure tunnel established"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安全隧道已建立"
           }
         }
       }
@@ -1234,6 +1966,12 @@
             "state": "translated",
             "value": "Install Profile"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安裝描述檔"
+          }
         }
       }
     },
@@ -1243,6 +1981,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Done"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成"
           }
         }
       }
@@ -1254,6 +1998,12 @@
             "state": "translated",
             "value": "Passwords and keys are kept only in the keychain and are never shown in the app or in diagnostics."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "密碼和金鑰只儲存在鑰匙圈裡，介面和診斷資訊都不會顯示。"
+          }
         }
       }
     },
@@ -1263,6 +2013,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Import"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入"
           }
         }
       }
@@ -1274,6 +2030,12 @@
             "state": "translated",
             "value": "Import your subscription to send the traffic you choose through a proxy by rules, and everything else direct."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入你的訂閱，就能按規則把需要的流量走代理，其餘直連。"
+          }
         }
       }
     },
@@ -1283,6 +2045,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Import failed"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入失敗"
           }
         }
       }
@@ -1294,6 +2062,12 @@
             "state": "translated",
             "value": "Imported"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入完成"
+          }
         }
       }
     },
@@ -1303,6 +2077,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "After you import a subscription with rules and policy groups (a Clash, Surge or Loon profile), you can route by its rules and switch its policy groups here. Right now all traffic goes through the selected node."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入帶規則和策略組的訂閱（Clash、Surge、Loon 設定）後，可以在這裡按訂閱規則分流和切換策略組。現在全部流量走所選節點。"
           }
         }
       }
@@ -1314,6 +2094,12 @@
             "state": "translated",
             "value": "Import Plugin"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入外掛"
+          }
         }
       }
     },
@@ -1323,6 +2109,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Importing a new node replaces the current one. Multiple nodes, subscriptions and policy groups will open up once the core supports them."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入新節點會替換目前節點。多節點、訂閱和策略組會在核心支援後開放。"
           }
         }
       }
@@ -1334,6 +2126,12 @@
             "state": "translated",
             "value": "Imported Nodes"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入的節點"
+          }
         }
       }
     },
@@ -1343,6 +2141,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Import your first node to connect"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入第一個節點後即可連線"
           }
         }
       }
@@ -1354,6 +2158,12 @@
             "state": "translated",
             "value": "The import component is unavailable. Update the app."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入組件不可用，請更新 App"
+          }
         }
       }
     },
@@ -1363,6 +2173,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Import Node"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入節點"
           }
         }
       }
@@ -1374,6 +2190,12 @@
             "state": "translated",
             "value": "Import Node…"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入節點…"
+          }
         }
       }
     },
@@ -1383,6 +2205,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Import Node (⌘I)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入節點（⌘I）"
           }
         }
       }
@@ -1394,6 +2222,12 @@
             "state": "translated",
             "value": "Import Subscription"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入訂閱"
+          }
         }
       }
     },
@@ -1403,6 +2237,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Import a subscription to switch nodes here."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入訂閱後，可以在這裡切換節點。"
           }
         }
       }
@@ -1414,6 +2254,12 @@
             "state": "translated",
             "value": "Import a subscription link and each subscription becomes a group you can test, switch, and update by hand or automatically."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入訂閱連結後，每個訂閱是一個訂閱組，可以測延遲、切換節點、手動或自動更新。"
+          }
         }
       }
     },
@@ -1423,6 +2269,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "After you import a subscription link or several nodes, all of them are listed here for delay tests and switching."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入訂閱連結或多個節點後，這裡會列出全部節點，可以測延遲和切換。"
           }
         }
       }
@@ -1434,6 +2286,12 @@
             "state": "translated",
             "value": "Export"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯出"
+          }
         }
       }
     },
@@ -1443,6 +2301,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Export Certificate (.cer)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯出憑證（.cer）"
           }
         }
       }
@@ -1454,6 +2318,12 @@
             "state": "translated",
             "value": "Replaces the current node “%@”"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將替換目前節點“%@”"
+          }
         }
       }
     },
@@ -1463,6 +2333,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "No certificate yet"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尚未產生憑證"
           }
         }
       }
@@ -1474,6 +2350,12 @@
             "state": "translated",
             "value": "Expand %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "展開 %@"
+          }
         }
       }
     },
@@ -1483,6 +2365,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Saved. The tunnel is reconnecting."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已儲存，隧道正在重新連線。"
           }
         }
       }
@@ -1494,6 +2382,12 @@
             "state": "translated",
             "value": "Copied"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已複製"
+          }
         }
       }
     },
@@ -1503,6 +2397,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Developer mode turned on"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已開啟開發者模式"
           }
         }
       }
@@ -1514,6 +2414,12 @@
             "state": "translated",
             "value": "Blocked"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已攔截"
+          }
         }
       }
     },
@@ -1523,6 +2429,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Disconnected"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已斷開"
           }
         }
       }
@@ -1534,6 +2446,12 @@
             "state": "translated",
             "value": "Used %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已用 %@"
+          }
         }
       }
     },
@@ -1543,6 +2461,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Used %1$@ / %2$@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已用 %@ / %@"
           }
         }
       }
@@ -1554,6 +2478,12 @@
             "state": "translated",
             "value": "Ended"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已結束"
+          }
         }
       }
     },
@@ -1563,6 +2493,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Closed %lld"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已結束 %lld"
           }
         }
       }
@@ -1574,6 +2510,12 @@
             "state": "translated",
             "value": "Online"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已聯網"
+          }
         }
       }
     },
@@ -1583,6 +2525,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connected"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已連線"
           }
         }
       }
@@ -1594,6 +2542,12 @@
             "state": "translated",
             "value": "Connected · %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已連線 · %@"
+          }
         }
       }
     },
@@ -1603,6 +2557,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Delay is the time for a real HTTP request to http://www.gstatic.com/generate_204 through the node; no answer in 5 seconds shows Timeout. Switching nodes while connected reconnects automatically."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "延遲為經該節點請求 http://www.gstatic.com/generate_204 的 HTTP 真連線時間，5 秒無回應顯示逾時。連線中切換節點會自動重連。"
           }
         }
       }
@@ -1614,6 +2574,12 @@
             "state": "translated",
             "value": "Developer Mode"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開發者模式"
+          }
         }
       }
     },
@@ -1623,6 +2589,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Developer mode is on"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開發者模式已開啟"
           }
         }
       }
@@ -1634,6 +2606,12 @@
             "state": "translated",
             "value": "Before turning this on, create and trust the HTTPS decryption certificate above."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開啟前請先在上面產生並信任 HTTPS 解密憑證。"
+          }
         }
       }
     },
@@ -1643,6 +2621,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Turn On Full Trust"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開啟完全信任"
           }
         }
       }
@@ -1654,6 +2638,12 @@
             "state": "translated",
             "value": "Started"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開始"
+          }
         }
       }
     },
@@ -1663,6 +2653,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Current Session"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前工作階段"
           }
         }
       }
@@ -1674,6 +2670,12 @@
             "state": "translated",
             "value": "Current node"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前節點"
+          }
         }
       }
     },
@@ -1683,6 +2685,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Current node %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前節點 %@"
           }
         }
       }
@@ -1694,6 +2702,12 @@
             "state": "translated",
             "value": "The current node has no policy groups"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前節點沒有策略組"
+          }
         }
       }
     },
@@ -1703,6 +2717,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "This subscription routes by rules: policy groups decide which node each connection uses."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前訂閱按規則分流，每條流量走哪個節點由策略組決定。"
           }
         }
       }
@@ -1714,6 +2734,12 @@
             "state": "translated",
             "value": "Or type it in"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "或手動輸入"
+          }
         }
       }
     },
@@ -1723,6 +2749,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Manual Update"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "手動更新"
           }
         }
       }
@@ -1734,6 +2766,12 @@
             "state": "translated",
             "value": "Open AnixOps Net"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開啟 AnixOps Net"
+          }
         }
       }
     },
@@ -1743,6 +2781,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open Settings"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開啟設定"
           }
         }
       }
@@ -1754,6 +2798,12 @@
             "state": "translated",
             "value": "Extensions"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "擴充功能"
+          }
         }
       }
     },
@@ -1763,6 +2813,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Extension Events (last %lld)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "擴充功能事件（最近 %lld 條）"
           }
         }
       }
@@ -1774,6 +2830,12 @@
             "state": "translated",
             "value": "The extension isn't responding"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "擴充功能沒有回應"
+          }
         }
       }
     },
@@ -1783,6 +2845,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Scan QR code"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "掃描 QR Code"
           }
         }
       }
@@ -1794,6 +2862,12 @@
             "state": "translated",
             "value": "The tunnel extension wasn't found"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "找不到隧道擴充功能"
+          }
         }
       }
     },
@@ -1803,6 +2877,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Technical Details"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "技術詳情"
           }
         }
       }
@@ -1814,6 +2894,12 @@
             "state": "translated",
             "value": "Reject"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拒絕"
+          }
         }
       }
     },
@@ -1823,6 +2909,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Drag the handles to reorder. Cards switched off don't show on Home."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拖動右側把手調整順序，關掉的卡片不在首頁顯示。"
           }
         }
       }
@@ -1834,6 +2926,12 @@
             "state": "translated",
             "value": "By host"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按主機"
+          }
         }
       }
     },
@@ -1843,6 +2941,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Routing by domain and IP, rule sets and rule testing will live here. This version sends all traffic through the node."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按網域和 IP 分流、規則集和規則測試會放在這裡。目前版本按節點設定轉發全部流量。"
           }
         }
       }
@@ -1854,6 +2958,12 @@
             "state": "translated",
             "value": "By hour"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按小時"
+          }
         }
       }
     },
@@ -1863,6 +2973,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sorted by delay, untested nodes last. Switching while connected reconnects automatically."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按延遲排序，未測速的節點在後。連線中切換節點會自動重連。"
           }
         }
       }
@@ -1874,6 +2990,12 @@
             "state": "translated",
             "value": "Metered network"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按流量計費的網路"
+          }
         }
       }
     },
@@ -1883,6 +3005,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "By policy"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按策略"
           }
         }
       }
@@ -1894,6 +3022,12 @@
             "state": "translated",
             "value": "Route by subscription rules"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按訂閱規則分流"
+          }
         }
       }
     },
@@ -1903,6 +3037,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Switch Node"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "換個節點"
           }
         }
       }
@@ -1914,6 +3054,12 @@
             "state": "translated",
             "value": "The profile may not be installed, or full trust is not turned on in Certificate Trust Settings."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "描述檔可能未安裝，或尚未在憑證信任設定中開啟完全信任。"
+          }
         }
       }
     },
@@ -1923,6 +3069,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Plugins"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "外掛"
           }
         }
       }
@@ -1934,6 +3086,12 @@
             "state": "translated",
             "value": "The plugin is empty"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "外掛內容為空"
+          }
         }
       }
     },
@@ -1943,6 +3101,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The plugin is larger than 8 MB"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "外掛超過 8 MB"
           }
         }
       }
@@ -1954,6 +3118,12 @@
             "state": "translated",
             "value": "Search nodes, /regex/ matches names"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜尋節點，/正規表示式/ 符合名稱"
+          }
         }
       }
     },
@@ -1963,6 +3133,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Works with subscription links, node links, QR codes, and Clash / Surge / Loon configs."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "支援訂閱連結、節點連結、QR Code，以及 Clash / Surge / Loon 設定。"
           }
         }
       }
@@ -1974,6 +3150,12 @@
             "state": "translated",
             "value": "Supports subscription links; Clash / Surge / Loon / Quantumult X subscription content; Trojan, VMess, VLESS, Shadowsocks, Hysteria2 and TUIC links; and WireGuard configs with one peer."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "支援訂閱連結，Clash / Surge / Loon / Quantumult X 訂閱內容，Trojan、VMess、VLESS、Shadowsocks、Hysteria2、TUIC 連結，以及單個 Peer 的 WireGuard 設定。"
+          }
         }
       }
     },
@@ -1983,6 +3165,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Collapse %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "收起 %@"
           }
         }
       }
@@ -1994,6 +3182,12 @@
             "state": "translated",
             "value": "Fallback"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "容錯移轉"
+          }
         }
       }
     },
@@ -2003,6 +3197,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The file isn't UTF-8 text or is larger than 8 MB"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "檔案不是 UTF-8 文字或超過 8 MB"
           }
         }
       }
@@ -2014,6 +3214,12 @@
             "state": "translated",
             "value": "The file isn't a text config this app recognizes"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "檔案不是可識別的文字設定"
+          }
         }
       }
     },
@@ -2023,6 +3229,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Disconnect"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "斷開"
           }
         }
       }
@@ -2034,6 +3246,12 @@
             "state": "translated",
             "value": "Disconnecting"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "斷開中"
+          }
         }
       }
     },
@@ -2043,6 +3261,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Close all %lld connections?"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "斷開全部 %lld 個連線？"
           }
         }
       }
@@ -2054,6 +3278,12 @@
             "state": "translated",
             "value": "Close all connections"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "斷開全部連線"
+          }
         }
       }
     },
@@ -2063,6 +3293,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Disconnect, currently connected"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "斷開，目前已連線"
           }
         }
       }
@@ -2074,6 +3310,12 @@
             "state": "translated",
             "value": "Disconnect, currently connecting"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "斷開，正在連線"
+          }
         }
       }
     },
@@ -2083,6 +3325,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "None"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無"
           }
         }
       }
@@ -2094,6 +3342,12 @@
             "state": "translated",
             "value": "Couldn't start the tunnel"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法啟動隧道"
+          }
         }
       }
     },
@@ -2103,6 +3357,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't save the node key to the keychain"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法把節點金鑰儲存到鑰匙圈"
           }
         }
       }
@@ -2114,6 +3374,12 @@
             "state": "translated",
             "value": "Couldn't serve the profile (%@)"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法提供描述檔（%@）"
+          }
         }
       }
     },
@@ -2123,6 +3389,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't change the login item. Adjust it in System Settings > General > Login Items."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法更改登入項目，請在 系統設定 > 一般 > 登入項目 中調整。"
           }
         }
       }
@@ -2134,6 +3406,12 @@
             "state": "translated",
             "value": "Couldn't build the plugin configuration"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法產生外掛設定"
+          }
         }
       }
     },
@@ -2143,6 +3421,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't build the tunnel configuration"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法產生隧道設定"
           }
         }
       }
@@ -2154,6 +3438,12 @@
             "state": "translated",
             "value": "Couldn't parse the node"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法解析節點"
+          }
         }
       }
     },
@@ -2163,6 +3453,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Unrecognized node link or subscription format"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法識別的節點連結或訂閱格式"
           }
         }
       }
@@ -2174,6 +3470,12 @@
             "state": "translated",
             "value": "Couldn't read the VPN configuration"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法讀取 VPN 設定"
+          }
         }
       }
     },
@@ -2183,6 +3485,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't read the file"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法讀取檔案"
           }
         }
       }
@@ -2194,6 +3502,12 @@
             "state": "translated",
             "value": "Couldn't read this picture"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法讀取這張圖片"
+          }
         }
       }
     },
@@ -2203,6 +3517,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "No network"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無網路"
           }
         }
       }
@@ -2214,6 +3534,12 @@
             "state": "translated",
             "value": "Nothing recorded"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無記錄"
+          }
         }
       }
     },
@@ -2223,6 +3549,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Duration"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "時長"
           }
         }
       }
@@ -2234,6 +3566,12 @@
             "state": "translated",
             "value": "Time"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "時間"
+          }
         }
       }
     },
@@ -2243,6 +3581,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Period"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "時間範圍"
           }
         }
       }
@@ -2254,6 +3598,12 @@
             "state": "translated",
             "value": "Shows this host's connections"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示這個主機的連線"
+          }
         }
       }
     },
@@ -2263,6 +3613,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nodes with plugins aren't supported yet"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暫不支援帶外掛的節點"
           }
         }
       }
@@ -2274,6 +3630,12 @@
             "state": "translated",
             "value": "Pause"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暫停重新整理"
+          }
         }
       }
     },
@@ -2283,6 +3645,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "No events yet"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暫無事件"
           }
         }
       }
@@ -2294,6 +3662,12 @@
             "state": "translated",
             "value": "No active connections"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暫無活躍連線"
+          }
         }
       }
     },
@@ -2303,6 +3677,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Updated %@ ago"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新於 %@前"
           }
         }
       }
@@ -2314,6 +3694,12 @@
             "state": "translated",
             "value": "Last 60 s"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最近 60 秒"
+          }
         }
       }
     },
@@ -2323,6 +3709,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wired"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有線網路"
           }
         }
       }
@@ -2334,6 +3726,12 @@
             "state": "translated",
             "value": "Not started"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未啟動"
+          }
         }
       }
     },
@@ -2343,6 +3741,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Untitled Plugin"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未命名外掛"
           }
         }
       }
@@ -2354,6 +3758,12 @@
             "state": "translated",
             "value": "Not imported"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未匯入"
+          }
         }
       }
     },
@@ -2363,6 +3773,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Unknown"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未知"
           }
         }
       }
@@ -2374,6 +3790,12 @@
             "state": "translated",
             "value": "Unknown protocol"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未知協定"
+          }
         }
       }
     },
@@ -2383,6 +3805,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Unknown state"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未知狀態"
           }
         }
       }
@@ -2394,6 +3822,12 @@
             "state": "translated",
             "value": "Not connected"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未連線"
+          }
         }
       }
     },
@@ -2403,6 +3837,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Not selected"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未選擇"
           }
         }
       }
@@ -2414,6 +3854,12 @@
             "state": "translated",
             "value": "Not configured"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未設定"
+          }
         }
       }
     },
@@ -2423,6 +3869,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld switches this session"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本次切換 %lld 次"
           }
         }
       }
@@ -2434,6 +3886,12 @@
             "state": "translated",
             "value": "This session"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本次用量"
+          }
         }
       }
     },
@@ -2443,6 +3901,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "View"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查看"
           }
         }
       }
@@ -2454,6 +3918,12 @@
             "state": "translated",
             "value": "All Subscriptions and Policy Groups"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查看全部訂閱和策略組"
+          }
         }
       }
     },
@@ -2463,6 +3933,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "See whether you're connected and tap to connect or disconnect."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查看是否已連線，點一下即可連線或斷開。"
           }
         }
       }
@@ -2474,6 +3950,12 @@
             "state": "translated",
             "value": "Looking up…"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查詢中…"
+          }
         }
       }
     },
@@ -2483,6 +3965,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lookup failed, tap to retry"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查詢失敗，點一下重試"
           }
         }
       }
@@ -2494,6 +3982,12 @@
             "state": "translated",
             "value": "Overview"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "概覽"
+          }
         }
       }
     },
@@ -2503,6 +3997,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Welcome to\nAnixOps Net"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "歡迎使用\nAnixOps Net"
           }
         }
       }
@@ -2514,6 +4014,12 @@
             "state": "translated",
             "value": "Setting up the secure tunnel"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在建立安全隧道"
+          }
         }
       }
     },
@@ -2523,6 +4029,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Routing by subscription rules: policy groups choose the nodes. Switch groups or turn rules off on the Rules page."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在按訂閱規則分流，節點由策略組決定；可以在“規則”頁切換策略組或關閉規則。"
           }
         }
       }
@@ -2534,6 +4046,12 @@
             "state": "translated",
             "value": "Routing by the subscription's rules; policy groups pick the nodes. Switch groups or turn the rules off on the Rules tab. Other subscriptions appear as “订阅·name” policy groups in the rules' select groups."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在按訂閱規則分流，節點由策略組決定；可以在“規則”頁切換策略組或關閉規則。其他訂閱組會作為“訂閱·名稱”策略組出現在規則的選擇組裡。"
+          }
         }
       }
     },
@@ -2543,6 +4061,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Disconnecting"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在斷開"
           }
         }
       }
@@ -2554,6 +4078,12 @@
             "state": "translated",
             "value": "Disconnecting…"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在斷開…"
+          }
         }
       }
     },
@@ -2563,6 +4093,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Updating"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在更新"
           }
         }
       }
@@ -2574,6 +4110,12 @@
             "state": "translated",
             "value": "Testing delay"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在測速"
+          }
         }
       }
     },
@@ -2583,6 +4125,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connecting…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在連線…"
           }
         }
       }
@@ -2594,6 +4142,12 @@
             "state": "translated",
             "value": "Steps"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "步驟"
+          }
         }
       }
     },
@@ -2603,6 +4157,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Updates every %lld days"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每 %lld 天自動更新"
           }
         }
       }
@@ -2614,6 +4174,12 @@
             "state": "translated",
             "value": "Updates every %lld hours"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每 %lld 小時自動更新"
+          }
         }
       }
     },
@@ -2623,6 +4189,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Refresh every 2 seconds"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每 2 秒自動重新整理"
           }
         }
       }
@@ -2634,6 +4206,12 @@
             "state": "translated",
             "value": "Updates weekly"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每週自動更新"
+          }
         }
       }
     },
@@ -2643,6 +4221,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The rule, policy and plugin tags each connection matches need data from the core and will show here in a later version."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每條連線命中的規則、策略和外掛標記需要核心提供資料，會在後續版本顯示在這裡。"
           }
         }
       }
@@ -2654,6 +4238,12 @@
             "state": "translated",
             "value": "No matching nodes."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有符合的節點。"
+          }
         }
       }
     },
@@ -2663,6 +4253,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "No usable node"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有可用的節點"
           }
         }
       }
@@ -2674,6 +4270,12 @@
             "state": "translated",
             "value": "No usable node (not supported yet: %@)"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有可用的節點（暫不支援：%@）"
+          }
         }
       }
     },
@@ -2683,6 +4285,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "No Nodes to Choose"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有可選的節點"
           }
         }
       }
@@ -2694,6 +4302,12 @@
             "state": "translated",
             "value": "No usable rewrites, scripts or [MITM] hosts were found"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有找到可用的重寫、腳本或 [MITM] 主機"
+          }
         }
       }
     },
@@ -2703,6 +4317,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "No file was read"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有讀取到檔案"
           }
         }
       }
@@ -2714,6 +4334,12 @@
             "state": "translated",
             "value": "Activity"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "活動"
+          }
         }
       }
     },
@@ -2723,6 +4349,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Top hosts"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "流量排行"
           }
         }
       }
@@ -2734,6 +4366,12 @@
             "state": "translated",
             "value": "Traffic Statistics"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "流量統計"
+          }
         }
       }
     },
@@ -2743,6 +4381,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Light"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "淺色"
           }
         }
       }
@@ -2754,6 +4398,12 @@
             "state": "translated",
             "value": "Test delay"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "測試延遲"
+          }
         }
       }
     },
@@ -2763,6 +4413,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dark"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "深色"
           }
         }
       }
@@ -2774,6 +4430,12 @@
             "state": "translated",
             "value": "Clear"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清空"
+          }
         }
       }
     },
@@ -2783,6 +4445,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Clear all traffic statistics?"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清空全部流量統計？"
           }
         }
       }
@@ -2794,6 +4462,12 @@
             "state": "translated",
             "value": "Clear Statistics"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清空統計"
+          }
         }
       }
     },
@@ -2803,6 +4477,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Click to connect, or press ⇧⌘C"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "點按連線，或按 ⇧⌘C"
           }
         }
       }
@@ -2814,6 +4494,12 @@
             "state": "translated",
             "value": "Version"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "版本"
+          }
         }
       }
     },
@@ -2823,6 +4509,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Create a root certificate for this device before decrypting HTTPS."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "產生本機專屬的根憑證後才能解密 HTTPS。"
           }
         }
       }
@@ -2834,6 +4526,12 @@
             "state": "translated",
             "value": "Create Root Certificate"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "產生根憑證"
+          }
         }
       }
     },
@@ -2843,6 +4541,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't create the certificate (%@)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "產生憑證失敗（%@）"
           }
         }
       }
@@ -2854,6 +4558,12 @@
             "state": "translated",
             "value": "Connects with the imported node, or disconnects."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用已匯入的節點連線，或斷開目前連線。"
+          }
         }
       }
     },
@@ -2863,6 +4573,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open AnixOps Net when you log in"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "登入 Mac 後開啟 AnixOps Net"
           }
         }
       }
@@ -2874,6 +4590,12 @@
             "state": "translated",
             "value": "Only VLESS nodes with REALITY security are supported for now"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前只支援 REALITY 安全類型的 VLESS 節點"
+          }
         }
       }
     },
@@ -2883,6 +4605,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Only Shadowsocks-2022 ciphers are supported for now"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前只支援 Shadowsocks-2022 加密方式"
           }
         }
       }
@@ -2894,6 +4622,12 @@
             "state": "translated",
             "value": "Only VLESS nodes over TCP are supported for now"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前只支援 TCP 傳輸的 VLESS 節點"
+          }
         }
       }
     },
@@ -2903,6 +4637,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Only the xtls-rprx-vision flow or no flow is supported for now"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前只支援 xtls-rprx-vision 流控或不使用流控"
           }
         }
       }
@@ -2914,6 +4654,12 @@
             "state": "translated",
             "value": "Only WireGuard configs with one peer are supported for now"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前只支援一個 Peer 的 WireGuard 設定"
+          }
         }
       }
     },
@@ -2923,6 +4669,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Direct"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "直連"
           }
         }
       }
@@ -2934,6 +4686,12 @@
             "state": "translated",
             "value": "Confirm Import"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "確認匯入"
+          }
         }
       }
     },
@@ -2943,6 +4701,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Not Now"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "稍後再說"
           }
         }
       }
@@ -2954,6 +4718,12 @@
             "state": "translated",
             "value": "Refresh Now"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "立即重新整理"
+          }
         }
       }
     },
@@ -2963,6 +4733,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Update Now"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "立即更新"
           }
         }
       }
@@ -2974,6 +4750,12 @@
             "state": "translated",
             "value": "Step %lld of 3"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "第 %lld 步，共 3 步"
+          }
         }
       }
     },
@@ -2983,6 +4765,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The first time you connect, iOS asks to add a VPN configuration. It only hands traffic to this app for routing; your browsing is not collected."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "第一次連線時，iOS 會請求新增 VPN 設定。它只用來把流量交給本 App 分流，不收集你的瀏覽記錄。"
           }
         }
       }
@@ -2994,6 +4782,12 @@
             "state": "translated",
             "value": "Policy groups"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "策略組"
+          }
         }
       }
     },
@@ -3003,6 +4797,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Paste an ss:// or vless:// link, or import a WireGuard config."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "貼上 ss://、vless:// 連結，或匯入 WireGuard 設定。"
           }
         }
       }
@@ -3014,6 +4814,12 @@
             "state": "translated",
             "value": "Paste a subscription link, an ss://, vless://, trojan://, vmess://, hysteria2:// or tuic:// link or subscription content, or import a WireGuard config."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "貼上訂閱連結，或 ss://、vless://、trojan://、vmess://、hysteria2://、tuic:// 等連結和訂閱內容，或匯入 WireGuard 設定。"
+          }
         }
       }
     },
@@ -3023,6 +4829,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "System"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系統"
           }
         }
       }
@@ -3034,6 +4846,12 @@
             "state": "translated",
             "value": "System DNS"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系統 DNS"
+          }
         }
       }
     },
@@ -3043,6 +4861,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The tunnel adds up its connection list every 5 seconds. Only host names and byte counts are kept, on this device, for 7 days."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "統計由隧道每 5 秒讀取一次連線清單累計，只記主機名和位元組數，儲存在本機，保留 7 天。"
           }
         }
       }
@@ -3054,6 +4878,12 @@
             "state": "translated",
             "value": "Import Another"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "繼續匯入"
+          }
         }
       }
     },
@@ -3063,6 +4893,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Edit Home"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "編輯首頁"
           }
         }
       }
@@ -3074,6 +4910,12 @@
             "state": "translated",
             "value": "Network"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "網路"
+          }
         }
       }
     },
@@ -3083,6 +4925,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Network switched to %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "網路切換到%@"
           }
         }
       }
@@ -3094,6 +4942,12 @@
             "state": "translated",
             "value": "Network changed, restoring the tunnel"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "網路變化，正在恢復隧道"
+          }
         }
       }
     },
@@ -3103,6 +4957,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Network changed, reconnecting"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "網路變化，正在重連"
           }
         }
       }
@@ -3114,6 +4974,12 @@
             "state": "translated",
             "value": "Network changed, reconnecting"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "網路已切換，馬上恢復"
+          }
         }
       }
     },
@@ -3123,6 +4989,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Auto Update"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動更新"
           }
         }
       }
@@ -3134,6 +5006,12 @@
             "state": "translated",
             "value": "Auto-select"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動選擇"
+          }
         }
       }
     },
@@ -3143,6 +5021,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Auto-select and fallback groups pick their node by latency and availability."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動選擇和容錯移轉的組由核心按延遲和可用性挑選節點。"
           }
         }
       }
@@ -3154,6 +5038,12 @@
             "state": "translated",
             "value": "Nodes"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "節點"
+          }
         }
       }
     },
@@ -3163,6 +5053,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "“%1$@” can't connect: this device's clock is about %2$lld minutes fast. Turn on Set Automatically in Settings › General › Date & Time, then retry."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "節點「%@」連不上：手機時間快了約 %lld 分鐘。請在設定裡開啟「自動設定」時間後重試。"
           }
         }
       }
@@ -3174,6 +5070,12 @@
             "state": "translated",
             "value": "“%1$@” can't connect: this device's clock is about %2$lld minutes slow. Turn on Set Automatically in Settings › General › Date & Time, then retry."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "節點「%@」連不上：手機時間慢了約 %lld 分鐘。請在設定裡開啟「自動設定」時間後重試。"
+          }
         }
       }
     },
@@ -3183,6 +5085,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The server rejected “%@”: the subscription may have expired or been reset, or this device's clock is off. Update the subscription, or check the time and retry."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "節點「%@」被伺服器拒絕：訂閱可能已到期或被重設，也可能是手機時間不準。請更新訂閱，或檢查時間後重試。"
           }
         }
       }
@@ -3194,6 +5102,12 @@
             "state": "translated",
             "value": "Node passwords stay in this device's Keychain."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "節點密碼只儲存在本機鑰匙圈裡。"
+          }
         }
       }
     },
@@ -3203,6 +5117,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Node passwords and keys stay in this device's keychain"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "節點密碼和金鑰只儲存在本機鑰匙圈"
           }
         }
       }
@@ -3214,6 +5134,12 @@
             "state": "translated",
             "value": "Node link · Subscription · WireGuard config"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "節點連結 · 訂閱內容 · WireGuard 設定"
+          }
         }
       }
     },
@@ -3223,6 +5149,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Node link or config"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "節點連結或設定"
           }
         }
       }
@@ -3234,6 +5166,12 @@
             "state": "translated",
             "value": "The node link isn't valid"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "節點連結格式不正確"
+          }
         }
       }
     },
@@ -3243,6 +5181,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cellular"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "行動網路"
           }
         }
       }
@@ -3254,6 +5198,12 @@
             "state": "translated",
             "value": "Rules"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "規則"
+          }
         }
       }
     },
@@ -3263,6 +5213,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rules and Routing"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "規則與分流"
           }
         }
       }
@@ -3274,6 +5230,12 @@
             "state": "translated",
             "value": "To decrypt HTTPS, first create and trust a root certificate on this device. The certificate and its private key stay in this device's keychain."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解密 HTTPS 需要先在本機產生並信任一張根憑證。憑證和私鑰只儲存在本機鑰匙圈。"
+          }
         }
       }
     },
@@ -3283,6 +5245,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Subscription"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "訂閱"
           }
         }
       }
@@ -3294,6 +5262,12 @@
             "state": "translated",
             "value": "Subscription %@ · %lld nodes"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "訂閱 %@ · %lld 個節點"
+          }
         }
       }
     },
@@ -3303,6 +5277,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The subscription could not be downloaded. Check the link and the network."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "訂閱下載失敗，請檢查連結和網路"
           }
         }
       }
@@ -3314,6 +5294,12 @@
             "state": "translated",
             "value": "Couldn't download the subscription: the link may have expired, or this network can't reach the server. Your current nodes still work."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "訂閱下載失敗：連結可能已失效，或目前網路連不上訂閱伺服器。現有節點仍可使用。"
+          }
         }
       }
     },
@@ -3323,6 +5309,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The subscription content is too large"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "訂閱內容過大"
           }
         }
       }
@@ -3334,6 +5326,12 @@
             "state": "translated",
             "value": "Subscription Actions"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "訂閱組操作"
+          }
         }
       }
     },
@@ -3343,6 +5341,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Subscription link; all nodes are downloaded on import"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "訂閱連結，匯入時下載全部節點"
           }
         }
       }
@@ -3354,6 +5358,12 @@
             "state": "translated",
             "value": "Settings"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定"
+          }
         }
       }
     },
@@ -3363,6 +5373,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "In Settings > General > About > Certificate Trust Settings, turn on the switch for this certificate."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定 > 一般 > 關於本機 > 憑證信任設定，開啟這張憑證的開關。"
           }
         }
       }
@@ -3374,6 +5390,12 @@
             "state": "translated",
             "value": "Settings…"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定…"
+          }
         }
       }
     },
@@ -3383,6 +5405,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Certificate"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "憑證"
           }
         }
       }
@@ -3394,6 +5422,12 @@
             "state": "translated",
             "value": "The certificate isn't trusted yet. Finish the certificate setup first."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "憑證尚未被信任，請先完成憑證設定。"
+          }
         }
       }
     },
@@ -3403,6 +5437,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Certificate trusted"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "憑證已信任"
           }
         }
       }
@@ -3414,6 +5454,12 @@
             "state": "translated",
             "value": "Certificate not trusted"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "憑證未被信任"
+          }
         }
       }
     },
@@ -3423,6 +5469,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recognize"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "識別"
           }
         }
       }
@@ -3434,6 +5486,12 @@
             "state": "translated",
             "value": "Diagnostics never include node names, server addresses or keys."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "診斷資訊不含節點名稱、伺服器位址和金鑰。"
+          }
         }
       }
     },
@@ -3443,6 +5501,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Import a node in the app first"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請先在 App 裡匯入節點"
           }
         }
       }
@@ -3454,6 +5518,12 @@
             "state": "translated",
             "value": "Import a node first"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請先匯入節點"
+          }
         }
       }
     },
@@ -3463,6 +5533,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Requests"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請求"
           }
         }
       }
@@ -3474,6 +5550,12 @@
             "state": "translated",
             "value": "Request log not available yet"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請求記錄還沒開放"
+          }
         }
       }
     },
@@ -3483,6 +5565,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Paste a node link, subscription content or a WireGuard config"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請貼上節點連結、訂閱內容或 WireGuard 設定"
           }
         }
       }
@@ -3494,6 +5582,12 @@
             "state": "translated",
             "value": "Couldn't read the plugin list"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "讀取外掛清單失敗"
+          }
         }
       }
     },
@@ -3503,6 +5597,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't read the certificate (%@)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "讀取憑證失敗（%@）"
           }
         }
       }
@@ -3514,6 +5614,12 @@
             "state": "translated",
             "value": "Timed out"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "逾時"
+          }
         }
       }
     },
@@ -3523,6 +5629,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "System"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "跟隨系統"
           }
         }
       }
@@ -3534,6 +5646,12 @@
             "state": "translated",
             "value": "Tap to import your first node"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "點一下匯入第一個節點"
+          }
         }
       }
     },
@@ -3543,6 +5661,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tap for 7-day statistics"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "點一下查看 7 天統計"
           }
         }
       }
@@ -3554,6 +5678,12 @@
             "state": "translated",
             "value": "Tap to look up"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "點一下查詢"
+          }
         }
       }
     },
@@ -3563,6 +5693,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tap to connect"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "點一下連線"
           }
         }
       }
@@ -3574,6 +5710,12 @@
             "state": "translated",
             "value": "Runtime ABI"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "執行時 ABI"
+          }
         }
       }
     },
@@ -3583,6 +5725,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Uptime"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "執行時長"
           }
         }
       }
@@ -3594,6 +5742,12 @@
             "state": "translated",
             "value": "Runtime Status"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "執行狀態"
+          }
         }
       }
     },
@@ -3603,6 +5757,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Go Back and Edit"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "返回修改"
           }
         }
       }
@@ -3614,6 +5774,12 @@
             "state": "translated",
             "value": "No traffic yet"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "還沒有流量"
+          }
         }
       }
     },
@@ -3623,6 +5789,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "No nodes yet"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "還沒有節點"
           }
         }
       }
@@ -3634,6 +5806,12 @@
             "state": "translated",
             "value": "No traffic in this period"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這段時間沒有流量"
+          }
         }
       }
     },
@@ -3643,6 +5821,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Active"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "進行中"
           }
         }
       }
@@ -3654,6 +5838,12 @@
             "state": "translated",
             "value": "Connection"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線"
+          }
         }
       }
     },
@@ -3663,6 +5853,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connect AnixOps Net"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線 AnixOps Net"
           }
         }
       }
@@ -3674,6 +5870,12 @@
             "state": "translated",
             "value": "Connecting"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線中"
+          }
         }
       }
     },
@@ -3683,6 +5885,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Statistics start once connected"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線後開始統計"
           }
         }
       }
@@ -3694,6 +5902,12 @@
             "state": "translated",
             "value": "Traffic by host shows once connected"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線後按主機統計流量"
+          }
         }
       }
     },
@@ -3703,6 +5917,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Each group's current choice shows once connected"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線後顯示各策略組目前選擇"
           }
         }
       }
@@ -3714,6 +5934,12 @@
             "state": "translated",
             "value": "Live speed shows once connected"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線後顯示即時速度"
+          }
         }
       }
     },
@@ -3723,6 +5949,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "While connected, shows the node and how long it has been up, with a disconnect button."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線後顯示節點和已連線時長，可以直接斷開。"
           }
         }
       }
@@ -3734,6 +5966,12 @@
             "state": "translated",
             "value": "Counted once connected"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線後統計"
+          }
         }
       }
     },
@@ -3743,6 +5981,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Disconnected: the node stopped answering, was interfered with, or the network just changed. Retry, or switch to another node."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線已斷開：節點沒有回應、被干擾，或網路剛切換。可以重試，或換一個節點。"
           }
         }
       }
@@ -3754,6 +5998,12 @@
             "state": "translated",
             "value": "Connect or Disconnect AnixOps Net"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線或斷開 AnixOps Net"
+          }
         }
       }
     },
@@ -3763,6 +6013,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connect or disconnect (⇧⌘C)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線或斷開（⇧⌘C）"
           }
         }
       }
@@ -3774,6 +6030,12 @@
             "state": "translated",
             "value": "Connection Status"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線狀態"
+          }
         }
       }
     },
@@ -3783,6 +6045,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connect, currently not connected"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線，目前未連線"
           }
         }
       }
@@ -3794,6 +6062,12 @@
             "state": "translated",
             "value": "Quit AnixOps Net"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "結束 AnixOps Net"
+          }
         }
       }
     },
@@ -3803,6 +6077,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choose another node"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選擇其他節點"
           }
         }
       }
@@ -3814,6 +6094,12 @@
             "state": "translated",
             "value": "Choose a Node"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選擇線路"
+          }
         }
       }
     },
@@ -3823,6 +6109,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Speed"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "速度"
           }
         }
       }
@@ -3834,6 +6126,12 @@
             "state": "translated",
             "value": "Rename"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新命名"
+          }
         }
       }
     },
@@ -3843,6 +6141,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rename Subscription"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新命名訂閱組"
           }
         }
       }
@@ -3854,6 +6158,12 @@
             "state": "translated",
             "value": "Download Again"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新下載訂閱"
+          }
         }
       }
     },
@@ -3863,6 +6173,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Check Trust Again"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新偵測信任狀態"
           }
         }
       }
@@ -3874,6 +6190,12 @@
             "state": "translated",
             "value": "Recreate"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新產生"
+          }
         }
       }
     },
@@ -3883,6 +6205,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The old certificate stops working immediately and the new one must be installed and trusted again. Also delete the old profile in Settings > General > VPN & Device Management."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新產生後舊憑證立即失效，需要重新安裝並信任。請同時在 設定 > 一般 > VPN與裝置管理 刪除舊描述檔。"
           }
         }
       }
@@ -3894,6 +6222,12 @@
             "state": "translated",
             "value": "Recreate Root Certificate"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新產生根憑證"
+          }
         }
       }
     },
@@ -3903,6 +6237,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recreate the root certificate?"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新產生根憑證？"
           }
         }
       }
@@ -3914,6 +6254,12 @@
             "state": "translated",
             "value": "Reconnecting"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新連線中"
+          }
         }
       }
     },
@@ -3923,6 +6269,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "No camera access"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有相機權限"
           }
         }
       }
@@ -3934,6 +6286,12 @@
             "state": "translated",
             "value": "Retry"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重試"
+          }
         }
       }
     },
@@ -3943,6 +6301,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The link is too long for a QR code. Copy or share the link instead."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連結太長，無法產生 QR Code，請複製或分享連結。"
           }
         }
       }
@@ -3954,6 +6318,12 @@
             "state": "translated",
             "value": "The link contains the node's password. Share it only with people you trust."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連結裡含有節點密碼，只分享給信任的人。"
+          }
         }
       }
     },
@@ -3963,6 +6333,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "This session ↑%1$@ ↓%2$@ · %3$lld connections"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本次已用 ↑%@ ↓%@ · %lld 個連線"
           }
         }
       }
@@ -3974,6 +6350,12 @@
             "state": "translated",
             "value": "Connections"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線記錄"
+          }
         }
       }
     },
@@ -3983,6 +6365,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Active %lld"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "活躍 %lld"
           }
         }
       }
@@ -3994,6 +6382,12 @@
             "state": "translated",
             "value": "Filter by host, rule or node"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "篩選網域、規則或節點"
+          }
         }
       }
     },
@@ -4003,6 +6397,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Resume"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "繼續重新整理"
           }
         }
       }
@@ -4014,6 +6414,12 @@
             "state": "translated",
             "value": "Connect to see every connection through the tunnel."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線後顯示經過隧道的每個連線。"
+          }
         }
       }
     },
@@ -4023,6 +6429,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "No matching connections"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有符合的連線"
           }
         }
       }
@@ -4034,6 +6446,12 @@
             "state": "translated",
             "value": "No closed connections yet"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "還沒有結束的連線"
+          }
         }
       }
     },
@@ -4043,6 +6461,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Loading…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在讀取…"
           }
         }
       }
@@ -4054,6 +6478,12 @@
             "state": "translated",
             "value": "Target"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目標"
+          }
         }
       }
     },
@@ -4063,6 +6493,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Requested address"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請求位址"
           }
         }
       }
@@ -4074,6 +6510,12 @@
             "state": "translated",
             "value": "Route"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "線路"
+          }
         }
       }
     },
@@ -4083,6 +6525,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Show connection on Lock Screen and Dynamic Island"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "鎖定畫面和動態島顯示連線"
           }
         }
       }
@@ -4094,6 +6542,12 @@
             "state": "translated",
             "value": "Error"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "錯誤"
+          }
         }
       }
     },
@@ -4103,6 +6557,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rejected by a rule"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "被規則拒絕"
           }
         }
       }
@@ -4114,6 +6574,12 @@
             "state": "translated",
             "value": "Connection failed"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線失敗"
+          }
         }
       }
     },
@@ -4123,6 +6589,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ended"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "結束"
           }
         }
       }
@@ -4134,6 +6606,12 @@
             "state": "translated",
             "value": "Connection"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線詳情"
+          }
         }
       }
     },
@@ -4143,6 +6621,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Privacy"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隱私"
           }
         }
       }
@@ -4154,6 +6638,12 @@
             "state": "translated",
             "value": "The tunnel stopped: %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隧道已停止：%@"
+          }
         }
       }
     },
@@ -4163,6 +6653,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The tunnel isn't running"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隧道未執行"
           }
         }
       }
@@ -4174,6 +6670,12 @@
             "state": "translated",
             "value": "The tunnel is off; showing the statistics read last time."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隧道未連線，顯示上次讀取的統計。"
+          }
         }
       }
     },
@@ -4183,6 +6685,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Home"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "首頁"
           }
         }
       }
@@ -4194,6 +6702,12 @@
             "state": "translated",
             "value": "Update All"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新全部訂閱"
+          }
         }
       }
     },
@@ -4203,6 +6717,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sort"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "排序"
           }
         }
       }
@@ -4214,6 +6734,12 @@
             "state": "translated",
             "value": "Subscription order"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "訂閱順序"
+          }
         }
       }
     },
@@ -4223,6 +6749,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "By name"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按名稱"
           }
         }
       }
@@ -4234,6 +6766,12 @@
             "state": "translated",
             "value": "By latency"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按延遲"
+          }
         }
       }
     },
@@ -4243,6 +6781,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Filter nodes; /regex/ matches names"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "篩選節點，/正規表示式/ 符合名稱"
           }
         }
       }
@@ -4254,6 +6798,12 @@
             "state": "translated",
             "value": "Edit"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "編輯"
+          }
         }
       }
     },
@@ -4263,6 +6813,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Delete node"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刪除節點"
           }
         }
       }
@@ -4274,6 +6830,12 @@
             "state": "translated",
             "value": "Server"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "伺服器"
+          }
         }
       }
     },
@@ -4283,6 +6845,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Port"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連接埠"
           }
         }
       }
@@ -4294,6 +6862,12 @@
             "state": "translated",
             "value": "Edit node"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "編輯節點"
+          }
         }
       }
     },
@@ -4303,6 +6877,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "This node has no subscription rules to route by"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前節點沒有訂閱規則，無法按規則分流"
           }
         }
       }
@@ -4314,6 +6894,12 @@
             "state": "translated",
             "value": "Couldn't save the mode to the VPN configuration"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存模式到 VPN 設定失敗"
+          }
         }
       }
     },
@@ -4323,6 +6909,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Global"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全域"
           }
         }
       }
@@ -4334,6 +6926,12 @@
             "state": "translated",
             "value": "Policy groups · %lld rules"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "策略組 · %lld 條規則"
+          }
         }
       }
     },
@@ -4343,6 +6941,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Routes by the subscription's rules and policy groups. Switching while connected takes effect at once; open connections reconnect."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按訂閱規則和策略組分流。連線中切換立即生效，已有連線會重新建立。"
           }
         }
       }
@@ -4354,6 +6958,12 @@
             "state": "translated",
             "value": "Sends everything through the node selected on the Proxies page. Switching while connected takes effect at once; open connections reconnect."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部流量走代理頁選中的節點。連線中切換立即生效，已有連線會重新建立。"
+          }
         }
       }
     },
@@ -4363,6 +6973,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sends everything directly, without a proxy node. Switching while connected takes effect at once; open connections reconnect."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部流量直連，不經過代理節點。連線中切換立即生效，已有連線會重新建立。"
           }
         }
       }
@@ -4374,6 +6990,12 @@
             "state": "translated",
             "value": "Switch AnixOps Net proxy mode"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換 AnixOps Net 代理模式"
+          }
         }
       }
     },
@@ -4383,6 +7005,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Switch to rule, global or direct mode. Takes effect at once while connected."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換到規則、全域或直連模式。連線中立即生效。"
           }
         }
       }
@@ -4394,6 +7022,12 @@
             "state": "translated",
             "value": "Mode"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模式"
+          }
         }
       }
     },
@@ -4403,6 +7037,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rule mode"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "規則模式"
           }
         }
       }
@@ -4414,6 +7054,12 @@
             "state": "translated",
             "value": "Global mode"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全域模式"
+          }
         }
       }
     },
@@ -4423,6 +7069,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Direct mode"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "直連模式"
           }
         }
       }
@@ -4434,6 +7086,12 @@
             "state": "translated",
             "value": "Switch to rule, global or direct mode from Control Center."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在控制中心切換到規則、全域或直連模式。"
+          }
         }
       }
     },
@@ -4443,6 +7101,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Switch proxy mode"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換代理模式"
           }
         }
       }
@@ -4454,6 +7118,12 @@
             "state": "translated",
             "value": "All rules"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部規則"
+          }
         }
       }
     },
@@ -4463,6 +7133,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Update rule sets now"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "立即更新規則集"
           }
         }
       }
@@ -4474,6 +7150,12 @@
             "state": "translated",
             "value": "Rules and rule sets"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "規則與規則集"
+          }
         }
       }
     },
@@ -4483,6 +7165,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The subscription doesn't provide this rule set, so its rules won't match"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "訂閱沒有提供這個規則集，相關規則不會命中"
           }
         }
       }
@@ -4494,6 +7182,12 @@
             "state": "translated",
             "value": "Filter rules"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "篩選規則"
+          }
         }
       }
     },
@@ -4503,6 +7197,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The subscription doesn't provide this rule set, so its rules are skipped"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "訂閱沒有提供這個規則集，已跳過相關規則"
           }
         }
       }
@@ -4514,6 +7214,12 @@
             "state": "translated",
             "value": "Default"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "預設"
+          }
         }
       }
     },
@@ -4523,6 +7229,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Restore defaults"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "恢復預設"
           }
         }
       }
@@ -4534,6 +7246,12 @@
             "state": "translated",
             "value": "Recommended split: domestic names (.cn and the geosite-cn list) go directly to AliDNS, everything else to Cloudflare through the proxy. By default every query goes to 1.1.1.1 through the proxy."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "推薦分流：國內網域（.cn 和 geosite-cn 清單）直連阿里 DNS，其餘經代理用 Cloudflare 解析。預設設定下所有查詢經代理發往 1.1.1.1。"
+          }
         }
       }
     },
@@ -4543,6 +7261,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Replace the current DNS settings with the recommended split?"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用推薦分流替換現有 DNS 設定？"
           }
         }
       }
@@ -4554,6 +7278,12 @@
             "state": "translated",
             "value": "Replace"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "替換"
+          }
         }
       }
     },
@@ -4563,6 +7293,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Clear all DNS settings?"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清除所有 DNS 設定？"
           }
         }
       }
@@ -4574,6 +7310,12 @@
             "state": "translated",
             "value": "Couldn't save"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法儲存"
+          }
         }
       }
     },
@@ -4583,6 +7325,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "OK"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "好"
           }
         }
       }
@@ -4594,6 +7342,12 @@
             "state": "translated",
             "value": "Set as default"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設為預設"
+          }
         }
       }
     },
@@ -4603,6 +7357,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Custom…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自訂…"
           }
         }
       }
@@ -4614,6 +7374,12 @@
             "state": "translated",
             "value": "Add DNS server"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新增 DNS 伺服器"
+          }
         }
       }
     },
@@ -4623,6 +7389,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Names no rule picks go to the default server; long-press a server to make it the default. Servers set to go through the proxy are reached directly in direct mode."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有規則命中的網域由預設伺服器解析，長按伺服器可設為預設。經代理的伺服器在直連模式下也直連。"
           }
         }
       }
@@ -4634,6 +7406,12 @@
             "state": "translated",
             "value": "Direct · %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "直連 · %@"
+          }
         }
       }
     },
@@ -4643,6 +7421,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Via proxy · %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "經代理 · %@"
           }
         }
       }
@@ -4654,6 +7438,12 @@
             "state": "translated",
             "value": "Add rule"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新增規則"
+          }
         }
       }
     },
@@ -4663,6 +7453,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Servers by domain"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按網域選擇伺服器"
           }
         }
       }
@@ -4674,6 +7470,12 @@
             "state": "translated",
             "value": "Add host"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新增 Hosts"
+          }
         }
       }
     },
@@ -4683,6 +7485,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "These names answer with the addresses given, without asking a server. *.example.com matches all of its subdomains."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這些網域直接返回填寫的位址，不查詢伺服器。*.example.com 符合它的所有子網域。"
           }
         }
       }
@@ -4694,6 +7502,12 @@
             "state": "translated",
             "value": "Address"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "位址"
+          }
         }
       }
     },
@@ -4703,6 +7517,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enter 1.1.1.1, tcp://, tls:// (DoT) or https:// (DoH). For DoT/DoH by IP address, enter the TLS name on the certificate."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "位址可寫 1.1.1.1、tcp://、tls://（DoT）或 https://（DoH）。用 IP 位址寫 DoT/DoH 時填寫憑證上的 TLS 名稱。"
           }
         }
       }
@@ -4714,6 +7534,12 @@
             "state": "translated",
             "value": "Via proxy"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "經代理"
+          }
         }
       }
     },
@@ -4723,6 +7549,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Domestic DNS servers are best reached directly."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "國內的 DNS 伺服器建議直連。"
           }
         }
       }
@@ -4734,6 +7566,12 @@
             "state": "translated",
             "value": "Edit DNS server"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "編輯 DNS 伺服器"
+          }
         }
       }
     },
@@ -4743,6 +7581,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Domain"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "網域"
           }
         }
       }
@@ -4754,6 +7598,12 @@
             "state": "translated",
             "value": "Add"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新增"
+          }
         }
       }
     },
@@ -4763,6 +7613,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Separate addresses with commas or spaces, up to 8."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "多個位址用逗號或空格分隔，最多 8 個。"
           }
         }
       }
@@ -4774,6 +7630,12 @@
             "state": "translated",
             "value": "Couldn't save the DNS settings"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法儲存 DNS 設定"
+          }
         }
       }
     },
@@ -4783,6 +7645,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Names may only use letters, digits and . _ -"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "名稱只能用字母、數字和 . _ -"
           }
         }
       }
@@ -4794,6 +7662,12 @@
             "state": "translated",
             "value": "A DNS server with this name already exists"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已有同名的 DNS 伺服器"
+          }
         }
       }
     },
@@ -4803,6 +7677,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The address must be an IP, or start with tcp://, tls:// or https://"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "位址應為 IP，或 tcp://、tls://、https:// 開頭"
           }
         }
       }
@@ -4814,6 +7694,12 @@
             "state": "translated",
             "value": "The domain name is invalid"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "網域格式不正確"
+          }
         }
       }
     },
@@ -4823,6 +7709,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enter 1–8 IP addresses"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請填寫 1–8 個 IP 位址"
           }
         }
       }
@@ -4834,6 +7726,12 @@
             "state": "translated",
             "value": "Enter one domain suffix per line, or a condition starting with DOMAIN, DOMAIN-KEYWORD, RULE-SET or GEOSITE"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每行寫一個網域後綴，或 DOMAIN、DOMAIN-KEYWORD、RULE-SET、GEOSITE 開頭的條件"
+          }
         }
       }
     },
@@ -4843,6 +7741,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Add a DNS server first"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請先新增 DNS 伺服器"
           }
         }
       }
@@ -4854,6 +7758,12 @@
             "state": "translated",
             "value": "The limit has been reached"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已達到數量上限"
+          }
         }
       }
     },
@@ -4863,6 +7773,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "AliDNS (DoH, direct)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "阿里 DNS（DoH，直連）"
           }
         }
       }
@@ -4874,6 +7790,12 @@
             "state": "translated",
             "value": "Tencent DNSPod (DoH, direct)"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "騰訊 DNSPod（DoH，直連）"
+          }
         }
       }
     },
@@ -4883,6 +7805,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Load balance"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "負載平衡"
           }
         }
       }
@@ -4894,6 +7822,12 @@
             "state": "translated",
             "value": "Round robin"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "輪詢"
+          }
         }
       }
     },
@@ -4903,6 +7837,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "This protocol has no common share link format, so it can't be exported"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這個協定沒有通用的分享連結格式，無法匯出"
           }
         }
       }
@@ -4914,6 +7854,12 @@
             "state": "translated",
             "value": "Couldn't create a share link"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法產生分享連結"
+          }
         }
       }
     },
@@ -4923,6 +7869,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't share"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法分享"
           }
         }
       }
@@ -4934,6 +7886,12 @@
             "state": "translated",
             "value": "Share node"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分享節點"
+          }
         }
       }
     },
@@ -4943,6 +7901,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "See each connection's target, matched rule and route"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查看每個連線的目標、命中規則和線路"
           }
         }
       }
@@ -4954,6 +7918,12 @@
             "state": "translated",
             "value": "Available while connected. Kept in memory only and cleared when the tunnel disconnects."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線後可用。只儲存在記憶體裡，斷開隧道即清空。"
+          }
         }
       }
     },
@@ -4963,6 +7933,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rules and DNS"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "規則與 DNS"
           }
         }
       }
@@ -4974,6 +7950,12 @@
             "state": "translated",
             "value": "Rule sets"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "規則集"
+          }
         }
       }
     },
@@ -4983,6 +7965,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Import a subscription with rules and policy groups (Clash, Surge or Loon profiles) to route by its rules and switch policy groups."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入帶規則和策略組的訂閱（Clash、Surge、Loon 設定）後，可以按訂閱規則分流和切換策略組。"
           }
         }
       }
@@ -4994,6 +7982,12 @@
             "state": "translated",
             "value": "Edit…"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "編輯…"
+          }
         }
       }
     },
@@ -5003,6 +7997,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copy share link"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "複製分享連結"
           }
         }
       }
@@ -5014,6 +8014,12 @@
             "state": "translated",
             "value": "Share link copied. It contains the node password, so share it only with people you trust."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已複製分享連結。連結裡含有節點密碼，只分享給信任的人。"
+          }
         }
       }
     },
@@ -5023,6 +8029,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't save"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存失敗"
           }
         }
       }
@@ -5034,6 +8046,12 @@
             "state": "translated",
             "value": "Passwords, keys and transport settings keep their imported values. A subscription update restores the provider's nodes."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "密碼、金鑰和傳輸設定保持匯入時的值。訂閱更新後會恢復為訂閱裡的節點。"
+          }
         }
       }
     },
@@ -5043,6 +8061,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enter a server address"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請填寫伺服器位址"
           }
         }
       }
@@ -5054,6 +8078,12 @@
             "state": "translated",
             "value": "The server address can't contain spaces or /"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "伺服器位址不能包含空格或 /"
+          }
         }
       }
     },
@@ -5063,6 +8093,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The port must be 1–65535"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連接埠應為 1–65535"
           }
         }
       }
@@ -5074,6 +8110,12 @@
             "state": "translated",
             "value": "Site badges are letters made on this device from the host name; no icons are fetched. Tags such as HTTPS and QUIC are inferred from the port. Upload and download are the bytes each connection moved through the tunnel. Target names come from the request itself or its TLS SNI / HTTP Host, are kept only in memory and are cleared on the next connection or when the app quits."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "站點標識是本機按主機名產生的字母，不聯網取圖示。HTTPS、QUIC 等標籤按連接埠推斷。上傳、下載為該連線經隧道的位元組數。目標網域來自請求本身或 TLS SNI / HTTP Host，只儲存在記憶體裡，下次連線或結束 App 時清空。"
+          }
         }
       }
     },
@@ -5083,6 +8125,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Last session"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上次連線"
           }
         }
       }
@@ -5094,6 +8142,12 @@
             "state": "translated",
             "value": "Duration %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "時長 %@"
+          }
         }
       }
     },
@@ -5103,6 +8157,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Disconnected. Showing requests from before the tunnel stopped."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隧道已斷開，顯示斷開前的記錄"
           }
         }
       }
@@ -5114,6 +8174,12 @@
             "state": "translated",
             "value": "Made by AnixOps Studio"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AnixOps Studio 出品"
+          }
         }
       }
     },
@@ -5123,6 +8189,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The strip shows each member's last measured delay: green under 120 ms, amber under 250 ms, orange slower, gray no data. Auto-select and fallback groups are picked by the engine by delay and availability."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "色條是每個成員最近一次測得的延遲：綠色低於 120 ms，琥珀色低於 250 ms，橙色更慢，灰色沒有資料。自動選擇和容錯移轉的組由核心按延遲和可用性挑選節點。"
           }
         }
       }
@@ -5134,6 +8206,12 @@
             "state": "translated",
             "value": "Switch node"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換節點"
+          }
         }
       }
     },
@@ -5143,6 +8221,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Turn the switch on to connect, or press ⇧⌘C"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開啟開關連線，或按 ⇧⌘C"
           }
         }
       }
@@ -5154,6 +8238,12 @@
             "state": "translated",
             "value": "Update"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新"
+          }
         }
       }
     },
@@ -5163,6 +8253,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Expires"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "到期"
           }
         }
       }
@@ -5174,6 +8270,12 @@
             "state": "translated",
             "value": "No expiry"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "長期有效"
+          }
         }
       }
     },
@@ -5183,6 +8285,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Last updated"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上次更新"
           }
         }
       }
@@ -5194,6 +8302,12 @@
             "state": "translated",
             "value": "No subscription yet. Imported nodes appear under Proxies."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "還沒有訂閱。匯入後節點會出現在“代理”裡。"
+          }
         }
       }
     },
@@ -5203,6 +8317,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The subscription reports no traffic allowance"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "訂閱沒有提供流量資訊"
           }
         }
       }
@@ -5214,6 +8334,12 @@
             "state": "translated",
             "value": "Allow AnixOps Net under System Settings › General › Login Items & Extensions › Network Extensions, then connect again"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請在“系統設定 › 一般 › 登入項目與延伸功能 › 網路延伸功能”中允許 AnixOps Net，然後再連線"
+          }
         }
       }
     },
@@ -5223,6 +8349,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The network extension takes effect after you restart your Mac"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "網路延伸功能將在重新啟動 Mac 後生效"
           }
         }
       }
@@ -5234,6 +8366,12 @@
             "state": "translated",
             "value": "Move AnixOps Net to the Applications folder and open it from there, then connect"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請先把 AnixOps Net 拖進“應用程式”資料夾，從那裡開啟後再連線"
+          }
         }
       }
     },
@@ -5243,6 +8381,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Could not enable the network extension"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法啟用網路延伸功能"
           }
         }
       }
@@ -5254,6 +8398,12 @@
             "state": "translated",
             "value": "More"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更多"
+          }
         }
       }
     },
@@ -5263,6 +8413,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Can't handle this link"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法處理這個連結"
           }
         }
       }
@@ -5274,6 +8430,12 @@
             "state": "translated",
             "value": "No node named “%@”"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "找不到節點「%@」"
+          }
         }
       }
     },
@@ -5283,6 +8445,348 @@
           "stringUnit": {
             "state": "translated",
             "value": "Policy group “%1$@” has no “%2$@”"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "策略群組「%@」裡沒有「%@」"
+          }
+        }
+      }
+    },
+    "AnixOps Net 已断开": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AnixOps Net disconnected"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AnixOps Net 已中斷連線"
+          }
+        }
+      }
+    },
+    "节点没有响应、被干扰，或网络刚切换。打开 App 重试或换一个节点。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The node stopped responding, was interfered with, or the network just changed. Open the app to retry or pick another node."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "節點沒有回應、受到干擾，或網路剛切換。開啟 App 重試或換一個節點。"
+          }
+        }
+      }
+    },
+    "订阅更新失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscription update failed"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "訂閱更新失敗"
+          }
+        }
+      }
+    },
+    "%@ 没有更新成功，仍在使用上次的节点。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ did not update; the last nodes are still in use."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 沒有更新成功，仍在使用上次的節點。"
+          }
+        }
+      }
+    },
+    "插件脚本的通知": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugin script notifications"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "外掛腳本的通知"
+          }
+        }
+      }
+    },
+    "连接意外断开": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unexpected disconnects"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線意外中斷"
+          }
+        }
+      }
+    },
+    "订阅自动更新失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed automatic subscription updates"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "訂閱自動更新失敗"
+          }
+        }
+      }
+    },
+    "通知": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifications"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通知"
+          }
+        }
+      }
+    },
+    "关掉后不再发出这类系统通知；也可以在系统设置里关闭 AnixOps Net 的全部通知。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turned off, the app posts no system notifications of that kind. You can also turn off all AnixOps Net notifications in System Settings."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉後不再發出這類系統通知；也可以在系統設定裡關閉 AnixOps Net 的全部通知。"
+          }
+        }
+      }
+    },
+    "调试": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Debug"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "除錯"
+          }
+        }
+      }
+    },
+    "信息": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Info"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "資訊"
+          }
+        }
+      }
+    },
+    "警告": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warning"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "警告"
+          }
+        }
+      }
+    },
+    "隧道": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tunnel"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隧道"
+          }
+        }
+      }
+    },
+    "内核": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Core"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "核心"
+          }
+        }
+      }
+    },
+    "脚本": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scripts"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "腳本"
+          }
+        }
+      }
+    },
+    "内存": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Memory"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "記憶體"
+          }
+        }
+      }
+    },
+    "级别": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Level"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "級別"
+          }
+        }
+      }
+    },
+    "模块": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Module"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模組"
+          }
+        }
+      }
+    },
+    "全部模块": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All modules"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部模組"
+          }
+        }
+      }
+    },
+    "扩展日志…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extension log…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "延伸功能日誌…"
+          }
+        }
+      }
+    },
+    "没有符合条件的日志": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No log lines match"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有符合條件的日誌"
           }
         }
       }
@@ -5294,6 +8798,12 @@
             "state": "translated",
             "value": "Edit rules as text"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "編輯規則文字"
+          }
         }
       }
     },
@@ -5303,6 +8813,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Saved; the tunnel reloaded the rules in place"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已儲存，隧道已熱重新載入規則"
           }
         }
       }
@@ -5314,6 +8830,12 @@
             "state": "translated",
             "value": "Saved"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已儲存"
+          }
         }
       }
     },
@@ -5323,6 +8845,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "No errors"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有錯誤"
           }
         }
       }
@@ -5334,6 +8862,12 @@
             "state": "translated",
             "value": "One rule a line, written as in Surge / Loon: type,value,policy[,no-resolve]. DIRECT and REJECT are kept; any other policy name means the proxy. A whole rule after # is switched off; other comments are not kept. Saving while connected swaps the rules in the running tunnel without dropping connections; adding a rule list URL reconnects."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一行一條，寫法同 Surge / Loon：類型,值,策略[,no-resolve]。策略寫 DIRECT、REJECT，其他名稱都當作代理。以 # 開頭的整條規則表示停用，其餘註解儲存時不保留。連線中儲存會直接在隧道裡換上新規則，現有連線不中斷；新增規則列表 URL 時會重新連線。"
+          }
         }
       }
     },
@@ -5343,6 +8877,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Line %lld"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "第 %lld 行"
           }
         }
       }
@@ -5354,6 +8894,12 @@
             "state": "translated",
             "value": "%lld errors; fix them to save"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 處錯誤，改好後才能儲存"
+          }
         }
       }
     },
@@ -5363,6 +8909,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Unsupported rule type %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不支援的規則類型 %@"
           }
         }
       }
@@ -5374,6 +8926,12 @@
             "state": "translated",
             "value": "The rule has no value"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "缺少規則的值"
+          }
         }
       }
     },
@@ -5383,6 +8941,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The value is not valid; the engine would refuse it"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "值的寫法不對，核心不會接受"
           }
         }
       }
@@ -5394,6 +8958,12 @@
             "state": "translated",
             "value": "FINAL comes from the preset or the subscription and cannot be written here"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FINAL 由預設或訂閱決定，這裡不能寫"
+          }
         }
       }
     },
@@ -5403,6 +8973,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "At most %lld rules"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最多 %lld 條規則"
           }
         }
       }
@@ -5414,6 +8990,12 @@
             "state": "translated",
             "value": "Dashboard"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儀表板"
+          }
         }
       }
     },
@@ -5423,6 +9005,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open Dashboard"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開啟儀表板"
           }
         }
       }
@@ -5434,6 +9022,12 @@
             "state": "translated",
             "value": "My Rules"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我的規則"
+          }
         }
       }
     },
@@ -5443,6 +9037,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Matched top to bottom before the subscription's rules. Saving while connected swaps them in without dropping connections."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "排在訂閱規則前面，從上到下比對。連線中儲存會直接換上新規則，現有連線不中斷。"
           }
         }
       }
@@ -5454,6 +9054,12 @@
             "state": "translated",
             "value": "In rule mode, matched top to bottom before the preset. Saving while connected swaps them in without dropping connections."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "規則模式下排在預設前面，從上到下比對。連線中儲存會直接換上新規則，現有連線不中斷。"
+          }
         }
       }
     },
@@ -5463,6 +9069,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reconnect automatically"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動重新連線"
           }
         }
       }
@@ -5474,6 +9086,12 @@
             "state": "translated",
             "value": "Leave as is"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保持不變"
+          }
         }
       }
     },
@@ -5483,6 +9101,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "If the tunnel quits unexpectedly (a crash, the memory limit, a system update), the system reconnects within seconds. Disconnecting by hand turns this off until you connect again."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隧道意外結束（當機、記憶體超出上限、系統更新）後由系統在幾秒內重新連線。手動斷開時會一併關閉，下次連線再開啟。"
           }
         }
       }
@@ -5494,6 +9118,12 @@
             "state": "translated",
             "value": "Wi-Fi name"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wi-Fi 名稱"
+          }
         }
       }
     },
@@ -5503,6 +9133,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Other Wi-Fi"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "其他 Wi-Fi"
           }
         }
       }
@@ -5514,6 +9150,12 @@
             "state": "translated",
             "value": "Wi-Fi rules"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wi-Fi 規則"
+          }
         }
       }
     },
@@ -5523,6 +9165,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The system applies these as soon as you join a network, without opening the app. On a network set to Disconnect, a manual connection is disconnected too."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加入網路時由系統立即執行，不需要開啟 App。設為「斷開」的網路下，手動連線也會被斷開。"
           }
         }
       }
@@ -5534,6 +9182,12 @@
             "state": "translated",
             "value": "Delete %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刪除 %@"
+          }
         }
       }
     },
@@ -5543,6 +9197,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't turn off automatic reconnect"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法關閉自動重新連線"
           }
         }
       }
@@ -5554,6 +9214,12 @@
             "state": "translated",
             "value": "Couldn't turn on automatic reconnect"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法開啟自動重新連線"
+          }
         }
       }
     },
@@ -5563,6 +9229,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't save the reconnect settings"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存自動重新連線設定失敗"
           }
         }
       }
