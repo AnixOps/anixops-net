@@ -229,7 +229,10 @@ mod tests {
     fn each_token_is_marked() {
         for (input, expected) in [
             ("node hk.example.net:443.", "node <host>."),
-            ("dial [2001:db8::1]:443 and 2001:db8::2", "dial <ip> and <ip>"),
+            (
+                "dial [2001:db8::1]:443 and 2001:db8::2",
+                "dial <ip> and <ip>",
+            ),
             ("peer 203.0.113.7:8443, done", "peer <ip>, done"),
             ("key=Zm9vYmFyYmF6cXV4MTIzNDU2Nzg5MA==", "<secret>"),
             ("id 3F2504E0-4F89-11D3-9A0C-0305E82C3301", "id <id>"),
