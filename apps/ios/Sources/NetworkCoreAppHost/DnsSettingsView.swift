@@ -22,10 +22,18 @@ struct DnsSection: View {
         if dns.isEmpty {
             return String(localized: "默认")
         }
+        var text: String
         if let name = dns.effectiveDefault {
-            return dns.rules.isEmpty ? name : String(localized: "\(name) 等 \(dns.servers.count) 个")
+            text = dns.rules.isEmpty ? name : String(localized: "\(name) 等 \(dns.servers.count) 个")
+        } else if !dns.hosts.isEmpty {
+            text = String(localized: "\(dns.hosts.count) 条 Hosts")
+        } else {
+            return "Fake-IP"
         }
-        return String(localized: "\(dns.hosts.count) 条 Hosts")
+        if dns.fakeIP {
+            text += " · Fake-IP"
+        }
+        return text
     }
 }
 
@@ -47,6 +55,7 @@ struct DnsSettingsView: View {
 
     var body: some View {
         List {
+            fakeIPSection
             serversSection
             if !dns.servers.isEmpty {
                 rulesSection
@@ -97,10 +106,11 @@ struct DnsSettingsView: View {
             Button("替换", role: .destructive) {
                 var next = DnsSettings.split
                 next.hosts = dns.hosts
+                next.fakeIP = dns.fakeIP
                 commit(next)
             }
         } message: {
-            Text("Hosts 会保留。")
+            Text("Hosts 与 Fake-IP 开关会保留。")
         }
         .confirmationDialog("清除所有 DNS 设置？", isPresented: $confirmingReset, titleVisibility: .visible) {
             Button("恢复默认", role: .destructive) {
@@ -237,6 +247,21 @@ struct DnsSettingsView: View {
             Text("按域名选择服务器")
         } footer: {
             Text("从上到下第一条命中的规则生效。RULE-SET 使用规则页的规则集，例如 geosite-cn；只有单个节点、没有订阅规则时它不会命中。")
+        }
+    }
+
+    private var fakeIPSection: some View {
+        Section {
+            Toggle(
+                "Fake-IP",
+                isOn: Binding(
+                    get: { dns.fakeIP },
+                    set: { on in commit { try dns.settingFakeIP(on) } }
+                )
+            )
+            .listRowBackground(brand.surface)
+        } footer: {
+            Text("开启后，应用查询域名时立即拿到 198.18.0.0/15 内的临时地址，连接时再还原成域名按规则分流、由代理解析，首次连接更快，非 HTTP/TLS 协议也能按域名分流。局域网、NTP、STUN、Apple 推送和联网检测等域名仍返回真实地址。关闭或更改后，个别应用可能需要重新打开。")
         }
     }
 

@@ -1,7 +1,7 @@
 import Foundation
 
 /// The engine's `dns` section as the user sets it: named upstreams (plain, DNS over TLS or over HTTPS, through the
-/// proxy or directly), the default one, local hosts and per-domain servers. Not secret; the app keeps it in
+/// proxy or directly), the default one, local hosts, per-domain servers and the Fake-IP switch. Not secret; the app keeps it in
 /// `dns-settings.json` and copies it into the tunnel profile (`TunnelProfileKeys.dns`). Empty leaves the engine's
 /// default: one resolver over TCP through the proxy.
 public struct DnsSettings: Codable, Equatable {
@@ -11,7 +11,8 @@ public struct DnsSettings: Codable, Equatable {
     public static let maxHostAddresses = 8
 
     public enum Via: String, Codable, CaseIterable, Identifiable {
-        /// Like the app's traffic: through the selected node or the rules, directly in the direct mode.
+        /// Through the proxy: the node a rule picks for the server or else the global target, never directly
+        /// because a rule says DIRECT; directly only in the direct mode.
         case proxy
         /// Always directly, for a resolver in the user's own country.
         case direct
@@ -114,19 +115,39 @@ public struct DnsSettings: Codable, Equatable {
     /// `example.lan` or `*.example.lan` to 1–8 addresses, answered without asking a server.
     public var hosts: [String: [String]]
     public var rules: [Rule]
+    /// Fake-IP: the tunnel answers names at once with an address from `fakeIPRange` and maps it back to the name
+    /// when the app connects, so domain rules match every protocol and the proxy resolves the name. LAN, time,
+    /// STUN, captive-portal and push names keep their real answers (the engine's built-in filter).
+    public var fakeIP: Bool
+
+    /// The engine's default range; its first /24 holds the tunnel's own addresses (`TunnelInterface`).
+    public static let fakeIPRange = "198.18.0.0/15"
+
+    /// The engine's `fake_ip` section, written only when it is on.
+    struct FakeIPSection: Codable, Equatable {
+        var enabled: Bool
+    }
 
     enum CodingKeys: String, CodingKey {
         case servers
         case defaultServer = "default"
         case hosts
         case rules
+        case fakeIP = "fake_ip"
     }
 
-    public init(servers: [Server] = [], defaultServer: String? = nil, hosts: [String: [String]] = [:], rules: [Rule] = []) {
+    public init(
+        servers: [Server] = [],
+        defaultServer: String? = nil,
+        hosts: [String: [String]] = [:],
+        rules: [Rule] = [],
+        fakeIP: Bool = false
+    ) {
         self.servers = servers
         self.defaultServer = defaultServer
         self.hosts = hosts
         self.rules = rules
+        self.fakeIP = fakeIP
     }
 
     public init(from decoder: Decoder) throws {
@@ -135,6 +156,7 @@ public struct DnsSettings: Codable, Equatable {
         defaultServer = try container.decodeIfPresent(String.self, forKey: .defaultServer)
         hosts = try container.decodeIfPresent([String: [String]].self, forKey: .hosts) ?? [:]
         rules = try container.decodeIfPresent([Rule].self, forKey: .rules) ?? []
+        fakeIP = try container.decodeIfPresent(FakeIPSection.self, forKey: .fakeIP)?.enabled ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -150,11 +172,36 @@ public struct DnsSettings: Codable, Equatable {
         if !hosts.isEmpty {
             try container.encode(hosts, forKey: .hosts)
         }
+        // Absent when off, so a profile without Fake-IP also suits an engine that predates it.
+        if fakeIP {
+            try container.encode(FakeIPSection(enabled: true), forKey: .fakeIP)
+        }
     }
 
     /// Nothing set: the engine keeps its default resolver.
     public var isEmpty: Bool {
-        servers.isEmpty && hosts.isEmpty
+        servers.isEmpty && hosts.isEmpty && !fakeIP
+    }
+
+    /// The settings with Fake-IP on or off; refused while a host answers with an address in the fake range, which
+    /// the engine would refuse.
+    public func settingFakeIP(_ on: Bool) throws -> DnsSettings {
+        if on, hosts.values.joined().contains(where: Self.isFakeIPAddress) {
+            throw DnsSettingsError.fakeIPRange
+        }
+        var copy = self
+        copy.fakeIP = on
+        return copy
+    }
+
+    /// Whether `text` is an IPv4 address in `fakeIPRange` (198.18.0.0/15).
+    public static func isFakeIPAddress(_ text: String) -> Bool {
+        var v4 = in_addr()
+        guard inet_pton(AF_INET, text, &v4) == 1 else {
+            return false
+        }
+        let address = UInt32(bigEndian: v4.s_addr)
+        return address & 0xFFFE_0000 == 0xC612_0000
     }
 
     /// The server names answer: `defaultServer`, otherwise the first server.
@@ -280,6 +327,9 @@ public struct DnsSettings: Codable, Equatable {
         let addresses = text.split(whereSeparator: { $0 == "," || $0.isWhitespace }).map(String.init)
         guard !addresses.isEmpty, addresses.count <= Self.maxHostAddresses, addresses.allSatisfy(Self.isAddress) else {
             throw DnsSettingsError.invalidAddress
+        }
+        guard !fakeIP || !addresses.contains(where: Self.isFakeIPAddress) else {
+            throw DnsSettingsError.fakeIPRange
         }
         guard hosts[host] != nil || hosts.count < Self.maxHosts else {
             throw DnsSettingsError.tooMany
@@ -470,6 +520,7 @@ public enum DnsSettingsError: Error, Equatable {
     case invalidRule
     case unknownServer
     case tooMany
+    case fakeIPRange
 
     public var message: String {
         switch self {
@@ -489,6 +540,8 @@ public enum DnsSettingsError: Error, Equatable {
             return String(localized: "请先添加 DNS 服务器")
         case .tooMany:
             return String(localized: "已达到数量上限")
+        case .fakeIPRange:
+            return String(localized: "Fake-IP 开启时，Hosts 不能使用 198.18.0.0/15 内的地址")
         }
     }
 }
