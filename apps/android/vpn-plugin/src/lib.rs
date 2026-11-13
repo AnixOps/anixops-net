@@ -27,6 +27,19 @@ struct StartResponse {
     fd: i32,
 }
 
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+#[derive(Debug, Serialize)]
+struct SaveRequest<'a> {
+    name: &'a str,
+    contents: &'a str,
+}
+
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+#[derive(Debug, Deserialize)]
+struct SaveResponse {
+    location: String,
+}
+
 /// Managed by the plugin: `app.state::<Vpn<R>>()`.
 pub struct Vpn<R: Runtime> {
     #[cfg(target_os = "android")]
@@ -44,6 +57,14 @@ impl<R: Runtime> Vpn<R> {
             .map_err(|error| error.to_string())
     }
 
+    /// Saves a text file to the shared Downloads folder and returns where it went ("Download/<name>").
+    pub fn save_to_downloads(&self, name: &str, contents: &str) -> Result<String, String> {
+        self.handle
+            .run_mobile_plugin::<SaveResponse>("saveToDownloads", SaveRequest { name, contents })
+            .map(|response| response.location)
+            .map_err(|error| error.to_string())
+    }
+
     pub fn stop(&self) -> Result<(), String> {
         self.handle
             .run_mobile_plugin::<serde_json::Value>("stop", ())
@@ -56,6 +77,10 @@ impl<R: Runtime> Vpn<R> {
 impl<R: Runtime> Vpn<R> {
     pub fn start(&self, _request: &StartRequest) -> Result<i32, String> {
         Err("the VPN service exists only on Android".to_string())
+    }
+
+    pub fn save_to_downloads(&self, _name: &str, _contents: &str) -> Result<String, String> {
+        Err("Downloads is an Android folder".to_string())
     }
 
     pub fn stop(&self) -> Result<(), String> {
