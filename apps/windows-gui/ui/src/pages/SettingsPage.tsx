@@ -1,7 +1,7 @@
 import { AppWindow, BadgeCheck, Bug, Cpu, FileCheck, Gauge, Timer, HardDrive, HeartPulse, Languages, LifeBuoy, Network, ScrollText, PlugZap, Power, RefreshCw, RotateCcw, ServerCog, ShieldCheck, SunMoon, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { desktop, HealthStatus, Preferences, preferencesFrom, RuntimeSnapshot } from "../bridge";
+import { desktop, HealthStatus, inProcessEngine, Preferences, preferencesFrom, RuntimeSnapshot } from "../bridge";
 import { Appearance, appearances } from "../theme";
 import { factLabel } from "../labels";
 import { Card, Loading, MoreMenu, Row, Run, Segmented, StatusDot, TileColor, ToggleRow } from "../ui";
@@ -30,10 +30,14 @@ export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, l
   if (!snapshot) return <Loading />;
   const save = (changes: Partial<Preferences>) => void run("preferences", () => desktop.savePreferences(preferencesFrom(snapshot, changes)));
   // The Linux client runs the engine in-process and has no service or driver.
-  const linux = snapshot.platform === "linux";
-  const startup = linux
-    ? startupOptions.filter((option) => option.key === "startAfterLogin" || option.key === "autoConnect")
-    : startupOptions;
+  const linux = inProcessEngine(snapshot);
+  // Android asks for the VPN consent in the window, so it neither starts after login nor connects on its own.
+  const android = snapshot.platform === "android";
+  const startup = android
+    ? []
+    : linux
+      ? startupOptions.filter((option) => option.key === "startAfterLogin" || option.key === "autoConnect")
+      : startupOptions;
 
   return (
     <div className="page-stack">
@@ -46,7 +50,7 @@ export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, l
         </Row>
       </Card>
 
-      <Card title={t("启动与自动化")}>
+      {startup.length > 0 && <Card title={t("启动与自动化")}>
         {startup.map((option) => (
           <ToggleRow
             key={option.key}
@@ -59,10 +63,10 @@ export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, l
             onChange={() => save({ [option.key]: !snapshot[option.key] } as Partial<Preferences>)}
           />
         ))}
-      </Card>
+      </Card>}
 
       {linux
-        ? <LinuxProxyCard busy={busy} run={run} />
+        ? !android && <LinuxProxyCard busy={busy} run={run} />
         : <Card title={t("运行方式")} description={t("桌面模式由客户端直接运行内核和 HTTPS 解密；Windows 服务模式在后台常驻，关掉窗口也不会断开。")}>
           <Row icon={AppWindow} color="purple" label={t("运行方式")}>
             <Segmented

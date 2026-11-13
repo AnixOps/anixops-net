@@ -29,6 +29,7 @@ jobs:
       windows: ${{ steps.changes.outputs.windows }}
       linux: ${{ steps.changes.outputs.linux }}
       apple: ${{ steps.changes.outputs.apple }}
+      android: ${{ steps.changes.outputs.android }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -55,21 +56,23 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          rust=false; ui=false; windows=false; linux=false; apple=false
-          all() { rust=true; ui=true; windows=true; linux=true; apple=true; }
+          rust=false; ui=false; windows=false; linux=false; apple=false; android=false
+          all() { rust=true; ui=true; windows=true; linux=true; apple=true; android=true; }
           if [[ "${EVENT_NAME}" != pull_request ]]; then
             all
           else
             while IFS= read -r path; do
               case "${path}" in
                 Cargo.toml | Cargo.lock | .github/*) all ;;
-                apps/windows-gui/ui/*) ui=true; windows=true; linux=true ;;
+                apps/windows-gui/ui/*) ui=true; windows=true; linux=true; android=true ;;
                 apps/windows-gui/* | apps/windows-service/* | installer/*) rust=true; windows=true ;;
-                apps/linux-gui/*) rust=true; linux=true ;;
-                crates/*) rust=true; windows=true; linux=true ;;
+                # The Android app is the Linux window and backend on Android.
+                apps/linux-gui/*) rust=true; linux=true; android=true ;;
+                apps/android/*) android=true ;;
+                crates/*) rust=true; windows=true; linux=true; android=true ;;
                 apps/ios/*) apple=true ;;
                 # The desktop UI bundles TERMS.md and the Apple tests check its version (first-start consent).
-                TERMS.md) ui=true; windows=true; linux=true; apple=true ;;
+                TERMS.md) ui=true; windows=true; linux=true; apple=true; android=true ;;
                 *) ;;
               esac
             done < <(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")
@@ -80,6 +83,7 @@ jobs:
             echo "windows=${windows}"
             echo "linux=${linux}"
             echo "apple=${apple}"
+            echo "android=${android}"
           } | tee -a "$GITHUB_OUTPUT"
 
   ui:
@@ -836,6 +840,119 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
 
+  # The Android app (apps/android): the Linux window and backend with the VpnService plugin, built for arm64 by
+  # the Tauri CLI. The Gradle project is generated here (`tauri android init`) and never committed. The APK is
+  # signed with ANDROID_KEYSTORE_* secrets when they are set, otherwise with a throwaway debug key made for this
+  # run (installing a later build then needs the old one uninstalled first).
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CARGO_INCREMENTAL: "0"
+    needs: changes
+    if: ${{ needs.changes.outputs.android == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/windows-gui/ui/pnpm-lock.yaml
+
+      - name: Build the shared interface
+        shell: bash
+        run: |
+          pnpm --dir apps/windows-gui/ui install --frozen-lockfile
+          pnpm --dir apps/windows-gui/ui run build
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add aarch64-linux-android
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: android
+          workspaces: apps/android -> target
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      - name: Install the Tauri CLI
+        shell: bash
+        run: npm install --global @tauri-apps/cli@2
+
+      - name: Generate the Android project
+        shell: bash
+        working-directory: apps/android
+        run: |
+          set -euo pipefail
+          export NDK_HOME="${ANDROID_NDK_LATEST_HOME}"
+          echo "NDK_HOME=${NDK_HOME}" >> "$GITHUB_ENV"
+          tauri android init --ci
+          tauri icon icons/networkcore.png
+
+      - name: Build the APK
+        shell: bash
+        working-directory: apps/android
+        run: tauri android build --apk --target aarch64 --ci
+
+      - name: Sign the APK
+        shell: bash
+        working-directory: apps/android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          unsigned="$(find gen/android/app/build/outputs/apk -name '*-unsigned.apk' | head -n 1)"
+          test -n "${unsigned}"
+          tools="$(ls -d "${ANDROID_HOME}"/build-tools/* | sort -V | tail -n 1)"
+          keystore="${RUNNER_TEMP}/signing.jks"
+          if [ -n "${KEYSTORE_BASE64}" ]; then
+            echo "${KEYSTORE_BASE64}" | base64 --decode > "${keystore}"
+            kind=release
+          else
+            KEYSTORE_PASSWORD=android KEY_ALIAS=androiddebugkey KEY_PASSWORD=android
+            keytool -genkeypair -keystore "${keystore}" -storepass "${KEYSTORE_PASSWORD}" -keypass "${KEY_PASSWORD}" \
+              -alias "${KEY_ALIAS}" -keyalg RSA -keysize 2048 -validity 3650 -dname "CN=AnixOps Net Debug"
+            kind=debug
+          fi
+          aligned="${RUNNER_TEMP}/aligned.apk"
+          "${tools}/zipalign" -f -p 4 "${unsigned}" "${aligned}"
+          mkdir -p "${RUNNER_TEMP}/apk"
+          out="${RUNNER_TEMP}/apk/anixops-net-android-arm64-${kind}.apk"
+          "${tools}/apksigner" sign --ks "${keystore}" --ks-pass "pass:${KEYSTORE_PASSWORD}" \
+            --ks-key-alias "${KEY_ALIAS}" --key-pass "pass:${KEY_PASSWORD}" --out "${out}" "${aligned}"
+          "${tools}/apksigner" verify --print-certs "${out}"
+          rm -f "${keystore}"
+          ls -l "${out}"
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: anixops-net-android-${{ github.sha }}
+          path: ${{ runner.temp }}/apk/*.apk
+          if-no-files-found: error
+          retention-days: 3
+
   ci-summary:
     name: CI summary
     runs-on: ubuntu-latest
@@ -847,6 +964,7 @@ jobs:
       - rust-deps
       - rust-linux
       - linux-gui
+      - android
       - windows
       - swift
       - ios-xcode-build

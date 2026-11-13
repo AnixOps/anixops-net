@@ -26,3 +26,6 @@ Thumbs.db
 # XcodeGen output is generated in GitHub Actions only and never committed
 apps/ios/*.xcodeproj/
 apps/ios/Generated/
+
+# Tauri mobile output: `tauri android init` generates the Gradle project in CI
+apps/android/gen/
