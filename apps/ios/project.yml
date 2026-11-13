@@ -38,6 +38,11 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
+        # anixops:// links: connect, disconnect, toggle, mode, select and import (NetworkCoreBridge/AppURLCommand.swift).
+        CFBundleURLTypes:
+          - CFBundleURLName: net.anixops.net
+            CFBundleURLSchemes:
+              - anixops
         # Scanning node and subscription QR codes in the import sheet; nothing is recorded or uploaded.
         NSCameraUsageDescription: 扫描节点或订阅二维码时使用相机，画面不会保存或上传。
         UISupportedInterfaceOrientations:
@@ -165,6 +170,7 @@ targets:
       - path: Sources/NetworkCoreAppHost/RuleSetsView.swift
       - path: Sources/NetworkCoreAppHost/RuleTextEditor.swift
       - path: Sources/NetworkCoreAppHost/TunnelController.swift
+      - path: Sources/NetworkCoreAppHost/URLCommandHandler.swift
       - path: Sources/NetworkCoreAppHost/NativeNodeImporterFFI.swift
       - path: Sources/NetworkCoreAppHost/NodeDelayFFI.swift
       - path: Sources/NetworkCoreAppHost/NodeEditSheet.swift
@@ -177,6 +183,11 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.utilities
+        # anixops:// links, the same six actions as on iOS (NetworkCoreBridge/AppURLCommand.swift).
+        CFBundleURLTypes:
+          - CFBundleURLName: net.anixops.net
+            CFBundleURLSchemes:
+              - anixops
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
         ITSAppUsesNonExemptEncryption: false
     settings:

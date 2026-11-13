@@ -60,6 +60,9 @@ final class TunnelController {
     /// When the running tunnel last took new local rules in place, without a restart.
     private(set) var lastRulesReload: Date?
 
+    /// The link an `anixops://import` asked for, until the import sheet takes it (`takePendingImportLink()`).
+    @ObservationIgnored var pendingImportLink: String?
+
     @ObservationIgnored private var manager: NETunnelProviderManager?
     @ObservationIgnored private var statusObserver: NSObjectProtocol?
     /// Set when a node switch stopped the tunnel; the tunnel starts again once it is down.
@@ -152,6 +155,11 @@ final class TunnelController {
         } catch {
             return .failure(ImportFailure(message: String(localized: "无法解析节点")))
         }
+    }
+
+    /// Shows a plain notice, for example after an `anixops://` link could not run.
+    func show(_ text: String) {
+        message = text
     }
 
     func clearMessage() {

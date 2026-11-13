@@ -26,6 +26,14 @@ struct NetworkCoreMacApp: App {
                 .onChange(of: tunnel.message) { _, message in
                     state.dashboard.messageShown(message)
                 }
+                // `anixops://` links from Shortcuts, other apps and web pages (`AppURLCommand`).
+                .onOpenURL { url in
+                    Task {
+                        if await tunnel.handle(url: url) == .openImport {
+                            state.importing = true
+                        }
+                    }
+                }
                 .task {
                     #if DEBUG
                     // Screenshots: made-up data instead of the saved configuration (`-AnixOpsDemo YES`).
