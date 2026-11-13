@@ -6,7 +6,7 @@ import Foundation
 /// or patch version only clarifies wording. `TermsConsentTests` checks `version` against TERMS.md.
 public enum TermsConsent {
     /// The terms version this build asks for, the "基准版本" line of TERMS.md.
-    public static let version = "2.0.0"
+    public static let version = "2.0.1"
     /// The `UserDefaults` key that holds the version last accepted.
     public static let storageKey = "terms-accepted-version"
     /// The full text, in the public repository.
