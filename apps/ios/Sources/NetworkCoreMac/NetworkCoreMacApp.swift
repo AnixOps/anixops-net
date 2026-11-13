@@ -13,6 +13,7 @@ struct NetworkCoreMacApp: App {
 
     init() {
         ClientHealthMonitor.shared.start()
+        AppNotifications.install()
     }
 
     var body: some Scene {
@@ -20,6 +21,10 @@ struct NetworkCoreMacApp: App {
         Window("AnixOps Net", id: MacAppState.mainWindowID) {
             MacRootView(tunnel: tunnel, state: state)
                 .preferredColorScheme(appearance.colorScheme)
+                // The System Extension cannot post notifications; the app posts what scripts posted.
+                .task {
+                    await tunnel.relayScriptNotifications()
+                }
                 .onAppear {
                     state.dashboard.startNetworkMonitor()
                 }

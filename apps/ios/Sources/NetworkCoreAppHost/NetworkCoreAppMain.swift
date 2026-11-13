@@ -12,6 +12,7 @@ struct NetworkCoreAppMain: App {
 
     init() {
         ClientHealthMonitor.shared.start()
+        AppNotifications.install()
     }
 
     var body: some Scene {
