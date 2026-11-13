@@ -33,3 +33,5 @@ XCFramework 和 MSI 里的 Windows CLI（见 `.github/scripts/kernel-root.sh`）
 ## 许可
 
 Apache-2.0，见 [LICENSE](LICENSE)。"AnixOps Net" 名称和标识见 [TRADEMARKS.md](TRADEMARKS.md)。
+
+使用前请阅读 [TERMS.md](TERMS.md)（用户协议、禁止用途与免责声明）。
