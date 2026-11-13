@@ -9566,6 +9566,12 @@
             "state": "translated",
             "value": "Command Line"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "命令列"
+          }
         }
       }
     },
@@ -9576,6 +9582,12 @@
             "state": "translated",
             "value": "Use anixops in Terminal to check status, connect, switch nodes, test delays and import. Run this command in Terminal to set it up:"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在終端機用 anixops 查看狀態、連線、切換節點、測速和匯入。在終端機執行下面的命令後即可使用："
+          }
         }
       }
     },
@@ -9585,6 +9597,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copy"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "複製"
           }
         }
       }
