@@ -224,6 +224,22 @@ mod tests {
         assert!(redacted.contains("<id>"));
     }
 
+    /// Also in the Swift port's tests (`ClientHealthTests.testRedactionMarksEachTokenLikeRust`).
+    #[test]
+    fn each_token_is_marked() {
+        for (input, expected) in [
+            ("node hk.example.net:443.", "node <host>."),
+            ("dial [2001:db8::1]:443 and 2001:db8::2", "dial <ip> and <ip>"),
+            ("peer 203.0.113.7:8443, done", "peer <ip>, done"),
+            ("key=Zm9vYmFyYmF6cXV4MTIzNDU2Nzg5MA==", "<secret>"),
+            ("id 3F2504E0-4F89-11D3-9A0C-0305E82C3301", "id <id>"),
+            ("mail a@b.cn", "mail <email>"),
+            ("see ss://YWVzLTI1Ni1nY20@host:8388#name", "see <url>"),
+        ] {
+            assert_eq!(redact(input), expected, "{input}");
+        }
+    }
+
     #[test]
     fn code_locations_and_symbols_are_kept() {
         let text = "panicked at crates/client-health/src/lib.rs:42:7:\nindex out of bounds\n   3: std::panicking::begin_panic::h1a2b3c4d5e6f7a8b\n   4: core::fmt::write";
