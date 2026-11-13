@@ -9606,6 +9606,166 @@
           }
         }
       }
+    },
+    "使用前请阅读用户协议": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read the User Agreement Before You Start"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用前請閱讀用戶協議"
+          }
+        }
+      }
+    },
+    "只在你自己的设备上使用，不替别人在其不知情时安装或开启代理、HTTPS 解密和脚本。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use it on your own devices only. Never install or turn on a proxy, HTTPS decryption or scripts for someone without their knowledge."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只在你自己的裝置上使用，不替別人在其不知情時安裝或開啟代理、HTTPS 解密和腳本。"
+          }
+        }
+      }
+    },
+    "HTTPS 解密只用于你自己的流量。根证书由你本人在系统设置里手动信任，只解密你列出的域名。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTPS decryption is for your own traffic only. You trust the root certificate yourself in Settings, and only the domains you list are decrypted."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTPS 解密只用於你自己的流量。根憑證由你本人在系統設定裡手動信任，只解密你列出的網域。"
+          }
+        }
+      }
+    },
+    "不得用于入侵他人系统、窃取数据，或绕过游戏、支付、登录等服务的安全机制。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Never use it to break into other people's systems, steal data, or get around the security of games, payments, sign-in or other services."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不得用於入侵他人系統、竊取資料，或繞過遊戲、支付、登入等服務的安全機制。"
+          }
+        }
+      }
+    },
+    "本 App 不提供节点或订阅，导入的内容由提供方负责。软件按现状提供，不作担保。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This app provides no nodes or subscriptions; whoever provides what you import is responsible for it. The software is provided as is, without warranty."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本 App 不提供節點或訂閱，匯入的內容由提供方負責。軟體按現狀提供，不作擔保。"
+          }
+        }
+      }
+    },
+    "阅读完整协议": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read the Full Agreement"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "閱讀完整協議"
+          }
+        }
+      }
+    },
+    "不同意就不能使用 AnixOps Net。你可以重新阅读后同意，或删除本 App。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AnixOps Net can't be used without agreeing. You can read it again and agree, or delete the app."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不同意就不能使用 AnixOps Net。你可以重新閱讀後同意，或刪除本 App。"
+          }
+        }
+      }
+    },
+    "同意并继续": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agree and Continue"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同意並繼續"
+          }
+        }
+      }
+    },
+    "不同意": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decline"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不同意"
+          }
+        }
+      }
+    },
+    "用户协议": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "User Agreement"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用戶協議"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
