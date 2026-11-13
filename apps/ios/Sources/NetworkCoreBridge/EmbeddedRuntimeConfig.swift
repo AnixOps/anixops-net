@@ -320,6 +320,21 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         return copy
     }
 
+    /// The rule lines to swap into an engine running `self` so it routes like `next`, or nil when more than the
+    /// lines differ (nodes, groups, the global target, rule sets, DNS, mode or anything else): those need a restart.
+    /// Equal lines are returned too, so a caller can tell "nothing to do" (`== routing.rules`) itself.
+    public func reloadableRules(to next: EmbeddedRuntimeConfig) -> [String]? {
+        guard let running = routing, let target = next.routing else {
+            return nil
+        }
+        var same = next
+        same.routing?.rules = running.rules
+        guard same == self else {
+            return nil
+        }
+        return target.rules
+    }
+
     /// The same config routing by a subscription's rules and groups; nil goes back to the selected node alone.
     public func withRouting(_ routing: Routing?) -> EmbeddedRuntimeConfig {
         var copy = self

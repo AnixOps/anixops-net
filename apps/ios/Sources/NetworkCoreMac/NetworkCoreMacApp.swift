@@ -16,13 +16,23 @@ struct NetworkCoreMacApp: App {
     }
 
     var body: some Scene {
-        // One window: a VPN client has a single connection, so a second window would only repeat it.
+        // One main window: a VPN client has a single connection, so a second one would only repeat it.
         Window("AnixOps Net", id: MacAppState.mainWindowID) {
             MacRootView(tunnel: tunnel, state: state)
                 .preferredColorScheme(appearance.colorScheme)
                 // The System Extension cannot post notifications; the app posts what scripts posted.
                 .task {
                     await tunnel.relayScriptNotifications()
+                }
+                .onAppear {
+                    state.dashboard.startNetworkMonitor()
+                }
+                // Logged once here, not by each window that shows the dashboard.
+                .onChange(of: tunnel.connection) { previous, status in
+                    state.dashboard.tunnelChanged(from: previous, to: status, node: tunnel.nodeName)
+                }
+                .onChange(of: tunnel.message) { _, message in
+                    state.dashboard.messageShown(message)
                 }
                 // `anixops://` links from Shortcuts, other apps and web pages (`AppURLCommand`).
                 .onOpenURL { url in
@@ -53,6 +63,16 @@ struct NetworkCoreMacApp: App {
             MacCommands(tunnel: tunnel, state: state)
         }
 
+        // The live cards alone, for a corner of the screen; shares the overview's sampler (MacAppState.dashboard).
+        Window("仪表盘", id: MacAppState.dashboardWindowID) {
+            MacDashboardWindow(tunnel: tunnel, state: state)
+                .onAppear {
+                    state.dashboard.startNetworkMonitor()
+                }
+        }
+        .defaultSize(width: 760, height: 560)
+        .keyboardShortcut("d", modifiers: [.command, .option])
+
         MenuBarExtra {
             MenuBarContent(tunnel: tunnel, state: state)
         } label: {
@@ -66,9 +86,12 @@ struct NetworkCoreMacApp: App {
 @MainActor
 final class MacAppState: ObservableObject {
     static let mainWindowID = "main"
+    static let dashboardWindowID = "dashboard"
 
     @Published var section: MacSection? = .home
     @Published var importing = false
+    /// The one dashboard sampler every window shows (the overview page and the dashboard window).
+    let dashboard = DashboardModel()
 
     init() {
         #if DEBUG
@@ -251,6 +274,10 @@ private struct MenuBarContent: View {
         Divider()
         Button("打开 AnixOps Net") {
             showWindow()
+        }
+        Button("打开仪表盘") {
+            openWindow(id: MacAppState.dashboardWindowID)
+            NSApp.activate(ignoringOtherApps: true)
         }
         Button("退出 AnixOps Net") {
             NSApp.terminate(nil)

@@ -15,12 +15,17 @@ public enum TunnelAppMessage: Equatable {
     case clearTrafficStats
     /// New `NotificationSettings` (`profileValue`) for the running extension; answered with `ok`.
     case notificationSettings(Data)
+    /// New local rules (`LocalRules.profileValue()`) for the running tunnel: the extension builds the routing it
+    /// would start with and, when only the rule lines changed, swaps them in place. Answered with a
+    /// `RuntimeControl.ReloadAnswer`; `restart` asks the app to restart the tunnel instead.
+    case reloadLocalRules(Data)
 
     private static let diagnosticsPayload = Data("diagnostics".utf8)
     private static let trafficStatsPayload = Data("traffic-stats".utf8)
     private static let clearTrafficStatsPayload = Data("traffic-stats-clear".utf8)
     private static let controlPrefix = Data("control:".utf8)
     private static let notificationsPrefix = Data("notifications:".utf8)
+    private static let reloadLocalRulesPrefix = Data("local-rules:".utf8)
 
     public var encoded: Data {
         switch self {
@@ -36,6 +41,8 @@ public enum TunnelAppMessage: Equatable {
             return Self.clearTrafficStatsPayload
         case let .notificationSettings(settings):
             return Self.notificationsPrefix + settings
+        case let .reloadLocalRules(value):
+            return Self.reloadLocalRulesPrefix + value
         }
     }
 
@@ -51,6 +58,8 @@ public enum TunnelAppMessage: Equatable {
         }
         if data.starts(with: notificationsPrefix) {
             return .notificationSettings(Data(data.dropFirst(notificationsPrefix.count)))
+        if data.starts(with: reloadLocalRulesPrefix) {
+            return .reloadLocalRules(Data(data.dropFirst(reloadLocalRulesPrefix.count)))
         }
         if data.starts(with: controlPrefix) {
             return .control(Data(data.dropFirst(controlPrefix.count)))

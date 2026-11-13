@@ -57,6 +57,8 @@ final class TunnelController {
     /// The rule mode of a node list without subscription rules and the user's own rules, from `local-rules.json`;
     /// the saved profile carries a copy.
     private(set) var localRules = LocalRules()
+    /// When the running tunnel last took new local rules in place, without a restart.
+    private(set) var lastRulesReload: Date?
 
     /// The link an `anixops://import` asked for, until the import sheet takes it (`takePendingImportLink()`).
     @ObservationIgnored var pendingImportLink: String?
@@ -811,7 +813,7 @@ final class TunnelController {
     /// Returns whether they were saved.
     @discardableResult
     /// Saves the local rules now, so quick edits build on each other, then puts them in the saved profile. A running
-    /// tunnel reconnects to use them.
+    /// tunnel takes them in place when only rule lines changed (see `applyLocalRulesToProfile`), else reconnects.
     func updateLocalRules(_ next: LocalRules) {
         do {
             try next.save(to: LocalRules.defaultURL)
@@ -848,7 +850,14 @@ final class TunnelController {
             return
         }
         refresh()
-        if isConnected {
+        guard isConnected else {
+            return
+        }
+        // Rule lines alone swap into the running engine without dropping a connection; anything more (a new rule
+        // list URL, an older extension, a refused line) restarts the tunnel as before.
+        if let answer = await reloadLocalRules(value), answer.reloaded {
+            lastRulesReload = Date()
+        } else {
             restart()
         }
     }
@@ -875,6 +884,24 @@ final class TunnelController {
             self.manager = saved
         }
         refresh()
+    }
+
+    /// Hands new local rules to the running extension (`TunnelAppMessage.reloadLocalRules`). Nil when the tunnel is
+    /// not connected or the extension does not answer.
+    private func reloadLocalRules(_ value: Data) async -> RuntimeControl.ReloadAnswer? {
+        guard let session = manager?.connection as? NETunnelProviderSession, connection == .connected else {
+            return nil
+        }
+        let data: Data? = await withCheckedContinuation { continuation in
+            do {
+                try session.sendProviderMessage(TunnelAppMessage.reloadLocalRules(value).encoded) { data in
+                    continuation.resume(returning: data)
+                }
+            } catch {
+                continuation.resume(returning: nil)
+            }
+        }
+        return RuntimeControl.decode(RuntimeControl.ReloadAnswer.self, from: data)
     }
 
     func applyDns(_ next: DnsSettings) async -> Bool {
