@@ -2910,6 +2910,7 @@ name = "networkcore-android"
 version = "0.3.0"
 dependencies = [
  "networkcore-linux-gui",
+ "rquickjs-sys",
  "tauri",
  "tauri-build",
  "tauri-plugin-anixops-vpn",

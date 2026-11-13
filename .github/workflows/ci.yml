@@ -904,6 +904,8 @@ jobs:
           set -euo pipefail
           export NDK_HOME="${ANDROID_NDK_LATEST_HOME}"
           echo "NDK_HOME=${NDK_HOME}" >> "$GITHUB_ENV"
+          # rquickjs-sys generates its Android bindings with bindgen, which needs the NDK's headers.
+          echo "BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android=--sysroot=${NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot" >> "$GITHUB_ENV"
           tauri android init --ci
           tauri icon icons/networkcore.png
 

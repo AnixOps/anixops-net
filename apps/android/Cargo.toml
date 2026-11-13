@@ -27,6 +27,11 @@ networkcore-linux-gui = { path = "../linux-gui", features = ["gui"] }
 tauri = { version = "2", features = [] }
 tauri-plugin-anixops-vpn = { path = "vpn-plugin" }
 
+# QuickJS (MITM scripts) ships no prebuilt bindings for Android: generate them with bindgen against the NDK
+# sysroot (BINDGEN_EXTRA_CLANG_ARGS in CI). Cargo unifies the feature into the kernel's rquickjs.
+[target.'cfg(target_os = "android")'.dependencies]
+rquickjs-sys = { version = "0.13", features = ["bindgen"] }
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
