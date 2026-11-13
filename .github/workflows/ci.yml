@@ -893,9 +893,11 @@ jobs:
           workspaces: apps/android -> target
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
+      # Installed next to tauri.conf.json: the generated Gradle project runs the CLI again from node_modules.
       - name: Install the Tauri CLI
         shell: bash
-        run: npm install --global @tauri-apps/cli@2
+        working-directory: apps/android
+        run: npm install --no-audit --no-fund
 
       - name: Generate the Android project
         shell: bash
@@ -907,13 +909,13 @@ jobs:
           # rquickjs-sys generates its Android bindings with bindgen, which needs the NDK headers and a versioned
           # target (the API level is the app minSdkVersion).
           echo "BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android=--target=aarch64-linux-android26 --sysroot=${NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot" >> "$GITHUB_ENV"
-          tauri android init --ci
-          tauri icon icons/networkcore.png
+          npx tauri android init --ci
+          npx tauri icon icons/networkcore.png
 
       - name: Build the APK
         shell: bash
         working-directory: apps/android
-        run: tauri android build --apk --target aarch64 --ci
+        run: npx tauri android build --apk --target aarch64 --ci
 
       - name: Sign the APK
         shell: bash

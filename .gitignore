@@ -29,3 +29,4 @@ apps/ios/Generated/
 
 # Tauri mobile output: `tauri android init` generates the Gradle project in CI
 apps/android/gen/
+apps/android/package-lock.json
