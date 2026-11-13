@@ -23,6 +23,7 @@ platform-windows = { workspace = true }
 rcgen = { version = "0.14.8", features = ["x509-parser"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+network-watch = { path = "../../crates/network-watch" }
 subscription-meta = { path = "../../crates/subscription-meta" }
 
 [target.'cfg(windows)'.dependencies]

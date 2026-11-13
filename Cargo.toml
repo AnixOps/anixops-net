@@ -5,6 +5,7 @@ members = [
     "apps/windows-service",
     "crates/desktop-dns",
     "crates/desktop-mitm",
+    "crates/network-watch",
     "crates/subscription-meta",
 ]
 resolver = "2"
