@@ -1,0 +1,9 @@
+[package]
+name = "network-watch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Tells the desktop clients when to rebuild the engine's connections: the network changed or the computer woke up."
+
+[dependencies]
