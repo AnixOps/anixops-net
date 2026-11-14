@@ -1,0 +1,122 @@
+name: UI screenshots
+
+# Draws the desktop interface page by page with demo data. On a pull request it draws the base commit the same
+# way, compares the two shot by shot and fails when a shot changed that the pull request description does not
+# acknowledge on a "界面变化：" line (docs/ui-ux.md). Editing the description runs it again.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - apps/windows-gui/ui/**
+      - TERMS.md
+      - .github/workflows/ui-screenshots.yml
+      - .github/scripts/screenshot-diff/**
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    paths:
+      - apps/windows-gui/ui/**
+      - TERMS.md
+      - .github/workflows/ui-screenshots.yml
+      - .github/scripts/screenshot-diff/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ui-screenshots-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  desktop:
+    name: Desktop interface screenshots
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      UI: apps/windows-gui/ui
+      TOOLS: ${{ runner.temp }}/screenshot-tools
+      SHOTS: ${{ runner.temp }}/ui-screenshots
+    steps:
+      # On a pull request this is the merge of the branch into its base, so the comparison below shows exactly
+      # what merging would change; the base is the merge's first parent.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/windows-gui/ui/pnpm-lock.yaml
+
+      # The interface is Chinese first; without these the text would be drawn in a fallback bitmap face.
+      - name: Install fonts
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk
+
+      # Pinned, and kept out of the app's own dependencies: these only draw and compare pictures.
+      - name: Install the browser and the comparison tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${TOOLS}"
+          npm install --prefix "${TOOLS}" --no-audit --no-fund playwright@1.63.0 pixelmatch@5.3.0 pngjs@7.0.0
+          "${TOOLS}/node_modules/.bin/playwright" install --with-deps chromium
+          echo "NODE_PATH=${TOOLS}/node_modules" >> "${GITHUB_ENV}"
+
+      - name: Test the comparison tools
+        shell: bash
+        run: node --test .github/scripts/screenshot-diff/
+
+      - name: Build the interface
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --dir "${UI}" install --frozen-lockfile
+          pnpm --dir "${UI}" run build
+
+      # A page that throws while it is drawn fails here: that is a bug in the pull request, not a difference.
+      - name: Draw the screenshots
+        shell: bash
+        run: node "${UI}/screenshots/render.cjs" "${UI}/dist" "${SHOTS}/after"
+
+      # The base is drawn with this branch's shot list and demo data, so both sides are taken the same way and a
+      # new shot shows up as "added". A shot the base cannot draw (a page it does not have) is simply missing.
+      - name: Build and draw the base commit
+        if: ${{ github.event_name == 'pull_request' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${RUNNER_TEMP}/base"
+          git worktree add --detach "${base}" HEAD^1
+          pnpm --dir "${base}/${UI}" install --frozen-lockfile
+          pnpm --dir "${base}/${UI}" run build
+          node "${UI}/screenshots/render.cjs" "${base}/${UI}/dist" "${SHOTS}/before" || echo "::notice::some shots could not be drawn on the base commit; they count as added"
+
+      - name: Compare with the base commit
+        if: ${{ github.event_name == 'pull_request' }}
+        shell: bash
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: node .github/scripts/screenshot-diff/diff.cjs --before "${SHOTS}/before" --after "${SHOTS}/after" --report "${SHOTS}/report" --label "桌面端（Windows / Linux）"
+
+      - name: Upload the screenshots
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/ui-screenshots/after
+            ${{ runner.temp }}/ui-screenshots/report
+          if-no-files-found: warn
+          retention-days: 3

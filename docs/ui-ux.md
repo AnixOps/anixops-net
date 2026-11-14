@@ -72,4 +72,18 @@
 6. 是否只显示了当前状态下适用的操作？
 7. 页面标题、分区标题、行内容、提示这四级文字能否一眼分清？
 
-macOS 的界面改动用 CI 的 `mac-screenshots-<sha>` 截图核对；桌面端用 CI 构建出的 `windows-gui-ui-<sha>` 核对。
+## 截图对比
+
+界面细节靠截图对比把关，不靠人记得去看。
+
+- **桌面端（Windows / Linux 共用的界面）**：`UI screenshots` 工作流用演示数据（`apps/windows-gui/ui/screenshots/mock.js`）逐页画出界面（`render.cjs` 里的清单），在 PR 上把基线提交用同样的方法再画一遍，逐张比对。时钟固定、动效关闭、没有随机数，同一份构建画多少次像素都一样，所以任何差异都是这个 PR 造成的。
+- 有差异的截图必须在 PR 描述里确认，否则工作流失败。看过产物 `ui-screenshots-<sha>` 里 `report/<截图名>/` 下的 `before.png`、`after.png`、`diff.png`，确认是想要的变化后，在描述里加一行，改完描述工作流会自己重跑：
+
+  ```
+  界面变化：debug-requests-light, debug-inspector-*
+  ```
+
+  名字用逗号或空格隔开，`*` 代表任意一段字符。新增和删除的截图同样要列出。确认了却没有变化的名字会在报告里提示。
+- 新页面或新状态要在 `render.cjs` 的清单里加一张截图；后端多了页面要用的命令，在 `mock.js` 里补上它的演示数据。
+- **macOS**：CI 的 `mac-screenshots-<sha>` 目前只上传截图，不自动比对，改动后要人工核对。
+- 比对工具（`.github/scripts/screenshot-diff/diff.cjs`）只认两个目录的 PNG，不管截图怎么来的。macOS、iOS 模拟器和真实 Windows / Linux 窗口在不同缩放下的截图，都按“同样的方法拍两遍，再交给它比”接入。
