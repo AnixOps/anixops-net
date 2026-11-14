@@ -26,6 +26,9 @@ use desktop_mitm::mappings;
 use desktop_mitm::plugins::{self, PluginSummary};
 use engine_embedded::profile::RoutingMode;
 use node_edits::NodeForm;
+use on_demand::{
+    Action as OnDemandAction, Current as CurrentNetwork, Settings as OnDemandSettings,
+};
 use subscription_meta::ResponseMeta;
 use tauri::plugin::TauriPlugin;
 use tauri::webview::PageLoadEvent;
@@ -111,7 +114,17 @@ pub trait TunnelHost: Send + Sync + 'static {
         let _ = (app, name, mime_type, data_base64);
         Err("this platform has no shared Downloads folder".to_string())
     }
+
+    /// The network the device is on, for the Wi-Fi rules; `ask` asks for the permission that reveals the
+    /// Wi-Fi name when it is withheld. `None` where the platform does not read it (Linux desktop).
+    fn current_network(&self, app: &AppHandle, ask: bool) -> Option<Network> {
+        let _ = (app, ask);
+        None
+    }
 }
+
+/// The network a [`TunnelHost`] reports.
+pub use on_demand::Network;
 
 struct TunnelHostState(Box<dyn TunnelHost>);
 
@@ -1073,6 +1086,60 @@ async fn notification_settings(
     lock(&state.0).notification_settings(update, &language)
 }
 
+/// The Wi-Fi rules, changed to `update` first when given.
+#[tauri::command]
+async fn on_demand_settings(
+    state: State<'_, AppState>,
+    update: Option<OnDemandSettings>,
+) -> Result<OnDemandSettings, String> {
+    with_backend(&state, move |backend| backend.on_demand_settings(update)).await
+}
+
+/// The network the device is on, for "add the current Wi-Fi"; `ask` asks for the permission that reveals its
+/// name.
+#[tauri::command]
+async fn current_network(app: AppHandle, ask: bool) -> Result<CurrentNetwork, String> {
+    off_lock(move || {
+        app.try_state::<TunnelHostState>()
+            .and_then(|host| host.0.current_network(&app, ask))
+            .map(|network| network.current())
+            .ok_or_else(|| "this platform does not read the Wi-Fi network".to_string())
+    })
+    .await
+}
+
+/// Applies the Wi-Fi rules: samples the network every ten seconds while they are on and connects or
+/// disconnects once when it changes. Only where the platform reads the network (Android).
+fn start_on_demand(app: AppHandle, backend: Arc<Mutex<Backend>>) {
+    if app.try_state::<TunnelHostState>().is_none() {
+        return;
+    }
+    thread::spawn(move || loop {
+        thread::sleep(Duration::from_secs(10));
+        if !lock(&backend).on_demand_enabled() {
+            continue;
+        }
+        let Some(network) = app
+            .try_state::<TunnelHostState>()
+            .and_then(|host| host.0.current_network(&app, false))
+        else {
+            continue;
+        };
+        let action = lock(&backend).on_demand_action(network);
+        let state = AppState(backend.clone());
+        match action {
+            Some(OnDemandAction::Connect) => {
+                let _ = tauri::async_runtime::block_on(connect_through_tunnel(&app, &state));
+            }
+            Some(OnDemandAction::Disconnect) => {
+                let _ = lock(&backend).disconnect();
+                close_tunnel(&app, &state);
+            }
+            _ => {}
+        }
+    });
+}
+
 /// Updates every subscription whose interval has passed, checking once a minute; a failed update is notified.
 fn start_subscription_updates(app: AppHandle, backend: Arc<Mutex<Backend>>) {
     thread::spawn(move || loop {
@@ -1499,6 +1566,7 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             move |app| {
                 start_app_links(app.handle());
                 start_subscription_updates(app.handle().clone(), shared.clone());
+                start_on_demand(app.handle().clone(), shared.clone());
                 start_monitor(app.handle().clone(), shared);
                 Ok(())
             }
@@ -1543,6 +1611,8 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             app_logs,
             notification_settings,
             take_app_links,
+            on_demand_settings,
+            current_network,
             node_form,
             edit_node,
             remove_node,

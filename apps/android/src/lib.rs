@@ -5,7 +5,7 @@
 mod android {
     use std::path::PathBuf;
 
-    use networkcore_linux_gui::app::{self, Host, TunnelHost, TunnelInterface};
+    use networkcore_linux_gui::app::{self, Host, Network, TunnelHost, TunnelInterface};
     use tauri::{AppHandle, Manager, Wry};
     use tauri_plugin_anixops_vpn::{StartRequest, Vpn};
 
@@ -69,6 +69,11 @@ mod android {
         ) -> Result<String, String> {
             app.state::<Vpn<Wry>>()
                 .save_base64_to_downloads(name, mime_type, data_base64)
+        }
+
+        fn current_network(&self, app: &AppHandle, ask: bool) -> Option<Network> {
+            let network = app.state::<Vpn<Wry>>().current_network(ask).ok()?;
+            Some(Network::from_kind(&network.kind, network.ssid))
         }
     }
 

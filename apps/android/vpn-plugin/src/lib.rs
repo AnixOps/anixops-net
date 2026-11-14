@@ -51,6 +51,21 @@ struct KeyResponse {
     key_base64: String,
 }
 
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+#[derive(Debug, Serialize)]
+struct NetworkRequest {
+    ask: bool,
+}
+
+/// The network the device is on: `kind` is wifi, cellular, other or offline; `ssid` the Wi-Fi name when Android
+/// gives it.
+#[derive(Debug, Clone, Deserialize)]
+pub struct NetworkResponse {
+    pub kind: String,
+    #[serde(default)]
+    pub ssid: Option<String>,
+}
+
 /// Managed by the plugin: `app.state::<Vpn<R>>()`.
 pub struct Vpn<R: Runtime> {
     #[cfg(target_os = "android")]
@@ -114,6 +129,13 @@ impl<R: Runtime> Vpn<R> {
             .map_err(|error| error.to_string())
     }
 
+    /// The current network; `ask` asks for the location permission when the Wi-Fi name is withheld.
+    pub fn current_network(&self, ask: bool) -> Result<NetworkResponse, String> {
+        self.handle
+            .run_mobile_plugin::<NetworkResponse>("currentNetwork", NetworkRequest { ask })
+            .map_err(|error| error.to_string())
+    }
+
     pub fn stop(&self) -> Result<(), String> {
         self.handle
             .run_mobile_plugin::<serde_json::Value>("stop", ())
@@ -143,6 +165,10 @@ impl<R: Runtime> Vpn<R> {
 
     pub fn capture_session_key(&self) -> Result<String, String> {
         Err("the Android Keystore exists only on Android".to_string())
+    }
+
+    pub fn current_network(&self, _ask: bool) -> Result<NetworkResponse, String> {
+        Err("the network is read on Android".to_string())
     }
 
     pub fn stop(&self) -> Result<(), String> {

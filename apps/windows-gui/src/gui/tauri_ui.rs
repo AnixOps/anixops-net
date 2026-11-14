@@ -25,6 +25,10 @@ use engine_embedded::config::{RuntimeConfig, CONFIG_SCHEMA_VERSION};
 use engine_embedded::delay::measure_delay;
 use engine_embedded::nodes::{outbound_for_node, routing_envelope, single_node_envelope};
 use node_edits::{NodeEdits, NodeForm};
+use on_demand::{
+    Action as OnDemandAction, Current as CurrentNetwork, Network, Settings as OnDemandSettings,
+    Watch as OnDemandWatch,
+};
 use platform_windows::managed::{
     read_managed_state, windows_managed_config_path, windows_managed_data_directory,
     windows_managed_log_directory, windows_managed_state_path, write_managed_config,
@@ -81,6 +85,8 @@ const EMBEDDED_PROXY_OUTBOUND: &str = "proxy";
 const EMBEDDED_DELAY_TIMEOUT: Duration = Duration::from_secs(5);
 /// Nodes the fastest-node search measures at once.
 const EMBEDDED_DELAY_PARALLELISM: usize = 16;
+/// How often the Wi-Fi rules read the Wi-Fi name when the network path stays the same.
+const ON_DEMAND_POLL: Duration = Duration::from_secs(12);
 
 #[derive(Clone)]
 struct DesktopAppState {
@@ -91,6 +97,8 @@ struct DesktopAppState {
     traffic: Arc<Mutex<TrafficRecorder>>,
     /// The notification switches (`notification_settings`).
     notifications: Arc<Mutex<NotificationSettings>>,
+    /// The Wi-Fi rules (`on_demand_settings`); a changed set is applied to the current network again.
+    on_demand: Arc<Mutex<(OnDemandSettings, OnDemandWatch)>>,
 }
 
 /// The traffic statistics and what the last connection list held.
@@ -112,6 +120,80 @@ impl TrafficRecorder {
     fn save(&mut self) {
         self.saved_at = Instant::now();
         let _ = self.stats.save(&traffic_stats_path());
+    }
+}
+
+fn on_demand_settings_path() -> PathBuf {
+    windows_managed_data_directory().join("on-demand.json")
+}
+
+/// The network under the connection: the Wi-Fi name from `netsh`, otherwise Ethernet or another interface,
+/// or offline when no route leaves the computer.
+fn current_network_now(path: Option<&String>) -> Network {
+    match on_demand::windows_wifi() {
+        Some(ssid) => Network::Wifi(ssid),
+        None if path.is_none() => Network::Offline,
+        None => Network::Other,
+    }
+}
+
+/// The Wi-Fi rules, changed to `update` first when given.
+#[tauri::command]
+async fn on_demand_settings(
+    update: Option<OnDemandSettings>,
+    state: State<'_, DesktopAppState>,
+) -> Result<OnDemandSettings, String> {
+    let mut guard = state
+        .on_demand
+        .lock()
+        .map_err(|_| "Wi-Fi rules lock failed")?;
+    if let Some(update) = update {
+        let next = update
+            .checked()
+            .map_err(|name| format!("\"{name}\" is not a Wi-Fi name (1 to 32 bytes)"))?;
+        if next != guard.0 {
+            next.save(&on_demand_settings_path())
+                .map_err(|error| format!("the Wi-Fi rules could not be saved: {error}"))?;
+            guard.0 = next;
+            guard.1.reset();
+        }
+    }
+    Ok(guard.0.clone())
+}
+
+/// The network the computer is on, for "add the current Wi-Fi". Windows 11 withholds the Wi-Fi name until
+/// location access is allowed in the system settings; `ask` has no prompt to show here.
+#[tauri::command]
+async fn current_network(ask: bool) -> Result<CurrentNetwork, String> {
+    let _ = ask;
+    run_blocking(|| {
+        let path = network_watch::current_path();
+        Ok(current_network_now(path.as_ref()).current())
+    })
+    .await
+}
+
+/// What the Wi-Fi rules want now, when the network is new and the connection is not already that way.
+fn on_demand_action(state: &DesktopAppState, path: Option<&String>) -> Option<OnDemandAction> {
+    let enabled = state
+        .on_demand
+        .lock()
+        .map(|guard| guard.0.enabled)
+        .unwrap_or(false);
+    if !enabled {
+        return None;
+    }
+    let network = current_network_now(path);
+    let action = {
+        let mut guard = state.on_demand.lock().ok()?;
+        let (settings, watch) = &mut *guard;
+        watch.observe(settings, network)?
+    };
+    let running = node_operations_runtime_running(state).ok()?;
+    match action {
+        OnDemandAction::Connect if !running => Some(action),
+        OnDemandAction::Disconnect if running => Some(action),
+        _ => None,
     }
 }
 
@@ -464,6 +546,10 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             notifications: Arc::new(Mutex::new(NotificationSettings::load(
                 &notification_settings_path(),
             ))),
+            on_demand: Arc::new(Mutex::new((
+                OnDemandSettings::load(&on_demand_settings_path()),
+                OnDemandWatch::default(),
+            ))),
         })
         .manage(HealthState(health))
         .setup(|app| {
@@ -542,6 +628,8 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             traffic_stats,
             app_logs,
             notification_settings,
+            on_demand_settings,
+            current_network,
             take_app_links,
             node_form,
             edit_node,
@@ -740,12 +828,34 @@ fn start_automatic_connection(state: DesktopAppState) {
 /// Rebuilds the connections of the engine this window runs when the network
 /// changes or the computer wakes (`network_watch`). The service-mode core and
 /// the TUN core are in another process or keep their own sockets; they are
-/// left alone.
+/// left alone. It also applies the Wi-Fi rules, reading the Wi-Fi name when
+/// the path changes and every twelve seconds (a switch between two Wi-Fi
+/// networks can keep the same address).
 fn start_network_watch(state: DesktopAppState) {
     std::thread::spawn(move || {
         let mut watch = network_watch::NetworkWatch::new();
+        let mut last_path = None;
+        let mut wifi_read_at: Option<Instant> = None;
         loop {
             let path = network_watch::current_path();
+            let due = wifi_read_at.is_none_or(|at| at.elapsed() >= ON_DEMAND_POLL);
+            if path != last_path || due {
+                last_path = path.clone();
+                wifi_read_at = Some(Instant::now());
+                match on_demand_action(&state, path.as_ref()) {
+                    Some(OnDemandAction::Connect) => {
+                        let _ = append_managed_log(APP_LOG_SCOPE, "Wi-Fi rules: connecting");
+                        let result = connect_blocking(state.clone());
+                        log_operation("Wi-Fi rules connect", &result);
+                    }
+                    Some(OnDemandAction::Disconnect) => {
+                        let _ = append_managed_log(APP_LOG_SCOPE, "Wi-Fi rules: disconnecting");
+                        let result = disconnect_blocking(state.clone());
+                        log_operation("Wi-Fi rules disconnect", &result);
+                    }
+                    _ => {}
+                }
+            }
             if let Some(reset) = watch.observe(std::time::SystemTime::now(), path) {
                 let answer = state
                     .direct_core

@@ -74,7 +74,7 @@
 | 扩展日志级别与模块筛选、开发者模式 | ✅ | ✅ | ✅ | ✅ | ✅ | 活动页“日志”：级别（全部 / 警告 / 错误）、模块、文字筛选，拷贝与清空（`crates/app-log`，T10）。桌面和 Android 只有应用自己的日志：内核不单独记日志；Windows 读窗口、应用、HTTPS 解密三份日志，Linux / Android 记连接、断开、订阅更新、网络切换和出错原因，网址去掉查询参数 |
 | 系统通知（脚本通知、意外断开、订阅更新失败） | ✅ | ✅ | ✅ | ✅ | ✅ | 设置页“通知”三个开关，默认全开（`crates/app-notifications`，tauri-plugin-notification，T11）。点击脚本通知不能打开它附带的链接：桌面通知插件不支持点击回调 |
 | 网络变化后重建连接 | ✅ | ✅ | ✅ | ✅ | ◐ | Android 共用 `network_watch`，Wi-Fi / 移动网络切换待真机确认 |
-| 按 Wi-Fi 自动连接 / 断开（On Demand） | ✅ | ✅ | ❌ | ❌ | ❌ | 桌面需要读 SSID，T12 评估 |
+| 按 Wi-Fi 自动连接 / 断开（On Demand） | ✅ | ✅ | ✅ | ⛔ | ✅ | 设置页“Wi-Fi 规则”：指定 Wi-Fi、其他 Wi-Fi、蜂窝（Android）、有线和其他网络各选连接 / 断开 / 保持不变；Windows、Android 由 App 运行时每 10–12 秒取样、换网络时执行一次（T12） |
 | 开机 / 登录后启动、自动连接 | ✅ | ✅ | ✅ | ✅ | ⛔ | Android 每次连接要系统 VPN 授权，见系统限制 |
 | `anixops://` 链接 | ✅ | ✅ | ✅ | ✅ | ✅ | 与 iOS 相同的动作：connect / disconnect / toggle、`mode?set=`、`select?node=&group=` 或 `policy=`、`import?url=`（只填进导入框，用户点“导入”才保存）。桌面没有 `global` 模式，`mode` 另外接受 `bypass_china` 等桌面模式名。Windows 写当前用户的 `HKCU\Software\Classes\anixops`，Linux 写 `~/.local/share/applications` 里的 handler 并调 `xdg-mime`，都在启动时注册；第二次启动把链接交给已运行的窗口（Linux 因此改为单实例）。Android 在 manifest 里声明 scheme（tauri-plugin-deep-link，T13） |
 | 崩溃报告（本机、脱敏） | ✅ | ✅ | ✅ | ✅ | ✅ | |
@@ -102,6 +102,10 @@ MSI 升级时旧服务随旧版本一起卸载；便携版注册过的服务由�
 - **Android 导入自有根证书**：解密在手机本机进行，不需要把团队 CA 装进别的设备；如需统一证书，见上一条，用户仍要在系统设置里装。
 - **Linux TUN / 流量重定向**：创建 TUN 需要 `CAP_NET_ADMIN`，改路由需要 root。Linux 客户端现在只做系统代理，不在 App 里提权。
   可以通过 polkit 启动一个有权限的辅助进程实现，属于新的安装形态，需要维护者决定是否做。
+- **Wi-Fi 规则（Windows、Android、Linux）**：iOS / macOS 由系统执行规则，App 不运行也生效；Windows 和 Android 没有对应的系统
+  功能，规则只在 App 运行时（Android 包括后台）生效。读 Wi-Fi 名称都要位置权限：Android 在打开规则时询问一次，Windows 11 要在
+  “隐私和安全性 > 位置”里允许桌面应用访问位置，否则只能区分“Wi-Fi / 有线”。Linux 桌面的网络管理器各不相同（NetworkManager、
+  systemd-networkd、iwd），自带按连接执行脚本的办法，客户端不做。
 - **iOS 指标端口**：Packet Tunnel 扩展的监听端口对其他 App 不可见，iOS 上用导出日志代替。
 
 ## 补齐计划
@@ -124,6 +128,6 @@ MSI 升级时旧服务随旧版本一起卸载；便携版注册过的服务由�
 | T9 | 按天流量统计 | Windows、Linux、Android | 已完成 |
 | T10 | 日志查看（级别、模块筛选） | Windows、Linux、Android | 已完成 |
 | T11 | 系统通知 | Windows、Linux、Android | 已完成 |
-| T12 | 按 Wi-Fi 自动连接 / 断开 | Windows、Linux | 待评估 |
+| T12 | 按 Wi-Fi 自动连接 / 断开 | Windows、Android | 已完成（Linux 桌面不做，见“系统限制”） |
 | T13 | `anixops://` 链接 | Windows、Linux、Android | 已完成 |
 | W1 | Windows 服务模式下的调试功能 | Windows | 已完成（删除服务模式，调试固定在窗口进程） |

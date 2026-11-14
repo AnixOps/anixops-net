@@ -8,6 +8,7 @@ import { Card, Loading, MoreMenu, Row, Run, Segmented, StatusDot, TileColor, Tog
 import { currentLanguage, LanguageChoice, languages, t } from "../i18n";
 import { TermsViewer, termsVersion } from "../terms";
 import { AppMode, modes } from "../mode";
+import { OnDemandCard } from "./OnDemandCard";
 
 type StartupKey = "startAfterLogin" | "autoConnect" | "autoRecoverCore" | "autoSubscriptionRefresh" | "autoSelectFastestNode";
 
@@ -84,6 +85,8 @@ export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, l
             onChange={() => void run("TUN", () => desktop.setTunMode(!snapshot.tunModeEnabled))}
           />
         </Card>}
+
+      {snapshot.platform !== "linux" && <OnDemandCard busy={busy} run={run} android={android} />}
 
       <NotificationsCard busy={busy} run={run} />
 
