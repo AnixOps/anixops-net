@@ -272,3 +272,9 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 - [ ] 装一个会调用 `$notification.post` 的插件脚本，命中后系统通知中心出现脚本标题和内容。
 - [ ] 连接后结束内核或在 Android 系统设置里断开 VPN，几秒内出现“连接已断开”；Windows 打开“内核意外退出时自动恢复一次”时文字是“正在重新连接”。
 - [ ] 把订阅地址改成打不开的地址并等到自动更新，出现“订阅更新失败”。关掉对应开关后不再出现；切换界面语言后通知文字跟着变。
+
+## `anixops://` 链接真机验收（T13）
+
+- [ ] Windows、Linux（GNOME / KDE）、Android：启动过一次客户端后，在浏览器地址栏或终端（`xdg-open` / `start`）打开 `anixops://connect`、`anixops://disconnect`、`anixops://toggle`，客户端窗口来到前台并执行。
+- [ ] `anixops://mode?set=direct`、`anixops://select?node=<节点名>`、`anixops://select?policy=<策略组>&node=<成员>` 生效；`anixops://import?url=<订阅链接>` 打开代理页的订阅、链接已填好，点“导入”才保存。
+- [ ] 客户端没运行时打开链接：启动客户端并执行（Windows / Linux 只有一个窗口，不会多开）。

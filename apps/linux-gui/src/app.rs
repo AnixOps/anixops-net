@@ -29,7 +29,8 @@ use node_edits::NodeForm;
 use subscription_meta::ResponseMeta;
 use tauri::plugin::TauriPlugin;
 use tauri::webview::PageLoadEvent;
-use tauri::{AppHandle, Context, Manager, RunEvent, State, Wry};
+use tauri::{AppHandle, Context, Emitter, Manager, RunEvent, State, Wry};
+use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_notification::NotificationExt;
 use traffic_stats::TrafficStats;
 
@@ -997,6 +998,59 @@ fn start_monitor(app: AppHandle, backend: Arc<Mutex<Backend>>) {
     });
 }
 
+/// `anixops://` links the window has not read yet (`take_app_links`); the window acts on them.
+#[derive(Default)]
+struct AppLinks(Mutex<Vec<String>>);
+
+/// Keeps the links, brings the window forward and tells it to read them.
+fn receive_app_links(app: &AppHandle, urls: Vec<String>) {
+    let urls: Vec<String> = urls
+        .into_iter()
+        .filter(|url| url.to_ascii_lowercase().starts_with("anixops:"))
+        .collect();
+    if urls.is_empty() {
+        return;
+    }
+    if let Ok(mut links) = app.state::<AppLinks>().0.lock() {
+        links.extend(urls);
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+    let _ = app.emit("app-link", ());
+}
+
+/// Hands the window the `anixops://` links received since it last asked.
+#[tauri::command]
+fn take_app_links(links: State<'_, AppLinks>) -> Vec<String> {
+    links
+        .0
+        .lock()
+        .map(|mut links| std::mem::take(&mut *links))
+        .unwrap_or_default()
+}
+
+/// Takes a link the app was started with and receives later ones. The desktop registers `anixops://` for this
+/// user (a `.desktop` handler); a second start hands its link over through the single instance plugin. Android
+/// declares the scheme in its manifest.
+fn start_app_links(app: &AppHandle) {
+    let deep_link = app.deep_link();
+    #[cfg(not(target_os = "android"))]
+    let _ = deep_link.register_all();
+    if let Ok(Some(urls)) = deep_link.get_current() {
+        receive_app_links(app, urls.iter().map(ToString::to_string).collect());
+    }
+    let handle = app.clone();
+    deep_link.on_open_url(move |event| {
+        receive_app_links(
+            &handle,
+            event.urls().iter().map(ToString::to_string).collect(),
+        );
+    });
+}
+
 /// Shows one system notification; one the system refuses (no permission, no notification service) is dropped.
 fn post_notice(app: &AppHandle, notice: &Notice) {
     let _ = app
@@ -1382,7 +1436,21 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
 
     start_network_watch(shared.clone());
 
-    let mut builder = tauri::Builder::default().plugin(tauri_plugin_notification::init());
+    let mut builder = tauri::Builder::default();
+    // One window per user: a second start (an `anixops://` link) hands over to the running one.
+    #[cfg(target_os = "linux")]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }));
+    }
+    builder = builder
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_notification::init());
     for plugin in plugins {
         builder = builder.plugin(plugin);
     }
@@ -1393,9 +1461,11 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
         .manage(AppState(shared.clone()))
         .manage(HealthState(health))
         .manage(SessionKeyState(Mutex::new(None)))
+        .manage(AppLinks::default())
         .setup({
             let shared = shared.clone();
             move |app| {
+                start_app_links(app.handle());
                 start_subscription_updates(app.handle().clone(), shared.clone());
                 start_monitor(app.handle().clone(), shared);
                 Ok(())
@@ -1437,6 +1507,7 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             traffic_stats,
             app_logs,
             notification_settings,
+            take_app_links,
             node_form,
             edit_node,
             remove_node,

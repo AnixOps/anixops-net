@@ -53,7 +53,8 @@ use std::{
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
 use tauri::webview::PageLoadEvent;
-use tauri::{AppHandle, Manager, Runtime, State, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State, WindowEvent};
+use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_notification::NotificationExt;
 use traffic_stats::{Counter as TrafficCounter, TrafficStats};
 
@@ -453,6 +454,8 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main_window(app);
         }))
+        .plugin(tauri_plugin_deep_link::init())
+        .manage(AppLinks::default())
         .manage(DesktopAppState {
             desktop: Arc::new(Mutex::new(desktop)),
             lifecycle: Arc::new(RuntimeLifecycle::default()),
@@ -469,6 +472,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
                 super::backdrop::apply(&window);
             }
             show_main_window(app);
+            start_app_links(app.handle());
             let state = app.state::<DesktopAppState>().inner().clone();
             remove_legacy_service(&state);
             start_automatic_connection(state.clone());
@@ -535,6 +539,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             traffic_stats,
             app_logs,
             notification_settings,
+            take_app_links,
             node_form,
             edit_node,
             remove_node,
@@ -614,6 +619,58 @@ fn install_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .build(app)?;
     app.manage(DesktopTray { _icon: tray });
     Ok(())
+}
+
+/// `anixops://` links the window has not read yet (`take_app_links`); the window acts on them.
+#[derive(Default)]
+struct AppLinks(Mutex<Vec<String>>);
+
+/// Keeps the links, brings the window forward and tells it to read them.
+fn receive_app_links(app: &AppHandle, urls: Vec<String>) {
+    let urls: Vec<String> = urls
+        .into_iter()
+        .filter(|url| url.to_ascii_lowercase().starts_with("anixops:"))
+        .collect();
+    if urls.is_empty() {
+        return;
+    }
+    if let Ok(mut links) = app.state::<AppLinks>().0.lock() {
+        links.extend(urls);
+    }
+    show_main_window(app);
+    let _ = app.emit("app-link", ());
+}
+
+/// Hands the window the `anixops://` links received since it last asked.
+#[tauri::command]
+fn take_app_links(links: State<'_, AppLinks>) -> Vec<String> {
+    links
+        .0
+        .lock()
+        .map(|mut links| std::mem::take(&mut *links))
+        .unwrap_or_default()
+}
+
+/// Registers `anixops://` for this user, takes a link the app was started with, and receives later ones (a second
+/// start hands its link over through the single instance plugin).
+fn start_app_links(app: &AppHandle) {
+    let deep_link = app.deep_link();
+    if let Err(error) = deep_link.register_all() {
+        let _ = append_managed_log(
+            APP_LOG_SCOPE,
+            &format!("anixops:// registration failed: {error}"),
+        );
+    }
+    if let Ok(Some(urls)) = deep_link.get_current() {
+        receive_app_links(app, urls.iter().map(ToString::to_string).collect());
+    }
+    let handle = app.clone();
+    deep_link.on_open_url(move |event| {
+        receive_app_links(
+            &handle,
+            event.urls().iter().map(ToString::to_string).collect(),
+        );
+    });
 }
 
 fn show_main_window<R: Runtime, M: Manager<R>>(app: &M) {

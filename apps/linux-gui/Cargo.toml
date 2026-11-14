@@ -12,7 +12,15 @@ description = "Linux desktop client for AnixOps Net: the shared Tauri + React in
 [features]
 default = []
 # `tauri/custom-protocol` embeds the built interface; without it a release binary loads the dev server URL.
-gui = ["dep:tauri", "dep:tauri-build", "dep:reqwest", "dep:tauri-plugin-notification", "tauri/custom-protocol"]
+gui = [
+    "dep:tauri",
+    "dep:tauri-build",
+    "dep:reqwest",
+    "dep:tauri-plugin-deep-link",
+    "dep:tauri-plugin-notification",
+    "dep:tauri-plugin-single-instance",
+    "tauri/custom-protocol",
+]
 
 [dependencies]
 anx-license = { path = "../../crates/anx-license" }
@@ -34,7 +42,12 @@ app-notifications = { path = "../../crates/app-notifications" }
 traffic-stats = { path = "../../crates/traffic-stats" }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"], optional = true }
 tauri = { version = "2", optional = true }
+tauri-plugin-deep-link = { version = "~2.4", optional = true }
 tauri-plugin-notification = { version = "~2.3", optional = true }
+
+# The desktop keeps one window per user, so an `anixops://` link reaches the running one.
+[target.'cfg(target_os = "linux")'.dependencies]
+tauri-plugin-single-instance = { version = "2", optional = true, features = ["deep-link"] }
 
 # Android (apps/android builds this crate with `gui`): the VPN's TUN descriptor is read and written directly.
 [target.'cfg(target_os = "android")'.dependencies]

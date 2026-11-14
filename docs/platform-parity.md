@@ -76,7 +76,7 @@
 | 网络变化后重建连接 | ✅ | ✅ | ✅ | ✅ | ◐ | Android 共用 `network_watch`，Wi-Fi / 移动网络切换待真机确认 |
 | 按 Wi-Fi 自动连接 / 断开（On Demand） | ✅ | ✅ | ❌ | ❌ | ❌ | 桌面需要读 SSID，T12 评估 |
 | 开机 / 登录后启动、自动连接 | ✅ | ✅ | ✅ | ✅ | ⛔ | Android 每次连接要系统 VPN 授权，见系统限制 |
-| `anixops://` 链接 | ✅ | ✅ | ❌ | ❌ | ❌ | T13 |
+| `anixops://` 链接 | ✅ | ✅ | ✅ | ✅ | ✅ | 与 iOS 相同的动作：connect / disconnect / toggle、`mode?set=`、`select?node=&group=` 或 `policy=`、`import?url=`（只填进导入框，用户点“导入”才保存）。桌面没有 `global` 模式，`mode` 另外接受 `bypass_china` 等桌面模式名。Windows 写当前用户的 `HKCU\Software\Classes\anixops`，Linux 写 `~/.local/share/applications` 里的 handler 并调 `xdg-mime`，都在启动时注册；第二次启动把链接交给已运行的窗口（Linux 因此改为单实例）。Android 在 manifest 里声明 scheme（tauri-plugin-deep-link，T13） |
 | 崩溃报告（本机、脱敏） | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 本机 Prometheus 指标 | ❌ | ❌ | ✅ | ✅ | ✅ | iOS 扩展不能开监听端口给别的 App；macOS 可补（A3） |
 | 用户协议同意、协议入口 | ✅ | ✅ | ✅ | ✅ | ✅ | |
@@ -125,5 +125,5 @@ MSI 升级时旧服务随旧版本一起卸载；便携版注册过的服务由�
 | T10 | 日志查看（级别、模块筛选） | Windows、Linux、Android | 已完成 |
 | T11 | 系统通知 | Windows、Linux、Android | 已完成 |
 | T12 | 按 Wi-Fi 自动连接 / 断开 | Windows、Linux | 待评估 |
-| T13 | `anixops://` 链接 | Windows、Linux、Android | 待做 |
+| T13 | `anixops://` 链接 | Windows、Linux、Android | 已完成 |
 | W1 | Windows 服务模式下的调试功能 | Windows | 已完成（删除服务模式，调试固定在窗口进程） |

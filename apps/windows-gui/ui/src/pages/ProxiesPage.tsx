@@ -34,6 +34,9 @@ type ProxiesProps = {
   run: Run;
   delays: Delays;
   setDelays: SetDelays;
+  /** A link an `anixops://import` link asked to import, put in the form for the user to confirm. */
+  pendingImport?: string | null;
+  takePendingImport?: () => void;
 };
 
 /** Subscriptions, policy groups and nodes; in debug mode the "Egress" page, with where captured traffic leaves on top. */
@@ -70,7 +73,7 @@ function EgressCard({ egress, nodes }: { egress: Egress; nodes: NodeSummary[] })
   );
 }
 
-function ProxiesContent({ snapshot, nodes, busy, run, delays, setDelays }: ProxiesProps) {
+function ProxiesContent({ snapshot, nodes, busy, run, delays, setDelays, pendingImport, takePendingImport }: ProxiesProps) {
   const [view, setView] = useState<View>({ kind: "nodes" });
   const [query, setQuery] = useState("");
   const [protocol, setProtocol] = useState("All");
@@ -79,6 +82,10 @@ function ProxiesContent({ snapshot, nodes, busy, run, delays, setDelays }: Proxi
   const [groups, setGroups] = useState<NativeGroupSummary[]>([]);
   const [sources, setSources] = useState<SubscriptionSummary[]>([]);
   const refreshSources = useCallback(() => void desktop.subscriptions().then(setSources).catch(() => setSources([])), []);
+  // An `anixops://import` link opens the subscriptions with the link filled in.
+  useEffect(() => {
+    if (pendingImport) setView({ kind: "subscriptions" });
+  }, [pendingImport]);
   useEffect(() => {
     refreshSources();
     void desktop.nativeGroups().then(setGroups).catch(() => setGroups([]));
@@ -107,7 +114,7 @@ function ProxiesContent({ snapshot, nodes, busy, run, delays, setDelays }: Proxi
   ];
 
   if (nodes.length === 0 && sources.length === 0) {
-    return <Subscriptions snapshot={snapshot} sources={sources} refreshSources={refreshSources} empty busy={busy} run={run} />;
+    return <Subscriptions snapshot={snapshot} sources={sources} refreshSources={refreshSources} empty busy={busy} run={run} pending={pendingImport} takePending={takePendingImport} />;
   }
 
   const group = view.kind === "group" ? groups.find((item) => item.tag === view.tag) : undefined;
@@ -183,7 +190,7 @@ function ProxiesContent({ snapshot, nodes, busy, run, delays, setDelays }: Proxi
         </nav>
       </Panel>
 
-      {shown.kind === "subscriptions" && <Subscriptions snapshot={snapshot} sources={sources} refreshSources={refreshSources} empty={false} busy={busy} run={run} />}
+      {shown.kind === "subscriptions" && <Subscriptions snapshot={snapshot} sources={sources} refreshSources={refreshSources} empty={false} busy={busy} run={run} pending={pendingImport} takePending={takePendingImport} />}
 
       {shown.kind === "nodes" && (
         <Panel
@@ -368,15 +375,22 @@ async function copyShareLink(node: NodeSummary) {
   return { message: t("已复制 {node} 的分享链接", { node: node.label }) };
 }
 
-function Subscriptions({ snapshot, sources, refreshSources, empty, busy, run }: {
+function Subscriptions({ snapshot, sources, refreshSources, empty, busy, run, pending, takePending }: {
   snapshot: RuntimeSnapshot | null;
   sources: SubscriptionSummary[];
   refreshSources: () => void;
   empty: boolean;
   busy: string | null;
   run: Run;
+  pending?: string | null;
+  takePending?: () => void;
 }) {
   const [location, setLocation] = useState("");
+  useEffect(() => {
+    if (!pending) return;
+    setLocation(pending);
+    takePending?.();
+  }, [pending, takePending]);
 
   const importSource = () => void run("subscription", async () => {
     const result = await desktop.importSubscription(location.trim());
