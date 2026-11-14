@@ -6,6 +6,7 @@ import { desktop, NodeDelay, NodeSummary, RuntimeSnapshot } from "./bridge";
 import { Wordmark } from "./brand";
 import { connectionTitle, connectPhase, routingLabel } from "./labels";
 import { ActivityPage } from "./pages/ActivityPage";
+import { RequestsPage } from "./pages/RequestsPage";
 import { ExtensionsPage } from "./pages/ExtensionsPage";
 import { HomePage } from "./pages/HomePage";
 import { ProxiesPage } from "./pages/ProxiesPage";
@@ -32,11 +33,12 @@ const navigation: NavItem[] = [
   { page: "activity", label: "活动", icon: Activity, color: "pink" },
 ];
 
-// Debug mode (docs/debug-mode.md): requests first, and subscriptions with nodes kept under "Egress" next to Settings.
+// Debug mode (docs/debug-mode.md), the same on every platform: Requests · Rewrite, then Egress · Settings. The app opens
+// on the requests; plugins, mappings and the decryption certificate are "Rewrite"; subscriptions, nodes and routing
+// rules are kept under "Egress".
 const debugNavigation: NavItem[] = [
   { page: "activity", label: "请求", icon: Activity, color: "pink" },
-  { page: "rules", label: "规则", icon: Route, color: "orange" },
-  { page: "extensions", label: "扩展", icon: Puzzle, color: "purple" },
+  { page: "extensions", label: "改写", icon: Puzzle, color: "purple" },
 ];
 
 const egressItem: NavItem = { page: "proxies", label: "出口", icon: Globe, color: "sky" };
@@ -173,7 +175,8 @@ export function App() {
     ? [node?.label ?? snapshot?.selectedNode, routingLabel(snapshot?.routingMode)].filter(Boolean).join(" · ")
     : phase === "off" ? "Ctrl+Shift+C" : "";
   const moving = phase === "connecting" || phase === "disconnecting";
-  const width = pageWidths[page] ?? "narrow";
+  // Debug mode's requests are a table beside an inspector that fills the window below the title bar.
+  const width = mode === "debug" && page === "activity" ? "split" : pageWidths[page] ?? "narrow";
 
   const navButton = ({ page: item, label, icon, color }: NavItem) => (
     <button
@@ -206,7 +209,7 @@ export function App() {
           <SidebarRates />
           <div className="sidebar-status">
             <StatusDot tone={dotTone} />
-            <button className="sidebar-status-text" onClick={() => setPage("home")}>
+            <button className="sidebar-status-text" onClick={() => setPage(sidebar.main[0].page)}>
               <strong>{connectionTitle(snapshot?.connection, phase)}</strong>
               {sideDetail && <small className="truncate">{sideDetail}</small>}
             </button>
@@ -221,7 +224,7 @@ export function App() {
           </div>
         </div>
       </aside>
-      <main className="workspace">
+      <main className={`workspace ${width === "split" ? "split" : ""}`}>
         <header className={`topbar ${width}`}>
           <h1>{title}</h1>
           <div className="topbar-tools" ref={setToolbar} />
@@ -230,9 +233,10 @@ export function App() {
           <ToolbarSlot.Provider value={toolbar}>
             {page === "home" && <HomePage snapshot={snapshot} nodes={nodes} phase={phase} busy={busy} run={run} toggle={toggleConnection} goTo={setPage} delays={delays} setDelays={setDelays} />}
             {page === "proxies" && <ProxiesPage snapshot={snapshot} nodes={nodes} busy={busy} run={run} delays={delays} setDelays={setDelays} egress={egress} />}
-            {page === "rules" && <RulesPage snapshot={snapshot} busy={busy} run={run} />}
+            {page === "proxies" && mode === "debug" && <div className="egress-rules"><RulesPage snapshot={snapshot} busy={busy} run={run} /></div>}
+            {page === "rules" && mode === "proxy" && <RulesPage snapshot={snapshot} busy={busy} run={run} />}
             {page === "extensions" && <ExtensionsPage snapshot={snapshot} busy={busy} run={run} />}
-            {page === "activity" && <ActivityPage snapshot={snapshot} busy={busy} run={run} debug={mode === "debug"} />}
+            {page === "activity" && (mode === "debug" ? <RequestsPage snapshot={snapshot} busy={busy} run={run} /> : <ActivityPage snapshot={snapshot} busy={busy} run={run} />)}
             {page === "settings" && <SettingsPage snapshot={snapshot} busy={busy} run={run} appearance={appearance} setAppearance={setAppearance} language={language} setLanguage={setLanguage} mode={mode} setMode={switchMode} />}
           </ToolbarSlot.Provider>
         </div>

@@ -76,9 +76,13 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含 `debug-home-light`�
 同一套行为，共用 `apps/windows-gui/ui` 的界面和 `crates/desktop-mitm`。
 
 - **模式**：存储键为 `anixops.app-mode`（`proxy` / `debug`）和 `anixops.debug-exit`（`direct` / `node`），保存在 WebView 的 localStorage（`ui/src/mode.ts`）。首次选择、老用户直接用代理模式、导入节点后自动切到“经过节点”，都与 Apple 端一致。
-- **侧栏**：调试网络下是“请求 · 规则 · 扩展”，“出口”放在“设置”上方，订阅与节点都在出口里。Android 窄屏下侧栏变成底栏。
+- **侧栏**：调试网络下是“请求 · 改写”，下方是“出口 · 设置”，打开就在请求页，没有概览。“改写”就是扩展页（插件、Map Local / Remote、解密证书）；订阅、节点和分流规则（含 DNS）都在“出口”里。Android 窄屏下侧栏变成底栏。
 - **直连出口**：后端命令 `set_direct_egress` 让引擎使用不含节点的 `{"outbound":{"type":"direct"}}` 配置。Linux、Android 和 Windows 都支持。
-- **请求列表**（`pages/RequestList.tsx`）：用 `capture_requests` 每秒增量读取，筛选框写的就是内核的过滤表达式。快速筛选（出错、JSON、图片、HTTP/2、大于 100 KB）会拼进表达式（`ui/src/capture-filter.ts`）。
+- **请求页**（`pages/RequestsPage.tsx`，仿 Proxyman）：左边是请求表格，右边常驻检查器（选中即看请求和响应，可重放、映射、导出）。窗口窄于 1100 px 时两者轮流显示，Android 上点一行打开详情。
+  - 页面工具栏只放整份抓包的操作：视图切换（请求 / 连接 / 已保存）、抓包开关、暂停刷新、“更多”里的导出全部 pcapng / HAR 和清空抓包（红色，要确认）。
+  - 表格（`pages/RequestList.tsx`）列出时间、方法、状态、主机、路径、类型、大小、耗时，点列头排序（`ui/src/request-table.ts`），默认最新在上。状态码按颜色区分：2xx 绿、3xx 黄、4xx/5xx 和没有响应红、等待中灰。只画可见的行，最多保留 2000 条。
+  - 键盘：表格获得焦点后用 ↑ ↓、j / k、PageUp / PageDown、Home / End 切换，Enter 打开；Ctrl+F 跳到筛选框，Ctrl+R 重放选中的请求。
+  - 用 `capture_requests` 每秒增量读取，筛选框写的就是内核的过滤表达式。快速筛选（出错、JSON、图片、HTTP/2、大于 100 KB）会拼进表达式（`ui/src/capture-filter.ts`）。
 - **导出**：连接可以导出 pcapng / HAR，单条请求可以导出 cURL、五种语言的代码、Postman、Insomnia 或 HAR，都保存到“下载”文件夹。“遮盖 Cookie、令牌和密码”默认打开。
 - **重放**（`desktop_mitm::replay`）：
   - 桌面经引擎的本机代理发出，Android 经内核的本机重放代理发出（`start_replay_proxy`，只监听 127.0.0.1，一次性 Basic 凭据，凭据只留在后端）。
