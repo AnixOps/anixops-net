@@ -118,6 +118,14 @@ pub fn import_text(
     let description: Value = inspect_plugin_json(&text)
         .and_then(|json| serde_json::from_slice(&json).ok())
         .ok_or("This text is not a Loon, Surge or Quantumult X plugin.")?;
+    // Any text parses; a plugin has at least one line the engine runs or a domain to decrypt.
+    let lines = |kind: &str| description["lines"][kind].as_u64().unwrap_or_default();
+    let decrypts = description["hostnames"]
+        .as_array()
+        .is_some_and(|hosts| !hosts.is_empty());
+    if lines("supported") + lines("partial") == 0 && !decrypts {
+        return Err("This text is not a Loon, Surge or Quantumult X plugin.".to_string());
+    }
     let key = description["name"]
         .as_str()
         .filter(|name| !name.trim().is_empty())
