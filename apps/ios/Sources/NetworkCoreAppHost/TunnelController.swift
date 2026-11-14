@@ -1495,6 +1495,11 @@ final class TunnelController {
     /// Sends a control request to the running engine (live traffic, the connection list). Nil while the tunnel is
     /// not connected, or when the engine refused the request.
     func control(_ command: RuntimeControl) async -> Data? {
+        #if DEBUG
+        if Self.isDemo {
+            return Self.demoControl(command)
+        }
+        #endif
         guard let session = manager?.connection as? NETunnelProviderSession, connection == .connected else {
             return nil
         }
@@ -1904,6 +1909,111 @@ extension TunnelController {
         let demoMode = UserDefaults.standard.string(forKey: "AnixOpsMode") ?? ""
         appMode = demoMode == "choose" ? nil : AppMode(rawValue: demoMode) ?? .proxy
         loaded = true
+    }
+
+    /// Made-up capture answers for the debug-mode screenshots: capture on, a dozen decrypted requests, each the only
+    /// request of its connection. Other commands get no answer.
+    static func demoControl(_ command: RuntimeControl) -> Data? {
+        guard let request = try? JSONSerialization.jsonObject(with: command.request) as? [String: Any],
+              let cmd = request["cmd"] as? String
+        else {
+            return nil
+        }
+        let requests = demoRequests()
+        let answer: [String: Any]
+        switch cmd {
+        case "capture":
+            answer = ["enabled": true, "max_total_bytes": 2_097_152, "used_bytes": 812_000, "connections": requests.count]
+        case "capture_requests":
+            let since = (request["since_seq"] as? NSNumber)?.intValue ?? 0
+            answer = [
+                "requests": since == 0 ? requests.map { $0.row } : [],
+                "last_seq": requests.count,
+                "dropped_before_seq": 0,
+            ]
+        case "capture_connection":
+            let id = (request["id"] as? NSNumber)?.intValue ?? 0
+            guard let found = requests.first(where: { ($0.row["connection_id"] as? Int) == id }) else {
+                return try? JSONSerialization.data(withJSONObject: ["capture": NSNull()])
+            }
+            let totals: [String: Any] = ["seen": 2_400, "captured": 2_400, "truncated": false]
+            answer = ["capture": [
+                "id": id,
+                "network": "tcp",
+                "decrypted": true,
+                "upload": totals,
+                "download": totals,
+                "chunks": [Any](),
+                "http": [found.exchange],
+            ]]
+        default:
+            return nil
+        }
+        return try? JSONSerialization.data(withJSONObject: answer)
+    }
+
+    private static func demoRequests() -> [(row: [String: Any], exchange: [String: Any])] {
+        let items: [(method: String, url: String, status: Int?, type: String, size: Int, took: Int)] = [
+            ("GET", "https://api.example.com/v2/users/me", 200, "application/json", 1_840, 86),
+            ("POST", "https://api.example.com/v2/orders", 201, "application/json", 412, 214),
+            ("GET", "https://api.example.com/v2/orders?page=2&limit=20", 200, "application/json", 18_320, 142),
+            ("GET", "https://cdn.example.com/img/banner@3x.png", 200, "image/png", 284_000, 391),
+            ("GET", "https://api.example.com/v2/feature-flags", 304, "", 0, 41),
+            ("PUT", "https://api.example.com/v2/users/me/avatar", 413, "application/json", 96, 77),
+            ("GET", "https://api.example.com/v2/notifications", 500, "application/json", 128, 1_204),
+            ("POST", "https://events.example.com/v1/batch", 204, "", 0, 63),
+            ("GET", "https://api.example.com/v2/search?q=coffee", 200, "application/json", 42_600, 288),
+            ("OPTIONS", "https://api.example.com/v2/orders", 204, "", 0, 38),
+            ("GET", "https://ws.example.com/socket", nil, "", 0, 0),
+            ("GET", "https://api.example.com/v2/config", 200, "application/json", 3_120, 95),
+        ]
+        let now = Int(Date().timeIntervalSince1970 * 1000)
+        return items.enumerated().map { index, item in
+            let seq = index + 1
+            let started = now - (items.count - index) * 1_700
+            let host = URL(string: item.url)?.host ?? ""
+            let body = "{\"id\":\"usr_29\",\"name\":\"Demo\",\"plan\":\"pro\"}"
+            var row: [String: Any] = [
+                "seq": seq,
+                "connection_id": seq,
+                "index": 0,
+                "method": item.method,
+                "url": item.url,
+                "host": host,
+                "http_version": index % 3 == 0 ? "HTTP/1.1" : "HTTP/2",
+                "started_at_ms": started,
+                "request_size": item.method == "GET" ? 0 : 240,
+                "response_size": item.size,
+            ]
+            var exchange: [String: Any] = [
+                "seq": seq,
+                "started_at_ms": started,
+                "method": item.method,
+                "url": item.url,
+                "request": [
+                    "headers": [[":authority", host], ["user-agent", "DemoApp/4.2 (iPhone; iOS 18.1)"], ["accept", "application/json"], ["authorization", "Bearer eyJhbGciOi…"]],
+                    "body": ["size": 0, "truncated": false, "data_base64": ""],
+                ],
+                "response": [
+                    "headers": item.type.isEmpty ? [[String]]() : [["content-type", item.type], ["cache-control", "no-store"]],
+                    "body": [
+                        "size": item.type == "application/json" ? body.utf8.count : 0,
+                        "truncated": false,
+                        "data_base64": item.type == "application/json" ? Data(body.utf8).base64EncodedString() : "",
+                    ],
+                ],
+            ]
+            if let status = item.status {
+                row["status"] = status
+                row["ended_at_ms"] = started + item.took
+                exchange["status"] = status
+                exchange["ended_at_ms"] = started + item.took
+            }
+            if !item.type.isEmpty {
+                row["response_content_type"] = item.type
+            }
+            return (row, exchange)
+        }
     }
 
     /// A request list as the engine would answer it: some connections still open, some ended, one rejected.

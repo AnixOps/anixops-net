@@ -1,6 +1,6 @@
-import { ArrowDownLeft, ArrowUpRight, ChevronLeft, Copy, Download, FileCode, FileSearch, Lock, Network, RotateCw } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ChevronLeft, Copy, Download, FileCode, FileSearch, Lock, MousePointerClick, Network, RotateCw } from "lucide-react";
 import { ReactNode, useEffect, useMemo, useState } from "react";
-import { CaptureChunk, CaptureConnection, CaptureExchange, CaptureFormat, CaptureMessage, CodeLanguage, ConnectionSnapshot, DebugMapping, desktop, ExportOptions } from "../bridge";
+import { CaptureChunk, CaptureConnection, CaptureExchange, CaptureFormat, CaptureMessage, CaptureRequest, CodeLanguage, ConnectionSnapshot, DebugMapping, desktop, ExportOptions } from "../bridge";
 import { connectionName } from "../activity-format";
 import { asText, bodySize, decodedBody, directionTotals, durationMs, fromBase64, header, hexDump, looksLikeTls, noteText, timeOfDay } from "../capture-format";
 import { usePageVisible } from "../live";
@@ -215,13 +215,127 @@ export function BytesView({ bytes, caption }: { bytes: Uint8Array; caption?: str
   );
 }
 
+/**
+ * The request table's inspector: the selected request and its response, with replay, mappings and export. It reads
+ * the request's connection from the engine, again every two seconds until the response is complete. Replay and the
+ * mapping editor open in its place, with the way back on top.
+ */
+export function RequestInspector({ request, busy, run, onBack, replayAsked, onReplayHandled }: {
+  request: CaptureRequest | null;
+  busy: string | null;
+  run: Run;
+  /** A narrow window shows the inspector in place of the table; this goes back to it. */
+  onBack?: () => void;
+  /** Ctrl+R in the table: opens replay for this request once it has loaded. */
+  replayAsked?: boolean;
+  onReplayHandled?: () => void;
+}) {
+  const [exchange, setExchange] = useState<CaptureExchange | null>(null);
+  const [state, setState] = useState<"loading" | "loaded" | "gone">("loading");
+  const [redact, setRedact] = useState(true);
+  const [tool, setTool] = useState<{ replay: CaptureExchange } | { mapping: DebugMapping } | null>(null);
+  const visible = usePageVisible();
+  const connectionId = request?.connection_id;
+  const index = request?.index;
+  const seq = request?.seq;
+
+  useEffect(() => {
+    setTool(null);
+    setExchange(null);
+    setState("loading");
+  }, [seq]);
+
+  useEffect(() => {
+    if (connectionId == null || index == null || !visible) return;
+    let cancelled = false;
+    let timer: number | undefined;
+    const load = () => desktop.captureConnection(connectionId)
+      .then((answer) => {
+        if (cancelled) return;
+        const item = answer.capture?.http[index] ?? null;
+        setExchange(item);
+        setState(item ? "loaded" : "gone");
+        // The response is still arriving: read again until it ends.
+        if (item && item.ended_at_ms == null && item.status == null) timer = window.setTimeout(() => void load(), 2000);
+      })
+      .catch(() => !cancelled && setState("gone"));
+    void load();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [connectionId, index, visible]);
+
+  useEffect(() => {
+    if (replayAsked && exchange) {
+      setTool({ replay: exchange });
+      onReplayHandled?.();
+    }
+  }, [replayAsked, exchange, onReplayHandled]);
+
+  if (!request) {
+    return (
+      <div className="inspector-empty">
+        <EmptyState icon={MousePointerClick} title={t("选择一条请求")} message={t("在左边的列表里选一条，这里显示它的请求和响应。方向键或 j / k 切换，Ctrl+R 重放。")} />
+      </div>
+    );
+  }
+  if (tool && "replay" in tool) {
+    return <ReplayEditor exchange={tool.replay} busy={busy} run={run} onBack={() => setTool(null)} />;
+  }
+  if (tool) {
+    return <MappingEditor initial={tool.mapping} busy={busy} run={run} onDone={() => setTool(null)} />;
+  }
+  if (!exchange) {
+    const message = state === "loading"
+      ? t("正在读取…")
+      : t("这个请求的内容已被更新的连接挤出（抓包内存有上限），或抓包已清空。");
+    return (
+      <div className="page-stack">
+        {onBack && <BackBar label={t("请求")} onBack={onBack} />}
+        <Card title={`${request.method} ${request.host}`}>
+          <EmptyState icon={FileSearch} title={t("抓包内容")} message={message} />
+        </Card>
+      </div>
+    );
+  }
+  const map = (kind: DebugMapping["kind"]) => void mappingFromExchange(exchange, kind).then((mapping) => setTool({ mapping }));
+  return (
+    <ExchangeDetail
+      exchange={exchange}
+      onBack={onBack}
+      backLabel={t("请求")}
+      exportCard={<ExchangeExport busy={busy} run={run} id={request.connection_id} index={request.index} redact={redact} onRedact={setRedact} />}
+      actions={<>
+        <button className="secondary compact" disabled={Boolean(busy)} onClick={() => setTool({ replay: exchange })} title="Ctrl+R"><RotateCw size={14} />{t("重放")}</button>
+        <MoreMenu
+          label={t("更多")}
+          disabled={Boolean(busy)}
+          items={[
+            { label: t("拷贝网址"), icon: Copy, onSelect: () => void navigator.clipboard?.writeText(exchange.url) },
+            { label: t("映射到本地"), onSelect: () => map("local") },
+            { label: t("映射到远程"), onSelect: () => map("remote") },
+          ]}
+        />
+      </>}
+    />
+  );
+}
+
 /** One decrypted request and its response: headers, and bodies decompressed when they say gzip or deflate. */
-function ExchangeDetail({ exchange, onBack, actions, exportCard }: { exchange: CaptureExchange; onBack: () => void; actions?: ReactNode; exportCard?: ReactNode }) {
+function ExchangeDetail({ exchange, onBack, backLabel, actions, exportCard }: {
+  exchange: CaptureExchange;
+  /** Absent in the inspector beside the table, which needs no way back. */
+  onBack?: () => void;
+  backLabel?: string;
+  actions?: ReactNode;
+  exportCard?: ReactNode;
+}) {
   const took = durationMs(exchange.started_at_ms, exchange.ended_at_ms);
   const note = noteText(exchange.note);
   return (
     <div className="page-stack">
-      <BackBar label={t("抓包内容")} onBack={onBack} />
+      {onBack && <BackBar label={backLabel ?? t("抓包内容")} onBack={onBack} />}
       <Card title={`${exchange.method} ${exchange.status ?? ""}`.trim()} actions={actions}>
         <div className="selectable url-line">{exchange.url}</div>
         <Row label={t("状态")} value={exchange.status != null ? String(exchange.status) : t("没有响应")} />

@@ -160,8 +160,8 @@ private struct MacHeroCard: View {
             Spacer(minLength: 0)
             HStack(spacing: 10) {
                 Button {
-                    // Debug mode keeps subscriptions and nodes under Settings › Exit.
-                    state.section = tunnel.appMode == .debug ? .settings : .proxies
+                    // Debug mode keeps subscriptions and nodes under Exit.
+                    state.section = tunnel.appMode == .debug ? .exit : .proxies
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "globe")
@@ -403,6 +403,48 @@ struct MacActivityPage: View {
     @State private var showsLog = false
 
     var body: some View {
+        Group {
+            if tunnel.appMode == .debug {
+                // Debug mode: the requests fill the page; the tunnel's diagnostics wait in a toolbar menu.
+                CaptureRequestsView(tunnel: tunnel)
+                    .toolbar {
+                        ToolbarItem {
+                            diagnosticsMenu
+                        }
+                    }
+            } else {
+                proxyActivity
+            }
+        }
+        .background(brand.bg)
+        .onAppear(perform: refresh)
+        .sheet(isPresented: $showsLog) {
+            MacDiagnosticLogSheet(tunnel: tunnel)
+        }
+    }
+
+    private var diagnosticsMenu: some View {
+        Menu {
+            Text(tunnel.runtimeStatus ?? String(localized: "隧道未运行"))
+            Divider()
+            Button(copied ? "已复制" : "复制诊断信息") {
+                copyDiagnostics()
+            }
+            Button("扩展日志…") {
+                tunnel.refreshDiagnostics()
+                showsLog = true
+            }
+            Button("导出日志…") {
+                exportLog()
+            }
+        } label: {
+            Label("诊断", systemImage: "stethoscope")
+        }
+        .help("诊断")
+    }
+
+    /// Proxy mode: the session's facts in one strip, then the connection list.
+    private var proxyActivity: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: 12) {
@@ -445,16 +487,7 @@ struct MacActivityPage: View {
             .overlay(RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous).strokeBorder(brand.border.opacity(0.6)))
             .padding(.horizontal, 20)
             .padding(.top, 16)
-            if tunnel.appMode == .debug {
-                CaptureRequestsView(tunnel: tunnel)
-            } else {
-                ConnectionsView(tunnel: tunnel)
-            }
-        }
-        .background(brand.bg)
-        .onAppear(perform: refresh)
-        .sheet(isPresented: $showsLog) {
-            MacDiagnosticLogSheet(tunnel: tunnel)
+            ConnectionsView(tunnel: tunnel)
         }
     }
 
@@ -525,6 +558,43 @@ struct MacActivityPage: View {
     }
 }
 
+/// Debug mode's Exit (plan G2): whether captured traffic goes straight out or through a node, with the
+/// subscriptions, nodes and rules that proxy mode shows in the sidebar.
+struct MacExitPage: View {
+    var tunnel: TunnelController
+    @ObservedObject var state: MacAppState
+
+    var body: some View {
+        Form {
+            Section {
+                DebugExitPicker(tunnel: tunnel)
+            } footer: {
+                Text(DebugExitPicker.footer(tunnel))
+            }
+            Section {
+                NavigationLink {
+                    MacProxiesPage(tunnel: tunnel, state: state)
+                        .navigationTitle("订阅与节点")
+                } label: {
+                    MacTileLabel(title: "订阅与节点", systemImage: "globe", color: MacTileColor.sky)
+                }
+                NavigationLink {
+                    MacRulesPage(tunnel: tunnel)
+                        .navigationTitle("规则")
+                } label: {
+                    MacTileLabel(title: "规则与 DNS", systemImage: "arrow.triangle.branch", color: MacTileColor.orange)
+                }
+            } footer: {
+                Text("出口为“经过节点”时才用到订阅、节点和规则；直连时它们原样保留。")
+            }
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .frame(maxWidth: 720)
+        .frame(maxWidth: .infinity)
+    }
+}
+
 /// Settings: appearance, login item, reconnecting and Wi-Fi rules, notifications, privacy and the version.
 struct MacSettingsPage: View {
     var tunnel: TunnelController
@@ -538,9 +608,6 @@ struct MacSettingsPage: View {
     var body: some View {
         Form {
             AppModeSection(tunnel: tunnel)
-            if tunnel.appMode == .debug {
-                exitSection
-            }
 
             Section("外观") {
                 Picker("外观", selection: $appearance.normalized) {
@@ -598,29 +665,6 @@ struct MacSettingsPage: View {
         .scrollContentBackground(.hidden)
         .frame(maxWidth: 720)
         .frame(maxWidth: .infinity)
-    }
-
-    /// Debug mode's exit (plan G2), with the subscriptions, nodes and rules that proxy mode shows in the sidebar.
-    private var exitSection: some View {
-        Section {
-            DebugExitPicker(tunnel: tunnel)
-            NavigationLink {
-                MacProxiesPage(tunnel: tunnel, state: state)
-                    .navigationTitle("订阅与节点")
-            } label: {
-                MacTileLabel(title: "订阅与节点", systemImage: "globe", color: MacTileColor.sky)
-            }
-            NavigationLink {
-                MacRulesPage(tunnel: tunnel)
-                    .navigationTitle("规则")
-            } label: {
-                MacTileLabel(title: "规则与 DNS", systemImage: "arrow.triangle.branch", color: MacTileColor.orange)
-            }
-        } header: {
-            Text("出口")
-        } footer: {
-            Text(DebugExitPicker.footer(tunnel))
-        }
     }
 
     private func setOpensAtLogin(_ enabled: Bool) {
