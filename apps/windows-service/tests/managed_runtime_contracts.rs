@@ -374,7 +374,8 @@ fn managed_runtime_owns_native_https_mitm_lifecycle() {
         running.native_mitm_listener.as_deref(),
         Some(expected_listener.as_str())
     );
-    assert!(events.borrow().contains(&"install-certificate".to_string()));
+    // The user trusts the root by hand; the service never adds it to a trust store.
+    assert!(!events.borrow().contains(&"install-certificate".to_string()));
 
     let stopped = runtime.stop().expect("managed native MITM stops");
     assert!(!stopped.native_mitm_running);
@@ -382,7 +383,7 @@ fn managed_runtime_owns_native_https_mitm_lifecycle() {
 }
 
 #[test]
-fn native_mitm_windows_acl_validation_precedes_trust_install_and_health_checks() {
+fn native_mitm_windows_acl_validation_precedes_start_and_never_installs_trust() {
     let source = include_str!("../src/lib.rs").replace("\r\n", "\n");
     let start = source
         .find("fn start_native_mitm(")
@@ -394,12 +395,10 @@ fn native_mitm_windows_acl_validation_precedes_trust_install_and_health_checks()
     let script_runtime = start_source
         .find("validate_native_mitm_script_runtime_availability(config)")
         .expect("native MITM start checks script runtime availability");
-    let trust_install = start_source
-        .find("install_root_certificate(&config.ca_certificate_path)")
-        .expect("native MITM start retains explicit trust installation");
+    let start_body = &start_source[..start_source.find("\n    fn ").unwrap_or(start_source.len())];
     assert!(
-        validation < trust_install,
-        "private key ACL validation must precede trust-store mutation"
+        !start_body.contains("install_root_certificate("),
+        "native MITM start must not add the root to a trust store; the user trusts it by hand"
     );
     assert!(
         script_runtime < validation,

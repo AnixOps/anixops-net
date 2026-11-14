@@ -737,17 +737,63 @@ async fn restore_network_settings(state: State<'_, AppState>) -> Result<Operatio
     with_backend(&state, Backend::restore_network_settings).await
 }
 
-/// Generates the root on first use, has the browsers and the system trust it (polkit asks for the system
-/// store), then restarts a running engine with decryption on.
+/// Generates the root on first use and restarts a running engine with decryption on. The root is not
+/// trusted here: the user does that with `open_mitm_root` (TERMS.md section 4).
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn enable_https_mitm(state: State<'_, AppState>) -> Result<OperationResult, String> {
+    lock(&state.0).ensure_mitm_root()?;
+    let trusted = off_lock(|| Ok(trust::is_trusted())).await?;
+    let result = with_backend(&state, |backend| backend.set_https_decryption(true)).await?;
+    let note = if trusted {
+        ""
+    } else {
+        ". The root certificate is not trusted yet: choose Trust root certificate under Extensions"
+    };
+    Ok(OperationResult {
+        message: format!("{}{note}", result.message),
+    })
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MitmRootStatus {
+    generated: bool,
+    trusted: bool,
+}
+
+/// Whether the root exists and a browser database or the system store holds it. Read only.
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+async fn mitm_root_status(state: State<'_, AppState>) -> Result<MitmRootStatus, String> {
+    let generated = lock(&state.0).mitm_root().exists();
+    let trusted = generated && off_lock(|| Ok(trust::is_trusted())).await?;
+    Ok(MitmRootStatus { generated, trusted })
+}
+
+/// The user's own request to trust the root: the browsers' databases and, after polkit asks, the
+/// system store.
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+async fn open_mitm_root(state: State<'_, AppState>) -> Result<OperationResult, String> {
     let root = lock(&state.0).ensure_mitm_root()?;
     let trusted = off_lock(move || Ok(trust::install(&root.certificate_path))).await?;
-    let result = with_backend(&state, |backend| backend.set_https_decryption(true)).await?;
     Ok(OperationResult {
-        message: format!("{}. {}", result.message, trusted.summary("trusted")),
+        message: trusted.summary("trusted"),
     })
+}
+
+/// Android: the user installs the root in the system settings; there is nothing to read or open here.
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn mitm_root_status() -> Result<MitmRootStatus, String> {
+    Err(UNAVAILABLE.to_string())
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn open_mitm_root() -> Result<OperationResult, String> {
+    Err(UNAVAILABLE.to_string())
 }
 
 #[cfg(not(target_os = "android"))]
@@ -1001,6 +1047,8 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             clear_script_runtime,
             enable_https_mitm,
             disable_https_mitm,
+            mitm_root_status,
+            open_mitm_root,
             list_mitm_plugins,
             import_mitm_plugin,
             set_mitm_plugin_enabled,

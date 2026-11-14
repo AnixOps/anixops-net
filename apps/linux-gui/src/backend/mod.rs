@@ -337,6 +337,11 @@ impl Backend {
 
     /// The HTTPS decryption root, generated on first use. The window installs it in the trust stores before
     /// turning decryption on.
+    /// Where the root is kept, whether or not it was generated yet.
+    pub fn mitm_root(&self) -> Root {
+        Root::at(&self.mitm_dir())
+    }
+
     pub fn ensure_mitm_root(&self) -> Result<Root, String> {
         Root::ensure(&self.mitm_dir())
     }

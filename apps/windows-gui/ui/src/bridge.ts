@@ -151,6 +151,12 @@ export interface NetworkProbe {
   directMs?: number | null;
 }
 
+/** The HTTPS decryption root: generated yet, and trusted by the user in a system or browser store. */
+export interface MitmRootStatus {
+  generated: boolean;
+  trusted: boolean;
+}
+
 export interface OperationResult {
   message: string;
 }
@@ -270,6 +276,8 @@ export const desktop = {
   refreshRoutingRules: () => invoke<OperationResult>("refresh_routing_rules"),
   enableHttpsMitm: () => invoke<OperationResult>("enable_https_mitm"),
   disableHttpsMitm: () => invoke<OperationResult>("disable_https_mitm"),
+  mitmRootStatus: () => invoke<MitmRootStatus>("mitm_root_status"),
+  openMitmRoot: () => invoke<OperationResult>("open_mitm_root"),
   mitmPlugins: () => invoke<MitmPlugin[]>("list_mitm_plugins"),
   importMitmPlugin: (url: string) => invoke<OperationResult>("import_mitm_plugin", { url }),
   setMitmPluginEnabled: (id: string, enabled: boolean) =>

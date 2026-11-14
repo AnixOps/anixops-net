@@ -1,6 +1,6 @@
-import { Ban, Download, KeyRound, LockKeyhole, Puzzle, Trash2 } from "lucide-react";
+import { Ban, Download, KeyRound, LockKeyhole, Puzzle, ShieldCheck, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { desktop, inProcessEngine, MitmPlugin, preferencesFrom, RuntimeSnapshot } from "../bridge";
+import { desktop, inProcessEngine, MitmPlugin, MitmRootStatus, preferencesFrom, RuntimeSnapshot } from "../bridge";
 import { Card, EmptyState, MoreMenu, Row, Run, StatusPill, Switch, ToggleRow } from "../ui";
 import { t } from "../i18n";
 import { useDecryptionConsent } from "../decryption-consent";
@@ -17,9 +17,21 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
   }, []);
   useEffect(loadPlugins, [loadPlugins]);
 
+  // Null where the platform has nothing to show (Android installs the root in its own settings).
+  const [root, setRoot] = useState<MitmRootStatus | null>(null);
+  const loadRoot = useCallback(() => {
+    desktop.mitmRootStatus().then(setRoot).catch(() => setRoot(null));
+  }, []);
+  useEffect(() => {
+    loadRoot();
+    // Coming back from the system's certificate window is when trust usually changes.
+    window.addEventListener("focus", loadRoot);
+    return () => window.removeEventListener("focus", loadRoot);
+  }, [loadRoot]);
+
   const decrypting = Boolean(snapshot?.httpsDecryptionEnabled);
   const locked = Boolean(busy) || !snapshot;
-  const change = (operation: string, task: () => Promise<{ message: string }>) => void run(operation, task).then(loadPlugins);
+  const change = (operation: string, task: () => Promise<{ message: string }>) => void run(operation, task).then(() => { loadPlugins(); loadRoot(); });
   const importPlugin = () => {
     const url = pluginUrl.trim();
     if (!url) return;
@@ -34,8 +46,21 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
       {consent.dialog}
       <Card
         title={t("HTTPS 解密")}
-        description={t("只解密插件和内置规则列出的域名，其余网站原样转发。首次开启会生成并信任一张本机根证书，关闭后移除。")}
+        description={t("只解密插件和内置规则列出的域名，其余网站原样转发。根证书在本机生成，需要你按系统提示手动信任，App 不会自动信任。")}
       >
+        {root && (
+          <Row
+            icon={ShieldCheck}
+            color={root.trusted ? "green" : "gray"}
+            label={t("根证书")}
+            hint={root.trusted ? t("已由你手动信任") : linux ? t("点“信任根证书”后，系统会请你授权写入浏览器和系统证书库") : t("点“信任根证书”会打开 Windows 证书窗口：选“安装证书”→“当前用户”→“将所有的证书都放入下列存储”→“受信任的根证书颁发机构”，再确认安全警告")}
+          >
+            <StatusPill label={root.trusted ? t("已信任") : t("未信任")} tone={root.trusted ? "success" : "warning"} />
+            {!root.trusted && (
+              <button className="secondary compact" disabled={locked} onClick={() => change("certificate", desktop.openMitmRoot)}>{t("信任根证书")}</button>
+            )}
+          </Row>
+        )}
         <ToggleRow
           icon={LockKeyhole}
           color="pink"
@@ -117,10 +142,10 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
       </Card>
 
       {!linux && (
-        <Card title={t("根证书")} description={t("HTTPS 解密的根证书会自动生成并安装。只有要让系统信任你自己的证书时才需要在这里填写。")}>
+        <Card title={t("自定义证书")} description={t("要让 Windows 信任你自己的证书时填写路径。证书会在 Windows 证书窗口中打开，由你手动安装。")}>
           <Row icon={KeyRound} color="gray" label={t("证书 PEM 路径")}>
             <input className="inline-input" aria-label={t("证书 PEM 路径")} placeholder={"C:\\certs\\ca.pem"} value={certificatePath} onChange={(event) => setCertificatePath(event.target.value)} />
-            <button className="secondary compact" disabled={Boolean(busy) || !certificatePath.trim()} onClick={() => void run("certificate", () => desktop.installCertificate(certificatePath.trim()))}>{t("安装证书")}</button>
+            <button className="secondary compact" disabled={Boolean(busy) || !certificatePath.trim()} onClick={() => void run("certificate", () => desktop.installCertificate(certificatePath.trim()))}>{t("打开证书")}</button>
             <MoreMenu
               label={t("更多")}
               disabled={Boolean(busy)}

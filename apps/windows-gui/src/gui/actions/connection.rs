@@ -10,8 +10,7 @@ use engine_embedded::local_proxy::LocalProxy;
 use inbound_mixed::MixedSettings;
 use networkcore_windows_service::native_mitm_policy_source;
 use platform_windows::managed::{
-    read_managed_state, windows_managed_config_path, windows_managed_state_path,
-    write_managed_state, WindowsManagedConfig, WindowsManagedEmbeddedConfig,
+    windows_managed_config_path, WindowsManagedConfig, WindowsManagedEmbeddedConfig,
     WindowsManagedNativeMitmConfig, WindowsProxySettings, WindowsProxySnapshot,
 };
 use platform_windows::system_integration::{
@@ -75,25 +74,6 @@ impl DesktopCore {
         if let Some(tun) = self.tun.take() {
             tun.stop();
         }
-    }
-
-    /// Trusts the managed root CA and records its thumbprint where disabling
-    /// HTTPS decryption removes it.
-    fn trust_mitm_root(config: &WindowsManagedNativeMitmConfig) -> Result<(), String> {
-        let thumbprint = NativeWindowsSystemIntegration::new()
-            .install_root_certificate(&config.ca_certificate_path)
-            .map_err(|error| {
-                format!("HTTPS decryption root certificate could not be trusted: {error}")
-            })?;
-        let state_path = windows_managed_state_path();
-        let mut state = read_managed_state(&state_path).unwrap_or_default();
-        if state.native_mitm_certificate_sha1.as_deref() != Some(thumbprint.as_str()) {
-            state.native_mitm_certificate_sha1 = Some(thumbprint);
-            write_managed_state(&state_path, &state).map_err(|error| {
-                format!("HTTPS decryption certificate could not be recorded: {error}")
-            })?;
-        }
-        Ok(())
     }
 
     /// The listener is bound when this returns.
@@ -217,9 +197,8 @@ pub fn connect_direct(
     let mitm = plan.native_mitm.as_ref();
     let envelope = desktop_envelope(embedded, mitm)?;
     let listen = desktop_listener(embedded, mitm)?;
-    if let Some(mitm) = mitm {
-        DesktopCore::trust_mitm_root(mitm)?;
-    }
+    // The decryption root is never trusted here: the user trusts it by hand before turning
+    // decryption on (TERMS.md section 4).
     if desktop.tun_mode_enabled {
         core.start_tun(&envelope)?;
     }

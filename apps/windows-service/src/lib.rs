@@ -383,14 +383,9 @@ where
             return Err(error);
         }
 
-        if state.native_mitm_certificate_sha1.is_none() {
-            state.native_mitm_certificate_sha1 = Some(
-                self.integration
-                    .install_root_certificate(&config.ca_certificate_path)?,
-            );
-            self.persist(state)?;
-        }
-
+        // The root is never added to a trust store here: the user trusts it by hand in Windows' own
+        // certificate dialog (TERMS.md section 4). A thumbprint recorded by an older build is still
+        // removed when decryption stops or the key ACL drifts.
         let service = build_native_mitm_service(config)?;
         let engine_config = native_mitm_proxy_engine_config(config);
         match service.start(&engine_config) {

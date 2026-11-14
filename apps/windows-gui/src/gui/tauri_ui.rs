@@ -1,6 +1,7 @@
 use super::actions::connection;
 use super::linked_sources::{self, CachedNode, OtherSource};
 use super::mitm_plugins::{self, PluginSummary};
+use super::root_trust;
 use super::runtime_status::{read_runtime_status, ManagedCoreStatus, WindowsRuntimeStatus};
 use super::startup::{
     desktop_state_path, load_desktop_state, owns_current_proxy, save_desktop_state,
@@ -344,6 +345,8 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             clear_script_runtime,
             enable_https_mitm,
             disable_https_mitm,
+            mitm_root_status,
+            open_mitm_root,
             list_mitm_plugins,
             import_mitm_plugin,
             set_mitm_plugin_enabled,
@@ -3358,19 +3361,15 @@ fn enable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult,
                 .to_string(),
         );
     }
-    let restart = stop_running_service_for_mitm_reconfigure()?;
-    let (certificate_path, private_key_path) = ensure_mitm_ca_material()?;
-    if let Err(error) = protect_windows_managed_mitm_private_key(&private_key_path) {
-        let _ = append_managed_log(
-            APP_LOG_SCOPE,
-            &format!(
-                "native HTTPS MITM private key protection failed: {}",
-                error.message
-            ),
-        );
-        let _ = remove_windows_managed_mitm_private_key(&private_key_path);
-        return Err(error.message);
+    let (certificate_path, private_key_path) = ensure_protected_mitm_ca_material()?;
+    // The user trusts the root by hand in Windows' certificate dialog; it is never added here.
+    if !root_trust::is_trusted(&certificate_path)? {
+        return Err(format!(
+            "Trust the HTTPS decryption root first: choose Trust root certificate under Extensions. {}.",
+            root_trust::STEPS
+        ));
     }
+    let restart = stop_running_service_for_mitm_reconfigure()?;
     let mut managed = managed_config_or_default()?;
     // The MITM proxy takes the system proxy port and relays every session to
     // the embedded engine behind it; the service runs both.
@@ -3553,6 +3552,66 @@ fn stop_running_service_for_mitm_reconfigure() -> Result<bool, String> {
     Ok(false)
 }
 
+/// The root and its key, generated on first use, with the key's ACL locked down.
+fn ensure_protected_mitm_ca_material() -> Result<(PathBuf, PathBuf), String> {
+    let (certificate_path, private_key_path) = ensure_mitm_ca_material()?;
+    if let Err(error) = protect_windows_managed_mitm_private_key(&private_key_path) {
+        let _ = append_managed_log(
+            APP_LOG_SCOPE,
+            &format!(
+                "native HTTPS MITM private key protection failed: {}",
+                error.message
+            ),
+        );
+        let _ = remove_windows_managed_mitm_private_key(&private_key_path);
+        return Err(error.message);
+    }
+    Ok((certificate_path, private_key_path))
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MitmRootStatus {
+    /// Whether a root exists yet; it is generated the first time the user asks to trust it.
+    generated: bool,
+    trusted: bool,
+}
+
+/// Whether the HTTPS decryption root exists and is in a Windows ROOT store. Read only.
+#[tauri::command]
+async fn mitm_root_status() -> Result<MitmRootStatus, String> {
+    run_blocking(|| {
+        let certificate_path = windows_managed_data_directory()
+            .join("mitm")
+            .join("root-ca.pem");
+        if !certificate_path.exists() {
+            return Ok(MitmRootStatus {
+                generated: false,
+                trusted: false,
+            });
+        }
+        Ok(MitmRootStatus {
+            generated: true,
+            trusted: root_trust::is_trusted(&certificate_path)?,
+        })
+    })
+    .await
+}
+
+/// Generates the root if needed and opens it in Windows' certificate dialog, where the user installs and
+/// trusts it by hand.
+#[tauri::command]
+async fn open_mitm_root() -> Result<OperationResult, String> {
+    run_blocking(|| {
+        let (certificate_path, _) = ensure_protected_mitm_ca_material()?;
+        root_trust::open_dialog(&certificate_path)?;
+        Ok(OperationResult {
+            message: format!("{}.", root_trust::STEPS),
+        })
+    })
+    .await
+}
+
 fn ensure_mitm_ca_material() -> Result<(PathBuf, PathBuf), String> {
     let directory = windows_managed_data_directory().join("mitm");
     let certificate_path = directory.join("root-ca.pem");
@@ -3594,17 +3653,11 @@ fn install_certificate_blocking(
     path: String,
     state: DesktopAppState,
 ) -> Result<OperationResult, String> {
-    let thumbprint = NativeWindowsSystemIntegration::new()
-        .install_root_certificate(&PathBuf::from(path))
-        .map_err(|error| error.to_string())?;
-    let mut desktop = state
-        .desktop
-        .lock()
-        .map_err(|_| "desktop state lock failed")?;
-    desktop.certificate_sha1 = Some(thumbprint.clone());
-    save_desktop_state(&desktop)?;
+    // Opened in Windows' certificate dialog: the user installs and trusts it there by hand.
+    let _ = state;
+    root_trust::open_dialog(&PathBuf::from(path))?;
     Ok(OperationResult {
-        message: format!("Certificate installed: {thumbprint}"),
+        message: format!("{}.", root_trust::STEPS),
     })
 }
 
