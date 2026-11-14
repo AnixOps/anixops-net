@@ -76,7 +76,7 @@ function Connections({ snapshot, busy, run, onOpen }: { snapshot: RuntimeSnapsho
 
   if (!list) {
     const message = !live
-      ? snapshot?.runtimeMode === "service" ? t("连接记录只在桌面模式下可用，服务模式的内核在另一个进程里运行。") : t("连接后，这里会实时显示每条连接命中的规则和策略。")
+      ? t("连接后，这里会实时显示每条连接命中的规则和策略。")
       : t("正在读取连接记录");
     return <Card><EmptyState icon={ListTree} title={t("连接")} message={message} /></Card>;
   }

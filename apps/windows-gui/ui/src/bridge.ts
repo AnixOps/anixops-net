@@ -18,7 +18,6 @@ export interface RuntimeSnapshot {
   platform?: "windows" | "linux" | "android";
   connection: string;
   connectionLabel: string;
-  service: StatusFact;
   core: StatusFact;
   proxy: StatusFact;
   selectedNode?: string;
@@ -45,7 +44,6 @@ export interface RuntimeSnapshot {
   /** HTTPS decryption is on (Windows); the Linux client leaves it out. */
   httpsDecryptionEnabled?: boolean;
   darkTheme: boolean;
-  runtimeMode: "desktop" | "service";
   routingMode: "bypass_china" | "gfw_list" | "direct" | "return_china" | "rule";
   /** How the engine resolves names; older backends leave it out. */
   dnsPreset?: DnsPreset;
@@ -393,7 +391,7 @@ export interface HealthStatus {
   coldStartMs?: number | null;
 }
 
-export type Preferences = Pick<RuntimeSnapshot, "startAfterLogin" | "autoConnect" | "autoRecoverCore" | "autoSubscriptionRefresh" | "autoSelectFastestNode" | "bilibiliWebAdBlockEnabled" | "darkTheme" | "runtimeMode">;
+export type Preferences = Pick<RuntimeSnapshot, "startAfterLogin" | "autoConnect" | "autoRecoverCore" | "autoSubscriptionRefresh" | "autoSelectFastestNode" | "bilibiliWebAdBlockEnabled" | "darkTheme">;
 
 /** The saved preferences from a snapshot with some of them changed. */
 export function preferencesFrom(snapshot: RuntimeSnapshot, changes: Partial<Preferences>): Preferences {
@@ -405,7 +403,6 @@ export function preferencesFrom(snapshot: RuntimeSnapshot, changes: Partial<Pref
     autoSelectFastestNode: snapshot.autoSelectFastestNode,
     bilibiliWebAdBlockEnabled: snapshot.bilibiliWebAdBlockEnabled,
     darkTheme: snapshot.darkTheme,
-    runtimeMode: snapshot.runtimeMode,
     ...changes,
   };
 }
@@ -484,9 +481,6 @@ export const desktop = {
   setSubscriptionInterval: (id: string, hours: number) =>
     invoke<OperationResult>("set_subscription_interval", { id, hours }),
   checkProfileRuntime: () => invoke<OperationResult>("check_profile_runtime"),
-  installService: () => invoke<OperationResult>("install_service"),
-  startService: () => invoke<OperationResult>("start_service"),
-  stopService: () => invoke<OperationResult>("stop_service"),
   restoreNetworkSettings: () => invoke<OperationResult>("restore_network_settings"),
   setRoutingMode: (mode: RuntimeSnapshot["routingMode"]) => invoke<OperationResult>("set_routing_mode", { mode }),
   setDnsPreset: (preset: DnsPreset) => invoke<OperationResult>("set_dns_preset", { preset }),

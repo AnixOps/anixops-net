@@ -23,33 +23,31 @@ windows-managed-client-install-model=wix-per-machine-msi
 windows-managed-client-system-mutation-policy=managed-apply-and-rollback
 windows-managed-client-gui=active
 windows-managed-client-gui-daily-usability=home-nodes-subscriptions-settings-diagnostics-advanced-active
-windows-managed-client-gui-runtime-status=scm-embedded-listener-current-user-proxy-active
+windows-managed-client-gui-runtime-status=in-process-engine-current-user-proxy-active
 windows-managed-client-gui-background-commands=active
-windows-managed-client-service=active
+windows-managed-client-service=removed-legacy-service-uninstalled-by-gui-and-msi
 windows-managed-client-driver-package-lifecycle=active
 windows-managed-client-installer=active
-windows-managed-client-msi-service-start=asynchronous-on-install
-windows-managed-client-service-start-handoff=immediate-scm-running-then-managed-runtime
 windows-managed-client-diagnostics=gui-config-preflight-and-local-report-active
 windows-managed-client-system-proxy-mutation=active
-windows-managed-client-system-proxy-lifecycle=service-owned-runtime-snapshot-active
+windows-managed-client-system-proxy-lifecycle=gui-owned-snapshot-active
 windows-managed-client-trust-store-mutation=active
 windows-managed-client-managed-lifecycle=active
 windows-managed-client-embedded-engine=in-process-local-proxy-active
 windows-managed-client-third-party-core=removed
-windows-managed-client-embedded-supervision=service-poll-failure-rollback-active
+windows-managed-client-embedded-supervision=gui-one-controlled-recovery-active
 windows-managed-client-embedded-node-switch=envelope-rewrite-and-engine-restart-active
 windows-managed-client-embedded-delay-test=in-process-url-request-active
 windows-managed-client-embedded-urltest=background-group-health-checks-active
 windows-managed-client-embedded-basic-protocols=shadowsocks-trojan-vless-vmess-hysteria2-tuic
-windows-managed-client-mitm-upstream=embedded-engine-loopback-socks-7891
+windows-managed-client-mitm-upstream=embedded-engine-decrypts-in-process
 windows-managed-client-local-profile-import=active
 windows-managed-client-remote-subscription-fetch=operator-initiated-http-s-profile-import-and-update-active
 windows-managed-client-remote-subscription-update=single-saved-url-explicit-only
 windows-managed-client-profile-node-selector=embedded-envelope-node-and-policy-group-active
 windows-managed-client-mitm-data-plane=active
 windows-managed-client-mitm-certificate-lifecycle=active
-windows-managed-client-mitm-protocol=http1-controlled-tls
+windows-managed-client-mitm-protocol=embedded-engine-http1-http2
 windows-managed-client-script-dispatch=blocked
 windows-managed-client-authenticode-policy=unsigned-no-authenticode-with-github-attestation
 windows-managed-client-attestation-policy=github-artifact-attestation-required
@@ -67,19 +65,26 @@ The MSI contains:
 - `networkcore-windows-gui.exe` from `apps/windows-gui`;
 - the x64 `WebView2Loader.dll` emitted by the pinned `webview2-com-sys` build
   dependency, installed next to the GUI executable;
-- `networkcore-windows-service.exe` from `apps/windows-service`;
 - `networkcore-windows.exe` from `apps/windows-cli`;
 - schema-version-1 `managed-config.json` from `installer/windows`.
 
-The MSI does not bundle or start any third-party proxy core. The GUI and the
-service run the embedded engine (`engine-embedded` local proxy) in-process.
+The MSI does not bundle or start any third-party proxy core, and it registers
+no Windows service. The GUI runs the embedded engine (`engine-embedded` local
+proxy, and the packet engine in TUN mode) in its own elevated process.
+
+Versions before 0.3.0-beta.7 shipped `networkcore-windows-service.exe` and the
+`AnixOpsNetworkCore` service as a second way to run the engine. That mode had
+none of the debug features, so it was removed. A major upgrade removes the
+service with the old package; the GUI removes one a portable copy registered
+when it starts, and if that service was serving the GUI-owned proxy, restores
+the proxy snapshot first.
 
 `v0.2.0` uses a Tauri/React desktop view with a Rust-owned command bridge and
 splits daily UI state, runtime observation, background command dispatch, and
-theme into dedicated GUI modules. `Connected` requires independent SCM state,
-the embedded engine's recorded running state and loopback listener, and current
-interactive-user proxy observations; managed JSON or a persisted state record
-alone cannot report a connection. The exact UI control and unavailable-feature
+theme into dedicated GUI modules. `Connected` requires the engine running in the
+GUI process and the current interactive-user proxy matching the snapshot the GUI
+applied; managed JSON or a persisted state record alone cannot report a
+connection. The exact UI control and unavailable-feature
 boundary is documented in [Windows GUI Daily Usability](windows-gui-daily-usability.md).
 
 Import accepts an operator-selected local file, a share link, or an
@@ -101,89 +106,62 @@ background health checks inside the engine. Supported protocols are
 Shadowsocks, Trojan, VLESS (including REALITY), VMess, Hysteria2, and TUIC with
 the TLS, WebSocket, gRPC and QUIC transports the embedded engine implements.
 
-The GUI `Enable HTTPS MITM` action generates a service-owned CA key pair below
+The GUI `Enable HTTPS MITM` action generates a CA key pair below
 `%ProgramData%\\AnixOps\\NetworkCore\\mitm`, then protects the fixed
 `root-ca-key.pem` path before it can enter managed configuration. Its Windows
 DACL has inheritance disabled and exactly two full-control ACEs: the generating
 account and LocalSystem. Protection rejects reparse points, any other path, or
 an ACL readback mismatch; enable removes the private key and stops before any
-service, proxy, or trust-store mutation on failure. Before installing the CA
-or starting the native listener, and on each managed runtime health poll, the
-service reads the same exact ACL back without modifying it; any later drift
-fails closed, revokes its recorded managed CA trust entry, and follows the
-recorded runtime rollback path. It then moves the embedded engine's listener to
-the loopback SOCKS upstream at `127.0.0.1:7891` and writes a native MITM
-listener at `127.0.0.1:7890`. The managed service imports that CA into
-LocalMachine ROOT, starts the embedded engine before the native listener,
-issues authority-bound leaf certificates, terminates downstream TLS, verifies
-upstream TLS, and applies the built-in policy hook to a bounded HTTP/1.1
-request/response exchange; chunked or streaming exchanges are not handled.
-Disable stops the listener, returns the embedded engine to `127.0.0.1:7890`,
-removes the managed ROOT entry, and deletes the generated private key.
+proxy or trust-store mutation on failure. On connect the GUI imports the CA
+into LocalMachine ROOT and the embedded engine decrypts HTTPS itself on the
+system proxy port, with the same MITM the iOS app uses. Disable removes the
+managed ROOT entry and deletes the generated private key.
 
 Advanced settings includes an opt-in `Bilibili web promotional request blocking
-(trial)` selection. When selected before `Enable HTTPS MITM`, the service loads
+(trial)` selection. When selected before `Enable HTTPS MITM`, the engine loads
 the first-party `networkcore.bilibili-web-adblock` request-only policy instead
 of the general ad-block pack. It rejects only four independent recommendation,
 topic, dynamic-follow-list, and live shopping endpoints. It does not fetch or
 execute BiliUniverse, Loon, Surge, or other third-party scripts; it does not
 modify response bodies, video playback, comments, the home feed, or HTTP/2,
 HTTP/3, and QUIC traffic. The selection is persisted with a default of off and
-requires HTTPS MITM to be enabled again before it affects the managed service.
+requires HTTPS MITM to be enabled again before it takes effect.
 
-While SCM is `Running`, the service polls the embedded engine and the enabled
-loopback listener. An unexpected stop or failed health observation records
-`last_transition=failed`, a redacted cause in `last_error`, stops runtime
-resources, restores the service-owned proxy snapshot, then reports SCM
-`Stopped`.
-
-The installer registers an automatic SCM service, but its install-time start is
-asynchronous. The service completes its SCM `Running` handshake before it
-applies a potentially slow or invalid managed configuration, and GUI/CLI
-`start` returns the immediately observed SCM state instead of polling for
-runtime readiness. MSI completion therefore does not wait for a preserved
-managed configuration to reach `Running`; a configuration failure is recorded
-in `%ProgramData%\\AnixOps\\NetworkCore\\logs\\service.log` and returns the
-service to `Stopped`. Stop and uninstall operations continue to wait so the
-`purge` rollback order stays deterministic.
+When the engine started by this GUI run stops unexpectedly, the GUI makes one
+controlled reconnect if `auto_recover_core` is on; disconnect, exit and a
+failed connect restore the GUI-owned proxy snapshot.
 
 The elevated GUI provides `Validate` and `Diagnostics` actions. `Validate`
-parses the managed JSON with the same schema validation as the service and
-checks the embedded envelope without starting a proxy, service, tunnel,
+parses the managed JSON with the same schema validation as connect and
+checks the embedded envelope without starting a proxy, tunnel,
 certificate, driver, or system-proxy mutation. `Diagnostics` writes and opens
 `%ProgramData%\\AnixOps\\NetworkCore\\logs\\diagnostics.log`, containing the
-current SCM status, managed runtime transition and failure detail, embedded
-engine and native MITM state, and bounded, redacted tails of the local GUI,
-service, and native MITM logs. URL/share links and
+managed runtime state, whether a legacy service is still registered, and
+bounded, redacted tails of the local logs. URL/share links and
 password/token/secret/authorization/private-key values are removed before the
 report is written. Failed GUI actions generate the same report automatically
 and show its path in the error dialog.
 
 Every Windows tag release also contains a portable ZIP with the GUI, its x64
-`WebView2Loader.dll`, service, CLI, inert `managed-config.json`, and portable
-README. Extracting the ZIP does not register or start a service; service and
-system-mutation operations remain explicit GUI or service-command actions.
+`WebView2Loader.dll`, CLI, inert `managed-config.json`, and portable README.
+Extracting the ZIP registers nothing; system-mutation operations remain
+explicit GUI actions.
 
 The app-local loader prevents a missing-`WebView2Loader.dll` launch failure. It
 does not embed the Microsoft Edge WebView2 Runtime: the supported Windows host
 must provide the Evergreen WebView2 Runtime, which the GUI reports through its
 normal launch/runtime diagnostics when unavailable.
 
-The GUI requests UAC elevation and controls SCM service state, configuration
-import, the current-user WinINet proxy, machine WinHTTP proxy, LocalMachine ROOT
-certificate entries, and signed INF driver packages. The service applies the
-same configuration under LocalSystem and restores the captured proxy state on stop. Full MSI uninstall runs the service
-`purge` command after `StopServices`, removing managed proxy, certificate,
-and driver state.
+The GUI requests UAC elevation and controls configuration import, the
+current-user WinINet proxy, LocalMachine ROOT certificate entries, and signed
+INF driver packages. Full MSI uninstall runs `networkcore-windows-gui.exe
+--purge` as LocalSystem before `RemoveFiles`, removing the recorded certificate
+and driver state and any legacy service; it logs failures and does not block
+the uninstall.
 
 `root_certificate_path` remains a separate generic trust-store lifecycle
-operation. Native MITM supports explicit loopback HTTP proxy clients and
-controlled HTTP/1.1 TLS exchanges with bounded `Content-Length` or `chunked`
-body framing only. HTTP/2 and HTTP/3/QUIC MITM, compression, streaming
-exchanges, multi-request CONNECT sessions, arbitrary plugin
-loading, XHTTP/ECH/multiplex inference for generated link profiles, remote
-scripts, TUN, DNS interception, firewall changes, and transparent capture remain
-unavailable. Scheduled remote subscriptions, persistent remote subscription
+operation. HTTPS decryption follows the embedded engine's MITM (see
+`docs/debug-mode.md`). Scheduled remote subscriptions, persistent remote subscription
 catalogs, and remote route/rule fetch remain unavailable.
 
 The driver capability installs and removes a caller-configured signed INF by
@@ -194,9 +172,9 @@ the package signature.
 ## CI And Release
 
 GitHub Actions builds all Rust binaries for `x86_64-pc-windows-gnu`, pins WiX
-4.0.6, builds and validates the MSI, performs bounded real MSI
-install/uninstall smoke plus invalid-managed-configuration nonblocking-start
-and core-exit proxy-rollback regressions, creates SHA-256 and schema-version-2 manifest files
+4.0.6, builds and validates the MSI, performs a bounded real MSI
+install/uninstall smoke that checks no service is registered and that the
+uninstall purge removes a legacy `AnixOpsNetworkCore` service, creates SHA-256 and schema-version-2 manifest files
 for the MSI and portable ZIP, and attests all eight Windows release-bundle
 files before publication. No local build, test, installer, or release
 validation is permitted.

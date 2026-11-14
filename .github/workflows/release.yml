@@ -614,21 +614,18 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Kernel Windows CLI build failed." }
           cargo build --locked --release `
             --package networkcore-windows-gui `
-            --package networkcore-windows-service `
             --target $env:TARGET
 
           $releaseDir = "target\$env:TARGET\release"
           $cliPath = Join-Path $releaseDir "networkcore-windows.exe"
           $guiPath = Join-Path $releaseDir "networkcore-windows-gui.exe"
-          $servicePath = Join-Path $releaseDir "networkcore-windows-service.exe"
-          foreach ($binaryPath in @($cliPath, $guiPath, $servicePath)) {
+          foreach ($binaryPath in @($cliPath, $guiPath)) {
             if (-not (Test-Path -Path $binaryPath -PathType Leaf)) {
               throw "Windows release binary not found: $binaryPath"
             }
           }
           $cliPath = (Resolve-Path $cliPath).Path
           $guiPath = (Resolve-Path $guiPath).Path
-          $servicePath = (Resolve-Path $servicePath).Path
           $webView2LoaderCandidates = @(
             Get-ChildItem -Path (Join-Path $releaseDir "build") -Recurse -Filter "WebView2Loader.dll" |
               Where-Object {
@@ -712,7 +709,6 @@ jobs:
           $integrityPath = Join-Path $distDir "integrity\integrity.sha256"
           & .github/scripts/write-integrity.ps1 -Output $integrityPath -Entry @(
             "networkcore-windows-gui.exe=$guiPath",
-            "networkcore-windows-service.exe=$servicePath",
             "networkcore-windows.exe=$cliPath",
             "WebView2Loader.dll=$webView2LoaderPath",
             "wintun.dll=$wintunPath"
@@ -725,7 +721,6 @@ jobs:
             -d "GuiExe=$guiPath" `
             -d "WebView2LoaderDll=$webView2LoaderPath" `
             -d "WintunDll=$wintunPath" `
-            -d "ServiceExe=$servicePath" `
             -d "DefaultConfig=$defaultConfigPath" `
             -d "IntegrityList=$integrityPath" `
             -o $archivePath
@@ -740,7 +735,6 @@ jobs:
           Copy-Item -Path $webView2LoaderPath -Destination (Join-Path $portableStageDir "WebView2Loader.dll")
           Copy-Item -Path $wintunPath -Destination (Join-Path $portableStageDir "wintun.dll")
           Copy-Item -Path (Join-Path (Split-Path $wintunPath) "wintun-LICENSE.txt") -Destination (Join-Path $portableStageDir "wintun-LICENSE.txt")
-          Copy-Item -Path $servicePath -Destination (Join-Path $portableStageDir "networkcore-windows-service.exe")
           Copy-Item -Path $defaultConfigPath -Destination (Join-Path $portableStageDir "managed-config.json")
           Copy-Item -Path $portableReadmePath -Destination (Join-Path $portableStageDir "README.txt")
           Copy-Item -Path $integrityPath -Destination (Join-Path $portableStageDir "integrity.sha256")
@@ -790,23 +784,21 @@ jobs:
               [ordered]@{ path = "networkcore-windows-gui.exe"; kind = "binary"; required = $true; source = "apps/windows-gui" },
               [ordered]@{ path = "WebView2Loader.dll"; kind = "runtime"; required = $true; source = "webview2-com-sys@0.38.2/x64" },
               [ordered]@{ path = "wintun.dll"; kind = "runtime"; required = $true; source = "wintun.net/builds/wintun-0.14.1.zip:bin/amd64" },
-              [ordered]@{ path = "networkcore-windows-service.exe"; kind = "binary"; required = $true; source = "apps/windows-service" },
               [ordered]@{ path = "networkcore-windows.exe"; kind = "binary"; required = $true; source = "AnixOps/networkcore_anixops:apps/windows-cli" },
               [ordered]@{ path = "managed-config.json"; kind = "configuration"; required = $true; source = "installer/windows/default-managed-config.json" },
               [ordered]@{ path = "integrity.sha256"; kind = "integrity"; required = $true; source = ".github/scripts/write-integrity.ps1" }
             )
             install_model = "wix-per-machine-msi"
             system_mutation_policy = "managed-apply-and-rollback"
-            source_identity = "apps/windows-gui+apps/windows-service+apps/windows-cli+platform-windows+installer/windows"
+            source_identity = "apps/windows-gui+apps/windows-cli+platform-windows+installer/windows"
             capability_anchor = "windows-release-assets"
             subscription_compatibility = "parser-gates-active-run-compat-deferred"
             active_operations = @(
-              "install-windows-service",
               "install-signed-inf-driver-package",
               "run-wix-installer",
               "mutate-system-proxy",
               "mutate-system-trust-store",
-              "managed-daemon-lifecycle"
+              "remove-legacy-windows-service"
             )
             blocked_operations = @(
               "execute-javascript-dispatch"
@@ -867,26 +859,23 @@ jobs:
               [ordered]@{ path = "$portableStem/WebView2Loader.dll"; kind = "runtime"; required = $true; source = "webview2-com-sys@0.38.2/x64" },
               [ordered]@{ path = "$portableStem/wintun.dll"; kind = "runtime"; required = $true; source = "wintun.net/builds/wintun-0.14.1.zip:bin/amd64" },
               [ordered]@{ path = "$portableStem/wintun-LICENSE.txt"; kind = "documentation"; required = $true; source = "wintun.net/builds/wintun-0.14.1.zip:LICENSE.txt" },
-              [ordered]@{ path = "$portableStem/networkcore-windows-service.exe"; kind = "binary"; required = $true; source = "apps/windows-service" },
               [ordered]@{ path = "$portableStem/networkcore-windows.exe"; kind = "binary"; required = $true; source = "AnixOps/networkcore_anixops:apps/windows-cli" },
               [ordered]@{ path = "$portableStem/managed-config.json"; kind = "configuration"; required = $true; source = "installer/windows/default-managed-config.json" },
               [ordered]@{ path = "$portableStem/README.txt"; kind = "documentation"; required = $true; source = "installer/windows/PORTABLE-README.txt" },
               [ordered]@{ path = "$portableStem/integrity.sha256"; kind = "integrity"; required = $true; source = ".github/scripts/write-integrity.ps1" }
             )
             install_model = "manual-extract"
-            system_mutation_policy = "explicit-gui-or-service-command-only"
-            source_identity = "apps/windows-gui+apps/windows-service+apps/windows-cli+platform-windows+installer/windows"
+            system_mutation_policy = "explicit-gui-command-only"
+            source_identity = "apps/windows-gui+apps/windows-cli+platform-windows+installer/windows"
             capability_anchor = "windows-portable-release-assets"
             active_operations = @(
               "run-native-gui",
-              "explicit-install-windows-service",
               "explicit-system-proxy-mutation",
               "explicit-system-trust-store-mutation",
-              "explicit-managed-daemon-lifecycle"
+              "remove-legacy-windows-service"
             )
             blocked_operations = @(
-              "automatic-service-registration-on-extract",
-              "automatic-service-start-on-extract",
+              "windows-service-registration",
               "execute-javascript-dispatch"
             )
             signing = [ordered]@{
@@ -898,7 +887,7 @@ jobs:
               provenance_file = "github-artifact-attestation"
             }
             rollback = [ordered]@{
-              rollback_policy = "purge-uninstall-service-delete-extracted-directory"
+              rollback_policy = "purge-delete-extracted-directory"
               rollback_status = "summarized-before-publish"
               rollback_scope = "windows-managed-client-portable"
               rollback_trigger = "checksum-runtime-security-or-provenance-defect"
@@ -966,7 +955,7 @@ jobs:
             "| Manifest | $manifestName |",
             "| Manifest sha256 | $manifestChecksumValue |",
             "| Target | $target |",
-            "| Source identity | GUI + service + CLI + platform + WiX |",
+            "| Source identity | GUI + CLI + platform + WiX |",
             "| Install model | wix-per-machine-msi |",
             "| System mutation policy | managed-apply-and-rollback |",
             "",
@@ -979,7 +968,7 @@ jobs:
             "| Manifest | $portableManifestName |",
             "| Manifest sha256 | $portableManifestChecksumValue |",
             "| Install model | manual-extract |",
-            "| System mutation policy | explicit-gui-or-service-command-only |"
+            "| System mutation policy | explicit-gui-command-only |"
           ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
       - name: Upload Windows release bundle

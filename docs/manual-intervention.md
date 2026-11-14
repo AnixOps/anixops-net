@@ -56,7 +56,7 @@ ios-upload-internal-workflow-secrets=APP_STORE_CONNECT_API_KEY_ID,APP_STORE_CONN
 在 Windows 真机上安装包含 Phase 4A 的构建后：
 
 - 用旧版本（兼容内核导入）留下的配置启动，记录连接时的提示；重新导入订阅后能连接，节点切换、延迟测试、策略组切换和五种分流模式都可用。
-- 服务模式下开启 HTTPS 解密：系统代理指向 `127.0.0.1:7890`，内置引擎监听 `127.0.0.1:7891`，浏览器经解密访问 HTTPS 站点正常；关闭解密后系统代理回到 `127.0.0.1:7890` 的内置引擎，且 7891 不再监听。
+- 开启 HTTPS 解密：浏览器经解密访问 HTTPS 站点正常；关闭解密后浏览器仍能正常上网。
 - 设置页不再出现兼容内核和附加协议内核卡片，规则页不再出现 JSON 编辑和 DNS JSON。
 - 诊断报告里只有内置引擎和 MITM 的状态字段。
 
@@ -97,7 +97,7 @@ GUI 清单改为 `requireAdministrator`，登录后启动从 HKCU Run 改为按�
 
 桌面模式下 HTTPS 解密改由客户端进程自己运行（客户端已固定以管理员运行），不再需要 Windows 服务：
 
-- [ ] 设置选「桌面模式」，扩展页开启 HTTPS 解密，连接成功；浏览器访问 HTTPS 站点证书颁发者为 NetworkCore 根证书，插件改写生效。
+- [ ] 扩展页开启 HTTPS 解密，连接成功；浏览器访问 HTTPS 站点证书颁发者为 NetworkCore 根证书，插件改写生效。
 - [ ] 已连接时开启/关闭 HTTPS 解密，客户端自动重连，系统代理保持在 127.0.0.1:7890。
 - [ ] 关闭 HTTPS 解密后，「受信任的根证书颁发机构」里的 NetworkCore 根证书被移除。
 - [ ] 断开连接后 7890/7891 端口都被释放。
@@ -163,8 +163,7 @@ CI 只能跑规则与重建逻辑的单元测试（`OnDemandSettingsTests`、`Ne
 - [ ] S6 SSID 规则（iOS、macOS）：把家里 Wi-Fi 设为“断开”，加入该 Wi-Fi 后隧道在 300 ms 内断开（用系统 VPN 状态栏图标或
   `log stream --predicate 'subsystem == "com.apple.networkextension"'` 的时间戳计时），离开后自动连接。
 - [ ] S4 桌面（Windows、Linux，本机代理模式）：拔插网线或换 Wi-Fi、睡眠 2 分钟后唤醒，网页几秒内恢复；Windows 日志
-  （`tauri-gui`）里有 `network change: engine reset {...}` / `wake: engine reset {...}`。TUN 模式和服务模式的内核不在本窗口进程里，
-  这一项不覆盖。
+  （`tauri-gui`）里有 `network change: engine reset {...}` / `wake: engine reset {...}`。TUN 模式这一项不覆盖。
 
 ## macOS 命令行工具
 
@@ -230,3 +229,11 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 - [ ] Windows（系统代理模式）：Fake-IP 打开时浏览器照常上网（Fake-IP 只在 TUN 模式下起作用）。
 - [ ] Android：同上两项，在 VPN 里确认 Fake-IP 返回 `198.18.x.x`，微信、推送等不受影响。
 - [ ] Linux：没有 Fake-IP 开关；自定义 DNS 保存后正在运行的引擎重启，Hosts 里写的名字按填的地址连接。
+
+## Windows 删除服务模式后真机验收（W1）
+
+- [ ] 在 beta.6 上选「Windows 服务」运行方式并连接，然后用 MSI 升级：升级后 `sc query AnixOpsNetworkCore` 报不存在，
+  客户端以窗口进程连接，系统代理和 HTTPS 解密正常。
+- [ ] 便携版：旧便携版注册过服务的机器上启动新版，`gui.log` 有删除旧服务的记录，服务不存在，之前由服务设置的系统代理已恢复。
+- [ ] MSI 卸载后根证书（NetworkCore 根证书和 HTTPS 解密根证书）和驱动都被删除；`%ProgramData%\AnixOps\NetworkCore\logs\gui.log`
+  有 `purged` 记录。卸载过程中不弹窗。

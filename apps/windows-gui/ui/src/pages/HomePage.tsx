@@ -51,7 +51,7 @@ export function HomePage({ snapshot, nodes, phase, busy, run, toggle, goTo, dela
   }, [connected]);
   useEffect(reprobe, [reprobe, snapshot?.selectedNode, snapshot?.routingMode]);
 
-  const waiting = phase === "on" && !live ? t("Windows 服务模式下不提供实时数据") : t("连接后显示");
+  const waiting = t("连接后显示");
   const programs = topUsage(connections, (item) => item.process?.split(/[\\/]/).pop(), 5);
 
   return (
@@ -108,7 +108,7 @@ function Hero({ snapshot, nodes, phase, busy, run, toggle, goTo, delays, probe }
     switch (phase) {
       case "on":
         return [
-          snapshot?.tunModeEnabled ? t("TUN 模式") : snapshot?.runtimeMode === "service" ? t("Windows 服务") : t("系统代理"),
+          snapshot?.tunModeEnabled ? t("TUN 模式") : t("系统代理"),
           routingLabel(snapshot?.routingMode),
           traffic ? t("{count} 个连接", { count: traffic.active ?? 0 }) : null,
           probe?.exitIp ? t("出口 {address}", { address: [probe.exitIp, probe.exitLocation].filter(Boolean).join(" ") }) : null,
@@ -403,7 +403,7 @@ function DelayPanel({ snapshot, busy, run, goTo, setDelays, probe, reprobe }: {
         )}
       </div>
       <dl className="facts">
-        {windows && snapshot?.runtimeMode !== "service" && (
+        {windows && (
           <div>
             <dt>{t("TUN 模式")}</dt>
             <dd><Switch label={t("TUN 模式")} checked={Boolean(snapshot?.tunModeEnabled)} disabled={Boolean(busy)} onChange={() => void run("TUN", () => desktop.setTunMode(!snapshot?.tunModeEnabled))} /></dd>

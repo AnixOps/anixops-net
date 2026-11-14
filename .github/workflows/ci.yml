@@ -65,7 +65,7 @@ jobs:
               case "${path}" in
                 Cargo.toml | Cargo.lock | .github/*) all ;;
                 apps/windows-gui/ui/*) ui=true; windows=true; linux=true; android=true ;;
-                apps/windows-gui/* | apps/windows-service/* | installer/*) rust=true; windows=true ;;
+                apps/windows-gui/* | installer/*) rust=true; windows=true ;;
                 # The Android app is the Linux window and backend on Android.
                 apps/linux-gui/*) rust=true; linux=true; android=true ;;
                 apps/android/*) android=true ;;
@@ -380,9 +380,9 @@ jobs:
         shell: bash
         run: cargo test --locked --workspace --all-targets
 
-      - name: Build the GUI and service
+      - name: Build the GUI
         shell: bash
-        run: cargo build --locked -p networkcore-windows-gui -p networkcore-windows-service
+        run: cargo build --locked -p networkcore-windows-gui
 
       # The MSI also ships the kernel's Windows CLI, built from the pinned kernel checkout with its own lockfile.
       - name: Build the kernel Windows CLI
@@ -423,7 +423,6 @@ jobs:
           $integrityPath = Join-Path $env:RUNNER_TEMP "integrity\integrity.sha256"
           & .github/scripts/write-integrity.ps1 -Output $integrityPath -Entry @(
             "networkcore-windows-gui.exe=$releaseDir\networkcore-windows-gui.exe",
-            "networkcore-windows-service.exe=$releaseDir\networkcore-windows-service.exe",
             "networkcore-windows.exe=$releaseDir\networkcore-windows.exe",
             "WebView2Loader.dll=$webView2LoaderPath",
             "wintun.dll=$wintunPath"
@@ -436,7 +435,6 @@ jobs:
             -d "GuiExe=$releaseDir\networkcore-windows-gui.exe" `
             -d "WebView2LoaderDll=$webView2LoaderPath" `
             -d "WintunDll=$wintunPath" `
-            -d "ServiceExe=$releaseDir\networkcore-windows-service.exe" `
             -d "DefaultConfig=$defaultConfig" `
             -d "IntegrityList=$integrityPath" `
             -o dist\windows-ci\networkcore-windows-ci.msi
@@ -481,18 +479,18 @@ jobs:
             -LogPath $installLog `
             -Operation "install"
 
-          $service = Get-Service -Name "AnixOpsNetworkCore" -ErrorAction SilentlyContinue
-          if ($null -eq $service) {
-            throw "Windows managed client MSI did not register AnixOpsNetworkCore."
+          # The client has no Windows service any more.
+          if ($null -ne (Get-Service -Name "AnixOpsNetworkCore" -ErrorAction SilentlyContinue)) {
+            throw "Windows managed client MSI registered the removed AnixOpsNetworkCore service."
           }
 
-          $serviceExe = Join-Path $env:ProgramFiles "AnixOps\NetworkCore\networkcore-windows-service.exe"
+          $installDir = Join-Path $env:ProgramFiles "AnixOps\NetworkCore"
+          if (Test-Path (Join-Path $installDir "networkcore-windows-service.exe")) {
+            throw "Windows managed client MSI installed the removed service executable."
+          }
           $guiExe = Join-Path $env:ProgramFiles "AnixOps\NetworkCore\networkcore-windows-gui.exe"
           $webView2Loader = Join-Path $env:ProgramFiles "AnixOps\NetworkCore\WebView2Loader.dll"
           $managedConfigPath = Join-Path $env:ProgramData "AnixOps\NetworkCore\managed-config.json"
-          if (-not (Test-Path $serviceExe -PathType Leaf)) {
-            throw "Windows managed client MSI did not install the service executable."
-          }
           if (-not (Test-Path $managedConfigPath -PathType Leaf)) {
             throw "Windows managed client MSI did not install managed-config.json."
           }
@@ -541,49 +539,9 @@ jobs:
           $startupTrigger = New-ScheduledTaskTrigger -AtLogOn
           Register-ScheduledTask -TaskPath "\AnixOps\" -TaskName $startupTaskName -Action $startupAction -Trigger $startupTrigger -Force | Out-Null
 
-          $service = Get-Service -Name "AnixOpsNetworkCore" -ErrorAction Stop
-          if ($service.Status -ne "Stopped") {
-            Stop-Service -Name "AnixOpsNetworkCore" -ErrorAction Stop
-            $service.WaitForStatus("Stopped", [TimeSpan]::FromSeconds(30))
-          }
-
-          $originalManagedConfig = Get-Content -Path $managedConfigPath -Raw
-          try {
-            Set-Content -Path $managedConfigPath -Value "{ invalid managed configuration" -Encoding utf8
-            $startOutput = Join-Path $env:RUNNER_TEMP "networkcore-service-start-invalid-config.out"
-            $startError = Join-Path $env:RUNNER_TEMP "networkcore-service-start-invalid-config.err"
-            $startProcess = Start-Process -FilePath $serviceExe -ArgumentList "start" -PassThru -RedirectStandardOutput $startOutput -RedirectStandardError $startError
-            if (-not $startProcess.WaitForExit(10000)) {
-              Stop-Process -Id $startProcess.Id -Force -ErrorAction SilentlyContinue
-              if (Test-Path $startOutput) { Get-Content $startOutput }
-              if (Test-Path $startError) { Get-Content $startError }
-              throw "Windows service start waited for an invalid managed configuration."
-            }
-            if ($startProcess.ExitCode -ne 0) {
-              if (Test-Path $startOutput) { Get-Content $startOutput }
-              if (Test-Path $startError) { Get-Content $startError }
-              throw "Windows service start request failed for an invalid managed configuration."
-            }
-
-            $deadline = [DateTime]::UtcNow.AddSeconds(15)
-            do {
-              $service = Get-Service -Name "AnixOpsNetworkCore" -ErrorAction Stop
-              if ($service.Status -eq "Stopped") { break }
-              Start-Sleep -Milliseconds 250
-            } while ([DateTime]::UtcNow -lt $deadline)
-            if ($service.Status -ne "Stopped") {
-              throw "Windows service did not report failure after invalid managed configuration."
-            }
-          } finally {
-            Set-Content -Path $managedConfigPath -Value $originalManagedConfig -Encoding utf8
-          }
-          $serviceLog = Join-Path $env:ProgramData "AnixOps\NetworkCore\logs\service.log"
-          if (-not (Test-Path $serviceLog -PathType Leaf)) {
-            throw "Windows service did not write a startup diagnostic log."
-          }
-          if (-not (Select-String -Path $serviceLog -SimpleMatch "runtime start failed" -Quiet)) {
-            throw "Windows service did not record the invalid managed configuration failure."
-          }
+          # A service an earlier version registered (portable copies did it by hand): the
+          # uninstaller's purge step, run as LocalSystem, must remove it.
+          New-Service -Name "AnixOpsNetworkCore" -BinaryPathName "`"$guiExe`" --legacy-service-placeholder" -StartupType Manual | Out-Null
 
           Invoke-MsiTransaction `
             -Arguments @("/x", "`"$msiPath`"", "/qn", "/norestart", "/l*v", "`"$uninstallLog`"") `
@@ -591,7 +549,7 @@ jobs:
             -Operation "uninstall"
 
           if ($null -ne (Get-Service -Name "AnixOpsNetworkCore" -ErrorAction SilentlyContinue)) {
-            throw "Windows managed client MSI uninstall left AnixOpsNetworkCore registered."
+            throw "Windows managed client MSI uninstall left the legacy AnixOpsNetworkCore service registered."
           }
           if ($null -ne (Get-ScheduledTask -TaskPath "\AnixOps\" -TaskName $startupTaskName -ErrorAction SilentlyContinue)) {
             throw "Windows managed client MSI uninstall left the NetworkCore sign-in startup task."
