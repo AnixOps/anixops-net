@@ -489,9 +489,21 @@ dl.headers > div { display: grid; grid-template-columns: minmax(120px, 30%) minm
 dl.headers > div + div { border-top: 1px solid var(--hairline); }
 dl.headers dt { overflow-wrap: anywhere; color: var(--text2); font-size: 12px; font-weight: 600; }
 dl.headers dd { margin: 0; font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+.replay-line { display: flex; gap: 8px; }
+.replay-line .method-input { flex: 0 0 96px; font-family: var(--font-mono); }
+.replay-line input:not(.method-input) { flex: 1; min-width: 0; font-family: var(--font-mono); }
+.mapping-pattern { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 720px) {
   dl.headers > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .bytes-tools { flex-wrap: wrap; }
+  /* Debug views on a phone: segmented choices share the row instead of pushing past it, the request line keeps
+     the method short, editors start lower, and a title with actions wraps instead of squeezing them. */
+  .row > .segmented { flex: 1 1 auto; min-width: 0; }
+  .row > .segmented button { min-width: 0; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; }
+  .replay-line .method-input { flex-basis: 72px; }
+  .bytes-view pre.bytes { max-height: 50vh; }
+  .card-header { flex-wrap: wrap; }
+  textarea { min-height: 96px; }
 }
 
 /* Windows 11 Mica: the Rust side sets data-backdrop="mica" only when the system backdrop is applied, so the
@@ -517,3 +529,14 @@ dl.headers dd { margin: 0; font-family: var(--font-mono); font-size: 12px; overf
 .root-import textarea { min-height: 88px; }
 .root-import button { justify-self: end; }
 @media (max-width: 560px) { .phone-qr { flex-direction: column; align-items: flex-start; } }
+/* First-launch mode choice (mode-choice.tsx): two equal answers, neither one a primary button. */
+.mode-dialog { width: min(560px, 100%); }
+.mode-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.mode-option { display: grid; gap: 6px; justify-items: start; padding: 16px; color: var(--text); text-align: left; background: var(--fill-1); border: 0; border-radius: var(--radius-card); box-shadow: 0 0 0 .5px var(--hairline); transition: background var(--fast) var(--ease-standard), box-shadow var(--fast) var(--ease-standard); }
+.mode-option:hover { background: var(--fill-2); box-shadow: 0 0 0 1.5px var(--accent); }
+.mode-option .tile { width: 32px; height: 32px; border-radius: 8px; }
+.mode-option strong { font-size: 14px; font-weight: 600; }
+.mode-option small { color: var(--text2); font-size: 12px; line-height: 1.45; }
+@media (max-width: 720px) {
+  .mode-options { grid-template-columns: minmax(0, 1fr); }
+}

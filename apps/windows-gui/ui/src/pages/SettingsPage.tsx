@@ -7,6 +7,7 @@ import { factLabel } from "../labels";
 import { Card, Loading, MoreMenu, Row, Run, Segmented, StatusDot, TileColor, ToggleRow } from "../ui";
 import { LanguageChoice, languages, t } from "../i18n";
 import { TermsViewer, termsVersion } from "../terms";
+import { AppMode, modes } from "../mode";
 
 type StartupKey = "startAfterLogin" | "autoConnect" | "autoRecoverCore" | "autoSubscriptionRefresh" | "autoSelectFastestNode";
 
@@ -18,7 +19,7 @@ const startupOptions: Array<{ key: StartupKey; label: string; hint?: string }> =
   { key: "autoSelectFastestNode", label: "每 30 分钟自动选择最快节点" },
 ];
 
-export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, language, setLanguage }: {
+export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, language, setLanguage, mode, setMode }: {
   snapshot: RuntimeSnapshot | null;
   busy: string | null;
   run: Run;
@@ -26,6 +27,8 @@ export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, l
   setAppearance: (value: Appearance) => void;
   language: LanguageChoice;
   setLanguage: (value: LanguageChoice) => void;
+  mode: AppMode;
+  setMode: (value: AppMode) => void;
 }) {
   if (!snapshot) return <Loading />;
   const save = (changes: Partial<Preferences>) => void run("preferences", () => desktop.savePreferences(preferencesFrom(snapshot, changes)));
@@ -42,6 +45,9 @@ export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, l
   return (
     <div className="page-stack">
       <Card title={t("通用")}>
+        <Row icon={Bug} color="pink" label={t("使用方式")} hint={t(modes.find((option) => option.value === mode)?.hint ?? "")}>
+          <Segmented label={t("使用方式")} options={modes.map((option) => ({ value: option.value, label: t(option.label) }))} value={mode} onChange={setMode} />
+        </Row>
         <Row icon={SunMoon} color="indigo" label={t("外观")}>
           <Segmented label={t("外观")} options={appearances.map((option) => ({ ...option, label: t(option.label) }))} value={appearance} onChange={setAppearance} />
         </Row>

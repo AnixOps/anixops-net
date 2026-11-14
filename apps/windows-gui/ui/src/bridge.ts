@@ -51,6 +51,8 @@ export interface RuntimeSnapshot {
   dnsPreset?: DnsPreset;
   /** UDP to port 443 is refused so apps fall back from QUIC to TCP; older backends leave it out. */
   blockQuic?: boolean;
+  /** Debug mode's direct egress: the engine runs with no node. Left out by backends that cannot do it yet. */
+  directEgress?: boolean;
   /** The imported profile runs on the embedded engine (Windows). */
   embeddedEngine?: boolean;
 }
@@ -177,6 +179,40 @@ export interface CaptureConnection {
 }
 
 export type CaptureFormat = "pcapng" | "har";
+
+/** An edited copy of a captured request, sent again through the local proxy. */
+export interface ReplayRequest {
+  method: string;
+  url: string;
+  headers: [string, string][];
+  /** Empty for no body. */
+  bodyBase64: string;
+}
+
+export interface ReplayResponse {
+  status: number;
+  headers: [string, string][];
+  bodyBase64: string;
+  /** Cut at 1 MiB. */
+  truncated: boolean;
+  elapsedMs: number;
+}
+
+/** A Map Local / Map Remote rule made in the debug view; saved ones become the plugin "AnixOps 调试映射". */
+export interface DebugMapping {
+  /** Empty for a new one. */
+  id: string;
+  name: string;
+  enabled: boolean;
+  kind: "local" | "remote";
+  match: "url" | "prefix" | "regex";
+  pattern: string;
+  status: number;
+  headers: { name: string; value: string }[];
+  /** The body as base64. */
+  body: string;
+  target: string;
+}
 
 /** One rule set of the running engine. */
 export interface RuleSetStatus {
@@ -325,6 +361,11 @@ export const desktop = {
     invoke<{ capture: CaptureConnection | null }>("runtime_control", { request: { cmd: "capture_connection", id } }),
   /** Saves the export to Downloads (one connection with `id`) and answers where it went. */
   exportCapture: (format: CaptureFormat, id?: number) => invoke<{ location: string }>("export_capture", { format, id }),
+  /** Sends a request through the local proxy without following redirects; not on Android. */
+  replayRequest: (request: ReplayRequest) => invoke<ReplayResponse>("replay_request", { request }),
+  debugMappings: () => invoke<DebugMapping[]>("list_debug_mappings"),
+  saveDebugMapping: (entry: DebugMapping) => invoke<OperationResult>("save_debug_mapping", { entry }),
+  removeDebugMapping: (id: string) => invoke<OperationResult>("remove_debug_mapping", { id }),
   testDelay: (nodeId: string, url: string) =>
     invoke<OperationResult>("test_node_delay", { nodeId, url }),
   /** Tests each node on its own and reports every result; failures do not reject. */
@@ -358,6 +399,7 @@ export const desktop = {
   setRoutingMode: (mode: RuntimeSnapshot["routingMode"]) => invoke<OperationResult>("set_routing_mode", { mode }),
   setDnsPreset: (preset: DnsPreset) => invoke<OperationResult>("set_dns_preset", { preset }),
   setBlockQuic: (enabled: boolean) => invoke<OperationResult>("set_block_quic", { enabled }),
+  setDirectEgress: (enabled: boolean) => invoke<OperationResult>("set_direct_egress", { enabled }),
   refreshRoutingRules: () => invoke<OperationResult>("refresh_routing_rules"),
   enableHttpsMitm: () => invoke<OperationResult>("enable_https_mitm"),
   disableHttpsMitm: () => invoke<OperationResult>("disable_https_mitm"),

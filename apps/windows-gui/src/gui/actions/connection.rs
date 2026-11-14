@@ -105,6 +105,14 @@ impl DesktopCore {
         Ok(())
     }
 
+    /// The local proxy of the engine this window runs.
+    pub fn local_addr(&self) -> Option<SocketAddr> {
+        self.embedded
+            .as_ref()
+            .filter(|proxy| proxy.is_running())
+            .map(LocalProxy::local_addr)
+    }
+
     /// Answers one kernel control request while this window runs the engine.
     pub fn control(&self, request: &[u8]) -> Result<Vec<u8>, String> {
         let proxy = self
@@ -217,6 +225,9 @@ pub fn connect_direct(
     desktop: DesktopState,
     core: &mut DesktopCore,
 ) -> Result<ConnectedProxy, String> {
+    if desktop.direct_egress {
+        return connect_direct_egress(&config_path, desktop, core);
+    }
     let plan = direct_connection_plan(load_validated_daily_managed_configuration(&config_path)?)?;
     let embedded = plan.embedded.as_ref().ok_or_else(|| {
         "Desktop mode requires an imported profile. Import a subscription first.".to_string()
@@ -237,12 +248,92 @@ pub fn connect_direct(
     apply_proxy_after_direct_readiness(&plan.proxy, desktop, core)
 }
 
+/// Where the engine listens and the system proxy points when nothing was
+/// imported: the ports an imported profile would get.
+pub const DIRECT_EGRESS_LISTEN_PORT: u16 = 7890;
+
+/// Debug mode's direct egress: the engine runs a profile with no node (the
+/// engine's `direct` outbound), so capture, HTTPS decryption and rewrites work
+/// before anything is imported. HTTPS decryption and the system proxy come
+/// from the managed configuration when there is one.
+fn connect_direct_egress(
+    config_path: &Path,
+    desktop: DesktopState,
+    core: &mut DesktopCore,
+) -> Result<ConnectedProxy, String> {
+    let managed = if config_path.exists() {
+        Some(load_validated_daily_managed_configuration(config_path)?)
+    } else {
+        None
+    };
+    let mitm = managed
+        .as_ref()
+        .and_then(|managed| managed.native_mitm.clone())
+        .filter(|mitm| mitm.enabled);
+    if mitm
+        .as_ref()
+        .is_some_and(|mitm| mitm.script_runtime.is_some())
+    {
+        return Err(
+            "Clear the legacy managed script runtime before enabling HTTPS MITM; Windows script execution requires a no-network sandbox."
+                .to_string(),
+        );
+    }
+    let proxy = managed
+        .and_then(|managed| managed.system_proxy)
+        .filter(|proxy| proxy.enabled)
+        .unwrap_or_else(|| WindowsProxySettings {
+            enabled: true,
+            server: format!("127.0.0.1:{DIRECT_EGRESS_LISTEN_PORT}"),
+            bypass: "<local>".to_string(),
+        });
+    let envelope = direct_egress_envelope(desktop.dns_preset, desktop.block_quic)?;
+    let envelope = match mitm.as_ref() {
+        Some(mitm) => with_native_mitm(envelope.into_bytes(), mitm)?,
+        None => envelope.into_bytes(),
+    };
+    let listen = match mitm.as_ref() {
+        Some(mitm) => loopback_listener(&format!("{}:{}", mitm.listen_host, mitm.listen_port))?,
+        None => SocketAddr::from(([127, 0, 0, 1], DIRECT_EGRESS_LISTEN_PORT)),
+    };
+    if let Some(mitm) = mitm.as_ref() {
+        DesktopCore::trust_mitm_root(mitm)?;
+    }
+    if desktop.tun_mode_enabled {
+        core.start_tun(&envelope)?;
+    }
+    if let Err(error) = core.start_embedded(&envelope, listen) {
+        core.stop();
+        return Err(error);
+    }
+    apply_proxy_after_direct_readiness(&proxy, desktop, core)
+}
+
+/// The node-less profile of debug mode's direct egress, with the DNS choice
+/// and QUIC blocking in it.
+pub fn direct_egress_envelope(
+    dns: desktop_dns::DnsPreset,
+    block_quic: bool,
+) -> Result<String, String> {
+    let profile = serde_json::json!({
+        "schema_version": 1,
+        "profile_id": "desktop",
+        "outbound": { "type": "direct" },
+    })
+    .to_string();
+    let envelope = desktop_dns::apply(&profile, dns)?;
+    desktop_dns::apply_block_quic(&envelope, block_quic)
+}
+
 pub fn disconnect_direct(
     config_path: PathBuf,
     desktop: DesktopState,
     core: &mut DesktopCore,
 ) -> Result<String, String> {
-    load_validated_daily_managed_configuration(&config_path)?;
+    // Debug mode's direct egress runs without an imported profile.
+    if !desktop.direct_egress || config_path.exists() {
+        load_validated_daily_managed_configuration(&config_path)?;
+    }
     let integration = NativeWindowsSystemIntegration::new();
     let mut proxy_restored = false;
     if let Some(snapshot) = desktop.proxy_snapshot.as_ref() {
@@ -332,9 +423,17 @@ fn desktop_envelope(
 ) -> Result<Vec<u8>, String> {
     let envelope = fs::read(&embedded.envelope_path)
         .map_err(|error| format!("embedded engine configuration could not be read: {error}"))?;
-    let Some(mitm) = mitm else {
-        return Ok(envelope);
-    };
+    match mitm {
+        Some(mitm) => with_native_mitm(envelope, mitm),
+        None => Ok(envelope),
+    }
+}
+
+/// `envelope` with the `mitm` section of HTTPS decryption.
+fn with_native_mitm(
+    envelope: Vec<u8>,
+    mitm: &WindowsManagedNativeMitmConfig,
+) -> Result<Vec<u8>, String> {
     let certificate = fs::read_to_string(&mitm.ca_certificate_path)
         .map_err(|error| format!("HTTPS decryption root certificate could not be read: {error}"))?;
     let private_key = fs::read_to_string(&mitm.ca_private_key_path)
@@ -359,6 +458,10 @@ fn desktop_listener(
         Some(mitm) => format!("{}:{}", mitm.listen_host, mitm.listen_port),
         None => embedded.listener(),
     };
+    loopback_listener(&listener)
+}
+
+fn loopback_listener(listener: &str) -> Result<SocketAddr, String> {
     listener
         .parse::<SocketAddr>()
         .ok()
@@ -586,6 +689,17 @@ mod tests {
             native_mitm: None,
             embedded: None,
         }
+    }
+
+    #[test]
+    fn the_direct_egress_envelope_runs_without_a_node() {
+        let envelope = direct_egress_envelope(desktop_dns::DnsPreset::default(), true)
+            .expect("direct envelope");
+        assert!(envelope.contains("\"direct\""), "{envelope}");
+        assert!(
+            engine_embedded::config::RuntimeConfig::from_json(envelope.as_bytes()).is_ok(),
+            "{envelope}"
+        );
     }
 
     #[test]

@@ -16,6 +16,7 @@ use config_core::routing_import::import_subscription_routing;
 use config_core::CoreSubscriptionService;
 use control_domain::{NodeDescriptor, SubscriptionService, SubscriptionSource};
 use desktop_dns::DnsPreset;
+use desktop_mitm::mappings;
 use engine_embedded::config::{RuntimeConfig, CONFIG_SCHEMA_VERSION};
 use engine_embedded::delay::measure_delay;
 use engine_embedded::nodes::{outbound_for_node, routing_envelope, single_node_envelope};
@@ -144,6 +145,10 @@ struct RuntimeSnapshot {
     dns_preset: &'static str,
     /// UDP to port 443 is refused so apps fall back from QUIC to TCP.
     block_quic: bool,
+    /// Debug mode's direct egress (the engine runs with no node); only in
+    /// desktop mode, where this window runs the engine.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    direct_egress: Option<bool>,
     /// The imported profile runs on the embedded engine.
     embedded_engine: bool,
 }
@@ -316,6 +321,10 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             select_native_group_outbound,
             runtime_control,
             export_capture,
+            replay_request,
+            list_debug_mappings,
+            save_debug_mapping,
+            remove_debug_mapping,
             test_node_delay,
             test_node_delays,
             network_probe,
@@ -340,6 +349,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             set_routing_mode,
             set_dns_preset,
             set_block_quic,
+            set_direct_egress,
             refresh_routing_rules,
             configure_script_runtime,
             clear_script_runtime,
@@ -881,6 +891,33 @@ async fn runtime_control(
             .map_err(|_| "desktop core lock failed")?
             .control(&request)?;
         serde_json::from_slice(&answer).map_err(|error| error.to_string())
+    })
+    .await
+}
+
+/// Sends an edited copy of a captured request through the engine this
+/// window runs (`desktop_mitm::replay`), trusting the HTTPS decryption root
+/// while decryption is on.
+#[tauri::command]
+async fn replay_request(
+    request: desktop_mitm::replay::ReplayRequest,
+    state: State<'_, DesktopAppState>,
+) -> Result<desktop_mitm::replay::ReplayResponse, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let proxy = state
+            .direct_core
+            .lock()
+            .map_err(|_| "desktop core lock failed")?
+            .local_addr()
+            .ok_or(
+                "connect in desktop mode first: replayed requests go through the running engine",
+            )?;
+        let root = managed_config_or_default()?
+            .native_mitm
+            .filter(|mitm| mitm.enabled)
+            .and_then(|mitm| fs::read_to_string(mitm.ca_certificate_path).ok());
+        desktop_mitm::replay::send(proxy, root.as_deref(), &request)
     })
     .await
 }
@@ -3092,6 +3129,43 @@ async fn set_block_quic(
     run_blocking(move || set_block_quic_blocking(enabled, state)).await
 }
 
+#[tauri::command]
+async fn set_direct_egress(
+    enabled: bool,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || set_direct_egress_blocking(enabled, state)).await
+}
+
+/// Debug mode's egress: with `enabled` the window's engine runs with no node
+/// (`connection::direct_egress_envelope`), else the imported profile again. A
+/// running core reconnects on it.
+fn set_direct_egress_blocking(
+    enabled: bool,
+    state: DesktopAppState,
+) -> Result<OperationResult, String> {
+    {
+        let mut desktop = state
+            .desktop
+            .lock()
+            .map_err(|_| "desktop state lock failed")?;
+        if desktop.direct_egress == enabled {
+            return Ok(OperationResult {
+                message: "Egress unchanged.".to_string(),
+            });
+        }
+        desktop.direct_egress = enabled;
+        save_desktop_state(&desktop)?;
+    }
+    let message = match reconnect_running_direct_core(&state) {
+        Ok(()) if enabled => "Traffic leaves directly.".to_string(),
+        Ok(()) => "Traffic leaves through the selected node.".to_string(),
+        Err(error) => format!("Egress saved. Reconnect to apply it: {error}"),
+    };
+    Ok(OperationResult { message })
+}
+
 /// Saves QUIC blocking into the envelope and the desktop state. A core this
 /// window runs reconnects on it; the Windows service takes it on its next
 /// start.
@@ -3315,6 +3389,41 @@ async fn remove_mitm_plugin(
     let state = state.inner().clone();
     run_blocking(move || {
         mitm_plugins::remove(&mitm_plugins::directory(), &id)?;
+        Ok(OperationResult {
+            message: apply_mitm_plugins(&state),
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn list_debug_mappings() -> Result<Vec<mappings::Entry>, String> {
+    run_blocking(|| mappings::list(&mitm_plugins::directory())).await
+}
+
+#[tauri::command]
+async fn save_debug_mapping(
+    entry: mappings::Entry,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        mappings::save(&mitm_plugins::directory(), entry)?;
+        Ok(OperationResult {
+            message: apply_mitm_plugins(&state),
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn remove_debug_mapping(
+    id: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        mappings::remove(&mitm_plugins::directory(), &id)?;
         Ok(OperationResult {
             message: apply_mitm_plugins(&state),
         })
@@ -3882,6 +3991,8 @@ fn snapshot(
         routing_mode: routing_mode_name(desktop.routing_mode).to_string(),
         dns_preset: desktop.dns_preset.as_str(),
         block_quic: desktop.block_quic,
+        direct_egress: (desktop.runtime_mode == DesktopRuntimeMode::Desktop)
+            .then_some(desktop.direct_egress),
         embedded_engine: active_embedded_config().ok().flatten().is_some(),
     }
 }
