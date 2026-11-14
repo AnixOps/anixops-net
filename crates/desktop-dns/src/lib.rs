@@ -2,9 +2,11 @@
 //! section each one adds to the envelope. The resolvers are addressed by IP
 //! with a TLS name, so the engine never has to resolve a resolver's own name.
 //! [`rules`] puts the user's own rule lines in front of the envelope's rules;
-//! [`custom`] holds the user's own servers, hosts and the Fake-IP switch.
+//! [`custom`] holds the user's own servers, hosts and the Fake-IP switch;
+//! [`redirects`] the destination rewrites (the engine's `redirects`).
 
 pub mod custom;
+pub mod redirects;
 pub mod rules;
 
 use serde::{Deserialize, Serialize};

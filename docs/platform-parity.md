@@ -49,7 +49,7 @@
 | 自定义 DNS 服务器、分域 DNS、Hosts | ✅ | ✅ | ✅ | ✅ | ✅ | T3：桌面与 Android 用文本编辑（`名称 = 地址`、`DOMAIN-SUFFIX,cn,服务器`、`域名 = 地址`），iOS / macOS 是表单 |
 | Fake-IP | ✅ | ✅ | ✅ | — | ✅ | 只在接管 IP 流量时有意义：Windows 在 TUN 模式下生效，Android 在 VPN 里生效（T3）；Linux 只有系统代理，代理拿到的就是域名 |
 | 屏蔽 QUIC | ✅ | ✅ | ✅ | ✅ | ✅ | #106 |
-| 流量重定向（TCP / UDP 劫持到开发服务器） | ✅ | ✅ | ❌ | ⛔ | ❌ | 需要接管 IP 流量：Windows TUN 模式、Android 可做（T6）；Linux 见系统限制 |
+| 流量重定向（TCP / UDP 劫持到开发服务器） | ✅ | ✅ | ✅ | ◐ | ✅ | 扩展 / 改写页“流量重定向”，与 iOS 相同的地址 / 域名 / 端口 / 协议 → 目标写法（引擎 `redirects`，`desktop_dns::redirects`）。Windows 不走系统代理的程序要开 TUN 模式；Linux 暂时只改走系统代理的连接，见系统限制（T6） |
 | TUN（接管全部流量） | ✅ | ✅ | ✅ | ⛔ | ✅ | Linux 现在只有系统代理，见系统限制 |
 | 系统代理 | — | — | ✅ | ✅ | — | |
 
@@ -122,7 +122,7 @@ MSI 升级时旧服务随旧版本一起卸载；便携版注册过的服务由�
 | T3 | DNS：自定义服务器、分域 DNS、Hosts、Fake-IP | Windows、Linux、Android | 已完成 |
 | T4 | 节点分享链接入口 | Windows、Linux、Android | 已完成 |
 | T5 | 手动添加 / 编辑节点，Android 扫码导入 | Windows、Linux、Android | 已完成 |
-| T6 | 流量重定向 | Windows（TUN 模式）、Android | 待做 |
+| T6 | 流量重定向 | Windows（TUN 模式）、Android | 已完成（Linux 等 TUN） |
 | T7 | 插件从文件 / 剪贴板导入、插件内容查看 | Windows、Linux、Android | 已完成 |
 | T8 | Android 诊断报告保存到“下载”、出口地址 | Android | 已完成 |
 | T9 | 按天流量统计 | Windows、Linux、Android | 已完成 |

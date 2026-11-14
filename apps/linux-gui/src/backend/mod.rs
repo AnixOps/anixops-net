@@ -24,6 +24,9 @@ pub fn capture_dir(dir: &Path) -> PathBuf {
 use app_log::{Entry as LogEntry, Level as LogLevel};
 use app_notifications::{DisconnectWatch, Notice, Settings as NotificationSettings};
 use control_domain::NodeDescriptor;
+use desktop_dns::redirects::{
+    Draft as RedirectDraft, Entry as RedirectEntry, Redirects, View as Redirect,
+};
 use desktop_mitm::Root;
 use engine_embedded::config::RuntimeConfig;
 use engine_embedded::profile::{self, RoutingMode, RuleList};
@@ -234,6 +237,7 @@ impl Backend {
     ) -> Self {
         let state = store.load();
         desktop_dns::custom::use_file(store.dir().join("dns-settings.json"));
+        desktop_dns::redirects::use_file(store.dir().join("redirects.json"));
         let mut backend = Self {
             store,
             state,
@@ -349,6 +353,7 @@ impl Backend {
             self.envelope_with_rules(&desktop_dns::rules::load_lines(&self.my_rules_path()))?;
         let envelope = desktop_dns::apply(&envelope, self.state.dns_preset)?;
         let envelope = desktop_dns::apply_block_quic(&envelope, self.state.block_quic)?;
+        let envelope = desktop_dns::redirects::apply(&envelope)?;
         if !self.state.preferences.https_decryption {
             return Ok(envelope);
         }
@@ -391,6 +396,7 @@ impl Backend {
                 let envelope = self.envelope_with_rules(&lines)?;
                 let envelope = desktop_dns::apply(&envelope, self.state.dns_preset)?;
                 let envelope = desktop_dns::apply_block_quic(&envelope, self.state.block_quic)?;
+                let envelope = desktop_dns::redirects::apply(&envelope)?;
                 RuntimeConfig::from_json(envelope.as_bytes())
                     .map_err(|error| format!("the engine rejected the rules: {}", error.message))?;
                 Some(envelope)
@@ -832,6 +838,49 @@ impl Backend {
             "QUIC is blocked"
         } else {
             "QUIC is allowed"
+        })
+    }
+
+    /// The destination rewrites, as the window lists them.
+    pub fn traffic_redirects(&self) -> Vec<Redirect> {
+        desktop_dns::redirects::views(&desktop_dns::redirects::current())
+    }
+
+    /// Adds a rewrite from the editor's fields, or changes the one with id `replacing`.
+    pub fn add_redirect(
+        &mut self,
+        draft: &RedirectDraft,
+        replacing: Option<&str>,
+    ) -> Result<OperationResult, String> {
+        let next = desktop_dns::redirects::current().adding(draft, replacing)?;
+        self.replace_redirects(&next)
+    }
+
+    /// Saves the list as the window changed it: switches, order and deletions.
+    pub fn save_redirects(
+        &mut self,
+        entries: Vec<RedirectEntry>,
+    ) -> Result<OperationResult, String> {
+        let next = Redirects { entries }.checked()?;
+        self.replace_redirects(&next)
+    }
+
+    /// Saves `next` once the engine accepts it: checked against the profile when there is one, and a running
+    /// engine restarts with it. A refused list leaves the saved one as it was.
+    fn replace_redirects(&mut self, next: &Redirects) -> Result<OperationResult, String> {
+        let restarted = desktop_dns::redirects::replace(next, || {
+            if self.envelope_with_rules(&[]).is_ok() {
+                let envelope = self.envelope()?;
+                RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
+                    format!("the engine rejected the redirects: {}", error.message)
+                })?;
+            }
+            self.restart_if_running()
+        })?;
+        done(if restarted {
+            "Redirects saved and applied"
+        } else {
+            "Redirects saved; they apply on the next connection"
         })
     }
 
