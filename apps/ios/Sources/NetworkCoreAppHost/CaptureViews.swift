@@ -120,7 +120,7 @@ struct CaptureDetailView: View {
                     Section("HTTP 请求") {
                         ForEach(Array(capture.http.enumerated()), id: \.offset) { _, exchange in
                             NavigationLink {
-                                HttpExchangeView(exchange: exchange)
+                                HttpExchangeView(tunnel: tunnel, exchange: exchange)
                             } label: {
                                 ExchangeRow(exchange: exchange)
                             }
@@ -314,8 +314,10 @@ private struct ChunkView: View {
 
 /// One decrypted request and its response: URL, status, headers and bodies.
 private struct HttpExchangeView: View {
+    let tunnel: TunnelController
     let exchange: PacketCapture.Exchange
     @Environment(\.brand) private var brand
+    @State private var mapping: MappingDraft?
 
     var body: some View {
         List {
@@ -338,11 +340,52 @@ private struct HttpExchangeView: View {
             if exchange.status != nil {
                 message("响应", exchange.response)
             }
+            Section {
+                Button {
+                    mapping = MappingDraft(entry: mapLocal, isNew: true)
+                } label: {
+                    Label("映射到本地", systemImage: "doc.text")
+                }
+                Button {
+                    mapping = MappingDraft(entry: DebugMappings.remote(url: exchange.url), isNew: true)
+                } label: {
+                    Label("映射到远程", systemImage: "arrow.uturn.right")
+                }
+            } footer: {
+                Text("用这次的响应生成 Map Local，或把这个 URL 转到另一个地址。保存后在 扩展 › Map Local / Map Remote 里管理。")
+            }
+            .listRowBackground(brand.surface)
         }
         .scrollContentBackground(.hidden)
         .background(brand.bg.ignoresSafeArea())
         .navigationTitle("\(exchange.method) \(exchange.status.map { String($0) } ?? "")")
         .inlineNavigationTitle()
+        .sheet(item: $mapping) { draft in
+            MappingEditor(draft: draft) { entry in
+                let next = try tunnel.debugMappings.saving(entry)
+                Task {
+                    await tunnel.applyDebugMappings(next)
+                }
+            }
+            .formSheetFrame()
+            .environment(\.brand, brand)
+            .tint(brand.primary)
+        }
+    }
+
+    /// A Map Local entry answering with this response. A cut-off or still-compressed body cannot be replayed as
+    /// captured, so it starts empty for the user to fill in.
+    private var mapLocal: DebugMappings.Entry {
+        let response = exchange.response
+        let encoding = response.headers.first { $0.name.lowercased() == "content-encoding" }?.value.lowercased()
+        let usable = !response.body.truncated && UInt64(response.body.data.count) == response.body.size
+            && (encoding == nil || encoding == "identity")
+        return DebugMappings.local(
+            url: exchange.url,
+            status: exchange.status,
+            headers: response.headers.map { .init(name: $0.name, value: $0.value) },
+            body: usable ? response.body.data : Data()
+        )
     }
 
     @ViewBuilder

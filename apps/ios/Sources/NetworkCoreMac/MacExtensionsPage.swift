@@ -16,6 +16,7 @@ struct MacExtensionsPage: View {
         Form {
             certificateSection
             PluginsSection(tunnel: tunnel, model: plugins)
+            MappingsSection(tunnel: tunnel)
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
