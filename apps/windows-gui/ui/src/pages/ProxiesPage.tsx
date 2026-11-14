@@ -1,11 +1,12 @@
 import { Activity, Bot, Check, CloudDownload, FileText, Gauge, Globe, Layers, Pencil, Plus, RefreshCw, Route, Search, Share2, Trash2, X, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { desktop, inProcessEngine, NativeGroupSummary, NodeDelay, NodeSummary, RuntimeSnapshot, SubscriptionSummary } from "../bridge";
+import { desktop, inProcessEngine, NativeGroupSummary, NodeDelay, NodeForm, NodeSummary, RuntimeSnapshot, SubscriptionSummary } from "../bridge";
 import { memberNode } from "../dashboard";
 import { groupMemberLabel, protocolAbbreviation } from "../labels";
 import { delayLabel, delayTone, filterNodes, groupNodes, NodeSort, sortNodes } from "../node-filter";
-import { Card, EmptyState, IconButton, MoreMenu, PageTools, Panel, Row, Run, Segmented, StatusPill, Tile, TileColor } from "../ui";
+import { nodeFormProblem } from "../node-form";
+import { Card, EmptyState, Field, IconButton, MenuItem, MoreMenu, PageTools, Panel, Row, Run, Segmented, StatusPill, Tile, TileColor } from "../ui";
 import type { DebugExit } from "../mode";
 import { t } from "../i18n";
 import { formatBytes, formatDay, updateIntervalChoices, updateIntervalLabel, usedFraction } from "../subscription-format";
@@ -74,6 +75,7 @@ function ProxiesContent({ snapshot, nodes, busy, run, delays, setDelays }: Proxi
   const [query, setQuery] = useState("");
   const [protocol, setProtocol] = useState("All");
   const [sort, setSort] = useState<NodeSort>("default");
+  const [editing, setEditing] = useState<{ node: NodeSummary; form: NodeForm } | null>(null);
   const [groups, setGroups] = useState<NativeGroupSummary[]>([]);
   const [sources, setSources] = useState<SubscriptionSummary[]>([]);
   const refreshSources = useCallback(() => void desktop.subscriptions().then(setSources).catch(() => setSources([])), []);
@@ -91,6 +93,18 @@ function ProxiesContent({ snapshot, nodes, busy, run, delays, setDelays }: Proxi
     }
     return { message: t("{ok} / {total} 个节点有响应", { ok: results.filter((result) => result.delayMs != null).length, total: results.length }) };
   });
+
+  const edit = (node: NodeSummary) => void desktop.nodeForm(node.id).then(
+    (form) => setEditing({ node, form }),
+    (error: unknown) => run("node", () => Promise.reject(error)),
+  );
+  const nodeMenu = (node: NodeSummary): MenuItem[] => [
+    { label: t("复制分享链接"), icon: Share2, onSelect: () => void run("share", () => copyShareLink(node)) },
+    ...(node.editable ? [
+      { label: t("编辑节点"), icon: Pencil, onSelect: () => edit(node) },
+      { label: t("删除节点"), icon: Trash2, danger: true, confirm: t("确认删除 {node}", { node: node.label }), onSelect: () => void run("node", () => desktop.removeNode(node.id)) },
+    ] : []),
+  ];
 
   if (nodes.length === 0 && sources.length === 0) {
     return <Subscriptions snapshot={snapshot} sources={sources} refreshSources={refreshSources} empty busy={busy} run={run} />;
@@ -186,6 +200,7 @@ function ProxiesContent({ snapshot, nodes, busy, run, delays, setDelays }: Proxi
             </select>
           </>}
         >
+          {editing && <NodeEditor key={editing.node.id} node={editing.node} form={editing.form} busy={busy} run={run} close={() => setEditing(null)} />}
           {sections.map((section) => (
             <div className="node-section" key={section.group ?? ""}>
               {sections.length > 1 && section.group && <h3 className="subhead">{section.group}<span className="count">{section.nodes.length}</span></h3>}
@@ -200,7 +215,7 @@ function ProxiesContent({ snapshot, nodes, busy, run, delays, setDelays }: Proxi
                     disabled={Boolean(busy)}
                     onPick={() => void run("switch", () => desktop.switchNode(node.id))}
                     onTest={() => testDelays([node])}
-                    onShare={() => void run("share", () => copyShareLink(node))}
+                    menu={nodeMenu(node)}
                   />
                 ))}
               </div>
@@ -260,7 +275,7 @@ function PaneItem({ icon, color, title, detail, badge, active, onClick }: {
 }
 
 /** One node as a card: its name, protocol and delay; the whole card picks it. */
-function NodeCard({ label, protocol, delay, selected, disabled, onPick, onTest, onShare }: {
+function NodeCard({ label, protocol, delay, selected, disabled, onPick, onTest, menu }: {
   label: string;
   protocol?: string;
   delay?: NodeDelay;
@@ -268,7 +283,8 @@ function NodeCard({ label, protocol, delay, selected, disabled, onPick, onTest, 
   disabled: boolean;
   onPick?: () => void;
   onTest?: () => void;
-  onShare?: () => void;
+  /** Share, edit and remove (actions S4: one icon action, the rest in the menu). */
+  menu?: MenuItem[];
 }) {
   return (
     <div className={`node-card ${selected ? "selected" : ""} ${onPick ? "" : "fixed"}`} role="listitem">
@@ -282,7 +298,7 @@ function NodeCard({ label, protocol, delay, selected, disabled, onPick, onTest, 
       {selected && <Check className="node-card-check" size={14} strokeWidth={2.5} aria-label={t("当前节点")} />}
       <span className="node-card-actions">
         {onTest && <IconButton label={t("测试 {node} 的延迟", { node: label })} disabled={disabled} onClick={onTest}><Activity size={13} /></IconButton>}
-        {onShare && <IconButton label={t("复制 {node} 的分享链接", { node: label })} disabled={disabled} onClick={onShare}><Share2 size={13} /></IconButton>}
+        {menu && <MoreMenu label={t("{node} 的更多操作", { node: label })} disabled={disabled} items={menu} />}
       </span>
     </div>
   );
@@ -308,6 +324,38 @@ function sourceDetail(source: SubscriptionSummary): string {
 }
 
 const delayUrl = "https://www.gstatic.com/generate_204";
+
+/** The edit form of a node of the subscription in use, above the node list. */
+function NodeEditor({ node, form, busy, run, close }: {
+  node: NodeSummary;
+  form: NodeForm;
+  busy: string | null;
+  run: Run;
+  close: () => void;
+}) {
+  const [name, setName] = useState(form.name);
+  const [server, setServer] = useState(form.server);
+  const [port, setPort] = useState(String(form.port || ""));
+  const problem = nodeFormProblem(server, port);
+  const save = () => void run("node", async () => {
+    const result = await desktop.editNode(node.id, name, server, port);
+    close();
+    return result;
+  });
+  return (
+    <Card title={t("编辑节点")} description={t("改动只保存在本机，更新订阅后恢复为订阅里的内容。")} className="node-editor">
+      <Field label={t("名称")}><input value={name} onChange={(event) => setName(event.target.value)} placeholder={node.label} /></Field>
+      <Field label={t("服务器地址")}><input value={server} onChange={(event) => setServer(event.target.value)} spellCheck={false} /></Field>
+      <Field label={t("端口")}><input value={port} onChange={(event) => setPort(event.target.value)} inputMode="numeric" /></Field>
+      {problem && <p className="danger-text">{problem}</p>}
+      <div className="button-row">
+        <button className="secondary" disabled={Boolean(busy)} onClick={close}>{t("取消")}</button>
+        <button className="primary" disabled={Boolean(busy) || Boolean(problem)} onClick={save}>{t("保存")}</button>
+      </div>
+    </Card>
+  );
+}
+
 
 async function copyShareLink(node: NodeSummary) {
   const link = await desktop.shareLink(node.id);

@@ -22,6 +22,7 @@ use desktop_mitm::mappings;
 use engine_embedded::config::{RuntimeConfig, CONFIG_SCHEMA_VERSION};
 use engine_embedded::delay::measure_delay;
 use engine_embedded::nodes::{outbound_for_node, routing_envelope, single_node_envelope};
+use node_edits::{NodeEdits, NodeForm};
 use platform_windows::managed::{
     read_managed_state, windows_managed_config_path, windows_managed_data_directory,
     windows_managed_log_directory, windows_managed_state_path, write_managed_config,
@@ -170,6 +171,8 @@ struct NodeSummary {
     /// The subscription the node comes from.
     #[serde(skip_serializing_if = "Option::is_none")]
     group: Option<String>,
+    /// A node of the imported profile, which can be edited and removed (`node_edits`).
+    editable: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -332,6 +335,9 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             test_node_delays,
             network_probe,
             node_share_link,
+            node_form,
+            edit_node,
+            remove_node,
             select_fastest_node,
             save_preferences,
             create_diagnostics,
@@ -709,6 +715,7 @@ fn list_nodes(state: State<'_, DesktopAppState>) -> Result<Vec<NodeSummary>, Str
             protocol: node.protocol.clone(),
             selected: selected(&node.id),
             group: group.clone(),
+            editable: true,
         })
         .collect();
     // Other subscriptions follow, each under its own name.
@@ -721,6 +728,7 @@ fn list_nodes(state: State<'_, DesktopAppState>) -> Result<Vec<NodeSummary>, Str
                 label: node.label.clone(),
                 protocol: node.protocol.clone(),
                 group: Some(other.name.clone()),
+                editable: false,
             });
         }
     }
@@ -1454,6 +1462,146 @@ async fn node_share_link(
             .map_err(|error| format!("This node cannot be shared: {error}"))
     })
     .await
+}
+
+/// The name, server and port of a node of the imported profile, and whether it can be removed.
+#[tauri::command]
+async fn node_form(node_id: String, state: State<'_, DesktopAppState>) -> Result<NodeForm, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let desktop = state
+            .desktop
+            .lock()
+            .map_err(|_| "desktop state lock failed")?
+            .clone();
+        node_form_of(&desktop, &node_id)
+    })
+    .await
+}
+
+fn node_form_of(desktop: &DesktopState, node_id: &str) -> Result<NodeForm, String> {
+    let node = selected_catalog_node(desktop, node_id)
+        .map_err(|_| "Only nodes of the subscription in use can be edited.".to_string())?;
+    let outbound = embedded_node_outbound(node_id)?;
+    let profile = read_embedded_profile().ok();
+    Ok(NodeForm {
+        name: node.label,
+        server: outbound["server"].as_str().unwrap_or_default().to_string(),
+        port: outbound["port"]
+            .as_u64()
+            .and_then(|port| u16::try_from(port).ok())
+            .unwrap_or_default(),
+        keep_reason: node_edits::keep_reason(
+            desktop.profile_node_catalog.len(),
+            profile.as_ref(),
+            node_id,
+        ),
+    })
+}
+
+#[tauri::command]
+async fn edit_node(
+    node_id: String,
+    name: String,
+    server: String,
+    port: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let change = node_edits::check(&name, &server, &port)?;
+        change_node_edits(&state, &node_id, |edits| edits.change(&node_id, change))?;
+        Ok(OperationResult {
+            message: "Node saved.".to_string(),
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn remove_node(
+    node_id: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        change_node_edits(&state, &node_id, |edits| edits.remove(&node_id))?;
+        Ok(OperationResult {
+            message: "Node removed.".to_string(),
+        })
+    })
+    .await
+}
+
+/// Changes the saved node edits, applies them to the imported profile from its kept content, and restarts a
+/// running core on the result. Nothing changes when they cannot be applied.
+fn change_node_edits(
+    state: &DesktopAppState,
+    node_id: &str,
+    change: impl FnOnce(&mut NodeEdits),
+) -> Result<(), String> {
+    let _refresh_guard = acquire_subscription_refresh(state)?;
+    let mut desktop = state
+        .desktop
+        .lock()
+        .map_err(|_| "desktop state lock failed")?
+        .clone();
+    let form = node_form_of(&desktop, node_id)?;
+    let path = node_edits_path();
+    let before = NodeEdits::load(&path);
+    let mut edits = before.clone();
+    change(&mut edits);
+    if edits.removed.contains(node_id) {
+        if let Some(reason) = form.keep_reason {
+            return Err(reason.to_string());
+        }
+    }
+    edits.save(&path).map_err(|error| error.to_string())?;
+    if let Err(error) = reapply_node_edits(&mut desktop) {
+        let _ = before.save(&path);
+        let mut restored = state
+            .desktop
+            .lock()
+            .map_err(|_| "desktop state lock failed")?
+            .clone();
+        let _ = reapply_node_edits(&mut restored);
+        return Err(error);
+    }
+    save_desktop_state(&desktop)?;
+    *state
+        .desktop
+        .lock()
+        .map_err(|_| "desktop state lock failed")? = desktop;
+    if node_operations_runtime_running(state)? {
+        restart_service_blocking(state.clone())?;
+    }
+    Ok(())
+}
+
+/// Imports the kept content of the profile again with the saved node edits, keeping the routing mode, and
+/// links the other subscriptions in as an import does.
+fn reapply_node_edits(desktop: &mut DesktopState) -> Result<(), String> {
+    let payload = fs::read_to_string(profile_source_text_path())
+        .map_err(|_| "Update the subscription once before editing its nodes.".to_string())?;
+    let previous = read_embedded_profile().ok();
+    import_embedded_subscription(
+        &payload,
+        desktop.profile_source_path.clone(),
+        desktop.profile_source_url.clone(),
+        desktop,
+        false,
+    )?;
+    let location = desktop.profile_source_url.clone().or_else(|| {
+        desktop
+            .profile_source_path
+            .as_ref()
+            .map(|path| path.display().to_string())
+    });
+    if let Some(location) = location {
+        // As in an import, a failed cache write only leaves the nodes out of other profiles' lists.
+        let _ = cache_imported_nodes(&location, desktop);
+    }
+    relink_active_profile(desktop, previous.as_ref())
 }
 
 #[tauri::command]
@@ -2551,7 +2699,12 @@ fn import_subscription_at(
 ) -> Result<subscription_meta::ResponseMeta, String> {
     let previous = read_embedded_profile().ok();
     let (payload, source_path, source_url, meta) = read_subscription(location)?;
-    import_embedded_subscription(&payload, source_path, source_url, desktop)?;
+    // An update brings back what the provider serves (`node_edits`); the content is kept so edits can be
+    // applied to it later without fetching it again.
+    let _ = fs::remove_file(node_edits_path());
+    write_managed_text_atomic(&profile_source_text_path(), &payload)
+        .map_err(|error| error.to_string())?;
+    import_embedded_subscription(&payload, source_path, source_url, desktop, true)?;
     // Listing and linking work without this subscription's cache, so a failed write only leaves it out.
     let _ = cache_imported_nodes(location, desktop);
     relink_active_profile(desktop, previous.as_ref())?;
@@ -2565,6 +2718,7 @@ fn import_embedded_subscription(
     source_path: Option<PathBuf>,
     source_url: Option<String>,
     desktop: &mut DesktopState,
+    fresh: bool,
 ) -> Result<(), String> {
     sync_anx_license();
     let service = CoreSubscriptionService::new();
@@ -2580,12 +2734,15 @@ fn import_embedded_subscription(
     if catalog.nodes.is_empty() {
         return Err("Profile did not contain a supported proxy node".to_string());
     }
+    // The subscription's rules and groups name the nodes as served; the engine runs them with the user's edits.
+    let parsed = catalog.nodes;
+    let nodes = NodeEdits::load(&node_edits_path()).applied(&parsed);
     // Subscription rules and policy groups drive the route when every node is
     // supported and the engine accepts the result; otherwise one node runs
     // alone.
-    let routed = import_subscription_routing(payload, &catalog.nodes)
+    let routed = import_subscription_routing(payload, &parsed)
         .spec
-        .and_then(|spec| routing_envelope(EMBEDDED_PROFILE_ID, &catalog.nodes, &spec).ok())
+        .and_then(|spec| routing_envelope(EMBEDDED_PROFILE_ID, &nodes, &spec).ok())
         // The engine caps the routed node and rule counts.
         .filter(|envelope| RuntimeConfig::from_json(envelope.as_bytes()).is_ok());
     // A single-node profile lists every supported node so it can be switched
@@ -2600,8 +2757,7 @@ fn import_embedded_subscription(
             if let Ok(previous) = read_embedded_profile() {
                 carry_routed_group_defaults(&previous, &mut profile);
             }
-            let node_outbounds = catalog
-                .nodes
+            let node_outbounds = nodes
                 .iter()
                 .filter_map(|node| {
                     outbound_for_node(node)
@@ -2619,20 +2775,18 @@ fn import_embedded_subscription(
             let selected = desktop
                 .profile_node_id
                 .as_deref()
-                .filter(|id| catalog.nodes.iter().any(|node| node.id == *id))
+                .filter(|id| nodes.iter().any(|node| node.id == *id))
                 .or_else(|| {
-                    catalog
-                        .nodes
+                    nodes
                         .iter()
                         .find(|node| is_trunk_node(node) && outbound_for_node(node).is_ok())
                         .map(|node| node.id.as_str())
                 });
-            let (envelope, node) =
-                single_node_envelope(EMBEDDED_PROFILE_ID, &catalog.nodes, selected).map_err(
-                    |reason| format!("The embedded engine cannot run this profile: {reason}"),
-                )?;
-            let node_outbounds = catalog
-                .nodes
+            let (envelope, node) = single_node_envelope(EMBEDDED_PROFILE_ID, &nodes, selected)
+                .map_err(|reason| {
+                    format!("The embedded engine cannot run this profile: {reason}")
+                })?;
+            let node_outbounds = nodes
                 .iter()
                 .filter_map(|node| {
                     outbound_for_node(node)
@@ -2658,7 +2812,7 @@ fn import_embedded_subscription(
     // The imported envelope is kept so routing modes can be reapplied to it.
     write_managed_text_atomic(&embedded_profile_path(), &envelope)
         .map_err(|error| error.to_string())?;
-    if routed_import {
+    if routed_import && fresh {
         // A profile with its own rules runs them by default.
         desktop.routing_mode = DesktopRoutingMode::Rule;
     }
@@ -2715,6 +2869,16 @@ fn embedded_directory() -> PathBuf {
 
 fn embedded_profile_path() -> PathBuf {
     embedded_directory().join("profile.json")
+}
+
+/// The imported subscription's content, so node edits can be applied to it again without fetching it.
+fn profile_source_text_path() -> PathBuf {
+    embedded_directory().join("source.txt")
+}
+
+/// The user's edits of the imported profile's nodes (`node_edits`), dropped when it is updated.
+fn node_edits_path() -> PathBuf {
+    embedded_directory().join("node-edits.json")
 }
 
 /// `{node id: outbound}` for the nodes of a single-node profile.

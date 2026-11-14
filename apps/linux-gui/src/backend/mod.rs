@@ -12,6 +12,7 @@ pub mod trust;
 #[cfg(target_os = "android")]
 pub mod tun;
 
+use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -24,6 +25,7 @@ use control_domain::NodeDescriptor;
 use desktop_mitm::Root;
 use engine_embedded::config::RuntimeConfig;
 use engine_embedded::profile::{self, RoutingMode, RuleList};
+use node_edits::{NodeEdits, NodeForm};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -114,6 +116,8 @@ pub struct NodeSummary {
     /// The subscription the node comes from.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
+    /// A node of the selected subscription, which can be edited and removed (`node_edits`).
+    pub editable: bool,
 }
 
 /// A policy group in the interface's `NativeGroupSummary` shape.
@@ -271,9 +275,10 @@ impl Backend {
             .and_then(|content| engine::parse_nodes(&content).map(|nodes| (content, nodes)))
         {
             Ok((content, nodes)) => {
-                self.routed_profile = engine::subscription_routing(&content, &nodes)
+                let edited = NodeEdits::load(&self.node_edits_path(&source.id)).applied(&nodes);
+                self.routed_profile = engine::subscription_routing(&content, &nodes, &edited)
                     .map(|profile| engine::link_sources(&profile, &self.others));
-                self.nodes = nodes;
+                self.nodes = edited;
             }
             Err(error) => self.configuration_error = Some(error),
         }
@@ -635,24 +640,28 @@ impl Backend {
         let group = self.state.selected_source().map(|source| {
             subscription_meta::display_name(source.name.as_deref(), &source.location)
         });
-        let summary = |id: String, node: &NodeDescriptor, group: &Option<String>| NodeSummary {
+        let summary = |id: String,
+                       node: &NodeDescriptor,
+                       group: &Option<String>,
+                       editable: bool| NodeSummary {
             selected: selected.as_deref() == Some(id.as_str()),
             id,
             label: node.name.clone(),
             protocol: engine::protocol_name(&node.protocol),
             group: group.clone(),
+            editable,
         };
         let own = self
             .nodes
             .iter()
             .filter(|node| engine::is_supported(node))
-            .map(|node| summary(node.id.clone(), node, &group));
+            .map(|node| summary(node.id.clone(), node, &group, true));
         let others = self.others.iter().flat_map(|other| {
             let group = Some(other.name.clone());
             other
                 .nodes
                 .iter()
-                .map(move |node| summary(other.outbound_id(&node.id), node, &group))
+                .map(move |node| summary(other.outbound_id(&node.id), node, &group, false))
                 .collect::<Vec<_>>()
         });
         own.chain(others).collect()
@@ -1126,6 +1135,79 @@ impl Backend {
         engine::share_link(node)
     }
 
+    /// The saved node edits of source `id`.
+    fn node_edits_path(&self, id: &str) -> PathBuf {
+        self.store
+            .dir()
+            .join("node-edits")
+            .join(format!("{id}.json"))
+    }
+
+    fn remove_node_edits(&self, id: &str) -> io::Result<()> {
+        NodeEdits::default().save(&self.node_edits_path(id))
+    }
+
+    /// The edit form of a node of the selected source.
+    pub fn node_form(&self, id: &str) -> Result<NodeForm, String> {
+        let profile = self
+            .routed_profile
+            .as_deref()
+            .and_then(|profile| serde_json::from_str::<Value>(profile).ok());
+        node_edits::form(&self.nodes, profile.as_ref(), id)
+            .ok_or_else(|| "only nodes of the selected subscription can be edited".to_string())
+    }
+
+    /// Gives a node of the selected source a new name, server and port until the subscription is updated.
+    /// A running engine restarts on it.
+    pub fn edit_node(
+        &mut self,
+        id: &str,
+        name: &str,
+        server: &str,
+        port: &str,
+    ) -> Result<OperationResult, String> {
+        let change = node_edits::check(name, server, port)?;
+        self.node_form(id)?;
+        self.change_node_edits(|edits| edits.change(id, change))?;
+        if self.restart_if_running()? {
+            return done("Node saved; the engine restarted with it");
+        }
+        done("Node saved")
+    }
+
+    /// Removes a node of the selected source until the subscription is updated. A running engine restarts on it.
+    pub fn remove_node(&mut self, id: &str) -> Result<OperationResult, String> {
+        if let Some(reason) = self.node_form(id)?.keep_reason {
+            return Err(reason.to_string());
+        }
+        self.change_node_edits(|edits| edits.remove(id))?;
+        if self.state.selected_node.as_deref() == Some(id) {
+            self.state.selected_node = None;
+            self.save();
+        }
+        if self.restart_if_running()? {
+            return done("Node removed; the engine restarted without it");
+        }
+        done("Node removed")
+    }
+
+    fn change_node_edits(&mut self, change: impl FnOnce(&mut NodeEdits)) -> Result<(), String> {
+        let source = self
+            .state
+            .selected_source()
+            .ok_or("no subscription is selected")?
+            .id
+            .clone();
+        let path = self.node_edits_path(&source);
+        let mut edits = NodeEdits::load(&path);
+        change(&mut edits);
+        edits
+            .save(&path)
+            .map_err(|error| format!("the node edit could not be saved: {error}"))?;
+        self.reload_nodes();
+        Ok(())
+    }
+
     /// The listed nodes, for a batch delay test run outside the lock; `None` for an id no source has.
     pub fn delay_nodes(&self, ids: &[String]) -> Vec<(String, Option<NodeDescriptor>)> {
         ids.iter()
@@ -1197,9 +1279,10 @@ impl Backend {
         let parsed =
             fetched.and_then(|content| engine::parse_nodes(&content).map(|nodes| (content, nodes)));
         let result = match parsed {
+            // An update brings back what the provider serves (`node_edits`).
             Ok((content, nodes)) => self
-                .store
-                .write_source(id, &content)
+                .remove_node_edits(id)
+                .and_then(|()| self.store.write_source(id, &content))
                 .map(|()| nodes.len())
                 .map_err(|error| format!("the subscription could not be saved: {error}")),
             Err(error) => Err(error),
@@ -1245,6 +1328,7 @@ impl Backend {
             self.state.group_choices.clear();
         }
         self.store.remove_source(id);
+        let _ = self.remove_node_edits(id);
         self.save();
         self.reload_nodes();
         done("Subscription removed")
@@ -1689,6 +1773,65 @@ rules:
         // Linked groups follow a rename.
         backend.rename_subscription("s1", "Two, B").unwrap();
         assert_eq!(backend.groups().last().unwrap().tag, "订阅·Two  B");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn node_edits_change_and_remove_nodes_until_the_subscription_is_updated() {
+        let (mut backend, dir) = backend("node-edits");
+        let two = format!("{LINK}\n{}", LINK.replace("11111#HK", "22222#JP"));
+        backend.import("https://edit.example/sub", &two).unwrap();
+        let nodes = backend.nodes();
+        assert_eq!(nodes.len(), 2);
+        assert!(nodes.iter().all(|node| node.editable));
+        let (hk, jp) = (nodes[0].id.clone(), nodes[1].id.clone());
+
+        let form = backend.node_form(&hk).unwrap();
+        assert_eq!((form.server.as_str(), form.port), ("82.47.34.99", 11111));
+        assert!(form.keep_reason.is_none());
+        assert!(backend.edit_node(&hk, "香港", "hk.example", "0").is_err());
+        backend
+            .edit_node(&hk, "香港", "hk.example", "8443")
+            .unwrap();
+        assert_eq!(backend.nodes()[0].label, "香港");
+        backend.switch_node(&hk).unwrap();
+        let envelope = backend.envelope().unwrap();
+        assert!(
+            envelope.contains("hk.example") && envelope.contains("8443"),
+            "{envelope}"
+        );
+
+        backend.remove_node(&jp).unwrap();
+        assert_eq!(backend.nodes().len(), 1);
+        assert!(backend.node_form(&hk).unwrap().keep_reason.is_some());
+        assert!(backend.remove_node(&hk).is_err());
+
+        // Edits survive a restart and go away with an update.
+        let reopened = Backend::open(
+            Store::new(dir.join("config")),
+            None,
+            None,
+            PathBuf::from("/usr/bin/anixops-net"),
+        );
+        assert_eq!(reopened.nodes().len(), 1);
+        let id = backend.subscriptions()[0].id.clone();
+        backend.finish_refresh(&id, Ok(two)).unwrap();
+        assert_eq!(backend.nodes().len(), 2);
+        assert_eq!(backend.nodes()[0].label, "HK");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn routed_nodes_its_groups_name_cannot_be_removed() {
+        let (mut backend, dir) = backend("node-edits-routed");
+        backend.import("https://example.com/sub", CLASH).unwrap();
+        let hk = backend.nodes()[0].id.clone();
+        assert!(backend.node_form(&hk).unwrap().keep_reason.is_some());
+        assert!(backend.remove_node(&hk).is_err());
+        backend.edit_node(&hk, "", "hk.example", "443").unwrap();
+        let envelope = backend.envelope().unwrap();
+        assert!(envelope.contains("hk.example"), "{envelope}");
+        assert!(RuntimeConfig::from_json(envelope.as_bytes()).is_ok());
         let _ = std::fs::remove_dir_all(dir);
     }
 

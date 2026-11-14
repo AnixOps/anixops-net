@@ -136,8 +136,14 @@ pub fn envelope(nodes: &[NodeDescriptor], node_id: &str) -> Result<String, Strin
 
 /// The envelope with every node and the subscription's rules and policy groups, when `content` carries them,
 /// every node can run on the engine and the engine accepts the result. Otherwise one node runs at a time.
-pub fn subscription_routing(content: &str, nodes: &[NodeDescriptor]) -> Option<String> {
-    let spec = import_subscription_routing(content, nodes).spec?;
+/// `parsed` are the subscription's nodes as served, which its rules and groups name; `nodes` are the ones to run,
+/// with the user's edits (`node_edits`).
+pub fn subscription_routing(
+    content: &str,
+    parsed: &[NodeDescriptor],
+    nodes: &[NodeDescriptor],
+) -> Option<String> {
+    let spec = import_subscription_routing(content, parsed).spec?;
     sync_anx_license();
     routing_envelope(PROFILE_ID, nodes, &spec)
         .ok()
