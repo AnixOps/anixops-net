@@ -95,8 +95,50 @@ pub fn import(
     let description: Value = inspect_plugin_json(&text)
         .and_then(|json| serde_json::from_slice(&json).ok())
         .ok_or("This address does not hold a Loon, Surge or Quantumult X plugin.")?;
-    let text = String::from_utf8(text).map_err(|_| "Plugin text is not UTF-8.".to_string())?;
     let id = format!("{:016x}", hash(url));
+    save(directory, id, url, text, &description, fetch)
+}
+
+/// Saves a plugin the user opened from a file or pasted, named `source` (the file name, or empty when
+/// pasted), with every script and data file it names downloaded as for [`import`]. Importing a plugin with
+/// the same name again replaces it.
+pub fn import_text(
+    directory: &Path,
+    source: &str,
+    text: &str,
+    fetch: impl Fn(&str, usize) -> Result<Vec<u8>, String>,
+) -> Result<PluginSummary, String> {
+    let text = text.trim().as_bytes().to_vec();
+    if text.len() > MAX_PLUGIN_LEN {
+        return Err(format!(
+            "The plugin is larger than {} KB.",
+            MAX_PLUGIN_LEN / 1024
+        ));
+    }
+    let description: Value = inspect_plugin_json(&text)
+        .and_then(|json| serde_json::from_slice(&json).ok())
+        .ok_or("This text is not a Loon, Surge or Quantumult X plugin.")?;
+    let key = description["name"]
+        .as_str()
+        .filter(|name| !name.trim().is_empty())
+        .map_or_else(
+            || format!("text:{}", hash_bytes(&text)),
+            |name| format!("name:{name}"),
+        );
+    let id = format!("{:016x}", hash(&key));
+    save(directory, id, source.trim(), text, &description, fetch)
+}
+
+/// Downloads the files the plugin names and saves it enabled, in place of a plugin with the same id.
+fn save(
+    directory: &Path,
+    id: String,
+    url: &str,
+    text: Vec<u8>,
+    description: &Value,
+    fetch: impl Fn(&str, usize) -> Result<Vec<u8>, String>,
+) -> Result<PluginSummary, String> {
+    let text = String::from_utf8(text).map_err(|_| "Plugin text is not UTF-8.".to_string())?;
 
     fs::create_dir_all(directory).map_err(|error| error.to_string())?;
     let mut scripts = BTreeMap::new();
@@ -135,7 +177,7 @@ pub fn import(
         name: description["name"]
             .as_str()
             .filter(|name| !name.trim().is_empty())
-            .unwrap_or(url)
+            .unwrap_or(if url.is_empty() { "Plugin" } else { url })
             .to_string(),
         url: url.to_string(),
         enabled: true,
@@ -168,6 +210,76 @@ pub fn import(
     }
     write_library(directory, &library)?;
     Ok(summary)
+}
+
+/// What a saved plugin holds, for the plugin inspector.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginDetails {
+    pub excluded_hostnames: Vec<String>,
+    /// Lines the engine runs fully, in part, not at all, and leaves for later.
+    pub supported_lines: u64,
+    pub partial_lines: u64,
+    pub unsupported_lines: u64,
+    pub deferred_lines: u64,
+    /// Script addresses, in the order the plugin names them.
+    pub scripts: Vec<String>,
+    /// Other files the plugin names (Map Local bodies).
+    pub resources: Vec<String>,
+    /// The engine's line-by-line report.
+    pub report: String,
+}
+
+/// The saved plugin `id`, described again from its text.
+pub fn details(directory: &Path, id: &str) -> Result<PluginDetails, String> {
+    let library = read_library(directory)?;
+    let plugin = library
+        .plugins
+        .iter()
+        .find(|plugin| plugin.id == id)
+        .ok_or("This plugin is no longer in the list.")?;
+    let description: Value = inspect_plugin_json(plugin.text.as_bytes())
+        .and_then(|json| serde_json::from_slice(&json).ok())
+        .ok_or("The saved plugin text can no longer be read.")?;
+    let strings = |value: &Value| -> Vec<String> {
+        value
+            .as_array()
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| item.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let resources = |script: bool| -> Vec<String> {
+        let mut urls: Vec<String> = Vec::new();
+        for resource in description["resources"].as_array().into_iter().flatten() {
+            if (resource["kind"].as_str() == Some(KIND_SCRIPT)) != script {
+                continue;
+            }
+            if let Some(url) = resource["url"].as_str() {
+                if !urls.iter().any(|known| known == url) {
+                    urls.push(url.to_string());
+                }
+            }
+        }
+        urls
+    };
+    let lines = |kind: &str| description["lines"][kind].as_u64().unwrap_or_default();
+    Ok(PluginDetails {
+        excluded_hostnames: strings(&description["excluded_hostnames"]),
+        supported_lines: lines("supported"),
+        partial_lines: lines("partial"),
+        unsupported_lines: lines("unsupported"),
+        deferred_lines: lines("deferred"),
+        scripts: resources(true),
+        resources: resources(false),
+        report: description["report"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string(),
+    })
 }
 
 pub fn set_enabled(directory: &Path, id: &str, enabled: bool) -> Result<(), String> {
@@ -276,6 +388,12 @@ fn hash(value: &str) -> u64 {
     hasher.finish()
 }
 
+fn hash_bytes(value: &[u8]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    hasher.finish()
+}
+
 fn read_library(directory: &Path) -> Result<Library, String> {
     match fs::read(directory.join(LIBRARY_FILE)) {
         Ok(bytes) => serde_json::from_slice(&bytes)
@@ -323,6 +441,28 @@ mod tests {
         ));
         let _ = fs::remove_dir_all(&directory);
         directory
+    }
+
+    #[test]
+    fn pasted_plugins_are_saved_by_name_and_described() {
+        let directory = scratch("pasted");
+        assert!(import_text(&directory, "", "not a plugin", fetch).is_err());
+        let first = import_text(&directory, "ipleak.plugin", PLUGIN, fetch).unwrap();
+        assert_eq!(first.name, "ipleak test");
+        assert_eq!(first.url, "ipleak.plugin");
+        assert_eq!(first.script_count, 1);
+        // The same name again replaces it.
+        let again = import_text(&directory, "", &format!("{PLUGIN}\n"), fetch).unwrap();
+        assert_eq!(again.id, first.id);
+        assert_eq!(list(&directory).unwrap().len(), 1);
+
+        let details = details(&directory, &first.id).unwrap();
+        assert_eq!(details.scripts, [SCRIPT_URL]);
+        assert!(details.resources.is_empty());
+        assert!(details.supported_lines + details.partial_lines > 0);
+        assert!(!details.report.is_empty());
+        assert!(super::details(&directory, "missing").is_err());
+        let _ = fs::remove_dir_all(directory);
     }
 
     #[test]

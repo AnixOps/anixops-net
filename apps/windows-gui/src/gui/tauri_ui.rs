@@ -367,6 +367,8 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             disable_https_mitm,
             list_mitm_plugins,
             import_mitm_plugin,
+            import_mitm_plugin_text,
+            mitm_plugin_details,
             set_mitm_plugin_enabled,
             remove_mitm_plugin,
             phone_qr_code,
@@ -3689,6 +3691,37 @@ fn routing_mode_label(mode: DesktopRoutingMode) -> &'static str {
 #[tauri::command]
 async fn list_mitm_plugins() -> Result<Vec<PluginSummary>, String> {
     run_blocking(|| mitm_plugins::list(&mitm_plugins::directory())).await
+}
+
+/// Saves a plugin opened from a file or pasted; `source` is the file name, empty when pasted.
+#[tauri::command]
+async fn import_mitm_plugin_text(
+    text: String,
+    source: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let plugin = mitm_plugins::import_text(
+            &mitm_plugins::directory(),
+            &source,
+            &text,
+            mitm_plugins::download,
+        )?;
+        let applied = apply_mitm_plugins(&state);
+        Ok(OperationResult {
+            message: format!(
+                "Plugin imported: {} ({} scripts). {applied}",
+                plugin.name, plugin.script_count
+            ),
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn mitm_plugin_details(id: String) -> Result<mitm_plugins::PluginDetails, String> {
+    run_blocking(move || mitm_plugins::details(&mitm_plugins::directory(), &id)).await
 }
 
 #[tauri::command]
