@@ -51,6 +51,8 @@ export interface RuntimeSnapshot {
   dnsPreset?: DnsPreset;
   /** UDP to port 443 is refused so apps fall back from QUIC to TCP; older backends leave it out. */
   blockQuic?: boolean;
+  /** Debug mode's direct egress: the engine runs with no node. Left out by backends that cannot do it yet. */
+  directEgress?: boolean;
   /** The imported profile runs on the embedded engine (Windows). */
   embeddedEngine?: boolean;
 }
@@ -104,6 +106,8 @@ export interface ConnectionSnapshot {
   download: number;
   /** `rejected` or `connect_failed`. */
   error?: string | null;
+  /** Packet capture kept bytes of this connection (`capture_connection`). */
+  captured?: boolean;
 }
 
 export interface ConnectionsSnapshot {
@@ -113,6 +117,68 @@ export interface ConnectionsSnapshot {
   /** Newest first. */
   closed: ConnectionSnapshot[];
 }
+
+/** Packet capture (`capture`, `set_capture`, `clear_capture`): off until turned on, lasts until the engine stops. */
+export interface CaptureStatus {
+  enabled: boolean;
+  max_total_bytes: number;
+  used_bytes: number;
+  connections: number;
+}
+
+/** Bytes one way: seen while capturing, kept, and whether some were not kept. */
+export interface CaptureDirection {
+  seen: number;
+  captured: number;
+  truncated: boolean;
+}
+
+export interface CaptureChunk {
+  dir: "upload" | "download";
+  at_ms: number;
+  data_base64: string;
+}
+
+export interface CaptureBody {
+  size: number;
+  truncated: boolean;
+  data_base64: string;
+}
+
+export interface CaptureMessage {
+  headers: Array<[string, string]>;
+  body: CaptureBody;
+}
+
+/** One decrypted HTTP request and its response. */
+export interface CaptureExchange {
+  started_at_ms: number;
+  ended_at_ms?: number | null;
+  method: string;
+  url: string;
+  status?: number | null;
+  /** `answered_locally`, `streaming` or `too_large`. */
+  note?: string | null;
+  request: CaptureMessage;
+  response: CaptureMessage;
+}
+
+/** What capture kept of one connection: raw bytes, or the HTTP messages when HTTPS decryption took it over. */
+export interface CaptureConnection {
+  id: number;
+  network: "tcp" | "udp";
+  host?: string | null;
+  destination: string;
+  started_at_ms: number;
+  ended_at_ms?: number | null;
+  decrypted: boolean;
+  upload: CaptureDirection;
+  download: CaptureDirection;
+  chunks: CaptureChunk[];
+  http: CaptureExchange[];
+}
+
+export type CaptureFormat = "pcapng" | "har";
 
 /** One rule set of the running engine. */
 export interface RuleSetStatus {
@@ -240,6 +306,14 @@ export const desktop = {
   /** Downloads the remote rule sets again in the background; answers how many were scheduled. */
   updateRuleSets: () => invoke<{ scheduled: number }>("runtime_control", { request: { cmd: "update_rule_sets" } }),
   closeAllConnections: () => invoke<{ closed: number }>("runtime_control", { request: { cmd: "close_all" } }),
+  captureStatus: () => invoke<CaptureStatus>("runtime_control", { request: { cmd: "capture" } }),
+  setCapture: (enabled: boolean) => invoke<CaptureStatus>("runtime_control", { request: { cmd: "set_capture", enabled } }),
+  clearCapture: () => invoke<CaptureStatus>("runtime_control", { request: { cmd: "clear_capture" } }),
+  /** Null once newer connections pushed it out of the budget or capture was cleared. */
+  captureConnection: (id: number) =>
+    invoke<{ capture: CaptureConnection | null }>("runtime_control", { request: { cmd: "capture_connection", id } }),
+  /** Saves the export to Downloads (one connection with `id`) and answers where it went. */
+  exportCapture: (format: CaptureFormat, id?: number) => invoke<{ location: string }>("export_capture", { format, id }),
   testDelay: (nodeId: string, url: string) =>
     invoke<OperationResult>("test_node_delay", { nodeId, url }),
   /** Tests each node on its own and reports every result; failures do not reject. */
@@ -273,6 +347,7 @@ export const desktop = {
   setRoutingMode: (mode: RuntimeSnapshot["routingMode"]) => invoke<OperationResult>("set_routing_mode", { mode }),
   setDnsPreset: (preset: DnsPreset) => invoke<OperationResult>("set_dns_preset", { preset }),
   setBlockQuic: (enabled: boolean) => invoke<OperationResult>("set_block_quic", { enabled }),
+  setDirectEgress: (enabled: boolean) => invoke<OperationResult>("set_direct_egress", { enabled }),
   refreshRoutingRules: () => invoke<OperationResult>("refresh_routing_rules"),
   enableHttpsMitm: () => invoke<OperationResult>("enable_https_mitm"),
   disableHttpsMitm: () => invoke<OperationResult>("disable_https_mitm"),

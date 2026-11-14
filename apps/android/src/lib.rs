@@ -55,6 +55,17 @@ mod android {
         ) -> Result<String, String> {
             app.state::<Vpn<Wry>>().save_to_downloads(name, contents)
         }
+
+        fn save_base64_to_downloads(
+            &self,
+            app: &AppHandle,
+            name: &str,
+            mime_type: &str,
+            data_base64: &str,
+        ) -> Result<String, String> {
+            app.state::<Vpn<Wry>>()
+                .save_base64_to_downloads(name, mime_type, data_base64)
+        }
     }
 
     pub fn run() {

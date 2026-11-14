@@ -117,6 +117,16 @@ pub fn sync_anx_license() {
     node_import::set_anx_license(license);
 }
 
+/// A profile with no node: everything leaves through the engine's `direct` outbound.
+pub fn direct_envelope() -> String {
+    serde_json::json!({
+        "schema_version": 1,
+        "profile_id": PROFILE_ID,
+        "outbound": { "type": "direct" },
+    })
+    .to_string()
+}
+
 pub fn envelope(nodes: &[NodeDescriptor], node_id: &str) -> Result<String, String> {
     sync_anx_license();
     single_node_envelope(PROFILE_ID, nodes, Some(node_id))
@@ -211,14 +221,20 @@ fn linked(profile: &Value, other: &OtherSource) -> Option<Value> {
 }
 
 /// Kernel control commands the client may send: reading traffic, connections and rule sets, closing
-/// connections and refreshing remote rule sets. Mode and group changes go through the saved profile instead.
-const ACTIVITY_COMMANDS: [&str; 6] = [
+/// connections, refreshing remote rule sets and packet capture. Mode and group changes go through the saved
+/// profile instead.
+const ACTIVITY_COMMANDS: [&str; 11] = [
     "traffic",
     "connections",
     "close_connection",
     "close_all",
     "rule_sets",
     "update_rule_sets",
+    "capture",
+    "set_capture",
+    "clear_capture",
+    "capture_connection",
+    "export_capture",
 ];
 
 /// The request bytes for an activity page command, or why it is refused.
@@ -491,6 +507,10 @@ mod tests {
         assert!(activity_request(&serde_json::json!({"cmd": "connections"})).is_ok());
         assert!(activity_request(&serde_json::json!({"cmd": "close_all"})).is_ok());
         assert!(activity_request(&serde_json::json!({"cmd": "rule_sets"})).is_ok());
+        assert!(
+            activity_request(&serde_json::json!({"cmd": "export_capture", "format": "har"}))
+                .is_ok()
+        );
         assert!(activity_request(&serde_json::json!({"cmd": "select", "group": "a"})).is_err());
         assert!(Engine::default()
             .control(&serde_json::json!({"cmd": "traffic"}))

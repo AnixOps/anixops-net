@@ -54,6 +54,8 @@ final class TunnelController {
     private(set) var dns = DnsSettings()
     /// Destination rewrites, from `redirects.json`; the saved profile carries the enabled lines.
     private(set) var redirects = TrafficRedirects()
+    /// Map Local and Map Remote entries, from `debug-mappings.json`; the saved profile carries their plugin.
+    private(set) var debugMappings = DebugMappings()
     /// The rule mode of a node list without subscription rules and the user's own rules, from `local-rules.json`;
     /// the saved profile carries a copy.
     private(set) var localRules = LocalRules()
@@ -116,6 +118,9 @@ final class TunnelController {
         }
         if let saved = try? DnsSettings.load(from: DnsSettings.defaultURL) {
             dns = saved
+        }
+        if let saved = try? DebugMappings.load(from: DebugMappings.defaultURL) {
+            debugMappings = saved
         }
         if let saved = try? LocalRules.load(from: LocalRules.defaultURL) {
             localRules = saved
@@ -883,19 +888,8 @@ final class TunnelController {
             providerConfiguration[TunnelProfileKeys.localRules] = value
         }
         providerConfiguration[TunnelProfileKeys.notifications] = AppNotifications.settings.profileValue
-        let library = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)) ?? MitmPluginLibrary()
-        var bundle = MitmProfileBundle()
-        if !library.activeTexts.isEmpty {
-            let scripts = (try? MitmScriptLibrary.load(from: MitmScriptLibrary.defaultURL)) ?? MitmScriptLibrary()
-            let resources = (try? MitmResourceLibrary.load(from: MitmResourceLibrary.defaultURL)) ?? MitmResourceLibrary()
-            bundle = MitmProfileBundle(
-                plugins: library.activeTexts,
-                scripts: (try? scripts.sources(for: library.activeScriptReferences)) ?? [:],
-                resources: resources.data(for: library.activeDataReferences.map(\.path))
-            )
-        }
         do {
-            try bundle.apply(to: &providerConfiguration)
+            try Self.savedMitmBundle(mappings: debugMappings).apply(to: &providerConfiguration)
         } catch {
             message = String(localized: "保存插件到 VPN 配置失败") + Self.errorCode(error)
             return false
@@ -970,7 +964,9 @@ final class TunnelController {
             return false
         }
         var configuration = tunnelProtocol.providerConfiguration ?? [:]
-        let next = MitmProfileBundle(plugins: texts, scripts: scripts, resources: resources)
+        // The Map Local / Map Remote entries ride along as one more plugin (`DebugMappings.pluginText`).
+        let plugins = texts + [debugMappings.pluginText].compactMap { $0 }
+        let next = MitmProfileBundle(plugins: plugins, scripts: scripts, resources: resources)
         let carriesOldKeys = configuration[TunnelProfileKeys.mitmPlugins] != nil
             || configuration[TunnelProfileKeys.mitmScripts] != nil
             || configuration[TunnelProfileKeys.mitmResources] != nil
@@ -996,6 +992,43 @@ final class TunnelController {
         if isConnected {
             restart()
         }
+        return true
+    }
+
+    /// The plugins, allowed scripts and downloaded bodies saved on the device, with the debug mappings' plugin
+    /// after the imported ones: what the tunnel profile carries.
+    private static func savedMitmBundle(mappings: DebugMappings) -> MitmProfileBundle {
+        let library = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)) ?? MitmPluginLibrary()
+        var bundle = MitmProfileBundle()
+        if !library.activeTexts.isEmpty {
+            let scripts = (try? MitmScriptLibrary.load(from: MitmScriptLibrary.defaultURL)) ?? MitmScriptLibrary()
+            let resources = (try? MitmResourceLibrary.load(from: MitmResourceLibrary.defaultURL)) ?? MitmResourceLibrary()
+            bundle = MitmProfileBundle(
+                plugins: library.activeTexts,
+                scripts: (try? scripts.sources(for: library.activeScriptReferences)) ?? [:],
+                resources: resources.data(for: library.activeDataReferences.map(\.path))
+            )
+        }
+        if let text = mappings.pluginText {
+            bundle.plugins.append(text)
+        }
+        return bundle
+    }
+
+    /// Saves the Map Local / Map Remote entries and puts their plugin in the saved profile; a running tunnel
+    /// reconnects to use them. Returns whether they were saved.
+    @discardableResult
+    func applyDebugMappings(_ next: DebugMappings) async -> Bool {
+        do {
+            try next.save(to: DebugMappings.defaultURL)
+        } catch {
+            message = String(localized: "无法保存映射")
+            return false
+        }
+        debugMappings = next
+        // `applyMitmPlugins` adds the mappings' plugin itself.
+        let imported = Self.savedMitmBundle(mappings: DebugMappings())
+        await applyMitmPlugins(imported.plugins, scripts: imported.scripts, resources: imported.resources)
         return true
     }
 

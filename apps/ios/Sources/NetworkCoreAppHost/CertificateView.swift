@@ -25,6 +25,7 @@ struct ExtensionsView: View {
                 }
 
                 PluginsSection(tunnel: tunnel, model: plugins)
+                MappingsSection(tunnel: tunnel)
             }
             .scrollContentBackground(.hidden)
             .background(brand.bg.ignoresSafeArea())

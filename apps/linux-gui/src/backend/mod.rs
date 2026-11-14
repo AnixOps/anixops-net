@@ -92,6 +92,8 @@ pub struct RuntimeSnapshot {
     pub dns_preset: &'static str,
     /// UDP to port 443 is refused so apps fall back from QUIC to TCP.
     pub block_quic: bool,
+    /// Debug mode's direct egress is on: the engine runs with no node.
+    pub direct_egress: bool,
     /// Always true: the interface then offers the subscription rules mode and explains the engine's DNS.
     pub embedded_engine: bool,
 }
@@ -293,22 +295,11 @@ impl Backend {
 
     /// The envelope to run: the profile (routed, or the chosen node) in the routing mode.
     fn envelope(&self) -> Result<String, String> {
-        let profile = match self.routed() {
-            Some(profile) => profile.to_string(),
-            None => {
-                let node = engine::choose_node(&self.nodes, self.state.selected_node.as_deref())
-                    .ok_or(
-                        "import a subscription with a node the embedded engine supports first",
-                    )?;
-                engine::envelope(&self.nodes, &node.id)?
-            }
+        let envelope = if self.state.direct_egress {
+            engine::direct_envelope()
+        } else {
+            self.routed_envelope()?
         };
-        let envelope = profile::envelope_for_mode(&profile, self.state.routing_mode, |list| {
-            self.store.read_rule_list(list).ok_or_else(|| {
-                "the routing rules have not been downloaded yet; refresh them on the Rules page"
-                    .to_string()
-            })
-        })?;
         let envelope = desktop_dns::apply(&envelope, self.state.dns_preset)?;
         let envelope = desktop_dns::apply_block_quic(&envelope, self.state.block_quic)?;
         if !self.state.preferences.https_decryption {
@@ -319,6 +310,26 @@ impl Backend {
             self.mitm_root()
                 .envelope(envelope.as_bytes(), "", Some(&self.plugins_dir()))?;
         String::from_utf8(envelope).map_err(|error| error.to_string())
+    }
+
+    /// The profile (routed, or the chosen node) in the routing mode.
+    fn routed_envelope(&self) -> Result<String, String> {
+        let profile = match self.routed() {
+            Some(profile) => profile.to_string(),
+            None => {
+                let node = engine::choose_node(&self.nodes, self.state.selected_node.as_deref())
+                    .ok_or(
+                        "import a subscription with a node the embedded engine supports first",
+                    )?;
+                engine::envelope(&self.nodes, &node.id)?
+            }
+        };
+        profile::envelope_for_mode(&profile, self.state.routing_mode, |list| {
+            self.store.read_rule_list(list).ok_or_else(|| {
+                "the routing rules have not been downloaded yet; refresh them on the Rules page"
+                    .to_string()
+            })
+        })
     }
 
     fn mitm_dir(&self) -> PathBuf {
@@ -402,14 +413,15 @@ impl Backend {
         let address = self
             .engine
             .start(&envelope, &node_id, self.state.listen_port)?;
-        let label =
-            if self.routed_profile.is_some() && self.state.routing_mode != RoutingMode::Direct {
-                "the subscription's policy groups".to_string()
-            } else if self.state.routing_mode == RoutingMode::Direct {
-                "direct connections".to_string()
-            } else {
-                self.node_name(&node_id).unwrap_or(node_id)
-            };
+        let label = if self.state.direct_egress {
+            "direct connections (debug mode)".to_string()
+        } else if self.routed_profile.is_some() && self.state.routing_mode != RoutingMode::Direct {
+            "the subscription's policy groups".to_string()
+        } else if self.state.routing_mode == RoutingMode::Direct {
+            "direct connections".to_string()
+        } else {
+            self.node_name(&node_id).unwrap_or(node_id)
+        };
         Ok((label, address))
     }
 
@@ -509,6 +521,7 @@ impl Backend {
             routing_mode: self.state.routing_mode.as_str(),
             dns_preset: self.state.dns_preset.as_str(),
             block_quic: self.state.block_quic,
+            direct_egress: self.state.direct_egress,
             embedded_engine: true,
         }
     }
@@ -631,6 +644,25 @@ impl Backend {
             "QUIC is blocked"
         } else {
             "QUIC is allowed"
+        })
+    }
+
+    /// Runs debug mode's node-less profile (`on`) or the nodes and rules again. A running engine restarts on it.
+    pub fn set_direct_egress(&mut self, on: bool) -> Result<OperationResult, String> {
+        if self.state.direct_egress == on {
+            return done("Egress unchanged");
+        }
+        let previous = self.state.direct_egress;
+        self.state.direct_egress = on;
+        if let Err(error) = self.restart_if_running() {
+            self.state.direct_egress = previous;
+            return Err(error);
+        }
+        self.save();
+        done(if on {
+            "Traffic leaves directly"
+        } else {
+            "Traffic leaves through the selected node"
         })
     }
 
@@ -1168,6 +1200,25 @@ mod tests {
         assert_eq!(format_time(0), "1970-01-01 00:00 UTC");
         assert_eq!(format_time(1_761_300_000), "2025-10-24 10:00 UTC");
         assert_eq!(format_delay(Duration::from_millis(123)), "123 ms");
+    }
+
+    #[test]
+    fn direct_egress_runs_without_any_node() {
+        use engine_embedded::config::RuntimeConfig;
+
+        let (mut backend, dir) = backend("direct");
+        assert!(backend.envelope().is_err());
+        backend.set_direct_egress(true).unwrap();
+        assert!(backend.snapshot().direct_egress);
+        let envelope = backend.envelope().unwrap();
+        assert!(envelope.contains("\"direct\""), "{envelope}");
+        assert!(RuntimeConfig::from_json(envelope.as_bytes()).is_ok());
+
+        backend.import(PASTED_LOCATION, LINK).unwrap();
+        assert!(backend.envelope().unwrap().contains("\"direct\""));
+        backend.set_direct_egress(false).unwrap();
+        assert!(backend.envelope().unwrap().contains("82.47.34.99"));
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

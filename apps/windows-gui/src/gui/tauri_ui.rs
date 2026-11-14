@@ -145,6 +145,10 @@ struct RuntimeSnapshot {
     dns_preset: &'static str,
     /// UDP to port 443 is refused so apps fall back from QUIC to TCP.
     block_quic: bool,
+    /// Debug mode's direct egress (the engine runs with no node); only in
+    /// desktop mode, where this window runs the engine.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    direct_egress: Option<bool>,
     /// The imported profile runs on the embedded engine.
     embedded_engine: bool,
 }
@@ -316,6 +320,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             switch_node,
             select_native_group_outbound,
             runtime_control,
+            export_capture,
             test_node_delay,
             test_node_delays,
             network_probe,
@@ -340,6 +345,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             set_routing_mode,
             set_dns_preset,
             set_block_quic,
+            set_direct_egress,
             refresh_routing_rules,
             configure_script_runtime,
             clear_script_runtime,
@@ -880,6 +886,45 @@ async fn runtime_control(
             .map_err(|_| "desktop core lock failed")?
             .control(&request)?;
         serde_json::from_slice(&answer).map_err(|error| error.to_string())
+    })
+    .await
+}
+
+/// Where a capture export was saved.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SavedFile {
+    location: String,
+}
+
+/// Exports the packet capture (`format` pcapng or har; one connection with `id`, else all) to the Downloads
+/// folder without replacing an older file, and answers where it went.
+#[tauri::command]
+async fn export_capture(
+    format: String,
+    id: Option<u64>,
+    state: State<'_, DesktopAppState>,
+) -> Result<SavedFile, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let mut request = json!({ "cmd": "export_capture", "format": format });
+        if let Some(id) = id {
+            request["id"] = json!(id);
+        }
+        let request = connection::activity_request(&request)?;
+        let answer = state
+            .direct_core
+            .lock()
+            .map_err(|_| "desktop core lock failed")?
+            .control(&request)?;
+        let answer: Value = serde_json::from_slice(&answer).map_err(|error| error.to_string())?;
+        let export = desktop_mitm::capture::Export::from_answer(&answer)?;
+        let dir = desktop_mitm::capture::downloads_dir()
+            .ok_or("the Downloads folder could not be found")?;
+        let path = desktop_mitm::capture::save_new_file(&dir, &export.file_name, &export.bytes()?)?;
+        Ok(SavedFile {
+            location: path.display().to_string(),
+        })
     })
     .await
 }
@@ -3052,6 +3097,43 @@ async fn set_block_quic(
     run_blocking(move || set_block_quic_blocking(enabled, state)).await
 }
 
+#[tauri::command]
+async fn set_direct_egress(
+    enabled: bool,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || set_direct_egress_blocking(enabled, state)).await
+}
+
+/// Debug mode's egress: with `enabled` the window's engine runs with no node
+/// (`connection::direct_egress_envelope`), else the imported profile again. A
+/// running core reconnects on it.
+fn set_direct_egress_blocking(
+    enabled: bool,
+    state: DesktopAppState,
+) -> Result<OperationResult, String> {
+    {
+        let mut desktop = state
+            .desktop
+            .lock()
+            .map_err(|_| "desktop state lock failed")?;
+        if desktop.direct_egress == enabled {
+            return Ok(OperationResult {
+                message: "Egress unchanged.".to_string(),
+            });
+        }
+        desktop.direct_egress = enabled;
+        save_desktop_state(&desktop)?;
+    }
+    let message = match reconnect_running_direct_core(&state) {
+        Ok(()) if enabled => "Traffic leaves directly.".to_string(),
+        Ok(()) => "Traffic leaves through the selected node.".to_string(),
+        Err(error) => format!("Egress saved. Reconnect to apply it: {error}"),
+    };
+    Ok(OperationResult { message })
+}
+
 /// Saves QUIC blocking into the envelope and the desktop state. A core this
 /// window runs reconnects on it; the Windows service takes it on its next
 /// start.
@@ -3852,6 +3934,8 @@ fn snapshot(
         routing_mode: routing_mode_name(desktop.routing_mode).to_string(),
         dns_preset: desktop.dns_preset.as_str(),
         block_quic: desktop.block_quic,
+        direct_egress: (desktop.runtime_mode == DesktopRuntimeMode::Desktop)
+            .then_some(desktop.direct_egress),
         embedded_engine: active_embedded_config().ok().flatten().is_some(),
     }
 }

@@ -467,6 +467,33 @@ select option { color: var(--label-1); background: var(--bg-elevated); }
 .terms-declined { margin: 0; font-size: 13px; color: var(--danger); }
 .terms-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
+/* Packet capture (pages/CaptureViews.tsx): connections that open, the detail drill-down, bytes and headers. */
+.list li.openable { padding-right: calc(var(--row-pad) - 4px); }
+.list-open { padding: 0; color: inherit; text-align: left; background: none; border: 0; cursor: default; }
+.list li.openable:hover { background: var(--fill-1); }
+.switch-label { display: inline-flex; gap: 6px; align-items: center; color: var(--text2); font-size: 12px; font-weight: 500; }
+.back-bar { display: flex; margin: 0 0 -12px; }
+.back-bar .link-button { padding-left: 0; }
+.row .method { margin-right: 6px; color: var(--accent); font-family: var(--font-mono); font-size: 12px; font-weight: 600; }
+.row.expanded { background: var(--fill-1); }
+.group > .bytes-view { padding-block: 10px; }
+.bytes-view { display: grid; gap: 8px; min-width: 0; }
+.bytes-tools { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.bytes-tools small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bytes-spacer { flex: 1; }
+pre.bytes { max-height: 420px; margin: 0; padding: 10px; overflow: auto; color: var(--text); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--fill-1); border-radius: 8px; user-select: text; -webkit-user-select: text; }
+.selectable { user-select: text; -webkit-user-select: text; }
+.url-line { font-family: var(--font-mono); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+dl.headers { display: grid; margin: 0; }
+dl.headers > div { display: grid; grid-template-columns: minmax(120px, 30%) minmax(0, 1fr); gap: 12px; padding: 5px 0; }
+dl.headers > div + div { border-top: 1px solid var(--hairline); }
+dl.headers dt { overflow-wrap: anywhere; color: var(--text2); font-size: 12px; font-weight: 600; }
+dl.headers dd { margin: 0; font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+@media (max-width: 720px) {
+  dl.headers > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .bytes-tools { flex-wrap: wrap; }
+}
+
 /* Windows 11 Mica: the Rust side sets data-backdrop="mica" only when the system backdrop is applied, so the
    sidebar shows the desktop-tinted material and the workspace floats on it. Without it the window keeps the
    opaque colours above (Windows 10, Linux, reduced transparency). */
@@ -476,4 +503,16 @@ select option { color: var(--label-1); background: var(--bg-elevated); }
 @media (prefers-reduced-transparency: reduce) {
   :root[data-backdrop="mica"], :root[data-backdrop="mica"] body { background: var(--window); }
   :root[data-backdrop="mica"] .sidebar { background: var(--sidebar); }
+}
+
+/* First-launch mode choice (mode-choice.tsx): two equal answers, neither one a primary button. */
+.mode-dialog { width: min(560px, 100%); }
+.mode-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.mode-option { display: grid; gap: 6px; justify-items: start; padding: 16px; color: var(--text); text-align: left; background: var(--fill-1); border: 0; border-radius: var(--radius-card); box-shadow: 0 0 0 .5px var(--hairline); transition: background var(--fast) var(--ease-standard), box-shadow var(--fast) var(--ease-standard); }
+.mode-option:hover { background: var(--fill-2); box-shadow: 0 0 0 1.5px var(--accent); }
+.mode-option .tile { width: 32px; height: 32px; border-radius: 8px; }
+.mode-option strong { font-size: 14px; font-weight: 600; }
+.mode-option small { color: var(--text2); font-size: 12px; line-height: 1.45; }
+@media (max-width: 720px) {
+  .mode-options { grid-template-columns: minmax(0, 1fr); }
 }
