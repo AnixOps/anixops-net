@@ -1,11 +1,11 @@
-import { Ban, BadgeCheck, Bug, Cpu, FileCheck, Gauge, Timer, HardDrive, HeartPulse, Languages, LifeBuoy, Network, ScrollText, PlugZap, Power, RefreshCw, RotateCcw, ShieldCheck, SunMoon, Zap } from "lucide-react";
+import { Ban, BadgeCheck, Bell, BellRing, Bug, CloudOff, Cpu, FileCheck, Gauge, Timer, HardDrive, HeartPulse, Languages, LifeBuoy, Network, ScrollText, PlugZap, Power, RefreshCw, RotateCcw, ShieldCheck, SunMoon, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { desktop, HealthStatus, inProcessEngine, Preferences, preferencesFrom, RuntimeSnapshot } from "../bridge";
+import { desktop, HealthStatus, inProcessEngine, NotificationSettings, Preferences, preferencesFrom, RuntimeSnapshot } from "../bridge";
 import { Appearance, appearances } from "../theme";
 import { factLabel } from "../labels";
 import { Card, Loading, MoreMenu, Row, Run, Segmented, StatusDot, TileColor, ToggleRow } from "../ui";
-import { LanguageChoice, languages, t } from "../i18n";
+import { currentLanguage, LanguageChoice, languages, t } from "../i18n";
 import { TermsViewer, termsVersion } from "../terms";
 import { AppMode, modes } from "../mode";
 
@@ -84,6 +84,8 @@ export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, l
             onChange={() => void run("TUN", () => desktop.setTunMode(!snapshot.tunModeEnabled))}
           />
         </Card>}
+
+      <NotificationsCard busy={busy} run={run} />
 
       <Card title={t("网络")}>
         <ToggleRow
@@ -211,6 +213,44 @@ function SystemCard({ busy, run }: { busy: string | null; run: Run }) {
           items={[{ label: t("移除驱动"), danger: true, confirm: t("确认移除驱动"), onSelect: () => void run("driver", desktop.removeDriver) }]}
         />
       </Row>
+    </Card>
+  );
+}
+
+type NotificationKey = "scripts" | "connection" | "subscriptions";
+
+const notificationOptions: Array<{ key: NotificationKey; label: string; hint: string; icon: LucideIcon; color: TileColor }> = [
+  { key: "scripts", label: "脚本通知", hint: "插件脚本发出的通知，例如签到结果。", icon: BellRing, color: "orange" },
+  { key: "connection", label: "连接意外断开", hint: "内核意外退出或 VPN 被别的应用占用时提醒。", icon: Bell, color: "red" },
+  { key: "subscriptions", label: "订阅自动更新失败", hint: "按间隔自动更新订阅失败时提醒，手动更新的结果直接显示在窗口里。", icon: CloudOff, color: "sky" },
+];
+
+/** The system notification switches, as in the iOS settings. */
+function NotificationsCard({ busy, run }: { busy: string | null; run: Run }) {
+  const [settings, setSettings] = useState<NotificationSettings | null>(null);
+  useEffect(() => {
+    void desktop.notificationSettings(currentLanguage()).then(setSettings).catch(() => setSettings(null));
+  }, []);
+  if (!settings) return null;
+  const toggle = (key: NotificationKey) => void run("notifications", async () => {
+    const next = await desktop.notificationSettings(currentLanguage(), { ...settings, [key]: !settings[key] });
+    setSettings(next);
+    return { message: next[key] ? t("已打开这类通知") : t("已关闭这类通知") };
+  });
+  return (
+    <Card title={t("通知")} description={t("通过系统通知提醒，系统里关掉本应用的通知后不会显示。")}>
+      {notificationOptions.map((option) => (
+        <ToggleRow
+          key={option.key}
+          icon={option.icon}
+          color={option.color}
+          label={t(option.label)}
+          hint={t(option.hint)}
+          checked={settings[option.key]}
+          disabled={Boolean(busy)}
+          onChange={() => toggle(option.key)}
+        />
+      ))}
     </Card>
   );
 }

@@ -15,7 +15,7 @@ import { keepIfUnchanged, liveEngine, usePageVisible } from "./live";
 import { TrafficSource, useTraffic } from "./traffic-feed";
 import { useAppearance } from "./theme";
 import { StatusDot, Switch, Tile, TileColor, ToolbarSlot } from "./ui";
-import { t, useLanguage } from "./i18n";
+import { currentLanguage, t, useLanguage } from "./i18n";
 import { TermsConsent, useTermsConsent } from "./terms";
 import { AppMode, initialMode, useDebugExit, useMode, wantsDirectEgress } from "./mode";
 import { ModeChoice } from "./mode-choice";
@@ -81,6 +81,11 @@ export function App() {
   const showError = useCallback((error: unknown) => show(error instanceof Error ? error.message : String(error), "danger"), [show]);
 
   const visible = usePageVisible();
+
+  // System notifications are written by the backend, in the language the window shows.
+  useEffect(() => {
+    void desktop.notificationSettings(currentLanguage()).catch(() => undefined);
+  }, [language]);
 
   const refresh = useCallback(async () => {
     const [nextSnapshot, nextNodes] = await Promise.all([desktop.snapshot(), desktop.nodes()]);

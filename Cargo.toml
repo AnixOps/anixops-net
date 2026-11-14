@@ -3,6 +3,7 @@ members = [
     "apps/linux-gui",
     "apps/windows-gui",
     "crates/app-log",
+    "crates/app-notifications",
     "crates/anx-license",
     "crates/client-health",
     "crates/desktop-dns",

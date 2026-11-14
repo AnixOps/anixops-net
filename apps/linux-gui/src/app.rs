@@ -20,6 +20,7 @@ use crate::backend::{
     autostart, format_delay, Backend, DnsPreset, GroupSummary, NodeSummary, OperationResult,
     PreferencesInput, RuntimeSnapshot, SubscriptionSummary, PASTED_LOCATION,
 };
+use app_notifications::{Notice, Settings as NotificationSettings};
 use client_health::{startup, Health};
 use desktop_mitm::mappings;
 use desktop_mitm::plugins::{self, PluginSummary};
@@ -29,6 +30,7 @@ use subscription_meta::ResponseMeta;
 use tauri::plugin::TauriPlugin;
 use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Context, Manager, RunEvent, State, Wry};
+use tauri_plugin_notification::NotificationExt;
 use traffic_stats::TrafficStats;
 
 /// The URL the delay tests fetch, as on Windows.
@@ -979,16 +981,44 @@ fn start_network_watch(backend: Arc<Mutex<Backend>>) {
     });
 }
 
-/// Counts the engine's traffic for the statistics every five seconds (`traffic_stats`).
-fn start_traffic_stats(backend: Arc<Mutex<Backend>>) {
+/// Every five seconds counts the engine's traffic for the statistics (`traffic_stats`) and posts what there
+/// is to notify: an unexpected stop and what scripts posted.
+fn start_monitor(app: AppHandle, backend: Arc<Mutex<Backend>>) {
     thread::spawn(move || loop {
         thread::sleep(Duration::from_secs(5));
-        lock(&backend).count_traffic();
+        let notices = {
+            let mut backend = lock(&backend);
+            backend.count_traffic();
+            backend.take_notices()
+        };
+        for notice in notices {
+            post_notice(&app, &notice);
+        }
     });
 }
 
-/// Updates every subscription whose interval has passed, checking once a minute.
-fn start_subscription_updates(backend: Arc<Mutex<Backend>>) {
+/// Shows one system notification; one the system refuses (no permission, no notification service) is dropped.
+fn post_notice(app: &AppHandle, notice: &Notice) {
+    let _ = app
+        .notification()
+        .builder()
+        .title(&notice.title)
+        .body(&notice.body)
+        .show();
+}
+
+/// The notification switches, changed to `update` first when given, with the texts in `language`.
+#[tauri::command]
+async fn notification_settings(
+    state: State<'_, AppState>,
+    update: Option<NotificationSettings>,
+    language: String,
+) -> Result<NotificationSettings, String> {
+    lock(&state.0).notification_settings(update, &language)
+}
+
+/// Updates every subscription whose interval has passed, checking once a minute; a failed update is notified.
+fn start_subscription_updates(app: AppHandle, backend: Arc<Mutex<Backend>>) {
     thread::spawn(move || loop {
         thread::sleep(Duration::from_secs(60));
         let due = lock(&backend).due_sources();
@@ -999,8 +1029,14 @@ fn start_subscription_updates(backend: Arc<Mutex<Backend>>) {
                 Ok((content, meta)) => (Ok(content), Some(meta)),
                 Err(error) => (Err(error), None),
             };
-            if let (Ok(_), Some(meta)) = (backend.finish_refresh(&id, content), meta) {
-                backend.record_response(Some(&id), meta);
+            match (backend.finish_refresh(&id, content), meta) {
+                (Ok(_), Some(meta)) => backend.record_response(Some(&id), meta),
+                (Err(error), _) => {
+                    if let Some(notice) = backend.subscription_failed_notice(&id, &error) {
+                        post_notice(&app, &notice);
+                    }
+                }
+                _ => {}
             }
         }
     });
@@ -1344,11 +1380,9 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
         });
     }
 
-    start_subscription_updates(shared.clone());
     start_network_watch(shared.clone());
-    start_traffic_stats(shared.clone());
 
-    let mut builder = tauri::Builder::default();
+    let mut builder = tauri::Builder::default().plugin(tauri_plugin_notification::init());
     for plugin in plugins {
         builder = builder.plugin(plugin);
     }
@@ -1359,6 +1393,14 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
         .manage(AppState(shared.clone()))
         .manage(HealthState(health))
         .manage(SessionKeyState(Mutex::new(None)))
+        .setup({
+            let shared = shared.clone();
+            move |app| {
+                start_subscription_updates(app.handle().clone(), shared.clone());
+                start_monitor(app.handle().clone(), shared);
+                Ok(())
+            }
+        })
         .on_page_load(|webview, payload| {
             if payload.event() != PageLoadEvent::Finished {
                 return;
@@ -1394,6 +1436,7 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             node_share_link,
             traffic_stats,
             app_logs,
+            notification_settings,
             node_form,
             edit_node,
             remove_node,
