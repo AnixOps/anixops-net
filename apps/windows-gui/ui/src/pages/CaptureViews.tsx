@@ -48,6 +48,9 @@ export function CaptureDetail({ connection, busy, run, onBack, initialExchange }
   const [decryptHosts, reloadDecryptHosts] = useDecryptHosts();
   const visible = usePageVisible();
   const open = connection.ended_at_ms == null;
+  /** The connection's domain while the decrypted-domain list does not cover it; null for an address or a covered one. */
+  const host = connection.host;
+  const undecrypted = isDecryptableHost(host) && !coveredBy(host, decryptHosts) ? decryptHostOf(host) : null;
 
   useEffect(() => {
     if (!visible) return;
@@ -136,11 +139,11 @@ export function CaptureDetail({ connection, busy, run, onBack, initialExchange }
         <Card
           title={capture.network === "udp" ? t("数据报") : t("数据")}
           description={looksLikeTls(capture) ? encryptedNote(connection.host, decryptHosts) : undefined}
-          actions={looksLikeTls(capture) && isDecryptableHost(connection.host) && !coveredBy(connection.host, decryptHosts) ? (
+          actions={looksLikeTls(capture) && undecrypted ? (
             <button
               className="secondary compact"
               disabled={Boolean(busy)}
-              onClick={() => void run("decrypt-host", () => desktop.addDecryptHost(decryptHostOf(connection.host))).then(reloadDecryptHosts)}
+              onClick={() => void run("decrypt-host", () => desktop.addDecryptHost(undecrypted)).then(reloadDecryptHosts)}
             >
               <Lock size={14} />{t("解密此域名")}
             </button>
@@ -170,7 +173,7 @@ export function CaptureDetail({ connection, busy, run, onBack, initialExchange }
 }
 
 /** What to do about an encrypted connection: add its domain, or wait for a new connection once it is added. */
-function encryptedNote(host: string, decrypted: string[]): string {
+function encryptedNote(host: string | null | undefined, decrypted: string[]): string {
   if (!isDecryptableHost(host)) return t("这是加密的 TLS 数据。目标只有 IP 地址，没有域名，无法按域名解密。");
   if (coveredBy(host, decrypted)) {
     return t("这个域名已在解密列表里。解密只对新连接生效；如果仍看不到明文，请确认 HTTPS 解密已开启、根证书已信任，或者这个 App 固定了证书。");

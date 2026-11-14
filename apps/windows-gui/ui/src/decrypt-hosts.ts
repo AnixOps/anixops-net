@@ -2,7 +2,7 @@
  * Whether a connection's host is a domain name decryption can be turned on for: not an IP address, with a dot, made
  * of letters, digits, dots and hyphens. The backend checks again (`mappings::normalize_host`).
  */
-export function isDecryptableHost(host: string | null | undefined): boolean {
+export function isDecryptableHost(host: string | null | undefined): host is string {
   if (!host) return false;
   const name = host.replace(/:\d+$/, "").replace(/\.$/, "").toLowerCase();
   if (!/^[a-z0-9.-]+$/.test(name) || !name.includes(".") || /^[.-]/.test(name)) return false;
