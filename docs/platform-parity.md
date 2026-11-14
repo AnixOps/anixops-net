@@ -43,11 +43,11 @@
 | 手动添加 / 编辑节点 | ✅ | ✅ | ❌ | ❌ | ❌ | T5 |
 | 扫码导入 | ✅ | — | — | — | ❌ | Android 可以用相机（T5 一并评估） |
 | 分流模式（规则 / 全局 / 直连等） | ✅ | ✅ | ✅ | ✅ | ✅ | |
-| 我的规则（规则文本编辑、连接中原地换规则） | ✅ | ✅ | ❌ | ❌ | ❌ | 内核 `reload_rules`（T2） |
+| 我的规则（规则文本编辑、连接中原地换规则） | ✅ | ✅ | ◐ | ◐ | ◐ | 内核 `reload_rules`（T2）。桌面与 Android 不收 RULE-SET / GEOIP / GEOSITE 行（这些要下载规则集，分流模式已覆盖）；Windows TUN 模式下次连接生效 |
 | 规则集查看、更新远程规则集 | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | DNS 预设 | ✅ | ✅ | ✅ | ✅ | ✅ | |
-| 自定义 DNS 服务器、分域 DNS、Hosts | ✅ | ✅ | ❌ | ❌ | ❌ | T3 |
-| Fake-IP | ✅ | ✅ | ❌ | — | ❌ | 只在接管 IP 流量时有意义：Windows TUN 模式、Android（T3）；Linux 只有系统代理，代理拿到的就是域名 |
+| 自定义 DNS 服务器、分域 DNS、Hosts | ✅ | ✅ | ✅ | ✅ | ✅ | T3：桌面与 Android 用文本编辑（`名称 = 地址`、`DOMAIN-SUFFIX,cn,服务器`、`域名 = 地址`），iOS / macOS 是表单 |
+| Fake-IP | ✅ | ✅ | ✅ | — | ✅ | 只在接管 IP 流量时有意义：Windows 在 TUN 模式下生效，Android 在 VPN 里生效（T3）；Linux 只有系统代理，代理拿到的就是域名 |
 | 屏蔽 QUIC | ✅ | ✅ | ✅ | ✅ | ✅ | #106 |
 | 流量重定向（TCP / UDP 劫持到开发服务器） | ✅ | ✅ | ❌ | ⛔ | ❌ | 需要接管 IP 流量：Windows TUN 模式、Android 可做（T6）；Linux 见系统限制 |
 | TUN（接管全部流量） | ✅ | ✅ | ✅ | ⛔ | ✅ | Linux 现在只有系统代理，见系统限制 |
@@ -118,8 +118,8 @@ Windows 有两种运行方式：桌面模式由窗口进程运行内核；服务
 | A2 | macOS 导入自有根证书 | macOS | 待做 |
 | A3 | macOS 本机指标端口 | macOS | 待评估 |
 | T1 | 抓包会话加密保存、列表、载入、删除 | Windows、Linux、Android | 已完成 |
-| T2 | 我的规则：规则文本编辑，连接中原地换规则 | Windows、Linux、Android | 待做 |
-| T3 | DNS：自定义服务器、分域 DNS、Hosts、Fake-IP | Windows、Linux、Android | 待做 |
+| T2 | 我的规则：规则文本编辑，连接中原地换规则 | Windows、Linux、Android | 已完成 |
+| T3 | DNS：自定义服务器、分域 DNS、Hosts、Fake-IP | Windows、Linux、Android | 已完成 |
 | T4 | 节点分享链接入口 | Windows、Linux、Android | 待做 |
 | T5 | 手动添加 / 编辑节点，Android 扫码导入 | Windows、Linux、Android | 待做 |
 | T6 | 流量重定向 | Windows（TUN 模式）、Android | 待做 |

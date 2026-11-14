@@ -57,7 +57,15 @@ export interface RuntimeSnapshot {
   embeddedEngine?: boolean;
 }
 
-export type DnsPreset = "system" | "encrypted" | "split";
+export type DnsPreset = "system" | "encrypted" | "split" | "custom";
+
+/** The "自定义" DNS choice as written, and the Fake-IP switch (Windows TUN mode and Android). */
+export interface DnsText {
+  servers: string;
+  rules: string;
+  hosts: string;
+  fake_ip: boolean;
+}
 
 export interface NodeSummary {
   id: string;
@@ -482,9 +490,16 @@ export const desktop = {
   restoreNetworkSettings: () => invoke<OperationResult>("restore_network_settings"),
   setRoutingMode: (mode: RuntimeSnapshot["routingMode"]) => invoke<OperationResult>("set_routing_mode", { mode }),
   setDnsPreset: (preset: DnsPreset) => invoke<OperationResult>("set_dns_preset", { preset }),
+  customDns: () => invoke<DnsText>("custom_dns"),
+  /** Checks every line before saving; the error names the field and the line. */
+  saveCustomDns: (text: DnsText) => invoke<OperationResult>("save_custom_dns", { text }),
   setBlockQuic: (enabled: boolean) => invoke<OperationResult>("set_block_quic", { enabled }),
   setDirectEgress: (enabled: boolean) => invoke<OperationResult>("set_direct_egress", { enabled }),
   refreshRoutingRules: () => invoke<OperationResult>("refresh_routing_rules"),
+  /** "我的规则": the saved text and how many rule lines it holds. */
+  myRules: () => invoke<{ text: string; count: number }>("my_rules"),
+  /** Checks every line, saves, and gives a running engine the new rules. */
+  saveMyRules: (text: string) => invoke<OperationResult>("save_my_rules", { text }),
   enableHttpsMitm: () => invoke<OperationResult>("enable_https_mitm"),
   disableHttpsMitm: () => invoke<OperationResult>("disable_https_mitm"),
   mitmPlugins: () => invoke<MitmPlugin[]>("list_mitm_plugins"),
