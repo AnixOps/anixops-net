@@ -41,6 +41,16 @@ public enum RuntimeControl {
     /// Swaps the engine's rule lines in place (`reload_rules`): the whole new list ending with `FINAL`, naming only
     /// the running nodes, groups and rule sets. Open connections keep going; `dryRun` only checks the list.
     case reloadRules([String], dryRun: Bool)
+    /// Whether capture (抓包) is on and how much of its memory budget it uses (`PacketCapture.Status`).
+    case captureStatus
+    /// Turns capture on or off for new connections; what was captured stays until `clearCapture`.
+    case setCapture(Bool)
+    /// Forgets everything captured.
+    case clearCapture
+    /// The bytes and decrypted HTTP messages kept of one connection (`{"capture": … | null}`).
+    case captureConnection(UInt64)
+    /// Everything captured, or one connection, as a pcapng or HAR file (`PacketCapture.ExportAnswer`).
+    case exportCapture(PacketCapture.ExportFormat, id: UInt64?)
 
     public var request: Data {
         let object: [String: Any]
@@ -85,6 +95,20 @@ public enum RuntimeControl {
             object = ["cmd": "metrics", "anonymous": anonymous]
         case let .reloadRules(rules, dryRun):
             object = ["cmd": "reload_rules", "rules": rules, "dry_run": dryRun]
+        case .captureStatus:
+            object = ["cmd": "capture"]
+        case let .setCapture(on):
+            object = ["cmd": "set_capture", "enabled": on]
+        case .clearCapture:
+            object = ["cmd": "clear_capture"]
+        case let .captureConnection(id):
+            object = ["cmd": "capture_connection", "id": id]
+        case let .exportCapture(format, id):
+            var request: [String: Any] = ["cmd": "export_capture", "format": format.rawValue]
+            if let id {
+                request["id"] = id
+            }
+            object = request
         }
         return (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
     }
@@ -159,6 +183,8 @@ public enum RuntimeControl {
         public let error: String?
         /// Where a redirect sent the connection instead (`TrafficRedirects`), and the line that matched.
         public let redirect: Redirect?
+        /// Capture was on as the connection opened, so `captureConnection` may have its bytes.
+        public let captured: Bool
 
         public struct Redirect: Decodable, Equatable {
             public let destination: String
@@ -179,6 +205,7 @@ public enum RuntimeControl {
             case download
             case error
             case redirect
+            case captured
         }
 
         public init(from decoder: Decoder) throws {
@@ -196,6 +223,7 @@ public enum RuntimeControl {
             download = try container.decode(UInt64.self, forKey: .download)
             error = try container.decodeIfPresent(String.self, forKey: .error)
             redirect = try container.decodeIfPresent(Redirect.self, forKey: .redirect)
+            captured = try container.decodeIfPresent(Bool.self, forKey: .captured) ?? false
         }
 
         private static func date(_ millis: UInt64) -> Date {

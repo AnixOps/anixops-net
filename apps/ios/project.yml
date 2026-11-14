@@ -160,6 +160,7 @@ targets:
       - path: Sources/NetworkCoreAppHost/BrandTokens.swift
       - path: Sources/NetworkCoreAppHost/ClientHealthMonitor.swift
       - path: Sources/NetworkCoreAppHost/ClientReporter.swift
+      - path: Sources/NetworkCoreAppHost/CaptureViews.swift
       - path: Sources/NetworkCoreAppHost/ConnectionsView.swift
       - path: Sources/NetworkCoreAppHost/DashboardCards.swift
       - path: Sources/NetworkCoreAppHost/DashboardModel.swift
