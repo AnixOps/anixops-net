@@ -3,7 +3,7 @@ import type { RuntimeSnapshot } from "./bridge";
 
 /** Whether this window runs the engine, so live traffic and connections can be read. */
 export function liveEngine(snapshot: RuntimeSnapshot | null): boolean {
-  return snapshot?.connection === "Connected" && snapshot.runtimeMode !== "service";
+  return snapshot?.connection === "Connected";
 }
 
 /**

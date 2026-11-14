@@ -1,13 +1,15 @@
 use super::actions::connection;
+use super::capture_sessions;
 use super::linked_sources::{self, CachedNode, OtherSource};
 use super::mitm_plugins::{self, PluginSummary};
 use super::root_trust;
-use super::runtime_status::{read_runtime_status, ManagedCoreStatus, WindowsRuntimeStatus};
+use super::runtime_status::{read_runtime_status, WindowsRuntimeStatus};
 use super::startup::{
-    desktop_state_path, load_desktop_state, owns_current_proxy, save_desktop_state,
-    DesktopProfileNode, DesktopRoutingMode, DesktopRuntimeMode, DesktopState,
+    desktop_state_path, dns_settings_path, load_desktop_state, my_rules_path, owns_current_proxy,
+    save_desktop_state, DesktopProfileNode, DesktopRoutingMode, DesktopState,
     DesktopSubscriptionSource,
 };
+use super::ui_state::ConnectionState;
 use super::{
     append_managed_log, is_trunk_node, load_validated_managed_configuration,
     managed_config_or_default, profile_node_options, write_diagnostic_report_at,
@@ -17,9 +19,11 @@ use config_core::routing_import::import_subscription_routing;
 use config_core::CoreSubscriptionService;
 use control_domain::{NodeDescriptor, SubscriptionService, SubscriptionSource};
 use desktop_dns::DnsPreset;
+use desktop_mitm::mappings;
 use engine_embedded::config::{RuntimeConfig, CONFIG_SCHEMA_VERSION};
 use engine_embedded::delay::measure_delay;
 use engine_embedded::nodes::{outbound_for_node, routing_envelope, single_node_envelope};
+use node_edits::{NodeEdits, NodeForm};
 use platform_windows::managed::{
     read_managed_state, windows_managed_config_path, windows_managed_data_directory,
     windows_managed_log_directory, windows_managed_state_path, write_managed_config,
@@ -32,8 +36,7 @@ use platform_windows::mitm_security::{
 };
 use platform_windows::system_integration::{
     current_user_startup_enabled, disable_current_user_startup, enable_current_user_startup,
-    read_current_user_system_proxy, NativeWindowsSystemIntegration, WindowsServiceState,
-    WindowsSystemIntegration,
+    read_current_user_system_proxy, NativeWindowsSystemIntegration, WindowsSystemIntegration,
 };
 use rcgen::{
     BasicConstraints, CertificateParams, DistinguishedName, DnType, IsCa, KeyPair, KeyUsagePurpose,
@@ -113,7 +116,6 @@ impl Drop for SubscriptionRefreshGuard {
 struct RuntimeSnapshot {
     connection: String,
     connection_label: String,
-    service: StatusFact,
     core: StatusFact,
     proxy: StatusFact,
     selected_node: Option<String>,
@@ -140,7 +142,6 @@ struct RuntimeSnapshot {
     /// HTTPS decryption is on for the managed profile.
     https_decryption_enabled: bool,
     dark_theme: bool,
-    runtime_mode: String,
     routing_mode: String,
     dns_preset: &'static str,
     /// UDP to port 443 is refused so apps fall back from QUIC to TCP.
@@ -171,6 +172,8 @@ struct NodeSummary {
     /// The subscription the node comes from.
     #[serde(skip_serializing_if = "Option::is_none")]
     group: Option<String>,
+    /// A node of the imported profile, which can be edited and removed (`node_edits`).
+    editable: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -226,12 +229,14 @@ struct PreferenceValues {
     auto_select_fastest_node: bool,
     bilibili_web_ad_block_enabled: bool,
     dark_theme: bool,
-    runtime_mode: String,
 }
 
 pub(super) fn run(debug: bool) -> Result<(), String> {
     let desktop = load_desktop_state()?;
     let _ = append_managed_log(APP_LOG_SCOPE, &format!("startup debug={debug}"));
+    // Saved capture sessions expire after a week even when the engine does not run to delete them.
+    capture_sessions::purge_expired();
+    desktop_dns::custom::use_file(dns_settings_path());
     let health_dir = desktop_state_path()
         .parent()
         .map(Path::to_path_buf)
@@ -276,6 +281,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             }
             show_main_window(app);
             let state = app.state::<DesktopAppState>().inner().clone();
+            remove_legacy_service(&state);
             start_automatic_connection(state.clone());
             start_network_watch(state.clone());
             start_core_recovery_monitor(state);
@@ -321,10 +327,18 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             select_native_group_outbound,
             runtime_control,
             export_capture,
+            capture_session,
+            replay_request,
+            list_debug_mappings,
+            save_debug_mapping,
+            remove_debug_mapping,
             test_node_delay,
             test_node_delays,
             network_probe,
             node_share_link,
+            node_form,
+            edit_node,
+            remove_node,
             select_fastest_node,
             save_preferences,
             create_diagnostics,
@@ -338,15 +352,16 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             rename_subscription,
             set_subscription_interval,
             check_profile_runtime,
-            install_service,
-            start_service,
-            stop_service,
             restore_network_settings,
             set_routing_mode,
             set_dns_preset,
             set_block_quic,
             set_direct_egress,
             refresh_routing_rules,
+            my_rules,
+            save_my_rules,
+            custom_dns,
+            save_custom_dns,
             configure_script_runtime,
             clear_script_runtime,
             enable_https_mitm,
@@ -355,8 +370,13 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             open_mitm_root,
             list_mitm_plugins,
             import_mitm_plugin,
+            import_mitm_plugin_text,
+            mitm_plugin_details,
             set_mitm_plugin_enabled,
             remove_mitm_plugin,
+            phone_qr_code,
+            import_mitm_root,
+            mitm_root_fingerprint,
             set_tun_mode,
             install_certificate,
             remove_certificate,
@@ -410,15 +430,20 @@ fn start_automatic_connection(state: DesktopAppState) {
                 return;
             }
         };
-        let runtime = read_runtime_status();
-        if !connection::should_auto_connect(
-            desktop.auto_connect,
-            false,
-            runtime.connection.is_connected(),
-        ) {
+        let connected = match node_operations_runtime_running(&state) {
+            Ok(connected) => connected,
+            Err(error) => {
+                let _ = append_managed_log(
+                    APP_LOG_SCOPE,
+                    &format!("automatic connection skipped: {error}"),
+                );
+                return;
+            }
+        };
+        if !connection::should_auto_connect(desktop.auto_connect, false, connected) {
             return;
         }
-        match connection::connect(windows_managed_config_path(), desktop) {
+        match connect_window_core(&state, desktop) {
             Ok(connected) => match state.desktop.lock() {
                 Ok(mut persisted) => {
                     persisted.proxy_snapshot = Some(connected.snapshot);
@@ -488,7 +513,13 @@ fn start_core_recovery_monitor(state: DesktopAppState) {
             Ok(desktop) => desktop.clone(),
             Err(_) => continue,
         };
-        let runtime = read_runtime_status();
+        // The engine runs in this window: it needs recovering when this run connected and it is no
+        // longer running.
+        let engine = match node_operations_runtime_running(&state) {
+            Ok(true) => ConnectionState::Connected,
+            Ok(false) => ConnectionState::CoreError,
+            Err(_) => continue,
+        };
         let should_recover = match (
             state.lifecycle.gui_started_connection.lock(),
             state.lifecycle.core_recovery_attempted.lock(),
@@ -498,7 +529,7 @@ fn start_core_recovery_monitor(state: DesktopAppState) {
                     desktop.auto_recover_core,
                     *attempted,
                     *gui_started,
-                    runtime.connection,
+                    engine,
                 ) =>
             {
                 *attempted = true;
@@ -510,7 +541,7 @@ fn start_core_recovery_monitor(state: DesktopAppState) {
             continue;
         }
         let _ = append_managed_log(APP_LOG_SCOPE, "one controlled core recovery was requested");
-        match connection::connect(windows_managed_config_path(), desktop) {
+        match connect_window_core(&state, desktop) {
             Ok(connected) => match state.desktop.lock() {
                 Ok(mut persisted) => {
                     persisted.proxy_snapshot = Some(connected.snapshot);
@@ -609,7 +640,7 @@ fn start_fastest_node_monitor(state: DesktopAppState) {
                 .lock()
                 .map(|desktop| desktop.auto_select_fastest_node)
                 .unwrap_or(false);
-            if !enabled || !read_runtime_status().connection.is_connected() {
+            if !enabled || !node_operations_runtime_running(&state).unwrap_or(false) {
                 continue;
             }
             match select_fastest_node_blocking(state.clone()) {
@@ -689,6 +720,7 @@ fn list_nodes(state: State<'_, DesktopAppState>) -> Result<Vec<NodeSummary>, Str
             protocol: node.protocol.clone(),
             selected: selected(&node.id),
             group: group.clone(),
+            editable: true,
         })
         .collect();
     // Other subscriptions follow, each under its own name.
@@ -701,6 +733,7 @@ fn list_nodes(state: State<'_, DesktopAppState>) -> Result<Vec<NodeSummary>, Str
                 label: node.label.clone(),
                 protocol: node.protocol.clone(),
                 group: Some(other.name.clone()),
+                editable: false,
             });
         }
     }
@@ -890,6 +923,38 @@ async fn runtime_control(
     .await
 }
 
+/// Sends an edited copy of a captured request through the engine this
+/// window runs (`desktop_mitm::replay`), trusting the HTTPS decryption root
+/// while decryption is on.
+#[tauri::command]
+async fn replay_request(
+    request: desktop_mitm::replay::ReplayRequest,
+    state: State<'_, DesktopAppState>,
+) -> Result<desktop_mitm::replay::ReplayResponse, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let proxy = state
+            .direct_core
+            .lock()
+            .map_err(|_| "desktop core lock failed")?
+            .local_addr()
+            .ok_or(
+                "connect in desktop mode first: replayed requests go through the running engine",
+            )?;
+        let root = managed_config_or_default()?
+            .native_mitm
+            .filter(|mitm| mitm.enabled)
+            .and_then(|mitm| fs::read_to_string(mitm.ca_certificate_path).ok());
+        let target = desktop_mitm::replay::Target {
+            proxy,
+            credentials: None,
+            root_pem: root,
+        };
+        desktop_mitm::replay::send(&target, &request)
+    })
+    .await
+}
+
 /// Where a capture export was saved.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -903,14 +968,13 @@ struct SavedFile {
 async fn export_capture(
     format: String,
     id: Option<u64>,
+    options: Option<desktop_mitm::capture::ExportOptions>,
     state: State<'_, DesktopAppState>,
 ) -> Result<SavedFile, String> {
     let state = state.inner().clone();
     run_blocking(move || {
-        let mut request = json!({ "cmd": "export_capture", "format": format });
-        if let Some(id) = id {
-            request["id"] = json!(id);
-        }
+        let request =
+            desktop_mitm::capture::export_request(&format, id, options.unwrap_or_default());
         let request = connection::activity_request(&request)?;
         let answer = state
             .direct_core
@@ -925,6 +989,37 @@ async fn export_capture(
         Ok(SavedFile {
             location: path.display().to_string(),
         })
+    })
+    .await
+}
+
+/// Saved capture sessions: list, save what capture holds, load one for viewing, delete
+/// (`desktop_mitm::sessions`). The engine is told where sessions go and the key, sealed with DPAPI,
+/// before every action, since it forgets both when it restarts.
+#[tauri::command]
+async fn capture_session(
+    action: desktop_mitm::sessions::SessionAction,
+    state: State<'_, DesktopAppState>,
+) -> Result<Value, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let request = action.request()?;
+        let key = capture_sessions::load_key()?;
+        let storage =
+            desktop_mitm::sessions::storage_request(&capture_sessions::sessions_dir()?, &key);
+        let to_bytes = |value: &Value| serde_json::to_vec(value).map_err(|error| error.to_string());
+        let core = state
+            .direct_core
+            .lock()
+            .map_err(|_| "desktop core lock failed")?;
+        core.control(&to_bytes(&storage)?)?;
+        let answer = core.control(&to_bytes(&request)?)?;
+        drop(core);
+        let answer: Value = serde_json::from_slice(&answer).map_err(|error| error.to_string())?;
+        Ok(desktop_mitm::sessions::with_protection(
+            answer,
+            key.protection,
+        ))
     })
     .await
 }
@@ -1050,19 +1145,7 @@ fn connect_blocking(state: DesktopAppState) -> Result<OperationResult, String> {
         .lock()
         .map_err(|_| "desktop state lock failed")?
         .clone();
-    let connected = match desktop.runtime_mode {
-        DesktopRuntimeMode::Desktop => connection::connect_direct(
-            windows_managed_config_path(),
-            desktop.clone(),
-            &mut *state
-                .direct_core
-                .lock()
-                .map_err(|_| "desktop core lock failed")?,
-        )?,
-        DesktopRuntimeMode::Service => {
-            connection::connect(windows_managed_config_path(), desktop.clone())?
-        }
-    };
+    let connected = connect_window_core(&state, desktop)?;
     let mut persisted = state
         .desktop
         .lock()
@@ -1072,15 +1155,60 @@ fn connect_blocking(state: DesktopAppState) -> Result<OperationResult, String> {
     save_desktop_state(&persisted)?;
     mark_gui_started_connection(&state);
     Ok(OperationResult {
-        message: match desktop.runtime_mode {
-            DesktopRuntimeMode::Desktop => {
-                "Connected. The desktop-owned core and current-user proxy are verified.".to_string()
-            }
-            DesktopRuntimeMode::Service => {
-                "Connected. The managed core and current-user proxy are verified.".to_string()
-            }
-        },
+        message: "Connected. The desktop-owned core and current-user proxy are verified."
+            .to_string(),
     })
+}
+
+/// Starts the engine in this window on the saved profile and applies the proxy.
+fn connect_window_core(
+    state: &DesktopAppState,
+    desktop: DesktopState,
+) -> Result<connection::ConnectedProxy, String> {
+    connection::connect_direct(
+        windows_managed_config_path(),
+        desktop,
+        &mut *state
+            .direct_core
+            .lock()
+            .map_err(|_| "desktop core lock failed")?,
+    )
+}
+
+/// Removes the Windows service earlier versions could run the engine in
+/// (`connection::remove_legacy_service`) and forgets the proxy it had set.
+fn remove_legacy_service(state: &DesktopAppState) {
+    let Ok(mut desktop) = state.desktop.lock() else {
+        return;
+    };
+    match connection::remove_legacy_service(&desktop) {
+        Ok(removal) if removal.removed => {
+            if removal.proxy_restored {
+                desktop.proxy_snapshot = None;
+                desktop.applied_proxy = None;
+                if let Err(error) = save_desktop_state(&desktop) {
+                    let _ = append_managed_log(
+                        APP_LOG_SCOPE,
+                        &format!("legacy service proxy state save failed: {error}"),
+                    );
+                }
+            }
+            let _ = append_managed_log(
+                APP_LOG_SCOPE,
+                &format!(
+                    "legacy Windows service removed; proxy restored={}",
+                    removal.proxy_restored
+                ),
+            );
+        }
+        Ok(_) => {}
+        Err(error) => {
+            let _ = append_managed_log(
+                APP_LOG_SCOPE,
+                &format!("legacy Windows service could not be removed: {error}"),
+            );
+        }
+    }
 }
 
 #[tauri::command]
@@ -1097,17 +1225,14 @@ fn disconnect_blocking(state: DesktopAppState) -> Result<OperationResult, String
         .lock()
         .map_err(|_| "desktop state lock failed")?
         .clone();
-    let message = match desktop.runtime_mode {
-        DesktopRuntimeMode::Desktop => connection::disconnect_direct(
-            windows_managed_config_path(),
-            desktop.clone(),
-            &mut *state
-                .direct_core
-                .lock()
-                .map_err(|_| "desktop core lock failed")?,
-        )?,
-        DesktopRuntimeMode::Service => connection::disconnect(desktop)?,
-    };
+    let message = connection::disconnect_direct(
+        windows_managed_config_path(),
+        desktop,
+        &mut *state
+            .direct_core
+            .lock()
+            .map_err(|_| "desktop core lock failed")?,
+    )?;
     let mut persisted = state
         .desktop
         .lock()
@@ -1124,9 +1249,6 @@ fn stop_desktop_core_for_exit(state: DesktopAppState) {
         Ok(desktop) => desktop.clone(),
         Err(_) => return,
     };
-    if desktop.runtime_mode != DesktopRuntimeMode::Desktop {
-        return;
-    }
     let result = state
         .direct_core
         .lock()
@@ -1154,42 +1276,25 @@ fn restart_service_blocking(state: DesktopAppState) -> Result<OperationResult, S
         .lock()
         .map_err(|_| "desktop state lock failed")?
         .clone();
-    let message = if desktop.runtime_mode == DesktopRuntimeMode::Desktop {
-        let _ = connection::disconnect_direct(
-            windows_managed_config_path(),
-            desktop.clone(),
-            &mut *state
-                .direct_core
-                .lock()
-                .map_err(|_| "desktop core lock failed")?,
-        );
-        let connected = connection::connect_direct(
-            windows_managed_config_path(),
-            desktop,
-            &mut *state
-                .direct_core
-                .lock()
-                .map_err(|_| "desktop core lock failed")?,
-        )?;
-        let mut persisted = state
-            .desktop
+    let _ = connection::disconnect_direct(
+        windows_managed_config_path(),
+        desktop.clone(),
+        &mut *state
+            .direct_core
             .lock()
-            .map_err(|_| "desktop state lock failed")?;
-        persisted.proxy_snapshot = Some(connected.snapshot);
-        persisted.applied_proxy = Some(connected.applied_proxy);
-        save_desktop_state(&persisted)?;
-        "Desktop core restarted and proxy settings were reapplied.".to_string()
-    } else {
-        match connection::restart(windows_managed_config_path(), desktop)? {
-            connection::RestartedService::Desktop(_) => {
-                "Service restarted and desktop proxy settings were reapplied.".to_string()
-            }
-            connection::RestartedService::ServiceManaged => {
-                "Service restart was submitted. Waiting for managed runtime status.".to_string()
-            }
-        }
-    };
-    Ok(OperationResult { message })
+            .map_err(|_| "desktop core lock failed")?,
+    );
+    let connected = connect_window_core(&state, desktop)?;
+    let mut persisted = state
+        .desktop
+        .lock()
+        .map_err(|_| "desktop state lock failed")?;
+    persisted.proxy_snapshot = Some(connected.snapshot);
+    persisted.applied_proxy = Some(connected.applied_proxy);
+    save_desktop_state(&persisted)?;
+    Ok(OperationResult {
+        message: "Desktop core restarted and proxy settings were reapplied.".to_string(),
+    })
 }
 
 #[tauri::command]
@@ -1222,7 +1327,7 @@ fn switch_node_blocking(
         .lock()
         .map_err(|_| "desktop state lock failed")?
         .clone();
-    let update_running_core = node_operations_runtime_running(&state, &desktop)?;
+    let update_running_core = node_operations_runtime_running(&state)?;
     if selected_catalog_node(&desktop, &node_id).is_err() {
         if let Some(other) = other_sources(&desktop)
             .into_iter()
@@ -1362,6 +1467,146 @@ async fn node_share_link(
             .map_err(|error| format!("This node cannot be shared: {error}"))
     })
     .await
+}
+
+/// The name, server and port of a node of the imported profile, and whether it can be removed.
+#[tauri::command]
+async fn node_form(node_id: String, state: State<'_, DesktopAppState>) -> Result<NodeForm, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let desktop = state
+            .desktop
+            .lock()
+            .map_err(|_| "desktop state lock failed")?
+            .clone();
+        node_form_of(&desktop, &node_id)
+    })
+    .await
+}
+
+fn node_form_of(desktop: &DesktopState, node_id: &str) -> Result<NodeForm, String> {
+    let node = selected_catalog_node(desktop, node_id)
+        .map_err(|_| "Only nodes of the subscription in use can be edited.".to_string())?;
+    let outbound = embedded_node_outbound(node_id)?;
+    let profile = read_embedded_profile().ok();
+    Ok(NodeForm {
+        name: node.label,
+        server: outbound["server"].as_str().unwrap_or_default().to_string(),
+        port: outbound["port"]
+            .as_u64()
+            .and_then(|port| u16::try_from(port).ok())
+            .unwrap_or_default(),
+        keep_reason: node_edits::keep_reason(
+            desktop.profile_node_catalog.len(),
+            profile.as_ref(),
+            node_id,
+        ),
+    })
+}
+
+#[tauri::command]
+async fn edit_node(
+    node_id: String,
+    name: String,
+    server: String,
+    port: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let change = node_edits::check(&name, &server, &port)?;
+        change_node_edits(&state, &node_id, |edits| edits.change(&node_id, change))?;
+        Ok(OperationResult {
+            message: "Node saved.".to_string(),
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn remove_node(
+    node_id: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        change_node_edits(&state, &node_id, |edits| edits.remove(&node_id))?;
+        Ok(OperationResult {
+            message: "Node removed.".to_string(),
+        })
+    })
+    .await
+}
+
+/// Changes the saved node edits, applies them to the imported profile from its kept content, and restarts a
+/// running core on the result. Nothing changes when they cannot be applied.
+fn change_node_edits(
+    state: &DesktopAppState,
+    node_id: &str,
+    change: impl FnOnce(&mut NodeEdits),
+) -> Result<(), String> {
+    let _refresh_guard = acquire_subscription_refresh(state)?;
+    let mut desktop = state
+        .desktop
+        .lock()
+        .map_err(|_| "desktop state lock failed")?
+        .clone();
+    let form = node_form_of(&desktop, node_id)?;
+    let path = node_edits_path();
+    let before = NodeEdits::load(&path);
+    let mut edits = before.clone();
+    change(&mut edits);
+    if edits.removed.contains(node_id) {
+        if let Some(reason) = form.keep_reason {
+            return Err(reason.to_string());
+        }
+    }
+    edits.save(&path).map_err(|error| error.to_string())?;
+    if let Err(error) = reapply_node_edits(&mut desktop) {
+        let _ = before.save(&path);
+        let mut restored = state
+            .desktop
+            .lock()
+            .map_err(|_| "desktop state lock failed")?
+            .clone();
+        let _ = reapply_node_edits(&mut restored);
+        return Err(error);
+    }
+    save_desktop_state(&desktop)?;
+    *state
+        .desktop
+        .lock()
+        .map_err(|_| "desktop state lock failed")? = desktop;
+    if node_operations_runtime_running(state)? {
+        restart_service_blocking(state.clone())?;
+    }
+    Ok(())
+}
+
+/// Imports the kept content of the profile again with the saved node edits, keeping the routing mode, and
+/// links the other subscriptions in as an import does.
+fn reapply_node_edits(desktop: &mut DesktopState) -> Result<(), String> {
+    let payload = fs::read_to_string(profile_source_text_path())
+        .map_err(|_| "Update the subscription once before editing its nodes.".to_string())?;
+    let previous = read_embedded_profile().ok();
+    import_embedded_subscription(
+        &payload,
+        desktop.profile_source_path.clone(),
+        desktop.profile_source_url.clone(),
+        desktop,
+        false,
+    )?;
+    let location = desktop.profile_source_url.clone().or_else(|| {
+        desktop
+            .profile_source_path
+            .as_ref()
+            .map(|path| path.display().to_string())
+    });
+    if let Some(location) = location {
+        // As in an import, a failed cache write only leaves the nodes out of other profiles' lists.
+        let _ = cache_imported_nodes(&location, desktop);
+    }
+    relink_active_profile(desktop, previous.as_ref())
 }
 
 #[tauri::command]
@@ -1773,7 +2018,7 @@ fn select_embedded_group_member(
         persisted.profile_node_id = routed_selected_node(&profile);
         save_desktop_state(&persisted)?;
     }
-    let running = node_operations_runtime_running(state, &desktop)?;
+    let running = node_operations_runtime_running(state)?;
     if running {
         restart_service_blocking(state.clone())?;
     }
@@ -1923,25 +2168,20 @@ fn select_fastest_embedded_node(
             ),
         });
     }
-    let update_running_core = node_operations_runtime_running(state, desktop)?;
+    let update_running_core = node_operations_runtime_running(state)?;
     switch_embedded_node(state, desktop, embedded, &node.id, update_running_core)?;
     Ok(OperationResult {
         message: format!("Selected fastest node: {} ({delay_millis} ms).", node.label),
     })
 }
 
-fn node_operations_runtime_running(
-    state: &DesktopAppState,
-    desktop: &DesktopState,
-) -> Result<bool, String> {
-    match desktop.runtime_mode {
-        DesktopRuntimeMode::Desktop => state
-            .direct_core
-            .lock()
-            .map_err(|_| "desktop core lock failed")?
-            .is_running(),
-        DesktopRuntimeMode::Service => Ok(read_runtime_status().connection.is_connected()),
-    }
+/// Whether the engine runs in this window.
+fn node_operations_runtime_running(state: &DesktopAppState) -> Result<bool, String> {
+    state
+        .direct_core
+        .lock()
+        .map_err(|_| "desktop core lock failed")?
+        .is_running()
 }
 
 #[tauri::command]
@@ -1987,11 +2227,6 @@ fn save_preferences_blocking(
     desktop.auto_select_fastest_node = preferences.auto_select_fastest_node;
     desktop.bilibili_web_ad_block_enabled = preferences.bilibili_web_ad_block_enabled;
     desktop.dark_theme = preferences.dark_theme;
-    desktop.runtime_mode = match preferences.runtime_mode.as_str() {
-        "desktop" => DesktopRuntimeMode::Desktop,
-        "service" => DesktopRuntimeMode::Service,
-        _ => return Err("runtime mode must be either desktop or service".to_string()),
-    };
     save_desktop_state(&desktop)?;
     Ok(OperationResult {
         message: "Desktop preferences saved.".to_string(),
@@ -2467,21 +2702,14 @@ fn import_subscription_at(
     location: &str,
     desktop: &mut DesktopState,
 ) -> Result<subscription_meta::ResponseMeta, String> {
-    let service = NativeWindowsSystemIntegration::new()
-        .service_status()
-        .map_err(|error| error.to_string())?;
-    if !matches!(
-        service.state,
-        WindowsServiceState::NotInstalled | WindowsServiceState::Stopped
-    ) {
-        return Err(
-            "Disconnect before importing or updating a profile so the running core keeps its active configuration."
-                .to_string(),
-        );
-    }
     let previous = read_embedded_profile().ok();
     let (payload, source_path, source_url, meta) = read_subscription(location)?;
-    import_embedded_subscription(&payload, source_path, source_url, desktop)?;
+    // An update brings back what the provider serves (`node_edits`); the content is kept so edits can be
+    // applied to it later without fetching it again.
+    let _ = fs::remove_file(node_edits_path());
+    write_managed_text_atomic(&profile_source_text_path(), &payload)
+        .map_err(|error| error.to_string())?;
+    import_embedded_subscription(&payload, source_path, source_url, desktop, true)?;
     // Listing and linking work without this subscription's cache, so a failed write only leaves it out.
     let _ = cache_imported_nodes(location, desktop);
     relink_active_profile(desktop, previous.as_ref())?;
@@ -2495,6 +2723,7 @@ fn import_embedded_subscription(
     source_path: Option<PathBuf>,
     source_url: Option<String>,
     desktop: &mut DesktopState,
+    fresh: bool,
 ) -> Result<(), String> {
     sync_anx_license();
     let service = CoreSubscriptionService::new();
@@ -2510,12 +2739,15 @@ fn import_embedded_subscription(
     if catalog.nodes.is_empty() {
         return Err("Profile did not contain a supported proxy node".to_string());
     }
+    // The subscription's rules and groups name the nodes as served; the engine runs them with the user's edits.
+    let parsed = catalog.nodes;
+    let nodes = NodeEdits::load(&node_edits_path()).applied(&parsed);
     // Subscription rules and policy groups drive the route when every node is
     // supported and the engine accepts the result; otherwise one node runs
     // alone.
-    let routed = import_subscription_routing(payload, &catalog.nodes)
+    let routed = import_subscription_routing(payload, &parsed)
         .spec
-        .and_then(|spec| routing_envelope(EMBEDDED_PROFILE_ID, &catalog.nodes, &spec).ok())
+        .and_then(|spec| routing_envelope(EMBEDDED_PROFILE_ID, &nodes, &spec).ok())
         // The engine caps the routed node and rule counts.
         .filter(|envelope| RuntimeConfig::from_json(envelope.as_bytes()).is_ok());
     // A single-node profile lists every supported node so it can be switched
@@ -2530,8 +2762,7 @@ fn import_embedded_subscription(
             if let Ok(previous) = read_embedded_profile() {
                 carry_routed_group_defaults(&previous, &mut profile);
             }
-            let node_outbounds = catalog
-                .nodes
+            let node_outbounds = nodes
                 .iter()
                 .filter_map(|node| {
                     outbound_for_node(node)
@@ -2549,20 +2780,18 @@ fn import_embedded_subscription(
             let selected = desktop
                 .profile_node_id
                 .as_deref()
-                .filter(|id| catalog.nodes.iter().any(|node| node.id == *id))
+                .filter(|id| nodes.iter().any(|node| node.id == *id))
                 .or_else(|| {
-                    catalog
-                        .nodes
+                    nodes
                         .iter()
                         .find(|node| is_trunk_node(node) && outbound_for_node(node).is_ok())
                         .map(|node| node.id.as_str())
                 });
-            let (envelope, node) =
-                single_node_envelope(EMBEDDED_PROFILE_ID, &catalog.nodes, selected).map_err(
-                    |reason| format!("The embedded engine cannot run this profile: {reason}"),
-                )?;
-            let node_outbounds = catalog
-                .nodes
+            let (envelope, node) = single_node_envelope(EMBEDDED_PROFILE_ID, &nodes, selected)
+                .map_err(|reason| {
+                    format!("The embedded engine cannot run this profile: {reason}")
+                })?;
+            let node_outbounds = nodes
                 .iter()
                 .filter_map(|node| {
                     outbound_for_node(node)
@@ -2588,7 +2817,7 @@ fn import_embedded_subscription(
     // The imported envelope is kept so routing modes can be reapplied to it.
     write_managed_text_atomic(&embedded_profile_path(), &envelope)
         .map_err(|error| error.to_string())?;
-    if routed_import {
+    if routed_import && fresh {
         // A profile with its own rules runs them by default.
         desktop.routing_mode = DesktopRoutingMode::Rule;
     }
@@ -2615,10 +2844,10 @@ fn import_embedded_subscription(
     Ok(())
 }
 
-/// Runs the embedded engine from `envelope_path`. On its own it is the system
-/// proxy and the desktop owns it; behind HTTPS MITM it moves to the MITM
-/// proxy's upstream port and the service owns the system proxy, which points
-/// at the MITM listener.
+/// Runs the embedded engine from `envelope_path`; the window owns the system
+/// proxy. With HTTPS MITM the profile keeps the listener layout the removed
+/// Windows service used, and `connection::desktop_listener` puts the engine,
+/// which decrypts itself, on the system proxy port.
 fn set_embedded_listener(managed: &mut WindowsManagedConfig, envelope_path: PathBuf, mitm: bool) {
     let listen_port = if mitm {
         EMBEDDED_MITM_UPSTREAM_PORT
@@ -2630,11 +2859,7 @@ fn set_embedded_listener(managed: &mut WindowsManagedConfig, envelope_path: Path
         server: format!("127.0.0.1:{EMBEDDED_LISTEN_PORT}"),
         bypass: "<local>".to_string(),
     });
-    managed.system_proxy_owner = if mitm {
-        WindowsSystemProxyOwner::Service
-    } else {
-        WindowsSystemProxyOwner::Desktop
-    };
+    managed.system_proxy_owner = WindowsSystemProxyOwner::Desktop;
     managed.embedded = Some(WindowsManagedEmbeddedConfig {
         enabled: true,
         envelope_path,
@@ -2649,6 +2874,16 @@ fn embedded_directory() -> PathBuf {
 
 fn embedded_profile_path() -> PathBuf {
     embedded_directory().join("profile.json")
+}
+
+/// The imported subscription's content, so node edits can be applied to it again without fetching it.
+fn profile_source_text_path() -> PathBuf {
+    embedded_directory().join("source.txt")
+}
+
+/// The user's edits of the imported profile's nodes (`node_edits`), dropped when it is updated.
+fn node_edits_path() -> PathBuf {
+    embedded_directory().join("node-edits.json")
 }
 
 /// `{node id: outbound}` for the nodes of a single-node profile.
@@ -2684,11 +2919,31 @@ fn embedded_envelope_for_mode(
     block_quic: bool,
     force_refresh: bool,
 ) -> Result<String, String> {
-    let envelope = desktop_dns::apply(&mode_envelope(profile, mode, force_refresh)?, dns)?;
+    let rules = desktop_dns::rules::load_lines(&my_rules_path());
+    embedded_envelope_with_rules(profile, mode, dns, block_quic, force_refresh, &rules)
+}
+
+/// [`embedded_envelope_for_mode`] with `rules` as "我的规则" in place of the saved ones.
+fn embedded_envelope_with_rules(
+    profile: &str,
+    mode: DesktopRoutingMode,
+    dns: DnsPreset,
+    block_quic: bool,
+    force_refresh: bool,
+    rules: &[String],
+) -> Result<String, String> {
+    let envelope = desktop_dns::rules::apply(&mode_envelope(profile, mode, force_refresh)?, rules)?;
+    let envelope = desktop_dns::apply(&envelope, dns)?;
     let envelope = desktop_dns::apply_block_quic(&envelope, block_quic)?;
-    if dns != DnsPreset::System {
-        RuntimeConfig::from_json(envelope.as_bytes())
-            .map_err(|error| format!("the DNS choice was rejected: {}", error.message))?;
+    let fake_ip = desktop_dns::custom::current().is_ok_and(|settings| settings.fake_ip);
+    if dns != DnsPreset::System || fake_ip || !rules.is_empty() {
+        RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
+            if rules.is_empty() {
+                format!("the DNS choice was rejected: {}", error.message)
+            } else {
+                format!("the engine rejected the rules: {}", error.message)
+            }
+        })?;
     }
     Ok(envelope)
 }
@@ -2901,55 +3156,6 @@ fn read_subscription(location: &str) -> Result<SubscriptionRead, String> {
 }
 
 #[tauri::command]
-async fn install_service() -> Result<OperationResult, String> {
-    run_blocking(install_service_blocking).await
-}
-
-fn install_service_blocking() -> Result<OperationResult, String> {
-    let executable = std::env::current_exe().map_err(|error| error.to_string())?;
-    let service = executable
-        .parent()
-        .ok_or_else(|| "GUI executable has no parent directory".to_string())?
-        .join("networkcore-windows-service.exe");
-    NativeWindowsSystemIntegration::new()
-        .install_service(&service)
-        .map_err(|error| error.to_string())?;
-    Ok(OperationResult {
-        message: "Windows service installed.".to_string(),
-    })
-}
-
-#[tauri::command]
-async fn start_service() -> Result<OperationResult, String> {
-    run_blocking(start_service_blocking).await
-}
-
-fn start_service_blocking() -> Result<OperationResult, String> {
-    NativeWindowsSystemIntegration::new()
-        .start_service()
-        .map_err(|error| error.to_string())?;
-    Ok(OperationResult {
-        message: "Windows service start requested.".to_string(),
-    })
-}
-
-#[tauri::command]
-async fn stop_service(state: State<'_, DesktopAppState>) -> Result<OperationResult, String> {
-    let state = state.inner().clone();
-    run_blocking(move || stop_service_blocking(state)).await
-}
-
-fn stop_service_blocking(state: DesktopAppState) -> Result<OperationResult, String> {
-    NativeWindowsSystemIntegration::new()
-        .stop_service()
-        .map_err(|error| error.to_string())?;
-    mark_gui_connection_stopped(&state);
-    Ok(OperationResult {
-        message: "Windows service stop requested.".to_string(),
-    })
-}
-
-#[tauri::command]
 async fn restore_network_settings(
     state: State<'_, DesktopAppState>,
 ) -> Result<OperationResult, String> {
@@ -3068,6 +3274,17 @@ fn set_dns_preset_blocking(
         .desktop
         .lock()
         .map_err(|_| "desktop state lock failed")?;
+    rewrite_embedded_envelope(&desktop, preset)?;
+    desktop.dns_preset = preset;
+    save_desktop_state(&desktop)?;
+    Ok(OperationResult {
+        message: "DNS choice saved. Connect to apply it.".to_string(),
+    })
+}
+
+/// Writes the imported profile's envelope again with `preset` and the saved
+/// "自定义" DNS settings; nothing to do before a profile is imported.
+fn rewrite_embedded_envelope(desktop: &DesktopState, preset: DnsPreset) -> Result<(), String> {
     if let Some(embedded) = active_embedded_config()? {
         let profile = fs::read_to_string(embedded_profile_path())
             .map_err(|error| format!("Import the profile again before changing DNS: {error}"))?;
@@ -3081,10 +3298,62 @@ fn set_dns_preset_blocking(
         write_managed_text_atomic(&embedded.envelope_path, &envelope)
             .map_err(|error| error.to_string())?;
     }
-    desktop.dns_preset = preset;
-    save_desktop_state(&desktop)?;
+    Ok(())
+}
+
+/// The "自定义" DNS text and the Fake-IP switch as saved.
+#[tauri::command]
+async fn custom_dns() -> Result<desktop_dns::custom::DnsText, String> {
+    run_blocking(desktop_dns::custom::text).await
+}
+
+/// Checks and saves the "自定义" DNS text and the Fake-IP switch. While the
+/// custom choice is selected or Fake-IP changes, the envelope changes too, so
+/// that needs a disconnected window, as the other DNS choices do; otherwise
+/// the text is only kept for later.
+#[tauri::command]
+async fn save_custom_dns(
+    text: desktop_dns::custom::DnsText,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || save_custom_dns_blocking(&text, state)).await
+}
+
+fn save_custom_dns_blocking(
+    text: &desktop_dns::custom::DnsText,
+    state: DesktopAppState,
+) -> Result<OperationResult, String> {
+    let settings = text.parse()?;
+    let fake_ip_changed =
+        !matches!(desktop_dns::custom::current(), Ok(saved) if saved.fake_ip == settings.fake_ip);
+    let desktop = state
+        .desktop
+        .lock()
+        .map_err(|_| "desktop state lock failed")?
+        .clone();
+    let in_use = desktop.dns_preset == DnsPreset::Custom || fake_ip_changed;
+    if in_use {
+        ensure_routing_configuration_stopped(&state)?;
+    }
+    desktop_dns::custom::replace(text, || {
+        if in_use {
+            rewrite_embedded_envelope(&desktop, desktop.dns_preset)?;
+        }
+        if desktop.direct_egress {
+            let envelope =
+                connection::direct_egress_envelope(desktop.dns_preset, desktop.block_quic)?;
+            RuntimeConfig::from_json(envelope.as_bytes())
+                .map_err(|error| format!("the DNS settings were rejected: {}", error.message))?;
+        }
+        Ok(())
+    })?;
     Ok(OperationResult {
-        message: "DNS choice saved. Connect to apply it.".to_string(),
+        message: if in_use {
+            "DNS settings saved. Connect to apply them.".to_string()
+        } else {
+            "DNS settings saved. Choose Custom to use them.".to_string()
+        },
     })
 }
 
@@ -3134,6 +3403,129 @@ fn set_direct_egress_blocking(
     Ok(OperationResult { message })
 }
 
+#[derive(Debug, Serialize)]
+struct MyRules {
+    text: String,
+    count: usize,
+}
+
+/// "我的规则": the user's own rule lines as written and how many rules they hold.
+#[tauri::command]
+async fn my_rules() -> Result<MyRules, String> {
+    run_blocking(|| {
+        let text = desktop_dns::rules::load(&my_rules_path());
+        let count = desktop_dns::rules::parse(&text).map_or(0, |lines| lines.len());
+        Ok(MyRules { text, count })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn save_my_rules(
+    text: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || save_my_rules_blocking(&text, state)).await
+}
+
+/// Checks "我的规则" against the imported profile, saves them and writes the envelope. The engine this window
+/// runs takes them in place (`reload_rules`), so open connections stay; TUN mode, or a profile that had no
+/// rules before, reconnects instead. The Windows service takes them on its next start.
+fn save_my_rules_blocking(text: &str, state: DesktopAppState) -> Result<OperationResult, String> {
+    let lines = desktop_dns::rules::parse(text).map_err(|error| error.message())?;
+    let mut envelope = None;
+    {
+        let desktop = state
+            .desktop
+            .lock()
+            .map_err(|_| "desktop state lock failed")?;
+        if let Some(embedded) = active_embedded_config()? {
+            // A profile whose mode cannot be applied yet (rule lists not downloaded) has nothing to check the
+            // lines against; they are kept and checked when it connects.
+            let profile = fs::read_to_string(embedded_profile_path())
+                .ok()
+                .filter(|profile| {
+                    embedded_envelope_with_rules(
+                        profile,
+                        desktop.routing_mode,
+                        desktop.dns_preset,
+                        desktop.block_quic,
+                        false,
+                        &[],
+                    )
+                    .is_ok()
+                });
+            if let Some(profile) = profile {
+                let routed = embedded_envelope_with_rules(
+                    &profile,
+                    desktop.routing_mode,
+                    desktop.dns_preset,
+                    desktop.block_quic,
+                    false,
+                    &lines,
+                )?;
+                envelope = Some((embedded.envelope_path, routed));
+            }
+        }
+        if desktop.direct_egress {
+            // Debug mode's node-less profile: checked the same way.
+            let direct = desktop_dns::rules::apply(
+                r#"{"schema_version":1,"profile_id":"desktop","outbound":{"type":"direct"}}"#,
+                &lines,
+            )?;
+            RuntimeConfig::from_json(direct.as_bytes())
+                .map_err(|error| format!("the engine rejected the rules: {}", error.message))?;
+        }
+    }
+    desktop_dns::rules::save(&my_rules_path(), text)?;
+    if let Some((path, routed)) = envelope.as_ref() {
+        write_managed_text_atomic(path, routed).map_err(|error| error.to_string())?;
+    }
+    let count = lines.len();
+    let running_rules = {
+        let desktop = state
+            .desktop
+            .lock()
+            .map_err(|_| "desktop state lock failed")?
+            .clone();
+        if desktop.direct_egress {
+            connection::direct_egress_envelope(desktop.dns_preset, desktop.block_quic)
+                .ok()
+                .and_then(|direct| desktop_dns::rules::rules_of(&direct))
+        } else {
+            envelope
+                .as_ref()
+                .and_then(|(_, routed)| desktop_dns::rules::rules_of(routed))
+        }
+    };
+    let reloaded = {
+        let core = state
+            .direct_core
+            .lock()
+            .map_err(|_| "desktop core lock failed")?;
+        !core.tun_running()
+            && running_rules.is_some_and(|rules| {
+                serde_json::to_vec(&json!({ "cmd": "reload_rules", "rules": rules }))
+                    .ok()
+                    .and_then(|request| core.control(&request).ok())
+                    .and_then(|answer| serde_json::from_slice::<Value>(&answer).ok())
+                    .is_some_and(|answer| answer.get("reloaded") == Some(&Value::Bool(true)))
+            })
+    };
+    let message = if reloaded {
+        format!("{count} rules saved and applied; open connections stay.")
+    } else {
+        match reconnect_running_direct_core(&state) {
+            Ok(()) => format!(
+                "{count} rules saved. They apply to the running connection, or the next one."
+            ),
+            Err(error) => format!("{count} rules saved. Reconnect to apply them: {error}"),
+        }
+    };
+    Ok(OperationResult { message })
+}
+
 /// Saves QUIC blocking into the envelope and the desktop state. A core this
 /// window runs reconnects on it; the Windows service takes it on its next
 /// start.
@@ -3173,15 +3565,6 @@ fn set_block_quic_blocking(
 }
 
 fn ensure_routing_configuration_stopped(state: &DesktopAppState) -> Result<(), String> {
-    let service = NativeWindowsSystemIntegration::new()
-        .service_status()
-        .map_err(|error| error.to_string())?;
-    if !matches!(
-        service.state,
-        WindowsServiceState::NotInstalled | WindowsServiceState::Stopped
-    ) {
-        return Err("Disconnect before changing the routing mode.".to_string());
-    }
     if state
         .direct_core
         .lock()
@@ -3313,6 +3696,37 @@ async fn list_mitm_plugins() -> Result<Vec<PluginSummary>, String> {
     run_blocking(|| mitm_plugins::list(&mitm_plugins::directory())).await
 }
 
+/// Saves a plugin opened from a file or pasted; `source` is the file name, empty when pasted.
+#[tauri::command]
+async fn import_mitm_plugin_text(
+    text: String,
+    source: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let plugin = mitm_plugins::import_text(
+            &mitm_plugins::directory(),
+            &source,
+            &text,
+            mitm_plugins::download,
+        )?;
+        let applied = apply_mitm_plugins(&state);
+        Ok(OperationResult {
+            message: format!(
+                "Plugin imported: {} ({} scripts). {applied}",
+                plugin.name, plugin.script_count
+            ),
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn mitm_plugin_details(id: String) -> Result<mitm_plugins::PluginDetails, String> {
+    run_blocking(move || mitm_plugins::details(&mitm_plugins::directory(), &id)).await
+}
+
 #[tauri::command]
 async fn import_mitm_plugin(
     url: String,
@@ -3364,6 +3778,41 @@ async fn remove_mitm_plugin(
     .await
 }
 
+#[tauri::command]
+async fn list_debug_mappings() -> Result<Vec<mappings::Entry>, String> {
+    run_blocking(|| mappings::list(&mitm_plugins::directory())).await
+}
+
+#[tauri::command]
+async fn save_debug_mapping(
+    entry: mappings::Entry,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        mappings::save(&mitm_plugins::directory(), entry)?;
+        Ok(OperationResult {
+            message: apply_mitm_plugins(&state),
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn remove_debug_mapping(
+    id: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        mappings::remove(&mitm_plugins::directory(), &id)?;
+        Ok(OperationResult {
+            message: apply_mitm_plugins(&state),
+        })
+    })
+    .await
+}
+
 /// Restarts a running desktop core so a plugin change takes effect, and
 /// says what the user still has to do when it cannot.
 fn apply_mitm_plugins(state: &DesktopAppState) -> String {
@@ -3397,15 +3846,6 @@ async fn clear_script_runtime() -> Result<OperationResult, String> {
 }
 
 fn clear_script_runtime_blocking() -> Result<OperationResult, String> {
-    let service = NativeWindowsSystemIntegration::new()
-        .service_status()
-        .map_err(|error| error.to_string())?;
-    if !matches!(
-        service.state,
-        WindowsServiceState::NotInstalled | WindowsServiceState::Stopped
-    ) {
-        return Err("Disconnect before changing the managed script runtime.".to_string());
-    }
     let mut managed = managed_config_or_default()?;
     let native_mitm = managed
         .native_mitm
@@ -3415,8 +3855,7 @@ fn clear_script_runtime_blocking() -> Result<OperationResult, String> {
     write_managed_config(&windows_managed_config_path(), &managed)
         .map_err(|error| error.to_string())?;
     Ok(OperationResult {
-        message: "Managed script runtime cleared. Restart the Windows service to apply it."
-            .to_string(),
+        message: "Managed script runtime cleared.".to_string(),
     })
 }
 
@@ -3451,10 +3890,8 @@ fn enable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult,
             root_trust::STEPS
         ));
     }
-    let restart = stop_running_service_for_mitm_reconfigure()?;
     let mut managed = managed_config_or_default()?;
-    // The MITM proxy takes the system proxy port and relays every session to
-    // the embedded engine behind it; the service runs both.
+    // The engine decrypts itself on the system proxy port (`connection::desktop_listener`).
     managed.native_mitm = Some(WindowsManagedNativeMitmConfig {
         enabled: true,
         listen_host: "127.0.0.1".to_string(),
@@ -3470,11 +3907,6 @@ fn enable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult,
     set_embedded_listener(&mut managed, embedded.envelope_path, true);
     write_managed_config(&windows_managed_config_path(), &managed)
         .map_err(|error| format!("Managed configuration update failed: {error}"))?;
-    if restart {
-        NativeWindowsSystemIntegration::new()
-            .start_service()
-            .map_err(|error| error.to_string())?;
-    }
     reconnect_running_direct_core(&state)?;
     Ok(OperationResult {
         message: format!(
@@ -3546,9 +3978,6 @@ fn reconnect_running_direct_core(state: &DesktopAppState) -> Result<(), String> 
         .lock()
         .map_err(|_| "desktop state lock failed")?
         .clone();
-    if desktop.runtime_mode != DesktopRuntimeMode::Desktop {
-        return Ok(());
-    }
     let mut core = state
         .direct_core
         .lock()
@@ -3575,7 +4004,6 @@ fn disable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult
         .native_mitm
         .take()
         .ok_or_else(|| "HTTPS MITM is not configured.".to_string())?;
-    let restart = stop_running_service_for_mitm_reconfigure()?;
     // The embedded engine takes the system proxy port back.
     if let Some(embedded) = managed.embedded.clone().filter(|embedded| embedded.enabled) {
         set_embedded_listener(&mut managed, embedded.envelope_path, false);
@@ -3601,11 +4029,6 @@ fn disable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult
         };
     // The root and its key stay, so turning decryption on again needs no new manual trust. The user
     // removes the root from Windows' certificate store when they stop using decryption.
-    if restart {
-        NativeWindowsSystemIntegration::new()
-            .start_service()
-            .map_err(|error| error.to_string())?;
-    }
     reconnect_running_direct_core(&state)?;
     if let Some(error) = certificate_cleanup_error {
         return Err(error);
@@ -3613,20 +4036,6 @@ fn disable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult
     Ok(OperationResult {
         message: "HTTPS MITM disabled; the embedded engine is the system proxy again.".to_string(),
     })
-}
-
-fn stop_running_service_for_mitm_reconfigure() -> Result<bool, String> {
-    let integration = NativeWindowsSystemIntegration::new();
-    let status = integration
-        .service_status()
-        .map_err(|error| error.to_string())?;
-    if status.state == WindowsServiceState::Running {
-        integration
-            .stop_service()
-            .map_err(|error| error.to_string())?;
-        return Ok(true);
-    }
-    Ok(false)
 }
 
 /// The root and its key, generated on first use, with the key's ACL locked down.
@@ -3715,6 +4124,46 @@ fn ensure_mitm_ca_material() -> Result<(PathBuf, PathBuf), String> {
     fs::write(&certificate_path, certificate.pem()).map_err(|error| error.to_string())?;
     fs::write(&private_key_path, key_pair.serialize_pem()).map_err(|error| error.to_string())?;
     Ok((certificate_path, private_key_path))
+}
+
+/// An SVG QR code for the phone setup page address of the LAN share.
+#[tauri::command]
+fn phone_qr_code(text: String) -> Result<String, String> {
+    desktop_mitm::phone::qr_svg(&text)
+}
+
+/// Replaces the HTTPS decryption root with the user's own CA (PEM certificate and PKCS#8 key); it is used the
+/// next time HTTPS decryption starts.
+#[tauri::command]
+async fn import_mitm_root(
+    certificate_pem: String,
+    private_key_pem: String,
+) -> Result<OperationResult, String> {
+    run_blocking(move || {
+        desktop_mitm::Root::import(
+            &windows_managed_data_directory().join("mitm"),
+            &certificate_pem,
+            &private_key_pem,
+        )?;
+        Ok(OperationResult {
+            message:
+                "Your root certificate is saved. Turn HTTPS decryption off and on again to use it, \
+                      then install it again on phones and other devices."
+                    .to_string(),
+        })
+    })
+    .await
+}
+
+/// SHA-256 of the HTTPS decryption root, for checking it against the phone setup page.
+#[tauri::command]
+fn mitm_root_fingerprint() -> Option<String> {
+    let root = desktop_mitm::Root::at(&windows_managed_data_directory().join("mitm"));
+    if root.exists() {
+        root.fingerprint().ok()
+    } else {
+        None
+    }
 }
 
 #[tauri::command]
@@ -3832,55 +4281,28 @@ fn snapshot(
     desktop: &DesktopState,
     direct_running: bool,
 ) -> RuntimeSnapshot {
-    let desktop_connected = desktop.runtime_mode == DesktopRuntimeMode::Desktop
-        && direct_running
+    let desktop_connected = direct_running
         && read_current_user_system_proxy()
             .ok()
             .is_some_and(|proxy| owns_current_proxy(desktop, &proxy));
     RuntimeSnapshot {
         connection: if desktop_connected {
-            "Connected".to_string()
+            "Connected"
         } else {
-            runtime.connection.label().to_string()
-        },
-        connection_label: if desktop.runtime_mode == DesktopRuntimeMode::Desktop {
-            if desktop_connected {
-                "Desktop mode is running the embedded engine and managing the current-user proxy."
-                    .to_string()
-            } else if direct_running {
-                "The embedded engine is running; the current-user proxy is not applied.".to_string()
-            } else {
-                "Desktop mode is selected. Connect to start the embedded engine without the Windows service."
-                    .to_string()
-            }
+            "Disconnected"
+        }
+        .to_string(),
+        connection_label: if desktop_connected {
+            "The embedded engine is running and managing the current-user proxy.".to_string()
+        } else if direct_running {
+            "The embedded engine is running; the current-user proxy is not applied.".to_string()
         } else {
-            runtime.status_line()
+            "Connect to start the embedded engine.".to_string()
         },
-        service: StatusFact {
-            label: if desktop.runtime_mode == DesktopRuntimeMode::Desktop {
-                "Not used".to_string()
-            } else {
-                format!("{:?}", runtime.service_state)
-            },
-            detail: if desktop.runtime_mode == DesktopRuntimeMode::Desktop {
-                Some("Desktop mode does not start the Windows service.".to_string())
-            } else {
-                runtime.service_detail.clone()
-            },
-            tone: if desktop_connected || runtime.connection.is_connected() {
-                "success"
-            } else {
-                "neutral"
-            },
-        },
-        core: if desktop.runtime_mode == DesktopRuntimeMode::Desktop {
-            StatusFact {
-                label: if direct_running { "Running" } else { "Stopped" }.to_string(),
-                detail: Some("Embedded engine in this app".to_string()),
-                tone: if direct_running { "success" } else { "neutral" },
-            }
-        } else {
-            core_status(&runtime.core)
+        core: StatusFact {
+            label: if direct_running { "Running" } else { "Stopped" }.to_string(),
+            detail: Some("Embedded engine in this app".to_string()),
+            tone: if direct_running { "success" } else { "neutral" },
         },
         proxy: StatusFact {
             label: runtime
@@ -3910,7 +4332,8 @@ fn snapshot(
         subscription_changed_node_count: desktop.profile_changed_node_count,
         subscription_refresh_error_code: desktop.profile_refresh_error_code.clone(),
         subscription_error: desktop.profile_last_update_error.clone(),
-        last_error: runtime.last_error.clone(),
+        // The state file's errors came from the removed Windows service; the window reports its own.
+        last_error: None,
         configuration_error: runtime.configuration_error.clone(),
         start_after_login: desktop.start_after_login,
         auto_connect: desktop.auto_connect,
@@ -3922,15 +4345,10 @@ fn snapshot(
         script_runtime_configured: managed_script_runtime_configured(),
         https_decryption_enabled: managed_https_decryption_enabled(),
         dark_theme: desktop.dark_theme,
-        runtime_mode: match desktop.runtime_mode {
-            DesktopRuntimeMode::Desktop => "desktop".to_string(),
-            DesktopRuntimeMode::Service => "service".to_string(),
-        },
         routing_mode: routing_mode_name(desktop.routing_mode).to_string(),
         dns_preset: desktop.dns_preset.as_str(),
         block_quic: desktop.block_quic,
-        direct_egress: (desktop.runtime_mode == DesktopRuntimeMode::Desktop)
-            .then_some(desktop.direct_egress),
+        direct_egress: Some(desktop.direct_egress),
         embedded_engine: active_embedded_config().ok().flatten().is_some(),
     }
 }
@@ -3948,19 +4366,6 @@ fn managed_script_runtime_configured() -> bool {
         .and_then(|managed| managed.native_mitm)
         .and_then(|native_mitm| native_mitm.script_runtime)
         .is_some()
-}
-
-fn core_status(status: &ManagedCoreStatus) -> StatusFact {
-    StatusFact {
-        label: status.label(),
-        detail: None,
-        tone: match status {
-            ManagedCoreStatus::EmbeddedRunning { .. } => "success",
-            ManagedCoreStatus::Failed { .. } => "danger",
-            ManagedCoreStatus::Starting => "warning",
-            ManagedCoreStatus::NotConfigured => "neutral",
-        },
-    }
 }
 
 #[cfg(test)]

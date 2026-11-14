@@ -38,6 +38,37 @@ impl Export {
     }
 }
 
+/// What else an `export_capture` request may say: one exchange of the connection, the language of a `code`
+/// export, and whether cookies, tokens and passwords are masked (the engine masks them unless told not to).
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportOptions {
+    #[serde(default)]
+    pub exchange: Option<u64>,
+    #[serde(default)]
+    pub language: Option<String>,
+    #[serde(default)]
+    pub redact: Option<bool>,
+}
+
+/// The engine's `export_capture` request: everything captured, one connection (`id`) or one of its exchanges.
+pub fn export_request(format: &str, id: Option<u64>, options: ExportOptions) -> Value {
+    let mut request = serde_json::json!({ "cmd": "export_capture", "format": format });
+    if let Some(id) = id {
+        request["id"] = Value::from(id);
+        if let Some(exchange) = options.exchange {
+            request["exchange"] = Value::from(exchange);
+        }
+    }
+    if let Some(language) = options.language.filter(|language| !language.is_empty()) {
+        request["language"] = Value::from(language);
+    }
+    if let Some(redact) = options.redact {
+        request["redact"] = Value::from(redact);
+    }
+    request
+}
+
 /// `name` without directories or characters Windows refuses in file names.
 pub fn safe_file_name(name: &str) -> String {
     let base = name.rsplit(['/', '\\']).next().unwrap_or_default();
@@ -94,6 +125,30 @@ pub fn decode_base64(text: &str) -> Result<Vec<u8>, String> {
         }
     }
     Ok(out)
+}
+
+/// Standard base64 with padding.
+pub fn encode_base64(data: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for chunk in data.chunks(3) {
+        let bytes = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
+        let value = (u32::from(bytes[0]) << 16) | (u32::from(bytes[1]) << 8) | u32::from(bytes[2]);
+        for index in 0..4 {
+            if index <= chunk.len() {
+                out.push(char::from(
+                    ALPHABET[((value >> (18 - 6 * index)) & 63) as usize],
+                ));
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
 }
 
 /// The user's Downloads folder: `XDG_DOWNLOAD_DIR` or the `user-dirs.dirs` entry on Linux, `%USERPROFILE%\Downloads`
@@ -189,6 +244,16 @@ mod tests {
     }
 
     #[test]
+    fn encodes_base64_that_decodes_back() {
+        assert_eq!(encode_base64(b""), "");
+        assert_eq!(encode_base64(b"f"), "Zg==");
+        assert_eq!(encode_base64(b"fo"), "Zm8=");
+        assert_eq!(encode_base64(b"foo"), "Zm9v");
+        let bytes: Vec<u8> = (0..=255).collect();
+        assert_eq!(decode_base64(&encode_base64(&bytes)).unwrap(), bytes);
+    }
+
+    #[test]
     fn file_names_lose_directories_and_reserved_characters() {
         assert_eq!(
             safe_file_name("anixops-capture-7.pcapng"),
@@ -233,6 +298,33 @@ mod tests {
         assert_eq!(fs::read(&first).unwrap(), b"1");
         assert_eq!(fs::read(&second).unwrap(), b"2");
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn builds_export_requests() {
+        assert_eq!(
+            export_request("har", None, ExportOptions::default()),
+            serde_json::json!({ "cmd": "export_capture", "format": "har" })
+        );
+        let one = ExportOptions {
+            exchange: Some(2),
+            language: Some("go".to_string()),
+            redact: Some(false),
+        };
+        assert_eq!(
+            export_request("code", Some(7), one.clone()),
+            serde_json::json!({
+                "cmd": "export_capture", "format": "code", "id": 7, "exchange": 2,
+                "language": "go", "redact": false,
+            })
+        );
+        // An exchange means nothing without its connection.
+        assert_eq!(
+            export_request("curl", None, one),
+            serde_json::json!({
+                "cmd": "export_capture", "format": "curl", "language": "go", "redact": false,
+            })
+        );
     }
 
     #[test]

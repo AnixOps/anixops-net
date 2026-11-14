@@ -1,4 +1,4 @@
-import { AppWindow, Ban, BadgeCheck, Bug, Cpu, FileCheck, Gauge, Timer, HardDrive, HeartPulse, Languages, LifeBuoy, Network, ScrollText, PlugZap, Power, RefreshCw, RotateCcw, ServerCog, ShieldCheck, SunMoon, Zap } from "lucide-react";
+import { Ban, BadgeCheck, Bug, Cpu, FileCheck, Gauge, Timer, HardDrive, HeartPulse, Languages, LifeBuoy, Network, ScrollText, PlugZap, Power, RefreshCw, RotateCcw, ShieldCheck, SunMoon, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { desktop, HealthStatus, inProcessEngine, Preferences, preferencesFrom, RuntimeSnapshot } from "../bridge";
@@ -73,27 +73,16 @@ export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, l
 
       {linux
         ? !android && <LinuxProxyCard busy={busy} run={run} />
-        : <Card title={t("运行方式")} description={t("桌面模式由客户端直接运行内核和 HTTPS 解密；Windows 服务模式在后台常驻，关掉窗口也不会断开。")}>
-          <Row icon={AppWindow} color="purple" label={t("运行方式")}>
-            <Segmented
-              label={t("运行方式")}
-              options={[{ value: "desktop", label: t("桌面模式") }, { value: "service", label: t("Windows 服务") }]}
-              value={snapshot.runtimeMode}
-              disabled={Boolean(busy)}
-              onChange={(runtimeMode) => save({ runtimeMode })}
-            />
-          </Row>
-          {snapshot.runtimeMode === "desktop" && (
-            <ToggleRow
-              icon={Network}
-              color="purple"
-              label={t("TUN 模式")}
-              hint={t("用虚拟网卡接管全部流量，不走系统代理的游戏和命令行程序也会经过代理。")}
-              checked={Boolean(snapshot.tunModeEnabled)}
-              disabled={Boolean(busy)}
-              onChange={() => void run("TUN", () => desktop.setTunMode(!snapshot.tunModeEnabled))}
-            />
-          )}
+        : <Card title={t("运行方式")} description={t("内核在客户端窗口进程里运行，关闭窗口会断开连接。")}>
+          <ToggleRow
+            icon={Network}
+            color="purple"
+            label={t("TUN 模式")}
+            hint={t("用虚拟网卡接管全部流量，不走系统代理的游戏和命令行程序也会经过代理。")}
+            checked={Boolean(snapshot.tunModeEnabled)}
+            disabled={Boolean(busy)}
+            onChange={() => void run("TUN", () => desktop.setTunMode(!snapshot.tunModeEnabled))}
+          />
         </Card>}
 
       <Card title={t("网络")}>
@@ -114,14 +103,13 @@ export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, l
         <Row icon={BadgeCheck} color="gray" label={t("校验配置")}>
           <button className="secondary compact" disabled={Boolean(busy)} onClick={() => void run("validate", desktop.validate)}>{t("校验")}</button>
         </Row>
-        <Row icon={RotateCcw} color="gray" label={snapshot.runtimeMode === "desktop" ? t("重启内核") : t("重启服务")}>
+        <Row icon={RotateCcw} color="gray" label={t("重启内核")}>
           <button className="secondary compact" disabled={Boolean(busy)} onClick={() => void run("restart", desktop.restart)}>{t("重启")}</button>
         </Row>
       </Card>
 
       <HealthCard busy={busy} run={run} />
 
-      {!linux && <ServiceCard snapshot={snapshot} busy={busy} run={run} />}
       {!linux && <SystemCard busy={busy} run={run} />}
 
       <AboutCard />
@@ -204,42 +192,6 @@ function LinuxProxyCard({ busy, run }: { busy: string | null; run: Run }) {
         <button className="secondary compact" disabled={Boolean(busy)} onClick={() => void run("network recovery", desktop.restoreNetworkSettings)}>{t("恢复")}</button>
       </Row>
     </Card>
-  );
-}
-
-function ServiceCard({ snapshot, busy, run }: { snapshot: RuntimeSnapshot; busy: string | null; run: Run }) {
-  return (
-    <Card title={t("Windows 服务")} description={t("管理已安装的 AnixOps Net 服务。")}>
-      <Row icon={ServerCog} color="gray" label={t("Windows 服务")} value={<><StatusDot tone={snapshot.service.tone} />{factLabel(snapshot.service.label)}</>}>
-        <ServiceAction state={snapshot.service.label} busy={busy} run={run} />
-      </Row>
-    </Card>
-  );
-}
-
-/**
- * The one service action that applies now (actions V1): install when it is missing, start when it is stopped, stop
- * when it runs. When the state is not known (desktop mode does not watch the service) all three are in the menu.
- */
-function ServiceAction({ state, busy, run }: { state: string; busy: string | null; run: Run }) {
-  const install = () => void run("service", desktop.installService);
-  const start = () => void run("service", desktop.startService);
-  const stop = () => void run("service", desktop.stopService);
-  const disabled = Boolean(busy);
-  if (state === "NotInstalled") return <button className="secondary compact" disabled={disabled} onClick={install}>{t("安装")}</button>;
-  if (state === "Stopped" || state === "Paused") return <button className="secondary compact" disabled={disabled} onClick={start}>{t("启动")}</button>;
-  if (state === "Running") return <button className="secondary compact" disabled={disabled} onClick={stop}>{t("停止")}</button>;
-  if (state === "StartPending" || state === "StopPending") return null;
-  return (
-    <MoreMenu
-      label={t("更多")}
-      disabled={disabled}
-      items={[
-        { label: t("安装服务"), onSelect: install },
-        { label: t("启动服务"), onSelect: start },
-        { label: t("停止服务"), onSelect: stop },
-      ]}
-    />
   );
 }
 

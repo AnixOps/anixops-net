@@ -10,6 +10,38 @@ export function fromBase64(text: string): Uint8Array {
   return bytes;
 }
 
+/** Base64 of bytes, for the engine and the backend. */
+export function toBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  }
+  return btoa(binary);
+}
+
+/** `Name: value` lines of headers, one per line, for a text box. */
+export function headerLines(headers: [string, string][]): string {
+  return headers.map(([name, value]) => `${name}: ${value}`).join("\n");
+}
+
+/** Headers from `Name: value` lines; blank lines and HTTP/2 pseudo-headers (`:path`) are left out. */
+export function parseHeaderLines(text: string): [string, string][] {
+  const headers: [string, string][] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const colon = line.indexOf(":");
+    if (colon <= 0) continue;
+    const name = line.slice(0, colon).trim();
+    if (name) headers.push([name, line.slice(colon + 1).trim()]);
+  }
+  return headers;
+}
+
+/** The URL without its query string and fragment. */
+export function withoutQuery(url: string): string {
+  const end = url.search(/[?#]/);
+  return end < 0 ? url : url.slice(0, end);
+}
+
 /** UTF-8 text when the bytes are valid UTF-8 without control characters other than whitespace; null otherwise. */
 export function asText(bytes: Uint8Array): string | null {
   let text: string;

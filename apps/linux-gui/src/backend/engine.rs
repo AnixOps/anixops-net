@@ -136,8 +136,14 @@ pub fn envelope(nodes: &[NodeDescriptor], node_id: &str) -> Result<String, Strin
 
 /// The envelope with every node and the subscription's rules and policy groups, when `content` carries them,
 /// every node can run on the engine and the engine accepts the result. Otherwise one node runs at a time.
-pub fn subscription_routing(content: &str, nodes: &[NodeDescriptor]) -> Option<String> {
-    let spec = import_subscription_routing(content, nodes).spec?;
+/// `parsed` are the subscription's nodes as served, which its rules and groups name; `nodes` are the ones to run,
+/// with the user's edits (`node_edits`).
+pub fn subscription_routing(
+    content: &str,
+    parsed: &[NodeDescriptor],
+    nodes: &[NodeDescriptor],
+) -> Option<String> {
+    let spec = import_subscription_routing(content, parsed).spec?;
     sync_anx_license();
     routing_envelope(PROFILE_ID, nodes, &spec)
         .ok()
@@ -223,7 +229,7 @@ fn linked(profile: &Value, other: &OtherSource) -> Option<Value> {
 /// Kernel control commands the client may send: reading traffic, connections and rule sets, closing
 /// connections, refreshing remote rule sets and packet capture. Mode and group changes go through the saved
 /// profile instead.
-const ACTIVITY_COMMANDS: [&str; 11] = [
+const ACTIVITY_COMMANDS: [&str; 12] = [
     "traffic",
     "connections",
     "close_connection",
@@ -235,6 +241,7 @@ const ACTIVITY_COMMANDS: [&str; 11] = [
     "clear_capture",
     "capture_connection",
     "export_capture",
+    "capture_requests",
 ];
 
 /// The request bytes for an activity page command, or why it is refused.
@@ -243,7 +250,9 @@ pub fn activity_request(request: &serde_json::Value) -> Result<Vec<u8>, String> 
         .get("cmd")
         .and_then(serde_json::Value::as_str)
         .unwrap_or_default();
-    if !ACTIVITY_COMMANDS.contains(&command) {
+    if !ACTIVITY_COMMANDS.contains(&command)
+        && !desktop_mitm::phone::CONTROL_COMMANDS.contains(&command)
+    {
         return Err(format!(
             "runtime control command {command:?} is not available"
         ));
@@ -342,6 +351,18 @@ impl Engine {
     /// Answers one activity page request (see [`activity_request`]) while the engine runs.
     pub fn control(&self, request: &serde_json::Value) -> Result<serde_json::Value, String> {
         let request = activity_request(request)?;
+        let answer = self.control_bytes(&request)?;
+        serde_json::from_slice(&answer).map_err(|error| error.to_string())
+    }
+
+    /// The replay proxy's state (`start` none), or starts it afresh with HTTPS decryption on or off. Not one of the
+    /// window's activity commands: only the backend asks, and the credentials stay in it.
+    pub fn replay_proxy(&self, start: Option<bool>) -> Result<serde_json::Value, String> {
+        let request = match start {
+            None => serde_json::json!({ "cmd": "replay_proxy" }),
+            Some(decrypt) => serde_json::json!({ "cmd": "start_replay_proxy", "decrypt": decrypt }),
+        };
+        let request = serde_json::to_vec(&request).map_err(|error| error.to_string())?;
         let answer = self.control_bytes(&request)?;
         serde_json::from_slice(&answer).map_err(|error| error.to_string())
     }

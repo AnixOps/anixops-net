@@ -51,6 +51,11 @@ public enum RuntimeControl {
     case captureConnection(UInt64)
     /// Everything captured, or one connection, as a pcapng or HAR file (`PacketCapture.ExportAnswer`).
     case exportCapture(PacketCapture.ExportFormat, id: UInt64?)
+    /// The engine opened to phones on the local network that set this Mac as their Wi-Fi proxy (`LanShare`).
+    case lanShare
+    /// Starts (or restarts) the LAN share on `port`; `0` picks a free one.
+    case startLanShare(port: UInt16)
+    case stopLanShare
 
     public var request: Data {
         let object: [String: Any]
@@ -109,8 +114,42 @@ public enum RuntimeControl {
                 request["id"] = id
             }
             object = request
+        case .lanShare:
+            object = ["cmd": "lan_share"]
+        case let .startLanShare(port):
+            object = ["cmd": "start_lan_share", "port": Int(port)]
+        case .stopLanShare:
+            object = ["cmd": "stop_lan_share"]
         }
         return (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
+    }
+
+    /// The answer to the LAN share commands: whether it runs, on which port, the Mac's private IPv4 addresses (the
+    /// likeliest first) and whether the phone setup page offers the HTTPS decryption root.
+    public struct LanShare: Decodable, Equatable {
+        public let running: Bool
+        public let port: UInt16?
+        public let addresses: [String]
+        public let url: String?
+        public let pageHost: String
+        public let httpsDecryption: Bool
+        public let certificate: Bool
+        public let active: UInt64
+        public let pages: UInt64
+
+        enum CodingKeys: String, CodingKey {
+            case running, port, addresses, url, certificate, active, pages
+            case pageHost = "page_host"
+            case httpsDecryption = "https_decryption"
+        }
+
+        /// The setup page address on `address`, what the QR code holds.
+        public func setupURL(address: String) -> String? {
+            guard running, let port else {
+                return nil
+            }
+            return "http://\(address):\(port)/"
+        }
     }
 
     /// The `metrics` answer.

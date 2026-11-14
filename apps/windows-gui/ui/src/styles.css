@@ -364,6 +364,11 @@ select option { color: var(--label-1); background: var(--bg-elevated); }
 .node-card-actions { position: absolute; top: 4px; right: 4px; display: inline-flex; gap: 1px; padding: 1px; background: var(--group); border-radius: 7px; box-shadow: 0 0 0 .5px var(--hairline), var(--shadow-1); opacity: 0; transition: opacity var(--fast); }
 .node-card-actions:empty { display: none; }
 .node-card:hover .node-card-actions, .node-card:focus-within .node-card-actions { opacity: 1; }
+/* Touch screens (Android) have no hover: the node menu stays visible. */
+@media (hover: none) { .node-card-actions, .row-actions { opacity: 1; } }
+.node-editor { margin-bottom: 12px; }
+.node-editor .button-row { justify-content: flex-end; }
+.node-editor .field { margin-bottom: 10px; }
 .node-card-actions .icon-button { width: 22px; height: 22px; }
 .row-actions { display: inline-flex; gap: 2px; opacity: 0; transition: opacity var(--fast); }
 .row:hover .row-actions, .row:focus-within .row-actions { opacity: 1; }
@@ -489,9 +494,27 @@ dl.headers > div { display: grid; grid-template-columns: minmax(120px, 30%) minm
 dl.headers > div + div { border-top: 1px solid var(--hairline); }
 dl.headers dt { overflow-wrap: anywhere; color: var(--text2); font-size: 12px; font-weight: 600; }
 dl.headers dd { margin: 0; font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+.replay-line { display: flex; gap: 8px; }
+.replay-line .method-input { flex: 0 0 96px; font-family: var(--font-mono); }
+.replay-line input:not(.method-input) { flex: 1; min-width: 0; font-family: var(--font-mono); }
+.requests .method { margin-right: 6px; color: var(--accent); font-family: var(--font-mono); font-size: 12px; font-weight: 600; }
+.requests .list-main strong { font-family: var(--font-mono); font-size: 12px; }
+.request-toolbar .search { flex: 1; width: auto; min-width: 0; }
+.quick-filters { flex-wrap: wrap; gap: 6px; min-height: 0; padding-block: 2px 8px; }
+.row + .row.quick-filters::before { display: none; }
+.search.invalid { box-shadow: 0 0 0 1.5px var(--danger); border-radius: 7px; }
+.mapping-pattern { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 720px) {
   dl.headers > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .bytes-tools { flex-wrap: wrap; }
+  /* Debug views on a phone: segmented choices share the row instead of pushing past it, the request line keeps
+     the method short, editors start lower, and a title with actions wraps instead of squeezing them. */
+  .row > .segmented { flex: 1 1 auto; min-width: 0; }
+  .row > .segmented button { min-width: 0; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; }
+  .replay-line .method-input { flex-basis: 72px; }
+  .bytes-view pre.bytes { max-height: 50vh; }
+  .card-header { flex-wrap: wrap; }
+  textarea { min-height: 96px; }
 }
 
 /* Windows 11 Mica: the Rust side sets data-backdrop="mica" only when the system backdrop is applied, so the
@@ -505,6 +528,23 @@ dl.headers dd { margin: 0; font-family: var(--font-mono); font-size: 12px; overf
   :root[data-backdrop="mica"] .sidebar { background: var(--sidebar); }
 }
 
+/* Phone debugging (Extensions page): the share's QR code beside its address and steps. */
+.port-input { flex: 0 0 72px; min-width: 72px; text-align: right; }
+.phone-qr { display: flex; gap: 16px; align-items: center; padding: 12px 14px; }
+.phone-qr-code { flex: 0 0 auto; width: 168px; height: 168px; padding: 6px; background: #fff; border-radius: 10px; }
+.phone-qr-code svg { display: block; width: 100%; height: 100%; }
+.phone-qr-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; align-items: flex-start; }
+.phone-qr-text code, code.selectable { font-family: var(--font-mono); font-size: 12px; user-select: text; word-break: break-all; }
+.phone-qr-text small { color: var(--text2); font-size: 12px; line-height: 1.5; }
+.root-import { display: grid; gap: 8px; padding: 10px 14px 12px; }
+.root-import textarea { min-height: 88px; }
+.root-import button { justify-self: end; }
+.rule-editor { display: grid; gap: 8px; padding: 10px 14px 12px; }
+.rule-editor textarea { min-height: 160px; }
+.rule-editor .button-row { justify-content: flex-end; }
+.editor-label { display: grid; gap: 2px; margin-top: 4px; font-weight: 500; }
+.editor-label small { color: var(--text3); font-size: 12px; font-weight: 400; }
+@media (max-width: 560px) { .phone-qr { flex-direction: column; align-items: flex-start; } }
 /* First-launch mode choice (mode-choice.tsx): two equal answers, neither one a primary button. */
 .mode-dialog { width: min(560px, 100%); }
 .mode-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
@@ -516,3 +556,5 @@ dl.headers dd { margin: 0; font-family: var(--font-mono); font-size: 12px; overf
 @media (max-width: 720px) {
   .mode-options { grid-template-columns: minmax(0, 1fr); }
 }
+.url-list { display: grid; gap: 2px; word-break: break-all; }
+.plugin-report { margin: 0; padding: 10px 14px 12px; max-height: 260px; overflow: auto; font: 12px/1.5 var(--mono, ui-monospace, monospace); color: var(--text2); white-space: pre-wrap; word-break: break-word; }

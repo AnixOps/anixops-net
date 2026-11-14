@@ -18,8 +18,9 @@ desktop-dns = { path = "../../crates/desktop-dns" }
 desktop-mitm = { path = "../../crates/desktop-mitm" }
 engine-embedded = { workspace = true }
 inbound-mixed = { workspace = true }
-networkcore-windows-service = { path = "../windows-service" }
+mitm-policy = { workspace = true }
 anx-license = { path = "../../crates/anx-license" }
+node-edits = { path = "../../crates/node-edits" }
 node-import = { workspace = true }
 platform-windows = { workspace = true }
 rcgen = { version = "0.14.8", features = ["x509-parser"] }
@@ -39,6 +40,7 @@ windows-sys = { version = "0.61.2", features = [
     "Win32_System_LibraryLoader",
     "Win32_System_Memory",
     "Win32_Security",
+    "Win32_Security_Cryptography",
     "Win32_System_SystemInformation",
     "Win32_System_Threading",
     "Win32_UI_Shell",

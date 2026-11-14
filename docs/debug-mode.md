@@ -1,7 +1,7 @@
 # 调试模式（Apple 客户端）
 
 AnixOps Net 是一个 App 两种模式（计划 A3/A4）：**代理**按订阅规则分流；**调试网络**把抓包、HTTPS 解密、改写和重放放在首位，代理只是底座。
-本页记录 iOS / macOS（SwiftUI）的实现；Windows、Linux、Android（Tauri）按同一行为另做。
+本页记录 iOS / macOS（SwiftUI）的实现；Windows、Linux、Android（Tauri）的实现见文末「Tauri 客户端」。
 
 ## 两种模式
 
@@ -57,3 +57,25 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含 `debug-home-light`�
 ## 后续
 
 - 请求列表按 HTTP 请求逐条展示，快捷筛选和表达式搜索共用一个搜索框（内核 `capture_requests` 和过滤表达式，见 project files `debug-client/kernel-capture-api.md`）。
+
+## Tauri 客户端（Windows / Linux / Android）
+
+同一套行为，共用 `apps/windows-gui/ui` 的界面和 `crates/desktop-mitm`。
+
+- **模式**：存储键为 `anixops.app-mode`（`proxy` / `debug`）和 `anixops.debug-exit`（`direct` / `node`），保存在 WebView 的 localStorage（`ui/src/mode.ts`）。首次选择、老用户直接用代理模式、导入节点后自动切到“经过节点”，都与 Apple 端一致。
+- **侧栏**：调试网络下是“请求 · 规则 · 扩展”，“出口”放在“设置”上方，订阅与节点都在出口里。Android 窄屏下侧栏变成底栏。
+- **直连出口**：后端命令 `set_direct_egress` 让引擎使用不含节点的 `{"outbound":{"type":"direct"}}` 配置。Linux、Android 和 Windows 都支持。
+- **请求列表**（`pages/RequestList.tsx`）：用 `capture_requests` 每秒增量读取，筛选框写的就是内核的过滤表达式。快速筛选（出错、JSON、图片、HTTP/2、大于 100 KB）会拼进表达式（`ui/src/capture-filter.ts`）。
+- **导出**：连接可以导出 pcapng / HAR，单条请求可以导出 cURL、五种语言的代码、Postman、Insomnia 或 HAR，都保存到“下载”文件夹。“遮盖 Cookie、令牌和密码”默认打开。
+- **重放**（`desktop_mitm::replay`）：
+  - 桌面经引擎的本机代理发出，Android 经内核的本机重放代理发出（`start_replay_proxy`，只监听 127.0.0.1，一次性 Basic 凭据，凭据只留在后端）。
+  - 不跟随重定向，不保存 Cookie，响应最多保留 1 MiB；开着 HTTPS 解密时会信任解密根证书。
+- **保存的会话**（`desktop_mitm::sessions`，调试模式的“请求”页）：把当前抓包整体加密保存成会话，之后可以载入回看请求、导出，或删除。
+  - 加密由内核完成（`set_capture_storage` / `save_capture` / `capture_sessions` / `load_capture` / `delete_capture`，ChaCha20-Poly1305）。
+    后端在每个会话操作前把目录和密钥告诉内核；窗口拿不到密钥，`runtime_control` 也拒绝窗口发 `set_capture_storage`。
+  - 密钥：Windows 用 DPAPI 封装后存在 `%LOCALAPPDATA%\AnixOps Net\capture`；Android 用 Keystore 里的 AES-GCM 密钥封装，存在 no-backup 目录；
+    Linux 存进 Secret Service（`secret-tool`），没有钥匙环时存成只有本人可读（0600）的文件，界面会写明。
+    已有的密钥读不出来（例如钥匙环没解锁）时报错，不会换新密钥，免得已保存的会话全部打不开。
+  - 7 天后删除：内核在设置存储、保存和列出时清理；客户端启动时也按文件名里的时间清理一次，不连接也会过期。
+  - 载入会替换当前抓到的内容并停止实时抓包；当前有内容时“载入”要再点一次确认。会话要在连接时才能列出和载入（内核在运行时才应答）。
+- **Map Local / Map Remote**（`desktop_mitm::mappings`）：存放在插件目录的 `debug-mappings.json`，格式与 Apple 端相同。`plugins::apply` 把生成的“AnixOps 调试映射”接在导入的插件后面。映射要开启 HTTPS 解密才生效，保存后正在运行的引擎会重新加载。

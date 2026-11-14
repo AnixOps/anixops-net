@@ -4,18 +4,28 @@
 
 pub mod autostart;
 pub mod engine;
+#[cfg(not(target_os = "android"))]
+pub mod session_key;
 pub mod state;
 pub mod system_proxy;
 pub mod trust;
 #[cfg(target_os = "android")]
 pub mod tun;
 
-use std::path::PathBuf;
+use std::io;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+/// The capture folder in the data directory `dir`: the key file (when there is one) and `sessions/`.
+pub fn capture_dir(dir: &Path) -> PathBuf {
+    dir.join("capture")
+}
 
 use control_domain::NodeDescriptor;
 use desktop_mitm::Root;
+use engine_embedded::config::RuntimeConfig;
 use engine_embedded::profile::{self, RoutingMode, RuleList};
+use node_edits::{NodeEdits, NodeForm};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -62,7 +72,6 @@ pub struct RuntimeSnapshot {
     pub platform: &'static str,
     pub connection: String,
     pub connection_label: String,
-    pub service: StatusFact,
     pub core: StatusFact,
     pub proxy: StatusFact,
     pub selected_node: Option<String>,
@@ -87,7 +96,6 @@ pub struct RuntimeSnapshot {
     pub script_runtime_configured: bool,
     pub https_decryption_enabled: bool,
     pub dark_theme: bool,
-    pub runtime_mode: &'static str,
     pub routing_mode: &'static str,
     pub dns_preset: &'static str,
     /// UDP to port 443 is refused so apps fall back from QUIC to TCP.
@@ -108,6 +116,8 @@ pub struct NodeSummary {
     /// The subscription the node comes from.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
+    /// A node of the selected subscription, which can be edited and removed (`node_edits`).
+    pub editable: bool,
 }
 
 /// A policy group in the interface's `NativeGroupSummary` shape.
@@ -154,6 +164,13 @@ pub struct OperationResult {
     pub message: String,
 }
 
+/// "我的规则" for the Rules page: the text as written and how many rules it holds.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct MyRules {
+    pub text: String,
+    pub count: usize,
+}
+
 fn done(message: impl Into<String>) -> Result<OperationResult, String> {
     Ok(OperationResult {
         message: message.into(),
@@ -195,6 +212,7 @@ impl Backend {
         executable: PathBuf,
     ) -> Self {
         let state = store.load();
+        desktop_dns::custom::use_file(store.dir().join("dns-settings.json"));
         let mut backend = Self {
             store,
             state,
@@ -257,9 +275,10 @@ impl Backend {
             .and_then(|content| engine::parse_nodes(&content).map(|nodes| (content, nodes)))
         {
             Ok((content, nodes)) => {
-                self.routed_profile = engine::subscription_routing(&content, &nodes)
+                let edited = NodeEdits::load(&self.node_edits_path(&source.id)).applied(&nodes);
+                self.routed_profile = engine::subscription_routing(&content, &nodes, &edited)
                     .map(|profile| engine::link_sources(&profile, &self.others));
-                self.nodes = nodes;
+                self.nodes = edited;
             }
             Err(error) => self.configuration_error = Some(error),
         }
@@ -295,11 +314,8 @@ impl Backend {
 
     /// The envelope to run: the profile (routed, or the chosen node) in the routing mode.
     fn envelope(&self) -> Result<String, String> {
-        let envelope = if self.state.direct_egress {
-            engine::direct_envelope()
-        } else {
-            self.routed_envelope()?
-        };
+        let envelope =
+            self.envelope_with_rules(&desktop_dns::rules::load_lines(&self.my_rules_path()))?;
         let envelope = desktop_dns::apply(&envelope, self.state.dns_preset)?;
         let envelope = desktop_dns::apply_block_quic(&envelope, self.state.block_quic)?;
         if !self.state.preferences.https_decryption {
@@ -310,6 +326,70 @@ impl Backend {
             self.mitm_root()
                 .envelope(envelope.as_bytes(), "", Some(&self.plugins_dir()))?;
         String::from_utf8(envelope).map_err(|error| error.to_string())
+    }
+
+    /// The profile, or debug mode's node-less one, with the user's own rule lines first.
+    fn envelope_with_rules(&self, lines: &[String]) -> Result<String, String> {
+        let envelope = if self.state.direct_egress {
+            engine::direct_envelope()
+        } else {
+            self.routed_envelope()?
+        };
+        desktop_dns::rules::apply(&envelope, lines)
+    }
+
+    /// Where "我的规则" are kept, as the text the user wrote.
+    fn my_rules_path(&self) -> PathBuf {
+        self.store.dir().join("my-rules.txt")
+    }
+
+    /// The user's own rule lines as written, and how many rules they hold.
+    pub fn my_rules(&self) -> MyRules {
+        let text = desktop_dns::rules::load(&self.my_rules_path());
+        let count = desktop_dns::rules::parse(&text).map_or(0, |lines| lines.len());
+        MyRules { text, count }
+    }
+
+    /// Checks and saves the user's own rule lines. A running engine takes them in place (`reload_rules`), so open
+    /// connections stay; when it cannot (the profile had no rules before), it restarts with them.
+    pub fn save_my_rules(&mut self, text: &str) -> Result<OperationResult, String> {
+        let lines = desktop_dns::rules::parse(text).map_err(|error| error.message())?;
+        // Without a profile there is nothing to check the lines against yet; they are kept for later.
+        let envelope = match self.envelope_with_rules(&[]) {
+            Ok(_) => {
+                let envelope = self.envelope_with_rules(&lines)?;
+                let envelope = desktop_dns::apply(&envelope, self.state.dns_preset)?;
+                let envelope = desktop_dns::apply_block_quic(&envelope, self.state.block_quic)?;
+                RuntimeConfig::from_json(envelope.as_bytes())
+                    .map_err(|error| format!("the engine rejected the rules: {}", error.message))?;
+                Some(envelope)
+            }
+            Err(_) => None,
+        };
+        desktop_dns::rules::save(&self.my_rules_path(), text)?;
+        if !self.engine.is_running() {
+            return done(format!("{} rules saved", lines.len()));
+        }
+        let reloaded = envelope
+            .as_deref()
+            .and_then(desktop_dns::rules::rules_of)
+            .and_then(|rules| {
+                self.engine
+                    .control(&serde_json::json!({ "cmd": "reload_rules", "rules": rules }))
+                    .ok()
+            })
+            .is_some_and(|answer| answer.get("reloaded") == Some(&serde_json::Value::Bool(true)));
+        if reloaded {
+            return done(format!(
+                "{} rules saved and applied; open connections stay",
+                lines.len()
+            ));
+        }
+        self.restart_if_running()?;
+        done(format!(
+            "{} rules saved; the engine restarted with them",
+            lines.len()
+        ))
     }
 
     /// The profile (routed, or the chosen node) in the routing mode.
@@ -336,6 +416,11 @@ impl Backend {
         self.store.dir().join("mitm")
     }
 
+    /// Saved capture sessions and, without a Secret Service, their key (`desktop_mitm::sessions`).
+    pub fn capture_dir(&self) -> PathBuf {
+        capture_dir(self.store.dir())
+    }
+
     /// Where the HTTPS decryption root is kept, whether or not it exists yet.
     pub fn mitm_root(&self) -> Root {
         Root::at(&self.mitm_dir())
@@ -359,6 +444,31 @@ impl Backend {
 
     pub fn https_decryption(&self) -> bool {
         self.state.preferences.https_decryption
+    }
+
+    /// Replaces the generated root with the user's own CA and restarts a running engine that decrypts.
+    pub fn import_mitm_root(
+        &mut self,
+        certificate_pem: &str,
+        private_key_pem: &str,
+    ) -> Result<OperationResult, String> {
+        Root::import(&self.mitm_dir(), certificate_pem, private_key_pem)?;
+        let restarted = self.state.preferences.https_decryption && self.restart_if_running()?;
+        done(if restarted {
+            "Your root certificate is in use. Install it again on phones and other devices"
+        } else {
+            "Your root certificate is saved; it is used the next time HTTPS decryption runs"
+        })
+    }
+
+    /// SHA-256 of the HTTPS decryption root, when there is one.
+    pub fn mitm_root_fingerprint(&self) -> Option<String> {
+        let root = self.mitm_root();
+        if root.exists() {
+            root.fingerprint().ok()
+        } else {
+            None
+        }
     }
 
     /// Turns HTTPS decryption on or off and restarts a running engine with it.
@@ -477,7 +587,6 @@ impl Backend {
             platform: PLATFORM,
             connection: connection.to_string(),
             connection_label: connection.to_string(),
-            service: StatusFact::new("Not used", None, "neutral"),
             core: if running {
                 StatusFact::new(
                     "Running",
@@ -517,7 +626,6 @@ impl Backend {
             script_runtime_configured: false,
             https_decryption_enabled: self.state.preferences.https_decryption,
             dark_theme: false,
-            runtime_mode: "desktop",
             routing_mode: self.state.routing_mode.as_str(),
             dns_preset: self.state.dns_preset.as_str(),
             block_quic: self.state.block_quic,
@@ -532,24 +640,28 @@ impl Backend {
         let group = self.state.selected_source().map(|source| {
             subscription_meta::display_name(source.name.as_deref(), &source.location)
         });
-        let summary = |id: String, node: &NodeDescriptor, group: &Option<String>| NodeSummary {
+        let summary = |id: String,
+                       node: &NodeDescriptor,
+                       group: &Option<String>,
+                       editable: bool| NodeSummary {
             selected: selected.as_deref() == Some(id.as_str()),
             id,
             label: node.name.clone(),
             protocol: engine::protocol_name(&node.protocol),
             group: group.clone(),
+            editable,
         };
         let own = self
             .nodes
             .iter()
             .filter(|node| engine::is_supported(node))
-            .map(|node| summary(node.id.clone(), node, &group));
+            .map(|node| summary(node.id.clone(), node, &group, true));
         let others = self.others.iter().flat_map(|other| {
             let group = Some(other.name.clone());
             other
                 .nodes
                 .iter()
-                .map(move |node| summary(other.outbound_id(&node.id), node, &group))
+                .map(move |node| summary(other.outbound_id(&node.id), node, &group, false))
                 .collect::<Vec<_>>()
         });
         own.chain(others).collect()
@@ -631,6 +743,46 @@ impl Backend {
         done(format!("DNS set to {}", preset.as_str()))
     }
 
+    /// The "自定义" DNS text and the Fake-IP switch as saved.
+    pub fn custom_dns(&self) -> Result<desktop_dns::custom::DnsText, String> {
+        desktop_dns::custom::text()
+    }
+
+    /// Checks and saves the "自定义" DNS text and the Fake-IP switch. A running engine restarts when the custom
+    /// choice is selected or Fake-IP changed; otherwise the text is kept for later.
+    pub fn save_custom_dns(
+        &mut self,
+        text: &desktop_dns::custom::DnsText,
+    ) -> Result<OperationResult, String> {
+        if text.fake_ip && !cfg!(target_os = "android") {
+            return Err(
+                "Fake-IP needs the packet tunnel; this Linux client uses the system proxy, which already sees domain names"
+                    .to_string(),
+            );
+        }
+        let settings = text.parse()?;
+        let fake_ip_changed = !matches!(desktop_dns::custom::current(), Ok(saved) if saved.fake_ip == settings.fake_ip);
+        let in_use = self.state.dns_preset == DnsPreset::Custom || fake_ip_changed;
+        desktop_dns::custom::replace(text, || {
+            // Without a profile there is nothing to check the settings against yet.
+            if self.envelope_with_rules(&[]).is_ok() {
+                let envelope = self.envelope()?;
+                RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
+                    format!("the engine rejected the DNS settings: {}", error.message)
+                })?;
+            }
+            Ok(())
+        })?;
+        if in_use && self.restart_if_running()? {
+            return done("DNS settings saved; the engine restarted with them");
+        }
+        done(if in_use {
+            "DNS settings saved"
+        } else {
+            "DNS settings saved; choose Custom to use them"
+        })
+    }
+
     /// Turns QUIC blocking on or off. A running engine restarts on it.
     pub fn set_block_quic(&mut self, on: bool) -> Result<OperationResult, String> {
         let previous = self.state.block_quic;
@@ -663,6 +815,43 @@ impl Backend {
             "Traffic leaves directly"
         } else {
             "Traffic leaves through the selected node"
+        })
+    }
+
+    /// Where a replayed request goes in (the running engine's local proxy) and the HTTPS decryption root it has
+    /// to trust while decryption is on.
+    /// Where a replayed request goes: the local proxy on the desktop; on Android, whose own traffic stays out of
+    /// the VPN, the engine's replay proxy (127.0.0.1, fresh port and credentials each start), started on first use.
+    pub fn replay_target(&self) -> Result<desktop_mitm::replay::Target, String> {
+        if !self.engine.is_running() {
+            return Err(
+                "connect first: replayed requests go through the running engine".to_string(),
+            );
+        }
+        let decrypt = self.state.preferences.https_decryption;
+        let root = if decrypt {
+            std::fs::read_to_string(&self.mitm_root().certificate_path).ok()
+        } else {
+            None
+        };
+        if cfg!(target_os = "android") {
+            let running = self.engine.replay_proxy(None)?;
+            let answer =
+                if running.get("running").and_then(serde_json::Value::as_bool) == Some(true) {
+                    running
+                } else {
+                    self.engine.replay_proxy(Some(decrypt))?
+                };
+            return desktop_mitm::replay::Target::from_replay_proxy(&answer, root);
+        }
+        let proxy = self
+            .engine
+            .address()
+            .ok_or("connect first: replayed requests go through the running engine")?;
+        Ok(desktop_mitm::replay::Target {
+            proxy,
+            credentials: None,
+            root_pem: root,
         })
     }
 
@@ -946,6 +1135,79 @@ impl Backend {
         engine::share_link(node)
     }
 
+    /// The saved node edits of source `id`.
+    fn node_edits_path(&self, id: &str) -> PathBuf {
+        self.store
+            .dir()
+            .join("node-edits")
+            .join(format!("{id}.json"))
+    }
+
+    fn remove_node_edits(&self, id: &str) -> io::Result<()> {
+        NodeEdits::default().save(&self.node_edits_path(id))
+    }
+
+    /// The edit form of a node of the selected source.
+    pub fn node_form(&self, id: &str) -> Result<NodeForm, String> {
+        let profile = self
+            .routed_profile
+            .as_deref()
+            .and_then(|profile| serde_json::from_str::<Value>(profile).ok());
+        node_edits::form(&self.nodes, profile.as_ref(), id)
+            .ok_or_else(|| "only nodes of the selected subscription can be edited".to_string())
+    }
+
+    /// Gives a node of the selected source a new name, server and port until the subscription is updated.
+    /// A running engine restarts on it.
+    pub fn edit_node(
+        &mut self,
+        id: &str,
+        name: &str,
+        server: &str,
+        port: &str,
+    ) -> Result<OperationResult, String> {
+        let change = node_edits::check(name, server, port)?;
+        self.node_form(id)?;
+        self.change_node_edits(|edits| edits.change(id, change))?;
+        if self.restart_if_running()? {
+            return done("Node saved; the engine restarted with it");
+        }
+        done("Node saved")
+    }
+
+    /// Removes a node of the selected source until the subscription is updated. A running engine restarts on it.
+    pub fn remove_node(&mut self, id: &str) -> Result<OperationResult, String> {
+        if let Some(reason) = self.node_form(id)?.keep_reason {
+            return Err(reason.to_string());
+        }
+        self.change_node_edits(|edits| edits.remove(id))?;
+        if self.state.selected_node.as_deref() == Some(id) {
+            self.state.selected_node = None;
+            self.save();
+        }
+        if self.restart_if_running()? {
+            return done("Node removed; the engine restarted without it");
+        }
+        done("Node removed")
+    }
+
+    fn change_node_edits(&mut self, change: impl FnOnce(&mut NodeEdits)) -> Result<(), String> {
+        let source = self
+            .state
+            .selected_source()
+            .ok_or("no subscription is selected")?
+            .id
+            .clone();
+        let path = self.node_edits_path(&source);
+        let mut edits = NodeEdits::load(&path);
+        change(&mut edits);
+        edits
+            .save(&path)
+            .map_err(|error| format!("the node edit could not be saved: {error}"))?;
+        self.reload_nodes();
+        Ok(())
+    }
+
     /// The listed nodes, for a batch delay test run outside the lock; `None` for an id no source has.
     pub fn delay_nodes(&self, ids: &[String]) -> Vec<(String, Option<NodeDescriptor>)> {
         ids.iter()
@@ -1017,9 +1279,10 @@ impl Backend {
         let parsed =
             fetched.and_then(|content| engine::parse_nodes(&content).map(|nodes| (content, nodes)));
         let result = match parsed {
+            // An update brings back what the provider serves (`node_edits`).
             Ok((content, nodes)) => self
-                .store
-                .write_source(id, &content)
+                .remove_node_edits(id)
+                .and_then(|()| self.store.write_source(id, &content))
                 .map(|()| nodes.len())
                 .map_err(|error| format!("the subscription could not be saved: {error}")),
             Err(error) => Err(error),
@@ -1065,6 +1328,7 @@ impl Backend {
             self.state.group_choices.clear();
         }
         self.store.remove_source(id);
+        let _ = self.remove_node_edits(id);
         self.save();
         self.reload_nodes();
         done("Subscription removed")
@@ -1203,9 +1467,44 @@ mod tests {
     }
 
     #[test]
-    fn direct_egress_runs_without_any_node() {
-        use engine_embedded::config::RuntimeConfig;
+    fn my_rules_go_first_and_the_engine_accepts_them() {
+        let (mut backend, dir) = backend("my-rules");
+        // Without a profile the lines are only checked and kept.
+        backend.save_my_rules("DOMAIN,kept.test,DIRECT").unwrap();
+        assert!(backend.save_my_rules("GEOSITE,cn,DIRECT").is_err());
+        assert_eq!(backend.my_rules().count, 1);
 
+        backend.import(PASTED_LOCATION, LINK).unwrap();
+        backend
+            .save_my_rules(
+                "DOMAIN-SUFFIX,ads.test,REJECT\nPROCESS-NAME,curl,DIRECT\nDOMAIN,a.test,PROXY",
+            )
+            .unwrap();
+        assert_eq!(backend.my_rules().count, 3);
+        let envelope = backend.envelope().unwrap();
+        assert!(
+            RuntimeConfig::from_json(envelope.as_bytes()).is_ok(),
+            "{envelope}"
+        );
+        let rules = desktop_dns::rules::rules_of(&envelope).unwrap();
+        assert_eq!(rules[0], "DOMAIN-SUFFIX,ads.test,REJECT");
+        assert_eq!(rules[2], "DOMAIN,a.test,proxy");
+
+        // Debug mode's direct egress has no node: PROXY lines go direct, the others still apply.
+        backend.set_direct_egress(true).unwrap();
+        let envelope = backend.envelope().unwrap();
+        assert!(
+            RuntimeConfig::from_json(envelope.as_bytes()).is_ok(),
+            "{envelope}"
+        );
+        let rules = desktop_dns::rules::rules_of(&envelope).unwrap();
+        assert_eq!(rules[0], "DOMAIN-SUFFIX,ads.test,REJECT");
+        assert_eq!(rules[2], "DOMAIN,a.test,DIRECT");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn direct_egress_runs_without_any_node() {
         let (mut backend, dir) = backend("direct");
         assert!(backend.envelope().is_err());
         backend.set_direct_egress(true).unwrap();
@@ -1223,8 +1522,6 @@ mod tests {
 
     #[test]
     fn https_decryption_adds_the_root_and_plugins_to_the_envelope() {
-        use engine_embedded::config::RuntimeConfig;
-
         const PLUGIN: &str = concat!(
             "#!name = ipleak test\n",
             "[Script]\n",
@@ -1476,6 +1773,65 @@ rules:
         // Linked groups follow a rename.
         backend.rename_subscription("s1", "Two, B").unwrap();
         assert_eq!(backend.groups().last().unwrap().tag, "订阅·Two  B");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn node_edits_change_and_remove_nodes_until_the_subscription_is_updated() {
+        let (mut backend, dir) = backend("node-edits");
+        let two = format!("{LINK}\n{}", LINK.replace("11111#HK", "22222#JP"));
+        backend.import("https://edit.example/sub", &two).unwrap();
+        let nodes = backend.nodes();
+        assert_eq!(nodes.len(), 2);
+        assert!(nodes.iter().all(|node| node.editable));
+        let (hk, jp) = (nodes[0].id.clone(), nodes[1].id.clone());
+
+        let form = backend.node_form(&hk).unwrap();
+        assert_eq!((form.server.as_str(), form.port), ("82.47.34.99", 11111));
+        assert!(form.keep_reason.is_none());
+        assert!(backend.edit_node(&hk, "香港", "hk.example", "0").is_err());
+        backend
+            .edit_node(&hk, "香港", "hk.example", "8443")
+            .unwrap();
+        assert_eq!(backend.nodes()[0].label, "香港");
+        backend.switch_node(&hk).unwrap();
+        let envelope = backend.envelope().unwrap();
+        assert!(
+            envelope.contains("hk.example") && envelope.contains("8443"),
+            "{envelope}"
+        );
+
+        backend.remove_node(&jp).unwrap();
+        assert_eq!(backend.nodes().len(), 1);
+        assert!(backend.node_form(&hk).unwrap().keep_reason.is_some());
+        assert!(backend.remove_node(&hk).is_err());
+
+        // Edits survive a restart and go away with an update.
+        let reopened = Backend::open(
+            Store::new(dir.join("config")),
+            None,
+            None,
+            PathBuf::from("/usr/bin/anixops-net"),
+        );
+        assert_eq!(reopened.nodes().len(), 1);
+        let id = backend.subscriptions()[0].id.clone();
+        backend.finish_refresh(&id, Ok(two)).unwrap();
+        assert_eq!(backend.nodes().len(), 2);
+        assert_eq!(backend.nodes()[0].label, "HK");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn routed_nodes_its_groups_name_cannot_be_removed() {
+        let (mut backend, dir) = backend("node-edits-routed");
+        backend.import("https://example.com/sub", CLASH).unwrap();
+        let hk = backend.nodes()[0].id.clone();
+        assert!(backend.node_form(&hk).unwrap().keep_reason.is_some());
+        assert!(backend.remove_node(&hk).is_err());
+        backend.edit_node(&hk, "", "hk.example", "443").unwrap();
+        let envelope = backend.envelope().unwrap();
+        assert!(envelope.contains("hk.example"), "{envelope}");
+        assert!(RuntimeConfig::from_json(envelope.as_bytes()).is_ok());
         let _ = std::fs::remove_dir_all(dir);
     }
 

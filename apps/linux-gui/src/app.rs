@@ -21,8 +21,10 @@ use crate::backend::{
     PreferencesInput, RuntimeSnapshot, SubscriptionSummary, PASTED_LOCATION,
 };
 use client_health::{startup, Health};
+use desktop_mitm::mappings;
 use desktop_mitm::plugins::{self, PluginSummary};
 use engine_embedded::profile::RoutingMode;
+use node_edits::NodeForm;
 use subscription_meta::ResponseMeta;
 use tauri::plugin::TauriPlugin;
 use tauri::webview::PageLoadEvent;
@@ -86,6 +88,13 @@ pub trait TunnelHost: Send + Sync + 'static {
         Err("this platform has no shared Downloads folder".to_string())
     }
 
+    /// The key that seals saved capture sessions, as base64, kept by the platform's key store (Android: the
+    /// Keystore), made on first use.
+    fn capture_session_key(&self, app: &AppHandle) -> Result<String, String> {
+        let _ = app;
+        Err("this platform keeps the capture session key itself".to_string())
+    }
+
     /// Puts a binary file, given as base64, in the same place as [`TunnelHost::save_to_downloads`] and
     /// returns where it went.
     fn save_base64_to_downloads(
@@ -108,6 +117,9 @@ pub use client_health::startup::mark_process_start;
 struct AppState(Arc<Mutex<Backend>>);
 
 struct HealthState(Arc<Health>);
+
+/// The capture session key once read, so the key store is asked once per run.
+struct SessionKeyState(Mutex<Option<desktop_mitm::sessions::SessionKey>>);
 
 fn lock(backend: &Mutex<Backend>) -> MutexGuard<'_, Backend> {
     backend.lock().unwrap_or_else(PoisonError::into_inner)
@@ -428,7 +440,123 @@ async fn runtime_control(
     state: State<'_, AppState>,
     request: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
+    // Only the backend names where sessions go and the key that seals them (`capture_session`).
+    if !desktop_mitm::sessions::window_may_send(&request) {
+        return Err("runtime control command \"set_capture_storage\" is not available".to_string());
+    }
     with_backend(&state, move |backend| backend.runtime_control(&request)).await
+}
+
+/// "我的规则": the user's own rule lines as written and how many rules they hold.
+#[tauri::command]
+async fn my_rules(state: State<'_, AppState>) -> Result<crate::backend::MyRules, String> {
+    with_backend(&state, |backend| Ok(backend.my_rules())).await
+}
+
+/// The "自定义" DNS text and the Fake-IP switch.
+#[tauri::command]
+async fn custom_dns(state: State<'_, AppState>) -> Result<desktop_dns::custom::DnsText, String> {
+    with_backend(&state, |backend| backend.custom_dns()).await
+}
+
+/// Checks and saves the "自定义" DNS text and the Fake-IP switch.
+#[tauri::command]
+async fn save_custom_dns(
+    state: State<'_, AppState>,
+    text: desktop_dns::custom::DnsText,
+) -> Result<OperationResult, String> {
+    with_backend(&state, move |backend| backend.save_custom_dns(&text)).await
+}
+
+/// Checks and saves "我的规则"; a running engine takes them in place.
+#[tauri::command]
+async fn save_my_rules(
+    state: State<'_, AppState>,
+    text: String,
+) -> Result<OperationResult, String> {
+    with_backend(&state, move |backend| backend.save_my_rules(&text)).await
+}
+
+/// Saved capture sessions: list, save what capture holds, load one for viewing, delete. The engine is told where
+/// sessions go and the key before every action, since it forgets both when it restarts.
+#[tauri::command]
+async fn capture_session(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    keys: State<'_, SessionKeyState>,
+    action: desktop_mitm::sessions::SessionAction,
+) -> Result<serde_json::Value, String> {
+    let request = action.request()?;
+    let capture_dir = with_backend(&state, |backend| Ok(backend.capture_dir())).await?;
+    let cached = keys
+        .0
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone();
+    let key = match cached {
+        Some(key) => key,
+        None => {
+            let dir = capture_dir.clone();
+            let key = off_lock(move || session_key(&app, &dir)).await?;
+            *keys.0.lock().unwrap_or_else(PoisonError::into_inner) = Some(key.clone());
+            key
+        }
+    };
+    let storage = desktop_mitm::sessions::storage_request(&capture_dir.join("sessions"), &key);
+    let protection = key.protection;
+    let answer = with_backend(&state, move |backend| {
+        backend.runtime_control(&storage)?;
+        backend.runtime_control(&request)
+    })
+    .await?;
+    Ok(desktop_mitm::sessions::with_protection(answer, protection))
+}
+
+/// Android: the Keystore keeps the key, through the VPN plugin.
+#[cfg(target_os = "android")]
+fn session_key(
+    app: &AppHandle,
+    _dir: &std::path::Path,
+) -> Result<desktop_mitm::sessions::SessionKey, String> {
+    let host = app
+        .try_state::<TunnelHostState>()
+        .ok_or("the Android key store is not available")?;
+    let key = desktop_mitm::capture::decode_base64(&host.0.capture_session_key(app)?)?;
+    desktop_mitm::sessions::SessionKey::new(&key, desktop_mitm::sessions::Protection::Keystore)
+}
+
+/// Linux: the Secret Service, or a file only this user can read.
+#[cfg(not(target_os = "android"))]
+fn session_key(
+    _app: &AppHandle,
+    dir: &std::path::Path,
+) -> Result<desktop_mitm::sessions::SessionKey, String> {
+    crate::backend::session_key::load(dir)
+}
+
+/// An SVG QR code for the phone setup page address of the LAN share.
+#[tauri::command]
+fn phone_qr_code(text: String) -> Result<String, String> {
+    desktop_mitm::phone::qr_svg(&text)
+}
+
+/// Replaces the HTTPS decryption root with the user's own CA (PEM certificate and PKCS#8 key).
+#[tauri::command]
+async fn import_mitm_root(
+    state: State<'_, AppState>,
+    certificate_pem: String,
+    private_key_pem: String,
+) -> Result<OperationResult, String> {
+    with_backend(&state, move |backend| {
+        backend.import_mitm_root(&certificate_pem, &private_key_pem)
+    })
+    .await
+}
+
+/// SHA-256 of the HTTPS decryption root, for checking it against the phone setup page.
+#[tauri::command]
+async fn mitm_root_fingerprint(state: State<'_, AppState>) -> Result<Option<String>, String> {
+    with_backend(&state, |backend| Ok(backend.mitm_root_fingerprint())).await
 }
 
 /// Where a capture export was saved.
@@ -446,11 +574,9 @@ async fn export_capture(
     state: State<'_, AppState>,
     format: String,
     id: Option<u64>,
+    options: Option<desktop_mitm::capture::ExportOptions>,
 ) -> Result<SavedFile, String> {
-    let mut request = serde_json::json!({ "cmd": "export_capture", "format": format });
-    if let Some(id) = id {
-        request["id"] = serde_json::json!(id);
-    }
+    let request = desktop_mitm::capture::export_request(&format, id, options.unwrap_or_default());
     let answer = with_backend(&state, move |backend| backend.runtime_control(&request)).await?;
     let export = desktop_mitm::capture::Export::from_answer(&answer)?;
     let location = off_lock(move || save_export(&app, &export)).await?;
@@ -478,6 +604,16 @@ fn save_export(_app: &AppHandle, export: &desktop_mitm::capture::Export) -> Resu
         desktop_mitm::capture::downloads_dir().ok_or("the Downloads folder could not be found")?;
     let path = desktop_mitm::capture::save_new_file(&dir, &export.file_name, &export.bytes()?)?;
     Ok(path.display().to_string())
+}
+
+/// Sends an edited copy of a captured request through the running engine (`desktop_mitm::replay`).
+#[tauri::command]
+async fn replay_request(
+    state: State<'_, AppState>,
+    request: desktop_mitm::replay::ReplayRequest,
+) -> Result<desktop_mitm::replay::ReplayResponse, String> {
+    let target = with_backend(&state, |backend| backend.replay_target()).await?;
+    off_lock(move || desktop_mitm::replay::send(&target, &request)).await
 }
 
 #[tauri::command]
@@ -604,6 +740,34 @@ async fn test_node_delays(
 #[tauri::command]
 async fn node_share_link(state: State<'_, AppState>, node_id: String) -> Result<String, String> {
     lock(&state.0).share_link(&node_id)
+}
+
+/// The name, server and port of a node of the selected subscription, and whether it can be removed.
+#[tauri::command]
+async fn node_form(state: State<'_, AppState>, node_id: String) -> Result<NodeForm, String> {
+    lock(&state.0).node_form(&node_id)
+}
+
+#[tauri::command]
+async fn edit_node(
+    state: State<'_, AppState>,
+    node_id: String,
+    name: String,
+    server: String,
+    port: String,
+) -> Result<OperationResult, String> {
+    with_backend(&state, move |backend| {
+        backend.edit_node(&node_id, &name, &server, &port)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn remove_node(
+    state: State<'_, AppState>,
+    node_id: String,
+) -> Result<OperationResult, String> {
+    with_backend(&state, move |backend| backend.remove_node(&node_id)).await
 }
 
 #[tauri::command]
@@ -954,6 +1118,29 @@ where
     })
 }
 
+/// Saves a plugin opened from a file or pasted; `source` is the file name, empty when pasted.
+#[tauri::command]
+async fn import_mitm_plugin_text(
+    state: State<'_, AppState>,
+    text: String,
+    source: String,
+) -> Result<OperationResult, String> {
+    change_plugins(&state, move |directory| {
+        let plugin = plugins::import_text(directory, &source, &text, plugins::download)?;
+        Ok(format!("Plugin imported: {}", plugin.name))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn mitm_plugin_details(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<plugins::PluginDetails, String> {
+    let directory = lock(&state.0).plugins_dir();
+    off_lock(move || plugins::details(&directory, &id)).await
+}
+
 #[tauri::command]
 async fn import_mitm_plugin(
     state: State<'_, AppState>,
@@ -996,6 +1183,36 @@ async fn remove_mitm_plugin(
     .await
 }
 
+#[tauri::command]
+async fn list_debug_mappings(state: State<'_, AppState>) -> Result<Vec<mappings::Entry>, String> {
+    let directory = lock(&state.0).plugins_dir();
+    off_lock(move || mappings::list(&directory)).await
+}
+
+#[tauri::command]
+async fn save_debug_mapping(
+    state: State<'_, AppState>,
+    entry: mappings::Entry,
+) -> Result<OperationResult, String> {
+    change_plugins(&state, move |directory| {
+        let saved = mappings::save(directory, entry)?;
+        Ok(format!("Mapping saved: {}", saved.pattern))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn remove_debug_mapping(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<OperationResult, String> {
+    change_plugins(&state, move |directory| {
+        mappings::remove(directory, &id)?;
+        Ok("Mapping removed".to_string())
+    })
+    .await
+}
+
 /// Commands the Windows client has and Linux does not yet; the interface hides their controls.
 macro_rules! unavailable {
     ($($name:ident),* $(,)?) => {
@@ -1009,9 +1226,6 @@ macro_rules! unavailable {
 }
 
 unavailable!(
-    install_service,
-    start_service,
-    stop_service,
     configure_script_runtime,
     clear_script_runtime,
     install_certificate,
@@ -1036,6 +1250,11 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
         },
         env!("CARGO_PKG_VERSION"),
         std::env::current_exe().unwrap_or_else(|_| executable.clone()),
+    );
+    // Sessions expire after a week even when the engine does not run to delete them.
+    desktop_mitm::sessions::purge(
+        &crate::backend::capture_dir(&dir).join("sessions"),
+        desktop_mitm::sessions::now_ms(),
     );
     let backend = Backend::open(
         Store::new(dir),
@@ -1082,6 +1301,7 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
     let app = builder
         .manage(AppState(shared.clone()))
         .manage(HealthState(health))
+        .manage(SessionKeyState(Mutex::new(None)))
         .on_page_load(|webview, payload| {
             if payload.event() != PageLoadEvent::Finished {
                 return;
@@ -1106,10 +1326,18 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             switch_node,
             runtime_control,
             export_capture,
+            capture_session,
+            replay_request,
+            list_debug_mappings,
+            save_debug_mapping,
+            remove_debug_mapping,
             test_node_delay,
             test_node_delays,
             network_probe,
             node_share_link,
+            node_form,
+            edit_node,
+            remove_node,
             select_fastest_node,
             save_preferences,
             create_diagnostics,
@@ -1127,9 +1355,10 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             set_block_quic,
             set_direct_egress,
             refresh_routing_rules,
-            install_service,
-            start_service,
-            stop_service,
+            my_rules,
+            save_my_rules,
+            custom_dns,
+            save_custom_dns,
             configure_script_runtime,
             clear_script_runtime,
             enable_https_mitm,
@@ -1139,8 +1368,13 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             remove_mitm_root_trust,
             list_mitm_plugins,
             import_mitm_plugin,
+            import_mitm_plugin_text,
+            mitm_plugin_details,
             set_mitm_plugin_enabled,
             remove_mitm_plugin,
+            phone_qr_code,
+            import_mitm_root,
+            mitm_root_fingerprint,
             install_certificate,
             remove_certificate,
             install_driver,

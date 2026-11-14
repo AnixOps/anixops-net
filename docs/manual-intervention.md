@@ -56,7 +56,7 @@ ios-upload-internal-workflow-secrets=APP_STORE_CONNECT_API_KEY_ID,APP_STORE_CONN
 在 Windows 真机上安装包含 Phase 4A 的构建后：
 
 - 用旧版本（兼容内核导入）留下的配置启动，记录连接时的提示；重新导入订阅后能连接，节点切换、延迟测试、策略组切换和五种分流模式都可用。
-- 服务模式下开启 HTTPS 解密：系统代理指向 `127.0.0.1:7890`，内置引擎监听 `127.0.0.1:7891`，浏览器经解密访问 HTTPS 站点正常；关闭解密后系统代理回到 `127.0.0.1:7890` 的内置引擎，且 7891 不再监听。
+- 开启 HTTPS 解密：浏览器经解密访问 HTTPS 站点正常；关闭解密后浏览器仍能正常上网。
 - 设置页不再出现兼容内核和附加协议内核卡片，规则页不再出现 JSON 编辑和 DNS JSON。
 - 诊断报告里只有内置引擎和 MITM 的状态字段。
 
@@ -97,7 +97,7 @@ GUI 清单改为 `requireAdministrator`，登录后启动从 HKCU Run 改为按�
 
 桌面模式下 HTTPS 解密改由客户端进程自己运行（客户端已固定以管理员运行），不再需要 Windows 服务：
 
-- [ ] 设置选「桌面模式」，扩展页开启 HTTPS 解密，连接成功；浏览器访问 HTTPS 站点证书颁发者为 NetworkCore 根证书，插件改写生效。
+- [ ] 扩展页开启 HTTPS 解密，连接成功；浏览器访问 HTTPS 站点证书颁发者为 NetworkCore 根证书，插件改写生效。
 - [ ] 已连接时开启/关闭 HTTPS 解密，客户端自动重连，系统代理保持在 127.0.0.1:7890。
 - [ ] 关闭 HTTPS 解密后，「受信任的根证书颁发机构」里的 NetworkCore 根证书被移除。
 - [ ] 断开连接后 7890/7891 端口都被释放。
@@ -163,8 +163,7 @@ CI 只能跑规则与重建逻辑的单元测试（`OnDemandSettingsTests`、`Ne
 - [ ] S6 SSID 规则（iOS、macOS）：把家里 Wi-Fi 设为“断开”，加入该 Wi-Fi 后隧道在 300 ms 内断开（用系统 VPN 状态栏图标或
   `log stream --predicate 'subsystem == "com.apple.networkextension"'` 的时间戳计时），离开后自动连接。
 - [ ] S4 桌面（Windows、Linux，本机代理模式）：拔插网线或换 Wi-Fi、睡眠 2 分钟后唤醒，网页几秒内恢复；Windows 日志
-  （`tauri-gui`）里有 `network change: engine reset {...}` / `wake: engine reset {...}`。TUN 模式和服务模式的内核不在本窗口进程里，
-  这一项不覆盖。
+  （`tauri-gui`）里有 `network change: engine reset {...}` / `wake: engine reset {...}`。TUN 模式这一项不覆盖。
 
 ## macOS 命令行工具
 
@@ -202,3 +201,52 @@ CI 的 `android` job 每次都产出 arm64 APK（artifact `anixops-net-android-<
 - [ ] 维护者在 Settings → Pages 把 Source 设为「GitHub Actions」（只做一次；没设之前 `Deploy to GitHub Pages` job 会失败）。
   设好后手动运行一次 `Download page` workflow。
 - [ ] 打开下载页，确认各平台按钮指向最新版，`/windows/` 等固定链接能跳转。
+
+
+## 手机连电脑抓包（真机验收）
+
+自动测试只覆盖了回环地址上的部分：设置页、证书下载、转发与连接标签。下面几项需要用真机验收：
+
+- [ ] macOS：连接后打开「扩展 → 手机抓包」，iPhone 扫码，按设置页的步骤设代理并安装、信任描述文件，`http://cert.anixops/` 显示“代理已生效”，请求页能看到 `LAN <iPhone 地址>` 的连接，HTTPS 内容能解密。
+- [ ] Windows（桌面模式）与 Linux：同样的步骤，再用一台 Android 手机安装 `.crt` 验收一遍。
+- [ ] 第一次开启时，macOS 和 Windows 可能弹出防火墙提示，需要允许传入连接。
+
+
+## 抓包会话加密保存（Tauri，真机验收）
+
+CI 只覆盖编译和会话请求、清理、密钥文件的单测；系统密钥库要在真机上确认：
+
+- [ ] Windows（桌面模式）：连接、开始抓包、在“请求”页保存会话；`%LOCALAPPDATA%\AnixOps Net\capture\` 下有 `session-key.dpapi` 和 `sessions\*.anxcap`；重启客户端后能载入；换一个 Windows 账户复制这两个文件过去打不开。
+- [ ] Linux（GNOME 或 KDE）：保存会话后 `secret-tool lookup application anixops-net purpose capture-session-key` 能查到，`capture/` 下只有 `session-key.secret-service` 标记、没有 `session-key` 文件；锁住钥匙环再列出会话时提示解锁，而不是换新密钥。
+- [ ] Linux（没有钥匙环的桌面）：`capture/session-key` 权限是 `0600`，界面说明写的是“密钥保存在只有你能读取的文件里”。
+- [ ] Android：保存、退出 App、重新连接后能载入；清除 App 数据后旧会话随之删除。
+
+## 自定义 DNS 与 Fake-IP（Tauri，真机验收）
+
+CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP 要在真机上看：
+
+- [ ] Windows（TUN 模式）：分流页 DNS 选“自定义 DNS”，填一个 `direct` 服务器和一条 `DOMAIN-SUFFIX`，保存后连接；`nslookup` 该域名走到填的服务器（看节点日志或抓包）。打开 Fake-IP 再连接，`nslookup example.com` 返回 `198.18.x.x`，浏览器正常打开，`nslookup router.lan` 之类局域网名仍是真实地址。
+- [ ] Windows（系统代理模式）：Fake-IP 打开时浏览器照常上网（Fake-IP 只在 TUN 模式下起作用）。
+- [ ] Android：同上两项，在 VPN 里确认 Fake-IP 返回 `198.18.x.x`，微信、推送等不受影响。
+- [ ] Linux：没有 Fake-IP 开关；自定义 DNS 保存后正在运行的引擎重启，Hosts 里写的名字按填的地址连接。
+
+## Windows 删除服务模式后真机验收（W1）
+
+- [ ] 在 beta.6 上选「Windows 服务」运行方式并连接，然后用 MSI 升级：升级后 `sc query AnixOpsNetworkCore` 报不存在，
+  客户端以窗口进程连接，系统代理和 HTTPS 解密正常。
+- [ ] 便携版：旧便携版注册过服务的机器上启动新版，`gui.log` 有删除旧服务的记录，服务不存在，之前由服务设置的系统代理已恢复。
+- [ ] MSI 卸载后根证书（NetworkCore 根证书和 HTTPS 解密根证书）和驱动都被删除；`%ProgramData%\AnixOps\NetworkCore\logs\gui.log`
+  有 `purged` 记录。卸载过程中不弹窗。
+
+## 节点编辑与分享真机验收（T4 / T5）
+
+- [ ] Windows、Linux、Android：节点卡片“更多”菜单复制分享链接，粘贴到另一台设备能导入同一节点。Android 上不需要长按或悬停就能看到菜单按钮。
+- [ ] 编辑一个节点的名称、服务器、端口后，连接中的内核自动重启，流量走新的服务器；重启客户端后改动仍在。
+- [ ] 删除一个没有被策略组用到的节点后列表少了它；更新订阅后编辑和删除都恢复为订阅里的内容。
+- [ ] Windows 上从 beta.6 升级后，第一次编辑节点会提示先更新一次订阅（旧版本没有保存订阅内容），更新后可以编辑。
+
+## 插件从文件 / 粘贴导入真机验收（T7）
+
+- [ ] Windows、Linux：扩展页插件卡片“更多导入方式 → 从文件导入”选一个 `.plugin` / `.sgmodule` 文件，插件出现在列表里，脚本已下载，开启 HTTPS 解密后生效。
+- [ ] Android：同样从文件导入（系统文件选择器）和粘贴插件内容都能导入；插件行的“更多”按钮不用长按就能看到。
+- [ ] 插件行“更多 → 查看内容”显示解密域名、脚本地址和逐行报告；再次导入同名插件替换原来那条，不会出现两条。

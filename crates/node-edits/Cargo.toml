@@ -1,0 +1,12 @@
+[package]
+name = "node-edits"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Node edits of the desktop and Android clients: a new name, server and port for a node of the selected subscription, or the node removed, kept beside the subscription until it is updated."
+
+[dependencies]
+control-domain = { workspace = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

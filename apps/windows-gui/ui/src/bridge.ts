@@ -18,7 +18,6 @@ export interface RuntimeSnapshot {
   platform?: "windows" | "linux" | "android";
   connection: string;
   connectionLabel: string;
-  service: StatusFact;
   core: StatusFact;
   proxy: StatusFact;
   selectedNode?: string;
@@ -45,7 +44,6 @@ export interface RuntimeSnapshot {
   /** HTTPS decryption is on (Windows); the Linux client leaves it out. */
   httpsDecryptionEnabled?: boolean;
   darkTheme: boolean;
-  runtimeMode: "desktop" | "service";
   routingMode: "bypass_china" | "gfw_list" | "direct" | "return_china" | "rule";
   /** How the engine resolves names; older backends leave it out. */
   dnsPreset?: DnsPreset;
@@ -57,7 +55,15 @@ export interface RuntimeSnapshot {
   embeddedEngine?: boolean;
 }
 
-export type DnsPreset = "system" | "encrypted" | "split";
+export type DnsPreset = "system" | "encrypted" | "split" | "custom";
+
+/** The "自定义" DNS choice as written, and the Fake-IP switch (Windows TUN mode and Android). */
+export interface DnsText {
+  servers: string;
+  rules: string;
+  hosts: string;
+  fake_ip: boolean;
+}
 
 export interface NodeSummary {
   id: string;
@@ -66,6 +72,16 @@ export interface NodeSummary {
   selected: boolean;
   /** The subscription the node comes from, when the backend lists several. */
   group?: string;
+  /** A node of the subscription in use, which can be edited and removed; older backends leave it out. */
+  editable?: boolean;
+}
+
+/** A node's edit form; `keepReason` says why it cannot be removed. */
+export interface NodeForm {
+  name: string;
+  server: string;
+  port: number;
+  keepReason?: string;
 }
 
 export interface NativeGroupSummary {
@@ -178,7 +194,110 @@ export interface CaptureConnection {
   http: CaptureExchange[];
 }
 
-export type CaptureFormat = "pcapng" | "har";
+export type CaptureFormat = "pcapng" | "har" | "curl" | "code" | "postman" | "insomnia";
+
+/** The language of a `code` export. */
+export type CodeLanguage = "python" | "javascript" | "swift" | "kotlin" | "go";
+
+export interface ExportOptions {
+  /** One exchange of the connection (its index in `http`); needs the connection id. */
+  exchange?: number;
+  language?: CodeLanguage;
+  /** Mask cookies, tokens and passwords; the engine does unless this is false. */
+  redact?: boolean;
+}
+
+/** One decrypted request in the engine's request list (`capture_requests`). */
+export interface CaptureRequest {
+  /** Rises with every request; the list is read again from the last one seen. */
+  seq: number;
+  connection_id: number;
+  /** Its place in the connection's `http` list. */
+  index: number;
+  method: string;
+  url: string;
+  host: string;
+  status?: number | null;
+  note?: string | null;
+  http_version: string;
+  started_at_ms: number;
+  ended_at_ms?: number | null;
+  request_size: number;
+  response_size: number;
+  response_content_type?: string | null;
+}
+
+/** What keeps the key of saved capture sessions on this device. */
+export type SessionProtection = "dpapi" | "keystore" | "secret-service" | "file";
+
+/** One saved capture session (`capture_sessions`). */
+export interface CaptureSession {
+  session: string;
+  /** Empty when saved without a name. */
+  name?: string;
+  saved_at_ms: number;
+  expires_at_ms: number;
+  size: number;
+  connections?: number;
+  requests?: number;
+  /** Sealed with another key (e.g. a reinstall): it cannot be opened and expires on its own. */
+  unreadable?: boolean;
+}
+
+/** Every session answer says what keeps the key and how long sessions are kept. */
+interface SessionAnswer {
+  protection: SessionProtection;
+  retention_days: number;
+}
+
+export type CaptureSessionAction =
+  | { action: "list" }
+  | { action: "save"; name?: string }
+  | { action: "load"; session: string }
+  | { action: "delete"; session: string };
+
+export interface CaptureRequestsAnswer {
+  requests?: CaptureRequest[];
+  last_seq?: number;
+  /** The highest seq the engine dropped (capture budget, cleared, a session loaded); it and older rows are gone. */
+  dropped_before_seq?: number;
+  /** `invalid_filter` with the character position of the mistake. */
+  error?: { code: string; at?: number; message?: string };
+}
+
+/** An edited copy of a captured request, sent again through the local proxy. */
+export interface ReplayRequest {
+  method: string;
+  url: string;
+  headers: [string, string][];
+  /** Empty for no body. */
+  bodyBase64: string;
+}
+
+export interface ReplayResponse {
+  status: number;
+  headers: [string, string][];
+  bodyBase64: string;
+  /** Cut at 1 MiB. */
+  truncated: boolean;
+  elapsedMs: number;
+}
+
+/** A Map Local / Map Remote rule made in the debug view; saved ones become the plugin "AnixOps 调试映射". */
+export interface DebugMapping {
+  /** Empty for a new one. */
+  id: string;
+  name: string;
+  enabled: boolean;
+  kind: "local" | "remote";
+  match: "url" | "prefix" | "regex";
+  pattern: string;
+  status: number;
+  headers: { name: string; value: string }[];
+  /** The body as base64. */
+  body: string;
+  target: string;
+}
 
 /** One rule set of the running engine. */
 export interface RuleSetStatus {
@@ -209,6 +328,18 @@ export interface MitmPlugin {
   scriptCount: number;
 }
 
+/** What a saved plugin holds, as the engine reads it. */
+export interface MitmPluginDetails {
+  excludedHostnames: string[];
+  supportedLines: number;
+  partialLines: number;
+  unsupportedLines: number;
+  deferredLines: number;
+  scripts: string[];
+  resources: string[];
+  report: string;
+}
+
 /** What the exit looks like from outside and how fast a mainland site answers around the proxy. */
 export interface NetworkProbe {
   exitIp?: string | null;
@@ -221,6 +352,25 @@ export interface NetworkProbe {
 export interface MitmRootStatus {
   generated: boolean;
   trusted: boolean;
+}
+
+/** The engine's LAN share for phones (`lan_share` control commands). */
+export interface LanShareStatus {
+  running: boolean;
+  port?: number | null;
+  /** This computer's private IPv4 addresses, the likeliest first. */
+  addresses: string[];
+  /** The phone setup page on the first address. */
+  url?: string | null;
+  /** The made-up host that answers the setup page through the proxy. */
+  page_host: string;
+  https_decryption: boolean;
+  certificate: boolean;
+  credentials: boolean;
+  accepted: number;
+  rejected: number;
+  active: number;
+  pages: number;
 }
 
 export interface OperationResult {
@@ -269,7 +419,7 @@ export interface HealthStatus {
   coldStartMs?: number | null;
 }
 
-export type Preferences = Pick<RuntimeSnapshot, "startAfterLogin" | "autoConnect" | "autoRecoverCore" | "autoSubscriptionRefresh" | "autoSelectFastestNode" | "bilibiliWebAdBlockEnabled" | "darkTheme" | "runtimeMode">;
+export type Preferences = Pick<RuntimeSnapshot, "startAfterLogin" | "autoConnect" | "autoRecoverCore" | "autoSubscriptionRefresh" | "autoSelectFastestNode" | "bilibiliWebAdBlockEnabled" | "darkTheme">;
 
 /** The saved preferences from a snapshot with some of them changed. */
 export function preferencesFrom(snapshot: RuntimeSnapshot, changes: Partial<Preferences>): Preferences {
@@ -281,7 +431,6 @@ export function preferencesFrom(snapshot: RuntimeSnapshot, changes: Partial<Pref
     autoSelectFastestNode: snapshot.autoSelectFastestNode,
     bilibiliWebAdBlockEnabled: snapshot.bilibiliWebAdBlockEnabled,
     darkTheme: snapshot.darkTheme,
-    runtimeMode: snapshot.runtimeMode,
     ...changes,
   };
 }
@@ -313,7 +462,27 @@ export const desktop = {
   captureConnection: (id: number) =>
     invoke<{ capture: CaptureConnection | null }>("runtime_control", { request: { cmd: "capture_connection", id } }),
   /** Saves the export to Downloads (one connection with `id`) and answers where it went. */
-  exportCapture: (format: CaptureFormat, id?: number) => invoke<{ location: string }>("export_capture", { format, id }),
+  exportCapture: (format: CaptureFormat, id?: number, options?: ExportOptions) =>
+    invoke<{ location: string }>("export_capture", { format, id, options }),
+  /** Saved capture sessions, newest first; the backend names the folder and keeps the key. */
+  captureSessions: () =>
+    invoke<SessionAnswer & { sessions: CaptureSession[] }>("capture_session", { action: { action: "list" } satisfies CaptureSessionAction }),
+  /** Seals what capture holds into a new session. */
+  saveCaptureSession: (name?: string) =>
+    invoke<SessionAnswer & { session: CaptureSession }>("capture_session", { action: { action: "save", name } satisfies CaptureSessionAction }),
+  /** Replaces what capture holds with a saved session and turns live capture off. */
+  loadCaptureSession: (session: string) =>
+    invoke<SessionAnswer & CaptureStatus>("capture_session", { action: { action: "load", session } satisfies CaptureSessionAction }),
+  deleteCaptureSession: (session: string) =>
+    invoke<SessionAnswer & { deleted: boolean }>("capture_session", { action: { action: "delete", session } satisfies CaptureSessionAction }),
+  /** Decrypted requests after `since`, the newest last; `filter` is the engine's filter expression. */
+  captureRequests: (since: number, filter: string) =>
+    invoke<CaptureRequestsAnswer>("runtime_control", { request: { cmd: "capture_requests", since_seq: since, limit: 2000, ...(filter ? { filter } : {}) } }),
+  /** Sends a request through the engine (its local proxy, or the replay proxy on Android) without following redirects. */
+  replayRequest: (request: ReplayRequest) => invoke<ReplayResponse>("replay_request", { request }),
+  debugMappings: () => invoke<DebugMapping[]>("list_debug_mappings"),
+  saveDebugMapping: (entry: DebugMapping) => invoke<OperationResult>("save_debug_mapping", { entry }),
+  removeDebugMapping: (id: string) => invoke<OperationResult>("remove_debug_mapping", { id }),
   testDelay: (nodeId: string, url: string) =>
     invoke<OperationResult>("test_node_delay", { nodeId, url }),
   /** Tests each node on its own and reports every result; failures do not reject. */
@@ -322,6 +491,11 @@ export const desktop = {
   networkProbe: (connected: boolean) => invoke<NetworkProbe>("network_probe", { connected }),
   /** The node's share link, or a Surge line for Snell. */
   shareLink: (nodeId: string) => invoke<string>("node_share_link", { nodeId }),
+  nodeForm: (nodeId: string) => invoke<NodeForm>("node_form", { nodeId }),
+  /** Until the subscription is updated, the node runs with this name, server and port. */
+  editNode: (nodeId: string, name: string, server: string, port: string) => invoke<OperationResult>("edit_node", { nodeId, name, server, port }),
+  /** Until the subscription is updated, the node is left out. */
+  removeNode: (nodeId: string) => invoke<OperationResult>("remove_node", { nodeId }),
   selectFastestNode: () => invoke<OperationResult>("select_fastest_node"),
   savePreferences: (preferences: Preferences) =>
     invoke<OperationResult>("save_preferences", {
@@ -340,15 +514,19 @@ export const desktop = {
   setSubscriptionInterval: (id: string, hours: number) =>
     invoke<OperationResult>("set_subscription_interval", { id, hours }),
   checkProfileRuntime: () => invoke<OperationResult>("check_profile_runtime"),
-  installService: () => invoke<OperationResult>("install_service"),
-  startService: () => invoke<OperationResult>("start_service"),
-  stopService: () => invoke<OperationResult>("stop_service"),
   restoreNetworkSettings: () => invoke<OperationResult>("restore_network_settings"),
   setRoutingMode: (mode: RuntimeSnapshot["routingMode"]) => invoke<OperationResult>("set_routing_mode", { mode }),
   setDnsPreset: (preset: DnsPreset) => invoke<OperationResult>("set_dns_preset", { preset }),
+  customDns: () => invoke<DnsText>("custom_dns"),
+  /** Checks every line before saving; the error names the field and the line. */
+  saveCustomDns: (text: DnsText) => invoke<OperationResult>("save_custom_dns", { text }),
   setBlockQuic: (enabled: boolean) => invoke<OperationResult>("set_block_quic", { enabled }),
   setDirectEgress: (enabled: boolean) => invoke<OperationResult>("set_direct_egress", { enabled }),
   refreshRoutingRules: () => invoke<OperationResult>("refresh_routing_rules"),
+  /** "我的规则": the saved text and how many rule lines it holds. */
+  myRules: () => invoke<{ text: string; count: number }>("my_rules"),
+  /** Checks every line, saves, and gives a running engine the new rules. */
+  saveMyRules: (text: string) => invoke<OperationResult>("save_my_rules", { text }),
   enableHttpsMitm: () => invoke<OperationResult>("enable_https_mitm"),
   disableHttpsMitm: () => invoke<OperationResult>("disable_https_mitm"),
   mitmRootStatus: () => invoke<MitmRootStatus>("mitm_root_status"),
@@ -356,9 +534,22 @@ export const desktop = {
   removeMitmRootTrust: () => invoke<OperationResult>("remove_mitm_root_trust"),
   mitmPlugins: () => invoke<MitmPlugin[]>("list_mitm_plugins"),
   importMitmPlugin: (url: string) => invoke<OperationResult>("import_mitm_plugin", { url }),
+  /** A plugin opened from a file (`source` is its name) or pasted (`source` is empty). */
+  importMitmPluginText: (text: string, source: string) => invoke<OperationResult>("import_mitm_plugin_text", { text, source }),
+  mitmPluginDetails: (id: string) => invoke<MitmPluginDetails>("mitm_plugin_details", { id }),
   setMitmPluginEnabled: (id: string, enabled: boolean) =>
     invoke<OperationResult>("set_mitm_plugin_enabled", { id, enabled }),
   removeMitmPlugin: (id: string) => invoke<OperationResult>("remove_mitm_plugin", { id }),
+  /** The LAN share of the running engine; rejects while the engine does not run in this window. */
+  lanShare: () => invoke<LanShareStatus>("runtime_control", { request: { cmd: "lan_share" } }),
+  startLanShare: (port: number) => invoke<LanShareStatus>("runtime_control", { request: { cmd: "start_lan_share", port } }),
+  stopLanShare: () => invoke<LanShareStatus>("runtime_control", { request: { cmd: "stop_lan_share" } }),
+  /** An SVG QR code of `text`. */
+  phoneQrCode: (text: string) => invoke<string>("phone_qr_code", { text }),
+  importMitmRoot: (certificatePem: string, privateKeyPem: string) =>
+    invoke<OperationResult>("import_mitm_root", { certificatePem, privateKeyPem }),
+  /** SHA-256 of the HTTPS decryption root, or null before one exists. */
+  mitmRootFingerprint: () => invoke<string | null>("mitm_root_fingerprint"),
   setTunMode: (enabled: boolean) => invoke<OperationResult>("set_tun_mode", { enabled }),
   installCertificate: (path: string) => invoke<OperationResult>("install_certificate", { path }),
   removeCertificate: () => invoke<OperationResult>("remove_certificate"),

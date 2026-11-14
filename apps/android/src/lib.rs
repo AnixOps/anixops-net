@@ -56,6 +56,10 @@ mod android {
             app.state::<Vpn<Wry>>().save_to_downloads(name, contents)
         }
 
+        fn capture_session_key(&self, app: &AppHandle) -> Result<String, String> {
+            app.state::<Vpn<Wry>>().capture_session_key()
+        }
+
         fn save_base64_to_downloads(
             &self,
             app: &AppHandle,

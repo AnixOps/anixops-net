@@ -1,13 +1,15 @@
 import { ArrowDown, ArrowUp, BadgeCheck, ChevronRight, CircleDot, ClipboardList, Download, FileCode, ListTree, RefreshCw, Search, Trash2, TriangleAlert, Unplug, X } from "lucide-react";
 import { useState } from "react";
-import { ConnectionSnapshot, desktop, RuntimeSnapshot } from "../bridge";
+import { CaptureRequest, ConnectionSnapshot, desktop, RuntimeSnapshot } from "../bridge";
 import { connectionDetail, connectionName, formatRate, matchesConnection } from "../activity-format";
 import { captureSummary } from "../capture-format";
 import { listPage, liveEngine, usePolling } from "../live";
 import { formatBytes } from "../subscription-format";
 import { Card, EmptyState, IconButton, MoreMenu, Row, Run, Segmented, Switch } from "../ui";
 import { t } from "../i18n";
+import { CaptureSessions } from "./CaptureSessions";
 import { CaptureDetail, exportCapture } from "./CaptureViews";
+import { RequestList } from "./RequestList";
 
 /** Session state and the connection list; debug mode ("Requests") puts the connections, with capture, first. */
 export function ActivityPage({ snapshot, busy, run, debug = false }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run; debug?: boolean }) {
@@ -15,9 +17,19 @@ export function ActivityPage({ snapshot, busy, run, debug = false }: { snapshot:
     ? [snapshot.subscriptionRefreshResult || t("等待中"), snapshot.subscriptionLastAttempt, snapshot.subscriptionRefreshErrorCode].filter(Boolean).join(" · ")
     : t("还没有自动更新记录");
 
-  const [detail, setDetail] = useState<ConnectionSnapshot | null>(null);
-  if (detail && liveEngine(snapshot)) {
-    return <CaptureDetail connection={detail} busy={busy} run={run} onBack={() => setDetail(null)} />;
+  const [detail, setDetail] = useState<{ connection: ConnectionSnapshot; exchange?: number } | null>(null);
+  const live = liveEngine(snapshot);
+  const [capture] = usePolling(desktop.captureStatus, debug && live);
+  if (detail && live) {
+    return (
+      <CaptureDetail
+        connection={detail.connection}
+        initialExchange={detail.exchange}
+        busy={busy}
+        run={run}
+        onBack={() => setDetail(null)}
+      />
+    );
   }
 
   const session = (
@@ -31,11 +43,15 @@ export function ActivityPage({ snapshot, busy, run, debug = false }: { snapshot:
       </Row>
     </Card>
   );
-  const connections = <Connections snapshot={snapshot} busy={busy} run={run} onOpen={setDetail} />;
+  const connections = <Connections snapshot={snapshot} busy={busy} run={run} onOpen={(connection) => setDetail({ connection })} />;
+  // A stopped capture or a loaded session still holds requests to list.
+  const holding = Boolean(capture?.enabled) || (capture?.connections ?? 0) > 0;
+  const requests = debug && live && <RequestList capturing={holding} onOpen={(request) => setDetail(requestDetail(request))} />;
+  const saved = debug && live && <CaptureSessions capture={capture} run={run} />;
 
   return (
     <div className="page-stack">
-      {debug ? <>{connections}{session}</> : <>{session}{connections}</>}
+      {debug ? <>{requests}{saved}{connections}{session}</> : <>{session}{connections}</>}
     </div>
   );
 }
@@ -60,7 +76,7 @@ function Connections({ snapshot, busy, run, onOpen }: { snapshot: RuntimeSnapsho
 
   if (!list) {
     const message = !live
-      ? snapshot?.runtimeMode === "service" ? t("连接记录只在桌面模式下可用，服务模式的内核在另一个进程里运行。") : t("连接后，这里会实时显示每条连接命中的规则和策略。")
+      ? t("连接后，这里会实时显示每条连接命中的规则和策略。")
       : t("正在读取连接记录");
     return <Card><EmptyState icon={ListTree} title={t("连接")} message={message} /></Card>;
   }
@@ -148,6 +164,27 @@ function Connections({ snapshot, busy, run, onOpen }: { snapshot: RuntimeSnapsho
         </>}
     </Card>
   );
+}
+
+/** What the capture view needs of a request's connection; it reads the rest from the engine. */
+function requestDetail(request: CaptureRequest): { connection: ConnectionSnapshot; exchange: number } {
+  return {
+    connection: {
+      id: request.connection_id,
+      network: "tcp",
+      host: request.host,
+      destination: request.host,
+      rule: "",
+      chain: [],
+      outbound: "",
+      started_at_ms: request.started_at_ms,
+      ended_at_ms: null,
+      upload: 0,
+      download: 0,
+      captured: true,
+    },
+    exchange: request.index,
+  };
 }
 
 /** One connection; one with captured bytes opens to show them. */

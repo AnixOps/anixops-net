@@ -1,37 +1,29 @@
 use crate::gui::{
     load_validated_managed_configuration, mitm_plugins,
-    runtime_status::{read_runtime_status, ManagedCoreStatus},
-    startup::{owns_current_proxy, save_desktop_state, DesktopState},
+    startup::{my_rules_path, owns_current_proxy, save_desktop_state, DesktopState},
     tun_mode::DesktopTun,
     ui_state::ConnectionState,
 };
 use desktop_mitm::envelope_with_mitm;
 use engine_embedded::local_proxy::LocalProxy;
 use inbound_mixed::MixedSettings;
-use networkcore_windows_service::native_mitm_policy_source;
+use mitm_policy::{builtin_ad_block_plugin_package, builtin_bilibili_web_ad_block_plugin_package};
 use platform_windows::managed::{
     windows_managed_config_path, WindowsManagedConfig, WindowsManagedEmbeddedConfig,
     WindowsManagedNativeMitmConfig, WindowsProxySettings, WindowsProxySnapshot,
 };
 use platform_windows::system_integration::{
-    managed_proxy_listener_ready, read_current_user_system_proxy, NativeWindowsSystemIntegration,
-    WindowsServiceState, WindowsSystemIntegration,
+    read_current_user_system_proxy, NativeWindowsSystemIntegration, WindowsServiceState,
+    WindowsSystemIntegration,
 };
 use std::fs;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone)]
 pub struct ConnectedProxy {
     pub snapshot: WindowsProxySnapshot,
     pub applied_proxy: WindowsProxySettings,
-}
-
-#[derive(Debug)]
-pub enum RestartedService {
-    Desktop(ConnectedProxy),
-    ServiceManaged,
 }
 
 struct DesktopConnectionPlan {
@@ -85,6 +77,14 @@ impl DesktopCore {
         Ok(())
     }
 
+    /// The local proxy of the engine this window runs.
+    pub fn local_addr(&self) -> Option<SocketAddr> {
+        self.embedded
+            .as_ref()
+            .filter(|proxy| proxy.is_running())
+            .map(LocalProxy::local_addr)
+    }
+
     /// Answers one kernel control request while this window runs the engine.
     pub fn control(&self, request: &[u8]) -> Result<Vec<u8>, String> {
         let proxy = self
@@ -112,7 +112,7 @@ impl DesktopCore {
 /// Kernel control commands the client may send: reading traffic, connections
 /// and rule sets, closing connections, refreshing remote rule sets and packet
 /// capture. Mode and group changes go through the saved profile instead.
-const ACTIVITY_COMMANDS: [&str; 11] = [
+const ACTIVITY_COMMANDS: [&str; 12] = [
     "traffic",
     "connections",
     "close_connection",
@@ -124,6 +124,7 @@ const ACTIVITY_COMMANDS: [&str; 11] = [
     "clear_capture",
     "capture_connection",
     "export_capture",
+    "capture_requests",
 ];
 
 /// The request bytes for an activity page command, or why it is refused.
@@ -132,7 +133,9 @@ pub fn activity_request(request: &serde_json::Value) -> Result<Vec<u8>, String> 
         .get("cmd")
         .and_then(serde_json::Value::as_str)
         .unwrap_or_default();
-    if !ACTIVITY_COMMANDS.contains(&command) {
+    if !ACTIVITY_COMMANDS.contains(&command)
+        && !desktop_mitm::phone::CONTROL_COMMANDS.contains(&command)
+    {
         return Err(format!(
             "runtime control command {command:?} is not available"
         ));
@@ -165,29 +168,6 @@ pub const fn should_restart_gui_started_core(
         && !already_attempted
         && gui_started_connection
         && matches!(connection, ConnectionState::CoreError)
-}
-
-pub fn should_restore_abandoned_owned_proxy(
-    has_proxy_snapshot: bool,
-    service_state: WindowsServiceState,
-    core: &ManagedCoreStatus,
-    already_attempted: bool,
-) -> bool {
-    has_proxy_snapshot
-        && !already_attempted
-        && matches!(
-            service_state,
-            WindowsServiceState::NotInstalled | WindowsServiceState::Stopped
-        )
-        && matches!(
-            core,
-            ManagedCoreStatus::NotConfigured | ManagedCoreStatus::Failed { .. }
-        )
-}
-
-pub fn connect(config_path: PathBuf, desktop: DesktopState) -> Result<ConnectedProxy, String> {
-    let plan = load_desktop_connection_plan(&config_path)?;
-    start_desktop_connection(plan, desktop)
 }
 
 pub fn connect_direct(
@@ -288,6 +268,9 @@ pub fn direct_egress_envelope(
         "outbound": { "type": "direct" },
     })
     .to_string();
+    // The user's own rules still apply: REJECT and DIRECT as written, PROXY direct since there is no node.
+    let profile =
+        desktop_dns::rules::apply(&profile, &desktop_dns::rules::load_lines(&my_rules_path()))?;
     let envelope = desktop_dns::apply(&profile, dns)?;
     desktop_dns::apply_block_quic(&envelope, block_quic)
 }
@@ -320,52 +303,23 @@ pub fn disconnect_direct(
     })
 }
 
-pub fn restart(config_path: PathBuf, desktop: DesktopState) -> Result<RestartedService, String> {
-    let managed = load_validated_daily_managed_configuration(&config_path)?;
-    if managed.system_proxy_owner.is_service_managed() {
-        NativeWindowsSystemIntegration::new()
-            .restart_service()
-            .map_err(|error| error.to_string())?;
-        return Ok(RestartedService::ServiceManaged);
-    }
-    let plan = desktop_connection_plan(managed)?;
-    disconnect(desktop.clone())?;
-    start_desktop_connection(plan, desktop).map(RestartedService::Desktop)
-}
-
-fn load_desktop_connection_plan(config_path: &Path) -> Result<DesktopConnectionPlan, String> {
-    desktop_connection_plan(load_validated_daily_managed_configuration(config_path)?)
-}
-
 fn load_validated_daily_managed_configuration(
     config_path: &Path,
 ) -> Result<WindowsManagedConfig, String> {
     let managed_config_path = windows_managed_config_path();
     if config_path != managed_config_path.as_path() {
         return Err(
-            "Apply this configuration before connecting or restarting so the Windows service uses the validated file."
+            "Apply this configuration before connecting or restarting so the engine uses the validated file."
                 .to_string(),
         );
     }
     load_validated_managed_configuration(config_path)
 }
 
+/// The connection plan for a profile without HTTPS decryption. The profile's
+/// `system_proxy_owner` dates from the Windows service and is ignored: the
+/// window always runs the engine and owns the proxy.
 fn desktop_connection_plan(managed: WindowsManagedConfig) -> Result<DesktopConnectionPlan, String> {
-    if managed.system_proxy_owner.is_service_managed() {
-        return Err(
-            "This configuration is managed by the Windows service. Use the explicit advanced workflow or import a daily desktop profile before connecting."
-                .to_string(),
-        );
-    }
-    if managed
-        .native_mitm
-        .as_ref()
-        .is_some_and(|mitm| mitm.enabled)
-    {
-        return Err(
-            "This profile enables HTTPS MITM and must run in Windows service mode.".to_string(),
-        );
-    }
     let proxy = managed
         .system_proxy
         .filter(|proxy| proxy.enabled)
@@ -499,140 +453,57 @@ fn apply_proxy_after_direct_readiness(
     })
 }
 
-fn start_desktop_connection(
-    plan: DesktopConnectionPlan,
-    desktop: DesktopState,
-) -> Result<ConnectedProxy, String> {
-    let DesktopConnectionPlan { proxy, .. } = plan;
+/// The built-in HTTPS decryption policy text for a managed profile.
+pub fn native_mitm_policy_source(bilibili_web_ad_block_enabled: bool) -> String {
+    if bilibili_web_ad_block_enabled {
+        builtin_bilibili_web_ad_block_plugin_package().source
+    } else {
+        builtin_ad_block_plugin_package().source
+    }
+}
+
+/// What [`remove_legacy_service`] did.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct LegacyServiceRemoval {
+    pub removed: bool,
+    /// The service was running with the proxy this window had set, so the
+    /// proxy was put back as it was before connecting.
+    pub proxy_restored: bool,
+}
+
+/// Earlier versions could run the engine in the "AnixOps NetworkCore"
+/// Windows service. That mode is gone: an MSI upgrade removes the service,
+/// and this removes one a portable copy registered. When it was connected,
+/// the proxy it served is put back, so the computer is not left pointing at
+/// a listener that no longer exists; automatic connection then connects in
+/// the window.
+pub fn remove_legacy_service(desktop: &DesktopState) -> Result<LegacyServiceRemoval, String> {
     let integration = NativeWindowsSystemIntegration::new();
+    let status = integration
+        .service_status()
+        .map_err(|error| error.to_string())?;
+    if status.state == WindowsServiceState::NotInstalled {
+        return Ok(LegacyServiceRemoval::default());
+    }
+    let was_running = status.state != WindowsServiceState::Stopped;
     integration
-        .start_service()
-        .map_err(|error| rollback_failed_connection(&integration, &desktop, error.to_string()))?;
-    let deadline = Instant::now() + Duration::from_secs(30);
-    let waiting_for = format!("local proxy listener at {}", proxy.server);
-    loop {
-        let runtime = read_runtime_status();
-        if runtime.service_state == WindowsServiceState::Running
-            && runtime.core.liveness_confirmed() == Some(true)
-        {
-            let listener_ready = managed_proxy_listener_ready(&proxy, Duration::from_millis(500))
-                .map_err(|error| {
-                rollback_failed_connection(&integration, &desktop, error.to_string())
-            })?;
-            if listener_ready {
-                return apply_proxy_after_readiness(&integration, proxy, desktop);
+        .uninstall_service()
+        .map_err(|error| error.to_string())?;
+    let mut proxy_restored = false;
+    if was_running {
+        if let Some(snapshot) = desktop.proxy_snapshot.as_ref() {
+            let current = read_current_user_system_proxy().map_err(|error| error.to_string())?;
+            if owns_current_proxy(desktop, &current) {
+                integration
+                    .restore_system_proxy(snapshot)
+                    .map_err(|error| error.to_string())?;
+                proxy_restored = true;
             }
         }
-        if matches!(
-            runtime.connection,
-            ConnectionState::CoreError | ConnectionState::ConfigurationError
-        ) {
-            let message = runtime
-                .last_error
-                .or(runtime.configuration_error)
-                .unwrap_or_else(|| "managed runtime failed before the core was ready".to_string());
-            return Err(rollback_failed_connection(&integration, &desktop, message));
-        }
-        if Instant::now() >= deadline {
-            return Err(rollback_failed_connection(
-                &integration,
-                &desktop,
-                format!("timed out waiting for {waiting_for}"),
-            ));
-        }
-        std::thread::sleep(Duration::from_millis(250));
     }
-}
-
-fn apply_proxy_after_readiness(
-    integration: &NativeWindowsSystemIntegration,
-    proxy: WindowsProxySettings,
-    mut desktop: DesktopState,
-) -> Result<ConnectedProxy, String> {
-    let current = read_current_user_system_proxy().map_err(|error| {
-        rollback_failed_connection(
-            integration,
-            &desktop,
-            format!("current-user proxy could not be read before connection: {error}"),
-        )
-    })?;
-    let existing_snapshot = owns_current_proxy(&desktop, &current)
-        .then(|| desktop.proxy_snapshot.clone())
-        .flatten();
-    let applied_snapshot = integration.apply_system_proxy(&proxy).map_err(|error| {
-        rollback_failed_connection(
-            integration,
-            &desktop,
-            format!("system proxy could not be applied after core readiness verification: {error}"),
-        )
-    })?;
-    let snapshot = existing_snapshot.unwrap_or(applied_snapshot);
-    desktop.proxy_snapshot = Some(snapshot.clone());
-    desktop.applied_proxy = Some(proxy.clone());
-    if let Err(error) = save_desktop_state(&desktop) {
-        let restore = integration.restore_system_proxy(&snapshot);
-        let stopped = integration.stop_service();
-        return Err(match (restore, stopped) {
-            (Ok(()), Ok(_)) => format!(
-                "proxy ownership could not be saved after connection; the proxy was restored: {error}"
-            ),
-            (restore, stopped) => format!(
-                "proxy ownership could not be saved after connection: {error}; rollback result proxy={restore:?} service={stopped:?}"
-            ),
-        });
-    }
-    Ok(ConnectedProxy {
-        snapshot,
-        applied_proxy: proxy,
-    })
-}
-
-fn rollback_failed_connection(
-    integration: &NativeWindowsSystemIntegration,
-    desktop: &DesktopState,
-    message: String,
-) -> String {
-    let proxy_result = desktop.proxy_snapshot.as_ref().map_or(Ok(()), |snapshot| {
-        let current = read_current_user_system_proxy().map_err(|error| error.to_string())?;
-        if owns_current_proxy(desktop, &current) {
-            integration
-                .restore_system_proxy(snapshot)
-                .map_err(|error| error.to_string())?;
-        }
-        Ok::<(), String>(())
-    });
-    let service_result = integration
-        .stop_service()
-        .map(|_| ())
-        .map_err(|error| error.to_string());
-    match (proxy_result, service_result) {
-        (Ok(()), Ok(())) => message,
-        (proxy, service) => {
-            format!("{message}; cleanup result proxy={proxy:?} service={service:?}")
-        }
-    }
-}
-
-pub fn disconnect(desktop: DesktopState) -> Result<String, String> {
-    let integration = NativeWindowsSystemIntegration::new();
-    let mut proxy_restored = false;
-    if let Some(snapshot) = desktop.proxy_snapshot.clone() {
-        let current = read_current_user_system_proxy().map_err(|error| error.to_string())?;
-        if owns_current_proxy(&desktop, &current) {
-            integration
-                .restore_system_proxy(&snapshot)
-                .map_err(|error| error.to_string())?;
-            proxy_restored = true;
-        }
-    }
-    integration
-        .stop_service()
-        .map_err(|error| error.to_string())?;
-    Ok(if proxy_restored {
-        "Service stopped and the GUI-owned desktop proxy snapshot was restored.".to_string()
-    } else {
-        "Service stopped. The current-user proxy was left unchanged because it was not owned by this GUI session."
-            .to_string()
+    Ok(LegacyServiceRemoval {
+        removed: true,
+        proxy_restored,
     })
 }
 
@@ -689,6 +560,10 @@ mod tests {
             activity_request(&serde_json::json!({"cmd": "set_mode", "mode": "global"})).is_err()
         );
         assert!(activity_request(&serde_json::json!({"id": 7})).is_err());
+        assert!(
+            activity_request(&serde_json::json!({"cmd": "start_lan_share", "port": 8899})).is_ok()
+        );
+        assert!(activity_request(&serde_json::json!({"cmd": "stop_lan_share"})).is_ok());
     }
 
     #[test]
@@ -724,34 +599,6 @@ mod tests {
     }
 
     #[test]
-    fn abandoned_gui_proxy_recovery_runs_once_only_after_the_runtime_is_gone() {
-        assert!(should_restore_abandoned_owned_proxy(
-            true,
-            WindowsServiceState::Stopped,
-            &ManagedCoreStatus::Failed {
-                reason: "listener failed".to_string(),
-            },
-            false,
-        ));
-        assert!(!should_restore_abandoned_owned_proxy(
-            true,
-            WindowsServiceState::Stopped,
-            &ManagedCoreStatus::Failed {
-                reason: "listener failed".to_string(),
-            },
-            true,
-        ));
-        assert!(!should_restore_abandoned_owned_proxy(
-            true,
-            WindowsServiceState::Running,
-            &ManagedCoreStatus::EmbeddedRunning {
-                endpoint: "127.0.0.1:7890".to_string(),
-            },
-            false,
-        ));
-    }
-
-    #[test]
     fn daily_desktop_restart_requires_an_owned_enabled_proxy_plan() {
         let proxy = WindowsProxySettings {
             enabled: true,
@@ -769,11 +616,12 @@ mod tests {
             desktop_connection_plan(managed_config(WindowsSystemProxyOwner::Desktop, None,))
                 .is_err()
         );
+        // A profile written for the removed Windows service runs in the window too.
         assert!(desktop_connection_plan(managed_config(
             WindowsSystemProxyOwner::Service,
             Some(proxy),
         ))
-        .is_err());
+        .is_ok());
     }
 
     #[test]
@@ -796,7 +644,6 @@ mod tests {
             bilibili_web_ad_block_enabled: false,
             script_runtime: None,
         });
-        assert!(desktop_connection_plan(managed.clone()).is_err());
         let plan = direct_connection_plan(managed.clone())
             .expect("desktop mode should accept a MITM-enabled profile");
         assert_eq!(plan.proxy, proxy);
@@ -806,6 +653,8 @@ mod tests {
         );
 
         managed.native_mitm = None;
+        assert!(direct_connection_plan(managed.clone()).is_ok());
+        managed.system_proxy = None;
         assert!(direct_connection_plan(managed).is_err());
     }
 
