@@ -6,6 +6,9 @@
 - 界面：iOS 和 macOS 共用 SwiftUI（`apps/ios`），Windows、Linux、Android 共用 Tauri 界面（`apps/windows-gui/ui`）。
   后端分别是 `apps/windows-gui`（Windows）和 `apps/linux-gui`（Linux，Android 复用它）。
 - 内核能力都在 networkcore（固定 `rev`），客户端只决定用不用、怎么呈现。
+- Windows 和 Linux 正在改为原生界面（WinUI 3、GTK4 + libadwaita），方案和迁移清单见
+  [`architecture/desktop-native.md`](architecture/desktop-native.md)。切换之前 Tauri 桌面版仍是正式版，本表的 Windows、
+  Linux 两列指 Tauri 版；原生骨架合并时会加“Windows 原生”“Linux 原生”两列。
 - 新增或改动功能时请同步更新本表。一个功能只在部分平台上线时，PR 描述写明其余平台的计划或系统限制。
 
 图例：✅ 已有 · ◐ 部分（见备注） · ❌ 缺，计划补齐 · ⛔ 系统限制或产品决定不做（见“系统限制”） · — 不适用
