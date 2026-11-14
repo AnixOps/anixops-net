@@ -31,5 +31,14 @@
     "icon": [
       "icons/networkcore.png"
     ]
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "anixops"
+        ]
+      }
+    }
   }
 }

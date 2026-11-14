@@ -24,6 +24,8 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 networkcore-linux-gui = { path = "../linux-gui", features = ["gui"] }
+# `tauri::generate_context!` writes the plugin settings in tauri.conf.json (deep-link) as `serde_json` values.
+serde_json = "1"
 tauri = { version = "2", features = [] }
 tauri-plugin-anixops-vpn = { path = "vpn-plugin" }
 

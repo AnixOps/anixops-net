@@ -532,6 +532,8 @@ export const desktop = {
   trafficStats: (clear = false) => invoke<TrafficStats>("traffic_stats", { clear }),
   /** The last 500 lines of the app's log, oldest first; `clear` empties it first. */
   appLogs: (clear = false) => invoke<LogEntry[]>("app_logs", { clear }),
+  /** The `anixops://` links received since the last call; the backend signals new ones with an `app-link` event. */
+  takeAppLinks: () => invoke<string[]>("take_app_links"),
   /** The notification switches, changed to `update` first when given; `language` sets that of the texts. */
   notificationSettings: (language: string, update: NotificationSettings | null = null) =>
     invoke<NotificationSettings>("notification_settings", { update, language }),

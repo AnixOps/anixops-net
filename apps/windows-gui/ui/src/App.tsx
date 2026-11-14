@@ -1,7 +1,9 @@
 import { Activity, ArrowDown, ArrowUp, CheckCircle2, CircleAlert, Globe, House, Puzzle, Route, Settings, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatRate } from "./activity-format";
+import { AppLink, findLinkMember, findLinkNode, parseAppLink } from "./app-link";
 import { desktop, NodeDelay, NodeSummary, RuntimeSnapshot } from "./bridge";
 import { Wordmark } from "./brand";
 import { connectionTitle, connectPhase, routingLabel } from "./labels";
@@ -124,6 +126,64 @@ export function App() {
     else void run("connect", desktop.connect);
   }, [busy, phase, run]);
 
+  // `anixops://` links: read once at start and whenever the backend says one arrived; the newest handler acts.
+  const [pendingImport, setPendingImport] = useState<string | null>(null);
+  const followLink = useCallback((raw: string) => {
+    const link: AppLink | { error: string; detail?: string } = parseAppLink(raw);
+    if ("error" in link) {
+      show(t("无法打开链接：{reason}", { reason: t(link.error) + (link.detail ? ` (${link.detail})` : "") }), "danger");
+      return;
+    }
+    switch (link.action) {
+      case "connect":
+        if (phase !== "on") void run("connect", desktop.connect);
+        return;
+      case "disconnect":
+        void run("disconnect", desktop.disconnect);
+        return;
+      case "toggle":
+        toggleConnection();
+        return;
+      case "mode":
+        void run("routing", () => desktop.setRoutingMode(link.mode));
+        return;
+      case "select": {
+        const node = findLinkNode(nodes, link.node, link.group);
+        if (node) void run("node", () => desktop.switchNode(node.id));
+        else show(t("找不到节点 {node}", { node: link.node }), "danger");
+        return;
+      }
+      case "selectMember":
+        void run("policy", async () => {
+          const target = findLinkMember(await desktop.nativeGroups(), link.policy, link.member);
+          if (!target) throw new Error(t("策略组 {policy} 里没有 {node}", { policy: link.policy, node: link.member }));
+          return desktop.selectNativeGroupOutbound(target.tag, target.outbound);
+        });
+        return;
+      case "import":
+        setPendingImport(link.url);
+        setPage("proxies");
+        show(t("核对订阅链接后点“导入”"), "success");
+    }
+  }, [nodes, phase, run, show, toggleConnection]);
+  const linkHandler = useRef(followLink);
+  linkHandler.current = followLink;
+  useEffect(() => {
+    if (needsTerms) return;
+    let stopped = false;
+    let unlisten: (() => void) | undefined;
+    const drain = () => void desktop.takeAppLinks().then((links) => links.forEach((link) => linkHandler.current(link))).catch(() => undefined);
+    drain();
+    void listen("app-link", drain).then((off) => {
+      if (stopped) off();
+      else unlisten = off;
+    }).catch(() => undefined);
+    return () => {
+      stopped = true;
+      unlisten?.();
+    };
+  }, [needsTerms]);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "c") {
@@ -237,7 +297,7 @@ export function App() {
         <div className={`page ${width}`} key={page}>
           <ToolbarSlot.Provider value={toolbar}>
             {page === "home" && <HomePage snapshot={snapshot} nodes={nodes} phase={phase} busy={busy} run={run} toggle={toggleConnection} goTo={setPage} delays={delays} setDelays={setDelays} />}
-            {page === "proxies" && <ProxiesPage snapshot={snapshot} nodes={nodes} busy={busy} run={run} delays={delays} setDelays={setDelays} egress={egress} />}
+            {page === "proxies" && <ProxiesPage snapshot={snapshot} nodes={nodes} busy={busy} run={run} delays={delays} setDelays={setDelays} egress={egress} pendingImport={pendingImport} takePendingImport={() => setPendingImport(null)} />}
             {page === "proxies" && mode === "debug" && <div className="egress-rules"><RulesPage snapshot={snapshot} busy={busy} run={run} /></div>}
             {page === "rules" && mode === "proxy" && <RulesPage snapshot={snapshot} busy={busy} run={run} />}
             {page === "extensions" && <ExtensionsPage snapshot={snapshot} busy={busy} run={run} />}

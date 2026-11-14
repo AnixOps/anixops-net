@@ -25,5 +25,17 @@
     "android": {
       "minSdkVersion": 26
     }
+  },
+  "plugins": {
+    "deep-link": {
+      "mobile": [
+        {
+          "scheme": [
+            "anixops"
+          ],
+          "appLink": false
+        }
+      ]
+    }
   }
 }
