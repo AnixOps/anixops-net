@@ -380,7 +380,7 @@ impl Client {
         let storage = desktop_mitm::sessions::storage_request(&capture_dir.join("sessions"), &key);
         let protection = key.protection;
         let answer = {
-            let mut backend = self.backend();
+            let backend = self.backend();
             backend.runtime_control(&storage)?;
             backend.runtime_control(&request)?
         };
