@@ -350,8 +350,8 @@ pub fn save(directory: &Path, mut entry: Entry) -> Result<Entry, String> {
     if entry.id.is_empty() {
         entry.id = new_id();
     }
-    match entries.iter_mut().find(|existing| existing.id == entry.id) {
-        Some(existing) => *existing = entry.clone(),
+    match entries.iter().position(|existing| existing.id == entry.id) {
+        Some(index) => entries[index] = entry.clone(),
         None if entries.len() >= MAX_ENTRIES => {
             return Err(format!("At most {MAX_ENTRIES} mappings can be kept."));
         }
