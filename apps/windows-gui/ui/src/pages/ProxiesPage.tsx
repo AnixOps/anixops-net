@@ -1,11 +1,12 @@
-import { Activity, Bot, Check, CloudDownload, FileText, Gauge, Globe, Layers, Pencil, Plus, RefreshCw, Search, Share2, Trash2, X, Zap } from "lucide-react";
+import { Activity, Bot, Check, CloudDownload, FileText, Gauge, Globe, Layers, Pencil, Plus, RefreshCw, Route, Search, Share2, Trash2, X, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { desktop, inProcessEngine, NativeGroupSummary, NodeDelay, NodeSummary, RuntimeSnapshot, SubscriptionSummary } from "../bridge";
 import { memberNode } from "../dashboard";
 import { groupMemberLabel, protocolAbbreviation } from "../labels";
 import { delayLabel, delayTone, filterNodes, groupNodes, NodeSort, sortNodes } from "../node-filter";
-import { Card, EmptyState, IconButton, MoreMenu, PageTools, Panel, Run, StatusPill, Tile, TileColor } from "../ui";
+import { Card, EmptyState, IconButton, MoreMenu, PageTools, Panel, Row, Run, Segmented, StatusPill, Tile, TileColor } from "../ui";
+import type { DebugExit } from "../mode";
 import { t } from "../i18n";
 import { formatBytes, formatDay, updateIntervalChoices, updateIntervalLabel, usedFraction } from "../subscription-format";
 import type { Delays, SetDelays } from "./HomePage";
@@ -17,14 +18,58 @@ type View = { kind: "nodes" } | { kind: "group"; tag: string } | { kind: "subscr
  * Two panes: on the left the node list, the profile's policy groups and the subscriptions; on the right the nodes
  * of the chosen one as cards colored by delay, or the subscription settings.
  */
-export function ProxiesPage({ snapshot, nodes, busy, run, delays, setDelays }: {
+/** Debug mode's egress choice, shown above the nodes when the page is "Egress". */
+export interface Egress {
+  exit: DebugExit;
+  setExit: (exit: DebugExit) => void;
+  /** The backend can run with no node; older backends always use the nodes. */
+  supported: boolean;
+}
+
+type ProxiesProps = {
   snapshot: RuntimeSnapshot | null;
   nodes: NodeSummary[];
   busy: string | null;
   run: Run;
   delays: Delays;
   setDelays: SetDelays;
-}) {
+};
+
+/** Subscriptions, policy groups and nodes; in debug mode the "Egress" page, with where captured traffic leaves on top. */
+export function ProxiesPage({ egress, ...props }: ProxiesProps & { egress?: Egress }) {
+  if (!egress) return <ProxiesContent {...props} />;
+  return (
+    <div className="page-stack">
+      <EgressCard egress={egress} nodes={props.nodes} />
+      <ProxiesContent {...props} />
+    </div>
+  );
+}
+
+function EgressCard({ egress, nodes }: { egress: Egress; nodes: NodeSummary[] }) {
+  if (!egress.supported) {
+    return <Card title={t("出口")} description={t("Windows 服务模式下，调试网络经过选中的节点发出流量；要直连出口，请在设置里改用桌面模式。")} />;
+  }
+  const description = egress.exit === "direct"
+    ? t("抓到的流量直接从这台设备发出，不需要任何节点。选节点和更新订阅不影响它。")
+    : nodes.length === 0
+      ? t("还没有节点，暂时直连。导入订阅或节点后按下面的节点和规则发出。")
+      : t("按下面选中的节点和订阅规则发出，可以切换节点对比不同地区的出口。");
+  return (
+    <Card title={t("出口")} description={description}>
+      <Row icon={Route} color="sky" label={t("抓到的流量从哪里发出")}>
+        <Segmented
+          label={t("出口")}
+          options={[{ value: "direct", label: t("直连") }, { value: "node", label: t("经过节点") }]}
+          value={egress.exit}
+          onChange={egress.setExit}
+        />
+      </Row>
+    </Card>
+  );
+}
+
+function ProxiesContent({ snapshot, nodes, busy, run, delays, setDelays }: ProxiesProps) {
   const [view, setView] = useState<View>({ kind: "nodes" });
   const [query, setQuery] = useState("");
   const [protocol, setProtocol] = useState("All");

@@ -504,3 +504,15 @@ dl.headers dd { margin: 0; font-family: var(--font-mono); font-size: 12px; overf
   :root[data-backdrop="mica"], :root[data-backdrop="mica"] body { background: var(--window); }
   :root[data-backdrop="mica"] .sidebar { background: var(--sidebar); }
 }
+
+/* First-launch mode choice (mode-choice.tsx): two equal answers, neither one a primary button. */
+.mode-dialog { width: min(560px, 100%); }
+.mode-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.mode-option { display: grid; gap: 6px; justify-items: start; padding: 16px; color: var(--text); text-align: left; background: var(--fill-1); border: 0; border-radius: var(--radius-card); box-shadow: 0 0 0 .5px var(--hairline); transition: background var(--fast) var(--ease-standard), box-shadow var(--fast) var(--ease-standard); }
+.mode-option:hover { background: var(--fill-2); box-shadow: 0 0 0 1.5px var(--accent); }
+.mode-option .tile { width: 32px; height: 32px; border-radius: 8px; }
+.mode-option strong { font-size: 14px; font-weight: 600; }
+.mode-option small { color: var(--text2); font-size: 12px; line-height: 1.45; }
+@media (max-width: 720px) {
+  .mode-options { grid-template-columns: minmax(0, 1fr); }
+}

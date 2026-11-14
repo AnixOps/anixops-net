@@ -299,6 +299,14 @@ async fn set_dns_preset(
 }
 
 #[tauri::command]
+async fn set_direct_egress(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<OperationResult, String> {
+    with_backend(&state, move |backend| backend.set_direct_egress(enabled)).await
+}
+
+#[tauri::command]
 async fn set_block_quic(
     state: State<'_, AppState>,
     enabled: bool,
@@ -1056,6 +1064,7 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             set_routing_mode,
             set_dns_preset,
             set_block_quic,
+            set_direct_egress,
             refresh_routing_rules,
             install_service,
             start_service,

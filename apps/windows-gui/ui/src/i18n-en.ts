@@ -398,4 +398,18 @@ export const english: Record<string, string> = {
   "解密后的内容可能含有密码、令牌和个人信息，只保存在本机；导出或分享前请先脱敏。": "Decrypted content can hold passwords, tokens and personal data. It stays on this device; redact it before you export or share it.",
   "不得用于入侵、窃取数据或绕过他人的安全机制。详见用户协议第 4 节。": "Never use it to break into systems, steal data or get around anyone else's security. See section 4 of the user agreement.",
   "我确认，开启": "I Confirm, Turn On",
+  // Two modes and debug egress (mode.ts, mode-choice.tsx).
+  "调试网络": "Network debugging",
+  "抓包、HTTPS 解密、改写和重放，给开发和测试用": "Capture, HTTPS decryption, rewrites and replay, for development and testing",
+  "订阅、节点和分流规则，日常上网用": "Subscriptions, nodes and routing rules, for everyday browsing",
+  "你主要用 AnixOps Net 做什么？": "What will you mainly use AnixOps Net for?",
+  "两种模式用同一个内核，只是界面不同。之后可以随时在设置里切换。": "Both use the same engine and only differ in the window. You can switch any time in Settings.",
+  "出口": "Egress",
+  "Windows 服务模式下，调试网络经过选中的节点发出流量；要直连出口，请在设置里改用桌面模式。": "In Windows service mode, debug traffic leaves through the selected node. For the direct egress, switch to desktop mode in Settings.",
+  "抓到的流量直接从这台设备发出，不需要任何节点。选节点和更新订阅不影响它。": "Captured traffic leaves straight from this device and needs no node. Picking nodes or updating subscriptions does not change that.",
+  "还没有节点，暂时直连。导入订阅或节点后按下面的节点和规则发出。": "No nodes yet, so traffic leaves directly for now. Once you import a subscription or nodes it follows the nodes and rules below.",
+  "按下面选中的节点和订阅规则发出，可以切换节点对比不同地区的出口。": "Traffic follows the node selected below and the subscription's rules; switch nodes to compare exits in different regions.",
+  "抓到的流量从哪里发出": "Where captured traffic leaves",
+  "经过节点": "Through a node",
+  "使用方式": "Use AnixOps Net for",
 };
