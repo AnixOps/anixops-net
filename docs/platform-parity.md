@@ -71,7 +71,7 @@
 | 出口地址探测 | ✅ | ✅ | ✅ | ✅ | ❌ | Android 没有本地代理，见 `apps/android/README.md`（T8） |
 | 流量统计（按天） | ✅ | ✅ | ✅ | ✅ | ✅ | 活动页“流量统计”：今天 / 7 天，按小时（天）、主机、策略；与 iOS 相同每 5 秒从连接列表累计，保留 7 天（`crates/traffic-stats`，T9） |
 | 导出日志 / 诊断报告 | ✅ | ✅ | ✅ | ✅ | ◐ | Android 报告写在 App 私有目录，用户拿不到（T8） |
-| 扩展日志级别与模块筛选、开发者模式 | ✅ | ✅ | ❌ | ❌ | ❌ | T10 |
+| 扩展日志级别与模块筛选、开发者模式 | ✅ | ✅ | ✅ | ✅ | ✅ | 活动页“日志”：级别（全部 / 警告 / 错误）、模块、文字筛选，拷贝与清空（`crates/app-log`，T10）。桌面和 Android 只有应用自己的日志：内核不单独记日志；Windows 读窗口、应用、HTTPS 解密三份日志，Linux / Android 记连接、断开、订阅更新、网络切换和出错原因，网址去掉查询参数 |
 | 系统通知（脚本通知、意外断开、订阅更新失败） | ✅ | ✅ | ❌ | ❌ | ◐ | Android 只有连接常驻通知（T11） |
 | 网络变化后重建连接 | ✅ | ✅ | ✅ | ✅ | ◐ | Android 共用 `network_watch`，Wi-Fi / 移动网络切换待真机确认 |
 | 按 Wi-Fi 自动连接 / 断开（On Demand） | ✅ | ✅ | ❌ | ❌ | ❌ | 桌面需要读 SSID，T12 评估 |
@@ -122,7 +122,7 @@ MSI 升级时旧服务随旧版本一起卸载；便携版注册过的服务由�
 | T7 | 插件从文件 / 剪贴板导入、插件内容查看 | Windows、Linux、Android | 已完成 |
 | T8 | Android 诊断报告保存到“下载”、出口地址 | Android | 待做 |
 | T9 | 按天流量统计 | Windows、Linux、Android | 已完成 |
-| T10 | 日志查看（级别、模块筛选） | Windows、Linux、Android | 待做 |
+| T10 | 日志查看（级别、模块筛选） | Windows、Linux、Android | 已完成 |
 | T11 | 系统通知 | Windows、Linux、Android | 待做 |
 | T12 | 按 Wi-Fi 自动连接 / 断开 | Windows、Linux | 待评估 |
 | T13 | `anixops://` 链接 | Windows、Linux、Android | 待做 |

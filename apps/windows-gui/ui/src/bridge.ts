@@ -342,6 +342,17 @@ export interface TrafficStats {
   hours: TrafficHour[];
 }
 
+export type LogLevel = "info" | "warn" | "error";
+
+/** One line of the app's own log; the engine keeps no log. */
+export interface LogEntry {
+  /** Unix milliseconds; 0 when the line has no time. */
+  timeMs: number;
+  module: string;
+  level: LogLevel;
+  message: string;
+}
+
 /** What a saved plugin holds, as the engine reads it. */
 export interface MitmPluginDetails {
   excludedHostnames: string[];
@@ -501,6 +512,8 @@ export const desktop = {
   shareLink: (nodeId: string) => invoke<string>("node_share_link", { nodeId }),
   /** Seven days of traffic by hour, host and policy; `clear` empties it first. */
   trafficStats: (clear = false) => invoke<TrafficStats>("traffic_stats", { clear }),
+  /** The last 500 lines of the app's log, oldest first; `clear` empties it first. */
+  appLogs: (clear = false) => invoke<LogEntry[]>("app_logs", { clear }),
   nodeForm: (nodeId: string) => invoke<NodeForm>("node_form", { nodeId }),
   /** Until the subscription is updated, the node runs with this name, server and port. */
   editNode: (nodeId: string, name: string, server: string, port: string) => invoke<OperationResult>("edit_node", { nodeId, name, server, port }),

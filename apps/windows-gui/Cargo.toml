@@ -28,6 +28,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 network-watch = { path = "../../crates/network-watch" }
 subscription-meta = { path = "../../crates/subscription-meta" }
+app-log = { path = "../../crates/app-log" }
 traffic-stats = { path = "../../crates/traffic-stats" }
 
 [target.'cfg(windows)'.dependencies]

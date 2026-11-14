@@ -21,6 +21,7 @@ pub fn capture_dir(dir: &Path) -> PathBuf {
     dir.join("capture")
 }
 
+use app_log::{Entry as LogEntry, Level as LogLevel};
 use control_domain::NodeDescriptor;
 use desktop_mitm::Root;
 use engine_embedded::config::RuntimeConfig;
@@ -37,6 +38,9 @@ use self::state::{SavedSource, SavedState, Store};
 use self::system_proxy::Desktop;
 
 /// The source label for share links pasted into the import field.
+/// Lines the log viewer shows.
+const LOG_LINES: usize = 500;
+
 pub const PASTED_LOCATION: &str = "粘贴的链接";
 
 /// The snapshot's `platform`: the interface hides what the platform does not have.
@@ -968,13 +972,46 @@ impl Backend {
 
     /// Records why a connection could not start before the engine was reached.
     pub fn record_error(&mut self, error: &str) {
+        self.log(LogLevel::Error, &format!("connect failed: {error}"));
         self.last_error = Some(error.to_string());
     }
 
     pub fn connect(&mut self) -> Result<OperationResult, String> {
         let result = self.start();
         self.last_error = result.as_ref().err().cloned();
+        match &result {
+            Ok(done) => self.log(LogLevel::Info, &done.message),
+            Err(error) => self.log(LogLevel::Error, &format!("connect failed: {error}")),
+        }
         result
+    }
+
+    fn source_name(&self, id: &str) -> String {
+        self.state
+            .sources
+            .iter()
+            .find(|source| source.id == id)
+            .map(|source| subscription_meta::display_name(source.name.as_deref(), &source.location))
+            .unwrap_or_default()
+    }
+
+    fn log_path(&self) -> PathBuf {
+        self.store.dir().join("logs").join("app.log")
+    }
+
+    /// Records an event in the app's log (the log viewer, `logs`).
+    pub fn log(&self, level: LogLevel, message: &str) {
+        let _ = app_log::append(&self.log_path(), level, message);
+    }
+
+    /// The last lines of the app's log, oldest first; emptied first with `clear`.
+    pub fn logs(&self, clear: bool) -> Result<Vec<LogEntry>, String> {
+        let files = [("app", self.log_path())];
+        if clear {
+            app_log::clear(&files)
+                .map_err(|error| format!("the log could not be cleared: {error}"))?;
+        }
+        Ok(app_log::read(&files, LOG_LINES))
     }
 
     fn start(&mut self) -> Result<OperationResult, String> {
@@ -1008,6 +1045,7 @@ impl Backend {
     pub fn disconnect(&mut self) -> Result<OperationResult, String> {
         self.engine.stop();
         self.last_error = None;
+        self.log(LogLevel::Info, "Disconnected");
         self.restore_proxy();
         done("Disconnected")
     }
@@ -1020,8 +1058,9 @@ impl Backend {
                     self.save();
                 }
                 Err(error) => {
-                    self.last_error =
-                        Some(format!("the system proxy could not be restored: {error}"))
+                    let error = format!("the system proxy could not be restored: {error}");
+                    self.log(LogLevel::Error, &error);
+                    self.last_error = Some(error);
                 }
             }
         }
@@ -1093,6 +1132,9 @@ impl Backend {
 
     /// Rebuilds the engine's connections after a network change or a wake; nothing while it is stopped.
     pub fn reset_network(&self, reset: network_watch::Reset) {
+        if self.engine.is_running() {
+            self.log(LogLevel::Info, "network changed: connections rebuilt");
+        }
         let _ = self.engine.reset_network(reset);
     }
 
@@ -1308,7 +1350,9 @@ impl Backend {
         self.state.group_choices.clear();
         self.save();
         self.reload_nodes();
-        done(format!("Imported {supported} of {} nodes", nodes.len()))
+        let message = format!("Imported {supported} of {} nodes", nodes.len());
+        self.log(LogLevel::Info, &message);
+        done(message)
     }
 
     /// The selected source's URL when it can be fetched again.
@@ -1347,6 +1391,17 @@ impl Backend {
                 }
                 Err(error) => source.last_error = Some(error.clone()),
             }
+        }
+        let name = self.source_name(id);
+        match &result {
+            Ok(count) => self.log(
+                LogLevel::Info,
+                &format!("subscription {name} updated: {count} nodes"),
+            ),
+            Err(error) => self.log(
+                LogLevel::Error,
+                &format!("subscription {name} update failed: {error}"),
+            ),
         }
         self.save();
         self.reload_nodes();
@@ -1916,6 +1971,26 @@ rules:
             .unwrap();
         assert!(backend.snapshot().start_after_login);
         assert!(backend.auto_connect());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn logs_imports_and_failed_updates_without_url_queries() {
+        let (mut backend, dir) = backend("logs");
+        backend
+            .import("https://a.example/sub?token=x", LINK)
+            .unwrap();
+        let id = backend.state.sources[0].id.clone();
+        let _ = backend.finish_refresh(
+            &id,
+            Err("error sending request for url (https://a.example/sub?token=x)".to_string()),
+        );
+        let logs = backend.logs(false).unwrap();
+        assert_eq!(logs.len(), 2);
+        assert_eq!(logs[0].message, "Imported 1 of 1 nodes");
+        assert_eq!(logs[1].level, LogLevel::Error);
+        assert!(!logs[1].message.contains("token"));
+        assert!(backend.logs(true).unwrap().is_empty());
         let _ = std::fs::remove_dir_all(dir);
     }
 }

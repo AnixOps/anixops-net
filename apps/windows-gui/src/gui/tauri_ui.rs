@@ -147,6 +147,27 @@ fn start_traffic_stats(state: DesktopAppState) {
     });
 }
 
+/// The app's log files, by module: the window, the app and the native HTTPS decryption.
+fn app_log_files() -> [(&'static str, PathBuf); 3] {
+    let directory = windows_managed_log_directory();
+    [
+        ("gui", directory.join("gui.log")),
+        ("app", directory.join(format!("{APP_LOG_SCOPE}.log"))),
+        ("mitm", directory.join("native-mitm.log")),
+    ]
+}
+
+/// The last lines of the app's logs, oldest first; `clear` empties them first.
+#[tauri::command]
+async fn app_logs(clear: bool) -> Result<Vec<app_log::Entry>, String> {
+    let files = app_log_files();
+    if clear {
+        app_log::clear(&files)
+            .map_err(|error| format!("the logs could not be cleared: {error}"))?;
+    }
+    Ok(app_log::read(&files, 500))
+}
+
 /// Seven days of traffic by hour, host and policy; `clear` empties it first.
 #[tauri::command]
 async fn traffic_stats(
@@ -419,6 +440,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             network_probe,
             node_share_link,
             traffic_stats,
+            app_logs,
             node_form,
             edit_node,
             remove_node,

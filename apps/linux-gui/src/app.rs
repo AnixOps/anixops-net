@@ -749,6 +749,12 @@ async fn traffic_stats(state: State<'_, AppState>, clear: bool) -> Result<Traffi
     Ok(lock(&state.0).traffic_stats(clear))
 }
 
+/// The last lines of the app's log, oldest first; `clear` empties it first.
+#[tauri::command]
+async fn app_logs(state: State<'_, AppState>, clear: bool) -> Result<Vec<app_log::Entry>, String> {
+    lock(&state.0).logs(clear)
+}
+
 /// The name, server and port of a node of the selected subscription, and whether it can be removed.
 #[tauri::command]
 async fn node_form(state: State<'_, AppState>, node_id: String) -> Result<NodeForm, String> {
@@ -1291,6 +1297,7 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             network_probe,
             node_share_link,
             traffic_stats,
+            app_logs,
             node_form,
             edit_node,
             remove_node,
