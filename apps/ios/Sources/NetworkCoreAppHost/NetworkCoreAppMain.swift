@@ -43,13 +43,19 @@ struct NetworkCoreAppMain: App {
     }
 }
 
-/// The five top-level sections shared by every AnixOps Net client.
+/// The top-level sections shared by every AnixOps Net client: five in proxy mode; in debug mode the requests take
+/// the place of proxies and rules, which move into Settings › Exit.
 enum AppTab: Hashable, CaseIterable, Identifiable {
     case home
+    case requests
     case proxies
     case rules
     case extensions
     case settings
+
+    static func tabs(for mode: AppMode?) -> [AppTab] {
+        mode == .debug ? [.home, .requests, .extensions, .settings] : [.home, .proxies, .rules, .extensions, .settings]
+    }
 
     var id: Self {
         self
@@ -59,6 +65,8 @@ enum AppTab: Hashable, CaseIterable, Identifiable {
         switch self {
         case .home:
             return "首页"
+        case .requests:
+            return "请求"
         case .proxies:
             return "代理"
         case .rules:
@@ -74,6 +82,8 @@ enum AppTab: Hashable, CaseIterable, Identifiable {
         switch self {
         case .home:
             return "house"
+        case .requests:
+            return "list.bullet.rectangle"
         case .proxies:
             return "globe"
         case .rules:
@@ -102,7 +112,7 @@ struct RootView: View {
     /// First run only: after loading, with nothing imported and the welcome screen never closed.
     private var showsOnboarding: Binding<Bool> {
         Binding(
-            get: { tunnel.loaded && tunnel.hasNoNodes && !onboardingDone && !needsTerms },
+            get: { tunnel.loaded && tunnel.appMode == .proxy && tunnel.hasNoNodes && !onboardingDone && !needsTerms },
             set: { shown in
                 if !shown {
                     onboardingDone = true
@@ -123,6 +133,12 @@ struct RootView: View {
                 TermsConsentView {
                     acceptedTerms = TermsConsent.version
                 }
+            } else if tunnel.loaded, tunnel.appMode == nil {
+                ModeChoiceView { mode in
+                    Task {
+                        await tunnel.setAppMode(mode)
+                    }
+                }
             } else if sizeClass == .regular {
                 splitView(brand)
             } else {
@@ -142,9 +158,19 @@ struct RootView: View {
                 return
             }
             Task {
+                // Someone who arrives through a link (a subscription, usually) uses the proxy client: they are not
+                // asked which mode they want (plan A4).
+                if tunnel.appMode == nil {
+                    await tunnel.setAppMode(.proxy)
+                }
                 if await tunnel.handle(url: url) == .openImport {
                     importing = true
                 }
+            }
+        }
+        .onChange(of: tunnel.appMode) { _, mode in
+            if !AppTab.tabs(for: mode).contains(tab) {
+                tab = .home
             }
         }
         .onChange(of: tunnel.loaded) { _, loaded in
@@ -199,7 +225,7 @@ struct RootView: View {
 
     private var tabView: some View {
         TabView(selection: $tab) {
-            ForEach(AppTab.allCases) { section in
+            ForEach(AppTab.tabs(for: tunnel.appMode)) { section in
                 content(section)
                     .tabItem { Label(section.title, systemImage: section.systemImage) }
                     .tag(section)
@@ -210,7 +236,7 @@ struct RootView: View {
     private func splitView(_ brand: BrandPalette) -> some View {
         NavigationSplitView {
             List(selection: Binding<AppTab?>(get: { tab }, set: { tab = $0 ?? tab })) {
-                ForEach(AppTab.allCases) { section in
+                ForEach(AppTab.tabs(for: tunnel.appMode)) { section in
                     Label(section.title, systemImage: section.systemImage)
                         .tag(section)
                 }
@@ -230,6 +256,10 @@ struct RootView: View {
         switch section {
         case .home:
             HomeView(tunnel: tunnel, tab: $tab, importing: $importing)
+        case .requests:
+            NavigationStack {
+                ConnectionsView(tunnel: tunnel)
+            }
         case .proxies:
             ProxiesView(tunnel: tunnel, importing: $importing)
         case .rules:

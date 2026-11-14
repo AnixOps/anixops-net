@@ -160,7 +160,8 @@ private struct MacHeroCard: View {
             Spacer(minLength: 0)
             HStack(spacing: 10) {
                 Button {
-                    state.section = .proxies
+                    // Debug mode keeps subscriptions and nodes under Settings › Exit.
+                    state.section = tunnel.appMode == .debug ? .settings : .proxies
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "globe")
@@ -179,26 +180,29 @@ private struct MacHeroCard: View {
                 .buttonStyle(.plain)
                 .help("切换节点")
                 Spacer(minLength: 8)
-                Picker("代理模式", selection: Binding(
-                    get: { tunnel.mode },
-                    set: { mode in
-                        Task {
-                            await tunnel.setMode(mode)
+                // The direct profile has no rules or node to switch between.
+                if !tunnel.runsDirectProfile {
+                    Picker("代理模式", selection: Binding(
+                        get: { tunnel.mode },
+                        set: { mode in
+                            Task {
+                                await tunnel.setMode(mode)
+                            }
                         }
+                    )) {
+                        if tunnel.library?.routing != nil {
+                            Text("规则").tag(ProxyMode.rule)
+                        }
+                        Text("全局").tag(ProxyMode.global)
+                        Text("直连").tag(ProxyMode.direct)
                     }
-                )) {
-                    if tunnel.library?.routing != nil {
-                        Text("规则").tag(ProxyMode.rule)
-                    }
-                    Text("全局").tag(ProxyMode.global)
-                    Text("直连").tag(ProxyMode.direct)
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(maxWidth: 240)
+                    .disabled(phase == .unconfigured)
+                    // The hero is slate in both themes, so its controls always use the dark appearance.
+                    .environment(\.colorScheme, .dark)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(maxWidth: 240)
-                .disabled(phase == .unconfigured)
-                // The hero is slate in both themes, so its controls always use the dark appearance.
-                .environment(\.colorScheme, .dark)
             }
         }
         .foregroundStyle(Brand.line)
@@ -520,6 +524,7 @@ struct MacActivityPage: View {
 /// Settings: appearance, login item, reconnecting and Wi-Fi rules, notifications, privacy and the version.
 struct MacSettingsPage: View {
     var tunnel: TunnelController
+    @ObservedObject var state: MacAppState
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
     @Environment(\.brand) private var brand
     @State private var opensAtLogin = SMAppService.mainApp.status == .enabled
@@ -528,6 +533,11 @@ struct MacSettingsPage: View {
 
     var body: some View {
         Form {
+            AppModeSection(tunnel: tunnel)
+            if tunnel.appMode == .debug {
+                exitSection
+            }
+
             Section("外观") {
                 Picker("外观", selection: $appearance.normalized) {
                     ForEach(Appearance.choices) { option in
@@ -584,6 +594,29 @@ struct MacSettingsPage: View {
         .scrollContentBackground(.hidden)
         .frame(maxWidth: 720)
         .frame(maxWidth: .infinity)
+    }
+
+    /// Debug mode's exit (plan G2), with the subscriptions, nodes and rules that proxy mode shows in the sidebar.
+    private var exitSection: some View {
+        Section {
+            DebugExitPicker(tunnel: tunnel)
+            NavigationLink {
+                MacProxiesPage(tunnel: tunnel, state: state)
+                    .navigationTitle("订阅与节点")
+            } label: {
+                MacTileLabel(title: "订阅与节点", systemImage: "globe", color: MacTileColor.sky)
+            }
+            NavigationLink {
+                MacRulesPage(tunnel: tunnel)
+                    .navigationTitle("规则")
+            } label: {
+                MacTileLabel(title: "规则与 DNS", systemImage: "arrow.triangle.branch", color: MacTileColor.orange)
+            }
+        } header: {
+            Text("出口")
+        } footer: {
+            Text(DebugExitPicker.footer(tunnel))
+        }
     }
 
     private func setOpensAtLogin(_ enabled: Bool) {

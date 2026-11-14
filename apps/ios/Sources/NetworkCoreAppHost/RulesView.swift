@@ -6,12 +6,14 @@ import SwiftUI
 /// any other node list routes by the local rules' preset and the user's own rules.
 struct RulesView: View {
     var tunnel: TunnelController
+    /// Pushed from another page (debug mode's exit settings) instead of being a tab's root.
+    var embedded = false
     @Environment(\.brand) private var brand
     /// The running engine's groups by id: what each group uses now and its members' last delay.
     @State private var runtime: [String: RuntimeControl.Groups.Group] = [:]
 
     var body: some View {
-        NavigationStack {
+        NavigationContainer(embedded: embedded) {
             Group {
                 if let library = tunnel.library, let routing = library.routing {
                     rules(library, routing)

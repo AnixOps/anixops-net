@@ -156,6 +156,7 @@ targets:
           - "Resources/**"
       - path: Sources/NetworkCoreApp/Resources/Localizable.xcstrings
       - path: Sources/NetworkCoreApp/Resources/PrivacyInfo.xcprivacy
+      - path: Sources/NetworkCoreAppHost/AppModeViews.swift
       - path: Sources/NetworkCoreAppHost/BrandPalette.swift
       - path: Sources/NetworkCoreAppHost/BrandTokens.swift
       - path: Sources/NetworkCoreAppHost/ClientHealthMonitor.swift

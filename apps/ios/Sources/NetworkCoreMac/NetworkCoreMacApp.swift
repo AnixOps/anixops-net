@@ -131,6 +131,12 @@ enum MacSection: String, CaseIterable, Identifiable, Hashable {
 
     var id: String { rawValue }
 
+    /// The sidebar for a mode: every section in proxy mode; in debug mode proxies and rules move into Settings ›
+    /// Exit, so the requests (Activity) come right after the overview.
+    static func sections(for mode: AppMode?) -> [MacSection] {
+        mode == .debug ? [.home, .activity, .extensions, .settings] : allCases
+    }
+
     var title: LocalizedStringKey {
         switch self {
         case .home:
@@ -199,7 +205,7 @@ enum MacTileColor {
 
 extension TunnelController {
     var phase: ConnectPhase {
-        ConnectPhase(status: connection, hasNode: nodeName != nil)
+        ConnectPhase(status: connection, hasNode: canConnect)
     }
 
     var toggleTitle: LocalizedStringKey {
@@ -272,21 +278,9 @@ private struct MenuBarContent: View {
                 tunnel.toggle()
             }
             .disabled(tunnel.phase == .disconnecting)
-            Picker("代理模式", selection: Binding(
-                get: { tunnel.mode },
-                set: { mode in
-                    Task {
-                        await tunnel.setMode(mode)
-                    }
-                }
-            )) {
-                if tunnel.library != nil {
-                    Text("规则").tag(ProxyMode.rule)
-                }
-                Text("全局").tag(ProxyMode.global)
-                Text("直连").tag(ProxyMode.direct)
+            if !tunnel.runsDirectProfile {
+                modePicker
             }
-            .pickerStyle(.inline)
         }
         Divider()
         Button("打开 AnixOps Net") {
@@ -299,6 +293,24 @@ private struct MenuBarContent: View {
         Button("退出 AnixOps Net") {
             NSApp.terminate(nil)
         }
+    }
+
+    private var modePicker: some View {
+        Picker("代理模式", selection: Binding(
+            get: { tunnel.mode },
+            set: { mode in
+                Task {
+                    await tunnel.setMode(mode)
+                }
+            }
+        )) {
+            if tunnel.library != nil {
+                Text("规则").tag(ProxyMode.rule)
+            }
+            Text("全局").tag(ProxyMode.global)
+            Text("直连").tag(ProxyMode.direct)
+        }
+        .pickerStyle(.inline)
     }
 
     private func showWindow() {
