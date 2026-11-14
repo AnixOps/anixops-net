@@ -361,6 +361,31 @@ impl Backend {
         self.state.preferences.https_decryption
     }
 
+    /// Replaces the generated root with the user's own CA and restarts a running engine that decrypts.
+    pub fn import_mitm_root(
+        &mut self,
+        certificate_pem: &str,
+        private_key_pem: &str,
+    ) -> Result<OperationResult, String> {
+        Root::import(&self.mitm_dir(), certificate_pem, private_key_pem)?;
+        let restarted = self.state.preferences.https_decryption && self.restart_if_running()?;
+        done(if restarted {
+            "Your root certificate is in use. Install it again on phones and other devices"
+        } else {
+            "Your root certificate is saved; it is used the next time HTTPS decryption runs"
+        })
+    }
+
+    /// SHA-256 of the HTTPS decryption root, when there is one.
+    pub fn mitm_root_fingerprint(&self) -> Option<String> {
+        let root = self.mitm_root();
+        if root.exists() {
+            root.fingerprint().ok()
+        } else {
+            None
+        }
+    }
+
     /// Turns HTTPS decryption on or off and restarts a running engine with it.
     pub fn set_https_decryption(&mut self, enabled: bool) -> Result<OperationResult, String> {
         if enabled {

@@ -359,6 +359,9 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             import_mitm_plugin,
             set_mitm_plugin_enabled,
             remove_mitm_plugin,
+            phone_qr_code,
+            import_mitm_root,
+            mitm_root_fingerprint,
             set_tun_mode,
             install_certificate,
             remove_certificate,
@@ -3728,6 +3731,46 @@ fn ensure_mitm_ca_material() -> Result<(PathBuf, PathBuf), String> {
     fs::write(&certificate_path, certificate.pem()).map_err(|error| error.to_string())?;
     fs::write(&private_key_path, key_pair.serialize_pem()).map_err(|error| error.to_string())?;
     Ok((certificate_path, private_key_path))
+}
+
+/// An SVG QR code for the phone setup page address of the LAN share.
+#[tauri::command]
+fn phone_qr_code(text: String) -> Result<String, String> {
+    desktop_mitm::phone::qr_svg(&text)
+}
+
+/// Replaces the HTTPS decryption root with the user's own CA (PEM certificate and PKCS#8 key); it is used the
+/// next time HTTPS decryption starts.
+#[tauri::command]
+async fn import_mitm_root(
+    certificate_pem: String,
+    private_key_pem: String,
+) -> Result<OperationResult, String> {
+    run_blocking(move || {
+        desktop_mitm::Root::import(
+            &windows_managed_data_directory().join("mitm"),
+            &certificate_pem,
+            &private_key_pem,
+        )?;
+        Ok(OperationResult {
+            message:
+                "Your root certificate is saved. Turn HTTPS decryption off and on again to use it, \
+                      then install it again on phones and other devices."
+                    .to_string(),
+        })
+    })
+    .await
+}
+
+/// SHA-256 of the HTTPS decryption root, for checking it against the phone setup page.
+#[tauri::command]
+fn mitm_root_fingerprint() -> Option<String> {
+    let root = desktop_mitm::Root::at(&windows_managed_data_directory().join("mitm"));
+    if root.exists() {
+        root.fingerprint().ok()
+    } else {
+        None
+    }
 }
 
 #[tauri::command]

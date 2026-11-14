@@ -202,3 +202,12 @@ CI 的 `android` job 每次都产出 arm64 APK（artifact `anixops-net-android-<
 - [ ] 维护者在 Settings → Pages 把 Source 设为「GitHub Actions」（只做一次；没设之前 `Deploy to GitHub Pages` job 会失败）。
   设好后手动运行一次 `Download page` workflow。
 - [ ] 打开下载页，确认各平台按钮指向最新版，`/windows/` 等固定链接能跳转。
+
+
+## 手机连电脑抓包（真机验收）
+
+自动测试只覆盖了回环地址上的部分：设置页、证书下载、转发与连接标签。下面几项需要用真机验收：
+
+- [ ] macOS：连接后打开「扩展 → 手机抓包」，iPhone 扫码，按设置页的步骤设代理并安装、信任描述文件，`http://cert.anixops/` 显示“代理已生效”，请求页能看到 `LAN <iPhone 地址>` 的连接，HTTPS 内容能解密。
+- [ ] Windows（桌面模式）与 Linux：同样的步骤，再用一台 Android 手机安装 `.crt` 验收一遍。
+- [ ] 第一次开启时，macOS 和 Windows 可能弹出防火墙提示，需要允许传入连接。

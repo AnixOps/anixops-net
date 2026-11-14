@@ -160,7 +160,9 @@ pub fn activity_request(request: &serde_json::Value) -> Result<Vec<u8>, String> 
         .get("cmd")
         .and_then(serde_json::Value::as_str)
         .unwrap_or_default();
-    if !ACTIVITY_COMMANDS.contains(&command) {
+    if !ACTIVITY_COMMANDS.contains(&command)
+        && !desktop_mitm::phone::CONTROL_COMMANDS.contains(&command)
+    {
         return Err(format!(
             "runtime control command {command:?} is not available"
         ));
@@ -720,6 +722,10 @@ mod tests {
             activity_request(&serde_json::json!({"cmd": "set_mode", "mode": "global"})).is_err()
         );
         assert!(activity_request(&serde_json::json!({"id": 7})).is_err());
+        assert!(
+            activity_request(&serde_json::json!({"cmd": "start_lan_share", "port": 8899})).is_ok()
+        );
+        assert!(activity_request(&serde_json::json!({"cmd": "stop_lan_share"})).is_ok());
     }
 
     #[test]

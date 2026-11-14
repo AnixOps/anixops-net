@@ -517,6 +517,18 @@ dl.headers dd { margin: 0; font-family: var(--font-mono); font-size: 12px; overf
   :root[data-backdrop="mica"] .sidebar { background: var(--sidebar); }
 }
 
+/* Phone debugging (Extensions page): the share's QR code beside its address and steps. */
+.port-input { flex: 0 0 72px; min-width: 72px; text-align: right; }
+.phone-qr { display: flex; gap: 16px; align-items: center; padding: 12px 14px; }
+.phone-qr-code { flex: 0 0 auto; width: 168px; height: 168px; padding: 6px; background: #fff; border-radius: 10px; }
+.phone-qr-code svg { display: block; width: 100%; height: 100%; }
+.phone-qr-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; align-items: flex-start; }
+.phone-qr-text code, code.selectable { font-family: var(--font-mono); font-size: 12px; user-select: text; word-break: break-all; }
+.phone-qr-text small { color: var(--text2); font-size: 12px; line-height: 1.5; }
+.root-import { display: grid; gap: 8px; padding: 10px 14px 12px; }
+.root-import textarea { min-height: 88px; }
+.root-import button { justify-self: end; }
+@media (max-width: 560px) { .phone-qr { flex-direction: column; align-items: flex-start; } }
 /* First-launch mode choice (mode-choice.tsx): two equal answers, neither one a primary button. */
 .mode-dialog { width: min(560px, 100%); }
 .mode-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }

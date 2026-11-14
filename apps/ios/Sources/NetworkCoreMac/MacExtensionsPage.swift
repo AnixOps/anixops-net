@@ -3,7 +3,7 @@ import NetworkCoreBridge
 import Security
 import SwiftUI
 
-/// Extensions: the HTTPS decryption root and the same plugin and script section as on iOS. A Mac trusts the root
+/// Extensions: the HTTPS decryption root, phone debugging through this Mac and the same plugin and script section as on iOS. A Mac trusts the root
 /// through the login keychain instead of a configuration profile.
 struct MacExtensionsPage: View {
     var tunnel: TunnelController
@@ -15,6 +15,7 @@ struct MacExtensionsPage: View {
     var body: some View {
         Form {
             certificateSection
+            MacPhoneCaptureSection(tunnel: tunnel)
             PluginsSection(tunnel: tunnel, model: plugins)
             MappingsSection(tunnel: tunnel)
         }

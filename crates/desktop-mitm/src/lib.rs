@@ -4,6 +4,7 @@
 
 pub mod capture;
 pub mod mappings;
+pub mod phone;
 pub mod plugins;
 pub mod replay;
 
@@ -68,6 +69,57 @@ impl Root {
         Ok(root)
     }
 
+    /// Replaces the root in `directory` with the user's own CA (a team root, say), both PEM: the certificate must
+    /// be a CA certificate and the key its PKCS#8 private key. Nothing is written when either is refused. The
+    /// engine and the trust stores pick it up at the next start of HTTPS decryption.
+    pub fn import(
+        directory: &Path,
+        certificate_pem: &str,
+        private_key_pem: &str,
+    ) -> Result<Self, String> {
+        let certificate_der = certificate_der(certificate_pem)?;
+        let is_ca = x509_parser::parse_x509_certificate(&certificate_der)
+            .ok()
+            .and_then(|(_, certificate)| {
+                certificate
+                    .basic_constraints()
+                    .ok()
+                    .flatten()
+                    .map(|constraints| constraints.value.ca)
+            })
+            .unwrap_or(false);
+        if !is_ca {
+            return Err("the certificate is not a CA certificate".to_string());
+        }
+        let key = KeyPair::from_pem(private_key_pem)
+            .map_err(|_| "the private key is not a PKCS#8 PEM key (BEGIN PRIVATE KEY)")?;
+        let public_key = key.public_key_raw();
+        if public_key.is_empty()
+            || !certificate_der
+                .windows(public_key.len())
+                .any(|window| window == public_key)
+        {
+            return Err("the private key does not belong to the certificate".to_string());
+        }
+        fs::create_dir_all(directory).map_err(|error| error.to_string())?;
+        let root = Self::at(directory);
+        write_private(&root.private_key_path, key.serialize_pem().as_bytes())?;
+        fs::write(
+            &root.certificate_path,
+            certificate_pem.trim().to_string() + "\n",
+        )
+        .map_err(|error| error.to_string())?;
+        Ok(root)
+    }
+
+    /// SHA-256 of the root certificate, upper-case hex pairs joined by `:` as the phone setup page shows it.
+    pub fn fingerprint(&self) -> Result<String, String> {
+        let pem = fs::read_to_string(&self.certificate_path).map_err(|error| {
+            format!("HTTPS decryption root certificate could not be read: {error}")
+        })?;
+        Ok(fingerprint(&certificate_der(&pem)?))
+    }
+
     /// `envelope` with a `mitm` section made of this root, `policy` and the enabled plugins in `plugins`.
     pub fn envelope(
         &self,
@@ -125,6 +177,27 @@ pub fn envelope_with_mitm(
     }
     sections.insert("mitm".to_string(), mitm.into());
     serde_json::to_vec(&envelope).map_err(|error| error.to_string())
+}
+
+/// The DER of the first PEM block of `pem`.
+fn certificate_der(pem: &str) -> Result<Vec<u8>, String> {
+    use base64::Engine as _;
+    if !pem.contains("-----BEGIN CERTIFICATE-----") {
+        return Err("the certificate is not a PEM certificate (BEGIN CERTIFICATE)".to_string());
+    }
+    pem_body(pem)
+        .and_then(|body| base64::engine::general_purpose::STANDARD.decode(body).ok())
+        .ok_or_else(|| "the certificate is not a PEM certificate (BEGIN CERTIFICATE)".to_string())
+}
+
+/// SHA-256 of `der`, upper-case hex pairs joined by `:`.
+pub fn fingerprint(der: &[u8]) -> String {
+    ring::digest::digest(&ring::digest::SHA256, der)
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02X}"))
+        .collect::<Vec<_>>()
+        .join(":")
 }
 
 /// The base64 body of the first PEM block: the DER the engine expects.
@@ -185,6 +258,58 @@ mod tests {
         );
         assert!(envelope["mitm"]["ca_private_key"].as_str().is_some());
         assert!(root.envelope(b"[]", "", None).is_err());
+        assert_eq!(root.fingerprint().unwrap().len(), 32 * 3 - 1);
+        let _ = fs::remove_dir_all(&directory);
+    }
+
+    fn own_ca(common_name: &str) -> (String, String) {
+        let mut params = CertificateParams::default();
+        params
+            .distinguished_name
+            .push(DnType::CommonName, common_name);
+        params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        let key = KeyPair::generate().unwrap();
+        let certificate = params.self_signed(&key).unwrap();
+        (certificate.pem(), key.serialize_pem())
+    }
+
+    #[test]
+    fn an_own_ca_replaces_the_root_only_when_it_is_valid() {
+        let directory =
+            std::env::temp_dir().join(format!("desktop-mitm-import-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&directory);
+        let generated = Root::ensure(&directory).unwrap();
+        let before = fs::read_to_string(&generated.certificate_path).unwrap();
+
+        let (certificate, key) = own_ca("Team Debug CA");
+        let (_, other_key) = own_ca("Someone Else");
+        assert!(Root::import(&directory, &certificate, &other_key).is_err());
+        assert!(Root::import(&directory, "not a certificate", &key).is_err());
+        assert!(Root::import(&directory, &certificate, "not a key").is_err());
+        // A leaf is not a CA.
+        let leaf_key = KeyPair::generate().unwrap();
+        let leaf = CertificateParams::new(vec!["example.com".to_string()])
+            .unwrap()
+            .self_signed(&leaf_key)
+            .unwrap();
+        assert!(Root::import(&directory, &leaf.pem(), &leaf_key.serialize_pem()).is_err());
+        assert_eq!(
+            fs::read_to_string(&generated.certificate_path).unwrap(),
+            before
+        );
+
+        let root = Root::import(&directory, &certificate, &key).unwrap();
+        assert_eq!(root, generated);
+        assert_eq!(
+            fs::read_to_string(&root.certificate_path).unwrap().trim(),
+            certificate.trim()
+        );
+        let envelope = root.envelope(br#"{"schema_version":1}"#, "", None).unwrap();
+        let envelope: Value = serde_json::from_slice(&envelope).unwrap();
+        assert_eq!(
+            envelope["mitm"]["ca_certificate"].as_str(),
+            pem_body(&certificate).as_deref()
+        );
         let _ = fs::remove_dir_all(&directory);
     }
 }
