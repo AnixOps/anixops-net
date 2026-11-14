@@ -1,0 +1,132 @@
+name: Android APK
+description: >-
+  Builds the arm64 Android APK (apps/android) and signs it with the given keystore, or with a throwaway debug
+  key when no keystore is given. Shared by ci.yml and release.yml.
+
+inputs:
+  keystore-base64:
+    description: Base64 of the release keystore (ANDROID_KEYSTORE_BASE64); empty = throwaway debug key
+    required: false
+    default: ""
+  keystore-password:
+    required: false
+    default: ""
+  key-alias:
+    required: false
+    default: ""
+  key-password:
+    required: false
+    default: ""
+  save-cache:
+    description: Whether to save the Rust build cache
+    required: false
+    default: "false"
+
+outputs:
+  apk:
+    description: Absolute path of the signed APK
+    value: ${{ steps.sign.outputs.apk }}
+  kind:
+    description: release (signed with the keystore) or debug (throwaway key)
+    value: ${{ steps.sign.outputs.kind }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 9
+
+    - name: Setup Node
+      uses: actions/setup-node@v7
+      with:
+        node-version: 22
+        cache: pnpm
+        cache-dependency-path: apps/windows-gui/ui/pnpm-lock.yaml
+
+    - name: Build the shared interface
+      shell: bash
+      run: |
+        pnpm --dir apps/windows-gui/ui install --frozen-lockfile
+        pnpm --dir apps/windows-gui/ui run build
+
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: "17"
+
+    - name: Setup Rust
+      shell: bash
+      run: |
+        rustup toolchain install stable --profile minimal
+        rustup default stable
+        rustup target add aarch64-linux-android
+
+    - name: Restore Rust build cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: android
+        workspaces: apps/android -> target
+        save-if: ${{ inputs.save-cache }}
+
+    # Installed next to tauri.conf.json: the generated Gradle project runs the CLI again from node_modules.
+    - name: Install the Tauri CLI
+      shell: bash
+      working-directory: apps/android
+      run: npm install --no-audit --no-fund
+
+    - name: Generate the Android project
+      shell: bash
+      working-directory: apps/android
+      run: |
+        set -euo pipefail
+        export NDK_HOME="${ANDROID_NDK_LATEST_HOME}"
+        echo "NDK_HOME=${NDK_HOME}" >> "$GITHUB_ENV"
+        # rquickjs-sys generates its Android bindings with bindgen, which needs the NDK headers and a versioned
+        # target (the API level is the app minSdkVersion).
+        echo "BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android=--target=aarch64-linux-android26 --sysroot=${NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot" >> "$GITHUB_ENV"
+        npx tauri android init --ci
+        npx tauri icon icons/networkcore.png
+
+    - name: Build the APK
+      shell: bash
+      working-directory: apps/android
+      run: npx tauri android build --apk --target aarch64 --ci
+
+    - name: Sign the APK
+      id: sign
+      shell: bash
+      working-directory: apps/android
+      env:
+        KEYSTORE_BASE64: ${{ inputs.keystore-base64 }}
+        KEYSTORE_PASSWORD: ${{ inputs.keystore-password }}
+        KEY_ALIAS: ${{ inputs.key-alias }}
+        KEY_PASSWORD: ${{ inputs.key-password }}
+      run: |
+        set -euo pipefail
+        unsigned="$(find gen/android/app/build/outputs/apk -name '*-unsigned.apk' | head -n 1)"
+        test -n "${unsigned}"
+        tools="$(ls -d "${ANDROID_HOME}"/build-tools/* | sort -V | tail -n 1)"
+        keystore="${RUNNER_TEMP}/signing.jks"
+        if [ -n "${KEYSTORE_BASE64}" ]; then
+          echo "${KEYSTORE_BASE64}" | base64 --decode > "${keystore}"
+          kind=release
+        else
+          KEYSTORE_PASSWORD=android KEY_ALIAS=androiddebugkey KEY_PASSWORD=android
+          keytool -genkeypair -keystore "${keystore}" -storepass "${KEYSTORE_PASSWORD}" -keypass "${KEY_PASSWORD}" \
+            -alias "${KEY_ALIAS}" -keyalg RSA -keysize 2048 -validity 3650 -dname "CN=AnixOps Net Debug"
+          kind=debug
+        fi
+        aligned="${RUNNER_TEMP}/aligned.apk"
+        "${tools}/zipalign" -f -p 4 "${unsigned}" "${aligned}"
+        mkdir -p "${RUNNER_TEMP}/apk"
+        out="${RUNNER_TEMP}/apk/anixops-net-android-arm64-${kind}.apk"
+        "${tools}/apksigner" sign --ks "${keystore}" --ks-pass "pass:${KEYSTORE_PASSWORD}" \
+          --ks-key-alias "${KEY_ALIAS}" --key-pass "pass:${KEY_PASSWORD}" --out "${out}" "${aligned}"
+        "${tools}/apksigner" verify --print-certs "${out}"
+        rm -f "${keystore}"
+        ls -l "${out}"
+        echo "apk=${out}" >> "$GITHUB_OUTPUT"
+        echo "kind=${kind}" >> "$GITHUB_OUTPUT"

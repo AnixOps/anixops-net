@@ -186,6 +186,19 @@ CI 的 `android` job 每次都产出 arm64 APK（artifact `anixops-net-android-<
   `keytool -genkeypair -v -keystore anixops-net.jks -alias anixops-net -keyalg RSA -keysize 4096 -validity 10000`，
   把 `base64 -w0 anixops-net.jks` 的结果和密码写入仓库 secrets：`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、
   `ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。配置后 CI 自动改用它签名（文件名里的 `debug` 变成 `release`）。
+- [ ] 发版时 `release.yml` 会把 APK 作为 `anixops-net-<版本>-android-arm64.apk` 放进 GitHub Release。配置正式密钥前，
+  Release 说明会写明「临时签名，装新版前要先卸载旧版」。
 - [ ] 真机验收：安装 APK，首次启动同意用户协议，导入订阅，点连接时允许 VPN，浏览器能打开网页，断开后网络恢复。
 - [ ] 上架 Google Play（暂不需要）：开发者账号、AAB 构建和 Play App Signing 另行处理。
 
+
+## 开源版下载页（GitHub Pages）
+
+2026-11-14 用户决定客户端分两版发布：开源版（不含 ANX）放本仓库 GitHub Release，ANX 版只在机场面板里下载。
+开源版的固定下载页由 `download-page.yml` 生成并部署到 GitHub Pages：`https://anixops.github.io/anixops-net/`，
+另有固定直链 `/windows/`、`/windows-portable/`、`/linux-deb/`、`/linux/`、`/android/`（跳转到最新版文件）和
+`latest.json`。`release.yml` 发布 Release 后会自动触发它。
+
+- [ ] 维护者在 Settings → Pages 把 Source 设为「GitHub Actions」（只做一次；没设之前 `Deploy to GitHub Pages` job 会失败）。
+  设好后手动运行一次 `Download page` workflow。
+- [ ] 打开下载页，确认各平台按钮指向最新版，`/windows/` 等固定链接能跳转。
