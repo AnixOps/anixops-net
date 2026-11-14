@@ -6,7 +6,7 @@ import Foundation
 /// or patch version only clarifies wording. `TermsConsentTests` checks `version` against TERMS.md.
 public enum TermsConsent {
     /// The terms version this build asks for, the "基准版本" line of TERMS.md.
-    public static let version = "2.0.1"
+    public static let version = "2.1.0"
     /// The `UserDefaults` key that holds the version last accepted.
     public static let storageKey = "terms-accepted-version"
     /// The full text, in the public repository.
@@ -33,5 +33,17 @@ public enum TermsConsent {
             return nil
         }
         return Int(first)
+    }
+}
+
+/// The extra confirmation the first time someone turns HTTPS decryption on (TERMS.md section 4: capture and decrypt
+/// only traffic you are entitled to see). Asked once per installation, on iOS and macOS alike.
+public enum DecryptionConsent {
+    /// The `UserDefaults` key that holds the terms version in force when it was confirmed.
+    public static let storageKey = "https-decryption-consent-version"
+
+    /// True until someone has confirmed once.
+    public static func needsConsent(accepted: String?) -> Bool {
+        accepted?.isEmpty ?? true
     }
 }

@@ -9846,6 +9846,54 @@
           }
         }
       }
+    },
+    "开启 HTTPS 解密前请确认": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Before You Turn On HTTPS Decryption"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開啟 HTTPS 解密前請確認"
+          }
+        }
+      }
+    },
+    "我确认，开启": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I Confirm, Turn On"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我確認，開啟"
+          }
+        }
+      }
+    },
+    "只解密你自己设备上的流量，或你有权调试的应用、设备和网络的流量；不抓取、不解密别人的流量。解密后的内容可能含有密码和个人信息，只保存在本机，导出或分享前请先脱敏。详见用户协议第 4 节。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decrypt only traffic on your own devices, or of apps, devices and networks you are authorised to debug. Never capture or decrypt other people's traffic. Decrypted content can hold passwords and personal data; it stays on this device, so redact it before you export or share it. See section 4 of the user agreement."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只解密你自己裝置上的流量，或你有權除錯的應用程式、裝置和網路的流量；不擷取、不解密別人的流量。解密後的內容可能含有密碼和個人資訊，只儲存在本機，匯出或分享前請先去識別化。詳見用戶協議第 4 節。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -13,6 +13,7 @@ import { formatBytes, formatDay, updateIntervalLabel, usedFraction } from "../su
 import { useTraffic } from "../traffic-feed";
 import { LetterTile, Panel, Run, Segmented, StatusDot, Switch } from "../ui";
 import { t } from "../i18n";
+import { useDecryptionConsent } from "../decryption-consent";
 
 export type Delays = Record<string, NodeDelay>;
 export type SetDelays = (update: (current: Delays) => Delays) => void;
@@ -370,6 +371,7 @@ function DelayPanel({ snapshot, busy, run, goTo, setDelays, probe, reprobe }: {
 
   const windows = snapshot !== null && !inProcessEngine(snapshot);
   const decrypting = Boolean(snapshot?.httpsDecryptionEnabled);
+  const consent = useDecryptionConsent();
 
   return (
     <Panel
@@ -410,7 +412,7 @@ function DelayPanel({ snapshot, busy, run, goTo, setDelays, probe, reprobe }: {
         {snapshot?.httpsDecryptionEnabled !== undefined && (
           <div>
             <dt><button className="plain-link" onClick={() => goTo("extensions")}>{t("HTTPS 解密")}<ChevronRight size={12} /></button></dt>
-            <dd><Switch label={t("HTTPS 解密")} checked={decrypting} disabled={Boolean(busy)} onChange={() => void run("mitm", decrypting ? desktop.disableHttpsMitm : desktop.enableHttpsMitm)} /></dd>
+            <dd><Switch label={t("HTTPS 解密")} checked={decrypting} disabled={Boolean(busy)} onChange={() => (decrypting ? void run("mitm", desktop.disableHttpsMitm) : consent.guard(() => void run("mitm", desktop.enableHttpsMitm)))} /></dd>
           </div>
         )}
         <div>
@@ -418,6 +420,7 @@ function DelayPanel({ snapshot, busy, run, goTo, setDelays, probe, reprobe }: {
           <dd>{dnsPresetLabel(snapshot?.dnsPreset)}</dd>
         </div>
       </dl>
+      {consent.dialog}
     </Panel>
   );
 }
