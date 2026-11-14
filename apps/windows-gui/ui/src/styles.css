@@ -496,6 +496,14 @@ dl.headers dd { margin: 0; font-family: var(--font-mono); font-size: 12px; overf
 @media (max-width: 720px) {
   dl.headers > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .bytes-tools { flex-wrap: wrap; }
+  /* Debug views on a phone: segmented choices share the row instead of pushing past it, the request line keeps
+     the method short, editors start lower, and a title with actions wraps instead of squeezing them. */
+  .row > .segmented { flex: 1 1 auto; min-width: 0; }
+  .row > .segmented button { min-width: 0; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; }
+  .replay-line .method-input { flex-basis: 72px; }
+  .bytes-view pre.bytes { max-height: 50vh; }
+  .card-header { flex-wrap: wrap; }
+  textarea { min-height: 96px; }
 }
 
 /* Windows 11 Mica: the Rust side sets data-backdrop="mica" only when the system backdrop is applied, so the
