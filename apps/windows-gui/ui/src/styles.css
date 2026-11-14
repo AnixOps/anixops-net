@@ -466,3 +466,14 @@ select option { color: var(--label-1); background: var(--bg-elevated); }
 .terms-text .terms-item::before { content: "• "; }
 .terms-declined { margin: 0; font-size: 13px; color: var(--danger); }
 .terms-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Windows 11 Mica: the Rust side sets data-backdrop="mica" only when the system backdrop is applied, so the
+   sidebar shows the desktop-tinted material and the workspace floats on it. Without it the window keeps the
+   opaque colours above (Windows 10, Linux, reduced transparency). */
+:root[data-backdrop="mica"], :root[data-backdrop="mica"] body { background: transparent; }
+:root[data-backdrop="mica"] .sidebar { background: transparent; }
+:root[data-backdrop="mica"] .workspace { background: var(--window); border-top-left-radius: 10px; box-shadow: 0 0 0 1px var(--hairline); }
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-backdrop="mica"], :root[data-backdrop="mica"] body { background: var(--window); }
+  :root[data-backdrop="mica"] .sidebar { background: var(--sidebar); }
+}

@@ -266,6 +266,9 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
         .manage(HealthState(health))
         .setup(|app| {
             install_tray(app)?;
+            if let Some(window) = app.get_webview_window("main") {
+                super::backdrop::apply(&window);
+            }
             show_main_window(app);
             let state = app.state::<DesktopAppState>().inner().clone();
             start_automatic_connection(state.clone());
@@ -276,6 +279,11 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             Ok(())
         })
         .on_page_load(|webview, payload| {
+            if payload.event() == PageLoadEvent::Finished {
+                if let Some(script) = super::backdrop::page_script() {
+                    let _ = webview.eval(script);
+                }
+            }
             let _ = append_managed_log(
                 APP_LOG_SCOPE,
                 &format!("webview page load {:?}: {}", payload.event(), payload.url()),

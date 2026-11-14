@@ -26,6 +26,7 @@ fn main() {
 #[allow(dead_code)]
 mod gui {
     mod actions;
+    mod backdrop;
     mod linked_sources;
     mod mitm_plugins;
     mod runtime_status;
