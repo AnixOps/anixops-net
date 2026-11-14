@@ -22,6 +22,8 @@ final class ScriptEventRelay: @unchecked Sendable {
     }
 
     private static let pollSeconds = 15
+    /// While the device sleeps notifications can wait a minute; `poll()` on wake shows them at once.
+    private static let sleepingPollSeconds = 60
     /// At most this many notifications are shown per poll; scripts that post more are cut short.
     private static let maxPerPoll = 8
 
@@ -50,6 +52,14 @@ final class ScriptEventRelay: @unchecked Sendable {
             timer.resume()
             self.timer = timer
             return scripts.count
+        }
+    }
+
+    /// Polls less often while the device sleeps, as usual again after wake.
+    func setSleeping(_ sleeping: Bool) {
+        queue.async { [self] in
+            let seconds = sleeping ? Self.sleepingPollSeconds : Self.pollSeconds
+            timer?.schedule(deadline: .now() + .seconds(seconds), repeating: .seconds(seconds), leeway: .seconds(sleeping ? 10 : 3))
         }
     }
 

@@ -430,6 +430,10 @@ struct MacActivityPage: View {
                         showsLog = true
                     }
                     .controlSize(.small)
+                    Button("导出日志…") {
+                        exportLog()
+                    }
+                    .controlSize(.small)
                 }
             }
             .padding(16)
@@ -471,22 +475,45 @@ struct MacActivityPage: View {
         tunnel.refreshDiagnostics()
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(500))
-            let info = Bundle.main.infoDictionary
-            let report = DeveloperReport(
-                appVersion: info?["CFBundleShortVersionString"] as? String ?? "unknown",
-                appBuild: info?["CFBundleVersion"] as? String ?? "unknown",
-                systemVersion: "macOS \(ProcessInfo.processInfo.operatingSystemVersionString)",
-                connection: ConnectPhase.describe(tunnel.connection),
-                outboundKind: tunnel.outboundKind,
-                lastDisconnectError: tunnel.lastDisconnectError,
-                diagnostics: tunnel.diagnostics,
-                generatedAt: Date(),
-                health: ClientHealthMonitor.shared.reportText
-            )
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(report.text, forType: .string)
+            NSPasteboard.general.setString(currentReport().text, forType: .string)
             copied = true
         }
+    }
+
+    /// Saves the redacted report as a `.log` file where the user picks (`DiagnosticLogExport`).
+    private func exportLog() {
+        tunnel.refreshDiagnostics()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
+            let power = [
+                "thermal state: \(DiagnosticLogExport.describe(thermalState: ProcessInfo.processInfo.thermalState))",
+                "low power mode: \(ProcessInfo.processInfo.isLowPowerModeEnabled)",
+            ]
+            let contents = DiagnosticLogExport.contents(report: currentReport(), power: power)
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = DiagnosticLogExport.fileName(at: Date())
+            panel.canCreateDirectories = true
+            guard panel.runModal() == .OK, let url = panel.url else {
+                return
+            }
+            try? Data(contents.utf8).write(to: url, options: .atomic)
+        }
+    }
+
+    private func currentReport() -> DeveloperReport {
+        let info = Bundle.main.infoDictionary
+        return DeveloperReport(
+            appVersion: info?["CFBundleShortVersionString"] as? String ?? "unknown",
+            appBuild: info?["CFBundleVersion"] as? String ?? "unknown",
+            systemVersion: "macOS \(ProcessInfo.processInfo.operatingSystemVersionString)",
+            connection: ConnectPhase.describe(tunnel.connection),
+            outboundKind: tunnel.outboundKind,
+            lastDisconnectError: tunnel.lastDisconnectError,
+            diagnostics: tunnel.diagnostics,
+            generatedAt: Date(),
+            health: ClientHealthMonitor.shared.reportText
+        )
     }
 }
 

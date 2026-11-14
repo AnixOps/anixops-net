@@ -1,6 +1,86 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "导出日志…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export Logs…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯出日誌…"
+          }
+        }
+      }
+    },
+    "导出日志": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export Logs"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯出日誌"
+          }
+        }
+      }
+    },
+    "日志导出失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not export logs"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "日誌匯出失敗"
+          }
+        }
+      }
+    },
+    "诊断": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diagnostics"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "診斷"
+          }
+        }
+      }
+    },
+    "把诊断信息存成 .log 文件，用系统分享发出去：含版本、扩展内存与事件、运行状态、发热和电量。地址、网址、账号和密钥已去掉。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saves the diagnostics as a .log file and shares it with the system share sheet: versions, extension memory and events, runtime status, heat and battery. Addresses, URLs, accounts and keys are removed."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "把診斷資訊存成 .log 檔，用系統分享傳出去：含版本、延伸功能記憶體與事件、執行狀態、發熱和電量。位址、網址、帳號和金鑰已去除。"
+          }
+        }
+      }
+    },
     " · 已暂停刷新": {
       "localizations": {
         "en": {

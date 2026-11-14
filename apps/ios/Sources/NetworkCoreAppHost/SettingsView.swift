@@ -49,6 +49,15 @@ struct SettingsView: View {
                     Text("崩溃时记录脱敏后的信息（不含网址、账号和节点地址），只保存在本机，复制诊断信息时附上。关闭会删除已保存的报告。")
                 }
 
+                Section {
+                    LogExportButton(tunnel: tunnel)
+                        .listRowBackground(brand.surface)
+                } header: {
+                    Text("诊断")
+                } footer: {
+                    Text("把诊断信息存成 .log 文件，用系统分享发出去：含版本、扩展内存与事件、运行状态、发热和电量。地址、网址、账号和密钥已去掉。")
+                }
+
                 AboutSection(tunnel: tunnel)
                     .listRowBackground(brand.surface)
             }

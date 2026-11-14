@@ -1101,7 +1101,7 @@ impl Backend {
         let report = format!("{report}\n{health}");
         let path = self
             .store
-            .write_report(&format!("diagnostics-{}.txt", now()), &report)
+            .write_report(&format!("diagnostics-{}.log", now()), &report)
             .map_err(|error| format!("the report could not be written: {error}"))?;
         done(format!("Diagnostics report saved to {}", path.display()))
     }

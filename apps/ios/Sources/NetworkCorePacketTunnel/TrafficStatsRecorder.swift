@@ -14,6 +14,8 @@ final class TrafficStatsRecorder: @unchecked Sendable {
     private let fileURL: URL?
 
     private static let pollSeconds = 5
+    /// While the device sleeps the counts can wait: one wake a minute instead of twelve.
+    private static let sleepingPollSeconds = 60
     private static let saveSeconds: TimeInterval = 60
 
     init() {
@@ -39,6 +41,14 @@ final class TrafficStatsRecorder: @unchecked Sendable {
             }
             timer.resume()
             self.timer = timer
+        }
+    }
+
+    /// Reads less often while the device sleeps (`NEPacketTunnelProvider.sleep`), as usual again after wake.
+    func setSleeping(_ sleeping: Bool) {
+        queue.async { [self] in
+            let seconds = sleeping ? Self.sleepingPollSeconds : Self.pollSeconds
+            timer?.schedule(deadline: .now() + .seconds(seconds), repeating: .seconds(seconds), leeway: .seconds(sleeping ? 10 : 1))
         }
     }
 
