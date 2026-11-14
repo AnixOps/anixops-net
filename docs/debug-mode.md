@@ -63,9 +63,13 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含 `debug-home-light`�
 - 表达式有误时内核返回出错位置，列表上方标红提示。
 - 只列 MITM 解密后的请求和明文 HTTP 请求；抓包未开启时空白页给出“开始抓包”。
 
-## 后续
+## 导出单条请求与加密会话（计划 F1 / F5 / E11）
 
-- 导出 cURL / 代码 / Postman / Insomnia（默认脱敏）和加密保存抓包会话（内核已支持：`export_capture` 新格式、`set_capture_storage` 等）。
+- 请求详情的“导出这条请求”：cURL、代码（Python requests / JavaScript fetch / Swift URLSession / Kotlin OkHttp / Go net/http）、Postman、Insomnia、HAR，经内核 `export_capture` 的 `id` + `exchange` 生成。
+- “遮盖 Cookie、令牌和密码”默认打开（内核 `redact`）；整份 pcapng / HAR 导出也按内核默认脱敏。
+- 请求列表“更多”里可以“保存当前抓包”和查看“已保存的会话”。
+  - 隧道扩展在引擎启动后自己调用 `set_capture_storage`：目录是扩展自己的 Application Support/AnixOps-Captures，密钥是钥匙串里仅本机可用的 32 字节随机数（`CaptureSessionStorage`），不经过 App。
+  - 会话用 ChaCha20-Poly1305 加密，保留 7 天。打开会话会替换当前抓包并停止实时抓包，之后照常筛选、查看和导出。
 
 ## Tauri 客户端（Windows / Linux / Android）
 

@@ -113,7 +113,7 @@ public enum NodeSecretStore {
 
     /// On macOS only the data protection keychain honors `keychain-access-groups`, which the app and the tunnel
     /// extension share; the legacy file keychain would keep the key out of the extension's reach.
-    private static var platformAttributes: [String: Any] {
+    static var platformAttributes: [String: Any] {
         #if os(macOS)
         return [kSecUseDataProtectionKeychain as String: true]
         #else

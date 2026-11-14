@@ -12,9 +12,42 @@ import AppKit
 /// read or written until then.
 struct CaptureExportFile: Transferable {
     let tunnel: TunnelController
-    let format: PacketCapture.ExportFormat
-    /// One connection, or everything captured.
-    let connection: UInt64?
+    let command: RuntimeControl
+    let title: String
+
+    /// Everything captured, or one connection, as pcapng or HAR.
+    init(tunnel: TunnelController, format: PacketCapture.ExportFormat, connection: UInt64?) {
+        self.tunnel = tunnel
+        command = .exportCapture(format, id: connection)
+        switch format {
+        case .pcapng:
+            title = String(localized: "导出 pcapng（Wireshark）")
+        case .har:
+            title = String(localized: "导出 HAR（HTTP 请求）")
+        }
+    }
+
+    /// One request of a connection.
+    init(tunnel: TunnelController, export: PacketCapture.RequestExport, connection: UInt64, exchange: Int, redact: Bool) {
+        self.tunnel = tunnel
+        command = .exportRequest(export, id: connection, exchange: exchange, redact: redact)
+        title = Self.title(export)
+    }
+
+    static func title(_ export: PacketCapture.RequestExport) -> String {
+        switch export {
+        case .curl:
+            return "cURL"
+        case let .code(language):
+            return language.title
+        case .postman:
+            return "Postman"
+        case .insomnia:
+            return "Insomnia"
+        case .har:
+            return "HAR"
+        }
+    }
 
     static var transferRepresentation: some TransferRepresentation {
         FileRepresentation(exportedContentType: .data) { file in
@@ -23,21 +56,12 @@ struct CaptureExportFile: Transferable {
     }
 
     func write() async throws -> URL {
-        guard let data = await tunnel.control(.exportCapture(format, id: connection)),
+        guard let data = await tunnel.control(command),
               let answer = RuntimeControl.decode(PacketCapture.ExportAnswer.self, from: data)
         else {
             throw CocoaError(.fileWriteUnknown)
         }
         return try PacketCapture.write(answer)
-    }
-
-    var title: String {
-        switch format {
-        case .pcapng:
-            return String(localized: "导出 pcapng（Wireshark）")
-        case .har:
-            return String(localized: "导出 HAR（HTTP 请求）")
-        }
     }
 }
 
@@ -118,9 +142,9 @@ struct CaptureDetailView: View {
                 .listRowBackground(brand.surface)
                 if !capture.http.isEmpty {
                     Section("HTTP 请求") {
-                        ForEach(Array(capture.http.enumerated()), id: \.offset) { _, exchange in
+                        ForEach(Array(capture.http.enumerated()), id: \.offset) { index, exchange in
                             NavigationLink {
-                                HttpExchangeView(tunnel: tunnel, exchange: exchange)
+                                HttpExchangeView(tunnel: tunnel, exchange: exchange, connectionID: connection.id, index: index)
                             } label: {
                                 ExchangeRow(exchange: exchange)
                             }
@@ -316,8 +340,13 @@ private struct ChunkView: View {
 private struct HttpExchangeView: View {
     let tunnel: TunnelController
     let exchange: PacketCapture.Exchange
+    /// Where the exchange sits in the capture, for exporting it alone.
+    let connectionID: UInt64
+    let index: Int
     @Environment(\.brand) private var brand
     @State private var mapping: MappingDraft?
+    /// Cookies, tokens and passwords are hidden in exports unless turned off (plan F5).
+    @State private var redact = true
 
     var body: some View {
         List {
@@ -358,6 +387,24 @@ private struct HttpExchangeView: View {
             }
             .listRowBackground(brand.surface)
             Section {
+                Toggle("遮盖 Cookie、令牌和密码", isOn: $redact)
+                ForEach(PacketCapture.RequestExport.all.filter { $0.language == nil }) { export in
+                    exportLink(export)
+                }
+                Menu {
+                    ForEach(PacketCapture.CodeLanguage.allCases) { language in
+                        exportLink(.code(language))
+                    }
+                } label: {
+                    Label("导出为代码", systemImage: "chevron.left.forwardslash.chevron.right")
+                }
+            } header: {
+                Text("导出这条请求")
+            } footer: {
+                Text(redact ? "Cookie、Authorization 和名字含 token、password、session 等的请求头、参数与字段会换成 <redacted>。" : "导出内容包含完整的 Cookie 和令牌，请只发给信任的人。")
+            }
+            .listRowBackground(brand.surface)
+            Section {
                 Button {
                     mapping = MappingDraft(entry: mapLocal, isNew: true)
                 } label: {
@@ -387,6 +434,13 @@ private struct HttpExchangeView: View {
             .formSheetFrame()
             .environment(\.brand, brand)
             .tint(brand.primary)
+        }
+    }
+
+    private func exportLink(_ export: PacketCapture.RequestExport) -> some View {
+        let file = CaptureExportFile(tunnel: tunnel, export: export, connection: connectionID, exchange: index, redact: redact)
+        return ShareLink(item: file, preview: SharePreview(file.title)) {
+            Label(file.title, systemImage: "square.and.arrow.up")
         }
     }
 
@@ -531,12 +585,13 @@ struct CapturedRequestView: View {
     let row: PacketCapture.RequestRow
     @Environment(\.brand) private var brand
     @State private var exchange: PacketCapture.Exchange?
+    @State private var index: Int?
     @State private var loaded = false
 
     var body: some View {
         Group {
-            if let exchange {
-                HttpExchangeView(tunnel: tunnel, exchange: exchange)
+            if let exchange, let index {
+                HttpExchangeView(tunnel: tunnel, exchange: exchange, connectionID: row.connectionID, index: index)
             } else {
                 List {
                     Text(loaded ? "这个请求已被更新的抓包挤出（抓包内存有上限），或抓包已清空。" : "正在读取…")
@@ -552,8 +607,12 @@ struct CapturedRequestView: View {
         .task {
             let data = await tunnel.control(.captureConnection(row.connectionID))
             if let capture = RuntimeControl.decode(PacketCapture.ConnectionAnswer.self, from: data)?.capture {
-                exchange = capture.http.first { $0.seq == row.seq }
-                    ?? (capture.http.indices.contains(row.index) && capture.http[row.index].seq == nil ? capture.http[row.index] : nil)
+                if let found = capture.http.firstIndex(where: { $0.seq == row.seq }) {
+                    index = found
+                } else if capture.http.indices.contains(row.index), capture.http[row.index].seq == nil {
+                    index = row.index
+                }
+                exchange = index.map { capture.http[$0] }
             }
             loaded = true
         }
