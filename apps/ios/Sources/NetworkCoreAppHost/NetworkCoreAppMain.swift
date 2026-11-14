@@ -10,6 +10,11 @@ struct NetworkCoreAppMain: App {
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
     @Environment(\.scenePhase) private var scenePhase
 
+    init() {
+        ClientHealthMonitor.shared.start()
+        AppNotifications.install()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView(tunnel: tunnel)
@@ -90,13 +95,14 @@ struct RootView: View {
     @State private var tab = AppTab.home
     @State private var importing = false
     @AppStorage(OnboardingView.storageKey) private var onboardingDone = false
+    @AppStorage(TermsConsent.storageKey) private var acceptedTerms = ""
     @AppStorage(LiveActivityController.storageKey) private var liveActivity = true
     @Environment(\.scenePhase) private var scenePhase
 
     /// First run only: after loading, with nothing imported and the welcome screen never closed.
     private var showsOnboarding: Binding<Bool> {
         Binding(
-            get: { tunnel.loaded && tunnel.hasNoNodes && !onboardingDone },
+            get: { tunnel.loaded && tunnel.hasNoNodes && !onboardingDone && !needsTerms },
             set: { shown in
                 if !shown {
                     onboardingDone = true
@@ -105,10 +111,19 @@ struct RootView: View {
         )
     }
 
+    /// Nothing else is usable until the user agreement is accepted (`TermsConsent`).
+    private var needsTerms: Bool {
+        TermsConsent.needsConsent(accepted: acceptedTerms)
+    }
+
     var body: some View {
         let brand = BrandPalette.resolve(appearance: appearance, scheme: colorScheme)
         Group {
-            if sizeClass == .regular {
+            if needsTerms {
+                TermsConsentView {
+                    acceptedTerms = TermsConsent.version
+                }
+            } else if sizeClass == .regular {
                 splitView(brand)
             } else {
                 tabView
@@ -120,6 +135,17 @@ struct RootView: View {
             ImportView(tunnel: tunnel)
                 .environment(\.brand, brand)
                 .tint(brand.primary)
+        }
+        // `anixops://` links from Shortcuts, other apps and web pages (`AppURLCommand`).
+        .onOpenURL { url in
+            guard !needsTerms else {
+                return
+            }
+            Task {
+                if await tunnel.handle(url: url) == .openImport {
+                    importing = true
+                }
+            }
         }
         .onChange(of: tunnel.loaded) { _, loaded in
             // Someone who already has nodes never needs the welcome screen, even after deleting them all later.

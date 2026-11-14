@@ -40,6 +40,9 @@ struct AboutSection: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+            Link(destination: TermsConsent.url) {
+                Label("用户协议", systemImage: "doc.text")
+            }
             if developerMode {
                 NavigationLink("开发者模式") {
                     DeveloperView(tunnel: tunnel)
@@ -76,6 +79,8 @@ struct DeveloperView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var autoRefresh = true
     @State private var copied = false
+    @AppStorage(DiagnosticFilterKeys.minimum) private var minimum = DiagnosticLevel.info
+    @AppStorage(DiagnosticFilterKeys.module) private var module = ""
 
     var body: some View {
         Form {
@@ -117,19 +122,15 @@ struct DeveloperView: View {
             }
 
             Section("扩展事件（最近 \(TunnelDiagnosticLog.defaultCapacity) 条）") {
-                let events = tunnel.diagnostics?.events ?? []
+                DiagnosticFilterPickers(minimum: $minimum, module: $module)
+                let events = (tunnel.diagnostics?.events ?? [])
+                    .filtered(minimum: minimum, modules: DiagnosticFilterKeys.modules(module))
                 if events.isEmpty {
                     Text("无")
                         .foregroundStyle(.secondary)
                 }
                 ForEach(Array(events.reversed().enumerated()), id: \.offset) { _, event in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(event.time, format: .dateTime.hour().minute().second())
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        Text(event.message)
-                            .font(.caption.monospaced())
-                    }
+                    DiagnosticEventRow(event: event)
                 }
             }
 
@@ -138,6 +139,7 @@ struct DeveloperView: View {
                     UIPasteboard.general.string = report().text
                     copied = true
                 }
+                LogExportButton(tunnel: tunnel)
                 Button("关闭开发者模式", role: .destructive) {
                     developerMode = false
                     dismiss()
@@ -178,7 +180,8 @@ struct DeveloperView: View {
             outboundKind: tunnel.outboundKind,
             lastDisconnectError: tunnel.lastDisconnectError,
             diagnostics: tunnel.diagnostics,
-            generatedAt: Date()
+            generatedAt: Date(),
+            health: ClientHealthMonitor.shared.reportText
         )
     }
 

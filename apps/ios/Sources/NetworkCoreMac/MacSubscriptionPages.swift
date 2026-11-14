@@ -369,6 +369,7 @@ struct MacRulesPage: View {
                         Divider()
                         dnsLink
                     }
+                    myRulesCard(hasSubscriptionRules: true)
                 }
                 .padding(24)
                 .frame(maxWidth: 860)
@@ -381,6 +382,7 @@ struct MacRulesPage: View {
                     MacCard(title: "DNS") {
                         dnsLink
                     }
+                    myRulesCard(hasSubscriptionRules: false)
                     Text("导入带规则和策略组的订阅（Clash、Surge、Loon 配置）后，可以按订阅规则分流和切换策略组。")
                         .font(.caption)
                         .foregroundStyle(brand.text2)
@@ -396,6 +398,23 @@ struct MacRulesPage: View {
                 title: "规则与分流",
                 message: "导入带规则和策略组的订阅（Clash、Surge、Loon 配置）后，可以在这里按订阅规则分流和切换策略组。现在全部流量走所选节点。"
             )
+        }
+    }
+
+    /// The user's own rules as text, matched before the subscription's (or before the preset of a plain node list).
+    private func myRulesCard(hasSubscriptionRules: Bool) -> some View {
+        MacCard(title: "我的规则") {
+            NavigationLink {
+                RuleTextEditorView(tunnel: tunnel)
+                    .frame(minWidth: 520, minHeight: 420)
+            } label: {
+                LabeledContent("编辑规则文本", value: "\(tunnel.localRules.rules.count)")
+            }
+            Text(hasSubscriptionRules
+                ? "排在订阅规则前面，从上到下匹配。连接中保存会直接换上新规则，已有连接不断开。"
+                : "规则模式下排在预设前面，从上到下匹配。连接中保存会直接换上新规则，已有连接不断开。")
+                .font(.caption)
+                .foregroundStyle(brand.text2)
         }
     }
 
@@ -427,7 +446,7 @@ struct MacRulesPage: View {
         NavigationLink {
             DnsSettingsView(tunnel: tunnel)
         } label: {
-            LabeledContent("DNS", value: tunnel.dns.isEmpty ? String(localized: "默认") : (tunnel.dns.effectiveDefault ?? String(localized: "Hosts")))
+            LabeledContent("DNS", value: tunnel.dns.isEmpty ? String(localized: "默认") : (tunnel.dns.effectiveDefault ?? (tunnel.dns.hosts.isEmpty ? "Fake-IP" : String(localized: "Hosts"))))
         }
     }
 

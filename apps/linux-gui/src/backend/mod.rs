@@ -6,11 +6,15 @@ pub mod autostart;
 pub mod engine;
 pub mod state;
 pub mod system_proxy;
+pub mod trust;
+#[cfg(target_os = "android")]
+pub mod tun;
 
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use control_domain::NodeDescriptor;
+use desktop_mitm::Root;
 use engine_embedded::profile::{self, RoutingMode, RuleList};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -23,6 +27,13 @@ use self::system_proxy::Desktop;
 
 /// The source label for share links pasted into the import field.
 pub const PASTED_LOCATION: &str = "粘贴的链接";
+
+/// The snapshot's `platform`: the interface hides what the platform does not have.
+pub const PLATFORM: &str = if cfg!(target_os = "android") {
+    "android"
+} else {
+    "linux"
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -74,10 +85,13 @@ pub struct RuntimeSnapshot {
     pub auto_select_fastest_node: bool,
     pub bilibili_web_ad_block_enabled: bool,
     pub script_runtime_configured: bool,
+    pub https_decryption_enabled: bool,
     pub dark_theme: bool,
     pub runtime_mode: &'static str,
     pub routing_mode: &'static str,
     pub dns_preset: &'static str,
+    /// UDP to port 443 is refused so apps fall back from QUIC to TCP.
+    pub block_quic: bool,
     /// Always true: the interface then offers the subscription rules mode and explains the engine's DNS.
     pub embedded_engine: bool,
 }
@@ -295,7 +309,72 @@ impl Backend {
                     .to_string()
             })
         })?;
-        desktop_dns::apply(&envelope, self.state.dns_preset)
+        let envelope = desktop_dns::apply(&envelope, self.state.dns_preset)?;
+        let envelope = desktop_dns::apply_block_quic(&envelope, self.state.block_quic)?;
+        if !self.state.preferences.https_decryption {
+            return Ok(envelope);
+        }
+        // Linux has no built-in policy: only the hosts of the enabled plugins are decrypted.
+        let envelope =
+            self.mitm_root()
+                .envelope(envelope.as_bytes(), "", Some(&self.plugins_dir()))?;
+        String::from_utf8(envelope).map_err(|error| error.to_string())
+    }
+
+    fn mitm_dir(&self) -> PathBuf {
+        self.store.dir().join("mitm")
+    }
+
+    /// Where the HTTPS decryption root is kept, whether or not it exists yet.
+    pub fn mitm_root(&self) -> Root {
+        Root::at(&self.mitm_dir())
+    }
+
+    /// The folder of the imported plugin library.
+    pub fn plugins_dir(&self) -> PathBuf {
+        self.mitm_dir().join("plugins")
+    }
+
+    /// The HTTPS decryption root, generated on first use. The window installs it in the trust stores before
+    /// turning decryption on.
+    pub fn ensure_mitm_root(&self) -> Result<Root, String> {
+        Root::ensure(&self.mitm_dir())
+    }
+
+    /// The local port the mixed proxy listens on.
+    pub fn listen_port(&self) -> u16 {
+        self.state.listen_port
+    }
+
+    pub fn https_decryption(&self) -> bool {
+        self.state.preferences.https_decryption
+    }
+
+    /// Turns HTTPS decryption on or off and restarts a running engine with it.
+    pub fn set_https_decryption(&mut self, enabled: bool) -> Result<OperationResult, String> {
+        if enabled {
+            self.ensure_mitm_root()?;
+        }
+        self.state.preferences.https_decryption = enabled;
+        self.save();
+        let restarted = self.restart_if_running()?;
+        done(match (enabled, restarted) {
+            (true, true) => "HTTPS decryption is on",
+            (true, false) => "HTTPS decryption is on; it starts with the next connection",
+            (false, _) => "HTTPS decryption is off",
+        })
+    }
+
+    /// Restarts a running engine after the plugin library changed, when it decrypts.
+    pub fn plugins_changed(&mut self) -> Result<&'static str, String> {
+        if !self.state.preferences.https_decryption {
+            return Ok("turn on HTTPS decryption for it to take effect");
+        }
+        Ok(if self.restart_if_running()? {
+            "applied to the running connection"
+        } else {
+            "it applies with the next connection"
+        })
     }
 
     /// Public rule lists the routing mode needs: the missing ones, or all of them with `force`. The window
@@ -383,7 +462,7 @@ impl Backend {
         };
         let source = self.state.selected_source();
         RuntimeSnapshot {
-            platform: "linux",
+            platform: PLATFORM,
             connection: connection.to_string(),
             connection_label: connection.to_string(),
             service: StatusFact::new("Not used", None, "neutral"),
@@ -424,10 +503,12 @@ impl Backend {
             auto_select_fastest_node: false,
             bilibili_web_ad_block_enabled: false,
             script_runtime_configured: false,
+            https_decryption_enabled: self.state.preferences.https_decryption,
             dark_theme: false,
             runtime_mode: "desktop",
             routing_mode: self.state.routing_mode.as_str(),
             dns_preset: self.state.dns_preset.as_str(),
+            block_quic: self.state.block_quic,
             embedded_engine: true,
         }
     }
@@ -535,6 +616,22 @@ impl Backend {
         }
         self.save();
         done(format!("DNS set to {}", preset.as_str()))
+    }
+
+    /// Turns QUIC blocking on or off. A running engine restarts on it.
+    pub fn set_block_quic(&mut self, on: bool) -> Result<OperationResult, String> {
+        let previous = self.state.block_quic;
+        self.state.block_quic = on;
+        if let Err(error) = self.restart_if_running() {
+            self.state.block_quic = previous;
+            return Err(error);
+        }
+        self.save();
+        done(if on {
+            "QUIC is blocked"
+        } else {
+            "QUIC is allowed"
+        })
     }
 
     pub fn subscriptions(&self) -> Vec<SubscriptionSummary> {
@@ -666,7 +763,16 @@ impl Backend {
                 }
             }
         }
+        if cfg!(target_os = "android") {
+            return done(format!("Connected through {label}"));
+        }
         done(format!("Connected through {label} on {address}"))
+    }
+
+    /// Stops the engine without touching the saved state or the last error; on Android this also lets go of
+    /// the VPN's TUN descriptor.
+    pub fn stop_engine(&mut self) {
+        self.engine.stop();
     }
 
     pub fn disconnect(&mut self) -> Result<OperationResult, String> {
@@ -708,6 +814,16 @@ impl Backend {
         request: &serde_json::Value,
     ) -> Result<serde_json::Value, String> {
         self.engine.control(request)
+    }
+
+    /// The engine's metrics text while it runs, and whether the client is connected.
+    pub fn metrics(&self) -> (Option<String>, bool) {
+        (self.engine.metrics(), self.engine.is_running())
+    }
+
+    /// Rebuilds the engine's connections after a network change or a wake; nothing while it is stopped.
+    pub fn reset_network(&self, reset: network_watch::Reset) {
+        let _ = self.engine.reset_network(reset);
     }
 
     /// Stops the engine and puts the proxy settings back; called when the window closes.
@@ -956,8 +1072,9 @@ impl Backend {
         ))
     }
 
-    /// Writes a report without node addresses, names or credentials.
-    pub fn diagnostics(&self) -> Result<OperationResult, String> {
+    /// Writes a report without node addresses, names or credentials. `health` is the client health section
+    /// (integrity, cold start, redacted crash reports), appended as it is.
+    pub fn diagnostics(&self, health: &str) -> Result<OperationResult, String> {
         let snapshot = self.snapshot();
         let mut protocols: Vec<String> = self
             .nodes
@@ -981,9 +1098,10 @@ impl Backend {
             snapshot.last_error.as_deref().unwrap_or("none"),
             snapshot.configuration_error.as_deref().unwrap_or("none"),
         );
+        let report = format!("{report}\n{health}");
         let path = self
             .store
-            .write_report(&format!("diagnostics-{}.txt", now()), &report)
+            .write_report(&format!("diagnostics-{}.log", now()), &report)
             .map_err(|error| format!("the report could not be written: {error}"))?;
         done(format!("Diagnostics report saved to {}", path.display()))
     }
@@ -1050,6 +1168,71 @@ mod tests {
         assert_eq!(format_time(0), "1970-01-01 00:00 UTC");
         assert_eq!(format_time(1_761_300_000), "2025-10-24 10:00 UTC");
         assert_eq!(format_delay(Duration::from_millis(123)), "123 ms");
+    }
+
+    #[test]
+    fn https_decryption_adds_the_root_and_plugins_to_the_envelope() {
+        use engine_embedded::config::RuntimeConfig;
+
+        const PLUGIN: &str = concat!(
+            "#!name = ipleak test\n",
+            "[Script]\n",
+            "http-response ^https?:\\/\\/ipleak\\.net\\/ script-path=https://plugins.example/a.js, requires-body=true, tag=ipleak\n",
+            "[MITM]\n",
+            "hostname = ipleak.net\n",
+        );
+        let (mut backend, dir) = backend("mitm");
+        backend.import(PASTED_LOCATION, LINK).unwrap();
+        assert!(!backend.snapshot().https_decryption_enabled);
+        assert!(!backend.envelope().unwrap().contains("\"mitm\""));
+        assert_eq!(
+            backend.plugins_changed().unwrap(),
+            "turn on HTTPS decryption for it to take effect"
+        );
+
+        backend.set_https_decryption(true).unwrap();
+        assert!(backend.mitm_root().exists());
+        assert!(backend.snapshot().https_decryption_enabled);
+        desktop_mitm::plugins::import(
+            &backend.plugins_dir(),
+            "https://plugins.example/a.plugin",
+            |url, _| {
+                Ok(if url.ends_with(".plugin") {
+                    PLUGIN.as_bytes().to_vec()
+                } else {
+                    b"$done({});".to_vec()
+                })
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            backend.plugins_changed().unwrap(),
+            "it applies with the next connection"
+        );
+        let envelope = backend.envelope().unwrap();
+        let parsed: Value = serde_json::from_str(&envelope).unwrap();
+        assert_eq!(parsed["mitm"]["plugins"], serde_json::json!([PLUGIN]));
+        assert_eq!(
+            parsed["mitm"]["script_assets"].as_object().unwrap().len(),
+            1
+        );
+        assert!(
+            RuntimeConfig::from_json(envelope.as_bytes()).is_ok(),
+            "the engine accepts the envelope"
+        );
+
+        // The choice is saved, and turning it off leaves the root for the next time.
+        let reopened = Backend::open(
+            Store::new(dir.join("config")),
+            None,
+            None,
+            PathBuf::from("/usr/bin/anixops-net"),
+        );
+        assert!(reopened.https_decryption());
+        backend.set_https_decryption(false).unwrap();
+        assert!(!backend.envelope().unwrap().contains("\"mitm\""));
+        assert!(backend.mitm_root().exists());
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

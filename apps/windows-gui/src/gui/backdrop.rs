@@ -52,7 +52,7 @@ fn windows_build() -> u32 {
         if ntdll.is_null() {
             return 0;
         }
-        let Some(address) = GetProcAddress(ntdll, b"RtlGetVersion\0".as_ptr()) else {
+        let Some(address) = GetProcAddress(ntdll, c"RtlGetVersion".as_ptr().cast()) else {
             return 0;
         };
         let rtl_get_version =

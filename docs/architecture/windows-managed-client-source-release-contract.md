@@ -151,7 +151,7 @@ The elevated GUI provides `Validate` and `Diagnostics` actions. `Validate`
 parses the managed JSON with the same schema validation as the service and
 checks the embedded envelope without starting a proxy, service, tunnel,
 certificate, driver, or system-proxy mutation. `Diagnostics` writes and opens
-`%ProgramData%\\AnixOps\\NetworkCore\\logs\\diagnostics.txt`, containing the
+`%ProgramData%\\AnixOps\\NetworkCore\\logs\\diagnostics.log`, containing the
 current SCM status, managed runtime transition and failure detail, embedded
 engine and native MITM state, and bounded, redacted tails of the local GUI,
 service, and native MITM logs. URL/share links and

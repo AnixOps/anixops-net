@@ -8,6 +8,7 @@ fn main() {
 
 #[cfg(windows)]
 fn main() {
+    client_health::startup::mark_process_start();
     if std::env::args().any(|argument| argument == "--cleanup-startup") {
         if let Err(error) = gui::cleanup_current_user_startup() {
             gui::show_fatal_error(&error);
@@ -27,20 +28,23 @@ mod gui {
     mod actions;
     mod backdrop;
     mod linked_sources;
+    mod mitm_plugins;
     mod runtime_status;
     mod startup;
     mod tauri_ui;
+    mod tun_mode;
     mod ui_state;
 
     use self::startup::DesktopProfileNode;
-    use control_domain::NodeDescriptor;
+    use control_domain::{NodeDescriptor, NODE_METADATA_PATH, NODE_PATH_TRUNK};
     use platform_windows::managed::{
         append_managed_log, read_managed_config, read_managed_state, windows_managed_config_path,
         windows_managed_log_directory, windows_managed_state_path, write_managed_text_atomic,
         WindowsManagedConfig, WindowsSystemProxyOwner, WINDOWS_MANAGED_CONFIG_SCHEMA_VERSION,
     };
     use platform_windows::system_integration::{
-        disable_current_user_startup, NativeWindowsSystemIntegration, WindowsSystemIntegration,
+        disable_current_user_startup, migrate_legacy_current_user_startup,
+        remove_all_startup_tasks, NativeWindowsSystemIntegration, WindowsSystemIntegration,
     };
     use std::env;
     use std::fs;
@@ -54,6 +58,7 @@ mod gui {
     const APP_TITLE: &str = "AnixOps NetworkCore";
 
     pub fn run_tauri(debug: bool) -> Result<(), String> {
+        migrate_legacy_startup();
         tauri_ui::run(debug)
     }
 
@@ -75,8 +80,34 @@ mod gui {
         value.encode_utf16().chain(Some(0)).collect()
     }
 
+    /// Earlier builds started from the HKCU Run key, which Windows skips now
+    /// that the GUI requires administrator rights; move it to the elevated
+    /// logon task. Best effort: a failure only leaves sign-in startup off.
+    fn migrate_legacy_startup() {
+        let Ok(executable) = env::current_exe() else {
+            return;
+        };
+        match migrate_legacy_current_user_startup(&executable) {
+            Ok(true) => {
+                let _ = append_managed_log("gui", "sign-in startup moved to the logon task");
+            }
+            Ok(false) => {}
+            Err(error) => {
+                let _ = append_managed_log(
+                    "gui",
+                    &format!("sign-in startup migration failed: {}", error.message),
+                );
+            }
+        }
+    }
+
+    /// Uninstall cleanup. The MSI runs it as LocalSystem (deferred, not
+    /// impersonated) because the elevated GUI cannot start from an
+    /// unelevated custom action, so it removes every user's logon task and
+    /// then this account's own legacy Run entry, if any.
     pub fn cleanup_current_user_startup() -> Result<(), String> {
         let executable = env::current_exe().map_err(|error| error.to_string())?;
+        remove_all_startup_tasks().map_err(|error| error.to_string())?;
         disable_current_user_startup(&executable).map_err(|error| error.to_string())
     }
 
@@ -86,7 +117,8 @@ mod gui {
         read_managed_config(path).map_err(|error| error.to_string())
     }
 
-    fn write_diagnostic_report_at(config_path: &Path) -> Result<PathBuf, String> {
+    /// `health` is the client health section (integrity, cold start, redacted crash reports), appended as it is.
+    fn write_diagnostic_report_at(config_path: &Path, health: &str) -> Result<PathBuf, String> {
         let mut report = String::from("AnixOps NetworkCore Windows diagnostics\n");
         report.push_str("managed_config_path=redacted\n");
 
@@ -180,7 +212,10 @@ mod gui {
             }
         }
 
-        let path = windows_managed_log_directory().join("diagnostics.txt");
+        report.push_str("\n--- client health ---\n");
+        report.push_str(health);
+
+        let path = windows_managed_log_directory().join("diagnostics.log");
         write_managed_text_atomic(&path, &report).map_err(|error| error.to_string())?;
         Ok(path)
     }
@@ -297,8 +332,17 @@ mod gui {
                 label: profile_node_label(node),
                 protocol: format!("{:?}", node.protocol),
                 outbound_tag: node.id.clone(),
+                trunk: is_trunk_node(node),
             })
             .collect()
+    }
+
+    /// Whether the subscription marks the node as a domestic ingress on a
+    /// shared trunk (`#anixops:path=trunk`, anx FUTURE-IMPROVEMENTS F-51).
+    fn is_trunk_node(node: &NodeDescriptor) -> bool {
+        node.metadata
+            .iter()
+            .any(|entry| entry.key == NODE_METADATA_PATH && entry.value.trim() == NODE_PATH_TRUNK)
     }
 
     fn profile_node_label(node: &NodeDescriptor) -> String {
@@ -341,7 +385,7 @@ mod gui {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use control_domain::{Endpoint, Protocol};
+        use control_domain::{Endpoint, MetadataEntry, Protocol};
 
         #[test]
         fn diagnostics_redact_urls_and_credential_values() {
@@ -377,6 +421,36 @@ mod gui {
                 "Primary node [primary-node] (Shadowsocks)"
             );
             assert_eq!(options[0].outbound_tag, "primary-node");
+            assert!(!options[0].trunk);
+        }
+
+        #[test]
+        fn subscription_trunk_mark_makes_a_trunk_node() {
+            let node = |id: &str, path: Option<&str>| NodeDescriptor {
+                id: id.to_string(),
+                name: id.to_string(),
+                protocol: Protocol::Shadowsocks,
+                endpoint: Endpoint {
+                    host: "edge.example.test".to_string(),
+                    port: 443,
+                },
+                tags: Vec::new(),
+                metadata: path
+                    .map(|value| {
+                        vec![MetadataEntry {
+                            key: NODE_METADATA_PATH.to_string(),
+                            value: value.to_string(),
+                        }]
+                    })
+                    .unwrap_or_default(),
+            };
+            let options = profile_node_options(&[
+                node("direct", None),
+                node("ingress", Some("trunk")),
+                node("other", Some("future-kind")),
+            ]);
+            let trunk: Vec<_> = options.iter().map(|node| node.trunk).collect();
+            assert_eq!(trunk, [false, true, false]);
         }
     }
 }

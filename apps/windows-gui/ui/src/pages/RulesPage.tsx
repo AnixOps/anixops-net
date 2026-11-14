@@ -1,9 +1,9 @@
 import { Check, Layers, ListChecks, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { desktop, DnsPreset, NativeGroupSummary, RuleSetStatus, RuntimeSnapshot } from "../bridge";
+import { desktop, DnsPreset, inProcessEngine, NativeGroupSummary, RuleSetStatus, RuntimeSnapshot } from "../bridge";
 import { availableRoutingModes, groupMemberLabel } from "../labels";
 import { liveEngine, usePolling } from "../live";
-import { Card, Run, Segmented, StatusPill } from "../ui";
+import { Card, Row, Run } from "../ui";
 import { t } from "../i18n";
 
 export function RulesPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
@@ -12,25 +12,25 @@ export function RulesPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot |
       <Card
         title={t("分流模式")}
         description={t("规则资源从公开来源缓存到本机，下次连接时生效。")}
-        actions={<button className="secondary" disabled={Boolean(busy)} onClick={() => void run("routing rules", desktop.refreshRoutingRules)}><RefreshCw size={15} />{t("刷新规则资源")}</button>}
+        actions={<button className="link-button" disabled={Boolean(busy)} onClick={() => void run("routing rules", desktop.refreshRoutingRules)}><RefreshCw size={13} />{t("刷新规则资源")}</button>}
       >
-        <div className="mode-grid" role="radiogroup" aria-label={t("分流模式")}>
-          {availableRoutingModes(snapshot).map((mode) => {
-            const selected = snapshot?.routingMode === mode.value;
-            return (
-              <button
-                key={mode.value}
-                role="radio"
-                aria-checked={selected}
-                className={`mode-card ${selected ? "selected" : ""}`}
-                disabled={Boolean(busy) || !snapshot}
-                onClick={() => void run("routing", () => desktop.setRoutingMode(mode.value))}
-              >
-                <span className="mode-title">{t(mode.label)}{selected && <Check size={16} />}</span>
-                <small>{t(mode.hint)}</small>
-              </button>
-            );
-          })}
+        <div role="radiogroup" aria-label={t("分流模式")}>
+        {availableRoutingModes(snapshot).map((mode) => {
+          const selected = snapshot?.routingMode === mode.value;
+          return (
+            <button
+              key={mode.value}
+              role="radio"
+              aria-checked={selected}
+              className={`row interactive choice ${selected ? "selected" : ""}`}
+              disabled={Boolean(busy) || !snapshot}
+              onClick={() => void run("routing", () => desktop.setRoutingMode(mode.value))}
+            >
+              <span className="row-label"><strong>{t(mode.label)}</strong><small>{t(mode.hint)}</small></span>
+              <span className="check">{selected && <Check size={15} strokeWidth={2.25} />}</span>
+            </button>
+          );
+        })}
         </div>
       </Card>
       <PolicyGroups busy={busy} run={run} />
@@ -52,35 +52,40 @@ function PolicyGroups({ busy, run }: { busy: string | null; run: Run }) {
     <Card
       title={t("策略组")}
       description={t("为手动选择的策略组设定默认出口。")}
-      actions={<StatusPill label={groups.length ? t("{count} 个策略组", { count: groups.length }) : t("没有策略组")} tone={groups.length ? "success" : "neutral"} />}
+      actions={groups.length > 0 && <span className="count">{t("{count} 个策略组", { count: groups.length })}</span>}
     >
       {groups.length === 0
         ? <p className="muted">{t("当前配置里没有策略组。")}</p>
-        : <ul className="list groups">
-          {groups.map((group) => (
-            <li key={group.tag}>
-              <Layers size={16} className="list-icon" />
-              <span className="list-main"><strong>{group.tag}</strong><small>{group.groupType === "selector" ? t("手动选择") : group.groupType === "urltest" ? t("自动测速") : group.groupType}{group.selected ? ` · ${groupMemberLabel(group, group.selected)}` : ""}</small></span>
-              <div className="group-options">
-                {group.groupType === "selector" && group.outbounds.map((outbound) => (
-                  <button
-                    key={outbound}
-                    className={`chip-button ${group.selected === outbound ? "selected" : ""}`}
-                    aria-pressed={group.selected === outbound}
-                    disabled={Boolean(busy) || group.selected === outbound}
-                    onClick={() => void run("native selector", async () => {
-                      const result = await desktop.selectNativeGroupOutbound(group.tag, outbound);
-                      setGroups((current) => current.map((item) => item.tag === group.tag ? { ...item, selected: outbound } : item));
-                      return result;
-                    })}
-                  >
-                    {groupMemberLabel(group, outbound)}
-                  </button>
-                ))}
-              </div>
-            </li>
-          ))}
-        </ul>}
+        : groups.map((group) => (
+          <Row
+            key={group.tag}
+            icon={Layers}
+            color="orange"
+            label={group.tag}
+            hint={group.groupType === "selector" ? t("手动选择") : group.groupType === "urltest" ? t("自动测速") : group.groupType}
+            value={group.groupType === "selector" ? undefined : groupMemberLabel(group, group.selected)}
+          >
+            {group.groupType === "selector" && (
+              <select
+                className="pop-up"
+                aria-label={group.tag}
+                value={group.selected ?? ""}
+                disabled={Boolean(busy)}
+                onChange={(event) => {
+                  const outbound = event.target.value;
+                  void run("native selector", async () => {
+                    const result = await desktop.selectNativeGroupOutbound(group.tag, outbound);
+                    setGroups((current) => current.map((item) => item.tag === group.tag ? { ...item, selected: outbound } : item));
+                    return result;
+                  });
+                }}
+              >
+                {group.selected === undefined && <option value="" disabled>{t("未选择")}</option>}
+                {group.outbounds.map((outbound) => <option key={outbound} value={outbound}>{groupMemberLabel(group, outbound)}</option>)}
+              </select>
+            )}
+          </Row>
+        ))}
     </Card>
   );
 }
@@ -96,20 +101,13 @@ function RuleSets({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; b
     <Card
       title={t("规则集")}
       description={t("当前连接正在使用的规则集。")}
-      actions={remote && <button className="secondary" disabled={Boolean(busy)} onClick={() => void run("rule sets", async () => {
+      actions={remote && <button className="link-button" disabled={Boolean(busy)} onClick={() => void run("rule sets", async () => {
         const result = await desktop.updateRuleSets();
         reload();
         return { message: t("已开始更新 {count} 个远程规则集", { count: result.scheduled }) };
-      })}><RefreshCw size={15} />{t("更新远程规则集")}</button>}
+      })}><RefreshCw size={13} />{t("更新远程规则集")}</button>}
     >
-      <ul className="list">
-        {sets.map((set) => (
-          <li key={set.name}>
-            <ListChecks size={16} className="list-icon" />
-            <span className="list-main"><strong>{set.name}</strong><small>{ruleSetDetail(set)}</small></span>
-          </li>
-        ))}
-      </ul>
+      {sets.map((set) => <Row key={set.name} icon={ListChecks} color={set.source === "remote" ? "sky" : "gray"} label={set.name} hint={ruleSetDetail(set)} />)}
     </Card>
   );
 }
@@ -132,21 +130,28 @@ const dnsChoices: Array<{ value: DnsPreset; label: string; hint: string }> = [
 /** The DNS choice; Windows applies it on the next connection, Linux restarts a running engine. */
 function DnsCard({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
   const current = snapshot?.dnsPreset ?? "system";
-  const choice = dnsChoices.find((item) => item.value === current) ?? dnsChoices[0];
-  const locked = snapshot?.platform !== "linux" && snapshot?.connection === "Connected";
+  const locked = !inProcessEngine(snapshot) && snapshot?.connection === "Connected";
 
   return (
-    <Card title="DNS" description={locked ? t("断开后才能更改 DNS。") : undefined} actions={<StatusPill label={t(choice.label)} tone="success" />}>
-      {snapshot?.dnsPreset !== undefined && (
-        <Segmented
-          label="DNS"
-          options={dnsChoices.map((item) => ({ value: item.value, label: t(item.label) }))}
-          value={current}
-          disabled={Boolean(busy) || locked}
-          onChange={(preset) => void run("dns", () => desktop.setDnsPreset(preset))}
-        />
-      )}
-      <p className="muted">{t(choice.hint)}</p>
+    <Card title="DNS" description={locked ? t("断开后才能更改 DNS。") : undefined}>
+      <div role="radiogroup" aria-label="DNS">
+      {dnsChoices.map((item) => {
+        const selected = item.value === current;
+        return (
+          <button
+            key={item.value}
+            role="radio"
+            aria-checked={selected}
+            className={`row interactive choice ${selected ? "selected" : ""}`}
+            disabled={Boolean(busy) || locked || snapshot?.dnsPreset === undefined}
+            onClick={() => void run("dns", () => desktop.setDnsPreset(item.value))}
+          >
+            <span className="row-label"><strong>{t(item.label)}</strong><small>{t(item.hint)}</small></span>
+            <span className="check">{selected && <Check size={15} strokeWidth={2.25} />}</span>
+          </button>
+        );
+      })}
+      </div>
     </Card>
   );
 }

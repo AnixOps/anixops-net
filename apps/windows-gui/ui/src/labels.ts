@@ -1,4 +1,4 @@
-import type { RuntimeSnapshot } from "./bridge";
+import type { DnsPreset, RuntimeSnapshot } from "./bridge";
 import { t } from "./i18n";
 
 export type ConnectPhase = "loading" | "off" | "connecting" | "on" | "disconnecting" | "failed";
@@ -68,6 +68,13 @@ export function routingLabel(mode: RuntimeSnapshot["routingMode"] | undefined): 
   return t(routingModes.find((item) => item.value === mode)?.label ?? routingModes[0].label);
 }
 
+const dnsPresetLabels: Record<DnsPreset, string> = { system: "系统 DNS", encrypted: "加密 DNS", split: "国内外分流" };
+
+/** The short name of a DNS choice; backends that do not report one use the system's. */
+export function dnsPresetLabel(preset: DnsPreset | undefined): string {
+  return t(dnsPresetLabels[preset ?? "system"]);
+}
+
 const exactFacts: Record<string, string> = {
   "Not used": "未使用",
   Running: "运行中",
@@ -97,6 +104,7 @@ export function factLabel(label: string | undefined): string {
 }
 
 const protocolAbbreviations: Record<string, string> = {
+  anx: "ANX",
   shadowsocks: "SS",
   vless: "VLESS",
   vmess: "VMess",

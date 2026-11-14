@@ -11,6 +11,8 @@ public enum RuntimeControl {
     case mode
     /// New connections only; open ones keep their route until `closeAll`.
     case setMode(ProxyMode)
+    /// Refuses UDP to port 443 for new flows when on, so apps fall back from QUIC to TCP (`{"block_quic": bool}`).
+    case setBlockQuic(Bool)
     case groups
     /// Picks the member of a `select` group.
     case select(group: String, member: String)
@@ -23,8 +25,22 @@ public enum RuntimeControl {
     case scriptNotifications
     /// Runs the `network-changed` scripts; the extension sends it when the device's network changes.
     case networkChanged
+    /// Drops the sessions the outbounds keep (shared QUIC connections, idle pools) and, with `closeConnections`, the
+    /// open connections, after the network under the tunnel changed or the device woke from a long sleep
+    /// (`{"reset": count, "closed": count}`).
+    case resetNetwork(closeConnections: Bool)
     /// Runs one scheduled script now.
     case runScript(tag: String)
+    /// Dial health of the nodes that keep it (`OutboundHealth`).
+    case outboundHealth
+    /// Lets a node that stopped after repeated rejections dial again (`{"resumed": bool}`).
+    case resumeOutbound(node: String)
+    /// The engine's metrics in the Prometheus text format (`{"content_type", "text"}`). `anonymous` replaces
+    /// policy group, member and rule set names with their positions, for text that leaves the device.
+    case metrics(anonymous: Bool)
+    /// Swaps the engine's rule lines in place (`reload_rules`): the whole new list ending with `FINAL`, naming only
+    /// the running nodes, groups and rule sets. Open connections keep going; `dryRun` only checks the list.
+    case reloadRules([String], dryRun: Bool)
 
     public var request: Data {
         let object: [String: Any]
@@ -41,6 +57,8 @@ public enum RuntimeControl {
             object = ["cmd": "mode"]
         case let .setMode(mode):
             object = ["cmd": "set_mode", "mode": mode.rawValue]
+        case let .setBlockQuic(on):
+            object = ["cmd": "set_block_quic", "enabled": on]
         case .groups:
             object = ["cmd": "groups"]
         case let .select(group, member):
@@ -55,10 +73,42 @@ public enum RuntimeControl {
             object = ["cmd": "script_notifications"]
         case .networkChanged:
             object = ["cmd": "network_changed"]
+        case let .resetNetwork(closeConnections):
+            object = ["cmd": "reset_network", "close_connections": closeConnections]
         case let .runScript(tag):
             object = ["cmd": "run_script", "tag": tag]
+        case .outboundHealth:
+            object = ["cmd": "outbound_health"]
+        case let .resumeOutbound(node):
+            object = ["cmd": "resume_outbound", "node": node]
+        case let .metrics(anonymous):
+            object = ["cmd": "metrics", "anonymous": anonymous]
+        case let .reloadRules(rules, dryRun):
+            object = ["cmd": "reload_rules", "rules": rules, "dry_run": dryRun]
         }
         return (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
+    }
+
+    /// The `metrics` answer.
+    public struct Metrics: Decodable, Equatable {
+        public let contentType: String
+        public let text: String
+
+        enum CodingKeys: String, CodingKey {
+            case contentType = "content_type"
+            case text
+        }
+    }
+
+    /// The `reset_network` answer.
+    public struct NetworkReset: Decodable, Equatable {
+        public let reset: Int
+        public let closed: Int
+
+        public init(reset: Int, closed: Int) {
+            self.reset = reset
+            self.closed = closed
+        }
     }
 
     /// The `traffic` answer: totals since the tunnel started and the current rates in bytes per second.
@@ -196,6 +246,46 @@ public enum RuntimeControl {
     /// The `mode` and `set_mode` answers.
     public struct ModeAnswer: Decodable, Equatable {
         public let mode: ProxyMode
+    }
+
+    /// The `set_block_quic` answer; an engine without the command answers nothing.
+    public struct BlockQuicAnswer: Decodable, Equatable {
+        public let blockQuic: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case blockQuic = "block_quic"
+        }
+    }
+
+    /// The `reload_rules` answer. `reloaded` is true once the new rules are in force; a refused list carries the
+    /// 0-based index of its first bad line and a code (`syntax`, `unknown_target`, `unknown_rule_set`,
+    /// `final_not_last`, `final_missing`, `too_many_rules`, `line_too_long`, `invalid`) and leaves the running rules.
+    public struct ReloadAnswer: Codable, Equatable {
+        public struct Rejection: Codable, Equatable {
+            public let line: Int?
+            public let code: String
+
+            public init(line: Int?, code: String) {
+                self.line = line
+                self.code = code
+            }
+        }
+
+        public let reloaded: Bool
+        public let rules: Int?
+        public let generation: UInt64?
+        public let error: Rejection?
+        /// Set by the extension, never by the engine: the change needs a restart (nodes, groups or rule sets
+        /// differ, or the running engine has no rules to swap).
+        public let restart: Bool?
+
+        public init(reloaded: Bool, rules: Int? = nil, generation: UInt64? = nil, error: Rejection? = nil, restart: Bool? = nil) {
+            self.reloaded = reloaded
+            self.rules = rules
+            self.generation = generation
+            self.error = error
+            self.restart = restart
+        }
     }
 
     /// The `select` answer: the member the group uses now.

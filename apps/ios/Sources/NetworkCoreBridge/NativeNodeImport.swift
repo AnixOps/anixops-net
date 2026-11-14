@@ -14,6 +14,17 @@ public struct NativeImportReport: Decodable, Equatable {
         public let port: UInt16
         /// The runtime outbound entry, credentials included.
         public let outbound: [String: JSONValue]
+        /// How the node crosses the border when the subscription says so: `trunk` for a domestic ingress on a link
+        /// many users share (the panel's `#anixops:path=trunk` mark). Such a node is the default pick (anx
+        /// FUTURE-IMPROVEMENTS F-51). Nil for every other node and for libraries saved before the mark existed.
+        public var path: String? = nil
+
+        /// Whether the node is a domestic ingress on a shared trunk.
+        public var isTrunk: Bool {
+            path == Self.trunkPath
+        }
+
+        public static let trunkPath = "trunk"
     }
 
     /// A node that was recognized but cannot run. `reason` is fixed text without node values.
@@ -105,7 +116,7 @@ extension NativeImportReport.Node {
             outbound["via"] = .string(rename(via))
         }
         return NativeImportReport.Node(id: rename(id), name: name, protocol: self.protocol, server: server, port: port,
-                                       outbound: outbound)
+                                       outbound: outbound, path: path)
     }
 
     /// The node ready to run on its own (one-node mode, delay tests): a `via` that names another node becomes
@@ -114,7 +125,7 @@ extension NativeImportReport.Node {
     /// letting it connect directly.
     public func standalone(among nodes: [NativeImportReport.Node]) -> NativeImportReport.Node {
         NativeImportReport.Node(id: id, name: name, protocol: self.protocol, server: server, port: port,
-                                outbound: Self.inlined(outbound, among: nodes, seen: [id]))
+                                outbound: Self.inlined(outbound, among: nodes, seen: [id]), path: path)
     }
 
     private static func inlined(
@@ -149,9 +160,9 @@ public enum NativeImportFailure: Error, Equatable {
 public typealias NativeNodeImporter = (String) throws -> Data
 
 extension TunnelProfile {
-    /// The profile for the first runnable node of a report.
+    /// The profile for the default node of a report: the first trunk node, otherwise the first runnable node.
     static func first(in report: NativeImportReport, profileID: String) throws -> TunnelProfile {
-        guard let node = report.nodes.first else {
+        guard let node = NodeLibrary.defaultNode(in: report.nodes) else {
             throw NativeImportFailure.noSupportedNode(
                 protocols: report.unsupported.map(\.protocol),
                 reasons: Array(Set(report.unsupported.map(\.reason))).sorted()

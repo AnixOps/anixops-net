@@ -32,6 +32,20 @@ final class DashboardModel {
         var isExpensive = false
         /// Interface switches seen since the app started.
         var switches = 0
+
+        /// The network type as the panel failure report names it.
+        var reportName: String {
+            switch interface {
+            case .wifi:
+                return "wifi"
+            case .cellular:
+                return "cellular"
+            case .wired:
+                return "ethernet"
+            case .other, .none:
+                return "other"
+            }
+        }
     }
 
     private(set) var traffic: RuntimeControl.Traffic?
@@ -48,13 +62,44 @@ final class DashboardModel {
     private static let lastSessionKey = "dashboard-last-session"
     /// How often, in one-second ticks, the poll also refreshes the cached seven-day statistics.
     private static let statsTicks = 15
+    /// How often, in one-second ticks, the poll reads the nodes' dial health.
+    private static let healthTicks = 30
     @ObservationIgnored private var monitor: NWPathMonitor?
+    /// Views showing this model through `observe(_:)`; the one shared poll runs while there is at least one.
+    @ObservationIgnored private var viewers = 0
+    @ObservationIgnored private var sampler: Task<Void, Never>?
 
     init() {
         let saved = UserDefaults.standard.data(forKey: Self.eventsKey)
         events = saved.flatMap { try? JSONDecoder().decode(DashboardEventLog.self, from: $0) } ?? DashboardEventLog()
         let last = UserDefaults.standard.data(forKey: Self.lastSessionKey)
         lastSession = last.flatMap { try? JSONDecoder().decode(LastSessionSummary.self, from: $0) }
+    }
+
+    /// Shows this model in one more view until the calling task is cancelled. However many views (the Mac's main
+    /// window and its dashboard window) observe it, one poll reads the engine: the first view starts it and the
+    /// last one to go stops it. While the tunnel is down the poll waits for it to connect again.
+    func observe(_ tunnel: TunnelController) async {
+        viewers += 1
+        if sampler == nil {
+            sampler = Task { [weak self] in
+                while !Task.isCancelled {
+                    guard let self else {
+                        return
+                    }
+                    await self.poll(tunnel)
+                    try? await Task.sleep(for: .seconds(1))
+                }
+            }
+        }
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(3600))
+        }
+        viewers -= 1
+        if viewers == 0 {
+            sampler?.cancel()
+            sampler = nil
+        }
     }
 
     /// Polls the engine once a second for speed, every third second for connections and groups, and every
@@ -77,6 +122,10 @@ final class DashboardModel {
                 if let answer = RuntimeControl.decode(RuntimeControl.Groups.self, from: await tunnel.control(.groups)) {
                     groups = answer.groups
                 }
+            }
+            if tick % Self.healthTicks == 0 {
+                // Nodes that stopped after repeated rejections, and the hourly failure report.
+                await tunnel.checkOutboundHealth(network: network.reportName)
             }
             if tick % Self.statsTicks == 0 {
                 // Keeps the statistics page's copy fresh, so it has something to show once the tunnel is off.
@@ -226,3 +275,41 @@ final class DashboardModel {
         }
     }
 }
+
+#if DEBUG
+/// Demo data for screenshots (`TunnelController.loadDemo()`): a minute of traffic, the busiest hosts and three
+/// policy groups, as the engine would answer.
+extension DashboardModel {
+    func loadDemo() {
+        traffic = RuntimeControl.Traffic(
+            uploadTotal: 86_400_000,
+            downloadTotal: 1_932_000_000,
+            uploadRate: 184_000,
+            downloadRate: 3_870_000,
+            active: 27
+        )
+        history.reset()
+        for step in 0..<history.capacity {
+            let wave = sin(Double(step) / 5) + sin(Double(step) / 2.3) * 0.5
+            let download = 2_600_000 + wave * 1_300_000
+            let upload = 150_000 + sin(Double(step) / 3.1) * 90_000
+            history.append(upload: UInt64(max(20_000, upload)), download: UInt64(max(200_000, download)))
+        }
+        topHosts = [
+            HostTraffic(host: "youtube.com", bytes: 1_240_000_000, connections: 9, outbound: "香港 01"),
+            HostTraffic(host: "github.com", bytes: 312_000_000, connections: 6, outbound: "日本 01"),
+            HostTraffic(host: "icloud.com", bytes: 148_000_000, connections: 4, outbound: "DIRECT"),
+            HostTraffic(host: "openai.com", bytes: 96_000_000, connections: 5, outbound: "美国 01"),
+            HostTraffic(host: "telegram.org", bytes: 41_000_000, connections: 3, outbound: "新加坡 01"),
+        ]
+        let answer = """
+        {"groups":[
+        {"id":"节点选择","type":"select","now":"香港 01","members":[{"name":"香港 01","latency_ms":38},{"name":"日本 01","latency_ms":72},{"name":"新加坡 01","latency_ms":86}]},
+        {"id":"自动选择","type":"url-test","now":"香港 02","members":[{"name":"香港 02","latency_ms":45},{"name":"香港 01","latency_ms":38}]},
+        {"id":"流媒体","type":"select","now":"美国 01","members":[{"name":"美国 01","latency_ms":164},{"name":"德国 01","latency_ms":213}]}
+        ]}
+        """
+        groups = RuntimeControl.decode(RuntimeControl.Groups.self, from: Data(answer.utf8))?.groups ?? []
+    }
+}
+#endif

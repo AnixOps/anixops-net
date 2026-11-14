@@ -57,6 +57,18 @@ final class TunnelController {
     /// The rule mode of a node list without subscription rules and the user's own rules, from `local-rules.json`;
     /// the saved profile carries a copy.
     private(set) var localRules = LocalRules()
+    /// Reconnecting by itself and the Wi-Fi rules (`OnDemandSettings`), from the app's defaults; the saved profile
+    /// carries the rules.
+    private(set) var onDemand = OnDemandSettings.load()
+    /// Whether the tunnel refuses UDP to port 443 so apps fall back from QUIC to TCP, where HTTPS decryption and
+    /// domain rules see them. Kept in the app's defaults; the saved profile carries a copy
+    /// (`TunnelProfileKeys.blockQuic`). Off by default.
+    private(set) var blockQuic = UserDefaults.standard.bool(forKey: TunnelController.blockQuicKey)
+    /// When the running tunnel last took new local rules in place, without a restart.
+    private(set) var lastRulesReload: Date?
+
+    /// The link an `anixops://import` asked for, until the import sheet takes it (`takePendingImportLink()`).
+    @ObservationIgnored var pendingImportLink: String?
 
     @ObservationIgnored private var manager: NETunnelProviderManager?
     @ObservationIgnored private var statusObserver: NSObjectProtocol?
@@ -152,6 +164,11 @@ final class TunnelController {
         }
     }
 
+    /// Shows a plain notice, for example after an `anixops://` link could not run.
+    func show(_ text: String) {
+        message = text
+    }
+
     func clearMessage() {
         message = nil
     }
@@ -219,10 +236,21 @@ final class TunnelController {
     /// background run never leaves a message on screen.
     func refreshDueSubscriptions(at date: Date = Date()) async {
         let shown = message
+        var failed: [String] = []
         for group in subscriptions.due(at: date) {
-            await refreshSubscription(group.id)
+            if !(await refreshSubscription(group.id)) {
+                failed.append(group.name)
+            }
         }
         message = shown
+        if !failed.isEmpty, AppNotifications.settings.subscriptions {
+            AppNotifications.post(
+                title: String(localized: "订阅更新失败"),
+                body: String(localized: "\(failed.joined(separator: "、")) 没有更新成功，仍在使用上次的节点。"),
+                thread: "subscriptions",
+                id: "subscriptions-failed"
+            )
+        }
         scheduleBackgroundRefresh()
     }
 
@@ -347,10 +375,9 @@ final class TunnelController {
         tunnelProtocol.providerConfiguration = configuration
         manager.protocolConfiguration = tunnelProtocol
         do {
-            try await manager.saveToPreferences()
-            try await manager.loadFromPreferences()
+            self.manager = try await persist(manager)
         } catch {
-            message = String(localized: "保存模式到 VPN 配置失败")
+            message = String(localized: "保存模式到 VPN 配置失败") + Self.errorCode(error)
             refresh()
             return
         }
@@ -363,6 +390,51 @@ final class TunnelController {
             _ = await control(.closeAll)
         } else {
             restart()
+        }
+    }
+
+    /// The app's defaults key of `blockQuic`.
+    static let blockQuicKey = "networkcore.block-quic"
+
+    /// Turns QUIC blocking on or off. A running engine switches in place and closes its open UDP flows to port 443,
+    /// so apps already on QUIC fall back to TCP at once; an older engine restarts the tunnel instead.
+    func setBlockQuic(_ on: Bool) async {
+        guard on != blockQuic else {
+            return
+        }
+        blockQuic = on
+        UserDefaults.standard.set(on, forKey: Self.blockQuicKey)
+        guard let manager, let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol else {
+            return
+        }
+        var configuration = tunnelProtocol.providerConfiguration ?? [:]
+        if on {
+            configuration[TunnelProfileKeys.blockQuic] = true
+        } else {
+            configuration.removeValue(forKey: TunnelProfileKeys.blockQuic)
+        }
+        tunnelProtocol.providerConfiguration = configuration
+        manager.protocolConfiguration = tunnelProtocol
+        do {
+            self.manager = try await persist(manager)
+        } catch {
+            message = String(localized: "保存 QUIC 设置到 VPN 配置失败") + Self.errorCode(error)
+            refresh()
+            return
+        }
+        refresh()
+        guard isConnected else {
+            return
+        }
+        let answer = RuntimeControl.decode(RuntimeControl.BlockQuicAnswer.self, from: await control(.setBlockQuic(on)))
+        guard answer?.blockQuic == on else {
+            restart()
+            return
+        }
+        if on, let list = RuntimeControl.decode(RuntimeControl.Connections.self, from: await control(.connections)) {
+            for flow in list.active where flow.network == "udp" && flow.destination.hasSuffix(":443") {
+                _ = await control(.closeConnection(flow.id))
+            }
         }
     }
 
@@ -575,16 +647,52 @@ final class TunnelController {
     /// Subscription bodies are text; the importer refuses anything larger than this.
     private static let maxSubscriptionBytes = 4 * 1024 * 1024
 
+    /// A subscription body and its headers. A panel that licenses ANX (anx spec §2.4.1) gets this device's key and
+    /// answers with its license (`AnxLicense`); the first time it says so, the request goes once more. A license
+    /// problem never fails the subscription.
     private static func download(_ url: URL) async throws -> (String, SubscriptionResponseInfo) {
+        let stored = (try? NodeSecretStore.value(account: AnxLicense.keychainAccount)).flatMap { try? AnxLicense.fromKeychainValue($0) }
+        var license = stored
+        var (data, http) = try await fetch(url, device: license?.requestHeader(for: url))
+        if recordAnxLicense(&license, url: url, http: http),
+           let retried = try? await fetch(url, device: license?.requestHeader(for: url))
+        {
+            (data, http) = retried
+            _ = recordAnxLicense(&license, url: url, http: http)
+        }
+        if license != stored, let value = try? license?.keychainValue() {
+            _ = try? NodeSecretStore.save(value, account: AnxLicense.keychainAccount)
+        }
+        let response = http
+        return (String(decoding: data, as: UTF8.self), SubscriptionResponseInfo(header: { response.value(forHTTPHeaderField: $0) }))
+    }
+
+    private static func fetch(_ url: URL, device: String?) async throws -> (Data, HTTPURLResponse) {
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
         request.setValue("AnixOpsNet/1.0", forHTTPHeaderField: "User-Agent")
+        if let device {
+            request.setValue(device, forHTTPHeaderField: AnxLicense.headerDevice)
+        }
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
               data.count <= maxSubscriptionBytes
         else {
             throw URLError(.badServerResponse)
         }
-        return (String(decoding: data, as: UTF8.self), SubscriptionResponseInfo(header: { http.value(forHTTPHeaderField: $0) }))
+        return (data, http)
+    }
+
+    /// Takes in the license headers; the device key is made the first time a server offers licensing. True when
+    /// this origin offered it for the first time.
+    private static func recordAnxLicense(_ license: inout AnxLicense?, url: URL, http: HTTPURLResponse) -> Bool {
+        let header = { (name: String) in http.value(forHTTPHeaderField: name) }
+        if license == nil {
+            guard let ca = header(AnxLicense.headerCA), !ca.trimmingCharacters(in: .whitespaces).isEmpty else {
+                return false
+            }
+            license = AnxLicense.generate()
+        }
+        return license?.record(url: url, header: header) ?? false
     }
 
     /// Saves the groups and the library the extension reads, both to the Keychain.
@@ -673,43 +781,83 @@ final class TunnelController {
         if let value = try? redirects.profileValue() {
             providerConfiguration[TunnelProfileKeys.redirects] = value
         }
+        if blockQuic {
+            providerConfiguration[TunnelProfileKeys.blockQuic] = true
+        }
         if let value = try? localRules.profileValue() {
             providerConfiguration[TunnelProfileKeys.localRules] = value
         }
+        providerConfiguration[TunnelProfileKeys.notifications] = AppNotifications.settings.profileValue
         let library = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)) ?? MitmPluginLibrary()
-        if let plugins = try? MitmPluginLibrary.profileValue(library.activeTexts), !library.activeTexts.isEmpty {
-            providerConfiguration[TunnelProfileKeys.mitmPlugins] = plugins
+        var bundle = MitmProfileBundle()
+        if !library.activeTexts.isEmpty {
             let scripts = (try? MitmScriptLibrary.load(from: MitmScriptLibrary.defaultURL)) ?? MitmScriptLibrary()
-            if let sources = try? scripts.sources(for: library.activeScriptReferences), !sources.isEmpty,
-               let value = try? MitmScriptLibrary.profileValue(sources)
-            {
-                providerConfiguration[TunnelProfileKeys.mitmScripts] = value
-            }
             let resources = (try? MitmResourceLibrary.load(from: MitmResourceLibrary.defaultURL)) ?? MitmResourceLibrary()
-            let data = resources.data(for: library.activeDataReferences.map(\.path))
-            if !data.isEmpty, let value = try? MitmResourceLibrary.profileValue(data) {
-                providerConfiguration[TunnelProfileKeys.mitmResources] = value
-            }
+            bundle = MitmProfileBundle(
+                plugins: library.activeTexts,
+                scripts: (try? scripts.sources(for: library.activeScriptReferences)) ?? [:],
+                resources: resources.data(for: library.activeDataReferences.map(\.path))
+            )
+        }
+        do {
+            try bundle.apply(to: &providerConfiguration)
+        } catch {
+            message = String(localized: "保存插件到 VPN 配置失败") + Self.errorCode(error)
+            return false
         }
         tunnelProtocol.providerConfiguration = providerConfiguration
 
+        // Saving the profile does not need the extension to be running, only connecting does. While macOS waits for
+        // the user to allow it, the import goes on and the notice says what to do.
+        guard await activateSystemExtension(allowPending: true) else {
+            return false
+        }
         let target = manager ?? NETunnelProviderManager()
         target.protocolConfiguration = tunnelProtocol
         target.localizedDescription = "AnixOps Net"
         target.isEnabled = true
+        // A saved profile keeps running On Demand while it is on; a new one starts it with the first connect.
+        onDemand.apply(to: target, active: target.isOnDemandEnabled)
         do {
-            try await target.saveToPreferences()
-            // Reload so the connection object reflects the saved profile.
-            try await target.loadFromPreferences()
-            manager = target
-            message = nil
+            manager = try await persist(target)
+            // Keep the hint to allow the extension: the profile is saved, but connecting still needs it.
+            message = systemExtensionPending ? Self.systemExtensionApprovalText : nil
         } catch {
-            message = String(localized: "保存 VPN 配置失败或未获授权")
+            message = String(localized: "保存 VPN 配置失败或未获授权") + Self.errorCode(error)
             refresh()
             return false
         }
         refresh()
         return true
+    }
+
+    /// Saves `target` and reloads it so its connection object reflects the saved profile. When the save fails, for
+    /// example because the object went stale after a widget, the Control Center switch or Settings changed the
+    /// configuration, or because the configuration was removed in Settings, the saved configuration is read again
+    /// and the same settings are saved once more on that fresh object. Returns the object that was saved.
+    private func persist(_ target: NETunnelProviderManager) async throws -> NETunnelProviderManager {
+        do {
+            try await target.saveToPreferences()
+            try await target.loadFromPreferences()
+            return target
+        } catch {
+            let fresh = (try? await NETunnelProviderManager.loadAllFromPreferences().first) ?? NETunnelProviderManager()
+            fresh.protocolConfiguration = target.protocolConfiguration?.copy() as? NEVPNProtocol
+            fresh.localizedDescription = target.localizedDescription
+            fresh.isEnabled = target.isEnabled
+            fresh.onDemandRules = target.onDemandRules
+            fresh.isOnDemandEnabled = target.isOnDemandEnabled
+            try await fresh.saveToPreferences()
+            try await fresh.loadFromPreferences()
+            return fresh
+        }
+    }
+
+    /// The system error's domain and code after a failed save, so a screenshot of the notice says why
+    /// (for example `NEVPNErrorDomain 5` is a read/write failure or a refused permission).
+    private static func errorCode(_ error: Error) -> String {
+        let error = error as NSError
+        return " (\(error.domain) \(error.code))"
     }
 
     /// Puts the enabled HTTPS decryption plugins and the scripts the user allowed in them into the saved profile.
@@ -727,46 +875,25 @@ final class TunnelController {
             return false
         }
         var configuration = tunnelProtocol.providerConfiguration ?? [:]
-        let current = MitmPluginLibrary.texts(fromProfileValue: configuration[TunnelProfileKeys.mitmPlugins] as? Data)
-        let currentScripts = MitmScriptLibrary.sources(fromProfileValue: configuration[TunnelProfileKeys.mitmScripts] as? Data)
-        let currentResources = MitmResourceLibrary.data(
-            fromProfileValue: configuration[TunnelProfileKeys.mitmResources] as? Data
-        )
-        let scripts = texts.isEmpty ? [:] : scripts
-        let resources = texts.isEmpty ? [:] : resources
-        guard current != texts || currentScripts != scripts || currentResources != resources else {
+        let next = MitmProfileBundle(plugins: texts, scripts: scripts, resources: resources)
+        let carriesOldKeys = configuration[TunnelProfileKeys.mitmPlugins] != nil
+            || configuration[TunnelProfileKeys.mitmScripts] != nil
+            || configuration[TunnelProfileKeys.mitmResources] != nil
+        guard carriesOldKeys || MitmProfileBundle.fromProfile(configuration) != next else {
             return false
         }
-        if texts.isEmpty {
-            configuration.removeValue(forKey: TunnelProfileKeys.mitmPlugins)
-        } else {
-            guard let value = try? MitmPluginLibrary.profileValue(texts) else {
-                message = String(localized: "无法生成插件配置")
-                return false
-            }
-            configuration[TunnelProfileKeys.mitmPlugins] = value
-        }
-        if scripts.isEmpty {
-            configuration.removeValue(forKey: TunnelProfileKeys.mitmScripts)
-        } else {
-            guard let value = try? MitmScriptLibrary.profileValue(scripts) else {
-                message = "无法生成脚本配置"
-                return false
-            }
-            configuration[TunnelProfileKeys.mitmScripts] = value
-        }
-        if resources.isEmpty {
-            configuration.removeValue(forKey: TunnelProfileKeys.mitmResources)
-        } else if let value = try? MitmResourceLibrary.profileValue(resources) {
-            configuration[TunnelProfileKeys.mitmResources] = value
+        do {
+            try next.apply(to: &configuration)
+        } catch {
+            message = String(localized: "保存插件到 VPN 配置失败") + Self.errorCode(error)
+            return false
         }
         tunnelProtocol.providerConfiguration = configuration
         manager.protocolConfiguration = tunnelProtocol
         do {
-            try await manager.saveToPreferences()
-            try await manager.loadFromPreferences()
+            self.manager = try await persist(manager)
         } catch {
-            message = String(localized: "保存插件到 VPN 配置失败")
+            message = String(localized: "保存插件到 VPN 配置失败") + Self.errorCode(error)
             refresh()
             return false
         }
@@ -781,7 +908,7 @@ final class TunnelController {
     /// Returns whether they were saved.
     @discardableResult
     /// Saves the local rules now, so quick edits build on each other, then puts them in the saved profile. A running
-    /// tunnel reconnects to use them.
+    /// tunnel takes them in place when only rule lines changed (see `applyLocalRulesToProfile`), else reconnects.
     func updateLocalRules(_ next: LocalRules) {
         do {
             try next.save(to: LocalRules.defaultURL)
@@ -811,17 +938,65 @@ final class TunnelController {
         tunnelProtocol.providerConfiguration = configuration
         manager.protocolConfiguration = tunnelProtocol
         do {
-            try await manager.saveToPreferences()
-            try await manager.loadFromPreferences()
+            self.manager = try await persist(manager)
         } catch {
-            message = String(localized: "保存本地规则到 VPN 配置失败")
+            message = String(localized: "保存本地规则到 VPN 配置失败") + Self.errorCode(error)
             refresh()
             return
         }
         refresh()
-        if isConnected {
+        guard isConnected else {
+            return
+        }
+        // Rule lines alone swap into the running engine without dropping a connection; anything more (a new rule
+        // list URL, an older extension, a refused line) restarts the tunnel as before.
+        if let answer = await reloadLocalRules(value), answer.reloaded {
+            lastRulesReload = Date()
+        } else {
             restart()
         }
+    }
+
+    /// The running tunnel's session, for messages that need no answer.
+    var tunnelSession: NETunnelProviderSession? {
+        manager?.connection as? NETunnelProviderSession
+    }
+
+    /// Puts the notification settings in the saved profile for the next start. No restart: a running extension
+    /// gets them as a message (`applyNotificationSettings`).
+    func saveNotificationSettingsToProfile(_ next: NotificationSettings) async {
+        guard let manager, let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol else {
+            return
+        }
+        var configuration = tunnelProtocol.providerConfiguration ?? [:]
+        guard configuration[TunnelProfileKeys.notifications] as? Data != next.profileValue else {
+            return
+        }
+        configuration[TunnelProfileKeys.notifications] = next.profileValue
+        tunnelProtocol.providerConfiguration = configuration
+        manager.protocolConfiguration = tunnelProtocol
+        if let saved = try? await persist(manager) {
+            self.manager = saved
+        }
+        refresh()
+    }
+
+    /// Hands new local rules to the running extension (`TunnelAppMessage.reloadLocalRules`). Nil when the tunnel is
+    /// not connected or the extension does not answer.
+    private func reloadLocalRules(_ value: Data) async -> RuntimeControl.ReloadAnswer? {
+        guard let session = manager?.connection as? NETunnelProviderSession, connection == .connected else {
+            return nil
+        }
+        let data: Data? = await withCheckedContinuation { continuation in
+            do {
+                try session.sendProviderMessage(TunnelAppMessage.reloadLocalRules(value).encoded) { data in
+                    continuation.resume(returning: data)
+                }
+            } catch {
+                continuation.resume(returning: nil)
+            }
+        }
+        return RuntimeControl.decode(RuntimeControl.ReloadAnswer.self, from: data)
     }
 
     func applyDns(_ next: DnsSettings) async -> Bool {
@@ -849,10 +1024,9 @@ final class TunnelController {
         tunnelProtocol.providerConfiguration = configuration
         manager.protocolConfiguration = tunnelProtocol
         do {
-            try await manager.saveToPreferences()
-            try await manager.loadFromPreferences()
+            self.manager = try await persist(manager)
         } catch {
-            message = String(localized: "保存 DNS 设置到 VPN 配置失败")
+            message = String(localized: "保存 DNS 设置到 VPN 配置失败") + Self.errorCode(error)
             refresh()
             return false
         }
@@ -891,10 +1065,9 @@ final class TunnelController {
         tunnelProtocol.providerConfiguration = configuration
         manager.protocolConfiguration = tunnelProtocol
         do {
-            try await manager.saveToPreferences()
-            try await manager.loadFromPreferences()
+            self.manager = try await persist(manager)
         } catch {
-            message = String(localized: "保存重定向到 VPN 配置失败")
+            message = String(localized: "保存重定向到 VPN 配置失败") + Self.errorCode(error)
             refresh()
             return false
         }
@@ -917,7 +1090,8 @@ final class TunnelController {
             return
         }
         if isConnected {
-            manager.connection.stopVPNTunnel()
+            // On Demand would start the tunnel again right away: the user's disconnect turns it off first.
+            Task { await disconnect(manager) }
             return
         }
         guard manager.isEnabled else {
@@ -934,17 +1108,49 @@ final class TunnelController {
         start(manager)
     }
 
+    private func disconnect(_ manager: NETunnelProviderManager) async {
+        if manager.isOnDemandEnabled {
+            manager.isOnDemandEnabled = false
+            do {
+                self.manager = try await persist(manager)
+            } catch {
+                message = String(localized: "无法关闭自动重连") + Self.errorCode(error)
+            }
+        }
+        self.manager?.connection.stopVPNTunnel()
+    }
+
+    /// Saves new reconnect and Wi-Fi settings and puts them in the VPN configuration. On Demand stays as it was: on
+    /// while the user keeps the tunnel up, off after they disconnected.
+    func setOnDemand(_ next: OnDemandSettings) async {
+        guard next != onDemand else {
+            return
+        }
+        onDemand = next
+        next.save()
+        guard let manager else {
+            return
+        }
+        next.apply(to: manager, active: manager.isOnDemandEnabled || isConnected)
+        do {
+            self.manager = try await persist(manager)
+        } catch {
+            message = String(localized: "保存自动重连设置失败") + Self.errorCode(error)
+        }
+        refresh()
+    }
+
     private func enableAndStart(_ manager: NETunnelProviderManager) async {
         do {
             manager.isEnabled = true
-            try await manager.saveToPreferences()
-            try await manager.loadFromPreferences()
+            onDemand.apply(to: manager, active: true)
+            let saved = try await persist(manager)
+            self.manager = saved
+            refresh()
+            start(saved)
         } catch {
-            message = String(localized: "无法启动隧道")
-            return
+            message = String(localized: "无法启动隧道") + Self.errorCode(error)
         }
-        refresh()
-        start(manager)
     }
 
     private func saveProfileAndStart(_ groups: SubscriptionGroups) async {
@@ -973,19 +1179,182 @@ final class TunnelController {
         guard var group = groups.groups.first(where: { !$0.library.nodes.isEmpty }) else {
             return nil
         }
-        group.library.selectedID = group.library.nodes.first?.id
+        group.library.selectedID = NodeLibrary.defaultNode(in: group.library.nodes)?.id
         groups.upsert(group)
         groups.activeID = group.id
         return groups
     }
 
     private func start(_ manager: NETunnelProviderManager) {
+        #if os(macOS)
+        // A newer build may carry a newer System Extension; activation replaces the running one first.
+        Task {
+            // When the user still has to allow the extension, the tunnel starts by itself once they do.
+            guard await activateSystemExtension(afterApproval: { [weak self] in
+                self?.startNow(manager)
+            }) else {
+                return
+            }
+            startNow(manager)
+        }
+        #else
+        startNow(manager)
+        #endif
+    }
+
+    private func startNow(_ manager: NETunnelProviderManager) {
+        // The user wants the tunnel up: On Demand keeps it up from here, including after the extension crashes.
+        if onDemand.rules != nil, !manager.isOnDemandEnabled {
+            onDemand.apply(to: manager, active: true)
+            Task {
+                var target = manager
+                do {
+                    target = try await persist(manager)
+                    self.manager = target
+                } catch {
+                    // Connecting still works; only the automatic reconnect is missing.
+                    message = String(localized: "无法开启自动重连") + Self.errorCode(error)
+                }
+                startTunnel(target)
+            }
+            return
+        }
+        startTunnel(manager)
+    }
+
+    private func startTunnel(_ manager: NETunnelProviderManager) {
         do {
-            try manager.connection.startVPNTunnel()
+            try manager.connection.startVPNTunnel(options: Self.startOptions())
             message = nil
         } catch {
             message = String(localized: "无法启动隧道")
         }
+    }
+
+    /// Set once this run of the app has activated the tunnel System Extension.
+    @ObservationIgnored private var systemExtensionActive = false
+    /// Set while an activation request waits for the user to allow the extension in System Settings.
+    @ObservationIgnored private var systemExtensionPending = false
+    /// Runs once the waiting request is allowed; the last connect attempt sets it.
+    @ObservationIgnored private var afterSystemExtensionApproval: (() -> Void)?
+
+    /// Shown while macOS waits for the user to allow the extension.
+    static let systemExtensionApprovalText = String(
+        localized: "请在“系统设置 › 通用 › 登录项与扩展 › 网络扩展”中允许 AnixOps Net，然后再连接"
+    )
+
+    /// On macOS the tunnel may be a System Extension, which runs as root and cannot read the user's Keychain, so
+    /// the app hands over the node key, node library and MITM root at start (`TunnelStartSecrets`). iOS shares the
+    /// Keychain with the extension and passes nothing.
+    private static func startOptions() -> [String: NSObject]? {
+        #if os(macOS)
+        return TunnelStartSecrets.fromKeychain().options
+        #else
+        return nil
+        #endif
+    }
+
+    /// Developer ID builds carry the tunnel as a System Extension, which macOS loads only after the app asks and the
+    /// user allows it. Returns false, with the reason in `message`, when it is not active. While the user has not
+    /// allowed it yet the request stays open: `allowPending` returns true anyway (saving a profile does not need
+    /// the extension), and `afterApproval` runs once the user allows it. Builds whose tunnel is an app extension
+    /// (iOS, Mac App Store) have nothing to activate.
+    private func activateSystemExtension(allowPending: Bool = false, afterApproval: (() -> Void)? = nil) async -> Bool {
+        #if os(macOS)
+        guard !systemExtensionActive, let identifier = Self.systemExtensionIdentifier() else {
+            return true
+        }
+        if afterApproval != nil {
+            afterSystemExtensionApproval = afterApproval
+        }
+        if systemExtensionPending {
+            message = Self.systemExtensionApprovalText
+            return allowPending
+        }
+        let outcome = await SystemExtensionActivation.run(identifier) { [weak self] late in
+            self?.systemExtensionFinished(late)
+        }
+        if outcome == .needsApproval {
+            systemExtensionPending = true
+            message = Self.systemExtensionApprovalText
+            return allowPending
+        }
+        return systemExtensionFinished(outcome)
+        #else
+        return true
+        #endif
+    }
+
+    #if os(macOS)
+    /// Records the activation's final outcome, with the reason in `message` when it failed, and starts the tunnel
+    /// when a connect waited for the user's approval. Returns whether the extension is active.
+    @discardableResult
+    private func systemExtensionFinished(_ outcome: SystemExtensionActivation.Outcome) -> Bool {
+        let waited = systemExtensionPending
+        systemExtensionPending = false
+        let next = afterSystemExtensionApproval
+        afterSystemExtensionApproval = nil
+        switch outcome {
+        case .activated:
+            systemExtensionActive = true
+            if message == Self.systemExtensionApprovalText {
+                message = nil
+            }
+            if waited {
+                next?()
+            }
+            return true
+        case .needsApproval:
+            systemExtensionPending = true
+            afterSystemExtensionApproval = next
+            message = Self.systemExtensionApprovalText
+        case .needsRestart:
+            message = String(localized: "网络扩展将在重启 Mac 后生效")
+        case .notInApplications:
+            message = String(localized: "请先把 AnixOps Net 拖进“应用程序”文件夹，从那里打开后再连接")
+        case let .failed(code):
+            message = String(localized: "无法启用网络扩展") + " (\(code))"
+        }
+        return false
+    }
+    #endif
+
+    /// Nodes whose stop the user has already been told about; a node leaves the set once it dials again.
+    @ObservationIgnored private var announcedStops: Set<String> = []
+    @ObservationIgnored private var reporter: ClientReporter?
+
+    /// Reads the engine's per-node dial health: tells the user once when a node stopped because its server kept
+    /// rejecting this client (expired subscription or wrong device time), and hands the counts to the panel
+    /// reporter. `network` is `wifi`, `cellular`, `ethernet` or `unknown`.
+    func checkOutboundHealth(network: String) async {
+        guard let health = RuntimeControl.decode(OutboundHealth.self, from: await control(.outboundHealth)) else {
+            return
+        }
+        let stopped = health.stopped
+        announcedStops.formIntersection(stopped.map(\.node))
+        if let entry = stopped.first(where: { !announcedStops.contains($0.node) }) {
+            announcedStops.insert(entry.node)
+            let origin = subscriptions.origin(ofRuntimeNode: entry.node)
+            let name = origin.map { $0.node.name.isEmpty ? $0.node.id : $0.node.name } ?? entry.node
+            var actions: [AppNotice.Action] = [.resumeNode(entry.node)]
+            if let group = origin?.group, group.url != nil {
+                actions.append(.refreshSubscription(group.id))
+            }
+            notice = AppNotice(
+                text: ClientReport.stoppedText(node: name, health: entry.health),
+                detail: "fallback=\(entry.health.counts.fallback) skew=\(entry.health.clockSkewSecs.map(String.init) ?? "-")",
+                actions: actions
+            )
+        }
+        let reporter = self.reporter ?? ClientReporter()
+        self.reporter = reporter
+        reporter.offer(health, groups: subscriptions, network: network)
+    }
+
+    /// Lets a stopped node dial again after the user fixed the time or the subscription.
+    func resumeNode(_ node: String) async {
+        announcedStops.remove(node)
+        _ = await control(.resumeOutbound(node: node))
     }
 
     /// Sends a control request to the running engine (live traffic, the connection list). Nil while the tunnel is
@@ -1085,6 +1454,11 @@ final class TunnelController {
 
     /// The saved profile's outbound protocol, without address or key.
     var outboundKind: String? {
+        #if DEBUG
+        if Self.isDemo {
+            return "shadowsocks"
+        }
+        #endif
         let configuration = (manager?.protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration
         guard let data = configuration?[TunnelProfileKeys.runtimeConfig] as? Data else {
             return nil
@@ -1104,7 +1478,7 @@ final class TunnelController {
         if restartAfterStop, connection == .disconnected {
             // The node switch stopped the tunnel on purpose: no error to show, just start it on the new node.
             restartAfterStop = false
-            try? manager?.connection.startVPNTunnel()
+            try? manager?.connection.startVPNTunnel(options: Self.startOptions())
         } else if connection == .disconnected, previous != .disconnected, previous != .invalid {
             showLastDisconnectError()
         }
@@ -1136,6 +1510,17 @@ final class TunnelController {
                 return
             }
             let text = Self.describe(disconnectError: error as NSError)
+            #if os(macOS)
+            // The System Extension cannot post; on iOS the extension posts this itself.
+            if AppNotifications.settings.connection {
+                AppNotifications.post(
+                    title: String(localized: "AnixOps Net 已断开"),
+                    body: String(localized: "节点没有响应、被干扰，或网络刚切换。打开 App 重试或换一个节点。"),
+                    thread: "connection",
+                    id: "connection-stopped"
+                )
+            }
+            #endif
             Task { @MainActor in
                 self?.notice = AppNotice(
                     text: String(localized: "连接已断开：节点没有响应、被干扰，或网络刚切换。可以重试，或换一个节点。"),
@@ -1170,6 +1555,9 @@ final class TunnelController {
     private static let profileID = NodeSecretStore.tunnelProfileAccount
 
     private static func tunnelBundleIdentifier() -> String? {
+        if let identifier = systemExtensionIdentifier() {
+            return identifier
+        }
         guard let plugins = Bundle.main.builtInPlugInsURL,
               let urls = try? FileManager.default.contentsOfDirectory(at: plugins, includingPropertiesForKeys: nil)
         else {
@@ -1185,6 +1573,29 @@ final class TunnelController {
             return bundle.bundleIdentifier
         }
         return nil
+    }
+
+    /// The packet tunnel System Extension in `Contents/Library/SystemExtensions` of a Developer ID build, or nil.
+    private static func systemExtensionIdentifier() -> String? {
+        #if os(macOS)
+        let folder = Bundle.main.bundleURL.appendingPathComponent("Contents/Library/SystemExtensions", isDirectory: true)
+        guard let urls = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) else {
+            return nil
+        }
+        for url in urls where url.pathExtension == "systemextension" {
+            guard let bundle = Bundle(url: url),
+                  let info = bundle.object(forInfoDictionaryKey: "NetworkExtension") as? [String: Any],
+                  let providers = info["NEProviderClasses"] as? [String: Any],
+                  providers["com.apple.networkextension.packet-tunnel"] != nil
+            else {
+                continue
+            }
+            return bundle.bundleIdentifier
+        }
+        return nil
+        #else
+        return nil
+        #endif
     }
 
     private static func describe(_ error: TunnelNodeImportError) -> String {
@@ -1296,9 +1707,111 @@ struct AppNotice: Equatable {
         case refreshSubscription(String)
         /// Open the import sheet.
         case importNode
+        /// Let an engine node that stopped after repeated rejections dial again.
+        case resumeNode(String)
     }
 
     var text: String
     var detail: String?
     var actions: [Action] = []
 }
+
+#if DEBUG
+/// Demo data for screenshots: a debug build launched with `-AnixOpsDemo YES` shows a connected client with a
+/// made-up subscription instead of reading the VPN configuration and the Keychain. Nothing is saved and no
+/// tunnel starts, so it runs unsigned on a CI machine.
+extension TunnelController {
+    static var isDemo: Bool {
+        UserDefaults.standard.bool(forKey: "AnixOpsDemo")
+    }
+
+    func loadDemo() {
+        let credentials = "YWVzLTI1Ni1nY206ZGVtby1wYXNzd29yZA"
+        let names = [("hk1", "香港 01"), ("hk2", "香港 02"), ("jp1", "日本 01"), ("sg1", "新加坡 01"), ("us1", "美国 01"), ("de1", "德国 01")]
+        let links = names.map { host, name in
+            "ss://\(credentials)@\(host).example.com:8388#\(name.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? host)"
+        }
+        let delays = [38, 45, 72, 86, 164, 213]
+        if let data = try? NativeNodeImporterFFI.importNodes(links.joined(separator: "\n")),
+           let report = try? NativeImportReport.decoded(from: data) {
+            let day: TimeInterval = 24 * 3600
+            let group = SubscriptionGroup(
+                name: "AnixOps",
+                library: NodeLibrary(
+                    report: report,
+                    subscriptionURL: "https://example.com/subscription",
+                    keeping: nil,
+                    at: Date().addingTimeInterval(-2 * 3600)
+                ),
+                userInfo: SubscriptionUserInfo(
+                    upload: 6_400_000_000,
+                    download: 61_800_000_000,
+                    total: 200_000_000_000,
+                    expire: Date().addingTimeInterval(23 * day)
+                )
+            )
+            subscriptions = SubscriptionGroups(groups: [group], activeID: group.id)
+            library = subscriptions.activeLibrary()
+            nodeName = group.library.selected?.name
+            for (index, node) in group.library.nodes.enumerated() {
+                latencies[Self.latencyKey(group: group.id, node: node.id)] = .millis(delays[index % delays.count])
+            }
+        }
+        // The made-up subscription has no rules, so the mode switch offers global and direct.
+        mode = .global
+        connection = .connected
+        connectedSince = Date().addingTimeInterval(-4521)
+        lastConnections = Self.demoConnections()
+        loaded = true
+    }
+
+    /// A request list as the engine would answer it: some connections still open, some ended, one rejected.
+    private static func demoConnections() -> RuntimeControl.Connections? {
+        let rows: [(host: String, port: Int, network: String, rule: String, outbound: String, bytes: Int, ended: Bool)] = [
+            ("www.youtube.com", 443, "udp", "DOMAIN-SUFFIX,youtube.com", "香港 01", 412_000_000, false),
+            ("rr3---sn.googlevideo.com", 443, "udp", "DOMAIN-SUFFIX,googlevideo.com", "香港 01", 828_000_000, false),
+            ("github.com", 443, "tcp", "DOMAIN-SUFFIX,github.com", "日本 01", 96_000_000, false),
+            ("objects.githubusercontent.com", 443, "tcp", "DOMAIN-SUFFIX,githubusercontent.com", "日本 01", 216_000_000, false),
+            ("gateway.icloud.com", 443, "tcp", "DOMAIN-SUFFIX,icloud.com", "DIRECT", 148_000_000, false),
+            ("api.openai.com", 443, "tcp", "DOMAIN-SUFFIX,openai.com", "美国 01", 96_000_000, false),
+            ("web.telegram.org", 443, "tcp", "DOMAIN-KEYWORD,telegram", "新加坡 01", 41_000_000, false),
+            ("www.apple.com", 443, "tcp", "DOMAIN-SUFFIX,apple.com", "DIRECT", 3_200_000, false),
+            ("ads.example.net", 443, "tcp", "DOMAIN-SUFFIX,example.net", "REJECT", 0, true),
+            ("www.google.com", 443, "tcp", "DOMAIN-SUFFIX,google.com", "香港 01", 1_800_000, true),
+            ("api.github.com", 443, "tcp", "DOMAIN-SUFFIX,github.com", "日本 01", 640_000, true),
+            ("time.apple.com", 123, "udp", "FINAL", "DIRECT", 96, true),
+        ]
+        let now = Int(Date().timeIntervalSince1970 * 1000)
+        let list = rows.enumerated().map { index, row -> [String: Any] in
+            var entry: [String: Any] = [
+                "id": index + 1,
+                "network": row.network,
+                "host": row.host,
+                "destination": "\(row.host):\(row.port)",
+                "rule": row.rule,
+                "chain": row.outbound == "DIRECT" || row.outbound == "REJECT" ? [row.outbound] : ["节点选择", row.outbound],
+                "outbound": row.outbound,
+                "started_at_ms": now - (index + 1) * 47_000,
+                "upload": row.bytes / 24,
+                "download": row.bytes,
+            ]
+            if row.ended {
+                entry["ended_at_ms"] = now - (index + 1) * 9_000
+            }
+            if row.outbound == "REJECT" {
+                entry["error"] = "rejected"
+            }
+            return entry
+        }
+        let answer: [String: Any] = [
+            "traffic": ["upload_total": 86_400_000, "download_total": 1_932_000_000, "upload_rate": 184_000, "download_rate": 3_870_000, "active": 8],
+            "active": list.filter { $0["ended_at_ms"] == nil },
+            "closed": list.filter { $0["ended_at_ms"] != nil },
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: answer) else {
+            return nil
+        }
+        return RuntimeControl.decodeConnections(data)
+    }
+}
+#endif

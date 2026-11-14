@@ -1,18 +1,26 @@
 # AnixOps Net
 
-AnixOps Net 的全平台客户端：iOS / macOS App、Windows 与 Linux 桌面 GUI、Windows 托管服务和 MSI 安装器。
+AnixOps Net 的全平台客户端：iOS / macOS App、Windows 与 Linux 桌面 GUI、安卓 App、Windows 托管服务和 MSI 安装器。
 
 网络内核（协议栈、嵌入式引擎、MITM、脚本运行时、CLI 和服务端节点内核）在
 [AnixOps/networkcore_anixops](https://github.com/AnixOps/networkcore_anixops)。本仓库只放客户端，通过 Cargo git
 依赖引用固定版本的内核。
+
+## 下载
+
+最新版下载页：<https://anixops.github.io/anixops-net/>（所有历史版本见 [Releases](https://github.com/AnixOps/anixops-net/releases)）。
+
+这里发布的是开源版，只含公开协议（Windows、Linux、安卓）。带 ANX 私有协议的版本（含 macOS 和 iOS TestFlight）
+只在机场面板里提供，不放在本仓库。
 
 ## 目录
 
 | 路径 | 内容 |
 | --- | --- |
 | `apps/ios` | iOS + macOS App、Packet Tunnel、Widget（Swift，XcodeGen 生成工程） |
-| `apps/windows-gui` | Windows Tauri GUI，`ui/` 是 Windows 与 Linux 共用的 React 界面 |
-| `apps/linux-gui` | Linux Tauri GUI |
+| `apps/windows-gui` | Windows Tauri GUI，`ui/` 是 Windows、Linux 与安卓共用的 React 界面 |
+| `apps/linux-gui` | Linux Tauri GUI，也是安卓 App 的后端 |
+| `apps/android` | 安卓 App（Tauri 移动端 + VpnService 插件），见 [apps/android/README.md](apps/android/README.md) |
 | `apps/windows-service` | Windows 托管服务 |
 | `installer/windows` | WiX MSI 安装器（同时打包内核仓库的 Windows CLI） |
 | `docs/` | 客户端相关的设计与合同文档 |
@@ -33,3 +41,5 @@ XCFramework 和 MSI 里的 Windows CLI（见 `.github/scripts/kernel-root.sh`）
 ## 许可
 
 Apache-2.0，见 [LICENSE](LICENSE)。"AnixOps Net" 名称和标识见 [TRADEMARKS.md](TRADEMARKS.md)。
+
+使用前请阅读 [TERMS.md](TERMS.md)（用户协议、禁止用途与免责声明）。

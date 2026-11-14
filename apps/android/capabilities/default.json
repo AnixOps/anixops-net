@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "default",
+  "description": "The AnixOps Net window may invoke only its Rust command bridge; the VPN plugin is called from Rust, not from the page.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

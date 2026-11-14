@@ -41,6 +41,23 @@
                 KeyPath="yes" />
           </Component>
 
+          <Component Id="WintunComponent" Guid="*">
+            <File
+                Id="WintunDll"
+                Source="$(WintunDll)"
+                Name="wintun.dll"
+                KeyPath="yes" />
+          </Component>
+
+          <!-- The install integrity list the client checks at start (crates/client-health). -->
+          <Component Id="IntegrityListComponent" Guid="*">
+            <File
+                Id="IntegrityList"
+                Source="$(IntegrityList)"
+                Name="integrity.sha256"
+                KeyPath="yes" />
+          </Component>
+
           <Component Id="CliComponent" Guid="*">
             <File
                 Id="CliExe"
@@ -99,7 +116,9 @@
     <Feature Id="Complete" Title="AnixOps NetworkCore" Level="1">
       <ComponentRef Id="GuiComponent" />
       <ComponentRef Id="WebView2LoaderComponent" />
+      <ComponentRef Id="WintunComponent" />
       <ComponentRef Id="CliComponent" />
+      <ComponentRef Id="IntegrityListComponent" />
       <ComponentRef Id="ServiceComponent" />
       <ComponentRef Id="ManagedConfigurationComponent" />
     </Feature>
@@ -115,9 +134,9 @@
         Id="CleanupCurrentUserStartup"
         FileRef="GuiExe"
         ExeCommand="--cleanup-startup"
-        Execute="immediate"
-        Impersonate="yes"
-        Return="check" />
+        Execute="deferred"
+        Impersonate="no"
+        Return="ignore" />
     <InstallExecuteSequence>
       <Custom
           Action="PurgeManagedNetworkState"

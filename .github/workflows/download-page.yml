@@ -1,0 +1,76 @@
+name: Download page
+
+# Publishes the fixed download page of the open-source client to GitHub Pages
+# (https://anixops.github.io/anixops-net/): every platform of the newest release, beta or not, plus fixed
+# links such as /windows/ that redirect to the newest file and a latest.json. The ANX edition is never listed
+# here; the page sends its users to the panel. Built by .github/scripts/download_page.py.
+#
+# release.yml dispatches this after it publishes a release (a release made with GITHUB_TOKEN triggers no
+# workflow). Pull requests only build the page; deploying needs Settings → Pages → Source = GitHub Actions
+# (docs/manual-intervention.md).
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/scripts/download_page.py
+      - .github/workflows/download-page.yml
+  pull_request:
+    paths:
+      - .github/scripts/download_page.py
+      - .github/workflows/download-page.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: download-page-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build download page
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Build the page from the newest release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GH_REPO}/releases?per_page=20" > "${RUNNER_TEMP}/releases.json"
+          python3 -I .github/scripts/download_page.py "${RUNNER_TEMP}/releases.json" site "${GH_REPO}"
+          test -s site/index.html
+          test -s site/windows/index.html
+          python3 -I -c 'import json,sys; d=json.load(open("site/latest.json")); assert d["version"].startswith("v"), d; print(d["version"], sorted(d["assets"]))'
+          find site -type f | sort
+
+      - name: Upload the page
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+          retention-days: 1
+
+  deploy:
+    name: Deploy to GitHub Pages
+    if: ${{ github.event_name != 'pull_request' }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deploy
+        uses: actions/deploy-pages@v4

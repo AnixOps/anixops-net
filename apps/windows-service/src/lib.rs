@@ -534,6 +534,34 @@ where
     }
 }
 
+/// The native HTTPS MITM proxy run inside the elevated GUI in desktop mode:
+/// the same engine, policy and CA checks the service uses, without the
+/// service's persisted state. The GUI installs and records the root CA.
+pub struct DesktopNativeMitm {
+    service: NativeProxyEngineService,
+}
+
+impl DesktopNativeMitm {
+    /// Validates the private key ACL, then starts the MITM listener; it is
+    /// bound when this returns.
+    pub fn start(config: &WindowsManagedNativeMitmConfig) -> DomainResult<Self> {
+        validate_native_mitm_private_key(&config.ca_private_key_path)?;
+        let service = build_native_mitm_service(config)?;
+        service.start(&native_mitm_proxy_engine_config(config))?;
+        Ok(Self { service })
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.service
+            .status(DEFAULT_NATIVE_ENGINE_ID)
+            .is_ok_and(|status| status.state == ProxyEngineLifecycleState::Running)
+    }
+
+    pub fn stop(self) -> DomainResult<()> {
+        self.service.stop(DEFAULT_NATIVE_ENGINE_ID).map(|_| ())
+    }
+}
+
 fn build_native_mitm_service(
     config: &WindowsManagedNativeMitmConfig,
 ) -> DomainResult<NativeProxyEngineService> {
@@ -578,6 +606,12 @@ fn build_native_mitm_service(
             certificate_pem,
             private_key_pem,
         )))
+}
+
+/// The built-in HTTPS decryption policy text for a managed profile, for a
+/// desktop engine that decrypts itself.
+pub fn native_mitm_policy_source(bilibili_web_ad_block_enabled: bool) -> String {
+    native_mitm_plugin_package(bilibili_web_ad_block_enabled).source
 }
 
 fn native_mitm_plugin_package(bilibili_web_ad_block_enabled: bool) -> PluginPackage {

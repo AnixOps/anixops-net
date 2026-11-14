@@ -1,6 +1,6 @@
 name: Release
 
-# Packages the Windows (MSI + portable ZIP) and Linux (tarball + .deb) desktop clients.
+# Packages the Windows (MSI + portable ZIP), Linux (tarball + .deb) and Android (APK) clients.
 # A tag push publishes a GitHub Release; workflow_dispatch from main only builds and attests.
 # iOS ships through ios-testflight.yml. Kernel CLI releases stay in AnixOps/networkcore_anixops.
 
@@ -27,7 +27,8 @@ env:
   LINUX_RUST_TOOLCHAIN: stable
   LINUX_RUST_PROFILE: minimal
   WINDOWS_TARGET: x86_64-pc-windows-gnu
-  WINDOWS_RUST_TOOLCHAIN: stable
+  # Pinned like the CI Windows job: tauri-build 2.6 fails with Rust 1.100's build directory layout.
+  WINDOWS_RUST_TOOLCHAIN: 1.99.0
   WINDOWS_RUST_PROFILE: minimal
   WINDOWS_WIX_VERSION: 4.0.6
 
@@ -264,8 +265,7 @@ jobs:
       - name: Install WebKitGTK
         shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
+          bash .github/scripts/apt-install.sh libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -341,6 +341,9 @@ jobs:
           install -m 0644 apps/linux-gui/icons/networkcore.png "${staging}/share/icons/hicolor/256x256/apps/anixops-net.png"
           desktop_entry anixops-net > "${staging}/share/applications/anixops-net.desktop"
           install -m 0644 LICENSE "${staging}/LICENSE"
+          # Install integrity list the client checks at start (crates/client-health): paths beside bin/anixops-net.
+          mkdir -p "${staging}/share/anixops-net"
+          (cd "${staging}/bin" && sha256sum anixops-net) > "${staging}/share/anixops-net/integrity.sha256"
           cat > "${staging}/INSTALL.md" <<EOF
           # AnixOps Net for Linux ${version}
 
@@ -370,6 +373,8 @@ jobs:
           install -m 0644 apps/linux-gui/icons/networkcore.png "${deb_root}/usr/share/icons/hicolor/256x256/apps/anixops-net.png"
           desktop_entry /usr/bin/anixops-net > "${deb_root}/usr/share/applications/anixops-net.desktop"
           install -m 0644 LICENSE "${deb_root}/usr/share/doc/anixops-net/copyright"
+          mkdir -p "${deb_root}/usr/share/anixops-net"
+          (cd "${deb_root}/usr/bin" && sha256sum anixops-net) > "${deb_root}/usr/share/anixops-net/integrity.sha256"
           installed_size="$(du -sk "${deb_root}/usr" | cut -f1)"
           cat > "${deb_root}/DEBIAN/control" <<EOF
           Package: anixops-net
@@ -702,6 +707,16 @@ jobs:
 
           Remove-Item -Recurse -Force $distDir -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+          $wintunPath = & .github/scripts/fetch-wintun.ps1 -Destination (Join-Path $env:RUNNER_TEMP "wintun")
+          # Install integrity list the client checks at start (crates/client-health), in the MSI and the ZIP.
+          $integrityPath = Join-Path $distDir "integrity\integrity.sha256"
+          & .github/scripts/write-integrity.ps1 -Output $integrityPath -Entry @(
+            "networkcore-windows-gui.exe=$guiPath",
+            "networkcore-windows-service.exe=$servicePath",
+            "networkcore-windows.exe=$cliPath",
+            "WebView2Loader.dll=$webView2LoaderPath",
+            "wintun.dll=$wintunPath"
+          )
           wix build installer/windows/Package.wxs `
             -ext WixToolset.UI.wixext `
             -arch x64 `
@@ -709,8 +724,10 @@ jobs:
             -d "CliExe=$cliPath" `
             -d "GuiExe=$guiPath" `
             -d "WebView2LoaderDll=$webView2LoaderPath" `
+            -d "WintunDll=$wintunPath" `
             -d "ServiceExe=$servicePath" `
             -d "DefaultConfig=$defaultConfigPath" `
+            -d "IntegrityList=$integrityPath" `
             -o $archivePath
           wix msi validate $archivePath
           # WiX emits a .wixpdb beside the MSI; it is a build symbol, not a release asset.
@@ -721,9 +738,12 @@ jobs:
           Copy-Item -Path $cliPath -Destination (Join-Path $portableStageDir "networkcore-windows.exe")
           Copy-Item -Path $guiPath -Destination (Join-Path $portableStageDir "networkcore-windows-gui.exe")
           Copy-Item -Path $webView2LoaderPath -Destination (Join-Path $portableStageDir "WebView2Loader.dll")
+          Copy-Item -Path $wintunPath -Destination (Join-Path $portableStageDir "wintun.dll")
+          Copy-Item -Path (Join-Path (Split-Path $wintunPath) "wintun-LICENSE.txt") -Destination (Join-Path $portableStageDir "wintun-LICENSE.txt")
           Copy-Item -Path $servicePath -Destination (Join-Path $portableStageDir "networkcore-windows-service.exe")
           Copy-Item -Path $defaultConfigPath -Destination (Join-Path $portableStageDir "managed-config.json")
           Copy-Item -Path $portableReadmePath -Destination (Join-Path $portableStageDir "README.txt")
+          Copy-Item -Path $integrityPath -Destination (Join-Path $portableStageDir "integrity.sha256")
           Compress-Archive -Path $portableStageDir -DestinationPath $portableArchivePath -CompressionLevel Optimal
           $portableInspectionDir = Join-Path $distDir "portable-inspection"
           Expand-Archive -Path $portableArchivePath -DestinationPath $portableInspectionDir
@@ -769,9 +789,11 @@ jobs:
             included_files = @(
               [ordered]@{ path = "networkcore-windows-gui.exe"; kind = "binary"; required = $true; source = "apps/windows-gui" },
               [ordered]@{ path = "WebView2Loader.dll"; kind = "runtime"; required = $true; source = "webview2-com-sys@0.38.2/x64" },
+              [ordered]@{ path = "wintun.dll"; kind = "runtime"; required = $true; source = "wintun.net/builds/wintun-0.14.1.zip:bin/amd64" },
               [ordered]@{ path = "networkcore-windows-service.exe"; kind = "binary"; required = $true; source = "apps/windows-service" },
               [ordered]@{ path = "networkcore-windows.exe"; kind = "binary"; required = $true; source = "AnixOps/networkcore_anixops:apps/windows-cli" },
-              [ordered]@{ path = "managed-config.json"; kind = "configuration"; required = $true; source = "installer/windows/default-managed-config.json" }
+              [ordered]@{ path = "managed-config.json"; kind = "configuration"; required = $true; source = "installer/windows/default-managed-config.json" },
+              [ordered]@{ path = "integrity.sha256"; kind = "integrity"; required = $true; source = ".github/scripts/write-integrity.ps1" }
             )
             install_model = "wix-per-machine-msi"
             system_mutation_policy = "managed-apply-and-rollback"
@@ -843,10 +865,13 @@ jobs:
             included_files = @(
               [ordered]@{ path = "$portableStem/networkcore-windows-gui.exe"; kind = "binary"; required = $true; source = "apps/windows-gui" },
               [ordered]@{ path = "$portableStem/WebView2Loader.dll"; kind = "runtime"; required = $true; source = "webview2-com-sys@0.38.2/x64" },
+              [ordered]@{ path = "$portableStem/wintun.dll"; kind = "runtime"; required = $true; source = "wintun.net/builds/wintun-0.14.1.zip:bin/amd64" },
+              [ordered]@{ path = "$portableStem/wintun-LICENSE.txt"; kind = "documentation"; required = $true; source = "wintun.net/builds/wintun-0.14.1.zip:LICENSE.txt" },
               [ordered]@{ path = "$portableStem/networkcore-windows-service.exe"; kind = "binary"; required = $true; source = "apps/windows-service" },
               [ordered]@{ path = "$portableStem/networkcore-windows.exe"; kind = "binary"; required = $true; source = "AnixOps/networkcore_anixops:apps/windows-cli" },
               [ordered]@{ path = "$portableStem/managed-config.json"; kind = "configuration"; required = $true; source = "installer/windows/default-managed-config.json" },
-              [ordered]@{ path = "$portableStem/README.txt"; kind = "documentation"; required = $true; source = "installer/windows/PORTABLE-README.txt" }
+              [ordered]@{ path = "$portableStem/README.txt"; kind = "documentation"; required = $true; source = "installer/windows/PORTABLE-README.txt" },
+              [ordered]@{ path = "$portableStem/integrity.sha256"; kind = "integrity"; required = $true; source = ".github/scripts/write-integrity.ps1" }
             )
             install_model = "manual-extract"
             system_mutation_policy = "explicit-gui-or-service-command-only"
@@ -1090,6 +1115,66 @@ jobs:
           echo "provenance_file=github-artifact-attestation" >> "${GITHUB_OUTPUT}"
           echo "windows-package-artifact-attestation-execution-status=attested"
 
+  # Android APK (arm64), built by the same composite action as ci.yml. Signed with the ANDROID_KEYSTORE_*
+  # secrets when they are set; until then with a throwaway key per build, and the release notes say that
+  # upgrading needs the old version uninstalled first.
+  package-android:
+    name: Package Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs:
+      - release-policy
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      CARGO_INCREMENTAL: "0"
+    outputs:
+      artifact_name: ${{ steps.stage.outputs.artifact_name }}
+      apk_name: ${{ steps.stage.outputs.apk_name }}
+      signing_kind: ${{ steps.apk.outputs.kind }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Build and sign the APK
+        id: apk
+        uses: ./.github/actions/android-apk
+        with:
+          keystore-base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Stage the APK
+        id: stage
+        shell: bash
+        env:
+          VERSION: ${{ needs.release-policy.outputs.version }}
+          APK: ${{ steps.apk.outputs.apk }}
+        run: |
+          set -euo pipefail
+          name="anixops-net-${VERSION}-android-arm64.apk"
+          mkdir -p dist/android
+          cp "${APK}" "dist/android/${name}"
+          (cd dist/android && sha256sum -- "${name}" > "${name}.sha256")
+          echo "apk_name=${name}" >> "${GITHUB_OUTPUT}"
+          echo "artifact_name=anixops-net-android-${VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Generate Android artifact attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/android/${{ steps.stage.outputs.apk_name }}
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.stage.outputs.artifact_name }}
+          path: dist/android/*
+          if-no-files-found: error
+          retention-days: 3
+
   publish-github-release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
@@ -1101,9 +1186,11 @@ jobs:
       - package-windows
       - attest-linux-gui
       - attest-windows
+      - package-android
     if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
     permissions:
       contents: write
+      actions: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -1120,6 +1207,12 @@ jobs:
           name: ${{ needs.package-windows.outputs.bundle_name }}
           path: dist/release
 
+      - name: Download Android APK
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.package-android.outputs.artifact_name }}
+          path: dist/android
+
       - name: Create GitHub Release
         shell: bash
         env:
@@ -1130,35 +1223,76 @@ jobs:
           CI_RUN_URL: ${{ needs.release-ci-gate.outputs.ci_run_url }}
           LINUX_GUI_ATTESTATION_STATUS: ${{ needs.attest-linux-gui.outputs.attestation_status }}
           WINDOWS_ATTESTATION_STATUS: ${{ needs.attest-windows.outputs.attestation_status }}
+          WINDOWS_MSI: ${{ needs.package-windows.outputs.artifact_name }}
+          WINDOWS_ZIP: ${{ needs.package-windows.outputs.portable_artifact_name }}
+          LINUX_TARBALL: ${{ needs.package-linux-gui.outputs.archive_name }}
+          LINUX_DEB: ${{ needs.package-linux-gui.outputs.deb_name }}
+          ANDROID_APK: ${{ needs.package-android.outputs.apk_name }}
+          ANDROID_SIGNING: ${{ needs.package-android.outputs.signing_kind }}
           KERNEL_REV_SOURCE: Cargo.toml
         run: |
           set -euo pipefail
           test "${LINUX_GUI_ATTESTATION_STATUS}" = "attested"
           test "${WINDOWS_ATTESTATION_STATUS}" = "attested"
-          assets=()
-          while IFS= read -r file; do
-            assets+=("${file}")
-          done < <(find dist/release -maxdepth 1 -type f | sort)
-          test "${#assets[@]}" = "16"
+          test "$(find dist/release -maxdepth 1 -type f | wc -l | tr -d ' ')" = "16"
           (
             cd dist/release
+            sha256sum -c ./*.sha256
+          )
+          (
+            cd dist/android
             sha256sum -c ./*.sha256
           )
           if gh release view "${VERSION}" >/dev/null 2>&1; then
             echo "::error::Release ${VERSION} already exists. Asset overwrite is forbidden."
             exit 1
           fi
+
+          # Publish only what users download: five packages under one name scheme plus one
+          # SHA256SUMS. Manifests and per-file .sha256 stay in the workflow artifacts; the
+          # attestations are bound to the file digests, so renaming keeps them verifiable.
+          publish_dir=dist/publish
+          mkdir -p "${publish_dir}"
+          cp "dist/release/${WINDOWS_MSI}" "${publish_dir}/anixops-net-${VERSION}-windows-x64.msi"
+          cp "dist/release/${WINDOWS_ZIP}" "${publish_dir}/anixops-net-${VERSION}-windows-x64-portable.zip"
+          cp "dist/release/${LINUX_DEB}" "${publish_dir}/anixops-net-${VERSION}-linux-amd64.deb"
+          cp "dist/release/${LINUX_TARBALL}" "${publish_dir}/anixops-net-${VERSION}-linux-x64.tar.gz"
+          cp "dist/android/${ANDROID_APK}" "${publish_dir}/${ANDROID_APK}"
+          (
+            cd "${publish_dir}"
+            sha256sum -- anixops-net-* > SHA256SUMS
+            cat SHA256SUMS
+          )
+          assets=()
+          while IFS= read -r file; do
+            assets+=("${file}")
+          done < <(find "${publish_dir}" -maxdepth 1 -type f | sort)
+          test "${#assets[@]}" = "6"
+
+          android_note="安卓 8.0 及以上（arm64），下载后直接安装。"
+          if [ "${ANDROID_SIGNING}" != "release" ]; then
+            android_note="${android_note}还没有正式签名密钥，本版用临时签名，装新版前要先卸载旧版。"
+          fi
           kernel_rev="$(grep -m1 -oE 'rev = "[0-9a-f]{40}"' "${KERNEL_REV_SOURCE}" | cut -d'"' -f2)"
           cat > release-body.md <<EOF
-          # AnixOps Net ${VERSION}
+          ## 下载
 
-          - Kernel: [AnixOps/networkcore_anixops@${kernel_rev:0:7}](https://github.com/AnixOps/networkcore_anixops/commit/${kernel_rev})
-          - CI: ${CI_RUN_URL}
-          - Windows: MSI installer and portable ZIP (GUI, service and the kernel CLI), unsigned, GitHub artifact attestation
-          - Linux: tarball and .deb desktop client, needs WebKitGTK 4.1, GitHub artifact attestation
-          - Every asset has a manifest and a sha256 file.
+          | 平台 | 文件 | 说明 |
+          | --- | --- | --- |
+          | Windows 10/11 | \`anixops-net-${VERSION}-windows-x64.msi\` | 安装版（推荐） |
+          | Windows 10/11 | \`anixops-net-${VERSION}-windows-x64-portable.zip\` | 便携版，解压即用 |
+          | Debian / Ubuntu | \`anixops-net-${VERSION}-linux-amd64.deb\` | \`sudo apt install ./<文件名>\` |
+          | 其他 Linux | \`anixops-net-${VERSION}-linux-x64.tar.gz\` | 解压后运行 \`bin/anixops-net\` |
+          | 安卓 | \`${ANDROID_APK}\` | ${android_note} |
 
-          No local build, test, package, or release verification was used.
+          这是开源版，只含公开协议。需要 ANX 协议的机场用户请在面板里下载 ANX 版（iOS 只有 ANX 版，通过 TestFlight 分发）。
+          所有平台的最新版下载链接汇总在 [下载页](https://anixops.github.io/anixops-net/)。
+
+          - Linux 版需要 WebKitGTK 4.1。
+          - Windows 安装包未做代码签名，首次运行时 SmartScreen 可能提示，选「仍要运行」。
+          - 校验：\`sha256sum -c SHA256SUMS\`；来源证明：\`gh attestation verify <文件> --repo ${GH_REPO}\`。
+
+          <sub>内核 [networkcore_anixops@${kernel_rev:0:7}](https://github.com/AnixOps/networkcore_anixops/commit/${kernel_rev}) · [CI](${CI_RUN_URL})</sub>
           EOF
           prerelease_args=()
           if [ "${RELEASE_KIND}" = "prerelease" ]; then
@@ -1170,3 +1304,5 @@ jobs:
             --verify-tag \
             "${prerelease_args[@]}"
           echo "Published $(gh release view "${VERSION}" --json url -q '.url')"
+          # A release created with GITHUB_TOKEN triggers no workflow, so refresh the download page explicitly.
+          gh workflow run download-page.yml --ref main || echo "::warning::Could not refresh the download page; run download-page.yml by hand."

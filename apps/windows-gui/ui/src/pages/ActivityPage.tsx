@@ -1,10 +1,10 @@
-import { ArrowDown, ArrowUp, ClipboardList, ListTree, Search, X } from "lucide-react";
+import { ArrowDown, ArrowUp, BadgeCheck, CircleDot, ClipboardList, ListTree, RefreshCw, Search, TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 import { ConnectionSnapshot, desktop, RuntimeSnapshot } from "../bridge";
 import { connectionDetail, connectionName, formatRate, matchesConnection } from "../activity-format";
 import { listPage, liveEngine, usePolling } from "../live";
 import { formatBytes } from "../subscription-format";
-import { Card, Detail, EmptyState, IconButton, Run, Segmented } from "../ui";
+import { Card, ConfirmButton, EmptyState, IconButton, Row, Run, Segmented } from "../ui";
 import { t } from "../i18n";
 
 export function ActivityPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
@@ -15,19 +15,14 @@ export function ActivityPage({ snapshot, busy, run }: { snapshot: RuntimeSnapsho
   return (
     <div className="page-stack">
       <Card title={t("当前会话")} description={t("只有独立核实过的运行状态才会显示为已连接。")}>
-        <dl className="details">
-          <Detail term={t("运行状态")} value={snapshot?.connectionLabel ?? t("读取中")} />
-          <Detail term={t("最近错误")} value={snapshot?.lastError ?? t("无")} />
-          <Detail term={t("配置校验")} value={snapshot?.configurationError ?? t("通过")} />
-          <Detail term={t("订阅自动更新")} value={snapshot?.subscriptionError ?? refresh} />
-        </dl>
+        <Row icon={CircleDot} color={snapshot?.connection === "Connected" ? "green" : "gray"} label={t("运行状态")} value={snapshot?.connectionLabel ?? t("读取中")} />
+        <Row icon={TriangleAlert} color={snapshot?.lastError ? "red" : "gray"} label={t("最近错误")} value={snapshot?.lastError ?? t("无")} />
+        <Row icon={BadgeCheck} color={snapshot?.configurationError ? "red" : "gray"} label={t("配置校验")} value={snapshot?.configurationError ?? t("通过")} />
+        <Row icon={RefreshCw} color={snapshot?.subscriptionError ? "red" : "gray"} label={t("订阅自动更新")} value={snapshot?.subscriptionError ?? refresh} />
+        <Row icon={ClipboardList} color="indigo" label={t("诊断报告")} hint={t("从受管的运行状态和日志生成一份有大小限制的报告，不包含节点密码。")}>
+          <button className="secondary compact" disabled={Boolean(busy)} onClick={() => void run("diagnostics", desktop.diagnostics)}>{t("生成诊断报告")}</button>
+        </Row>
       </Card>
-
-      <Card
-        title={t("诊断报告")}
-        description={t("从受管的运行状态和日志生成一份有大小限制的报告，不包含节点密码。")}
-        actions={<button className="primary" disabled={Boolean(busy)} onClick={() => void run("diagnostics", desktop.diagnostics)}><ClipboardList size={16} />{t("生成诊断报告")}</button>}
-      />
 
       <Connections snapshot={snapshot} />
     </div>
@@ -65,10 +60,15 @@ function Connections({ snapshot }: { snapshot: RuntimeSnapshot | null }) {
       actions={<>
         <span className="rate"><ArrowUp size={14} />{formatRate(traffic.upload_rate)}</span>
         <span className="rate"><ArrowDown size={14} />{formatRate(traffic.download_rate)}</span>
-        <button className="secondary" disabled={list.active.length === 0} onClick={() => close(desktop.closeAllConnections)}>{t("全部断开")}</button>
+        <ConfirmButton
+          label={t("全部断开")}
+          confirm={t("确认断开 {count} 条连接", { count: list.active.length })}
+          disabled={list.active.length === 0}
+          onConfirm={() => close(desktop.closeAllConnections)}
+        />
       </>}
     >
-      <div className="toolbar">
+      <div className="row toolbar">
         <Segmented
           label={t("连接列表")}
           options={[{ value: "active", label: t("活跃 {count}", { count: list.active.length }) }, { value: "closed", label: t("已关闭 {count}", { count: list.closed.length }) }]}
@@ -76,12 +76,12 @@ function Connections({ snapshot }: { snapshot: RuntimeSnapshot | null }) {
           onChange={(next) => { setShown(next); setLimit(listPage); }}
         />
         <label className="search">
-          <Search size={15} aria-hidden="true" />
+          <Search size={14} aria-hidden="true" />
           <input aria-label={t("筛选连接")} placeholder={t("筛选主机、规则、策略或程序")} value={query} onChange={(event) => { setQuery(event.target.value); setLimit(listPage); }} />
         </label>
         <span className="count">{connections.length}</span>
       </div>
-      {failure && <p className="muted">{failure}</p>}
+      {failure && <p className="muted danger-text">{failure}</p>}
       {connections.length === 0
         ? <p className="muted">{query ? t("没有匹配的连接。") : shown === "active" ? t("现在没有活跃连接。") : t("还没有关闭的连接。")}</p>
         : <>
@@ -91,7 +91,7 @@ function Connections({ snapshot }: { snapshot: RuntimeSnapshot | null }) {
             ))}
           </ul>
           {connections.length > limit && (
-            <button className="secondary" onClick={() => setLimit((current) => current + listPage)}>
+            <button className="link-button more" onClick={() => setLimit((current) => current + listPage)}>
               {t("再显示 {count} 条", { count: Math.min(listPage, connections.length - limit) })}
             </button>
           )}

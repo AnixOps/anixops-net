@@ -76,7 +76,7 @@ final class VlessNodeLinkTests: XCTestCase {
                 "server_name": "www.example.com",
                 "public_key": publicKey,
                 "short_id": "6ba85179e30d4fc2",
-                "fingerprint": "chrome",
+                "fingerprint": "auto",
             ] as NSDictionary
         )
 

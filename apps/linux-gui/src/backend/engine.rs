@@ -9,12 +9,22 @@ use std::time::Duration;
 
 use config_core::routing_import::import_subscription_routing;
 use config_core::CoreSubscriptionService;
-use control_domain::{NodeDescriptor, Protocol, RawSubscription, SubscriptionService};
+use control_domain::{
+    NodeDescriptor, Protocol, RawSubscription, SubscriptionService, NODE_METADATA_PATH,
+    NODE_PATH_TRUNK,
+};
 use engine_embedded::config::RuntimeConfig;
 use engine_embedded::delay::measure_delay;
+#[cfg(not(target_os = "android"))]
 use engine_embedded::local_proxy::LocalProxy;
 use engine_embedded::nodes::{outbound_for_node, routing_envelope, single_node_envelope};
+#[cfg(not(target_os = "android"))]
 use inbound_mixed::MixedSettings;
+
+#[cfg(target_os = "android")]
+use super::tun::{self, TunEngine};
+#[cfg(target_os = "android")]
+pub use super::tun::{attach as attach_tunnel, attached as tunnel_attached};
 use serde_json::{json, Value};
 
 const PROFILE_ID: &str = "linux-gui";
@@ -64,10 +74,51 @@ pub fn choose_node<'a>(
                 .iter()
                 .find(|node| node.id == id && is_supported(node))
         })
+        .or_else(|| {
+            nodes
+                .iter()
+                .find(|node| is_trunk(node) && is_supported(node))
+        })
         .or_else(|| nodes.iter().find(|node| is_supported(node)))
 }
 
+/// Whether the subscription marks the node as a domestic ingress on a shared trunk (`#anixops:path=trunk`).
+/// Such a node is the default pick and wins the fastest-node search whenever one answers (anx
+/// FUTURE-IMPROVEMENTS F-51); direct nodes stay available to pick by hand.
+pub fn is_trunk(node: &NodeDescriptor) -> bool {
+    node.metadata
+        .iter()
+        .any(|entry| entry.key == NODE_METADATA_PATH && entry.value.trim() == NODE_PATH_TRUNK)
+}
+
+/// This device's ANX license directory (`anx_license`), beside the saved state.
+pub fn license_store() -> Option<anx_license::LicenseStore> {
+    super::state::Store::default_dir()
+        .map(|dir| anx_license::LicenseStore::new(dir.join("anx-license")))
+}
+
+/// Hands this device's key and license file to the ANX outbounds the engine builds, once a subscription
+/// offers ANX licensing (`anx_license`); until then ANX outbounds stay exactly as before.
+pub fn sync_anx_license() {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs());
+    let license = license_store().and_then(|store| {
+        if store.state(now) == anx_license::LicenseState::NotOffered {
+            return None;
+        }
+        let device = store.device().ok()?;
+        Some(node_import::AnxLicense {
+            device_key: device.private_key_hex(),
+            device_alg: device.alg().to_string(),
+            license_cert_path: store.license_path().to_string_lossy().into_owned(),
+        })
+    });
+    node_import::set_anx_license(license);
+}
+
 pub fn envelope(nodes: &[NodeDescriptor], node_id: &str) -> Result<String, String> {
+    sync_anx_license();
     single_node_envelope(PROFILE_ID, nodes, Some(node_id))
         .map(|(envelope, _)| envelope)
         .map_err(str::to_string)
@@ -77,6 +128,7 @@ pub fn envelope(nodes: &[NodeDescriptor], node_id: &str) -> Result<String, Strin
 /// every node can run on the engine and the engine accepts the result. Otherwise one node runs at a time.
 pub fn subscription_routing(content: &str, nodes: &[NodeDescriptor]) -> Option<String> {
     let spec = import_subscription_routing(content, nodes).spec?;
+    sync_anx_license();
     routing_envelope(PROFILE_ID, nodes, &spec)
         .ok()
         .filter(|envelope| RuntimeConfig::from_json(envelope.as_bytes()).is_ok())
@@ -183,57 +235,127 @@ pub fn activity_request(request: &serde_json::Value) -> Result<Vec<u8>, String> 
     serde_json::to_vec(request).map_err(|error| error.to_string())
 }
 
-/// The running local proxy, if any.
+/// The running engine, if any: a local proxy on the desktop, the VPN's TUN interface on Android.
 #[derive(Default)]
 pub struct Engine {
+    #[cfg(not(target_os = "android"))]
     proxy: Option<LocalProxy>,
+    #[cfg(target_os = "android")]
+    tunnel: Option<TunEngine>,
     node_id: Option<String>,
 }
 
 impl Engine {
+    /// Starts (or restarts) the engine. The desktop listens on `port`; Android runs on the kept VPN descriptor
+    /// and returns the interface address.
     pub fn start(
         &mut self,
         envelope: &str,
         node_id: &str,
         port: u16,
     ) -> Result<SocketAddr, String> {
-        self.stop();
-        let listen = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
-        let proxy = LocalProxy::start(envelope.as_bytes(), listen, MixedSettings::default())
-            .map_err(|error| error.message.to_string())?;
-        let address = proxy.local_addr();
-        self.proxy = Some(proxy);
+        self.stop_runtime();
+        #[cfg(not(target_os = "android"))]
+        let address = {
+            let listen = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
+            let proxy = LocalProxy::start(envelope.as_bytes(), listen, MixedSettings::default())
+                .map_err(|error| error.message.to_string())?;
+            let address = proxy.local_addr();
+            self.proxy = Some(proxy);
+            address
+        };
+        #[cfg(target_os = "android")]
+        let address = {
+            let _ = port;
+            self.tunnel = Some(TunEngine::start(envelope)?);
+            SocketAddr::from((Ipv4Addr::new(198, 18, 0, 1), 0))
+        };
         self.node_id = Some(node_id.to_string());
         Ok(address)
     }
 
-    pub fn stop(&mut self) {
+    fn stop_runtime(&mut self) {
+        #[cfg(not(target_os = "android"))]
         if let Some(mut proxy) = self.proxy.take() {
             proxy.stop();
         }
+        #[cfg(target_os = "android")]
+        if let Some(mut tunnel) = self.tunnel.take() {
+            tunnel.stop();
+        }
+    }
+
+    /// Stops the engine; on Android this also closes the VPN interface.
+    pub fn stop(&mut self) {
+        self.stop_runtime();
+        #[cfg(target_os = "android")]
+        tun::detach();
         self.node_id = None;
     }
 
+    #[cfg(not(target_os = "android"))]
     pub fn is_running(&self) -> bool {
         self.proxy.as_ref().is_some_and(LocalProxy::is_running)
+    }
+
+    #[cfg(target_os = "android")]
+    pub fn is_running(&self) -> bool {
+        self.tunnel.as_ref().is_some_and(TunEngine::is_running)
+    }
+
+    /// One kernel control request to the running engine.
+    #[cfg(not(target_os = "android"))]
+    fn control_bytes(&self, request: &[u8]) -> Result<Vec<u8>, String> {
+        self.proxy
+            .as_ref()
+            .filter(|proxy| proxy.is_running())
+            .ok_or("the engine is not running")?
+            .control_json(request)
+            .map_err(|error| error.message.to_string())
+    }
+
+    #[cfg(target_os = "android")]
+    fn control_bytes(&self, request: &[u8]) -> Result<Vec<u8>, String> {
+        self.tunnel
+            .as_ref()
+            .filter(|tunnel| tunnel.is_running())
+            .ok_or("the engine is not running")?
+            .control_json(request)
     }
 
     /// Answers one activity page request (see [`activity_request`]) while the engine runs.
     pub fn control(&self, request: &serde_json::Value) -> Result<serde_json::Value, String> {
         let request = activity_request(request)?;
-        let proxy = self
-            .proxy
-            .as_ref()
-            .filter(|proxy| proxy.is_running())
-            .ok_or("the engine is not running")?;
-        let answer = proxy
-            .control_json(&request)
-            .map_err(|error| error.message.to_string())?;
+        let answer = self.control_bytes(&request)?;
         serde_json::from_slice(&answer).map_err(|error| error.to_string())
     }
 
+    /// The engine's Prometheus text (the kernel's `metrics` command) while it runs.
+    pub fn metrics(&self) -> Option<String> {
+        let answer = self.control_bytes(br#"{"cmd":"metrics"}"#).ok()?;
+        let answer: serde_json::Value = serde_json::from_slice(&answer).ok()?;
+        answer
+            .get("text")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+    }
+
+    /// Sends the engine a `reset_network` request (see `network_watch`) while it runs; not an activity page
+    /// command, so it skips [`activity_request`].
+    pub fn reset_network(&self, reset: network_watch::Reset) -> Result<(), String> {
+        self.control_bytes(&reset.request()).map(|_| ())
+    }
+
+    /// The local proxy's address.
+    #[cfg(not(target_os = "android"))]
     pub fn address(&self) -> Option<SocketAddr> {
         self.proxy.as_ref().map(LocalProxy::local_addr)
+    }
+
+    /// Android has no local proxy: traffic comes in through the VPN.
+    #[cfg(target_os = "android")]
+    pub fn address(&self) -> Option<SocketAddr> {
+        None
     }
 
     pub fn node_id(&self) -> Option<&str> {
@@ -285,10 +407,12 @@ pub fn node_delays(
     results
 }
 
-/// Tests every supported node and returns the fastest one with its delay.
+/// Tests every supported node and returns the fastest one with its delay: the fastest trunk node when one
+/// answers, otherwise the fastest node.
 pub fn fastest_node(nodes: &[NodeDescriptor], url: &str) -> Option<(String, Duration)> {
     let candidates: Vec<&NodeDescriptor> = nodes.iter().filter(|node| is_supported(node)).collect();
     let mut best: Option<(String, Duration)> = None;
+    let mut best_trunk: Option<(String, Duration)> = None;
     for batch in candidates.chunks(DELAY_BATCH) {
         let (sender, receiver) = mpsc::channel();
         thread::scope(|scope| {
@@ -303,13 +427,21 @@ pub fn fastest_node(nodes: &[NodeDescriptor], url: &str) -> Option<(String, Dura
         drop(sender);
         for (id, delay) in receiver {
             if let Some(delay) = delay {
+                let trunk = nodes.iter().any(|node| node.id == id && is_trunk(node));
+                if trunk
+                    && best_trunk
+                        .as_ref()
+                        .is_none_or(|(_, current)| delay < *current)
+                {
+                    best_trunk = Some((id.clone(), delay));
+                }
                 if best.as_ref().is_none_or(|(_, current)| delay < *current) {
                     best = Some((id, delay));
                 }
             }
         }
     }
-    best
+    best_trunk.or(best)
 }
 
 #[cfg(test)]
@@ -324,6 +456,26 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, "gone");
         assert!(results[0].1.is_err());
+    }
+
+    #[test]
+    fn picks_the_marked_trunk_node_by_default() {
+        let text = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@82.47.34.99:11111#JP%20direct\n\
+            #anixops:path=trunk\n\
+            ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@203.0.113.9:11111#SH%20CN2";
+        let nodes = parse_nodes(text).unwrap();
+        let trunk: Vec<_> = nodes.iter().map(is_trunk).collect();
+        assert_eq!(trunk, [false, true]);
+        assert_eq!(choose_node(&nodes, None).unwrap().id, nodes[1].id);
+        assert_eq!(choose_node(&nodes, Some("gone")).unwrap().id, nodes[1].id);
+        // A node the user picked stays picked.
+        assert_eq!(
+            choose_node(&nodes, Some(&nodes[0].id)).unwrap().id,
+            nodes[0].id
+        );
+        // Without a mark the first node stays the default.
+        let plain = parse_nodes(LINK).unwrap();
+        assert_eq!(choose_node(&plain, None).unwrap().id, plain[0].id);
     }
 
     #[test]

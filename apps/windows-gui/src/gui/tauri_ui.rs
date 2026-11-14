@@ -1,14 +1,17 @@
 use super::actions::connection;
 use super::linked_sources::{self, CachedNode, OtherSource};
+use super::mitm_plugins::{self, PluginSummary};
 use super::runtime_status::{read_runtime_status, ManagedCoreStatus, WindowsRuntimeStatus};
 use super::startup::{
-    load_desktop_state, owns_current_proxy, save_desktop_state, DesktopProfileNode,
-    DesktopRoutingMode, DesktopRuntimeMode, DesktopState, DesktopSubscriptionSource,
+    desktop_state_path, load_desktop_state, owns_current_proxy, save_desktop_state,
+    DesktopProfileNode, DesktopRoutingMode, DesktopRuntimeMode, DesktopState,
+    DesktopSubscriptionSource,
 };
 use super::{
-    append_managed_log, load_validated_managed_configuration, managed_config_or_default,
-    profile_node_options, write_diagnostic_report_at,
+    append_managed_log, is_trunk_node, load_validated_managed_configuration,
+    managed_config_or_default, profile_node_options, write_diagnostic_report_at,
 };
+use client_health::{startup as cold_start, Health};
 use config_core::routing_import::import_subscription_routing;
 use config_core::CoreSubscriptionService;
 use control_domain::{NodeDescriptor, SubscriptionService, SubscriptionSource};
@@ -44,6 +47,7 @@ use std::{
 };
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
+use tauri::webview::PageLoadEvent;
 use tauri::{Manager, Runtime, State, WindowEvent};
 
 const APP_LOG_SCOPE: &str = "tauri-gui";
@@ -76,6 +80,9 @@ struct DesktopAppState {
     lifecycle: Arc<RuntimeLifecycle>,
     direct_core: Arc<Mutex<connection::DesktopCore>>,
 }
+
+/// Crash reports, the metrics endpoint, the install check and the cold start.
+struct HealthState(Arc<Health>);
 
 struct DesktopTray {
     _icon: TrayIcon,
@@ -127,11 +134,16 @@ struct RuntimeSnapshot {
     auto_subscription_refresh: bool,
     auto_select_fastest_node: bool,
     bilibili_web_ad_block_enabled: bool,
+    tun_mode_enabled: bool,
     script_runtime_configured: bool,
+    /// HTTPS decryption is on for the managed profile.
+    https_decryption_enabled: bool,
     dark_theme: bool,
     runtime_mode: String,
     routing_mode: String,
     dns_preset: &'static str,
+    /// UDP to port 443 is refused so apps fall back from QUIC to TCP.
+    block_quic: bool,
     /// The imported profile runs on the embedded engine.
     embedded_engine: bool,
 }
@@ -215,6 +227,32 @@ struct PreferenceValues {
 pub(super) fn run(debug: bool) -> Result<(), String> {
     let desktop = load_desktop_state()?;
     let _ = append_managed_log(APP_LOG_SCOPE, &format!("startup debug={debug}"));
+    let health_dir = desktop_state_path()
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(std::env::temp_dir);
+    let health = Health::start(
+        &health_dir,
+        "windows",
+        env!("CARGO_PKG_VERSION"),
+        std::env::current_exe().unwrap_or_default(),
+    );
+    let direct_core = Arc::new(Mutex::new(connection::DesktopCore::default()));
+    // The endpoint skips the engine while another command holds the core, rather than waiting on it.
+    let probe = Arc::downgrade(&direct_core);
+    health.serve_metrics(Arc::new(move || {
+        let text = probe.upgrade().and_then(|core| {
+            let answer = core
+                .try_lock()
+                .ok()?
+                .control(br#"{"cmd":"metrics"}"#)
+                .ok()?;
+            let answer: Value = serde_json::from_slice(&answer).ok()?;
+            client_health::metrics::engine_text(&answer)
+        });
+        let connected = text.is_some();
+        (text, connected)
+    }));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -223,8 +261,9 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
         .manage(DesktopAppState {
             desktop: Arc::new(Mutex::new(desktop)),
             lifecycle: Arc::new(RuntimeLifecycle::default()),
-            direct_core: Arc::new(Mutex::new(connection::DesktopCore::default())),
+            direct_core,
         })
+        .manage(HealthState(health))
         .setup(|app| {
             install_tray(app)?;
             if let Some(window) = app.get_webview_window("main") {
@@ -233,13 +272,14 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             show_main_window(app);
             let state = app.state::<DesktopAppState>().inner().clone();
             start_automatic_connection(state.clone());
+            start_network_watch(state.clone());
             start_core_recovery_monitor(state);
             start_subscription_refresh_monitor(app.state::<DesktopAppState>().inner().clone());
             start_fastest_node_monitor(app.state::<DesktopAppState>().inner().clone());
             Ok(())
         })
         .on_page_load(|webview, payload| {
-            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+            if payload.event() == PageLoadEvent::Finished {
                 if let Some(script) = super::backdrop::page_script() {
                     let _ = webview.eval(script);
                 }
@@ -248,6 +288,14 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
                 APP_LOG_SCOPE,
                 &format!("webview page load {:?}: {}", payload.event(), payload.url()),
             );
+            if payload.event() == PageLoadEvent::Finished {
+                let ready = cold_start::first_page_loaded();
+                // CI's cold start job: record the time and quit.
+                if let Some(path) = cold_start::probe_path() {
+                    let _ = cold_start::write_probe(&path, ready);
+                    webview.app_handle().exit(0);
+                }
+            }
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -269,10 +317,13 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             runtime_control,
             test_node_delay,
             test_node_delays,
+            network_probe,
             node_share_link,
             select_fastest_node,
             save_preferences,
             create_diagnostics,
+            health_status,
+            set_crash_reports,
             import_subscription,
             update_subscription,
             select_subscription,
@@ -287,11 +338,17 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             restore_network_settings,
             set_routing_mode,
             set_dns_preset,
+            set_block_quic,
             refresh_routing_rules,
             configure_script_runtime,
             clear_script_runtime,
             enable_https_mitm,
             disable_https_mitm,
+            list_mitm_plugins,
+            import_mitm_plugin,
+            set_mitm_plugin_enabled,
+            remove_mitm_plugin,
+            set_tun_mode,
             install_certificate,
             remove_certificate,
             install_driver,
@@ -380,6 +437,37 @@ fn start_automatic_connection(state: DesktopAppState) {
                     &format!("automatic connection failed: {error}"),
                 );
             }
+        }
+    });
+}
+
+/// Rebuilds the connections of the engine this window runs when the network
+/// changes or the computer wakes (`network_watch`). The service-mode core and
+/// the TUN core are in another process or keep their own sockets; they are
+/// left alone.
+fn start_network_watch(state: DesktopAppState) {
+    std::thread::spawn(move || {
+        let mut watch = network_watch::NetworkWatch::new();
+        loop {
+            let path = network_watch::current_path();
+            if let Some(reset) = watch.observe(std::time::SystemTime::now(), path) {
+                let answer = state
+                    .direct_core
+                    .lock()
+                    .map_err(|_| "desktop core lock failed".to_string())
+                    .and_then(|core| core.control(&reset.request()));
+                if let Ok(answer) = answer {
+                    let _ = append_managed_log(
+                        APP_LOG_SCOPE,
+                        &format!(
+                            "{}: engine reset {}",
+                            reset.reason.as_str(),
+                            String::from_utf8_lossy(&answer)
+                        ),
+                    );
+                }
+            }
+            std::thread::sleep(network_watch::POLL);
         }
     });
 }
@@ -698,7 +786,12 @@ fn relink_active_profile(
     let rendered = profile.to_string();
     write_managed_text_atomic(&embedded_profile_path(), &rendered)
         .map_err(|error| error.to_string())?;
-    let envelope = embedded_envelope_or_profile(rendered, desktop.routing_mode, desktop.dns_preset);
+    let envelope = embedded_envelope_or_profile(
+        rendered,
+        desktop.routing_mode,
+        desktop.dns_preset,
+        desktop.block_quic,
+    );
     write_managed_text_atomic(&embedded.envelope_path, &envelope)
         .map_err(|error| error.to_string())?;
     desktop.profile_node_id = routed_selected_node(&profile);
@@ -742,6 +835,7 @@ fn list_native_groups_blocking(state: DesktopAppState) -> Result<Vec<NativeGroup
             label: node.label.clone(),
             protocol: node.protocol.clone(),
             outbound_tag: other.outbound_id(&node.id),
+            trunk: false,
         }));
     }
     Ok(embedded_groups(&profile, &nodes))
@@ -886,7 +980,20 @@ fn change_subscription_source(
 #[tauri::command]
 async fn connect(state: State<'_, DesktopAppState>) -> Result<OperationResult, String> {
     let state = state.inner().clone();
-    run_blocking(move || connect_blocking(state)).await
+    let result = run_blocking(move || connect_blocking(state)).await;
+    log_operation("connect", &result);
+    result
+}
+
+/// Desktop mode runs the core inside this process, so the service state file
+/// says nothing about it: record each connect / disconnect outcome in the app
+/// log that the diagnostics report includes.
+fn log_operation(operation: &str, result: &Result<OperationResult, String>) {
+    let line = match result {
+        Ok(done) => format!("{operation} ok: {}", done.message),
+        Err(error) => format!("{operation} failed: {error}"),
+    };
+    let _ = append_managed_log(APP_LOG_SCOPE, &line);
 }
 
 fn connect_blocking(state: DesktopAppState) -> Result<OperationResult, String> {
@@ -931,7 +1038,9 @@ fn connect_blocking(state: DesktopAppState) -> Result<OperationResult, String> {
 #[tauri::command]
 async fn disconnect(state: State<'_, DesktopAppState>) -> Result<OperationResult, String> {
     let state = state.inner().clone();
-    run_blocking(move || disconnect_blocking(state)).await
+    let result = run_blocking(move || disconnect_blocking(state)).await;
+    log_operation("disconnect", &result);
+    result
 }
 
 fn disconnect_blocking(state: DesktopAppState) -> Result<OperationResult, String> {
@@ -1116,6 +1225,7 @@ fn switch_other_source_node(
                 &rendered,
                 desktop.routing_mode,
                 desktop.dns_preset,
+                desktop.block_quic,
                 false,
             )?;
             write_managed_text_atomic(&embedded_profile_path(), &rendered)
@@ -1268,6 +1378,74 @@ struct NodeDelay {
     node_id: String,
     delay_ms: Option<u64>,
     error: Option<String>,
+}
+
+/// What the overview shows about the path: the address websites see through the proxy, and how long a mainland
+/// site takes to answer without it.
+#[derive(Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NetworkProbe {
+    exit_ip: Option<String>,
+    /// The exit's two-letter country code.
+    exit_location: Option<String>,
+    direct_ms: Option<u64>,
+}
+
+const PROBE_TIMEOUT: Duration = Duration::from_secs(6);
+const EXIT_TRACE_URL: &str = "https://www.cloudflare.com/cdn-cgi/trace";
+const DIRECT_PROBE_URL: &str = "https://www.baidu.com/";
+
+/// `ip` and `loc` from Cloudflare's `key=value` trace lines.
+fn parse_trace(body: &str) -> (Option<String>, Option<String>) {
+    let field = |name: &str| {
+        body.lines()
+            .find_map(|line| line.strip_prefix(name)?.strip_prefix('='))
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    };
+    (field("ip"), field("loc"))
+}
+
+/// Asks through the local proxy on `proxy_port` (when connected) which address the exit has, and times one
+/// request to a mainland site that goes around the proxy. A probe that fails leaves its fields empty.
+fn probe_network(proxy_port: Option<u16>) -> NetworkProbe {
+    let (exit_ip, exit_location) = proxy_port
+        .and_then(|port| {
+            let proxy = reqwest::Proxy::all(format!("http://127.0.0.1:{port}")).ok()?;
+            let body = reqwest::blocking::Client::builder()
+                .timeout(PROBE_TIMEOUT)
+                .proxy(proxy)
+                .build()
+                .ok()?
+                .get(EXIT_TRACE_URL)
+                .send()
+                .ok()?
+                .text()
+                .ok()?;
+            Some(parse_trace(&body))
+        })
+        .unwrap_or((None, None));
+    let direct_ms = reqwest::blocking::Client::builder()
+        .timeout(PROBE_TIMEOUT)
+        .no_proxy()
+        .build()
+        .ok()
+        .and_then(|client| {
+            let started = std::time::Instant::now();
+            client.head(DIRECT_PROBE_URL).send().ok()?;
+            Some(u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX))
+        });
+    NetworkProbe {
+        exit_ip,
+        exit_location,
+        direct_ms,
+    }
+}
+
+/// The exit address and the direct delay for the overview; `connected` says whether the local proxy is up.
+#[tauri::command]
+async fn network_probe(connected: bool) -> Result<NetworkProbe, String> {
+    run_blocking(move || Ok(probe_network(connected.then_some(EMBEDDED_LISTEN_PORT)))).await
 }
 
 /// Tests the listed nodes, up to 16 at a time, and reports each one.
@@ -1528,8 +1706,13 @@ fn select_embedded_group_member(
     let mut profile = read_embedded_profile()?;
     set_routed_group_default(&mut profile, group_id, member)?;
     let rendered = profile.to_string();
-    let envelope =
-        embedded_envelope_for_mode(&rendered, desktop.routing_mode, desktop.dns_preset, false)?;
+    let envelope = embedded_envelope_for_mode(
+        &rendered,
+        desktop.routing_mode,
+        desktop.dns_preset,
+        desktop.block_quic,
+        false,
+    )?;
     write_managed_text_atomic(&embedded_profile_path(), &rendered)
         .map_err(|error| error.to_string())?;
     write_managed_text_atomic(&embedded.envelope_path, &envelope)
@@ -1612,7 +1795,12 @@ fn switch_embedded_node(
     };
     write_managed_text_atomic(&embedded_profile_path(), &profile)
         .map_err(|error| error.to_string())?;
-    let envelope = embedded_envelope_or_profile(profile, desktop.routing_mode, desktop.dns_preset);
+    let envelope = embedded_envelope_or_profile(
+        profile,
+        desktop.routing_mode,
+        desktop.dns_preset,
+        desktop.block_quic,
+    );
     write_managed_text_atomic(&embedded.envelope_path, &envelope)
         .map_err(|error| error.to_string())?;
     {
@@ -1649,7 +1837,11 @@ fn select_fastest_embedded_node(
         })
         .cloned()
         .collect();
+    // Trunk nodes win over direct ones whenever one of them answers (anx
+    // FUTURE-IMPROVEMENTS F-51); direct nodes are only picked when no trunk
+    // node does.
     let mut fastest: Option<(&DesktopProfileNode, Duration)> = None;
+    let mut fastest_trunk: Option<(&DesktopProfileNode, Duration)> = None;
     for chunk in candidates.chunks(EMBEDDED_DELAY_PARALLELISM) {
         let delays: Vec<_> = std::thread::scope(|scope| {
             let handles: Vec<_> = chunk
@@ -1666,10 +1858,14 @@ fn select_fastest_embedded_node(
             if fastest.is_none_or(|(_, best)| delay < best) {
                 fastest = Some((node, delay));
             }
+            if node.trunk && fastest_trunk.is_none_or(|(_, best)| delay < best) {
+                fastest_trunk = Some((node, delay));
+            }
         }
     }
-    let (node, delay) =
-        fastest.ok_or_else(|| "No imported node returned a successful delay test.".to_string())?;
+    let (node, delay) = fastest_trunk
+        .or(fastest)
+        .ok_or_else(|| "No imported node returned a successful delay test.".to_string())?;
     let delay_millis = delay.as_millis();
     if desktop.profile_node_id.as_deref() == Some(node.id.as_str()) {
         return Ok(OperationResult {
@@ -1755,12 +1951,37 @@ fn save_preferences_blocking(
 }
 
 #[tauri::command]
-async fn create_diagnostics() -> Result<OperationResult, String> {
-    run_blocking(create_diagnostics_blocking).await
+async fn create_diagnostics(health: State<'_, HealthState>) -> Result<OperationResult, String> {
+    let section = health.0.diagnostics();
+    run_blocking(move || create_diagnostics_blocking(&section)).await
 }
 
-fn create_diagnostics_blocking() -> Result<OperationResult, String> {
-    let path = write_diagnostic_report_at(&windows_managed_config_path())?;
+/// Crash reports, the metrics endpoint, the install check and the cold start, for the settings page.
+#[tauri::command]
+fn health_status(health: State<'_, HealthState>) -> Value {
+    health.0.status()
+}
+
+#[tauri::command]
+fn set_crash_reports(
+    health: State<'_, HealthState>,
+    enabled: bool,
+) -> Result<OperationResult, String> {
+    health
+        .0
+        .set_crash_reports(enabled)
+        .map_err(|error| format!("The setting could not be saved: {error}"))?;
+    Ok(OperationResult {
+        message: if enabled {
+            "Crash reports on.".to_string()
+        } else {
+            "Crash reports off; kept reports deleted.".to_string()
+        },
+    })
+}
+
+fn create_diagnostics_blocking(health: &str) -> Result<OperationResult, String> {
+    let path = write_diagnostic_report_at(&windows_managed_config_path(), health)?;
     Ok(OperationResult {
         message: format!("Diagnostics written to {}", path.display()),
     })
@@ -2227,6 +2448,7 @@ fn import_embedded_subscription(
     source_url: Option<String>,
     desktop: &mut DesktopState,
 ) -> Result<(), String> {
+    sync_anx_license();
     let service = CoreSubscriptionService::new();
     let source = SubscriptionSource {
         id: EMBEDDED_PROFILE_ID.to_string(),
@@ -2273,10 +2495,20 @@ fn import_embedded_subscription(
             (profile.to_string(), selected, node_outbounds)
         }
         None => {
+            // The node picked before stays; otherwise the first trunk node
+            // (anx FUTURE-IMPROVEMENTS F-51), and without one the engine's
+            // first runnable node.
             let selected = desktop
                 .profile_node_id
                 .as_deref()
-                .filter(|id| catalog.nodes.iter().any(|node| node.id == *id));
+                .filter(|id| catalog.nodes.iter().any(|node| node.id == *id))
+                .or_else(|| {
+                    catalog
+                        .nodes
+                        .iter()
+                        .find(|node| is_trunk_node(node) && outbound_for_node(node).is_ok())
+                        .map(|node| node.id.as_str())
+                });
             let (envelope, node) =
                 single_node_envelope(EMBEDDED_PROFILE_ID, &catalog.nodes, selected).map_err(
                     |reason| format!("The embedded engine cannot run this profile: {reason}"),
@@ -2312,7 +2544,12 @@ fn import_embedded_subscription(
         // A profile with its own rules runs them by default.
         desktop.routing_mode = DesktopRoutingMode::Rule;
     }
-    let envelope = embedded_envelope_or_profile(envelope, desktop.routing_mode, desktop.dns_preset);
+    let envelope = embedded_envelope_or_profile(
+        envelope,
+        desktop.routing_mode,
+        desktop.dns_preset,
+        desktop.block_quic,
+    );
     let envelope_path = embedded_directory().join("envelope.json");
     write_managed_text_atomic(&envelope_path, &envelope).map_err(|error| error.to_string())?;
     let mut managed = managed_config_or_default()?;
@@ -2377,8 +2614,9 @@ fn embedded_envelope_or_profile(
     profile: String,
     mode: DesktopRoutingMode,
     dns: DnsPreset,
+    block_quic: bool,
 ) -> String {
-    match embedded_envelope_for_mode(&profile, mode, dns, false) {
+    match embedded_envelope_for_mode(&profile, mode, dns, block_quic, false) {
         Ok(routed) => routed,
         Err(error) => {
             let _ = append_managed_log(
@@ -2390,14 +2628,16 @@ fn embedded_envelope_or_profile(
     }
 }
 
-/// The envelope for `mode` with the DNS choice in it.
+/// The envelope for `mode` with the DNS choice and QUIC blocking in it.
 fn embedded_envelope_for_mode(
     profile: &str,
     mode: DesktopRoutingMode,
     dns: DnsPreset,
+    block_quic: bool,
     force_refresh: bool,
 ) -> Result<String, String> {
     let envelope = desktop_dns::apply(&mode_envelope(profile, mode, force_refresh)?, dns)?;
+    let envelope = desktop_dns::apply_block_quic(&envelope, block_quic)?;
     if dns != DnsPreset::System {
         RuntimeConfig::from_json(envelope.as_bytes())
             .map_err(|error| format!("the DNS choice was rejected: {}", error.message))?;
@@ -2529,25 +2769,77 @@ type SubscriptionRead = (
     subscription_meta::ResponseMeta,
 );
 
+/// This device's ANX license directory (`anx_license`), beside the desktop state.
+fn anx_license_store() -> anx_license::LicenseStore {
+    anx_license::LicenseStore::new(windows_managed_data_directory().join("anx-license"))
+}
+
+/// Hands this device's key and license file to the ANX outbounds built from now on, once a
+/// subscription offers ANX licensing (`anx_license`); until then ANX outbounds stay as before.
+fn sync_anx_license() {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs());
+    let store = anx_license_store();
+    let license = if store.state(now) == anx_license::LicenseState::NotOffered {
+        None
+    } else {
+        store.device().ok().map(|device| node_import::AnxLicense {
+            device_key: device.private_key_hex(),
+            device_alg: device.alg().to_string(),
+            license_cert_path: store.license_path().to_string_lossy().into_owned(),
+        })
+    };
+    node_import::set_anx_license(license);
+}
+
+fn download_subscription(
+    location: &str,
+    licenses: &anx_license::LicenseStore,
+) -> Result<(String, subscription_meta::ResponseMeta, bool), String> {
+    // The panel picks the subscription format by User-Agent; without one it serves
+    // plain v2ray links and leaves out anx:// nodes.
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .user_agent(SUBSCRIPTION_USER_AGENT)
+        .build()
+        .map_err(|error| error.to_string())?;
+    let mut request = client.get(location);
+    if let Ok(Some(device)) = licenses.request_header(location) {
+        request = request.header(anx_license::HEADER_DEVICE, device);
+    }
+    let response = request
+        .send()
+        .and_then(reqwest::blocking::Response::error_for_status)
+        .map_err(|error| error.to_string())?;
+    let header = |name: &str| {
+        response
+            .headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string)
+    };
+    let meta = subscription_meta::ResponseMeta::from_headers(header);
+    // A license problem never fails the subscription.
+    let offered = licenses.record(location, header).unwrap_or(false);
+    let payload = response.text().map_err(|error| error.to_string())?;
+    Ok((payload, meta, offered))
+}
+
+/// Same token the iOS app sends, so the panel answers in the AnixOps Net format.
+const SUBSCRIPTION_USER_AGENT: &str = concat!("AnixOpsNet/", env!("CARGO_PKG_VERSION"));
+
 fn read_subscription(location: &str) -> Result<SubscriptionRead, String> {
     if is_subscription_url(location) {
-        let client = reqwest::blocking::Client::builder()
-            .timeout(Duration::from_secs(30))
-            .build()
-            .map_err(|error| error.to_string())?;
-        let response = client
-            .get(location)
-            .send()
-            .and_then(reqwest::blocking::Response::error_for_status)
-            .map_err(|error| error.to_string())?;
-        let meta = subscription_meta::ResponseMeta::from_headers(|name| {
-            response
-                .headers()
-                .get(name)
-                .and_then(|value| value.to_str().ok())
-                .map(str::to_string)
-        });
-        let payload = response.text().map_err(|error| error.to_string())?;
+        // A panel that licenses ANX gets this device's key and answers with its license
+        // (`anx_license`); the first time it says so, the request goes once more.
+        let licenses = anx_license_store();
+        let (payload, meta, offered) = download_subscription(location, &licenses)?;
+        if offered {
+            if let Ok((payload, meta, _)) = download_subscription(location, &licenses) {
+                return Ok((payload, None, Some(location.to_string()), meta));
+            }
+        }
         return Ok((payload, None, Some(location.to_string()), meta));
     }
     let path = PathBuf::from(location);
@@ -2689,7 +2981,13 @@ fn set_routing_mode_blocking(
     let profile = fs::read_to_string(embedded_profile_path()).map_err(|error| {
         format!("Import the profile again before applying a routing mode: {error}")
     })?;
-    let envelope = embedded_envelope_for_mode(&profile, mode, desktop.dns_preset, force_refresh)?;
+    let envelope = embedded_envelope_for_mode(
+        &profile,
+        mode,
+        desktop.dns_preset,
+        desktop.block_quic,
+        force_refresh,
+    )?;
     write_managed_text_atomic(&embedded.envelope_path, &envelope)
         .map_err(|error| error.to_string())?;
     desktop.routing_mode = mode;
@@ -2725,7 +3023,13 @@ fn set_dns_preset_blocking(
     if let Some(embedded) = active_embedded_config()? {
         let profile = fs::read_to_string(embedded_profile_path())
             .map_err(|error| format!("Import the profile again before changing DNS: {error}"))?;
-        let envelope = embedded_envelope_for_mode(&profile, desktop.routing_mode, preset, false)?;
+        let envelope = embedded_envelope_for_mode(
+            &profile,
+            desktop.routing_mode,
+            preset,
+            desktop.block_quic,
+            false,
+        )?;
         write_managed_text_atomic(&embedded.envelope_path, &envelope)
             .map_err(|error| error.to_string())?;
     }
@@ -2734,6 +3038,53 @@ fn set_dns_preset_blocking(
     Ok(OperationResult {
         message: "DNS choice saved. Connect to apply it.".to_string(),
     })
+}
+
+#[tauri::command]
+async fn set_block_quic(
+    enabled: bool,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || set_block_quic_blocking(enabled, state)).await
+}
+
+/// Saves QUIC blocking into the envelope and the desktop state. A core this
+/// window runs reconnects on it; the Windows service takes it on its next
+/// start.
+fn set_block_quic_blocking(
+    enabled: bool,
+    state: DesktopAppState,
+) -> Result<OperationResult, String> {
+    {
+        let mut desktop = state
+            .desktop
+            .lock()
+            .map_err(|_| "desktop state lock failed")?;
+        if let Some(embedded) = active_embedded_config()? {
+            let profile = fs::read_to_string(embedded_profile_path()).map_err(|error| {
+                format!("Import the profile again before changing QUIC blocking: {error}")
+            })?;
+            let envelope = embedded_envelope_for_mode(
+                &profile,
+                desktop.routing_mode,
+                desktop.dns_preset,
+                enabled,
+                false,
+            )?;
+            write_managed_text_atomic(&embedded.envelope_path, &envelope)
+                .map_err(|error| error.to_string())?;
+        }
+        desktop.block_quic = enabled;
+        save_desktop_state(&desktop)?;
+    }
+    let message = match reconnect_running_direct_core(&state) {
+        Ok(()) => {
+            "QUIC setting saved. It applies to the running connection, or the next one.".to_string()
+        }
+        Err(error) => format!("QUIC setting saved. Reconnect to apply it: {error}"),
+    };
+    Ok(OperationResult { message })
 }
 
 fn ensure_routing_configuration_stopped(state: &DesktopAppState) -> Result<(), String> {
@@ -2873,6 +3224,74 @@ fn routing_mode_label(mode: DesktopRoutingMode) -> &'static str {
 }
 
 #[tauri::command]
+async fn list_mitm_plugins() -> Result<Vec<PluginSummary>, String> {
+    run_blocking(|| mitm_plugins::list(&mitm_plugins::directory())).await
+}
+
+#[tauri::command]
+async fn import_mitm_plugin(
+    url: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let plugin =
+            mitm_plugins::import(&mitm_plugins::directory(), &url, mitm_plugins::download)?;
+        let applied = apply_mitm_plugins(&state);
+        Ok(OperationResult {
+            message: format!(
+                "Plugin imported: {} ({} scripts). {applied}",
+                plugin.name, plugin.script_count
+            ),
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn set_mitm_plugin_enabled(
+    id: String,
+    enabled: bool,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        mitm_plugins::set_enabled(&mitm_plugins::directory(), &id, enabled)?;
+        Ok(OperationResult {
+            message: apply_mitm_plugins(&state),
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn remove_mitm_plugin(
+    id: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        mitm_plugins::remove(&mitm_plugins::directory(), &id)?;
+        Ok(OperationResult {
+            message: apply_mitm_plugins(&state),
+        })
+    })
+    .await
+}
+
+/// Restarts a running desktop core so a plugin change takes effect, and
+/// says what the user still has to do when it cannot.
+fn apply_mitm_plugins(state: &DesktopAppState) -> String {
+    if !managed_https_decryption_enabled() {
+        return "Turn on HTTPS decryption for plugins to take effect.".to_string();
+    }
+    match reconnect_running_direct_core(state) {
+        Ok(()) => "Plugins are applied to the running connection.".to_string(),
+        Err(error) => format!("Reconnect to apply plugins: {error}"),
+    }
+}
+
+#[tauri::command]
 async fn configure_script_runtime(script_runtime_json: String) -> Result<OperationResult, String> {
     run_blocking(move || configure_script_runtime_blocking(script_runtime_json)).await
 }
@@ -2975,6 +3394,7 @@ fn enable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult,
             .start_service()
             .map_err(|error| error.to_string())?;
     }
+    reconnect_running_direct_core(&state)?;
     Ok(OperationResult {
         message: format!(
             "HTTPS MITM enabled with CA material at {}.",
@@ -2984,11 +3404,91 @@ fn enable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult,
 }
 
 #[tauri::command]
-async fn disable_https_mitm() -> Result<OperationResult, String> {
-    run_blocking(disable_https_mitm_blocking).await
+async fn disable_https_mitm(state: State<'_, DesktopAppState>) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || disable_https_mitm_blocking(state)).await
 }
 
-fn disable_https_mitm_blocking() -> Result<OperationResult, String> {
+#[tauri::command]
+async fn set_tun_mode(
+    enabled: bool,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || set_tun_mode_blocking(enabled, state)).await
+}
+
+/// Saves the TUN mode switch and reconnects a running desktop core, which
+/// creates or removes the Wintun adapter.
+fn set_tun_mode_blocking(enabled: bool, state: DesktopAppState) -> Result<OperationResult, String> {
+    if enabled {
+        let dll = platform_windows::tun::default_wintun_dll_path()
+            .map_err(|error| format!("wintun.dll could not be located: {error}"))?;
+        if !dll.is_file() {
+            return Err(
+                "TUN mode needs wintun.dll next to the client. Reinstall the client.".to_string(),
+            );
+        }
+    }
+    let previous = {
+        let mut desktop = state
+            .desktop
+            .lock()
+            .map_err(|_| "desktop state lock failed")?;
+        let previous = desktop.tun_mode_enabled;
+        desktop.tun_mode_enabled = enabled;
+        save_desktop_state(&desktop)?;
+        previous
+    };
+    if let Err(error) = reconnect_running_direct_core(&state) {
+        if let Ok(mut desktop) = state.desktop.lock() {
+            desktop.tun_mode_enabled = previous;
+            let _ = save_desktop_state(&desktop);
+        }
+        let _ = reconnect_running_direct_core(&state);
+        return Err(error);
+    }
+    Ok(OperationResult {
+        message: if enabled {
+            "TUN mode is on.".to_string()
+        } else {
+            "TUN mode is off.".to_string()
+        },
+    })
+}
+
+/// Desktop mode runs HTTPS decryption inside this process, so a running
+/// desktop core picks up an enabled or disabled MITM only by reconnecting.
+fn reconnect_running_direct_core(state: &DesktopAppState) -> Result<(), String> {
+    let desktop = state
+        .desktop
+        .lock()
+        .map_err(|_| "desktop state lock failed")?
+        .clone();
+    if desktop.runtime_mode != DesktopRuntimeMode::Desktop {
+        return Ok(());
+    }
+    let mut core = state
+        .direct_core
+        .lock()
+        .map_err(|_| "desktop core lock failed")?;
+    if !core.is_running()? {
+        return Ok(());
+    }
+    let _ =
+        connection::disconnect_direct(windows_managed_config_path(), desktop.clone(), &mut core);
+    let connected = connection::connect_direct(windows_managed_config_path(), desktop, &mut core)?;
+    drop(core);
+    let mut persisted = state
+        .desktop
+        .lock()
+        .map_err(|_| "desktop state lock failed")?;
+    persisted.proxy_snapshot = Some(connected.snapshot);
+    persisted.applied_proxy = Some(connected.applied_proxy);
+    save_desktop_state(&persisted)
+}
+
+fn disable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult, String> {
     let mut managed = managed_config_or_default()?;
     let native_mitm = managed
         .native_mitm
@@ -3027,6 +3527,7 @@ fn disable_https_mitm_blocking() -> Result<OperationResult, String> {
             .start_service()
             .map_err(|error| error.to_string())?;
     }
+    reconnect_running_direct_core(&state)?;
     if let Some(error) = certificate_cleanup_error {
         return Err(error);
     }
@@ -3287,7 +3788,9 @@ fn snapshot(
         auto_subscription_refresh: desktop.auto_subscription_refresh,
         auto_select_fastest_node: desktop.auto_select_fastest_node,
         bilibili_web_ad_block_enabled: desktop.bilibili_web_ad_block_enabled,
+        tun_mode_enabled: desktop.tun_mode_enabled,
         script_runtime_configured: managed_script_runtime_configured(),
+        https_decryption_enabled: managed_https_decryption_enabled(),
         dark_theme: desktop.dark_theme,
         runtime_mode: match desktop.runtime_mode {
             DesktopRuntimeMode::Desktop => "desktop".to_string(),
@@ -3295,8 +3798,16 @@ fn snapshot(
         },
         routing_mode: routing_mode_name(desktop.routing_mode).to_string(),
         dns_preset: desktop.dns_preset.as_str(),
+        block_quic: desktop.block_quic,
         embedded_engine: active_embedded_config().ok().flatten().is_some(),
     }
+}
+
+fn managed_https_decryption_enabled() -> bool {
+    managed_config_or_default()
+        .ok()
+        .and_then(|managed| managed.native_mitm)
+        .is_some_and(|native_mitm| native_mitm.enabled)
 }
 
 fn managed_script_runtime_configured() -> bool {
@@ -3323,6 +3834,16 @@ fn core_status(status: &ManagedCoreStatus) -> StatusFact {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn trace_gives_the_exit_address_and_country() {
+        let body = "fl=1f2\nh=www.cloudflare.com\nip=203.0.113.7\nts=1.5\nloc=HK\ntls=TLSv1.3\n";
+        assert_eq!(
+            parse_trace(body),
+            (Some("203.0.113.7".to_string()), Some("HK".to_string()))
+        );
+        assert_eq!(parse_trace("ipx=1\nloc=\n"), (None, None));
+    }
 
     fn routed_profile() -> Value {
         json!({
@@ -3425,6 +3946,7 @@ mod tests {
             label: label.to_string(),
             protocol: "Shadowsocks".to_string(),
             outbound_tag: format!("node-{id}"),
+            trunk: false,
         }
     }
 

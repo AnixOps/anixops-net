@@ -5,12 +5,25 @@ import UserNotifications
 /// Connects the engine's plugin scripts that run outside HTTP flows to the device: it tells the engine when the
 /// network changes (`network-changed` scripts) and shows what scripts post (`$notification.post`, `$notify`) as
 /// local notifications. Without such scripts in the running config it does nothing.
+///
+/// On macOS the tunnel is a System Extension running as root, outside the user's session, so it cannot post
+/// notifications: it leaves them in the engine and the app reads and posts them (`TunnelController.relayScriptNotifications`).
 final class ScriptEventRelay: @unchecked Sendable {
     private let queue = DispatchQueue(label: "networkcore.packet-tunnel.script-events")
     private var timer: DispatchSourceTimer?
     private var control: (@Sendable (Data) -> Data?)?
+    /// `NotificationSettings.scripts`: when off, what scripts post is read and dropped.
+    private var postsNotifications = true
+
+    func setPostsNotifications(_ on: Bool) {
+        queue.async { [weak self] in
+            self?.postsNotifications = on
+        }
+    }
 
     private static let pollSeconds = 15
+    /// While the device sleeps notifications can wait a minute; `poll()` on wake shows them at once.
+    private static let sleepingPollSeconds = 60
     /// At most this many notifications are shown per poll; scripts that post more are cut short.
     private static let maxPerPoll = 8
 
@@ -39,6 +52,14 @@ final class ScriptEventRelay: @unchecked Sendable {
             timer.resume()
             self.timer = timer
             return scripts.count
+        }
+    }
+
+    /// Polls less often while the device sleeps, as usual again after wake.
+    func setSleeping(_ sleeping: Bool) {
+        queue.async { [self] in
+            let seconds = sleeping ? Self.sleepingPollSeconds : Self.pollSeconds
+            timer?.schedule(deadline: .now() + .seconds(seconds), repeating: .seconds(seconds), leeway: .seconds(sleeping ? 10 : 3))
         }
     }
 
@@ -75,12 +96,18 @@ final class ScriptEventRelay: @unchecked Sendable {
     }
 
     private func pollLocked() {
+        #if os(macOS)
+        return
+        #else
         guard let control,
               let answer = RuntimeControl.decode(
                   RuntimeControl.ScriptNotifications.self, from: control(RuntimeControl.scriptNotifications.request)
               ),
               !answer.notifications.isEmpty
         else {
+            return
+        }
+        guard postsNotifications else {
             return
         }
         let center = UNUserNotificationCenter.current()
@@ -95,5 +122,6 @@ final class ScriptEventRelay: @unchecked Sendable {
             }
             center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
         }
+        #endif
     }
 }

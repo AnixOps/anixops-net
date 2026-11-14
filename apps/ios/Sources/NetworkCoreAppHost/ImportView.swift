@@ -32,7 +32,7 @@ struct ImportView: View {
                 case let .preview(preview):
                     previewStep(preview)
                 case let .done(name):
-                    DoneStep(name: name) {
+                    DoneStep(name: name, note: tunnel.message) {
                         dismiss()
                     } again: {
                         text = ""
@@ -41,6 +41,13 @@ struct ImportView: View {
                 }
             }
             .background(brand.bg.ignoresSafeArea())
+            .onAppear {
+                // Opened by an `anixops://import` link: show its preview, which the user still confirms.
+                if let link = tunnel.takePendingImportLink() {
+                    text = link
+                    recognize()
+                }
+            }
             .navigationTitle(title)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -315,6 +322,8 @@ private struct DoneStep: View {
     @Environment(\.brand) private var brand
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let name: String
+    /// What the user still has to do before connecting, such as allowing the macOS network extension.
+    let note: String?
     let connect: () -> Void
     let again: () -> Void
     @State private var drawn: CGFloat = 0
@@ -330,6 +339,12 @@ private struct DoneStep: View {
                 .font(.subheadline)
                 .foregroundStyle(brand.text2)
                 .multilineTextAlignment(.center)
+            if let note {
+                Label(note, systemImage: "info.circle")
+                    .font(.subheadline)
+                    .foregroundStyle(brand.text2)
+                    .multilineTextAlignment(.leading)
+            }
             Spacer()
             Button(action: connect) {
                 Text("去连接")

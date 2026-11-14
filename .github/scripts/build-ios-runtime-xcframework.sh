@@ -5,8 +5,9 @@
 # The crate comes from the kernel commit pinned in Cargo.toml and is built inside that kernel
 # checkout with the kernel's own Cargo.lock (see kernel-root.sh).
 #
-# Usage: build-ios-runtime-xcframework.sh [device|all]
+# Usage: build-ios-runtime-xcframework.sh [device|macos|all]
 #   device: iPhone slice only (archive and upload)
+#   macos:  universal macOS slice only (Developer ID archive)
 #   all:    iPhone, simulator and universal macOS slices (default, CI Xcode build)
 #
 # NETWORKCORE_RUNTIME_PREBUILT_DIR (optional): skip the cargo build and package
@@ -21,9 +22,9 @@ set -euo pipefail
 
 slices="${1:-all}"
 case "${slices}" in
-  device | all) ;;
+  device | macos | all) ;;
   *)
-    echo "::error::usage: build-ios-runtime-xcframework.sh [device|all]"
+    echo "::error::usage: build-ios-runtime-xcframework.sh [device|macos|all]"
     exit 2
     ;;
 esac
@@ -38,10 +39,11 @@ echo "Kernel checkout: ${kernel}"
 device_target=aarch64-apple-ios
 sim_targets=(aarch64-apple-ios-sim x86_64-apple-ios)
 mac_targets=(aarch64-apple-darwin x86_64-apple-darwin)
-targets=("${device_target}")
-if [[ "${slices}" == all ]]; then
-  targets+=("${sim_targets[@]}" "${mac_targets[@]}")
-fi
+case "${slices}" in
+  device) targets=("${device_target}") ;;
+  macos) targets=("${mac_targets[@]}") ;;
+  all) targets=("${device_target}" "${sim_targets[@]}" "${mac_targets[@]}") ;;
+esac
 
 rustup target add "${targets[@]}"
 
@@ -52,10 +54,12 @@ export CARGO_PROFILE_RELEASE_LTO=thin
 export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
 export CARGO_PROFILE_RELEASE_DEBUG=0
 # rquickjs (MITM scripts) ships no iOS bindings; bindgen generates them against the matching SDK.
-export BINDGEN_EXTRA_CLANG_ARGS_aarch64_apple_ios="-isysroot $(xcrun --sdk iphoneos --show-sdk-path)"
-simulator_sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
-export BINDGEN_EXTRA_CLANG_ARGS_aarch64_apple_ios_sim="-isysroot ${simulator_sdk}"
-export BINDGEN_EXTRA_CLANG_ARGS_x86_64_apple_ios="-isysroot ${simulator_sdk}"
+if [[ "${slices}" != macos ]]; then
+  export BINDGEN_EXTRA_CLANG_ARGS_aarch64_apple_ios="-isysroot $(xcrun --sdk iphoneos --show-sdk-path)"
+  simulator_sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+  export BINDGEN_EXTRA_CLANG_ARGS_aarch64_apple_ios_sim="-isysroot ${simulator_sdk}"
+  export BINDGEN_EXTRA_CLANG_ARGS_x86_64_apple_ios="-isysroot ${simulator_sdk}"
+fi
 
 if [[ -n "${NETWORKCORE_RUNTIME_PREBUILT_DIR:-}" ]]; then
   target_dir="${NETWORKCORE_RUNTIME_PREBUILT_DIR}"
@@ -80,7 +84,7 @@ package() {
   local out="${root}/apps/ios/Generated/${name}.xcframework"
   local work="${RUNNER_TEMP:-${root}/target}/networkcore-ios-${name}"
   rm -rf "${work}" "${out}"
-  mkdir -p "${work}/device" "$(dirname "${out}")"
+  mkdir -p "$(dirname "${out}")"
   # Each module map sits in a directory named after its module, so the module maps of one
   # XCFramework (and of any other linked one, which Xcode copies into the same include/) never collide.
   local spec crate header module
@@ -91,8 +95,12 @@ package() {
     printf 'module %s {\n    header "%s"\n    export *\n}\n' "${module}" "${header}" > "${work}/headers/${module}/module.modulemap"
   done
 
-  cp "${target_dir}/${device_target}/release/${lib}" "${work}/device/${lib}"
-  local args=(-library "${work}/device/${lib}" -headers "${work}/headers")
+  local args=()
+  if [[ "${slices}" != macos ]]; then
+    mkdir -p "${work}/device"
+    cp "${target_dir}/${device_target}/release/${lib}" "${work}/device/${lib}"
+    args+=(-library "${work}/device/${lib}" -headers "${work}/headers")
+  fi
 
   if [[ "${slices}" == all ]]; then
     mkdir -p "${work}/simulator"
@@ -102,7 +110,9 @@ package() {
     done
     lipo -create "${sim_libs[@]}" -output "${work}/simulator/${lib}"
     args+=(-library "${work}/simulator/${lib}" -headers "${work}/headers")
+  fi
 
+  if [[ "${slices}" != device ]]; then
     mkdir -p "${work}/macos"
     local mac_libs=()
     for target in "${mac_targets[@]}"; do
@@ -116,7 +126,7 @@ package() {
 
   # Linkage of the C ABI is checked on the built binaries by the CI Xcode job; Xcode's nm cannot
   # always read archives produced by Rust's newer LLVM.
-  du -sh "${work}/device/${lib}"
+  du -sh "${work}"/*/"${lib}"
   echo "Built ${out} (${slices})"
 }
 

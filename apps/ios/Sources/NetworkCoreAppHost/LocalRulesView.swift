@@ -128,6 +128,7 @@ struct LocalRulesView: View {
     @State private var status: [String: RuntimeControl.RuleSets.Status] = [:]
     @State private var updating = false
     @State private var showingLibrary = false
+    @State private var editingText = false
 
     private var rules: LocalRules {
         tunnel.localRules
@@ -180,6 +181,12 @@ struct LocalRulesView: View {
                     } label: {
                         Label("从配置导入", systemImage: "doc.on.clipboard")
                     }
+                    Divider()
+                    Button {
+                        editingText = true
+                    } label: {
+                        Label("编辑规则文本", systemImage: "curlybraces")
+                    }
                 } label: {
                     Image(systemName: "plus")
                         .accessibilityLabel("添加")
@@ -193,6 +200,9 @@ struct LocalRulesView: View {
         }
         .navigationDestination(isPresented: $showingLibrary) {
             RuleSetLibraryView(tunnel: tunnel)
+        }
+        .navigationDestination(isPresented: $editingText) {
+            RuleTextEditorView(tunnel: tunnel)
         }
         .sheet(item: $editing) { edit in
             LocalRuleSheet(edit: edit) { rule in

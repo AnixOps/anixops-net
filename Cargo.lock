@@ -99,6 +99,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000"
 
 [[package]]
+name = "anx-license"
+version = "0.3.0"
+dependencies = [
+ "ring",
+]
+
+[[package]]
 name = "anyhow"
 version = "1.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -763,6 +770,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "client-health"
+version = "0.3.0"
+dependencies = [
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "combine"
 version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -784,7 +799,7 @@ dependencies = [
 [[package]]
 name = "config-core"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "base64 0.22.1",
  "control-domain",
@@ -806,7 +821,7 @@ checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
 [[package]]
 name = "control-domain"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "serde",
  "serde_json",
@@ -1149,6 +1164,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "desktop-mitm"
+version = "0.3.0"
+dependencies = [
+ "engine-embedded",
+ "rcgen",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1177,7 +1203,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1345,7 +1371,7 @@ checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
 [[package]]
 name = "engine-embedded"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "base64 0.22.1",
  "boringtun",
@@ -1370,12 +1396,14 @@ dependencies = [
  "outbound-tuic",
  "outbound-vless",
  "outbound-vmess",
+ "outbound-wireguard",
  "rcgen",
  "ring",
  "rustls",
  "serde",
  "serde_json",
  "time",
+ "tls-mimic",
  "tokio",
  "tokio-rustls",
  "transport-tls",
@@ -1385,7 +1413,7 @@ dependencies = [
 [[package]]
 name = "engine-native"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "bytes",
  "control-domain",
@@ -1405,7 +1433,7 @@ dependencies = [
 [[package]]
 name = "engine-outbound"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "serde",
  "serde_json",
@@ -1457,7 +1485,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2394,7 +2422,7 @@ dependencies = [
 [[package]]
 name = "inbound-mixed"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "engine-outbound",
  "tokio",
@@ -2924,7 +2952,7 @@ dependencies = [
 [[package]]
 name = "mitm-anixops-sys"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "cc",
  "pcre2-sys",
@@ -2933,7 +2961,7 @@ dependencies = [
 [[package]]
 name = "mitm-policy"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "config-core",
  "control-domain",
@@ -2975,7 +3003,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.19",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3005,7 +3033,7 @@ dependencies = [
 [[package]]
 name = "netstack-smoltcp"
 version = "0.2.4"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "etherparse",
  "futures",
@@ -3018,14 +3046,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "network-watch"
+version = "0.3.0"
+
+[[package]]
 name = "networkcore-linux-gui"
 version = "0.3.0"
 dependencies = [
+ "anx-license",
+ "client-health",
  "config-core",
  "control-domain",
  "desktop-dns",
+ "desktop-mitm",
  "engine-embedded",
  "inbound-mixed",
+ "libc",
+ "network-watch",
  "node-import",
  "reqwest 0.12.28",
  "serde",
@@ -3039,11 +3076,16 @@ dependencies = [
 name = "networkcore-windows-gui"
 version = "0.3.0"
 dependencies = [
+ "anx-license",
+ "client-health",
  "config-core",
  "control-domain",
  "desktop-dns",
+ "desktop-mitm",
  "engine-embedded",
  "inbound-mixed",
+ "network-watch",
+ "networkcore-windows-service",
  "node-import",
  "platform-windows",
  "rcgen",
@@ -3093,7 +3135,7 @@ dependencies = [
 [[package]]
 name = "node-import"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "config-core",
  "control-domain",
@@ -3408,7 +3450,7 @@ dependencies = [
 [[package]]
 name = "outbound-http"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "base64 0.22.1",
  "engine-outbound",
@@ -3420,7 +3462,7 @@ dependencies = [
 [[package]]
 name = "outbound-hysteria2"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "bytes",
  "engine-outbound",
@@ -3437,7 +3479,7 @@ dependencies = [
 [[package]]
 name = "outbound-iwan"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "aes",
  "engine-outbound",
@@ -3450,7 +3492,7 @@ dependencies = [
 [[package]]
 name = "outbound-mieru"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "chacha20poly1305",
  "engine-outbound",
@@ -3462,7 +3504,7 @@ dependencies = [
 [[package]]
 name = "outbound-shadowsocks"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "aes",
  "base64 0.22.1",
@@ -3478,7 +3520,7 @@ dependencies = [
 [[package]]
 name = "outbound-snell"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "argon2",
  "base64 0.22.1",
@@ -3492,7 +3534,7 @@ dependencies = [
 [[package]]
 name = "outbound-socks"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "engine-outbound",
  "serde",
@@ -3502,10 +3544,11 @@ dependencies = [
 [[package]]
 name = "outbound-trojan"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "engine-outbound",
  "serde",
+ "serde_json",
  "sha2",
  "tokio",
  "transport-grpc",
@@ -3517,7 +3560,7 @@ dependencies = [
 [[package]]
 name = "outbound-tuic"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "bytes",
  "engine-outbound",
@@ -3531,11 +3574,12 @@ dependencies = [
 [[package]]
 name = "outbound-vless"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "engine-outbound",
  "ring",
  "serde",
+ "serde_json",
  "tls-mimic",
  "tokio",
  "transport-grpc",
@@ -3547,7 +3591,7 @@ dependencies = [
 [[package]]
 name = "outbound-vmess"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "aes",
  "crc32fast",
@@ -3555,6 +3599,7 @@ dependencies = [
  "md-5",
  "ring",
  "serde",
+ "serde_json",
  "sha2",
  "sha3",
  "tokio",
@@ -3562,6 +3607,20 @@ dependencies = [
  "transport-tls",
  "transport-ws",
  "transport-xhttp",
+]
+
+[[package]]
+name = "outbound-wireguard"
+version = "0.2.0"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
+dependencies = [
+ "base64 0.22.1",
+ "boringtun",
+ "engine-outbound",
+ "serde",
+ "serde_json",
+ "smoltcp",
+ "tokio",
 ]
 
 [[package]]
@@ -3735,7 +3794,7 @@ checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 [[package]]
 name = "platform-windows"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "config-core",
  "control-domain",
@@ -3960,9 +4019,9 @@ dependencies = [
 
 [[package]]
 name = "quinn-proto"
-version = "0.11.18"
+version = "0.11.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9746dbde176634f4f2f1faf2404e30a31b2bc1e9cafb5329c95d8177a18c9fc"
+checksum = "0e750cca55fe4f0439a15d0bb529da9651e79993e8e72c61a899a36d462befbe"
 dependencies = [
  "bytes",
  "getrandom 0.4.3",
@@ -3982,16 +4041,16 @@ dependencies = [
 
 [[package]]
 name = "quinn-udp"
-version = "0.5.15"
+version = "0.5.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35a133f956daabe89a61a685c2649f13d82d5aa4bd5d12d1277e1072a21c0694"
+checksum = "af66907df18639dcf4db56ca65490cabc4b27a97dbadd96f2926cca73298f016"
 dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4345,7 +4404,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4464,7 +4523,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 [[package]]
 name = "script-runtime"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "rquickjs",
  "serde",
@@ -4784,7 +4843,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5262,10 +5321,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5375,11 +5434,12 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 [[package]]
 name = "tls-mimic"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "ml-kem",
  "rand_core 0.6.4",
  "ring",
+ "serde_json",
  "tokio",
  "x25519-dalek",
 ]
@@ -5633,7 +5693,7 @@ dependencies = [
 [[package]]
 name = "transport-grpc"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "bytes",
  "engine-outbound",
@@ -5645,7 +5705,7 @@ dependencies = [
 [[package]]
 name = "transport-quic"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "blake2",
  "engine-outbound",
@@ -5658,10 +5718,11 @@ dependencies = [
 [[package]]
 name = "transport-tls"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "engine-outbound",
  "rustls",
+ "serde_json",
  "tokio",
  "tokio-rustls",
  "webpki-roots",
@@ -5670,7 +5731,7 @@ dependencies = [
 [[package]]
 name = "transport-ws"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "base64 0.22.1",
  "engine-outbound",
@@ -5681,7 +5742,7 @@ dependencies = [
 [[package]]
 name = "transport-xhttp"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=cabf09fb6e865975ba751bca5e3fde80264473b3#cabf09fb6e865975ba751bca5e3fde80264473b3"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=6ba42464244cad53f3a5a4a8681373ce3bef8735#6ba42464244cad53f3a5a4a8681373ce3bef8735"
 dependencies = [
  "bytes",
  "engine-outbound",
@@ -5715,7 +5776,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.19",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5750,7 +5811,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6154,7 +6215,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

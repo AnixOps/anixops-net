@@ -34,6 +34,11 @@ pub struct DesktopProfileNode {
     pub label: String,
     pub protocol: String,
     pub outbound_tag: String,
+    /// A domestic ingress on a shared trunk (the subscription's
+    /// `#anixops:path=trunk` mark): picked by default and preferred by the
+    /// fastest-node search (anx FUTURE-IMPROVEMENTS F-51).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub trunk: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -90,8 +95,14 @@ pub struct DesktopState {
     pub routing_mode: DesktopRoutingMode,
     #[serde(default)]
     pub dns_preset: desktop_dns::DnsPreset,
+    /// Refuse UDP to port 443 so apps fall back from QUIC to TCP (the engine's `block_quic`).
+    #[serde(default)]
+    pub block_quic: bool,
     #[serde(default)]
     pub bilibili_web_ad_block_enabled: bool,
+    /// Desktop mode also captures system traffic with a Wintun adapter.
+    #[serde(default)]
+    pub tun_mode_enabled: bool,
     pub proxy_snapshot: Option<WindowsProxySnapshot>,
     #[serde(default)]
     pub applied_proxy: Option<WindowsProxySettings>,
@@ -206,6 +217,7 @@ mod tests {
                 label: "Primary [primary] (Shadowsocks)".to_string(),
                 protocol: "Shadowsocks".to_string(),
                 outbound_tag: "primary".to_string(),
+                trunk: true,
             }],
             ..DesktopState::default()
         };

@@ -48,7 +48,7 @@ struct HomeView: View {
                         tunnel: tunnel,
                         model: dashboard,
                         layout: DashboardLayout(storage: layoutStorage),
-                        tab: $tab
+                        showProxies: { tab = .proxies }
                     )
                 }
                 .padding(.horizontal, 16)
@@ -105,6 +105,11 @@ struct HomeView: View {
             tunnel.clearMessage()
             Task {
                 await tunnel.refreshSubscription(groupID)
+            }
+        case let .resumeNode(node):
+            tunnel.clearMessage()
+            Task {
+                await tunnel.resumeNode(node)
             }
         case .importNode:
             tunnel.clearMessage()
@@ -361,13 +366,6 @@ private struct CompactConnectButton: View {
     }
 }
 
-enum ConnectElapsed {
-    static func text(from start: Date, to now: Date) -> String {
-        let seconds = max(0, Int(now.timeIntervalSince(start)))
-        return String(format: "%02d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
-    }
-}
-
 /// Shrinks slightly while pressed, without the default list highlight.
 /// With Reduce Motion on it does not scale; the press still shows as a slight fade.
 struct PressableStyle: ButtonStyle {
@@ -477,6 +475,8 @@ private struct NoticeCard: View {
             return "重新下载订阅"
         case .importNode:
             return "导入节点"
+        case .resumeNode:
+            return "重试"
         }
     }
 }

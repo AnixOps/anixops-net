@@ -11,16 +11,21 @@ default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
 
 [dependencies]
+client-health = { path = "../../crates/client-health" }
 config-core = { workspace = true }
 control-domain = { workspace = true }
 desktop-dns = { path = "../../crates/desktop-dns" }
+desktop-mitm = { path = "../../crates/desktop-mitm" }
 engine-embedded = { workspace = true }
 inbound-mixed = { workspace = true }
+networkcore-windows-service = { path = "../windows-service" }
+anx-license = { path = "../../crates/anx-license" }
 node-import = { workspace = true }
 platform-windows = { workspace = true }
 rcgen = { version = "0.14.8", features = ["x509-parser"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+network-watch = { path = "../../crates/network-watch" }
 subscription-meta = { path = "../../crates/subscription-meta" }
 
 [target.'cfg(windows)'.dependencies]

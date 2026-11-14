@@ -19,6 +19,12 @@ public enum MitmCertificateStore {
     static let account = "root"
 
     public static func load() throws -> MitmCertificateAuthority? {
+        try storedValue().map(decode)
+    }
+
+    /// The stored item as it is, for handing it to a macOS System Extension (`TunnelStartSecrets`), or nil when
+    /// there is none.
+    public static func storedValue() throws -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -33,7 +39,12 @@ public enum MitmCertificateStore {
         guard status == errSecSuccess, let data = result as? Data else {
             throw Failure(status: status)
         }
-        return try decode(data)
+        return data
+    }
+
+    /// Decodes a value from `storedValue()`.
+    public static func authority(fromStoredValue data: Data) throws -> MitmCertificateAuthority {
+        try decode(data)
     }
 
     public static func save(_ authority: MitmCertificateAuthority) throws {

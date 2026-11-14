@@ -108,19 +108,6 @@ struct ConnectionsView: View {
     var body: some View {
         List {
             Section {
-                VStack(spacing: 10) {
-                    Picker("连接", selection: $page) {
-                        Text("活跃 \(list.active.count)").tag(Page.active)
-                        Text("已结束 \(list.closed.count)").tag(Page.closed)
-                        Text("按主机").tag(Page.hosts)
-                    }
-                    .pickerStyle(.segmented)
-                    filterChips
-                }
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets())
-            }
-            Section {
                 if page == .hosts {
                     if hosts.isEmpty {
                         emptyRow
@@ -174,6 +161,12 @@ struct ConnectionsView: View {
             }
         }
         .scrollContentBackground(.hidden)
+        // The view switch and the filter chips are page controls, so they sit in the bar under the navigation
+        // title, edge to edge, and the list scrolls beneath them. They used to be the list's first row, which
+        // put them in a rounded inset-grouped card that scrolled away with the rows.
+        .topControlBar(brand) {
+            controlBar
+        }
         .background(brand.bg.ignoresSafeArea())
         .navigationTitle("请求")
         .inlineNavigationTitle()
@@ -186,13 +179,19 @@ struct ConnectionsView: View {
                     Image(systemName: paused ? "play.fill" : "pause.fill")
                 }
                 .accessibilityLabel(paused ? "继续刷新" : "暂停刷新")
-                Button(role: .destructive) {
-                    confirmingCloseAll = true
+                // The destructive action is not a neighbour of pause: it sits in the "more" menu and is confirmed
+                // (AnixOps Design, actions D1 and D2).
+                Menu {
+                    Button(role: .destructive) {
+                        confirmingCloseAll = true
+                    } label: {
+                        Label("断开全部连接", systemImage: "xmark.circle")
+                    }
+                    .disabled(list.active.isEmpty || tunnel.connection != .connected)
                 } label: {
-                    Image(systemName: "xmark.circle")
+                    Image(systemName: "ellipsis.circle")
                 }
-                .disabled(list.active.isEmpty || tunnel.connection != .connected)
-                .accessibilityLabel("断开全部连接")
+                .accessibilityLabel("更多")
             }
         }
         .confirmationDialog("断开全部 \(list.active.count) 个连接？", isPresented: $confirmingCloseAll, titleVisibility: .visible) {
@@ -213,6 +212,22 @@ struct ConnectionsView: View {
                 try? await Task.sleep(for: .seconds(1))
             }
         }
+    }
+
+    private var controlBar: some View {
+        VStack(spacing: 10) {
+            Picker("连接", selection: $page) {
+                Text("活跃 \(list.active.count)").tag(Page.active)
+                Text("已结束 \(list.closed.count)").tag(Page.closed)
+                Text("按主机").tag(Page.hosts)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            filterChips
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
+        .padding(.bottom, 8)
     }
 
     private var filterChips: some View {
@@ -237,14 +252,19 @@ struct ConnectionsView: View {
                 }
             }
             .padding(.vertical, 1)
+            .padding(.horizontal, 16)
         }
+        .padding(.horizontal, -16)
     }
 
     private var emptyRow: some View {
         Text(emptyText)
             .font(.subheadline)
             .foregroundStyle(brand.text2)
-            .listRowBackground(brand.surface)
+            .frame(maxWidth: .infinity)
+            .multilineTextAlignment(.center)
+            .padding(.vertical, 24)
+            .listRowBackground(Color.clear)
     }
 
     static func title(_ filter: RequestFilter) -> String {
@@ -312,6 +332,13 @@ struct ConnectionsView: View {
     }
 
     private func load() async {
+        #if DEBUG
+        if TunnelController.isDemo {
+            list = tunnel.lastConnections ?? list
+            loaded = true
+            return
+        }
+        #endif
         guard let data = await tunnel.control(.connections), let next = RuntimeControl.decodeConnections(data) else {
             if tunnel.connection != .connected {
                 // Keep showing what went through the tunnel before it stopped.
@@ -556,5 +583,26 @@ private struct ConnectionDetail: View {
     static func route(_ connection: RuntimeControl.Connection) -> String {
         let chain = connection.chain.last == connection.outbound ? connection.chain : connection.chain + [connection.outbound]
         return chain.joined(separator: " › ")
+    }
+}
+
+extension View {
+    /// Page controls pinned under the navigation bar. On iOS 26 and later they join the bar's scroll edge
+    /// effect, so rows fade out under them like under the title; before that the bar has the page background.
+    @ViewBuilder
+    func topControlBar<Bar: View>(_ brand: BrandPalette, @ViewBuilder _ bar: () -> Bar) -> some View {
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, macOS 26.0, *) {
+            safeAreaBar(edge: .top, spacing: 0, content: bar)
+        } else {
+            safeAreaInset(edge: .top, spacing: 0) {
+                bar().background(brand.bg)
+            }
+        }
+        #else
+        safeAreaInset(edge: .top, spacing: 0) {
+            bar().background(brand.bg)
+        }
+        #endif
     }
 }

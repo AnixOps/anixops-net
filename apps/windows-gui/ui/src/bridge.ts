@@ -8,9 +8,14 @@ export interface StatusFact {
   tone: Tone;
 }
 
+/** The Linux and Android clients run the engine in the app itself, with no Windows service or driver. */
+export function inProcessEngine(snapshot: { platform?: string } | null | undefined): boolean {
+  return snapshot?.platform === "linux" || snapshot?.platform === "android";
+}
+
 export interface RuntimeSnapshot {
-  /** Sent by the Linux client; the Windows client leaves it out. */
-  platform?: "windows" | "linux";
+  /** Sent by the Linux and Android clients; the Windows client leaves it out. */
+  platform?: "windows" | "linux" | "android";
   connection: string;
   connectionLabel: string;
   service: StatusFact;
@@ -35,12 +40,17 @@ export interface RuntimeSnapshot {
   autoSubscriptionRefresh: boolean;
   autoSelectFastestNode: boolean;
   bilibiliWebAdBlockEnabled: boolean;
+  tunModeEnabled?: boolean;
   scriptRuntimeConfigured: boolean;
+  /** HTTPS decryption is on (Windows); the Linux client leaves it out. */
+  httpsDecryptionEnabled?: boolean;
   darkTheme: boolean;
   runtimeMode: "desktop" | "service";
   routingMode: "bypass_china" | "gfw_list" | "direct" | "return_china" | "rule";
   /** How the engine resolves names; older backends leave it out. */
   dnsPreset?: DnsPreset;
+  /** UDP to port 443 is refused so apps fall back from QUIC to TCP; older backends leave it out. */
+  blockQuic?: boolean;
   /** The imported profile runs on the embedded engine (Windows). */
   embeddedEngine?: boolean;
 }
@@ -121,6 +131,26 @@ export interface NodeDelay {
   error?: string | null;
 }
 
+/** An HTTPS decryption plugin imported from a URL. */
+export interface MitmPlugin {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+  /** How much of the plugin the engine supports. */
+  level: "full" | "partial" | "unsupported" | string;
+  hostnames: string[];
+  scriptCount: number;
+}
+
+/** What the exit looks like from outside and how fast a mainland site answers around the proxy. */
+export interface NetworkProbe {
+  exitIp?: string | null;
+  /** Two-letter country code of the exit. */
+  exitLocation?: string | null;
+  directMs?: number | null;
+}
+
 export interface OperationResult {
   message: string;
 }
@@ -151,6 +181,20 @@ export interface SubscriptionSummary {
   updateIntervalHours: number;
   /** A link that can be downloaded again, not a file or pasted links. */
   refreshable: boolean;
+}
+
+/** Crash reports, the local metrics endpoint, the install check and the cold start (`health_status`). */
+export interface HealthStatus {
+  crashReports: boolean;
+  crashReportsKept: number;
+  /** The build sends reports to an address; otherwise they stay on this computer. */
+  crashUploadConfigured: boolean;
+  /** `http://127.0.0.1:9477/metrics` while the endpoint runs. */
+  metricsAddress?: string | null;
+  metricsError?: string | null;
+  integrity: "checking" | "verified" | "unverified" | "damaged" | "invalid";
+  integrityDetail?: string | null;
+  coldStartMs?: number | null;
 }
 
 export type Preferences = Pick<RuntimeSnapshot, "startAfterLogin" | "autoConnect" | "autoRecoverCore" | "autoSubscriptionRefresh" | "autoSelectFastestNode" | "bilibiliWebAdBlockEnabled" | "darkTheme" | "runtimeMode">;
@@ -194,6 +238,8 @@ export const desktop = {
     invoke<OperationResult>("test_node_delay", { nodeId, url }),
   /** Tests each node on its own and reports every result; failures do not reject. */
   testDelays: (nodeIds: string[], url: string) => invoke<NodeDelay[]>("test_node_delays", { nodeIds, url }),
+  /** The exit address through the local proxy (only while `connected`) and the delay of a direct mainland request. */
+  networkProbe: (connected: boolean) => invoke<NetworkProbe>("network_probe", { connected }),
   /** The node's share link, or a Surge line for Snell. */
   shareLink: (nodeId: string) => invoke<string>("node_share_link", { nodeId }),
   selectFastestNode: () => invoke<OperationResult>("select_fastest_node"),
@@ -202,6 +248,8 @@ export const desktop = {
       preferences,
     }),
   diagnostics: () => invoke<OperationResult>("create_diagnostics"),
+  health: () => invoke<HealthStatus>("health_status"),
+  setCrashReports: (enabled: boolean) => invoke<OperationResult>("set_crash_reports", { enabled }),
   importSubscription: (location: string) =>
     invoke<OperationResult>("import_subscription", { location }),
   updateSubscription: () => invoke<OperationResult>("update_subscription"),
@@ -218,12 +266,16 @@ export const desktop = {
   restoreNetworkSettings: () => invoke<OperationResult>("restore_network_settings"),
   setRoutingMode: (mode: RuntimeSnapshot["routingMode"]) => invoke<OperationResult>("set_routing_mode", { mode }),
   setDnsPreset: (preset: DnsPreset) => invoke<OperationResult>("set_dns_preset", { preset }),
+  setBlockQuic: (enabled: boolean) => invoke<OperationResult>("set_block_quic", { enabled }),
   refreshRoutingRules: () => invoke<OperationResult>("refresh_routing_rules"),
-  configureScriptRuntime: (scriptRuntimeJson: string) =>
-    invoke<OperationResult>("configure_script_runtime", { scriptRuntimeJson }),
-  clearScriptRuntime: () => invoke<OperationResult>("clear_script_runtime"),
   enableHttpsMitm: () => invoke<OperationResult>("enable_https_mitm"),
   disableHttpsMitm: () => invoke<OperationResult>("disable_https_mitm"),
+  mitmPlugins: () => invoke<MitmPlugin[]>("list_mitm_plugins"),
+  importMitmPlugin: (url: string) => invoke<OperationResult>("import_mitm_plugin", { url }),
+  setMitmPluginEnabled: (id: string, enabled: boolean) =>
+    invoke<OperationResult>("set_mitm_plugin_enabled", { id, enabled }),
+  removeMitmPlugin: (id: string) => invoke<OperationResult>("remove_mitm_plugin", { id }),
+  setTunMode: (enabled: boolean) => invoke<OperationResult>("set_tun_mode", { enabled }),
   installCertificate: (path: string) => invoke<OperationResult>("install_certificate", { path }),
   removeCertificate: () => invoke<OperationResult>("remove_certificate"),
   installDriver: (path: string) => invoke<OperationResult>("install_driver", { path }),

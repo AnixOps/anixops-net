@@ -122,3 +122,43 @@ the same address needs a new agreement, and a swipe revokes it. The allowed sour
 digest and passes them as `script_assets`, with `$persistentStore` in its Application Support folder; scripts run in
 QuickJS inside the tunnel without `$httpClient`. If the runtime refuses the scripts, the tunnel keeps decryption
 without them.
+
+## URL scheme
+
+The iOS and macOS apps register `anixops://` (`CFBundleURLTypes` in `project.yml`). `AppURLCommand` in
+NetworkCoreBridge parses a link and `TunnelController.handle(url:)` runs it:
+
+| Link | Action |
+| --- | --- |
+| `anixops://connect` | Connect with the selected node (aliases `start`, `on`) |
+| `anixops://disconnect` | Disconnect (aliases `stop`, `off`) |
+| `anixops://toggle` | Connect or disconnect |
+| `anixops://mode?set=rule\|global\|direct` | Switch the proxy mode |
+| `anixops://select?node=<name>[&group=<subscription>]` | Use a node of a subscription group (the active one by default); `group` matches an id or a name |
+| `anixops://select?policy=<policy group>&node=<member>` | Pick a member of a `select` policy group in the subscription's rules |
+| `anixops://import?url=<link>` | Open the import sheet with that subscription or node link (alias `install-config`) |
+
+Parameters are percent-encoded. `anixops:///connect` and `anixops://x-callback-url/connect` work too. An import
+link never saves anything by itself: the sheet shows the preview and the user confirms. A link the app cannot run
+shows a notice with the action or parameter it could not use. Links longer than 8 KiB are refused.
+
+## Notifications
+
+Settings › 通知 has three switches, all on by default (`NotificationSettings`): plugin script notifications
+(`$notification.post`, `$notify`), unexpected disconnects (the provider stopped with a failure reason, never a
+user disconnect, sleep or another VPN) and failed automatic subscription updates. The app keeps the choice in its
+defaults and copies it into the tunnel profile (`TunnelProfileKeys.notifications`); a change while connected reaches
+the running extension as `TunnelAppMessage.notificationSettings`, without a restart.
+
+On iOS the extension posts script and disconnect notifications itself. The macOS tunnel is a System Extension
+running as root, which cannot post, so the macOS app reads script notifications from the engine every 15 seconds
+while connected and posts the disconnect notice from the stop error. Tapping a script notification opens its
+`open-url` (http, https or `anixops://` only).
+
+## Extension log levels and modules
+
+Every line of the extension's event log (`TunnelDiagnosticLog`) has a level (调试, 信息, 警告, 错误) and a module
+(隧道, 内核, 网络, 规则, DNS, HTTPS 解密, 脚本, 内存). `record` can set them; otherwise
+`DiagnosticModule.classify` derives them from the fixed message, which also covers lines from older extensions.
+iOS developer mode and the macOS Activity page's "扩展日志…" filter by level-and-above and by module, and remember the
+choice. The copied diagnostics report adds `[level module]` to each line.

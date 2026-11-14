@@ -13,11 +13,19 @@ public enum TunnelAppMessage: Equatable {
     case trafficStats
     /// Clears the extension's `TrafficStats`; answered with the empty stats.
     case clearTrafficStats
+    /// New `NotificationSettings` (`profileValue`) for the running extension; answered with `ok`.
+    case notificationSettings(Data)
+    /// New local rules (`LocalRules.profileValue()`) for the running tunnel: the extension builds the routing it
+    /// would start with and, when only the rule lines changed, swaps them in place. Answered with a
+    /// `RuntimeControl.ReloadAnswer`; `restart` asks the app to restart the tunnel instead.
+    case reloadLocalRules(Data)
 
     private static let diagnosticsPayload = Data("diagnostics".utf8)
     private static let trafficStatsPayload = Data("traffic-stats".utf8)
     private static let clearTrafficStatsPayload = Data("traffic-stats-clear".utf8)
     private static let controlPrefix = Data("control:".utf8)
+    private static let notificationsPrefix = Data("notifications:".utf8)
+    private static let reloadLocalRulesPrefix = Data("local-rules:".utf8)
 
     public var encoded: Data {
         switch self {
@@ -31,6 +39,10 @@ public enum TunnelAppMessage: Equatable {
             return Self.trafficStatsPayload
         case .clearTrafficStats:
             return Self.clearTrafficStatsPayload
+        case let .notificationSettings(settings):
+            return Self.notificationsPrefix + settings
+        case let .reloadLocalRules(value):
+            return Self.reloadLocalRulesPrefix + value
         }
     }
 
@@ -44,6 +56,12 @@ public enum TunnelAppMessage: Equatable {
         if data == clearTrafficStatsPayload {
             return .clearTrafficStats
         }
+        if data.starts(with: notificationsPrefix) {
+            return .notificationSettings(Data(data.dropFirst(notificationsPrefix.count)))
+        }
+        if data.starts(with: reloadLocalRulesPrefix) {
+            return .reloadLocalRules(Data(data.dropFirst(reloadLocalRulesPrefix.count)))
+        }
         if data.starts(with: controlPrefix) {
             return .control(Data(data.dropFirst(controlPrefix.count)))
         }
@@ -52,13 +70,36 @@ public enum TunnelAppMessage: Equatable {
 }
 
 /// One line of the extension's event log. Messages are fixed strings and codes, never profile content.
+///
+/// Each line has a level and a module (`DiagnosticLevel`, `DiagnosticModule`) for filtering. The extension may set
+/// them; otherwise they follow from the message (`DiagnosticModule.classify`), which also covers lines from
+/// extensions that predate them.
 public struct TunnelDiagnosticEvent: Codable, Equatable {
     public let time: Date
     public let message: String
+    public let level: DiagnosticLevel
+    public let module: DiagnosticModule
 
-    public init(time: Date, message: String) {
+    public init(time: Date, message: String, level: DiagnosticLevel? = nil, module: DiagnosticModule? = nil) {
+        let classified = DiagnosticModule.classify(message)
         self.time = time
         self.message = message
+        self.level = level ?? classified.level
+        self.module = module ?? classified.module
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case time, message, level, module
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let time = try container.decode(Date.self, forKey: .time)
+        let message = try container.decode(String.self, forKey: .message)
+        // Unknown names from a newer extension fall back to the classification too.
+        let level = (try? container.decodeIfPresent(String.self, forKey: .level)).flatMap { $0 }.flatMap(DiagnosticLevel.init(rawValue:))
+        let module = (try? container.decodeIfPresent(String.self, forKey: .module)).flatMap { $0 }.flatMap(DiagnosticModule.init(rawValue:))
+        self.init(time: time, message: message, level: level, module: module)
     }
 }
 
@@ -74,10 +115,15 @@ public final class TunnelDiagnosticLog: @unchecked Sendable {
         self.capacity = max(1, capacity)
     }
 
-    public func record(_ message: String, at time: Date = Date()) {
+    public func record(
+        _ message: String,
+        level: DiagnosticLevel? = nil,
+        module: DiagnosticModule? = nil,
+        at time: Date = Date()
+    ) {
         lock.lock()
         defer { lock.unlock() }
-        events.append(TunnelDiagnosticEvent(time: time, message: message))
+        events.append(TunnelDiagnosticEvent(time: time, message: message, level: level, module: module))
         if events.count > capacity {
             events.removeFirst(events.count - capacity)
         }
@@ -104,6 +150,9 @@ public struct TunnelDiagnostics: Codable, Equatable {
     public var runtimeSchemaVersion: UInt32
     public var runtimeFeatureSetVersion: UInt32
     public var events: [TunnelDiagnosticEvent]
+    /// The engine's metrics with anonymous labels (Prometheus text), nil before a runtime starts or from an older
+    /// extension.
+    public var engineMetrics: String?
 
     enum CodingKeys: String, CodingKey {
         case runtimeStatus = "runtime_status"
@@ -115,6 +164,7 @@ public struct TunnelDiagnostics: Codable, Equatable {
         case runtimeSchemaVersion = "runtime_schema_version"
         case runtimeFeatureSetVersion = "runtime_feature_set_version"
         case events
+        case engineMetrics = "engine_metrics"
     }
 
     public init(
@@ -124,7 +174,8 @@ public struct TunnelDiagnostics: Codable, Equatable {
         memoryAvailableBytes: UInt64? = nil,
         uptimeSeconds: Double?,
         handshake: NetworkCoreRuntimeFFI.Handshake,
-        events: [TunnelDiagnosticEvent]
+        events: [TunnelDiagnosticEvent],
+        engineMetrics: String? = nil
     ) {
         self.runtimeStatus = runtimeStatus
         self.memoryFootprintBytes = memoryFootprintBytes
@@ -135,6 +186,29 @@ public struct TunnelDiagnostics: Codable, Equatable {
         runtimeSchemaVersion = handshake.dtoSchemaVersion
         runtimeFeatureSetVersion = handshake.featureSetVersion
         self.events = events
+        self.engineMetrics = engineMetrics
+    }
+
+    /// The extension's gauges and the engine's metrics in the Prometheus text format, for the diagnostics export.
+    public var prometheusText: String {
+        var lines: [String] = []
+        func gauge(_ name: String, _ help: String, _ value: String?) {
+            guard let value = value else {
+                return
+            }
+            lines.append("# HELP \(name) \(help)")
+            lines.append("# TYPE \(name) gauge")
+            lines.append("\(name) \(value)")
+        }
+        gauge("anixops_extension_memory_bytes", "Memory footprint of the packet tunnel extension.", memoryFootprintBytes.map(String.init))
+        gauge("anixops_extension_memory_peak_bytes", "Highest memory footprint since the extension started.", peakMemoryFootprintBytes.map(String.init))
+        gauge("anixops_extension_memory_available_bytes", "Headroom before the system memory limit.", memoryAvailableBytes.map(String.init))
+        gauge("anixops_extension_uptime_seconds", "Seconds since the extension started.", uptimeSeconds.map { String(format: "%.3f", $0) })
+        var text = lines.joined(separator: "\n") + "\n"
+        if let engineMetrics = engineMetrics, !engineMetrics.isEmpty {
+            text += engineMetrics.hasSuffix("\n") ? engineMetrics : engineMetrics + "\n"
+        }
+        return text
     }
 
     public func encoded() throws -> Data {
@@ -179,6 +253,8 @@ public struct DeveloperReport: Equatable {
     public var lastDisconnectError: String?
     public var diagnostics: TunnelDiagnostics?
     public var generatedAt: Date
+    /// The client health section: install integrity and the redacted crash reports (`ClientHealth`).
+    public var health: String?
 
     public init(
         appVersion: String,
@@ -188,7 +264,8 @@ public struct DeveloperReport: Equatable {
         outboundKind: String?,
         lastDisconnectError: String?,
         diagnostics: TunnelDiagnostics?,
-        generatedAt: Date
+        generatedAt: Date,
+        health: String? = nil
     ) {
         self.appVersion = appVersion
         self.appBuild = appBuild
@@ -198,6 +275,7 @@ public struct DeveloperReport: Equatable {
         self.lastDisconnectError = lastDisconnectError
         self.diagnostics = diagnostics
         self.generatedAt = generatedAt
+        self.health = health
     }
 
     public var text: String {
@@ -212,6 +290,9 @@ public struct DeveloperReport: Equatable {
         if let lastDisconnectError = lastDisconnectError {
             lines.append("last disconnect error:")
             lines.append(lastDisconnectError)
+        }
+        if let health = health, !health.isEmpty {
+            lines.append(health.hasSuffix("\n") ? String(health.dropLast()) : health)
         }
         guard let diagnostics = diagnostics else {
             lines.append("extension: not reachable")
@@ -231,8 +312,10 @@ public struct DeveloperReport: Equatable {
             lines.append("none")
         }
         for event in diagnostics.events {
-            lines.append("\(Self.timestamp(event.time)) \(event.message)")
+            lines.append("\(Self.timestamp(event.time)) \(event.message) [\(event.level.rawValue) \(event.module.rawValue)]")
         }
+        lines.append("metrics:")
+        lines.append(diagnostics.prometheusText.trimmingCharacters(in: .newlines))
         return lines.joined(separator: "\n")
     }
 

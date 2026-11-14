@@ -182,6 +182,11 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
     /// The engine's `redirects` lines (`TrafficRedirects.lines`); absent rewrites nothing. The profile stores them
     /// apart (`TunnelProfileKeys.redirects`) and the extension adds them with `withRedirects(_:)`.
     public private(set) var redirects: [String]?
+    /// The engine's `block_quic`: refuse UDP to port 443 so apps fall back from QUIC to TCP. Written only when on,
+    /// so profiles still suit engines without it. The profile stores it apart (`TunnelProfileKeys.blockQuic`) and the
+    /// extension adds it with `withBlockQuic(_:)`; the app switches it later without a restart
+    /// (`RuntimeControl.setBlockQuic`).
+    public private(set) var blockQuic: Bool?
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
@@ -193,6 +198,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         case mode
         case dns
         case redirects
+        case blockQuic = "block_quic"
     }
 
     /// Only the extension encodes a routed config, and only for the runtime; nothing decodes one.
@@ -210,6 +216,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         try container.encodeIfPresent(mode, forKey: .mode)
         try container.encodeIfPresent(dns, forKey: .dns)
         try container.encodeIfPresent(redirects, forKey: .redirects)
+        try container.encodeIfPresent(blockQuic, forKey: .blockQuic)
     }
 
     public init(node: ShadowsocksNode, profileID: String, mtu: Int = 1500) {
@@ -249,7 +256,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
                     serverName: node.serverName,
                     publicKey: node.publicKey,
                     shortID: node.shortID,
-                    fingerprint: "chrome"
+                    fingerprint: "auto"
                 )
             )
         )
@@ -287,6 +294,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         copy.mode = nil
         copy.dns = nil
         copy.redirects = nil
+        copy.blockQuic = nil
         return copy
     }
 
@@ -314,10 +322,32 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         return copy
     }
 
+    /// The same config refusing UDP to port 443 when `on`; off leaves the key out.
+    public func withBlockQuic(_ on: Bool) -> EmbeddedRuntimeConfig {
+        var copy = self
+        copy.blockQuic = on ? true : nil
+        return copy
+    }
+
     public func withMode(_ mode: ProxyMode?) -> EmbeddedRuntimeConfig {
         var copy = self
         copy.mode = mode
         return copy
+    }
+
+    /// The rule lines to swap into an engine running `self` so it routes like `next`, or nil when more than the
+    /// lines differ (nodes, groups, the global target, rule sets, DNS, mode or anything else): those need a restart.
+    /// Equal lines are returned too, so a caller can tell "nothing to do" (`== routing.rules`) itself.
+    public func reloadableRules(to next: EmbeddedRuntimeConfig) -> [String]? {
+        guard let running = routing, let target = next.routing else {
+            return nil
+        }
+        var same = next
+        same.routing?.rules = running.rules
+        guard same == self else {
+            return nil
+        }
+        return target.rules
     }
 
     /// The same config routing by a subscription's rules and groups; nil goes back to the selected node alone.
@@ -576,6 +606,10 @@ public enum TunnelProfileKeys {
     /// `Data` holding a JSON object of remote `[Map Local]` body URL to its downloaded bytes for the enabled plugins
     /// (`MitmResourceLibrary.profileValue`). Lines whose body is absent answer nothing.
     public static let mitmResources = "networkcore.mitm-resources"
+    /// `Data` pointing at the HTTPS decryption payload in the shared Keychain (`MitmProfileBundle`). Profiles
+    /// saved by this version carry it instead of `mitmPlugins`, `mitmScripts` and `mitmResources`, which made the
+    /// configuration too large for iOS to save.
+    public static let mitmBundle = "networkcore.mitm-bundle"
     /// The `ProxyMode` raw value the tunnel starts in. Profiles saved before it existed use `rule` when
     /// `routing` is set and `global` otherwise (`ProxyMode.saved(in:)`).
     public static let mode = "networkcore.mode"
@@ -584,7 +618,31 @@ public enum TunnelProfileKeys {
     /// `Data` holding a JSON array of the engine's `redirects` lines (`TrafficRedirects.profileValue`). Absent
     /// rewrites nothing.
     public static let redirects = "networkcore.redirects"
+    /// `true` when the tunnel refuses UDP to port 443 so apps fall back from QUIC (HTTP/3) to TCP, where HTTPS
+    /// decryption and domain rules see them. Absent is off.
+    public static let blockQuic = "networkcore.block-quic"
     /// `Data` holding the encoded `LocalRules`: the rule mode of a node list without subscription rules, and the
     /// user's rules in front of a subscription's. Absent is the default preset with no rules of the user's.
     public static let localRules = "networkcore.local-rules"
+    /// `Data` holding the encoded `NotificationSettings`. Absent posts every kind of notification.
+    public static let notifications = "networkcore.notifications"
+}
+
+extension EmbeddedRuntimeConfig {
+    // Here rather than in AnxLicense.swift: `outbound` and `routing` are only settable in this file.
+    /// The same config with `fields` set on every ANX outbound: the selected node and the subscription's nodes.
+    public func withAnxLicense(_ fields: [String: JSONValue]) -> EmbeddedRuntimeConfig {
+        var copy = self
+        if case var .native(native) = outbound, native.type == "anx" {
+            native.settings.merge(fields) { _, new in new }
+            copy.outbound = .native(native)
+        }
+        if var routing = copy.routing {
+            for (id, settings) in routing.outbounds where settings["type"] == .string("anx") {
+                routing.outbounds[id] = settings.merging(fields) { _, new in new }
+            }
+            copy.routing = routing
+        }
+        return copy
+    }
 }

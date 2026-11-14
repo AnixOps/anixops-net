@@ -29,6 +29,7 @@ jobs:
       windows: ${{ steps.changes.outputs.windows }}
       linux: ${{ steps.changes.outputs.linux }}
       apple: ${{ steps.changes.outputs.apple }}
+      android: ${{ steps.changes.outputs.android }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -55,19 +56,23 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          rust=false; ui=false; windows=false; linux=false; apple=false
-          all() { rust=true; ui=true; windows=true; linux=true; apple=true; }
+          rust=false; ui=false; windows=false; linux=false; apple=false; android=false
+          all() { rust=true; ui=true; windows=true; linux=true; apple=true; android=true; }
           if [[ "${EVENT_NAME}" != pull_request ]]; then
             all
           else
             while IFS= read -r path; do
               case "${path}" in
                 Cargo.toml | Cargo.lock | .github/*) all ;;
-                apps/windows-gui/ui/*) ui=true; windows=true; linux=true ;;
+                apps/windows-gui/ui/*) ui=true; windows=true; linux=true; android=true ;;
                 apps/windows-gui/* | apps/windows-service/* | installer/*) rust=true; windows=true ;;
-                apps/linux-gui/*) rust=true; linux=true ;;
-                crates/*) rust=true; windows=true; linux=true ;;
+                # The Android app is the Linux window and backend on Android.
+                apps/linux-gui/*) rust=true; linux=true; android=true ;;
+                apps/android/*) android=true ;;
+                crates/*) rust=true; windows=true; linux=true; android=true ;;
                 apps/ios/*) apple=true ;;
+                # The desktop UI bundles TERMS.md and the Apple tests check its version (first-start consent).
+                TERMS.md) ui=true; windows=true; linux=true; apple=true; android=true ;;
                 *) ;;
               esac
             done < <(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")
@@ -78,6 +83,7 @@ jobs:
             echo "windows=${windows}"
             echo "linux=${linux}"
             echo "apple=${apple}"
+            echo "android=${android}"
           } | tee -a "$GITHUB_OUTPUT"
 
   ui:
@@ -203,8 +209,7 @@ jobs:
       - name: Install WebKitGTK
         shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
+          bash .github/scripts/apt-install.sh libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -244,6 +249,21 @@ jobs:
           cargo test --locked -p networkcore-linux-gui
           cargo build --locked -p networkcore-linux-gui --features gui --release
           test -x target/release/anixops-net
+
+      # F4 cold start (median of 7 launches to the window's first page load, budget 1.5 s), the loopback
+      # Prometheus endpoint and the install integrity check, on the release binary under Xvfb.
+      - name: Cold start and client health
+        shell: bash
+        env:
+          # Xvfb has no GPU: WebKitGTK renders in software.
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          set -euo pipefail
+          bash .github/scripts/apt-install.sh xvfb xauth dbus
+          chmod +x .github/scripts/linux-client-health.sh
+          xvfb-run -a --server-args="-screen 0 1280x800x24" \
+            dbus-run-session -- .github/scripts/linux-client-health.sh target/release/anixops-net
 
   windows:
     name: Windows build, test and MSI
@@ -306,8 +326,11 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          rustup toolchain install stable --profile minimal
-          rustup default stable
+          # Pinned: Rust 1.100 lays build script outputs out as build/<crate>/<hash>/out, and tauri-build 2.6
+          # walks up from OUT_DIR to find the target directory, so the GUI build script fails with
+          # "The system cannot find the path specified". Move back to stable once tauri-build handles it.
+          rustup toolchain install 1.99.0 --profile minimal
+          rustup default 1.99.0
           rustup component add clippy
           rustup target add x86_64-pc-windows-gnu
 
@@ -396,6 +419,15 @@ jobs:
             throw "WebView2Loader.dll is empty: $webView2LoaderPath"
           }
           $defaultConfig = (Resolve-Path "installer\windows\default-managed-config.json").Path
+          $wintunPath = & .github/scripts/fetch-wintun.ps1 -Destination (Join-Path $env:RUNNER_TEMP "wintun")
+          $integrityPath = Join-Path $env:RUNNER_TEMP "integrity\integrity.sha256"
+          & .github/scripts/write-integrity.ps1 -Output $integrityPath -Entry @(
+            "networkcore-windows-gui.exe=$releaseDir\networkcore-windows-gui.exe",
+            "networkcore-windows-service.exe=$releaseDir\networkcore-windows-service.exe",
+            "networkcore-windows.exe=$releaseDir\networkcore-windows.exe",
+            "WebView2Loader.dll=$webView2LoaderPath",
+            "wintun.dll=$wintunPath"
+          )
           wix build installer/windows/Package.wxs `
             -ext WixToolset.UI.wixext `
             -arch x64 `
@@ -403,8 +435,10 @@ jobs:
             -d "CliExe=$releaseDir\networkcore-windows.exe" `
             -d "GuiExe=$releaseDir\networkcore-windows-gui.exe" `
             -d "WebView2LoaderDll=$webView2LoaderPath" `
+            -d "WintunDll=$wintunPath" `
             -d "ServiceExe=$releaseDir\networkcore-windows-service.exe" `
             -d "DefaultConfig=$defaultConfig" `
+            -d "IntegrityList=$integrityPath" `
             -o dist\windows-ci\networkcore-windows-ci.msi
           wix msi validate dist\windows-ci\networkcore-windows-ci.msi
           if ((Get-Item dist\windows-ci\networkcore-windows-ci.msi).Length -le 0) {
@@ -468,6 +502,23 @@ jobs:
           if (-not (Test-Path $webView2Loader -PathType Leaf)) {
             throw "Windows managed client MSI did not install WebView2Loader.dll beside the GUI executable."
           }
+          if (-not (Test-Path (Join-Path $env:ProgramFiles "AnixOps\NetworkCore\wintun.dll") -PathType Leaf)) {
+            throw "Windows managed client MSI did not install wintun.dll beside the GUI executable."
+          }
+          # The integrity list the client checks at start must match the installed files.
+          $installDir = Join-Path $env:ProgramFiles "AnixOps\NetworkCore"
+          $integrityList = Join-Path $installDir "integrity.sha256"
+          if (-not (Test-Path $integrityList -PathType Leaf)) {
+            throw "Windows managed client MSI did not install integrity.sha256."
+          }
+          foreach ($line in Get-Content $integrityList) {
+            if (-not $line.Trim()) { continue }
+            $expected, $name = $line -split "  ", 2
+            $actual = (Get-FileHash -Algorithm SHA256 -Path (Join-Path $installDir $name)).Hash.ToLowerInvariant()
+            if ($actual -ne $expected) {
+              throw "Installed $name does not match integrity.sha256."
+            }
+          }
 
           # GitHub-hosted Windows runners have no dependable interactive desktop session for
           # WebView2 navigation. Verify the installed binary through its non-windowed entrypoint;
@@ -481,10 +532,14 @@ jobs:
             throw "Windows GUI cleanup entrypoint exited with code $($guiProcess.ExitCode)."
           }
 
-          $startupKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-          New-Item -Path $startupKey -Force | Out-Null
-          $startupCommand = "`"$guiExe`" --start-after-login"
-          New-ItemProperty -Path $startupKey -Name "AnixOpsNetworkCore" -Value $startupCommand -PropertyType String -Force | Out-Null
+          # Sign-in startup is a per-user elevated logon task (the GUI manifest requires
+          # administrator rights, which the Run key silently skips). Seed one the way the
+          # GUI registers it; the uninstaller, running as LocalSystem, must remove it.
+          $startupSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+          $startupTaskName = "AnixOps Net $startupSid"
+          $startupAction = New-ScheduledTaskAction -Execute $guiExe -Argument "--start-after-login"
+          $startupTrigger = New-ScheduledTaskTrigger -AtLogOn
+          Register-ScheduledTask -TaskPath "\AnixOps\" -TaskName $startupTaskName -Action $startupAction -Trigger $startupTrigger -Force | Out-Null
 
           $service = Get-Service -Name "AnixOpsNetworkCore" -ErrorAction Stop
           if ($service.Status -ne "Stopped") {
@@ -538,8 +593,8 @@ jobs:
           if ($null -ne (Get-Service -Name "AnixOpsNetworkCore" -ErrorAction SilentlyContinue)) {
             throw "Windows managed client MSI uninstall left AnixOpsNetworkCore registered."
           }
-          if ($null -ne (Get-ItemProperty -Path $startupKey -Name "AnixOpsNetworkCore" -ErrorAction SilentlyContinue)) {
-            throw "Windows managed client MSI uninstall left the current-user NetworkCore startup entry."
+          if ($null -ne (Get-ScheduledTask -TaskPath "\AnixOps\" -TaskName $startupTaskName -ErrorAction SilentlyContinue)) {
+            throw "Windows managed client MSI uninstall left the NetworkCore sign-in startup task."
           }
 
   swift:
@@ -565,6 +620,22 @@ jobs:
         shell: bash
         working-directory: apps/ios
         run: swift build
+
+      # The release tool signs with the app's own verifier; every tampered feed or archive must be refused.
+      - name: Signed update feed refuses tampering
+        shell: bash
+        run: bash .github/scripts/appcast-tamper-check.sh
+
+      - name: Setup Go for the anix-kit interop check
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: false
+
+      # Feeds signed by AnixOps/anix-kit (anixsign / anixupdate) verify in the app, and the reverse.
+      - name: Update feed interoperates with anix-kit
+        shell: bash
+        run: bash .github/scripts/appcast-anixkit-interop.sh
 
   ios-xcode-build:
     name: iOS and macOS Xcode build
@@ -610,6 +681,7 @@ jobs:
           grep -q 'CODE_SIGN_ENTITLEMENTS = Entitlements/NetworkCoreWidget.entitlements;' NetworkCore.xcodeproj/project.pbxproj
           grep -q 'CODE_SIGN_ENTITLEMENTS = Entitlements/NetworkCoreMac.entitlements;' NetworkCore.xcodeproj/project.pbxproj
           grep -q 'CODE_SIGN_ENTITLEMENTS = Entitlements/NetworkCoreMacTunnel.entitlements;' NetworkCore.xcodeproj/project.pbxproj
+          grep -q 'CODE_SIGN_ENTITLEMENTS = Entitlements/NetworkCoreCLI.entitlements;' NetworkCore.xcodeproj/project.pbxproj
 
       - name: Build the app without signing
         shell: bash
@@ -687,12 +759,22 @@ jobs:
         run: |
           set -euo pipefail
           app="apps/ios/build/Build/Products/Debug/AnixOps Net.app"
-          appex="${app}/Contents/PlugIns/NetworkCoreMacTunnel.appex"
+          # Developer ID distribution: the tunnel is a System Extension named after its bundle ID.
+          tunnel_id=com.example.networkcore.macos.packettunnel
+          appex="${app}/Contents/Library/SystemExtensions/${tunnel_id}.systemextension"
           test -f "${app}/Contents/Resources/PrivacyInfo.xcprivacy"
           test -f "${app}/Contents/Resources/Assets.car"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "${app}/Contents/Info.plist" | grep -qx 'AppIcon'
-          /usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "${appex}/Contents/Info.plist" \
-            | grep -qx 'com.apple.networkextension.packet-tunnel'
+          /usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "${appex}/Contents/Info.plist" | grep -qx 'SYSX'
+          /usr/libexec/PlistBuddy -c 'Print :NetworkExtension:NEProviderClasses:com.apple.networkextension.packet-tunnel' \
+            "${appex}/Contents/Info.plist" | grep -qx 'NetworkCoreMacTunnel.PacketTunnelProvider'
+          /usr/libexec/PlistBuddy -c 'Print :NetworkExtension:NEMachServiceName' "${appex}/Contents/Info.plist" \
+            | grep -q 'net.anixops.networkcore.tunnel$'
+          /usr/libexec/PlistBuddy -c 'Print :NSSystemExtensionUsageDescription' "${appex}/Contents/Info.plist" > /dev/null
+          # In-app updates are off unless the release build sets the feed URL and public keys (docs/macos-updates.md).
+          /usr/libexec/PlistBuddy -c 'Print :AnixOpsUpdateFeedURL' "${app}/Contents/Info.plist" > /dev/null
+          /usr/libexec/PlistBuddy -c 'Print :AnixOpsUpdatePublicKeys' "${app}/Contents/Info.plist" > /dev/null
+          test ! -d "${app}/Contents/PlugIns/NetworkCoreMacTunnel.appex"
           test -d "${app}/Contents/Resources/en.lproj"
           symbols() {
             local dir="$1" name="$2" out="$3"
@@ -701,14 +783,95 @@ jobs:
               nm "${file}" >> "${out}" 2>/dev/null || true
             done
           }
-          symbols "${appex}/Contents/MacOS" NetworkCoreMacTunnel "${RUNNER_TEMP}/mac-appex-symbols.txt"
+          symbols "${appex}/Contents/MacOS" "${tunnel_id}" "${RUNNER_TEMP}/mac-appex-symbols.txt"
           symbols "${app}/Contents/MacOS" "AnixOps Net" "${RUNNER_TEMP}/mac-app-symbols.txt"
           grep -q '_networkcore_ios_runtime_init$' "${RUNNER_TEMP}/mac-appex-symbols.txt"
           # The app links the runtime library for subscription import and the HTTP delay test.
           grep -q '_networkcore_import_nodes$' "${RUNNER_TEMP}/mac-app-symbols.txt"
           grep -q '_networkcore_ios_measure_delay$' "${RUNNER_TEMP}/mac-app-symbols.txt"
-          lipo -archs "${appex}/Contents/MacOS/NetworkCoreMacTunnel" | tee "${RUNNER_TEMP}/mac-archs.txt"
+          lipo -archs "${appex}/Contents/MacOS/${tunnel_id}" | tee "${RUNNER_TEMP}/mac-archs.txt"
           grep -q arm64 "${RUNNER_TEMP}/mac-archs.txt"
+
+      # The command-line tool ships in the app and must parse, report its version and use the documented exit codes
+      # without the app running (docs/macos-cli.md).
+      - name: Check the macOS command-line tool
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="apps/ios/build/Build/Products/Debug/AnixOps Net.app"
+          cli="${app}/Contents/MacOS/anixops"
+          test -x "${cli}"
+          /usr/libexec/PlistBuddy -c 'Print :AnixOpsAppGroup' "${app}/Contents/Info.plist" | grep -q 'net.anixops.networkcore$'
+          "${cli}" --help | grep -q '退出码'
+          "${cli}" version | grep -q '^anixops '
+          expect() {
+            local want="$1"
+            shift
+            set +e
+            "${cli}" "$@" > /dev/null 2>&1
+            local got=$?
+            set -e
+            if [ "${got}" -ne "${want}" ]; then
+              echo "::error::anixops $*: expected exit code ${want}, got ${got}"
+              exit 1
+            fi
+          }
+          expect 64 frobnicate
+          expect 64 mode fast
+          expect 64
+          expect 66 import /nonexistent/nodes.txt
+          # Nothing listens on this socket: the app is "not running", and status never launches the app.
+          expect 69 status --socket "${RUNNER_TEMP}/none.sock"
+          expect 69 nodes --socket "${RUNNER_TEMP}/none.sock"
+
+      # The unsigned debug build opens with made-up data (`-AnixOpsDemo YES`), so the pictures need no account,
+      # no certificate and no tunnel. A machine without a screen session must not fail the build.
+      - name: Take macOS screenshots with demo data
+        continue-on-error: true
+        shell: bash
+        run: .github/scripts/mac-screenshots.sh "apps/ios/build/Build/Products/Debug/AnixOps Net.app" "${RUNNER_TEMP}/mac-screenshots"
+
+      - name: Upload the macOS screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-screenshots-${{ github.sha }}
+          path: ${{ runner.temp }}/mac-screenshots
+          if-no-files-found: ignore
+          retention-days: 3
+
+  # The Android app (apps/android): the Linux window and backend with the VpnService plugin, built for arm64 by
+  # the Tauri CLI. The Gradle project is generated here (`tauri android init`) and never committed. The APK is
+  # signed with ANDROID_KEYSTORE_* secrets when they are set, otherwise with a throwaway debug key made for this
+  # run (installing a later build then needs the old one uninstalled first).
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CARGO_INCREMENTAL: "0"
+    needs: changes
+    if: ${{ needs.changes.outputs.android == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Build and sign the APK
+        uses: ./.github/actions/android-apk
+        with:
+          keystore-base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          save-cache: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: anixops-net-android-${{ github.sha }}
+          path: ${{ runner.temp }}/apk/*.apk
+          if-no-files-found: error
+          retention-days: 3
 
   ci-summary:
     name: CI summary
@@ -721,6 +884,7 @@ jobs:
       - rust-deps
       - rust-linux
       - linux-gui
+      - android
       - windows
       - swift
       - ios-xcode-build

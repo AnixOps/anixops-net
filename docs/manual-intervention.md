@@ -82,3 +82,123 @@ CI 只能编译和跑单元测试，以下需在 TestFlight 真机上确认：
 - 点另一个订阅组的节点会切到该组并重连。
 - 带规则的订阅按规则分流时，“规则”页的选择组里出现“订阅·名称”成员，选它后流量走另一个订阅组的节点。
 - 后台刷新：设置 > 通用 > 后台 App 刷新打开时，把间隔设为 1 小时，一段时间后不打开 App 也能看到更新时间变化（iOS 调度时间不保证）。
+
+## Windows 启动即管理员运行真机验收
+
+GUI 清单改为 `requireAdministrator`，登录后启动从 HKCU Run 改为按用户的提权计划任务 `\AnixOps\AnixOps Net <SID>`。CI 覆盖 MSI 安装/卸载和任务清理；以下需要在真机确认：
+
+- [ ] 双击 `networkcore-windows-gui.exe` 弹出 UAC，同意后正常进入界面；拒绝则不启动。
+- [ ] 设置里打开「登录后启动」，注销再登录，客户端自动以管理员启动且不弹 UAC。
+- [ ] 旧版本开过「登录后启动」的机器升级后首次启动，HKCU Run 里的 `AnixOpsNetworkCore` 被删除，计划任务已创建。
+- [ ] MSI 卸载后计划任务被删除，卸载不会因为这一步失败。
+- [ ] 以管理员身份运行后，系统代理仍写到当前登录用户（同一账户提权）；标准用户输入其他管理员账户凭据的情况不支持，需记录现象。
+
+## Windows 桌面模式 HTTPS 解密真机验收
+
+桌面模式下 HTTPS 解密改由客户端进程自己运行（客户端已固定以管理员运行），不再需要 Windows 服务：
+
+- [ ] 设置选「桌面模式」，扩展页开启 HTTPS 解密，连接成功；浏览器访问 HTTPS 站点证书颁发者为 NetworkCore 根证书，插件改写生效。
+- [ ] 已连接时开启/关闭 HTTPS 解密，客户端自动重连，系统代理保持在 127.0.0.1:7890。
+- [ ] 关闭 HTTPS 解密后，「受信任的根证书颁发机构」里的 NetworkCore 根证书被移除。
+- [ ] 断开连接后 7890/7891 端口都被释放。
+
+## Windows TUN 模式真机验收
+
+桌面模式新增「TUN 模式」开关：客户端用 Wintun 虚拟网卡接管全部流量，系统代理和 HTTPS 解密照常保留。CI 没有 Wintun 驱动，只能真机验收（Windows 10/11 x64，管理员）：
+
+- [ ] 安装目录（MSI 和便携 ZIP）里有 `wintun.dll`；设置 → 运行方式 → 打开「TUN 模式」，已连接时客户端自动重连。
+- [ ] 「网络连接」里出现 `AnixOps Net` 网卡；`route print` 有 `0.0.0.0/1`、`128.0.0.0/1` 走该网卡，原默认路由仍在。
+- [ ] 不走系统代理的程序（`curl --noproxy "*" https://www.google.com/generate_204`、游戏）经过代理；活动页可能只显示系统代理那一路的连接。
+- [ ] 代理服务器连接不回环：连接稳定、CPU 正常，`netstat -ano` 中客户端到节点的连接本地地址是物理网卡 IP。
+- [ ] 关闭 TUN 模式或断开后，`AnixOps Net` 网卡和路由消失，网络恢复正常。
+- [ ] 已知限制：DNS 服务器在本地网段（如路由器 192.168.1.1）时 Windows 可能并发向它查询；切换 Wi-Fi/有线后需要重连一次。
+
+## macOS Developer ID 版真机验收
+
+macOS 客户端改为官网分发（Developer ID 签名 + 公证），隧道从 App 扩展改成 System Extension。签名、公证在私有 anx 仓库的
+「macOS with ANX」workflow 里完成；CI 只能做不签名构建，以下只能真机验收（macOS 14+）：
+
+- [ ] 解开 ZIP / 挂载 DMG，把 AnixOps Net 拖进「应用程序」后打开，Gatekeeper 不报「无法验证开发者」；`spctl -a -vv` 显示 `Notarized Developer ID`。
+- [ ] 第一次连接时提示允许网络扩展；在「系统设置 › 通用 › 登录项与扩展 › 网络扩展」允许后，再连接成功。
+- [ ] 不在「应用程序」里直接打开时，连接给出「请先把 AnixOps Net 拖进应用程序文件夹」的提示。
+- [ ] 订阅规则、HTTPS 解密（根证书已信任）、脚本插件在 Mac 上照常生效（隧道读的是 App 启动时交给它的密钥副本）。
+- [ ] 睡眠唤醒、从系统设置的 VPN 开关直接连接（不经 App）也能连上。
+- [ ] 安装新版本后再连接，系统扩展被替换为新版本（`systemextensionsctl list` 版本号更新）。
+
+## macOS 应用内更新
+
+应用内更新的代码、发布工具和 CI 篡改检查已经就绪（`docs/macos-updates.md`），但对外更新通道默认关闭：没有 feed URL
+和公钥的构建不会检查更新。启用需要维护者同意并完成：
+
+- [ ] 在可信的机器上生成签名密钥：`anixops-appcast keygen --out update-signing.key`，私钥存进 anx 仓库 Environment
+  `apple-anx` 的 secret `MACOS_UPDATE_SIGNING_KEY`，公钥存为 variable `MACOS_UPDATE_PUBLIC_KEYS`；本机副本离线保存后删除。
+- [ ] 决定 feed 和安装包放在哪个 HTTPS 地址（官网或对象存储），存为 variable `MACOS_UPDATE_FEED_URL`。
+- [ ] 让「macOS with ANX」workflow 出带签名 `.pkg` 的版本（需要 Developer ID Installer 证书），并生成 `appcast.json`。
+- [ ] 上传第一份 `appcast.json` 与安装包，真机验收：
+  - [ ] 旧版本在「设置 › 软件更新」点「检查更新」，看到新版本和说明；下载后「安装并退出」打开 Installer，装完版本号更新。
+  - [ ] 把服务器上的 `appcast.json` 改一个字节，检查更新提示「更新信息未通过签名校验，已忽略」。
+  - [ ] 把服务器上的 `.pkg` 换成别的文件，下载后提示「更新安装包未通过校验，已删除」，下载目录里没有留下文件。
+
+## 客户端可观测性真机验收
+
+见 [`docs/architecture/client-health.md`](architecture/client-health.md)。Linux 的冷启动、指标端点与完整性由 CI 验证，其余需真机：
+
+- [ ] Windows：连接后浏览器打开 `http://127.0.0.1:9477/metrics`，有 `networkcore_upload_bytes_total` 与 `anixops_client_integrity{state="verified"} 1`（MSI 安装版）。
+- [ ] Windows：设置 › 诊断与隐私 显示「安装完整性：完整」；改动安装目录里的 `wintun.dll` 后重启客户端显示「文件缺失或被改动」。
+- [ ] 关闭「崩溃报告」后 `crashes` 目录被删除；重新打开后开关状态在重启后保持。
+- [ ] iOS / macOS：设置 › 隐私 有「崩溃报告」开关；开发者模式（macOS 为活动页）复制的诊断信息里有 `install integrity: verified` 与 `metrics:` 段，`metrics:` 段里没有节点名、策略组名。
+- [ ] iOS：发生过崩溃的设备次日打开 App 后，诊断信息里出现 `kind: metrickit crash diagnostic` 的报告，且没有网址与 IP。
+
+## 稳定性与自愈真机验收（S3 / S4 / S6）
+
+客户端打开“设置 › 连接 › 自动重连”（默认开）后，VPN 配置带 On Demand 规则；内核 `reset_network` 在切网和唤醒时重建出站连接。
+CI 只能跑规则与重建逻辑的单元测试（`OnDemandSettingsTests`、`NetworkRecoveryTests`，内核
+`reset_network_twenty_times_leaks_nothing`），以下需要真机：
+
+- [ ] S3 崩溃自愈（iOS、macOS）：连接后强杀扩展（iOS 用 Xcode Debug › Attach 后 kill，或 `kill -9` macOS 的
+  `com.example.networkcore.macos.packettunnel` 进程），记录到重新显示“已连接”的时间，目标 ≤ 5 s；手动断开后不应自己连上。
+- [ ] S4 唤醒/切网（iOS）：Wi-Fi ↔ 蜂窝、两个 Wi-Fi 之间各切 20 次，每次切换后网页和 Hysteria2/TUIC 节点都能在几秒内恢复；
+  开发者模式的事件里每次有一条 `network change: reset … sessions, closed … connections`，扩展内存（诊断里的
+  footprint）20 次后不持续增长。锁屏超过 1 分钟再解锁，应有 `wake: … closed …`。
+- [ ] S6 SSID 规则（iOS、macOS）：把家里 Wi-Fi 设为“断开”，加入该 Wi-Fi 后隧道在 300 ms 内断开（用系统 VPN 状态栏图标或
+  `log stream --predicate 'subsystem == "com.apple.networkextension"'` 的时间戳计时），离开后自动连接。
+- [ ] S4 桌面（Windows、Linux，本机代理模式）：拔插网线或换 Wi-Fi、睡眠 2 分钟后唤醒，网页几秒内恢复；Windows 日志
+  （`tauri-gui`）里有 `network change: engine reset {...}` / `wake: engine reset {...}`。TUN 模式和服务模式的内核不在本窗口进程里，
+  这一项不覆盖。
+
+## macOS 命令行工具
+
+`anixops` 的解析、退出码和套接字通道有单元测试，CI 还在构建好的 App 里运行工具检查帮助、版本和退出码
+（`docs/macos-cli.md`）。签名后的真实行为只能真机验收（macOS 14+，Developer ID 版）：
+
+- [ ] 「macOS with ANX」workflow 给 `Contents/MacOS/anixops` 用 Developer ID 签名并开 Hardened Runtime，公证通过。
+- [ ] App 运行时 `anixops status` 显示状态；macOS 15 上不弹「想要访问其他 App 的数据」。
+- [ ] App 未运行时 `anixops connect` 在后台打开 App 并连上；`anixops status -q; echo $?` 未连接为 3、已连接为 0。
+- [ ] `anixops mode rule`、`anixops select <节点>`、`anixops test`、`anixops import <订阅链接>` 与窗口里同样的操作效果一致，窗口实时更新。
+- [ ] 另一个用户（或 `sudo -u nobody`）运行 `anixops status` 连不上（退出码 69 或 71）。
+
+## 安卓 APK 签名与真机验收
+
+CI 的 `android` job 每次都产出 arm64 APK（artifact `anixops-net-android-<sha>`）。没有签名密钥时用临时调试密钥签名，
+每次构建的密钥都不同，装新版前要先卸载旧版。
+
+- [ ] 生成正式签名密钥（只做一次，丢了就无法给已安装的用户升级）：
+  `keytool -genkeypair -v -keystore anixops-net.jks -alias anixops-net -keyalg RSA -keysize 4096 -validity 10000`，
+  把 `base64 -w0 anixops-net.jks` 的结果和密码写入仓库 secrets：`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、
+  `ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。配置后 CI 自动改用它签名（文件名里的 `debug` 变成 `release`）。
+- [ ] 发版时 `release.yml` 会把 APK 作为 `anixops-net-<版本>-android-arm64.apk` 放进 GitHub Release。配置正式密钥前，
+  Release 说明会写明「临时签名，装新版前要先卸载旧版」。
+- [ ] 真机验收：安装 APK，首次启动同意用户协议，导入订阅，点连接时允许 VPN，浏览器能打开网页，断开后网络恢复。
+- [ ] 上架 Google Play（暂不需要）：开发者账号、AAB 构建和 Play App Signing 另行处理。
+
+
+## 开源版下载页（GitHub Pages）
+
+2026-11-14 用户决定客户端分两版发布：开源版（不含 ANX）放本仓库 GitHub Release，ANX 版只在机场面板里下载。
+开源版的固定下载页由 `download-page.yml` 生成并部署到 GitHub Pages：`https://anixops.github.io/anixops-net/`，
+另有固定直链 `/windows/`、`/windows-portable/`、`/linux-deb/`、`/linux/`、`/android/`（跳转到最新版文件）和
+`latest.json`。`release.yml` 发布 Release 后会自动触发它。
+
+- [ ] 维护者在 Settings → Pages 把 Source 设为「GitHub Actions」（只做一次；没设之前 `Deploy to GitHub Pages` job 会失败）。
+  设好后手动运行一次 `Download page` workflow。
+- [ ] 打开下载页，确认各平台按钮指向最新版，`/windows/` 等固定链接能跳转。
