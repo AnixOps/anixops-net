@@ -32,6 +32,7 @@ desktop-mitm = { path = "../../crates/desktop-mitm" }
 engine-embedded = { workspace = true }
 inbound-mixed = { workspace = true }
 node-edits = { path = "../../crates/node-edits" }
+on-demand = { path = "../../crates/on-demand" }
 node-import = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

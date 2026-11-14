@@ -5,7 +5,10 @@ import android.app.Activity
 import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.VpnService
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
@@ -27,6 +30,12 @@ import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
+
+/** `ask`: ask for the location permission when Android withholds the Wi-Fi name. */
+@InvokeArg
+class NetworkArgs {
+    var ask: Boolean = false
+}
 
 /** The interface to bring up; the field names match the Rust `StartRequest` (camelCase). */
 @InvokeArg
@@ -94,6 +103,44 @@ class VpnPlugin(private val activity: Activity) : Plugin(activity) {
         ) {
             activity.requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 0)
         }
+    }
+
+    /**
+     * The network the device is on, for the Wi-Fi rules: `kind` is wifi, cellular, other or offline, and `ssid` the
+     * Wi-Fi name when Android gives it (location permission granted). The app is left out of its own VPN, so the
+     * active network here is the one underneath.
+     */
+    @Command
+    fun currentNetwork(invoke: Invoke) {
+        val args = invoke.parseArgs(NetworkArgs::class.java)
+        val result = JSObject()
+        val connectivity = activity.getSystemService(ConnectivityManager::class.java)
+        val capabilities = connectivity?.activeNetwork?.let { connectivity.getNetworkCapabilities(it) }
+        val kind = when {
+            capabilities == null -> "offline"
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
+            else -> "other"
+        }
+        result.put("kind", kind)
+        if (kind == "wifi") {
+            val granted = activity.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+            if (granted) {
+                @Suppress("DEPRECATION")
+                val ssid = activity.applicationContext.getSystemService(WifiManager::class.java)?.connectionInfo?.ssid
+                val name = ssid?.removeSurrounding("\"")?.takeIf { it.isNotEmpty() && it != "<unknown ssid>" }
+                if (name != null) {
+                    result.put("ssid", name)
+                }
+            } else if (args.ask) {
+                activity.requestPermissions(
+                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                    1
+                )
+            }
+        }
+        invoke.resolve(result)
     }
 
     /**

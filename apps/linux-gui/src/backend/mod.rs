@@ -28,6 +28,9 @@ use desktop_mitm::Root;
 use engine_embedded::config::RuntimeConfig;
 use engine_embedded::profile::{self, RoutingMode, RuleList};
 use node_edits::{NodeEdits, NodeForm};
+use on_demand::{
+    Action as OnDemandAction, Network, Settings as OnDemandSettings, Watch as OnDemandWatch,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use traffic_stats::{Counter as TrafficCounter, TrafficStats};
@@ -216,6 +219,9 @@ pub struct Backend {
     /// The notification switches (`notification_settings`).
     notifications: NotificationSettings,
     disconnect_watch: DisconnectWatch,
+    /// The Wi-Fi rules (`on_demand_settings`); the platform samples the network (Android only).
+    on_demand: OnDemandSettings,
+    on_demand_watch: OnDemandWatch,
 }
 
 impl Backend {
@@ -245,9 +251,12 @@ impl Backend {
             traffic_saved_at: now(),
             notifications: NotificationSettings::default(),
             disconnect_watch: DisconnectWatch::default(),
+            on_demand: OnDemandSettings::default(),
+            on_demand_watch: OnDemandWatch::default(),
         };
         backend.traffic = TrafficStats::load(&backend.traffic_path());
         backend.notifications = NotificationSettings::load(&backend.notifications_path());
+        backend.on_demand = OnDemandSettings::load(&backend.on_demand_path());
         backend.restore_proxy();
         backend.reload_nodes();
         backend
@@ -1042,6 +1051,50 @@ impl Backend {
             .script_notifications()
             .map(|answer| self.notifications.script_notices(&answer))
             .unwrap_or_default()
+    }
+
+    fn on_demand_path(&self) -> PathBuf {
+        self.store.dir().join("on-demand.json")
+    }
+
+    /// The Wi-Fi rules, changed to `update` first when given; changed rules apply to the current network at
+    /// the next sample.
+    pub fn on_demand_settings(
+        &mut self,
+        update: Option<OnDemandSettings>,
+    ) -> Result<OnDemandSettings, String> {
+        if let Some(update) = update {
+            let next = update
+                .checked()
+                .map_err(|name| format!("\"{name}\" is not a Wi-Fi name (1 to 32 bytes)"))?;
+            if next != self.on_demand {
+                next.save(&self.on_demand_path())
+                    .map_err(|error| format!("the Wi-Fi rules could not be saved: {error}"))?;
+                self.on_demand = next;
+                self.on_demand_watch.reset();
+            }
+        }
+        Ok(self.on_demand.clone())
+    }
+
+    pub fn on_demand_enabled(&self) -> bool {
+        self.on_demand.enabled
+    }
+
+    /// What the rules want on `network` when it is new and the connection is not already that way.
+    pub fn on_demand_action(&mut self, network: Network) -> Option<OnDemandAction> {
+        let running = self.engine.is_running();
+        match self.on_demand_watch.observe(&self.on_demand, network)? {
+            OnDemandAction::Connect if !running => {
+                self.log(LogLevel::Info, "Wi-Fi rules: connecting");
+                Some(OnDemandAction::Connect)
+            }
+            OnDemandAction::Disconnect if running => {
+                self.log(LogLevel::Info, "Wi-Fi rules: disconnecting");
+                Some(OnDemandAction::Disconnect)
+            }
+            _ => None,
+        }
     }
 
     /// The notice for a failed automatic update of source `id`.
@@ -2092,6 +2145,44 @@ rules:
             off
         );
         assert!(backend.take_notices().is_empty());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn keeps_wifi_rules_and_connects_only_when_disconnected() {
+        let (mut backend, dir) = backend("on-demand");
+        assert!(!backend.on_demand_settings(None).unwrap().enabled);
+        assert_eq!(backend.on_demand_action(Network::Cellular), None);
+        let rules = OnDemandSettings {
+            enabled: true,
+            wifi: vec![on_demand::Rule {
+                ssid: " Home ".to_string(),
+                action: OnDemandAction::Disconnect,
+            }],
+            ..OnDemandSettings::default()
+        };
+        let saved = backend.on_demand_settings(Some(rules)).unwrap();
+        assert_eq!(saved.wifi[0].ssid, "Home");
+        assert_eq!(OnDemandSettings::load(&backend.on_demand_path()), saved);
+        // Not connected: "Home" wants a disconnect, which there is nothing to do for; cellular connects once.
+        assert_eq!(
+            backend.on_demand_action(Network::Wifi(Some("Home".into()))),
+            None
+        );
+        assert_eq!(
+            backend.on_demand_action(Network::Cellular),
+            Some(OnDemandAction::Connect)
+        );
+        assert_eq!(backend.on_demand_action(Network::Cellular), None);
+        let refused = OnDemandSettings {
+            wifi: vec![on_demand::Rule {
+                ssid: String::new(),
+                action: OnDemandAction::Connect,
+            }],
+            ..saved.clone()
+        };
+        assert!(backend.on_demand_settings(Some(refused)).is_err());
+        assert_eq!(backend.on_demand_settings(None).unwrap(), saved);
         let _ = std::fs::remove_dir_all(dir);
     }
 }

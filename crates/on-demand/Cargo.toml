@@ -1,0 +1,11 @@
+[package]
+name = "on-demand"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Connect or disconnect by Wi-Fi network on the desktop and Android clients, the rules of the iOS On Demand settings."
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

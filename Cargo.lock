@@ -3144,6 +3144,7 @@ dependencies = [
  "network-watch",
  "node-edits",
  "node-import",
+ "on-demand",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -3174,6 +3175,7 @@ dependencies = [
  "network-watch",
  "node-edits",
  "node-import",
+ "on-demand",
  "platform-windows",
  "rcgen",
  "reqwest 0.12.28",
@@ -3516,6 +3518,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12f40cff3dde1b6087cc5d5f5d4d65712f34016a03ed60e9c08dcc392736b5b7"
 dependencies = [
  "asn1-rs",
+]
+
+[[package]]
+name = "on-demand"
+version = "0.3.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

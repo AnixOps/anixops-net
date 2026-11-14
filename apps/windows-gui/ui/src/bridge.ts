@@ -350,6 +350,25 @@ export interface NotificationSettings {
   language: string;
 }
 
+/** What the Wi-Fi rules do on one kind of network. */
+export type OnDemandAction = "connect" | "disconnect" | "ignore";
+
+/** The Wi-Fi rules, as in the iOS On Demand settings; named networks first, first match wins. */
+export interface OnDemandSettings {
+  enabled: boolean;
+  wifi: Array<{ ssid: string; action: OnDemandAction }>;
+  otherWifi: OnDemandAction;
+  cellular: OnDemandAction;
+  /** Ethernet and other networks. */
+  other: OnDemandAction;
+}
+
+/** The network the device is on; `ssid` when the system gives the Wi-Fi name. */
+export interface CurrentNetwork {
+  kind: "wifi" | "cellular" | "other" | "offline";
+  ssid?: string | null;
+}
+
 export type LogLevel = "info" | "warn" | "error";
 
 /** One line of the app's own log; the engine keeps no log. */
@@ -537,6 +556,10 @@ export const desktop = {
   /** The notification switches, changed to `update` first when given; `language` sets that of the texts. */
   notificationSettings: (language: string, update: NotificationSettings | null = null) =>
     invoke<NotificationSettings>("notification_settings", { update, language }),
+  /** The Wi-Fi rules, changed to `update` first when given. */
+  onDemandSettings: (update: OnDemandSettings | null = null) => invoke<OnDemandSettings>("on_demand_settings", { update }),
+  /** The current network; `ask` asks for the permission that reveals the Wi-Fi name (Android). */
+  currentNetwork: (ask = false) => invoke<CurrentNetwork>("current_network", { ask }),
   nodeForm: (nodeId: string) => invoke<NodeForm>("node_form", { nodeId }),
   /** Until the subscription is updated, the node runs with this name, server and port. */
   editNode: (nodeId: string, name: string, server: string, port: string) => invoke<OperationResult>("edit_node", { nodeId, name, server, port }),
