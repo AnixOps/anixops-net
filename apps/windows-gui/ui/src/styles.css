@@ -492,6 +492,12 @@ dl.headers dd { margin: 0; font-family: var(--font-mono); font-size: 12px; overf
 .replay-line { display: flex; gap: 8px; }
 .replay-line .method-input { flex: 0 0 96px; font-family: var(--font-mono); }
 .replay-line input:not(.method-input) { flex: 1; min-width: 0; font-family: var(--font-mono); }
+.requests .method { margin-right: 6px; color: var(--accent); font-family: var(--font-mono); font-size: 12px; font-weight: 600; }
+.requests .list-main strong { font-family: var(--font-mono); font-size: 12px; }
+.request-toolbar .search { flex: 1; width: auto; min-width: 0; }
+.quick-filters { flex-wrap: wrap; gap: 6px; min-height: 0; padding-block: 2px 8px; }
+.row + .row.quick-filters::before { display: none; }
+.search.invalid { box-shadow: 0 0 0 1.5px var(--danger); border-radius: 7px; }
 .mapping-pattern { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 720px) {
   dl.headers > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }

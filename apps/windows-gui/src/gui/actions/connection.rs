@@ -140,7 +140,7 @@ impl DesktopCore {
 /// Kernel control commands the client may send: reading traffic, connections
 /// and rule sets, closing connections, refreshing remote rule sets and packet
 /// capture. Mode and group changes go through the saved profile instead.
-const ACTIVITY_COMMANDS: [&str; 11] = [
+const ACTIVITY_COMMANDS: [&str; 12] = [
     "traffic",
     "connections",
     "close_connection",
@@ -152,6 +152,7 @@ const ACTIVITY_COMMANDS: [&str; 11] = [
     "clear_capture",
     "capture_connection",
     "export_capture",
+    "capture_requests",
 ];
 
 /// The request bytes for an activity page command, or why it is refused.
