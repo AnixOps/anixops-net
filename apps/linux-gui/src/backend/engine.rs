@@ -117,6 +117,16 @@ pub fn sync_anx_license() {
     node_import::set_anx_license(license);
 }
 
+/// A profile with no node: everything leaves through the engine's `direct` outbound.
+pub fn direct_envelope() -> String {
+    serde_json::json!({
+        "schema_version": 1,
+        "profile_id": PROFILE_ID,
+        "outbound": { "type": "direct" },
+    })
+    .to_string()
+}
+
 pub fn envelope(nodes: &[NodeDescriptor], node_id: &str) -> Result<String, String> {
     sync_anx_license();
     single_node_envelope(PROFILE_ID, nodes, Some(node_id))

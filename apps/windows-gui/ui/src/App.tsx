@@ -17,10 +17,14 @@ import { useAppearance } from "./theme";
 import { StatusDot, Switch, Tile, TileColor, ToolbarSlot } from "./ui";
 import { t, useLanguage } from "./i18n";
 import { TermsConsent, useTermsConsent } from "./terms";
+import { AppMode, initialMode, useDebugExit, useMode, wantsDirectEgress } from "./mode";
+import { ModeChoice } from "./mode-choice";
 
 export type Page = "home" | "proxies" | "rules" | "extensions" | "activity" | "settings";
 
-const navigation: Array<{ page: Page; label: string; icon: LucideIcon; color: TileColor }> = [
+type NavItem = { page: Page; label: string; icon: LucideIcon; color: TileColor };
+
+const navigation: NavItem[] = [
   { page: "home", label: "概览", icon: House, color: "indigo" },
   { page: "proxies", label: "代理", icon: Globe, color: "sky" },
   { page: "rules", label: "规则", icon: Route, color: "orange" },
@@ -28,7 +32,21 @@ const navigation: Array<{ page: Page; label: string; icon: LucideIcon; color: Ti
   { page: "activity", label: "活动", icon: Activity, color: "pink" },
 ];
 
-const settingsItem = { page: "settings" as const, label: "设置", icon: Settings, color: "gray" as const };
+// Debug mode (docs/debug-mode.md): requests first, and subscriptions with nodes kept under "Egress" next to Settings.
+const debugNavigation: NavItem[] = [
+  { page: "activity", label: "请求", icon: Activity, color: "pink" },
+  { page: "rules", label: "规则", icon: Route, color: "orange" },
+  { page: "extensions", label: "扩展", icon: Puzzle, color: "purple" },
+];
+
+const egressItem: NavItem = { page: "proxies", label: "出口", icon: Globe, color: "sky" };
+
+const settingsItem: NavItem = { page: "settings", label: "设置", icon: Settings, color: "gray" };
+
+/** The sidebar of a mode: the main pages, then the ones below the gap. */
+function sidebarOf(mode: AppMode): { main: NavItem[]; foot: NavItem[] } {
+  return mode === "debug" ? { main: debugNavigation, foot: [egressItem, settingsItem] } : { main: navigation, foot: [settingsItem] };
+}
 
 // The dashboards use the whole window, lists read better wider, and settings-style pages keep a narrow column.
 const pageWidths: Partial<Record<Page, "full" | "wide">> = { home: "full", proxies: "full", activity: "wide" };
@@ -50,6 +68,8 @@ export function App() {
   const [appearance, setAppearance] = useAppearance();
   const [language, setLanguage] = useLanguage();
   const [needsTerms, acceptTerms] = useTermsConsent();
+  const [storedMode, chooseMode] = useMode();
+  const [debugExit, setDebugExit] = useDebugExit();
   const noticeTimer = useRef<number>();
 
   const show = useCallback((text: string, tone: Notice["tone"]) => {
@@ -108,7 +128,45 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [toggleConnection]);
 
-  const title = t([...navigation, settingsItem].find((item) => item.page === page)?.label ?? "");
+  // Someone with a subscription or nodes came for the proxy and is not asked; a new user picks once.
+  const hasProfile = snapshot ? Boolean(snapshot.subscription) || nodes.length > 0 : null;
+  const resolved = initialMode(storedMode, hasProfile);
+  const mode: AppMode = resolved === "debug" ? "debug" : "proxy";
+  useEffect(() => {
+    if (storedMode === null && resolved === "proxy") chooseMode("proxy");
+  }, [storedMode, resolved, chooseMode]);
+  const sidebar = sidebarOf(mode);
+  const pages = [...sidebar.main, ...sidebar.foot];
+  // A page the mode has no entry for (the overview in debug mode) gives way to the mode's first page.
+  useEffect(() => {
+    if (resolved !== "wait" && resolved !== "ask" && !pages.some((item) => item.page === page)) setPage(pages[0].page);
+  }, [resolved, page, pages]);
+  const switchMode = (next: AppMode) => {
+    chooseMode(next);
+    setPage(sidebarOf(next).main[0].page);
+  };
+
+  // Debug mode with the direct exit runs the engine with no node; the backend keeps the choice, so it is sent only
+  // when it differs, once per wanted value.
+  const supportsDirect = snapshot?.directEgress !== undefined;
+  const wantDirect = wantsDirectEgress(mode, debugExit, nodes.length > 0);
+  const sentEgress = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (!supportsDirect || resolved === "wait" || resolved === "ask" || snapshot?.directEgress === wantDirect || sentEgress.current === wantDirect) return;
+    sentEgress.current = wantDirect;
+    void run("egress", () => desktop.setDirectEgress(wantDirect));
+  }, [supportsDirect, resolved, snapshot?.directEgress, wantDirect, run]);
+  // Importing nodes in debug mode means they are wanted as the exit.
+  const knownNodes = useRef<number | null>(null);
+  useEffect(() => {
+    if (!snapshot) return;
+    if (knownNodes.current === 0 && nodes.length > 0 && mode === "debug") setDebugExit("node");
+    knownNodes.current = nodes.length;
+  }, [snapshot, nodes.length, mode, setDebugExit]);
+  const egress = mode === "debug" ? { exit: debugExit, setExit: setDebugExit, supported: supportsDirect } : undefined;
+  const canRunWithoutNodes = supportsDirect && wantDirect;
+
+  const title = t(pages.find((item) => item.page === page)?.label ?? "");
   const dotTone = phase === "on" ? "success" : phase === "failed" ? "danger" : phase === "connecting" || phase === "disconnecting" ? "warning" : "neutral";
   const node = nodes.find((item) => item.id === snapshot?.selectedNode);
   const sideDetail = phase === "on"
@@ -117,7 +175,7 @@ export function App() {
   const moving = phase === "connecting" || phase === "disconnecting";
   const width = pageWidths[page] ?? "narrow";
 
-  const navButton = ({ page: item, label, icon, color }: typeof navigation[number]) => (
+  const navButton = ({ page: item, label, icon, color }: NavItem) => (
     <button
       className={`nav-item ${page === item ? "active" : ""}`}
       key={item}
@@ -125,13 +183,14 @@ export function App() {
       onClick={() => setPage(item)}
     >
       <Tile icon={icon} color={color} /><span>{t(label)}</span>
-      {item === "proxies" && nodes.length > 0 && <span className="nav-count">{nodes.length}</span>}
+      {item === "proxies" && mode === "proxy" && nodes.length > 0 && <span className="nav-count">{nodes.length}</span>}
       {item === "activity" && <ActiveCount />}
     </button>
   );
 
   // Nothing else is usable until the user agreement is accepted (TERMS.md).
   if (needsTerms) return <TermsConsent onAccept={acceptTerms} />;
+  if (resolved === "ask") return <ModeChoice onChoose={switchMode} />;
 
   return (
     <div className="app-shell">
@@ -139,9 +198,9 @@ export function App() {
       <aside className="sidebar">
         <div className="sidebar-brand"><Wordmark /></div>
         <nav aria-label={t("主导航")}>
-          {navigation.map(navButton)}
+          {sidebar.main.map(navButton)}
           <div className="nav-gap" />
-          {navButton(settingsItem)}
+          {sidebar.foot.map(navButton)}
         </nav>
         <div className="sidebar-foot">
           <SidebarRates />
@@ -156,7 +215,7 @@ export function App() {
               tone="go"
               checked={phase === "on" || phase === "connecting"}
               busy={moving}
-              disabled={phase === "loading" || moving || (snapshot !== null && !snapshot.subscription && nodes.length === 0)}
+              disabled={phase === "loading" || moving || (snapshot !== null && !snapshot.subscription && nodes.length === 0 && !canRunWithoutNodes)}
               onChange={toggleConnection}
             />
           </div>
@@ -170,11 +229,11 @@ export function App() {
         <div className={`page ${width}`} key={page}>
           <ToolbarSlot.Provider value={toolbar}>
             {page === "home" && <HomePage snapshot={snapshot} nodes={nodes} phase={phase} busy={busy} run={run} toggle={toggleConnection} goTo={setPage} delays={delays} setDelays={setDelays} />}
-            {page === "proxies" && <ProxiesPage snapshot={snapshot} nodes={nodes} busy={busy} run={run} delays={delays} setDelays={setDelays} />}
+            {page === "proxies" && <ProxiesPage snapshot={snapshot} nodes={nodes} busy={busy} run={run} delays={delays} setDelays={setDelays} egress={egress} />}
             {page === "rules" && <RulesPage snapshot={snapshot} busy={busy} run={run} />}
             {page === "extensions" && <ExtensionsPage snapshot={snapshot} busy={busy} run={run} />}
-            {page === "activity" && <ActivityPage snapshot={snapshot} busy={busy} run={run} />}
-            {page === "settings" && <SettingsPage snapshot={snapshot} busy={busy} run={run} appearance={appearance} setAppearance={setAppearance} language={language} setLanguage={setLanguage} />}
+            {page === "activity" && <ActivityPage snapshot={snapshot} busy={busy} run={run} debug={mode === "debug"} />}
+            {page === "settings" && <SettingsPage snapshot={snapshot} busy={busy} run={run} appearance={appearance} setAppearance={setAppearance} language={language} setLanguage={setLanguage} mode={mode} setMode={switchMode} />}
           </ToolbarSlot.Provider>
         </div>
         {notice && (
