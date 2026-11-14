@@ -211,3 +211,13 @@ CI 的 `android` job 每次都产出 arm64 APK（artifact `anixops-net-android-<
 - [ ] macOS：连接后打开「扩展 → 手机抓包」，iPhone 扫码，按设置页的步骤设代理并安装、信任描述文件，`http://cert.anixops/` 显示“代理已生效”，请求页能看到 `LAN <iPhone 地址>` 的连接，HTTPS 内容能解密。
 - [ ] Windows（桌面模式）与 Linux：同样的步骤，再用一台 Android 手机安装 `.crt` 验收一遍。
 - [ ] 第一次开启时，macOS 和 Windows 可能弹出防火墙提示，需要允许传入连接。
+
+
+## 抓包会话加密保存（Tauri，真机验收）
+
+CI 只覆盖编译和会话请求、清理、密钥文件的单测；系统密钥库要在真机上确认：
+
+- [ ] Windows（桌面模式）：连接、开始抓包、在“请求”页保存会话；`%LOCALAPPDATA%\AnixOps Net\capture\` 下有 `session-key.dpapi` 和 `sessions\*.anxcap`；重启客户端后能载入；换一个 Windows 账户复制这两个文件过去打不开。
+- [ ] Linux（GNOME 或 KDE）：保存会话后 `secret-tool lookup application anixops-net purpose capture-session-key` 能查到，`capture/` 下只有 `session-key.secret-service` 标记、没有 `session-key` 文件；锁住钥匙环再列出会话时提示解锁，而不是换新密钥。
+- [ ] Linux（没有钥匙环的桌面）：`capture/session-key` 权限是 `0600`，界面说明写的是“密钥保存在只有你能读取的文件里”。
+- [ ] Android：保存、退出 App、重新连接后能载入；清除 App 数据后旧会话随之删除。
