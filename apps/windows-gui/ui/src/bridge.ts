@@ -328,6 +328,18 @@ export interface MitmPlugin {
   scriptCount: number;
 }
 
+/** What a saved plugin holds, as the engine reads it. */
+export interface MitmPluginDetails {
+  excludedHostnames: string[];
+  supportedLines: number;
+  partialLines: number;
+  unsupportedLines: number;
+  deferredLines: number;
+  scripts: string[];
+  resources: string[];
+  report: string;
+}
+
 /** What the exit looks like from outside and how fast a mainland site answers around the proxy. */
 export interface NetworkProbe {
   exitIp?: string | null;
@@ -513,6 +525,9 @@ export const desktop = {
   disableHttpsMitm: () => invoke<OperationResult>("disable_https_mitm"),
   mitmPlugins: () => invoke<MitmPlugin[]>("list_mitm_plugins"),
   importMitmPlugin: (url: string) => invoke<OperationResult>("import_mitm_plugin", { url }),
+  /** A plugin opened from a file (`source` is its name) or pasted (`source` is empty). */
+  importMitmPluginText: (text: string, source: string) => invoke<OperationResult>("import_mitm_plugin_text", { text, source }),
+  mitmPluginDetails: (id: string) => invoke<MitmPluginDetails>("mitm_plugin_details", { id }),
   setMitmPluginEnabled: (id: string, enabled: boolean) =>
     invoke<OperationResult>("set_mitm_plugin_enabled", { id, enabled }),
   removeMitmPlugin: (id: string) => invoke<OperationResult>("remove_mitm_plugin", { id }),

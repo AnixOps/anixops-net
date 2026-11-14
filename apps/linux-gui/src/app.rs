@@ -1057,6 +1057,29 @@ where
     })
 }
 
+/// Saves a plugin opened from a file or pasted; `source` is the file name, empty when pasted.
+#[tauri::command]
+async fn import_mitm_plugin_text(
+    state: State<'_, AppState>,
+    text: String,
+    source: String,
+) -> Result<OperationResult, String> {
+    change_plugins(&state, move |directory| {
+        let plugin = plugins::import_text(directory, &source, &text, plugins::download)?;
+        Ok(format!("Plugin imported: {}", plugin.name))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn mitm_plugin_details(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<plugins::PluginDetails, String> {
+    let directory = lock(&state.0).plugins_dir();
+    off_lock(move || plugins::details(&directory, &id)).await
+}
+
 #[tauri::command]
 async fn import_mitm_plugin(
     state: State<'_, AppState>,
@@ -1281,6 +1304,8 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             disable_https_mitm,
             list_mitm_plugins,
             import_mitm_plugin,
+            import_mitm_plugin_text,
+            mitm_plugin_details,
             set_mitm_plugin_enabled,
             remove_mitm_plugin,
             phone_qr_code,

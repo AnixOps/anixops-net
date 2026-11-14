@@ -365,7 +365,7 @@ select option { color: var(--label-1); background: var(--bg-elevated); }
 .node-card-actions:empty { display: none; }
 .node-card:hover .node-card-actions, .node-card:focus-within .node-card-actions { opacity: 1; }
 /* Touch screens (Android) have no hover: the node menu stays visible. */
-@media (hover: none) { .node-card-actions { opacity: 1; } }
+@media (hover: none) { .node-card-actions, .row-actions { opacity: 1; } }
 .node-editor { margin-bottom: 12px; }
 .node-editor .button-row { justify-content: flex-end; }
 .node-editor .field { margin-bottom: 10px; }
@@ -556,3 +556,5 @@ dl.headers dd { margin: 0; font-family: var(--font-mono); font-size: 12px; overf
 @media (max-width: 720px) {
   .mode-options { grid-template-columns: minmax(0, 1fr); }
 }
+.url-list { display: grid; gap: 2px; word-break: break-all; }
+.plugin-report { margin: 0; padding: 10px 14px 12px; max-height: 260px; overflow: auto; font: 12px/1.5 var(--mono, ui-monospace, monospace); color: var(--text2); white-space: pre-wrap; word-break: break-word; }
