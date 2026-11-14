@@ -7,6 +7,7 @@ members = [
     "crates/desktop-dns",
     "crates/desktop-mitm",
     "crates/network-watch",
+    "crates/node-edits",
     "crates/subscription-meta",
 ]
 resolver = "2"

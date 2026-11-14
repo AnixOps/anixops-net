@@ -364,6 +364,11 @@ select option { color: var(--label-1); background: var(--bg-elevated); }
 .node-card-actions { position: absolute; top: 4px; right: 4px; display: inline-flex; gap: 1px; padding: 1px; background: var(--group); border-radius: 7px; box-shadow: 0 0 0 .5px var(--hairline), var(--shadow-1); opacity: 0; transition: opacity var(--fast); }
 .node-card-actions:empty { display: none; }
 .node-card:hover .node-card-actions, .node-card:focus-within .node-card-actions { opacity: 1; }
+/* Touch screens (Android) have no hover: the node menu stays visible. */
+@media (hover: none) { .node-card-actions { opacity: 1; } }
+.node-editor { margin-bottom: 12px; }
+.node-editor .button-row { justify-content: flex-end; }
+.node-editor .field { margin-bottom: 10px; }
 .node-card-actions .icon-button { width: 22px; height: 22px; }
 .row-actions { display: inline-flex; gap: 2px; opacity: 0; transition: opacity var(--fast); }
 .row:hover .row-actions, .row:focus-within .row-actions { opacity: 1; }

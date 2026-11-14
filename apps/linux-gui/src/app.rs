@@ -24,6 +24,7 @@ use client_health::{startup, Health};
 use desktop_mitm::mappings;
 use desktop_mitm::plugins::{self, PluginSummary};
 use engine_embedded::profile::RoutingMode;
+use node_edits::NodeForm;
 use subscription_meta::ResponseMeta;
 use tauri::plugin::TauriPlugin;
 use tauri::webview::PageLoadEvent;
@@ -741,6 +742,34 @@ async fn node_share_link(state: State<'_, AppState>, node_id: String) -> Result<
     lock(&state.0).share_link(&node_id)
 }
 
+/// The name, server and port of a node of the selected subscription, and whether it can be removed.
+#[tauri::command]
+async fn node_form(state: State<'_, AppState>, node_id: String) -> Result<NodeForm, String> {
+    lock(&state.0).node_form(&node_id)
+}
+
+#[tauri::command]
+async fn edit_node(
+    state: State<'_, AppState>,
+    node_id: String,
+    name: String,
+    server: String,
+    port: String,
+) -> Result<OperationResult, String> {
+    with_backend(&state, move |backend| {
+        backend.edit_node(&node_id, &name, &server, &port)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn remove_node(
+    state: State<'_, AppState>,
+    node_id: String,
+) -> Result<OperationResult, String> {
+    with_backend(&state, move |backend| backend.remove_node(&node_id)).await
+}
+
 #[tauri::command]
 async fn select_fastest_node(state: State<'_, AppState>) -> Result<OperationResult, String> {
     let nodes = lock(&state.0).node_list();
@@ -1222,6 +1251,9 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             test_node_delays,
             network_probe,
             node_share_link,
+            node_form,
+            edit_node,
+            remove_node,
             select_fastest_node,
             save_preferences,
             create_diagnostics,

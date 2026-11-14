@@ -3070,6 +3070,7 @@ dependencies = [
  "inbound-mixed",
  "libc",
  "network-watch",
+ "node-edits",
  "node-import",
  "reqwest 0.12.28",
  "serde",
@@ -3093,6 +3094,7 @@ dependencies = [
  "inbound-mixed",
  "mitm-policy",
  "network-watch",
+ "node-edits",
  "node-import",
  "platform-windows",
  "rcgen",
@@ -3122,6 +3124,15 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
+]
+
+[[package]]
+name = "node-edits"
+version = "0.3.0"
+dependencies = [
+ "control-domain",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -72,6 +72,16 @@ export interface NodeSummary {
   selected: boolean;
   /** The subscription the node comes from, when the backend lists several. */
   group?: string;
+  /** A node of the subscription in use, which can be edited and removed; older backends leave it out. */
+  editable?: boolean;
+}
+
+/** A node's edit form; `keepReason` says why it cannot be removed. */
+export interface NodeForm {
+  name: string;
+  server: string;
+  port: number;
+  keepReason?: string;
 }
 
 export interface NativeGroupSummary {
@@ -463,6 +473,11 @@ export const desktop = {
   networkProbe: (connected: boolean) => invoke<NetworkProbe>("network_probe", { connected }),
   /** The node's share link, or a Surge line for Snell. */
   shareLink: (nodeId: string) => invoke<string>("node_share_link", { nodeId }),
+  nodeForm: (nodeId: string) => invoke<NodeForm>("node_form", { nodeId }),
+  /** Until the subscription is updated, the node runs with this name, server and port. */
+  editNode: (nodeId: string, name: string, server: string, port: string) => invoke<OperationResult>("edit_node", { nodeId, name, server, port }),
+  /** Until the subscription is updated, the node is left out. */
+  removeNode: (nodeId: string) => invoke<OperationResult>("remove_node", { nodeId }),
   selectFastestNode: () => invoke<OperationResult>("select_fastest_node"),
   savePreferences: (preferences: Preferences) =>
     invoke<OperationResult>("save_preferences", {
