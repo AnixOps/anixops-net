@@ -6,6 +6,8 @@ import SwiftUI
 struct ProxiesView: View {
     var tunnel: TunnelController
     @Binding var importing: Bool
+    /// Pushed from another page (debug mode's exit settings) instead of being a tab's root.
+    var embedded = false
     @Environment(\.brand) private var brand
     @State private var testing = false
     @State private var collapsed: Set<String> = []
@@ -20,7 +22,7 @@ struct ProxiesView: View {
     @State private var shareFailure: String?
 
     var body: some View {
-        NavigationStack {
+        NavigationContainer(embedded: embedded) {
             Group {
                 if !tunnel.subscriptions.groups.isEmpty {
                     groupList

@@ -66,6 +66,12 @@ final class TunnelController {
     private(set) var blockQuic = UserDefaults.standard.bool(forKey: TunnelController.blockQuicKey)
     /// When the running tunnel last took new local rules in place, without a restart.
     private(set) var lastRulesReload: Date?
+    /// Proxy client or debugging tool (`AppMode`); nil until the user picks one on first launch. Read in `load()`.
+    private(set) var appMode: AppMode?
+    /// Where debug mode sends traffic: straight out, or through the selected node (`DebugExit`).
+    private(set) var debugExit = DebugExit(rawValue: UserDefaults.standard.string(forKey: DebugExit.storageKey) ?? "") ?? .direct
+    /// The saved profile is the node-less one debug mode uses (`TunnelProfile.direct`).
+    private(set) var runsDirectProfile = false
 
     /// The link an `anixops://import` asked for, until the import sheet takes it (`takePendingImportLink()`).
     @ObservationIgnored var pendingImportLink: String?
@@ -131,12 +137,89 @@ final class TunnelController {
             store(SubscriptionGroups.migrating(previous, name: String(localized: "导入的节点")))
         }
         refresh()
+        let stored = UserDefaults.standard.string(forKey: AppMode.storageKey)
+        appMode = AppMode.resolve(
+            stored: stored,
+            hasNodes: !hasNoNodes,
+            onboardingDone: UserDefaults.standard.bool(forKey: AppMode.onboardingDoneKey)
+        )
+        if stored == nil, let appMode {
+            UserDefaults.standard.set(appMode.rawValue, forKey: AppMode.storageKey)
+        }
         loaded = true
     }
 
-    /// Nothing imported yet: no saved profile and no subscription groups.
+    /// Nothing imported yet: no node profile and no subscription groups. Debug mode's direct profile is no node.
     var hasNoNodes: Bool {
-        nodeName == nil && subscriptions.groups.isEmpty
+        (nodeName == nil || runsDirectProfile) && subscriptions.groups.isEmpty
+    }
+
+    /// Debug mode runs without a node: the tunnel goes straight out (`DebugExit.usesDirect`).
+    var usesDirectExit: Bool {
+        DebugExit.usesDirect(mode: appMode, exit: debugExit, hasNodes: !hasNoNodes)
+    }
+
+    /// The connect switch can start a tunnel: there is a node, or debug mode goes direct.
+    var canConnect: Bool {
+        !hasNoNodes || usesDirectExit
+    }
+
+    /// Switches between the proxy client and the debugging tool. The saved profile follows: debug mode with the
+    /// direct exit runs the direct profile, the proxy client the selected node. A running tunnel reconnects.
+    func setAppMode(_ next: AppMode) async {
+        guard next != appMode else {
+            return
+        }
+        // A single pasted node lives only in the saved profile, so debug mode goes through it rather than
+        // replacing it with the direct profile.
+        if next == .debug, subscriptions.activeID == nil, nodeName != nil, !runsDirectProfile {
+            setDebugExitValue(.node)
+        }
+        appMode = next
+        UserDefaults.standard.set(next.rawValue, forKey: AppMode.storageKey)
+        await applyExit()
+    }
+
+    /// Debug mode's exit: direct, or the selected node of the subscriptions. A running tunnel reconnects.
+    func setDebugExit(_ next: DebugExit) async {
+        guard next != debugExit else {
+            return
+        }
+        setDebugExitValue(next)
+        await applyExit()
+    }
+
+    private func setDebugExitValue(_ next: DebugExit) {
+        debugExit = next
+        UserDefaults.standard.set(next.rawValue, forKey: DebugExit.storageKey)
+    }
+
+    /// Saves the profile the mode and exit call for, when it is not the saved one, and reconnects a running tunnel.
+    private func applyExit() async {
+        let saved: Bool
+        if usesDirectExit {
+            // Without a saved profile nothing is saved yet: the system asks to add the VPN configuration on the
+            // first connect (`toggle()`), not when a mode is picked.
+            guard manager != nil, !runsDirectProfile else {
+                return
+            }
+            saved = await saveDirectProfile()
+        } else if runsDirectProfile, let groups = Self.withSelectedNode(subscriptions) {
+            saved = await saveActiveProfile(groups)
+            if saved {
+                store(groups)
+            }
+        } else {
+            return
+        }
+        if saved, isConnected {
+            restart()
+        }
+    }
+
+    /// Saves the direct profile (`TunnelProfile.direct`).
+    private func saveDirectProfile() async -> Bool {
+        await save(TunnelProfile.direct(profileID: Self.profileID, displayName: String(localized: "直连")))
     }
 
     /// Parses pasted text for the import preview without saving anything. A subscription link is downloaded only
@@ -178,6 +261,10 @@ final class TunnelController {
     /// group becomes active. Returns whether it was saved; on failure `message` says why.
     @discardableResult
     func importLink(_ link: String) async -> Bool {
+        // Importing in debug mode means going through what was imported.
+        if appMode == .debug {
+            setDebugExitValue(.node)
+        }
         if let url = SubscriptionLink.url(from: link) {
             return await updateSubscription(url, groupID: subscriptions.group(url: url.absoluteString)?.id, activate: true)
         }
@@ -728,8 +815,16 @@ final class TunnelController {
     static let backgroundRefreshID = "net.anixops.subscriptions.refresh"
 
     /// Saves `profile` as the tunnel profile; `routed` makes the extension follow the node library's rules.
-    private func save(_ profile: TunnelProfile, routed: Bool = false) async -> Bool {
+    private func save(_ requested: TunnelProfile, routed requestedRouted: Bool = false) async -> Bool {
         let profileID = Self.profileID
+        // Debug mode with the direct exit keeps the direct profile whichever node is picked or refreshed; the
+        // picks are kept in the subscription groups for when the exit goes through a node. (Not `usesDirectExit`:
+        // the first import is saved before its group is stored, while there are no nodes yet.)
+        let direct = appMode == .debug && debugExit == .direct
+        let profile = direct && !requested.isDirect
+            ? TunnelProfile.direct(profileID: profileID, displayName: String(localized: "直连"))
+            : requested
+        let routed = requestedRouted && !profile.isDirect
         guard let providerBundleIdentifier = Self.tunnelBundleIdentifier() else {
             message = String(localized: "找不到隧道扩展")
             return false
@@ -767,7 +862,7 @@ final class TunnelController {
         // With subscription rules the rules switch decides between the rule and global modes; a node list without
         // them keeps the mode the user picked (local rules), and a single node has no rule mode.
         let savedMode: ProxyMode
-        if mode == .direct {
+        if mode == .direct || profile.isDirect {
             savedMode = .direct
         } else if routed || (mode == .rule && library != nil && library?.routing == nil) {
             savedMode = .rule
@@ -1080,7 +1175,14 @@ final class TunnelController {
 
     func toggle() {
         guard let manager = manager else {
-            if let groups = Self.withSelectedNode(subscriptions) {
+            if usesDirectExit {
+                // Debug mode needs no node: save the direct profile, then connect.
+                Task {
+                    if await saveDirectProfile(), let manager = self.manager {
+                        start(manager)
+                    }
+                }
+            } else if let groups = Self.withSelectedNode(subscriptions) {
                 // Nodes are imported but no VPN profile is saved yet (or it was removed in Settings): save the
                 // profile for the selected node, then connect.
                 Task { await saveProfileAndStart(groups) }
@@ -1485,6 +1587,9 @@ final class TunnelController {
         let configuration = (manager?.protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration
         let previousNode = nodeName
         nodeName = configuration?[TunnelProfileKeys.nodeName] as? String
+        runsDirectProfile = (configuration?[TunnelProfileKeys.runtimeConfig] as? Data)
+            .flatMap { try? EmbeddedRuntimeConfig.decoded(from: $0) }?
+            .outboundKind == TunnelProfile.directOutboundType
         let previousMode = mode
         mode = ProxyMode.saved(in: configuration)
         if connection != previous || nodeName != previousNode || mode != previousMode {
@@ -1762,6 +1867,9 @@ extension TunnelController {
         connection = .connected
         connectedSince = Date().addingTimeInterval(-4521)
         lastConnections = Self.demoConnections()
+        // Screenshots of debug mode pass `-AnixOpsMode debug`; `choose` shows the first-launch mode choice.
+        let demoMode = UserDefaults.standard.string(forKey: "AnixOpsMode") ?? ""
+        appMode = demoMode == "choose" ? nil : AppMode(rawValue: demoMode) ?? .proxy
         loaded = true
     }
 
