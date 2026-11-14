@@ -96,6 +96,30 @@ pub fn decode_base64(text: &str) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
+/// Standard base64 with padding.
+pub fn encode_base64(data: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for chunk in data.chunks(3) {
+        let bytes = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
+        let value = (u32::from(bytes[0]) << 16) | (u32::from(bytes[1]) << 8) | u32::from(bytes[2]);
+        for index in 0..4 {
+            if index <= chunk.len() {
+                out.push(char::from(
+                    ALPHABET[((value >> (18 - 6 * index)) & 63) as usize],
+                ));
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
 /// The user's Downloads folder: `XDG_DOWNLOAD_DIR` or the `user-dirs.dirs` entry on Linux, `%USERPROFILE%\Downloads`
 /// on Windows, `$HOME/Downloads` otherwise. Falls back to the home folder when there is no Downloads folder.
 pub fn downloads_dir() -> Option<PathBuf> {
@@ -186,6 +210,16 @@ mod tests {
         );
         assert!(decode_base64("Zm9v!").is_err());
         assert!(decode_base64("Zg==Zg").is_err());
+    }
+
+    #[test]
+    fn encodes_base64_that_decodes_back() {
+        assert_eq!(encode_base64(b""), "");
+        assert_eq!(encode_base64(b"f"), "Zg==");
+        assert_eq!(encode_base64(b"fo"), "Zm8=");
+        assert_eq!(encode_base64(b"foo"), "Zm9v");
+        let bytes: Vec<u8> = (0..=255).collect();
+        assert_eq!(decode_base64(&encode_base64(&bytes)).unwrap(), bytes);
     }
 
     #[test]

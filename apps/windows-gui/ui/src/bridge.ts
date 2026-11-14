@@ -180,6 +180,40 @@ export interface CaptureConnection {
 
 export type CaptureFormat = "pcapng" | "har";
 
+/** An edited copy of a captured request, sent again through the local proxy. */
+export interface ReplayRequest {
+  method: string;
+  url: string;
+  headers: [string, string][];
+  /** Empty for no body. */
+  bodyBase64: string;
+}
+
+export interface ReplayResponse {
+  status: number;
+  headers: [string, string][];
+  bodyBase64: string;
+  /** Cut at 1 MiB. */
+  truncated: boolean;
+  elapsedMs: number;
+}
+
+/** A Map Local / Map Remote rule made in the debug view; saved ones become the plugin "AnixOps 调试映射". */
+export interface DebugMapping {
+  /** Empty for a new one. */
+  id: string;
+  name: string;
+  enabled: boolean;
+  kind: "local" | "remote";
+  match: "url" | "prefix" | "regex";
+  pattern: string;
+  status: number;
+  headers: { name: string; value: string }[];
+  /** The body as base64. */
+  body: string;
+  target: string;
+}
+
 /** One rule set of the running engine. */
 export interface RuleSetStatus {
   name: string;
@@ -308,6 +342,11 @@ export const desktop = {
     invoke<{ capture: CaptureConnection | null }>("runtime_control", { request: { cmd: "capture_connection", id } }),
   /** Saves the export to Downloads (one connection with `id`) and answers where it went. */
   exportCapture: (format: CaptureFormat, id?: number) => invoke<{ location: string }>("export_capture", { format, id }),
+  /** Sends a request through the local proxy without following redirects; not on Android. */
+  replayRequest: (request: ReplayRequest) => invoke<ReplayResponse>("replay_request", { request }),
+  debugMappings: () => invoke<DebugMapping[]>("list_debug_mappings"),
+  saveDebugMapping: (entry: DebugMapping) => invoke<OperationResult>("save_debug_mapping", { entry }),
+  removeDebugMapping: (id: string) => invoke<OperationResult>("remove_debug_mapping", { id }),
   testDelay: (nodeId: string, url: string) =>
     invoke<OperationResult>("test_node_delay", { nodeId, url }),
   /** Tests each node on its own and reports every result; failures do not reject. */

@@ -1,9 +1,10 @@
 import { Ban, Download, KeyRound, LockKeyhole, Puzzle, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { desktop, inProcessEngine, MitmPlugin, preferencesFrom, RuntimeSnapshot } from "../bridge";
+import { DebugMapping, desktop, inProcessEngine, MitmPlugin, preferencesFrom, RuntimeSnapshot } from "../bridge";
 import { Card, EmptyState, MoreMenu, Row, Run, StatusPill, Switch, ToggleRow } from "../ui";
 import { t } from "../i18n";
 import { useDecryptionConsent } from "../decryption-consent";
+import { MappingEditor, MappingsCard } from "./DebugTools";
 
 export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
   const linux = inProcessEngine(snapshot);
@@ -11,6 +12,7 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
   const [pluginUrl, setPluginUrl] = useState("");
   const [plugins, setPlugins] = useState<MitmPlugin[]>([]);
   const consent = useDecryptionConsent();
+  const [mapping, setMapping] = useState<DebugMapping | null>(null);
 
   const loadPlugins = useCallback(() => {
     desktop.mitmPlugins().then(setPlugins).catch(() => setPlugins([]));
@@ -28,6 +30,10 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
       loadPlugins();
     });
   };
+
+  if (mapping) {
+    return <MappingEditor initial={mapping} busy={busy} run={run} onDone={() => setMapping(null)} />;
+  }
 
   return (
     <div className="page-stack">
@@ -115,6 +121,8 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
           </div>
         )}
       </Card>
+
+      <MappingsCard busy={busy} run={run} onEdit={setMapping} />
 
       {!linux && (
         <Card title={t("根证书")} description={t("HTTPS 解密的根证书会自动生成并安装。只有要让系统信任你自己的证书时才需要在这里填写。")}>

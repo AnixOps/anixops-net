@@ -3,7 +3,9 @@
 //! imported, and creates the root where the platform has none of its own.
 
 pub mod capture;
+pub mod mappings;
 pub mod plugins;
+pub mod replay;
 
 use std::fs;
 use std::io::Write;

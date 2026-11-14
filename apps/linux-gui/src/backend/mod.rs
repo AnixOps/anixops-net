@@ -666,6 +666,22 @@ impl Backend {
         })
     }
 
+    /// Where a replayed request goes in (the running engine's local proxy) and the HTTPS decryption root it has
+    /// to trust while decryption is on.
+    pub fn replay_target(&self) -> Result<(std::net::SocketAddr, Option<String>), String> {
+        let proxy = self
+            .engine
+            .address()
+            .filter(|_| self.engine.is_running())
+            .ok_or("connect first: replayed requests go through the running engine")?;
+        let root = if self.state.preferences.https_decryption {
+            std::fs::read_to_string(&self.mitm_root().certificate_path).ok()
+        } else {
+            None
+        };
+        Ok((proxy, root))
+    }
+
     pub fn subscriptions(&self) -> Vec<SubscriptionSummary> {
         self.state
             .sources

@@ -105,6 +105,14 @@ impl DesktopCore {
         Ok(())
     }
 
+    /// The local proxy of the engine this window runs.
+    pub fn local_addr(&self) -> Option<SocketAddr> {
+        self.embedded
+            .as_ref()
+            .filter(|proxy| proxy.is_running())
+            .map(LocalProxy::local_addr)
+    }
+
     /// Answers one kernel control request while this window runs the engine.
     pub fn control(&self, request: &[u8]) -> Result<Vec<u8>, String> {
         let proxy = self
