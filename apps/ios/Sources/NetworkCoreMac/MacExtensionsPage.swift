@@ -15,6 +15,7 @@ struct MacExtensionsPage: View {
     var body: some View {
         Form {
             certificateSection
+            DecryptHostsSection(tunnel: tunnel)
             MacPhoneCaptureSection(tunnel: tunnel)
             PluginsSection(tunnel: tunnel, model: plugins)
             MappingsSection(tunnel: tunnel)

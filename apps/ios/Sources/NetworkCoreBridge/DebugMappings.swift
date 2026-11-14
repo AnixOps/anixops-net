@@ -5,9 +5,15 @@ import Foundation
 /// lines, so the enabled entries become one generated Loon plugin (`pluginText`) that goes to the tunnel with the
 /// imported plugins: `[Map Local]` for local responses, `[Rewrite] … 307 …` for remote ones (307 keeps the method and
 /// body), and `[MITM] hostname` for the hosts they need decrypted. Not secret; kept in `debug-mappings.json`.
+///
+/// The same file keeps the domains the user turned decryption on for one by one (`hosts`, "解密此域名"): HTTPS
+/// decryption is per domain, and these join the plugin's `[MITM] hostname` line even when no mapping is on. The
+/// desktop clients read and write the same shape (`crates/desktop-mitm/src/mappings.rs`).
 public struct DebugMappings: Codable, Equatable, Sendable {
     /// Most entries kept.
     public static let maxEntries = 200
+    /// Most decrypted domains kept.
+    public static let maxHosts = 500
     /// Largest local response body: the engine inlines `[Map Local]` data up to this size.
     public static let maxBodyBytes = 256 * 1024
     /// The generated plugin's name, as the engine's plugin report shows it.
@@ -184,14 +190,30 @@ public struct DebugMappings: Codable, Equatable, Sendable {
     }
 
     public var entries: [Entry]
+    /// Domains decrypted one by one, lower-cased, in the order added. `*.example.com` covers the subdomains.
+    public var hosts: [String]
 
-    public init(entries: [Entry] = []) {
+    public init(entries: [Entry] = [], hosts: [String] = []) {
         self.entries = entries
+        self.hosts = hosts
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case entries, hosts
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         entries = try container.decodeIfPresent([Entry].self, forKey: .entries) ?? []
+        hosts = try container.decodeIfPresent([String].self, forKey: .hosts) ?? []
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(entries, forKey: .entries)
+        if !hosts.isEmpty {
+            try container.encode(hosts, forKey: .hosts)
+        }
     }
 
     /// The entries the tunnel gets: enabled and usable.
@@ -199,13 +221,13 @@ public struct DebugMappings: Codable, Equatable, Sendable {
         entries.filter { $0.enabled && (try? $0.validate()) != nil }
     }
 
-    /// The generated plugin, or nil when no entry is on.
+    /// The generated plugin, or nil when no entry is on and no domain is decrypted.
     public var pluginText: String? {
         let active = active
-        guard !active.isEmpty else {
+        guard !active.isEmpty || !hosts.isEmpty else {
             return nil
         }
-        var lines = ["#!name=\(Self.pluginName)", "#!desc=由调试视图生成的 Map Local / Map Remote 规则"]
+        var lines = ["#!name=\(Self.pluginName)", "#!desc=由调试视图生成的 Map Local / Map Remote 规则和解密域名"]
         let remote = active.filter { $0.kind == .remote }
         let local = active.filter { $0.kind == .local }
         if !remote.isEmpty {
@@ -218,16 +240,77 @@ public struct DebugMappings: Codable, Equatable, Sendable {
             lines.append("[Map Local]")
             lines.append(contentsOf: local.map(\.line))
         }
-        var hosts: [String] = []
-        for host in active.compactMap(\.host) where !hosts.contains(host) {
-            hosts.append(host)
+        var decrypted: [String] = []
+        for host in active.compactMap(\.host) + hosts where !decrypted.contains(host) {
+            decrypted.append(host)
         }
-        if !hosts.isEmpty {
+        if !decrypted.isEmpty {
             lines.append("")
             lines.append("[MITM]")
-            lines.append("hostname = %APPEND% " + hosts.joined(separator: ", "))
+            lines.append("hostname = %APPEND% " + decrypted.joined(separator: ", "))
         }
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// With decryption on for one more domain (typed, or a request's host); unchanged when it is already listed.
+    public func addingHost(_ text: String) throws -> DebugMappings {
+        guard let host = Self.normalizeHost(text) else {
+            throw DebugMappingsError.invalidHost
+        }
+        guard !hosts.contains(host) else {
+            return self
+        }
+        guard hosts.count < Self.maxHosts else {
+            throw DebugMappingsError.tooMany
+        }
+        var copy = self
+        copy.hosts.append(host)
+        return copy
+    }
+
+    /// With decryption off for a domain of `hosts`.
+    public func removingHost(_ host: String) -> DebugMappings {
+        var copy = self
+        copy.hosts.removeAll { $0 == host }
+        return copy
+    }
+
+    /// Whether `host` is decrypted by the list: the same name, or a `*.` entry that covers it.
+    public func decrypts(_ host: String) -> Bool {
+        guard let name = Self.normalizeHost(host) else {
+            return false
+        }
+        return hosts.contains { $0 == name || ($0.hasPrefix("*.") && name.hasSuffix($0.dropFirst())) }
+    }
+
+    /// A domain as typed or taken from a request ("API.example.com:443", "https://a.test/x", "*.example.com"),
+    /// lower-cased and without scheme, path or port; nil when it is not a domain name. Same rules as the desktop
+    /// clients' `normalize_host`.
+    public static func normalizeHost(_ text: String) -> String? {
+        let text = text.trimmingCharacters(in: .whitespaces)
+        if text.contains("://") {
+            return host(of: text).flatMap { isIPv4($0) ? nil : $0 }
+        }
+        let wildcard = text.hasPrefix("*.")
+        var name = Substring(wildcard ? String(text.dropFirst(2)) : text)
+        name = name.prefix { $0 != "/" && $0 != "?" && $0 != "#" }
+        name = name.prefix { $0 != ":" }
+        while name.hasSuffix(".") {
+            name = name.dropLast()
+        }
+        let allowed = Set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-")
+        guard !name.isEmpty, name.allSatisfy(allowed.contains), name.contains("."),
+              !name.hasPrefix("."), !name.hasPrefix("-"), !isIPv4(name)
+        else {
+            return nil
+        }
+        let lower = name.lowercased()
+        return wildcard ? "*." + lower : lower
+    }
+
+    /// Digits and dots only: an IPv4 address, never a domain. Decryption is chosen per domain, so an address is refused.
+    private static func isIPv4<S: StringProtocol>(_ name: S) -> Bool {
+        name.allSatisfy { $0 == "." || ("0"..."9").contains($0) }
     }
 
     /// Adds `entry`, or replaces the entry with its id.
@@ -394,6 +477,7 @@ public enum DebugMappingsError: Error, Equatable {
     case invalidHeader
     case bodyTooLarge
     case invalidTarget
+    case invalidHost
     case tooMany
 
     public var message: String {
@@ -412,6 +496,8 @@ public enum DebugMappingsError: Error, Equatable {
             return String(localized: "响应体不能超过 256 KB")
         case .invalidTarget:
             return String(localized: "目标应为 http:// 或 https:// 开头的完整 URL")
+        case .invalidHost:
+            return String(localized: "请填写域名，例如 api.example.com 或 *.example.com")
         case .tooMany:
             return String(localized: "已达到数量上限")
         }

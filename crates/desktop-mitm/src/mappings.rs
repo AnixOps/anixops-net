@@ -4,6 +4,9 @@
 //! remote ones (307 keeps the method and body) and `[MITM] hostname` for the hosts they need decrypted. The entries
 //! are kept in `debug-mappings.json` next to the plugin library, in the same shape as the Apple clients'
 //! `DebugMappings` (docs/debug-mode.md).
+//!
+//! The same file keeps the domains the user turned decryption on for one by one ("解密此域名", `hosts`): HTTPS
+//! decryption is per domain, and these join the plugin's `[MITM] hostname` line even when no mapping is on.
 
 use std::fs;
 use std::path::Path;
@@ -16,6 +19,8 @@ use crate::capture::{decode_base64, encode_base64};
 
 /// Most entries kept.
 pub const MAX_ENTRIES: usize = 200;
+/// Most decrypted domains kept.
+pub const MAX_HOSTS: usize = 500;
 /// Largest local response body: the engine inlines `[Map Local]` data up to this size.
 pub const MAX_BODY_BYTES: usize = 256 * 1024;
 /// The generated plugin's name, as the engine's plugin report shows it.
@@ -83,10 +88,14 @@ fn ok_status() -> u16 {
     200
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-struct Stored {
+/// Everything in `debug-mappings.json`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Stored {
     #[serde(default)]
-    entries: Vec<Entry>,
+    pub entries: Vec<Entry>,
+    /// Domains decrypted one by one, lower-cased, in the order added. `*.example.com` covers the subdomains.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hosts: Vec<String>,
 }
 
 impl Entry {
@@ -274,18 +283,18 @@ fn quote(token: &str, always: bool) -> String {
     quoted
 }
 
-/// The generated plugin of the enabled, usable entries; none when no entry is on.
-pub fn plugin_text(entries: &[Entry]) -> Option<String> {
+/// The generated plugin of the enabled, usable entries and the decrypted domains; none when there is neither.
+pub fn plugin_text(entries: &[Entry], decrypted: &[String]) -> Option<String> {
     let active: Vec<&Entry> = entries
         .iter()
         .filter(|entry| entry.enabled && entry.validate().is_ok())
         .collect();
-    if active.is_empty() {
+    if active.is_empty() && decrypted.is_empty() {
         return None;
     }
     let mut lines = vec![
         format!("#!name={PLUGIN_NAME}"),
-        "#!desc=由调试视图生成的 Map Local / Map Remote 规则".to_string(),
+        "#!desc=由调试视图生成的 Map Local / Map Remote 规则和解密域名".to_string(),
     ];
     for (kind, section) in [(Kind::Remote, "[Rewrite]"), (Kind::Local, "[Map Local]")] {
         let section_lines: Vec<String> = active
@@ -300,7 +309,11 @@ pub fn plugin_text(entries: &[Entry]) -> Option<String> {
         }
     }
     let mut hosts: Vec<String> = Vec::new();
-    for host in active.iter().filter_map(|entry| entry.host()) {
+    for host in active
+        .iter()
+        .filter_map(|entry| entry.host())
+        .chain(decrypted.iter().cloned())
+    {
         if !hosts.contains(&host) {
             hosts.push(host);
         }
@@ -313,21 +326,85 @@ pub fn plugin_text(entries: &[Entry]) -> Option<String> {
     Some(lines.join("\n") + "\n")
 }
 
-/// The saved entries, oldest first; none when nothing was saved.
-pub fn list(directory: &Path) -> Result<Vec<Entry>, String> {
+/// A domain as typed or taken from a request ("API.example.com:443", "https://a.test/x", "*.example.com"),
+/// lower-cased and without scheme, path or port; none when it is not a domain name.
+pub fn normalize_host(text: &str) -> Option<String> {
+    let text = text.trim();
+    if text.contains("://") {
+        return host_of(text).filter(|host| !is_ipv4(host));
+    }
+    let (wildcard, name) = match text.strip_prefix("*.") {
+        Some(rest) => (true, rest),
+        None => (false, text),
+    };
+    let name = name.split(['/', '?', '#']).next().unwrap_or_default();
+    let name = name
+        .split(':')
+        .next()
+        .unwrap_or_default()
+        .trim_end_matches('.');
+    let allowed = name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-');
+    if name.is_empty()
+        || !allowed
+        || !name.contains('.')
+        || name.starts_with(['.', '-'])
+        || is_ipv4(name)
+    {
+        return None;
+    }
+    let name = name.to_ascii_lowercase();
+    Some(if wildcard { format!("*.{name}") } else { name })
+}
+
+/// Digits and dots only: an IPv4 address, never a domain (top-level domains are never all digits). Decryption is
+/// chosen per domain, so an address is refused.
+fn is_ipv4(name: &str) -> bool {
+    name.chars().all(|c| c.is_ascii_digit() || c == '.')
+}
+
+/// Everything saved; empty when nothing was saved.
+pub fn load(directory: &Path) -> Result<Stored, String> {
     let path = directory.join(FILE);
     if !path.exists() {
-        return Ok(Vec::new());
+        return Ok(Stored::default());
     }
     let text = fs::read(&path).map_err(|error| error.to_string())?;
     serde_json::from_slice::<Stored>(&text)
-        .map(|stored| stored.entries)
         .map_err(|error| format!("debug mappings could not be read: {error}"))
 }
 
-fn write(directory: &Path, entries: Vec<Entry>) -> Result<(), String> {
+/// Turns decryption on for one more domain and answers the domains now decrypted.
+pub fn add_host(directory: &Path, host: &str) -> Result<Vec<String>, String> {
+    let host = normalize_host(host).ok_or_else(|| "Not a domain name.".to_string())?;
+    let mut stored = load(directory)?;
+    if !stored.hosts.contains(&host) {
+        if stored.hosts.len() >= MAX_HOSTS {
+            return Err(format!("At most {MAX_HOSTS} domains can be decrypted."));
+        }
+        stored.hosts.push(host);
+        write(directory, &stored)?;
+    }
+    Ok(stored.hosts)
+}
+
+/// Turns decryption off for a domain added with `add_host` and answers the domains still decrypted.
+pub fn remove_host(directory: &Path, host: &str) -> Result<Vec<String>, String> {
+    let mut stored = load(directory)?;
+    stored.hosts.retain(|existing| existing != host);
+    write(directory, &stored)?;
+    Ok(stored.hosts)
+}
+
+/// The saved entries, oldest first; none when nothing was saved.
+pub fn list(directory: &Path) -> Result<Vec<Entry>, String> {
+    load(directory).map(|stored| stored.entries)
+}
+
+fn write(directory: &Path, stored: &Stored) -> Result<(), String> {
     fs::create_dir_all(directory).map_err(|error| error.to_string())?;
-    let text = serde_json::to_vec_pretty(&Stored { entries }).map_err(|error| error.to_string())?;
+    let text = serde_json::to_vec_pretty(stored).map_err(|error| error.to_string())?;
     let path = directory.join(FILE);
     let temporary = directory.join(format!("{FILE}.tmp"));
     fs::write(&temporary, text).map_err(|error| error.to_string())?;
@@ -346,25 +423,29 @@ fn new_id() -> String {
 /// Adds `entry`, or replaces the entry with its id, and answers the saved entry.
 pub fn save(directory: &Path, mut entry: Entry) -> Result<Entry, String> {
     entry.validate()?;
-    let mut entries = list(directory)?;
+    let mut stored = load(directory)?;
     if entry.id.is_empty() {
         entry.id = new_id();
     }
-    match entries.iter().position(|existing| existing.id == entry.id) {
-        Some(index) => entries[index] = entry.clone(),
-        None if entries.len() >= MAX_ENTRIES => {
+    match stored
+        .entries
+        .iter()
+        .position(|existing| existing.id == entry.id)
+    {
+        Some(index) => stored.entries[index] = entry.clone(),
+        None if stored.entries.len() >= MAX_ENTRIES => {
             return Err(format!("At most {MAX_ENTRIES} mappings can be kept."));
         }
-        None => entries.push(entry.clone()),
+        None => stored.entries.push(entry.clone()),
     }
-    write(directory, entries)?;
+    write(directory, &stored)?;
     Ok(entry)
 }
 
 pub fn remove(directory: &Path, id: &str) -> Result<(), String> {
-    let mut entries = list(directory)?;
-    entries.retain(|entry| entry.id != id);
-    write(directory, entries)
+    let mut stored = load(directory)?;
+    stored.entries.retain(|entry| entry.id != id);
+    write(directory, &stored)
 }
 
 /// A body as stored in an entry.
@@ -411,7 +492,7 @@ mod tests {
             remote.line(),
             "^https://api\\.example\\.com/v1/(.*)$ 307 https://staging.example.com/v1/$1"
         );
-        let text = plugin_text(&[entry, remote]).unwrap();
+        let text = plugin_text(&[entry, remote], &[]).unwrap();
         assert!(text.starts_with("#!name=AnixOps 调试映射\n"), "{text}");
         assert!(text.contains("\n[Rewrite]\n^https://api"), "{text}");
         assert!(text.contains("\n[Map Local]\n^https://api"), "{text}");
@@ -462,12 +543,94 @@ mod tests {
         };
         assert!(remote.validate().is_err());
         assert_eq!(
-            plugin_text(&[Entry {
-                enabled: false,
-                ..local("https://a.example.com/")
-            }]),
+            plugin_text(
+                &[Entry {
+                    enabled: false,
+                    ..local("https://a.example.com/")
+                }],
+                &[]
+            ),
             None
         );
+    }
+
+    #[test]
+    fn decrypts_added_domains_without_any_mapping() {
+        let text = plugin_text(
+            &[],
+            &[
+                "api.example.com".to_string(),
+                "*.cdn.example.com".to_string(),
+            ],
+        )
+        .unwrap();
+        assert!(text.starts_with("#!name=AnixOps 调试映射\n"), "{text}");
+        assert!(
+            !text.contains("[Rewrite]") && !text.contains("[Map Local]"),
+            "{text}"
+        );
+        assert!(
+            text.ends_with("[MITM]\nhostname = %APPEND% api.example.com, *.cdn.example.com\n"),
+            "{text}"
+        );
+        // A domain a mapping already needs is listed once.
+        let text = plugin_text(
+            &[local("https://api.example.com/v1")],
+            &["api.example.com".to_string()],
+        )
+        .unwrap();
+        assert!(
+            text.ends_with("hostname = %APPEND% api.example.com\n"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn normalizes_typed_domains() {
+        assert_eq!(
+            normalize_host("API.Example.com:443").as_deref(),
+            Some("api.example.com")
+        );
+        assert_eq!(
+            normalize_host(" https://a.test/x?y ").as_deref(),
+            Some("a.test")
+        );
+        assert_eq!(
+            normalize_host("*.Example.com").as_deref(),
+            Some("*.example.com")
+        );
+        assert_eq!(
+            normalize_host("example.com.").as_deref(),
+            Some("example.com")
+        );
+        assert_eq!(normalize_host("localhost"), None);
+        assert_eq!(normalize_host("10.0.0.1:443"), None);
+        assert_eq!(normalize_host("https://1.2.3.4/x"), None);
+        assert_eq!(normalize_host("bad host.com"), None);
+        assert_eq!(normalize_host("-a.com"), None);
+        assert_eq!(normalize_host(""), None);
+    }
+
+    #[test]
+    fn keeps_domains_and_mappings_side_by_side() {
+        let dir = std::env::temp_dir().join(format!("desktop-mitm-hosts-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        assert_eq!(
+            add_host(&dir, "API.example.com").unwrap(),
+            vec!["api.example.com"]
+        );
+        assert_eq!(
+            add_host(&dir, "api.example.com").unwrap(),
+            vec!["api.example.com"]
+        );
+        assert!(add_host(&dir, "not a domain").is_err());
+        save(&dir, local("https://b.example.com/")).unwrap();
+        let stored = load(&dir).unwrap();
+        assert_eq!(stored.hosts, vec!["api.example.com"]);
+        assert_eq!(stored.entries.len(), 1);
+        assert!(remove_host(&dir, "api.example.com").unwrap().is_empty());
+        assert_eq!(list(&dir).unwrap().len(), 1);
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

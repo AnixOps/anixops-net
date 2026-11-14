@@ -10134,6 +10134,390 @@
           }
         }
       }
+    },
+    "解密域名": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decrypted domains"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解密網域"
+          }
+        }
+      }
+    },
+    "未添加": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未新增"
+          }
+        }
+      }
+    },
+    "%lld 个域名": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld domains"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 個網域"
+          }
+        }
+      }
+    },
+    "只解密这里、插件和映射里列出的域名，其余 HTTPS 原样转发。也可以在加密连接的详情里点“解密此域名”。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only domains listed here, in plugins and in mappings are decrypted; other HTTPS passes through untouched. You can also tap “Decrypt This Domain” in an encrypted connection's details."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只解密這裡、外掛和對應裡列出的網域，其餘 HTTPS 原樣轉發。也可以在加密連線的詳情裡點「解密此網域」。"
+          }
+        }
+      }
+    },
+    "api.example.com 或 *.example.com": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "api.example.com or *.example.com"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "api.example.com 或 *.example.com"
+          }
+        }
+      }
+    },
+    "写 *.example.com 包含它的所有子域名。需要先信任 HTTPS 解密证书，保存后连接中的隧道会自动重连。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "*.example.com includes all of its subdomains. Trust the HTTPS decryption certificate first; a connected tunnel reconnects after saving."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "寫 *.example.com 包含它的所有子網域。需要先信任 HTTPS 解密憑證，儲存後連線中的通道會自動重新連線。"
+          }
+        }
+      }
+    },
+    "还没有域名。也可以在加密连接的详情里点“解密此域名”。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No domains yet. You can also tap “Decrypt This Domain” in an encrypted connection's details."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "還沒有網域。也可以在加密連線的詳情裡點「解密此網域」。"
+          }
+        }
+      }
+    },
+    "不再解密": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop Decrypting"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不再解密"
+          }
+        }
+      }
+    },
+    "无法保存映射": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't save mappings"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法儲存對應"
+          }
+        }
+      }
+    },
+    "抓 HTTPS 请求前还差 %lld 步": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld steps left before HTTPS requests are captured"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "擷取 HTTPS 請求前還差 %lld 步"
+          }
+        }
+      }
+    },
+    "明文 HTTP 请求不需要这些步骤，抓包开始后就会列出。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plain HTTP requests don't need these steps; they're listed once capture starts."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "明文 HTTP 請求不需要這些步驟，開始擷取後就會列出。"
+          }
+        }
+      }
+    },
+    "信任根证书": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trust the root certificate"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "信任根憑證"
+          }
+        }
+      }
+    },
+    "添加要解密的域名": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add domains to decrypt"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新增要解密的網域"
+          }
+        }
+      }
+    },
+    "开始抓包": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start Capture"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開始擷取"
+          }
+        }
+      }
+    },
+    "用连接开关连接。调试模式默认直连，不需要节点。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn on the connection switch. Debug mode connects directly by default; no node is needed."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用連線開關連線。偵錯模式預設直連，不需要節點。"
+          }
+        }
+      }
+    },
+    "在 改写 › HTTPS 解密证书 生成并信任，只需一次。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generate and trust it once in Rewrite › HTTPS Decryption Certificate."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 改寫 › HTTPS 解密憑證 產生並信任，只需一次。"
+          }
+        }
+      }
+    },
+    "在 改写 › 解密域名 添加，或在加密连接的详情里点“解密此域名”。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add them in Rewrite › Decrypted Domains, or tap “Decrypt This Domain” in an encrypted connection's details."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 改寫 › 解密網域 新增，或在加密連線的詳情裡點「解密此網域」。"
+          }
+        }
+      }
+    },
+    "开始后，新的请求会逐条出现在这里。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New requests appear here one by one once it starts."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開始後，新的請求會逐條出現在這裡。"
+          }
+        }
+      }
+    },
+    "解密此域名": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decrypt This Domain"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解密此網域"
+          }
+        }
+      }
+    },
+    "这是加密的 TLS 数据。目标是 IP 地址，没有域名可以解密。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is encrypted TLS data. The target is an IP address, so there is no domain to decrypt."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這是加密的 TLS 資料。目標是 IP 位址，沒有網域可以解密。"
+          }
+        }
+      }
+    },
+    "这是加密的 TLS 数据。这个域名已在解密列表里，新的连接会被解密；请确认已信任 HTTPS 解密证书。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is encrypted TLS data. The domain is already on the decrypt list, so new connections are decrypted; make sure the HTTPS decryption certificate is trusted."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這是加密的 TLS 資料。這個網域已在解密清單裡，新的連線會被解密；請確認已信任 HTTPS 解密憑證。"
+          }
+        }
+      }
+    },
+    "这是加密的 TLS 数据。点“解密此域名”后，新的连接会被解密（需要先信任 HTTPS 解密证书）。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is encrypted TLS data. After you tap “Decrypt This Domain”, new connections are decrypted (the HTTPS decryption certificate must be trusted first)."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這是加密的 TLS 資料。點「解密此網域」後，新的連線會被解密（需要先信任 HTTPS 解密憑證）。"
+          }
+        }
+      }
+    },
+    "还没有请求。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No requests yet."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "還沒有請求。"
+          }
+        }
+      }
+    },
+    "请填写域名，例如 api.example.com 或 *.example.com": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a domain, such as api.example.com or *.example.com"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請填寫網域，例如 api.example.com 或 *.example.com"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

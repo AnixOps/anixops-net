@@ -52,6 +52,18 @@ AnixOps Net 是一个 App 两种模式（计划 A3/A4）：**代理**按订阅�
 - 从请求生成 Map Local 时去掉 Content-Length、Content-Encoding 等逐跳 / 长度头；响应体被截断或仍是压缩内容时留空待填写。
 - 保存后连接中的隧道自动重连。
 
+## 解密域名与首次使用清单（2026-11-14 用户决定）
+
+HTTPS 解密按域名逐个开启，不默认解密全部流量。
+
+- 解密的域名来自三处：改写 › 解密域名 里的列表、启用的插件的 `[MITM]`、启用的映射匹配的主机。
+- 列表和映射存在同一个 `debug-mappings.json` 的 `hosts` 字段（为空时不写），最多 500 个；写 `*.example.com` 包含所有子域名。
+  生成的“AnixOps 调试映射”插件把它们和映射的主机一起写进 `[MITM] hostname = %APPEND% …`，所以只有列表、没有映射时也会生成这个插件。
+- 域名统一转成小写，去掉协议、路径和端口；IP 地址不能加入（Rust `mappings::normalize_host`、Swift `DebugMappings.normalizeHost` 规则相同）。
+- 加密连接的详情里有“解密此域名”，一键把连接的域名加进列表；已在列表里或目标是 IP 时不显示，说明文字会写明原因。
+- 调试模式的请求页在还抓不到 HTTPS 请求时显示检查清单：连接 → 信任根证书 → （Tauri）开启 HTTPS 解密 → 添加要解密的域名 → 开始抓包，每步写明去哪里做，全部完成后消失。
+  Apple 端的映射插件不受插件总开关影响，所以没有“开启 HTTPS 解密”这一步；Android 上 App 读不到证书是否被信任，不列这一步。
+
 ## 截图
 
 CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含调试模式的 `debug-activity-light` / `debug-activity-dark`（请求表格和检查器）、`debug-exit-light`、`debug-settings-light`，以及首次启动的 `choose-home-light`。
