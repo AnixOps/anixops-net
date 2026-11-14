@@ -197,10 +197,10 @@ pub fn remove(directory: &Path, id: &str) -> Result<(), String> {
 /// Adds the enabled plugins, their scripts and data files to a `mitm`
 /// section. A file that is gone from disk is left out, so one missing
 /// script cannot keep the engine from starting.
+/// The debug mappings (Map Local / Map Remote) made in the capture view
+/// join as one more plugin, after the imported ones.
 pub fn apply(directory: &Path, mitm: &mut Map<String, Value>) {
-    let Ok(library) = read_library(directory) else {
-        return;
-    };
+    let library = read_library(directory).unwrap_or_default();
     let mut texts = Vec::new();
     let mut scripts = Map::new();
     let mut resources = Map::new();
@@ -217,6 +217,12 @@ pub fn apply(directory: &Path, mitm: &mut Map<String, Value>) {
                 }
             }
         }
+    }
+    if let Some(text) = crate::mappings::list(directory)
+        .ok()
+        .and_then(|entries| crate::mappings::plugin_text(&entries))
+    {
+        texts.push(Value::String(text));
     }
     if texts.is_empty() {
         return;

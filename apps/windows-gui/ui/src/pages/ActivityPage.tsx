@@ -17,7 +17,7 @@ export function ActivityPage({ snapshot, busy, run, debug = false }: { snapshot:
 
   const [detail, setDetail] = useState<ConnectionSnapshot | null>(null);
   if (detail && liveEngine(snapshot)) {
-    return <CaptureDetail connection={detail} busy={busy} run={run} onBack={() => setDetail(null)} />;
+    return <CaptureDetail connection={detail} busy={busy} run={run} onBack={() => setDetail(null)} replayable={snapshot?.platform !== "android"} />;
   }
 
   const session = (

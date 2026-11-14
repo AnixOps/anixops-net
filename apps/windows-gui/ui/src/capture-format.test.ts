@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CaptureConnection } from "./bridge";
-import { asText, decodedBody, directionTotals, durationMs, fromBase64, header, hexDump, looksLikeTls, noteText } from "./capture-format";
+import { asText, decodedBody, directionTotals, durationMs, fromBase64, header, headerLines, hexDump, looksLikeTls, noteText, parseHeaderLines, toBase64, withoutQuery } from "./capture-format";
 
 const base64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 
@@ -26,6 +26,22 @@ function connection(firstUpload: Uint8Array): CaptureConnection {
 }
 
 describe("capture format", () => {
+  it("encodes base64 that decodes back", () => {
+    const bytes = new Uint8Array(70000).map((_, index) => index % 256);
+    expect(toBase64(new Uint8Array([102, 111]))).toBe("Zm8=");
+    expect(Array.from(fromBase64(toBase64(bytes)))).toEqual(Array.from(bytes));
+  });
+
+  it("edits headers as lines", () => {
+    expect(headerLines([["Accept", "*/*"], ["X-A", "1:2"]])).toBe("Accept: */*\nX-A: 1:2");
+    expect(parseHeaderLines("Accept: */*\r\n\n:path: /\nX-A: 1:2\nbroken")).toEqual([["Accept", "*/*"], ["X-A", "1:2"]]);
+  });
+
+  it("drops the query of a URL", () => {
+    expect(withoutQuery("https://a.test/p?q=1#f")).toBe("https://a.test/p");
+    expect(withoutQuery("https://a.test/p")).toBe("https://a.test/p");
+  });
+
   it("decodes base64 and tells text from binary", () => {
     expect(Array.from(fromBase64("AP/+"))).toEqual([0, 255, 254]);
     expect(asText(new TextEncoder().encode("GET / HTTP/1.1\r\nHost: a\r\n\r\n"))).toContain("Host: a");

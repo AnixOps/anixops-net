@@ -21,6 +21,7 @@ use crate::backend::{
     PreferencesInput, RuntimeSnapshot, SubscriptionSummary, PASTED_LOCATION,
 };
 use client_health::{startup, Health};
+use desktop_mitm::mappings;
 use desktop_mitm::plugins::{self, PluginSummary};
 use engine_embedded::profile::RoutingMode;
 use subscription_meta::ResponseMeta;
@@ -480,6 +481,16 @@ fn save_export(_app: &AppHandle, export: &desktop_mitm::capture::Export) -> Resu
     Ok(path.display().to_string())
 }
 
+/// Sends an edited copy of a captured request through the running engine (`desktop_mitm::replay`).
+#[tauri::command]
+async fn replay_request(
+    state: State<'_, AppState>,
+    request: desktop_mitm::replay::ReplayRequest,
+) -> Result<desktop_mitm::replay::ReplayResponse, String> {
+    let (proxy, root) = with_backend(&state, |backend| backend.replay_target()).await?;
+    off_lock(move || desktop_mitm::replay::send(proxy, root.as_deref(), &request)).await
+}
+
 #[tauri::command]
 async fn test_node_delay(
     state: State<'_, AppState>,
@@ -935,6 +946,36 @@ async fn remove_mitm_plugin(
     .await
 }
 
+#[tauri::command]
+async fn list_debug_mappings(state: State<'_, AppState>) -> Result<Vec<mappings::Entry>, String> {
+    let directory = lock(&state.0).plugins_dir();
+    off_lock(move || mappings::list(&directory)).await
+}
+
+#[tauri::command]
+async fn save_debug_mapping(
+    state: State<'_, AppState>,
+    entry: mappings::Entry,
+) -> Result<OperationResult, String> {
+    change_plugins(&state, move |directory| {
+        let saved = mappings::save(directory, entry)?;
+        Ok(format!("Mapping saved: {}", saved.pattern))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn remove_debug_mapping(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<OperationResult, String> {
+    change_plugins(&state, move |directory| {
+        mappings::remove(directory, &id)?;
+        Ok("Mapping removed".to_string())
+    })
+    .await
+}
+
 /// Commands the Windows client has and Linux does not yet; the interface hides their controls.
 macro_rules! unavailable {
     ($($name:ident),* $(,)?) => {
@@ -1045,6 +1086,10 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             switch_node,
             runtime_control,
             export_capture,
+            replay_request,
+            list_debug_mappings,
+            save_debug_mapping,
+            remove_debug_mapping,
             test_node_delay,
             test_node_delays,
             network_probe,

@@ -16,6 +16,7 @@ use config_core::routing_import::import_subscription_routing;
 use config_core::CoreSubscriptionService;
 use control_domain::{NodeDescriptor, SubscriptionService, SubscriptionSource};
 use desktop_dns::DnsPreset;
+use desktop_mitm::mappings;
 use engine_embedded::config::{RuntimeConfig, CONFIG_SCHEMA_VERSION};
 use engine_embedded::delay::measure_delay;
 use engine_embedded::nodes::{outbound_for_node, routing_envelope, single_node_envelope};
@@ -320,6 +321,10 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             select_native_group_outbound,
             runtime_control,
             export_capture,
+            replay_request,
+            list_debug_mappings,
+            save_debug_mapping,
+            remove_debug_mapping,
             test_node_delay,
             test_node_delays,
             network_probe,
@@ -883,6 +888,33 @@ async fn runtime_control(
             .map_err(|_| "desktop core lock failed")?
             .control(&request)?;
         serde_json::from_slice(&answer).map_err(|error| error.to_string())
+    })
+    .await
+}
+
+/// Sends an edited copy of a captured request through the engine this
+/// window runs (`desktop_mitm::replay`), trusting the HTTPS decryption root
+/// while decryption is on.
+#[tauri::command]
+async fn replay_request(
+    request: desktop_mitm::replay::ReplayRequest,
+    state: State<'_, DesktopAppState>,
+) -> Result<desktop_mitm::replay::ReplayResponse, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let proxy = state
+            .direct_core
+            .lock()
+            .map_err(|_| "desktop core lock failed")?
+            .local_addr()
+            .ok_or(
+                "connect in desktop mode first: replayed requests go through the running engine",
+            )?;
+        let root = managed_config_or_default()?
+            .native_mitm
+            .filter(|mitm| mitm.enabled)
+            .and_then(|mitm| fs::read_to_string(mitm.ca_certificate_path).ok());
+        desktop_mitm::replay::send(proxy, root.as_deref(), &request)
     })
     .await
 }
@@ -3354,6 +3386,41 @@ async fn remove_mitm_plugin(
     let state = state.inner().clone();
     run_blocking(move || {
         mitm_plugins::remove(&mitm_plugins::directory(), &id)?;
+        Ok(OperationResult {
+            message: apply_mitm_plugins(&state),
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn list_debug_mappings() -> Result<Vec<mappings::Entry>, String> {
+    run_blocking(|| mappings::list(&mitm_plugins::directory())).await
+}
+
+#[tauri::command]
+async fn save_debug_mapping(
+    entry: mappings::Entry,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        mappings::save(&mitm_plugins::directory(), entry)?;
+        Ok(OperationResult {
+            message: apply_mitm_plugins(&state),
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn remove_debug_mapping(
+    id: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        mappings::remove(&mitm_plugins::directory(), &id)?;
         Ok(OperationResult {
             message: apply_mitm_plugins(&state),
         })
