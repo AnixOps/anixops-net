@@ -27,4 +27,10 @@ final class TermsConsentTests: XCTestCase {
         let terms = try String(contentsOf: root.appendingPathComponent("TERMS.md"), encoding: .utf8)
         XCTAssertEqual(TermsConsent.version(inTerms: terms), TermsConsent.version)
     }
+
+    func testDecryptionIsConfirmedOnce() {
+        XCTAssertTrue(DecryptionConsent.needsConsent(accepted: nil))
+        XCTAssertTrue(DecryptionConsent.needsConsent(accepted: ""))
+        XCTAssertFalse(DecryptionConsent.needsConsent(accepted: "2.1.0"))
+    }
 }
