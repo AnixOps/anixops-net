@@ -172,6 +172,7 @@ targets:
       - path: Sources/NetworkCoreAppHost/MitmTrustPresentation.swift
       - path: Sources/NetworkCoreAppHost/PluginsView.swift
       - path: Sources/NetworkCoreAppHost/ProxyModeText.swift
+      - path: Sources/NetworkCoreAppHost/ReplayView.swift
       - path: Sources/NetworkCoreAppHost/RouteLine.swift
       - path: Sources/NetworkCoreAppHost/TermsConsentView.swift
       - path: Sources/NetworkCoreAppHost/RuleSetsView.swift

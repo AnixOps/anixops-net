@@ -341,6 +341,23 @@ private struct HttpExchangeView: View {
                 message("响应", exchange.response)
             }
             Section {
+                let captured = replay
+                NavigationLink {
+                    ReplayView(original: captured.replay, complete: captured.complete, sendOnAppear: true)
+                } label: {
+                    Label("重放", systemImage: "arrow.clockwise")
+                }
+                .disabled(!captured.complete)
+                NavigationLink {
+                    ReplayView(original: captured.replay, complete: captured.complete, sendOnAppear: false)
+                } label: {
+                    Label("编辑后重放", systemImage: "square.and.pencil")
+                }
+            } footer: {
+                Text(replay.complete ? "从本机重新发出这个请求，不带 Cookie 存储，不跟随重定向。" : "请求体没有完整抓到，只能编辑后重放。")
+            }
+            .listRowBackground(brand.surface)
+            Section {
                 Button {
                     mapping = MappingDraft(entry: mapLocal, isNew: true)
                 } label: {
@@ -371,6 +388,18 @@ private struct HttpExchangeView: View {
             .environment(\.brand, brand)
             .tint(brand.primary)
         }
+    }
+
+    /// The request as captured, ready to send again.
+    private var replay: (replay: RequestReplay, complete: Bool) {
+        RequestReplay.captured(
+            method: exchange.method,
+            url: exchange.url,
+            headers: exchange.request.headers.map { (name: $0.name, value: $0.value) },
+            body: exchange.request.body.data,
+            bodyTruncated: exchange.request.body.truncated
+                || UInt64(exchange.request.body.data.count) != exchange.request.body.size
+        )
     }
 
     /// A Map Local entry answering with this response. A cut-off or still-compressed body cannot be replayed as

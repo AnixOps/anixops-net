@@ -27,6 +27,15 @@ AnixOps Net 是一个 App 两种模式（计划 A3/A4）：**代理**按订阅�
 
 在调试模式下导入订阅或节点会把出口切到“经过节点”。直连时选节点、更新订阅都只改订阅组里的选择，隧道配置保持直连。
 
+## 单条重放与编辑（计划 E1，免费）
+
+请求详情里的“重放”按抓到的样子立即重发，“编辑后重放”先改方法、URL、请求头和请求体再发。
+
+- App 用 URLSession 发出（`NetworkCoreBridge/RequestReplay.swift`），连接中会经过隧道，自然出现在抓包里。
+- 不用 Cookie 存储和缓存，不跟随重定向，显示服务器自己的响应（状态、耗时、响应头、响应体）。
+- 去掉 HTTP/2 伪头（`:authority` 等）和 Host、Content-Length 等由系统填写的头；请求体最大 1 MB。
+- 抓到的请求体被截断时不能直接重放，只能编辑后重放。
+
 ## Map Local / Map Remote（计划 E3）
 
 扩展 › Map Local / Map Remote 管理映射；请求详情里的“映射到本地 / 映射到远程”用抓到的请求预填一条。
@@ -48,4 +57,3 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含 `debug-home-light`�
 ## 后续
 
 - 请求列表按 HTTP 请求逐条展示，快捷筛选和表达式搜索共用一个搜索框（内核 `capture_requests` 和过滤表达式，见 project files `debug-client/kernel-capture-api.md`）。
-- 单条重放与编辑（App 用 URLSession 发出，自然进抓包）。
