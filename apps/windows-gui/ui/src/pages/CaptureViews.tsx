@@ -8,6 +8,8 @@ import { formatBytes } from "../subscription-format";
 import { Card, EmptyState, IconButton, MoreMenu, Row, Run, Segmented, ToggleRow } from "../ui";
 import { t } from "../i18n";
 import { mappingFromExchange, MappingEditor, ReplayEditor } from "./DebugTools";
+import { coveredBy, decryptHostOf, isDecryptableHost } from "../decrypt-hosts";
+import { useDecryptHosts } from "./DecryptHosts";
 
 /** Saves an export to Downloads and shows where it went. */
 export function exportCapture(run: Run, format: CaptureFormat, id?: number, options?: ExportOptions) {
@@ -43,6 +45,7 @@ export function CaptureDetail({ connection, busy, run, onBack, initialExchange }
   const [exchange, setExchange] = useState<number | null>(initialExchange ?? null);
   const [redact, setRedact] = useState(true);
   const [tool, setTool] = useState<{ replay: CaptureExchange } | { mapping: DebugMapping } | null>(null);
+  const [decryptHosts, reloadDecryptHosts] = useDecryptHosts();
   const visible = usePageVisible();
   const open = connection.ended_at_ms == null;
 
@@ -132,7 +135,16 @@ export function CaptureDetail({ connection, busy, run, onBack, initialExchange }
       {capture.chunks.length > 0 && (
         <Card
           title={capture.network === "udp" ? t("数据报") : t("数据")}
-          description={looksLikeTls(capture) ? t("这是加密的 TLS 数据。要看到 HTTPS 明文，请在扩展里为这个域名启用 HTTPS 解密（MITM），并信任证书。") : undefined}
+          description={looksLikeTls(capture) ? encryptedNote(connection.host, decryptHosts) : undefined}
+          actions={looksLikeTls(capture) && isDecryptableHost(connection.host) && !coveredBy(connection.host, decryptHosts) ? (
+            <button
+              className="secondary compact"
+              disabled={Boolean(busy)}
+              onClick={() => void run("decrypt-host", () => desktop.addDecryptHost(decryptHostOf(connection.host))).then(reloadDecryptHosts)}
+            >
+              <Lock size={14} />{t("解密此域名")}
+            </button>
+          ) : undefined}
         >
           {capture.chunks.map((chunk, index) => <ChunkRow key={`${chunk.at_ms}-${index}`} chunk={chunk} />)}
         </Card>
@@ -155,6 +167,15 @@ export function CaptureDetail({ connection, busy, run, onBack, initialExchange }
       </Card>
     </div>
   );
+}
+
+/** What to do about an encrypted connection: add its domain, or wait for a new connection once it is added. */
+function encryptedNote(host: string, decrypted: string[]): string {
+  if (!isDecryptableHost(host)) return t("这是加密的 TLS 数据。目标只有 IP 地址，没有域名，无法按域名解密。");
+  if (coveredBy(host, decrypted)) {
+    return t("这个域名已在解密列表里。解密只对新连接生效；如果仍看不到明文，请确认 HTTPS 解密已开启、根证书已信任，或者这个 App 固定了证书。");
+  }
+  return t("这是加密的 TLS 数据。点“解密此域名”后，这个域名的新连接会被解密（需要开启 HTTPS 解密并信任根证书）。");
 }
 
 function exchangeHint(exchange: CaptureExchange): string {

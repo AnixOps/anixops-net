@@ -8,6 +8,7 @@ import { EmptyState, IconButton, MoreMenu, PageTools, Run, Segmented, Switch } f
 import { t } from "../i18n";
 import { captureMenu, ConnectionsView } from "./ActivityPage";
 import { CaptureSessions } from "./CaptureSessions";
+import { DebugSetupCard } from "./DecryptHosts";
 import { RequestInspector } from "./CaptureViews";
 import { RequestFilterBar, RequestTable, useRequestFeed } from "./RequestList";
 
@@ -32,7 +33,13 @@ function useWideWindow(): boolean {
  * toolbar holds what applies to the whole capture (the view, capture on or off, pause, export and clear); the
  * connections and the saved sessions are the page's other two views.
  */
-export function RequestsPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
+export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
+  snapshot: RuntimeSnapshot | null;
+  busy: string | null;
+  run: Run;
+  /** Goes to "Rewrite", where the certificate, decryption and decrypted domains are set up. */
+  onOpenRewrite: () => void;
+}) {
   const live = liveEngine(snapshot);
   const [view, setView] = useState<View>("requests");
   const [capture, reloadCapture] = usePolling(desktop.captureStatus, live);
@@ -117,12 +124,26 @@ export function RequestsPage({ snapshot, busy, run }: { snapshot: RuntimeSnapsho
     </PageTools>
   );
 
+  // Where the empty page already offers "Start capture" as its main button, the checklist does not repeat it.
+  const setupCard = (offerCapture: boolean, compact = false) => (
+    <DebugSetupCard
+      compact={compact}
+      snapshot={snapshot}
+      capture={capture}
+      onStartCapture={offerCapture ? () => change(() => desktop.setCapture(true)) : undefined}
+      onOpenRewrite={onOpenRewrite}
+    />
+  );
+
   if (!live) {
     return (
       <>
         {tools}
         <div className="page-placeholder">
-          <EmptyState icon={PlugZap} title={t("还没有连接")} message={t("用连接开关连接后，经过本机的 HTTP 请求会逐条列在这里。调试模式默认直连，不需要节点。")} />
+          <div className="setup-stack">
+            <EmptyState icon={PlugZap} title={t("还没有连接")} message={t("用连接开关连接后，经过本机的 HTTP 请求会逐条列在这里。调试模式默认直连，不需要节点。")} />
+            {setupCard(true)}
+          </div>
         </div>
       </>
     );
@@ -136,9 +157,12 @@ export function RequestsPage({ snapshot, busy, run }: { snapshot: RuntimeSnapsho
       <>
         {tools}
         <div className="page-placeholder">
-          <EmptyState icon={FileSearch} title={t("还没有开始抓包")} message={t("开始抓包后，新的请求会逐条出现在这里。要看到 HTTPS 明文，还要在“改写”里信任解密证书，并为要看的域名开启解密。")}>
-            <button className="primary" onClick={() => change(() => desktop.setCapture(true))}>{t("开始抓包")}</button>
-          </EmptyState>
+          <div className="setup-stack">
+            <EmptyState icon={FileSearch} title={t("还没有开始抓包")} message={t("开始抓包后，新的请求会逐条出现在这里。要看到 HTTPS 明文，还要在“改写”里信任解密证书，并为要看的域名开启解密。")}>
+              <button className="primary" onClick={() => change(() => desktop.setCapture(true))}>{t("开始抓包")}</button>
+            </EmptyState>
+            {setupCard(false)}
+          </div>
         </div>
       </>
     );
@@ -148,7 +172,6 @@ export function RequestsPage({ snapshot, busy, run }: { snapshot: RuntimeSnapsho
     <section className="request-pane" aria-label={t("请求")}>
       <RequestFilterBar ref={filterField} typed={typed} onType={setTyped} quick={quick} onQuick={setQuick} error={feed.error} count={feed.rows.length} />
       {paused && <p className="muted request-paused">{t("已暂停刷新，新的请求仍在记录。")}</p>}
-      {failure && <p className="muted danger-text" role="alert">{failure}</p>}
       {feed.rows.length === 0 ? (
         <div className="request-empty">
           <p className="muted">{filter ? t("没有匹配的请求。") : t("还没有解密的请求。HTTPS 请求要先在“改写”里为域名开启解密。")}</p>
@@ -188,6 +211,8 @@ export function RequestsPage({ snapshot, busy, run }: { snapshot: RuntimeSnapsho
   return (
     <>
       {tools}
+      {failure && <p className="muted danger-text" role="alert">{failure}</p>}
+      <div className="setup-banner">{setupCard(true, true)}</div>
       {wide
         ? <div className="request-workbench">{table}{inspector}</div>
         : <div className="request-workbench single">{opened && request ? inspector : table}</div>}

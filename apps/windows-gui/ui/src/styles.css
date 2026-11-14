@@ -538,6 +538,11 @@ dl.headers dd { margin: 0; font-family: var(--font-mono); font-size: 12px; overf
 .inspector-pane > .page-stack { gap: 16px; padding-bottom: 8px; }
 .inspector-empty { display: grid; height: 100%; place-items: center; background: var(--group); border-radius: var(--radius-card); box-shadow: 0 0 0 .5px var(--hairline); }
 .egress-rules { margin-top: 24px; }
+.setup-stack { display: grid; gap: 8px; width: min(560px, 100%); }
+.setup-banner:empty { display: none; }
+.setup-banner { flex: 0 0 auto; margin-bottom: 12px; }
+.setup-banner .card { max-width: 720px; }
+.debug-setup .row.done .row-label strong { color: var(--text2); font-weight: 500; }
 @media (max-width: 1360px) {
   .request-head, .request-row { grid-template-columns: 56px 44px minmax(80px, 1fr) minmax(100px, 1.5fr) 62px 56px; }
   .request-head .col-time, .request-row .col-time, .request-head .col-type, .request-row .col-type { display: none; }

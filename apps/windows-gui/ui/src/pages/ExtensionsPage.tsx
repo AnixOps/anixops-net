@@ -6,6 +6,7 @@ import { t } from "../i18n";
 import { PhoneCaptureCards } from "./PhoneCaptureCards";
 import { useDecryptionConsent } from "../decryption-consent";
 import { MappingEditor, MappingsCard } from "./DebugTools";
+import { DecryptHostsCard } from "./DecryptHosts";
 
 export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
   const linux = inProcessEngine(snapshot);
@@ -71,7 +72,7 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
       {consent.dialog}
       <Card
         title={t("HTTPS 解密")}
-        description={t("只解密插件和内置规则列出的域名，其余网站原样转发。根证书在本机生成，需要你按系统提示手动信任，App 不会自动信任。")}
+        description={t("只解密下面“解密域名”、插件和映射里列出的域名，其余网站原样转发。根证书在本机生成，需要你按系统提示手动信任，App 不会自动信任。")}
       >
         {root && (
           <Row
@@ -118,6 +119,8 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
           />
         )}
       </Card>
+
+      <DecryptHostsCard busy={busy} run={run} />
 
       {snapshot?.platform !== "android" && <PhoneCaptureCards busy={busy} run={run} />}
 
