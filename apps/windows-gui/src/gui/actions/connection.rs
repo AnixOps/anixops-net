@@ -265,9 +265,7 @@ fn connect_direct_egress(
         Some(mitm) => loopback_listener(&format!("{}:{}", mitm.listen_host, mitm.listen_port))?,
         None => SocketAddr::from(([127, 0, 0, 1], DIRECT_EGRESS_LISTEN_PORT)),
     };
-    if let Some(mitm) = mitm.as_ref() {
-        DesktopCore::trust_mitm_root(mitm)?;
-    }
+    // The decryption root is trusted by the user by hand, never here (TERMS.md section 4).
     if desktop.tun_mode_enabled {
         core.start_tun(&envelope)?;
     }
