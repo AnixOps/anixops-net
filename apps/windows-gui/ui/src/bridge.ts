@@ -151,6 +151,25 @@ export interface NetworkProbe {
   directMs?: number | null;
 }
 
+/** The engine's LAN share for phones (`lan_share` control commands). */
+export interface LanShareStatus {
+  running: boolean;
+  port?: number | null;
+  /** This computer's private IPv4 addresses, the likeliest first. */
+  addresses: string[];
+  /** The phone setup page on the first address. */
+  url?: string | null;
+  /** The made-up host that answers the setup page through the proxy. */
+  page_host: string;
+  https_decryption: boolean;
+  certificate: boolean;
+  credentials: boolean;
+  accepted: number;
+  rejected: number;
+  active: number;
+  pages: number;
+}
+
 export interface OperationResult {
   message: string;
 }
@@ -275,6 +294,16 @@ export const desktop = {
   setMitmPluginEnabled: (id: string, enabled: boolean) =>
     invoke<OperationResult>("set_mitm_plugin_enabled", { id, enabled }),
   removeMitmPlugin: (id: string) => invoke<OperationResult>("remove_mitm_plugin", { id }),
+  /** The LAN share of the running engine; rejects while the engine does not run in this window. */
+  lanShare: () => invoke<LanShareStatus>("runtime_control", { request: { cmd: "lan_share" } }),
+  startLanShare: (port: number) => invoke<LanShareStatus>("runtime_control", { request: { cmd: "start_lan_share", port } }),
+  stopLanShare: () => invoke<LanShareStatus>("runtime_control", { request: { cmd: "stop_lan_share" } }),
+  /** An SVG QR code of `text`. */
+  phoneQrCode: (text: string) => invoke<string>("phone_qr_code", { text }),
+  importMitmRoot: (certificatePem: string, privateKeyPem: string) =>
+    invoke<OperationResult>("import_mitm_root", { certificatePem, privateKeyPem }),
+  /** SHA-256 of the HTTPS decryption root, or null before one exists. */
+  mitmRootFingerprint: () => invoke<string | null>("mitm_root_fingerprint"),
   setTunMode: (enabled: boolean) => invoke<OperationResult>("set_tun_mode", { enabled }),
   installCertificate: (path: string) => invoke<OperationResult>("install_certificate", { path }),
   removeCertificate: () => invoke<OperationResult>("remove_certificate"),

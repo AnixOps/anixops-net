@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { desktop, inProcessEngine, MitmPlugin, preferencesFrom, RuntimeSnapshot } from "../bridge";
 import { Card, EmptyState, MoreMenu, Row, Run, StatusPill, Switch, ToggleRow } from "../ui";
 import { t } from "../i18n";
+import { PhoneCaptureCards } from "./PhoneCaptureCards";
 
 export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
   const linux = inProcessEngine(snapshot);
@@ -58,6 +59,8 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
           />
         )}
       </Card>
+
+      {snapshot?.platform !== "android" && <PhoneCaptureCards busy={busy} run={run} />}
 
       <Card
         title={t("插件")}

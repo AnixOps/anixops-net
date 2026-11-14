@@ -12,6 +12,28 @@ final class RuntimeControlTests: XCTestCase {
         )
     }
 
+    func testLanShareCommandsAndAnswer() throws {
+        XCTAssertEqual(String(decoding: RuntimeControl.lanShare.request, as: UTF8.self), #"{"cmd":"lan_share"}"#)
+        XCTAssertEqual(
+            String(decoding: RuntimeControl.startLanShare(port: 8899).request, as: UTF8.self),
+            #"{"cmd":"start_lan_share","port":8899}"#
+        )
+        XCTAssertEqual(String(decoding: RuntimeControl.stopLanShare.request, as: UTF8.self), #"{"cmd":"stop_lan_share"}"#)
+        let share = try XCTUnwrap(RuntimeControl.decode(RuntimeControl.LanShare.self, from: Data("""
+        {"running":true,"port":8899,"addresses":["192.168.1.5","10.0.0.2"],"url":"http://192.168.1.5:8899/",
+         "page_host":"cert.anixops","https_decryption":true,"certificate":true,"credentials":false,
+         "accepted":3,"rejected":0,"active":1,"pages":2}
+        """.utf8)))
+        XCTAssertEqual(share.addresses, ["192.168.1.5", "10.0.0.2"])
+        XCTAssertEqual(share.setupURL(address: "10.0.0.2"), "http://10.0.0.2:8899/")
+        XCTAssertTrue(share.httpsDecryption)
+        let stopped = try XCTUnwrap(RuntimeControl.decode(RuntimeControl.LanShare.self, from: Data("""
+        {"running":false,"port":null,"addresses":[],"url":null,"page_host":"cert.anixops","https_decryption":false,
+         "certificate":false,"credentials":false,"accepted":0,"rejected":0,"active":0,"pages":0}
+        """.utf8)))
+        XCTAssertNil(stopped.setupURL(address: "192.168.1.5"))
+    }
+
     func testScriptCommandsAndAnswers() throws {
         XCTAssertEqual(String(decoding: RuntimeControl.networkChanged.request, as: UTF8.self), #"{"cmd":"network_changed"}"#)
         XCTAssertEqual(

@@ -410,6 +410,31 @@ async fn runtime_control(
     with_backend(&state, move |backend| backend.runtime_control(&request)).await
 }
 
+/// An SVG QR code for the phone setup page address of the LAN share.
+#[tauri::command]
+fn phone_qr_code(text: String) -> Result<String, String> {
+    desktop_mitm::phone::qr_svg(&text)
+}
+
+/// Replaces the HTTPS decryption root with the user's own CA (PEM certificate and PKCS#8 key).
+#[tauri::command]
+async fn import_mitm_root(
+    state: State<'_, AppState>,
+    certificate_pem: String,
+    private_key_pem: String,
+) -> Result<OperationResult, String> {
+    with_backend(&state, move |backend| {
+        backend.import_mitm_root(&certificate_pem, &private_key_pem)
+    })
+    .await
+}
+
+/// SHA-256 of the HTTPS decryption root, for checking it against the phone setup page.
+#[tauri::command]
+async fn mitm_root_fingerprint(state: State<'_, AppState>) -> Result<Option<String>, String> {
+    with_backend(&state, |backend| Ok(backend.mitm_root_fingerprint())).await
+}
+
 #[tauri::command]
 async fn test_node_delay(
     state: State<'_, AppState>,
@@ -1005,6 +1030,9 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             import_mitm_plugin,
             set_mitm_plugin_enabled,
             remove_mitm_plugin,
+            phone_qr_code,
+            import_mitm_root,
+            mitm_root_fingerprint,
             install_certificate,
             remove_certificate,
             install_driver,

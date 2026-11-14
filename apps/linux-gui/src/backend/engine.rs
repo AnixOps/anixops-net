@@ -227,7 +227,9 @@ pub fn activity_request(request: &serde_json::Value) -> Result<Vec<u8>, String> 
         .get("cmd")
         .and_then(serde_json::Value::as_str)
         .unwrap_or_default();
-    if !ACTIVITY_COMMANDS.contains(&command) {
+    if !ACTIVITY_COMMANDS.contains(&command)
+        && !desktop_mitm::phone::CONTROL_COMMANDS.contains(&command)
+    {
         return Err(format!(
             "runtime control command {command:?} is not available"
         ));
