@@ -294,3 +294,12 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 
 - [ ] Windows 打开 TUN 模式、Android 连接 VPN 后，在“流量重定向”新建一条（例如游戏服务器 IP → 开发服务器 `IP:端口`，协议选 UDP），游戏或 `nc -u` 的流量到达开发服务器，UDP 回包正常。
 - [ ] 域名写法（`game.example.com`）匹配子域名；关掉开关或删除后恢复原地址；连接列表里能看到改发后的地址。
+
+## Windows / Linux 原生界面（`docs/architecture/desktop-native.md`）
+
+- [ ] Windows 代码签名证书：发布物现在没有 Authenticode 签名。原生版把内核放进系统服务，未签名的服务更容易被安全软件
+  拦截，安装时也有 SmartScreen 警告。正式切换到原生版之前需要维护者申请证书，并把证书或托管签名服务的凭据配置成仓库
+  secrets。不阻塞开发。
+- [ ] 原生预览版真机验收（预览版发布后）：Windows 11 上检查贴靠布局、125% 和 150% 缩放、中文输入法、讲述人朗读；
+  Linux 上在 GNOME 和 KDE 各检查一次窗口、托盘、深浅色和触控板滚动。
+
