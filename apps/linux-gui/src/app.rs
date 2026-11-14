@@ -510,8 +510,8 @@ async fn replay_request(
     state: State<'_, AppState>,
     request: desktop_mitm::replay::ReplayRequest,
 ) -> Result<desktop_mitm::replay::ReplayResponse, String> {
-    let (proxy, root) = with_backend(&state, |backend| backend.replay_target()).await?;
-    off_lock(move || desktop_mitm::replay::send(proxy, root.as_deref(), &request)).await
+    let target = with_backend(&state, |backend| backend.replay_target()).await?;
+    off_lock(move || desktop_mitm::replay::send(&target, &request)).await
 }
 
 #[tauri::command]

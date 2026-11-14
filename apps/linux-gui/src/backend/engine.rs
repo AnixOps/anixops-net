@@ -349,6 +349,18 @@ impl Engine {
         serde_json::from_slice(&answer).map_err(|error| error.to_string())
     }
 
+    /// The replay proxy's state (`start` none), or starts it afresh with HTTPS decryption on or off. Not one of the
+    /// window's activity commands: only the backend asks, and the credentials stay in it.
+    pub fn replay_proxy(&self, start: Option<bool>) -> Result<serde_json::Value, String> {
+        let request = match start {
+            None => serde_json::json!({ "cmd": "replay_proxy" }),
+            Some(decrypt) => serde_json::json!({ "cmd": "start_replay_proxy", "decrypt": decrypt }),
+        };
+        let request = serde_json::to_vec(&request).map_err(|error| error.to_string())?;
+        let answer = self.control_bytes(&request)?;
+        serde_json::from_slice(&answer).map_err(|error| error.to_string())
+    }
+
     /// The engine's Prometheus text (the kernel's `metrics` command) while it runs.
     pub fn metrics(&self) -> Option<String> {
         let answer = self.control_bytes(br#"{"cmd":"metrics"}"#).ok()?;

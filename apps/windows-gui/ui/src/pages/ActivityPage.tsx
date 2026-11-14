@@ -27,7 +27,6 @@ export function ActivityPage({ snapshot, busy, run, debug = false }: { snapshot:
         busy={busy}
         run={run}
         onBack={() => setDetail(null)}
-        replayable={snapshot?.platform !== "android"}
       />
     );
   }

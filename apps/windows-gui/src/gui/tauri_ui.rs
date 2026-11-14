@@ -917,7 +917,12 @@ async fn replay_request(
             .native_mitm
             .filter(|mitm| mitm.enabled)
             .and_then(|mitm| fs::read_to_string(mitm.ca_certificate_path).ok());
-        desktop_mitm::replay::send(proxy, root.as_deref(), &request)
+        let target = desktop_mitm::replay::Target {
+            proxy,
+            credentials: None,
+            root_pem: root,
+        };
+        desktop_mitm::replay::send(&target, &request)
     })
     .await
 }

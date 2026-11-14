@@ -693,18 +693,39 @@ impl Backend {
 
     /// Where a replayed request goes in (the running engine's local proxy) and the HTTPS decryption root it has
     /// to trust while decryption is on.
-    pub fn replay_target(&self) -> Result<(std::net::SocketAddr, Option<String>), String> {
-        let proxy = self
-            .engine
-            .address()
-            .filter(|_| self.engine.is_running())
-            .ok_or("connect first: replayed requests go through the running engine")?;
-        let root = if self.state.preferences.https_decryption {
+    /// Where a replayed request goes: the local proxy on the desktop; on Android, whose own traffic stays out of
+    /// the VPN, the engine's replay proxy (127.0.0.1, fresh port and credentials each start), started on first use.
+    pub fn replay_target(&self) -> Result<desktop_mitm::replay::Target, String> {
+        if !self.engine.is_running() {
+            return Err(
+                "connect first: replayed requests go through the running engine".to_string(),
+            );
+        }
+        let decrypt = self.state.preferences.https_decryption;
+        let root = if decrypt {
             std::fs::read_to_string(&self.mitm_root().certificate_path).ok()
         } else {
             None
         };
-        Ok((proxy, root))
+        if cfg!(target_os = "android") {
+            let running = self.engine.replay_proxy(None)?;
+            let answer =
+                if running.get("running").and_then(serde_json::Value::as_bool) == Some(true) {
+                    running
+                } else {
+                    self.engine.replay_proxy(Some(decrypt))?
+                };
+            return desktop_mitm::replay::Target::from_replay_proxy(&answer, root);
+        }
+        let proxy = self
+            .engine
+            .address()
+            .ok_or("connect first: replayed requests go through the running engine")?;
+        Ok(desktop_mitm::replay::Target {
+            proxy,
+            credentials: None,
+            root_pem: root,
+        })
     }
 
     pub fn subscriptions(&self) -> Vec<SubscriptionSummary> {

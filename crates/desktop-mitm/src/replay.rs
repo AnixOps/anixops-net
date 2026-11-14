@@ -55,13 +55,56 @@ pub fn skipped_header(name: &str) -> bool {
     SKIPPED_HEADERS.contains(&name.trim().to_ascii_lowercase().as_str())
 }
 
+/// Where a replay goes: the engine's local HTTP proxy, with credentials when it asks for them (the replay proxy of
+/// the packet tunnel on Android), and the HTTPS decryption root to trust.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Target {
+    pub proxy: SocketAddr,
+    /// User name and password for `Proxy-Authorization: Basic`.
+    pub credentials: Option<(String, String)>,
+    pub root_pem: Option<String>,
+}
+
+impl Target {
+    /// The target of a running `start_replay_proxy` / `replay_proxy` answer: `{"running", "host", "port",
+    /// "username", "password", ...}`.
+    pub fn from_replay_proxy(
+        answer: &serde_json::Value,
+        root_pem: Option<String>,
+    ) -> Result<Self, String> {
+        if answer.get("running").and_then(serde_json::Value::as_bool) != Some(true) {
+            return Err("the replay proxy is not running".to_string());
+        }
+        let host = answer
+            .get("host")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("127.0.0.1");
+        let port = answer
+            .get("port")
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|port| u16::try_from(port).ok())
+            .ok_or("the replay proxy has no port")?;
+        let proxy = format!("{host}:{port}")
+            .parse::<SocketAddr>()
+            .map_err(|error| format!("replay proxy address: {error}"))?;
+        let text = |key: &str| {
+            answer
+                .get(key)
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+        };
+        let credentials = text("username").zip(text("password"));
+        Ok(Self {
+            proxy,
+            credentials,
+            root_pem,
+        })
+    }
+}
+
 /// Sends `request` through the HTTP proxy at `proxy`. `root_pem` is the HTTPS decryption root, trusted on top of the
 /// usual roots so decrypted hosts answer with a certificate the client accepts.
-pub fn send(
-    proxy: SocketAddr,
-    root_pem: Option<&str>,
-    request: &ReplayRequest,
-) -> Result<ReplayResponse, String> {
+pub fn send(target: &Target, request: &ReplayRequest) -> Result<ReplayResponse, String> {
     let url =
         reqwest::Url::parse(request.url.trim()).map_err(|error| format!("invalid URL: {error}"))?;
     if !matches!(url.scheme(), "http" | "https") {
@@ -69,11 +112,16 @@ pub fn send(
     }
     let method = reqwest::Method::from_bytes(request.method.trim().as_bytes())
         .map_err(|_| format!("invalid method {:?}", request.method))?;
+    let mut proxy = reqwest::Proxy::all(format!("http://{}", target.proxy))
+        .map_err(|error| error.to_string())?;
+    if let Some((username, password)) = &target.credentials {
+        proxy = proxy.basic_auth(username, password);
+    }
     let mut builder = reqwest::blocking::Client::builder()
-        .proxy(reqwest::Proxy::all(format!("http://{proxy}")).map_err(|error| error.to_string())?)
+        .proxy(proxy)
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(30));
-    if let Some(pem) = root_pem {
+    if let Some(pem) = &target.root_pem {
         let root =
             reqwest::Certificate::from_pem(pem.as_bytes()).map_err(|error| error.to_string())?;
         builder = builder.add_root_certificate(root);
@@ -142,16 +190,33 @@ mod tests {
 
     #[test]
     fn rejects_other_schemes_and_bad_methods() {
-        let proxy = SocketAddr::from(([127, 0, 0, 1], 9));
+        let target = Target {
+            proxy: SocketAddr::from(([127, 0, 0, 1], 9)),
+            credentials: None,
+            root_pem: None,
+        };
         let request = |method: &str, url: &str| ReplayRequest {
             method: method.to_string(),
             url: url.to_string(),
             headers: Vec::new(),
             body_base64: String::new(),
         };
-        assert!(send(proxy, None, &request("GET", "ftp://example.com/")).is_err());
-        assert!(send(proxy, None, &request("G ET", "http://example.com/")).is_err());
-        assert!(send(proxy, None, &request("GET", "not a url")).is_err());
+        assert!(send(&target, &request("GET", "ftp://example.com/")).is_err());
+        assert!(send(&target, &request("G ET", "http://example.com/")).is_err());
+        assert!(send(&target, &request("GET", "not a url")).is_err());
+    }
+
+    #[test]
+    fn reads_the_replay_proxy_answer() {
+        let answer = serde_json::json!({
+            "running": true, "host": "127.0.0.1", "port": 40123,
+            "username": "a", "password": "b", "https_decryption": true,
+        });
+        let target = Target::from_replay_proxy(&answer, None).unwrap();
+        assert_eq!(target.proxy, SocketAddr::from(([127, 0, 0, 1], 40123)));
+        assert_eq!(target.credentials, Some(("a".to_string(), "b".to_string())));
+        let stopped = serde_json::json!({ "running": false, "username": null });
+        assert!(Target::from_replay_proxy(&stopped, None).is_err());
     }
 
     /// A one-shot HTTP proxy stand-in: answers the first request with a redirect and hands back what it got.
@@ -177,9 +242,13 @@ mod tests {
                 .unwrap();
             String::from_utf8_lossy(&seen).into_owned()
         });
-        let response = send(
+        let target = Target {
             proxy,
-            None,
+            credentials: Some(("u".to_string(), "p".to_string())),
+            root_pem: None,
+        };
+        let response = send(
+            &target,
             &ReplayRequest {
                 method: "POST".to_string(),
                 url: "http://example.com/api?x=1".to_string(),
@@ -198,6 +267,12 @@ mod tests {
         );
         assert!(seen.to_ascii_lowercase().contains("x-test: 1"), "{seen}");
         assert!(!seen.contains("ignored"), "{seen}");
+        // base64("u:p")
+        assert!(
+            seen.to_ascii_lowercase()
+                .contains("proxy-authorization: basic dtpw"),
+            "{seen}"
+        );
         assert_eq!(response.status, 302);
         assert_eq!(decode_base64(&response.body_base64).unwrap(), b"ok");
         assert!(!response.truncated);
