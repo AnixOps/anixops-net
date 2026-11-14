@@ -45,7 +45,7 @@ crates/client-core/                  从 apps/linux-gui/src/app.rs 抽出的、�
 
 好处：命令契约只有一份；Tauri 桌面端、现有 Tauri 安卓和新的 Compose 安卓在迁移期间共用同一套后端和测试。
 
-### 2. JNI 桥（推荐方案，见待定 1）
+### 2. JNI 桥（已定，见待定 1）
 
 Rust 侧 `apps/android-native/rust`（`jni` crate，MIT/Apache）只导出四个函数：
 
@@ -161,8 +161,8 @@ CI 新 job `android-native`（GitHub 托管 runner，变更范围检测同现有
 
 ## 待定（需要用户选择）
 
-1. **界面与 Rust 后端的接口**：推荐 JSON 命令桥（沿用 `bridge.ts` 的命令名，一份契约三端共用，加共享样例测试）；
-   另一选项是 UniFFI 生成的类型化 Kotlin 绑定（类型更强，但要另维护一套 UDL / 宏标注，桌面 Tauri 端用不上）。
+1. **界面与 Rust 后端的接口**：已定（用户 2026-11-14）：JSON 命令桥，沿用 `bridge.ts` 的命令名，一份契约三端共用，
+   加共享样例测试。
 2. **迁移方式**：已定（用户 2026-11-14）：原生版在 `apps/android-native` 平行开发、以“预览”包名并存安装，全部打勾后一个
    PR 切换并删除 Tauri 安卓。
 3. **颜色**：推荐固定品牌色、深浅色跟随系统；另一选项是默认 Material You 动态取色（随壁纸），或品牌色默认、设置里可切换。
