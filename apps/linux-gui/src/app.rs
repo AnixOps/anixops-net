@@ -472,11 +472,9 @@ async fn export_capture(
     state: State<'_, AppState>,
     format: String,
     id: Option<u64>,
+    options: Option<desktop_mitm::capture::ExportOptions>,
 ) -> Result<SavedFile, String> {
-    let mut request = serde_json::json!({ "cmd": "export_capture", "format": format });
-    if let Some(id) = id {
-        request["id"] = serde_json::json!(id);
-    }
+    let request = desktop_mitm::capture::export_request(&format, id, options.unwrap_or_default());
     let answer = with_backend(&state, move |backend| backend.runtime_control(&request)).await?;
     let export = desktop_mitm::capture::Export::from_answer(&answer)?;
     let location = off_lock(move || save_export(&app, &export)).await?;
