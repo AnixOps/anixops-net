@@ -7,6 +7,7 @@ pub mod mappings;
 pub mod phone;
 pub mod plugins;
 pub mod replay;
+pub mod sessions;
 
 use std::fs;
 use std::io::Write;

@@ -64,6 +64,6 @@ export function mergeRequests(rows: CaptureRequest[], answer: CaptureRequestsAns
   const bySeq = new Map(rows.map((row) => [row.seq, row]));
   for (const request of answer.requests ?? []) bySeq.set(request.seq, request);
   const dropped = answer.dropped_before_seq ?? 0;
-  const merged = [...bySeq.values()].filter((row) => row.seq >= dropped).sort((a, b) => a.seq - b.seq);
+  const merged = [...bySeq.values()].filter((row) => row.seq > dropped).sort((a, b) => a.seq - b.seq);
   return merged.length > MAX_REQUESTS ? merged.slice(merged.length - MAX_REQUESTS) : merged;
 }

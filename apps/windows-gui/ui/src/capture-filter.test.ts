@@ -42,8 +42,9 @@ describe("capture filter", () => {
   it("merges answers, replacing updated requests and dropping pushed-out ones", () => {
     const rows = [request(1), request(2), request(3, false)];
     const merged = mergeRequests(rows, { requests: [request(3), request(4)], last_seq: 4, dropped_before_seq: 2 });
-    expect(merged.map((row) => row.seq)).toEqual([2, 3, 4]);
-    expect(merged[1].status).toBe(200);
+    // dropped_before_seq is the highest seq the engine dropped, so that row goes too.
+    expect(merged.map((row) => row.seq)).toEqual([3, 4]);
+    expect(merged[0].status).toBe(200);
     const many = Array.from({ length: MAX_REQUESTS + 5 }, (_, index) => request(index + 1));
     const capped = mergeRequests([], { requests: many });
     expect(capped).toHaveLength(MAX_REQUESTS);

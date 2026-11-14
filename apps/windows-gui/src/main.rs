@@ -27,6 +27,7 @@ fn main() {
 mod gui {
     mod actions;
     mod backdrop;
+    mod capture_sessions;
     mod linked_sources;
     mod mitm_plugins;
     mod runtime_status;
