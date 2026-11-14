@@ -1,50 +1,32 @@
-//! The Tauri window: the shared React interface (`apps/windows-gui/ui`) over the Linux backend. Command names
-//! and argument shapes match the interface's `bridge.ts`; Windows-only commands answer that they are not
-//! available, and the snapshot's `platform` field hides them in the interface.
+//! The Tauri window: the shared React interface (`apps/windows-gui/ui`) over the Linux backend. Every command
+//! the interface invokes goes to [`Client::invoke`] by name (`crate::client`, names and argument shapes as in the
+//! interface's `bridge.ts`); this file only adds what needs Tauri: the window, plugins, `anixops://` links and
+//! system notifications.
 //!
 //! The Android app (`apps/android`) runs this same window and backend. There the engine carries the system
 //! VPN's TUN interface instead of a local proxy, and [`TunnelHost`] opens and closes that VPN.
 
-use std::fs;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::thread;
-use std::time::Duration;
+use std::sync::{Arc, OnceLock};
 
-use crate::backend::engine;
-use crate::backend::state::Store;
-use crate::backend::system_proxy::Desktop;
-#[cfg(not(target_os = "android"))]
-use crate::backend::trust;
-use crate::backend::{
-    autostart, format_delay, Backend, DnsPreset, GroupSummary, NodeSummary, OperationResult,
-    PreferencesInput, RuntimeSnapshot, SubscriptionSummary, PASTED_LOCATION,
-};
-use app_notifications::{Notice, Settings as NotificationSettings};
-use client_health::{startup, Health};
-use desktop_mitm::mappings;
-use desktop_mitm::plugins::{self, PluginSummary};
-use engine_embedded::profile::RoutingMode;
-use node_edits::NodeForm;
-use on_demand::{
-    Action as OnDemandAction, Current as CurrentNetwork, Settings as OnDemandSettings,
-};
-use subscription_meta::ResponseMeta;
+use app_notifications::Notice;
+use client_health::startup;
+use tauri::ipc::{Invoke, InvokeBody};
 use tauri::plugin::TauriPlugin;
 use tauri::webview::PageLoadEvent;
-use tauri::{AppHandle, Context, Emitter, Manager, RunEvent, State, Wry};
+use tauri::{AppHandle, Context, Emitter, Manager, RunEvent, Wry};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_notification::NotificationExt;
-use traffic_stats::TrafficStats;
 
-/// The URL the delay tests fetch, as on Windows.
-const DELAY_URL: &str = "https://www.gstatic.com/generate_204";
-const FETCH_TIMEOUT: Duration = Duration::from_secs(30);
-const UNAVAILABLE: &str = if cfg!(target_os = "android") {
-    "Not available on Android yet"
-} else {
-    "Not available on Linux yet"
-};
+use crate::client::{self, Client, Platform};
+
+/// The network a [`TunnelHost`] reports.
+pub use crate::client::{Network, TunnelInterface};
+
+/// For the cold start measurement; call first thing in `main`.
+pub use client_health::startup::mark_process_start;
+
+const NO_WINDOW: &str = "the window is not running yet";
 
 /// Where the window runs: the data directory, the program autostart starts, extra plugins, and the system VPN
 /// when the platform carries traffic through one.
@@ -53,28 +35,6 @@ pub struct Host {
     pub executable: PathBuf,
     pub plugins: Vec<TauriPlugin<Wry>>,
     pub tunnel: Option<Box<dyn TunnelHost>>,
-}
-
-/// Addresses, routes, DNS and MTU of the VPN interface, as the iOS client's `TunnelInterface.proxy`: the
-/// userspace stack answers on any address, and DNS to 198.18.0.2 is answered by the engine.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TunnelInterface {
-    pub addresses: Vec<String>,
-    pub routes: Vec<String>,
-    pub dns_servers: Vec<String>,
-    pub mtu: u32,
-}
-
-impl TunnelInterface {
-    pub fn proxy() -> Self {
-        let owned = |values: &[&str]| values.iter().map(|value| value.to_string()).collect();
-        Self {
-            addresses: owned(&["198.18.0.1/24", "fd00:4e43::1/64"]),
-            routes: owned(&["0.0.0.0/0", "::/0"]),
-            dns_servers: owned(&["198.18.0.2"]),
-            mtu: 1500,
-        }
-    }
 }
 
 /// Opens the system VPN and hands back its TUN descriptor (Android's VpnService), and closes it again.
@@ -123,909 +83,104 @@ pub trait TunnelHost: Send + Sync + 'static {
     }
 }
 
-/// The network a [`TunnelHost`] reports.
-pub use on_demand::Network;
-
-struct TunnelHostState(Box<dyn TunnelHost>);
-
-/// For the cold start measurement; call first thing in `main`.
-pub use client_health::startup::mark_process_start;
-
-struct AppState(Arc<Mutex<Backend>>);
-
-struct HealthState(Arc<Health>);
-
-/// The capture session key once read, so the key store is asked once per run.
-struct SessionKeyState(Mutex<Option<desktop_mitm::sessions::SessionKey>>);
-
-fn lock(backend: &Mutex<Backend>) -> MutexGuard<'_, Backend> {
-    backend.lock().unwrap_or_else(PoisonError::into_inner)
+/// The client's [`Platform`] through Tauri: notifications from the notification plugin, everything else from
+/// the [`TunnelHost`] when there is one. The app handle arrives once the window is set up.
+struct TauriPlatform {
+    app: OnceLock<AppHandle>,
+    tunnel: Option<Box<dyn TunnelHost>>,
 }
 
-/// Runs `task` on a blocking thread with the backend locked, so the window keeps polling meanwhile.
-async fn with_backend<T, F>(state: &AppState, task: F) -> Result<T, String>
-where
-    T: Send + 'static,
-    F: FnOnce(&mut Backend) -> Result<T, String> + Send + 'static,
-{
-    let backend = state.0.clone();
-    tauri::async_runtime::spawn_blocking(move || task(&mut lock(&backend)))
-        .await
-        .map_err(|error| error.to_string())?
+impl TauriPlatform {
+    fn host(&self) -> Result<(&AppHandle, &dyn TunnelHost), String> {
+        let app = self.app.get().ok_or(NO_WINDOW)?;
+        let tunnel = self
+            .tunnel
+            .as_deref()
+            .ok_or("this platform has no system VPN")?;
+        Ok((app, tunnel))
+    }
 }
 
-/// Runs `task` on a blocking thread without the lock, for network work.
-async fn off_lock<T, F>(task: F) -> Result<T, String>
-where
-    T: Send + 'static,
-    F: FnOnce() -> Result<T, String> + Send + 'static,
-{
-    tauri::async_runtime::spawn_blocking(task)
-        .await
-        .map_err(|error| error.to_string())?
-}
+impl Platform for TauriPlatform {
+    fn has_system_vpn(&self) -> bool {
+        self.tunnel.is_some()
+    }
 
-fn http_get(url: &str) -> Result<String, reqwest::Error> {
-    http_get_with_meta(url).map(|(body, _)| body)
-}
+    fn open_tunnel(&self, interface: &TunnelInterface) -> Result<i32, String> {
+        let (app, tunnel) = self.host()?;
+        tunnel.open(app, interface)
+    }
 
-/// The body and what the subscription headers say about it. A panel that licenses ANX gets this device's
-/// key and answers with its license (`anx_license`); the first time it says so, the request goes once more.
-fn http_get_with_meta(url: &str) -> Result<(String, ResponseMeta), reqwest::Error> {
-    let licenses = engine::license_store();
-    let (body, meta, offered) = http_get_once(url, licenses.as_ref())?;
-    if offered {
-        if let Ok((body, meta, _)) = http_get_once(url, licenses.as_ref()) {
-            return Ok((body, meta));
+    fn close_tunnel(&self) {
+        if let Ok((app, tunnel)) = self.host() {
+            tunnel.close(app);
         }
     }
-    Ok((body, meta))
-}
 
-fn http_get_once(
-    url: &str,
-    licenses: Option<&anx_license::LicenseStore>,
-) -> Result<(String, ResponseMeta, bool), reqwest::Error> {
-    // The panel picks the subscription format by User-Agent (same token as the iOS app).
-    let mut request = reqwest::blocking::Client::builder()
-        .timeout(FETCH_TIMEOUT)
-        .user_agent(concat!("AnixOpsNet/", env!("CARGO_PKG_VERSION")))
-        .build()?
-        .get(url);
-    if let Some(device) = licenses.and_then(|store| store.request_header(url).ok().flatten()) {
-        request = request.header(anx_license::HEADER_DEVICE, device);
+    fn save_to_downloads(&self, name: &str, contents: &str) -> Result<String, String> {
+        let (app, tunnel) = self.host()?;
+        tunnel.save_to_downloads(app, name, contents)
     }
-    let response = request
-        .send()
-        .and_then(reqwest::blocking::Response::error_for_status)?;
-    let header = |name: &str| {
-        response
-            .headers()
-            .get(name)
-            .and_then(|value| value.to_str().ok())
-            .map(str::to_string)
-    };
-    let meta = ResponseMeta::from_headers(header);
-    // A license problem never fails the subscription.
-    let offered = licenses
-        .and_then(|store| store.record(url, header).ok())
-        .unwrap_or(false);
-    Ok((response.text()?, meta, offered))
-}
 
-/// A URL's body with its headers' meta, a local file, or the pasted share links themselves.
-fn fetch(location: &str) -> Result<(String, ResponseMeta), String> {
-    if location.starts_with("https://") || location.starts_with("http://") {
-        return http_get_with_meta(location)
-            .map_err(|error| format!("the subscription could not be downloaded: {error}"));
+    fn save_base64_to_downloads(
+        &self,
+        name: &str,
+        mime_type: &str,
+        data_base64: &str,
+    ) -> Result<String, String> {
+        let (app, tunnel) = self.host()?;
+        tunnel.save_base64_to_downloads(app, name, mime_type, data_base64)
     }
-    if location.contains("://") {
-        return Ok((location.to_string(), ResponseMeta::default()));
-    }
-    let path = match location.strip_prefix("~/") {
-        Some(rest) => std::env::var_os("HOME").map_or_else(
-            || PathBuf::from(location),
-            |home| PathBuf::from(home).join(rest),
-        ),
-        None => PathBuf::from(location),
-    };
-    fs::read_to_string(&path)
-        .map(|content| (content, ResponseMeta::default()))
-        .map_err(|error| format!("{} could not be read: {error}", path.display()))
-}
 
-/// Downloads the public rule lists `mode` needs (all of them with `force`, else the missing ones) outside the
-/// lock and caches them.
-async fn download_rule_lists(
-    state: &AppState,
-    mode: RoutingMode,
-    force: bool,
-) -> Result<usize, String> {
-    let (store, lists) = {
-        let backend = lock(&state.0);
-        (backend.store(), backend.rule_lists_to_download(mode, force))
-    };
-    off_lock(move || {
-        for list in &lists {
-            let content = http_get(list.url()).map_err(|error| {
-                format!(
-                    "the routing rules could not be downloaded from {}: {error}",
-                    list.url()
-                )
-            })?;
-            let entries = list.parse(&content);
-            if entries.is_empty() {
-                return Err(format!("{} returned no usable entries", list.url()));
-            }
-            store
-                .write_rule_list(*list, &entries)
-                .map_err(|error| format!("the routing rules could not be saved: {error}"))?;
+    fn capture_session_key(&self) -> Result<String, String> {
+        let (app, tunnel) = self.host()?;
+        tunnel.capture_session_key(app)
+    }
+
+    fn current_network(&self, ask: bool) -> Option<Network> {
+        let (app, tunnel) = self.host().ok()?;
+        tunnel.current_network(app, ask)
+    }
+
+    /// Shows one system notification; one the system refuses (no permission, no notification service) is
+    /// dropped.
+    fn post_notice(&self, notice: &Notice) {
+        if let Some(app) = self.app.get() {
+            let _ = app
+                .notification()
+                .builder()
+                .title(&notice.title)
+                .body(&notice.body)
+                .show();
         }
-        Ok(lists.len())
-    })
-    .await
-}
-
-/// Connects after fetching any rule list the routing mode still lacks.
-async fn connect_with_rules(state: &AppState) -> Result<OperationResult, String> {
-    let mode = lock(&state.0).routing_mode();
-    if let Err(error) = download_rule_lists(state, mode, false).await {
-        lock(&state.0).record_error(&error);
-        return Err(error);
-    }
-    with_backend(state, Backend::connect).await
-}
-
-#[tauri::command]
-fn runtime_snapshot(state: State<'_, AppState>) -> RuntimeSnapshot {
-    lock(&state.0).snapshot()
-}
-
-#[tauri::command]
-fn list_nodes(state: State<'_, AppState>) -> Vec<NodeSummary> {
-    lock(&state.0).nodes()
-}
-
-#[tauri::command]
-fn list_subscriptions(state: State<'_, AppState>) -> Vec<SubscriptionSummary> {
-    lock(&state.0).subscriptions()
-}
-
-#[tauri::command]
-fn list_native_groups(state: State<'_, AppState>) -> Vec<GroupSummary> {
-    lock(&state.0).groups()
-}
-
-#[tauri::command]
-async fn select_native_group_outbound(
-    state: State<'_, AppState>,
-    group_tag: String,
-    outbound_tag: String,
-) -> Result<OperationResult, String> {
-    with_backend(&state, move |backend| {
-        backend.select_group_member(&group_tag, &outbound_tag)
-    })
-    .await
-}
-
-#[tauri::command]
-async fn set_routing_mode(
-    state: State<'_, AppState>,
-    mode: String,
-) -> Result<OperationResult, String> {
-    let mode = RoutingMode::parse(&mode).ok_or("unknown routing mode")?;
-    download_rule_lists(&state, mode, false).await?;
-    with_backend(&state, move |backend| backend.set_routing_mode(mode)).await
-}
-
-#[tauri::command]
-async fn set_dns_preset(
-    state: State<'_, AppState>,
-    preset: String,
-) -> Result<OperationResult, String> {
-    let preset = DnsPreset::parse(&preset).ok_or("unknown DNS choice")?;
-    with_backend(&state, move |backend| backend.set_dns_preset(preset)).await
-}
-
-#[tauri::command]
-async fn set_direct_egress(
-    state: State<'_, AppState>,
-    enabled: bool,
-) -> Result<OperationResult, String> {
-    with_backend(&state, move |backend| backend.set_direct_egress(enabled)).await
-}
-
-#[tauri::command]
-async fn set_block_quic(
-    state: State<'_, AppState>,
-    enabled: bool,
-) -> Result<OperationResult, String> {
-    with_backend(&state, move |backend| backend.set_block_quic(enabled)).await
-}
-
-/// Downloads the current mode's public rule lists again; they apply on the next connection.
-#[tauri::command]
-async fn refresh_routing_rules(state: State<'_, AppState>) -> Result<OperationResult, String> {
-    let mode = lock(&state.0).routing_mode();
-    let count = download_rule_lists(&state, mode, true).await?;
-    Ok(OperationResult {
-        message: if count == 0 {
-            "The current routing mode uses no public rule lists".to_string()
-        } else {
-            format!("Routing rules refreshed ({count} lists); they apply on the next connection")
-        },
-    })
-}
-
-/// Where the platform carries traffic through a system VPN (Android), opens it first so the engine has its TUN
-/// descriptor.
-async fn open_tunnel(app: &AppHandle, state: &AppState) -> Result<(), String> {
-    if app.try_state::<TunnelHostState>().is_none() {
-        return Ok(());
-    }
-    open_system_tunnel(app, state).await
-}
-
-/// Keeps a live descriptor; one whose VPN was taken away (another VPN, or the system settings) is dropped and
-/// the VPN opened again.
-#[cfg(target_os = "android")]
-async fn open_system_tunnel(app: &AppHandle, state: &AppState) -> Result<(), String> {
-    if engine::tunnel_attached() {
-        return Ok(());
-    }
-    lock(&state.0).stop_engine();
-    let app = app.clone();
-    off_lock(move || {
-        let host = app.state::<TunnelHostState>();
-        let fd = host.0.open(&app, &TunnelInterface::proxy())?;
-        engine::attach_tunnel(fd);
-        Ok(())
-    })
-    .await
-}
-
-#[cfg(not(target_os = "android"))]
-async fn open_system_tunnel(_app: &AppHandle, _state: &AppState) -> Result<(), String> {
-    Err("this platform has no system VPN".to_string())
-}
-
-/// Stops the engine and closes the system VPN, if the platform has one.
-fn close_tunnel(app: &AppHandle, state: &AppState) {
-    if let Some(host) = app.try_state::<TunnelHostState>() {
-        lock(&state.0).stop_engine();
-        host.0.close(app);
     }
 }
 
-/// Connects, through the system VPN where the platform has one; a failed start closes that VPN again.
-async fn connect_through_tunnel(
-    app: &AppHandle,
-    state: &AppState,
-) -> Result<OperationResult, String> {
-    if let Err(error) = open_tunnel(app, state).await {
-        lock(&state.0).record_error(&error);
-        return Err(error);
-    }
-    let result = connect_with_rules(state).await;
-    if result.is_err() {
-        close_tunnel(app, state);
-    }
-    result
-}
-
-#[tauri::command]
-async fn connect(app: AppHandle, state: State<'_, AppState>) -> Result<OperationResult, String> {
-    connect_through_tunnel(&app, &state).await
-}
-
-#[tauri::command]
-async fn disconnect(app: AppHandle, state: State<'_, AppState>) -> Result<OperationResult, String> {
-    let result = with_backend(&state, Backend::disconnect).await;
-    close_tunnel(&app, &state);
-    result
-}
-
-/// "Restart core": starts the engine again with the current node.
-#[tauri::command]
-async fn restart_service(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<OperationResult, String> {
-    connect_through_tunnel(&app, &state).await
-}
-
-#[tauri::command]
-async fn validate_configuration(state: State<'_, AppState>) -> Result<OperationResult, String> {
-    with_backend(&state, |backend| backend.validate()).await
-}
-
-#[tauri::command]
-async fn check_profile_runtime(state: State<'_, AppState>) -> Result<OperationResult, String> {
-    with_backend(&state, |backend| backend.validate()).await
-}
-
-#[tauri::command]
-async fn switch_node(
-    state: State<'_, AppState>,
-    node_id: String,
-) -> Result<OperationResult, String> {
-    with_backend(&state, move |backend| backend.switch_node(&node_id)).await
-}
-
-#[tauri::command]
-async fn runtime_control(
-    state: State<'_, AppState>,
-    request: serde_json::Value,
-) -> Result<serde_json::Value, String> {
-    // Only the backend names where sessions go and the key that seals them (`capture_session`).
-    if !desktop_mitm::sessions::window_may_send(&request) {
-        return Err("runtime control command \"set_capture_storage\" is not available".to_string());
-    }
-    with_backend(&state, move |backend| backend.runtime_control(&request)).await
-}
-
-/// "我的规则": the user's own rule lines as written and how many rules they hold.
-#[tauri::command]
-async fn my_rules(state: State<'_, AppState>) -> Result<crate::backend::MyRules, String> {
-    with_backend(&state, |backend| Ok(backend.my_rules())).await
-}
-
-/// The "自定义" DNS text and the Fake-IP switch.
-#[tauri::command]
-async fn custom_dns(state: State<'_, AppState>) -> Result<desktop_dns::custom::DnsText, String> {
-    with_backend(&state, |backend| backend.custom_dns()).await
-}
-
-/// Checks and saves the "自定义" DNS text and the Fake-IP switch.
-#[tauri::command]
-async fn save_custom_dns(
-    state: State<'_, AppState>,
-    text: desktop_dns::custom::DnsText,
-) -> Result<OperationResult, String> {
-    with_backend(&state, move |backend| backend.save_custom_dns(&text)).await
-}
-
-/// Checks and saves "我的规则"; a running engine takes them in place.
-#[tauri::command]
-async fn save_my_rules(
-    state: State<'_, AppState>,
-    text: String,
-) -> Result<OperationResult, String> {
-    with_backend(&state, move |backend| backend.save_my_rules(&text)).await
-}
-
-/// Saved capture sessions: list, save what capture holds, load one for viewing, delete. The engine is told where
-/// sessions go and the key before every action, since it forgets both when it restarts.
-#[tauri::command]
-async fn capture_session(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    keys: State<'_, SessionKeyState>,
-    action: desktop_mitm::sessions::SessionAction,
-) -> Result<serde_json::Value, String> {
-    let request = action.request()?;
-    let capture_dir = with_backend(&state, |backend| Ok(backend.capture_dir())).await?;
-    let cached = keys
-        .0
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone();
-    let key = match cached {
-        Some(key) => key,
-        None => {
-            let dir = capture_dir.clone();
-            let key = off_lock(move || session_key(&app, &dir)).await?;
-            *keys.0.lock().unwrap_or_else(PoisonError::into_inner) = Some(key.clone());
-            key
+/// Answers an interface command on a blocking thread, so the window keeps polling meanwhile.
+fn dispatch(client: &Arc<Client>, invoke: Invoke<Wry>) -> bool {
+    let Invoke {
+        message, resolver, ..
+    } = invoke;
+    let command = message.command().to_string();
+    let args = match message.payload() {
+        InvokeBody::Json(args) => args.clone(),
+        InvokeBody::Raw(_) => {
+            resolver.reject(format!("{command} takes JSON arguments"));
+            return true;
         }
     };
-    let storage = desktop_mitm::sessions::storage_request(&capture_dir.join("sessions"), &key);
-    let protection = key.protection;
-    let answer = with_backend(&state, move |backend| {
-        backend.runtime_control(&storage)?;
-        backend.runtime_control(&request)
-    })
-    .await?;
-    Ok(desktop_mitm::sessions::with_protection(answer, protection))
-}
-
-/// Android: the Keystore keeps the key, through the VPN plugin.
-#[cfg(target_os = "android")]
-fn session_key(
-    app: &AppHandle,
-    _dir: &std::path::Path,
-) -> Result<desktop_mitm::sessions::SessionKey, String> {
-    let host = app
-        .try_state::<TunnelHostState>()
-        .ok_or("the Android key store is not available")?;
-    let key = desktop_mitm::capture::decode_base64(&host.0.capture_session_key(app)?)?;
-    desktop_mitm::sessions::SessionKey::new(&key, desktop_mitm::sessions::Protection::Keystore)
-}
-
-/// Linux: the Secret Service, or a file only this user can read.
-#[cfg(not(target_os = "android"))]
-fn session_key(
-    _app: &AppHandle,
-    dir: &std::path::Path,
-) -> Result<desktop_mitm::sessions::SessionKey, String> {
-    crate::backend::session_key::load(dir)
-}
-
-/// An SVG QR code for the phone setup page address of the LAN share.
-#[tauri::command]
-fn phone_qr_code(text: String) -> Result<String, String> {
-    desktop_mitm::phone::qr_svg(&text)
-}
-
-/// Replaces the HTTPS decryption root with the user's own CA (PEM certificate and PKCS#8 key).
-#[tauri::command]
-async fn import_mitm_root(
-    state: State<'_, AppState>,
-    certificate_pem: String,
-    private_key_pem: String,
-) -> Result<OperationResult, String> {
-    with_backend(&state, move |backend| {
-        backend.import_mitm_root(&certificate_pem, &private_key_pem)
-    })
-    .await
-}
-
-/// SHA-256 of the HTTPS decryption root, for checking it against the phone setup page.
-#[tauri::command]
-async fn mitm_root_fingerprint(state: State<'_, AppState>) -> Result<Option<String>, String> {
-    with_backend(&state, |backend| Ok(backend.mitm_root_fingerprint())).await
-}
-
-/// Where a capture export was saved.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct SavedFile {
-    location: String,
-}
-
-/// Exports the packet capture (`format` pcapng or har; one connection with `id`, else all) to Downloads without
-/// replacing an older file, and answers where it went.
-#[tauri::command]
-async fn export_capture(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    format: String,
-    id: Option<u64>,
-    options: Option<desktop_mitm::capture::ExportOptions>,
-) -> Result<SavedFile, String> {
-    let request = desktop_mitm::capture::export_request(&format, id, options.unwrap_or_default());
-    let answer = with_backend(&state, move |backend| backend.runtime_control(&request)).await?;
-    let export = desktop_mitm::capture::Export::from_answer(&answer)?;
-    let location = off_lock(move || save_export(&app, &export)).await?;
-    Ok(SavedFile { location })
-}
-
-/// Android keeps files the user opens elsewhere in the shared Downloads folder, which only the VPN plugin can
-/// write.
-#[cfg(target_os = "android")]
-fn save_export(app: &AppHandle, export: &desktop_mitm::capture::Export) -> Result<String, String> {
-    let host = app
-        .try_state::<TunnelHostState>()
-        .ok_or("this platform has no shared Downloads folder")?;
-    host.0.save_base64_to_downloads(
-        app,
-        &export.file_name,
-        &export.content_type,
-        &export.data_base64,
-    )
-}
-
-#[cfg(not(target_os = "android"))]
-fn save_export(_app: &AppHandle, export: &desktop_mitm::capture::Export) -> Result<String, String> {
-    let dir =
-        desktop_mitm::capture::downloads_dir().ok_or("the Downloads folder could not be found")?;
-    let path = desktop_mitm::capture::save_new_file(&dir, &export.file_name, &export.bytes()?)?;
-    Ok(path.display().to_string())
-}
-
-/// Sends an edited copy of a captured request through the running engine (`desktop_mitm::replay`).
-#[tauri::command]
-async fn replay_request(
-    state: State<'_, AppState>,
-    request: desktop_mitm::replay::ReplayRequest,
-) -> Result<desktop_mitm::replay::ReplayResponse, String> {
-    let target = with_backend(&state, |backend| backend.replay_target()).await?;
-    off_lock(move || desktop_mitm::replay::send(&target, &request)).await
-}
-
-#[tauri::command]
-async fn test_node_delay(
-    state: State<'_, AppState>,
-    node_id: String,
-    url: String,
-) -> Result<OperationResult, String> {
-    let (nodes, id, name) = lock(&state.0)
-        .delay_target(&node_id)
-        .ok_or("the node is not in any subscription")?;
-    let delay = off_lock(move || engine::node_delay(&nodes, &id, &url)).await?;
-    Ok(OperationResult {
-        message: format!("{name}: {}", format_delay(delay)),
-    })
-}
-
-/// One node's result in a batch delay test, as the Windows backend reports it.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct NodeDelay {
-    node_id: String,
-    delay_ms: Option<u64>,
-    error: Option<String>,
-}
-
-/// What the overview shows about the path: the address websites see through the proxy, and how long a mainland
-/// site takes to answer without it.
-#[derive(Debug, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct NetworkProbe {
-    exit_ip: Option<String>,
-    /// The exit's two-letter country code.
-    exit_location: Option<String>,
-    direct_ms: Option<u64>,
-}
-
-const PROBE_TIMEOUT: Duration = Duration::from_secs(6);
-const EXIT_TRACE_URL: &str = "https://www.cloudflare.com/cdn-cgi/trace";
-const DIRECT_PROBE_URL: &str = "https://www.baidu.com/";
-
-/// `ip` and `loc` from Cloudflare's `key=value` trace lines.
-fn parse_trace(body: &str) -> (Option<String>, Option<String>) {
-    let field = |name: &str| {
-        body.lines()
-            .find_map(|line| line.strip_prefix(name)?.strip_prefix('='))
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
-    };
-    (field("ip"), field("loc"))
-}
-
-/// Asks through the local proxy on `proxy_port` (when connected) which address the exit has, and times one
-/// request to a mainland site that goes around the proxy. A probe that fails leaves its fields empty.
-fn probe_network(proxy_port: Option<u16>) -> NetworkProbe {
-    let (exit_ip, exit_location) = proxy_port
-        .and_then(|port| {
-            let proxy = reqwest::Proxy::all(format!("http://127.0.0.1:{port}")).ok()?;
-            let body = reqwest::blocking::Client::builder()
-                .timeout(PROBE_TIMEOUT)
-                .proxy(proxy)
-                .build()
-                .ok()?
-                .get(EXIT_TRACE_URL)
-                .send()
-                .ok()?
-                .text()
-                .ok()?;
-            Some(parse_trace(&body))
-        })
-        .unwrap_or((None, None));
-    let direct_ms = reqwest::blocking::Client::builder()
-        .timeout(PROBE_TIMEOUT)
-        .no_proxy()
-        .build()
-        .ok()
-        .and_then(|client| {
-            let started = std::time::Instant::now();
-            client.head(DIRECT_PROBE_URL).send().ok()?;
-            Some(u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX))
-        });
-    NetworkProbe {
-        exit_ip,
-        exit_location,
-        direct_ms,
-    }
-}
-
-/// The exit address and the direct delay for the overview; `connected` says whether the local proxy is up.
-#[tauri::command]
-async fn network_probe(
-    state: State<'_, AppState>,
-    connected: bool,
-) -> Result<NetworkProbe, String> {
-    let (port, envelope) = {
-        let backend = lock(&state.0);
-        (backend.listen_port(), backend.probe_envelope())
-    };
-    off_lock(move || {
-        Ok(match envelope.filter(|_| connected) {
-            // Android: the exit through a short-lived local proxy on the running configuration.
-            Some(envelope) => {
-                engine::through_temporary_proxy(&envelope, |port| probe_network(Some(port)))
-                    .unwrap_or_else(|_| probe_network(None))
-            }
-            None => probe_network(connected.then_some(port)),
-        })
-    })
-    .await
-}
-
-#[tauri::command]
-async fn test_node_delays(
-    state: State<'_, AppState>,
-    node_ids: Vec<String>,
-    url: String,
-) -> Result<Vec<NodeDelay>, String> {
-    let nodes = lock(&state.0).delay_nodes(&node_ids);
-    let results = off_lock(move || Ok(engine::node_delays(&nodes, &url))).await?;
-    Ok(results
-        .into_iter()
-        .map(|(node_id, delay)| match delay {
-            Ok(delay) => NodeDelay {
-                node_id,
-                delay_ms: Some(u64::try_from(delay.as_millis()).unwrap_or(u64::MAX)),
-                error: None,
-            },
-            Err(error) => NodeDelay {
-                node_id,
-                delay_ms: None,
-                error: Some(error),
-            },
-        })
-        .collect())
-}
-
-#[tauri::command]
-async fn node_share_link(state: State<'_, AppState>, node_id: String) -> Result<String, String> {
-    lock(&state.0).share_link(&node_id)
-}
-
-/// Seven days of traffic by hour, host and policy; `clear` empties it first.
-#[tauri::command]
-async fn traffic_stats(state: State<'_, AppState>, clear: bool) -> Result<TrafficStats, String> {
-    Ok(lock(&state.0).traffic_stats(clear))
-}
-
-/// The last lines of the app's log, oldest first; `clear` empties it first.
-#[tauri::command]
-async fn app_logs(state: State<'_, AppState>, clear: bool) -> Result<Vec<app_log::Entry>, String> {
-    lock(&state.0).logs(clear)
-}
-
-/// The name, server and port of a node of the selected subscription, and whether it can be removed.
-#[tauri::command]
-async fn node_form(state: State<'_, AppState>, node_id: String) -> Result<NodeForm, String> {
-    lock(&state.0).node_form(&node_id)
-}
-
-#[tauri::command]
-async fn edit_node(
-    state: State<'_, AppState>,
-    node_id: String,
-    name: String,
-    server: String,
-    port: String,
-) -> Result<OperationResult, String> {
-    with_backend(&state, move |backend| {
-        backend.edit_node(&node_id, &name, &server, &port)
-    })
-    .await
-}
-
-#[tauri::command]
-async fn remove_node(
-    state: State<'_, AppState>,
-    node_id: String,
-) -> Result<OperationResult, String> {
-    with_backend(&state, move |backend| backend.remove_node(&node_id)).await
-}
-
-#[tauri::command]
-async fn select_fastest_node(state: State<'_, AppState>) -> Result<OperationResult, String> {
-    let nodes = lock(&state.0).node_list();
-    let (id, delay) = off_lock(move || {
-        engine::fastest_node(&nodes, DELAY_URL)
-            .ok_or_else(|| "no node answered the delay test".to_string())
-    })
-    .await?;
-    let switched = with_backend(&state, move |backend| backend.switch_node(&id)).await?;
-    Ok(OperationResult {
-        message: format!("{} ({})", switched.message, format_delay(delay)),
-    })
-}
-
-#[tauri::command]
-async fn save_preferences(
-    state: State<'_, AppState>,
-    preferences: PreferencesInput,
-) -> Result<OperationResult, String> {
-    with_backend(&state, move |backend| {
-        backend.save_preferences(&preferences)
-    })
-    .await
-}
-
-#[tauri::command]
-async fn create_diagnostics(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    health: State<'_, HealthState>,
-) -> Result<OperationResult, String> {
-    let section = health.0.diagnostics();
-    // Android: the app's own directory is out of the user's reach, so the report goes to Downloads.
-    if app.try_state::<TunnelHostState>().is_some() {
-        let report = lock(&state.0).diagnostics_report(&section);
-        let name = format!("anixops-net-diagnostics-{}.log", unix_seconds());
-        let saved = off_lock(move || {
-            let host = app
-                .try_state::<TunnelHostState>()
-                .ok_or("this platform has no shared Downloads folder")?;
-            host.0.save_to_downloads(&app, &name, &report)
-        })
-        .await?;
-        return Ok(OperationResult {
-            message: format!("Diagnostics report saved to {saved}"),
-        });
-    }
-    with_backend(&state, move |backend| backend.diagnostics(&section)).await
-}
-
-fn unix_seconds() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_secs())
-}
-
-/// Crash reports, the metrics endpoint, the install check and the cold start, for the settings page.
-#[tauri::command]
-fn health_status(health: State<'_, HealthState>) -> serde_json::Value {
-    health.0.status()
-}
-
-#[tauri::command]
-fn set_crash_reports(
-    health: State<'_, HealthState>,
-    enabled: bool,
-) -> Result<OperationResult, String> {
-    health
-        .0
-        .set_crash_reports(enabled)
-        .map_err(|error| format!("the setting could not be saved: {error}"))?;
-    Ok(OperationResult {
-        message: if enabled {
-            "Crash reports on".to_string()
-        } else {
-            "Crash reports off; kept reports deleted".to_string()
-        },
-    })
-}
-
-#[tauri::command]
-async fn import_subscription(
-    state: State<'_, AppState>,
-    location: String,
-) -> Result<OperationResult, String> {
-    let location = location.trim().to_string();
-    if location.is_empty() {
-        return Err("enter a subscription link, share links or a file path".to_string());
-    }
-    let label = if location.contains("://") && !location.starts_with("http") {
-        PASTED_LOCATION.to_string()
-    } else {
-        location.clone()
-    };
-    let (content, meta) = off_lock(move || fetch(&location)).await?;
-    with_backend(&state, move |backend| {
-        let result = backend.import(&label, &content)?;
-        backend.record_response(None, meta);
-        Ok(result)
-    })
-    .await
-}
-
-#[tauri::command]
-async fn update_subscription(state: State<'_, AppState>) -> Result<OperationResult, String> {
-    let (id, location) = lock(&state.0)
-        .refreshable_location()
-        .ok_or("the current subscription is not a link that can be updated")?;
-    refresh_source(&state.0, id, location).await
-}
-
-#[tauri::command]
-async fn update_subscription_source(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<OperationResult, String> {
-    let location = lock(&state.0)
-        .source_location(&id)
-        .ok_or("this subscription is not a link that can be updated")?;
-    refresh_source(&state.0, id, location).await
-}
-
-/// Downloads source `id` again outside the lock and records the result.
-async fn refresh_source(
-    backend: &Arc<Mutex<Backend>>,
-    id: String,
-    location: String,
-) -> Result<OperationResult, String> {
-    let fetched = off_lock(move || Ok(fetch(&location))).await?;
-    let backend = backend.clone();
-    off_lock(move || {
-        let mut backend = lock(&backend);
-        let (content, meta) = match fetched {
-            Ok((content, meta)) => (Ok(content), Some(meta)),
-            Err(error) => (Err(error), None),
-        };
-        let result = backend.finish_refresh(&id, content);
-        if let (Ok(_), Some(meta)) = (&result, meta) {
-            backend.record_response(Some(&id), meta);
-        }
-        result
-    })
-    .await
-}
-
-#[tauri::command]
-async fn rename_subscription(
-    state: State<'_, AppState>,
-    id: String,
-    name: String,
-) -> Result<OperationResult, String> {
-    with_backend(&state, move |backend| {
-        backend.rename_subscription(&id, &name)
-    })
-    .await
-}
-
-#[tauri::command]
-async fn set_subscription_interval(
-    state: State<'_, AppState>,
-    id: String,
-    hours: u32,
-) -> Result<OperationResult, String> {
-    with_backend(&state, move |backend| {
-        backend.set_subscription_interval(&id, hours)
-    })
-    .await
-}
-
-/// Rebuilds the engine's connections when the network changes or the computer wakes (`network_watch`).
-fn start_network_watch(backend: Arc<Mutex<Backend>>) {
-    thread::spawn(move || {
-        let mut watch = network_watch::NetworkWatch::new();
-        loop {
-            let path = network_watch::current_path();
-            if let Some(reset) = watch.observe(std::time::SystemTime::now(), path) {
-                lock(&backend).reset_network(reset);
-            }
-            thread::sleep(network_watch::POLL);
-        }
+    let client = client.clone();
+    tauri::async_runtime::spawn_blocking(move || match client.invoke(&command, args) {
+        Ok(answer) => resolver.resolve(answer),
+        Err(error) => resolver.reject(error),
     });
+    true
 }
 
-/// Every five seconds counts the engine's traffic for the statistics (`traffic_stats`) and posts what there
-/// is to notify: an unexpected stop and what scripts posted.
-fn start_monitor(app: AppHandle, backend: Arc<Mutex<Backend>>) {
-    thread::spawn(move || loop {
-        thread::sleep(Duration::from_secs(5));
-        let notices = {
-            let mut backend = lock(&backend);
-            backend.count_traffic();
-            backend.take_notices()
-        };
-        for notice in notices {
-            post_notice(&app, &notice);
-        }
-    });
-}
-
-/// `anixops://` links the window has not read yet (`take_app_links`); the window acts on them.
-#[derive(Default)]
-struct AppLinks(Mutex<Vec<String>>);
-
-/// Keeps the links, brings the window forward and tells it to read them.
-fn receive_app_links(app: &AppHandle, urls: Vec<String>) {
-    let urls: Vec<String> = urls
-        .into_iter()
-        .filter(|url| url.to_ascii_lowercase().starts_with("anixops:"))
-        .collect();
-    if urls.is_empty() {
+/// Keeps the links, brings the window forward and tells it to read them (`take_app_links`).
+fn receive_app_links(app: &AppHandle, client: &Client, urls: Vec<String>) {
+    if !client.receive_app_links(urls) {
         return;
-    }
-    if let Ok(mut links) = app.state::<AppLinks>().0.lock() {
-        links.extend(urls);
     }
     // Android brings the activity forward itself when it opens the link.
     #[cfg(not(target_os = "android"))]
@@ -1037,477 +192,26 @@ fn receive_app_links(app: &AppHandle, urls: Vec<String>) {
     let _ = app.emit("app-link", ());
 }
 
-/// Hands the window the `anixops://` links received since it last asked.
-#[tauri::command]
-fn take_app_links(links: State<'_, AppLinks>) -> Vec<String> {
-    links
-        .0
-        .lock()
-        .map(|mut links| std::mem::take(&mut *links))
-        .unwrap_or_default()
-}
-
 /// Takes a link the app was started with and receives later ones. The desktop registers `anixops://` for this
 /// user (a `.desktop` handler); a second start hands its link over through the single instance plugin. Android
 /// declares the scheme in its manifest.
-fn start_app_links(app: &AppHandle) {
+fn start_app_links(app: &AppHandle, client: &Arc<Client>) {
     let deep_link = app.deep_link();
     #[cfg(not(target_os = "android"))]
     let _ = deep_link.register_all();
     if let Ok(Some(urls)) = deep_link.get_current() {
-        receive_app_links(app, urls.iter().map(ToString::to_string).collect());
+        receive_app_links(app, client, urls.iter().map(ToString::to_string).collect());
     }
     let handle = app.clone();
+    let client = client.clone();
     deep_link.on_open_url(move |event| {
         receive_app_links(
             &handle,
+            &client,
             event.urls().iter().map(ToString::to_string).collect(),
         );
     });
 }
-
-/// Shows one system notification; one the system refuses (no permission, no notification service) is dropped.
-fn post_notice(app: &AppHandle, notice: &Notice) {
-    let _ = app
-        .notification()
-        .builder()
-        .title(&notice.title)
-        .body(&notice.body)
-        .show();
-}
-
-/// The notification switches, changed to `update` first when given, with the texts in `language`.
-#[tauri::command]
-async fn notification_settings(
-    state: State<'_, AppState>,
-    update: Option<NotificationSettings>,
-    language: String,
-) -> Result<NotificationSettings, String> {
-    lock(&state.0).notification_settings(update, &language)
-}
-
-/// The destination rewrites (`redirects`), as the window lists them.
-#[tauri::command]
-async fn traffic_redirects(
-    state: State<'_, AppState>,
-) -> Result<Vec<desktop_dns::redirects::View>, String> {
-    with_backend(&state, |backend| Ok(backend.traffic_redirects())).await
-}
-
-/// Adds a rewrite from the editor's fields, or changes the one with id `replacing`.
-#[tauri::command]
-async fn add_traffic_redirect(
-    state: State<'_, AppState>,
-    draft: desktop_dns::redirects::Draft,
-    replacing: Option<String>,
-) -> Result<OperationResult, String> {
-    with_backend(&state, move |backend| {
-        backend.add_redirect(&draft, replacing.as_deref())
-    })
-    .await
-}
-
-/// Saves the rewrites as the window changed them: switches, order and deletions.
-#[tauri::command]
-async fn save_traffic_redirects(
-    state: State<'_, AppState>,
-    entries: Vec<desktop_dns::redirects::Entry>,
-) -> Result<OperationResult, String> {
-    with_backend(&state, move |backend| backend.save_redirects(entries)).await
-}
-
-/// The Wi-Fi rules, changed to `update` first when given.
-#[tauri::command]
-async fn on_demand_settings(
-    state: State<'_, AppState>,
-    update: Option<OnDemandSettings>,
-) -> Result<OnDemandSettings, String> {
-    with_backend(&state, move |backend| backend.on_demand_settings(update)).await
-}
-
-/// The network the device is on, for "add the current Wi-Fi"; `ask` asks for the permission that reveals its
-/// name.
-#[tauri::command]
-async fn current_network(app: AppHandle, ask: bool) -> Result<CurrentNetwork, String> {
-    off_lock(move || {
-        app.try_state::<TunnelHostState>()
-            .and_then(|host| host.0.current_network(&app, ask))
-            .map(|network| network.current())
-            .ok_or_else(|| "this platform does not read the Wi-Fi network".to_string())
-    })
-    .await
-}
-
-/// Applies the Wi-Fi rules: samples the network every ten seconds while they are on and connects or
-/// disconnects once when it changes. Only where the platform reads the network (Android).
-fn start_on_demand(app: AppHandle, backend: Arc<Mutex<Backend>>) {
-    if app.try_state::<TunnelHostState>().is_none() {
-        return;
-    }
-    thread::spawn(move || loop {
-        thread::sleep(Duration::from_secs(10));
-        if !lock(&backend).on_demand_enabled() {
-            continue;
-        }
-        let Some(network) = app
-            .try_state::<TunnelHostState>()
-            .and_then(|host| host.0.current_network(&app, false))
-        else {
-            continue;
-        };
-        let action = lock(&backend).on_demand_action(network);
-        let state = AppState(backend.clone());
-        match action {
-            Some(OnDemandAction::Connect) => {
-                let _ = tauri::async_runtime::block_on(connect_through_tunnel(&app, &state));
-            }
-            Some(OnDemandAction::Disconnect) => {
-                let _ = lock(&backend).disconnect();
-                close_tunnel(&app, &state);
-            }
-            _ => {}
-        }
-    });
-}
-
-/// Updates every subscription whose interval has passed, checking once a minute; a failed update is notified.
-fn start_subscription_updates(app: AppHandle, backend: Arc<Mutex<Backend>>) {
-    thread::spawn(move || loop {
-        thread::sleep(Duration::from_secs(60));
-        let due = lock(&backend).due_sources();
-        for (id, location) in due {
-            let fetched = fetch(&location);
-            let mut backend = lock(&backend);
-            let (content, meta) = match fetched {
-                Ok((content, meta)) => (Ok(content), Some(meta)),
-                Err(error) => (Err(error), None),
-            };
-            match (backend.finish_refresh(&id, content), meta) {
-                (Ok(_), Some(meta)) => backend.record_response(Some(&id), meta),
-                (Err(error), _) => {
-                    if let Some(notice) = backend.subscription_failed_notice(&id, &error) {
-                        post_notice(&app, &notice);
-                    }
-                }
-                _ => {}
-            }
-        }
-    });
-}
-
-#[tauri::command]
-async fn select_subscription(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<OperationResult, String> {
-    with_backend(&state, move |backend| backend.select_subscription(&id)).await
-}
-
-#[tauri::command]
-async fn remove_subscription(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<OperationResult, String> {
-    with_backend(&state, move |backend| backend.remove_subscription(&id)).await
-}
-
-#[tauri::command]
-async fn restore_network_settings(state: State<'_, AppState>) -> Result<OperationResult, String> {
-    with_backend(&state, Backend::restore_network_settings).await
-}
-
-/// Generates the root on first use and restarts a running engine with decryption on. The root is not
-/// trusted here: the user does that with `open_mitm_root` (TERMS.md section 4).
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn enable_https_mitm(state: State<'_, AppState>) -> Result<OperationResult, String> {
-    lock(&state.0).ensure_mitm_root()?;
-    let trusted = off_lock(|| Ok(trust::is_trusted())).await?;
-    let result = with_backend(&state, |backend| backend.set_https_decryption(true)).await?;
-    let note = if trusted {
-        ""
-    } else {
-        ". The root certificate is not trusted yet: choose Trust root certificate under Extensions"
-    };
-    Ok(OperationResult {
-        message: format!("{}{note}", result.message),
-    })
-}
-
-#[derive(Debug, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct MitmRootStatus {
-    generated: bool,
-    trusted: bool,
-}
-
-/// Whether the root exists and a browser database or the system store holds it. Read only.
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn mitm_root_status(state: State<'_, AppState>) -> Result<MitmRootStatus, String> {
-    let generated = lock(&state.0).mitm_root().exists();
-    let trusted = generated && off_lock(|| Ok(trust::is_trusted())).await?;
-    Ok(MitmRootStatus { generated, trusted })
-}
-
-/// The user's own request to trust the root: the browsers' databases and, after polkit asks, the
-/// system store.
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn open_mitm_root(state: State<'_, AppState>) -> Result<OperationResult, String> {
-    let root = lock(&state.0).ensure_mitm_root()?;
-    let trusted = off_lock(move || Ok(trust::install(&root.certificate_path))).await?;
-    Ok(OperationResult {
-        message: trusted.summary("trusted"),
-    })
-}
-
-/// Android: the user installs the root in the system settings; there is nothing to read or open here.
-#[cfg(target_os = "android")]
-#[tauri::command]
-fn mitm_root_status() -> Result<MitmRootStatus, String> {
-    Err(UNAVAILABLE.to_string())
-}
-
-#[cfg(target_os = "android")]
-#[tauri::command]
-fn open_mitm_root() -> Result<OperationResult, String> {
-    Err(UNAVAILABLE.to_string())
-}
-
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn disable_https_mitm(state: State<'_, AppState>) -> Result<OperationResult, String> {
-    // The root stays trusted, so turning decryption on again needs no new manual trust; the user
-    // removes it with `remove_mitm_root_trust`.
-    with_backend(&state, |backend| backend.set_https_decryption(false)).await
-}
-
-/// The user's own request to stop trusting the root: the browsers' databases and, after polkit asks, the
-/// system store.
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn remove_mitm_root_trust() -> Result<OperationResult, String> {
-    let removed = off_lock(|| Ok(trust::remove())).await?;
-    Ok(OperationResult {
-        message: removed.summary("removed"),
-    })
-}
-
-#[cfg(target_os = "android")]
-#[tauri::command]
-fn remove_mitm_root_trust() -> Result<OperationResult, String> {
-    Err(UNAVAILABLE.to_string())
-}
-
-/// The name the decryption root gets in Downloads.
-#[cfg(target_os = "android")]
-const ROOT_DOWNLOAD_NAME: &str = "AnixOps-Net-HTTPS-root.crt";
-
-/// Android has no trust store an app may change: the root is saved to Downloads, the user installs it in the
-/// system settings, and only apps that trust user certificates (most browsers) accept it.
-#[cfg(target_os = "android")]
-#[tauri::command]
-async fn enable_https_mitm(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<OperationResult, String> {
-    let root = lock(&state.0).ensure_mitm_root()?;
-    let saved = off_lock(move || {
-        let pem = fs::read_to_string(&root.certificate_path)
-            .map_err(|error| format!("the root certificate could not be read: {error}"))?;
-        let host = app
-            .try_state::<TunnelHostState>()
-            .ok_or("this platform has no shared Downloads folder")?;
-        host.0.save_to_downloads(&app, ROOT_DOWNLOAD_NAME, &pem)
-    })
-    .await;
-    let result = with_backend(&state, |backend| backend.set_https_decryption(true)).await?;
-    let install = match saved {
-        Ok(location) => format!(
-            "The root certificate is saved as {location}; install it under Settings > Security > \
-             Encryption & credentials > Install a certificate > CA certificate"
-        ),
-        Err(error) => format!("The root certificate could not be saved to Downloads: {error}"),
-    };
-    Ok(OperationResult {
-        message: format!(
-            "{}. {install}. Apps that ignore user certificates are not decrypted",
-            result.message
-        ),
-    })
-}
-
-#[cfg(target_os = "android")]
-#[tauri::command]
-async fn disable_https_mitm(state: State<'_, AppState>) -> Result<OperationResult, String> {
-    with_backend(&state, |backend| backend.set_https_decryption(false)).await
-}
-
-#[tauri::command]
-async fn list_mitm_plugins(state: State<'_, AppState>) -> Result<Vec<PluginSummary>, String> {
-    let directory = lock(&state.0).plugins_dir();
-    off_lock(move || plugins::list(&directory)).await
-}
-
-/// Changes the plugin library outside the lock, then applies it to a running engine.
-async fn change_plugins<F>(state: &AppState, change: F) -> Result<OperationResult, String>
-where
-    F: FnOnce(&std::path::Path) -> Result<String, String> + Send + 'static,
-{
-    let directory = lock(&state.0).plugins_dir();
-    let message = off_lock(move || change(&directory)).await?;
-    let applied = with_backend(state, |backend| backend.plugins_changed()).await?;
-    Ok(OperationResult {
-        message: format!("{message}; {applied}"),
-    })
-}
-
-/// Saves a plugin opened from a file or pasted; `source` is the file name, empty when pasted.
-#[tauri::command]
-async fn import_mitm_plugin_text(
-    state: State<'_, AppState>,
-    text: String,
-    source: String,
-) -> Result<OperationResult, String> {
-    change_plugins(&state, move |directory| {
-        let plugin = plugins::import_text(directory, &source, &text, plugins::download)?;
-        Ok(format!("Plugin imported: {}", plugin.name))
-    })
-    .await
-}
-
-#[tauri::command]
-async fn mitm_plugin_details(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<plugins::PluginDetails, String> {
-    let directory = lock(&state.0).plugins_dir();
-    off_lock(move || plugins::details(&directory, &id)).await
-}
-
-#[tauri::command]
-async fn import_mitm_plugin(
-    state: State<'_, AppState>,
-    url: String,
-) -> Result<OperationResult, String> {
-    change_plugins(&state, move |directory| {
-        let plugin = plugins::import(directory, &url, plugins::download)?;
-        Ok(format!("Plugin imported: {}", plugin.name))
-    })
-    .await
-}
-
-#[tauri::command]
-async fn set_mitm_plugin_enabled(
-    state: State<'_, AppState>,
-    id: String,
-    enabled: bool,
-) -> Result<OperationResult, String> {
-    change_plugins(&state, move |directory| {
-        plugins::set_enabled(directory, &id, enabled)?;
-        Ok(if enabled {
-            "Plugin enabled"
-        } else {
-            "Plugin disabled"
-        }
-        .to_string())
-    })
-    .await
-}
-
-#[tauri::command]
-async fn remove_mitm_plugin(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<OperationResult, String> {
-    change_plugins(&state, move |directory| {
-        plugins::remove(directory, &id)?;
-        Ok("Plugin removed".to_string())
-    })
-    .await
-}
-
-#[tauri::command]
-async fn list_debug_mappings(state: State<'_, AppState>) -> Result<Vec<mappings::Entry>, String> {
-    let directory = lock(&state.0).plugins_dir();
-    off_lock(move || mappings::list(&directory)).await
-}
-
-#[tauri::command]
-async fn save_debug_mapping(
-    state: State<'_, AppState>,
-    entry: mappings::Entry,
-) -> Result<OperationResult, String> {
-    change_plugins(&state, move |directory| {
-        let saved = mappings::save(directory, entry)?;
-        Ok(format!("Mapping saved: {}", saved.pattern))
-    })
-    .await
-}
-
-#[tauri::command]
-async fn remove_debug_mapping(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<OperationResult, String> {
-    change_plugins(&state, move |directory| {
-        mappings::remove(directory, &id)?;
-        Ok("Mapping removed".to_string())
-    })
-    .await
-}
-
-#[tauri::command]
-async fn list_decrypt_hosts(state: State<'_, AppState>) -> Result<Vec<String>, String> {
-    let directory = lock(&state.0).plugins_dir();
-    off_lock(move || mappings::load(&directory).map(|stored| stored.hosts)).await
-}
-
-#[tauri::command]
-async fn add_decrypt_host(
-    state: State<'_, AppState>,
-    host: String,
-) -> Result<OperationResult, String> {
-    change_plugins(&state, move |directory| {
-        mappings::add_host(directory, &host)?;
-        Ok(format!("Decrypting {host}"))
-    })
-    .await
-}
-
-#[tauri::command]
-async fn remove_decrypt_host(
-    state: State<'_, AppState>,
-    host: String,
-) -> Result<OperationResult, String> {
-    change_plugins(&state, move |directory| {
-        mappings::remove_host(directory, &host)?;
-        Ok(format!("No longer decrypting {host}"))
-    })
-    .await
-}
-
-/// Commands the Windows client has and Linux does not yet; the interface hides their controls.
-macro_rules! unavailable {
-    ($($name:ident),* $(,)?) => {
-        $(
-            #[tauri::command]
-            fn $name() -> Result<(), String> {
-                Err(UNAVAILABLE.to_string())
-            }
-        )*
-    };
-}
-
-unavailable!(
-    configure_script_runtime,
-    clear_script_runtime,
-    install_certificate,
-    remove_certificate,
-    install_driver,
-    remove_driver,
-);
 
 pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
     let Host {
@@ -1516,54 +220,11 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
         plugins,
         tunnel,
     } = host;
-    let health = Health::start(
-        &dir,
-        if cfg!(target_os = "android") {
-            "android"
-        } else {
-            "linux"
-        },
-        env!("CARGO_PKG_VERSION"),
-        std::env::current_exe().unwrap_or_else(|_| executable.clone()),
-    );
-    // Sessions expire after a week even when the engine does not run to delete them.
-    desktop_mitm::sessions::purge(
-        &crate::backend::capture_dir(&dir).join("sessions"),
-        desktop_mitm::sessions::now_ms(),
-    );
-    let backend = Backend::open(
-        Store::new(dir),
-        Desktop::from_env(),
-        if cfg!(target_os = "android") {
-            None
-        } else {
-            autostart::autostart_dir()
-        },
-        executable,
-    );
-    let auto_connect = backend.auto_connect();
-    let shared = Arc::new(Mutex::new(backend));
-    // The endpoint skips the engine while another command holds the backend, rather than waiting on it.
-    let probe = Arc::downgrade(&shared);
-    health.serve_metrics(Arc::new(move || {
-        let Some(backend) = probe.upgrade() else {
-            return (None, false);
-        };
-        let guard = backend.try_lock();
-        match guard {
-            Ok(backend) => backend.metrics(),
-            Err(_) => (None, false),
-        }
-    }));
-    // The system VPN asks the user for consent in the window, so a platform with one connects from the window.
-    if auto_connect && tunnel.is_none() {
-        let state = AppState(shared.clone());
-        thread::spawn(move || {
-            let _ = tauri::async_runtime::block_on(connect_with_rules(&state));
-        });
-    }
-
-    start_network_watch(shared.clone());
+    let platform = Arc::new(TauriPlatform {
+        app: OnceLock::new(),
+        tunnel,
+    });
+    let client = Client::open(client::Config { dir, executable }, platform.clone());
 
     let mut builder = tauri::Builder::default();
     // One window per user: a second start (an `anixops://` link) hands over to the running one.
@@ -1583,21 +244,13 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
     for plugin in plugins {
         builder = builder.plugin(plugin);
     }
-    if let Some(tunnel) = tunnel {
-        builder = builder.manage(TunnelHostState(tunnel));
-    }
     let app = builder
-        .manage(AppState(shared.clone()))
-        .manage(HealthState(health))
-        .manage(SessionKeyState(Mutex::new(None)))
-        .manage(AppLinks::default())
         .setup({
-            let shared = shared.clone();
+            let client = client.clone();
             move |app| {
-                start_app_links(app.handle());
-                start_subscription_updates(app.handle().clone(), shared.clone());
-                start_on_demand(app.handle().clone(), shared.clone());
-                start_monitor(app.handle().clone(), shared);
+                let _ = platform.app.set(app.handle().clone());
+                start_app_links(app.handle(), &client);
+                client.start_background();
                 Ok(())
             }
         })
@@ -1612,93 +265,16 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
                 webview.app_handle().exit(0);
             }
         })
-        .invoke_handler(tauri::generate_handler![
-            runtime_snapshot,
-            list_nodes,
-            list_native_groups,
-            list_subscriptions,
-            connect,
-            disconnect,
-            restart_service,
-            validate_configuration,
-            check_profile_runtime,
-            switch_node,
-            runtime_control,
-            export_capture,
-            capture_session,
-            replay_request,
-            list_debug_mappings,
-            save_debug_mapping,
-            remove_debug_mapping,
-            list_decrypt_hosts,
-            add_decrypt_host,
-            remove_decrypt_host,
-            test_node_delay,
-            test_node_delays,
-            network_probe,
-            node_share_link,
-            traffic_stats,
-            app_logs,
-            notification_settings,
-            take_app_links,
-            on_demand_settings,
-            current_network,
-            traffic_redirects,
-            add_traffic_redirect,
-            save_traffic_redirects,
-            node_form,
-            edit_node,
-            remove_node,
-            select_fastest_node,
-            save_preferences,
-            create_diagnostics,
-            import_subscription,
-            update_subscription,
-            select_subscription,
-            remove_subscription,
-            update_subscription_source,
-            rename_subscription,
-            set_subscription_interval,
-            restore_network_settings,
-            select_native_group_outbound,
-            set_routing_mode,
-            set_dns_preset,
-            set_block_quic,
-            set_direct_egress,
-            refresh_routing_rules,
-            my_rules,
-            save_my_rules,
-            custom_dns,
-            save_custom_dns,
-            configure_script_runtime,
-            clear_script_runtime,
-            enable_https_mitm,
-            disable_https_mitm,
-            mitm_root_status,
-            open_mitm_root,
-            remove_mitm_root_trust,
-            list_mitm_plugins,
-            import_mitm_plugin,
-            import_mitm_plugin_text,
-            mitm_plugin_details,
-            set_mitm_plugin_enabled,
-            remove_mitm_plugin,
-            phone_qr_code,
-            import_mitm_root,
-            mitm_root_fingerprint,
-            install_certificate,
-            remove_certificate,
-            install_driver,
-            remove_driver,
-            health_status,
-            set_crash_reports,
-        ])
+        .invoke_handler({
+            let client = client.clone();
+            move |invoke| dispatch(&client, invoke)
+        })
         .build(context)
         .map_err(|error| error.to_string())?;
     app.run(move |_, event| {
         // Put the desktop's proxy settings back when the window closes; a crash leaves them for the next start.
         if let RunEvent::Exit = event {
-            lock(&shared).shutdown();
+            client.shutdown();
         }
     });
     Ok(())

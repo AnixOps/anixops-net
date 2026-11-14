@@ -15,7 +15,6 @@ default = []
 gui = [
     "dep:tauri",
     "dep:tauri-build",
-    "dep:reqwest",
     "dep:tauri-plugin-deep-link",
     "dep:tauri-plugin-notification",
     "dep:tauri-plugin-single-instance",
@@ -41,7 +40,7 @@ subscription-meta = { path = "../../crates/subscription-meta" }
 app-log = { path = "../../crates/app-log" }
 app-notifications = { path = "../../crates/app-notifications" }
 traffic-stats = { path = "../../crates/traffic-stats" }
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"], optional = true }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 tauri = { version = "2", optional = true }
 tauri-plugin-deep-link = { version = "~2.4", optional = true }
 tauri-plugin-notification = { version = "~2.3", optional = true }

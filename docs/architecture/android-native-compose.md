@@ -27,21 +27,27 @@ apps/android-native/                 Gradle 工程（提交进仓库，不再 `t
   app/                               Compose 界面、导航、ViewModel
   core/                              Kotlin 侧的内核桥：Core（JNI）、命令与数据类型、事件 Flow
   vpn/                               VpnService、前台通知、快捷设置磁贴、始终开启的 VPN
-  rust/                              cdylib crate `anixops_net_core`：JNI 入口，调 client-core
-crates/client-core/                  从 apps/linux-gui/src/app.rs 抽出的、不依赖 Tauri 的客户端服务层
+  rust/                              cdylib crate `anixops_net_core`：JNI 入口，调 `Client`
+apps/linux-gui/src/client.rs         从 app.rs 抽出的、不依赖 Tauri 的客户端服务层（`networkcore_linux_gui::client`）
 ```
 
-### 1. 抽出 `client-core`（Rust）
+### 1. 抽出客户端服务层 `client`（Rust，PR 1）
 
-把 `app.rs` 里不属于 Tauri 的部分搬进新 crate `crates/client-core`，Linux 窗口和安卓共用：
+把 `app.rs` 里不属于 Tauri 的部分搬进 `apps/linux-gui/src/client.rs`（不开 `gui` feature 也编译，根 workspace 的
+测试覆盖它）。没有另建 crate：`Backend` 就在这个 crate 里，搬家只会带来大面积改名而没有收益。
 
-- `Client`：持有 `Backend`、健康状态、抓包会话密钥缓存；`invoke(command, args: serde_json::Value) -> Result<Value, String>`
-  按命令名分发，命令名、参数和返回 JSON 与今天的 `bridge.ts` 完全一致。
-- `Platform` trait 替代 `TunnelHost`，去掉 `AppHandle` 参数：`open_tunnel`、`close_tunnel`、`save_to_downloads`、
-  `save_base64_to_downloads`、`capture_session_key`、`current_network`、`post_notice`。
-- 后台任务（状态监视、订阅自动更新、Wi-Fi 规则、链接）改为 `Client::start(events: Arc<dyn EventSink>)`，事件是
-  `{"name": "...", "payload": {...}}`（`app-link`、`notice`、`state-changed`）。
-- `apps/linux-gui/src/app.rs` 只剩 Tauri 命令到 `Client::invoke` 的薄包装和 Tauri 事件转发，行为不变。
+- `Client`：持有 `Backend`、健康状态、抓包会话密钥缓存和待读的 `anixops://` 链接；
+  `invoke(command, args: serde_json::Value) -> Result<Value, String>` 按命令名分发，命令名、参数和返回 JSON 与
+  `bridge.ts` 完全一致。分发表是一个 `fn handler(name) -> Option<Handler>`；测试读 `bridge.ts`，界面调用的每个命令
+  都必须有处理函数或在 Windows 专属清单里，漏掉就失败。
+- `Platform` trait：`has_system_vpn`、`open_tunnel`、`close_tunnel`、`save_to_downloads`、`save_base64_to_downloads`、
+  `capture_session_key`、`current_network`、`post_notice`，不带 `AppHandle`。
+- 后台任务（网络变化、订阅自动更新、Wi-Fi 规则、流量统计与通知）由 `Client::open` / `Client::start_background` 启动；
+  通知走 `Platform::post_notice`。
+- `apps/linux-gui/src/app.rs` 只剩 Tauri 的部分：一个 `invoke_handler` 把每个命令转给 `Client::invoke`（在阻塞线程上），
+  `TauriPlatform` 把 `Platform` 接到 `TunnelHost` 和通知插件，`anixops://` 链接和窗口。行为不变；现有 Tauri 安卓
+  （`apps/android`）不用改。
+- 原生安卓的事件（连接状态变化、链接、通知）在 PR 2 加：JNI 层实现 `Platform::post_notice`，状态变化由前台服务通知。
 
 好处：命令契约只有一份；Tauri 桌面端、现有 Tauri 安卓和新的 Compose 安卓在迁移期间共用同一套后端和测试。
 
@@ -59,7 +65,7 @@ Rust 侧 `apps/android-native/rust`（`jni` crate，MIT/Apache）只导出四个
 Kotlin 侧 `core` 模块：`Core.invoke<T>(Command)` 用 kotlinx.serialization 把数据类编码成与 `bridge.ts` 相同的 JSON；
 事件转成 `SharedFlow<CoreEvent>`。每个命令一个类型化的 suspend 函数，页面不直接拼 JSON。
 
-契约测试：`crates/client-core/tests/fixtures/*.json` 存每个命令的请求和应答样例；Rust 测试检查后端产出与样例一致，
+契约测试：`apps/linux-gui/tests/fixtures/*.json` 存每个命令的请求和应答样例；Rust 测试检查后端产出与样例一致，
 Kotlin 单元测试检查数据类能无损解析同一批样例，命令新增或改字段时两边一起失败。
 
 ### 3. 进程与生命周期
@@ -73,14 +79,17 @@ Kotlin 单元测试检查数据类能无损解析同一批样例，命令新增�
 
 ### 4. 界面逻辑从 TypeScript 移到哪里
 
-| 逻辑 | 去处 | 理由 |
-|---|---|---|
-| 抓包筛选表达式、请求表格排序 | Kotlin，用共享样例测试 | 输入即时响应，不值得每次过 JNI |
-| `anixops://` 链接解析 | Kotlin，用共享样例测试 | 在 Activity 收到 Intent 时就要解析 |
-| 节点筛选、标签格式化、流量与速率格式化 | Kotlin | 纯展示 |
-| 节点表单校验 | 已在 Rust（`node-edits`），界面只显示错误 | — |
+原生界面会有 Kotlin（安卓）、C#（Windows）、Rust（Linux）几套（见线程「规划 Windows 和 Linux 原生客户端」），所以有行为的
+界面逻辑在 Rust 里写一次，放进共用的 `client-view`，作为 `Client::invoke` 的命令暴露，各端调用，共享样例只测一份：
 
-共享样例放在 `apps/windows-gui/ui/test-vectors/`（JSON），vitest 和 JUnit 都读同一份，防止两边行为漂移。
+| 逻辑 | 去处 |
+|---|---|
+| 抓包筛选表达式、请求表格排序与筛选、节点筛选 | `client-view`（Rust 命令） |
+| `anixops://` 链接解析 | `client-view`（Rust 命令） |
+| 节点表单校验 | 已在 Rust（`node-edits`） |
+| 字节、速率、时长、日期的显示格式 | 各端用平台的区域设置格式化（安卓 `Formatter` / `DateFormat`） |
+
+JNI 一次调用是微秒级，筛选在 Rust 里做不比 Kotlin 慢。`client-view` 由先需要它的线程建，建好后安卓直接调用。
 
 ### 5. 导航与页面
 
@@ -108,8 +117,9 @@ Kotlin 单元测试检查数据类能无损解析同一批样例，命令新增�
 
 ### 7. 文案与语言
 
-简体（默认）、繁体、英文三套 `strings.xml`（`values`、`values-zh-rTW`、`values-en`），由 `i18n-en.ts` /
-`i18n-zh-hant.ts` 首次移植；Android Lint 的 `MissingTranslation` 设为错误。
+简体（默认）、繁体、英文三种语言，文案用单一来源生成各端格式（安卓 `strings.xml`，Windows `.resw`，Linux gettext，
+Tauri 的 TS 表），与原生 Windows / Linux 方案共用。现在 TS 表以简体原文为 key，迁移时换成稳定 id。
+安卓侧 Android Lint 的 `MissingTranslation` 设为错误。
 
 ### 8. 构建、测试与截图基线
 
@@ -140,7 +150,7 @@ CI 新 job `android-native`（GitHub 托管 runner，变更范围检测同现有
 
 | 组 | 内容 | PR |
 |---|---|---|
-| 基础 | `client-core` 抽取；JNI 桥；VpnService 移植；主题 tokens；导航骨架；CI、截图基线、冒烟测试 | 1、2 |
+| 基础 | 抽出 `client` 服务层；JNI 桥；VpnService 移植；主题 tokens；导航骨架；CI、截图基线、冒烟测试 | 1、2 |
 | 代理 › 首页 | 连接开关、状态、实时流量、连接列表与断开、出口地址、代理模式切换 | 3 |
 | 代理 › 代理 | 订阅导入 / 更新 / 自动更新 / 重命名 / 删除，扫码导入（CameraX + ZXing core，Apache-2.0；不用 ML Kit，它依赖 Google 服务条款），节点测速、最快、策略组、分享链接、添加 / 编辑 / 删除节点 | 3 |
 | 规则 | 分流模式、我的规则文本编辑、规则集查看与更新、DNS 预设、自定义 DNS / 分域 / Hosts、Fake-IP、屏蔽 QUIC | 4 |
@@ -155,7 +165,7 @@ CI 新 job `android-native`（GitHub 托管 runner，变更范围检测同现有
 
 ## 排期
 
-- 现在：本方案；确认后可以先做 PR 1（`client-core` 抽取，不改界面，Linux 与现有安卓行为不变）和 PR 2（工程骨架与 CI），
+- 现在：本方案；确认后可以先做 PR 1（抽出 `client` 服务层，不改界面，Linux 与现有安卓行为不变）和 PR 2（工程骨架与 CI），
   它们不碰桌面界面，与桌面做精的线程不冲突。
 - 桌面端做精完成后：PR 3–8 页面迁移和切换。页面的视觉细节（间距、动效、空状态）参照桌面做精线程定下的规则。
 
