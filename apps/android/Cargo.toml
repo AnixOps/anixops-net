@@ -33,6 +33,8 @@ tauri-plugin-anixops-vpn = { path = "vpn-plugin" }
 # sysroot (BINDGEN_EXTRA_CLANG_ARGS in CI). Cargo unifies the feature into the kernel's rquickjs.
 [target.'cfg(target_os = "android")'.dependencies]
 rquickjs-sys = { version = "0.13", features = ["bindgen"] }
+# Scans subscription and share link QR codes. Held at 2.4 so it does not pull a newer tauri than the lock has.
+tauri-plugin-barcode-scanner = "~2.4"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

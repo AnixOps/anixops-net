@@ -692,4 +692,10 @@ export const english: Record<string, string> = {
   "蜂窝网络": "Cellular",
   "读不到 Wi-Fi 名称，请在 Windows 设置的“隐私和安全性 > 位置”里允许桌面应用访问位置": "The Wi-Fi name is withheld. Allow desktop apps to use your location in Windows Settings under Privacy & security > Location",
   "读不到 Wi-Fi 名称，请在系统设置里允许本应用使用位置信息": "The Wi-Fi name is withheld. Allow this app to use your location in the system settings",
+  "没有相机权限，请在系统设置里允许本应用使用相机": "No camera access. Allow this app to use the camera in the system settings",
+  "已取消扫码": "Scan cancelled",
+  "已识别二维码，核对后点“导入”": "QR code read. Check it, then press Import",
+  "扫码": "Scan",
+  "扫描二维码": "Scan QR code",
+  "把订阅或节点的二维码放进框内": "Fit the subscription or node QR code in the frame",
 };

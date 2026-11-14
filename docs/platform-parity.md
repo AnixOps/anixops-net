@@ -41,7 +41,7 @@
 | 节点测速、选择最快、策略组切换 | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 节点分享链接 | ✅ | ✅ | ✅ | ✅ | ✅ | Tauri 在节点卡片的“更多”菜单里；触屏上菜单按钮常显（T4） |
 | 手动添加 / 编辑节点 | ✅ | ✅ | ✅ | ✅ | ✅ | 添加 = 粘贴分享链接导入；编辑名称、服务器、端口和删除节点只改本机，更新订阅后恢复，与 iOS 相同（`crates/node-edits`，T5）。策略组或规则用到的节点和最后一个节点不能删 |
-| 扫码导入 | ✅ | — | — | — | ❌ | Android 可以用相机（T5 一并评估） |
+| 扫码导入 | ✅ | — | — | — | ✅ | Android：订阅页“扫码”用相机读订阅或分享链接二维码，填进链接框后点“导入”（`tauri-plugin-barcode-scanner`，T5） |
 | 分流模式（规则 / 全局 / 直连等） | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 我的规则（规则文本编辑、连接中原地换规则） | ✅ | ✅ | ◐ | ◐ | ◐ | 内核 `reload_rules`（T2）。桌面与 Android 不收 RULE-SET / GEOIP / GEOSITE 行（这些要下载规则集，分流模式已覆盖）；Windows TUN 模式下次连接生效 |
 | 规则集查看、更新远程规则集 | ✅ | ✅ | ✅ | ✅ | ✅ | |
@@ -121,7 +121,7 @@ MSI 升级时旧服务随旧版本一起卸载；便携版注册过的服务由�
 | T2 | 我的规则：规则文本编辑，连接中原地换规则 | Windows、Linux、Android | 已完成 |
 | T3 | DNS：自定义服务器、分域 DNS、Hosts、Fake-IP | Windows、Linux、Android | 已完成 |
 | T4 | 节点分享链接入口 | Windows、Linux、Android | 已完成 |
-| T5 | 手动添加 / 编辑节点，Android 扫码导入 | Windows、Linux、Android | 编辑 / 删除已完成；Android 扫码待做 |
+| T5 | 手动添加 / 编辑节点，Android 扫码导入 | Windows、Linux、Android | 已完成 |
 | T6 | 流量重定向 | Windows（TUN 模式）、Android | 待做 |
 | T7 | 插件从文件 / 剪贴板导入、插件内容查看 | Windows、Linux、Android | 已完成 |
 | T8 | Android 诊断报告保存到“下载”、出口地址 | Android | 已完成 |
