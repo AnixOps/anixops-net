@@ -104,6 +104,8 @@ struct ConnectionsView: View {
     @State private var paused = false
     @State private var query = ""
     @State private var confirmingCloseAll = false
+    /// Nil until read, or when the engine has no capture (older kernels).
+    @State private var capture: PacketCapture.Status?
 
     var body: some View {
         List {
@@ -141,7 +143,7 @@ struct ConnectionsView: View {
                     }
                     ForEach(shown) { connection in
                         NavigationLink {
-                            ConnectionDetail(connection: connection)
+                            ConnectionDetail(connection: connection, tunnel: tunnel, captureSupported: capture != nil)
                         } label: {
                             ConnectionRow(connection: connection)
                         }
@@ -168,9 +170,12 @@ struct ConnectionsView: View {
                     }
                     Text(summary)
                         .monospacedDigit()
+                    if let capture, capture.enabled {
+                        CaptureStatusLine(status: capture)
+                    }
                 }
             } footer: {
-                Text("站点标识是本机按主机名生成的字母，不联网取图标。HTTPS、QUIC 等标签按端口推断。上传、下载为该连接经隧道的字节数。目标域名来自请求本身或 TLS SNI / HTTP Host，只保存在内存里，下次连接或退出 App 时清空。")
+                Text("站点标识是本机按主机名生成的字母，不联网取图标。HTTPS、QUIC 等标签按端口推断。上传、下载为该连接经隧道的字节数。目标域名来自请求本身或 TLS SNI / HTTP Host，只保存在内存里，下次连接或退出 App 时清空。在右上角“更多”中开始抓包后，新的连接可在详情里查看和导出内容（每个方向前 64 KiB，HTTPS 需启用解密才是明文）。")
             }
         }
         .scrollContentBackground(.hidden)
@@ -189,6 +194,12 @@ struct ConnectionsView: View {
                 // The destructive action is not a neighbour of pause: it sits in the "more" menu and is confirmed
                 // (AnixOps Design, actions D1 and D2).
                 Menu {
+                    if tunnel.connection == .connected {
+                        CaptureMenuItems(tunnel: tunnel, status: capture) {
+                            await load()
+                        }
+                        Divider()
+                    }
                     Button(role: .destructive) {
                         confirmingCloseAll = true
                     } label: {
@@ -336,6 +347,8 @@ struct ConnectionsView: View {
         list = next
         loaded = true
         tunnel.remember(next)
+        let status = await tunnel.control(.captureStatus)
+        capture = RuntimeControl.decode(PacketCapture.Status.self, from: status)
     }
 }
 
@@ -519,6 +532,9 @@ private struct HostRow: View {
 /// Everything the engine reports about one connection.
 private struct ConnectionDetail: View {
     let connection: RuntimeControl.Connection
+    var tunnel: TunnelController
+    /// The running engine can capture: offer the capture page, or say how to start capturing.
+    let captureSupported: Bool
     @Environment(\.brand) private var brand
 
     var body: some View {
@@ -550,6 +566,23 @@ private struct ConnectionDetail: View {
                 }
             }
             .listRowBackground(brand.surface)
+            if connection.captured {
+                Section {
+                    NavigationLink {
+                        CaptureDetailView(tunnel: tunnel, connection: connection)
+                    } label: {
+                        Label("抓包内容", systemImage: "doc.text.magnifyingglass")
+                    }
+                }
+                .listRowBackground(brand.surface)
+            } else if captureSupported {
+                Section {
+                    Text("这个连接建立时没有在抓包。在请求列表右上角“更多”中开始抓包后，新的连接可以查看和导出内容。")
+                        .font(.footnote)
+                        .foregroundStyle(brand.text2)
+                }
+                .listRowBackground(brand.surface)
+            }
         }
         .scrollContentBackground(.hidden)
         .background(brand.bg.ignoresSafeArea())
