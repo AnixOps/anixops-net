@@ -6,6 +6,13 @@ AnixOps Net 的全平台客户端：iOS / macOS App、Windows 与 Linux 桌面 G
 [AnixOps/networkcore_anixops](https://github.com/AnixOps/networkcore_anixops)。本仓库只放客户端，通过 Cargo git
 依赖引用固定版本的内核。
 
+## 下载
+
+最新版下载页：<https://anixops.github.io/anixops-net/>（所有历史版本见 [Releases](https://github.com/AnixOps/anixops-net/releases)）。
+
+这里发布的是开源版，只含公开协议（Windows、Linux、安卓）。带 ANX 私有协议的版本（含 macOS 和 iOS TestFlight）
+只在机场面板里提供，不放在本仓库。
+
 ## 目录
 
 | 路径 | 内容 |

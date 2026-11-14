@@ -1,6 +1,6 @@
 name: Release
 
-# Packages the Windows (MSI + portable ZIP) and Linux (tarball + .deb) desktop clients.
+# Packages the Windows (MSI + portable ZIP), Linux (tarball + .deb) and Android (APK) clients.
 # A tag push publishes a GitHub Release; workflow_dispatch from main only builds and attests.
 # iOS ships through ios-testflight.yml. Kernel CLI releases stay in AnixOps/networkcore_anixops.
 
@@ -1115,6 +1115,66 @@ jobs:
           echo "provenance_file=github-artifact-attestation" >> "${GITHUB_OUTPUT}"
           echo "windows-package-artifact-attestation-execution-status=attested"
 
+  # Android APK (arm64), built by the same composite action as ci.yml. Signed with the ANDROID_KEYSTORE_*
+  # secrets when they are set; until then with a throwaway key per build, and the release notes say that
+  # upgrading needs the old version uninstalled first.
+  package-android:
+    name: Package Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs:
+      - release-policy
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      CARGO_INCREMENTAL: "0"
+    outputs:
+      artifact_name: ${{ steps.stage.outputs.artifact_name }}
+      apk_name: ${{ steps.stage.outputs.apk_name }}
+      signing_kind: ${{ steps.apk.outputs.kind }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Build and sign the APK
+        id: apk
+        uses: ./.github/actions/android-apk
+        with:
+          keystore-base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Stage the APK
+        id: stage
+        shell: bash
+        env:
+          VERSION: ${{ needs.release-policy.outputs.version }}
+          APK: ${{ steps.apk.outputs.apk }}
+        run: |
+          set -euo pipefail
+          name="anixops-net-${VERSION}-android-arm64.apk"
+          mkdir -p dist/android
+          cp "${APK}" "dist/android/${name}"
+          (cd dist/android && sha256sum -- "${name}" > "${name}.sha256")
+          echo "apk_name=${name}" >> "${GITHUB_OUTPUT}"
+          echo "artifact_name=anixops-net-android-${VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Generate Android artifact attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/android/${{ steps.stage.outputs.apk_name }}
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.stage.outputs.artifact_name }}
+          path: dist/android/*
+          if-no-files-found: error
+          retention-days: 3
+
   publish-github-release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
@@ -1126,9 +1186,11 @@ jobs:
       - package-windows
       - attest-linux-gui
       - attest-windows
+      - package-android
     if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
     permissions:
       contents: write
+      actions: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -1145,6 +1207,12 @@ jobs:
           name: ${{ needs.package-windows.outputs.bundle_name }}
           path: dist/release
 
+      - name: Download Android APK
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.package-android.outputs.artifact_name }}
+          path: dist/android
+
       - name: Create GitHub Release
         shell: bash
         env:
@@ -1159,6 +1227,8 @@ jobs:
           WINDOWS_ZIP: ${{ needs.package-windows.outputs.portable_artifact_name }}
           LINUX_TARBALL: ${{ needs.package-linux-gui.outputs.archive_name }}
           LINUX_DEB: ${{ needs.package-linux-gui.outputs.deb_name }}
+          ANDROID_APK: ${{ needs.package-android.outputs.apk_name }}
+          ANDROID_SIGNING: ${{ needs.package-android.outputs.signing_kind }}
           KERNEL_REV_SOURCE: Cargo.toml
         run: |
           set -euo pipefail
@@ -1169,12 +1239,16 @@ jobs:
             cd dist/release
             sha256sum -c ./*.sha256
           )
+          (
+            cd dist/android
+            sha256sum -c ./*.sha256
+          )
           if gh release view "${VERSION}" >/dev/null 2>&1; then
             echo "::error::Release ${VERSION} already exists. Asset overwrite is forbidden."
             exit 1
           fi
 
-          # Publish only what users download: four packages under one name scheme plus one
+          # Publish only what users download: five packages under one name scheme plus one
           # SHA256SUMS. Manifests and per-file .sha256 stay in the workflow artifacts; the
           # attestations are bound to the file digests, so renaming keeps them verifiable.
           publish_dir=dist/publish
@@ -1183,6 +1257,7 @@ jobs:
           cp "dist/release/${WINDOWS_ZIP}" "${publish_dir}/anixops-net-${VERSION}-windows-x64-portable.zip"
           cp "dist/release/${LINUX_DEB}" "${publish_dir}/anixops-net-${VERSION}-linux-amd64.deb"
           cp "dist/release/${LINUX_TARBALL}" "${publish_dir}/anixops-net-${VERSION}-linux-x64.tar.gz"
+          cp "dist/android/${ANDROID_APK}" "${publish_dir}/${ANDROID_APK}"
           (
             cd "${publish_dir}"
             sha256sum -- anixops-net-* > SHA256SUMS
@@ -1192,8 +1267,12 @@ jobs:
           while IFS= read -r file; do
             assets+=("${file}")
           done < <(find "${publish_dir}" -maxdepth 1 -type f | sort)
-          test "${#assets[@]}" = "5"
+          test "${#assets[@]}" = "6"
 
+          android_note="安卓 8.0 及以上（arm64），下载后直接安装。"
+          if [ "${ANDROID_SIGNING}" != "release" ]; then
+            android_note="${android_note}还没有正式签名密钥，本版用临时签名，装新版前要先卸载旧版。"
+          fi
           kernel_rev="$(grep -m1 -oE 'rev = "[0-9a-f]{40}"' "${KERNEL_REV_SOURCE}" | cut -d'"' -f2)"
           cat > release-body.md <<EOF
           ## 下载
@@ -1204,8 +1283,10 @@ jobs:
           | Windows 10/11 | \`anixops-net-${VERSION}-windows-x64-portable.zip\` | 便携版，解压即用 |
           | Debian / Ubuntu | \`anixops-net-${VERSION}-linux-amd64.deb\` | \`sudo apt install ./<文件名>\` |
           | 其他 Linux | \`anixops-net-${VERSION}-linux-x64.tar.gz\` | 解压后运行 \`bin/anixops-net\` |
+          | 安卓 | \`${ANDROID_APK}\` | ${android_note} |
 
-          iOS 版通过 TestFlight 分发。
+          这是开源版，只含公开协议。需要 ANX 协议的机场用户请在面板里下载 ANX 版（iOS 只有 ANX 版，通过 TestFlight 分发）。
+          所有平台的最新版下载链接汇总在 [下载页](https://anixops.github.io/anixops-net/)。
 
           - Linux 版需要 WebKitGTK 4.1。
           - Windows 安装包未做代码签名，首次运行时 SmartScreen 可能提示，选「仍要运行」。
@@ -1223,3 +1304,5 @@ jobs:
             --verify-tag \
             "${prerelease_args[@]}"
           echo "Published $(gh release view "${VERSION}" --json url -q '.url')"
+          # A release created with GITHUB_TOKEN triggers no workflow, so refresh the download page explicitly.
+          gh workflow run download-page.yml --ref main || echo "::warning::Could not refresh the download page; run download-page.yml by hand."
