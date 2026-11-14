@@ -369,6 +369,14 @@ impl Engine {
         serde_json::from_slice(&answer).map_err(|error| error.to_string())
     }
 
+    /// What scripts posted since the last read (the kernel's `script_notifications`), while the engine runs.
+    pub fn script_notifications(&self) -> Option<serde_json::Value> {
+        let answer = self
+            .control_bytes(br#"{"cmd":"script_notifications"}"#)
+            .ok()?;
+        serde_json::from_slice(&answer).ok()
+    }
+
     /// The engine's Prometheus text (the kernel's `metrics` command) while it runs.
     pub fn metrics(&self) -> Option<String> {
         let answer = self.control_bytes(br#"{"cmd":"metrics"}"#).ok()?;

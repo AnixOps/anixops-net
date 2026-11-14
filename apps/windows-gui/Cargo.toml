@@ -29,10 +29,12 @@ serde_json = "1"
 network-watch = { path = "../../crates/network-watch" }
 subscription-meta = { path = "../../crates/subscription-meta" }
 app-log = { path = "../../crates/app-log" }
+app-notifications = { path = "../../crates/app-notifications" }
 traffic-stats = { path = "../../crates/traffic-stats" }
 
 [target.'cfg(windows)'.dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-notification = "~2.3"
 tauri-plugin-single-instance = "2"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 windows-sys = { version = "0.61.2", features = [

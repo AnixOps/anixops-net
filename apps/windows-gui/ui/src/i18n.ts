@@ -28,6 +28,11 @@ export function t(text: string, values?: Record<string, string | number | null |
   return result;
 }
 
+/** The language the interface shows now. */
+export function currentLanguage(): Language {
+  return current;
+}
+
 export function setLanguage(language: Language) {
   current = language;
   if (typeof document !== "undefined") document.documentElement.lang = language === "zh" ? "zh-CN" : language === "zh-Hant" ? "zh-TW" : "en";

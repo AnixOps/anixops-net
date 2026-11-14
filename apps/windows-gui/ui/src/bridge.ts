@@ -342,6 +342,14 @@ export interface TrafficStats {
   hours: TrafficHour[];
 }
 
+/** The system notification switches; `language` is that of the texts. */
+export interface NotificationSettings {
+  scripts: boolean;
+  connection: boolean;
+  subscriptions: boolean;
+  language: string;
+}
+
 export type LogLevel = "info" | "warn" | "error";
 
 /** One line of the app's own log; the engine keeps no log. */
@@ -520,6 +528,9 @@ export const desktop = {
   trafficStats: (clear = false) => invoke<TrafficStats>("traffic_stats", { clear }),
   /** The last 500 lines of the app's log, oldest first; `clear` empties it first. */
   appLogs: (clear = false) => invoke<LogEntry[]>("app_logs", { clear }),
+  /** The notification switches, changed to `update` first when given; `language` sets that of the texts. */
+  notificationSettings: (language: string, update: NotificationSettings | null = null) =>
+    invoke<NotificationSettings>("notification_settings", { update, language }),
   nodeForm: (nodeId: string) => invoke<NodeForm>("node_form", { nodeId }),
   /** Until the subscription is updated, the node runs with this name, server and port. */
   editNode: (nodeId: string, name: string, server: string, port: string) => invoke<OperationResult>("edit_node", { nodeId, name, server, port }),
