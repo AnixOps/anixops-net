@@ -30,15 +30,13 @@ export function BackBar({ label, onBack }: { label: string; onBack: () => void }
  * What capture kept of one connection: the decrypted HTTP requests and the raw bytes each way, with exports of this
  * connection alone. Read again every two seconds while the connection is open.
  */
-export function CaptureDetail({ connection, busy, run, onBack, replayable, initialExchange }: {
+export function CaptureDetail({ connection, busy, run, onBack, initialExchange }: {
   connection: ConnectionSnapshot;
   /** Opens straight on this request of the connection (from the request list). */
   initialExchange?: number;
   busy: string | null;
   run: Run;
   onBack: () => void;
-  /** Whether replay can go through a local proxy (not on Android). */
-  replayable: boolean;
 }) {
   const [capture, setCapture] = useState<CaptureConnection | null>(null);
   const [state, setState] = useState<"loading" | "loaded" | "unreachable">("loading");
@@ -81,7 +79,7 @@ export function CaptureDetail({ connection, busy, run, onBack, replayable, initi
         onBack={() => setExchange(null)}
         exportCard={<ExchangeExport busy={busy} run={run} id={connection.id} index={exchange} redact={redact} onRedact={setRedact} />}
         actions={<>
-          {replayable && <button className="secondary compact" disabled={Boolean(busy)} onClick={() => setTool({ replay: item })}><RotateCw size={14} />{t("重放")}</button>}
+          <button className="secondary compact" disabled={Boolean(busy)} onClick={() => setTool({ replay: item })}><RotateCw size={14} />{t("重放")}</button>
           <MoreMenu
             label={t("更多")}
             disabled={Boolean(busy)}

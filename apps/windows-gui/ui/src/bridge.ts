@@ -405,7 +405,7 @@ export const desktop = {
   /** Decrypted requests after `since`, the newest last; `filter` is the engine's filter expression. */
   captureRequests: (since: number, filter: string) =>
     invoke<CaptureRequestsAnswer>("runtime_control", { request: { cmd: "capture_requests", since_seq: since, limit: 2000, ...(filter ? { filter } : {}) } }),
-  /** Sends a request through the local proxy without following redirects; not on Android. */
+  /** Sends a request through the engine (its local proxy, or the replay proxy on Android) without following redirects. */
   replayRequest: (request: ReplayRequest) => invoke<ReplayResponse>("replay_request", { request }),
   debugMappings: () => invoke<DebugMapping[]>("list_debug_mappings"),
   saveDebugMapping: (entry: DebugMapping) => invoke<OperationResult>("save_debug_mapping", { entry }),

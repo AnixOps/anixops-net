@@ -23,14 +23,14 @@ repository = "https://github.com/AnixOps/anixops-net"
 # CI also builds the iOS runtime and the Windows CLI from this same checkout (.github/scripts/kernel-root.sh).
 # For local kernel work, uncomment the [patch] section at the end and point it at a kernel checkout.
 [workspace.dependencies]
-config-core = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "d1a8cc1a2cadd2851eaf045963db2019082d2644" }
-control-domain = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "d1a8cc1a2cadd2851eaf045963db2019082d2644" }
-engine-embedded = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "d1a8cc1a2cadd2851eaf045963db2019082d2644" }
-engine-native = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "d1a8cc1a2cadd2851eaf045963db2019082d2644" }
-inbound-mixed = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "d1a8cc1a2cadd2851eaf045963db2019082d2644" }
-mitm-policy = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "d1a8cc1a2cadd2851eaf045963db2019082d2644" }
-node-import = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "d1a8cc1a2cadd2851eaf045963db2019082d2644" }
-platform-windows = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "d1a8cc1a2cadd2851eaf045963db2019082d2644" }
+config-core = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "e5e158ae4ea0d67015d52b841bcbe5ad359b2a70" }
+control-domain = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "e5e158ae4ea0d67015d52b841bcbe5ad359b2a70" }
+engine-embedded = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "e5e158ae4ea0d67015d52b841bcbe5ad359b2a70" }
+engine-native = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "e5e158ae4ea0d67015d52b841bcbe5ad359b2a70" }
+inbound-mixed = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "e5e158ae4ea0d67015d52b841bcbe5ad359b2a70" }
+mitm-policy = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "e5e158ae4ea0d67015d52b841bcbe5ad359b2a70" }
+node-import = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "e5e158ae4ea0d67015d52b841bcbe5ad359b2a70" }
+platform-windows = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "e5e158ae4ea0d67015d52b841bcbe5ad359b2a70" }
 
 # [patch."https://github.com/AnixOps/networkcore_anixops"]
 # config-core = { path = "../networkcore_anixops/crates/config-core" }
