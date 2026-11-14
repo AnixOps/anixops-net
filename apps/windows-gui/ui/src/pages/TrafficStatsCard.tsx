@@ -49,7 +49,7 @@ export function TrafficStatsCard({ live, busy, run }: { live: boolean; busy: str
       {hours.length === 0 ? (
         <EmptyState icon={Activity} title={t("流量统计")} message={stats ? t("这段时间没有流量") : t("连接后开始统计")} />
       ) : view === "time" ? (
-        <div className={`stats-bars ${period}`} role="img" aria-label={t("流量统计")}>
+        <div className={"stats-bars " + period} role="img" aria-label={t("流量统计")}>
           {bars.map((bar) => (
             <span key={bar.start} title={`${new Date(bar.start * 1000).toLocaleString()} · ${formatBytes(bar.bytes)}`}>
               <span style={{ height: `${(bar.bytes / peak) * 100}%` }} />
