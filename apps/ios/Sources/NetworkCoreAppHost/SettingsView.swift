@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Settings: the mode (proxy or debugging) and, in debug mode, the exit; appearance, reconnecting and Wi-Fi rules,
+/// Settings: the mode (proxy or debugging); appearance, reconnecting and Wi-Fi rules,
 /// privacy and the About section that unlocks developer mode.
 struct SettingsView: View {
     var tunnel: TunnelController
@@ -14,9 +14,6 @@ struct SettingsView: View {
             Form {
                 AppModeSection(tunnel: tunnel)
                     .listRowBackground(brand.surface)
-                if tunnel.appMode == .debug {
-                    ExitSettingsRow(tunnel: tunnel)
-                }
 
                 Section {
                     Picker("外观", selection: $appearance.normalized) {

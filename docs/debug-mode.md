@@ -7,10 +7,13 @@ AnixOps Net 是一个 App 两种模式（计划 A3/A4）：**代理**按订阅�
 
 | | 代理 | 调试 |
 |---|---|---|
-| iOS 标签 | 首页 · 代理 · 规则 · 扩展 · 设置 | 首页 · 请求 · 扩展 · 设置 |
-| macOS 侧栏 | 概览 · 代理 · 规则 · 扩展 · 活动 · 设置 | 概览 · 活动 · 扩展 · 设置 |
-| 订阅与节点 | 自己的标签 / 侧栏项 | 设置 › 出口 |
-| 首页导入按钮 | 有 | 没有（在 设置 › 出口 › 订阅与节点 里导入） |
+| iOS 标签 | 首页 · 代理 · 规则 · 扩展 · 设置 | 请求 · 改写 · 出口 · 设置 |
+| macOS 侧栏 | 概览 · 代理 · 规则 · 扩展 · 活动 · 设置 | 请求 · 改写 · 出口 · 设置 |
+| 打开时 | 概览 | 请求（调试模式没有概览） |
+| 订阅、节点与规则 | 自己的标签 / 侧栏项 | 出口 |
+| 导入节点 | 首页右上角 / 侧栏工具栏 | 出口 › 订阅与节点 |
+
+调试模式在五个平台上一样（2026-11-14 用户决定）：请求 · 改写 · 出口 · 设置，打开就是请求。“改写”就是代理模式的“扩展”（插件、Map Local / Remote、解密证书），只是名字不同；“出口”放直连 / 经过节点的选择，以及订阅、节点、规则和 DNS。
 
 - 模式存在 App 的 defaults，键 `app-mode`（`proxy` / `debug`，`NetworkCoreBridge/AppMode.swift`）。
 - 首次启动（同意用户协议之后）让用户选，默认选中“调试网络”。已经导入过节点或关过旧欢迎页的老用户直接按代理模式，不再问。
@@ -51,12 +54,15 @@ AnixOps Net 是一个 App 两种模式（计划 A3/A4）：**代理**按订阅�
 
 ## 截图
 
-CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含 `debug-home-light`、`debug-settings-light` 和首次启动的 `choose-home-light`。
-演示数据用 `-AnixOpsMode debug|proxy|choose` 选择模式。
+CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含调试模式的 `debug-activity-light` / `debug-activity-dark`（请求表格和检查器）、`debug-exit-light`、`debug-settings-light`，以及首次启动的 `choose-home-light`。
+演示数据用 `-AnixOpsMode debug|proxy|choose` 选择模式；调试模式的演示请求由 `TunnelController.demoControl` 应答。
 
 ## 请求列表（计划 E5）
 
-调试模式的“请求”（iOS 标签 / macOS 活动页）按 HTTP 请求逐条列出，最新在上，点开是请求详情（可重放、生成映射）。右上角可以切到全部连接。
+调试模式的“请求”按 HTTP 请求逐条列出，最新在上。右上角可以切到全部连接。
+
+- **macOS 和宽屏 iPad**（仿 Proxyman）：可排序的表格（时间、方法、状态、主机、路径、类型、大小、耗时）加右侧常驻检查器，选中一行就在检查器里看请求和响应，可以重放、生成映射、导出；工具栏按钮可以收起检查器。方向键切换行，右键可以拷贝网址。状态码按颜色区分：2xx 绿、3xx 黄、4xx/5xx 和没有响应红、等待中灰。macOS 的隧道诊断（复制诊断信息、扩展日志、导出日志）放在工具栏的“诊断”菜单里。
+- **iPhone 和窄屏 iPad**：列表，点开一条进入请求详情。
 
 - 数据来自内核 `capture_requests`（networkcore d1a8cc1 起），每秒按 `since_seq` 增量读取，`dropped_before_seq` 以内的行随内核一起删掉；本地最多保留 5000 行（`NetworkCoreBridge/CaptureRequests.swift`）。
 - 快捷筛选（出错、JSON、图片、非 GET、HTTP/2、大于 100 KB、本地应答）和搜索框拼成同一个过滤表达式交给内核解析，语法见 project files `debug-client/kernel-capture-api.md` §4。快捷筛选的条件会加到搜索框每个 `OR` 分组里。
@@ -76,9 +82,13 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含 `debug-home-light`�
 同一套行为，共用 `apps/windows-gui/ui` 的界面和 `crates/desktop-mitm`。
 
 - **模式**：存储键为 `anixops.app-mode`（`proxy` / `debug`）和 `anixops.debug-exit`（`direct` / `node`），保存在 WebView 的 localStorage（`ui/src/mode.ts`）。首次选择、老用户直接用代理模式、导入节点后自动切到“经过节点”，都与 Apple 端一致。
-- **侧栏**：调试网络下是“请求 · 规则 · 扩展”，“出口”放在“设置”上方，订阅与节点都在出口里。Android 窄屏下侧栏变成底栏。
+- **侧栏**：调试网络下是“请求 · 改写”，下方是“出口 · 设置”，打开就在请求页，没有概览。“改写”就是扩展页（插件、Map Local / Remote、解密证书）；订阅、节点和分流规则（含 DNS）都在“出口”里。Android 窄屏下侧栏变成底栏。
 - **直连出口**：后端命令 `set_direct_egress` 让引擎使用不含节点的 `{"outbound":{"type":"direct"}}` 配置。Linux、Android 和 Windows 都支持。
-- **请求列表**（`pages/RequestList.tsx`）：用 `capture_requests` 每秒增量读取，筛选框写的就是内核的过滤表达式。快速筛选（出错、JSON、图片、HTTP/2、大于 100 KB）会拼进表达式（`ui/src/capture-filter.ts`）。
+- **请求页**（`pages/RequestsPage.tsx`，仿 Proxyman）：左边是请求表格，右边常驻检查器（选中即看请求和响应，可重放、映射、导出）。窗口窄于 1100 px 时两者轮流显示，Android 上点一行打开详情。
+  - 页面工具栏只放整份抓包的操作：视图切换（请求 / 连接 / 已保存）、抓包开关、暂停刷新、“更多”里的导出全部 pcapng / HAR 和清空抓包（红色，要确认）。
+  - 表格（`pages/RequestList.tsx`）列出时间、方法、状态、主机、路径、类型、大小、耗时，点列头排序（`ui/src/request-table.ts`），默认最新在上。状态码按颜色区分：2xx 绿、3xx 黄、4xx/5xx 和没有响应红、等待中灰。只画可见的行，最多保留 2000 条。
+  - 键盘：表格获得焦点后用 ↑ ↓、j / k、PageUp / PageDown、Home / End 切换，Enter 打开；Ctrl+F 跳到筛选框，Ctrl+R 重放选中的请求。
+  - 用 `capture_requests` 每秒增量读取，筛选框写的就是内核的过滤表达式。快速筛选（出错、JSON、图片、HTTP/2、大于 100 KB）会拼进表达式（`ui/src/capture-filter.ts`）。
 - **导出**：连接可以导出 pcapng / HAR，单条请求可以导出 cURL、五种语言的代码、Postman、Insomnia 或 HAR，都保存到“下载”文件夹。“遮盖 Cookie、令牌和密码”默认打开。
 - **重放**（`desktop_mitm::replay`）：
   - 桌面经引擎的本机代理发出，Android 经内核的本机重放代理发出（`start_replay_proxy`，只监听 127.0.0.1，一次性 Basic 凭据，凭据只留在后端）。

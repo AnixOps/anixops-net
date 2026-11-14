@@ -1,37 +1,34 @@
 import { ArrowDown, ArrowUp, BadgeCheck, ChevronRight, CircleDot, ClipboardList, Download, FileCode, ListTree, RefreshCw, Search, Trash2, TriangleAlert, Unplug, X } from "lucide-react";
 import { useState } from "react";
-import { CaptureRequest, ConnectionSnapshot, desktop, RuntimeSnapshot } from "../bridge";
+import { ConnectionSnapshot, desktop, RuntimeSnapshot } from "../bridge";
 import { connectionDetail, connectionName, formatRate, matchesConnection } from "../activity-format";
 import { captureSummary } from "../capture-format";
 import { listPage, liveEngine, usePolling } from "../live";
 import { formatBytes } from "../subscription-format";
-import { Card, EmptyState, IconButton, MoreMenu, Row, Run, Segmented, Switch } from "../ui";
+import { Card, EmptyState, IconButton, MenuItem, MoreMenu, Row, Run, Segmented, Switch } from "../ui";
 import { t } from "../i18n";
-import { CaptureSessions } from "./CaptureSessions";
 import { CaptureDetail, exportCapture } from "./CaptureViews";
-import { RequestList } from "./RequestList";
 import { LogsCard } from "./LogsCard";
 import { TrafficStatsCard } from "./TrafficStatsCard";
 
-/** Session state and the connection list; debug mode ("Requests") puts the connections, with capture, first. */
-export function ActivityPage({ snapshot, busy, run, debug = false }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run; debug?: boolean }) {
+/** Proxy mode's activity: the session state, traffic statistics, the connection list and the app log. */
+export function ActivityPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
+  return <ConnectionsView snapshot={snapshot} busy={busy} run={run} />;
+}
+
+/**
+ * The connection list with its drill-down into captured bytes, the session state and the app log. Debug mode shows it
+ * as the "Connections" view of the requests page, where capture is switched from the page toolbar instead.
+ */
+export function ConnectionsView({ snapshot, busy, run, debug = false }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run; debug?: boolean }) {
   const refresh = snapshot?.subscriptionLastAttempt
     ? [snapshot.subscriptionRefreshResult || t("等待中"), snapshot.subscriptionLastAttempt, snapshot.subscriptionRefreshErrorCode].filter(Boolean).join(" · ")
     : t("还没有自动更新记录");
 
-  const [detail, setDetail] = useState<{ connection: ConnectionSnapshot; exchange?: number } | null>(null);
+  const [detail, setDetail] = useState<ConnectionSnapshot | null>(null);
   const live = liveEngine(snapshot);
-  const [capture] = usePolling(desktop.captureStatus, debug && live);
   if (detail && live) {
-    return (
-      <CaptureDetail
-        connection={detail.connection}
-        initialExchange={detail.exchange}
-        busy={busy}
-        run={run}
-        onBack={() => setDetail(null)}
-      />
-    );
+    return <CaptureDetail connection={detail} busy={busy} run={run} onBack={() => setDetail(null)} />;
   }
 
   const session = (
@@ -45,16 +42,12 @@ export function ActivityPage({ snapshot, busy, run, debug = false }: { snapshot:
       </Row>
     </Card>
   );
-  const connections = <Connections snapshot={snapshot} busy={busy} run={run} onOpen={(connection) => setDetail({ connection })} />;
-  // A stopped capture or a loaded session still holds requests to list.
-  const holding = Boolean(capture?.enabled) || (capture?.connections ?? 0) > 0;
-  const requests = debug && live && <RequestList capturing={holding} onOpen={(request) => setDetail(requestDetail(request))} />;
-  const saved = debug && live && <CaptureSessions capture={capture} run={run} />;
+  const connections = <Connections snapshot={snapshot} busy={busy} run={run} captureControls={!debug} onOpen={setDetail} />;
   const logs = <LogsCard live={live} busy={busy} run={run} />;
 
   return (
     <div className="page-stack">
-      {debug ? <>{requests}{saved}{connections}{session}{logs}</> : <>{session}<TrafficStatsCard live={live} busy={busy} run={run} />{connections}{logs}</>}
+      {debug ? <>{connections}{session}{logs}</> : <>{session}<TrafficStatsCard live={live} busy={busy} run={run} />{connections}{logs}</>}
     </div>
   );
 }
@@ -63,7 +56,14 @@ export function ActivityPage({ snapshot, busy, run, debug = false }: { snapshot:
  * Live traffic and the engine's connection list, read once a second while connected. With packet capture on, new
  * connections keep their first bytes and open to show them.
  */
-function Connections({ snapshot, busy, run, onOpen }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run; onOpen: (connection: ConnectionSnapshot) => void }) {
+function Connections({ snapshot, busy, run, onOpen, captureControls }: {
+  snapshot: RuntimeSnapshot | null;
+  busy: string | null;
+  run: Run;
+  onOpen: (connection: ConnectionSnapshot) => void;
+  /** Proxy mode switches and exports capture here; debug mode does it from the page toolbar. */
+  captureControls: boolean;
+}) {
   const live = liveEngine(snapshot);
   const [list, reload] = usePolling(desktop.connections, live);
   const [capture, reloadCapture] = usePolling(desktop.captureStatus, live);
@@ -97,7 +97,7 @@ function Connections({ snapshot, busy, run, onOpen }: { snapshot: RuntimeSnapsho
       actions={<>
         <span className="rate"><ArrowUp size={14} />{formatRate(traffic.upload_rate)}</span>
         <span className="rate"><ArrowDown size={14} />{formatRate(traffic.download_rate)}</span>
-        {capture && (
+        {capture && captureControls && (
           <label className="switch-label">
             <span>{t("抓包")}</span>
             <Switch
@@ -110,16 +110,7 @@ function Connections({ snapshot, busy, run, onOpen }: { snapshot: RuntimeSnapsho
         <MoreMenu
           label={t("更多连接操作")}
           items={[
-            { label: t("导出全部 pcapng"), icon: Download, disabled: Boolean(busy) || captured === 0, onSelect: () => exportCapture(run, "pcapng") },
-            { label: t("导出全部 HAR"), icon: FileCode, disabled: Boolean(busy) || captured === 0, onSelect: () => exportCapture(run, "har") },
-            {
-              label: t("清空抓包"),
-              icon: Trash2,
-              danger: true,
-              disabled: captured === 0,
-              confirm: t("确认清空 {count} 个连接的抓包", { count: captured }),
-              onSelect: () => close(desktop.clearCapture),
-            },
+            ...(captureControls ? captureMenu(run, busy, captured, () => close(desktop.clearCapture)) : []),
             {
               label: t("全部断开"),
               icon: Unplug,
@@ -169,25 +160,20 @@ function Connections({ snapshot, busy, run, onOpen }: { snapshot: RuntimeSnapsho
   );
 }
 
-/** What the capture view needs of a request's connection; it reads the rest from the engine. */
-function requestDetail(request: CaptureRequest): { connection: ConnectionSnapshot; exchange: number } {
-  return {
-    connection: {
-      id: request.connection_id,
-      network: "tcp",
-      host: request.host,
-      destination: request.host,
-      rule: "",
-      chain: [],
-      outbound: "",
-      started_at_ms: request.started_at_ms,
-      ended_at_ms: null,
-      upload: 0,
-      download: 0,
-      captured: true,
+/** Export everything captured and clear it: the capture entries of a "more" menu, the destructive one last. */
+export function captureMenu(run: Run, busy: string | null, captured: number, clear: () => void): MenuItem[] {
+  return [
+    { label: t("导出全部 pcapng"), icon: Download, disabled: Boolean(busy) || captured === 0, onSelect: () => exportCapture(run, "pcapng") },
+    { label: t("导出全部 HAR"), icon: FileCode, disabled: Boolean(busy) || captured === 0, onSelect: () => exportCapture(run, "har") },
+    {
+      label: t("清空抓包"),
+      icon: Trash2,
+      danger: true,
+      disabled: captured === 0,
+      confirm: t("确认清空 {count} 个连接的抓包", { count: captured }),
+      onSelect: clear,
     },
-    exchange: request.index,
-  };
+  ];
 }
 
 /** One connection; one with captured bytes opens to show them. */

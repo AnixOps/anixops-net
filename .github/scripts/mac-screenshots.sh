@@ -70,8 +70,10 @@ shoot extensions light
 shoot activity light
 shoot settings light
 shoot terms light
-# Debug mode (proxies and rules move into Settings › Exit) and the first-launch mode choice.
-shoot home light debug
+# Debug mode (requests · rewrite · exit · settings, opening on the requests table) and the first-launch mode choice.
+shoot activity light debug
+shoot activity dark debug
+shoot exit light debug
 shoot settings light debug
 shoot home light choose
 

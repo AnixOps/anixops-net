@@ -94,9 +94,9 @@ struct HomeView: View {
         }
     }
 
-    /// Where the subscriptions and nodes are: their own tab, or Settings › Exit in debug mode.
+    /// Where the subscriptions and nodes are: their own tab, or the exit in debug mode.
     private var nodesTab: AppTab {
-        tunnel.appMode == .debug ? .settings : .proxies
+        tunnel.appMode == .debug ? .exit : .proxies
     }
 
     private func perform(_ action: AppNotice.Action) {

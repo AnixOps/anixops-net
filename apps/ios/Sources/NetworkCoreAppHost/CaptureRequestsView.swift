@@ -5,9 +5,19 @@ import SwiftUI
 /// the search box build one filter expression the engine parses (`CaptureFilter`), so a chip and the same words typed
 /// do the same thing. Rows arrive a second at a time while capture is on; the connection list sits behind the
 /// toolbar's "连接" button.
+///
+/// On the Mac and in a regular-width iPad window the requests are a sortable table beside an inspector that shows
+/// the selected one (after Proxyman); on an iPhone they are a list that opens each request on its own page.
 struct CaptureRequestsView: View {
     var tunnel: TunnelController
     @Environment(\.brand) private var brand
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+    @State private var selection: PacketCapture.RequestRow.ID?
+    /// Newest first until a column header is clicked.
+    @State private var sortOrder = [KeyPathComparator(\PacketCapture.RequestRow.seq, order: .reverse)]
+    @State private var showsInspector = true
     @State private var log = CaptureRequestLog()
     @State private var query = ""
     @State private var chips: [CaptureQuickFilter] = []
@@ -32,7 +42,116 @@ struct CaptureRequestsView: View {
         let filter: String
     }
 
+    /// A table with an inspector, or a list that pushes each request.
+    private var usesTable: Bool {
+        #if os(macOS)
+        return true
+        #else
+        return sizeClass == .regular
+        #endif
+    }
+
     var body: some View {
+        Group {
+            if usesTable {
+                workbench
+            } else {
+                list
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .topControlBar(brand) {
+            chipBar
+        }
+        .background(brand.bg.ignoresSafeArea())
+        .navigationTitle("请求")
+        .inlineNavigationTitle()
+        .searchable(text: $query, prompt: Text("搜索或表达式，如 status:4xx"))
+        .autocorrectionDisabled()
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                toolbarItems
+            }
+        }
+        .navigationDestination(isPresented: $showsSessions) {
+            CaptureSessionsView(tunnel: tunnel) {
+                log.reset()
+                notice = String(localized: "正在查看已保存的会话，抓包已停止")
+            }
+        }
+        #if DEBUG
+        // Screenshots show the inspector with the newest request in it.
+        .onChange(of: log.rows.count) { _, _ in
+            if TunnelController.isDemo, selection == nil {
+                selection = log.rows.last?.id
+            }
+        }
+        #endif
+        .task(id: LoadKey(connected: tunnel.connection == .connected, filter: filter)) {
+            // A new filter starts over; the short wait lets typing settle before asking the engine.
+            try? await Task.sleep(for: .milliseconds(300))
+            log.reset()
+            invalidFilter = nil
+            while !Task.isCancelled {
+                if !paused {
+                    await load()
+                }
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+    }
+
+    /// The table, its status lines above it and the inspector beside it.
+    private var workbench: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            statusLines
+                .font(.footnote)
+                .foregroundStyle(brand.text2)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 6)
+            if log.rows.isEmpty {
+                emptyRow
+                    .frame(maxHeight: .infinity, alignment: .top)
+            } else {
+                CaptureRequestTable(rows: log.rows, selection: $selection, sortOrder: $sortOrder)
+            }
+        }
+        .inspector(isPresented: $showsInspector) {
+            NavigationStack {
+                if let row = log.rows.first(where: { $0.id == selection }) {
+                    CapturedRequestView(tunnel: tunnel, row: row)
+                        .id(row.id)
+                } else {
+                    ContentUnavailableView {
+                        Label("选择一条请求", systemImage: "cursorarrow.click.2")
+                    } description: {
+                        Text("在列表里选一条，这里显示它的请求和响应，可以重放、映射和导出。")
+                    }
+                }
+            }
+            .inspectorColumnWidth(min: 320, ideal: 420, max: 720)
+        }
+    }
+
+    private var statusLines: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(summary)
+                .monospacedDigit()
+            if let capture, capture.enabled {
+                CaptureStatusLine(status: capture)
+            }
+            if let notice {
+                Text(notice)
+            }
+            if let invalidFilter {
+                Text(invalidText(invalidFilter))
+                    .foregroundStyle(brand.danger)
+            }
+        }
+    }
+
+    /// The iPhone list: newest first, each row opening the request on its own page.
+    private var list: some View {
         List {
             Section {
                 if log.rows.isEmpty {
@@ -47,93 +166,64 @@ struct CaptureRequestsView: View {
                     .listRowBackground(brand.surface)
                 }
             } header: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(summary)
-                        .monospacedDigit()
-                    if let capture, capture.enabled {
-                        CaptureStatusLine(status: capture)
-                    }
-                    if let notice {
-                        Text(notice)
-                    }
-                    if let invalidFilter {
-                        Text(invalidText(invalidFilter))
-                            .foregroundStyle(brand.danger)
-                    }
-                }
+                statusLines
             } footer: {
                 Text("只列出 HTTPS 解密（MITM）后的请求和明文 HTTP 请求。搜索框可以直接写表达式：host:api.example.com status:>=400 type:json -method:GET，空格表示同时满足，OR 表示或者。")
             }
         }
-        .scrollContentBackground(.hidden)
-        .topControlBar(brand) {
-            chipBar
-        }
-        .background(brand.bg.ignoresSafeArea())
-        .navigationTitle("请求")
-        .inlineNavigationTitle()
-        .searchable(text: $query, prompt: Text("搜索或表达式，如 status:4xx"))
-        .autocorrectionDisabled()
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button {
-                    paused.toggle()
-                } label: {
-                    Image(systemName: paused ? "play.fill" : "pause.fill")
-                }
-                .accessibilityLabel(paused ? "继续刷新" : "暂停刷新")
-                NavigationLink {
-                    ConnectionsView(tunnel: tunnel)
-                } label: {
-                    Image(systemName: "point.3.connected.trianglepath.dotted")
-                }
-                .accessibilityLabel("全部连接")
-                Menu {
-                    if tunnel.connection == .connected {
-                        CaptureMenuItems(tunnel: tunnel, status: capture) {
-                            log.reset()
-                            await load()
-                        }
-                        Divider()
-                        Button {
-                            Task {
-                                await saveSession()
-                            }
-                        } label: {
-                            Label("保存当前抓包", systemImage: "lock.doc")
-                        }
-                        .disabled((capture?.connections ?? 0) == 0)
-                        Button {
-                            showsSessions = true
-                        } label: {
-                            Label("已保存的会话", systemImage: "clock.arrow.circlepath")
-                        }
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .accessibilityLabel("更多")
-                .disabled(tunnel.connection != .connected)
+    }
+
+    @ViewBuilder
+    private var toolbarItems: some View {
+        if usesTable {
+            Button {
+                showsInspector.toggle()
+            } label: {
+                Image(systemName: "sidebar.trailing")
             }
+            .accessibilityLabel(showsInspector ? "隐藏详情" : "显示详情")
+            .help(showsInspector ? "隐藏详情" : "显示详情")
         }
-        .navigationDestination(isPresented: $showsSessions) {
-            CaptureSessionsView(tunnel: tunnel) {
-                log.reset()
-                notice = String(localized: "正在查看已保存的会话，抓包已停止")
-            }
+        Button {
+            paused.toggle()
+        } label: {
+            Image(systemName: paused ? "play.fill" : "pause.fill")
         }
-        .task(id: LoadKey(connected: tunnel.connection == .connected, filter: filter)) {
-            // A new filter starts over; the short wait lets typing settle before asking the engine.
-            try? await Task.sleep(for: .milliseconds(300))
-            log.reset()
-            invalidFilter = nil
-            while !Task.isCancelled {
-                if !paused {
+        .accessibilityLabel(paused ? "继续刷新" : "暂停刷新")
+        .help(paused ? "继续刷新" : "暂停刷新")
+        NavigationLink {
+            ConnectionsView(tunnel: tunnel)
+        } label: {
+            Image(systemName: "point.3.connected.trianglepath.dotted")
+        }
+        .accessibilityLabel("全部连接")
+        .help("全部连接")
+        Menu {
+            if tunnel.connection == .connected {
+                CaptureMenuItems(tunnel: tunnel, status: capture) {
+                    log.reset()
                     await load()
                 }
-                try? await Task.sleep(for: .seconds(1))
+                Divider()
+                Button {
+                    Task {
+                        await saveSession()
+                    }
+                } label: {
+                    Label("保存当前抓包", systemImage: "lock.doc")
+                }
+                .disabled((capture?.connections ?? 0) == 0)
+                Button {
+                    showsSessions = true
+                } label: {
+                    Label("已保存的会话", systemImage: "clock.arrow.circlepath")
+                }
             }
+        } label: {
+            Image(systemName: "ellipsis.circle")
         }
+        .accessibilityLabel("更多")
+        .disabled(tunnel.connection != .connected)
     }
 
     private var chipBar: some View {
@@ -366,5 +456,128 @@ struct CaptureRequestRow: View {
             .padding(.vertical, 2)
             .foregroundStyle(brand.text2)
             .background(brand.raised, in: RoundedRectangle(cornerRadius: BrandRadius.badge, style: .continuous))
+    }
+}
+
+/// The request table of the Mac and of a wide iPad window: sortable columns, one selected row. Arrow keys move the
+/// selection; the context menu copies the URL.
+struct CaptureRequestTable: View {
+    let rows: [PacketCapture.RequestRow]
+    @Binding var selection: PacketCapture.RequestRow.ID?
+    @Binding var sortOrder: [KeyPathComparator<PacketCapture.RequestRow>]
+    @Environment(\.brand) private var brand
+
+    var body: some View {
+        Table(rows.sorted(using: sortOrder), selection: $selection, sortOrder: $sortOrder) {
+            TableColumn("时间", value: \.seq) { row in
+                Text(row.startedAt.formatted(date: .omitted, time: .standard))
+                    .monospacedDigit()
+                    .foregroundStyle(brand.text2)
+            }
+            .width(min: 64, ideal: 72, max: 96)
+            TableColumn("方法", value: \.method) { row in
+                Text(row.method)
+                    .font(.body.monospaced().weight(.semibold))
+                    .foregroundStyle(brand.primary)
+            }
+            .width(min: 44, ideal: 56, max: 80)
+            TableColumn("状态", value: \.sortStatus) { row in
+                Text(statusText(row))
+                    .fontWeight(.semibold)
+                    .monospacedDigit()
+                    .foregroundStyle(statusColor(row))
+            }
+            .width(min: 40, ideal: 48, max: 64)
+            TableColumn("主机", value: \.host) { row in
+                Text(row.host)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .width(min: 100, ideal: 180)
+            TableColumn("路径", value: \.path) { row in
+                Text(verbatim: row.path)
+                    .font(.body.monospaced())
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .width(min: 120, ideal: 260)
+            TableColumn("类型") { row in
+                Text(typeText(row))
+                    .foregroundStyle(brand.text2)
+            }
+            .width(min: 48, ideal: 80, max: 140)
+            TableColumn("大小", value: \.responseSize) { row in
+                Text(row.responseSize > 0 ? TrafficFormat.bytes(row.responseSize) : "")
+                    .monospacedDigit()
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .width(min: 56, ideal: 72, max: 96)
+            TableColumn("耗时", value: \.sortDuration) { row in
+                Text(row.duration.map { "\(Int(($0 * 1000).rounded())) ms" } ?? "")
+                    .monospacedDigit()
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .width(min: 56, ideal: 68, max: 96)
+        }
+        .contextMenu(forSelectionType: PacketCapture.RequestRow.ID.self) { selected in
+            if let row = rows.first(where: { selected.contains($0.id) }) {
+                Button {
+                    Pasteboard.copy(row.url)
+                } label: {
+                    Label("拷贝网址", systemImage: "doc.on.doc")
+                }
+            }
+        }
+    }
+
+    /// HTTP/2, the kind of body and a local answer, in one short line.
+    private func typeText(_ row: PacketCapture.RequestRow) -> String {
+        var parts: [String] = []
+        if row.isHTTP2 {
+            parts.append("H2")
+        }
+        if let kind = row.kind {
+            parts.append(kind)
+        }
+        if row.note == "answered_locally" {
+            parts.append(String(localized: "本地应答"))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func statusText(_ row: PacketCapture.RequestRow) -> String {
+        if let status = row.status {
+            return String(status)
+        }
+        return row.endedAt == nil && row.note == nil ? "…" : String(localized: "失败")
+    }
+
+    /// Green 2xx, amber 3xx, red 4xx/5xx or no response, gray while waiting.
+    private func statusColor(_ row: PacketCapture.RequestRow) -> Color {
+        guard let status = row.status else {
+            if row.note == "answered_locally" || (row.endedAt == nil && row.note == nil) {
+                return brand.text3
+            }
+            return brand.danger
+        }
+        if status >= 400 {
+            return brand.danger
+        }
+        if status >= 300 {
+            return brand.warning
+        }
+        return brand.success
+    }
+}
+
+extension PacketCapture.RequestRow {
+    /// The status column's order: answered requests by code, then the ones without a status.
+    var sortStatus: Int {
+        status ?? Int.max
+    }
+
+    /// The duration column's order: finished requests by time taken, then the ones still waiting.
+    var sortDuration: TimeInterval {
+        duration ?? .greatestFiniteMagnitude
     }
 }

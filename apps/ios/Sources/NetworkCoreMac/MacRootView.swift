@@ -34,16 +34,18 @@ struct MacRootView: View {
                     NavigationStack {
                         page
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                            .navigationTitle(state.section?.title ?? "AnixOps Net")
+                            .navigationTitle(state.section?.title(in: tunnel.appMode) ?? "AnixOps Net")
                     }
                 }
             }
         }
         .tint(brand.primary)
         .environment(\.brand, brand)
-        .onChange(of: tunnel.appMode) { _, mode in
-            if let section = state.section, !MacSection.sections(for: mode).contains(section) {
-                state.section = .home
+        .onChange(of: tunnel.appMode, initial: true) { _, mode in
+            // Each mode opens on its first section: the overview, or the requests in debug mode.
+            let sections = MacSection.sections(for: mode)
+            if !sections.contains(state.section ?? .home) {
+                state.section = sections.first
             }
         }
         .sheet(isPresented: $state.importing) {
@@ -58,12 +60,12 @@ struct MacRootView: View {
         List(selection: $state.section) {
             Section {
                 ForEach(MacSection.sections(for: tunnel.appMode).filter { $0 != .settings }) { section in
-                    MacSidebarLabel(section: section)
+                    MacSidebarLabel(section: section, mode: tunnel.appMode)
                         .tag(section)
                 }
             }
             Section {
-                MacSidebarLabel(section: .settings)
+                MacSidebarLabel(section: .settings, mode: tunnel.appMode)
                     .tag(MacSection.settings)
             }
         }
@@ -88,7 +90,7 @@ struct MacRootView: View {
 
     @ViewBuilder
     private var page: some View {
-        switch state.section ?? .home {
+        switch state.section ?? MacSection.sections(for: tunnel.appMode)[0] {
         case .home:
             MacHomePage(tunnel: tunnel, state: state)
         case .proxies:
@@ -99,6 +101,8 @@ struct MacRootView: View {
             MacExtensionsPage(tunnel: tunnel)
         case .activity:
             MacActivityPage(tunnel: tunnel)
+        case .exit:
+            MacExitPage(tunnel: tunnel, state: state)
         case .settings:
             MacSettingsPage(tunnel: tunnel, state: state)
         }
@@ -108,10 +112,11 @@ struct MacRootView: View {
 /// A sidebar row: the section's glyph on a colored tile, as System Settings draws its panes.
 private struct MacSidebarLabel: View {
     let section: MacSection
+    let mode: AppMode?
 
     var body: some View {
         Label {
-            Text(section.title)
+            Text(section.title(in: mode))
         } icon: {
             MacTile(systemImage: section.systemImage, color: section.tileColor)
         }
@@ -173,7 +178,7 @@ private struct MacSidebarStatus: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    state.section = .home
+                    state.section = MacSection.sections(for: tunnel.appMode).first
                 }
                 MacConnectSwitch(tunnel: tunnel, controlSize: .small)
             }

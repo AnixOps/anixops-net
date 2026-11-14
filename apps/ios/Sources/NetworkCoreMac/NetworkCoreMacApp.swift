@@ -127,14 +127,31 @@ enum MacSection: String, CaseIterable, Identifiable, Hashable {
     case rules
     case extensions
     case activity
+    /// Debug mode's exit (plan G2): direct or through a node, with the subscriptions, nodes and rules.
+    case exit
     case settings
 
     var id: String { rawValue }
 
-    /// The sidebar for a mode: every section in proxy mode; in debug mode proxies and rules move into Settings ›
-    /// Exit, so the requests (Activity) come right after the overview.
+    /// The sidebar for a mode. Debug mode is the same on every platform (docs/debug-mode.md): Requests · Rewrite ·
+    /// Exit · Settings, opening on the requests, with proxies and rules under Exit.
     static func sections(for mode: AppMode?) -> [MacSection] {
-        mode == .debug ? [.home, .activity, .extensions, .settings] : allCases
+        mode == .debug ? [.activity, .extensions, .exit, .settings] : [.home, .proxies, .rules, .extensions, .activity, .settings]
+    }
+
+    /// The section's name in a mode: in debug mode Activity is the requests and Extensions are "Rewrite".
+    func title(in mode: AppMode?) -> LocalizedStringKey {
+        guard mode == .debug else {
+            return title
+        }
+        switch self {
+        case .activity:
+            return "请求"
+        case .extensions:
+            return "改写"
+        default:
+            return title
+        }
     }
 
     var title: LocalizedStringKey {
@@ -149,6 +166,8 @@ enum MacSection: String, CaseIterable, Identifiable, Hashable {
             return "扩展"
         case .activity:
             return "活动"
+        case .exit:
+            return "出口"
         case .settings:
             return "设置"
         }
@@ -166,6 +185,8 @@ enum MacSection: String, CaseIterable, Identifiable, Hashable {
             return "puzzlepiece.extension.fill"
         case .activity:
             return "waveform.path.ecg"
+        case .exit:
+            return "globe"
         case .settings:
             return "gearshape.fill"
         }
@@ -184,6 +205,8 @@ enum MacSection: String, CaseIterable, Identifiable, Hashable {
             return MacTileColor.purple
         case .activity:
             return MacTileColor.pink
+        case .exit:
+            return MacTileColor.sky
         case .settings:
             return MacTileColor.gray
         }
