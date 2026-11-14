@@ -1,4 +1,6 @@
-//! Trusting the HTTPS decryption root on a Linux desktop. Browsers read NSS databases (Chrome and Chromium the
+//! Trusting the HTTPS decryption root on a Linux desktop. The app only does this when the user asks for it
+//! with the separate "trust root certificate" action, never when decryption is turned on (TERMS.md
+//! section 4). Browsers read NSS databases (Chrome and Chromium the
 //! user's `~/.pki/nssdb`, Firefox one per profile), which `certutil` changes without privileges; command line
 //! tools read the system store, which only root can change, so that part asks through `pkexec`.
 
@@ -174,6 +176,17 @@ pub fn install(certificate: &Path) -> Outcome {
             .push("this distribution's system store is not known".to_string()),
     }
     outcome
+}
+
+/// Whether a browser database or the system store already holds the root. Nothing is changed.
+pub fn is_trusted() -> bool {
+    let databases = home().map(|home| nss_databases(&home)).unwrap_or_default();
+    databases.iter().any(|database| {
+        matches!(
+            certutil(database, &["-L", "-n", ROOT_COMMON_NAME]),
+            Ok(true)
+        )
+    }) || system_anchor(Path::new("/")).is_some_and(|(anchor, _)| anchor.exists())
 }
 
 /// Takes the root out of every browser database and, when it was installed there, the system store.

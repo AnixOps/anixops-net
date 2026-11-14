@@ -362,6 +362,12 @@ export interface NetworkProbe {
   directMs?: number | null;
 }
 
+/** The HTTPS decryption root: generated yet, and trusted by the user in a system or browser store. */
+export interface MitmRootStatus {
+  generated: boolean;
+  trusted: boolean;
+}
+
 /** The engine's LAN share for phones (`lan_share` control commands). */
 export interface LanShareStatus {
   running: boolean;
@@ -539,6 +545,9 @@ export const desktop = {
   saveMyRules: (text: string) => invoke<OperationResult>("save_my_rules", { text }),
   enableHttpsMitm: () => invoke<OperationResult>("enable_https_mitm"),
   disableHttpsMitm: () => invoke<OperationResult>("disable_https_mitm"),
+  mitmRootStatus: () => invoke<MitmRootStatus>("mitm_root_status"),
+  openMitmRoot: () => invoke<OperationResult>("open_mitm_root"),
+  removeMitmRootTrust: () => invoke<OperationResult>("remove_mitm_root_trust"),
   mitmPlugins: () => invoke<MitmPlugin[]>("list_mitm_plugins"),
   importMitmPlugin: (url: string) => invoke<OperationResult>("import_mitm_plugin", { url }),
   /** A plugin opened from a file (`source` is its name) or pasted (`source` is empty). */

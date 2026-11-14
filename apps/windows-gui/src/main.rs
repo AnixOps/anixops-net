@@ -38,6 +38,7 @@ mod gui {
     mod capture_sessions;
     mod linked_sources;
     mod mitm_plugins;
+    mod root_trust;
     mod runtime_status;
     mod startup;
     mod tauri_ui;
