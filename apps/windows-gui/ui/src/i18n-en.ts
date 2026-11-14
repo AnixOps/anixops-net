@@ -405,7 +405,7 @@ export const english: Record<string, string> = {
   "你主要用 AnixOps Net 做什么？": "What will you mainly use AnixOps Net for?",
   "两种模式用同一个内核，只是界面不同。之后可以随时在设置里切换。": "Both use the same engine and only differ in the window. You can switch any time in Settings.",
   "出口": "Egress",
-  "这个版本的调试模式经过选中的节点发出流量；直连出口稍后支持。": "In this version debug mode sends traffic through the selected node; a direct egress is coming later.",
+  "Windows 服务模式下，调试网络经过选中的节点发出流量；要直连出口，请在设置里改用桌面模式。": "In Windows service mode, debug traffic leaves through the selected node. For the direct egress, switch to desktop mode in Settings.",
   "抓到的流量直接从这台设备发出，不需要任何节点。选节点和更新订阅不影响它。": "Captured traffic leaves straight from this device and needs no node. Picking nodes or updating subscriptions does not change that.",
   "还没有节点，暂时直连。导入订阅或节点后按下面的节点和规则发出。": "No nodes yet, so traffic leaves directly for now. Once you import a subscription or nodes it follows the nodes and rules below.",
   "按下面选中的节点和订阅规则发出，可以切换节点对比不同地区的出口。": "Traffic follows the node selected below and the subscription's rules; switch nodes to compare exits in different regions.",

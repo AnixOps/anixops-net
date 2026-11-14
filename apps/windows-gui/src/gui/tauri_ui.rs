@@ -144,6 +144,10 @@ struct RuntimeSnapshot {
     dns_preset: &'static str,
     /// UDP to port 443 is refused so apps fall back from QUIC to TCP.
     block_quic: bool,
+    /// Debug mode's direct egress (the engine runs with no node); only in
+    /// desktop mode, where this window runs the engine.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    direct_egress: Option<bool>,
     /// The imported profile runs on the embedded engine.
     embedded_engine: bool,
 }
@@ -340,6 +344,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             set_routing_mode,
             set_dns_preset,
             set_block_quic,
+            set_direct_egress,
             refresh_routing_rules,
             configure_script_runtime,
             clear_script_runtime,
@@ -3089,6 +3094,43 @@ async fn set_block_quic(
     run_blocking(move || set_block_quic_blocking(enabled, state)).await
 }
 
+#[tauri::command]
+async fn set_direct_egress(
+    enabled: bool,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || set_direct_egress_blocking(enabled, state)).await
+}
+
+/// Debug mode's egress: with `enabled` the window's engine runs with no node
+/// (`connection::direct_egress_envelope`), else the imported profile again. A
+/// running core reconnects on it.
+fn set_direct_egress_blocking(
+    enabled: bool,
+    state: DesktopAppState,
+) -> Result<OperationResult, String> {
+    {
+        let mut desktop = state
+            .desktop
+            .lock()
+            .map_err(|_| "desktop state lock failed")?;
+        if desktop.direct_egress == enabled {
+            return Ok(OperationResult {
+                message: "Egress unchanged.".to_string(),
+            });
+        }
+        desktop.direct_egress = enabled;
+        save_desktop_state(&desktop)?;
+    }
+    let message = match reconnect_running_direct_core(&state) {
+        Ok(()) if enabled => "Traffic leaves directly.".to_string(),
+        Ok(()) => "Traffic leaves through the selected node.".to_string(),
+        Err(error) => format!("Egress saved. Reconnect to apply it: {error}"),
+    };
+    Ok(OperationResult { message })
+}
+
 /// Saves QUIC blocking into the envelope and the desktop state. A core this
 /// window runs reconnects on it; the Windows service takes it on its next
 /// start.
@@ -3839,6 +3881,8 @@ fn snapshot(
         routing_mode: routing_mode_name(desktop.routing_mode).to_string(),
         dns_preset: desktop.dns_preset.as_str(),
         block_quic: desktop.block_quic,
+        direct_egress: (desktop.runtime_mode == DesktopRuntimeMode::Desktop)
+            .then_some(desktop.direct_egress),
         embedded_engine: active_embedded_config().ok().flatten().is_some(),
     }
 }

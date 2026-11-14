@@ -98,6 +98,9 @@ pub struct DesktopState {
     /// Refuse UDP to port 443 so apps fall back from QUIC to TCP (the engine's `block_quic`).
     #[serde(default)]
     pub block_quic: bool,
+    /// Debug mode's direct egress: the window's engine runs with no node.
+    #[serde(default)]
+    pub direct_egress: bool,
     #[serde(default)]
     pub bilibili_web_ad_block_enabled: bool,
     /// Desktop mode also captures system traffic with a Wintun adapter.

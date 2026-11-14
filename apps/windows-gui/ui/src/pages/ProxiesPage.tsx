@@ -48,7 +48,7 @@ export function ProxiesPage({ egress, ...props }: ProxiesProps & { egress?: Egre
 
 function EgressCard({ egress, nodes }: { egress: Egress; nodes: NodeSummary[] }) {
   if (!egress.supported) {
-    return <Card title={t("出口")} description={t("这个版本的调试模式经过选中的节点发出流量；直连出口稍后支持。")} />;
+    return <Card title={t("出口")} description={t("Windows 服务模式下，调试网络经过选中的节点发出流量；要直连出口，请在设置里改用桌面模式。")} />;
   }
   const description = egress.exit === "direct"
     ? t("抓到的流量直接从这台设备发出，不需要任何节点。选节点和更新订阅不影响它。")
