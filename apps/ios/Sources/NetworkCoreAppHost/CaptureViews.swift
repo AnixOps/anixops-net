@@ -567,7 +567,7 @@ private struct BytesText: View {
 }
 
 /// The system pasteboard on iOS and macOS.
-private enum Pasteboard {
+enum Pasteboard {
     static func copy(_ text: String) {
         #if os(iOS)
         UIPasteboard.general.string = text

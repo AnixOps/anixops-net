@@ -51,10 +51,19 @@ enum AppTab: Hashable, CaseIterable, Identifiable {
     case proxies
     case rules
     case extensions
+    /// Debug mode's exit (plan G2): direct or through a node, with the subscriptions, nodes and rules.
+    case exit
     case settings
 
+    /// Debug mode is the same on every platform (docs/debug-mode.md): Requests · Rewrite · Exit · Settings, opening
+    /// on the requests.
     static func tabs(for mode: AppMode?) -> [AppTab] {
-        mode == .debug ? [.home, .requests, .extensions, .settings] : [.home, .proxies, .rules, .extensions, .settings]
+        mode == .debug ? [.requests, .extensions, .exit, .settings] : [.home, .proxies, .rules, .extensions, .settings]
+    }
+
+    /// The tab's name in a mode: the extensions are "Rewrite" in debug mode, where plugins and mappings rewrite traffic.
+    func title(in mode: AppMode?) -> LocalizedStringKey {
+        self == .extensions && mode == .debug ? "改写" : title
     }
 
     var id: Self {
@@ -73,6 +82,8 @@ enum AppTab: Hashable, CaseIterable, Identifiable {
             return "规则"
         case .extensions:
             return "扩展"
+        case .exit:
+            return "出口"
         case .settings:
             return "设置"
         }
@@ -90,6 +101,8 @@ enum AppTab: Hashable, CaseIterable, Identifiable {
             return "arrow.triangle.branch"
         case .extensions:
             return "puzzlepiece.extension"
+        case .exit:
+            return "globe"
         case .settings:
             return "slider.horizontal.3"
         }
@@ -168,9 +181,11 @@ struct RootView: View {
                 }
             }
         }
-        .onChange(of: tunnel.appMode) { _, mode in
-            if !AppTab.tabs(for: mode).contains(tab) {
-                tab = .home
+        .onChange(of: tunnel.appMode, initial: true) { _, mode in
+            // Each mode opens on its first tab: the overview, or the requests in debug mode.
+            let tabs = AppTab.tabs(for: mode)
+            if !tabs.contains(tab), let first = tabs.first {
+                tab = first
             }
         }
         .onChange(of: tunnel.loaded) { _, loaded in
@@ -227,7 +242,7 @@ struct RootView: View {
         TabView(selection: $tab) {
             ForEach(AppTab.tabs(for: tunnel.appMode)) { section in
                 content(section)
-                    .tabItem { Label(section.title, systemImage: section.systemImage) }
+                    .tabItem { Label(section.title(in: tunnel.appMode), systemImage: section.systemImage) }
                     .tag(section)
             }
         }
@@ -237,7 +252,7 @@ struct RootView: View {
         NavigationSplitView {
             List(selection: Binding<AppTab?>(get: { tab }, set: { tab = $0 ?? tab })) {
                 ForEach(AppTab.tabs(for: tunnel.appMode)) { section in
-                    Label(section.title, systemImage: section.systemImage)
+                    Label(section.title(in: tunnel.appMode), systemImage: section.systemImage)
                         .tag(section)
                 }
             }
@@ -266,6 +281,10 @@ struct RootView: View {
             RulesView(tunnel: tunnel)
         case .extensions:
             ExtensionsView(tunnel: tunnel)
+        case .exit:
+            NavigationStack {
+                ExitSettingsView(tunnel: tunnel)
+            }
         case .settings:
             SettingsView(tunnel: tunnel)
         }

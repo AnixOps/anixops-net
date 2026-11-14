@@ -1,7 +1,7 @@
 import NetworkCoreBridge
 import SwiftUI
 
-/// Settings › Exit in debug mode (plan G2): whether captured traffic goes straight out or through a node, and the
+/// Debug mode's Exit tab (plan G2): whether captured traffic goes straight out or through a node, and the
 /// subscriptions, nodes and rules that the proxy mode shows as tabs of their own.
 struct ExitSettingsView: View {
     var tunnel: TunnelController
@@ -49,29 +49,5 @@ struct ExitSettingsView: View {
             return tunnel.hasNoNodes ? String(localized: "未导入") : (tunnel.nodeName ?? "")
         }
         return String(localized: "\(count) 个节点")
-    }
-}
-
-/// The settings row that opens the exit page, with the exit in use.
-struct ExitSettingsRow: View {
-    var tunnel: TunnelController
-    @Environment(\.brand) private var brand
-
-    var body: some View {
-        Section {
-            NavigationLink {
-                ExitSettingsView(tunnel: tunnel)
-            } label: {
-                LabeledContent("出口", value: value)
-            }
-            .listRowBackground(brand.surface)
-        }
-    }
-
-    private var value: String {
-        if tunnel.usesDirectExit {
-            return String(localized: "直连")
-        }
-        return tunnel.nodeName ?? String(localized: "经过节点")
     }
 }
