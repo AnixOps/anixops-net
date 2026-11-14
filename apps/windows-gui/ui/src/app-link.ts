@@ -42,7 +42,7 @@ export function parseAppLink(raw: string): AppLink | AppLinkError {
   } catch {
     return { error: "链接无效" };
   }
-  if (url.protocol.toLowerCase() !== `${appLinkScheme}:`) return { error: "不是 anixops:// 链接" };
+  if (url.protocol.toLowerCase() !== appLinkScheme + ":") return { error: "不是 anixops:// 链接" };
   if (raw.length > maxImportLength + 256) return { error: "链接太长" };
   const segments = url.pathname.split("/").filter(Boolean);
   const host = url.hostname.toLowerCase();

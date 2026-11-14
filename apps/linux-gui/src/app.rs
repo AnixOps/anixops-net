@@ -1014,6 +1014,8 @@ fn receive_app_links(app: &AppHandle, urls: Vec<String>) {
     if let Ok(mut links) = app.state::<AppLinks>().0.lock() {
         links.extend(urls);
     }
+    // Android brings the activity forward itself when it opens the link.
+    #[cfg(not(target_os = "android"))]
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.show();
