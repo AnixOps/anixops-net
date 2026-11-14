@@ -1113,9 +1113,6 @@ macro_rules! unavailable {
 }
 
 unavailable!(
-    install_service,
-    start_service,
-    stop_service,
     configure_script_runtime,
     clear_script_runtime,
     install_certificate,
@@ -1246,9 +1243,6 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             save_my_rules,
             custom_dns,
             save_custom_dns,
-            install_service,
-            start_service,
-            stop_service,
             configure_script_runtime,
             clear_script_runtime,
             enable_https_mitm,

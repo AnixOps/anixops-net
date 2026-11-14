@@ -10,14 +10,6 @@ const DESKTOP_STATE_FILE: &str = "desktop-state.json";
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum DesktopRuntimeMode {
-    #[default]
-    Desktop,
-    Service,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub enum DesktopRoutingMode {
     #[default]
     BypassChina,
@@ -89,8 +81,7 @@ impl DesktopSubscriptionSource {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DesktopState {
-    #[serde(default)]
-    pub runtime_mode: DesktopRuntimeMode,
+    // `runtime_mode` from versions with the Windows service mode is ignored when read.
     #[serde(default)]
     pub routing_mode: DesktopRoutingMode,
     #[serde(default)]
@@ -215,11 +206,17 @@ mod tests {
         assert!(!state.auto_recover_core);
         assert!(!state.auto_subscription_refresh);
         assert!(!state.auto_select_fastest_node);
-        assert_eq!(state.runtime_mode, DesktopRuntimeMode::Desktop);
         assert_eq!(state.routing_mode, DesktopRoutingMode::BypassChina);
         assert!(!state.bilibili_web_ad_block_enabled);
         assert!(state.applied_proxy.is_none());
         assert!(state.profile_node_catalog.is_empty());
+    }
+
+    #[test]
+    fn a_state_from_the_service_mode_era_still_loads() {
+        let state: DesktopState =
+            serde_json::from_str(r#"{"runtime_mode":"service","auto_connect":true}"#).unwrap();
+        assert!(state.auto_connect);
     }
 
     #[test]

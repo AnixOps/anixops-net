@@ -3091,8 +3091,8 @@ dependencies = [
  "desktop-mitm",
  "engine-embedded",
  "inbound-mixed",
+ "mitm-policy",
  "network-watch",
- "networkcore-windows-service",
  "node-import",
  "platform-windows",
  "rcgen",
@@ -3103,21 +3103,6 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-single-instance",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "networkcore-windows-service"
-version = "0.3.0"
-dependencies = [
- "control-domain",
- "engine-embedded",
- "engine-native",
- "inbound-mixed",
- "mitm-policy",
- "platform-windows",
- "rcgen",
- "serde_json",
  "windows-sys 0.61.2",
 ]
 

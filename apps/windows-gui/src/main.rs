@@ -9,6 +9,14 @@ fn main() {
 #[cfg(windows)]
 fn main() {
     client_health::startup::mark_process_start();
+    // Run by the MSI as LocalSystem, where no one can see a message box: the
+    // outcome goes to the log only.
+    if std::env::args().any(|argument| argument == "--purge") {
+        if gui::purge_managed_network_state().is_err() {
+            std::process::exit(1);
+        }
+        return;
+    }
     if std::env::args().any(|argument| argument == "--cleanup-startup") {
         if let Err(error) = gui::cleanup_current_user_startup() {
             gui::show_fatal_error(&error);
@@ -40,8 +48,9 @@ mod gui {
     use control_domain::{NodeDescriptor, NODE_METADATA_PATH, NODE_PATH_TRUNK};
     use platform_windows::managed::{
         append_managed_log, read_managed_config, read_managed_state, windows_managed_config_path,
-        windows_managed_log_directory, windows_managed_state_path, write_managed_text_atomic,
-        WindowsManagedConfig, WindowsSystemProxyOwner, WINDOWS_MANAGED_CONFIG_SCHEMA_VERSION,
+        windows_managed_log_directory, windows_managed_state_path, write_managed_state,
+        write_managed_text_atomic, WindowsManagedConfig, WindowsSystemProxyOwner,
+        WINDOWS_MANAGED_CONFIG_SCHEMA_VERSION,
     };
     use platform_windows::system_integration::{
         disable_current_user_startup, migrate_legacy_current_user_startup,
@@ -110,6 +119,48 @@ mod gui {
         let executable = env::current_exe().map_err(|error| error.to_string())?;
         remove_all_startup_tasks().map_err(|error| error.to_string())?;
         disable_current_user_startup(&executable).map_err(|error| error.to_string())
+    }
+
+    /// Uninstall cleanup, run by the MSI as LocalSystem: removes what the
+    /// client installed machine-wide (the root certificates and the driver
+    /// recorded in the managed state) and the Windows service earlier
+    /// versions registered.
+    pub fn purge_managed_network_state() -> Result<(), String> {
+        let integration = NativeWindowsSystemIntegration::new();
+        let state_path = windows_managed_state_path();
+        let mut errors = Vec::new();
+        if let Err(error) = integration.uninstall_service() {
+            errors.push(format!("service: {error}"));
+        }
+        if let Ok(mut state) = read_managed_state(&state_path) {
+            for thumbprint in [
+                state.certificate_sha1.take(),
+                state.native_mitm_certificate_sha1.take(),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                if let Err(error) = integration.remove_root_certificate(&thumbprint) {
+                    errors.push(format!("certificate {thumbprint}: {error}"));
+                }
+            }
+            if let Some(inf_path) = state.driver_inf_path.take() {
+                match integration.uninstall_driver(&inf_path) {
+                    Ok(reboot) => state.driver_reboot_required = reboot,
+                    Err(error) => errors.push(format!("driver: {error}")),
+                }
+            }
+            state.last_transition = "purged".to_string();
+            if let Err(error) = write_managed_state(&state_path, &state) {
+                errors.push(format!("state: {error}"));
+            }
+        }
+        let _ = append_managed_log("gui", &format!("purge errors={errors:?}"));
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors.join("; "))
+        }
     }
 
     pub(super) fn load_validated_managed_configuration(
@@ -359,7 +410,7 @@ mod gui {
         Ok(WindowsManagedConfig {
             schema_version: WINDOWS_MANAGED_CONFIG_SCHEMA_VERSION,
             system_proxy: None,
-            system_proxy_owner: WindowsSystemProxyOwner::Service,
+            system_proxy_owner: WindowsSystemProxyOwner::Desktop,
             root_certificate_path: None,
             driver_package: None,
             native_mitm: None,

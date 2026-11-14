@@ -66,35 +66,6 @@
                 KeyPath="yes" />
           </Component>
 
-          <Component Id="ServiceComponent" Guid="*">
-            <File
-                Id="ServiceExe"
-                Source="$(ServiceExe)"
-                Name="networkcore-windows-service.exe"
-                KeyPath="yes" />
-            <ServiceInstall
-                Id="NetworkCoreServiceInstall"
-                Name="AnixOpsNetworkCore"
-                DisplayName="AnixOps NetworkCore"
-                Description="Manages the AnixOps NetworkCore tunnel and Windows network integration."
-                Arguments="service"
-                Type="ownProcess"
-                Start="auto"
-                ErrorControl="normal"
-                Account="LocalSystem"
-                Vital="yes" />
-            <ServiceControl
-                Id="NetworkCoreServiceStartControl"
-                Name="AnixOpsNetworkCore"
-                Start="install"
-                Wait="no" />
-            <ServiceControl
-                Id="NetworkCoreServiceLifecycleControl"
-                Name="AnixOpsNetworkCore"
-                Stop="both"
-                Remove="uninstall"
-                Wait="yes" />
-          </Component>
         </Directory>
       </Directory>
     </StandardDirectory>
@@ -119,17 +90,16 @@
       <ComponentRef Id="WintunComponent" />
       <ComponentRef Id="CliComponent" />
       <ComponentRef Id="IntegrityListComponent" />
-      <ComponentRef Id="ServiceComponent" />
       <ComponentRef Id="ManagedConfigurationComponent" />
     </Feature>
 
     <CustomAction
         Id="PurgeManagedNetworkState"
-        FileRef="ServiceExe"
-        ExeCommand="purge"
+        FileRef="GuiExe"
+        ExeCommand="--purge"
         Execute="deferred"
         Impersonate="no"
-        Return="check" />
+        Return="ignore" />
     <CustomAction
         Id="CleanupCurrentUserStartup"
         FileRef="GuiExe"
@@ -140,7 +110,7 @@
     <InstallExecuteSequence>
       <Custom
           Action="PurgeManagedNetworkState"
-          After="StopServices"
+          Before="RemoveFiles"
           Condition="Installed AND REMOVE=&quot;ALL&quot;" />
       <Custom
           Action="CleanupCurrentUserStartup"

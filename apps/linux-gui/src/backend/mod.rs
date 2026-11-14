@@ -70,7 +70,6 @@ pub struct RuntimeSnapshot {
     pub platform: &'static str,
     pub connection: String,
     pub connection_label: String,
-    pub service: StatusFact,
     pub core: StatusFact,
     pub proxy: StatusFact,
     pub selected_node: Option<String>,
@@ -95,7 +94,6 @@ pub struct RuntimeSnapshot {
     pub script_runtime_configured: bool,
     pub https_decryption_enabled: bool,
     pub dark_theme: bool,
-    pub runtime_mode: &'static str,
     pub routing_mode: &'static str,
     pub dns_preset: &'static str,
     /// UDP to port 443 is refused so apps fall back from QUIC to TCP.
@@ -584,7 +582,6 @@ impl Backend {
             platform: PLATFORM,
             connection: connection.to_string(),
             connection_label: connection.to_string(),
-            service: StatusFact::new("Not used", None, "neutral"),
             core: if running {
                 StatusFact::new(
                     "Running",
@@ -624,7 +621,6 @@ impl Backend {
             script_runtime_configured: false,
             https_decryption_enabled: self.state.preferences.https_decryption,
             dark_theme: false,
-            runtime_mode: "desktop",
             routing_mode: self.state.routing_mode.as_str(),
             dns_preset: self.state.dns_preset.as_str(),
             block_quic: self.state.block_quic,
