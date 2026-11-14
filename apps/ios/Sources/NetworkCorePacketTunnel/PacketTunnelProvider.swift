@@ -246,6 +246,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     override func sleep(completionHandler: @escaping () -> Void) {
         events.record("device sleep")
         sleptAt = Date()
+        // Fewer timer wakes while the screen is off (iOS heat and battery).
+        trafficStats.setSleeping(true)
+        scriptEvents.setSleeping(true)
         completionHandler()
     }
 
@@ -255,6 +258,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let slept = sleptAt.map { Date().timeIntervalSince($0) } ?? 0
         sleptAt = nil
         events.record("device wake after \(Int(slept)) s")
+        trafficStats.setSleeping(false)
+        scriptEvents.setSleeping(false)
         resetEngine(NetworkRecovery.afterWake(sleptFor: slept), reason: "wake")
         scriptEvents.poll()
     }

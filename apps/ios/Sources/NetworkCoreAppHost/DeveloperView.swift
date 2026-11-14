@@ -139,6 +139,7 @@ struct DeveloperView: View {
                     UIPasteboard.general.string = report().text
                     copied = true
                 }
+                LogExportButton(tunnel: tunnel)
                 Button("关闭开发者模式", role: .destructive) {
                     developerMode = false
                     dismiss()

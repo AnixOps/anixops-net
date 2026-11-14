@@ -214,7 +214,7 @@ mod gui {
         report.push_str("\n--- client health ---\n");
         report.push_str(health);
 
-        let path = windows_managed_log_directory().join("diagnostics.txt");
+        let path = windows_managed_log_directory().join("diagnostics.log");
         write_managed_text_atomic(&path, &report).map_err(|error| error.to_string())?;
         Ok(path)
     }
