@@ -472,11 +472,9 @@ async fn export_capture(
     state: State<'_, AppState>,
     format: String,
     id: Option<u64>,
+    options: Option<desktop_mitm::capture::ExportOptions>,
 ) -> Result<SavedFile, String> {
-    let mut request = serde_json::json!({ "cmd": "export_capture", "format": format });
-    if let Some(id) = id {
-        request["id"] = serde_json::json!(id);
-    }
+    let request = desktop_mitm::capture::export_request(&format, id, options.unwrap_or_default());
     let answer = with_backend(&state, move |backend| backend.runtime_control(&request)).await?;
     let export = desktop_mitm::capture::Export::from_answer(&answer)?;
     let location = off_lock(move || save_export(&app, &export)).await?;
@@ -512,8 +510,8 @@ async fn replay_request(
     state: State<'_, AppState>,
     request: desktop_mitm::replay::ReplayRequest,
 ) -> Result<desktop_mitm::replay::ReplayResponse, String> {
-    let (proxy, root) = with_backend(&state, |backend| backend.replay_target()).await?;
-    off_lock(move || desktop_mitm::replay::send(proxy, root.as_deref(), &request)).await
+    let target = with_backend(&state, |backend| backend.replay_target()).await?;
+    off_lock(move || desktop_mitm::replay::send(&target, &request)).await
 }
 
 #[tauri::command]

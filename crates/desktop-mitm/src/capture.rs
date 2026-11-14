@@ -38,6 +38,37 @@ impl Export {
     }
 }
 
+/// What else an `export_capture` request may say: one exchange of the connection, the language of a `code`
+/// export, and whether cookies, tokens and passwords are masked (the engine masks them unless told not to).
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportOptions {
+    #[serde(default)]
+    pub exchange: Option<u64>,
+    #[serde(default)]
+    pub language: Option<String>,
+    #[serde(default)]
+    pub redact: Option<bool>,
+}
+
+/// The engine's `export_capture` request: everything captured, one connection (`id`) or one of its exchanges.
+pub fn export_request(format: &str, id: Option<u64>, options: ExportOptions) -> Value {
+    let mut request = serde_json::json!({ "cmd": "export_capture", "format": format });
+    if let Some(id) = id {
+        request["id"] = Value::from(id);
+        if let Some(exchange) = options.exchange {
+            request["exchange"] = Value::from(exchange);
+        }
+    }
+    if let Some(language) = options.language.filter(|language| !language.is_empty()) {
+        request["language"] = Value::from(language);
+    }
+    if let Some(redact) = options.redact {
+        request["redact"] = Value::from(redact);
+    }
+    request
+}
+
 /// `name` without directories or characters Windows refuses in file names.
 pub fn safe_file_name(name: &str) -> String {
     let base = name.rsplit(['/', '\\']).next().unwrap_or_default();
@@ -267,6 +298,33 @@ mod tests {
         assert_eq!(fs::read(&first).unwrap(), b"1");
         assert_eq!(fs::read(&second).unwrap(), b"2");
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn builds_export_requests() {
+        assert_eq!(
+            export_request("har", None, ExportOptions::default()),
+            serde_json::json!({ "cmd": "export_capture", "format": "har" })
+        );
+        let one = ExportOptions {
+            exchange: Some(2),
+            language: Some("go".to_string()),
+            redact: Some(false),
+        };
+        assert_eq!(
+            export_request("code", Some(7), one.clone()),
+            serde_json::json!({
+                "cmd": "export_capture", "format": "code", "id": 7, "exchange": 2,
+                "language": "go", "redact": false,
+            })
+        );
+        // An exchange means nothing without its connection.
+        assert_eq!(
+            export_request("curl", None, one),
+            serde_json::json!({
+                "cmd": "export_capture", "format": "curl", "language": "go", "redact": false,
+            })
+        );
     }
 
     #[test]

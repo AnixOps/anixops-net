@@ -223,7 +223,7 @@ fn linked(profile: &Value, other: &OtherSource) -> Option<Value> {
 /// Kernel control commands the client may send: reading traffic, connections and rule sets, closing
 /// connections, refreshing remote rule sets and packet capture. Mode and group changes go through the saved
 /// profile instead.
-const ACTIVITY_COMMANDS: [&str; 11] = [
+const ACTIVITY_COMMANDS: [&str; 12] = [
     "traffic",
     "connections",
     "close_connection",
@@ -235,6 +235,7 @@ const ACTIVITY_COMMANDS: [&str; 11] = [
     "clear_capture",
     "capture_connection",
     "export_capture",
+    "capture_requests",
 ];
 
 /// The request bytes for an activity page command, or why it is refused.
@@ -344,6 +345,18 @@ impl Engine {
     /// Answers one activity page request (see [`activity_request`]) while the engine runs.
     pub fn control(&self, request: &serde_json::Value) -> Result<serde_json::Value, String> {
         let request = activity_request(request)?;
+        let answer = self.control_bytes(&request)?;
+        serde_json::from_slice(&answer).map_err(|error| error.to_string())
+    }
+
+    /// The replay proxy's state (`start` none), or starts it afresh with HTTPS decryption on or off. Not one of the
+    /// window's activity commands: only the backend asks, and the credentials stay in it.
+    pub fn replay_proxy(&self, start: Option<bool>) -> Result<serde_json::Value, String> {
+        let request = match start {
+            None => serde_json::json!({ "cmd": "replay_proxy" }),
+            Some(decrypt) => serde_json::json!({ "cmd": "start_replay_proxy", "decrypt": decrypt }),
+        };
+        let request = serde_json::to_vec(&request).map_err(|error| error.to_string())?;
         let answer = self.control_bytes(&request)?;
         serde_json::from_slice(&answer).map_err(|error| error.to_string())
     }

@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, BadgeCheck, ChevronRight, CircleDot, ClipboardList, Download, FileCode, ListTree, RefreshCw, Search, Trash2, TriangleAlert, Unplug, X } from "lucide-react";
 import { useState } from "react";
-import { ConnectionSnapshot, desktop, RuntimeSnapshot } from "../bridge";
+import { CaptureRequest, ConnectionSnapshot, desktop, RuntimeSnapshot } from "../bridge";
 import { connectionDetail, connectionName, formatRate, matchesConnection } from "../activity-format";
 import { captureSummary } from "../capture-format";
 import { listPage, liveEngine, usePolling } from "../live";
@@ -8,6 +8,7 @@ import { formatBytes } from "../subscription-format";
 import { Card, EmptyState, IconButton, MoreMenu, Row, Run, Segmented, Switch } from "../ui";
 import { t } from "../i18n";
 import { CaptureDetail, exportCapture } from "./CaptureViews";
+import { RequestList } from "./RequestList";
 
 /** Session state and the connection list; debug mode ("Requests") puts the connections, with capture, first. */
 export function ActivityPage({ snapshot, busy, run, debug = false }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run; debug?: boolean }) {
@@ -15,9 +16,19 @@ export function ActivityPage({ snapshot, busy, run, debug = false }: { snapshot:
     ? [snapshot.subscriptionRefreshResult || t("等待中"), snapshot.subscriptionLastAttempt, snapshot.subscriptionRefreshErrorCode].filter(Boolean).join(" · ")
     : t("还没有自动更新记录");
 
-  const [detail, setDetail] = useState<ConnectionSnapshot | null>(null);
-  if (detail && liveEngine(snapshot)) {
-    return <CaptureDetail connection={detail} busy={busy} run={run} onBack={() => setDetail(null)} replayable={snapshot?.platform !== "android"} />;
+  const [detail, setDetail] = useState<{ connection: ConnectionSnapshot; exchange?: number } | null>(null);
+  const live = liveEngine(snapshot);
+  const [capture] = usePolling(desktop.captureStatus, debug && live);
+  if (detail && live) {
+    return (
+      <CaptureDetail
+        connection={detail.connection}
+        initialExchange={detail.exchange}
+        busy={busy}
+        run={run}
+        onBack={() => setDetail(null)}
+      />
+    );
   }
 
   const session = (
@@ -31,11 +42,12 @@ export function ActivityPage({ snapshot, busy, run, debug = false }: { snapshot:
       </Row>
     </Card>
   );
-  const connections = <Connections snapshot={snapshot} busy={busy} run={run} onOpen={setDetail} />;
+  const connections = <Connections snapshot={snapshot} busy={busy} run={run} onOpen={(connection) => setDetail({ connection })} />;
+  const requests = debug && live && <RequestList capturing={Boolean(capture?.enabled)} onOpen={(request) => setDetail(requestDetail(request))} />;
 
   return (
     <div className="page-stack">
-      {debug ? <>{connections}{session}</> : <>{session}{connections}</>}
+      {debug ? <>{requests}{connections}{session}</> : <>{session}{connections}</>}
     </div>
   );
 }
@@ -148,6 +160,27 @@ function Connections({ snapshot, busy, run, onOpen }: { snapshot: RuntimeSnapsho
         </>}
     </Card>
   );
+}
+
+/** What the capture view needs of a request's connection; it reads the rest from the engine. */
+function requestDetail(request: CaptureRequest): { connection: ConnectionSnapshot; exchange: number } {
+  return {
+    connection: {
+      id: request.connection_id,
+      network: "tcp",
+      host: request.host,
+      destination: request.host,
+      rule: "",
+      chain: [],
+      outbound: "",
+      started_at_ms: request.started_at_ms,
+      ended_at_ms: null,
+      upload: 0,
+      download: 0,
+      captured: true,
+    },
+    exchange: request.index,
+  };
 }
 
 /** One connection; one with captured bytes opens to show them. */

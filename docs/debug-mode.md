@@ -1,7 +1,7 @@
 # 调试模式（Apple 客户端）
 
 AnixOps Net 是一个 App 两种模式（计划 A3/A4）：**代理**按订阅规则分流；**调试网络**把抓包、HTTPS 解密、改写和重放放在首位，代理只是底座。
-本页记录 iOS / macOS（SwiftUI）的实现；Windows、Linux、Android（Tauri）按同一行为另做。
+本页记录 iOS / macOS（SwiftUI）的实现；Windows、Linux、Android（Tauri）的实现见文末「Tauri 客户端」。
 
 ## 两种模式
 
@@ -66,3 +66,17 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含 `debug-home-light`�
 ## 后续
 
 - 导出 cURL / 代码 / Postman / Insomnia（默认脱敏）和加密保存抓包会话（内核已支持：`export_capture` 新格式、`set_capture_storage` 等）。
+
+## Tauri 客户端（Windows / Linux / Android）
+
+同一套行为，共用 `apps/windows-gui/ui` 的界面和 `crates/desktop-mitm`。
+
+- **模式**：存储键为 `anixops.app-mode`（`proxy` / `debug`）和 `anixops.debug-exit`（`direct` / `node`），保存在 WebView 的 localStorage（`ui/src/mode.ts`）。首次选择、老用户直接用代理模式、导入节点后自动切到“经过节点”，都与 Apple 端一致。
+- **侧栏**：调试网络下是“请求 · 规则 · 扩展”，“出口”放在“设置”上方，订阅与节点都在出口里。Android 窄屏下侧栏变成底栏。
+- **直连出口**：后端命令 `set_direct_egress` 让引擎使用不含节点的 `{"outbound":{"type":"direct"}}` 配置。Linux、Android 和 Windows 桌面模式支持；Windows 服务模式仍经过选中的节点。
+- **请求列表**（`pages/RequestList.tsx`）：用 `capture_requests` 每秒增量读取，筛选框写的就是内核的过滤表达式。快速筛选（出错、JSON、图片、HTTP/2、大于 100 KB）会拼进表达式（`ui/src/capture-filter.ts`）。
+- **导出**：连接可以导出 pcapng / HAR，单条请求可以导出 cURL、五种语言的代码、Postman、Insomnia 或 HAR，都保存到“下载”文件夹。“遮盖 Cookie、令牌和密码”默认打开。
+- **重放**（`desktop_mitm::replay`）：
+  - 桌面经引擎的本机代理发出，Android 经内核的本机重放代理发出（`start_replay_proxy`，只监听 127.0.0.1，一次性 Basic 凭据，凭据只留在后端）。
+  - 不跟随重定向，不保存 Cookie，响应最多保留 1 MiB；开着 HTTPS 解密时会信任解密根证书。
+- **Map Local / Map Remote**（`desktop_mitm::mappings`）：存放在插件目录的 `debug-mappings.json`，格式与 Apple 端相同。`plugins::apply` 把生成的“AnixOps 调试映射”接在导入的插件后面。映射要开启 HTTPS 解密才生效，保存后正在运行的引擎会重新加载。

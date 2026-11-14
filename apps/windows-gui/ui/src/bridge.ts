@@ -178,7 +178,47 @@ export interface CaptureConnection {
   http: CaptureExchange[];
 }
 
-export type CaptureFormat = "pcapng" | "har";
+export type CaptureFormat = "pcapng" | "har" | "curl" | "code" | "postman" | "insomnia";
+
+/** The language of a `code` export. */
+export type CodeLanguage = "python" | "javascript" | "swift" | "kotlin" | "go";
+
+export interface ExportOptions {
+  /** One exchange of the connection (its index in `http`); needs the connection id. */
+  exchange?: number;
+  language?: CodeLanguage;
+  /** Mask cookies, tokens and passwords; the engine does unless this is false. */
+  redact?: boolean;
+}
+
+/** One decrypted request in the engine's request list (`capture_requests`). */
+export interface CaptureRequest {
+  /** Rises with every request; the list is read again from the last one seen. */
+  seq: number;
+  connection_id: number;
+  /** Its place in the connection's `http` list. */
+  index: number;
+  method: string;
+  url: string;
+  host: string;
+  status?: number | null;
+  note?: string | null;
+  http_version: string;
+  started_at_ms: number;
+  ended_at_ms?: number | null;
+  request_size: number;
+  response_size: number;
+  response_content_type?: string | null;
+}
+
+export interface CaptureRequestsAnswer {
+  requests?: CaptureRequest[];
+  last_seq?: number;
+  /** Requests below this were pushed out of the capture budget. */
+  dropped_before_seq?: number;
+  /** `invalid_filter` with the character position of the mistake. */
+  error?: { code: string; at?: number; message?: string };
+}
 
 /** An edited copy of a captured request, sent again through the local proxy. */
 export interface ReplayRequest {
@@ -360,8 +400,12 @@ export const desktop = {
   captureConnection: (id: number) =>
     invoke<{ capture: CaptureConnection | null }>("runtime_control", { request: { cmd: "capture_connection", id } }),
   /** Saves the export to Downloads (one connection with `id`) and answers where it went. */
-  exportCapture: (format: CaptureFormat, id?: number) => invoke<{ location: string }>("export_capture", { format, id }),
-  /** Sends a request through the local proxy without following redirects; not on Android. */
+  exportCapture: (format: CaptureFormat, id?: number, options?: ExportOptions) =>
+    invoke<{ location: string }>("export_capture", { format, id, options }),
+  /** Decrypted requests after `since`, the newest last; `filter` is the engine's filter expression. */
+  captureRequests: (since: number, filter: string) =>
+    invoke<CaptureRequestsAnswer>("runtime_control", { request: { cmd: "capture_requests", since_seq: since, limit: 2000, ...(filter ? { filter } : {}) } }),
+  /** Sends a request through the engine (its local proxy, or the replay proxy on Android) without following redirects. */
   replayRequest: (request: ReplayRequest) => invoke<ReplayResponse>("replay_request", { request }),
   debugMappings: () => invoke<DebugMapping[]>("list_debug_mappings"),
   saveDebugMapping: (entry: DebugMapping) => invoke<OperationResult>("save_debug_mapping", { entry }),

@@ -917,7 +917,12 @@ async fn replay_request(
             .native_mitm
             .filter(|mitm| mitm.enabled)
             .and_then(|mitm| fs::read_to_string(mitm.ca_certificate_path).ok());
-        desktop_mitm::replay::send(proxy, root.as_deref(), &request)
+        let target = desktop_mitm::replay::Target {
+            proxy,
+            credentials: None,
+            root_pem: root,
+        };
+        desktop_mitm::replay::send(&target, &request)
     })
     .await
 }
@@ -935,14 +940,13 @@ struct SavedFile {
 async fn export_capture(
     format: String,
     id: Option<u64>,
+    options: Option<desktop_mitm::capture::ExportOptions>,
     state: State<'_, DesktopAppState>,
 ) -> Result<SavedFile, String> {
     let state = state.inner().clone();
     run_blocking(move || {
-        let mut request = json!({ "cmd": "export_capture", "format": format });
-        if let Some(id) = id {
-            request["id"] = json!(id);
-        }
+        let request =
+            desktop_mitm::capture::export_request(&format, id, options.unwrap_or_default());
         let request = connection::activity_request(&request)?;
         let answer = state
             .direct_core

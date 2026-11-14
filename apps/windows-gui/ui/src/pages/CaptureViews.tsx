@@ -1,18 +1,18 @@
 import { ArrowDownLeft, ArrowUpRight, ChevronLeft, Copy, Download, FileCode, FileSearch, Lock, Network, RotateCw } from "lucide-react";
 import { ReactNode, useEffect, useMemo, useState } from "react";
-import { CaptureChunk, CaptureConnection, CaptureExchange, CaptureFormat, CaptureMessage, ConnectionSnapshot, DebugMapping, desktop } from "../bridge";
+import { CaptureChunk, CaptureConnection, CaptureExchange, CaptureFormat, CaptureMessage, CodeLanguage, ConnectionSnapshot, DebugMapping, desktop, ExportOptions } from "../bridge";
 import { connectionName } from "../activity-format";
 import { asText, bodySize, decodedBody, directionTotals, durationMs, fromBase64, header, hexDump, looksLikeTls, noteText, timeOfDay } from "../capture-format";
 import { usePageVisible } from "../live";
 import { formatBytes } from "../subscription-format";
-import { Card, EmptyState, IconButton, MoreMenu, Row, Run, Segmented } from "../ui";
+import { Card, EmptyState, IconButton, MoreMenu, Row, Run, Segmented, ToggleRow } from "../ui";
 import { t } from "../i18n";
 import { mappingFromExchange, MappingEditor, ReplayEditor } from "./DebugTools";
 
 /** Saves an export to Downloads and shows where it went. */
-export function exportCapture(run: Run, format: CaptureFormat, id?: number) {
+export function exportCapture(run: Run, format: CaptureFormat, id?: number, options?: ExportOptions) {
   void run(`export-${format}`, async () => {
-    const saved = await desktop.exportCapture(format, id);
+    const saved = await desktop.exportCapture(format, id, options);
     return { message: t("已保存到 {location}", { location: saved.location }) };
   });
 }
@@ -30,17 +30,18 @@ export function BackBar({ label, onBack }: { label: string; onBack: () => void }
  * What capture kept of one connection: the decrypted HTTP requests and the raw bytes each way, with exports of this
  * connection alone. Read again every two seconds while the connection is open.
  */
-export function CaptureDetail({ connection, busy, run, onBack, replayable }: {
+export function CaptureDetail({ connection, busy, run, onBack, initialExchange }: {
   connection: ConnectionSnapshot;
+  /** Opens straight on this request of the connection (from the request list). */
+  initialExchange?: number;
   busy: string | null;
   run: Run;
   onBack: () => void;
-  /** Whether replay can go through a local proxy (not on Android). */
-  replayable: boolean;
 }) {
   const [capture, setCapture] = useState<CaptureConnection | null>(null);
   const [state, setState] = useState<"loading" | "loaded" | "unreachable">("loading");
-  const [exchange, setExchange] = useState<number | null>(null);
+  const [exchange, setExchange] = useState<number | null>(initialExchange ?? null);
+  const [redact, setRedact] = useState(true);
   const [tool, setTool] = useState<{ replay: CaptureExchange } | { mapping: DebugMapping } | null>(null);
   const visible = usePageVisible();
   const open = connection.ended_at_ms == null;
@@ -76,8 +77,9 @@ export function CaptureDetail({ connection, busy, run, onBack, replayable }: {
       <ExchangeDetail
         exchange={item}
         onBack={() => setExchange(null)}
+        exportCard={<ExchangeExport busy={busy} run={run} id={connection.id} index={exchange} redact={redact} onRedact={setRedact} />}
         actions={<>
-          {replayable && <button className="secondary compact" disabled={Boolean(busy)} onClick={() => setTool({ replay: item })}><RotateCw size={14} />{t("重放")}</button>}
+          <button className="secondary compact" disabled={Boolean(busy)} onClick={() => setTool({ replay: item })}><RotateCw size={14} />{t("重放")}</button>
           <MoreMenu
             label={t("更多")}
             disabled={Boolean(busy)}
@@ -142,13 +144,14 @@ export function CaptureDetail({ connection, busy, run, onBack, replayable }: {
 
       <Card title={t("导出")} description={t("pcapng 可用 Wireshark 打开，HAR 可导入浏览器开发者工具、Charles 或 Proxyman。导出内容可能包含账号、Cookie 等敏感信息，请只发给信任的人。")}>
         <Row icon={Download} color="indigo" label={t("导出 pcapng")} hint={t("保存到“下载”文件夹")}>
-          <button className="secondary compact" disabled={Boolean(busy)} onClick={() => exportCapture(run, "pcapng", connection.id)}>{t("导出")}</button>
+          <button className="secondary compact" disabled={Boolean(busy)} onClick={() => exportCapture(run, "pcapng", connection.id, { redact })}>{t("导出")}</button>
         </Row>
         {capture.http.length > 0 && (
           <Row icon={FileCode} color="purple" label={t("导出 HAR")} hint={t("保存到“下载”文件夹")}>
-            <button className="secondary compact" disabled={Boolean(busy)} onClick={() => exportCapture(run, "har", connection.id)}>{t("导出")}</button>
+            <button className="secondary compact" disabled={Boolean(busy)} onClick={() => exportCapture(run, "har", connection.id, { redact })}>{t("导出")}</button>
           </Row>
         )}
+        <RedactRow redact={redact} onRedact={setRedact} />
       </Card>
     </div>
   );
@@ -213,7 +216,7 @@ export function BytesView({ bytes, caption }: { bytes: Uint8Array; caption?: str
 }
 
 /** One decrypted request and its response: headers, and bodies decompressed when they say gzip or deflate. */
-function ExchangeDetail({ exchange, onBack, actions }: { exchange: CaptureExchange; onBack: () => void; actions?: ReactNode }) {
+function ExchangeDetail({ exchange, onBack, actions, exportCard }: { exchange: CaptureExchange; onBack: () => void; actions?: ReactNode; exportCard?: ReactNode }) {
   const took = durationMs(exchange.started_at_ms, exchange.ended_at_ms);
   const note = noteText(exchange.note);
   return (
@@ -228,7 +231,66 @@ function ExchangeDetail({ exchange, onBack, actions }: { exchange: CaptureExchan
       </Card>
       <MessageView title={t("请求")} message={exchange.request} />
       {exchange.status != null && <MessageView title={t("响应")} message={exchange.response} />}
+      {exportCard}
     </div>
+  );
+}
+
+/** Masking applies to every export; on unless the user turns it off for this view. */
+function RedactRow({ redact, onRedact }: { redact: boolean; onRedact: (redact: boolean) => void }) {
+  return (
+    <ToggleRow
+      icon={Lock}
+      color="green"
+      label={t("遮盖 Cookie、令牌和密码")}
+      hint={t("导出的文件里把这些值换成 <redacted>")}
+      checked={redact}
+      onChange={() => onRedact(!redact)}
+    />
+  );
+}
+
+type ExchangeFormat = "curl" | CodeLanguage | "postman" | "insomnia" | "har";
+
+const exchangeFormats: Array<{ value: ExchangeFormat; label: string }> = [
+  { value: "curl", label: "cURL" },
+  { value: "python", label: "Python (requests)" },
+  { value: "javascript", label: "JavaScript (fetch)" },
+  { value: "swift", label: "Swift (URLSession)" },
+  { value: "kotlin", label: "Kotlin (OkHttp)" },
+  { value: "go", label: "Go (net/http)" },
+  { value: "postman", label: "Postman" },
+  { value: "insomnia", label: "Insomnia" },
+  { value: "har", label: "HAR" },
+];
+
+/** Exports this one request as a command, code, or a collection for an API tool. */
+function ExchangeExport({ busy, run, id, index, redact, onRedact }: {
+  busy: string | null;
+  run: Run;
+  id: number;
+  index: number;
+  redact: boolean;
+  onRedact: (redact: boolean) => void;
+}) {
+  const [format, setFormat] = useState<ExchangeFormat>("curl");
+  const save = () => {
+    if (format === "curl" || format === "postman" || format === "insomnia" || format === "har") {
+      exportCapture(run, format, id, { exchange: index, redact });
+    } else {
+      exportCapture(run, "code", id, { exchange: index, redact, language: format });
+    }
+  };
+  return (
+    <Card title={t("导出这条请求")} description={t("保存到“下载”文件夹。导出内容可能包含账号等敏感信息，请只发给信任的人。")}>
+      <Row icon={FileCode} color="purple" label={t("格式")}>
+        <select className="pop-up" aria-label={t("导出格式")} value={format} onChange={(event) => setFormat(event.target.value as ExchangeFormat)}>
+          {exchangeFormats.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </select>
+        <button className="secondary compact" disabled={Boolean(busy)} onClick={save}>{t("导出")}</button>
+      </Row>
+      <RedactRow redact={redact} onRedact={onRedact} />
+    </Card>
   );
 }
 
