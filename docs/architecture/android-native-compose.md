@@ -79,14 +79,17 @@ Kotlin 单元测试检查数据类能无损解析同一批样例，命令新增�
 
 ### 4. 界面逻辑从 TypeScript 移到哪里
 
-| 逻辑 | 去处 | 理由 |
-|---|---|---|
-| 抓包筛选表达式、请求表格排序 | Kotlin，用共享样例测试 | 输入即时响应，不值得每次过 JNI |
-| `anixops://` 链接解析 | Kotlin，用共享样例测试 | 在 Activity 收到 Intent 时就要解析 |
-| 节点筛选、标签格式化、流量与速率格式化 | Kotlin | 纯展示 |
-| 节点表单校验 | 已在 Rust（`node-edits`），界面只显示错误 | — |
+原生界面会有 Kotlin（安卓）、C#（Windows）、Rust（Linux）几套（见线程「规划 Windows 和 Linux 原生客户端」），所以有行为的
+界面逻辑在 Rust 里写一次，放进共用的 `client-view`，作为 `Client::invoke` 的命令暴露，各端调用，共享样例只测一份：
 
-共享样例放在 `apps/windows-gui/ui/test-vectors/`（JSON），vitest 和 JUnit 都读同一份，防止两边行为漂移。
+| 逻辑 | 去处 |
+|---|---|
+| 抓包筛选表达式、请求表格排序与筛选、节点筛选 | `client-view`（Rust 命令） |
+| `anixops://` 链接解析 | `client-view`（Rust 命令） |
+| 节点表单校验 | 已在 Rust（`node-edits`） |
+| 字节、速率、时长、日期的显示格式 | 各端用平台的区域设置格式化（安卓 `Formatter` / `DateFormat`） |
+
+JNI 一次调用是微秒级，筛选在 Rust 里做不比 Kotlin 慢。`client-view` 由先需要它的线程建，建好后安卓直接调用。
 
 ### 5. 导航与页面
 
@@ -114,8 +117,9 @@ Kotlin 单元测试检查数据类能无损解析同一批样例，命令新增�
 
 ### 7. 文案与语言
 
-简体（默认）、繁体、英文三套 `strings.xml`（`values`、`values-zh-rTW`、`values-en`），由 `i18n-en.ts` /
-`i18n-zh-hant.ts` 首次移植；Android Lint 的 `MissingTranslation` 设为错误。
+简体（默认）、繁体、英文三种语言，文案用单一来源生成各端格式（安卓 `strings.xml`，Windows `.resw`，Linux gettext，
+Tauri 的 TS 表），与原生 Windows / Linux 方案共用。现在 TS 表以简体原文为 key，迁移时换成稳定 id。
+安卓侧 Android Lint 的 `MissingTranslation` 设为错误。
 
 ### 8. 构建、测试与截图基线
 
