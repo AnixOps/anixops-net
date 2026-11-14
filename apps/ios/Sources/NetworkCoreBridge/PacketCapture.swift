@@ -92,6 +92,8 @@ public enum PacketCapture {
             }
         }
 
+        /// The request list's row number (`capture_requests`); nil from kernels before it.
+        public let seq: UInt64?
         public let startedAt: Date
         public let endedAt: Date?
         public let method: String
@@ -106,11 +108,12 @@ public enum PacketCapture {
         enum CodingKeys: String, CodingKey {
             case startedAtMs = "started_at_ms"
             case endedAtMs = "ended_at_ms"
-            case method, url, status, note, request, response
+            case seq, method, url, status, note, request, response
         }
 
         public init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
+            seq = try container.decodeIfPresent(UInt64.self, forKey: .seq)
             startedAt = PacketCapture.date(try container.decode(UInt64.self, forKey: .startedAtMs))
             endedAt = try container.decodeIfPresent(UInt64.self, forKey: .endedAtMs).map(PacketCapture.date)
             method = try container.decode(String.self, forKey: .method)

@@ -523,3 +523,39 @@ private enum Pasteboard {
         #endif
     }
 }
+
+/// One row of the HTTP request list opened: reads its connection's capture and shows the exchange, found by its
+/// `seq` (its place in the connection as a fallback).
+struct CapturedRequestView: View {
+    var tunnel: TunnelController
+    let row: PacketCapture.RequestRow
+    @Environment(\.brand) private var brand
+    @State private var exchange: PacketCapture.Exchange?
+    @State private var loaded = false
+
+    var body: some View {
+        Group {
+            if let exchange {
+                HttpExchangeView(tunnel: tunnel, exchange: exchange)
+            } else {
+                List {
+                    Text(loaded ? "这个请求已被更新的抓包挤出（抓包内存有上限），或抓包已清空。" : "正在读取…")
+                        .foregroundStyle(brand.text2)
+                        .listRowBackground(brand.surface)
+                }
+                .scrollContentBackground(.hidden)
+                .background(brand.bg.ignoresSafeArea())
+                .navigationTitle("\(row.method) \(row.status.map { String($0) } ?? "")")
+                .inlineNavigationTitle()
+            }
+        }
+        .task {
+            let data = await tunnel.control(.captureConnection(row.connectionID))
+            if let capture = RuntimeControl.decode(PacketCapture.ConnectionAnswer.self, from: data)?.capture {
+                exchange = capture.http.first { $0.seq == row.seq }
+                    ?? (capture.http.indices.contains(row.index) && capture.http[row.index].seq == nil ? capture.http[row.index] : nil)
+            }
+            loaded = true
+        }
+    }
+}

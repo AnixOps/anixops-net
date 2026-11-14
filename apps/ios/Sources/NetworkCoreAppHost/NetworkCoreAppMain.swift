@@ -258,7 +258,7 @@ struct RootView: View {
             HomeView(tunnel: tunnel, tab: $tab, importing: $importing)
         case .requests:
             NavigationStack {
-                ConnectionsView(tunnel: tunnel)
+                CaptureRequestsView(tunnel: tunnel)
             }
         case .proxies:
             ProxiesView(tunnel: tunnel, importing: $importing)
