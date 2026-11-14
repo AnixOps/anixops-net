@@ -293,7 +293,9 @@ export function RequestInspector({ request, busy, run, onBack, replayAsked, onRe
     return (
       <div className="page-stack">
         {onBack && <BackBar label={t("请求")} onBack={onBack} />}
-        <Card title={`${request.method} ${request.host}`}><EmptyState icon={FileSearch} title={t("抓包内容")} message={message} /></Card>
+        <Card title={`${request.method} ${request.host}`}>
+          <EmptyState icon={FileSearch} title={t("抓包内容")} message={message} />
+        </Card>
       </div>
     );
   }
