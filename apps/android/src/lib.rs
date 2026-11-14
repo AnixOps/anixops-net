@@ -83,7 +83,10 @@ mod android {
         let host = Host {
             executable: std::env::current_exe().unwrap_or_else(|_| dir.clone()),
             dir,
-            plugins: vec![tauri_plugin_anixops_vpn::init()],
+            plugins: vec![
+                tauri_plugin_anixops_vpn::init(),
+                tauri_plugin_barcode_scanner::init(),
+            ],
             tunnel: Some(Box::new(VpnHost)),
         };
         if let Err(error) = app::run(tauri::generate_context!(), host) {

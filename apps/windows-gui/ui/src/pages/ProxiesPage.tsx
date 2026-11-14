@@ -1,6 +1,7 @@
-import { Activity, Bot, Check, CloudDownload, FileText, Gauge, Globe, Layers, Pencil, Plus, RefreshCw, Route, Search, Share2, Trash2, X, Zap } from "lucide-react";
+import { Activity, Bot, Check, CloudDownload, FileText, Gauge, Globe, Layers, Pencil, Plus, RefreshCw, Route, ScanLine, Search, Share2, Trash2, X, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { desktop, inProcessEngine, NativeGroupSummary, NodeDelay, NodeForm, NodeSummary, RuntimeSnapshot, SubscriptionSummary } from "../bridge";
 import { memberNode } from "../dashboard";
 import { groupMemberLabel, protocolAbbreviation } from "../labels";
@@ -9,6 +10,7 @@ import { nodeFormProblem } from "../node-form";
 import { Card, EmptyState, Field, IconButton, MenuItem, MoreMenu, PageTools, Panel, Row, Run, Segmented, StatusPill, Tile, TileColor } from "../ui";
 import type { DebugExit } from "../mode";
 import { t } from "../i18n";
+import { cancelQrScan, scanQrCode } from "../qr-scan";
 import { formatBytes, formatDay, updateIntervalChoices, updateIntervalLabel, usedFraction } from "../subscription-format";
 import type { Delays, SetDelays } from "./HomePage";
 
@@ -399,6 +401,22 @@ function Subscriptions({ snapshot, sources, refreshSources, empty, busy, run, pe
     return result;
   });
 
+  // Android scans a subscription or share link QR code into the field; "导入" then saves it, as with a pasted link.
+  const android = snapshot?.platform === "android";
+  const [scanning, setScanning] = useState(false);
+  const scan = () => void run("scan", async () => {
+    setScanning(true);
+    try {
+      const outcome = await scanQrCode();
+      if ("denied" in outcome) return { message: t("没有相机权限，请在系统设置里允许本应用使用相机") };
+      if ("cancelled" in outcome) return { message: t("已取消扫码") };
+      setLocation(outcome.content);
+      return { message: t("已识别二维码，核对后点“导入”") };
+    } finally {
+      setScanning(false);
+    }
+  });
+
   const refreshDetail = snapshot?.subscriptionError
     ?? (snapshot?.subscriptionLastAttempt
       ? [
@@ -419,7 +437,16 @@ function Subscriptions({ snapshot, sources, refreshSources, empty, busy, run, pe
         onChange={(event) => setLocation(event.target.value)}
         onKeyDown={(event) => { if (event.key === "Enter" && location.trim() && !busy) importSource(); }}
       />
+      {android && <button className="secondary" disabled={Boolean(busy)} onClick={scan}><ScanLine size={14} />{t("扫码")}</button>}
       <button className="primary" disabled={Boolean(busy) || !location.trim()} onClick={importSource}><CloudDownload size={14} />{t("导入")}</button>
+      {scanning && createPortal(
+        <div className="qr-scan-overlay" role="dialog" aria-label={t("扫描二维码")}>
+          <div className="qr-scan-frame" />
+          <p>{t("把订阅或节点的二维码放进框内")}</p>
+          <button className="secondary" onClick={() => void cancelQrScan().catch(() => undefined)}>{t("取消")}</button>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 
