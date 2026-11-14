@@ -24,12 +24,14 @@ struct ExtensionsView: View {
                     Text("解密 HTTPS 需要先在本机生成并信任一张根证书。证书和私钥只保存在本机钥匙串。")
                 }
 
+                DecryptHostsSection(tunnel: tunnel)
                 PluginsSection(tunnel: tunnel, model: plugins)
                 MappingsSection(tunnel: tunnel)
             }
             .scrollContentBackground(.hidden)
             .background(brand.bg.ignoresSafeArea())
-            .navigationTitle("扩展")
+            // Debug mode calls the same page "改写" (the user's choice, 2026-11-14).
+            .navigationTitle(tunnel.appMode == .debug ? "改写" : "扩展")
             .brandBars(brand)
         }
     }

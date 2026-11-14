@@ -338,9 +338,9 @@ pub fn apply(directory: &Path, mitm: &mut Map<String, Value>) {
             }
         }
     }
-    if let Some(text) = crate::mappings::list(directory)
+    if let Some(text) = crate::mappings::load(directory)
         .ok()
-        .and_then(|entries| crate::mappings::plugin_text(&entries))
+        .and_then(|stored| crate::mappings::plugin_text(&stored.entries, &stored.hosts))
     {
         texts.push(Value::String(text));
     }

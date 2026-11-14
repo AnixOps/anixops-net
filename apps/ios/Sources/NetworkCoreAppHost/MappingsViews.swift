@@ -379,3 +379,251 @@ struct MappingEditor: View {
         }
     }
 }
+
+/// The extensions page's link to the decrypted domains, with how many the list has. HTTPS decryption is per domain
+/// (the user's choice, 2026-11-14): this list, the plugins' `[MITM]` and the mappings' hosts.
+struct DecryptHostsSection: View {
+    var tunnel: TunnelController
+    @Environment(\.brand) private var brand
+
+    var body: some View {
+        Section {
+            NavigationLink {
+                DecryptHostsView(tunnel: tunnel)
+            } label: {
+                LabeledContent {
+                    Text(summary)
+                } label: {
+                    Label("解密域名", systemImage: "globe")
+                }
+            }
+            .listRowBackground(brand.surface)
+        } footer: {
+            Text("只解密这里、插件和映射里列出的域名，其余 HTTPS 原样转发。也可以在加密连接的详情里点“解密此域名”。")
+        }
+    }
+
+    private var summary: String {
+        let count = tunnel.debugMappings.hosts.count
+        return count == 0 ? String(localized: "未添加") : String(localized: "\(count) 个域名")
+    }
+}
+
+/// The domains decrypted besides the plugins' and the mappings': type one to add it, swipe or the row menu to stop
+/// decrypting it. Saved with the mappings (`debug-mappings.json`); a running tunnel reconnects.
+struct DecryptHostsView: View {
+    var tunnel: TunnelController
+    @Environment(\.brand) private var brand
+    @State private var typed = ""
+    @State private var failure: String?
+
+    private var hosts: [String] {
+        tunnel.debugMappings.hosts
+    }
+
+    var body: some View {
+        List {
+            Section {
+                HStack(spacing: 10) {
+                    TextField("api.example.com 或 *.example.com", text: $typed)
+                        .autocorrectionDisabled()
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                        #endif
+                        .onSubmit(add)
+                    Button("添加", action: add)
+                        .disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                if let failure {
+                    Text(failure)
+                        .font(.footnote)
+                        .foregroundStyle(brand.danger)
+                }
+            } footer: {
+                Text("写 *.example.com 包含它的所有子域名。需要先信任 HTTPS 解密证书，保存后连接中的隧道会自动重连。")
+            }
+            .listRowBackground(brand.surface)
+
+            Section {
+                if hosts.isEmpty {
+                    Text("还没有域名。也可以在加密连接的详情里点“解密此域名”。")
+                        .font(.subheadline)
+                        .foregroundStyle(brand.text2)
+                }
+                ForEach(hosts, id: \.self) { host in
+                    Text(verbatim: host)
+                        .font(.body.monospaced())
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                commit(tunnel.debugMappings.removingHost(host))
+                            } label: {
+                                Label("不再解密", systemImage: "lock")
+                            }
+                        }
+                }
+                .onDelete { offsets in
+                    var next = tunnel.debugMappings
+                    for host in offsets.map({ hosts[$0] }) {
+                        next = next.removingHost(host)
+                    }
+                    commit(next)
+                }
+            }
+            .listRowBackground(brand.surface)
+        }
+        .scrollContentBackground(.hidden)
+        .background(brand.bg.ignoresSafeArea())
+        .navigationTitle("解密域名")
+        .inlineNavigationTitle()
+    }
+
+    private func add() {
+        do {
+            let next = try tunnel.debugMappings.addingHost(typed)
+            failure = nil
+            typed = ""
+            commit(next)
+        } catch let error as DebugMappingsError {
+            failure = error.message
+        } catch {
+            failure = String(localized: "无法保存映射")
+        }
+    }
+
+    private func commit(_ next: DebugMappings) {
+        guard next != tunnel.debugMappings else {
+            return
+        }
+        Task {
+            await tunnel.applyDebugMappings(next)
+        }
+    }
+}
+
+/// Debug mode's first-use checklist (the user's choice, 2026-11-14): what is still missing before HTTPS requests show
+/// up, in order. Shown in the request list's empty state until nothing is missing.
+struct DebugSetupChecklist: View {
+    var tunnel: TunnelController
+    let capturing: Bool
+    @Environment(\.brand) private var brand
+    @State private var trusted: Bool?
+    @State private var pluginDomains = 0
+
+    enum Step: CaseIterable {
+        case connect, certificate, domains, capture
+    }
+
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        let pending = pendingSteps
+        Group {
+            if !pending.isEmpty {
+                card(pending)
+            }
+        }
+        .task(id: tunnel.debugMappings) {
+            refresh()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Trust usually changes in Settings or Keychain Access, away from the app.
+            if phase == .active {
+                refresh()
+            }
+        }
+    }
+
+    private func card(_ pending: [Step]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("抓 HTTPS 请求前还差 \(pending.count) 步")
+                .font(.headline)
+                .foregroundStyle(brand.text)
+            ForEach(Step.allCases, id: \.self) { step in
+                row(step, done: !pending.contains(step))
+            }
+            Text("明文 HTTP 请求不需要这些步骤，抓包开始后就会列出。")
+                .font(.footnote)
+                .foregroundStyle(brand.text2)
+        }
+        .padding(14)
+        .frame(maxWidth: 520, alignment: .leading)
+        .background(brand.surface, in: RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous))
+    }
+
+    private var pendingSteps: [Step] {
+        var steps: [Step] = []
+        if tunnel.connection != .connected {
+            steps.append(.connect)
+        }
+        if trusted == false {
+            steps.append(.certificate)
+        }
+        if domainCount == 0 {
+            steps.append(.domains)
+        }
+        if !capturing {
+            steps.append(.capture)
+        }
+        return steps
+    }
+
+    /// The list's domains, the active mappings' hosts and the enabled plugins' `[MITM]` hosts.
+    private var domainCount: Int {
+        let mappings = tunnel.debugMappings
+        return mappings.hosts.count + mappings.active.compactMap(\.host).count + pluginDomains
+    }
+
+    private func refresh() {
+        trusted = (try? MitmCertificateStore.load())?.trustState() == .trusted
+        let library = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)) ?? MitmPluginLibrary()
+        pluginDomains = library.isEnabled
+            ? library.plugins.filter(\.isEnabled).reduce(0) { $0 + $1.summary.hostnames.count }
+            : 0
+    }
+
+    private func row(_ step: Step, done: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: done ? "checkmark.circle.fill" : Self.symbol(step))
+                .foregroundStyle(done ? brand.success : brand.primary)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(Self.title(step))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(done ? brand.text2 : brand.text)
+                if !done {
+                    Text(Self.hint(step))
+                        .font(.footnote)
+                        .foregroundStyle(brand.text2)
+                }
+            }
+        }
+    }
+
+    private static func symbol(_ step: Step) -> String {
+        switch step {
+        case .connect: "power"
+        case .certificate: "lock.shield"
+        case .domains: "globe"
+        case .capture: "record.circle"
+        }
+    }
+
+    private static func title(_ step: Step) -> LocalizedStringKey {
+        switch step {
+        case .connect: "连接"
+        case .certificate: "信任根证书"
+        case .domains: "添加要解密的域名"
+        case .capture: "开始抓包"
+        }
+    }
+
+    private static func hint(_ step: Step) -> LocalizedStringKey {
+        switch step {
+        case .connect: "用连接开关连接。调试模式默认直连，不需要节点。"
+        case .certificate: "在 改写 › HTTPS 解密证书 生成并信任，只需一次。"
+        case .domains: "在 改写 › 解密域名 添加，或在加密连接的详情里点“解密此域名”。"
+        case .capture: "开始后，新的请求会逐条出现在这里。"
+        }
+    }
+}

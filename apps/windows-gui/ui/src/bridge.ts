@@ -516,6 +516,10 @@ export const desktop = {
   debugMappings: () => invoke<DebugMapping[]>("list_debug_mappings"),
   saveDebugMapping: (entry: DebugMapping) => invoke<OperationResult>("save_debug_mapping", { entry }),
   removeDebugMapping: (id: string) => invoke<OperationResult>("remove_debug_mapping", { id }),
+  /** The domains decryption was turned on for one by one (kept with the mappings, `debug-mappings.json`). */
+  decryptHosts: () => invoke<string[]>("list_decrypt_hosts"),
+  addDecryptHost: (host: string) => invoke<OperationResult>("add_decrypt_host", { host }),
+  removeDecryptHost: (host: string) => invoke<OperationResult>("remove_decrypt_host", { host }),
   testDelay: (nodeId: string, url: string) =>
     invoke<OperationResult>("test_node_delay", { nodeId, url }),
   /** Tests each node on its own and reports every result; failures do not reject. */

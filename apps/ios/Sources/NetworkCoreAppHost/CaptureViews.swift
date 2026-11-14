@@ -126,6 +126,40 @@ struct CaptureDetailView: View {
     @State private var capture: PacketCapture.Connection?
     @State private var loaded = false
     @State private var unreachable = false
+    @State private var decryptFailure: String?
+
+    /// The connection's domain while the decrypted-domain list does not cover it; nil for an address or a covered one.
+    private var undecryptedHost: String? {
+        guard let host = connection.host.flatMap(DebugMappings.normalizeHost), !tunnel.debugMappings.decrypts(host) else {
+            return nil
+        }
+        return host
+    }
+
+    private var encryptedNote: LocalizedStringKey {
+        guard let host = connection.host.flatMap(DebugMappings.normalizeHost) else {
+            return "这是加密的 TLS 数据。目标是 IP 地址，没有域名可以解密。"
+        }
+        if tunnel.debugMappings.decrypts(host) {
+            return "这是加密的 TLS 数据。这个域名已在解密列表里，新的连接会被解密；请确认已信任 HTTPS 解密证书。"
+        }
+        return "这是加密的 TLS 数据。点“解密此域名”后，新的连接会被解密（需要先信任 HTTPS 解密证书）。"
+    }
+
+    /// Adds the connection's domain to the decrypted-domain list; a running tunnel reconnects.
+    private func decrypt(_ host: String) {
+        let next: DebugMappings
+        do {
+            next = try tunnel.debugMappings.addingHost(host)
+        } catch {
+            decryptFailure = (error as? DebugMappingsError)?.message ?? String(localized: "无法保存映射")
+            return
+        }
+        decryptFailure = nil
+        Task {
+            await tunnel.applyDebugMappings(next)
+        }
+    }
 
     var body: some View {
         List {
@@ -154,6 +188,13 @@ struct CaptureDetailView: View {
                 }
                 if !capture.chunks.isEmpty {
                     Section {
+                        if capture.looksLikeTLS, let host = undecryptedHost {
+                            Button {
+                                decrypt(host)
+                            } label: {
+                                Label("解密此域名", systemImage: "lock.open")
+                            }
+                        }
                         ForEach(Array(capture.chunks.enumerated()), id: \.offset) { _, chunk in
                             NavigationLink {
                                 ChunkView(chunk: chunk, network: capture.network)
@@ -164,8 +205,11 @@ struct CaptureDetailView: View {
                     } header: {
                         Text(capture.network == "udp" ? "数据报" : "数据")
                     } footer: {
-                        if capture.looksLikeTLS {
-                            Text("这是加密的 TLS 数据。要看到 HTTPS 明文，请在扩展里为这个域名启用 HTTPS 解密（MITM），并信任证书。")
+                        if let decryptFailure {
+                            Text(decryptFailure)
+                                .foregroundStyle(brand.danger)
+                        } else if capture.looksLikeTLS {
+                            Text(encryptedNote)
                         }
                     }
                     .listRowBackground(brand.surface)

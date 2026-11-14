@@ -1361,6 +1361,36 @@ async fn remove_debug_mapping(
     .await
 }
 
+#[tauri::command]
+async fn list_decrypt_hosts(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let directory = lock(&state.0).plugins_dir();
+    off_lock(move || mappings::load(&directory).map(|stored| stored.hosts)).await
+}
+
+#[tauri::command]
+async fn add_decrypt_host(
+    state: State<'_, AppState>,
+    host: String,
+) -> Result<OperationResult, String> {
+    change_plugins(&state, move |directory| {
+        mappings::add_host(directory, &host)?;
+        Ok(format!("Decrypting {host}"))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn remove_decrypt_host(
+    state: State<'_, AppState>,
+    host: String,
+) -> Result<OperationResult, String> {
+    change_plugins(&state, move |directory| {
+        mappings::remove_host(directory, &host)?;
+        Ok(format!("No longer decrypting {host}"))
+    })
+    .await
+}
+
 /// Commands the Windows client has and Linux does not yet; the interface hides their controls.
 macro_rules! unavailable {
     ($($name:ident),* $(,)?) => {
@@ -1502,6 +1532,9 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             list_debug_mappings,
             save_debug_mapping,
             remove_debug_mapping,
+            list_decrypt_hosts,
+            add_decrypt_host,
+            remove_decrypt_host,
             test_node_delay,
             test_node_delays,
             network_probe,

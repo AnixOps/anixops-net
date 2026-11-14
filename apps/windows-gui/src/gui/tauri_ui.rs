@@ -532,6 +532,9 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             list_debug_mappings,
             save_debug_mapping,
             remove_debug_mapping,
+            list_decrypt_hosts,
+            add_decrypt_host,
+            remove_decrypt_host,
             test_node_delay,
             test_node_delays,
             network_probe,
@@ -4087,6 +4090,41 @@ async fn remove_debug_mapping(
     let state = state.inner().clone();
     run_blocking(move || {
         mappings::remove(&mitm_plugins::directory(), &id)?;
+        Ok(OperationResult {
+            message: apply_mitm_plugins(&state),
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn list_decrypt_hosts() -> Result<Vec<String>, String> {
+    run_blocking(|| mappings::load(&mitm_plugins::directory()).map(|stored| stored.hosts)).await
+}
+
+#[tauri::command]
+async fn add_decrypt_host(
+    host: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        mappings::add_host(&mitm_plugins::directory(), &host)?;
+        Ok(OperationResult {
+            message: apply_mitm_plugins(&state),
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn remove_decrypt_host(
+    host: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        mappings::remove_host(&mitm_plugins::directory(), &host)?;
         Ok(OperationResult {
             message: apply_mitm_plugins(&state),
         })

@@ -298,6 +298,11 @@ struct CaptureRequestsView: View {
                 }
                 .buttonStyle(.brandPrimary)
             }
+            // What is still missing before HTTPS requests can show up; hidden once nothing is.
+            if tunnel.appMode == .debug, filter.isEmpty, invalidFilter == nil {
+                DebugSetupChecklist(tunnel: tunnel, capturing: capture?.enabled == true)
+                    .padding(.top, 8)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
@@ -322,6 +327,10 @@ struct CaptureRequestsView: View {
         }
         if !filter.isEmpty {
             return "没有匹配的请求"
+        }
+        if tunnel.appMode == .debug {
+            // The setup checklist under this line says what is missing for HTTPS.
+            return "还没有请求。"
         }
         return "还没有请求。要看到 HTTPS 请求，请在 扩展 › HTTPS 解密证书 中安装并信任根证书，再为域名启用解密。"
     }

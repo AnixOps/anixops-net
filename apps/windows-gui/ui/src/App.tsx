@@ -301,7 +301,7 @@ export function App() {
             {page === "proxies" && mode === "debug" && <div className="egress-rules"><RulesPage snapshot={snapshot} busy={busy} run={run} /></div>}
             {page === "rules" && mode === "proxy" && <RulesPage snapshot={snapshot} busy={busy} run={run} />}
             {page === "extensions" && <ExtensionsPage snapshot={snapshot} busy={busy} run={run} />}
-            {page === "activity" && (mode === "debug" ? <RequestsPage snapshot={snapshot} busy={busy} run={run} /> : <ActivityPage snapshot={snapshot} busy={busy} run={run} />)}
+            {page === "activity" && (mode === "debug" ? <RequestsPage snapshot={snapshot} busy={busy} run={run} onOpenRewrite={() => setPage("extensions")} /> : <ActivityPage snapshot={snapshot} busy={busy} run={run} />)}
             {page === "settings" && <SettingsPage snapshot={snapshot} busy={busy} run={run} appearance={appearance} setAppearance={setAppearance} language={language} setLanguage={setLanguage} mode={mode} setMode={switchMode} />}
           </ToolbarSlot.Provider>
         </div>

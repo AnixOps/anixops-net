@@ -124,4 +124,37 @@ final class DebugMappingsTests: XCTestCase {
         try mappings.save(to: url)
         XCTAssertEqual(try DebugMappings.load(from: url), mappings)
     }
+
+    func testDecryptedDomainsMakeAPluginOnTheirOwn() throws {
+        var mappings = try DebugMappings().addingHost("API.example.com:443")
+        mappings = try mappings.addingHost("*.cdn.example.com")
+        mappings = try mappings.addingHost("https://api.example.com/v1")
+        XCTAssertEqual(mappings.hosts, ["api.example.com", "*.cdn.example.com"])
+        let text = try XCTUnwrap(mappings.pluginText)
+        XCTAssertFalse(text.contains("[Rewrite]"))
+        XCTAssertTrue(text.hasSuffix("\n[MITM]\nhostname = %APPEND% api.example.com, *.cdn.example.com\n"))
+        XCTAssertTrue(mappings.decrypts("img.cdn.example.com"))
+        XCTAssertFalse(mappings.decrypts("cdn.example.com"))
+        XCTAssertNil(mappings.removingHost("api.example.com").removingHost("*.cdn.example.com").pluginText)
+    }
+
+    func testOnlyDomainNamesAreDecrypted() {
+        XCTAssertEqual(DebugMappings.normalizeHost(" Example.com. "), "example.com")
+        XCTAssertNil(DebugMappings.normalizeHost("localhost"))
+        XCTAssertNil(DebugMappings.normalizeHost("10.0.0.1:443"))
+        XCTAssertNil(DebugMappings.normalizeHost("https://1.2.3.4/x"))
+        XCTAssertNil(DebugMappings.normalizeHost("bad host.com"))
+        XCTAssertNil(DebugMappings.normalizeHost("-a.com"))
+        XCTAssertThrowsError(try DebugMappings().addingHost("not a domain"))
+    }
+
+    func testDomainsSurviveStorageAndOldFilesStillLoad() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let mappings = try DebugMappings().addingHost("api.example.com")
+        try mappings.save(to: url)
+        XCTAssertEqual(try DebugMappings.load(from: url), mappings)
+        try Data(#"{"entries":[]}"#.utf8).write(to: url)
+        XCTAssertEqual(try DebugMappings.load(from: url).hosts, [])
+    }
 }
