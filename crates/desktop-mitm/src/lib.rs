@@ -78,8 +78,14 @@ impl Root {
         let certificate_der = certificate_der(certificate_pem)?;
         let is_ca = x509_parser::parse_x509_certificate(&certificate_der)
             .ok()
-            .and_then(|(_, certificate)| certificate.basic_constraints().ok().flatten())
-            .is_some_and(|constraints| constraints.value.ca);
+            .and_then(|(_, certificate)| {
+                certificate
+                    .basic_constraints()
+                    .ok()
+                    .flatten()
+                    .map(|constraints| constraints.value.ca)
+            })
+            .unwrap_or(false);
         if !is_ca {
             return Err("the certificate is not a CA certificate".to_string());
         }
