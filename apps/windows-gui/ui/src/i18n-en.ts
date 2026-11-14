@@ -391,4 +391,11 @@ export const english: Record<string, string> = {
   "清空抓包": "Clear capture",
   "确认清空 {count} 个连接的抓包": "Clear the capture of {count} connections",
   "查看抓包内容：{name}": "Show captured content: {name}",
+  "开启 HTTPS 解密前请确认": "Before You Turn On HTTPS Decryption",
+  "HTTPS 解密能看到加密连接里的明文。只在下面的范围内使用：": "HTTPS decryption shows the plain text inside encrypted connections. Use it only within these limits:",
+  "只解密你自己设备上的流量，或你有权调试的应用、设备和网络的流量。": "Decrypt only traffic on your own devices, or of apps, devices and networks you are authorised to debug.",
+  "不抓取、不解密别人的流量。把其他设备接入抓包前，先取得设备所有者的同意。": "Never capture or decrypt other people's traffic. Get the owner's consent before you connect another device to capture.",
+  "解密后的内容可能含有密码、令牌和个人信息，只保存在本机；导出或分享前请先脱敏。": "Decrypted content can hold passwords, tokens and personal data. It stays on this device; redact it before you export or share it.",
+  "不得用于入侵、窃取数据或绕过他人的安全机制。详见用户协议第 4 节。": "Never use it to break into systems, steal data or get around anyone else's security. See section 4 of the user agreement.",
+  "我确认，开启": "I Confirm, Turn On",
 };
