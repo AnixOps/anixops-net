@@ -221,3 +221,12 @@ CI 只覆盖编译和会话请求、清理、密钥文件的单测；系统密�
 - [ ] Linux（GNOME 或 KDE）：保存会话后 `secret-tool lookup application anixops-net purpose capture-session-key` 能查到，`capture/` 下只有 `session-key.secret-service` 标记、没有 `session-key` 文件；锁住钥匙环再列出会话时提示解锁，而不是换新密钥。
 - [ ] Linux（没有钥匙环的桌面）：`capture/session-key` 权限是 `0600`，界面说明写的是“密钥保存在只有你能读取的文件里”。
 - [ ] Android：保存、退出 App、重新连接后能载入；清除 App 数据后旧会话随之删除。
+
+## 自定义 DNS 与 Fake-IP（Tauri，真机验收）
+
+CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP 要在真机上看：
+
+- [ ] Windows（TUN 模式）：分流页 DNS 选“自定义 DNS”，填一个 `direct` 服务器和一条 `DOMAIN-SUFFIX`，保存后连接；`nslookup` 该域名走到填的服务器（看节点日志或抓包）。打开 Fake-IP 再连接，`nslookup example.com` 返回 `198.18.x.x`，浏览器正常打开，`nslookup router.lan` 之类局域网名仍是真实地址。
+- [ ] Windows（系统代理模式）：Fake-IP 打开时浏览器照常上网（Fake-IP 只在 TUN 模式下起作用）。
+- [ ] Android：同上两项，在 VPN 里确认 Fake-IP 返回 `198.18.x.x`，微信、推送等不受影响。
+- [ ] Linux：没有 Fake-IP 开关；自定义 DNS 保存后正在运行的引擎重启，Hosts 里写的名字按填的地址连接。

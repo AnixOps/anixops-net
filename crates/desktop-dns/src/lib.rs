@@ -1,8 +1,10 @@
 //! The DNS choices the Windows and Linux clients offer and the engine `dns`
 //! section each one adds to the envelope. The resolvers are addressed by IP
 //! with a TLS name, so the engine never has to resolve a resolver's own name.
-//! [`rules`] puts the user's own rule lines in front of the envelope's rules.
+//! [`rules`] puts the user's own rule lines in front of the envelope's rules;
+//! [`custom`] holds the user's own servers, hosts and the Fake-IP switch.
 
+pub mod custom;
 pub mod rules;
 
 use serde::{Deserialize, Serialize};
@@ -23,6 +25,8 @@ pub enum DnsPreset {
     /// Mainland names over AliDNS (direct), everything else over Cloudflare
     /// (through the proxy).
     Split,
+    /// The user's own servers, per-domain servers and hosts ([`custom`]).
+    Custom,
 }
 
 impl DnsPreset {
@@ -31,6 +35,7 @@ impl DnsPreset {
             Self::System => "system",
             Self::Encrypted => "encrypted",
             Self::Split => "split",
+            Self::Custom => "custom",
         }
     }
 
@@ -39,25 +44,49 @@ impl DnsPreset {
             "system" => Some(Self::System),
             "encrypted" => Some(Self::Encrypted),
             "split" => Some(Self::Split),
+            "custom" => Some(Self::Custom),
             _ => None,
         }
     }
 }
 
-/// `envelope` with the preset's `dns` section in place of its own; the
-/// system choice leaves the envelope as it is.
+/// `envelope` with the preset's `dns` section in place of its own, and
+/// Fake-IP on when the user turned it on ([`custom`]). The system choice
+/// without Fake-IP leaves the envelope as it is.
 pub fn apply(envelope: &str, preset: DnsPreset) -> Result<String, String> {
-    if preset == DnsPreset::System {
+    apply_with(envelope, preset, &custom::current()?)
+}
+
+/// [`apply`] with these settings instead of the saved ones.
+pub fn apply_with(
+    envelope: &str,
+    preset: DnsPreset,
+    settings: &custom::DnsSettings,
+) -> Result<String, String> {
+    if preset == DnsPreset::System && !settings.fake_ip {
         return Ok(envelope.to_string());
     }
     let mut envelope: Value = serde_json::from_str(envelope).map_err(|error| error.to_string())?;
     let has_china = envelope
         .pointer(&format!("/routing/rule_sets/{CHINA_RULE_SET}"))
         .is_some();
+    let mut dns = match preset {
+        DnsPreset::System => Some(json!({})),
+        DnsPreset::Encrypted | DnsPreset::Split => Some(section(preset, has_china)),
+        DnsPreset::Custom => settings.section(&envelope),
+    };
+    if settings.fake_ip {
+        if let Some(Value::Object(dns)) = dns.as_mut() {
+            dns.insert("fake_ip".to_string(), json!({ "enabled": true }));
+        }
+    }
     let object = envelope
         .as_object_mut()
         .ok_or("the envelope must be a JSON object")?;
-    object.insert("dns".to_string(), section(preset, has_china));
+    match dns {
+        Some(dns) => object.insert("dns".to_string(), dns),
+        None => object.remove("dns"),
+    };
     Ok(envelope.to_string())
 }
 
@@ -141,10 +170,46 @@ mod tests {
 
     #[test]
     fn names_round_trip() {
-        for preset in [DnsPreset::System, DnsPreset::Encrypted, DnsPreset::Split] {
+        for preset in [
+            DnsPreset::System,
+            DnsPreset::Encrypted,
+            DnsPreset::Split,
+            DnsPreset::Custom,
+        ] {
             assert_eq!(DnsPreset::parse(preset.as_str()), Some(preset));
         }
-        assert_eq!(DnsPreset::parse("custom"), None);
+        assert_eq!(DnsPreset::parse("custom"), Some(DnsPreset::Custom));
+        assert_eq!(DnsPreset::parse("fake-ip"), None);
+    }
+
+    #[test]
+    fn custom_and_fake_ip_use_the_given_settings() {
+        let settings = custom::DnsText {
+            servers: "a = 1.1.1.1".to_string(),
+            fake_ip: true,
+            ..custom::DnsText::default()
+        }
+        .parse()
+        .unwrap();
+        let custom: Value =
+            serde_json::from_str(&apply_with(SINGLE, DnsPreset::Custom, &settings).unwrap())
+                .unwrap();
+        assert_eq!(custom["dns"]["default"], "a");
+        assert_eq!(custom["dns"]["fake_ip"]["enabled"], true);
+        let system: Value =
+            serde_json::from_str(&apply_with(SINGLE, DnsPreset::System, &settings).unwrap())
+                .unwrap();
+        assert_eq!(system["dns"], json!({ "fake_ip": { "enabled": true } }));
+        let split: Value =
+            serde_json::from_str(&apply_with(SINGLE, DnsPreset::Split, &settings).unwrap())
+                .unwrap();
+        assert_eq!(split["dns"]["default"], "cloudflare");
+        assert_eq!(split["dns"]["fake_ip"]["enabled"], true);
+        // Nothing set: the engine keeps its default resolver.
+        let empty = custom::DnsSettings::default();
+        let plain: Value =
+            serde_json::from_str(&apply_with(SINGLE, DnsPreset::Custom, &empty).unwrap()).unwrap();
+        assert!(plain.get("dns").is_none());
     }
 
     #[test]

@@ -210,6 +210,7 @@ impl Backend {
         executable: PathBuf,
     ) -> Self {
         let state = store.load();
+        desktop_dns::custom::use_file(store.dir().join("dns-settings.json"));
         let mut backend = Self {
             store,
             state,
@@ -735,6 +736,46 @@ impl Backend {
         }
         self.save();
         done(format!("DNS set to {}", preset.as_str()))
+    }
+
+    /// The "自定义" DNS text and the Fake-IP switch as saved.
+    pub fn custom_dns(&self) -> Result<desktop_dns::custom::DnsText, String> {
+        desktop_dns::custom::text()
+    }
+
+    /// Checks and saves the "自定义" DNS text and the Fake-IP switch. A running engine restarts when the custom
+    /// choice is selected or Fake-IP changed; otherwise the text is kept for later.
+    pub fn save_custom_dns(
+        &mut self,
+        text: &desktop_dns::custom::DnsText,
+    ) -> Result<OperationResult, String> {
+        if text.fake_ip && !cfg!(target_os = "android") {
+            return Err(
+                "Fake-IP needs the packet tunnel; this Linux client uses the system proxy, which already sees domain names"
+                    .to_string(),
+            );
+        }
+        let settings = text.parse()?;
+        let fake_ip_changed = !matches!(desktop_dns::custom::current(), Ok(saved) if saved.fake_ip == settings.fake_ip);
+        let in_use = self.state.dns_preset == DnsPreset::Custom || fake_ip_changed;
+        desktop_dns::custom::replace(text, || {
+            // Without a profile there is nothing to check the settings against yet.
+            if self.envelope_with_rules(&[]).is_ok() {
+                let envelope = self.envelope()?;
+                RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
+                    format!("the engine rejected the DNS settings: {}", error.message)
+                })?;
+            }
+            Ok(())
+        })?;
+        if in_use && self.restart_if_running()? {
+            return done("DNS settings saved; the engine restarted with them");
+        }
+        done(if in_use {
+            "DNS settings saved"
+        } else {
+            "DNS settings saved; choose Custom to use them"
+        })
     }
 
     /// Turns QUIC blocking on or off. A running engine restarts on it.

@@ -162,6 +162,11 @@ pub fn my_rules_path() -> PathBuf {
     windows_managed_data_directory().join("my-rules.txt")
 }
 
+/// The "自定义" DNS text and the Fake-IP switch (`desktop_dns::custom`), next to the desktop state.
+pub fn dns_settings_path() -> PathBuf {
+    windows_managed_data_directory().join("dns-settings.json")
+}
+
 pub fn desktop_state_path() -> PathBuf {
     windows_managed_data_directory().join(DESKTOP_STATE_FILE)
 }

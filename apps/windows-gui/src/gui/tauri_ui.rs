@@ -4,8 +4,8 @@ use super::linked_sources::{self, CachedNode, OtherSource};
 use super::mitm_plugins::{self, PluginSummary};
 use super::runtime_status::{read_runtime_status, ManagedCoreStatus, WindowsRuntimeStatus};
 use super::startup::{
-    desktop_state_path, load_desktop_state, my_rules_path, owns_current_proxy, save_desktop_state,
-    DesktopProfileNode, DesktopRoutingMode, DesktopRuntimeMode, DesktopState,
+    desktop_state_path, dns_settings_path, load_desktop_state, my_rules_path, owns_current_proxy,
+    save_desktop_state, DesktopProfileNode, DesktopRoutingMode, DesktopRuntimeMode, DesktopState,
     DesktopSubscriptionSource,
 };
 use super::{
@@ -235,6 +235,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
     let _ = append_managed_log(APP_LOG_SCOPE, &format!("startup debug={debug}"));
     // Saved capture sessions expire after a week even when the engine does not run to delete them.
     capture_sessions::purge_expired();
+    desktop_dns::custom::use_file(dns_settings_path());
     let health_dir = desktop_state_path()
         .parent()
         .map(Path::to_path_buf)
@@ -357,6 +358,8 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             refresh_routing_rules,
             my_rules,
             save_my_rules,
+            custom_dns,
+            save_custom_dns,
             configure_script_runtime,
             clear_script_runtime,
             enable_https_mitm,
@@ -2773,7 +2776,8 @@ fn embedded_envelope_with_rules(
     let envelope = desktop_dns::rules::apply(&mode_envelope(profile, mode, force_refresh)?, rules)?;
     let envelope = desktop_dns::apply(&envelope, dns)?;
     let envelope = desktop_dns::apply_block_quic(&envelope, block_quic)?;
-    if dns != DnsPreset::System || !rules.is_empty() {
+    let fake_ip = desktop_dns::custom::current().is_ok_and(|settings| settings.fake_ip);
+    if dns != DnsPreset::System || fake_ip || !rules.is_empty() {
         RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
             if rules.is_empty() {
                 format!("the DNS choice was rejected: {}", error.message)
@@ -3160,6 +3164,17 @@ fn set_dns_preset_blocking(
         .desktop
         .lock()
         .map_err(|_| "desktop state lock failed")?;
+    rewrite_embedded_envelope(&desktop, preset)?;
+    desktop.dns_preset = preset;
+    save_desktop_state(&desktop)?;
+    Ok(OperationResult {
+        message: "DNS choice saved. Connect to apply it.".to_string(),
+    })
+}
+
+/// Writes the imported profile's envelope again with `preset` and the saved
+/// "自定义" DNS settings; nothing to do before a profile is imported.
+fn rewrite_embedded_envelope(desktop: &DesktopState, preset: DnsPreset) -> Result<(), String> {
     if let Some(embedded) = active_embedded_config()? {
         let profile = fs::read_to_string(embedded_profile_path())
             .map_err(|error| format!("Import the profile again before changing DNS: {error}"))?;
@@ -3173,10 +3188,62 @@ fn set_dns_preset_blocking(
         write_managed_text_atomic(&embedded.envelope_path, &envelope)
             .map_err(|error| error.to_string())?;
     }
-    desktop.dns_preset = preset;
-    save_desktop_state(&desktop)?;
+    Ok(())
+}
+
+/// The "自定义" DNS text and the Fake-IP switch as saved.
+#[tauri::command]
+async fn custom_dns() -> Result<desktop_dns::custom::DnsText, String> {
+    run_blocking(desktop_dns::custom::text).await
+}
+
+/// Checks and saves the "自定义" DNS text and the Fake-IP switch. While the
+/// custom choice is selected or Fake-IP changes, the envelope changes too, so
+/// that needs a disconnected window, as the other DNS choices do; otherwise
+/// the text is only kept for later.
+#[tauri::command]
+async fn save_custom_dns(
+    text: desktop_dns::custom::DnsText,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || save_custom_dns_blocking(&text, state)).await
+}
+
+fn save_custom_dns_blocking(
+    text: &desktop_dns::custom::DnsText,
+    state: DesktopAppState,
+) -> Result<OperationResult, String> {
+    let settings = text.parse()?;
+    let fake_ip_changed =
+        !matches!(desktop_dns::custom::current(), Ok(saved) if saved.fake_ip == settings.fake_ip);
+    let desktop = state
+        .desktop
+        .lock()
+        .map_err(|_| "desktop state lock failed")?
+        .clone();
+    let in_use = desktop.dns_preset == DnsPreset::Custom || fake_ip_changed;
+    if in_use {
+        ensure_routing_configuration_stopped(&state)?;
+    }
+    desktop_dns::custom::replace(text, || {
+        if in_use {
+            rewrite_embedded_envelope(&desktop, desktop.dns_preset)?;
+        }
+        if desktop.direct_egress {
+            let envelope =
+                connection::direct_egress_envelope(desktop.dns_preset, desktop.block_quic)?;
+            RuntimeConfig::from_json(envelope.as_bytes())
+                .map_err(|error| format!("the DNS settings were rejected: {}", error.message))?;
+        }
+        Ok(())
+    })?;
     Ok(OperationResult {
-        message: "DNS choice saved. Connect to apply it.".to_string(),
+        message: if in_use {
+            "DNS settings saved. Connect to apply them.".to_string()
+        } else {
+            "DNS settings saved. Choose Custom to use them.".to_string()
+        },
     })
 }
 

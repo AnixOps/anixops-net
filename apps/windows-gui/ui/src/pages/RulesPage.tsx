@@ -1,10 +1,11 @@
 import { Check, Layers, ListChecks, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { desktop, DnsPreset, inProcessEngine, NativeGroupSummary, RuleSetStatus, RuntimeSnapshot } from "../bridge";
+import { desktop, NativeGroupSummary, RuleSetStatus, RuntimeSnapshot } from "../bridge";
 import { availableRoutingModes, groupMemberLabel } from "../labels";
 import { liveEngine, usePolling } from "../live";
 import { Card, Row, Run } from "../ui";
 import { t } from "../i18n";
+import { DnsCards } from "./DnsCards";
 import { MyRules } from "./MyRules";
 
 export function RulesPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
@@ -37,7 +38,7 @@ export function RulesPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot |
       <MyRules busy={busy} run={run} />
       <PolicyGroups busy={busy} run={run} />
       <RuleSets snapshot={snapshot} busy={busy} run={run} />
-      <DnsCard snapshot={snapshot} busy={busy} run={run} />
+      <DnsCards snapshot={snapshot} busy={busy} run={run} />
     </div>
   );
 }
@@ -121,39 +122,4 @@ function ruleSetDetail(set: RuleSetStatus): string {
     set.updated_at_ms ? t("更新于 {time}", { time: new Date(set.updated_at_ms).toLocaleString() }) : set.source === "remote" ? t("尚未下载") : null,
     set.last_error ? t("上次下载失败：{error}", { error: set.last_error }) : null,
   ].filter(Boolean).join(" · ");
-}
-
-const dnsChoices: Array<{ value: DnsPreset; label: string; hint: string }> = [
-  { value: "system", label: "系统 DNS", hint: "内置引擎用系统 DNS 解析规则里需要 IP 的域名；经节点的连接由节点服务器解析域名。" },
-  { value: "encrypted", label: "加密 DNS", hint: "所有域名经节点用 Cloudflare DNS over HTTPS 解析，本地网络看不到查询内容。" },
-  { value: "split", label: "国内外分流", hint: "国内域名直连阿里 DNS over HTTPS 解析，其余经节点用 Cloudflare 解析，国内网站拿到就近的地址。" },
-];
-
-/** The DNS choice; Windows applies it on the next connection, Linux restarts a running engine. */
-function DnsCard({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
-  const current = snapshot?.dnsPreset ?? "system";
-  const locked = !inProcessEngine(snapshot) && snapshot?.connection === "Connected";
-
-  return (
-    <Card title="DNS" description={locked ? t("断开后才能更改 DNS。") : undefined}>
-      <div role="radiogroup" aria-label="DNS">
-      {dnsChoices.map((item) => {
-        const selected = item.value === current;
-        return (
-          <button
-            key={item.value}
-            role="radio"
-            aria-checked={selected}
-            className={`row interactive choice ${selected ? "selected" : ""}`}
-            disabled={Boolean(busy) || locked || snapshot?.dnsPreset === undefined}
-            onClick={() => void run("dns", () => desktop.setDnsPreset(item.value))}
-          >
-            <span className="row-label"><strong>{t(item.label)}</strong><small>{t(item.hint)}</small></span>
-            <span className="check">{selected && <Check size={15} strokeWidth={2.25} />}</span>
-          </button>
-        );
-      })}
-      </div>
-    </Card>
-  );
 }

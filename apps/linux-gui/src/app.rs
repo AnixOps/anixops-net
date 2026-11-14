@@ -452,6 +452,21 @@ async fn my_rules(state: State<'_, AppState>) -> Result<crate::backend::MyRules,
     with_backend(&state, |backend| Ok(backend.my_rules())).await
 }
 
+/// The "自定义" DNS text and the Fake-IP switch.
+#[tauri::command]
+async fn custom_dns(state: State<'_, AppState>) -> Result<desktop_dns::custom::DnsText, String> {
+    with_backend(&state, |backend| backend.custom_dns()).await
+}
+
+/// Checks and saves the "自定义" DNS text and the Fake-IP switch.
+#[tauri::command]
+async fn save_custom_dns(
+    state: State<'_, AppState>,
+    text: desktop_dns::custom::DnsText,
+) -> Result<OperationResult, String> {
+    with_backend(&state, move |backend| backend.save_custom_dns(&text)).await
+}
+
 /// Checks and saves "我的规则"; a running engine takes them in place.
 #[tauri::command]
 async fn save_my_rules(
@@ -1229,6 +1244,8 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             refresh_routing_rules,
             my_rules,
             save_my_rules,
+            custom_dns,
+            save_custom_dns,
             install_service,
             start_service,
             stop_service,
