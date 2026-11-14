@@ -50,8 +50,8 @@ tauri-plugin-notification = { version = "~2.3", optional = true }
 [target.'cfg(target_os = "linux")'.dependencies]
 tauri-plugin-single-instance = { version = "2", optional = true, features = ["deep-link"] }
 
-# Android (apps/android builds this crate with `gui`): the VPN's TUN descriptor is read and written directly.
-[target.'cfg(target_os = "android")'.dependencies]
+# Android's VPN and Linux TUN mode: the TUN descriptor is read and written directly.
+[target.'cfg(any(target_os = "android", target_os = "linux"))'.dependencies]
 libc = "0.2"
 
 [build-dependencies]

@@ -357,13 +357,35 @@ async fn refresh_routing_rules(state: State<'_, AppState>) -> Result<OperationRe
     })
 }
 
-/// Where the platform carries traffic through a system VPN (Android), opens it first so the engine has its TUN
-/// descriptor.
+/// Where the platform carries traffic through a system VPN (Android), or the Linux desktop is in TUN mode, opens
+/// it first so the engine has its TUN descriptor.
 async fn open_tunnel(app: &AppHandle, state: &AppState) -> Result<(), String> {
-    if app.try_state::<TunnelHostState>().is_none() {
+    if app.try_state::<TunnelHostState>().is_some() {
+        return open_system_tunnel(app, state).await;
+    }
+    if !lock(&state.0).tun_mode() {
         return Ok(());
     }
-    open_system_tunnel(app, state).await
+    let state = AppState(state.0.clone());
+    off_lock(move || open_helper_tunnel(&state)).await
+}
+
+/// Linux desktop TUN mode: the polkit helper makes the device (the desktop asks for the administrator password)
+/// and the engine runs on it. A device already open is kept.
+#[cfg(target_os = "linux")]
+fn open_helper_tunnel(state: &AppState) -> Result<(), String> {
+    if engine::tunnel_attached() {
+        return Ok(());
+    }
+    lock(&state.0).stop_engine();
+    let fd = crate::backend::tun_helper::open(TunnelInterface::proxy().mtu)?;
+    engine::attach_tunnel(fd);
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn open_helper_tunnel(_state: &AppState) -> Result<(), String> {
+    Err("TUN mode is not available here".to_string())
 }
 
 /// Keeps a live descriptor; one whose VPN was taken away (another VPN, or the system settings) is dropped and
@@ -389,12 +411,23 @@ async fn open_system_tunnel(_app: &AppHandle, _state: &AppState) -> Result<(), S
     Err("this platform has no system VPN".to_string())
 }
 
-/// Stops the engine and closes the system VPN, if the platform has one.
+/// Stops the engine and closes the system VPN, if the platform has one, or the Linux TUN mode device.
 fn close_tunnel(app: &AppHandle, state: &AppState) {
     if let Some(host) = app.try_state::<TunnelHostState>() {
         lock(&state.0).stop_engine();
         host.0.close(app);
+    } else if lock(&state.0).tun_mode() {
+        lock(&state.0).stop_engine();
     }
+}
+
+/// Linux desktop TUN mode on or off; only while disconnected.
+#[tauri::command]
+async fn set_tun_mode(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<OperationResult, String> {
+    with_backend(&state, move |backend| backend.set_tun_mode(enabled)).await
 }
 
 /// Connects, through the system VPN where the platform has one; a failed start closes that VPN again.
@@ -1559,7 +1592,18 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
     if auto_connect && tunnel.is_none() {
         let state = AppState(shared.clone());
         thread::spawn(move || {
-            let _ = tauri::async_runtime::block_on(connect_with_rules(&state));
+            // TUN mode asks for the password at login; refused, the client stays disconnected.
+            if lock(&state.0).tun_mode() {
+                if let Err(error) = open_helper_tunnel(&state) {
+                    lock(&state.0).record_error(&error);
+                    return;
+                }
+            }
+            if tauri::async_runtime::block_on(connect_with_rules(&state)).is_err()
+                && lock(&state.0).tun_mode()
+            {
+                lock(&state.0).stop_engine();
+            }
         });
     }
 
@@ -1664,6 +1708,7 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             set_routing_mode,
             set_dns_preset,
             set_block_quic,
+            set_tun_mode,
             set_direct_egress,
             refresh_routing_rules,
             my_rules,

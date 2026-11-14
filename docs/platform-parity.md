@@ -49,8 +49,8 @@
 | 自定义 DNS 服务器、分域 DNS、Hosts | ✅ | ✅ | ✅ | ✅ | ✅ | T3：桌面与 Android 用文本编辑（`名称 = 地址`、`DOMAIN-SUFFIX,cn,服务器`、`域名 = 地址`），iOS / macOS 是表单 |
 | Fake-IP | ✅ | ✅ | ✅ | — | ✅ | 只在接管 IP 流量时有意义：Windows 在 TUN 模式下生效，Android 在 VPN 里生效（T3）；Linux 只有系统代理，代理拿到的就是域名 |
 | 屏蔽 QUIC | ✅ | ✅ | ✅ | ✅ | ✅ | #106 |
-| 流量重定向（TCP / UDP 劫持到开发服务器） | ✅ | ✅ | ✅ | ◐ | ✅ | 扩展 / 改写页“流量重定向”，与 iOS 相同的地址 / 域名 / 端口 / 协议 → 目标写法（引擎 `redirects`，`desktop_dns::redirects`）。Windows 不走系统代理的程序要开 TUN 模式；Linux 暂时只改走系统代理的连接，见系统限制（T6） |
-| TUN（接管全部流量） | ✅ | ✅ | ✅ | ⛔ | ✅ | Linux 现在只有系统代理，见系统限制 |
+| 流量重定向（TCP / UDP 劫持到开发服务器） | ✅ | ✅ | ✅ | ✅ | ✅ | 扩展 / 改写页“流量重定向”，与 iOS 相同的地址 / 域名 / 端口 / 协议 → 目标写法（引擎 `redirects`，`desktop_dns::redirects`）。Windows 和 Linux 不走系统代理的程序要开 TUN 模式（T6） |
+| TUN（接管全部流量） | ✅ | ✅ | ✅ | ✅ | ✅ | Linux 每次连接经 pkexec（polkit）提权助手创建虚拟网卡，App 本身不提权，见系统限制（T14） |
 | 系统代理 | — | — | ✅ | ✅ | — | |
 
 ## 扩展（插件与脚本）
@@ -100,8 +100,12 @@ MSI 升级时旧服务随旧版本一起卸载；便携版注册过的服务由�
 - **Android 自动连接**：VpnService 每次建立前要用户在系统对话框授权（或在系统设置里设为“始终开启的 VPN”）。App 不能自己在
   开机后连上。
 - **Android 导入自有根证书**：解密在手机本机进行，不需要把团队 CA 装进别的设备；如需统一证书，见上一条，用户仍要在系统设置里装。
-- **Linux TUN / 流量重定向**：创建 TUN 需要 `CAP_NET_ADMIN`，改路由需要 root。Linux 客户端现在只做系统代理，不在 App 里提权。
-  可以通过 polkit 启动一个有权限的辅助进程实现，属于新的安装形态，需要维护者决定是否做。
+- **Linux TUN**：创建 TUN 需要 `CAP_NET_ADMIN`，改路由需要 root。App 本身不提权：每次在 TUN 模式下连接时，用 `pkexec`
+  以 root 启动同一个程序的 `--tun-helper`，它只创建非持久的 `anxtun` 网卡、配地址和 `0.0.0.0/1`、`128.0.0.0/1`（IPv6
+  同理）两半默认路由，把描述符交回 App 后退出；App 退出或断开时网卡随描述符消失，路由一起删除。所以每次连接会询问一次
+  管理员密码（`.deb` 装的 polkit 规则在同一会话里短时间内不再询问）。引擎自己的连接用 `SO_BINDTODEVICE` 绑到原来的默认
+  网卡避免回环，需要 Linux 5.7 以上。需要系统装有 `pkexec`；AppImage 运行在只有本用户可读的挂载点上，root 进程读不到，
+  不支持 TUN 模式。Linux 的 TUN 模式暂不提供 Fake-IP 开关；打开“启动时自动连接”时，启动后也会先弹出一次授权。
 - **Wi-Fi 规则（Windows、Android、Linux）**：iOS / macOS 由系统执行规则，App 不运行也生效；Windows 和 Android 没有对应的系统
   功能，规则只在 App 运行时（Android 包括后台）生效。读 Wi-Fi 名称都要位置权限：Android 在打开规则时询问一次，Windows 11 要在
   “隐私和安全性 > 位置”里允许桌面应用访问位置，否则只能区分“Wi-Fi / 有线”。Linux 桌面的网络管理器各不相同（NetworkManager、
@@ -122,7 +126,7 @@ MSI 升级时旧服务随旧版本一起卸载；便携版注册过的服务由�
 | T3 | DNS：自定义服务器、分域 DNS、Hosts、Fake-IP | Windows、Linux、Android | 已完成 |
 | T4 | 节点分享链接入口 | Windows、Linux、Android | 已完成 |
 | T5 | 手动添加 / 编辑节点，Android 扫码导入 | Windows、Linux、Android | 已完成 |
-| T6 | 流量重定向 | Windows（TUN 模式）、Android | 已完成（Linux 等 TUN） |
+| T6 | 流量重定向 | Windows、Linux（TUN 模式）、Android | 已完成 |
 | T7 | 插件从文件 / 剪贴板导入、插件内容查看 | Windows、Linux、Android | 已完成 |
 | T8 | Android 诊断报告保存到“下载”、出口地址 | Android | 已完成 |
 | T9 | 按天流量统计 | Windows、Linux、Android | 已完成 |
@@ -130,4 +134,5 @@ MSI 升级时旧服务随旧版本一起卸载；便携版注册过的服务由�
 | T11 | 系统通知 | Windows、Linux、Android | 已完成 |
 | T12 | 按 Wi-Fi 自动连接 / 断开 | Windows、Android | 已完成（Linux 桌面不做，见“系统限制”） |
 | T13 | `anixops://` 链接 | Windows、Linux、Android | 已完成 |
+| T14 | Linux TUN 模式（polkit 提权助手） | Linux | 已完成 |
 | W1 | Windows 服务模式下的调试功能 | Windows | 已完成（删除服务模式，调试固定在窗口进程） |

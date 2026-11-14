@@ -370,6 +370,7 @@ function DelayPanel({ snapshot, busy, run, goTo, setDelays, probe, reprobe }: {
   }, [nodeId, test]);
 
   const windows = snapshot !== null && !inProcessEngine(snapshot);
+  const tunSwitch = windows || snapshot?.platform === "linux";
   const decrypting = Boolean(snapshot?.httpsDecryptionEnabled);
   const consent = useDecryptionConsent();
 
@@ -403,7 +404,7 @@ function DelayPanel({ snapshot, busy, run, goTo, setDelays, probe, reprobe }: {
         )}
       </div>
       <dl className="facts">
-        {windows && (
+        {tunSwitch && (
           <div>
             <dt>{t("TUN 模式")}</dt>
             <dd><Switch label={t("TUN 模式")} checked={Boolean(snapshot?.tunModeEnabled)} disabled={Boolean(busy)} onChange={() => void run("TUN", () => desktop.setTunMode(!snapshot?.tunModeEnabled))} /></dd>
