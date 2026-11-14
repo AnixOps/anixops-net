@@ -1,6 +1,6 @@
-import { ChevronRight, Ellipsis, LoaderCircle } from "lucide-react";
+import { Check, ChevronRight, Copy, Ellipsis, LoaderCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { Tone } from "./bridge";
 import { t } from "./i18n";
@@ -144,6 +144,69 @@ export function IconButton({ label, children, onClick, disabled = false }: {
   disabled?: boolean;
 }) {
   return <button className="icon-button" title={label} aria-label={label} onClick={onClick} disabled={disabled}>{children}</button>;
+}
+
+/**
+ * Copies text and shows a tick for a moment, so the click has an answer. `text` may be a function, read on click,
+ * when working the text out is not free.
+ */
+export function CopyButton({ label, text, disabled = false }: { label: string; text: string | (() => string); disabled?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 1200);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+  const copy = () => {
+    const value = typeof text === "function" ? text() : text;
+    void navigator.clipboard?.writeText(value).then(() => setCopied(true)).catch(() => undefined);
+  };
+  return (
+    <button className={copied ? "icon-button copied" : "icon-button"} title={copied ? t("已拷贝") : label} aria-label={label} onClick={copy} disabled={disabled}>
+      {copied ? <Check size={14} /> : <Copy size={14} />}
+      <span className="visually-hidden" role="status">{copied ? t("已拷贝") : ""}</span>
+    </button>
+  );
+}
+
+/**
+ * Tabs over one pane (the request inspector): one is shown at a time. Left and right arrows move between them, as
+ * the ARIA tabs pattern asks; only the selected tab is in the Tab order.
+ */
+export function Tabs<T extends string>({ label, options, value, onChange }: {
+  label: string;
+  options: Array<{ value: T; label: string; badge?: string | number }>;
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  const move = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+    const edge = event.key === "Home" ? 0 : event.key === "End" ? options.length - 1 : null;
+    if (step === 0 && edge === null) return;
+    event.preventDefault();
+    const at = options.findIndex((option) => option.value === value);
+    const next = edge ?? (at + step + options.length) % options.length;
+    onChange(options[next].value);
+    const buttons = event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+    buttons[next]?.focus();
+  };
+  return (
+    <div className="tabs" role="tablist" aria-label={label} onKeyDown={move}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          role="tab"
+          aria-selected={value === option.value}
+          tabIndex={value === option.value ? 0 : -1}
+          className={value === option.value ? "selected" : ""}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+          {option.badge !== undefined && <span className="tab-badge">{option.badge}</span>}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 /** One entry of a `MoreMenu`. A `danger` entry is listed last, in red, and with `confirm` asks once more in place. */
