@@ -20,6 +20,13 @@ struct MacRootView: View {
                     acceptedTerms = TermsConsent.version
                 }
                 .frame(minWidth: 520, minHeight: 600)
+            } else if tunnel.loaded, tunnel.appMode == nil {
+                ModeChoiceView { mode in
+                    Task {
+                        await tunnel.setAppMode(mode)
+                    }
+                }
+                .frame(minWidth: 520, minHeight: 600)
             } else {
                 NavigationSplitView {
                     sidebar
@@ -34,6 +41,11 @@ struct MacRootView: View {
         }
         .tint(brand.primary)
         .environment(\.brand, brand)
+        .onChange(of: tunnel.appMode) { _, mode in
+            if let section = state.section, !MacSection.sections(for: mode).contains(section) {
+                state.section = .home
+            }
+        }
         .sheet(isPresented: $state.importing) {
             ImportView(tunnel: tunnel)
                 .frame(width: 480, height: 580)
@@ -45,7 +57,7 @@ struct MacRootView: View {
     private var sidebar: some View {
         List(selection: $state.section) {
             Section {
-                ForEach(MacSection.allCases.filter { $0 != .settings }) { section in
+                ForEach(MacSection.sections(for: tunnel.appMode).filter { $0 != .settings }) { section in
                     MacSidebarLabel(section: section)
                         .tag(section)
                 }
@@ -88,7 +100,7 @@ struct MacRootView: View {
         case .activity:
             MacActivityPage(tunnel: tunnel)
         case .settings:
-            MacSettingsPage(tunnel: tunnel)
+            MacSettingsPage(tunnel: tunnel, state: state)
         }
     }
 }

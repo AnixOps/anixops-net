@@ -30,13 +30,16 @@ for window in windows {
 SWIFT
 
 shoot() {
-    local section="$1" appearance="$2"
+    local section="$1" appearance="$2" mode="${3:-proxy}"
     local file="${out}/${section}-${appearance}.png"
+    if [ "${mode}" != proxy ]; then
+        file="${out}/${mode}-${section}-${appearance}.png"
+    fi
     local accepted="${terms}"
     if [ "${section}" = terms ]; then
         accepted="none"
     fi
-    open -n "${app}" --args -AnixOpsDemo YES -AnixOpsSection "${section}" -appearance "${appearance}" \
+    open -n "${app}" --args -AnixOpsDemo YES -AnixOpsMode "${mode}" -AnixOpsSection "${section}" -appearance "${appearance}" \
         -AppleLanguages "(${language})" -terms-accepted-version "${accepted}"
     local id=""
     for _ in 1 2 3 4 5 6 7 8 9 10; do
@@ -67,6 +70,10 @@ shoot extensions light
 shoot activity light
 shoot settings light
 shoot terms light
+# Debug mode (proxies and rules move into Settings › Exit) and the first-launch mode choice.
+shoot home light debug
+shoot settings light debug
+shoot home light choose
 
 rm -f "${finder}"
 ls -l "${out}"

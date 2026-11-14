@@ -2,6 +2,7 @@
 //! envelope has a `mitm` section; this crate makes that section from a local root and the plugins the user
 //! imported, and creates the root where the platform has none of its own.
 
+pub mod capture;
 pub mod phone;
 pub mod plugins;
 

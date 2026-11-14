@@ -315,6 +315,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             switch_node,
             select_native_group_outbound,
             runtime_control,
+            export_capture,
             test_node_delay,
             test_node_delays,
             network_probe,
@@ -880,6 +881,45 @@ async fn runtime_control(
             .map_err(|_| "desktop core lock failed")?
             .control(&request)?;
         serde_json::from_slice(&answer).map_err(|error| error.to_string())
+    })
+    .await
+}
+
+/// Where a capture export was saved.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SavedFile {
+    location: String,
+}
+
+/// Exports the packet capture (`format` pcapng or har; one connection with `id`, else all) to the Downloads
+/// folder without replacing an older file, and answers where it went.
+#[tauri::command]
+async fn export_capture(
+    format: String,
+    id: Option<u64>,
+    state: State<'_, DesktopAppState>,
+) -> Result<SavedFile, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let mut request = json!({ "cmd": "export_capture", "format": format });
+        if let Some(id) = id {
+            request["id"] = json!(id);
+        }
+        let request = connection::activity_request(&request)?;
+        let answer = state
+            .direct_core
+            .lock()
+            .map_err(|_| "desktop core lock failed")?
+            .control(&request)?;
+        let answer: Value = serde_json::from_slice(&answer).map_err(|error| error.to_string())?;
+        let export = desktop_mitm::capture::Export::from_answer(&answer)?;
+        let dir = desktop_mitm::capture::downloads_dir()
+            .ok_or("the Downloads folder could not be found")?;
+        let path = desktop_mitm::capture::save_new_file(&dir, &export.file_name, &export.bytes()?)?;
+        Ok(SavedFile {
+            location: path.display().to_string(),
+        })
     })
     .await
 }

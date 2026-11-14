@@ -29,9 +29,13 @@ struct StartResponse {
 
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct SaveRequest<'a> {
     name: &'a str,
     contents: &'a str,
+    /// `contents` is base64 of a binary file.
+    base64: bool,
+    mime_type: &'a str,
 }
 
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
@@ -60,7 +64,36 @@ impl<R: Runtime> Vpn<R> {
     /// Saves a text file to the shared Downloads folder and returns where it went ("Download/<name>").
     pub fn save_to_downloads(&self, name: &str, contents: &str) -> Result<String, String> {
         self.handle
-            .run_mobile_plugin::<SaveResponse>("saveToDownloads", SaveRequest { name, contents })
+            .run_mobile_plugin::<SaveResponse>(
+                "saveToDownloads",
+                SaveRequest {
+                    name,
+                    contents,
+                    base64: false,
+                    mime_type: "application/x-x509-ca-cert",
+                },
+            )
+            .map(|response| response.location)
+            .map_err(|error| error.to_string())
+    }
+
+    /// Saves a binary file, given as base64, to the shared Downloads folder and returns where it went.
+    pub fn save_base64_to_downloads(
+        &self,
+        name: &str,
+        mime_type: &str,
+        data_base64: &str,
+    ) -> Result<String, String> {
+        self.handle
+            .run_mobile_plugin::<SaveResponse>(
+                "saveToDownloads",
+                SaveRequest {
+                    name,
+                    contents: data_base64,
+                    base64: true,
+                    mime_type,
+                },
+            )
             .map(|response| response.location)
             .map_err(|error| error.to_string())
     }
@@ -80,6 +113,15 @@ impl<R: Runtime> Vpn<R> {
     }
 
     pub fn save_to_downloads(&self, _name: &str, _contents: &str) -> Result<String, String> {
+        Err("Downloads is an Android folder".to_string())
+    }
+
+    pub fn save_base64_to_downloads(
+        &self,
+        _name: &str,
+        _mime_type: &str,
+        _data_base64: &str,
+    ) -> Result<String, String> {
         Err("Downloads is an Android folder".to_string())
     }
 

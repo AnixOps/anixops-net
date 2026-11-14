@@ -23,7 +23,7 @@ struct HomeView: View {
     private static let headerHeight: CGFloat = 52
 
     private var phase: ConnectPhase {
-        ConnectPhase(status: tunnel.connection, hasNode: !tunnel.hasNoNodes)
+        ConnectPhase(status: tunnel.connection, hasNode: tunnel.canConnect)
     }
 
     var body: some View {
@@ -48,7 +48,7 @@ struct HomeView: View {
                         tunnel: tunnel,
                         model: dashboard,
                         layout: DashboardLayout(storage: layoutStorage),
-                        showProxies: { tab = .proxies }
+                        showProxies: { tab = nodesTab }
                     )
                 }
                 .padding(.horizontal, 16)
@@ -76,7 +76,7 @@ struct HomeView: View {
             }
             .sheet(isPresented: $picking) {
                 NodePickerSheet(tunnel: tunnel) {
-                    tab = .proxies
+                    tab = nodesTab
                 }
             }
             .task(id: tunnel.connection) {
@@ -92,6 +92,11 @@ struct HomeView: View {
                 dashboard.messageShown(message)
             }
         }
+    }
+
+    /// Where the subscriptions and nodes are: their own tab, or Settings › Exit in debug mode.
+    private var nodesTab: AppTab {
+        tunnel.appMode == .debug ? .settings : .proxies
     }
 
     private func perform(_ action: AppNotice.Action) {
@@ -135,16 +140,10 @@ struct HomeView: View {
                     .brandGlass(Circle(), fallback: brand.raised)
             }
             .accessibilityLabel("编辑首页")
-            Button {
-                importing = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(brand.primary)
-                    .frame(width: headerButton, height: headerButton)
-                    .brandGlass(Circle(), fallback: brand.raised)
+            // Importing nodes is a proxy-mode action; debug mode imports them under Settings › Exit.
+            if tunnel.appMode != .debug {
+                importButton
             }
-            .accessibilityLabel("导入节点")
         }
         .frame(minHeight: Self.headerHeight)
         .padding(.horizontal, 16)
@@ -155,6 +154,19 @@ struct HomeView: View {
                 .frame(height: 1)
                 .opacity(heroVisible ? 0 : 1)
         }
+    }
+
+    private var importButton: some View {
+        Button {
+            importing = true
+        } label: {
+            Image(systemName: "plus")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(brand.primary)
+                .frame(width: headerButton, height: headerButton)
+                .brandGlass(Circle(), fallback: brand.raised)
+        }
+        .accessibilityLabel("导入节点")
     }
 }
 
@@ -217,7 +229,13 @@ private struct ConnectCard: View {
                     subtitle
                         .font(.footnote.monospacedDigit())
                         .foregroundStyle(Brand.lineMuted)
-                    if let name = tunnel.nodeName {
+                    if tunnel.runsDirectProfile {
+                        // Debug mode without a node: nothing to pick here, the exit is in Settings.
+                        Text("出口 · 直连")
+                            .font(.footnote)
+                            .foregroundStyle(Brand.line.opacity(0.85))
+                            .frame(minHeight: 28)
+                    } else if let name = tunnel.nodeName {
                         Button {
                             picking = true
                         } label: {
@@ -246,7 +264,8 @@ private struct ConnectCard: View {
                 .animation(reduceMotion ? nil : .easeInOut(duration: BrandMotion.standard), value: phase)
             }
 
-            if phase != .unconfigured {
+            // The direct profile has no rules or node to switch between.
+            if phase != .unconfigured, !tunnel.runsDirectProfile {
                 modePicker
             }
         }

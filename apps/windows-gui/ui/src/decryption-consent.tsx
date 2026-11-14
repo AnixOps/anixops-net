@@ -1,0 +1,76 @@
+import { useState, type ReactElement } from "react";
+import { ShieldAlert } from "lucide-react";
+import { t } from "./i18n";
+
+// The first time someone turns HTTPS decryption on, the app asks once more that they will only capture and decrypt
+// traffic they are entitled to see (TERMS.md section 4). The answer is kept, so it is asked once per installation.
+
+const storageKey = "anixops.https-decryption-consent";
+
+/** True until someone has confirmed once; any stored value counts as confirmed. */
+export function decryptionConsentNeeded(stored: string | null | undefined): boolean {
+  return !stored;
+}
+
+function loadStored(): string | null {
+  try {
+    return window.localStorage.getItem(storageKey);
+  } catch {
+    return null;
+  }
+}
+
+/** The four points the confirmation shows, in the order they are read. */
+export const decryptionConsentPoints = [
+  "只解密你自己设备上的流量，或你有权调试的应用、设备和网络的流量。",
+  "不抓取、不解密别人的流量。把其他设备接入抓包前，先取得设备所有者的同意。",
+  "解密后的内容可能含有密码、令牌和个人信息，只保存在本机；导出或分享前请先脱敏。",
+  "不得用于入侵、窃取数据或绕过他人的安全机制。详见用户协议第 4 节。",
+];
+
+/**
+ * `guard(enable)` runs `enable` right away once confirmed before; otherwise it shows the confirmation and runs it only
+ * when the person confirms. Render `dialog` somewhere in the page.
+ */
+export function useDecryptionConsent(): { guard: (enable: () => void) => void; dialog: ReactElement | null } {
+  const [pending, setPending] = useState<(() => void) | null>(null);
+  const guard = (enable: () => void) => {
+    if (!decryptionConsentNeeded(loadStored())) enable();
+    else setPending(() => enable);
+  };
+  const confirm = () => {
+    try {
+      window.localStorage.setItem(storageKey, new Date().toISOString());
+    } catch {
+      // Confirmed for this session; the question comes back next start.
+    }
+    const enable = pending;
+    setPending(null);
+    enable?.();
+  };
+  const dialog = pending ? <DecryptionConsentDialog onConfirm={confirm} onCancel={() => setPending(null)} /> : null;
+  return { guard, dialog };
+}
+
+function DecryptionConsentDialog({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div className="terms-overlay" role="dialog" aria-modal="true" aria-labelledby="decryption-consent-title" onKeyDown={(event) => event.key === "Escape" && onCancel()}>
+      <div className="terms-dialog">
+        <header className="terms-head">
+          <ShieldAlert size={22} aria-hidden />
+          <div>
+            <h2 id="decryption-consent-title">{t("开启 HTTPS 解密前请确认")}</h2>
+            <p>{t("HTTPS 解密能看到加密连接里的明文。只在下面的范围内使用：")}</p>
+          </div>
+        </header>
+        <div className="terms-text">
+          {decryptionConsentPoints.map((point) => <p key={point} className="terms-item">{t(point)}</p>)}
+        </div>
+        <footer className="terms-actions">
+          <button className="secondary" autoFocus onClick={onCancel}>{t("取消")}</button>
+          <button className="primary" onClick={onConfirm}>{t("我确认，开启")}</button>
+        </footer>
+      </div>
+    </div>
+  );
+}

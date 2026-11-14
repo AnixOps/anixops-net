@@ -1,9 +1,10 @@
+import NetworkCoreBridge
 import SwiftUI
 
 /// First run: what the app does in one sentence, why iOS will ask to add a VPN configuration, and one way forward,
 /// importing a subscription. Shown once, only while nothing has been imported; 稍后再说 or an import ends it.
 struct OnboardingView: View {
-    static let storageKey = "onboarding-done"
+    static let storageKey = AppMode.onboardingDoneKey
 
     /// Opens the import sheet after this screen closes.
     let importNow: () -> Void

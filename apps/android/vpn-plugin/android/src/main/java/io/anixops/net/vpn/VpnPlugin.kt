@@ -9,6 +9,7 @@ import android.net.VpnService
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Base64
 import java.io.File
 import androidx.activity.result.ActivityResult
 import app.tauri.annotation.ActivityCallback
@@ -29,11 +30,13 @@ class StartArgs {
     var session: String = "AnixOps Net"
 }
 
-/** A text file to put in the shared Downloads folder. */
+/** A file to put in the shared Downloads folder: text, or base64 of a binary file. */
 @InvokeArg
 class SaveArgs {
     var name: String = ""
     var contents: String = ""
+    var base64: Boolean = false
+    var mimeType: String = "application/x-x509-ca-cert"
 }
 
 /**
@@ -85,26 +88,30 @@ class VpnPlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
-    /** Saves a file to Downloads (for the HTTPS decryption root, which the user installs in the system settings). */
+    /**
+     * Saves a file to Downloads: the HTTPS decryption root, which the user installs in the system settings, and
+     * packet capture exports (pcapng, HAR).
+     */
     @Command
     fun saveToDownloads(invoke: Invoke) {
         val args = invoke.parseArgs(SaveArgs::class.java)
         try {
+            val bytes = if (args.base64) Base64.decode(args.contents, Base64.DEFAULT) else args.contents.toByteArray()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val values = ContentValues().apply {
                     put(MediaStore.MediaColumns.DISPLAY_NAME, args.name)
-                    put(MediaStore.MediaColumns.MIME_TYPE, "application/x-x509-ca-cert")
+                    put(MediaStore.MediaColumns.MIME_TYPE, args.mimeType)
                     put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
                 }
                 val resolver = activity.contentResolver
                 val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
                     ?: throw IllegalStateException("Downloads is not available")
-                resolver.openOutputStream(uri)?.use { it.write(args.contents.toByteArray()) }
+                resolver.openOutputStream(uri)?.use { it.write(bytes) }
                     ?: throw IllegalStateException("Downloads is not writable")
             } else {
                 @Suppress("DEPRECATION")
                 val folder = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                File(folder, args.name).writeText(args.contents)
+                File(folder, args.name).writeBytes(bytes)
             }
             val result = JSObject()
             result.put("location", "${Environment.DIRECTORY_DOWNLOADS}/${args.name}")

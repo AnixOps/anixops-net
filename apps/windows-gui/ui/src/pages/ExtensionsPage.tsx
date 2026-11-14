@@ -4,12 +4,14 @@ import { desktop, inProcessEngine, MitmPlugin, preferencesFrom, RuntimeSnapshot 
 import { Card, EmptyState, MoreMenu, Row, Run, StatusPill, Switch, ToggleRow } from "../ui";
 import { t } from "../i18n";
 import { PhoneCaptureCards } from "./PhoneCaptureCards";
+import { useDecryptionConsent } from "../decryption-consent";
 
 export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
   const linux = inProcessEngine(snapshot);
   const [certificatePath, setCertificatePath] = useState("");
   const [pluginUrl, setPluginUrl] = useState("");
   const [plugins, setPlugins] = useState<MitmPlugin[]>([]);
+  const consent = useDecryptionConsent();
 
   const loadPlugins = useCallback(() => {
     desktop.mitmPlugins().then(setPlugins).catch(() => setPlugins([]));
@@ -30,6 +32,7 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
 
   return (
     <div className="page-stack">
+      {consent.dialog}
       <Card
         title={t("HTTPS 解密")}
         description={t("只解密插件和内置规则列出的域名，其余网站原样转发。首次开启会生成并信任一张本机根证书，关闭后移除。")}
@@ -41,7 +44,7 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
           hint={t("插件和脚本需要它才能改写网页请求")}
           checked={decrypting}
           disabled={locked}
-          onChange={() => change("mitm", decrypting ? desktop.disableHttpsMitm : desktop.enableHttpsMitm)}
+          onChange={() => (decrypting ? change("mitm", desktop.disableHttpsMitm) : consent.guard(() => change("mitm", desktop.enableHttpsMitm)))}
         />
         {!linux && (
           <ToggleRow
