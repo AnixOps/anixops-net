@@ -51,6 +51,17 @@ public enum RuntimeControl {
     case captureConnection(UInt64)
     /// Everything captured, or one connection, as a pcapng or HAR file (`PacketCapture.ExportAnswer`).
     case exportCapture(PacketCapture.ExportFormat, id: UInt64?)
+    /// One captured request (`exchange` of connection `id`) as cURL, code, Postman, Insomnia or HAR; `redact` hides
+    /// cookies, tokens and passwords.
+    case exportRequest(PacketCapture.RequestExport, id: UInt64, exchange: Int, redact: Bool)
+    /// Where saved sessions go and the key that seals them; set by the extension after the engine starts.
+    case setCaptureStorage(dir: String, keyBase64: String, retentionDays: Int)
+    /// Seals what is captured now into a session file.
+    case saveCapture(name: String?)
+    case captureSessions
+    /// Replaces what is captured with a saved session (and stops live capture).
+    case loadCapture(String)
+    case deleteCapture(String)
     /// One row per decrypted HTTP exchange after `sinceSeq`, those matching `filter` (`CaptureFilter`).
     case captureRequests(sinceSeq: UInt64, limit: Int, filter: String)
     /// The engine opened to phones on the local network that set this Mac as their Wi-Fi proxy (`LanShare`).
@@ -116,6 +127,28 @@ public enum RuntimeControl {
                 request["id"] = id
             }
             object = request
+        case let .exportRequest(export, id, exchange, redact):
+            var request: [String: Any] = [
+                "cmd": "export_capture", "format": export.format, "id": id, "exchange": exchange, "redact": redact,
+            ]
+            if let language = export.language {
+                request["language"] = language.rawValue
+            }
+            object = request
+        case let .setCaptureStorage(dir, keyBase64, retentionDays):
+            object = ["cmd": "set_capture_storage", "dir": dir, "key_base64": keyBase64, "retention_days": retentionDays]
+        case let .saveCapture(name):
+            var request: [String: Any] = ["cmd": "save_capture"]
+            if let name, !name.isEmpty {
+                request["name"] = name
+            }
+            object = request
+        case .captureSessions:
+            object = ["cmd": "capture_sessions"]
+        case let .loadCapture(session):
+            object = ["cmd": "load_capture", "session": session]
+        case let .deleteCapture(session):
+            object = ["cmd": "delete_capture", "session": session]
         case let .captureRequests(sinceSeq, limit, filter):
             var request: [String: Any] = ["cmd": "capture_requests", "since_seq": sinceSeq, "limit": limit]
             if !filter.isEmpty {

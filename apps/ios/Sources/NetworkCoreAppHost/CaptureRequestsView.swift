@@ -19,6 +19,9 @@ struct CaptureRequestsView: View {
     @State private var invalidFilter: Int??
     /// The engine answers no `capture_requests` (a kernel before it).
     @State private var unsupported = false
+    @State private var showsSessions = false
+    /// A line under the summary after saving a session, or why it failed.
+    @State private var notice: String?
 
     private var filter: String {
         CaptureFilter.compose(chips: chips, text: query)
@@ -49,6 +52,9 @@ struct CaptureRequestsView: View {
                         .monospacedDigit()
                     if let capture, capture.enabled {
                         CaptureStatusLine(status: capture)
+                    }
+                    if let notice {
+                        Text(notice)
                     }
                     if let invalidFilter {
                         Text(invalidText(invalidFilter))
@@ -88,12 +94,32 @@ struct CaptureRequestsView: View {
                             log.reset()
                             await load()
                         }
+                        Divider()
+                        Button {
+                            Task {
+                                await saveSession()
+                            }
+                        } label: {
+                            Label("保存当前抓包", systemImage: "lock.doc")
+                        }
+                        .disabled((capture?.connections ?? 0) == 0)
+                        Button {
+                            showsSessions = true
+                        } label: {
+                            Label("已保存的会话", systemImage: "clock.arrow.circlepath")
+                        }
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
                 .accessibilityLabel("更多")
                 .disabled(tunnel.connection != .connected)
+            }
+        }
+        .navigationDestination(isPresented: $showsSessions) {
+            CaptureSessionsView(tunnel: tunnel) {
+                log.reset()
+                notice = String(localized: "正在查看已保存的会话，抓包已停止")
             }
         }
         .task(id: LoadKey(connected: tunnel.connection == .connected, filter: filter)) {
@@ -220,6 +246,15 @@ struct CaptureRequestsView: View {
             return String(localized: "表达式第 \(at + 1) 个字符附近有误")
         }
         return String(localized: "表达式有误")
+    }
+
+    private func saveSession() async {
+        let answer = RuntimeControl.decode(PacketCapture.SavedAnswer.self, from: await tunnel.control(.saveCapture(name: nil)))
+        if let session = answer?.session {
+            notice = String(localized: "已加密保存：\(CaptureSessionsView.title(session))，7 天后自动删除")
+        } else {
+            notice = String(localized: "无法保存会话")
+        }
     }
 
     private func load() async {

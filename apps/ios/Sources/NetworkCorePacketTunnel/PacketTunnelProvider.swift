@@ -211,6 +211,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 }
                 self.watchNetworkPath()
                 self.watchPhysicalNetwork(session)
+                self.setUpCaptureStorage(session)
                 completionHandler(nil)
             } catch let failure as EmbeddedRuntimeSession.Failure {
                 completionHandler(PacketTunnelFailure(reason: "embedded runtime could not start (code \(failure.code))"))
@@ -295,6 +296,18 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     /// Tells the engine when the network under the tunnel changes (Wi-Fi to cellular, another Wi-Fi), for the
     /// plugins' `network-changed` scripts. The first path seen is the one the tunnel started on.
+    /// Lets the engine seal saved capture sessions: a folder in this extension's container and a key that stays in
+    /// the Keychain on this device. Without either, saving sessions is simply unavailable.
+    private func setUpCaptureStorage(_ session: EmbeddedRuntimeSession) {
+        do {
+            if session.control(try CaptureSessionStorage.setupRequest().request) == nil {
+                events.record("capture storage refused")
+            }
+        } catch {
+            events.record("capture storage unavailable")
+        }
+    }
+
     private func watchNetworkPath() {
         pathObservation?.invalidate()
         pathObservation = observe(\.defaultPath, options: [.initial, .new]) { [weak self] provider, _ in
