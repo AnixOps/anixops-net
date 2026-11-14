@@ -1,0 +1,10 @@
+[package]
+name = "app-log"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The client's own log files: appended one line per event, read back newest last with level and module for the log viewer."
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }

@@ -562,3 +562,14 @@ dl.headers dd { margin: 0; font-family: var(--font-mono); font-size: 12px; overf
 .stats-bars { display: flex; align-items: flex-end; gap: 3px; height: 120px; padding: 10px 14px 12px; }
 .stats-bars > span { flex: 1; height: 100%; display: flex; align-items: flex-end; }
 .stats-bars > span > span { width: 100%; min-height: 1px; border-radius: 3px 3px 0 0; background: var(--accent); }
+.log-lines { list-style: none; margin: 0; padding: 0 14px 10px; font-family: var(--mono, ui-monospace, monospace); font-size: 12px; }
+.log-lines li { display: grid; grid-template-columns: auto auto 1fr; gap: 8px; padding: 4px 0; border-top: 1px solid var(--hairline); }
+.log-lines li:first-child { border-top: 0; }
+.log-lines time, .log-module { color: var(--text3); white-space: nowrap; }
+.log-message { min-width: 0; overflow-wrap: anywhere; }
+.log-lines li.warn .log-message { color: var(--warning); }
+.log-lines li.error .log-message { color: var(--danger); }
+@media (max-width: 560px) {
+  .log-lines li { grid-template-columns: auto 1fr; }
+  .log-message { grid-column: 1 / -1; }
+}

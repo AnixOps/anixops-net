@@ -10,6 +10,7 @@ import { t } from "../i18n";
 import { CaptureSessions } from "./CaptureSessions";
 import { CaptureDetail, exportCapture } from "./CaptureViews";
 import { RequestList } from "./RequestList";
+import { LogsCard } from "./LogsCard";
 import { TrafficStatsCard } from "./TrafficStatsCard";
 
 /** Session state and the connection list; debug mode ("Requests") puts the connections, with capture, first. */
@@ -49,10 +50,11 @@ export function ActivityPage({ snapshot, busy, run, debug = false }: { snapshot:
   const holding = Boolean(capture?.enabled) || (capture?.connections ?? 0) > 0;
   const requests = debug && live && <RequestList capturing={holding} onOpen={(request) => setDetail(requestDetail(request))} />;
   const saved = debug && live && <CaptureSessions capture={capture} run={run} />;
+  const logs = <LogsCard live={live} busy={busy} run={run} />;
 
   return (
     <div className="page-stack">
-      {debug ? <>{requests}{saved}{connections}{session}</> : <>{session}<TrafficStatsCard live={live} busy={busy} run={run} />{connections}</>}
+      {debug ? <>{requests}{saved}{connections}{session}{logs}</> : <>{session}<TrafficStatsCard live={live} busy={busy} run={run} />{connections}{logs}</>}
     </div>
   );
 }
