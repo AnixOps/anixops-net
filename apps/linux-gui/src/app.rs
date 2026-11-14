@@ -85,6 +85,19 @@ pub trait TunnelHost: Send + Sync + 'static {
         let _ = (app, name, contents);
         Err("this platform has no shared Downloads folder".to_string())
     }
+
+    /// Puts a binary file, given as base64, in the same place as [`TunnelHost::save_to_downloads`] and
+    /// returns where it went.
+    fn save_base64_to_downloads(
+        &self,
+        app: &AppHandle,
+        name: &str,
+        mime_type: &str,
+        data_base64: &str,
+    ) -> Result<String, String> {
+        let _ = (app, name, mime_type, data_base64);
+        Err("this platform has no shared Downloads folder".to_string())
+    }
 }
 
 struct TunnelHostState(Box<dyn TunnelHost>);
@@ -408,6 +421,55 @@ async fn runtime_control(
     request: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     with_backend(&state, move |backend| backend.runtime_control(&request)).await
+}
+
+/// Where a capture export was saved.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SavedFile {
+    location: String,
+}
+
+/// Exports the packet capture (`format` pcapng or har; one connection with `id`, else all) to Downloads without
+/// replacing an older file, and answers where it went.
+#[tauri::command]
+async fn export_capture(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    format: String,
+    id: Option<u64>,
+) -> Result<SavedFile, String> {
+    let mut request = serde_json::json!({ "cmd": "export_capture", "format": format });
+    if let Some(id) = id {
+        request["id"] = serde_json::json!(id);
+    }
+    let answer = with_backend(&state, move |backend| backend.runtime_control(&request)).await?;
+    let export = desktop_mitm::capture::Export::from_answer(&answer)?;
+    let location = off_lock(move || save_export(&app, &export)).await?;
+    Ok(SavedFile { location })
+}
+
+/// Android keeps files the user opens elsewhere in the shared Downloads folder, which only the VPN plugin can
+/// write.
+#[cfg(target_os = "android")]
+fn save_export(app: &AppHandle, export: &desktop_mitm::capture::Export) -> Result<String, String> {
+    let host = app
+        .try_state::<TunnelHostState>()
+        .ok_or("this platform has no shared Downloads folder")?;
+    host.0.save_base64_to_downloads(
+        app,
+        &export.file_name,
+        &export.content_type,
+        &export.data_base64,
+    )
+}
+
+#[cfg(not(target_os = "android"))]
+fn save_export(_app: &AppHandle, export: &desktop_mitm::capture::Export) -> Result<String, String> {
+    let dir =
+        desktop_mitm::capture::downloads_dir().ok_or("the Downloads folder could not be found")?;
+    let path = desktop_mitm::capture::save_new_file(&dir, &export.file_name, &export.bytes()?)?;
+    Ok(path.display().to_string())
 }
 
 #[tauri::command]
@@ -974,6 +1036,7 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             check_profile_runtime,
             switch_node,
             runtime_control,
+            export_capture,
             test_node_delay,
             test_node_delays,
             network_probe,
