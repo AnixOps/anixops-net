@@ -52,6 +52,7 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
 use tauri::webview::PageLoadEvent;
 use tauri::{Manager, Runtime, State, WindowEvent};
+use traffic_stats::{Counter as TrafficCounter, TrafficStats};
 
 const APP_LOG_SCOPE: &str = "tauri-gui";
 const MITM_CA_SUBJECT: &str = "AnixOps NetworkCore Windows HTTPS MITM CA";
@@ -82,6 +83,86 @@ struct DesktopAppState {
     desktop: Arc<Mutex<DesktopState>>,
     lifecycle: Arc<RuntimeLifecycle>,
     direct_core: Arc<Mutex<connection::DesktopCore>>,
+    /// Seven days of traffic by hour, host and policy (`traffic_stats`).
+    traffic: Arc<Mutex<TrafficRecorder>>,
+}
+
+/// The traffic statistics and what the last connection list held.
+struct TrafficRecorder {
+    stats: TrafficStats,
+    counter: TrafficCounter,
+    saved_at: Instant,
+}
+
+impl TrafficRecorder {
+    fn load() -> Self {
+        Self {
+            stats: TrafficStats::load(&traffic_stats_path()),
+            counter: TrafficCounter::default(),
+            saved_at: Instant::now(),
+        }
+    }
+
+    fn save(&mut self) {
+        self.saved_at = Instant::now();
+        let _ = self.stats.save(&traffic_stats_path());
+    }
+}
+
+fn traffic_stats_path() -> PathBuf {
+    windows_managed_data_directory().join("traffic-stats.json")
+}
+
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs())
+}
+
+/// Counts the engine's connections into the traffic statistics every five seconds; saved once a minute and on quit.
+fn start_traffic_stats(state: DesktopAppState) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_secs(5));
+        let list = state
+            .direct_core
+            .lock()
+            .ok()
+            .and_then(|core| core.control(br#"{"cmd":"connections"}"#).ok())
+            .and_then(|answer| serde_json::from_slice::<Value>(&answer).ok());
+        let Ok(mut recorder) = state.traffic.lock() else {
+            continue;
+        };
+        let Some(list) = list else {
+            recorder.counter.reset();
+            continue;
+        };
+        let recorder = &mut *recorder;
+        if recorder
+            .counter
+            .ingest(&list, &mut recorder.stats, unix_now())
+            && recorder.saved_at.elapsed() >= Duration::from_secs(60)
+        {
+            recorder.save();
+        }
+    });
+}
+
+/// Seven days of traffic by hour, host and policy; `clear` empties it first.
+#[tauri::command]
+async fn traffic_stats(
+    clear: bool,
+    state: State<'_, DesktopAppState>,
+) -> Result<TrafficStats, String> {
+    let mut recorder = state
+        .traffic
+        .lock()
+        .map_err(|_| "traffic statistics lock failed")?;
+    if clear {
+        recorder.stats.clear();
+        recorder.save();
+    }
+    recorder.stats.prune(unix_now());
+    Ok(recorder.stats.clone())
 }
 
 /// Crash reports, the metrics endpoint, the install check and the cold start.
@@ -271,6 +352,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             desktop: Arc::new(Mutex::new(desktop)),
             lifecycle: Arc::new(RuntimeLifecycle::default()),
             direct_core,
+            traffic: Arc::new(Mutex::new(TrafficRecorder::load())),
         })
         .manage(HealthState(health))
         .setup(|app| {
@@ -286,6 +368,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             start_core_recovery_monitor(state);
             start_subscription_refresh_monitor(app.state::<DesktopAppState>().inner().clone());
             start_fastest_node_monitor(app.state::<DesktopAppState>().inner().clone());
+            start_traffic_stats(app.state::<DesktopAppState>().inner().clone());
             Ok(())
         })
         .on_page_load(|webview, payload| {
@@ -335,6 +418,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             test_node_delays,
             network_probe,
             node_share_link,
+            traffic_stats,
             node_form,
             edit_node,
             remove_node,
@@ -400,6 +484,9 @@ fn install_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             "show" => show_main_window(app),
             "quit" => {
                 if let Some(state) = app.try_state::<DesktopAppState>() {
+                    if let Ok(mut recorder) = state.traffic.lock() {
+                        recorder.save();
+                    }
                     stop_desktop_core_for_exit(state.inner().clone());
                 }
                 app.exit(0);

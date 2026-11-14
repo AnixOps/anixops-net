@@ -1,0 +1,11 @@
+[package]
+name = "traffic-stats"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Traffic over the last seven days in hourly buckets, by host and by policy, counted from the engine's connection list, as the iOS statistics page keeps it."
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

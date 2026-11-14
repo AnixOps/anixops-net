@@ -29,6 +29,7 @@ use subscription_meta::ResponseMeta;
 use tauri::plugin::TauriPlugin;
 use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Context, Manager, RunEvent, State, Wry};
+use traffic_stats::TrafficStats;
 
 /// The URL the delay tests fetch, as on Windows.
 const DELAY_URL: &str = "https://www.gstatic.com/generate_204";
@@ -742,6 +743,12 @@ async fn node_share_link(state: State<'_, AppState>, node_id: String) -> Result<
     lock(&state.0).share_link(&node_id)
 }
 
+/// Seven days of traffic by hour, host and policy; `clear` empties it first.
+#[tauri::command]
+async fn traffic_stats(state: State<'_, AppState>, clear: bool) -> Result<TrafficStats, String> {
+    Ok(lock(&state.0).traffic_stats(clear))
+}
+
 /// The name, server and port of a node of the selected subscription, and whether it can be removed.
 #[tauri::command]
 async fn node_form(state: State<'_, AppState>, node_id: String) -> Result<NodeForm, String> {
@@ -928,6 +935,14 @@ fn start_network_watch(backend: Arc<Mutex<Backend>>) {
             }
             thread::sleep(network_watch::POLL);
         }
+    });
+}
+
+/// Counts the engine's traffic for the statistics every five seconds (`traffic_stats`).
+fn start_traffic_stats(backend: Arc<Mutex<Backend>>) {
+    thread::spawn(move || loop {
+        thread::sleep(Duration::from_secs(5));
+        lock(&backend).count_traffic();
     });
 }
 
@@ -1229,6 +1244,7 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
 
     start_subscription_updates(shared.clone());
     start_network_watch(shared.clone());
+    start_traffic_stats(shared.clone());
 
     let mut builder = tauri::Builder::default();
     for plugin in plugins {
@@ -1274,6 +1290,7 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             test_node_delays,
             network_probe,
             node_share_link,
+            traffic_stats,
             node_form,
             edit_node,
             remove_node,

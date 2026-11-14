@@ -28,6 +28,7 @@ use engine_embedded::profile::{self, RoutingMode, RuleList};
 use node_edits::{NodeEdits, NodeForm};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use traffic_stats::{Counter as TrafficCounter, TrafficStats};
 
 pub use desktop_dns::DnsPreset;
 
@@ -201,6 +202,10 @@ pub struct Backend {
     executable: PathBuf,
     last_error: Option<String>,
     configuration_error: Option<String>,
+    /// Seven days of traffic by hour, host and policy (`traffic_stats`).
+    traffic: TrafficStats,
+    traffic_counter: TrafficCounter,
+    traffic_saved_at: u64,
 }
 
 impl Backend {
@@ -225,7 +230,11 @@ impl Backend {
             executable,
             last_error: None,
             configuration_error: None,
+            traffic: TrafficStats::default(),
+            traffic_counter: TrafficCounter::default(),
+            traffic_saved_at: now(),
         };
+        backend.traffic = TrafficStats::load(&backend.traffic_path());
         backend.restore_proxy();
         backend.reload_nodes();
         backend
@@ -1037,6 +1046,46 @@ impl Backend {
         self.engine.control(request)
     }
 
+    fn traffic_path(&self) -> PathBuf {
+        self.store.dir().join("traffic-stats.json")
+    }
+
+    /// Counts what the running engine's connections moved since the last call; the statistics are saved at most
+    /// once a minute and when the app closes.
+    pub fn count_traffic(&mut self) {
+        if !self.engine.is_running() {
+            self.traffic_counter.reset();
+            return;
+        }
+        let Ok(list) = self
+            .engine
+            .control(&serde_json::json!({ "cmd": "connections" }))
+        else {
+            return;
+        };
+        let now = now();
+        if self.traffic_counter.ingest(&list, &mut self.traffic, now)
+            && now >= self.traffic_saved_at + 60
+        {
+            self.save_traffic();
+        }
+    }
+
+    fn save_traffic(&mut self) {
+        self.traffic_saved_at = now();
+        let _ = self.traffic.save(&self.traffic_path());
+    }
+
+    /// The traffic statistics, emptied first with `clear`.
+    pub fn traffic_stats(&mut self, clear: bool) -> TrafficStats {
+        if clear {
+            self.traffic.clear();
+            self.save_traffic();
+        }
+        self.traffic.prune(now());
+        self.traffic.clone()
+    }
+
     /// The engine's metrics text while it runs, and whether the client is connected.
     pub fn metrics(&self) -> (Option<String>, bool) {
         (self.engine.metrics(), self.engine.is_running())
@@ -1049,6 +1098,7 @@ impl Backend {
 
     /// Stops the engine and puts the proxy settings back; called when the window closes.
     pub fn shutdown(&mut self) {
+        self.save_traffic();
         self.engine.stop();
         self.restore_proxy();
     }

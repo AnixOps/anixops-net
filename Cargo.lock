@@ -3078,6 +3078,7 @@ dependencies = [
  "subscription-meta",
  "tauri",
  "tauri-build",
+ "traffic-stats",
 ]
 
 [[package]]
@@ -3105,6 +3106,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-single-instance",
+ "traffic-stats",
  "windows-sys 0.61.2",
 ]
 
@@ -5697,6 +5699,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
+]
+
+[[package]]
+name = "traffic-stats"
+version = "0.3.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
