@@ -3571,7 +3571,7 @@ fn reconnect_running_direct_core(state: &DesktopAppState) -> Result<(), String> 
 
 fn disable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult, String> {
     let mut managed = managed_config_or_default()?;
-    let native_mitm = managed
+    managed
         .native_mitm
         .take()
         .ok_or_else(|| "HTTPS MITM is not configured.".to_string())?;
@@ -3599,10 +3599,8 @@ fn disable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult
         } else {
             None
         };
-    let private_key_cleanup_error =
-        remove_windows_managed_mitm_private_key(&native_mitm.ca_private_key_path)
-            .err()
-            .map(|error| error.message);
+    // The root and its key stay, so turning decryption on again needs no new manual trust. The user
+    // removes the root from Windows' certificate store when they stop using decryption.
     if restart {
         NativeWindowsSystemIntegration::new()
             .start_service()
@@ -3610,9 +3608,6 @@ fn disable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult
     }
     reconnect_running_direct_core(&state)?;
     if let Some(error) = certificate_cleanup_error {
-        return Err(error);
-    }
-    if let Some(error) = private_key_cleanup_error {
         return Err(error);
     }
     Ok(OperationResult {

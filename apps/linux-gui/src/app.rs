@@ -869,11 +869,26 @@ fn open_mitm_root() -> Result<OperationResult, String> {
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn disable_https_mitm(state: State<'_, AppState>) -> Result<OperationResult, String> {
-    let result = with_backend(&state, |backend| backend.set_https_decryption(false)).await?;
+    // The root stays trusted, so turning decryption on again needs no new manual trust; the user
+    // removes it with `remove_mitm_root_trust`.
+    with_backend(&state, |backend| backend.set_https_decryption(false)).await
+}
+
+/// The user's own request to stop trusting the root: the browsers' databases and, after polkit asks, the
+/// system store.
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+async fn remove_mitm_root_trust() -> Result<OperationResult, String> {
     let removed = off_lock(|| Ok(trust::remove())).await?;
     Ok(OperationResult {
-        message: format!("{}. {}", result.message, removed.summary("removed")),
+        message: removed.summary("removed"),
     })
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn remove_mitm_root_trust() -> Result<OperationResult, String> {
+    Err(UNAVAILABLE.to_string())
 }
 
 /// The name the decryption root gets in Downloads.
@@ -1121,6 +1136,7 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             disable_https_mitm,
             mitm_root_status,
             open_mitm_root,
+            remove_mitm_root_trust,
             list_mitm_plugins,
             import_mitm_plugin,
             set_mitm_plugin_enabled,

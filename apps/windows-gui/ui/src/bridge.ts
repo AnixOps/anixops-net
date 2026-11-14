@@ -353,6 +353,7 @@ export const desktop = {
   disableHttpsMitm: () => invoke<OperationResult>("disable_https_mitm"),
   mitmRootStatus: () => invoke<MitmRootStatus>("mitm_root_status"),
   openMitmRoot: () => invoke<OperationResult>("open_mitm_root"),
+  removeMitmRootTrust: () => invoke<OperationResult>("remove_mitm_root_trust"),
   mitmPlugins: () => invoke<MitmPlugin[]>("list_mitm_plugins"),
   importMitmPlugin: (url: string) => invoke<OperationResult>("import_mitm_plugin", { url }),
   setMitmPluginEnabled: (id: string, enabled: boolean) =>

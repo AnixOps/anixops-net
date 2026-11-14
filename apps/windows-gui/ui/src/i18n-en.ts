@@ -422,4 +422,8 @@ export const english: Record<string, string> = {
   "抓到的流量从哪里发出": "Where captured traffic leaves",
   "经过节点": "Through a node",
   "使用方式": "Use AnixOps Net for",
+  "已由你手动信任。关闭解密后仍保留，不再使用时请移除信任": "Trusted by you. It stays trusted when decryption is off; remove the trust when you no longer use it",
+  "已由你手动信任。关闭解密后仍保留，不再使用时请在 certmgr.msc 的“受信任的根证书颁发机构”里删除": "Trusted by you. It stays trusted when decryption is off; when you no longer use it, delete it from Trusted Root Certification Authorities in certmgr.msc",
+  "移除信任": "Remove Trust",
+  "确认移除根证书的信任": "Remove trust in the root certificate?",
 };

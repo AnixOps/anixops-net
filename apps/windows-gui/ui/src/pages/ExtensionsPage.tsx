@@ -53,11 +53,18 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
             icon={ShieldCheck}
             color={root.trusted ? "green" : "gray"}
             label={t("根证书")}
-            hint={root.trusted ? t("已由你手动信任") : linux ? t("点“信任根证书”后，系统会请你授权写入浏览器和系统证书库") : t("点“信任根证书”会打开 Windows 证书窗口：选“安装证书”→“当前用户”→“将所有的证书都放入下列存储”→“受信任的根证书颁发机构”，再确认安全警告")}
+            hint={root.trusted ? (linux ? t("已由你手动信任。关闭解密后仍保留，不再使用时请移除信任") : t("已由你手动信任。关闭解密后仍保留，不再使用时请在 certmgr.msc 的“受信任的根证书颁发机构”里删除")) : linux ? t("点“信任根证书”后，系统会请你授权写入浏览器和系统证书库") : t("点“信任根证书”会打开 Windows 证书窗口：选“安装证书”→“当前用户”→“将所有的证书都放入下列存储”→“受信任的根证书颁发机构”，再确认安全警告")}
           >
             <StatusPill label={root.trusted ? t("已信任") : t("未信任")} tone={root.trusted ? "success" : "warning"} />
             {!root.trusted && (
               <button className="secondary compact" disabled={locked} onClick={() => change("certificate", desktop.openMitmRoot)}>{t("信任根证书")}</button>
+            )}
+            {root.trusted && linux && (
+              <MoreMenu
+                label={t("更多")}
+                disabled={locked}
+                items={[{ label: t("移除信任"), danger: true, confirm: t("确认移除根证书的信任"), onSelect: () => change("certificate", desktop.removeMitmRootTrust) }]}
+              />
             )}
           </Row>
         )}
