@@ -68,7 +68,12 @@ export function Select<T extends string>({ label, value, onChange, choices = [],
       placeholder={placeholder}
     >
       <Button className={`select-trigger ${className}`}>
-        {children ?? <SelectValue className="select-value" />}
+        {children ?? (
+          // Only the entry's text: its own content also carries the check mark of the list.
+          <SelectValue className="select-value">
+            {({ isPlaceholder, selectedText, defaultChildren }) => (isPlaceholder ? defaultChildren : selectedText)}
+          </SelectValue>
+        )}
         <ChevronsUpDown className="select-arrows" size={12} aria-hidden="true" />
       </Button>
       <Popover className="popover" offset={4}>
