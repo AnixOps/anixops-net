@@ -328,6 +328,20 @@ export interface MitmPlugin {
   scriptCount: number;
 }
 
+/** One hour of traffic; `start` is Unix seconds. */
+export interface TrafficHour {
+  start: number;
+  upload: number;
+  download: number;
+  hosts: Record<string, number>;
+  policies: Record<string, number>;
+}
+
+/** Seven days of traffic, oldest hour first. */
+export interface TrafficStats {
+  hours: TrafficHour[];
+}
+
 /** What a saved plugin holds, as the engine reads it. */
 export interface MitmPluginDetails {
   excludedHostnames: string[];
@@ -485,6 +499,8 @@ export const desktop = {
   networkProbe: (connected: boolean) => invoke<NetworkProbe>("network_probe", { connected }),
   /** The node's share link, or a Surge line for Snell. */
   shareLink: (nodeId: string) => invoke<string>("node_share_link", { nodeId }),
+  /** Seven days of traffic by hour, host and policy; `clear` empties it first. */
+  trafficStats: (clear = false) => invoke<TrafficStats>("traffic_stats", { clear }),
   nodeForm: (nodeId: string) => invoke<NodeForm>("node_form", { nodeId }),
   /** Until the subscription is updated, the node runs with this name, server and port. */
   editNode: (nodeId: string, name: string, server: string, port: string) => invoke<OperationResult>("edit_node", { nodeId, name, server, port }),

@@ -10,6 +10,7 @@ import { t } from "../i18n";
 import { CaptureSessions } from "./CaptureSessions";
 import { CaptureDetail, exportCapture } from "./CaptureViews";
 import { RequestList } from "./RequestList";
+import { TrafficStatsCard } from "./TrafficStatsCard";
 
 /** Session state and the connection list; debug mode ("Requests") puts the connections, with capture, first. */
 export function ActivityPage({ snapshot, busy, run, debug = false }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run; debug?: boolean }) {
@@ -51,7 +52,7 @@ export function ActivityPage({ snapshot, busy, run, debug = false }: { snapshot:
 
   return (
     <div className="page-stack">
-      {debug ? <>{requests}{saved}{connections}{session}</> : <>{session}{connections}</>}
+      {debug ? <>{requests}{saved}{connections}{session}</> : <>{session}<TrafficStatsCard live={live} busy={busy} run={run} />{connections}</>}
     </div>
   );
 }
