@@ -14,6 +14,7 @@ use super::{
     append_managed_log, is_trunk_node, load_validated_managed_configuration,
     managed_config_or_default, profile_node_options, write_diagnostic_report_at,
 };
+use app_notifications::{DisconnectWatch, Notice, Settings as NotificationSettings};
 use client_health::{startup as cold_start, Health};
 use config_core::routing_import::import_subscription_routing;
 use config_core::CoreSubscriptionService;
@@ -52,7 +53,8 @@ use std::{
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
 use tauri::webview::PageLoadEvent;
-use tauri::{Manager, Runtime, State, WindowEvent};
+use tauri::{AppHandle, Manager, Runtime, State, WindowEvent};
+use tauri_plugin_notification::NotificationExt;
 use traffic_stats::{Counter as TrafficCounter, TrafficStats};
 
 const APP_LOG_SCOPE: &str = "tauri-gui";
@@ -86,6 +88,8 @@ struct DesktopAppState {
     direct_core: Arc<Mutex<connection::DesktopCore>>,
     /// Seven days of traffic by hour, host and policy (`traffic_stats`).
     traffic: Arc<Mutex<TrafficRecorder>>,
+    /// The notification switches (`notification_settings`).
+    notifications: Arc<Mutex<NotificationSettings>>,
 }
 
 /// The traffic statistics and what the last connection list held.
@@ -110,6 +114,69 @@ impl TrafficRecorder {
     }
 }
 
+fn notification_settings_path() -> PathBuf {
+    windows_managed_data_directory().join("notifications.json")
+}
+
+/// The name the subscription at `location` is shown with.
+fn subscription_name(state: &DesktopAppState, location: &str) -> String {
+    state
+        .desktop
+        .lock()
+        .ok()
+        .and_then(|desktop| {
+            desktop
+                .subscription_sources
+                .iter()
+                .find(|source| source.location == location)
+                .map(|source| {
+                    subscription_meta::display_name(source.name.as_deref(), &source.location)
+                })
+        })
+        .unwrap_or_else(|| subscription_meta::display_name(None, location))
+}
+
+fn notification_settings_now(state: &DesktopAppState) -> NotificationSettings {
+    state
+        .notifications
+        .lock()
+        .map(|settings| settings.clone())
+        .unwrap_or_default()
+}
+
+/// Shows one system notification; one the system refuses is dropped.
+fn post_notice(app: &AppHandle, notice: &Notice) {
+    let _ = app
+        .notification()
+        .builder()
+        .title(&notice.title)
+        .body(&notice.body)
+        .show();
+}
+
+/// The notification switches, changed to `update` first when given, with the texts in `language`.
+#[tauri::command]
+async fn notification_settings(
+    update: Option<NotificationSettings>,
+    language: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<NotificationSettings, String> {
+    let mut settings = state
+        .notifications
+        .lock()
+        .map_err(|_| "notification settings lock failed")?;
+    let mut next = update.unwrap_or_else(|| settings.clone());
+    if !language.is_empty() {
+        next.language = language;
+    }
+    if next != *settings {
+        next.save(&notification_settings_path())
+            .map_err(|error| format!("the notification settings could not be saved: {error}"))?;
+        *settings = next;
+    }
+    Ok(settings.clone())
+}
+
 fn traffic_stats_path() -> PathBuf {
     windows_managed_data_directory().join("traffic-stats.json")
 }
@@ -120,16 +187,31 @@ fn unix_now() -> u64 {
         .map_or(0, |elapsed| elapsed.as_secs())
 }
 
-/// Counts the engine's connections into the traffic statistics every five seconds; saved once a minute and on quit.
-fn start_traffic_stats(state: DesktopAppState) {
+/// Counts the engine's connections into the traffic statistics every five seconds (saved once a minute and on
+/// quit), and posts what scripts posted.
+fn start_traffic_stats(app: AppHandle, state: DesktopAppState) {
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_secs(5));
-        let list = state
+        let (list, scripts) = state
             .direct_core
             .lock()
-            .ok()
-            .and_then(|core| core.control(br#"{"cmd":"connections"}"#).ok())
-            .and_then(|answer| serde_json::from_slice::<Value>(&answer).ok());
+            .map(|core| {
+                let read = |request: &[u8]| {
+                    core.control(request)
+                        .ok()
+                        .and_then(|answer| serde_json::from_slice::<Value>(&answer).ok())
+                };
+                (
+                    read(br#"{"cmd":"connections"}"#),
+                    read(br#"{"cmd":"script_notifications"}"#),
+                )
+            })
+            .unwrap_or_default();
+        if let Some(answer) = scripts {
+            for notice in notification_settings_now(&state).script_notices(&answer) {
+                post_notice(&app, &notice);
+            }
+        }
         let Ok(mut recorder) = state.traffic.lock() else {
             continue;
         };
@@ -367,6 +449,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
     }));
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main_window(app);
         }))
@@ -375,6 +458,9 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             lifecycle: Arc::new(RuntimeLifecycle::default()),
             direct_core,
             traffic: Arc::new(Mutex::new(TrafficRecorder::load())),
+            notifications: Arc::new(Mutex::new(NotificationSettings::load(
+                &notification_settings_path(),
+            ))),
         })
         .manage(HealthState(health))
         .setup(|app| {
@@ -387,10 +473,16 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             remove_legacy_service(&state);
             start_automatic_connection(state.clone());
             start_network_watch(state.clone());
-            start_core_recovery_monitor(state);
-            start_subscription_refresh_monitor(app.state::<DesktopAppState>().inner().clone());
+            start_core_recovery_monitor(app.handle().clone(), state);
+            start_subscription_refresh_monitor(
+                app.handle().clone(),
+                app.state::<DesktopAppState>().inner().clone(),
+            );
             start_fastest_node_monitor(app.state::<DesktopAppState>().inner().clone());
-            start_traffic_stats(app.state::<DesktopAppState>().inner().clone());
+            start_traffic_stats(
+                app.handle().clone(),
+                app.state::<DesktopAppState>().inner().clone(),
+            );
             Ok(())
         })
         .on_page_load(|webview, payload| {
@@ -442,6 +534,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             node_share_link,
             traffic_stats,
             app_logs,
+            notification_settings,
             node_form,
             edit_node,
             remove_node,
@@ -615,7 +708,8 @@ fn start_network_watch(state: DesktopAppState) {
     });
 }
 
-fn start_core_recovery_monitor(state: DesktopAppState) {
+fn start_core_recovery_monitor(app: AppHandle, state: DesktopAppState) {
+    let mut watch = DisconnectWatch::default();
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_secs(2));
         let desktop = match state.desktop.lock() {
@@ -629,15 +723,18 @@ fn start_core_recovery_monitor(state: DesktopAppState) {
             Ok(false) => ConnectionState::CoreError,
             Err(_) => continue,
         };
-        let should_recover = match (
-            state.lifecycle.gui_started_connection.lock(),
-            state.lifecycle.core_recovery_attempted.lock(),
-        ) {
-            (Ok(gui_started), Ok(mut attempted))
+        let gui_started = state
+            .lifecycle
+            .gui_started_connection
+            .lock()
+            .map(|started| *started)
+            .unwrap_or(false);
+        let should_recover = match state.lifecycle.core_recovery_attempted.lock() {
+            Ok(mut attempted)
                 if connection::should_restart_gui_started_core(
                     desktop.auto_recover_core,
                     *attempted,
-                    *gui_started,
+                    gui_started,
                     engine,
                 ) =>
             {
@@ -646,6 +743,18 @@ fn start_core_recovery_monitor(state: DesktopAppState) {
             }
             _ => false,
         };
+        // A stop between a connect of this window and a disconnect is notified once.
+        let running = engine == ConnectionState::Connected;
+        if !gui_started {
+            watch.disconnected();
+        } else if running {
+            watch.connected();
+        } else if watch.stopped_unexpectedly(running) {
+            let _ = append_managed_log(APP_LOG_SCOPE, "the connection stopped unexpectedly");
+            if let Some(notice) = notification_settings_now(&state).disconnected(should_recover) {
+                post_notice(&app, &notice);
+            }
+        }
         if !should_recover {
             continue;
         }
@@ -684,7 +793,7 @@ fn start_core_recovery_monitor(state: DesktopAppState) {
     });
 }
 
-fn start_subscription_refresh_monitor(state: DesktopAppState) {
+fn start_subscription_refresh_monitor(app: AppHandle, state: DesktopAppState) {
     std::thread::spawn(move || {
         let mut last_refresh = Instant::now();
         loop {
@@ -713,6 +822,7 @@ fn start_subscription_refresh_monitor(state: DesktopAppState) {
                 continue;
             }
             last_refresh = Instant::now();
+            let name = subscription_name(&state, &location);
             match import_subscription_blocking(
                 state.clone(),
                 location,
@@ -729,6 +839,11 @@ fn start_subscription_refresh_monitor(state: DesktopAppState) {
                         APP_LOG_SCOPE,
                         &format!("automatic subscription update skipped or failed: {error}"),
                     );
+                    if let Some(notice) =
+                        notification_settings_now(&state).subscription_failed(&name, &error)
+                    {
+                        post_notice(&app, &notice);
+                    }
                 }
             }
         }

@@ -22,6 +22,7 @@ pub fn capture_dir(dir: &Path) -> PathBuf {
 }
 
 use app_log::{Entry as LogEntry, Level as LogLevel};
+use app_notifications::{DisconnectWatch, Notice, Settings as NotificationSettings};
 use control_domain::NodeDescriptor;
 use desktop_mitm::Root;
 use engine_embedded::config::RuntimeConfig;
@@ -212,6 +213,9 @@ pub struct Backend {
     traffic: TrafficStats,
     traffic_counter: TrafficCounter,
     traffic_saved_at: u64,
+    /// The notification switches (`notification_settings`).
+    notifications: NotificationSettings,
+    disconnect_watch: DisconnectWatch,
 }
 
 impl Backend {
@@ -239,8 +243,11 @@ impl Backend {
             traffic: TrafficStats::default(),
             traffic_counter: TrafficCounter::default(),
             traffic_saved_at: now(),
+            notifications: NotificationSettings::default(),
+            disconnect_watch: DisconnectWatch::default(),
         };
         backend.traffic = TrafficStats::load(&backend.traffic_path());
+        backend.notifications = NotificationSettings::load(&backend.notifications_path());
         backend.restore_proxy();
         backend.reload_nodes();
         backend
@@ -987,10 +994,60 @@ impl Backend {
         let result = self.start();
         self.last_error = result.as_ref().err().cloned();
         match &result {
-            Ok(done) => self.log(LogLevel::Info, &done.message),
+            Ok(done) => {
+                self.disconnect_watch.connected();
+                self.log(LogLevel::Info, &done.message);
+            }
             Err(error) => self.log(LogLevel::Error, &format!("connect failed: {error}")),
         }
         result
+    }
+
+    fn notifications_path(&self) -> PathBuf {
+        self.store.dir().join("notifications.json")
+    }
+
+    /// The notification switches, changed to `update` first when given; `language` (the window's) sets the
+    /// language of the texts.
+    pub fn notification_settings(
+        &mut self,
+        update: Option<NotificationSettings>,
+        language: &str,
+    ) -> Result<NotificationSettings, String> {
+        let mut next = update.unwrap_or_else(|| self.notifications.clone());
+        if !language.is_empty() {
+            next.language = language.to_string();
+        }
+        if next != self.notifications {
+            next.save(&self.notifications_path()).map_err(|error| {
+                format!("the notification settings could not be saved: {error}")
+            })?;
+            self.notifications = next;
+        }
+        Ok(self.notifications.clone())
+    }
+
+    /// What to notify since the last call: an unexpected stop of the engine, and what scripts posted. Called
+    /// every few seconds.
+    pub fn take_notices(&mut self) -> Vec<Notice> {
+        let running = self.engine.is_running();
+        if self.disconnect_watch.stopped_unexpectedly(running) {
+            self.log(LogLevel::Error, "the connection stopped unexpectedly");
+            return self.notifications.disconnected(false).into_iter().collect();
+        }
+        if !running {
+            return Vec::new();
+        }
+        self.engine
+            .script_notifications()
+            .map(|answer| self.notifications.script_notices(&answer))
+            .unwrap_or_default()
+    }
+
+    /// The notice for a failed automatic update of source `id`.
+    pub fn subscription_failed_notice(&self, id: &str, error: &str) -> Option<Notice> {
+        self.notifications
+            .subscription_failed(&self.source_name(id), error)
     }
 
     fn source_name(&self, id: &str) -> String {
@@ -1051,6 +1108,7 @@ impl Backend {
 
     pub fn disconnect(&mut self) -> Result<OperationResult, String> {
         self.engine.stop();
+        self.disconnect_watch.disconnected();
         self.last_error = None;
         self.log(LogLevel::Info, "Disconnected");
         self.restore_proxy();
@@ -2013,6 +2071,27 @@ rules:
         assert_eq!(logs[1].level, LogLevel::Error);
         assert!(!logs[1].message.contains("token"));
         assert!(backend.logs(true).unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn keeps_notification_settings_and_notices_nothing_while_disconnected() {
+        let (mut backend, dir) = backend("notifications");
+        let settings = backend.notification_settings(None, "en").unwrap();
+        assert!(settings.scripts && settings.connection && settings.subscriptions);
+        assert_eq!(settings.language, "en");
+        let off = NotificationSettings {
+            scripts: false,
+            ..settings
+        };
+        backend
+            .notification_settings(Some(off.clone()), "")
+            .unwrap();
+        assert_eq!(
+            NotificationSettings::load(&backend.notifications_path()),
+            off
+        );
+        assert!(backend.take_notices().is_empty());
         let _ = std::fs::remove_dir_all(dir);
     }
 }
