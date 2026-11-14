@@ -1,6 +1,6 @@
 # 安卓原生界面（Jetpack Compose）方案
 
-状态：方案，待用户确认取舍（见文末“待定”）。核对基准：main `439270c`。
+状态：方案已确认（2026-11-14，取舍见文末）。核对基准：main `439270c`。
 
 2026-11-14 用户决定：安卓界面改用原生 Kotlin + Jetpack Compose + Material 3，套 AnixOps 品牌色；内核与后端沿用现有 Rust
 和 VpnService；排在桌面端界面做精之后大规模动手。本页是设计与架构，页面实现按文末的 PR 顺序推进。
@@ -45,7 +45,7 @@ crates/client-core/                  从 apps/linux-gui/src/app.rs 抽出的、�
 
 好处：命令契约只有一份；Tauri 桌面端、现有 Tauri 安卓和新的 Compose 安卓在迁移期间共用同一套后端和测试。
 
-### 2. JNI 桥（已定，见待定 1）
+### 2. JNI 桥（已定，见文末第 1 项）
 
 Rust 侧 `apps/android-native/rust`（`jni` crate，MIT/Apache）只导出四个函数：
 
@@ -103,7 +103,7 @@ Kotlin 单元测试检查数据类能无损解析同一批样例，命令新增�
 - 颜色、字号、圆角、动效时长都从同一份设计 tokens 生成：扩展 `.github/scripts/design_tokens.py`，在生成 `tokens.css`
   的同时生成 `apps/android-native/app/src/main/java/.../theme/Tokens.kt`，CI 检查生成物与源一致（和 CSS 相同）。
 - Material 3 的 `ColorScheme` 由品牌 tokens 映射：`primary` = 品牌主色，`surface*` 用 tokens 的背景层级，危险色用
-  tokens 的 `danger`；浅色 / 深色跟随系统。是否使用 Material You 动态取色见待定 3。
+  tokens 的 `danger`；浅色 / 深色跟随系统，不用 Material You 动态取色（已定，见文末第 3 项）。
 - 字体用系统字体（与桌面的决定一致），等宽字体（请求详情、日志）用系统 `monospace`。
 
 ### 7. 文案与语言
@@ -131,7 +131,7 @@ CI 新 job `android-native`（GitHub 托管 runner，变更范围检测同现有
   `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD` 四个 secrets 和同一段 zipalign + apksigner。这样切换后从 Tauri 版直接
   覆盖升级，数据目录（`files/anixops-net`）不变，订阅、节点、插件、设置原样保留。
 - 现在还没有发布密钥，CI 每次用临时调试密钥签名，任意两个 APK 之间本来就不能覆盖安装；用户给出密钥后才有升级链路。
-- 迁移期间（已定，见待定 2）原生版用 `applicationIdSuffix = ".next"` 和名称“AnixOps Net（预览）”，可以与现有版本
+- 迁移期间（已定，见文末第 2 项）原生版用 `applicationIdSuffix = ".next"` 和名称“AnixOps Net（预览）”，可以与现有版本
   并存安装测试；切换的那个 PR 去掉后缀。
 
 ## 功能迁移清单
@@ -159,10 +159,10 @@ CI 新 job `android-native`（GitHub 托管 runner，变更范围检测同现有
   它们不碰桌面界面，与桌面做精的线程不冲突。
 - 桌面端做精完成后：PR 3–8 页面迁移和切换。页面的视觉细节（间距、动效、空状态）参照桌面做精线程定下的规则。
 
-## 待定（需要用户选择）
+## 已定的取舍
 
 1. **界面与 Rust 后端的接口**：已定（用户 2026-11-14）：JSON 命令桥，沿用 `bridge.ts` 的命令名，一份契约三端共用，
    加共享样例测试。
 2. **迁移方式**：已定（用户 2026-11-14）：原生版在 `apps/android-native` 平行开发、以“预览”包名并存安装，全部打勾后一个
    PR 切换并删除 Tauri 安卓。
-3. **颜色**：推荐固定品牌色、深浅色跟随系统；另一选项是默认 Material You 动态取色（随壁纸），或品牌色默认、设置里可切换。
+3. **颜色**：已定（用户 2026-11-14）：固定品牌色，深浅色跟随系统，不用 Material You 动态取色。
