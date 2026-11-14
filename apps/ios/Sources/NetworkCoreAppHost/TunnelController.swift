@@ -1548,6 +1548,12 @@ final class TunnelController {
 
     /// Asks the running extension for its sanitized runtime status.
     func refreshRuntimeStatus() {
+        #if DEBUG
+        if Self.isDemo {
+            // The demo is connected without a tunnel; keep the made-up status so the page does not say it is not running.
+            return
+        }
+        #endif
         guard let session = manager?.connection as? NETunnelProviderSession, connection == .connected else {
             runtimeStatus = nil
             return
@@ -1566,6 +1572,11 @@ final class TunnelController {
 
     /// Asks the running extension for developer-mode diagnostics; clears them when it is not running.
     func refreshDiagnostics() {
+        #if DEBUG
+        if Self.isDemo {
+            return
+        }
+        #endif
         guard let session = manager?.connection as? NETunnelProviderSession, isConnected else {
             diagnostics = nil
             return
@@ -1905,10 +1916,36 @@ extension TunnelController {
         connection = .connected
         connectedSince = Date().addingTimeInterval(-4521)
         lastConnections = Self.demoConnections()
+        runtimeStatus = Self.demoRuntimeStatus
+        diagnostics = Self.demoDiagnostics()
         // Screenshots of debug mode pass `-AnixOpsMode debug`; `choose` shows the first-launch mode choice.
         let demoMode = UserDefaults.standard.string(forKey: "AnixOpsMode") ?? ""
         appMode = demoMode == "choose" ? nil : AppMode(rawValue: demoMode) ?? .proxy
         loaded = true
+    }
+
+    /// A running engine's sanitized status (`engine-embedded` `RuntimeStatus`), so the demo's diagnostics agree with
+    /// its "connected" state.
+    static let demoRuntimeStatus = #"{"abi_version":1,"schema_version":1,"profile_id":"demo","outbound":"shadowsocks","state":"running","last_error":null,"stats":{"packets_in":48210,"packets_in_dropped":0,"packets_out":51377,"tcp_active":14,"tcp_total":1286,"tcp_rejected":0,"tcp_connect_failed":3,"udp_dropped":0,"udp_flows":212,"udp_failed":0,"dns_queries":904,"dns_failed":2}}"#
+
+    /// The extension's diagnostics for the demo: the status above, memory and a few log lines.
+    static func demoDiagnostics() -> TunnelDiagnostics {
+        let now = Date()
+        let lines = [
+            (4521.0, "startTunnel"),
+            (4520.0, "mode global"),
+            (4519.0, "startTunnel succeeded"),
+            (1803.0, "bound interface en0 (code 0)"),
+        ]
+        return TunnelDiagnostics(
+            runtimeStatus: demoRuntimeStatus,
+            memoryFootprintBytes: 18_400_000,
+            peakMemoryFootprintBytes: 23_100_000,
+            memoryAvailableBytes: 31_600_000,
+            uptimeSeconds: 4521,
+            handshake: .current,
+            events: lines.map { TunnelDiagnosticEvent(time: now.addingTimeInterval(-$0.0), message: $0.1) }
+        )
     }
 
     /// Made-up capture answers for the debug-mode screenshots: capture on, a dozen decrypted requests, each the only
