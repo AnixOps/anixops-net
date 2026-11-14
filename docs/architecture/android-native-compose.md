@@ -131,7 +131,7 @@ CI 新 job `android-native`（GitHub 托管 runner，变更范围检测同现有
   `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD` 四个 secrets 和同一段 zipalign + apksigner。这样切换后从 Tauri 版直接
   覆盖升级，数据目录（`files/anixops-net`）不变，订阅、节点、插件、设置原样保留。
 - 现在还没有发布密钥，CI 每次用临时调试密钥签名，任意两个 APK 之间本来就不能覆盖安装；用户给出密钥后才有升级链路。
-- 迁移期间（待定 2 推荐方案）原生版用 `applicationIdSuffix = ".next"` 和名称“AnixOps Net（预览）”，可以与现有版本
+- 迁移期间（已定，见待定 2）原生版用 `applicationIdSuffix = ".next"` 和名称“AnixOps Net（预览）”，可以与现有版本
   并存安装测试；切换的那个 PR 去掉后缀。
 
 ## 功能迁移清单
@@ -163,6 +163,6 @@ CI 新 job `android-native`（GitHub 托管 runner，变更范围检测同现有
 
 1. **界面与 Rust 后端的接口**：推荐 JSON 命令桥（沿用 `bridge.ts` 的命令名，一份契约三端共用，加共享样例测试）；
    另一选项是 UniFFI 生成的类型化 Kotlin 绑定（类型更强，但要另维护一套 UDL / 宏标注，桌面 Tauri 端用不上）。
-2. **迁移方式**：推荐原生版在 `apps/android-native` 平行开发、以“预览”包名并存安装，全部打勾后一个 PR 切换并删除
-   Tauri 安卓；另一选项是在现有包上逐页替换（每个中间版本都是 WebView 和原生混合）。
+2. **迁移方式**：已定（用户 2026-11-14）：原生版在 `apps/android-native` 平行开发、以“预览”包名并存安装，全部打勾后一个
+   PR 切换并删除 Tauri 安卓。
 3. **颜色**：推荐固定品牌色、深浅色跟随系统；另一选项是默认 Material You 动态取色（随壁纸），或品牌色默认、设置里可切换。
