@@ -709,8 +709,21 @@ async fn network_probe(
     state: State<'_, AppState>,
     connected: bool,
 ) -> Result<NetworkProbe, String> {
-    let port = lock(&state.0).listen_port();
-    off_lock(move || Ok(probe_network(connected.then_some(port)))).await
+    let (port, envelope) = {
+        let backend = lock(&state.0);
+        (backend.listen_port(), backend.probe_envelope())
+    };
+    off_lock(move || {
+        Ok(match envelope.filter(|_| connected) {
+            // Android: the exit through a short-lived local proxy on the running configuration.
+            Some(envelope) => {
+                engine::through_temporary_proxy(&envelope, |port| probe_network(Some(port)))
+                    .unwrap_or_else(|_| probe_network(None))
+            }
+            None => probe_network(connected.then_some(port)),
+        })
+    })
+    .await
 }
 
 #[tauri::command]
@@ -810,11 +823,33 @@ async fn save_preferences(
 
 #[tauri::command]
 async fn create_diagnostics(
+    app: AppHandle,
     state: State<'_, AppState>,
     health: State<'_, HealthState>,
 ) -> Result<OperationResult, String> {
     let section = health.0.diagnostics();
+    // Android: the app's own directory is out of the user's reach, so the report goes to Downloads.
+    if app.try_state::<TunnelHostState>().is_some() {
+        let report = lock(&state.0).diagnostics_report(&section);
+        let name = format!("anixops-net-diagnostics-{}.log", unix_seconds());
+        let saved = off_lock(move || {
+            let host = app
+                .try_state::<TunnelHostState>()
+                .ok_or("this platform has no shared Downloads folder")?;
+            host.0.save_to_downloads(&app, &name, &report)
+        })
+        .await?;
+        return Ok(OperationResult {
+            message: format!("Diagnostics report saved to {saved}"),
+        });
+    }
     with_backend(&state, move |backend| backend.diagnostics(&section)).await
+}
+
+fn unix_seconds() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs())
 }
 
 /// Crash reports, the metrics endpoint, the install check and the cold start, for the settings page.

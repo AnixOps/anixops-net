@@ -77,7 +77,7 @@ impl<R: Runtime> Vpn<R> {
                     name,
                     contents,
                     base64: false,
-                    mime_type: "application/x-x509-ca-cert",
+                    mime_type: text_mime_type(name),
                 },
             )
             .map(|response| response.location)
@@ -169,4 +169,14 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             Ok(())
         })
         .build()
+}
+
+/// The type a text file is saved with: a report or log is plain text, anything else the root certificate.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn text_mime_type(name: &str) -> &'static str {
+    if name.ends_with(".log") || name.ends_with(".txt") {
+        "text/plain"
+    } else {
+        "application/x-x509-ca-cert"
+    }
 }

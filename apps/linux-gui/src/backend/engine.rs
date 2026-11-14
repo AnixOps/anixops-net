@@ -15,10 +15,8 @@ use control_domain::{
 };
 use engine_embedded::config::RuntimeConfig;
 use engine_embedded::delay::measure_delay;
-#[cfg(not(target_os = "android"))]
 use engine_embedded::local_proxy::LocalProxy;
 use engine_embedded::nodes::{outbound_for_node, routing_envelope, single_node_envelope};
-#[cfg(not(target_os = "android"))]
 use inbound_mixed::MixedSettings;
 
 #[cfg(target_os = "android")]
@@ -267,6 +265,9 @@ pub struct Engine {
     proxy: Option<LocalProxy>,
     #[cfg(target_os = "android")]
     tunnel: Option<TunEngine>,
+    /// The running configuration, for the exit address probe ([`Engine::probe_envelope`]).
+    #[cfg(target_os = "android")]
+    envelope: Option<String>,
     node_id: Option<String>,
 }
 
@@ -293,6 +294,7 @@ impl Engine {
         let address = {
             let _ = port;
             self.tunnel = Some(TunEngine::start(envelope)?);
+            self.envelope = Some(envelope.to_string());
             SocketAddr::from((Ipv4Addr::new(198, 18, 0, 1), 0))
         };
         self.node_id = Some(node_id.to_string());
@@ -395,9 +397,36 @@ impl Engine {
         None
     }
 
+    /// The running configuration where the exit address cannot be probed through the engine's own listener:
+    /// Android's VPN leaves the app's sockets out, so the probe runs a short-lived local proxy on it
+    /// ([`through_temporary_proxy`]).
+    #[cfg(not(target_os = "android"))]
+    pub fn probe_envelope(&self) -> Option<String> {
+        None
+    }
+
+    #[cfg(target_os = "android")]
+    pub fn probe_envelope(&self) -> Option<String> {
+        self.envelope.clone().filter(|_| self.is_running())
+    }
+
     pub fn node_id(&self) -> Option<&str> {
         self.node_id.as_deref()
     }
+}
+
+/// Runs `probe` with the port of a local proxy started on `envelope` for as long as it takes, on a free
+/// loopback port, then stops the proxy.
+pub fn through_temporary_proxy<T>(
+    envelope: &str,
+    probe: impl FnOnce(u16) -> T,
+) -> Result<T, String> {
+    let listen = SocketAddr::from((Ipv4Addr::LOCALHOST, 0));
+    let mut proxy = LocalProxy::start(envelope.as_bytes(), listen, MixedSettings::default())
+        .map_err(|error| error.message.to_string())?;
+    let result = probe(proxy.local_addr().port());
+    proxy.stop();
+    Ok(result)
 }
 
 /// Measures `url` through one node.

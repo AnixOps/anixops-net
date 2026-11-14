@@ -40,6 +40,8 @@ use self::system_proxy::Desktop;
 /// The source label for share links pasted into the import field.
 /// Lines the log viewer shows.
 const LOG_LINES: usize = 500;
+/// Log lines the diagnostics report ends with.
+const DIAGNOSTIC_LOG_LINES: usize = 80;
 
 pub const PASTED_LOCATION: &str = "粘贴的链接";
 
@@ -453,6 +455,11 @@ impl Backend {
     /// The local port the mixed proxy listens on.
     pub fn listen_port(&self) -> u16 {
         self.state.listen_port
+    }
+
+    /// See [`Engine::probe_envelope`].
+    pub fn probe_envelope(&self) -> Option<String> {
+        self.engine.probe_envelope()
     }
 
     pub fn https_decryption(&self) -> bool {
@@ -1476,6 +1483,16 @@ impl Backend {
     /// Writes a report without node addresses, names or credentials. `health` is the client health section
     /// (integrity, cold start, redacted crash reports), appended as it is.
     pub fn diagnostics(&self, health: &str) -> Result<OperationResult, String> {
+        let report = self.diagnostics_report(health);
+        let path = self
+            .store
+            .write_report(&format!("diagnostics-{}.log", now()), &report)
+            .map_err(|error| format!("the report could not be written: {error}"))?;
+        done(format!("Diagnostics report saved to {}", path.display()))
+    }
+
+    /// The diagnostics report: the client's state, `health`, and the last lines of the app's log.
+    pub fn diagnostics_report(&self, health: &str) -> String {
         let snapshot = self.snapshot();
         let mut protocols: Vec<String> = self
             .nodes
@@ -1499,12 +1516,17 @@ impl Backend {
             snapshot.last_error.as_deref().unwrap_or("none"),
             snapshot.configuration_error.as_deref().unwrap_or("none"),
         );
-        let report = format!("{report}\n{health}");
-        let path = self
-            .store
-            .write_report(&format!("diagnostics-{}.log", now()), &report)
-            .map_err(|error| format!("the report could not be written: {error}"))?;
-        done(format!("Diagnostics report saved to {}", path.display()))
+        let log = self
+            .logs(false)
+            .unwrap_or_default()
+            .iter()
+            .rev()
+            .take(DIAGNOSTIC_LOG_LINES)
+            .rev()
+            .map(|entry| format!("{} {:?} {}", entry.time_ms, entry.level, entry.message))
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!("{report}\n{health}\n\n--- app log ---\n{log}\n")
     }
 }
 
