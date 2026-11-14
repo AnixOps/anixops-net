@@ -1,16 +1,23 @@
-import { ArrowDown, ArrowUp, BadgeCheck, CircleDot, ClipboardList, ListTree, RefreshCw, Search, TriangleAlert, X } from "lucide-react";
+import { ArrowDown, ArrowUp, BadgeCheck, ChevronRight, CircleDot, ClipboardList, Download, FileCode, ListTree, RefreshCw, Search, Trash2, TriangleAlert, Unplug, X } from "lucide-react";
 import { useState } from "react";
 import { ConnectionSnapshot, desktop, RuntimeSnapshot } from "../bridge";
 import { connectionDetail, connectionName, formatRate, matchesConnection } from "../activity-format";
+import { captureSummary } from "../capture-format";
 import { listPage, liveEngine, usePolling } from "../live";
 import { formatBytes } from "../subscription-format";
-import { Card, ConfirmButton, EmptyState, IconButton, Row, Run, Segmented } from "../ui";
+import { Card, EmptyState, IconButton, MoreMenu, Row, Run, Segmented, Switch } from "../ui";
 import { t } from "../i18n";
+import { CaptureDetail, exportCapture } from "./CaptureViews";
 
 export function ActivityPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
   const refresh = snapshot?.subscriptionLastAttempt
     ? [snapshot.subscriptionRefreshResult || t("等待中"), snapshot.subscriptionLastAttempt, snapshot.subscriptionRefreshErrorCode].filter(Boolean).join(" · ")
     : t("还没有自动更新记录");
+
+  const [detail, setDetail] = useState<ConnectionSnapshot | null>(null);
+  if (detail && liveEngine(snapshot)) {
+    return <CaptureDetail connection={detail} busy={busy} run={run} onBack={() => setDetail(null)} />;
+  }
 
   return (
     <div className="page-stack">
@@ -24,15 +31,19 @@ export function ActivityPage({ snapshot, busy, run }: { snapshot: RuntimeSnapsho
         </Row>
       </Card>
 
-      <Connections snapshot={snapshot} />
+      <Connections snapshot={snapshot} busy={busy} run={run} onOpen={setDetail} />
     </div>
   );
 }
 
-/** Live traffic and the engine's connection list, read once a second while connected. */
-function Connections({ snapshot }: { snapshot: RuntimeSnapshot | null }) {
+/**
+ * Live traffic and the engine's connection list, read once a second while connected. With packet capture on, new
+ * connections keep their first bytes and open to show them.
+ */
+function Connections({ snapshot, busy, run, onOpen }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run; onOpen: (connection: ConnectionSnapshot) => void }) {
   const live = liveEngine(snapshot);
   const [list, reload] = usePolling(desktop.connections, live);
+  const [capture, reloadCapture] = usePolling(desktop.captureStatus, live);
   const [shown, setShown] = useState<"active" | "closed">("active");
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(listPage);
@@ -40,7 +51,7 @@ function Connections({ snapshot }: { snapshot: RuntimeSnapshot | null }) {
 
   const close = (task: () => Promise<unknown>) => {
     setFailure(null);
-    task().then(reload).catch((error: unknown) => setFailure(String(error)));
+    task().then(() => { reload(); reloadCapture(); }).catch((error: unknown) => setFailure(String(error)));
   };
 
   if (!list) {
@@ -53,18 +64,48 @@ function Connections({ snapshot }: { snapshot: RuntimeSnapshot | null }) {
   const connections = (shown === "active" ? [...list.active].reverse() : list.closed).filter((item) => matchesConnection(item, query));
   const traffic = list.traffic;
 
+  const totals = t("上传 {up} · 下载 {down}，自本次连接起", { up: formatBytes(traffic.upload_total), down: formatBytes(traffic.download_total) });
+  const captured = capture?.connections ?? 0;
+
   return (
     <Card
       title={t("连接")}
-      description={t("上传 {up} · 下载 {down}，自本次连接起", { up: formatBytes(traffic.upload_total), down: formatBytes(traffic.download_total) })}
+      description={capture?.enabled ? `${captureSummary(capture)} · ${totals}` : totals}
       actions={<>
         <span className="rate"><ArrowUp size={14} />{formatRate(traffic.upload_rate)}</span>
         <span className="rate"><ArrowDown size={14} />{formatRate(traffic.download_rate)}</span>
-        <ConfirmButton
-          label={t("全部断开")}
-          confirm={t("确认断开 {count} 条连接", { count: list.active.length })}
-          disabled={list.active.length === 0}
-          onConfirm={() => close(desktop.closeAllConnections)}
+        {capture && (
+          <label className="switch-label">
+            <span>{t("抓包")}</span>
+            <Switch
+              label={capture.enabled ? t("停止抓包") : t("开始抓包")}
+              checked={capture.enabled}
+              onChange={() => close(() => desktop.setCapture(!capture.enabled))}
+            />
+          </label>
+        )}
+        <MoreMenu
+          label={t("更多连接操作")}
+          items={[
+            { label: t("导出全部 pcapng"), icon: Download, disabled: Boolean(busy) || captured === 0, onSelect: () => exportCapture(run, "pcapng") },
+            { label: t("导出全部 HAR"), icon: FileCode, disabled: Boolean(busy) || captured === 0, onSelect: () => exportCapture(run, "har") },
+            {
+              label: t("清空抓包"),
+              icon: Trash2,
+              danger: true,
+              disabled: captured === 0,
+              confirm: t("确认清空 {count} 个连接的抓包", { count: captured }),
+              onSelect: () => close(desktop.clearCapture),
+            },
+            {
+              label: t("全部断开"),
+              icon: Unplug,
+              danger: true,
+              disabled: list.active.length === 0,
+              confirm: t("确认断开 {count} 条连接", { count: list.active.length }),
+              onSelect: () => close(desktop.closeAllConnections),
+            },
+          ]}
         />
       </>}
     >
@@ -87,7 +128,12 @@ function Connections({ snapshot }: { snapshot: RuntimeSnapshot | null }) {
         : <>
           <ul className="list connections">
             {connections.slice(0, limit).map((connection) => (
-              <ConnectionRow key={connection.id} connection={connection} onClose={shown === "active" ? () => close(() => desktop.closeConnection(connection.id)) : undefined} />
+              <ConnectionRow
+                key={connection.id}
+                connection={connection}
+                onOpen={connection.captured ? () => onOpen(connection) : undefined}
+                onClose={shown === "active" ? () => close(() => desktop.closeConnection(connection.id)) : undefined}
+              />
             ))}
           </ul>
           {connections.length > limit && (
@@ -100,15 +146,22 @@ function Connections({ snapshot }: { snapshot: RuntimeSnapshot | null }) {
   );
 }
 
-function ConnectionRow({ connection, onClose }: { connection: ConnectionSnapshot; onClose?: () => void }) {
+/** One connection; one with captured bytes opens to show them. */
+function ConnectionRow({ connection, onOpen, onClose }: { connection: ConnectionSnapshot; onOpen?: () => void; onClose?: () => void }) {
   const detail = connectionDetail(connection);
+  const main = (
+    <>
+      <strong className="truncate" title={connection.destination}>{connectionName(connection)}</strong>
+      <small title={detail}>{detail}</small>
+    </>
+  );
   return (
-    <li>
-      <span className="list-main">
-        <strong className="truncate" title={connection.destination}>{connectionName(connection)}</strong>
-        <small title={detail}>{detail}</small>
-      </span>
+    <li className={onOpen ? "openable" : undefined}>
+      {onOpen
+        ? <button className="list-main list-open" onClick={onOpen} aria-label={t("查看抓包内容：{name}", { name: connectionName(connection) })}>{main}</button>
+        : <span className="list-main">{main}</span>}
       {onClose && <IconButton label={t("断开这条连接")} onClick={onClose}><X size={15} /></IconButton>}
+      {onOpen && <ChevronRight size={15} className="chevron" aria-hidden="true" />}
     </li>
   );
 }
