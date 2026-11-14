@@ -1,15 +1,19 @@
 /* AnixOps Net desktop theme, on AnixOps Design. design/anixops/ is the vendored design system (tokens for both
-   themes, Inter); design/tokens.css maps this stylesheet's names onto it and is generated from
+   themes; its Inter files are not loaded, see --font-sans below); design/tokens.css maps this stylesheet's names onto it and is generated from
    apps/ios/Design/tokens.json by .github/scripts/design_tokens.py. Never edit either by hand.
 
    Two layouts share one look. The overview and the proxies page are dashboards in the manner of Surge: panels in
    a grid that use the whole window. Rules, extensions, activity and settings follow macOS System Settings: one
    centred column of grouped lists, titles above each group and explanations below it. */
-@import "./design/anixops/fonts/inter/inter.css";
 @import "./design/anixops/tokens.css";
 @import "./design/tokens.css";
 
 :root {
+  /* The system's own interface font on each platform, so text matches the applications around it: Segoe UI Variable
+     on Windows 11 (Segoe UI on Windows 10) with Microsoft YaHei UI for Chinese, the desktop's font on Linux, Roboto
+     and Noto on Android. This replaces the Inter-first stack of the shared design tokens. */
+  --font-sans: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Noto Sans SC", sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
   --window: var(--bg-grouped);
   --sidebar: color-mix(in srgb, var(--label-1) 5%, var(--bg-grouped));
   --group: var(--bg-elevated);
@@ -190,28 +194,51 @@ label.toggle-row input:disabled + i { opacity: .5; }
 .link-button.danger { color: var(--danger); }
 .link-button.danger:hover:not(:disabled) { background: var(--danger-soft); }
 /* The "more" menu of a row or header: fixed to the window so a clipping group does not cut it. */
-.more-menu { position: relative; display: inline-flex; flex: 0 0 auto; }
-.menu { position: fixed; z-index: var(--z-dropdown); display: flex; flex-direction: column; min-width: 168px; max-width: 280px; padding: 4px; background: var(--group); border-radius: 9px; box-shadow: 0 0 0 .5px var(--separator-strong), var(--shadow-2); }
-.menu-item { display: flex; gap: 8px; align-items: center; min-height: 26px; padding: 0 8px; color: var(--text); font-size: 12px; text-align: left; background: none; border: 0; border-radius: 6px; }
-.menu-item:hover:not(:disabled) { background: var(--fill-2); }
+/* Pop-up lists, menus and tooltips (controls.tsx). React Aria places them inside the window and sets the data-*
+   states; --trigger-width is the width of the button that opened the pop-up. */
+.popover { z-index: var(--z-dropdown); display: flex; flex-direction: column; min-width: max(var(--trigger-width, 0px), 168px); max-width: min(360px, calc(100vw - 16px)); background: var(--group); border-radius: 9px; box-shadow: 0 0 0 .5px var(--separator-strong), var(--shadow-2); outline: none; }
+:root[data-theme="dark"] .popover { background: #2c2c30; }
+.popover[data-placement="bottom"] { transform-origin: top; }
+.popover[data-placement="top"] { transform-origin: bottom; }
+.popover[data-entering] { animation: pop-in var(--fast) var(--ease-standard); }
+.popover[data-exiting] { animation: pop-in 80ms linear reverse; }
+@keyframes pop-in { from { opacity: 0; transform: scale(.97); } }
+.listbox, .menu { max-height: inherit; padding: 4px; overflow: auto; outline: none; }
+.option, .menu-item { display: flex; gap: 8px; align-items: center; min-height: 26px; padding: 0 8px; color: var(--text); font-size: 12px; text-align: left; border-radius: 6px; outline: none; cursor: default; }
+.option[data-focused], .menu-item[data-focused] { background: var(--fill-2); }
+.option[data-disabled], .menu-item[data-disabled] { opacity: .45; }
+.option > span, .menu-item > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.option .check { flex: 0 0 auto; color: var(--accent); visibility: hidden; }
+.option[data-selected] .check { visibility: visible; }
+.option-section > header { padding: 8px 8px 3px; color: var(--text3); font-size: 11px; font-weight: 600; }
 .menu-item > svg { flex: 0 0 auto; color: var(--text2); }
 .menu-item.danger, .menu-item.danger > svg { color: var(--danger); }
-.menu-item.danger:hover:not(:disabled) { background: var(--danger-soft); }
+.menu-item.danger[data-focused] { background: var(--danger-soft); }
+.tooltip { z-index: var(--z-tooltip); max-width: 260px; padding: 4px 8px; color: var(--text); font-size: 11.5px; line-height: 1.4; background: var(--group); border-radius: 6px; box-shadow: 0 0 0 .5px var(--separator-strong), var(--shadow-2); }
+:root[data-theme="dark"] .tooltip { background: #3a3a3e; }
+.tooltip[data-entering] { animation: fade-in var(--fast) linear; }
+.tooltip[data-exiting] { animation: fade-in 80ms linear reverse; }
 .menu-separator { height: 1px; margin: 4px 6px; background: var(--separator); }
 .button-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip-button { height: 24px; padding: 0 10px; color: var(--text2); font-size: 12px; font-weight: 500; background: var(--fill-1); border: 0; border-radius: var(--radius-pill); }
 .chip-button.selected { color: var(--accent); background: var(--accent-soft); }
 
 /* Inputs */
-input, textarea, select { width: 100%; padding: 0 9px; color: var(--text); background: var(--fill-1); border: 1px solid transparent; border-radius: 7px; transition: border-color var(--fast), box-shadow var(--fast); }
-input, select { height: 28px; }
-input:focus, textarea:focus, select:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+input, textarea { width: 100%; padding: 0 9px; color: var(--text); background: var(--fill-1); border: 1px solid transparent; border-radius: 7px; transition: border-color var(--fast), box-shadow var(--fast); }
+input { height: 28px; }
+input:focus, textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
 input::placeholder, textarea::placeholder { color: var(--text3); }
 textarea { min-height: 120px; padding: 8px 9px; resize: vertical; font-family: var(--font-mono); font-size: 12px; line-height: 1.5; }
 input[type="checkbox"] { width: auto; height: auto; }
-select option { color: var(--label-1); background: var(--bg-elevated); }
-.pop-up { width: auto; max-width: 220px; height: 24px; padding: 0 6px; font-size: 12px; background: var(--group); box-shadow: 0 0 0 .5px var(--separator-strong), 0 1px 1px rgb(0 0 0 / 5%); }
-:root[data-theme="dark"] .pop-up { background: #3a3a3e; box-shadow: none; }
+.select { display: inline-flex; flex: 0 1 auto; min-width: 0; max-width: 100%; }
+.select-trigger { display: inline-flex; flex: 0 1 auto; gap: 6px; align-items: center; min-width: 0; max-width: 220px; height: 24px; padding: 0 6px 0 8px; color: var(--text); font-size: 12px; text-align: left; background: var(--group); border: 0; border-radius: 7px; box-shadow: 0 0 0 .5px var(--separator-strong), 0 1px 1px rgb(0 0 0 / 5%); transition: background var(--fast) var(--ease-standard); }
+:root[data-theme="dark"] .select-trigger { background: #3a3a3e; box-shadow: none; }
+.select-trigger[data-hovered], .select-trigger[data-pressed] { background: color-mix(in srgb, var(--label-1) 5%, var(--group)); }
+:root[data-theme="dark"] .select-trigger[data-hovered], :root[data-theme="dark"] .select-trigger[data-pressed] { background: #46464b; }
+.select-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-value[data-placeholder] { color: var(--text3); }
+.select-arrows { flex: 0 0 auto; color: var(--text3); }
+.select-trigger.mono { max-width: 280px; font-family: var(--font-mono); }
 .inline-input { flex: 1; min-width: 160px; height: 24px; font-size: 12px; }
 .field { display: grid; gap: 6px; }
 .field > span { color: var(--text2); font-size: 12px; font-weight: 500; }
@@ -275,13 +302,12 @@ select option { color: var(--label-1); background: var(--bg-elevated); }
 .hero-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hairline); }
 .hero-controls .segmented { min-width: 280px; }
 .hero-controls .segmented button { min-width: 0; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; }
-.node-select { position: relative; display: flex; flex: 0 1 auto; gap: 8px; align-items: center; max-width: 100%; height: 30px; padding: 0 10px; font-size: 12px; font-weight: 500; background: var(--fill-1); border-radius: 8px; cursor: pointer; transition: background var(--fast) var(--ease-standard); }
-.node-select:hover { background: var(--fill-2); }
-.node-select:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.select-trigger.node-select { gap: 8px; max-width: 100%; height: 30px; padding: 0 10px; font-weight: 500; background: var(--fill-1); border-radius: 8px; box-shadow: none; transition: background var(--fast) var(--ease-standard); }
+.select-trigger.node-select[data-hovered], .select-trigger.node-select[data-pressed] { background: var(--fill-2); }
+:root[data-theme="dark"] .select-trigger.node-select { background: var(--fill-1); }
+:root[data-theme="dark"] .select-trigger.node-select[data-hovered], :root[data-theme="dark"] .select-trigger.node-select[data-pressed] { background: var(--fill-2); }
 .node-select > .lucide { flex: 0 0 auto; color: var(--text3); }
 .node-select .delay { flex: 0 0 auto; }
-.node-select select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
-.node-select select:disabled { cursor: default; }
 
 /* Subscription allowance */
 .allowance { display: flex; gap: 14px; align-items: center; }
@@ -333,7 +359,7 @@ select option { color: var(--label-1); background: var(--bg-elevated); }
 .usage-text strong { overflow: hidden; font-size: 12px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .usage-text small { overflow: hidden; color: var(--text2); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .usage-value { flex: 0 1 auto; min-width: 0; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.usage-row .pop-up { max-width: 150px; }
+.usage-row .select-trigger { max-width: 150px; }
 
 /* Proxies: groups and subscriptions on the left, node cards on the right. */
 .panes { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 12px; align-items: start; }
@@ -441,6 +467,7 @@ select option { color: var(--label-1); background: var(--bg-elevated); }
   *, *::before, *::after { transition: none !important; }
   .page { animation: fade-in 100ms linear; }
   .toast { animation: none; }
+  .popover[data-entering], .popover[data-exiting] { animation: fade-in 100ms linear; }
   .switch.busy:disabled { animation: none; opacity: .7; }
 }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
@@ -459,6 +486,7 @@ select option { color: var(--label-1); background: var(--bg-elevated); }
 
 /* User agreement: first-start consent and the copy in Settings (terms.tsx). */
 .terms-overlay { position: fixed; inset: 0; z-index: var(--z-modal); display: grid; place-items: center; padding: 24px; background: color-mix(in srgb, var(--window) 70%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+.dialog { display: flex; flex: 1; flex-direction: column; gap: 14px; min-height: 0; outline: none; }
 .terms-dialog { display: flex; flex-direction: column; gap: 14px; width: min(680px, 100%); max-height: calc(100vh - 48px); padding: 22px 24px 18px; background: var(--group); border-radius: var(--radius-hero); box-shadow: 0 0 0 .5px var(--separator-strong), var(--shadow-3); }
 .terms-head { display: flex; gap: 12px; align-items: flex-start; color: var(--accent); }
 .terms-head h2 { margin: 0 0 4px; font-size: 17px; color: var(--text); }

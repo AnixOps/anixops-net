@@ -2,6 +2,7 @@ import { FileKey, KeyRound, Network, Smartphone } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { desktop, LanShareStatus } from "../bridge";
 import { Card, Row, Run, StatusPill, Switch } from "../ui";
+import { Select } from "../controls";
 import { t } from "../i18n";
 
 const DEFAULT_PORT = 8899;
@@ -98,9 +99,7 @@ export function PhoneCaptureCards({ busy, run }: { busy: string | null; run: Run
             ) : (
               <Row icon={Network} color="sky" label={t("代理地址")} hint={t("在手机的 Wi-Fi 设置里选“手动”，填这个服务器和端口")}>
                 {addresses.length > 1 ? (
-                  <select className="inline-input" aria-label={t("代理地址")} value={chosen ?? ""} onChange={(event) => setAddress(event.target.value)}>
-                    {addresses.map((item) => <option key={item} value={item}>{item + ":" + status.port}</option>)}
-                  </select>
+                  <Select label={t("代理地址")} className="mono" value={chosen ?? ""} onChange={setAddress} choices={addresses.map((item) => ({ value: item, label: item + ":" + status.port }))} />
                 ) : (
                   <code className="row-value selectable">{chosen + ":" + status.port}</code>
                 )}
