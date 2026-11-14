@@ -23,7 +23,7 @@
 | 导出 pcapng / HAR | ✅ | ✅ | ◐ | ✅ | ✅ | 同上 |
 | HTTP 请求列表、快捷筛选、表达式搜索 | ⏳ | ⏳ | ◐ | ✅ | ✅ | Apple 见 #126（进行中） |
 | 单条请求导出 cURL / 代码 / Postman / Insomnia，默认脱敏 | ❌ | ❌ | ◐ | ✅ | ✅ | Apple 由 Apple 调试线程在 #126 之后做（A1） |
-| 抓包会话加密保存、7 天清理、载入回看 | ❌ | ❌ | ❌ | ❌ | ❌ | 内核已有 `set_capture_storage` 等，客户端都没接（A1、T1） |
+| 抓包会话加密保存、7 天清理、载入回看 | ❌ | ❌ | ◐ | ✅ | ✅ | Tauri 见 `debug-mode.md`；Windows 只在桌面模式（W1）；Apple 见 A1 |
 | 单条重放、编辑后重放 | ✅ | ✅ | ◐ | ✅ | ✅ | Android 经内核重放代理（#128） |
 | Map Local / Map Remote | ✅ | ✅ | ✅ | ✅ | ✅ | 需开启 HTTPS 解密 |
 | HTTP/2 MITM | ✅ | ✅ | ✅ | ✅ | ✅ | 内核 #233，各平台共用 |
@@ -117,7 +117,7 @@ Windows 有两种运行方式：桌面模式由窗口进程运行内核；服务
 | A1 | 单条请求导出（cURL / 代码 / Postman / Insomnia）、抓包会话加密保存 | iOS、macOS | Apple 调试线程在 #126 之后做 |
 | A2 | macOS 导入自有根证书 | macOS | 待做 |
 | A3 | macOS 本机指标端口 | macOS | 待评估 |
-| T1 | 抓包会话加密保存、列表、载入、删除 | Windows、Linux、Android | 进行中 |
+| T1 | 抓包会话加密保存、列表、载入、删除 | Windows、Linux、Android | 已完成 |
 | T2 | 我的规则：规则文本编辑，连接中原地换规则 | Windows、Linux、Android | 待做 |
 | T3 | DNS：自定义服务器、分域 DNS、Hosts、Fake-IP | Windows、Linux、Android | 待做 |
 | T4 | 节点分享链接入口 | Windows、Linux、Android | 待做 |

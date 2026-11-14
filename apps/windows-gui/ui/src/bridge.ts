@@ -211,10 +211,39 @@ export interface CaptureRequest {
   response_content_type?: string | null;
 }
 
+/** What keeps the key of saved capture sessions on this device. */
+export type SessionProtection = "dpapi" | "keystore" | "secret-service" | "file";
+
+/** One saved capture session (`capture_sessions`). */
+export interface CaptureSession {
+  session: string;
+  /** Empty when saved without a name. */
+  name?: string;
+  saved_at_ms: number;
+  expires_at_ms: number;
+  size: number;
+  connections?: number;
+  requests?: number;
+  /** Sealed with another key (e.g. a reinstall): it cannot be opened and expires on its own. */
+  unreadable?: boolean;
+}
+
+/** Every session answer says what keeps the key and how long sessions are kept. */
+interface SessionAnswer {
+  protection: SessionProtection;
+  retention_days: number;
+}
+
+export type CaptureSessionAction =
+  | { action: "list" }
+  | { action: "save"; name?: string }
+  | { action: "load"; session: string }
+  | { action: "delete"; session: string };
+
 export interface CaptureRequestsAnswer {
   requests?: CaptureRequest[];
   last_seq?: number;
-  /** Requests below this were pushed out of the capture budget. */
+  /** The highest seq the engine dropped (capture budget, cleared, a session loaded); it and older rows are gone. */
   dropped_before_seq?: number;
   /** `invalid_filter` with the character position of the mistake. */
   error?: { code: string; at?: number; message?: string };
@@ -402,6 +431,17 @@ export const desktop = {
   /** Saves the export to Downloads (one connection with `id`) and answers where it went. */
   exportCapture: (format: CaptureFormat, id?: number, options?: ExportOptions) =>
     invoke<{ location: string }>("export_capture", { format, id, options }),
+  /** Saved capture sessions, newest first; the backend names the folder and keeps the key. */
+  captureSessions: () =>
+    invoke<SessionAnswer & { sessions: CaptureSession[] }>("capture_session", { action: { action: "list" } satisfies CaptureSessionAction }),
+  /** Seals what capture holds into a new session. */
+  saveCaptureSession: (name?: string) =>
+    invoke<SessionAnswer & { session: CaptureSession }>("capture_session", { action: { action: "save", name } satisfies CaptureSessionAction }),
+  /** Replaces what capture holds with a saved session and turns live capture off. */
+  loadCaptureSession: (session: string) =>
+    invoke<SessionAnswer & CaptureStatus>("capture_session", { action: { action: "load", session } satisfies CaptureSessionAction }),
+  deleteCaptureSession: (session: string) =>
+    invoke<SessionAnswer & { deleted: boolean }>("capture_session", { action: { action: "delete", session } satisfies CaptureSessionAction }),
   /** Decrypted requests after `since`, the newest last; `filter` is the engine's filter expression. */
   captureRequests: (since: number, filter: string) =>
     invoke<CaptureRequestsAnswer>("runtime_control", { request: { cmd: "capture_requests", since_seq: since, limit: 2000, ...(filter ? { filter } : {}) } }),

@@ -1,4 +1,5 @@
 use super::actions::connection;
+use super::capture_sessions;
 use super::linked_sources::{self, CachedNode, OtherSource};
 use super::mitm_plugins::{self, PluginSummary};
 use super::runtime_status::{read_runtime_status, ManagedCoreStatus, WindowsRuntimeStatus};
@@ -232,6 +233,8 @@ struct PreferenceValues {
 pub(super) fn run(debug: bool) -> Result<(), String> {
     let desktop = load_desktop_state()?;
     let _ = append_managed_log(APP_LOG_SCOPE, &format!("startup debug={debug}"));
+    // Saved capture sessions expire after a week even when the engine does not run to delete them.
+    capture_sessions::purge_expired();
     let health_dir = desktop_state_path()
         .parent()
         .map(Path::to_path_buf)
@@ -321,6 +324,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             select_native_group_outbound,
             runtime_control,
             export_capture,
+            capture_session,
             replay_request,
             list_debug_mappings,
             save_debug_mapping,
@@ -961,6 +965,37 @@ async fn export_capture(
         Ok(SavedFile {
             location: path.display().to_string(),
         })
+    })
+    .await
+}
+
+/// Saved capture sessions: list, save what capture holds, load one for viewing, delete
+/// (`desktop_mitm::sessions`). The engine is told where sessions go and the key, sealed with DPAPI,
+/// before every action, since it forgets both when it restarts.
+#[tauri::command]
+async fn capture_session(
+    action: desktop_mitm::sessions::SessionAction,
+    state: State<'_, DesktopAppState>,
+) -> Result<Value, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let request = action.request()?;
+        let key = capture_sessions::load_key()?;
+        let storage =
+            desktop_mitm::sessions::storage_request(&capture_sessions::sessions_dir()?, &key);
+        let to_bytes = |value: &Value| serde_json::to_vec(value).map_err(|error| error.to_string());
+        let core = state
+            .direct_core
+            .lock()
+            .map_err(|_| "desktop core lock failed")?;
+        core.control(&to_bytes(&storage)?)?;
+        let answer = core.control(&to_bytes(&request)?)?;
+        drop(core);
+        let answer: Value = serde_json::from_slice(&answer).map_err(|error| error.to_string())?;
+        Ok(desktop_mitm::sessions::with_protection(
+            answer,
+            key.protection,
+        ))
     })
     .await
 }

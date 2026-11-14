@@ -9,8 +9,16 @@ import android.net.VpnService
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
 import android.util.Base64
 import java.io.File
+import java.security.KeyStore
+import java.security.SecureRandom
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 import androidx.activity.result.ActivityResult
 import app.tauri.annotation.ActivityCallback
 import app.tauri.annotation.Command
@@ -121,9 +129,77 @@ class VpnPlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
+    /**
+     * The key that seals saved capture sessions (32 bytes, base64). A random key is wrapped with an AES-GCM key
+     * that never leaves the Android Keystore and kept in the app's no-backup folder; it is made on first use. A
+     * wrapped key that cannot be unwrapped is an error, never replaced, so saved sessions are not orphaned.
+     */
+    @Command
+    fun captureSessionKey(invoke: Invoke) {
+        try {
+            val file = File(activity.noBackupFilesDir, SESSION_KEY_FILE)
+            val key = if (file.exists()) unwrapSessionKey(file.readBytes()) else createSessionKey(file)
+            val result = JSObject()
+            result.put("keyBase64", Base64.encodeToString(key, Base64.NO_WRAP))
+            key.fill(0)
+            invoke.resolve(result)
+        } catch (error: Exception) {
+            invoke.reject("The capture session key is not available: ${error.message ?: error.javaClass.simpleName}")
+        }
+    }
+
+    private fun keystoreKey(): SecretKey {
+        val store = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+        (store.getKey(KEYSTORE_ALIAS, null) as? SecretKey)?.let { return it }
+        val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
+        generator.init(
+            KeyGenParameterSpec.Builder(KEYSTORE_ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(256)
+                .build()
+        )
+        return generator.generateKey()
+    }
+
+    private fun createSessionKey(file: File): ByteArray {
+        val key = ByteArray(SESSION_KEY_LENGTH).also { SecureRandom().nextBytes(it) }
+        val cipher = Cipher.getInstance(WRAP_TRANSFORMATION)
+        cipher.init(Cipher.ENCRYPT_MODE, keystoreKey())
+        val sealed = cipher.iv + cipher.doFinal(key)
+        val partial = File(file.parentFile, "${file.name}.tmp")
+        partial.writeBytes(sealed)
+        if (!partial.renameTo(file)) {
+            partial.delete()
+            throw IllegalStateException("the key could not be saved")
+        }
+        return key
+    }
+
+    private fun unwrapSessionKey(sealed: ByteArray): ByteArray {
+        if (sealed.size <= GCM_IV_LENGTH) throw IllegalStateException("the saved key is damaged")
+        val store = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+        val wrapping = store.getKey(KEYSTORE_ALIAS, null) as? SecretKey
+            ?: throw IllegalStateException("the Keystore key is gone")
+        val cipher = Cipher.getInstance(WRAP_TRANSFORMATION)
+        cipher.init(Cipher.DECRYPT_MODE, wrapping, GCMParameterSpec(128, sealed.copyOfRange(0, GCM_IV_LENGTH)))
+        val key = cipher.doFinal(sealed, GCM_IV_LENGTH, sealed.size - GCM_IV_LENGTH)
+        if (key.size != SESSION_KEY_LENGTH) throw IllegalStateException("the saved key is damaged")
+        return key
+    }
+
     @Command
     fun stop(invoke: Invoke) {
         AnxVpnService.stopRunning()
         invoke.resolve()
+    }
+
+    private companion object {
+        const val ANDROID_KEYSTORE = "AndroidKeyStore"
+        const val KEYSTORE_ALIAS = "anixops-net-capture-sessions"
+        const val WRAP_TRANSFORMATION = "AES/GCM/NoPadding"
+        const val GCM_IV_LENGTH = 12
+        const val SESSION_KEY_LENGTH = 32
+        const val SESSION_KEY_FILE = "capture-session-key.sealed"
     }
 }

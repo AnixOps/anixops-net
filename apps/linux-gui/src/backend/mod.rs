@@ -4,14 +4,21 @@
 
 pub mod autostart;
 pub mod engine;
+#[cfg(not(target_os = "android"))]
+pub mod session_key;
 pub mod state;
 pub mod system_proxy;
 pub mod trust;
 #[cfg(target_os = "android")]
 pub mod tun;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+/// The capture folder in the data directory `dir`: the key file (when there is one) and `sessions/`.
+pub fn capture_dir(dir: &Path) -> PathBuf {
+    dir.join("capture")
+}
 
 use control_domain::NodeDescriptor;
 use desktop_mitm::Root;
@@ -334,6 +341,11 @@ impl Backend {
 
     fn mitm_dir(&self) -> PathBuf {
         self.store.dir().join("mitm")
+    }
+
+    /// Saved capture sessions and, without a Secret Service, their key (`desktop_mitm::sessions`).
+    pub fn capture_dir(&self) -> PathBuf {
+        capture_dir(self.store.dir())
     }
 
     /// Where the HTTPS decryption root is kept, whether or not it exists yet.

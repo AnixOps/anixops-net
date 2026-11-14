@@ -44,6 +44,13 @@ struct SaveResponse {
     location: String,
 }
 
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct KeyResponse {
+    key_base64: String,
+}
+
 /// Managed by the plugin: `app.state::<Vpn<R>>()`.
 pub struct Vpn<R: Runtime> {
     #[cfg(target_os = "android")]
@@ -98,6 +105,15 @@ impl<R: Runtime> Vpn<R> {
             .map_err(|error| error.to_string())
     }
 
+    /// The key that seals saved capture sessions, as base64. The Android Keystore wraps it; the plugin makes it
+    /// on first use and never replaces one it cannot unwrap.
+    pub fn capture_session_key(&self) -> Result<String, String> {
+        self.handle
+            .run_mobile_plugin::<KeyResponse>("captureSessionKey", ())
+            .map(|response| response.key_base64)
+            .map_err(|error| error.to_string())
+    }
+
     pub fn stop(&self) -> Result<(), String> {
         self.handle
             .run_mobile_plugin::<serde_json::Value>("stop", ())
@@ -123,6 +139,10 @@ impl<R: Runtime> Vpn<R> {
         _data_base64: &str,
     ) -> Result<String, String> {
         Err("Downloads is an Android folder".to_string())
+    }
+
+    pub fn capture_session_key(&self) -> Result<String, String> {
+        Err("the Android Keystore exists only on Android".to_string())
     }
 
     pub fn stop(&self) -> Result<(), String> {

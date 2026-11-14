@@ -70,4 +70,12 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含 `debug-home-light`�
 - **重放**（`desktop_mitm::replay`）：
   - 桌面经引擎的本机代理发出，Android 经内核的本机重放代理发出（`start_replay_proxy`，只监听 127.0.0.1，一次性 Basic 凭据，凭据只留在后端）。
   - 不跟随重定向，不保存 Cookie，响应最多保留 1 MiB；开着 HTTPS 解密时会信任解密根证书。
+- **保存的会话**（`desktop_mitm::sessions`，调试模式的“请求”页）：把当前抓包整体加密保存成会话，之后可以载入回看请求、导出，或删除。
+  - 加密由内核完成（`set_capture_storage` / `save_capture` / `capture_sessions` / `load_capture` / `delete_capture`，ChaCha20-Poly1305）。
+    后端在每个会话操作前把目录和密钥告诉内核；窗口拿不到密钥，`runtime_control` 也拒绝窗口发 `set_capture_storage`。
+  - 密钥：Windows 用 DPAPI 封装后存在 `%LOCALAPPDATA%\AnixOps Net\capture`；Android 用 Keystore 里的 AES-GCM 密钥封装，存在 no-backup 目录；
+    Linux 存进 Secret Service（`secret-tool`），没有钥匙环时存成只有本人可读（0600）的文件，界面会写明。
+    已有的密钥读不出来（例如钥匙环没解锁）时报错，不会换新密钥，免得已保存的会话全部打不开。
+  - 7 天后删除：内核在设置存储、保存和列出时清理；客户端启动时也按文件名里的时间清理一次，不连接也会过期。
+  - 载入会替换当前抓到的内容并停止实时抓包；当前有内容时“载入”要再点一次确认。会话要在连接时才能列出和载入（内核在运行时才应答）。
 - **Map Local / Map Remote**（`desktop_mitm::mappings`）：存放在插件目录的 `debug-mappings.json`，格式与 Apple 端相同。`plugins::apply` 把生成的“AnixOps 调试映射”接在导入的插件后面。映射要开启 HTTPS 解密才生效，保存后正在运行的引擎会重新加载。

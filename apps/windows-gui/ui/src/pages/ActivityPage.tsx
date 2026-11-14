@@ -7,6 +7,7 @@ import { listPage, liveEngine, usePolling } from "../live";
 import { formatBytes } from "../subscription-format";
 import { Card, EmptyState, IconButton, MoreMenu, Row, Run, Segmented, Switch } from "../ui";
 import { t } from "../i18n";
+import { CaptureSessions } from "./CaptureSessions";
 import { CaptureDetail, exportCapture } from "./CaptureViews";
 import { RequestList } from "./RequestList";
 
@@ -43,11 +44,14 @@ export function ActivityPage({ snapshot, busy, run, debug = false }: { snapshot:
     </Card>
   );
   const connections = <Connections snapshot={snapshot} busy={busy} run={run} onOpen={(connection) => setDetail({ connection })} />;
-  const requests = debug && live && <RequestList capturing={Boolean(capture?.enabled)} onOpen={(request) => setDetail(requestDetail(request))} />;
+  // A stopped capture or a loaded session still holds requests to list.
+  const holding = Boolean(capture?.enabled) || (capture?.connections ?? 0) > 0;
+  const requests = debug && live && <RequestList capturing={holding} onOpen={(request) => setDetail(requestDetail(request))} />;
+  const saved = debug && live && <CaptureSessions capture={capture} run={run} />;
 
   return (
     <div className="page-stack">
-      {debug ? <>{requests}{connections}{session}</> : <>{session}{connections}</>}
+      {debug ? <>{requests}{saved}{connections}{session}</> : <>{session}{connections}</>}
     </div>
   );
 }

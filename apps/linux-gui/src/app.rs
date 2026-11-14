@@ -87,6 +87,13 @@ pub trait TunnelHost: Send + Sync + 'static {
         Err("this platform has no shared Downloads folder".to_string())
     }
 
+    /// The key that seals saved capture sessions, as base64, kept by the platform's key store (Android: the
+    /// Keystore), made on first use.
+    fn capture_session_key(&self, app: &AppHandle) -> Result<String, String> {
+        let _ = app;
+        Err("this platform keeps the capture session key itself".to_string())
+    }
+
     /// Puts a binary file, given as base64, in the same place as [`TunnelHost::save_to_downloads`] and
     /// returns where it went.
     fn save_base64_to_downloads(
@@ -109,6 +116,9 @@ pub use client_health::startup::mark_process_start;
 struct AppState(Arc<Mutex<Backend>>);
 
 struct HealthState(Arc<Health>);
+
+/// The capture session key once read, so the key store is asked once per run.
+struct SessionKeyState(Mutex<Option<desktop_mitm::sessions::SessionKey>>);
 
 fn lock(backend: &Mutex<Backend>) -> MutexGuard<'_, Backend> {
     backend.lock().unwrap_or_else(PoisonError::into_inner)
@@ -429,7 +439,68 @@ async fn runtime_control(
     state: State<'_, AppState>,
     request: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
+    // Only the backend names where sessions go and the key that seals them (`capture_session`).
+    if !desktop_mitm::sessions::window_may_send(&request) {
+        return Err("runtime control command \"set_capture_storage\" is not available".to_string());
+    }
     with_backend(&state, move |backend| backend.runtime_control(&request)).await
+}
+
+/// Saved capture sessions: list, save what capture holds, load one for viewing, delete. The engine is told where
+/// sessions go and the key before every action, since it forgets both when it restarts.
+#[tauri::command]
+async fn capture_session(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    keys: State<'_, SessionKeyState>,
+    action: desktop_mitm::sessions::SessionAction,
+) -> Result<serde_json::Value, String> {
+    let request = action.request()?;
+    let capture_dir = with_backend(&state, |backend| Ok(backend.capture_dir())).await?;
+    let cached = keys
+        .0
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone();
+    let key = match cached {
+        Some(key) => key,
+        None => {
+            let dir = capture_dir.clone();
+            let key = off_lock(move || session_key(&app, &dir)).await?;
+            *keys.0.lock().unwrap_or_else(PoisonError::into_inner) = Some(key.clone());
+            key
+        }
+    };
+    let storage = desktop_mitm::sessions::storage_request(&capture_dir.join("sessions"), &key);
+    let protection = key.protection;
+    let answer = with_backend(&state, move |backend| {
+        backend.runtime_control(&storage)?;
+        backend.runtime_control(&request)
+    })
+    .await?;
+    Ok(desktop_mitm::sessions::with_protection(answer, protection))
+}
+
+/// Android: the Keystore keeps the key, through the VPN plugin.
+#[cfg(target_os = "android")]
+fn session_key(
+    app: &AppHandle,
+    _dir: &std::path::Path,
+) -> Result<desktop_mitm::sessions::SessionKey, String> {
+    let host = app
+        .try_state::<TunnelHostState>()
+        .ok_or("the Android key store is not available")?;
+    let key = desktop_mitm::capture::decode_base64(&host.0.capture_session_key(app)?)?;
+    desktop_mitm::sessions::SessionKey::new(&key, desktop_mitm::sessions::Protection::Keystore)
+}
+
+/// Linux: the Secret Service, or a file only this user can read.
+#[cfg(not(target_os = "android"))]
+fn session_key(
+    _app: &AppHandle,
+    dir: &std::path::Path,
+) -> Result<desktop_mitm::sessions::SessionKey, String> {
+    crate::backend::session_key::load(dir)
 }
 
 /// An SVG QR code for the phone setup page address of the LAN share.
@@ -1040,6 +1111,11 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
         env!("CARGO_PKG_VERSION"),
         std::env::current_exe().unwrap_or_else(|_| executable.clone()),
     );
+    // Sessions expire after a week even when the engine does not run to delete them.
+    desktop_mitm::sessions::purge(
+        &crate::backend::capture_dir(&dir).join("sessions"),
+        desktop_mitm::sessions::now_ms(),
+    );
     let backend = Backend::open(
         Store::new(dir),
         Desktop::from_env(),
@@ -1085,6 +1161,7 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
     let app = builder
         .manage(AppState(shared.clone()))
         .manage(HealthState(health))
+        .manage(SessionKeyState(Mutex::new(None)))
         .on_page_load(|webview, payload| {
             if payload.event() != PageLoadEvent::Finished {
                 return;
@@ -1109,6 +1186,7 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             switch_node,
             runtime_control,
             export_capture,
+            capture_session,
             replay_request,
             list_debug_mappings,
             save_debug_mapping,
