@@ -335,13 +335,8 @@ impl Backend {
         self.mitm_dir().join("plugins")
     }
 
-    /// The HTTPS decryption root, generated on first use. The window installs it in the trust stores before
-    /// turning decryption on.
-    /// Where the root is kept, whether or not it was generated yet.
-    pub fn mitm_root(&self) -> Root {
-        Root::at(&self.mitm_dir())
-    }
-
+    /// The HTTPS decryption root, generated on first use. The user trusts it by hand; the window never
+    /// installs it in a trust store when decryption is turned on.
     pub fn ensure_mitm_root(&self) -> Result<Root, String> {
         Root::ensure(&self.mitm_dir())
     }
