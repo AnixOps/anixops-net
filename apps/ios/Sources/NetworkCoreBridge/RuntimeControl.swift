@@ -51,6 +51,8 @@ public enum RuntimeControl {
     case captureConnection(UInt64)
     /// Everything captured, or one connection, as a pcapng or HAR file (`PacketCapture.ExportAnswer`).
     case exportCapture(PacketCapture.ExportFormat, id: UInt64?)
+    /// One row per decrypted HTTP exchange after `sinceSeq`, those matching `filter` (`CaptureFilter`).
+    case captureRequests(sinceSeq: UInt64, limit: Int, filter: String)
     /// The engine opened to phones on the local network that set this Mac as their Wi-Fi proxy (`LanShare`).
     case lanShare
     /// Starts (or restarts) the LAN share on `port`; `0` picks a free one.
@@ -112,6 +114,12 @@ public enum RuntimeControl {
             var request: [String: Any] = ["cmd": "export_capture", "format": format.rawValue]
             if let id {
                 request["id"] = id
+            }
+            object = request
+        case let .captureRequests(sinceSeq, limit, filter):
+            var request: [String: Any] = ["cmd": "capture_requests", "since_seq": sinceSeq, "limit": limit]
+            if !filter.isEmpty {
+                request["filter"] = filter
             }
             object = request
         case .lanShare:

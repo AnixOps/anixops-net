@@ -445,7 +445,11 @@ struct MacActivityPage: View {
             .overlay(RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous).strokeBorder(brand.border.opacity(0.6)))
             .padding(.horizontal, 20)
             .padding(.top, 16)
-            ConnectionsView(tunnel: tunnel)
+            if tunnel.appMode == .debug {
+                CaptureRequestsView(tunnel: tunnel)
+            } else {
+                ConnectionsView(tunnel: tunnel)
+            }
         }
         .background(brand.bg)
         .onAppear(perform: refresh)

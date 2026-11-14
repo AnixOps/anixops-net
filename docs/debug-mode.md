@@ -54,6 +54,15 @@ AnixOps Net 是一个 App 两种模式（计划 A3/A4）：**代理**按订阅�
 CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含 `debug-home-light`、`debug-settings-light` 和首次启动的 `choose-home-light`。
 演示数据用 `-AnixOpsMode debug|proxy|choose` 选择模式。
 
+## 请求列表（计划 E5）
+
+调试模式的“请求”（iOS 标签 / macOS 活动页）按 HTTP 请求逐条列出，最新在上，点开是请求详情（可重放、生成映射）。右上角可以切到全部连接。
+
+- 数据来自内核 `capture_requests`（networkcore d1a8cc1 起），每秒按 `since_seq` 增量读取，`dropped_before_seq` 以内的行随内核一起删掉；本地最多保留 5000 行（`NetworkCoreBridge/CaptureRequests.swift`）。
+- 快捷筛选（出错、JSON、图片、非 GET、HTTP/2、大于 100 KB、本地应答）和搜索框拼成同一个过滤表达式交给内核解析，语法见 project files `debug-client/kernel-capture-api.md` §4。快捷筛选的条件会加到搜索框每个 `OR` 分组里。
+- 表达式有误时内核返回出错位置，列表上方标红提示。
+- 只列 MITM 解密后的请求和明文 HTTP 请求；抓包未开启时空白页给出“开始抓包”。
+
 ## 后续
 
-- 请求列表按 HTTP 请求逐条展示，快捷筛选和表达式搜索共用一个搜索框（内核 `capture_requests` 和过滤表达式，见 project files `debug-client/kernel-capture-api.md`）。
+- 导出 cURL / 代码 / Postman / Insomnia（默认脱敏）和加密保存抓包会话（内核已支持：`export_capture` 新格式、`set_capture_storage` 等）。
