@@ -76,10 +76,13 @@ impl Root {
         private_key_pem: &str,
     ) -> Result<Self, String> {
         let certificate_der = certificate_der(certificate_pem)?;
-        CertificateParams::from_ca_cert_pem(certificate_pem)
+        let is_ca = x509_parser::parse_x509_certificate(&certificate_der)
             .ok()
-            .filter(|params| matches!(params.is_ca, IsCa::Ca(_)))
-            .ok_or("the certificate is not a CA certificate")?;
+            .and_then(|(_, certificate)| certificate.basic_constraints().ok().flatten())
+            .is_some_and(|constraints| constraints.value.ca);
+        if !is_ca {
+            return Err("the certificate is not a CA certificate".to_string());
+        }
         let key = KeyPair::from_pem(private_key_pem)
             .map_err(|_| "the private key is not a PKCS#8 PEM key (BEGIN PRIVATE KEY)")?;
         let public_key = key.public_key_raw();

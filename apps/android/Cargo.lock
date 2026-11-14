@@ -1071,6 +1071,7 @@ dependencies = [
  "ring",
  "serde",
  "serde_json",
+ "x509-parser",
 ]
 
 [[package]]
