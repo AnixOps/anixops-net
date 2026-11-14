@@ -1,6 +1,9 @@
 //! The DNS choices the Windows and Linux clients offer and the engine `dns`
 //! section each one adds to the envelope. The resolvers are addressed by IP
 //! with a TLS name, so the engine never has to resolve a resolver's own name.
+//! [`rules`] puts the user's own rule lines in front of the envelope's rules.
+
+pub mod rules;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};

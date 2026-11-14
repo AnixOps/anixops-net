@@ -22,6 +22,7 @@ pub fn capture_dir(dir: &Path) -> PathBuf {
 
 use control_domain::NodeDescriptor;
 use desktop_mitm::Root;
+use engine_embedded::config::RuntimeConfig;
 use engine_embedded::profile::{self, RoutingMode, RuleList};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -159,6 +160,13 @@ pub struct SubscriptionSummary {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct OperationResult {
     pub message: String,
+}
+
+/// "我的规则" for the Rules page: the text as written and how many rules it holds.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct MyRules {
+    pub text: String,
+    pub count: usize,
 }
 
 fn done(message: impl Into<String>) -> Result<OperationResult, String> {
@@ -302,11 +310,8 @@ impl Backend {
 
     /// The envelope to run: the profile (routed, or the chosen node) in the routing mode.
     fn envelope(&self) -> Result<String, String> {
-        let envelope = if self.state.direct_egress {
-            engine::direct_envelope()
-        } else {
-            self.routed_envelope()?
-        };
+        let envelope =
+            self.envelope_with_rules(&desktop_dns::rules::load_lines(&self.my_rules_path()))?;
         let envelope = desktop_dns::apply(&envelope, self.state.dns_preset)?;
         let envelope = desktop_dns::apply_block_quic(&envelope, self.state.block_quic)?;
         if !self.state.preferences.https_decryption {
@@ -317,6 +322,70 @@ impl Backend {
             self.mitm_root()
                 .envelope(envelope.as_bytes(), "", Some(&self.plugins_dir()))?;
         String::from_utf8(envelope).map_err(|error| error.to_string())
+    }
+
+    /// The profile, or debug mode's node-less one, with the user's own rule lines first.
+    fn envelope_with_rules(&self, lines: &[String]) -> Result<String, String> {
+        let envelope = if self.state.direct_egress {
+            engine::direct_envelope()
+        } else {
+            self.routed_envelope()?
+        };
+        desktop_dns::rules::apply(&envelope, lines)
+    }
+
+    /// Where "我的规则" are kept, as the text the user wrote.
+    fn my_rules_path(&self) -> PathBuf {
+        self.store.dir().join("my-rules.txt")
+    }
+
+    /// The user's own rule lines as written, and how many rules they hold.
+    pub fn my_rules(&self) -> MyRules {
+        let text = desktop_dns::rules::load(&self.my_rules_path());
+        let count = desktop_dns::rules::parse(&text).map_or(0, |lines| lines.len());
+        MyRules { text, count }
+    }
+
+    /// Checks and saves the user's own rule lines. A running engine takes them in place (`reload_rules`), so open
+    /// connections stay; when it cannot (the profile had no rules before), it restarts with them.
+    pub fn save_my_rules(&mut self, text: &str) -> Result<OperationResult, String> {
+        let lines = desktop_dns::rules::parse(text).map_err(|error| error.message())?;
+        // Without a profile there is nothing to check the lines against yet; they are kept for later.
+        let envelope = match self.envelope_with_rules(&[]) {
+            Ok(_) => {
+                let envelope = self.envelope_with_rules(&lines)?;
+                let envelope = desktop_dns::apply(&envelope, self.state.dns_preset)?;
+                let envelope = desktop_dns::apply_block_quic(&envelope, self.state.block_quic)?;
+                RuntimeConfig::from_json(envelope.as_bytes())
+                    .map_err(|error| format!("the engine rejected the rules: {}", error.message))?;
+                Some(envelope)
+            }
+            Err(_) => None,
+        };
+        desktop_dns::rules::save(&self.my_rules_path(), text)?;
+        if !self.engine.is_running() {
+            return done(format!("{} rules saved", lines.len()));
+        }
+        let reloaded = envelope
+            .as_deref()
+            .and_then(desktop_dns::rules::rules_of)
+            .and_then(|rules| {
+                self.engine
+                    .control(&serde_json::json!({ "cmd": "reload_rules", "rules": rules }))
+                    .ok()
+            })
+            .is_some_and(|answer| answer.get("reloaded") == Some(&serde_json::Value::Bool(true)));
+        if reloaded {
+            return done(format!(
+                "{} rules saved and applied; open connections stay",
+                lines.len()
+            ));
+        }
+        self.restart_if_running()?;
+        done(format!(
+            "{} rules saved; the engine restarted with them",
+            lines.len()
+        ))
     }
 
     /// The profile (routed, or the chosen node) in the routing mode.
@@ -1277,9 +1346,44 @@ mod tests {
     }
 
     #[test]
-    fn direct_egress_runs_without_any_node() {
-        use engine_embedded::config::RuntimeConfig;
+    fn my_rules_go_first_and_the_engine_accepts_them() {
+        let (mut backend, dir) = backend("my-rules");
+        // Without a profile the lines are only checked and kept.
+        backend.save_my_rules("DOMAIN,kept.test,DIRECT").unwrap();
+        assert!(backend.save_my_rules("GEOSITE,cn,DIRECT").is_err());
+        assert_eq!(backend.my_rules().count, 1);
 
+        backend.import(PASTED_LOCATION, LINK).unwrap();
+        backend
+            .save_my_rules(
+                "DOMAIN-SUFFIX,ads.test,REJECT\nPROCESS-NAME,curl,DIRECT\nDOMAIN,a.test,PROXY",
+            )
+            .unwrap();
+        assert_eq!(backend.my_rules().count, 3);
+        let envelope = backend.envelope().unwrap();
+        assert!(
+            RuntimeConfig::from_json(envelope.as_bytes()).is_ok(),
+            "{envelope}"
+        );
+        let rules = desktop_dns::rules::rules_of(&envelope).unwrap();
+        assert_eq!(rules[0], "DOMAIN-SUFFIX,ads.test,REJECT");
+        assert_eq!(rules[2], "DOMAIN,a.test,proxy");
+
+        // Debug mode's direct egress has no node: PROXY lines go direct, the others still apply.
+        backend.set_direct_egress(true).unwrap();
+        let envelope = backend.envelope().unwrap();
+        assert!(
+            RuntimeConfig::from_json(envelope.as_bytes()).is_ok(),
+            "{envelope}"
+        );
+        let rules = desktop_dns::rules::rules_of(&envelope).unwrap();
+        assert_eq!(rules[0], "DOMAIN-SUFFIX,ads.test,REJECT");
+        assert_eq!(rules[2], "DOMAIN,a.test,DIRECT");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn direct_egress_runs_without_any_node() {
         let (mut backend, dir) = backend("direct");
         assert!(backend.envelope().is_err());
         backend.set_direct_egress(true).unwrap();
@@ -1297,8 +1401,6 @@ mod tests {
 
     #[test]
     fn https_decryption_adds_the_root_and_plugins_to_the_envelope() {
-        use engine_embedded::config::RuntimeConfig;
-
         const PLUGIN: &str = concat!(
             "#!name = ipleak test\n",
             "[Script]\n",

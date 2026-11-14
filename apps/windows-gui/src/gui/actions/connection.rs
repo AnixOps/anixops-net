@@ -1,7 +1,7 @@
 use crate::gui::{
     load_validated_managed_configuration, mitm_plugins,
     runtime_status::{read_runtime_status, ManagedCoreStatus},
-    startup::{owns_current_proxy, save_desktop_state, DesktopState},
+    startup::{my_rules_path, owns_current_proxy, save_desktop_state, DesktopState},
     tun_mode::DesktopTun,
     ui_state::ConnectionState,
 };
@@ -322,6 +322,9 @@ pub fn direct_egress_envelope(
         "outbound": { "type": "direct" },
     })
     .to_string();
+    // The user's own rules still apply: REJECT and DIRECT as written, PROXY direct since there is no node.
+    let profile =
+        desktop_dns::rules::apply(&profile, &desktop_dns::rules::load_lines(&my_rules_path()))?;
     let envelope = desktop_dns::apply(&profile, dns)?;
     desktop_dns::apply_block_quic(&envelope, block_quic)
 }

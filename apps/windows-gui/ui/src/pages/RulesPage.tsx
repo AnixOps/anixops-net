@@ -5,6 +5,7 @@ import { availableRoutingModes, groupMemberLabel } from "../labels";
 import { liveEngine, usePolling } from "../live";
 import { Card, Row, Run } from "../ui";
 import { t } from "../i18n";
+import { MyRules } from "./MyRules";
 
 export function RulesPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
   return (
@@ -33,6 +34,7 @@ export function RulesPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot |
         })}
         </div>
       </Card>
+      <MyRules busy={busy} run={run} />
       <PolicyGroups busy={busy} run={run} />
       <RuleSets snapshot={snapshot} busy={busy} run={run} />
       <DnsCard snapshot={snapshot} busy={busy} run={run} />

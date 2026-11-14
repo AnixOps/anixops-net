@@ -485,6 +485,10 @@ export const desktop = {
   setBlockQuic: (enabled: boolean) => invoke<OperationResult>("set_block_quic", { enabled }),
   setDirectEgress: (enabled: boolean) => invoke<OperationResult>("set_direct_egress", { enabled }),
   refreshRoutingRules: () => invoke<OperationResult>("refresh_routing_rules"),
+  /** "我的规则": the saved text and how many rule lines it holds. */
+  myRules: () => invoke<{ text: string; count: number }>("my_rules"),
+  /** Checks every line, saves, and gives a running engine the new rules. */
+  saveMyRules: (text: string) => invoke<OperationResult>("save_my_rules", { text }),
   enableHttpsMitm: () => invoke<OperationResult>("enable_https_mitm"),
   disableHttpsMitm: () => invoke<OperationResult>("disable_https_mitm"),
   mitmPlugins: () => invoke<MitmPlugin[]>("list_mitm_plugins"),

@@ -527,4 +527,8 @@ export const traditional: Record<string, string> = {
   "载入": "載入",
   "删除会话": "刪除會話",
   "确认删除会话 {name}": "確認刪除會話 {name}",
+  "我的规则": "我的規則",
+  "每行一条，从上到下匹配，排在分流模式和订阅规则前面。策略写 PROXY（当前节点或订阅的第一个策略组）、DIRECT 或 REJECT。支持 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD、DOMAIN-WILDCARD、IP-CIDR、IP-CIDR6、DST-PORT、PROCESS-NAME、USER-AGENT、URL-REGEX、PROTOCOL；# 开头的行是注释。": "每行一條，從上到下比對，排在分流模式和訂閱規則前面。策略寫 PROXY（目前節點或訂閱的第一個策略群組）、DIRECT 或 REJECT。支援 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD、DOMAIN-WILDCARD、IP-CIDR、IP-CIDR6、DST-PORT、PROCESS-NAME、USER-AGENT、URL-REGEX、PROTOCOL；# 開頭的行是註解。",
+  "{count} 条规则": "{count} 條規則",
+  "还原": "還原",
 };

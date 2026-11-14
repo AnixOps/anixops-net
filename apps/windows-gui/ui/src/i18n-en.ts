@@ -528,4 +528,8 @@ export const english: Record<string, string> = {
   "载入": "Load",
   "删除会话": "Delete Session",
   "确认删除会话 {name}": "Delete session {name}?",
+  "我的规则": "My Rules",
+  "每行一条，从上到下匹配，排在分流模式和订阅规则前面。策略写 PROXY（当前节点或订阅的第一个策略组）、DIRECT 或 REJECT。支持 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD、DOMAIN-WILDCARD、IP-CIDR、IP-CIDR6、DST-PORT、PROCESS-NAME、USER-AGENT、URL-REGEX、PROTOCOL；# 开头的行是注释。": "One rule per line, matched top to bottom before the routing mode's and the subscription's rules. The policy is PROXY (the current node or the subscription's first policy group), DIRECT or REJECT. Supports DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD, DOMAIN-WILDCARD, IP-CIDR, IP-CIDR6, DST-PORT, PROCESS-NAME, USER-AGENT, URL-REGEX and PROTOCOL; lines starting with # are comments.",
+  "{count} 条规则": "{count} rules",
+  "还原": "Revert",
 };

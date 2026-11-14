@@ -157,6 +157,11 @@ pub struct DesktopState {
     pub subscription_sources: Vec<DesktopSubscriptionSource>,
 }
 
+/// "我的规则": the user's own rule lines as written (`desktop_dns::rules`), next to the desktop state.
+pub fn my_rules_path() -> PathBuf {
+    windows_managed_data_directory().join("my-rules.txt")
+}
+
 pub fn desktop_state_path() -> PathBuf {
     windows_managed_data_directory().join(DESKTOP_STATE_FILE)
 }

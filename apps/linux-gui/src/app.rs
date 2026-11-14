@@ -446,6 +446,21 @@ async fn runtime_control(
     with_backend(&state, move |backend| backend.runtime_control(&request)).await
 }
 
+/// "我的规则": the user's own rule lines as written and how many rules they hold.
+#[tauri::command]
+async fn my_rules(state: State<'_, AppState>) -> Result<crate::backend::MyRules, String> {
+    with_backend(&state, |backend| Ok(backend.my_rules())).await
+}
+
+/// Checks and saves "我的规则"; a running engine takes them in place.
+#[tauri::command]
+async fn save_my_rules(
+    state: State<'_, AppState>,
+    text: String,
+) -> Result<OperationResult, String> {
+    with_backend(&state, move |backend| backend.save_my_rules(&text)).await
+}
+
 /// Saved capture sessions: list, save what capture holds, load one for viewing, delete. The engine is told where
 /// sessions go and the key before every action, since it forgets both when it restarts.
 #[tauri::command]
@@ -1212,6 +1227,8 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             set_block_quic,
             set_direct_egress,
             refresh_routing_rules,
+            my_rules,
+            save_my_rules,
             install_service,
             start_service,
             stop_service,

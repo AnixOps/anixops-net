@@ -534,6 +534,9 @@ dl.headers dd { margin: 0; font-family: var(--font-mono); font-size: 12px; overf
 .root-import { display: grid; gap: 8px; padding: 10px 14px 12px; }
 .root-import textarea { min-height: 88px; }
 .root-import button { justify-self: end; }
+.rule-editor { display: grid; gap: 8px; padding: 10px 14px 12px; }
+.rule-editor textarea { min-height: 160px; }
+.rule-editor .button-row { justify-content: flex-end; }
 @media (max-width: 560px) { .phone-qr { flex-direction: column; align-items: flex-start; } }
 /* First-launch mode choice (mode-choice.tsx): two equal answers, neither one a primary button. */
 .mode-dialog { width: min(560px, 100%); }

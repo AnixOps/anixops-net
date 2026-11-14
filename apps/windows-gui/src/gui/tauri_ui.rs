@@ -4,7 +4,7 @@ use super::linked_sources::{self, CachedNode, OtherSource};
 use super::mitm_plugins::{self, PluginSummary};
 use super::runtime_status::{read_runtime_status, ManagedCoreStatus, WindowsRuntimeStatus};
 use super::startup::{
-    desktop_state_path, load_desktop_state, owns_current_proxy, save_desktop_state,
+    desktop_state_path, load_desktop_state, my_rules_path, owns_current_proxy, save_desktop_state,
     DesktopProfileNode, DesktopRoutingMode, DesktopRuntimeMode, DesktopState,
     DesktopSubscriptionSource,
 };
@@ -355,6 +355,8 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             set_block_quic,
             set_direct_egress,
             refresh_routing_rules,
+            my_rules,
+            save_my_rules,
             configure_script_runtime,
             clear_script_runtime,
             enable_https_mitm,
@@ -2755,11 +2757,30 @@ fn embedded_envelope_for_mode(
     block_quic: bool,
     force_refresh: bool,
 ) -> Result<String, String> {
-    let envelope = desktop_dns::apply(&mode_envelope(profile, mode, force_refresh)?, dns)?;
+    let rules = desktop_dns::rules::load_lines(&my_rules_path());
+    embedded_envelope_with_rules(profile, mode, dns, block_quic, force_refresh, &rules)
+}
+
+/// [`embedded_envelope_for_mode`] with `rules` as "我的规则" in place of the saved ones.
+fn embedded_envelope_with_rules(
+    profile: &str,
+    mode: DesktopRoutingMode,
+    dns: DnsPreset,
+    block_quic: bool,
+    force_refresh: bool,
+    rules: &[String],
+) -> Result<String, String> {
+    let envelope = desktop_dns::rules::apply(&mode_envelope(profile, mode, force_refresh)?, rules)?;
+    let envelope = desktop_dns::apply(&envelope, dns)?;
     let envelope = desktop_dns::apply_block_quic(&envelope, block_quic)?;
-    if dns != DnsPreset::System {
-        RuntimeConfig::from_json(envelope.as_bytes())
-            .map_err(|error| format!("the DNS choice was rejected: {}", error.message))?;
+    if dns != DnsPreset::System || !rules.is_empty() {
+        RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
+            if rules.is_empty() {
+                format!("the DNS choice was rejected: {}", error.message)
+            } else {
+                format!("the engine rejected the rules: {}", error.message)
+            }
+        })?;
     }
     Ok(envelope)
 }
@@ -3201,6 +3222,129 @@ fn set_direct_egress_blocking(
         Ok(()) if enabled => "Traffic leaves directly.".to_string(),
         Ok(()) => "Traffic leaves through the selected node.".to_string(),
         Err(error) => format!("Egress saved. Reconnect to apply it: {error}"),
+    };
+    Ok(OperationResult { message })
+}
+
+#[derive(Debug, Serialize)]
+struct MyRules {
+    text: String,
+    count: usize,
+}
+
+/// "我的规则": the user's own rule lines as written and how many rules they hold.
+#[tauri::command]
+async fn my_rules() -> Result<MyRules, String> {
+    run_blocking(|| {
+        let text = desktop_dns::rules::load(&my_rules_path());
+        let count = desktop_dns::rules::parse(&text).map_or(0, |lines| lines.len());
+        Ok(MyRules { text, count })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn save_my_rules(
+    text: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || save_my_rules_blocking(&text, state)).await
+}
+
+/// Checks "我的规则" against the imported profile, saves them and writes the envelope. The engine this window
+/// runs takes them in place (`reload_rules`), so open connections stay; TUN mode, or a profile that had no
+/// rules before, reconnects instead. The Windows service takes them on its next start.
+fn save_my_rules_blocking(text: &str, state: DesktopAppState) -> Result<OperationResult, String> {
+    let lines = desktop_dns::rules::parse(text).map_err(|error| error.message())?;
+    let mut envelope = None;
+    {
+        let desktop = state
+            .desktop
+            .lock()
+            .map_err(|_| "desktop state lock failed")?;
+        if let Some(embedded) = active_embedded_config()? {
+            // A profile whose mode cannot be applied yet (rule lists not downloaded) has nothing to check the
+            // lines against; they are kept and checked when it connects.
+            let profile = fs::read_to_string(embedded_profile_path())
+                .ok()
+                .filter(|profile| {
+                    embedded_envelope_with_rules(
+                        profile,
+                        desktop.routing_mode,
+                        desktop.dns_preset,
+                        desktop.block_quic,
+                        false,
+                        &[],
+                    )
+                    .is_ok()
+                });
+            if let Some(profile) = profile {
+                let routed = embedded_envelope_with_rules(
+                    &profile,
+                    desktop.routing_mode,
+                    desktop.dns_preset,
+                    desktop.block_quic,
+                    false,
+                    &lines,
+                )?;
+                envelope = Some((embedded.envelope_path, routed));
+            }
+        }
+        if desktop.direct_egress {
+            // Debug mode's node-less profile: checked the same way.
+            let direct = desktop_dns::rules::apply(
+                r#"{"schema_version":1,"profile_id":"desktop","outbound":{"type":"direct"}}"#,
+                &lines,
+            )?;
+            RuntimeConfig::from_json(direct.as_bytes())
+                .map_err(|error| format!("the engine rejected the rules: {}", error.message))?;
+        }
+    }
+    desktop_dns::rules::save(&my_rules_path(), text)?;
+    if let Some((path, routed)) = envelope.as_ref() {
+        write_managed_text_atomic(path, routed).map_err(|error| error.to_string())?;
+    }
+    let count = lines.len();
+    let running_rules = {
+        let desktop = state
+            .desktop
+            .lock()
+            .map_err(|_| "desktop state lock failed")?
+            .clone();
+        if desktop.direct_egress {
+            connection::direct_egress_envelope(desktop.dns_preset, desktop.block_quic)
+                .ok()
+                .and_then(|direct| desktop_dns::rules::rules_of(&direct))
+        } else {
+            envelope
+                .as_ref()
+                .and_then(|(_, routed)| desktop_dns::rules::rules_of(routed))
+        }
+    };
+    let reloaded = {
+        let core = state
+            .direct_core
+            .lock()
+            .map_err(|_| "desktop core lock failed")?;
+        !core.tun_running()
+            && running_rules.is_some_and(|rules| {
+                serde_json::to_vec(&json!({ "cmd": "reload_rules", "rules": rules }))
+                    .ok()
+                    .and_then(|request| core.control(&request).ok())
+                    .and_then(|answer| serde_json::from_slice::<Value>(&answer).ok())
+                    .is_some_and(|answer| answer.get("reloaded") == Some(&Value::Bool(true)))
+            })
+    };
+    let message = if reloaded {
+        format!("{count} rules saved and applied; open connections stay.")
+    } else {
+        match reconnect_running_direct_core(&state) {
+            Ok(()) => format!(
+                "{count} rules saved. They apply to the running connection, or the next one."
+            ),
+            Err(error) => format!("{count} rules saved. Reconnect to apply them: {error}"),
+        }
     };
     Ok(OperationResult { message })
 }
