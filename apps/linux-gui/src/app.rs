@@ -1086,6 +1086,36 @@ async fn notification_settings(
     lock(&state.0).notification_settings(update, &language)
 }
 
+/// The destination rewrites (`redirects`), as the window lists them.
+#[tauri::command]
+async fn traffic_redirects(
+    state: State<'_, AppState>,
+) -> Result<Vec<desktop_dns::redirects::View>, String> {
+    with_backend(&state, |backend| Ok(backend.traffic_redirects())).await
+}
+
+/// Adds a rewrite from the editor's fields, or changes the one with id `replacing`.
+#[tauri::command]
+async fn add_traffic_redirect(
+    state: State<'_, AppState>,
+    draft: desktop_dns::redirects::Draft,
+    replacing: Option<String>,
+) -> Result<OperationResult, String> {
+    with_backend(&state, move |backend| {
+        backend.add_redirect(&draft, replacing.as_deref())
+    })
+    .await
+}
+
+/// Saves the rewrites as the window changed them: switches, order and deletions.
+#[tauri::command]
+async fn save_traffic_redirects(
+    state: State<'_, AppState>,
+    entries: Vec<desktop_dns::redirects::Entry>,
+) -> Result<OperationResult, String> {
+    with_backend(&state, move |backend| backend.save_redirects(entries)).await
+}
+
 /// The Wi-Fi rules, changed to `update` first when given.
 #[tauri::command]
 async fn on_demand_settings(
@@ -1613,6 +1643,9 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             take_app_links,
             on_demand_settings,
             current_network,
+            traffic_redirects,
+            add_traffic_redirect,
+            save_traffic_redirects,
             node_form,
             edit_node,
             remove_node,

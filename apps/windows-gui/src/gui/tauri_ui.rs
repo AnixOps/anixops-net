@@ -504,6 +504,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
     // Saved capture sessions expire after a week even when the engine does not run to delete them.
     capture_sessions::purge_expired();
     desktop_dns::custom::use_file(dns_settings_path());
+    desktop_dns::redirects::use_file(windows_managed_data_directory().join("redirects.json"));
     let health_dir = desktop_state_path()
         .parent()
         .map(Path::to_path_buf)
@@ -630,6 +631,9 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             notification_settings,
             on_demand_settings,
             current_network,
+            traffic_redirects,
+            add_traffic_redirect,
+            save_traffic_redirects,
             take_app_links,
             node_form,
             edit_node,
@@ -3329,10 +3333,17 @@ fn embedded_envelope_with_rules(
     let envelope = desktop_dns::rules::apply(&mode_envelope(profile, mode, force_refresh)?, rules)?;
     let envelope = desktop_dns::apply(&envelope, dns)?;
     let envelope = desktop_dns::apply_block_quic(&envelope, block_quic)?;
+    let envelope = desktop_dns::redirects::apply(&envelope)?;
     let fake_ip = desktop_dns::custom::current().is_ok_and(|settings| settings.fake_ip);
-    if dns != DnsPreset::System || fake_ip || !rules.is_empty() {
+    let redirects = envelope.contains("\"redirects\"");
+    if dns != DnsPreset::System || fake_ip || !rules.is_empty() || redirects {
         RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
-            if rules.is_empty() {
+            if redirects {
+                format!(
+                    "the engine rejected the settings or redirects: {}",
+                    error.message
+                )
+            } else if rules.is_empty() {
                 format!("the DNS choice was rejected: {}", error.message)
             } else {
                 format!("the engine rejected the rules: {}", error.message)
@@ -3693,6 +3704,66 @@ fn rewrite_embedded_envelope(desktop: &DesktopState, preset: DnsPreset) -> Resul
             .map_err(|error| error.to_string())?;
     }
     Ok(())
+}
+
+/// The destination rewrites (`redirects`), as the window lists them.
+#[tauri::command]
+async fn traffic_redirects() -> Result<Vec<desktop_dns::redirects::View>, String> {
+    Ok(desktop_dns::redirects::views(
+        &desktop_dns::redirects::current(),
+    ))
+}
+
+/// Adds a rewrite from the editor's fields, or changes the one with id `replacing`.
+#[tauri::command]
+async fn add_traffic_redirect(
+    draft: desktop_dns::redirects::Draft,
+    replacing: Option<String>,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let next = desktop_dns::redirects::current().adding(&draft, replacing.as_deref())?;
+        replace_redirects(&next, &state)
+    })
+    .await
+}
+
+/// Saves the rewrites as the window changed them: switches, order and deletions.
+#[tauri::command]
+async fn save_traffic_redirects(
+    entries: Vec<desktop_dns::redirects::Entry>,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let next = desktop_dns::redirects::Redirects { entries }.checked()?;
+        replace_redirects(&next, &state)
+    })
+    .await
+}
+
+/// Saves `next` once the imported profile's envelope takes it (the engine checks it there), then reconnects a
+/// running core. A refused list leaves the saved one and the envelope as they were.
+fn replace_redirects(
+    next: &desktop_dns::redirects::Redirects,
+    state: &DesktopAppState,
+) -> Result<OperationResult, String> {
+    let desktop = state
+        .desktop
+        .lock()
+        .map_err(|_| "desktop state lock failed")?
+        .clone();
+    desktop_dns::redirects::replace(next, || {
+        rewrite_embedded_envelope(&desktop, desktop.dns_preset)
+    })?;
+    let message = match reconnect_running_direct_core(state) {
+        Ok(()) => {
+            "Redirects saved. They apply to the running connection, or the next one.".to_string()
+        }
+        Err(error) => format!("Redirects saved. Reconnect to apply them: {error}"),
+    };
+    Ok(OperationResult { message })
 }
 
 /// The "自定义" DNS text and the Fake-IP switch as saved.

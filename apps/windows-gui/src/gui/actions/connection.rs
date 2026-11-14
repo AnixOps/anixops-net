@@ -272,7 +272,8 @@ pub fn direct_egress_envelope(
     let profile =
         desktop_dns::rules::apply(&profile, &desktop_dns::rules::load_lines(&my_rules_path()))?;
     let envelope = desktop_dns::apply(&profile, dns)?;
-    desktop_dns::apply_block_quic(&envelope, block_quic)
+    let envelope = desktop_dns::apply_block_quic(&envelope, block_quic)?;
+    desktop_dns::redirects::apply(&envelope)
 }
 
 pub fn disconnect_direct(
