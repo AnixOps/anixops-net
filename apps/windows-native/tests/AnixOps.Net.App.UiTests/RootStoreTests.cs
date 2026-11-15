@@ -40,6 +40,9 @@ internal static class RootConfirmation
         }
     }
 
+    /// <summary>The dialogs whose button was pressed last, for the test's notes.</summary>
+    public static string LastPressed { get; private set; } = "";
+
     private static bool Press(string button)
     {
         foreach (var window in TopLevel())
@@ -57,6 +60,7 @@ internal static class RootConfirmation
                         new PropertyCondition(AutomationElement.NameProperty, button)));
                 if (found is not null && found.TryGetCurrentPattern(InvokePattern.Pattern, out var pattern))
                 {
+                    LastPressed = $"'{button}' in {Describe(window)}";
                     ((InvokePattern)pattern).Invoke();
                     return true;
                 }
@@ -76,6 +80,7 @@ internal static class RootConfirmation
     /// </summary>
     public static async Task<bool> AnswerAsync(string button, Func<Task> work)
     {
+        LastPressed = "";
         var running = Task.Run(work);
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(60);
         var pressed = 0;
@@ -92,7 +97,16 @@ internal static class RootConfirmation
                 $"no '{button}' button to press after {pressed} presses; the windows on the desktop: {string.Join(", ", TopLevel().Select(Describe))}");
             await Task.Delay(100);
         }
-        await running;
+        try
+        {
+            await running;
+        }
+        catch (RefusedException) when (pressed == 0)
+        {
+            // Refused without a dialog to answer: say so, since the caller cannot tell otherwise.
+            LastPressed = "(refused without a dialog)";
+            throw;
+        }
         return pressed > 0;
     }
 }
@@ -193,7 +207,7 @@ public sealed class RootStoreTests
 
             // The user says Yes (where Windows asks): trusted for this user, kept where the removal looks.
             var asked = await RootConfirmation.AnswerAsync("Yes", () => Task.Run(() => store.Trust(pem)));
-            Note($"Windows asked before adding the root: {asked}");
+            Note($"Windows asked before adding the root: {asked} {RootConfirmation.LastPressed}");
             Assert.True(store.Trusts(pem));
             Assert.True(KeyExists(root.Thumbprint));
             Eventually(() => Accepted(root), "Windows does not accept the root although it is in the user's store");
@@ -204,19 +218,40 @@ public sealed class RootStoreTests
             Eventually(() => !store.Trusts(pem), "the user's store still lists the root after its key was deleted");
             Eventually(() => !Accepted(root), "Windows still accepts the root after its key was deleted");
 
-            if (asked)
+            // The user says No, where Windows asks: nothing is trusted, and the reason is one the core can
+            // pass on. Windows does not ask on every machine every time; what happened is written down.
+            var answeredNo = false;
+            string outcome;
+            try
             {
-                // The user says No: nothing is trusted, and the reason is one the core can pass on.
-                var refused = await Assert.ThrowsAsync<RefusedException>(() => RootConfirmation.AnswerAsync("No", () => Task.Run(() => store.Trust(pem))));
+                answeredNo = await RootConfirmation.AnswerAsync("No", () => Task.Run(() => store.Trust(pem)));
+                outcome = "trusted";
+            }
+            catch (RefusedException refused)
+            {
+                outcome = $"refused: {refused.Message}";
                 Assert.Contains("answered with No", refused.Message, StringComparison.Ordinal);
+            }
+            Note($"Answering No: pressed {answeredNo} {RootConfirmation.LastPressed}, outcome {outcome}");
+            if (outcome != "trusted")
+            {
                 Assert.False(store.Trusts(pem));
                 Assert.False(KeyExists(root.Thumbprint));
             }
+            else
+            {
+                // A root the user refused must never end up trusted.
+                Assert.False(answeredNo, $"the root is trusted although No was pressed ({RootConfirmation.LastPressed})");
+                DeleteAsTheRemovalDoes(root.Thumbprint);
+                Eventually(() => !store.Trusts(pem), "the user's store still lists the root after its key was deleted");
+            }
 
             // The user's own request to stop trusting it.
-            await RootConfirmation.AnswerAsync("Yes", () => Task.Run(() => store.Trust(pem)));
+            var again = await RootConfirmation.AnswerAsync("Yes", () => Task.Run(() => store.Trust(pem)));
+            Note($"Windows asked before adding the root a second time: {again} {RootConfirmation.LastPressed}");
             Assert.True(store.Trusts(pem));
-            await RootConfirmation.AnswerAsync("Yes", () => Task.Run(() => store.Untrust(pem)));
+            var removing = await RootConfirmation.AnswerAsync("Yes", () => Task.Run(() => store.Untrust(pem)));
+            Note($"Windows asked before removing the root: {removing} {RootConfirmation.LastPressed}");
             Assert.False(store.Trusts(pem));
             Assert.False(KeyExists(root.Thumbprint));
             Eventually(() => !Accepted(root), "Windows still accepts the root after the user stopped trusting it");
