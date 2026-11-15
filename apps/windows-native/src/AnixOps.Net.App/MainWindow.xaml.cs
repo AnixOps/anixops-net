@@ -17,10 +17,13 @@ public sealed partial class MainWindow : Window
     private const int InitialHeight = 760;
 
     private readonly Strings strings;
+    private readonly Launch launch;
+    private IReadOnlyList<RequestRow>? demoRequests;
 
     public MainWindow(Launch launch, Strings strings)
     {
         this.strings = strings;
+        this.launch = launch;
         InitializeComponent();
 
         Title = strings["app.name"];
@@ -68,12 +71,25 @@ public sealed partial class MainWindow : Window
 
     private void OnSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
-        if (args.SelectedItem is NavigationViewItem { Tag: string id } && Sections.Find(id) is { } section)
+        if (args.SelectedItem is not NavigationViewItem { Tag: string id } || Sections.Find(id) is not { } section)
+        {
+            return;
+        }
+        var transition = args.RecommendedNavigationTransitionInfo ?? new EntranceNavigationTransitionInfo();
+        if (section.Id == Sections.Activity)
+        {
+            demoRequests ??= DemoRequests.Make(launch.DemoRows);
+            PageFrame.Navigate(
+                typeof(RequestsPage),
+                new RequestsPage.Model(strings, demoRequests, Demo: launch.DemoRows > 0, launch.Measure),
+                transition);
+        }
+        else
         {
             PageFrame.Navigate(
                 typeof(SectionPage),
                 new SectionPage.Model(strings[section.Title], strings[section.Summary], strings["page.unfinished"]),
-                args.RecommendedNavigationTransitionInfo ?? new EntranceNavigationTransitionInfo());
+                transition);
         }
     }
 

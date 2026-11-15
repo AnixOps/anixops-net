@@ -78,13 +78,32 @@ public sealed class ShellTests
     }
 
     [Theory]
+    [MemberData(nameof(Languages))]
+    public void TheRequestListNamesEverythingThatTakesTheKeyboard(string language)
+    {
+        var strings = Strings.For(language);
+        using var app = AppSession.Start("--language", language, "--page", Sections.Activity, "--demo-rows", "300");
+        app.WaitForName("Requests.Count", strings.Format("requests.count", 300, 300));
+        Assert.Equal(strings["requests.filter"], app.Find("Requests.Filter").Current.Name);
+        Assert.Equal(strings["requests.table"], app.Find("Requests.Table").Current.Name);
+        var unnamed = app.Elements()
+            .Where(element => element.Current.IsKeyboardFocusable && element.Current.IsControlElement)
+            .Where(element => IsOperable(element.Current.ControlType))
+            .Where(element => string.IsNullOrWhiteSpace(element.Current.Name))
+            .Select(element => $"{element.Current.ControlType.ProgrammaticName} '{element.Current.AutomationId}' ({element.Current.ClassName})")
+            .ToList();
+        Assert.True(unnamed.Count == 0, "without a name: " + string.Join(", ", unnamed));
+    }
+
+    [Theory]
     [MemberData(nameof(Looks))]
     public void EveryPageIsPictured(string language, string theme)
     {
         var strings = Strings.For(language);
         foreach (var section in Sections.All)
         {
-            using var app = AppSession.Start("--language", language, "--theme", theme, "--page", section.Id);
+            // The request list is pictured with demo requests in it.
+            using var app = AppSession.Start("--language", language, "--theme", theme, "--page", section.Id, "--demo-rows", "2000");
             app.WaitForName(PageTitle, strings[section.Title]);
             app.Screenshot($"{section.Id}-{language}-{theme}");
         }

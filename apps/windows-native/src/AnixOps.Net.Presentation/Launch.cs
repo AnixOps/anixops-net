@@ -11,13 +11,19 @@ public enum Appearance
 
 /// <summary>
 /// How the app was started. The options exist so that tests and screenshots can fix what otherwise follows
-/// the system: <c>--language zh|en</c>, <c>--theme light|dark</c>, <c>--page &lt;id&gt;</c>.
+/// the system: <c>--language zh|en</c>, <c>--theme light|dark</c>, <c>--page &lt;id&gt;</c>,
+/// <c>--demo-rows &lt;count&gt;</c>, <c>--measure &lt;file&gt;</c>.
 /// </summary>
 /// <param name="Language">The language asked for, or null to follow Windows.</param>
 /// <param name="Appearance">The colours asked for.</param>
 /// <param name="Page">The section to open on.</param>
-public sealed record Launch(string? Language, Appearance Appearance, string Page)
+/// <param name="DemoRows">How many made-up requests the request list shows instead of real ones.</param>
+/// <param name="Measure">A file to write the request list's timings to; the app measures itself and exits.</param>
+public sealed record Launch(string? Language, Appearance Appearance, string Page, int DemoRows = 0, string? Measure = null)
 {
+    /// <summary>The most demo requests that can be asked for.</summary>
+    public const int MostDemoRows = 1_000_000;
+
     /// <summary>Reads the command line (without the program name). Unknown options and values are ignored:
     /// a shortcut written for a newer version must still open the app.</summary>
     public static Launch Parse(IEnumerable<string> arguments)
@@ -25,6 +31,8 @@ public sealed record Launch(string? Language, Appearance Appearance, string Page
         string? language = null;
         var appearance = Appearance.System;
         var page = Sections.Overview;
+        var demoRows = 0;
+        string? measure = null;
         using var rest = arguments.GetEnumerator();
         while (rest.MoveNext())
         {
@@ -36,7 +44,7 @@ public sealed record Launch(string? Language, Appearance Appearance, string Page
                 value = name[(equals + 1)..];
                 name = name[..equals];
             }
-            if (name is not ("--language" or "--theme" or "--page"))
+            if (name is not ("--language" or "--theme" or "--page" or "--demo-rows" or "--measure"))
             {
                 continue;
             }
@@ -62,8 +70,15 @@ public sealed record Launch(string? Language, Appearance Appearance, string Page
                 case "--page" when Sections.Find(value) is not null:
                     page = value;
                     break;
+                case "--demo-rows" when int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var count)
+                    && count <= MostDemoRows:
+                    demoRows = count;
+                    break;
+                case "--measure" when value.Length > 0:
+                    measure = value;
+                    break;
             }
         }
-        return new Launch(language, appearance, page);
+        return new Launch(language, appearance, page, demoRows, measure);
     }
 }

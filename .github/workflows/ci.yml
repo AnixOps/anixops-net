@@ -988,6 +988,14 @@ jobs:
           ANIXOPS_NET_SCREENSHOTS: ${{ runner.temp }}\windows-native-screenshots
         run: dotnet test apps/windows-native/AnixOps.Net.slnx --configuration Release --no-build --logger "console;verbosity=normal"
 
+      # What the request list measured about itself with 50,000 rows (the test above holds it to the limits).
+      - name: Show the request list measurement
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          $file = Join-Path $env:RUNNER_TEMP "windows-native-screenshots\requests-measurement.json"
+          if (Test-Path $file) { Get-Content $file } else { Write-Host "no measurement was written" }
+
       - name: Upload screenshots
         if: ${{ always() }}
         uses: actions/upload-artifact@v4

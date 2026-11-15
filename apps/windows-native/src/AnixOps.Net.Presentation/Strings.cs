@@ -30,6 +30,20 @@ public sealed class Strings
         ["page.extensions.summary"] = "插件、HTTPS 解密和改写。",
         ["page.activity.summary"] = "经过客户端的请求和连接。",
         ["page.settings.summary"] = "启动、通知、语言和诊断。",
+        ["requests.filter"] = "筛选请求",
+        ["requests.count"] = "{0} / {1} 条请求",
+        ["requests.empty"] = "还没有请求。",
+        ["requests.none"] = "没有符合筛选条件的请求。",
+        ["requests.demo"] = "演示数据：这些请求不是真实流量。",
+        ["requests.table"] = "请求列表",
+        ["column.seq"] = "序号",
+        ["column.method"] = "方法",
+        ["column.status"] = "状态",
+        ["column.host"] = "主机",
+        ["column.path"] = "路径",
+        ["column.type"] = "类型",
+        ["column.size"] = "大小",
+        ["column.duration"] = "耗时",
     };
 
     private static readonly Dictionary<string, string> En = new()
@@ -50,6 +64,20 @@ public sealed class Strings
         ["page.extensions.summary"] = "Plugins, HTTPS decryption and rewriting.",
         ["page.activity.summary"] = "The requests and connections passing through the client.",
         ["page.settings.summary"] = "Startup, notifications, language and diagnostics.",
+        ["requests.filter"] = "Filter requests",
+        ["requests.count"] = "{0} of {1} requests",
+        ["requests.empty"] = "No requests yet.",
+        ["requests.none"] = "No request matches the filter.",
+        ["requests.demo"] = "Demo data: these requests are not real traffic.",
+        ["requests.table"] = "Requests",
+        ["column.seq"] = "No.",
+        ["column.method"] = "Method",
+        ["column.status"] = "Status",
+        ["column.host"] = "Host",
+        ["column.path"] = "Path",
+        ["column.type"] = "Type",
+        ["column.size"] = "Size",
+        ["column.duration"] = "Time",
     };
 
     private readonly Dictionary<string, string> table;
@@ -69,6 +97,11 @@ public sealed class Strings
     /// <summary>The wording for a key. A key without wording is a programming error.</summary>
     public string this[string key] =>
         table.TryGetValue(key, out var value) ? value : throw new KeyNotFoundException($"no wording for '{key}' in '{Language}'");
+
+    /// <summary>The wording for a key with its placeholders filled in. Numbers are written plainly, without
+    /// grouping, so that the same values read the same everywhere.</summary>
+    public string Format(string key, params object[] values) =>
+        string.Format(System.Globalization.CultureInfo.InvariantCulture, this[key], values);
 
     /// <summary>The wording in a language; anything other than Chinese is English.</summary>
     public static Strings For(string language) =>
