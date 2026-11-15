@@ -273,7 +273,8 @@ impl NodeDialog {
         qr.set_halign(gtk::Align::Center);
         qr.set_can_shrink(true);
         qr.set_content_fit(gtk::ContentFit::Contain);
-        qr.set_alternative_text(Some(text("node.qr")));
+        // A picture's alternative text is only its description to a screen reader; this is its name.
+        qr.update_property(&[gtk::accessible::Property::Label(text("node.qr"))]);
         let link = gtk::Label::new(None);
         link.set_widget_name("link");
         link.set_xalign(0.0);
