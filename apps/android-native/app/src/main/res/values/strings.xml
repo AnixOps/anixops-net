@@ -477,4 +477,31 @@
     <string name="export_redact_hint">导出的文件里把这些值换成 &lt;redacted&gt;</string>
     <string name="export_save">导出</string>
     <string name="export_note">保存到“下载”文件夹。导出内容可能包含账号等敏感信息，请只发给信任的人。</string>
+    <string name="requests_export_har">导出全部为 HAR</string>
+    <string name="requests_export_pcapng">导出全部为 pcapng</string>
+    <string name="sessions">抓包会话</string>
+    <string name="sessions_save">保存当前抓包</string>
+    <string name="sessions_nothing">还没有抓到内容</string>
+    <string name="sessions_name">会话名称（可选）</string>
+    <string name="sessions_saved">已保存的会话</string>
+    <string name="sessions_loading">正在读取…</string>
+    <string name="sessions_empty">还没有保存的会话。保存后可以在这里载入，查看当时的请求并导出。</string>
+    <string name="sessions_keystore">用 Android Keystore 中的密钥加密。</string>
+    <string name="sessions_unreadable">本机的密钥打不开这个会话（可能是重装前保存的），到期后自动删除</string>
+    <string name="sessions_expires">%1$s 删除</string>
+    <string name="sessions_load">载入</string>
+    <string name="sessions_delete">删除会话</string>
+    <string name="sessions_replace_title">载入“%1$s”？</string>
+    <string name="sessions_replace_body">当前抓到的内容会被替换，实时抓包会停止。</string>
+    <string name="sessions_replace">替换并载入</string>
+    <string name="sessions_delete_confirm">确认删除会话“%1$s”</string>
+    <string name="sessions_saved_message">已保存会话：%1$s</string>
+    <string name="sessions_loaded_message">已载入会话：%1$s。实时抓包已停止。</string>
+    <string name="sessions_deleted_message">已删除会话：%1$s</string>
+    <plurals name="sessions_connections">
+        <item quantity="other">%d 个连接</item>
+    </plurals>
+    <plurals name="sessions_kept">
+        <item quantity="other">会话只保存在本机，%d 天后自动删除。</item>
+    </plurals>
 </resources>

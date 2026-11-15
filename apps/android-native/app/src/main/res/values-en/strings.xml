@@ -488,4 +488,33 @@
     <string name="export_redact_hint">The exported file shows these values as &lt;redacted&gt;</string>
     <string name="export_save">Export</string>
     <string name="export_note">Saved to the Downloads folder. Exports can hold account details, so share them only with people you trust.</string>
+    <string name="requests_export_har">Export All as HAR</string>
+    <string name="requests_export_pcapng">Export All as pcapng</string>
+    <string name="sessions">Capture Sessions</string>
+    <string name="sessions_save">Save Current Capture</string>
+    <string name="sessions_nothing">Nothing captured yet</string>
+    <string name="sessions_name">Session name (optional)</string>
+    <string name="sessions_saved">Saved Sessions</string>
+    <string name="sessions_loading">Reading…</string>
+    <string name="sessions_empty">No saved sessions. Saved sessions can be loaded here to look at their requests and export them.</string>
+    <string name="sessions_keystore">\u0020They are encrypted with a key held in the Android Keystore.</string>
+    <string name="sessions_unreadable">This device\'s key cannot open this session (it may predate a reinstall); it is deleted when it expires</string>
+    <string name="sessions_expires">Deleted %1$s</string>
+    <string name="sessions_load">Load</string>
+    <string name="sessions_delete">Delete Session</string>
+    <string name="sessions_replace_title">Load “%1$s”?</string>
+    <string name="sessions_replace_body">What capture holds now is replaced, and live capture stops.</string>
+    <string name="sessions_replace">Replace and Load</string>
+    <string name="sessions_delete_confirm">Delete session “%1$s”?</string>
+    <string name="sessions_saved_message">Session saved: %1$s</string>
+    <string name="sessions_loaded_message">Session loaded: %1$s. Live capture is off.</string>
+    <string name="sessions_deleted_message">Session deleted: %1$s</string>
+    <plurals name="sessions_connections">
+        <item quantity="one">%d connection</item>
+        <item quantity="other">%d connections</item>
+    </plurals>
+    <plurals name="sessions_kept">
+        <item quantity="one">Sessions stay on this device and are deleted after %d day.</item>
+        <item quantity="other">Sessions stay on this device and are deleted after %d days.</item>
+    </plurals>
 </resources>

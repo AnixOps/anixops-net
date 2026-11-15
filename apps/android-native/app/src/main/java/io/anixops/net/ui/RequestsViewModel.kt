@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.anixops.net.core.CaptureExchange
 import io.anixops.net.core.CaptureMessage
+import io.anixops.net.core.CaptureSession
 import io.anixops.net.core.CaptureStatus
 import io.anixops.net.core.Core
 import io.anixops.net.core.CoreException
@@ -77,6 +78,20 @@ data class ReplayDraft(
     val answerBody: BodyText? = null,
 )
 
+/** The saved capture sessions page, opened from the requests page's menu. */
+data class SessionsPage(
+    val loaded: Boolean = false,
+    val sessions: List<CaptureSession> = emptyList(),
+    /** What keeps the sessions' key on this device (`keystore` on Android). */
+    val protection: String = "",
+    val retentionDays: Int = 7,
+    /** Why the list could not be read. */
+    val failure: String? = null,
+    /** The name the next save gets; blank saves it under the time. */
+    val name: String = "",
+    val working: Boolean = false,
+)
+
 /** The requests page: capture, the filters and order, the rows shown, and the request opened. */
 data class RequestsState(
     /** Null while the engine is not running. */
@@ -95,6 +110,7 @@ data class RequestsState(
     /** Exports mask cookies, tokens and passwords unless this is turned off. */
     val redact: Boolean = true,
     val replay: ReplayDraft? = null,
+    val sessions: SessionsPage? = null,
 )
 
 /** A sentence for the snackbar, or where an export was saved. */
@@ -102,7 +118,12 @@ sealed interface RequestsEvent {
     data class Message(val text: String) : RequestsEvent
 
     data class Saved(val location: String) : RequestsEvent
+
+    /** A saved session was saved, loaded or deleted. */
+    data class Session(val change: SessionChange, val session: CaptureSession) : RequestsEvent
 }
+
+enum class SessionChange { Saved, Loaded, Deleted }
 
 class RequestsViewModel(private val core: Core) : ViewModel() {
     private val _state = MutableStateFlow(RequestsState())
@@ -232,6 +253,84 @@ class RequestsViewModel(private val core: Core) : ViewModel() {
             }
         }
     }
+
+    /** Saves everything capture holds (`har` or `pcapng`) to Downloads and says where. */
+    fun exportAll(format: String) {
+        viewModelScope.launch {
+            try {
+                _events.send(RequestsEvent.Saved(core.exportCapture(format).location))
+            } catch (error: CoreException) {
+                _events.send(RequestsEvent.Message(error.message.orEmpty()))
+            }
+        }
+    }
+
+    fun openSessions() {
+        _state.update { it.copy(sessions = SessionsPage()) }
+        viewModelScope.launch { readSessions() }
+    }
+
+    fun closeSessions() = _state.update { it.copy(sessions = null) }
+
+    fun setSessionName(name: String) = editSessions { it.copy(name = name) }
+
+    /** Seals what capture holds into a new session under the name typed (or the time). */
+    fun saveSession() = sessionCommand { page ->
+        val saved = core.saveCaptureSession(page.name)
+        editSessions { it.copy(name = "") }
+        RequestsEvent.Session(SessionChange.Saved, saved)
+    }
+
+    /** Replaces what capture holds with [session], turns live capture off and goes back to the list. */
+    fun loadSession(session: CaptureSession) = sessionCommand {
+        val status = core.loadCaptureSession(session.session)
+        reading.withLock { feed = RequestFeed() }
+        _state.update { it.copy(capture = status, rows = emptyList(), opened = null, sessions = null) }
+        RequestsEvent.Session(SessionChange.Loaded, session)
+    }
+
+    fun deleteSession(session: CaptureSession) = sessionCommand {
+        core.deleteCaptureSession(session.session)
+        RequestsEvent.Session(SessionChange.Deleted, session)
+    }
+
+    /** One session command at a time; then the list (or, once a session is loaded, the requests) is read again. */
+    private fun sessionCommand(command: suspend (SessionsPage) -> RequestsEvent) {
+        val page = _state.value.sessions ?: return
+        if (page.working) return
+        editSessions { it.copy(working = true) }
+        viewModelScope.launch {
+            val event = try {
+                command(page)
+            } catch (error: CoreException) {
+                RequestsEvent.Message(error.message.orEmpty())
+            }
+            editSessions { it.copy(working = false) }
+            _events.send(event)
+            if (_state.value.sessions != null) readSessions() else read()
+        }
+    }
+
+    private suspend fun readSessions() {
+        val answer = try {
+            core.captureSessions()
+        } catch (error: CoreException) {
+            editSessions { it.copy(loaded = true, failure = error.message.orEmpty()) }
+            return
+        }
+        editSessions {
+            it.copy(
+                loaded = true,
+                sessions = answer.sessions,
+                protection = answer.protection,
+                retentionDays = answer.retentionDays,
+                failure = null,
+            )
+        }
+    }
+
+    private fun editSessions(change: (SessionsPage) -> SessionsPage) =
+        _state.update { state -> state.copy(sessions = state.sessions?.let(change)) }
 
     private fun refilter(change: (RequestsState) -> RequestsState) {
         _state.update(change)

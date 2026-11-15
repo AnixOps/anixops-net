@@ -40,6 +40,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -111,6 +112,7 @@ fun AnixApp(
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { app.poll() }
     }
     val context = LocalContext.current
+    val locale by rememberUpdatedState(LocalConfiguration.current.locales[0])
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(app) { app.messages.collect { snackbar.showSnackbar(it) } }
     LaunchedEffect(requests) {
@@ -118,6 +120,14 @@ fun AnixApp(
             val text = when (event) {
                 is RequestsEvent.Message -> event.text
                 is RequestsEvent.Saved -> context.getString(R.string.request_saved, event.location)
+                is RequestsEvent.Session -> context.getString(
+                    when (event.change) {
+                        SessionChange.Saved -> R.string.sessions_saved_message
+                        SessionChange.Loaded -> R.string.sessions_loaded_message
+                        SessionChange.Deleted -> R.string.sessions_deleted_message
+                    },
+                    sessionTitle(event.session, locale),
+                )
             }
             if (text.isNotBlank()) snackbar.showSnackbar(text)
         }
@@ -226,6 +236,13 @@ fun AnixApp(
             editReplay = requests::editReplay,
             sendReplay = requests::sendReplay,
             closeReplay = requests::closeReplay,
+            exportAll = requests::exportAll,
+            openSessions = requests::openSessions,
+            closeSessions = requests::closeSessions,
+            setSessionName = requests::setSessionName,
+            saveSession = requests::saveSession,
+            loadSession = requests::loadSession,
+            deleteSession = requests::deleteSession,
         ),
         proxiesState = proxiesState,
         proxies = ProxiesActions(
@@ -552,6 +569,7 @@ fun AnixScaffold(
                 Destination.Requests -> {
                     LaunchedEffect(Unit) { pollRequests() }
                     when {
+                        requestsState.sessions != null -> BackTo(requests.closeSessions)
                         requestsState.replay != null -> BackTo(requests.closeReplay)
                         requestsState.opened != null -> BackTo(requests.close)
                     }

@@ -195,6 +195,40 @@ class CoreTest {
     }
 
     @Test
+    fun theWholeCaptureExportsWithoutAnId() = runTest {
+        val transport = Recording("""{"ok":{"location":"Download/capture.pcapng"}}""")
+        Core(transport, StandardTestDispatcher(testScheduler)).exportCapture("pcapng")
+        assertEquals(listOf("export_capture" to """{"format":"pcapng"}"""), transport.calls)
+    }
+
+    @Test
+    fun sessionCommandsNameTheirAction() = runTest {
+        val transport = Recording(
+            """{"ok":{"sessions":[{"session":"1700000000000-a1b2c3d4","saved_at_ms":1700000000000,"expires_at_ms":1700604800000,""" +
+                """"size":2048,"connections":2,"requests":9}],"protection":"keystore","retention_days":7}}""",
+        )
+        val core = Core(transport, StandardTestDispatcher(testScheduler))
+        val list = core.captureSessions()
+        assertEquals("keystore", list.protection)
+        assertEquals(9, list.sessions.single().requests)
+        core.saveCaptureSession("  login  ")
+        core.saveCaptureSession(" ")
+        core.loadCaptureSession("1700000000000-a1b2c3d4")
+        core.deleteCaptureSession("1700000000000-a1b2c3d4")
+        assertEquals(
+            listOf(
+                """{"action":{"action":"list"}}""",
+                """{"action":{"action":"save","name":"login"}}""",
+                """{"action":{"action":"save"}}""",
+                """{"action":{"action":"load","session":"1700000000000-a1b2c3d4"}}""",
+                """{"action":{"action":"delete","session":"1700000000000-a1b2c3d4"}}""",
+            ),
+            transport.calls.map { it.second },
+        )
+        assertTrue(transport.calls.all { it.first == "capture_session" })
+    }
+
+    @Test
     fun ruleSetsGoThroughRuntimeControl() = runTest {
         val transport = Recording(
             """{"ok":{"rule_sets":[{"name":"china","source":"remote","entries":8412,"updated_at_ms":1763198400000}]}}""",
