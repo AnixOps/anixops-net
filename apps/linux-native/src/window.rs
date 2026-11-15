@@ -573,7 +573,9 @@ impl SimpleComponent for Shell {
                     );
                     FAILED.store(true, Ordering::SeqCst);
                 }
-                window.close();
+                // Not `close`: with a dialog over the window, that closes the dialog and leaves the
+                // window open.
+                window.destroy();
             });
         }
 
