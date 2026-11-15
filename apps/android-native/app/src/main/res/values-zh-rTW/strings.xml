@@ -224,4 +224,47 @@
     <string name="terms_accept">同意並繼續</string>
     <string name="terms_full_text">用戶協議全文</string>
     <string name="action_done">完成</string>
+    <string name="activity">活動</string>
+    <string name="action_view">檢視</string>
+    <string name="action_clear">清空</string>
+    <string name="action_back">返回</string>
+    <string name="logs">日誌</string>
+    <string name="logs_note">應用自己的執行記錄：連線、中斷、訂閱更新和出錯原因，網址不含查詢參數。核心不單獨記日誌。</string>
+    <string name="logs_more">更多日誌操作</string>
+    <string name="logs_refresh">重新整理日誌</string>
+    <string name="logs_copy">拷貝篩選出的日誌</string>
+    <string name="logs_clear">清空日誌</string>
+    <string name="logs_confirm_clear">確認清空全部日誌</string>
+    <string name="logs_cleared">已清空日誌</string>
+    <string name="logs_all">全部</string>
+    <string name="logs_warnings">警告</string>
+    <string name="logs_errors">錯誤</string>
+    <string name="logs_all_modules">全部模組</string>
+    <string name="logs_filter">篩選日誌內容</string>
+    <string name="logs_none">還沒有日誌</string>
+    <string name="logs_no_match">沒有符合的日誌</string>
+    <string name="logs_module_app">應用</string>
+    <string name="logs_module_window">視窗</string>
+    <string name="logs_module_mitm">HTTPS 解密</string>
+    <string name="traffic_stats">流量統計</string>
+    <string name="traffic_note">每 5 秒從連線列表累計，只記主機名稱和位元組數，儲存在本機，保留 7 天。</string>
+    <string name="traffic_clear">清空統計</string>
+    <string name="traffic_confirm_clear">確認清空全部流量統計</string>
+    <string name="traffic_cleared">已清空流量統計</string>
+    <string name="traffic_today">今天</string>
+    <string name="traffic_week">7 天</string>
+    <string name="traffic_by_hour">按小時</string>
+    <string name="traffic_by_day">按天</string>
+    <string name="traffic_by_host">按主機</string>
+    <string name="traffic_by_policy">按策略</string>
+    <string name="traffic_up_down">上傳 %1$s · 下載 %2$s</string>
+    <string name="traffic_none">這段時間沒有流量</string>
+    <string name="traffic_after_connect">連線後開始統計</string>
+    <string name="traffic_other_hosts">其他主機</string>
+    <plurals name="logs_copied">
+        <item quantity="other">已拷貝 %d 行日誌</item>
+    </plurals>
+    <plurals name="logs_show_more">
+        <item quantity="other">再顯示 %d 條</item>
+    </plurals>
 </resources>
