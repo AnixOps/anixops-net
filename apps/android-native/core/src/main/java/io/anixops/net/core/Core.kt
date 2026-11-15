@@ -195,6 +195,38 @@ class Core(
         args("text" to Envelope.json.encodeToJsonElement(DnsText.serializer(), text)),
     )
 
+    // The settings page.
+
+    /** The notification switches, changed to [update] first when given; [language] sets that of the texts. */
+    suspend fun notificationSettings(language: String, update: NotificationSettings? = null): NotificationSettings = call(
+        "notification_settings",
+        NotificationSettings.serializer(),
+        args("update" to encodeOrNull(NotificationSettings.serializer(), update), "language" to JsonPrimitive(language)),
+    )
+
+    /** The Wi-Fi rules, changed to [update] first when given. */
+    suspend fun onDemandSettings(update: OnDemandSettings? = null): OnDemandSettings = call(
+        "on_demand_settings",
+        OnDemandSettings.serializer(),
+        args("update" to encodeOrNull(OnDemandSettings.serializer(), update)),
+    )
+
+    /** The network underneath; the app asks for the location permission itself, so [ask] stays false here. */
+    suspend fun currentNetwork(): CurrentNetwork =
+        call("current_network", CurrentNetwork.serializer(), args("ask" to JsonPrimitive(false)))
+
+    suspend fun validateConfiguration(): OperationResult = call("validate_configuration", OperationResult.serializer())
+
+    suspend fun restartCore(): OperationResult = call("restart_service", OperationResult.serializer())
+
+    suspend fun health(): HealthStatus = call("health_status", HealthStatus.serializer())
+
+    suspend fun setCrashReports(enabled: Boolean): OperationResult =
+        call("set_crash_reports", OperationResult.serializer(), args("enabled" to JsonPrimitive(enabled)))
+
+    /** Writes the diagnostics report to Downloads; the answer names the file. */
+    suspend fun createDiagnostics(): OperationResult = call("create_diagnostics", OperationResult.serializer())
+
     // Plumbing.
 
     suspend fun <T> call(
@@ -224,6 +256,9 @@ class Core(
     } catch (error: CoreException) {
         null
     }
+
+    private fun <T> encodeOrNull(serializer: KSerializer<T>, value: T?): JsonElement =
+        value?.let { Envelope.json.encodeToJsonElement(serializer, it) } ?: JsonNull
 
     private fun args(vararg pairs: Pair<String, JsonElement>) = JsonObject(mapOf(*pairs))
 

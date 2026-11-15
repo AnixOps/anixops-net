@@ -31,6 +31,10 @@ class SmokeTest {
 
     @Test
     fun theClientAnswersEveryPage() {
+        // A fresh install starts with the user agreement.
+        waitFor(R.string.terms_accept)
+        compose.onNodeWithText(text(R.string.terms_accept)).performClick()
+
         // The overview read through the bridge: with no node the hero card asks for one.
         waitFor(R.string.home_choose_node)
         waitFor(R.string.status_not_connected)
@@ -42,7 +46,9 @@ class SmokeTest {
         compose.onNodeWithText(text(R.string.nav_rules)).performClick()
         waitForText(compose.activity.resources.getQuantityString(R.plurals.rules_count, 0, 0))
 
+        // The notification switches show once `notification_settings` has answered.
         compose.onNodeWithText(text(R.string.nav_settings)).performClick()
+        waitFor(R.string.notifications_scripts)
         waitFor(R.string.settings_version)
         compose.onNodeWithText(BuildConfig.VERSION_NAME).assertExists()
     }

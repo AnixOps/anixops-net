@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
@@ -20,7 +19,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -432,35 +430,4 @@ private fun ChoiceRow(label: String, hint: String, selected: Boolean, enabled: B
         }
         if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = palette.primary)
     }
-}
-
-/** A switch with its name and sentence; the whole row toggles it. */
-@Composable
-private fun SwitchRow(label: String, hint: String, checked: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange)
-            .heightIn(min = RowMinHeight)
-            .padding(horizontal = BrandSpacing.md, vertical = BrandSpacing.xs),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(BrandSpacing.sm),
-    ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(BrandSpacing.xxs)) {
-            Text(label, style = MaterialTheme.typography.bodyLarge)
-            Text(hint, style = MaterialTheme.typography.bodySmall, color = LocalBrandPalette.current.text2)
-        }
-        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
-    }
-}
-
-/** The sentence under a section, as the other clients' card descriptions. */
-@Composable
-private fun Note(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.bodySmall,
-        color = LocalBrandPalette.current.text2,
-        modifier = Modifier.padding(start = BrandSpacing.md, end = BrandSpacing.md, top = BrandSpacing.xs),
-    )
 }

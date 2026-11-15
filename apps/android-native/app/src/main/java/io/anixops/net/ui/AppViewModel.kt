@@ -55,6 +55,11 @@ class AppViewModel(
     private val _mode = MutableStateFlow(AppMode.of(preferences.getString(MODE_KEY, null)))
     val mode: StateFlow<AppMode> = _mode.asStateFlow()
 
+    private val _termsAccepted = MutableStateFlow(preferences.getString(TERMS_KEY, null))
+
+    /** The version of the user agreement accepted on this device, or null before the first start's consent. */
+    val termsAccepted: StateFlow<String?> = _termsAccepted.asStateFlow()
+
     private val _messages = Channel<String>(Channel.BUFFERED)
 
     /** What a command answered, for a snackbar. */
@@ -93,6 +98,11 @@ class AppViewModel(
     fun setMode(mode: AppMode) {
         preferences.edit { putString(MODE_KEY, mode.key) }
         _mode.value = mode
+    }
+
+    fun acceptTerms(version: String) {
+        preferences.edit { putString(TERMS_KEY, version) }
+        _termsAccepted.value = version
     }
 
     private suspend fun refresh() {
@@ -142,6 +152,7 @@ class AppViewModel(
     companion object {
         const val PREFERENCES = "anixops"
         private const val MODE_KEY = "app-mode"
+        private const val TERMS_KEY = "terms-accepted"
         private const val POLL_MILLIS = 1_000L
     }
 }

@@ -1,6 +1,7 @@
 package io.anixops.net.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -20,10 +21,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -133,5 +136,36 @@ fun RowDivider() {
     HorizontalDivider(
         color = LocalBrandPalette.current.border,
         modifier = Modifier.padding(start = BrandSpacing.md),
+    )
+}
+
+/** A switch with its name and sentence; the whole row toggles it. */
+@Composable
+fun SwitchRow(label: String, hint: String?, checked: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange)
+            .heightIn(min = RowMinHeight)
+            .padding(horizontal = BrandSpacing.md, vertical = BrandSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(BrandSpacing.sm),
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(BrandSpacing.xxs)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            if (hint != null) Text(hint, style = MaterialTheme.typography.bodySmall, color = LocalBrandPalette.current.text2)
+        }
+        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
+    }
+}
+
+/** The sentence under a section, as the other clients' card descriptions. */
+@Composable
+fun Note(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = LocalBrandPalette.current.text2,
+        modifier = Modifier.padding(start = BrandSpacing.md, end = BrandSpacing.md, top = BrandSpacing.xs),
     )
 }
