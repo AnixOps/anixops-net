@@ -14,8 +14,9 @@ For every language the window is started for real and checked from the outside:
 With the daemon's program given, the window is also run against a real daemon on a socket of its own: it
 says that the core service is not running, finds the daemon when it starts, connects and disconnects with
 the overview's button (the daemon is first told to send traffic out directly, since it has no subscription),
-shows the engine's counters while connected, notices when the daemon stops, and finds it again. With a
-directory given too, the connected window is drawn into it.
+shows the engine's counters while connected, imports share links on the proxies page, searches the node
+list, chooses another node, tests the nodes' delay, notices when the daemon stops, and finds it again. With
+a directory given too, the connected window and the proxies page are drawn into it.
 
 Needs at-spi2-core, gir1.2-atspi-2.0 and python3-gi.
 """
@@ -42,7 +43,7 @@ LANGUAGES = ("zh", "zh-Hant", "en")
 # sits in the footer list.
 PAGES = (
     ("overview", "nav.overview", "overview.node"),
-    ("proxies", "nav.proxies", "page.proxies.summary"),
+    ("proxies", "nav.proxies", "proxies.import.link"),
     ("rules", "nav.rules", "page.rules.summary"),
     ("extensions", "nav.extensions", "page.extensions.summary"),
     ("activity", "nav.activity", "page.activity.summary"),
@@ -260,6 +261,150 @@ def core_ask(endpoint: str, command: str, args: dict):
                 return message.get("ok")
 
 
+# Two nodes nobody answers at (addresses reserved for documentation): importing, listing and choosing them
+# needs no server, and a delay test of them ends without an answer.
+FIRST_NODE = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@203.0.113.9:11111#Test"
+SECOND_NODE = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@203.0.113.10:11111#Second"
+
+
+def check_proxies(app, binary: str, endpoint: str, text, button, press, sentence, shots: str | None) -> str:
+    """The proxies page against the real daemon: import, list, search, choose a node, test the delays."""
+
+    def showing(node) -> bool:
+        return node.get_state_set().contains(Atspi.StateType.SHOWING)
+
+    def label(wanted: str):
+        return next(
+            (node for node, _ in walk(app) if role(node) == "label" and node.get_name() == wanted and showing(node)),
+            None,
+        )
+
+    def editable(name: str):
+        """The text box under that name, as something text can be put into."""
+
+        def probe():
+            for node, _ in walk(app):
+                if node.get_name() != name or not showing(node):
+                    continue
+                for candidate, _ in walk(node):
+                    try:
+                        iface = candidate.get_editable_text_iface()
+                    except GLib.Error:
+                        iface = None
+                    if iface is not None:
+                        return iface
+            return None
+
+        return until(f"the text box {name!r}", probe)
+
+    def write(name: str, value: str) -> None:
+        if not editable(name).set_text_contents(value):
+            fail(f"the text box {name!r} did not take {value!r} through the accessibility interface")
+
+    def node_list():
+        return next(
+            (node for node, _ in walk(app) if node.get_name() == text("proxies.list") and showing(node)),
+            None,
+        )
+
+    def items() -> list:
+        found = node_list()
+        if found is None:
+            return []
+        return [node for node, _ in walk(found) if role(node) == "list item" and showing(node)]
+
+    def item(name: str):
+        return next((node for node in items() if node.get_name() == name), None)
+
+    def count(total: int, shown: int | None = None) -> str:
+        if shown is None or shown == total:
+            return text("proxies.count").replace("{0}", str(total))
+        return text("proxies.count.shown").replace("{0}", str(shown)).replace("{1}", str(total))
+
+    # The second row of the sidebar's first list.
+    sidebar = until(
+        "the sidebar",
+        lambda: next((node for node, _ in walk(app) if role(node) == "list" and node.get_name() == text("nav.label")),
+                     None),
+    )
+    if not sidebar.get_selection_iface().select_child(1):
+        fail("choosing the proxies page was refused")
+    # A daemon that was never given a subscription has no node.
+    until("the proxies page to say that there are no nodes", lambda: label(text("proxies.empty")))
+
+    # Import one share link the way the user does: write it into the box and press the button.
+    write(text("proxies.import.link"), FIRST_NODE)
+    press("proxies.import")
+    until("the imported node in the list", lambda: item("Test"))
+    until(f"the page to say {count(1)!r}", lambda: label(count(1)))
+    button("proxies.import")
+
+    # A second node, given to the daemon by another program: the window shows it without being told.
+    core_ask(endpoint, "import_subscription", {"location": FIRST_NODE + "\n" + SECOND_NODE})
+    until("the second node in the list", lambda: item("Second"))
+    total = core_ask(endpoint, "proxies", {})["total"]
+    until(f"the page to say {count(total)!r}", lambda: label(count(total)))
+
+    # Searching leaves the nodes the daemon says it leaves.
+    left = core_ask(endpoint, "proxies", {"query": "second"})["shown"]
+    if not 0 < left < total:
+        fail(f"searching 'second' leaves {left} of {total} nodes at the daemon")
+    write(text("proxies.search"), "second")
+    until(f"the page to say {count(total, left)!r}", lambda: label(count(total, left)))
+    until("the search to leave only the second node", lambda: item("Test") is None and item("Second") is not None)
+    write(text("proxies.search"), "")
+    until(f"the page to say {count(total)!r} again", lambda: label(count(total)))
+    until("the first node to be back", lambda: item("Test"))
+
+    # Choosing a node that is not in use makes the daemon use it.
+    def in_use() -> list[str]:
+        answer = core_ask(endpoint, "proxies", {})
+        return [node["label"] for section in answer["sections"] for node in section["nodes"] if node["selected"]]
+
+    before = in_use()
+    names = [node.get_name() for node in items()]
+    target = next((name for name in names if name not in before), None)
+    if target is None:
+        fail(f"every listed node ({names}) is already in use ({before})")
+    selection = node_list().get_selection_iface()
+    if selection is None:
+        dump(app)
+        fail("the node list cannot be operated through the accessibility interface")
+    if not selection.select_child(names.index(target)):
+        fail(f"choosing the node {target!r} was refused")
+    until(f"the daemon to use the node {target!r} (it used {before})", lambda: in_use() == [target])
+    until(
+        f"the row of {target!r} to be the selected one",
+        lambda: [node.get_name() for node in items() if node.get_state_set().contains(Atspi.StateType.SELECTED)]
+        == [target],
+    )
+
+    # Nobody answers at these nodes: the test ends and every node says so.
+    press("proxies.test")
+
+    def unanswered():
+        found = [
+            node
+            for node, _ in walk(app)
+            if role(node) == "label" and node.get_name() == text("proxies.delay.failed") and showing(node)
+        ]
+        return found if len(found) == len(items()) else None
+
+    until("every node to say that its delay test got no answer", unanswered)
+    button("proxies.test")
+    if shots:
+        picture = os.path.join(shots, "core-proxies-zh-light.png")
+        subprocess.run(
+            [binary, "--language", "zh", "--theme", "light", "--socket", endpoint, "--page", "proxies",
+             "--screenshot", picture],
+            check=True,
+            timeout=60,
+        )
+        if not os.path.getsize(picture):
+            fail(f"{picture} is empty")
+    return f"imported, {total} nodes, searched ({left}), chose {target!r}, tested"
+
+
 def check_core(binary: str, daemon: str, wording: dict, shots: str | None) -> None:
     """The window against a real daemon: away, found, connected, disconnected, away again, found again."""
     language = "zh"
@@ -355,13 +500,14 @@ def check_core(binary: str, daemon: str, wording: dict, shots: str | None) -> No
             press("overview.disconnect")
             sentence("overview.state.disconnected")
             button("overview.connect")
+            nodes = check_proxies(app, binary, endpoint, text, button, press, sentence, shots)
             stop(core)
             core = None
             away("after the daemon stopped")
             core = start_daemon()
             found("after the daemon started again")
             print(f"[core] not running, found ({line!r}), connected ({', '.join(rates)}), disconnected, "
-                  "stopped, found again")
+                  f"proxies ({nodes}), stopped, found again")
         finally:
             stop(window)
             stop(core)

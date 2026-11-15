@@ -23,6 +23,8 @@ use serde_json::json;
 use crate::launch::{Appearance, Launch};
 use crate::overview::{self, Overview, Pending, Press};
 use crate::overview_page::OverviewPage;
+use crate::proxies::{self, Action, Busy, Proxies};
+use crate::proxies_page::{Asked, ProxiesPage};
 use crate::sections::{self, Section};
 use crate::{Language, APP_ID};
 
@@ -41,6 +43,9 @@ const REFRESH_SECONDS: u32 = 1;
 const ASK_PATIENCE: Duration = Duration::from_secs(10);
 /// How long the core gets to connect or disconnect: starting the engine can mean downloading rule lists.
 const PRESS_PATIENCE: Duration = Duration::from_secs(120);
+/// How long the core gets to test a list of nodes: a node that does not answer takes seconds, and a
+/// subscription can have thousands.
+const TEST_PATIENCE: Duration = Duration::from_secs(1800);
 
 /// Set when the window was asked for a screenshot and could not make it.
 static FAILED: AtomicBool = AtomicBool::new(false);
@@ -89,6 +94,23 @@ struct Shell {
     pending: Pending,
     /// Why the last press did not work.
     failure: Option<String>,
+    /// The node list as the daemon last described it; `None` while it does not answer.
+    proxies: Option<Proxies>,
+    /// What the user searches the node list for.
+    query: String,
+    /// A question about the node list is out; the next one waits for its answer.
+    listing: Arc<AtomicBool>,
+    /// Why the last question about the node list got no answer.
+    list_trouble: Option<String>,
+    /// What the user asked for on the proxies page that the daemon has not finished.
+    busy: Busy,
+    /// Why the last thing asked for on the proxies page did not work.
+    list_failure: Option<String>,
+    /// How many subscriptions the daemon took in for this window; the link's box empties at each.
+    imports: u32,
+    /// Counts the changes of the link to the daemon, so that the answer to something asked of a daemon
+    /// that has gone since is not taken for the present one's.
+    era: u32,
 }
 
 #[derive(Debug)]
@@ -104,6 +126,12 @@ enum Show {
     Press,
     /// The daemon finished what the button asked for, or could not.
     Pressed(Result<(), String>),
+    /// The daemon's node list for a search.
+    Proxies(String, Result<Proxies, String>),
+    /// The user asked for something on the proxies page.
+    Ask(Asked),
+    /// The daemon finished that, or could not. The number is the [`Shell::era`] it was asked in.
+    Done(u32, Action, Result<(), String>),
 }
 
 struct ShellWidgets {
@@ -113,12 +141,16 @@ struct ShellWidgets {
     /// The overview page, or the placeholder of a page that is not built yet.
     stack: gtk::Stack,
     overview: OverviewPage,
+    proxies: ProxiesPage,
+    /// The value of [`Shell::imports`] at which the link's box was last emptied.
+    emptied: u32,
     status: adw::StatusPage,
     core: gtk::Label,
 }
 
 /// The names of the two things the page area shows.
 const OVERVIEW_PAGE: &str = "overview";
+const PROXIES_PAGE: &str = "proxies";
 const PLACEHOLDER_PAGE: &str = "placeholder";
 
 impl Shell {
@@ -139,6 +171,59 @@ impl Shell {
             self.pending,
             self.failure.as_deref().or(self.trouble.as_deref()),
         )
+    }
+
+    /// The proxies page for what is known now.
+    fn proxies_shown(&self) -> proxies::Shown {
+        proxies::shown(
+            self.language,
+            self.core_answers(),
+            self.proxies.as_ref(),
+            self.busy,
+            self.list_failure
+                .as_deref()
+                .or(self.list_trouble.as_deref()),
+        )
+    }
+
+    /// Asks the daemon for the node list on another thread, while the proxies page is the one shown and
+    /// unless an earlier question is still out.
+    fn list(&self, sender: &ComponentSender<Self>) {
+        if !self.core_answers()
+            || sections::ALL[self.current].id != sections::PROXIES
+            || self.listing.swap(true, Ordering::SeqCst)
+        {
+            return;
+        }
+        let link = Arc::clone(&self.link);
+        let listing = Arc::clone(&self.listing);
+        let input = sender.input_sender().clone();
+        let query = self.query.clone();
+        thread::spawn(move || {
+            let answer = link
+                .ask(Proxies::COMMAND, Proxies::args(&query), ASK_PATIENCE)
+                .map(|answer| Proxies::read(&answer));
+            listing.store(false, Ordering::SeqCst);
+            let _ = input.send(Show::Proxies(query, answer));
+        });
+    }
+
+    /// Sends what the user asked for on the proxies page to the daemon, on another thread.
+    fn act(&mut self, action: Action, sender: &ComponentSender<Self>) {
+        self.busy.set(&action, true);
+        self.list_failure = None;
+        let link = Arc::clone(&self.link);
+        let input = sender.input_sender().clone();
+        let era = self.era;
+        thread::spawn(move || {
+            let (command, args) = action.ask();
+            let patience = match action {
+                Action::Test(_) => TEST_PATIENCE,
+                Action::Import(_) | Action::Switch(_) => PRESS_PATIENCE,
+            };
+            let answer = link.ask(command, args, patience).map(|_| ());
+            let _ = input.send(Show::Done(era, action, answer));
+        });
     }
 
     /// Asks the daemon for the overview on another thread, unless an earlier question is still out.
@@ -274,6 +359,14 @@ impl SimpleComponent for Shell {
             trouble: None,
             pending: Pending::Nothing,
             failure: None,
+            proxies: None,
+            query: String::new(),
+            listing: Arc::new(AtomicBool::new(false)),
+            list_trouble: None,
+            busy: Busy::default(),
+            list_failure: None,
+            imports: 0,
+            era: 0,
         };
 
         let style = adw::StyleManager::default();
@@ -335,10 +428,15 @@ impl SimpleComponent for Shell {
             let sender = sender.clone();
             move || sender.input(Show::Press)
         });
+        let proxies = ProxiesPage::new(model.language, {
+            let sender = sender.clone();
+            move |asked| sender.input(Show::Ask(asked))
+        });
         let status = adw::StatusPage::new();
         status.set_widget_name("page");
         let stack = gtk::Stack::new();
         stack.add_named(overview.widget(), Some(OVERVIEW_PAGE));
+        stack.add_named(proxies.widget(), Some(PROXIES_PAGE));
         stack.add_named(&status, Some(PLACEHOLDER_PAGE));
         let content_view = adw::ToolbarView::new();
         content_view.add_top_bar(&adw::HeaderBar::new());
@@ -383,6 +481,8 @@ impl SimpleComponent for Shell {
             content,
             stack,
             overview,
+            proxies,
+            emptied: 0,
             status,
             core,
         };
@@ -427,7 +527,10 @@ impl SimpleComponent for Shell {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>) {
         match message {
-            Show::Page(index) => self.current = index,
+            Show::Page(index) => {
+                self.current = index;
+                self.list(&sender);
+            }
             Show::Core(state) => {
                 self.core = state;
                 // Whatever was known belongs to the connection that was; a daemon that comes back may be
@@ -436,9 +539,18 @@ impl SimpleComponent for Shell {
                 self.trouble = None;
                 self.failure = None;
                 self.pending = Pending::Nothing;
+                self.proxies = None;
+                self.list_trouble = None;
+                self.list_failure = None;
+                self.busy = Busy::default();
+                self.era = self.era.wrapping_add(1);
                 self.refresh(&sender);
+                self.list(&sender);
             }
-            Show::Tick => self.refresh(&sender),
+            Show::Tick => {
+                self.refresh(&sender);
+                self.list(&sender);
+            }
             // An answer that comes after the daemon went away says nothing about now.
             Show::Overview(_) if !self.core_answers() => {}
             Show::Overview(Ok(overview)) => {
@@ -459,6 +571,52 @@ impl SimpleComponent for Shell {
                 self.pending = Pending::Nothing;
                 self.failure = answer.err();
                 // Ask again at once, not at the next tick.
+                self.refresh(&sender);
+            }
+            // An answer that comes after the daemon went away says nothing about now.
+            Show::Proxies(..) if !self.core_answers() => {}
+            // An answer to a search the user has typed past: ask for the one that stands now.
+            Show::Proxies(query, _) if query != self.query => self.list(&sender),
+            Show::Proxies(_, Ok(proxies)) => {
+                self.proxies = Some(proxies);
+                self.list_trouble = None;
+            }
+            Show::Proxies(_, Err(problem)) => {
+                self.proxies = None;
+                self.list_trouble = Some(problem);
+            }
+            Show::Ask(Asked::Search(query)) => {
+                self.query = query;
+                self.list(&sender);
+            }
+            Show::Ask(asked) => {
+                let shown = self.proxies_shown();
+                let action = match asked {
+                    Asked::Import(location) if shown.can_import => Some(Action::Import(location)),
+                    Asked::Test if shown.can_test => Some(Action::Test(self.query.clone())),
+                    // Choosing the node that is already in use asks for nothing.
+                    Asked::Switch(id)
+                        if shown.can_switch
+                            && !shown.rows.iter().any(|row| row.selected && row.id == id) =>
+                    {
+                        Some(Action::Switch(id))
+                    }
+                    _ => None,
+                };
+                if let Some(action) = action {
+                    self.act(action, &sender);
+                }
+            }
+            // The daemon that was asked is gone; what it was busy with went with it.
+            Show::Done(era, ..) if era != self.era => {}
+            Show::Done(_, action, answer) => {
+                self.busy.set(&action, false);
+                if matches!(action, Action::Import(_)) && answer.is_ok() {
+                    self.imports += 1;
+                }
+                self.list_failure = answer.err();
+                // Ask again at once, not at the next tick: the list, and the overview's node in use.
+                self.list(&sender);
                 self.refresh(&sender);
             }
         }
@@ -482,12 +640,17 @@ impl SimpleComponent for Shell {
         widgets.content.set_title(self.text(section.title));
         widgets.overview.show(&self.overview_shown());
         widgets
-            .stack
-            .set_visible_child_name(if section.id == sections::OVERVIEW {
-                OVERVIEW_PAGE
-            } else {
-                PLACEHOLDER_PAGE
-            });
+            .proxies
+            .show(&self.proxies_shown(), self.busy.switching);
+        if widgets.emptied != self.imports {
+            widgets.proxies.clear_link();
+            widgets.emptied = self.imports;
+        }
+        widgets.stack.set_visible_child_name(match section.id {
+            sections::OVERVIEW => OVERVIEW_PAGE,
+            sections::PROXIES => PROXIES_PAGE,
+            _ => PLACEHOLDER_PAGE,
+        });
         widgets.status.set_icon_name(Some(section.icon));
         widgets.status.set_title(self.text(section.title));
         let description = format!(
