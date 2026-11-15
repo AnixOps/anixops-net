@@ -76,8 +76,8 @@ jobs:
                 apps/linux-gui/*) rust=true; linux=true; android=true ;;
                 # The Linux daemon; the workspace job builds and tests it.
                 apps/linux-daemon/*) rust=true ;;
-                # The Windows service; the Windows job builds and tests it.
-                apps/windows-service/*) rust=true; windows=true ;;
+                # The Windows service; the Windows job builds and tests it, and the native app is tested against it.
+                apps/windows-service/*) rust=true; windows=true; windows_native=true ;;
                 # The native Windows app (C#); its tests read the message samples under crates/client-ipc.
                 apps/windows-native/*) windows_native=true ;;
                 apps/android/*) android=true ;;
@@ -87,7 +87,8 @@ jobs:
                 apps/ios/Design/*) apple=true; android_native=true; windows_native=true ;;
                 crates/client-ipc/fixtures/* | crates/client-service/fixtures/*)
                   rust=true; windows=true; linux=true; android=true; android_native=true; windows_native=true ;;
-                crates/*) rust=true; windows=true; linux=true; android=true; android_native=true ;;
+                # The native Windows app is tested against the real service, which is built from these.
+                crates/*) rust=true; windows=true; linux=true; android=true; android_native=true; windows_native=true ;;
                 apps/ios/*) apple=true ;;
                 # The desktop UI bundles TERMS.md and the Apple tests check its version (first-start consent).
                 TERMS.md) ui=true; windows=true; linux=true; apple=true; android=true ;;
@@ -958,20 +959,92 @@ jobs:
           retention-days: 3
 
   # The native Windows app (apps/windows-native, WinUI 3 and C#): the channel library (its tests read the same
-  # message samples as the Rust side), what the app shows, and the app itself.
+  # message samples as the Rust side), what the app shows, and the app itself, also against the real core
+  # service (apps/windows-service), which is built here in release mode so that what is measured is what ships.
   windows-native:
     name: Windows native app
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 75
     needs:
       - changes
     if: ${{ needs.changes.outputs.windows_native == 'true' }}
     env:
       DOTNET_NOLOGO: "true"
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      CARGO_INCREMENTAL: "0"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      # The same Rust toolchain as the "Windows build, test and MSI" job, for the service.
+      - name: Setup Windows C toolchain
+        uses: msys2/setup-msys2@v2
+        id: msys2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-binutils
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-libsystre
+
+      - name: Configure Windows Rust GNU target
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $MsysRoot = "${{ steps.msys2.outputs.msys2-location }}"
+          $MingwPrefix = Join-Path $MsysRoot "mingw64"
+          "${{ github.workspace }}\.github\scripts" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "$MingwPrefix\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "MSYS2_LOCATION=$MsysRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MINGW_PREFIX=$MingwPrefix" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RC_x86_64_pc_windows_gnu=${{ github.workspace }}\.github\scripts\rc.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CARGO_BUILD_TARGET=x86_64-pc-windows-gnu" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CC_x86_64_pc_windows_gnu=$MingwPrefix\bin\gcc.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "AR_x86_64_pc_windows_gnu=$MingwPrefix\bin\ar.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=$MingwPrefix\bin\gcc.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Setup Rust
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          # The same pinned toolchain as the Windows job.
+          rustup toolchain install 1.99.0 --profile minimal
+          rustup default 1.99.0
+          rustup target add x86_64-pc-windows-gnu
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: windows-gnu-service-release
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      - name: Restore windres compatibility shim
+        id: windres-shim-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .github/scripts/windres.exe
+            .github/scripts/rc.exe
+          key: windres-shim-${{ runner.os }}-${{ hashFiles('.github/scripts/windres_compat.rs', '.github/scripts/rc_compat.rs') }}
+
+      - name: Build windres compatibility shim
+        if: steps.windres-shim-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          rustc .github/scripts/windres_compat.rs -o .github/scripts/windres.exe
+          rustc .github/scripts/rc_compat.rs -o .github/scripts/rc.exe
+
+      - name: Build the core service
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          cargo build --locked --release -p anixops-net-service
+          if ($LASTEXITCODE -ne 0) { throw "the service did not build" }
+          $exe = Join-Path $env:GITHUB_WORKSPACE "target\x86_64-pc-windows-gnu\release\anixops-net-service.exe"
+          if (-not (Test-Path $exe)) { throw "$exe was not built" }
+          "ANIXOPS_NET_SERVICE_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v4

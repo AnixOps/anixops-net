@@ -7,7 +7,8 @@ pipe.
 - `src/AnixOps.Net.Ipc`: the window's end of the channel to the service. The wire format is fixed by the
   samples in `crates/client-ipc/fixtures`, which the tests here read too.
 - `src/AnixOps.Net.Session`: what the service asks the signed-in user's side to do (`session.*`: the user's
-  system proxy, start after login, notices). Requests and answers are fixed by the samples in
+  system proxy, start after login, notices), and `CoreLink`, the window's standing connection to the
+  service. Requests and answers are fixed by the samples in
   `crates/client-service/fixtures`.
 - `src/AnixOps.Net.Presentation`: what the app shows and how it is started, without any window (sections,
   wording, launch options).
@@ -17,5 +18,9 @@ pipe.
   Automation. All run in the "Windows native app" job in CI, which also uploads a picture of every page.
 
 Options for tests and screenshots: `--language zh|en`, `--theme light|dark`, `--page <id>`.
+`--pipe <name>` makes the window talk to a service on another pipe than the installed one's.
+
+The tests against the real service need `ANIXOPS_NET_SERVICE_EXE` (the built `anixops-net-service.exe`); CI
+builds it. They run it with `--console` on a pipe and a data folder of their own.
 
 Like the rest of the repository, this is built and tested in GitHub Actions only.
