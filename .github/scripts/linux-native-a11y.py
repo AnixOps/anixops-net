@@ -573,7 +573,7 @@ def check_subscriptions(app, binary: str, endpoint: str, text, press, shots: str
         box, editable = until(f"the text box {text('subscriptions.name')!r}", name_box)
         text_iface = box.get_text_iface()
         if text_iface is not None:
-            written = text_iface.get_text(0, text_iface.get_character_count())
+            written = Atspi.Text.get_text(text_iface, 0, Atspi.Text.get_character_count(text_iface))
             if written != title:
                 fail(f"the box for the new name starts with {written!r}, not {title!r}")
         if not editable.set_text_contents(renamed):
