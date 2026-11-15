@@ -47,7 +47,6 @@ import io.anixops.net.ui.theme.LocalBrandPalette
 /** What the rules page can ask for. */
 data class RulesActions(
     val setRoutingMode: (String) -> Unit = {},
-    val refreshRoutingRules: () -> Unit = {},
     val saveMyRules: (String) -> Unit = {},
     val selectGroupOutbound: (group: String, outbound: String) -> Unit = { _, _ -> },
     val updateRuleSets: () -> Unit = {},
@@ -112,14 +111,7 @@ fun RulesScreen(
 @Composable
 private fun RoutingSection(current: String?, enabled: Boolean, actions: RulesActions) {
     Column {
-        Section(
-            stringResource(R.string.home_routing),
-            action = {
-                TextButton(onClick = actions.refreshRoutingRules, enabled = enabled) {
-                    Text(stringResource(R.string.rules_refresh))
-                }
-            },
-        ) {
+        Section(stringResource(R.string.home_routing)) {
             Column(Modifier.selectableGroup()) {
                 RoutingModes.forEachIndexed { index, mode ->
                     if (index > 0) RowDivider()
@@ -140,9 +132,6 @@ private fun RoutingSection(current: String?, enabled: Boolean, actions: RulesAct
 @Composable
 private fun routingHint(mode: String): String = stringResource(
     when (mode) {
-        "bypass_china" -> R.string.routing_bypass_china_hint
-        "gfw_list" -> R.string.routing_gfw_list_hint
-        "return_china" -> R.string.routing_return_china_hint
         "direct" -> R.string.routing_direct_hint
         else -> R.string.routing_rule_hint
     },

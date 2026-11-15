@@ -38,13 +38,13 @@ export interface RuntimeSnapshot {
   autoRecoverCore: boolean;
   autoSubscriptionRefresh: boolean;
   autoSelectFastestNode: boolean;
-  bilibiliWebAdBlockEnabled: boolean;
   tunModeEnabled?: boolean;
   scriptRuntimeConfigured: boolean;
   /** HTTPS decryption is on (Windows); the Linux client leaves it out. */
   httpsDecryptionEnabled?: boolean;
   darkTheme: boolean;
-  routingMode: "bypass_china" | "gfw_list" | "direct" | "return_china" | "rule";
+  /** No preset list modes in public builds (docs/no-presets.md). */
+  routingMode: "direct" | "rule";
   /** How the engine resolves names; older backends leave it out. */
   dnsPreset?: DnsPreset;
   /** UDP to port 443 is refused so apps fall back from QUIC to TCP; older backends leave it out. */
@@ -558,7 +558,7 @@ export interface HealthStatus {
   coldStartMs?: number | null;
 }
 
-export type Preferences = Pick<RuntimeSnapshot, "startAfterLogin" | "autoConnect" | "autoRecoverCore" | "autoSubscriptionRefresh" | "autoSelectFastestNode" | "bilibiliWebAdBlockEnabled" | "darkTheme">;
+export type Preferences = Pick<RuntimeSnapshot, "startAfterLogin" | "autoConnect" | "autoRecoverCore" | "autoSubscriptionRefresh" | "autoSelectFastestNode" | "darkTheme">;
 
 /** The saved preferences from a snapshot with some of them changed. */
 export function preferencesFrom(snapshot: RuntimeSnapshot, changes: Partial<Preferences>): Preferences {
@@ -568,7 +568,6 @@ export function preferencesFrom(snapshot: RuntimeSnapshot, changes: Partial<Pref
     autoRecoverCore: snapshot.autoRecoverCore,
     autoSubscriptionRefresh: snapshot.autoSubscriptionRefresh,
     autoSelectFastestNode: snapshot.autoSelectFastestNode,
-    bilibiliWebAdBlockEnabled: snapshot.bilibiliWebAdBlockEnabled,
     darkTheme: snapshot.darkTheme,
     ...changes,
   };
@@ -705,7 +704,6 @@ export const desktop = {
   saveCustomDns: (text: DnsText) => invoke<OperationResult>("save_custom_dns", { text }),
   setBlockQuic: (enabled: boolean) => invoke<OperationResult>("set_block_quic", { enabled }),
   setDirectEgress: (enabled: boolean) => invoke<OperationResult>("set_direct_egress", { enabled }),
-  refreshRoutingRules: () => invoke<OperationResult>("refresh_routing_rules"),
   /** "我的规则": the saved text and how many rule lines it holds. */
   myRules: () => invoke<{ text: string; count: number }>("my_rules"),
   /** Checks every line, saves, and gives a running engine the new rules. */

@@ -67,13 +67,6 @@ const MITM_CA_SUBJECT: &str = "AnixOps NetworkCore Windows HTTPS MITM CA";
 const SUBSCRIPTION_REFRESH_INTERVAL: Duration = Duration::from_secs(60 * 60);
 const NODE_SELECTION_INTERVAL: Duration = Duration::from_secs(30 * 60);
 const DEFAULT_NODE_SELECTION_URL: &str = "https://www.gstatic.com/generate_204";
-const LOYALSOLDIER_GFW_URL: &str =
-    "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/gfw.txt";
-const LOYALSOLDIER_CHINA_URL: &str =
-    "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/china-list.txt";
-const CHINA_IP_URL: &str =
-    "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/ip-lists/china.txt";
-const ROUTING_RULE_DIRECTORY: &str = "routing-rules";
 const EMBEDDED_PROFILE_ID: &str = "windows-tauri-profile";
 /// The embedded engine's listener, which is the system proxy unless HTTPS
 /// MITM takes that port.
@@ -403,7 +396,6 @@ struct RuntimeSnapshot {
     auto_recover_core: bool,
     auto_subscription_refresh: bool,
     auto_select_fastest_node: bool,
-    bilibili_web_ad_block_enabled: bool,
     tun_mode_enabled: bool,
     script_runtime_configured: bool,
     /// HTTPS decryption is on for the managed profile.
@@ -494,7 +486,6 @@ struct PreferenceValues {
     auto_recover_core: bool,
     auto_subscription_refresh: bool,
     auto_select_fastest_node: bool,
-    bilibili_web_ad_block_enabled: bool,
     dark_theme: bool,
 }
 
@@ -657,7 +648,6 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             set_dns_preset,
             set_block_quic,
             set_direct_egress,
-            refresh_routing_rules,
             my_rules,
             save_my_rules,
             custom_dns,
@@ -1785,7 +1775,6 @@ fn switch_other_source_node(
                 desktop.routing_mode,
                 desktop.dns_preset,
                 desktop.block_quic,
-                false,
             )?;
             write_managed_text_atomic(&embedded_profile_path(), &rendered)
                 .map_err(|error| error.to_string())?;
@@ -2410,7 +2399,6 @@ fn select_embedded_group_member(
         desktop.routing_mode,
         desktop.dns_preset,
         desktop.block_quic,
-        false,
     )?;
     write_managed_text_atomic(&embedded_profile_path(), &rendered)
         .map_err(|error| error.to_string())?;
@@ -2631,7 +2619,6 @@ fn save_preferences_blocking(
         }
     }
     desktop.auto_select_fastest_node = preferences.auto_select_fastest_node;
-    desktop.bilibili_web_ad_block_enabled = preferences.bilibili_web_ad_block_enabled;
     desktop.dark_theme = preferences.dark_theme;
     save_desktop_state(&desktop)?;
     Ok(OperationResult {
@@ -3305,7 +3292,7 @@ fn embedded_envelope_or_profile(
     dns: DnsPreset,
     block_quic: bool,
 ) -> String {
-    match embedded_envelope_for_mode(&profile, mode, dns, block_quic, false) {
+    match embedded_envelope_for_mode(&profile, mode, dns, block_quic) {
         Ok(routed) => routed,
         Err(error) => {
             let _ = append_managed_log(
@@ -3323,10 +3310,9 @@ fn embedded_envelope_for_mode(
     mode: DesktopRoutingMode,
     dns: DnsPreset,
     block_quic: bool,
-    force_refresh: bool,
 ) -> Result<String, String> {
     let rules = desktop_dns::rules::load_lines(&my_rules_path());
-    embedded_envelope_with_rules(profile, mode, dns, block_quic, force_refresh, &rules)
+    embedded_envelope_with_rules(profile, mode, dns, block_quic, &rules)
 }
 
 /// [`embedded_envelope_for_mode`] with `rules` as "我的规则" in place of the saved ones.
@@ -3335,10 +3321,9 @@ fn embedded_envelope_with_rules(
     mode: DesktopRoutingMode,
     dns: DnsPreset,
     block_quic: bool,
-    force_refresh: bool,
     rules: &[String],
 ) -> Result<String, String> {
-    let envelope = desktop_dns::rules::apply(&mode_envelope(profile, mode, force_refresh)?, rules)?;
+    let envelope = desktop_dns::rules::apply(&mode_envelope(profile, mode)?, rules)?;
     let envelope = desktop_dns::apply(&envelope, dns)?;
     let envelope = desktop_dns::apply_block_quic(&envelope, block_quic)?;
     let envelope = desktop_dns::redirects::apply(&envelope)?;
@@ -3361,120 +3346,34 @@ fn embedded_envelope_with_rules(
     Ok(envelope)
 }
 
-/// The imported envelope with `mode`'s rules in place of its own: the
-/// profile's FINAL target (or its single outbound) is the proxy, and the
-/// mode's lists become rule sets.
-fn mode_envelope(
-    profile: &str,
-    mode: DesktopRoutingMode,
-    force_refresh: bool,
-) -> Result<String, String> {
+/// The imported envelope in `mode`. Rule mode keeps the profile's own rules and groups (or sends everything
+/// through its one node); direct mode replaces them with `FINAL,DIRECT`. Public builds ship no preset list modes
+/// (docs/no-presets.md).
+fn mode_envelope(profile: &str, mode: DesktopRoutingMode) -> Result<String, String> {
+    RuntimeConfig::from_json(profile.as_bytes())
+        .map_err(|error| format!("embedded profile was rejected: {}", error.message))?;
     if mode == DesktopRoutingMode::Rule {
-        // The profile's own rules and groups, or its one node for everything.
-        RuntimeConfig::from_json(profile.as_bytes())
-            .map_err(|error| format!("embedded profile was rejected: {}", error.message))?;
         return Ok(profile.to_string());
-    }
-    let rule_directory = windows_managed_data_directory().join(ROUTING_RULE_DIRECTORY);
-    if mode != DesktopRoutingMode::Direct {
-        refresh_routing_rule_assets(&rule_directory, mode, force_refresh)?;
     }
     let mut envelope: Value = serde_json::from_str(profile).map_err(|error| error.to_string())?;
     let object = envelope
         .as_object_mut()
         .ok_or_else(|| "embedded profile must be a JSON object".to_string())?;
-    let (mut routing, proxy) = match (object.remove("outbound"), object.remove("routing")) {
-        (Some(outbound), None) => (
-            json!({ "outbounds": { EMBEDDED_PROXY_OUTBOUND: outbound } }),
-            EMBEDDED_PROXY_OUTBOUND.to_string(),
-        ),
-        (None, Some(routing)) => {
-            let proxy = routing
-                .get("rules")
-                .and_then(Value::as_array)
-                .and_then(|rules| rules.last())
-                .and_then(Value::as_str)
-                .and_then(|rule| rule.strip_prefix("FINAL,"))
-                .map(str::to_string)
-                .ok_or_else(|| "embedded profile routing must end with FINAL".to_string())?;
-            (routing, proxy)
-        }
+    let mut routing = match (object.remove("outbound"), object.remove("routing")) {
+        (Some(outbound), None) => json!({ "outbounds": { EMBEDDED_PROXY_OUTBOUND: outbound } }),
+        (None, Some(routing)) => routing,
         _ => return Err("embedded profile must carry one outbound or routing".to_string()),
-    };
-    let list = |name: &str| read_rule_set_asset(&rule_directory.join(name));
-    let (rules, rule_sets) = match mode {
-        DesktopRoutingMode::BypassChina | DesktopRoutingMode::ReturnChina => {
-            let (mut domain_suffix, _) = list("china-domains.json")?;
-            let (more_domains, ip_cidr) = list("china-ips.json")?;
-            domain_suffix.extend(more_domains);
-            let (china_target, final_target) = if mode == DesktopRoutingMode::BypassChina {
-                ("DIRECT".to_string(), proxy)
-            } else {
-                (proxy, "DIRECT".to_string())
-            };
-            (
-                vec![
-                    format!("RULE-SET,china,{china_target}"),
-                    format!("FINAL,{final_target}"),
-                ],
-                json!({ "china": { "domain_suffix": domain_suffix, "ip_cidr": ip_cidr } }),
-            )
-        }
-        DesktopRoutingMode::GfwList => {
-            let (domain_suffix, ip_cidr) = list("gfw-domains.json")?;
-            (
-                vec![format!("RULE-SET,gfw,{proxy}"), "FINAL,DIRECT".to_string()],
-                json!({ "gfw": { "domain_suffix": domain_suffix, "ip_cidr": ip_cidr } }),
-            )
-        }
-        DesktopRoutingMode::Direct => (vec!["FINAL,DIRECT".to_string()], json!({})),
-        DesktopRoutingMode::Rule => unreachable!("rule mode returns the profile above"),
     };
     let routing_object = routing
         .as_object_mut()
         .ok_or_else(|| "embedded profile routing must be a JSON object".to_string())?;
-    routing_object.insert("rules".to_string(), json!(rules));
-    routing_object.insert("rule_sets".to_string(), rule_sets);
+    routing_object.insert("rules".to_string(), json!(["FINAL,DIRECT"]));
+    routing_object.insert("rule_sets".to_string(), json!({}));
     object.insert("routing".to_string(), routing);
     let rendered = serde_json::to_string(&envelope).map_err(|error| error.to_string())?;
     RuntimeConfig::from_json(rendered.as_bytes())
         .map_err(|error| format!("routed embedded profile was rejected: {}", error.message))?;
     Ok(rendered)
-}
-
-/// Domain suffixes and networks of a rule asset written by
-/// [`write_rule_set_asset`].
-fn read_rule_set_asset(path: &Path) -> Result<(Vec<String>, Vec<String>), String> {
-    let content = fs::read_to_string(path).map_err(|error| {
-        format!(
-            "routing rules could not be read from {}: {error}",
-            path.display()
-        )
-    })?;
-    let source: Value = serde_json::from_str(&content).map_err(|error| error.to_string())?;
-    let mut domain_suffix = Vec::new();
-    let mut ip_cidr = Vec::new();
-    for rule in source
-        .get("rules")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
-        for (key, entries) in [
-            ("domain_suffix", &mut domain_suffix),
-            ("ip_cidr", &mut ip_cidr),
-        ] {
-            entries.extend(
-                rule.get(key)
-                    .and_then(Value::as_array)
-                    .into_iter()
-                    .flatten()
-                    .filter_map(Value::as_str)
-                    .map(str::to_string),
-            );
-        }
-    }
-    Ok((domain_suffix, ip_cidr))
 }
 
 /// The subscription text, where it came from, and what the server's headers said about it.
@@ -3613,29 +3512,12 @@ async fn set_routing_mode(
     state: State<'_, DesktopAppState>,
 ) -> Result<OperationResult, String> {
     let state = state.inner().clone();
-    run_blocking(move || set_routing_mode_blocking(&mode, state, false)).await
-}
-
-#[tauri::command]
-async fn refresh_routing_rules(
-    state: State<'_, DesktopAppState>,
-) -> Result<OperationResult, String> {
-    let state = state.inner().clone();
-    run_blocking(move || {
-        let mode = state
-            .desktop
-            .lock()
-            .map_err(|_| "desktop state lock failed")?
-            .routing_mode;
-        set_routing_mode_blocking(routing_mode_name(mode), state, true)
-    })
-    .await
+    run_blocking(move || set_routing_mode_blocking(&mode, state)).await
 }
 
 fn set_routing_mode_blocking(
     mode: &str,
     state: DesktopAppState,
-    force_refresh: bool,
 ) -> Result<OperationResult, String> {
     let mode = parse_routing_mode(mode)?;
     ensure_routing_configuration_stopped(&state)?;
@@ -3648,13 +3530,8 @@ fn set_routing_mode_blocking(
     let profile = fs::read_to_string(embedded_profile_path()).map_err(|error| {
         format!("Import the profile again before applying a routing mode: {error}")
     })?;
-    let envelope = embedded_envelope_for_mode(
-        &profile,
-        mode,
-        desktop.dns_preset,
-        desktop.block_quic,
-        force_refresh,
-    )?;
+    let envelope =
+        embedded_envelope_for_mode(&profile, mode, desktop.dns_preset, desktop.block_quic)?;
     write_managed_text_atomic(&embedded.envelope_path, &envelope)
         .map_err(|error| error.to_string())?;
     desktop.routing_mode = mode;
@@ -3701,13 +3578,8 @@ fn rewrite_embedded_envelope(desktop: &DesktopState, preset: DnsPreset) -> Resul
     if let Some(embedded) = active_embedded_config()? {
         let profile = fs::read_to_string(embedded_profile_path())
             .map_err(|error| format!("Import the profile again before changing DNS: {error}"))?;
-        let envelope = embedded_envelope_for_mode(
-            &profile,
-            desktop.routing_mode,
-            preset,
-            desktop.block_quic,
-            false,
-        )?;
+        let envelope =
+            embedded_envelope_for_mode(&profile, desktop.routing_mode, preset, desktop.block_quic)?;
         write_managed_text_atomic(&embedded.envelope_path, &envelope)
             .map_err(|error| error.to_string())?;
     }
@@ -3924,7 +3796,6 @@ fn save_my_rules_blocking(text: &str, state: DesktopAppState) -> Result<Operatio
                         desktop.routing_mode,
                         desktop.dns_preset,
                         desktop.block_quic,
-                        false,
                         &[],
                     )
                     .is_ok()
@@ -3935,7 +3806,6 @@ fn save_my_rules_blocking(text: &str, state: DesktopAppState) -> Result<Operatio
                     desktop.routing_mode,
                     desktop.dns_preset,
                     desktop.block_quic,
-                    false,
                     &lines,
                 )?;
                 envelope = Some((embedded.envelope_path, routed));
@@ -4020,7 +3890,6 @@ fn set_block_quic_blocking(
                 desktop.routing_mode,
                 desktop.dns_preset,
                 enabled,
-                false,
             )?;
             write_managed_text_atomic(&embedded.envelope_path, &envelope)
                 .map_err(|error| error.to_string())?;
@@ -4049,118 +3918,23 @@ fn ensure_routing_configuration_stopped(state: &DesktopAppState) -> Result<(), S
     Ok(())
 }
 
-fn refresh_routing_rule_assets(
-    directory: &Path,
-    mode: DesktopRoutingMode,
-    force_refresh: bool,
-) -> Result<(), String> {
-    fs::create_dir_all(directory).map_err(|error| error.to_string())?;
-    let needs_china = matches!(
-        mode,
-        DesktopRoutingMode::BypassChina | DesktopRoutingMode::ReturnChina
-    );
-    if needs_china {
-        write_rule_set_asset(
-            directory.join("china-domains.json"),
-            LOYALSOLDIER_CHINA_URL,
-            false,
-            force_refresh,
-        )?;
-        write_rule_set_asset(
-            directory.join("china-ips.json"),
-            CHINA_IP_URL,
-            true,
-            force_refresh,
-        )?;
-    }
-    if mode == DesktopRoutingMode::GfwList {
-        write_rule_set_asset(
-            directory.join("gfw-domains.json"),
-            LOYALSOLDIER_GFW_URL,
-            false,
-            force_refresh,
-        )?;
-    }
-    Ok(())
-}
-
-fn write_rule_set_asset(
-    path: PathBuf,
-    url: &str,
-    ip: bool,
-    force_refresh: bool,
-) -> Result<(), String> {
-    if path.exists() && !force_refresh {
-        return Ok(());
-    }
-    let content = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()
-        .map_err(|error| format!("routing rules HTTP client could not be created: {error}"))?
-        .get(url)
-        .send()
-        .and_then(|response| response.error_for_status())
-        .map_err(|error| format!("routing rules could not be downloaded from {url}: {error}"))?
-        .text()
-        .map_err(|error| format!("routing rules response could not be read from {url}: {error}"))?;
-    let entries = content
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty() && !line.starts_with('#'))
-        .filter_map(|line| line.split_whitespace().next())
-        .filter(|entry| {
-            if ip {
-                entry.parse::<std::net::IpAddr>().is_ok() || entry.contains('/')
-            } else {
-                entry.contains('.') && !entry.contains('/')
-            }
-        })
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    if entries.is_empty() {
-        return Err(format!(
-            "routing rules source returned no usable entries: {url}"
-        ));
-    }
-    let rule = if ip {
-        json!({ "ip_cidr": entries })
-    } else {
-        json!({ "domain_suffix": entries })
-    };
-    let source = serde_json::to_string_pretty(&json!({ "version": 1, "rules": [rule] }))
-        .map_err(|error| error.to_string())?;
-    write_managed_text_atomic(&path, &source).map_err(|error| error.to_string())
-}
-
 fn parse_routing_mode(value: &str) -> Result<DesktopRoutingMode, String> {
     match value {
-        "bypass_china" => Ok(DesktopRoutingMode::BypassChina),
-        "gfw_list" => Ok(DesktopRoutingMode::GfwList),
         "direct" => Ok(DesktopRoutingMode::Direct),
-        "return_china" => Ok(DesktopRoutingMode::ReturnChina),
         "rule" => Ok(DesktopRoutingMode::Rule),
-        _ => Err(
-            "routing mode must be bypass_china, gfw_list, direct, return_china, or rule"
-                .to_string(),
-        ),
+        _ => Err("routing mode must be rule or direct".to_string()),
     }
 }
 fn routing_mode_name(mode: DesktopRoutingMode) -> &'static str {
     match mode {
-        DesktopRoutingMode::BypassChina => "bypass_china",
-        DesktopRoutingMode::GfwList => "gfw_list",
         DesktopRoutingMode::Direct => "direct",
-        DesktopRoutingMode::ReturnChina => "return_china",
         DesktopRoutingMode::Rule => "rule",
     }
 }
 fn routing_mode_label(mode: DesktopRoutingMode) -> &'static str {
     match mode {
-        DesktopRoutingMode::BypassChina => "Bypass China",
-        DesktopRoutingMode::GfwList => "GFW list",
         DesktopRoutingMode::Direct => "Direct",
-        DesktopRoutingMode::ReturnChina => "Return China",
-        DesktopRoutingMode::Rule => "Subscription rules",
+        DesktopRoutingMode::Rule => "Rules",
     }
 }
 
@@ -4374,11 +4148,6 @@ async fn enable_https_mitm(state: State<'_, DesktopAppState>) -> Result<Operatio
 }
 
 fn enable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult, String> {
-    let desktop = state
-        .desktop
-        .lock()
-        .map_err(|_| "desktop state lock failed")?
-        .clone();
     let embedded = active_embedded_config()?
         .ok_or_else(|| "Import a profile before enabling HTTPS MITM.".to_string())?;
     if managed_config_or_default()?
@@ -4409,7 +4178,8 @@ fn enable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult,
         ca_certificate_path: certificate_path.clone(),
         ca_private_key_path: private_key_path,
         log_path: windows_managed_log_directory().join("native-mitm.log"),
-        bilibili_web_ad_block_enabled: desktop.bilibili_web_ad_block_enabled,
+        // No built-in plugin (docs/no-presets.md); the field stays false until the kernel drops it.
+        bilibili_web_ad_block_enabled: false,
         script_runtime: None,
     });
     set_embedded_listener(&mut managed, embedded.envelope_path, true);
@@ -4848,7 +4618,6 @@ fn snapshot(
         auto_recover_core: desktop.auto_recover_core,
         auto_subscription_refresh: desktop.auto_subscription_refresh,
         auto_select_fastest_node: desktop.auto_select_fastest_node,
-        bilibili_web_ad_block_enabled: desktop.bilibili_web_ad_block_enabled,
         tun_mode_enabled: desktop.tun_mode_enabled,
         script_runtime_configured: managed_script_runtime_configured(),
         https_decryption_enabled: managed_https_decryption_enabled(),
@@ -4983,6 +4752,25 @@ mod tests {
     fn rule_mode_round_trips() {
         assert_eq!(parse_routing_mode("rule"), Ok(DesktopRoutingMode::Rule));
         assert_eq!(routing_mode_name(DesktopRoutingMode::Rule), "rule");
+        assert_eq!(parse_routing_mode("direct"), Ok(DesktopRoutingMode::Direct));
+        // No preset list modes in public builds (docs/no-presets.md).
+        for preset in ["bypass_china", "gfw_list", "return_china"] {
+            assert!(parse_routing_mode(preset).is_err(), "{preset}");
+        }
+    }
+
+    #[test]
+    fn mode_envelopes_add_no_preset_rules() {
+        let single = r#"{"schema_version":1,"profile_id":"p","outbound":{"type":"direct"}}"#;
+        assert_eq!(
+            mode_envelope(single, DesktopRoutingMode::Rule).unwrap(),
+            single
+        );
+        let direct: Value =
+            serde_json::from_str(&mode_envelope(single, DesktopRoutingMode::Direct).unwrap())
+                .unwrap();
+        assert_eq!(direct["routing"]["rules"], json!(["FINAL,DIRECT"]));
+        assert_eq!(direct["routing"]["rule_sets"], json!({}));
     }
 
     fn node(id: &str, label: &str) -> DesktopProfileNode {

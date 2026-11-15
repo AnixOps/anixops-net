@@ -18,7 +18,6 @@ use app_notifications::{Notice, Settings as NotificationSettings};
 use client_health::Health;
 use desktop_mitm::mappings;
 use desktop_mitm::plugins;
-use engine_embedded::profile::RoutingMode;
 use on_demand::{Action as OnDemandAction, Settings as OnDemandSettings};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -27,7 +26,7 @@ use subscription_meta::ResponseMeta;
 
 use crate::backend::engine;
 use crate::backend::session::{LocalSession, UserSession};
-use crate::backend::state::Store;
+use crate::backend::state::{RoutingMode, Store};
 use crate::backend::system_proxy::Desktop;
 #[cfg(not(target_os = "android"))]
 use crate::backend::trust;
@@ -289,56 +288,6 @@ impl Client {
         }
     }
 
-    /// Downloads the public rule lists `mode` needs (all of them with `force`, else the missing ones) outside
-    /// the lock and caches them.
-    fn download_rule_lists(&self, mode: RoutingMode, force: bool) -> Result<usize, String> {
-        let (store, lists) = {
-            let backend = self.backend();
-            (backend.store(), backend.rule_lists_to_download(mode, force))
-        };
-        for list in &lists {
-            let content = http_get(list.url()).map_err(|error| {
-                format!(
-                    "the routing rules could not be downloaded from {}: {error}",
-                    list.url()
-                )
-            })?;
-            let entries = list.parse(&content);
-            if entries.is_empty() {
-                return Err(format!("{} returned no usable entries", list.url()));
-            }
-            store
-                .write_rule_list(*list, &entries)
-                .map_err(|error| format!("the routing rules could not be saved: {error}"))?;
-        }
-        Ok(lists.len())
-    }
-
-    /// Downloads the current mode's public rule lists again; they apply on the next connection.
-    fn refresh_routing_rules(&self) -> Result<OperationResult, String> {
-        let mode = self.backend().routing_mode();
-        let count = self.download_rule_lists(mode, true)?;
-        Ok(OperationResult {
-            message: if count == 0 {
-                "The current routing mode uses no public rule lists".to_string()
-            } else {
-                format!(
-                    "Routing rules refreshed ({count} lists); they apply on the next connection"
-                )
-            },
-        })
-    }
-
-    /// Connects after fetching any rule list the routing mode still lacks.
-    fn connect_with_rules(&self) -> Result<OperationResult, String> {
-        let mode = self.backend().routing_mode();
-        if let Err(error) = self.download_rule_lists(mode, false) {
-            self.backend().record_error(&error);
-            return Err(error);
-        }
-        self.backend().connect()
-    }
-
     /// Where the platform carries traffic through a system VPN, or the desktop is in TUN mode, opens it
     /// first so the engine has its TUN device.
     fn open_tunnel(&self) -> Result<(), String> {
@@ -415,7 +364,7 @@ impl Client {
             self.backend().record_error(&error);
             return Err(error);
         }
-        let result = self.connect_with_rules();
+        let result = self.backend().connect();
         if result.is_err() {
             self.close_tunnel();
         }
@@ -1167,7 +1116,6 @@ fn handler(name: &str) -> Option<Handler> {
         "set_routing_mode" => |client, args| {
             let Mode { mode } = parse(args)?;
             let mode = RoutingMode::parse(&mode).ok_or("unknown routing mode")?;
-            client.download_rule_lists(mode, false)?;
             json(client.backend().set_routing_mode(mode)?)
         },
         "set_dns_preset" => |client, args| {
@@ -1190,7 +1138,6 @@ fn handler(name: &str) -> Option<Handler> {
             let Enabled { enabled } = parse(args)?;
             json(client.backend().set_direct_egress(enabled)?)
         },
-        "refresh_routing_rules" => |client, _| json(client.refresh_routing_rules()?),
         "my_rules" => |client, _| json(client.backend().my_rules()),
         "save_my_rules" => |client, args| {
             let Text { text } = parse(args)?;
@@ -1610,10 +1557,6 @@ fn probe_network(proxy_port: Option<u16>) -> NetworkProbe {
         exit_location,
         direct_ms,
     }
-}
-
-fn http_get(url: &str) -> Result<String, reqwest::Error> {
-    http_get_with_meta(url).map(|(body, _)| body)
 }
 
 /// The body and what the subscription headers say about it. A panel that licenses ANX gets this device's

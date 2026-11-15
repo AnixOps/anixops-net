@@ -59,8 +59,6 @@ class RulesViewModel(private val core: Core) : ViewModel() {
         }
     }
 
-    fun refreshRoutingRules() = perform { message(core.refreshRoutingRules()) }
-
     fun saveMyRules(text: String) = perform { message(core.saveMyRules(text)) }
 
     fun selectGroupOutbound(group: String, outbound: String) =

@@ -4,7 +4,7 @@ import type { NativeGroupSummary, NodeSummary, RuntimeSnapshot } from "./bridge"
  * What an `anixops://` link asks for, the same actions as on iOS (`AppURLCommand.swift`):
  *
  * - `anixops://connect`, `anixops://disconnect`, `anixops://toggle`
- * - `anixops://mode?set=rule|direct|bypass_china|gfw_list|return_china`
+ * - `anixops://mode?set=rule|direct` (no preset list modes in public builds, docs/no-presets.md)
  * - `anixops://select?node=<name>[&group=<subscription>]`, or `anixops://select?policy=<group>&node=<member>`
  * - `anixops://import?url=<subscription or node link>` fills in the import form; nothing is saved until the
  *   user presses Import
@@ -30,9 +30,6 @@ export const maxImportLength = 8 * 1024;
 const modes: Record<string, RuntimeSnapshot["routingMode"]> = {
   rule: "rule",
   direct: "direct",
-  bypass_china: "bypass_china",
-  gfw_list: "gfw_list",
-  return_china: "return_china",
 };
 
 export function parseAppLink(raw: string): AppLink | AppLinkError {

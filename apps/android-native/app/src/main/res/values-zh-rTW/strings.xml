@@ -22,9 +22,6 @@
     <string name="home_last_error">上次出錯</string>
     <string name="home_vpn_denied">沒有允許建立 VPN，無法連線</string>
 
-    <string name="routing_bypass_china">繞過大陸</string>
-    <string name="routing_gfw_list">GFW 清單</string>
-    <string name="routing_return_china">回國</string>
     <string name="routing_direct">直連</string>
     <string name="routing_rule">規則</string>
 
@@ -114,13 +111,9 @@
     <plurals name="interval_days">
         <item quantity="other">每 %d 天自動更新</item>
     </plurals>
-    <string name="rules_refresh">重新整理規則資源</string>
-    <string name="rules_routing_note">規則資源從公開來源快取到本機，下次連線時生效。</string>
-    <string name="routing_bypass_china_hint">大陸網站直連，其餘走代理</string>
-    <string name="routing_gfw_list_hint">只有清單內的網站走代理</string>
-    <string name="routing_return_china_hint">大陸網站走代理，適合在海外使用</string>
+    <string name="rules_routing_note">用戶端不帶預設規則：規則模式只按訂閱自帶的規則和你的規則分流。</string>
     <string name="routing_direct_hint">所有流量直連，不經過節點</string>
-    <string name="routing_rule_hint">按訂閱自帶的規則和策略組分流</string>
+    <string name="routing_rule_hint">按訂閱自帶的規則和你的規則分流，其餘走代理</string>
     <string name="rules_mine">我的規則</string>
     <string name="rules_mine_note">每行一條，從上到下比對，排在分流模式和訂閱規則前面。策略寫 PROXY（目前節點或訂閱的第一個策略群組）、DIRECT 或 REJECT。支援 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD、DOMAIN-WILDCARD、IP-CIDR、IP-CIDR6、DST-PORT、PROCESS-NAME、USER-AGENT、URL-REGEX、PROTOCOL；# 開頭的行是註解。</string>
     <string name="action_revert">還原</string>

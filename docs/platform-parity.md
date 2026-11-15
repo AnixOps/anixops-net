@@ -46,8 +46,8 @@
 | 节点分享链接 | ✅ | ✅ | ✅ | ✅ | ✅ | Tauri 在节点卡片的“更多”菜单里；触屏上菜单按钮常显（T4） |
 | 手动添加 / 编辑节点 | ✅ | ✅ | ✅ | ✅ | ✅ | 添加 = 粘贴分享链接导入；编辑名称、服务器、端口和删除节点只改本机，更新订阅后恢复，与 iOS 相同（`crates/node-edits`，T5）。策略组或规则用到的节点和最后一个节点不能删 |
 | 扫码导入 | ✅ | — | — | — | ✅ | Android：订阅页“扫码”用相机读订阅或分享链接二维码，填进链接框后点“导入”（CameraX + ZXing，T5） |
-| 分流模式（规则 / 全局 / 直连等） | ✅ | ✅ | ✅ | ✅ | ✅ | |
-| 我的规则（规则文本编辑、连接中原地换规则） | ✅ | ✅ | ◐ | ◐ | ◐ | 内核 `reload_rules`（T2）。桌面与 Android 不收 RULE-SET / GEOIP / GEOSITE 行（这些要下载规则集，分流模式已覆盖）；Windows TUN 模式下次连接生效 |
+| 分流模式（规则 / 全局 / 直连；不带预设分流模式，见 [no-presets.md](no-presets.md)） | ✅ | ✅ | ✅ | ✅ | ✅ | |
+| 我的规则（规则文本编辑、连接中原地换规则） | ✅ | ✅ | ◐ | ◐ | ◐ | 内核 `reload_rules`（T2）。桌面与 Android 不收 RULE-SET / GEOIP / GEOSITE 行（这些要下载规则集）；Windows TUN 模式下次连接生效 |
 | 规则集查看、更新远程规则集 | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | DNS 预设 | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 自定义 DNS 服务器、分域 DNS、Hosts | ✅ | ✅ | ✅ | ✅ | ✅ | T3：桌面与 Android 用文本编辑（`名称 = 地址`、`DOMAIN-SUFFIX,cn,服务器`、`域名 = 地址`），iOS / macOS 是表单 |
@@ -80,7 +80,7 @@
 | 网络变化后重建连接 | ✅ | ✅ | ✅ | ✅ | ◐ | Android 共用 `network_watch`，Wi-Fi / 移动网络切换待真机确认 |
 | 按 Wi-Fi 自动连接 / 断开（On Demand） | ✅ | ✅ | ✅ | ⛔ | ✅ | 设置页“Wi-Fi 规则”：指定 Wi-Fi、其他 Wi-Fi、蜂窝（Android）、有线和其他网络各选连接 / 断开 / 保持不变；Windows、Android 由 App 运行时每 10–12 秒取样、换网络时执行一次（T12） |
 | 开机 / 登录后启动、自动连接 | ✅ | ✅ | ✅ | ✅ | ◐ | Android 在系统设置里把本 App 设为“始终开启的 VPN”后，开机由系统启动并自动连接；App 自己不能开机连接，见系统限制 |
-| `anixops://` 链接 | ✅ | ✅ | ✅ | ✅ | ✅ | 与 iOS 相同的动作：connect / disconnect / toggle、`mode?set=`、`select?node=&group=` 或 `policy=`、`import?url=`（只填进导入框，用户点“导入”才保存）。桌面没有 `global` 模式，`mode` 另外接受 `bypass_china` 等桌面模式名。Windows 写当前用户的 `HKCU\Software\Classes\anixops`，Linux 写 `~/.local/share/applications` 里的 handler 并调 `xdg-mime`，都在启动时注册；第二次启动把链接交给已运行的窗口（Linux 因此改为单实例）。Android 在 manifest 里声明 scheme，由共用的 `view.parse_app_link` 解析（T13） |
+| `anixops://` 链接 | ✅ | ✅ | ✅ | ✅ | ✅ | 与 iOS 相同的动作：connect / disconnect / toggle、`mode?set=`、`select?node=&group=` 或 `policy=`、`import?url=`（只填进导入框，用户点“导入”才保存）。桌面没有 `global` 模式；公开版不带预设分流模式（[no-presets.md](no-presets.md)），`bypass_china` 等旧模式名一律拒绝。Windows 写当前用户的 `HKCU\Software\Classes\anixops`，Linux 写 `~/.local/share/applications` 里的 handler 并调 `xdg-mime`，都在启动时注册；第二次启动把链接交给已运行的窗口（Linux 因此改为单实例）。Android 在 manifest 里声明 scheme，由共用的 `view.parse_app_link` 解析（T13） |
 | 崩溃报告（本机、脱敏） | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 本机 Prometheus 指标 | ⛔ | ✅ | ✅ | ✅ | ✅ | macOS 在设置页打开，`127.0.0.1:9477/metrics`，默认关闭（A3）；iOS 见系统限制 |
 | 用户协议同意、协议入口 | ✅ | ✅ | ✅ | ✅ | ✅ | |

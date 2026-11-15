@@ -175,8 +175,6 @@ class Core(
 
     // The rules page.
 
-    suspend fun refreshRoutingRules(): OperationResult = call("refresh_routing_rules", OperationResult.serializer())
-
     suspend fun myRules(): MyRules = call("my_rules", MyRules.serializer())
 
     suspend fun saveMyRules(text: String): OperationResult =
