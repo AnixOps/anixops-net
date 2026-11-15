@@ -26,6 +26,7 @@ fi
 
 base_id=""
 base_commit=""
+pending=""
 for commit in $(gh api "repos/${REPO}/commits?sha=${BASE_SHA}&per_page=30" --jq '.[].sha'); do
     base_id="$(gh api "repos/${REPO}/actions/artifacts?name=${platform}-screenshots-${commit}&per_page=1" \
         --jq '[.artifacts[] | select(.expired == false)][0].id // empty')"
@@ -33,12 +34,22 @@ for commit in $(gh api "repos/${REPO}/commits?sha=${BASE_SHA}&per_page=30" --jq 
         base_commit="${commit}"
         break
     fi
+    # A newer commit of main whose CI has not finished has no screenshots yet. The comparison then falls back to
+    # an older commit and can show changes that main already has; say so instead of leaving a puzzle.
+    running="$(gh api "repos/${REPO}/actions/runs?head_sha=${commit}&per_page=30" \
+        --jq '[.workflow_runs[] | select(.name == "CI" and .status != "completed")] | length' 2> /dev/null || echo 0)"
+    if [ "${running}" != "0" ]; then
+        pending="${pending:+${pending}, }${commit:0:7}"
+    fi
 done
 if [ -z "${base_id}" ]; then
     echo "::warning::no ${platform} screenshots from main within 30 commits of ${BASE_SHA}; nothing to compare with"
     exit 0
 fi
 echo "Comparing with the screenshots of main at ${base_commit}"
+if [ -n "${pending}" ]; then
+    echo "::warning::main 在 ${pending} 的 CI 还没跑完，这次只能和更早的 ${base_commit:0:7} 比；下面若列出本 PR 没碰过的截图，等 main 跑完后重跑这个 job"
+fi
 
 gh api "repos/${REPO}/actions/artifacts/${base_id}/zip" > "${work}/base.zip"
 rm -rf "${work}/base" "${work}/before" "${work}/after"
