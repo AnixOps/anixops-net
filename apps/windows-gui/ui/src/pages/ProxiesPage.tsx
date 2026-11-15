@@ -12,7 +12,7 @@ import { Select } from "../controls";
 import type { DebugExit } from "../mode";
 import { t } from "../i18n";
 import { cancelQrScan, scanQrCode } from "../qr-scan";
-import { formatBytes, formatDay, updateIntervalChoices, updateIntervalLabel, usedFraction } from "../subscription-format";
+import { formatBytes, formatDay, subscriptionErrorText, updateIntervalChoices, updateIntervalLabel, usedFraction } from "../subscription-format";
 import type { Delays, SetDelays } from "./HomePage";
 
 /** What the right pane shows: every node, one policy group's members, or the subscriptions. */
@@ -421,7 +421,7 @@ function Subscriptions({ snapshot, sources, refreshSources, empty, busy, run, pe
     }
   });
 
-  const refreshDetail = snapshot?.subscriptionError
+  const refreshDetail = (snapshot?.subscriptionError ? subscriptionErrorText(snapshot.subscriptionRefreshErrorCode) ?? snapshot.subscriptionError : undefined)
     ?? (snapshot?.subscriptionLastAttempt
       ? [
         t("上次尝试 {time}", { time: snapshot.subscriptionLastAttempt }),
@@ -517,7 +517,7 @@ function SubscriptionRow({ source, canUpdate, busy, run, changed }: {
   const status = [
     source.nodeCount != null ? t("{count} 个节点", { count: source.nodeCount }) : null,
     source.lastSuccessfulUpdate ? t("更新于 {time}", { time: source.lastSuccessfulUpdate }) : source.lastAttempt ? t("尝试于 {time}", { time: source.lastAttempt }) : t("从未更新"),
-    source.lastUpdateError,
+    source.lastUpdateError ? subscriptionErrorText(source.errorCode) ?? source.lastUpdateError : null,
   ].filter(Boolean).join(" · ");
   const traffic = [
     used != null ? (source.total ? t("已用 {used} / {total}", { used: formatBytes(used), total: formatBytes(source.total) }) : t("已用 {used}", { used: formatBytes(used) })) : null,

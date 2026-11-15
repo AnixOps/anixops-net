@@ -763,4 +763,12 @@ export const english: Record<string, string> = {
   "详情": "Details",
   "链路": "Link",
   "长度": "Length",
+  "下载订阅超时": "Subscription download timed out",
+  "连不上订阅服务器": "Couldn't reach the subscription server",
+  "下载订阅失败": "Subscription download failed",
+  "订阅内容里没有可用的节点": "The subscription has no usable nodes",
+  "先断开连接再使用这份订阅": "Disconnect before using this subscription",
+  "订阅服务器拒绝了请求（HTTP {status}），订阅可能已过期或链接已失效": "The subscription server refused the request (HTTP {status}); the subscription may have expired or the link is no longer valid",
+  "订阅服务器返回了错误（HTTP {status}）": "The subscription server returned an error (HTTP {status})",
+  "更新订阅失败": "Subscription update failed",
 };
