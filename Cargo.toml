@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "apps/android-native/rust",
+    "apps/linux-daemon",
     "apps/linux-gui",
     "apps/windows-gui",
     "crates/app-log",

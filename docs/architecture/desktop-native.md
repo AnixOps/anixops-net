@@ -89,6 +89,13 @@ Tauri（过渡期）        ── 同进程调用                             P
    - 界面不能反过来向核心发 `session.*`。
    还没解决：系统代理的备份只存一份，Windows 快速用户切换时两个用户先后连上会把备份还给错的人；做服务时按用户
    分开存。
+   Linux 守护进程是 `apps/linux-daemon`（程序名 `anixops-netd`，systemd 单元在它的 `packaging/` 里）：以 root 运行，
+   数据放 `/var/lib/anixops-net`（只有 root 能进），套接字放 `/run/anixops-net/core.sock`。谁可以控制它：root，以及
+   在本机有登录会话的用户（登录管理器在 `/run/systemd/users/` 或 `/run/user/` 下有这个用户的记录）；其他账号连上后
+   每个命令都得到一句说明原因的拒绝。这条线和 Windows 命名管道的"本机登录用户"一致，不区分坐在屏幕前和远程登录，
+   需要区分的动作以后走 polkit。收到 SIGTERM 时先停内核、让界面把系统代理还原，再删套接字。
+   守护进程还没做的：TUN 模式现在仍走 `pkexec` 助手，守护进程里要改成直接打开设备；Linux Tauri 版放在用户目录下的
+   数据搬到 `/var/lib/anixops-net`；deb / rpm 里装单元文件并启用。
 3. **契约有类型。** 每个命令的请求和应答样例放在 `client-core/tests/fixtures/*.json`。C# 和 Kotlin 的数据类型必须
    无损解析同一批样例；命令改字段时 Rust、Kotlin、C# 三边测试一起失败。GTK 界面直接用 Rust 类型。
 4. **`crates/client-view`。** 现在 TypeScript 里有行为的纯逻辑（抓包筛选表达式、请求表排序、节点筛选、`anixops://`

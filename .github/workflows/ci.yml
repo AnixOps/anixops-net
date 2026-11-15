@@ -69,6 +69,8 @@ jobs:
                 apps/windows-gui/* | installer/*) rust=true; windows=true ;;
                 # The Android app is the Linux window and backend on Android.
                 apps/linux-gui/*) rust=true; linux=true; android=true ;;
+                # The Linux daemon; the workspace job builds and tests it.
+                apps/linux-daemon/*) rust=true ;;
                 apps/android/*) android=true ;;
                 # The native Android app (Compose over crates/client-core through JNI); its colours come from the
                 # client tokens.

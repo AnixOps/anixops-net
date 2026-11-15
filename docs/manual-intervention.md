@@ -312,6 +312,10 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 - [ ] Windows 旧版数据搬运的真机核对（原生预览版发布后、正式切换之前）：在一台用过 Tauri 版的 Windows 机器上装原生预览版，
   核对订阅、选中的节点、分流模式、DNS、我的规则、插件和解密根证书都在，旧版程序仍能照常启动。CI 里的夹具是照着旧版的
   结构体写的，不是真机上取的文件，所以要这一步。
+- [ ] Linux 守护进程单元的真机核对（deb / rpm 带上 `anixops-netd` 之后）：在 Ubuntu 和 Fedora 上 `systemctl start
+  anixops-netd`，确认单元里的收紧项（`ProtectSystem=strict`、`ProtectHome=yes`、`CapabilityBoundingSet`、
+  `RestrictAddressFamilies`）下连接、TUN 模式、HTTPS 解密都正常；用普通登录用户能控制，用没有登录会话的账号
+  （`sudo -u nobody`）连接时得到拒绝的说明。CI 的 runner 上没有 systemd 会话，测不到这一层。
 
 ## macOS 自有根证书与指标端口真机验收（A2、A3）
 
