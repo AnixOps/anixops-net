@@ -828,6 +828,14 @@ jobs:
         shell: bash
         run: .github/scripts/mac-screenshots.sh "apps/ios/build/Build/Products/Debug/AnixOps Net.app" "${RUNNER_TEMP}/mac-screenshots"
 
+      # The same for the iPhone app, in a simulator made for this run: demo data, a fixed status bar, one picture
+      # per tab. A machine that cannot boot a simulator must not fail the build. Taken before either comparison, so a
+      # change on macOS that still needs acknowledging does not hide the iPhone pictures.
+      - name: Take iOS screenshots with demo data
+        continue-on-error: true
+        shell: bash
+        run: .github/scripts/ios-screenshots.sh apps/ios/build/Build/Products/Debug-iphonesimulator/NetworkCoreApp.app "${RUNNER_TEMP}/ios-screenshots"
+
       # A pull request's pictures are compared with main's, shot by shot; a change the description does not
       # acknowledge on a "界面变化：" line fails the job (docs/ui-ux.md). The demo data has a fixed clock, so two
       # runs of the same code give the same pixels.
@@ -839,7 +847,7 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: .github/scripts/mac-screenshot-compare.sh "${RUNNER_TEMP}/mac-screenshots" "${RUNNER_TEMP}/mac-screenshot-compare"
+        run: .github/scripts/screenshot-compare.sh "${RUNNER_TEMP}/mac-screenshots" "${RUNNER_TEMP}/mac-screenshot-compare" mac macOS
 
       # Main's pictures are the baseline later pull requests compare with, so they are kept longer.
       - name: Upload the macOS screenshots
@@ -858,6 +866,35 @@ jobs:
         with:
           name: mac-screenshot-report-${{ github.sha }}
           path: ${{ runner.temp }}/mac-screenshot-compare/report
+          if-no-files-found: ignore
+          retention-days: 3
+
+      - name: Compare the iOS screenshots with main
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: .github/scripts/screenshot-compare.sh "${RUNNER_TEMP}/ios-screenshots" "${RUNNER_TEMP}/ios-screenshot-compare" ios iOS
+
+      - name: Upload the iOS screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-screenshots-${{ github.sha }}
+          path: ${{ runner.temp }}/ios-screenshots
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: ${{ github.event_name == 'push' && 30 || 3 }}
+
+      - name: Upload the iOS screenshot comparison
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-screenshot-report-${{ github.sha }}
+          path: ${{ runner.temp }}/ios-screenshot-compare/report
           if-no-files-found: ignore
           retention-days: 3
 

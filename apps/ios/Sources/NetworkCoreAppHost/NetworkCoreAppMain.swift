@@ -20,6 +20,13 @@ struct NetworkCoreAppMain: App {
             RootView(tunnel: tunnel)
                 .preferredColorScheme(appearance.colorScheme)
                 .task {
+                    #if DEBUG
+                    // Screenshots: made-up data instead of the saved configuration (`-AnixOpsDemo YES`).
+                    if TunnelController.isDemo {
+                        tunnel.loadDemo()
+                        return
+                    }
+                    #endif
                     await tunnel.load()
                     await tunnel.refreshDueSubscriptions()
                 }
@@ -59,6 +66,30 @@ enum AppTab: Hashable, CaseIterable, Identifiable {
     /// on the requests.
     static func tabs(for mode: AppMode?) -> [AppTab] {
         mode == .debug ? [.requests, .extensions, .exit, .settings] : [.home, .proxies, .rules, .extensions, .settings]
+    }
+
+    /// The tab the app opens on. CI screenshots open a given one: `-AnixOpsSection proxies` (debug builds only).
+    static var launchTab: AppTab {
+        #if DEBUG
+        switch UserDefaults.standard.string(forKey: "AnixOpsSection") {
+        case "requests":
+            return .requests
+        case "proxies":
+            return .proxies
+        case "rules":
+            return .rules
+        case "extensions":
+            return .extensions
+        case "exit":
+            return .exit
+        case "settings":
+            return .settings
+        default:
+            return .home
+        }
+        #else
+        return .home
+        #endif
     }
 
     /// The tab's name in a mode: the extensions are "Rewrite" in debug mode, where plugins and mappings rewrite traffic.
@@ -115,7 +146,7 @@ struct RootView: View {
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.horizontalSizeClass) private var sizeClass
-    @State private var tab = AppTab.home
+    @State private var tab = AppTab.launchTab
     @State private var importing = false
     @AppStorage(OnboardingView.storageKey) private var onboardingDone = false
     @AppStorage(TermsConsent.storageKey) private var acceptedTerms = ""
@@ -182,7 +213,11 @@ struct RootView: View {
             }
         }
         .onChange(of: tunnel.appMode, initial: true) { _, mode in
-            // Each mode opens on its first tab: the overview, or the requests in debug mode.
+            // Each mode opens on its first tab: the overview, or the requests in debug mode. Before the mode has
+            // been read there is nothing to check against: resetting then would drop a tab only debug mode has.
+            guard mode != nil else {
+                return
+            }
             let tabs = AppTab.tabs(for: mode)
             if !tabs.contains(tab), let first = tabs.first {
                 tab = first
