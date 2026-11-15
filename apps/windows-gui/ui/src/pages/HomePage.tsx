@@ -1,4 +1,4 @@
-import { Activity, AppWindow, ChevronRight, ChevronsUpDown, CloudDownload, Globe, House, Layers, ListTree, Play, RefreshCw, RotateCw, Search, Timer, Waypoints, Zap } from "lucide-react";
+import { Activity, AppWindow, ChevronRight, CloudDownload, Globe, House, Layers, ListTree, Play, RefreshCw, RotateCw, Search, Timer, Waypoints, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { Page } from "../App";
@@ -12,6 +12,7 @@ import { delayLabel, delayTone } from "../node-filter";
 import { formatBytes, formatDay, updateIntervalLabel, usedFraction } from "../subscription-format";
 import { useTraffic } from "../traffic-feed";
 import { LetterTile, Panel, Run, Segmented, StatusDot, Switch } from "../ui";
+import { Select } from "../controls";
 import { t } from "../i18n";
 import { useDecryptionConsent } from "../decryption-consent";
 
@@ -149,28 +150,25 @@ function Hero({ snapshot, nodes, phase, busy, run, toggle, goTo, delays, probe }
           />}
       </div>
       <div className="hero-controls">
-        <label className="node-select" title={t("切换节点")}>
+        <Select
+          label={t("切换节点")}
+          className="node-select"
+          value={node?.id ?? ""}
+          disabled={Boolean(busy) || nodes.length === 0}
+          onChange={(id) => void run("switch", () => desktop.switchNode(id))}
+          choices={sections.length > 1 ? undefined : nodes.map((item) => ({ value: item.id, label: item.label }))}
+          sections={sections.length > 1
+            ? sections.map((section) => ({
+              title: section || t("节点"),
+              choices: nodes.filter((item) => (item.group ?? "") === section).map((item) => ({ value: item.id, label: item.label })),
+            }))
+            : undefined}
+        >
           <Globe size={13} aria-hidden="true" />
           <span className="truncate">{nodeName ?? t("未选择")}</span>
           {node && <span className="protocol-badge">{protocolAbbreviation(node.protocol)}</span>}
           {delay && <span className={`delay ${delayTone(delay)}`}>{delayLabel(delay)}</span>}
-          <ChevronsUpDown size={12} aria-hidden="true" />
-          <select
-            aria-label={t("切换节点")}
-            value={node?.id ?? ""}
-            disabled={Boolean(busy) || nodes.length === 0}
-            onChange={(event) => void run("switch", () => desktop.switchNode(event.target.value))}
-          >
-            {!node && <option value="" disabled>{t("未选择")}</option>}
-            {sections.length > 1
-              ? sections.map((section) => (
-                <optgroup key={section} label={section || t("节点")}>
-                  {nodes.filter((item) => (item.group ?? "") === section).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-                </optgroup>
-              ))
-              : nodes.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-          </select>
-        </label>
+        </Select>
         <Segmented
           label={t("分流模式")}
           className="fill"
@@ -469,23 +467,20 @@ function GroupsPanel({ groups, setGroups, busy, run, goTo }: {
           <span className="usage-text"><strong>{group.tag}</strong></span>
           {group.groupType === "selector"
             ? (
-              <select
-                className="pop-up"
-                aria-label={group.tag}
+              <Select
+                label={group.tag}
                 value={group.selected ?? ""}
+                placeholder={t("未选择")}
                 disabled={Boolean(busy)}
-                onChange={(event) => {
-                  const outbound = event.target.value;
+                onChange={(outbound) => {
                   void run("native selector", async () => {
                     const result = await desktop.selectNativeGroupOutbound(group.tag, outbound);
                     setGroups((current) => current.map((item) => item.tag === group.tag ? { ...item, selected: outbound } : item));
                     return result;
                   });
                 }}
-              >
-                {group.selected === undefined && <option value="" disabled>{t("未选择")}</option>}
-                {group.outbounds.map((outbound) => <option key={outbound} value={outbound}>{groupMemberLabel(group, outbound)}</option>)}
-              </select>
+                choices={group.outbounds.map((outbound) => ({ value: outbound, label: groupMemberLabel(group, outbound) ?? outbound }))}
+              />
             )
             : <><span className="usage-value truncate">{groupMemberLabel(group, group.selected) ?? "—"}</span><span className="chip quiet">{group.groupType === "urltest" ? t("自动") : group.groupType}</span></>}
         </div>

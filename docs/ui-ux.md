@@ -20,6 +20,22 @@
 
 即时生效的开关用 `Switch` / `Toggle`，二到四个互斥模式用 `Segmented` / 分段 `Picker`，都不用按钮代替。
 
+## 桌面端的控件和字体
+
+桌面端（Windows、Linux，`apps/windows-gui/ui`）的外观自己画，行为交给 React Aria Components，统一封装在 `src/controls.tsx`：
+
+| 要做的事 | 用哪个组件 | 不要用 |
+|---|---|---|
+| 从几个值里选一个 | `Select` | 浏览器的 `<select>` |
+| 行或分区的“更多”操作 | `MoreMenu` | 自己定位的浮层 |
+| 图标按钮和它的悬停说明 | `IconButton`（内含 `Tip`） | `title` 属性 |
+| 盖住整个窗口的对话框 | `ModalDialog`，标题用 `<Heading slot="title">` | 自己写 `role="dialog"` 的遮罩 |
+
+这些组件自带方向键、首字母定位、Esc 关闭、焦点圈定与归还、弹层不出窗口。新控件先看 React Aria Components 有没有，再考虑手写。
+
+字体用各平台的系统界面字体（Windows 是 Segoe UI Variable 配微软雅黑 UI，Linux 跟随桌面设置），不加载设计仓库附带的 Inter；
+字体栈在 `styles.css` 的 `--font-sans`、`--font-mono`。字号、字重仍以 AnixOps Design 的 tokens 为准。
+
 ## 作用范围对应的位置
 
 | 范围 | 影响什么 | 桌面端 | macOS |

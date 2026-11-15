@@ -8,6 +8,7 @@ import { groupMemberLabel, protocolAbbreviation } from "../labels";
 import { delayLabel, delayTone, filterNodes, groupNodes, NodeSort, sortNodes } from "../node-filter";
 import { nodeFormProblem } from "../node-form";
 import { Card, EmptyState, Field, IconButton, MenuItem, MoreMenu, PageTools, Panel, Row, Run, Segmented, StatusPill, Tile, TileColor } from "../ui";
+import { Select } from "../controls";
 import type { DebugExit } from "../mode";
 import { t } from "../i18n";
 import { cancelQrScan, scanQrCode } from "../qr-scan";
@@ -199,14 +200,17 @@ function ProxiesContent({ snapshot, nodes, busy, run, delays, setDelays, pending
           className="main-pane"
           title={<>{t("全部节点")}<span className="count">{[t("{count} 个节点", { count: visible.length }), available > 0 ? t("{count} 个可用", { count: available }) : null].filter(Boolean).join(" · ")}</span></>}
           action={<>
-            <select className="pop-up" aria-label={t("按协议筛选")} value={protocol} onChange={(event) => setProtocol(event.target.value)}>
-              {protocols.map((value) => <option key={value} value={value}>{value === "All" ? t("全部协议") : protocolAbbreviation(value)}</option>)}
-            </select>
-            <select className="pop-up" aria-label={t("节点排序")} value={sort} onChange={(event) => setSort(event.target.value as NodeSort)}>
-              <option value="default">{t("默认顺序")}</option>
-              <option value="name">{t("按名称")}</option>
-              <option value="delay">{t("按延迟")}</option>
-            </select>
+            <Select label={t("按协议筛选")} value={protocol} onChange={setProtocol} choices={protocols.map((value) => ({ value, label: value === "All" ? t("全部协议") : protocolAbbreviation(value) }))} />
+            <Select<NodeSort>
+              label={t("节点排序")}
+              value={sort}
+              onChange={setSort}
+              choices={[
+                { value: "default", label: t("默认顺序") },
+                { value: "name", label: t("按名称") },
+                { value: "delay", label: t("按延迟") },
+              ]}
+            />
           </>}
         >
           {editing && <NodeEditor key={editing.node.id} node={editing.node} form={editing.form} busy={busy} run={run} close={() => setEditing(null)} />}
@@ -552,15 +556,13 @@ function SubscriptionRow({ source, canUpdate, busy, run, changed }: {
         )}
       </span>
       {source.refreshable && (
-        <select
-          className="pop-up"
-          aria-label={t("自动更新")}
-          value={source.updateIntervalHours}
+        <Select
+          label={t("自动更新")}
+          value={String(source.updateIntervalHours)}
           disabled={Boolean(busy)}
-          onChange={(event) => void run("subscription", then(() => desktop.setSubscriptionInterval(source.id, Number(event.target.value))))}
-        >
-          {updateIntervalChoices(source.updateIntervalHours).map((hours) => <option key={hours} value={hours}>{updateIntervalLabel(hours)}</option>)}
-        </select>
+          onChange={(hours) => void run("subscription", then(() => desktop.setSubscriptionInterval(source.id, Number(hours))))}
+          choices={updateIntervalChoices(source.updateIntervalHours).map((hours) => ({ value: String(hours), label: updateIntervalLabel(hours) }))}
+        />
       )}
       <StatusPill label={source.selected ? t("使用中") : source.result === "failed" ? t("更新失败") : t("已保存")} tone={source.selected ? "success" : source.result === "failed" ? "danger" : "neutral"} />
       {canUpdate && (

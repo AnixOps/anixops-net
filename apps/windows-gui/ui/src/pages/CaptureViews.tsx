@@ -6,6 +6,7 @@ import { asText, directionTotals, durationMs, fromBase64, header, hexDump, looks
 import { usePageVisible } from "../live";
 import { formatBytes } from "../subscription-format";
 import { Card, CopyButton, EmptyState, MenuItem, MoreMenu, Row, Run, Segmented, ToggleRow } from "../ui";
+import { Select } from "../controls";
 import { ExchangeInspector } from "./Inspector";
 import { t } from "../i18n";
 import { mappingFromExchange, MappingEditor, ReplayEditor } from "./DebugTools";
@@ -393,9 +394,7 @@ function ExchangeExport({ busy, run, id, index, redact, onRedact }: {
   return (
     <Card title={t("导出这条请求")} description={t("保存到“下载”文件夹。导出内容可能包含账号等敏感信息，请只发给信任的人。")}>
       <Row icon={FileCode} color="purple" label={t("格式")}>
-        <select className="pop-up" aria-label={t("导出格式")} value={format} onChange={(event) => setFormat(event.target.value as ExchangeFormat)}>
-          {exchangeFormats.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-        </select>
+        <Select label={t("导出格式")} value={format} onChange={setFormat} choices={exchangeFormats.map((item) => ({ value: item.value, label: item.label }))} />
         <button className="secondary compact" disabled={Boolean(busy)} onClick={save}>{t("导出")}</button>
       </Row>
       <RedactRow redact={redact} onRedact={onRedact} />

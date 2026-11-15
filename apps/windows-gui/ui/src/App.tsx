@@ -18,6 +18,7 @@ import { keepIfUnchanged, liveEngine, usePageVisible } from "./live";
 import { TrafficSource, useTraffic } from "./traffic-feed";
 import { useAppearance } from "./theme";
 import { StatusDot, Switch, Tile, TileColor, ToolbarSlot } from "./ui";
+import { I18nProvider } from "react-aria-components";
 import { currentLanguage, t, useLanguage } from "./i18n";
 import { TermsConsent, useTermsConsent } from "./terms";
 import { AppMode, initialMode, useDebugExit, useMode, wantsDirectEgress } from "./mode";
@@ -257,10 +258,13 @@ export function App() {
   );
 
   // Nothing else is usable until the user agreement is accepted (TERMS.md).
-  if (needsTerms) return <TermsConsent onAccept={acceptTerms} />;
-  if (resolved === "ask") return <ModeChoice onChoose={switchMode} />;
+  // React Aria's own words (for screen readers) and its text direction follow the interface language.
+  const locale = currentLanguage() === "zh" ? "zh-CN" : currentLanguage() === "zh-Hant" ? "zh-TW" : "en-US";
+  if (needsTerms) return <I18nProvider locale={locale}><TermsConsent onAccept={acceptTerms} /></I18nProvider>;
+  if (resolved === "ask") return <I18nProvider locale={locale}><ModeChoice onChoose={switchMode} /></I18nProvider>;
 
   return (
+    <I18nProvider locale={locale}>
     <div className="app-shell">
       <TrafficSource enabled={liveEngine(snapshot)} />
       <aside className="sidebar">
@@ -314,6 +318,7 @@ export function App() {
         )}
       </main>
     </div>
+    </I18nProvider>
   );
 }
 

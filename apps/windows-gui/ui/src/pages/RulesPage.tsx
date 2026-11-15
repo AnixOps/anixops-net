@@ -4,6 +4,7 @@ import { desktop, NativeGroupSummary, RuleSetStatus, RuntimeSnapshot } from "../
 import { availableRoutingModes, groupMemberLabel } from "../labels";
 import { liveEngine, usePolling } from "../live";
 import { Card, Row, Run } from "../ui";
+import { Select } from "../controls";
 import { t } from "../i18n";
 import { DnsCards } from "./DnsCards";
 import { MyRules } from "./MyRules";
@@ -69,23 +70,20 @@ function PolicyGroups({ busy, run }: { busy: string | null; run: Run }) {
             value={group.groupType === "selector" ? undefined : groupMemberLabel(group, group.selected)}
           >
             {group.groupType === "selector" && (
-              <select
-                className="pop-up"
-                aria-label={group.tag}
+              <Select
+                label={group.tag}
                 value={group.selected ?? ""}
+                placeholder={t("未选择")}
                 disabled={Boolean(busy)}
-                onChange={(event) => {
-                  const outbound = event.target.value;
+                onChange={(outbound) => {
                   void run("native selector", async () => {
                     const result = await desktop.selectNativeGroupOutbound(group.tag, outbound);
                     setGroups((current) => current.map((item) => item.tag === group.tag ? { ...item, selected: outbound } : item));
                     return result;
                   });
                 }}
-              >
-                {group.selected === undefined && <option value="" disabled>{t("未选择")}</option>}
-                {group.outbounds.map((outbound) => <option key={outbound} value={outbound}>{groupMemberLabel(group, outbound)}</option>)}
-              </select>
+                choices={group.outbounds.map((outbound) => ({ value: outbound, label: groupMemberLabel(group, outbound) ?? outbound }))}
+              />
             )}
           </Row>
         ))}
