@@ -4217,8 +4217,6 @@ fn enable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult,
         ca_certificate_path: certificate_path.clone(),
         ca_private_key_path: private_key_path,
         log_path: windows_managed_log_directory().join("native-mitm.log"),
-        // No built-in plugin (docs/no-presets.md); the field stays false until the kernel drops it.
-        bilibili_web_ad_block_enabled: false,
         script_runtime: None,
     });
     set_embedded_listener(&mut managed, embedded.envelope_path, true);

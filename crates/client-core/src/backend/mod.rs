@@ -518,10 +518,7 @@ impl Backend {
                 engine::envelope(&self.nodes, &node.id)?
             }
         };
-        // Rule and direct modes use no rule list; public builds ship none (docs/no-presets.md).
-        profile::envelope_for_mode(&profile, self.state.routing_mode.profile_mode(), |_| {
-            Err("public builds ship no preset rule lists".to_string())
-        })
+        profile::envelope_for_mode(&profile, self.state.routing_mode.profile_mode())
     }
 
     fn mitm_dir(&self) -> PathBuf {
