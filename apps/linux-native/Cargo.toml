@@ -16,6 +16,9 @@ gui = ["dep:adw", "dep:client-session", "dep:client-window", "dep:gtk", "dep:rel
 
 [dependencies]
 client-strings = { path = "../../crates/client-strings" }
+# What the core's state means for a page, decided once for every window. No engine in it.
+client-view = { path = "../../crates/client-view" }
+serde_json = "1"
 
 # GTK 4.14 and libadwaita 1.5 are the oldest the window runs on (Ubuntu 24.04, Debian 13, Fedora 40).
 [target.'cfg(target_os = "linux")'.dependencies]

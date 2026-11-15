@@ -98,10 +98,12 @@ version = "0.3.0"
 dependencies = [
  "client-session",
  "client-strings",
+ "client-view",
  "client-window",
  "gtk4",
  "libadwaita",
  "relm4",
+ "serde_json",
 ]
 
 [[package]]

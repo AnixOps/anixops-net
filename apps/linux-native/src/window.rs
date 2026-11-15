@@ -8,7 +8,8 @@
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
+use std::thread;
 use std::time::Duration;
 
 use adw::prelude::*;
@@ -17,8 +18,11 @@ use client_session::system_proxy::Desktop;
 use client_window::{CoreLink, LinkOptions, LinkState, WindowEnd};
 use gtk::{gdk, gio, glib};
 use relm4::{ComponentParts, ComponentSender, RelmApp, SimpleComponent};
+use serde_json::Value;
 
 use crate::launch::{Appearance, Launch};
+use crate::overview::{self, Feed, Overview, Pending, Press};
+use crate::overview_page::OverviewPage;
 use crate::sections::{self, Section};
 use crate::{Language, APP_ID};
 
@@ -31,6 +35,12 @@ const DEFAULT_SIZE: (i32, i32) = (1080, 720);
 const NARROW: f64 = 640.0;
 /// How long the window is left to settle (first layout, icons, fonts) before it is drawn into a file.
 const SETTLE: Duration = Duration::from_millis(800);
+/// How often the overview is asked for again, in seconds.
+const REFRESH_SECONDS: u32 = 1;
+/// How long the core gets to say how things are. It only reads its own state for this.
+const ASK_PATIENCE: Duration = Duration::from_secs(10);
+/// How long the core gets to connect or disconnect: starting the engine can mean downloading rule lists.
+const PRESS_PATIENCE: Duration = Duration::from_secs(120);
 
 /// Set when the window was asked for a screenshot and could not make it.
 static FAILED: AtomicBool = AtomicBool::new(false);
@@ -68,7 +78,18 @@ struct Shell {
     /// Whether the daemon answers.
     core: LinkState,
     /// Keeps looking for the daemon for as long as the window lives.
-    _link: CoreLink,
+    link: Arc<CoreLink>,
+    /// The overview as the daemon last described it; `None` while it does not answer.
+    overview: Option<Overview>,
+    /// Asks the daemon for the overview, on a thread of its own, one refresh at a time.
+    feed: Arc<Mutex<Feed>>,
+    refreshing: Arc<AtomicBool>,
+    /// Why the last refresh got no answer.
+    trouble: Option<String>,
+    /// What the user pressed that the daemon has not finished.
+    pending: Pending,
+    /// Why the last press did not work.
+    failure: Option<String>,
 }
 
 #[derive(Debug)]
@@ -76,19 +97,89 @@ enum Show {
     Page(usize),
     /// The link to the daemon changed.
     Core(LinkState),
+    /// Time to ask the daemon how things are.
+    Tick,
+    /// The daemon's answer to that.
+    Overview(Result<Overview, String>),
+    /// The user pressed the overview's button.
+    Press,
+    /// The daemon finished what the button asked for, or could not.
+    Pressed(Result<(), String>),
 }
 
 struct ShellWidgets {
     pages: gtk::ListBox,
     footer: gtk::ListBox,
     content: adw::NavigationPage,
+    /// The overview page, or the placeholder of a page that is not built yet.
+    stack: gtk::Stack,
+    overview: OverviewPage,
     status: adw::StatusPage,
     core: gtk::Label,
 }
 
+/// The names of the two things the page area shows.
+const OVERVIEW_PAGE: &str = "overview";
+const PLACEHOLDER_PAGE: &str = "placeholder";
+
 impl Shell {
     fn text(&self, id: &str) -> &'static str {
         client_strings::text(self.language, id)
+    }
+
+    fn core_answers(&self) -> bool {
+        matches!(self.core, LinkState::Connected { .. })
+    }
+
+    /// The overview page for what is known now.
+    fn overview_shown(&self) -> overview::Shown {
+        overview::shown(
+            self.language,
+            self.core_answers(),
+            self.overview.as_ref(),
+            self.pending,
+            self.failure.as_deref().or(self.trouble.as_deref()),
+        )
+    }
+
+    /// Asks the daemon for the overview on another thread, unless an earlier question is still out.
+    fn refresh(&self, sender: &ComponentSender<Self>) {
+        if !self.core_answers() || self.refreshing.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let link = Arc::clone(&self.link);
+        let feed = Arc::clone(&self.feed);
+        let refreshing = Arc::clone(&self.refreshing);
+        let input = sender.input_sender().clone();
+        thread::spawn(move || {
+            let answer = feed
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .refresh(&|command: &str, args: Value| link.ask(command, args, ASK_PATIENCE));
+            refreshing.store(false, Ordering::SeqCst);
+            let _ = input.send(Show::Overview(answer));
+        });
+    }
+
+    /// Sends the button's command to the daemon on another thread.
+    fn press(&mut self, press: Press, sender: &ComponentSender<Self>) {
+        self.pending = press.pending();
+        self.failure = None;
+        let link = Arc::clone(&self.link);
+        let input = sender.input_sender().clone();
+        thread::spawn(move || {
+            let answer = link
+                .ask(press.command(), serde_json::json!({}), PRESS_PATIENCE)
+                .map(|_| ());
+            let _ = input.send(Show::Pressed(answer));
+        });
+    }
+
+    fn forget_nodes(&self) {
+        self.feed
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .forget();
     }
 
     /// The line at the foot of the sidebar. Why the daemon does not answer is for the log, not for here.
@@ -187,7 +278,13 @@ impl SimpleComponent for Shell {
             language: launch.language.unwrap_or_else(desktop_language),
             current: sections::position(launch.page).unwrap_or(0),
             core: LinkState::Connecting,
-            _link: link(launch.socket, &sender),
+            link: Arc::new(link(launch.socket, &sender)),
+            overview: None,
+            feed: Arc::new(Mutex::new(Feed::new())),
+            refreshing: Arc::new(AtomicBool::new(false)),
+            trouble: None,
+            pending: Pending::Nothing,
+            failure: None,
         };
 
         let style = adw::StyleManager::default();
@@ -244,12 +341,19 @@ impl SimpleComponent for Shell {
         sidebar_view.add_bottom_bar(&foot);
         let sidebar = adw::NavigationPage::new(&sidebar_view, model.text("app.name"));
 
-        // The page. Until the real pages are built, each one says what it will hold.
+        // The page: the overview, or for a page that is not built yet, what it will hold.
+        let overview = OverviewPage::new(model.language, {
+            let sender = sender.clone();
+            move || sender.input(Show::Press)
+        });
         let status = adw::StatusPage::new();
         status.set_widget_name("page");
+        let stack = gtk::Stack::new();
+        stack.add_named(overview.widget(), Some(OVERVIEW_PAGE));
+        stack.add_named(&status, Some(PLACEHOLDER_PAGE));
         let content_view = adw::ToolbarView::new();
         content_view.add_top_bar(&adw::HeaderBar::new());
-        content_view.set_content(Some(&status));
+        content_view.set_content(Some(&stack));
         let content = adw::NavigationPage::new(&content_view, "");
 
         let split = adw::NavigationSplitView::new();
@@ -288,9 +392,19 @@ impl SimpleComponent for Shell {
             pages,
             footer,
             content,
+            stack,
+            overview,
             status,
             core,
         };
+        // The overview follows the daemon for as long as the window lives.
+        glib::timeout_add_seconds_local(REFRESH_SECONDS, {
+            let sender = sender.clone();
+            move || {
+                sender.input(Show::Tick);
+                glib::ControlFlow::Continue
+            }
+        });
         model.update_view(&mut widgets, sender);
         // The keyboard starts on the chosen page's row. Left to itself the window would focus the first row
         // of the sidebar, and a list selects the row the keyboard lands on: `--page` would open on Overview.
@@ -322,10 +436,44 @@ impl SimpleComponent for Shell {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>) {
         match message {
             Show::Page(index) => self.current = index,
-            Show::Core(state) => self.core = state,
+            Show::Core(state) => {
+                self.core = state;
+                // Whatever was known belongs to the connection that was; a daemon that comes back may be
+                // another version with other nodes.
+                self.overview = None;
+                self.trouble = None;
+                self.failure = None;
+                self.pending = Pending::Nothing;
+                self.forget_nodes();
+                self.refresh(&sender);
+            }
+            Show::Tick => self.refresh(&sender),
+            // An answer that comes after the daemon went away says nothing about now.
+            Show::Overview(_) if !self.core_answers() => {}
+            Show::Overview(Ok(overview)) => {
+                self.overview = Some(overview);
+                self.trouble = None;
+            }
+            Show::Overview(Err(problem)) => {
+                self.overview = None;
+                self.trouble = Some(problem);
+            }
+            Show::Press => {
+                let shown = self.overview_shown();
+                if shown.enabled {
+                    self.press(shown.press, &sender);
+                }
+            }
+            Show::Pressed(answer) => {
+                self.pending = Pending::Nothing;
+                self.failure = answer.err();
+                // Connecting can change which node is in use; ask again at once, not at the next tick.
+                self.forget_nodes();
+                self.refresh(&sender);
+            }
         }
     }
 
@@ -345,6 +493,14 @@ impl SimpleComponent for Shell {
         }
 
         widgets.content.set_title(self.text(section.title));
+        widgets.overview.show(&self.overview_shown());
+        widgets
+            .stack
+            .set_visible_child_name(if section.id == sections::OVERVIEW {
+                OVERVIEW_PAGE
+            } else {
+                PLACEHOLDER_PAGE
+            });
         widgets.status.set_icon_name(Some(section.icon));
         widgets.status.set_title(self.text(section.title));
         let description = format!(

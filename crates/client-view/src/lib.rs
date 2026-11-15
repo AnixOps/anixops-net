@@ -2,9 +2,10 @@
 //!
 //! The windows are written in different languages (C#, Rust, Kotlin, and TypeScript while the web interface
 //! lasts). Logic with behaviour of its own (how an `anixops://` link is read, how quick filters join a typed
-//! filter, how the request and node lists are ordered) would otherwise be written and tested once per
-//! language and drift apart. It lives here instead, and a window reaches it as commands whose names start
-//! with `view.`, through the same door as the core's commands ([`invoke`]).
+//! filter, how the request and node lists are ordered, what the overview page makes of the core's state)
+//! would otherwise be written and tested once per language and drift apart. It lives here instead, and a
+//! window reaches it as commands whose names start with `view.`, through the same door as the core's
+//! commands ([`invoke`]).
 //!
 //! The commands take and give JSON. Rows (requests, nodes) are passed through as they came, so fields this
 //! crate does not know stay on them. Nothing here is written for one language's eyes: what a window shows
@@ -17,6 +18,7 @@
 pub mod app_link;
 pub mod capture;
 pub mod nodes;
+pub mod overview;
 
 use serde_json::{json, Value};
 
@@ -105,6 +107,11 @@ pub fn invoke(command: &str, args: &Value) -> Option<Result<Value, String>> {
             ))
         }
         "delay_tone" => json!(nodes::delay_tone(args.get("delay").unwrap_or(&Value::Null))),
+        "overview" => overview::overview(
+            args.get("snapshot").unwrap_or(&Value::Null),
+            rows(args, "nodes"),
+            args.get("traffic").unwrap_or(&Value::Null),
+        ),
         _ => return Some(Err(format!("unknown command {command}"))),
     };
     Some(Ok(answer))
@@ -147,6 +154,7 @@ mod tests {
             "group_nodes",
             "sort_nodes",
             "delay_tone",
+            "overview",
         ] {
             let command = format!("{PREFIX}{name}");
             assert!(

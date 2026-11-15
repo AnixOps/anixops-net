@@ -12,8 +12,10 @@ For every language the window is started for real and checked from the outside:
 - every control that can be operated has a name.
 
 With the daemon's program given, the window is also run against a real daemon on a socket of its own: it
-says that the core service is not running, finds the daemon when it starts, notices when it stops, and
-finds it again. With a directory given too, the connected window is drawn into it.
+says that the core service is not running, finds the daemon when it starts, connects and disconnects with
+the overview's button (the daemon is first told to send traffic out directly, since it has no subscription),
+shows the engine's counters while connected, notices when the daemon stops, and finds it again. With a
+directory given too, the connected window is drawn into it.
 
 Needs at-spi2-core, gir1.2-atspi-2.0 and python3-gi.
 """
@@ -23,6 +25,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import socket
+import struct
 import subprocess
 import sys
 import tempfile
@@ -34,9 +38,10 @@ gi.require_version("Atspi", "2.0")
 from gi.repository import Atspi, Gio, GLib  # noqa: E402
 
 LANGUAGES = ("zh", "zh-Hant", "en")
-# (id, title wording id, summary wording id), in sidebar order; the last one sits in the footer list.
+# (id, title wording id, the wording id of a sentence only that page shows), in sidebar order; the last one
+# sits in the footer list.
 PAGES = (
-    ("overview", "nav.overview", "page.overview.summary"),
+    ("overview", "nav.overview", "overview.node"),
     ("proxies", "nav.proxies", "page.proxies.summary"),
     ("rules", "nav.rules", "page.rules.summary"),
     ("extensions", "nav.extensions", "page.extensions.summary"),
@@ -134,14 +139,11 @@ def check(binary: str, wording: dict, language: str) -> None:
             fail(f"[{language}] the window is named {frame.get_name()!r}, not {text('app.name')!r}")
 
         def lists():
-            found = [node for node, _ in walk(app) if role(node) == "list"]
+            # The pages have lists of their own; the sidebar's two are the ones named for navigation.
+            found = [node for node, _ in walk(app) if role(node) == "list" and node.get_name() == text("nav.label")]
             return found if len(found) == 2 else None
 
-        pages, footer = until("the two lists of the sidebar", lists)
-        for sidebar in (pages, footer):
-            if sidebar.get_name() != text("nav.label"):
-                dump(app)
-                fail(f"[{language}] a sidebar list is named {sidebar.get_name()!r}, not {text('nav.label')!r}")
+        pages, footer = until(f"the two lists of the sidebar, named {text('nav.label')!r}", lists)
 
         def names(sidebar):
             return [item.get_name() for item in children(sidebar) if role(item) == "list item"]
@@ -153,8 +155,15 @@ def check(binary: str, wording: dict, language: str) -> None:
             fail(f"[{language}] the sidebar offers {found}, expected {expected} with the last one at the bottom")
 
         def shown(summary: str):
+            # On screen, not only in the tree: the pages that are not chosen stay built.
             return next(
-                (node for node, _ in walk(frame) if role(node) == "label" and (node.get_name() or "").startswith(summary)),
+                (
+                    node
+                    for node, _ in walk(frame)
+                    if role(node) == "label"
+                    and (node.get_name() or "").startswith(summary)
+                    and node.get_state_set().contains(Atspi.StateType.SHOWING)
+                ),
                 None,
             )
 
@@ -214,8 +223,45 @@ def stop(process: subprocess.Popen | None) -> None:
         process.kill()
 
 
+def core_ask(endpoint: str, command: str, args: dict):
+    """Sends one command to the daemon as another program of this user would, and returns its answer."""
+
+    def send(channel: socket.socket, message: dict) -> None:
+        payload = json.dumps(message).encode()
+        channel.sendall(struct.pack(">I", len(payload)) + payload)
+
+    def receive(channel: socket.socket) -> dict:
+        def exactly(count: int) -> bytes:
+            data = b""
+            while len(data) < count:
+                more = channel.recv(count - len(data))
+                if not more:
+                    fail(f"the daemon closed the channel while {command} waited for its answer")
+                data += more
+            return data
+
+        (length,) = struct.unpack(">I", exactly(4))
+        return json.loads(exactly(length))
+
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:
+        channel.settimeout(60)
+        channel.connect(endpoint)
+        send(channel, {"type": "hello", "protocol": 1, "role": "window", "version": "0.0.0"})
+        if receive(channel).get("type") != "hello":
+            fail("the daemon did not introduce itself")
+        send(channel, {"type": "request", "id": 1, "command": command, "args": args})
+        while True:
+            # The daemon's own questions to this program (what session it runs in) go unanswered: it is
+            # not a window.
+            message = receive(channel)
+            if message.get("type") == "response" and message.get("id") == 1:
+                if "error" in message:
+                    fail(f"the daemon refused {command}: {message['error']}")
+                return message.get("ok")
+
+
 def check_core(binary: str, daemon: str, wording: dict, shots: str | None) -> None:
-    """The window against a real daemon: away, found, away again, found again."""
+    """The window against a real daemon: away, found, connected, disconnected, away again, found again."""
     language = "zh"
     text = lambda key: wording[key][language]  # noqa: E731
     before, after = text("core.connected").split("{0}")
@@ -227,12 +273,12 @@ def check_core(binary: str, daemon: str, wording: dict, shots: str | None) -> No
         return re.fullmatch(r"\d+\.\d+\.\d+\S*", version) is not None
 
     with tempfile.TemporaryDirectory(prefix="anixops-net-core-") as folder:
-        socket = os.path.join(folder, "run", "core.sock")
+        endpoint = os.path.join(folder, "run", "core.sock")
 
         def start_daemon() -> subprocess.Popen:
-            return subprocess.Popen([daemon, "--dir", os.path.join(folder, "data"), "--socket", socket])
+            return subprocess.Popen([daemon, "--dir", os.path.join(folder, "data"), "--socket", endpoint])
 
-        window = subprocess.Popen([binary, "--language", language, "--theme", "light", "--socket", socket])
+        window = subprocess.Popen([binary, "--language", language, "--theme", "light", "--socket", endpoint])
         core = None
         try:
             app = until("the window on the accessibility bus", lambda: application(window.pid))
@@ -256,22 +302,66 @@ def check_core(binary: str, daemon: str, wording: dict, shots: str | None) -> No
             line = found("after the daemon started")
             if core.poll() is not None:
                 fail(f"the daemon stopped by itself with status {core.returncode}")
+
+            def button(wording_id: str):
+                """The overview's button under that name, once it can be pressed."""
+
+                def probe():
+                    for node, _ in walk(app):
+                        if role(node) not in ("push button", "button") or node.get_name() != text(wording_id):
+                            continue
+                        if node.get_state_set().contains(Atspi.StateType.SENSITIVE):
+                            return node
+                    return None
+
+                return until(f"the button {text(wording_id)!r} to be ready", probe)
+
+            def press(wording_id: str) -> None:
+                action = button(wording_id).get_action_iface()
+                if action is None or not action.do_action(0):
+                    fail(f"the button {text(wording_id)!r} could not be pressed through the accessibility interface")
+
+            def sentence(wording_id: str) -> None:
+                until(f"the window to say {text(wording_id)!r}", lambda: says(lambda name: name == text(wording_id)))
+
+            # A daemon that was never given a subscription has no node: nothing to connect through.
+            sentence("overview.state.disconnected")
+            sentence("overview.node.none")
+            core_ask(endpoint, "set_direct_egress", {"enabled": True})
+            sentence("overview.node.direct")
+            press("overview.connect")
+            sentence("overview.state.connected")
+            # The engine's counters: two rates, and the totals under them.
+            rates = until(
+                "the two rates",
+                lambda: (lambda found: found if len(found) == 2 else None)(
+                    [
+                        node.get_name()
+                        for node, _ in walk(app)
+                        if role(node) == "label" and re.fullmatch(r"\d+(\.\d)? [KMGT]?B/s", node.get_name() or "")
+                    ]
+                ),
+            )
             if shots:
                 # A second window, as short-lived as every screenshot: it finds the daemon by itself.
                 picture = os.path.join(shots, "core-connected-zh-light.png")
                 subprocess.run(
-                    [binary, "--language", language, "--theme", "light", "--socket", socket, "--screenshot", picture],
+                    [binary, "--language", language, "--theme", "light", "--socket", endpoint, "--screenshot", picture],
                     check=True,
                     timeout=60,
                 )
                 if not os.path.getsize(picture):
                     fail(f"{picture} is empty")
+            press("overview.disconnect")
+            sentence("overview.state.disconnected")
+            button("overview.connect")
             stop(core)
             core = None
             away("after the daemon stopped")
             core = start_daemon()
             found("after the daemon started again")
-            print(f"[core] not running, found ({line!r}), stopped, found again")
+            print(f"[core] not running, found ({line!r}), connected ({', '.join(rates)}), disconnected, "
+                  "stopped, found again")
         finally:
             stop(window)
             stop(core)
