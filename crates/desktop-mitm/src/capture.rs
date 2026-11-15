@@ -376,8 +376,8 @@ mod tests {
     fn decodes_bodies_with_the_kernel() {
         // "hello" gzipped (RFC 1952 member, no name).
         let gzip = [
-            0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00,
-            0x86, 0xa6, 0x10, 0x36, 0x05, 0x00, 0x00, 0x00,
+            0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xcb, 0x48, 0xcd, 0xc9,
+            0xc9, 0x07, 0x00, 0x86, 0xa6, 0x10, 0x36, 0x05, 0x00, 0x00, 0x00,
         ];
         let request = |coding: &str, data: &[u8], complete: bool| DecodeRequest {
             data_base64: encode_base64(data),
@@ -385,7 +385,10 @@ mod tests {
             complete,
         };
         let answer = decode_body(&request("gzip", &gzip, true)).unwrap();
-        assert_eq!(decode_base64(answer["data_base64"].as_str().unwrap()).unwrap(), b"hello");
+        assert_eq!(
+            decode_base64(answer["data_base64"].as_str().unwrap()).unwrap(),
+            b"hello"
+        );
         assert_eq!(answer["truncated"], false);
         assert_eq!(answer["codings"], serde_json::json!(["gzip"]));
         // Kept only in part: what came out so far, marked truncated.
