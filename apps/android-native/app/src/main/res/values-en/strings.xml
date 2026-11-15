@@ -468,4 +468,24 @@
         <item quantity="other">%d requests</item>
     </plurals>
     <string name="request_local_short">Local</string>
+    <string name="request_saved">Saved to %1$s</string>
+    <string name="replay">Replay request</string>
+    <string name="replay_edit">Edit and send</string>
+    <string name="replay_method">Method</string>
+    <string name="replay_url">URL</string>
+    <string name="replay_headers">Request headers (one “Name: value” per line)</string>
+    <string name="replay_body">Request body</string>
+    <string name="replay_body_cut">Request body (capture kept only the start)</string>
+    <string name="replay_binary_body">Binary content, %1$s, sent as captured</string>
+    <string name="replay_clear_body">Clear</string>
+    <string name="replay_send">Send</string>
+    <string name="replay_sending">Sending…</string>
+    <string name="replay_note">Sent through the local proxy and the current exit, so it also shows in the capture. Redirects are not followed and cookies are not kept.</string>
+    <string name="replay_answer">Response %1$d</string>
+    <string name="export_request">Export this request</string>
+    <string name="export_format">Format</string>
+    <string name="export_redact">Mask cookies, tokens and passwords</string>
+    <string name="export_redact_hint">The exported file shows these values as &lt;redacted&gt;</string>
+    <string name="export_save">Export</string>
+    <string name="export_note">Saved to the Downloads folder. Exports can hold account details, so share them only with people you trust.</string>
 </resources>

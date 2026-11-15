@@ -28,6 +28,7 @@ import io.anixops.net.core.Overview
 import io.anixops.net.core.ProxiesPage
 import io.anixops.net.core.ProxiesView
 import io.anixops.net.core.RedirectDraft
+import io.anixops.net.core.ReplayResponse
 import io.anixops.net.core.RequestRow
 import io.anixops.net.core.RuleSetStatus
 import io.anixops.net.core.RuntimeSnapshot
@@ -288,6 +289,24 @@ class ScreenshotTest {
         "en",
         dark = true,
         requests = requestsState.copy(opened = openedRequest),
+    )
+
+    @Test
+    fun replayPhoneLightZh() = captureRequests(
+        "replay-phone-light-zh",
+        PHONE,
+        "zh-rCN",
+        dark = false,
+        requests = requestsState.copy(opened = openedRequest, replay = replayDraft),
+    )
+
+    @Test
+    fun replayAnswerWholePagePhoneDarkEn() = captureRequests(
+        "replay-answer-whole-page-phone-dark-en",
+        TALL_PHONE,
+        "en",
+        dark = true,
+        requests = requestsState.copy(opened = openedRequest, replay = replayAnswered),
     )
 
     @Test
@@ -765,6 +784,22 @@ class ScreenshotTest {
             ),
             requestBody = BodyText("", 0),
             responseBody = BodyText(BodyText.text(PROFILE_JSON.toByteArray(), "application/json"), PROFILE_JSON.length.toLong()),
+        )
+
+        val replayDraft = ReplayDraft(
+            method = "POST",
+            url = "https://api.example.com/v1/profile",
+            headers = "accept: application/json\ncontent-type: application/json\nuser-agent: Example/3.2 (Android 15)",
+            body = "{\"name\": \"Mika\"}",
+        )
+
+        val replayAnswered = replayDraft.copy(
+            answer = ReplayResponse(
+                status = 200,
+                headers = listOf(listOf("content-type", "application/json"), listOf("cache-control", "no-store")),
+                elapsedMs = 184,
+            ),
+            answerBody = BodyText(BodyText.text(PROFILE_JSON.toByteArray(), "application/json"), PROFILE_JSON.length.toLong()),
         )
     }
 }

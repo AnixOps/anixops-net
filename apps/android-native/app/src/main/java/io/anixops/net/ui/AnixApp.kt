@@ -113,7 +113,15 @@ fun AnixApp(
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(app) { app.messages.collect { snackbar.showSnackbar(it) } }
-    LaunchedEffect(requests) { requests.messages.collect { if (it.isNotBlank()) snackbar.showSnackbar(it) } }
+    LaunchedEffect(requests) {
+        requests.events.collect { event ->
+            val text = when (event) {
+                is RequestsEvent.Message -> event.text
+                is RequestsEvent.Saved -> context.getString(R.string.request_saved, event.location)
+            }
+            if (text.isNotBlank()) snackbar.showSnackbar(text)
+        }
+    }
     LaunchedEffect(proxies) {
         proxies.events.collect { event ->
             when (event) {
@@ -211,6 +219,13 @@ fun AnixApp(
             setPaused = requests::setPaused,
             open = requests::open,
             close = requests::close,
+            setExportFormat = requests::setExportFormat,
+            setRedact = requests::setRedact,
+            export = requests::export,
+            openReplay = requests::openReplay,
+            editReplay = requests::editReplay,
+            sendReplay = requests::sendReplay,
+            closeReplay = requests::closeReplay,
         ),
         proxiesState = proxiesState,
         proxies = ProxiesActions(
@@ -536,7 +551,10 @@ fun AnixScaffold(
                 }
                 Destination.Requests -> {
                     LaunchedEffect(Unit) { pollRequests() }
-                    if (requestsState.opened != null) BackTo(requests.close)
+                    when {
+                        requestsState.replay != null -> BackTo(requests.closeReplay)
+                        requestsState.opened != null -> BackTo(requests.close)
+                    }
                     RequestsScreen(state, requestsState, requests.copy(connect = home.connect, disconnect = home.disconnect))
                 }
             }

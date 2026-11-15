@@ -2,14 +2,22 @@ package io.anixops.net.ui
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -22,20 +30,72 @@ import io.anixops.net.ui.theme.LocalBrandPalette
 import java.text.DateFormat
 import java.util.Date
 
-/** One request opened from the list: what it was, then its headers and bodies, the request's before the response's. */
+/**
+ * One request opened from the list: what it was, a way to send it again, its headers and bodies (the request's
+ * before the response's), and its export.
+ */
 @Composable
-fun RequestDetailScreen(opened: OpenedRequest, onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun RequestDetailScreen(opened: OpenedRequest, requests: RequestsState, actions: RequestsActions, modifier: Modifier = Modifier) {
     val exchange = opened.exchange
-    Page(stringResource(R.string.request_detail), modifier, onBack) {
+    Page(stringResource(R.string.request_detail), modifier, actions.close) {
         SummarySection(opened)
         when {
             exchange != null -> {
+                Section(title = null) {
+                    InfoRow(
+                        stringResource(R.string.replay),
+                        stringResource(R.string.replay_edit),
+                        onClick = actions.openReplay,
+                    )
+                }
                 MessageSections(R.string.request_headers, R.string.request_body, exchange.request, opened.requestBody)
                 MessageSections(R.string.response_headers, R.string.response_body, exchange.response, opened.responseBody)
             }
             opened.gone -> Note(stringResource(R.string.request_gone))
             else -> Note(stringResource(R.string.request_loading))
         }
+        if (!opened.gone) ExportSection(requests, actions)
+    }
+}
+
+/** Saves this one request as a command, code, or a collection for an API tool, in Downloads. */
+@Composable
+private fun ExportSection(requests: RequestsState, actions: RequestsActions) {
+    Column {
+        Section(stringResource(R.string.export_request)) {
+            var choosing by remember { mutableStateOf(false) }
+            Box {
+                InfoRow(
+                    stringResource(R.string.export_format),
+                    ExportFormats.firstOrNull { it.first == requests.exportFormat }?.second.orEmpty(),
+                    onClick = { choosing = true },
+                )
+                DropdownMenu(expanded = choosing, onDismissRequest = { choosing = false }) {
+                    ExportFormats.forEach { (id, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                choosing = false
+                                actions.setExportFormat(id)
+                            },
+                        )
+                    }
+                }
+            }
+            RowDivider()
+            SwitchRow(
+                stringResource(R.string.export_redact),
+                stringResource(R.string.export_redact_hint),
+                checked = requests.redact,
+                enabled = true,
+                onChange = actions.setRedact,
+            )
+            RowDivider()
+            Row(Modifier.padding(BrandSpacing.md)) {
+                Button(onClick = actions.export) { Text(stringResource(R.string.export_save)) }
+            }
+        }
+        Note(stringResource(R.string.export_note))
     }
 }
 
@@ -90,7 +150,7 @@ private fun noteText(note: String?): String? = when (note) {
 }
 
 @Composable
-private fun MessageSections(@StringRes headersTitle: Int, @StringRes bodyTitle: Int, message: CaptureMessage, body: BodyText?) {
+internal fun MessageSections(@StringRes headersTitle: Int, @StringRes bodyTitle: Int, message: CaptureMessage, body: BodyText?) {
     val palette = LocalBrandPalette.current
     Section(stringResource(headersTitle)) {
         if (message.headers.isEmpty()) {
@@ -121,7 +181,7 @@ private fun MessageSections(@StringRes headersTitle: Int, @StringRes bodyTitle: 
 }
 
 @Composable
-private fun BodySection(title: String, body: BodyText) {
+internal fun BodySection(title: String, body: BodyText) {
     val palette = LocalBrandPalette.current
     Column {
         Section("$title · ${formatBytes(body.size)}") {

@@ -464,6 +464,37 @@ class Core(
         },
     )
 
+    /**
+     * Saves one exchange ([exchange] of connection [connection]) to Downloads as [format] (`curl`, `code`, `postman`,
+     * `insomnia` or `har`; `code` in [language]), with cookies, tokens and passwords masked unless [redact] is false.
+     */
+    suspend fun exportExchange(
+        connection: Long,
+        exchange: Int,
+        format: String,
+        language: String? = null,
+        redact: Boolean = true,
+    ): SavedFile = call(
+        "export_capture",
+        SavedFile.serializer(),
+        buildJsonObject {
+            put("format", format)
+            put("id", connection)
+            putJsonObject("options") {
+                put("exchange", exchange)
+                if (language != null) put("language", language)
+                put("redact", redact)
+            }
+        },
+    )
+
+    /** Sends [request] through the engine without following redirects; it shows up in capture too. */
+    suspend fun replay(request: ReplayRequest): ReplayResponse = call(
+        "replay_request",
+        ReplayResponse.serializer(),
+        args("request" to Envelope.json.encodeToJsonElement(ReplayRequest.serializer(), request)),
+    )
+
     // Plumbing.
 
     suspend fun <T> call(

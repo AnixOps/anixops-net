@@ -457,4 +457,24 @@
         <item quantity="other">%d 个请求</item>
     </plurals>
     <string name="request_local_short">本地</string>
+    <string name="request_saved">已保存到 %1$s</string>
+    <string name="replay">重放请求</string>
+    <string name="replay_edit">编辑并发送</string>
+    <string name="replay_method">方法</string>
+    <string name="replay_url">网址</string>
+    <string name="replay_headers">请求头（每行一个“名称: 值”）</string>
+    <string name="replay_body">请求体</string>
+    <string name="replay_body_cut">请求体（抓包只保留了前一部分）</string>
+    <string name="replay_binary_body">二进制内容 %1$s，按原样发送</string>
+    <string name="replay_clear_body">清空</string>
+    <string name="replay_send">发送</string>
+    <string name="replay_sending">正在发送…</string>
+    <string name="replay_note">经本机代理发出，走当前出口，也会出现在抓包里。不跟随重定向，不保存 Cookie。</string>
+    <string name="replay_answer">响应 %1$d</string>
+    <string name="export_request">导出这条请求</string>
+    <string name="export_format">格式</string>
+    <string name="export_redact">遮盖 Cookie、令牌和密码</string>
+    <string name="export_redact_hint">导出的文件里把这些值换成 &lt;redacted&gt;</string>
+    <string name="export_save">导出</string>
+    <string name="export_note">保存到“下载”文件夹。导出内容可能包含账号等敏感信息，请只发给信任的人。</string>
 </resources>

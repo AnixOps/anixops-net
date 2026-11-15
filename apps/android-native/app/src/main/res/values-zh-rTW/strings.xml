@@ -448,4 +448,24 @@
         <item quantity="other">%d 個請求</item>
     </plurals>
     <string name="request_local_short">本機</string>
+    <string name="request_saved">已儲存到 %1$s</string>
+    <string name="replay">重送請求</string>
+    <string name="replay_edit">編輯並送出</string>
+    <string name="replay_method">方法</string>
+    <string name="replay_url">網址</string>
+    <string name="replay_headers">請求標頭（每行一個「名稱: 值」）</string>
+    <string name="replay_body">請求內容</string>
+    <string name="replay_body_cut">請求內容（抓包只保留了前一部分）</string>
+    <string name="replay_binary_body">二進位內容 %1$s，按原樣送出</string>
+    <string name="replay_clear_body">清空</string>
+    <string name="replay_send">送出</string>
+    <string name="replay_sending">正在送出…</string>
+    <string name="replay_note">經本機代理送出，走目前出口，也會出現在抓包裡。不跟隨重新導向，不儲存 Cookie。</string>
+    <string name="replay_answer">回應 %1$d</string>
+    <string name="export_request">匯出這筆請求</string>
+    <string name="export_format">格式</string>
+    <string name="export_redact">遮蓋 Cookie、權杖和密碼</string>
+    <string name="export_redact_hint">匯出的檔案裡把這些值換成 &lt;redacted&gt;</string>
+    <string name="export_save">匯出</string>
+    <string name="export_note">儲存到「下載」資料夾。匯出內容可能包含帳號等敏感資訊，請只傳給信任的人。</string>
 </resources>

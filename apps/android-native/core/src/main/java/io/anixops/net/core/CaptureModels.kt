@@ -113,3 +113,29 @@ data class DecodedBody(
     @SerialName("data_base64") val dataBase64: String = "",
     val truncated: Boolean = false,
 )
+
+/** An edited copy of a captured request, sent again through the engine (`replay_request`). */
+@Serializable
+data class ReplayRequest(
+    val method: String,
+    val url: String,
+    val headers: List<List<String>>,
+    /** Empty for no body. */
+    val bodyBase64: String = "",
+)
+
+/** What a replayed request got back; the body is cut at 1 MiB. */
+@Serializable
+data class ReplayResponse(
+    val status: Int = 0,
+    val headers: List<List<String>> = emptyList(),
+    val bodyBase64: String = "",
+    val truncated: Boolean = false,
+    val elapsedMs: Long = 0,
+) {
+    val message: CaptureMessage get() = CaptureMessage(headers, CaptureBody(0, truncated, bodyBase64))
+}
+
+/** Where an export was saved (`export_capture`). */
+@Serializable
+data class SavedFile(val location: String = "")
