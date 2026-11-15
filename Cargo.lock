@@ -808,6 +808,7 @@ dependencies = [
  "serde_json",
  "subscription-meta",
  "traffic-stats",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3174,6 +3175,7 @@ dependencies = [
  "anx-license",
  "app-log",
  "app-notifications",
+ "client-core",
  "client-health",
  "config-core",
  "control-domain",

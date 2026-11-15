@@ -4,7 +4,10 @@
 
 pub mod autostart;
 pub mod engine;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", windows)))]
+pub mod session_key;
+#[cfg(windows)]
+#[path = "session_key_windows.rs"]
 pub mod session_key;
 pub mod state;
 pub mod system_proxy;

@@ -844,6 +844,7 @@ dependencies = [
  "serde_json",
  "subscription-meta",
  "traffic-stats",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
