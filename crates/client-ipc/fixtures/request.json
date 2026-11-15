@@ -1,0 +1,1 @@
+{ "type": "request", "id": 7, "command": "select_node", "args": { "nodeId": "node-hk" } }

@@ -8,6 +8,7 @@ members = [
     "crates/anx-license",
     "crates/client-core",
     "crates/client-health",
+    "crates/client-ipc",
     "crates/desktop-dns",
     "crates/desktop-mitm",
     "crates/network-watch",

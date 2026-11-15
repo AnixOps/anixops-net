@@ -65,6 +65,11 @@ Tauri（过渡期）        ── 同进程调用                             P
    系统代理、证书库、开机启动、Wi-Fi 取样）。`tauri_ui.rs` 缩成薄包装。Tauri 版行为不变，两套后端变一套。
 2. **`crates/client-ipc`。** 把 `Client::invoke` 和事件流通过本机通道传输：长度前缀的 JSON 帧，请求带编号，事件单向
    推送。Windows 命名管道按安装用户的 SID 设 ACL；Linux 用 `SO_PEERCRED` 核对对端用户，特权动作再过 polkit。
+   线上格式（第一版，协议号 1）：每条消息一帧，4 字节大端长度加 UTF-8 JSON，单帧上限 64 MiB。消息有四种 `type`：
+   `hello`（双方各先发一条，协议号不同或对端角色不对就断开）、`request`（带 `id`、`command`、`args`）、`response`
+   （同 `id`，带 `ok` 或 `error`）、`event`（`name`、`payload`，不需要应答）。两边都可以发请求：界面请求核心执行
+   命令，核心请求界面做只有用户会话能做的事（写当前用户的系统代理等）。样例在 `crates/client-ipc/fixtures/`，C# 那边
+   用同一批样例测试；改格式就改协议号。
 3. **契约有类型。** 每个命令的请求和应答样例放在 `client-core/tests/fixtures/*.json`。C# 和 Kotlin 的数据类型必须
    无损解析同一批样例；命令改字段时 Rust、Kotlin、C# 三边测试一起失败。GTK 界面直接用 Rust 类型。
 4. **`crates/client-view`。** 现在 TypeScript 里有行为的纯逻辑（抓包筛选表达式、请求表排序、节点筛选、`anixops://`
