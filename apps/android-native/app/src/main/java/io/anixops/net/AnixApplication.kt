@@ -6,6 +6,9 @@ import io.anixops.net.core.CoreTransport
 import io.anixops.net.core.NativeCore
 import io.anixops.net.platform.AndroidPlatform
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 /**
  * Holds the process's [Core]. The Rust client opens on the first command, on the command's background thread,
@@ -13,6 +16,9 @@ import java.io.File
  */
 class AnixApplication : Application() {
     private val platform by lazy { AndroidPlatform(this) }
+
+    /** Work that outlives a screen: the Quick Settings tile's taps and the always-on VPN's start. */
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val core: Core by lazy {
         Core(
