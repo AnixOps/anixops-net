@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Drives the built app through UI Automation, the way a screen reader does. Needs a desktop session; in
+       CI that is the hosted runner's own. The app is not referenced: the tests start its executable. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>AnixOps.Net.App.UiTests</RootNamespace>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <!-- For UIAutomationClient and System.Drawing; no window of either kind is created. -->
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AnixOps.Net.Presentation\AnixOps.Net.Presentation.csproj" />
+  </ItemGroup>
+</Project>

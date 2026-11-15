@@ -1,8 +1,12 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/AnixOps.Net.App/AnixOps.Net.App.csproj" />
     <Project Path="src/AnixOps.Net.Ipc/AnixOps.Net.Ipc.csproj" />
+    <Project Path="src/AnixOps.Net.Presentation/AnixOps.Net.Presentation.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/AnixOps.Net.App.UiTests/AnixOps.Net.App.UiTests.csproj" />
     <Project Path="tests/AnixOps.Net.Ipc.Tests/AnixOps.Net.Ipc.Tests.csproj" />
+    <Project Path="tests/AnixOps.Net.Presentation.Tests/AnixOps.Net.Presentation.Tests.csproj" />
   </Folder>
 </Solution>
