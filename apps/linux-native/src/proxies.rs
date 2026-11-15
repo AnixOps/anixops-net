@@ -34,6 +34,9 @@ pub struct Node {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Section {
     pub group: Option<String>,
+    /// Share links pasted into the client: the heading is this window's wording, not `group`, which is
+    /// the core's own name for them.
+    pub pasted: bool,
     pub nodes: Vec<Node>,
 }
 
@@ -96,6 +99,7 @@ impl Proxies {
                             .get("group")
                             .and_then(Value::as_str)
                             .map(str::to_owned),
+                        pasted: section.get("pasted").and_then(Value::as_bool) == Some(true),
                         nodes: section
                             .get("nodes")
                             .and_then(Value::as_array)
@@ -243,10 +247,14 @@ pub fn shown(
         .filter(|section| !section.nodes.is_empty())
         .enumerate()
     {
-        let heading = section
-            .group
-            .clone()
-            .unwrap_or_else(|| text("proxies.group.none"));
+        let heading = if section.pasted {
+            text("proxies.group.pasted")
+        } else {
+            section
+                .group
+                .clone()
+                .unwrap_or_else(|| text("proxies.group.none"))
+        };
         for node in &section.nodes {
             let (delay, tone) = match node.delay {
                 Delay::Untested => (String::new(), Tone::Plain),
@@ -349,6 +357,7 @@ mod tests {
             assert_eq!(read.sections.len(), sections.len(), "{case}");
             for (read, section) in read.sections.iter().zip(sections) {
                 assert_eq!(read.group.as_deref(), section["group"].as_str(), "{case}");
+                assert_eq!(Some(read.pasted), section["pasted"].as_bool(), "{case}");
                 let nodes = section["nodes"].as_array().unwrap();
                 assert_eq!(read.nodes.len(), nodes.len(), "{case}");
                 for (read, node) in read.nodes.iter().zip(nodes) {
@@ -460,6 +469,33 @@ mod tests {
         assert_eq!(
             page.rows[2].description(Language::Chinese),
             "shadowsocks, 超时"
+        );
+    }
+
+    #[test]
+    fn subscriptions_of_one_name_stay_apart_and_pasted_links_are_named_in_the_windows_language() {
+        // Two subscriptions called "One", then links pasted into the client.
+        let all = Proxies::read(&cases()[6]["answer"]);
+        let headings = |language| -> Vec<(u32, String)> {
+            shown(language, true, Some(&all), IDLE, None)
+                .rows
+                .iter()
+                .map(|row| (row.section, row.heading.clone()))
+                .collect()
+        };
+        assert_eq!(
+            headings(Language::English),
+            [
+                (0, "One".to_owned()),
+                (1, "One".to_owned()),
+                (2, "Pasted links".to_owned()),
+                (2, "Pasted links".to_owned()),
+            ]
+        );
+        assert_eq!(headings(Language::Chinese)[3], (2, "粘贴的链接".to_owned()));
+        assert_eq!(
+            headings(Language::TraditionalChinese)[3],
+            (2, "貼上的連結".to_owned())
         );
     }
 

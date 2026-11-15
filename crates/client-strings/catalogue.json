@@ -1,4 +1,5 @@
 {
+  "action.cancel": { "zh": "取消", "zh-Hant": "取消", "en": "Cancel" },
   "app.name": { "zh": "AnixOps Net", "zh-Hant": "AnixOps Net", "en": "AnixOps Net" },
   "app.preview": { "zh": "预览", "zh-Hant": "預覽", "en": "Preview" },
   "column.duration": { "zh": "耗时", "zh-Hant": "耗時", "en": "Time" },
@@ -49,6 +50,7 @@
   "proxies.delay.ms": { "zh": "{0} ms", "zh-Hant": "{0} ms", "en": "{0} ms" },
   "proxies.empty": { "zh": "还没有节点。导入订阅后，节点显示在这里。", "zh-Hant": "還沒有節點。匯入訂閱後，節點顯示在這裡。", "en": "No nodes yet. Import a subscription and its nodes appear here." },
   "proxies.group.none": { "zh": "未归入订阅的节点", "zh-Hant": "未歸入訂閱的節點", "en": "Nodes outside subscriptions" },
+  "proxies.group.pasted": { "zh": "粘贴的链接", "zh-Hant": "貼上的連結", "en": "Pasted links" },
   "proxies.import": { "zh": "导入", "zh-Hant": "匯入", "en": "Import" },
   "proxies.import.link": { "zh": "订阅链接或分享链接", "zh-Hant": "訂閱連結或分享連結", "en": "Subscription link or share links" },
   "proxies.importing": { "zh": "正在导入", "zh-Hant": "正在匯入", "en": "Importing" },
@@ -56,6 +58,7 @@
   "proxies.no_match": { "zh": "没有符合搜索的节点。", "zh-Hant": "沒有符合搜尋的節點。", "en": "No node matches the search." },
   "proxies.search": { "zh": "搜索节点", "zh-Hant": "搜尋節點", "en": "Search nodes" },
   "proxies.selected": { "zh": "当前使用", "zh-Hant": "目前使用", "en": "In use" },
+  "proxies.subscriptions": { "zh": "订阅", "zh-Hant": "訂閱", "en": "Subscriptions" },
   "proxies.test": { "zh": "测速", "zh-Hant": "測速", "en": "Test latency" },
   "proxies.testing": { "zh": "正在测速", "zh-Hant": "正在測速", "en": "Testing" },
   "requests.count": { "zh": "{0} / {1} 条请求", "zh-Hant": "{0} / {1} 筆請求", "en": "{0} of {1} requests" },
@@ -63,5 +66,20 @@
   "requests.empty": { "zh": "还没有请求。", "zh-Hant": "還沒有請求。", "en": "No requests yet." },
   "requests.filter": { "zh": "筛选请求", "zh-Hant": "篩選請求", "en": "Filter requests" },
   "requests.none": { "zh": "没有符合筛选条件的请求。", "zh-Hant": "沒有符合篩選條件的請求。", "en": "No request matches the filter." },
-  "requests.table": { "zh": "请求列表", "zh-Hant": "請求清單", "en": "Requests" }
+  "requests.table": { "zh": "请求列表", "zh-Hant": "請求清單", "en": "Requests" },
+  "subscriptions.empty": { "zh": "还没有订阅。", "zh-Hant": "還沒有訂閱。", "en": "No subscriptions yet." },
+  "subscriptions.error": { "zh": "上次更新没有成功：{0}", "zh-Hant": "上次更新沒有成功：{0}", "en": "The last update did not work: {0}" },
+  "subscriptions.expire": { "zh": "{0} 到期", "zh-Hant": "{0} 到期", "en": "Expires {0}" },
+  "subscriptions.expired": { "zh": "已到期", "zh-Hant": "已到期", "en": "Expired" },
+  "subscriptions.more": { "zh": "更多操作", "zh-Hant": "更多操作", "en": "More actions" },
+  "subscriptions.name": { "zh": "名称", "zh-Hant": "名稱", "en": "Name" },
+  "subscriptions.remove": { "zh": "删除", "zh-Hant": "刪除", "en": "Remove" },
+  "subscriptions.remove.confirm": { "zh": "删除“{0}”和它的节点？", "zh-Hant": "刪除「{0}」和它的節點？", "en": "Remove “{0}” and its nodes?" },
+  "subscriptions.rename": { "zh": "改名", "zh-Hant": "改名", "en": "Rename" },
+  "subscriptions.save": { "zh": "保存", "zh-Hant": "儲存", "en": "Save" },
+  "subscriptions.update": { "zh": "更新", "zh-Hant": "更新", "en": "Update" },
+  "subscriptions.updated": { "zh": "更新于 {0}", "zh-Hant": "更新於 {0}", "en": "Updated {0}" },
+  "subscriptions.updating": { "zh": "正在更新", "zh-Hant": "正在更新", "en": "Updating" },
+  "subscriptions.usage": { "zh": "已用 {0} / {1}", "zh-Hant": "已用 {0} / {1}", "en": "{0} of {1} used" },
+  "subscriptions.usage.used": { "zh": "已用 {0}", "zh-Hant": "已用 {0}", "en": "{0} used" }
 }

@@ -2555,6 +2555,8 @@
    "sections": [
     {
      "group": "One",
+     "source": null,
+     "pasted": false,
      "nodes": [
       {
        "id": "a",
@@ -2582,6 +2584,8 @@
     },
     {
      "group": "Two",
+     "source": null,
+     "pasted": false,
      "nodes": [
       {
        "id": "c",
@@ -2598,6 +2602,8 @@
     },
     {
      "group": null,
+     "source": null,
+     "pasted": false,
      "nodes": [
       {
        "id": "d",
@@ -2668,6 +2674,8 @@
    "sections": [
     {
      "group": "One",
+     "source": null,
+     "pasted": false,
      "nodes": [
       {
        "id": "b",
@@ -2684,6 +2692,8 @@
     },
     {
      "group": null,
+     "source": null,
+     "pasted": false,
      "nodes": [
       {
        "id": "d",
@@ -2743,6 +2753,8 @@
    "sections": [
     {
      "group": "Two",
+     "source": null,
+     "pasted": false,
      "nodes": [
       {
        "id": "c",
@@ -2857,6 +2869,8 @@
    "sections": [
     {
      "group": "One",
+     "source": null,
+     "pasted": false,
      "nodes": [
       {
        "id": "a",
@@ -2884,6 +2898,8 @@
     },
     {
      "group": "Two",
+     "source": null,
+     "pasted": false,
      "nodes": [
       {
        "id": "c",
@@ -2897,6 +2913,8 @@
     },
     {
      "group": null,
+     "source": null,
+     "pasted": false,
      "nodes": [
       {
        "id": "d",
@@ -2927,5 +2945,446 @@
   "command": "view.reboot",
   "args": {},
   "refused": true
+ },
+ {
+  "command": "view.proxies",
+  "args": {
+   "nodes": [
+    {
+     "id": "a",
+     "label": "Tokyo",
+     "protocol": "trojan",
+     "selected": true,
+     "group": "One",
+     "editable": true,
+     "source": "s1"
+    },
+    {
+     "id": "s2.b",
+     "label": "Osaka",
+     "protocol": "vless",
+     "selected": false,
+     "group": "One",
+     "editable": false,
+     "source": "s2"
+    },
+    {
+     "id": "s3.c",
+     "label": "Link",
+     "protocol": "shadowsocks",
+     "selected": false,
+     "group": "粘贴的链接",
+     "editable": false,
+     "source": "s3",
+     "pasted": true
+    },
+    {
+     "id": "s3.d",
+     "label": "Other link",
+     "protocol": "shadowsocks",
+     "selected": false,
+     "group": "粘贴的链接",
+     "editable": false,
+     "source": "s3",
+     "pasted": true
+    }
+   ],
+   "delays": {},
+   "query": ""
+  },
+  "answer": {
+   "total": 4,
+   "shown": 4,
+   "sections": [
+    {
+     "group": "One",
+     "source": "s1",
+     "pasted": false,
+     "nodes": [
+      {
+       "id": "a",
+       "label": "Tokyo",
+       "protocol": "trojan",
+       "group": "One",
+       "selected": true,
+       "delay": null
+      }
+     ]
+    },
+    {
+     "group": "One",
+     "source": "s2",
+     "pasted": false,
+     "nodes": [
+      {
+       "id": "s2.b",
+       "label": "Osaka",
+       "protocol": "vless",
+       "group": "One",
+       "selected": false,
+       "delay": null
+      }
+     ]
+    },
+    {
+     "group": "粘贴的链接",
+     "source": "s3",
+     "pasted": true,
+     "nodes": [
+      {
+       "id": "s3.c",
+       "label": "Link",
+       "protocol": "shadowsocks",
+       "group": "粘贴的链接",
+       "selected": false,
+       "delay": null
+      },
+      {
+       "id": "s3.d",
+       "label": "Other link",
+       "protocol": "shadowsocks",
+       "group": "粘贴的链接",
+       "selected": false,
+       "delay": null
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "command": "view.proxies",
+  "args": {
+   "nodes": [
+    {
+     "id": "a",
+     "label": "Tokyo",
+     "protocol": "trojan",
+     "selected": true,
+     "group": "One",
+     "editable": true,
+     "source": "s1"
+    },
+    {
+     "id": "s2.b",
+     "label": "Osaka",
+     "protocol": "vless",
+     "selected": false,
+     "group": "One",
+     "editable": false,
+     "source": "s2"
+    },
+    {
+     "id": "s3.c",
+     "label": "Link",
+     "protocol": "shadowsocks",
+     "selected": false,
+     "group": "粘贴的链接",
+     "editable": false,
+     "source": "s3",
+     "pasted": true
+    },
+    {
+     "id": "s3.d",
+     "label": "Other link",
+     "protocol": "shadowsocks",
+     "selected": false,
+     "group": "粘贴的链接",
+     "editable": false,
+     "source": "s3",
+     "pasted": true
+    }
+   ],
+   "delays": {},
+   "query": "link"
+  },
+  "answer": {
+   "total": 4,
+   "shown": 2,
+   "sections": [
+    {
+     "group": "粘贴的链接",
+     "source": "s3",
+     "pasted": true,
+     "nodes": [
+      {
+       "id": "s3.c",
+       "label": "Link",
+       "protocol": "shadowsocks",
+       "group": "粘贴的链接",
+       "selected": false,
+       "delay": null
+      },
+      {
+       "id": "s3.d",
+       "label": "Other link",
+       "protocol": "shadowsocks",
+       "group": "粘贴的链接",
+       "selected": false,
+       "delay": null
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "command": "view.subscriptions",
+  "args": {
+   "subscriptions": [
+    {
+     "id": "s1",
+     "location": "https://example.com/sub?token=x",
+     "selected": true,
+     "lastSuccessfulUpdate": "2026-11-15 12:00",
+     "lastAttempt": "2026-11-15 12:00",
+     "nextAttempt": null,
+     "result": "succeeded",
+     "addedNodeCount": 0,
+     "removedNodeCount": 0,
+     "changedNodeCount": 0,
+     "errorCode": null,
+     "lastUpdateError": null,
+     "name": "One",
+     "nodeCount": 12,
+     "upload": 100,
+     "download": 900,
+     "total": 5000,
+     "expire": 1999999999,
+     "updateIntervalHours": 24,
+     "refreshable": true,
+     "pasted": false
+    },
+    {
+     "id": "s2",
+     "location": "https://other.example/sub",
+     "selected": false,
+     "lastSuccessfulUpdate": null,
+     "lastAttempt": "2026-11-15 12:01",
+     "nextAttempt": null,
+     "result": "failed",
+     "addedNodeCount": 0,
+     "removedNodeCount": 0,
+     "changedNodeCount": 0,
+     "errorCode": null,
+     "lastUpdateError": "the server answered 403",
+     "name": "other.example",
+     "nodeCount": null,
+     "upload": null,
+     "download": null,
+     "total": null,
+     "expire": null,
+     "updateIntervalHours": 24,
+     "refreshable": true,
+     "pasted": false
+    },
+    {
+     "id": "s3",
+     "location": "粘贴的链接",
+     "selected": false,
+     "lastSuccessfulUpdate": "2026-11-15 12:02",
+     "lastAttempt": "2026-11-15 12:02",
+     "nextAttempt": null,
+     "result": "succeeded",
+     "addedNodeCount": 0,
+     "removedNodeCount": 0,
+     "changedNodeCount": 0,
+     "errorCode": null,
+     "lastUpdateError": null,
+     "name": "粘贴的链接",
+     "nodeCount": 2,
+     "upload": null,
+     "download": 7,
+     "total": 0,
+     "expire": 0,
+     "updateIntervalHours": 0,
+     "refreshable": false,
+     "pasted": true
+    }
+   ],
+   "now": 1999999998
+  },
+  "answer": {
+   "subscriptions": [
+    {
+     "id": "s1",
+     "name": "One",
+     "pasted": false,
+     "selected": true,
+     "refreshable": true,
+     "nodes": 12,
+     "updated": "2026-11-15 12:00",
+     "error": null,
+     "used": 1000,
+     "total": 5000,
+     "expire": 1999999999,
+     "expireDate": "2033-05-18",
+     "expired": false
+    },
+    {
+     "id": "s2",
+     "name": "other.example",
+     "pasted": false,
+     "selected": false,
+     "refreshable": true,
+     "nodes": null,
+     "updated": null,
+     "error": "the server answered 403",
+     "used": null,
+     "total": null,
+     "expire": null,
+     "expireDate": null,
+     "expired": false
+    },
+    {
+     "id": "s3",
+     "name": "粘贴的链接",
+     "pasted": true,
+     "selected": false,
+     "refreshable": false,
+     "nodes": 2,
+     "updated": "2026-11-15 12:02",
+     "error": null,
+     "used": 7,
+     "total": null,
+     "expire": null,
+     "expireDate": null,
+     "expired": false
+    }
+   ]
+  }
+ },
+ {
+  "command": "view.subscriptions",
+  "args": {
+   "subscriptions": [
+    {
+     "id": "s1",
+     "location": "https://example.com/sub?token=x",
+     "selected": true,
+     "lastSuccessfulUpdate": "2026-11-15 12:00",
+     "lastAttempt": "2026-11-15 12:00",
+     "nextAttempt": null,
+     "result": "succeeded",
+     "addedNodeCount": 0,
+     "removedNodeCount": 0,
+     "changedNodeCount": 0,
+     "errorCode": null,
+     "lastUpdateError": null,
+     "name": "One",
+     "nodeCount": 12,
+     "upload": 100,
+     "download": 900,
+     "total": 5000,
+     "expire": 1999999999,
+     "updateIntervalHours": 24,
+     "refreshable": true,
+     "pasted": false
+    },
+    {
+     "id": "s2",
+     "location": "https://other.example/sub",
+     "selected": false,
+     "lastSuccessfulUpdate": null,
+     "lastAttempt": "2026-11-15 12:01",
+     "nextAttempt": null,
+     "result": "failed",
+     "addedNodeCount": 0,
+     "removedNodeCount": 0,
+     "changedNodeCount": 0,
+     "errorCode": null,
+     "lastUpdateError": "the server answered 403",
+     "name": "other.example",
+     "nodeCount": null,
+     "upload": null,
+     "download": null,
+     "total": null,
+     "expire": null,
+     "updateIntervalHours": 24,
+     "refreshable": true,
+     "pasted": false
+    },
+    {
+     "id": "s3",
+     "location": "粘贴的链接",
+     "selected": false,
+     "lastSuccessfulUpdate": "2026-11-15 12:02",
+     "lastAttempt": "2026-11-15 12:02",
+     "nextAttempt": null,
+     "result": "succeeded",
+     "addedNodeCount": 0,
+     "removedNodeCount": 0,
+     "changedNodeCount": 0,
+     "errorCode": null,
+     "lastUpdateError": null,
+     "name": "粘贴的链接",
+     "nodeCount": 2,
+     "upload": null,
+     "download": 7,
+     "total": 0,
+     "expire": 0,
+     "updateIntervalHours": 0,
+     "refreshable": false,
+     "pasted": true
+    }
+   ],
+   "now": 1999999999
+  },
+  "answer": {
+   "subscriptions": [
+    {
+     "id": "s1",
+     "name": "One",
+     "pasted": false,
+     "selected": true,
+     "refreshable": true,
+     "nodes": 12,
+     "updated": "2026-11-15 12:00",
+     "error": null,
+     "used": 1000,
+     "total": 5000,
+     "expire": 1999999999,
+     "expireDate": "2033-05-18",
+     "expired": true
+    },
+    {
+     "id": "s2",
+     "name": "other.example",
+     "pasted": false,
+     "selected": false,
+     "refreshable": true,
+     "nodes": null,
+     "updated": null,
+     "error": "the server answered 403",
+     "used": null,
+     "total": null,
+     "expire": null,
+     "expireDate": null,
+     "expired": false
+    },
+    {
+     "id": "s3",
+     "name": "粘贴的链接",
+     "pasted": true,
+     "selected": false,
+     "refreshable": false,
+     "nodes": 2,
+     "updated": "2026-11-15 12:02",
+     "error": null,
+     "used": 7,
+     "total": null,
+     "expire": null,
+     "expireDate": null,
+     "expired": false
+    }
+   ]
+  }
+ },
+ {
+  "command": "view.subscriptions",
+  "args": {},
+  "answer": {
+   "subscriptions": []
+  }
  }
 ]

@@ -23,7 +23,11 @@ public readonly record struct NodeDelay(bool Tested, ulong? Milliseconds, bool F
 public sealed record ProxyNode(string Id, string Label, string Protocol, bool Selected, NodeDelay Delay);
 
 /// <summary>The nodes of one subscription, or (<paramref name="Group"/> null) those that belong to none.</summary>
-public sealed record ProxySection(string? Group, IReadOnlyList<ProxyNode> Nodes);
+/// <param name="Pasted">
+/// Share links pasted into the client: the heading is this window's wording, not <paramref name="Group"/>,
+/// which is the core's own name for them.
+/// </param>
+public sealed record ProxySection(string? Group, IReadOnlyList<ProxyNode> Nodes, bool Pasted = false);
 
 /// <summary>What the user asked for on the proxies page.</summary>
 public enum ProxyActionKind
@@ -190,7 +194,10 @@ public sealed record Proxies(ulong Total, ulong Shown, IReadOnlyList<ProxySectio
                             ReadDelay(Member(node, "delay"))));
                     }
                 }
-                sections.Add(new ProxySection(Text(section, "group"), nodes));
+                sections.Add(new ProxySection(
+                    Text(section, "group"),
+                    nodes,
+                    Member(section, "pasted") is { ValueKind: JsonValueKind.True }));
             }
         }
         return new Proxies(Number(answer, "total") ?? 0, Number(answer, "shown") ?? 0, sections);
@@ -204,7 +211,7 @@ public sealed record Proxies(ulong Total, ulong Shown, IReadOnlyList<ProxySectio
         // A subscription without nodes has no heading either.
         foreach (var section in (proxies?.Sections ?? Array.Empty<ProxySection>()).Where(section => section.Nodes.Count > 0))
         {
-            var heading = section.Group ?? strings["proxies.group.none"];
+            var heading = section.Pasted ? strings["proxies.group.pasted"] : section.Group ?? strings["proxies.group.none"];
             foreach (var node in section.Nodes)
             {
                 var (delay, tone) = node.Delay switch
