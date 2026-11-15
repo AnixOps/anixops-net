@@ -1,0 +1,1 @@
+{ "type": "event", "name": "snapshot_changed", "payload": { "connection": "connected" } }
