@@ -30,3 +30,7 @@ traffic-stats = { path = "../traffic-stats" }
 # Android's VPN and Linux TUN mode: the TUN descriptor is read and written directly (`backend::tun`).
 [target.'cfg(any(target_os = "android", target_os = "linux"))'.dependencies]
 libc = "0.2"
+
+# Windows: Data Protection (DPAPI) seals the capture session key (`backend::session_key`).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
