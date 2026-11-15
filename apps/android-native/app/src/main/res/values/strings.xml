@@ -26,9 +26,6 @@
     <string name="home_last_error">上次出错</string>
     <string name="home_vpn_denied">没有允许建立 VPN，无法连接</string>
 
-    <string name="routing_bypass_china">绕过大陆</string>
-    <string name="routing_gfw_list">GFW 列表</string>
-    <string name="routing_return_china">回国</string>
     <string name="routing_direct">直连</string>
     <string name="routing_rule">规则</string>
 
@@ -120,13 +117,9 @@
         <item quantity="other">每 %d 天自动更新</item>
     </plurals>
     <string name="proxies_delay_ms" translatable="false">%1$d ms</string>
-    <string name="rules_refresh">刷新规则资源</string>
-    <string name="rules_routing_note">规则资源从公开来源缓存到本机，下次连接时生效。</string>
-    <string name="routing_bypass_china_hint">大陆网站直连，其余走代理</string>
-    <string name="routing_gfw_list_hint">只有列表内的网站走代理</string>
-    <string name="routing_return_china_hint">大陆网站走代理，适合在海外使用</string>
+    <string name="rules_routing_note">客户端不带预设规则：规则模式只按订阅自带的规则和你的规则分流。</string>
     <string name="routing_direct_hint">所有流量直连，不经过节点</string>
-    <string name="routing_rule_hint">按订阅自带的规则和策略组分流</string>
+    <string name="routing_rule_hint">按订阅自带的规则和你的规则分流，其余走代理</string>
     <string name="rules_mine">我的规则</string>
     <string name="rules_mine_note">每行一条，从上到下匹配，排在分流模式和订阅规则前面。策略写 PROXY（当前节点或订阅的第一个策略组）、DIRECT 或 REJECT。支持 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD、DOMAIN-WILDCARD、IP-CIDR、IP-CIDR6、DST-PORT、PROCESS-NAME、USER-AGENT、URL-REGEX、PROTOCOL；# 开头的行是注释。</string>
     <string name="action_revert">还原</string>
@@ -146,11 +139,9 @@
     <string name="rule_set_failed">上次下载失败：%1$s</string>
     <string name="dns_system">系统 DNS</string>
     <string name="dns_encrypted">加密 DNS</string>
-    <string name="dns_split">国内外分流</string>
     <string name="dns_custom">自定义 DNS</string>
     <string name="dns_system_hint">内置引擎用系统 DNS 解析规则里需要 IP 的域名；经节点的连接由节点服务器解析域名。</string>
     <string name="dns_encrypted_hint">所有域名经节点用 Cloudflare DNS over HTTPS 解析，本地网络看不到查询内容。</string>
-    <string name="dns_split_hint">国内域名直连阿里 DNS over HTTPS 解析，其余经节点用 Cloudflare 解析，国内网站拿到就近的地址。</string>
     <string name="dns_custom_hint">用下面填写的服务器、分域规则和 Hosts。</string>
     <string name="dns_fake_ip_hint">应用查询域名时立刻拿到 198.18.0.0/15 里的地址，连接时还原成域名按规则分流，由节点解析。局域网、对时、STUN 和推送等域名仍拿真实地址。</string>
     <string name="dns_custom_note">每行一条，# 开头的行是注释。没有填服务器时，引擎经节点用 TCP 查询默认服务器。</string>

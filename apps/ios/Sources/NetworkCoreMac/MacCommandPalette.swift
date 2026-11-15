@@ -149,12 +149,22 @@ struct MacCommandPalette: View {
         }
         .onAppear {
             entries = makeEntries()
-            focused = true
+            focused = !Self.shownForScreenshot
         }
         .onChange(of: query) { _, _ in
             // The best match is selected after every key press, so Return runs what is on top.
             selectedID = nil
         }
+    }
+
+    /// CI screenshots open the palette with `-AnixOpsPalette YES`. The search field stays unfocused there:
+    /// its blinking caret made the picture differ from run to run.
+    private static var shownForScreenshot: Bool {
+        #if DEBUG
+        UserDefaults.standard.bool(forKey: "AnixOpsPalette")
+        #else
+        false
+        #endif
     }
 
     private func row(_ item: CommandPalette.Item, selected: Bool) -> some View {

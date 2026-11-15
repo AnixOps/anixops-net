@@ -47,7 +47,7 @@ use desktop_dns::redirects::{
 };
 use desktop_mitm::Root;
 use engine_embedded::config::RuntimeConfig;
-use engine_embedded::profile::{self, RoutingMode, RuleList};
+use engine_embedded::profile;
 use node_edits::{NodeEdits, NodeForm};
 use on_demand::{
     Action as OnDemandAction, Network, Settings as OnDemandSettings, Watch as OnDemandWatch,
@@ -60,7 +60,7 @@ pub use desktop_dns::DnsPreset;
 
 use self::engine::{Engine, OtherSource};
 use self::session::UserSession;
-use self::state::{SavedSource, SavedState, Store};
+use self::state::{RoutingMode, SavedSource, SavedState, Store};
 
 /// The source label for share links pasted into the import field.
 /// Lines the log viewer shows.
@@ -124,7 +124,6 @@ pub struct RuntimeSnapshot {
     pub auto_recover_core: bool,
     pub auto_subscription_refresh: bool,
     pub auto_select_fastest_node: bool,
-    pub bilibili_web_ad_block_enabled: bool,
     pub script_runtime_configured: bool,
     pub https_decryption_enabled: bool,
     pub dark_theme: bool,
@@ -307,9 +306,17 @@ pub struct Backend {
 impl Backend {
     /// Loads the saved state and first puts back proxy settings a previous run left changed.
     pub fn open(store: Store, session: Box<dyn UserSession>) -> Self {
-        let state = store.load();
+        let mut state = store.load();
         desktop_dns::custom::use_file(store.dir().join("dns-settings.json"));
         desktop_dns::redirects::use_file(store.dir().join("redirects.json"));
+        // The removed 国内外分流 DNS choice becomes the user's own settings (docs/no-presets.md). Until that
+        // works it is applied as "自定义", never as a preset.
+        if let Ok(adopted) = desktop_dns::adopt_legacy_split(state.dns_preset) {
+            if adopted != state.dns_preset {
+                state.dns_preset = adopted;
+                let _ = store.save(&state);
+            }
+        }
         let mut backend = Self {
             store,
             state,
@@ -511,11 +518,9 @@ impl Backend {
                 engine::envelope(&self.nodes, &node.id)?
             }
         };
-        profile::envelope_for_mode(&profile, self.state.routing_mode, |list| {
-            self.store.read_rule_list(list).ok_or_else(|| {
-                "the routing rules have not been downloaded yet; refresh them on the Rules page"
-                    .to_string()
-            })
+        // Rule and direct modes use no rule list; public builds ship none (docs/no-presets.md).
+        profile::envelope_for_mode(&profile, self.state.routing_mode.profile_mode(), |_| {
+            Err("public builds ship no preset rule lists".to_string())
         })
     }
 
@@ -631,16 +636,6 @@ impl Backend {
         })
     }
 
-    /// Public rule lists the routing mode needs: the missing ones, or all of them with `force`. The window
-    /// downloads them outside the lock and saves them with `store()`.
-    pub fn rule_lists_to_download(&self, mode: RoutingMode, force: bool) -> Vec<RuleList> {
-        mode.rule_lists()
-            .iter()
-            .copied()
-            .filter(|list| force || !self.store.has_rule_list(*list))
-            .collect()
-    }
-
     pub fn store(&self) -> Store {
         self.store.clone()
     }
@@ -752,7 +747,6 @@ impl Backend {
             auto_recover_core: false,
             auto_subscription_refresh: false,
             auto_select_fastest_node: false,
-            bilibili_web_ad_block_enabled: false,
             script_runtime_configured: false,
             https_decryption_enabled: self.state.preferences.https_decryption,
             dark_theme: false,
@@ -870,11 +864,8 @@ impl Backend {
         }
     }
 
-    /// Switches the routing mode; its rule lists must already be downloaded. A running engine restarts on it.
+    /// Switches the routing mode. A running engine restarts on it.
     pub fn set_routing_mode(&mut self, mode: RoutingMode) -> Result<OperationResult, String> {
-        if !self.rule_lists_to_download(mode, false).is_empty() {
-            return Err("the routing rules for this mode could not be downloaded".to_string());
-        }
         let previous = self.state.routing_mode;
         self.state.routing_mode = mode;
         if let Err(error) = self.restart_if_running() {
@@ -2226,32 +2217,19 @@ rules:
         let routed: serde_json::Value = serde_json::from_str(&backend.envelope().unwrap()).unwrap();
         assert_eq!(routed["routing"]["groups"][0]["default"], "DIRECT");
 
-        // List modes need their downloaded lists; direct and rule modes need none.
+        // Rule and direct modes only: public builds ship no preset list modes (docs/no-presets.md).
         assert_eq!(backend.snapshot().routing_mode, "rule");
-        assert!(backend.set_routing_mode(RoutingMode::BypassChina).is_err());
-        assert_eq!(
-            backend.rule_lists_to_download(RoutingMode::BypassChina, false),
-            [RuleList::ChinaDomains, RuleList::ChinaIps]
-        );
-        let store = backend.store();
-        store
-            .write_rule_list(RuleList::ChinaDomains, &["cn".to_string()])
-            .unwrap();
-        store
-            .write_rule_list(RuleList::ChinaIps, &["1.0.1.0/24".to_string()])
-            .unwrap();
-        assert!(backend
-            .rule_lists_to_download(RoutingMode::BypassChina, false)
-            .is_empty());
-        backend.set_routing_mode(RoutingMode::BypassChina).unwrap();
-        let bypass: serde_json::Value = serde_json::from_str(&backend.envelope().unwrap()).unwrap();
-        assert_eq!(bypass["routing"]["rules"][0], "RULE-SET,china,DIRECT");
-        assert_eq!(
-            bypass["routing"]["rule_sets"]["china"]["domain_suffix"][0],
-            "cn"
-        );
+        assert_eq!(RoutingMode::parse("bypass_china"), None);
+        assert_eq!(RoutingMode::parse("gfw_list"), None);
+        assert_eq!(RoutingMode::parse("return_china"), None);
         backend.set_routing_mode(RoutingMode::Direct).unwrap();
         assert_eq!(backend.snapshot().routing_mode, "direct");
+        let direct: serde_json::Value = serde_json::from_str(&backend.envelope().unwrap()).unwrap();
+        assert_eq!(
+            direct["routing"]["rules"],
+            serde_json::json!(["FINAL,DIRECT"])
+        );
+        backend.set_routing_mode(RoutingMode::Rule).unwrap();
 
         // Choices belong to the subscription they were made in.
         let _ = backend.import(PASTED_LOCATION, LINK);

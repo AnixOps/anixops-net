@@ -21,7 +21,7 @@ final class LocalRulesTests: XCTestCase {
     "groups":[{"id":"Proxy","type":"select","members":["a","DIRECT"],"default":null}]}}
     """
 
-    func testPlainNodeListsRouteByThePresetToTheSelectedNode() throws {
+    func testPlainNodeListsSendEverythingElseToTheSelectedNodeWithoutPresetLists() throws {
         let report = try NativeImportReport.decoded(from: Data(plainReport.utf8))
         var library = NodeLibrary(report: report, subscriptionURL: nil, keeping: nil)
         library.selectedID = "b"
@@ -31,20 +31,41 @@ final class LocalRulesTests: XCTestCase {
         XCTAssertEqual(routing.global, "b")
         XCTAssertTrue(routing.groups.isEmpty)
         XCTAssertEqual(Set(routing.outbounds.keys), ["a", "b"])
+        // A fresh install: the private networks direct (the switch the user can turn off), then the node. No
+        // country, GFW or ad list and no rule set at all.
         XCTAssertEqual(routing.rules.first, "DOMAIN-SUFFIX,local,DIRECT")
-        XCTAssertEqual(Array(routing.rules.suffix(3)), ["GEOSITE,cn,DIRECT", "GEOIP,cn,DIRECT", "FINAL,b"])
-        XCTAssertNotNil(routing.ruleSets?["geosite-cn"]?.url)
-        XCTAssertNotNil(routing.ruleSets?["geoip-cn"]?.url)
+        XCTAssertEqual(routing.rules.last, "FINAL,b")
+        XCTAssertTrue(routing.rules.dropLast().allSatisfy { $0.hasSuffix(",DIRECT") || $0.hasSuffix(",DIRECT,no-resolve") })
+        XCTAssertFalse(routing.rules.contains { $0.hasPrefix("GEOSITE") || $0.hasPrefix("GEOIP") || $0.hasPrefix("RULE-SET") })
+        XCTAssertNil(routing.ruleSets)
 
-        let gfw = try XCTUnwrap(library.routingForModes(localRules: LocalRules(preset: .gfwList, bypassLAN: false)))
-        XCTAssertEqual(gfw.rules, ["GEOSITE,gfw,b", "FINAL,DIRECT"])
-        XCTAssertEqual(gfw.ruleSets.map { Set($0.keys) }, ["geosite-gfw"])
+        let bare = try XCTUnwrap(library.routingForModes(localRules: LocalRules(bypassLAN: false)))
+        XCTAssertEqual(bare.rules, ["FINAL,b"])
+        XCTAssertNil(bare.ruleSets)
+    }
+
+    func testValuesSavedWithAnOldPresetLoadWithoutIt() throws {
+        let old = Data(#"{"preset":"bypassChina","bypass_lan":false,"rules":[],"subscriptions":[{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","name":"Ads","url":"https://lists.example/ads.list","policy":"REJECT","enabled":true,"catalogID":"bm7-advertising"}]}"#.utf8)
+        let rules = LocalRules.fromProfileValue(old)
+        XCTAssertFalse(rules.bypassLAN)
+        // The list the user added stays: it is their own configuration.
+        XCTAssertEqual(rules.subscriptions.map(\.url), ["https://lists.example/ads.list"])
+        let lines = rules.engineLines(proxy: "a").lines
+        XCTAssertEqual(lines.last, "FINAL,a")
+        XCTAssertFalse(lines.contains { $0.hasPrefix("GEOSITE") || $0.hasPrefix("GEOIP") })
+    }
+
+    func testTheUsersOwnGeositeRulesStillGetTheirList() throws {
+        let rules = try LocalRules(bypassLAN: false).saving(LocalRules.rule(from: "GEOSITE,cn,DIRECT"))
+        let engine = rules.engineLines(proxy: "a")
+        XCTAssertEqual(engine.lines, ["GEOSITE,cn,DIRECT", "FINAL,a"])
+        XCTAssertNotNil(engine.ruleSets["geosite-cn"])
     }
 
     func testUserRulesGoFirstWithProxyReplaced() throws {
         let report = try NativeImportReport.decoded(from: Data(plainReport.utf8))
         let library = NodeLibrary(report: report, subscriptionURL: nil, keeping: nil)
-        var rules = LocalRules(preset: .proxyAll, bypassLAN: false)
+        var rules = LocalRules(bypassLAN: false)
         rules = try rules.saving(LocalRules.rule(from: "DOMAIN-SUFFIX,Example.COM,Proxy"))
         rules = try rules.saving(LocalRules.rule(from: "IP-CIDR,203.0.113.0/24,DIRECT,no-resolve"))
         rules = try rules.saving(LocalRules.rule(from: "RULE-SET,https://lists.example/ads.list,REJECT-TINYGIF"))
@@ -68,7 +89,7 @@ final class LocalRulesTests: XCTestCase {
         let library = NodeLibrary(report: report, subscriptionURL: nil, keeping: nil)
         let rules = try LocalRules().saving(LocalRules.rule(from: "DOMAIN-KEYWORD,video,PROXY"))
         let routing = try XCTUnwrap(library.routingForModes(localRules: rules))
-        // The preset applies only without subscription rules.
+        // The private networks and FINAL apply only without subscription rules.
         XCTAssertEqual(routing.rules, ["DOMAIN-KEYWORD,video,Proxy", "DOMAIN-SUFFIX,google.com,Proxy", "FINAL,Proxy"])
         XCTAssertEqual(library.routingForModes()?.rules, ["DOMAIN-SUFFIX,google.com,Proxy", "FINAL,Proxy"])
     }
@@ -128,20 +149,20 @@ final class LocalRulesTests: XCTestCase {
     }
 
     func testProfileValueRoundTripsAndOldProfilesGetTheDefault() throws {
-        let rules = try LocalRules(preset: .returnChina, bypassLAN: false)
+        let rules = try LocalRules(bypassLAN: false)
             .saving(LocalRules.rule(from: "DOMAIN,a.example,DIRECT"))
         XCTAssertEqual(LocalRules.fromProfileValue(try rules.profileValue()), rules)
         XCTAssertEqual(LocalRules.fromProfileValue(nil), LocalRules())
-        XCTAssertEqual(LocalRules.fromProfileValue(Data("{}".utf8)).preset, .bypassChina)
+        XCTAssertEqual(LocalRules.fromProfileValue(Data("{}".utf8)), LocalRules())
     }
 
     func testRuleSetSubscriptionsMatchAfterTheUserRulesAndDownloadThroughTheProxy() throws {
         let report = try NativeImportReport.decoded(from: Data(plainReport.utf8))
         let library = NodeLibrary(report: report, subscriptionURL: nil, keeping: nil)
-        let ads = try XCTUnwrap(OpenRuleSets.entry(id: "bm7-advertising")).subscription()
-        var off = try XCTUnwrap(OpenRuleSets.entry(id: "bm7-apple")).subscription()
+        let ads = LocalRules.Subscription(name: "Ads", url: "https://lists.example/ads.list", policy: .reject)
+        var off = LocalRules.Subscription(name: "Apple", url: "https://lists.example/apple.list", policy: .direct)
         off.enabled = false
-        var rules = LocalRules(preset: .proxyAll, bypassLAN: false)
+        var rules = LocalRules(bypassLAN: false)
         rules = try rules.saving(LocalRules.rule(from: "DOMAIN,a.example,DIRECT"))
         rules = try rules.saving(ads)
         rules = try rules.saving(off)
@@ -182,22 +203,9 @@ final class LocalRulesTests: XCTestCase {
         let routing = try XCTUnwrap(library.routingForModes(localRules: rules))
         let sets = try XCTUnwrap(routing.ruleSets)
         XCTAssertEqual(sets.count, NodeLibrary.maxRuleSets)
-        XCTAssertNotNil(sets["geosite-cn"])
-        XCTAssertNotNil(sets["geoip-cn"])
         // Every remaining RULE-SET rule names a set the engine has.
         for line in routing.rules where line.hasPrefix("RULE-SET,") {
             XCTAssertNotNil(sets[line.split(separator: ",")[1].description], line)
-        }
-    }
-
-    func testTheOpenRuleSetCatalogIsWellFormed() throws {
-        XCTAssertEqual(Set(OpenRuleSets.entries.map(\.id)).count, OpenRuleSets.entries.count)
-        for entry in OpenRuleSets.entries {
-            XCTAssertNoThrow(try LocalRules().saving(entry.subscription()), entry.id)
-            XCTAssertTrue(entry.url.hasPrefix("https://raw.githubusercontent.com/"), entry.id)
-        }
-        for category in OpenRuleSets.Category.allCases {
-            XCTAssertFalse(OpenRuleSets.entries.filter { $0.category == category }.isEmpty, category.rawValue)
         }
     }
 }

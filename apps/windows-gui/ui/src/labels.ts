@@ -46,16 +46,13 @@ export function connectionTitle(connection: string | undefined, phase: ConnectPh
 }
 
 export const routingModes: Array<{ value: RuntimeSnapshot["routingMode"]; label: string; hint: string }> = [
-  { value: "bypass_china", label: "绕过大陆", hint: "大陆网站直连，其余走代理" },
-  { value: "gfw_list", label: "GFW 列表", hint: "只有列表内的网站走代理" },
-  { value: "return_china", label: "回国", hint: "大陆网站走代理，适合在海外使用" },
+  { value: "rule", label: "规则", hint: "按订阅自带的规则和你的规则分流，其余走代理" },
   { value: "direct", label: "直连", hint: "所有流量直连，不经过节点" },
-  { value: "rule", label: "规则", hint: "按订阅自带的规则和策略组分流" },
 ];
 
-/** The modes this profile can use: subscription rules only run on the embedded engine. */
-export function availableRoutingModes(snapshot: RuntimeSnapshot | null) {
-  return routingModes.filter((mode) => mode.value !== "rule" || snapshot?.embeddedEngine || snapshot?.routingMode === "rule");
+/** The modes a profile can use. Public builds ship no preset list modes (docs/no-presets.md). */
+export function availableRoutingModes() {
+  return routingModes;
 }
 
 /** The name to show for a group member. */
@@ -68,7 +65,7 @@ export function routingLabel(mode: RuntimeSnapshot["routingMode"] | undefined): 
   return t(routingModes.find((item) => item.value === mode)?.label ?? routingModes[0].label);
 }
 
-const dnsPresetLabels: Record<DnsPreset, string> = { system: "系统 DNS", encrypted: "加密 DNS", split: "国内外分流", custom: "自定义 DNS" };
+const dnsPresetLabels: Record<DnsPreset, string> = { system: "系统 DNS", encrypted: "加密 DNS", custom: "自定义 DNS" };
 
 /** The short name of a DNS choice; backends that do not report one use the system's. */
 export function dnsPresetLabel(preset: DnsPreset | undefined): string {

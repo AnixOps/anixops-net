@@ -7,13 +7,12 @@ import { t } from "../i18n";
 const dnsChoices: Array<{ value: DnsPreset; label: string; hint: string }> = [
   { value: "system", label: "系统 DNS", hint: "内置引擎用系统 DNS 解析规则里需要 IP 的域名；经节点的连接由节点服务器解析域名。" },
   { value: "encrypted", label: "加密 DNS", hint: "所有域名经节点用 Cloudflare DNS over HTTPS 解析，本地网络看不到查询内容。" },
-  { value: "split", label: "国内外分流", hint: "国内域名直连阿里 DNS over HTTPS 解析，其余经节点用 Cloudflare 解析，国内网站拿到就近的地址。" },
   { value: "custom", label: "自定义 DNS", hint: "用下面填写的服务器、分域规则和 Hosts。" },
 ];
 
 /** Examples shown in the empty editors; the formats follow Surge's [DNS] and [Host] lines. */
 const SERVERS_PLACEHOLDER = "cloudflare = https://1.1.1.1/dns-query, server-name=cloudflare-dns.com\nalidns = tls://223.5.5.5, server-name=dns.alidns.com, direct";
-const RULES_PLACEHOLDER = "DOMAIN-SUFFIX,cn,alidns\nDOMAIN-KEYWORD,taobao,alidns\nRULE-SET,china,alidns";
+const RULES_PLACEHOLDER = "DOMAIN-SUFFIX,example.cn,alidns\nDOMAIN-KEYWORD,intranet,alidns";
 const HOSTS_PLACEHOLDER = "router.lan = 192.168.1.1\n*.home.lan = 192.168.1.20, fd00::20";
 
 /**

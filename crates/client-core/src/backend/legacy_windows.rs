@@ -27,11 +27,9 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use desktop_dns::DnsPreset;
-use engine_embedded::profile::{RoutingMode, RuleList};
 use serde::Deserialize;
-use serde_json::Value;
 
-use super::state::{SavedState, Store};
+use super::state::{RoutingMode, SavedState, Store};
 
 const STATE_FILE: &str = "desktop-state.json";
 
@@ -49,43 +47,14 @@ const SAME_FILES: [&str; 6] = [
 /// device licence.
 const SAME_DIRS: [&str; 2] = ["mitm", "anx-license"];
 
-/// The old client's public rule lists and the list each one becomes.
-const RULE_FILES: [(&str, RuleList); 3] = [
-    ("china-domains.json", RuleList::ChinaDomains),
-    ("china-ips.json", RuleList::ChinaIps),
-    ("gfw-domains.json", RuleList::GfwDomains),
-];
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum LegacyRoutingMode {
-    // What the old client used when the file did not say.
-    #[default]
-    BypassChina,
-    GfwList,
-    Direct,
-    ReturnChina,
-    Rule,
-}
-
-impl From<LegacyRoutingMode> for RoutingMode {
-    fn from(mode: LegacyRoutingMode) -> Self {
-        match mode {
-            LegacyRoutingMode::BypassChina => Self::BypassChina,
-            LegacyRoutingMode::GfwList => Self::GfwList,
-            LegacyRoutingMode::Direct => Self::Direct,
-            LegacyRoutingMode::ReturnChina => Self::ReturnChina,
-            LegacyRoutingMode::Rule => Self::Rule,
-        }
-    }
-}
-
 /// The parts of the old `desktop-state.json` that have a place in this crate's state. Fields the file
 /// lacks take the old client's defaults; fields it has beyond these are ignored.
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 struct LegacyState {
-    routing_mode: LegacyRoutingMode,
+    /// The old client's 绕过大陆, GFW 列表 and 回国 modes (and its default, 绕过大陆) become rule mode:
+    /// public builds ship no preset list modes (docs/no-presets.md). Its downloaded lists are not carried.
+    routing_mode: RoutingMode,
     dns_preset: DnsPreset,
     block_quic: bool,
     direct_egress: bool,
@@ -176,16 +145,6 @@ pub fn migrate(old: &Path, store: &Store) -> Result<Option<Migrated>, String> {
             migrated.carried.push(name.to_string());
         }
     }
-    for (name, list) in RULE_FILES {
-        let Some(entries) = rule_entries(&old.join("routing-rules").join(name), list) else {
-            continue;
-        };
-        store
-            .write_rule_list(list, &entries)
-            .map_err(|error| failed(name, &error))?;
-        migrated.carried.push(format!("rules/{}", list.file_name()));
-    }
-
     // Last, so a run cut short before this point starts over.
     store
         .save(&state)
@@ -195,7 +154,7 @@ pub fn migrate(old: &Path, store: &Store) -> Result<Option<Migrated>, String> {
 
 /// `state`, a new store's defaults, with what the old state says, and the id of the subscription in use.
 fn convert(legacy: &LegacyState, mut state: SavedState) -> (SavedState, Option<String>) {
-    state.routing_mode = legacy.routing_mode.into();
+    state.routing_mode = legacy.routing_mode;
     state.dns_preset = legacy.dns_preset;
     state.block_quic = legacy.block_quic;
     state.direct_egress = legacy.direct_egress;
@@ -234,27 +193,6 @@ fn convert(legacy: &LegacyState, mut state: SavedState) -> (SavedState, Option<S
         state.selected_node = None;
     }
     (state, selected)
-}
-
-/// The entries of one of the old client's rule lists: `{"rules": [{"domain_suffix": [..]}]}`, or `ip_cidr`
-/// for networks. `None` when the list was never downloaded or holds nothing usable.
-fn rule_entries(path: &Path, list: RuleList) -> Option<Vec<String>> {
-    let source: Value = serde_json::from_slice(&fs::read(path).ok()?).ok()?;
-    let key = if list.is_networks() {
-        "ip_cidr"
-    } else {
-        "domain_suffix"
-    };
-    let entries: Vec<String> = source
-        .get("rules")?
-        .as_array()?
-        .iter()
-        .filter_map(|rule| rule.get(key)?.as_array())
-        .flatten()
-        .filter_map(Value::as_str)
-        .map(str::to_string)
-        .collect();
-    (!entries.is_empty()).then_some(entries)
 }
 
 fn failed(what: &str, error: &io::Error) -> String {
@@ -425,7 +363,8 @@ mod tests {
         assert!(migrated.nodes_cached);
 
         let state = store.load();
-        assert_eq!(state.routing_mode, RoutingMode::GfwList);
+        // GFW 列表 is a preset list mode, which public builds no longer have.
+        assert_eq!(state.routing_mode, RoutingMode::Rule);
         assert_eq!(state.dns_preset, DnsPreset::Split);
         assert!(state.block_quic);
         assert!(!state.direct_egress);
@@ -493,16 +432,8 @@ mod tests {
             fs::read_to_string(new.join("mitm").join("plugins").join("library.json")).unwrap(),
             "[]"
         );
-        assert_eq!(
-            store.read_rule_list(RuleList::GfwDomains).unwrap(),
-            ["example.net", "example.org"]
-        );
-        assert_eq!(
-            store.read_rule_list(RuleList::ChinaIps).unwrap(),
-            ["1.0.1.0/24"]
-        );
-        // Never downloaded by the old client, so not made up here.
-        assert!(!store.has_rule_list(RuleList::ChinaDomains));
+        // The old client's downloaded preset lists are not carried (docs/no-presets.md).
+        assert!(!new.join("rules").exists());
         // Files the old client did not have are not created.
         assert!(!new.join("redirects.json").exists());
 
@@ -577,8 +508,8 @@ mod tests {
         let migrated = migrate(&old, &store).unwrap().unwrap();
         assert_eq!(migrated.sources, 1);
         let state = store.load();
-        // The old client's default when the file did not say.
-        assert_eq!(state.routing_mode, RoutingMode::BypassChina);
+        // The old client's default (绕过大陆) is a preset list mode; rule mode takes its place.
+        assert_eq!(state.routing_mode, RoutingMode::Rule);
         let source = state.selected_source().unwrap();
         assert_eq!(source.location, "https://example.com/only");
         assert_eq!(store.read_source(&source.id).unwrap(), LINK);

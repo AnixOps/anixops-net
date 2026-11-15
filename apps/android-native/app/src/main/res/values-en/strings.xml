@@ -22,9 +22,6 @@
     <string name="home_last_error">Last error</string>
     <string name="home_vpn_denied">The VPN was not allowed, so AnixOps Net cannot connect</string>
 
-    <string name="routing_bypass_china">Bypass mainland China</string>
-    <string name="routing_gfw_list">GFW list</string>
-    <string name="routing_return_china">Return to China</string>
     <string name="routing_direct">Direct</string>
     <string name="routing_rule">Rules</string>
 
@@ -118,13 +115,9 @@
         <item quantity="one">Every day</item>
         <item quantity="other">Every %d days</item>
     </plurals>
-    <string name="rules_refresh">Refresh rule resources</string>
-    <string name="rules_routing_note">Rule resources are cached on this device from public sources and take effect on the next connection.</string>
-    <string name="routing_bypass_china_hint">Mainland China sites go direct, everything else through the proxy</string>
-    <string name="routing_gfw_list_hint">Only sites on the list go through the proxy</string>
-    <string name="routing_return_china_hint">Mainland China sites go through the proxy, for use abroad</string>
+    <string name="rules_routing_note">The client ships no preset rules: rule mode follows only the subscription\'s rules and your own.</string>
     <string name="routing_direct_hint">All traffic goes direct, never through a node</string>
-    <string name="routing_rule_hint">Follows the subscription\'s own rules and policy groups</string>
+    <string name="routing_rule_hint">Follows the subscription\'s rules and your own rules; everything else goes through the proxy</string>
     <string name="rules_mine">My rules</string>
     <string name="rules_mine_note">One rule per line, matched top to bottom before the routing mode\'s and the subscription\'s rules. The policy is PROXY (the current node or the subscription\'s first policy group), DIRECT or REJECT. Supports DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD, DOMAIN-WILDCARD, IP-CIDR, IP-CIDR6, DST-PORT, PROCESS-NAME, USER-AGENT, URL-REGEX and PROTOCOL; lines starting with # are comments.</string>
     <string name="action_revert">Revert</string>
@@ -144,11 +137,9 @@
     <string name="rule_set_failed">Last download failed: %1$s</string>
     <string name="dns_system">System DNS</string>
     <string name="dns_encrypted">Encrypted DNS</string>
-    <string name="dns_split">Split by region</string>
     <string name="dns_custom">Custom DNS</string>
     <string name="dns_system_hint">The embedded engine resolves domains that IP rules need with the system DNS; connections through a node have the node server resolve the domain.</string>
     <string name="dns_encrypted_hint">Every name is resolved with Cloudflare DNS over HTTPS through the node, so the local network cannot see the queries.</string>
-    <string name="dns_split_hint">Mainland names go directly to AliDNS over HTTPS and the rest to Cloudflare through the node, so mainland sites get nearby addresses.</string>
     <string name="dns_custom_hint">Uses the servers, per-domain servers and hosts below.</string>
     <string name="dns_fake_ip_hint">Apps get an address in 198.18.0.0/15 at once when they look up a name; when they connect, the name is restored, matched against the rules and resolved by the node. LAN, time, STUN and push names still get real addresses.</string>
     <string name="dns_custom_note">One per line; lines starting with # are comments. Without servers the engine asks its default server over TCP through the node.</string>

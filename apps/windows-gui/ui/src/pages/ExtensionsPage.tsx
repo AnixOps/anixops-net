@@ -1,6 +1,6 @@
-import { Ban, ClipboardPaste, Download, Eye, FileUp, KeyRound, LockKeyhole, Puzzle, ShieldCheck, Trash2 } from "lucide-react";
+import { ClipboardPaste, Download, Eye, FileUp, KeyRound, LockKeyhole, Puzzle, ShieldCheck, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DebugMapping, desktop, inProcessEngine, MitmPlugin, MitmPluginDetails, MitmRootStatus, preferencesFrom, RuntimeSnapshot } from "../bridge";
+import { DebugMapping, desktop, inProcessEngine, MitmPlugin, MitmPluginDetails, MitmRootStatus, RuntimeSnapshot } from "../bridge";
 import { Card, EmptyState, MoreMenu, Row, Run, StatusPill, Switch, ToggleRow } from "../ui";
 import { t } from "../i18n";
 import { PhoneCaptureCards } from "./PhoneCaptureCards";
@@ -104,21 +104,6 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
           disabled={locked}
           onChange={() => (decrypting ? change("mitm", desktop.disableHttpsMitm) : consent.guard(() => change("mitm", desktop.enableHttpsMitm)))}
         />
-        {!linux && (
-          <ToggleRow
-            icon={Ban}
-            color="sky"
-            label={t("屏蔽哔哩哔哩网页版推广请求（试用）")}
-            hint={t("改动后需要重新开启 HTTPS 解密才会生效")}
-            checked={Boolean(snapshot?.bilibiliWebAdBlockEnabled)}
-            disabled={locked}
-            onChange={() => void run("Bilibili web trial", async () => {
-              if (!snapshot) throw new Error(t("还没有读取到客户端状态。"));
-              await desktop.savePreferences(preferencesFrom(snapshot, { bilibiliWebAdBlockEnabled: !snapshot.bilibiliWebAdBlockEnabled }));
-              return { message: t("已保存。重新开启 HTTPS 解密后生效。") };
-            })}
-          />
-        )}
       </Card>
 
       <DecryptHostsCard busy={busy} run={run} />

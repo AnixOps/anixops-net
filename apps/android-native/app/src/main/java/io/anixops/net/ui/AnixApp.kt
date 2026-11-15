@@ -298,7 +298,6 @@ fun AnixApp(
         rulesState = rulesState,
         rules = RulesActions(
             setRoutingMode = app::setRoutingMode,
-            refreshRoutingRules = rules::refreshRoutingRules,
             saveMyRules = rules::saveMyRules,
             selectGroupOutbound = rules::selectGroupOutbound,
             updateRuleSets = rules::updateRuleSets,

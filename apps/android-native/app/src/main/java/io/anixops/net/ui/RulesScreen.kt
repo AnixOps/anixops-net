@@ -47,7 +47,6 @@ import io.anixops.net.ui.theme.LocalBrandPalette
 /** What the rules page can ask for. */
 data class RulesActions(
     val setRoutingMode: (String) -> Unit = {},
-    val refreshRoutingRules: () -> Unit = {},
     val saveMyRules: (String) -> Unit = {},
     val selectGroupOutbound: (group: String, outbound: String) -> Unit = { _, _ -> },
     val updateRuleSets: () -> Unit = {},
@@ -62,7 +61,6 @@ private data class Choice(val value: String, @param:StringRes val label: Int, @p
 private val DnsChoices = listOf(
     Choice("system", R.string.dns_system, R.string.dns_system_hint),
     Choice("encrypted", R.string.dns_encrypted, R.string.dns_encrypted_hint),
-    Choice("split", R.string.dns_split, R.string.dns_split_hint),
     Choice("custom", R.string.dns_custom, R.string.dns_custom_hint),
 )
 
@@ -72,7 +70,7 @@ private const val RulesPlaceholder =
 private const val ServersPlaceholder =
     "cloudflare = https://1.1.1.1/dns-query, server-name=cloudflare-dns.com\n" +
         "alidns = tls://223.5.5.5, server-name=dns.alidns.com, direct"
-private const val DnsRulesPlaceholder = "DOMAIN-SUFFIX,cn,alidns\nRULE-SET,china,alidns"
+private const val DnsRulesPlaceholder = "DOMAIN-SUFFIX,example.cn,alidns\nDOMAIN-KEYWORD,intranet,alidns"
 private const val HostsPlaceholder = "router.lan = 192.168.1.1\n*.home.lan = 192.168.1.20, fd00::20"
 
 /**
@@ -112,14 +110,7 @@ fun RulesScreen(
 @Composable
 private fun RoutingSection(current: String?, enabled: Boolean, actions: RulesActions) {
     Column {
-        Section(
-            stringResource(R.string.home_routing),
-            action = {
-                TextButton(onClick = actions.refreshRoutingRules, enabled = enabled) {
-                    Text(stringResource(R.string.rules_refresh))
-                }
-            },
-        ) {
+        Section(stringResource(R.string.home_routing)) {
             Column(Modifier.selectableGroup()) {
                 RoutingModes.forEachIndexed { index, mode ->
                     if (index > 0) RowDivider()
@@ -140,9 +131,6 @@ private fun RoutingSection(current: String?, enabled: Boolean, actions: RulesAct
 @Composable
 private fun routingHint(mode: String): String = stringResource(
     when (mode) {
-        "bypass_china" -> R.string.routing_bypass_china_hint
-        "gfw_list" -> R.string.routing_gfw_list_hint
-        "return_china" -> R.string.routing_return_china_hint
         "direct" -> R.string.routing_direct_hint
         else -> R.string.routing_rule_hint
     },

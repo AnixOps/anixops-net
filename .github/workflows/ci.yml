@@ -47,6 +47,10 @@ jobs:
       - name: Design tokens are up to date
         run: python3 .github/scripts/design_tokens.py --check
 
+      # Public builds ship no preset scripts or preset routing rules (docs/no-presets.md).
+      - name: No preset scripts or routing rules
+        run: python3 .github/scripts/no_presets.py
+
       # Pull requests run only the platforms their paths touch. Pushes to main, manual runs and any change to
       # the workspace, lockfile, workflows or scripts run everything.
       - name: Classify changed paths
