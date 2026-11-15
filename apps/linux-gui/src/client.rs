@@ -326,7 +326,7 @@ impl Client {
 
     /// Linux desktop TUN mode: the polkit helper makes the device (the desktop asks for the administrator
     /// password) and the engine runs on it. A device already open is kept.
-    #[cfg(not(target_os = "android"))]
+    #[cfg(target_os = "linux")]
     fn open_helper_tunnel(&self) -> Result<(), String> {
         if engine::tunnel_attached() {
             return Ok(());
@@ -337,7 +337,7 @@ impl Client {
         Ok(())
     }
 
-    #[cfg(target_os = "android")]
+    #[cfg(not(target_os = "linux"))]
     fn open_helper_tunnel(&self) -> Result<(), String> {
         Err(UNAVAILABLE.to_string())
     }
@@ -961,7 +961,7 @@ fn handler(name: &str) -> Option<Handler> {
         },
         "set_tun_mode" => |client, args| {
             let Enabled { enabled } = parse(args)?;
-            if cfg!(target_os = "android") {
+            if !cfg!(target_os = "linux") {
                 return Err(UNAVAILABLE.to_string());
             }
             json(client.backend().set_tun_mode(enabled)?)
