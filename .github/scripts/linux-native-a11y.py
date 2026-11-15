@@ -679,11 +679,13 @@ def check_groups(app, binary: str, endpoint: str, text, press, shots: str | None
         return next((row for row in core_ask(endpoint, "groups", {})["groups"] if row["tag"] == tag), None)
 
     def listing(name: str):
-        """The list under that name that is on the screen now."""
-        return next(
-            (node for node, _ in walk(app) if role(node) == "list" and node.get_name() == name and showing(node)),
-            None,
-        )
+        """The list under that name that is on the screen now: the first thing of that name with rows in it."""
+        for node, _ in walk(app):
+            if node.get_name() != name or not showing(node) or role(node) in ("push button", "button", "label"):
+                continue
+            if any(role(inner) == "list item" for inner, _ in walk(node)):
+                return node
+        return None
 
     def rows(name: str) -> list:
         found = listing(name)
@@ -758,7 +760,12 @@ def check_groups(app, binary: str, endpoint: str, text, press, shots: str | None
         if action is None or not action.do_action(0):
             fail("the members of Proxy could not be opened through the accessibility interface")
         wanted = [member["label"] for member in proxy["members"]]
-        until(f"the members {wanted} of Proxy", lambda: [node.get_name() for node in rows("Proxy")] == wanted)
+        try:
+            until(f"the members {wanted} of Proxy", lambda: [node.get_name() for node in rows("Proxy")] == wanted)
+        except SystemExit:
+            # What the window shows instead, for whoever reads the log.
+            dump(app)
+            raise
 
         def chosen() -> list[str]:
             return [node.get_name() for node in rows("Proxy")
