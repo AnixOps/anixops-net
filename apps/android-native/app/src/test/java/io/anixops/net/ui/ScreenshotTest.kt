@@ -1,8 +1,19 @@
 package io.anixops.net.ui
 
 import com.github.takahirom.roborazzi.captureRoboImage
+import io.anixops.net.core.ConnectionSnapshot
+import io.anixops.net.core.Delay
+import io.anixops.net.core.NetworkProbe
+import io.anixops.net.core.NodeRow
+import io.anixops.net.core.NodeSection
+import io.anixops.net.core.NodeSummary
+import io.anixops.net.core.Overview
+import io.anixops.net.core.ProxiesPage
+import io.anixops.net.core.ProxiesView
 import io.anixops.net.core.RuntimeSnapshot
 import io.anixops.net.core.StatusFact
+import io.anixops.net.core.SubscriptionSummary
+import io.anixops.net.core.Traffic
 import io.anixops.net.ui.theme.AnixTheme
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -36,10 +47,8 @@ class ScreenshotTest {
         "zh-rCN",
         dark = false,
         state = UiState(
-            snapshot = connected.copy(
-                connection = "Connection failed",
-                lastError = "节点 tokyo-01 握手超时（10 秒）",
-            ),
+            snapshot = snapshot.copy(connection = "Connection failed"),
+            overview = overview.copy(state = "failed", traffic = null, error = "节点 tokyo-01 握手超时（10 秒）"),
         ),
     )
 
@@ -49,7 +58,10 @@ class ScreenshotTest {
         PHONE,
         "en",
         dark = true,
-        state = UiState(snapshot = connected.copy(connection = "Not connected", selectedNode = null, subscription = null)),
+        state = UiState(
+            snapshot = snapshot.copy(connection = "Not connected", selectedNode = null, subscription = null),
+            overview = Overview(state = "disconnected", egress = "node", canConnect = false),
+        ),
     )
 
     @Test
@@ -67,6 +79,28 @@ class ScreenshotTest {
         capture("settings-phone-dark-en", PHONE, "en", dark = true, destination = Destination.Settings)
 
     @Test
+    fun proxiesPhoneLightZh() =
+        capture("proxies-phone-light-zh", PHONE, "zh-rCN", dark = false, destination = Destination.Proxies)
+
+    @Test
+    fun proxiesPhoneDarkEn() =
+        capture("proxies-phone-dark-en", PHONE, "en", dark = true, destination = Destination.Proxies)
+
+    @Test
+    fun proxiesTabletLightZh() =
+        capture("proxies-tablet-light-zh", TABLET, "zh-rCN", dark = false, destination = Destination.Proxies)
+
+    @Test
+    fun proxiesEmptyPhoneLightZh() = capture(
+        "proxies-empty-phone-light-zh",
+        PHONE,
+        "zh-rCN",
+        dark = false,
+        destination = Destination.Proxies,
+        proxies = ProxiesState(loaded = true),
+    )
+
+    @Test
     fun debugRequestsPhoneLightZh() =
         capture("debug-requests-phone-light-zh", PHONE, "zh-rCN", dark = false, mode = AppMode.Debug)
 
@@ -75,9 +109,10 @@ class ScreenshotTest {
         device: String,
         locale: String,
         dark: Boolean,
-        state: UiState = UiState(snapshot = connected),
+        state: UiState = connectedState,
         mode: AppMode = AppMode.Proxy,
         destination: Destination? = null,
+        proxies: ProxiesState = proxiesState,
     ) {
         RuntimeEnvironment.setQualifiers("$locale-$device-${if (dark) "night" else "notnight"}-xhdpi")
         captureRoboImage("src/test/screenshots/$name.png") {
@@ -86,9 +121,8 @@ class ScreenshotTest {
                     state = state,
                     mode = mode,
                     version = "0.3.0",
-                    onConnect = {},
-                    onDisconnect = {},
                     onModeChange = {},
+                    proxiesState = proxies,
                     initial = destination,
                 )
             }
@@ -99,7 +133,7 @@ class ScreenshotTest {
         const val PHONE = "w411dp-h891dp"
         const val TABLET = "w1280dp-h800dp"
 
-        val connected = RuntimeSnapshot(
+        val snapshot = RuntimeSnapshot(
             platform = "android",
             connection = "Connected",
             core = StatusFact(label = "Running", tone = "success"),
@@ -107,6 +141,72 @@ class ScreenshotTest {
             subscription = "https://panel.example.com/api/v1/client/subscribe?token=demo",
             routingMode = "rule",
             dnsPreset = "system",
+        )
+
+        val tokyo = NodeSummary(id = "tokyo-01", label = "东京 01", protocol = "VLESS", selected = true, group = "Panel")
+
+        val overview = Overview(
+            state = "connected",
+            egress = "node",
+            node = tokyo,
+            canConnect = true,
+            traffic = Traffic(
+                uploadRate = 21_504,
+                downloadRate = 1_572_864,
+                uploadTotal = 18_874_368,
+                downloadTotal = 734_003_200,
+                connections = 3,
+            ),
+        )
+
+        val connectedState = UiState(
+            snapshot = snapshot,
+            overview = overview,
+            connections = listOf(
+                ConnectionSnapshot(1, "tcp", "www.example.com", "www.example.com:443", "DOMAIN-SUFFIX", listOf("东京 01"), upload = 4_096, download = 1_048_576),
+                ConnectionSnapshot(2, "udp", null, "203.0.113.8:443", "MATCH", listOf("东京 01"), upload = 2_048, download = 65_536),
+                ConnectionSnapshot(3, "tcp", "api.example.org", "api.example.org:443", "GEOIP", listOf("DIRECT"), upload = 512, download = 2_048),
+            ),
+            probe = NetworkProbe(exitIp = "198.51.100.24", exitLocation = "JP"),
+        )
+
+        val proxiesState = ProxiesState(
+            loaded = true,
+            subscriptions = listOf(
+                SubscriptionSummary(
+                    id = "s1",
+                    location = "https://panel.example.com/sub",
+                    selected = true,
+                    name = "Panel",
+                    lastSuccessfulUpdate = "2026-11-15 09:30",
+                    nodeCount = 3,
+                    upload = 3_221_225_472,
+                    download = 42_949_672_960,
+                    total = 214_748_364_800,
+                    expire = 1_798_675_200,
+                    updateIntervalHours = 24,
+                    refreshable = true,
+                ),
+                SubscriptionSummary(id = "s2", location = "backup", name = "Backup", nodeCount = 1),
+            ),
+            page = ProxiesPage(
+                view = ProxiesView(
+                    total = 4,
+                    shown = 4,
+                    sections = listOf(
+                        NodeSection(
+                            "Panel",
+                            listOf(
+                                NodeRow("tokyo-01", "东京 01", "VLESS", "Panel", selected = true, delay = Delay(86, "fast")),
+                                NodeRow("osaka-02", "大阪 02", "Trojan", "Panel", delay = Delay(642, "slow")),
+                                NodeRow("hk-03", "香港 03", "Shadowsocks", "Panel", delay = Delay(null, "failed")),
+                            ),
+                        ),
+                        NodeSection(null, listOf(NodeRow("pasted", "Singapore", "Hysteria2"))),
+                    ),
+                ),
+                editable = setOf("tokyo-01", "osaka-02", "hk-03"),
+            ),
         )
     }
 }

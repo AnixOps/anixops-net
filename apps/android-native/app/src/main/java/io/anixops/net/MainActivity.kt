@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.anixops.net.ui.AnixApp
 import io.anixops.net.ui.AppViewModel
+import io.anixops.net.ui.ProxiesViewModel
 import io.anixops.net.ui.theme.AnixTheme
 
 class MainActivity : ComponentActivity() {
@@ -17,7 +18,11 @@ class MainActivity : ComponentActivity() {
         val preferences = getSharedPreferences(AppViewModel.PREFERENCES, MODE_PRIVATE)
         setContent {
             AnixTheme {
-                AnixApp(viewModel { AppViewModel(app.core, preferences) }, BuildConfig.VERSION_NAME)
+                AnixApp(
+                    app = viewModel { AppViewModel(app.core, preferences) },
+                    proxies = viewModel { ProxiesViewModel(app.core) },
+                    version = BuildConfig.VERSION_NAME,
+                )
             }
         }
     }

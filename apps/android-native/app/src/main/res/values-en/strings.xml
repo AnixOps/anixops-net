@@ -15,7 +15,6 @@
     <string name="status_core_error">Core error</string>
     <string name="status_working">Working…</string>
     <string name="home_connection">Connection</string>
-    <string name="home_node">Node</string>
     <string name="home_subscription">Subscription</string>
     <string name="home_routing">Routing mode</string>
     <string name="home_no_node">None selected</string>
@@ -30,7 +29,7 @@
     <string name="routing_rule">Rules</string>
 
     <string name="pending_title">This page is still moving over</string>
-    <string name="pending_body">The native preview has only Home and Settings so far. Use the current app for everything else.</string>
+    <string name="pending_body">The native preview does not have this page yet; use the current app for it.</string>
 
     <string name="settings_usage">Use AnixOps Net for</string>
     <string name="mode_proxy">Proxy</string>
@@ -41,4 +40,79 @@
     <string name="notification_channel_vpn">Connection status</string>
     <string name="notification_channel_notices">Notifications</string>
     <string name="notification_connected">Connected</string>
+
+    <string name="home_traffic">Live traffic</string>
+    <string name="home_upload">Upload</string>
+    <string name="home_download">Download</string>
+    <string name="home_total">%1$s total</string>
+    <string name="home_egress">Exit</string>
+    <string name="home_egress_direct">Direct</string>
+    <string name="home_exit_ip">Exit IP</string>
+    <string name="home_after_connect">Shown once connected</string>
+    <string name="home_choose_node">Pick a node in Proxies first</string>
+    <string name="home_connections">Open connections</string>
+    <string name="home_no_connections">No connections yet</string>
+    <string name="home_close_all">Close all</string>
+    <string name="home_close_connection">Close %1$s</string>
+    <string name="proxies_search">Search nodes</string>
+    <string name="proxies_test_all">Test all</string>
+    <string name="proxies_testing">Testing…</string>
+    <string name="proxies_fastest">Pick the fastest</string>
+    <string name="proxies_empty">No nodes yet</string>
+    <string name="proxies_empty_body">Import a subscription to switch nodes and test delays here.</string>
+    <string name="proxies_no_match">No nodes match.</string>
+    <string name="proxies_other_nodes">Other nodes</string>
+    <string name="proxies_in_use">In use</string>
+    <string name="proxies_timed_out">Timed out</string>
+    <string name="proxies_more">More for %1$s</string>
+    <string name="proxies_share">Copy share link</string>
+    <string name="proxies_shared">Copied the share link of %1$s</string>
+    <string name="proxies_edit">Edit node</string>
+    <string name="proxies_remove">Remove node</string>
+    <string name="proxies_confirm_remove">Remove %1$s?</string>
+    <string name="node_name">Name</string>
+    <string name="node_server">Server</string>
+    <string name="node_port">Port</string>
+    <string name="node_edit_note">Changes stay on this device; updating the subscription brings back what it serves.</string>
+    <string name="action_save">Save</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_remove">Remove</string>
+    <string name="subscriptions">Subscriptions</string>
+    <string name="subscription_import">Import subscription</string>
+    <string name="subscription_link">Subscription link</string>
+    <string name="subscription_import_action">Import</string>
+    <string name="subscription_scan">Scan</string>
+    <string name="subscription_scan_title">Scan QR code</string>
+    <string name="subscription_scan_hint">Fit the subscription or node QR code in the frame</string>
+    <string name="subscription_camera_denied">No camera access. Allow this app to use the camera in the system settings</string>
+    <string name="subscription_use">Use</string>
+    <string name="subscription_update">Update</string>
+    <string name="subscription_rename">Rename</string>
+    <string name="subscription_remove">Delete subscription</string>
+    <string name="subscription_confirm_remove">Delete %1$s?</string>
+    <string name="subscription_updated_at">Updated %1$s</string>
+    <string name="subscription_never">Never updated</string>
+    <string name="subscription_failed">Update failed</string>
+    <string name="subscription_used_of">Used %1$s / %2$s</string>
+    <string name="subscription_used">Used %1$s</string>
+    <string name="subscription_expires">Expires %1$s</string>
+    <string name="subscription_interval">Auto update</string>
+    <string name="interval_manual">Update by hand</string>
+    <string name="interval_weekly">Weekly</string>
+    <plurals name="home_connection_count">
+        <item quantity="one">%d connection</item>
+        <item quantity="other">%d connections</item>
+    </plurals>
+    <plurals name="proxies_node_count">
+        <item quantity="one">%d node</item>
+        <item quantity="other">%d nodes</item>
+    </plurals>
+    <plurals name="interval_hours">
+        <item quantity="one">Every hour</item>
+        <item quantity="other">Every %d hours</item>
+    </plurals>
+    <plurals name="interval_days">
+        <item quantity="one">Every day</item>
+        <item quantity="other">Every %d days</item>
+    </plurals>
 </resources>
