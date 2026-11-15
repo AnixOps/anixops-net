@@ -6,7 +6,7 @@ import Foundation
 ///
 /// A line starting with `#`, `;` or `//` is a comment. A comment that is exactly a rule (`# DOMAIN,example.com,DIRECT`)
 /// is that rule switched off, so the list's on/off switches survive a trip through the text; other comments are not
-/// kept. `FINAL` is not a user rule: the preset or the subscription decides it.
+/// kept. `FINAL` is not a user rule: the subscription decides it, or else everything left goes through the proxy.
 ///
 /// Positions are UTF-16 offsets, as `NSRange`, `UITextView` and `NSTextView` count them.
 public enum RuleText {
@@ -42,7 +42,7 @@ public enum RuleText {
         case missingValue
         /// The value does not fit the type; the engine would refuse the whole routing for it.
         case invalidValue
-        /// `FINAL` / `MATCH`: decided by the preset or the subscription.
+        /// `FINAL` / `MATCH`: decided by the subscription, or the proxy without one.
         case final
         /// The line would be rule number `LocalRules.maxRules + 1` or later.
         case tooMany
@@ -201,7 +201,7 @@ public enum RuleText {
     }
 
     /// The rules of `text`, keeping the id of each unchanged rule of `rules` so the list keeps its identity; the
-    /// preset, the private-network switch and the rule sets stay as they are. Throws `Rejected` with every problem
+    /// private-network switch and the rule sets stay as they are. Throws `Rejected` with every problem
     /// when one line cannot be kept, and then nothing changes.
     public static func apply(_ text: String, to rules: LocalRules) throws -> LocalRules {
         let checked = check(text)

@@ -407,7 +407,7 @@ struct MacRulesPage: View {
         }
     }
 
-    /// The user's own rules as text, matched before the subscription's (or before the preset of a plain node list).
+    /// The user's own rules as text, matched before the subscription's (or, for a plain node list, before everything else goes through the selected node).
     private func myRulesCard(hasSubscriptionRules: Bool) -> some View {
         MacCard(title: "我的规则") {
             NavigationLink {

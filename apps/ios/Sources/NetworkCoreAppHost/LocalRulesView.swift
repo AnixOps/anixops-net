@@ -8,7 +8,7 @@ import SwiftUI
 /// user's there are.
 struct LocalRulesSection: View {
     var tunnel: TunnelController
-    /// Whether the active subscription brings its own rules; the preset then does not apply.
+    /// Whether the active subscription brings its own rules; they then decide what no rule here matched.
     var hasSubscriptionRules: Bool
     @Environment(\.brand) private var brand
 
@@ -29,7 +29,7 @@ struct LocalRulesSection: View {
             .listRowBackground(brand.surface)
         } footer: {
             if !hasSubscriptionRules {
-                Text("订阅没有自带规则时，规则模式按这里的预设、规则集和你的规则分流。")
+                Text("订阅没有自带规则时，规则模式按这里你自己的规则和规则集分流，其余走代理。")
             }
         }
     }
@@ -37,9 +37,6 @@ struct LocalRulesSection: View {
     private var summary: String {
         let rules = tunnel.localRules
         var parts: [String] = []
-        if !hasSubscriptionRules {
-            parts.append(LocalRulesText.title(rules.preset))
-        }
         let sets = rules.subscriptions.filter(\.enabled).count
         let own = rules.rules.filter(\.enabled).count
         parts.append(String(localized: "\(sets) 个规则集"))
@@ -49,32 +46,6 @@ struct LocalRulesSection: View {
 }
 
 enum LocalRulesText {
-    static func title(_ preset: LocalRules.Preset) -> String {
-        switch preset {
-        case .bypassChina:
-            return String(localized: "绕过大陆")
-        case .gfwList:
-            return String(localized: "GFW 列表")
-        case .returnChina:
-            return String(localized: "回国")
-        case .proxyAll:
-            return String(localized: "全部代理")
-        }
-    }
-
-    static func detail(_ preset: LocalRules.Preset) -> String {
-        switch preset {
-        case .bypassChina:
-            return String(localized: "大陆域名和 IP 直连，其余走代理")
-        case .gfwList:
-            return String(localized: "只有 GFW 列表里的域名走代理，其余直连")
-        case .returnChina:
-            return String(localized: "大陆域名和 IP 走代理，其余直连，适合在海外访问国内服务")
-        case .proxyAll:
-            return String(localized: "不用列表，未匹配的流量都走代理")
-        }
-    }
-
     static func policy(_ policy: LocalRules.Policy) -> String {
         switch policy {
         case .proxy:
@@ -113,9 +84,9 @@ struct PolicyChip: View {
     }
 }
 
-/// The local rules, in the order they match: the user's rules, the rule sets (open-source lists from GitHub or any
-/// list URL, downloaded and refreshed by the engine), then the preset for whatever is left. Saving reconnects a
-/// running tunnel.
+/// The local rules, in the order they match: the user's rules, the rule sets (list URLs the user added, downloaded
+/// and refreshed by the engine), then the proxy for whatever is left. Nothing here is preset: a new install starts
+/// empty. Saving reconnects a running tunnel.
 struct LocalRulesView: View {
     var tunnel: TunnelController
     var hasSubscriptionRules: Bool
@@ -127,7 +98,6 @@ struct LocalRulesView: View {
     @State private var notice: String?
     @State private var status: [String: RuntimeControl.RuleSets.Status] = [:]
     @State private var updating = false
-    @State private var showingLibrary = false
     @State private var editingText = false
 
     private var rules: LocalRules {
@@ -139,7 +109,7 @@ struct LocalRulesView: View {
             rulesSection
             ruleSetsSection
             if !hasSubscriptionRules {
-                presetSection
+                remainderSection
             }
             Section {
                 Button("从 Loon / Surge 配置导入规则") {
@@ -153,7 +123,7 @@ struct LocalRulesView: View {
             } footer: {
                 Text(hasSubscriptionRules
                     ? "从上到下匹配，先匹配先生效，全部排在订阅规则前面。“代理”指订阅的第一个策略组。"
-                    : "从上到下匹配，先匹配先生效：你的规则、规则集，最后是预设。“代理”指当前选中的节点。")
+                    : "从上到下匹配，先匹配先生效：你的规则、规则集，其余走代理。“代理”指当前选中的节点。")
             }
             .listRowBackground(brand.surface)
         }
@@ -171,7 +141,7 @@ struct LocalRulesView: View {
                     }
                     .disabled(rules.rules.count >= LocalRules.maxRules)
                     Button {
-                        showingLibrary = true
+                        editingSet = RuleSetEdit(original: nil)
                     } label: {
                         Label("添加规则集", systemImage: "square.stack.3d.down.right")
                     }
@@ -197,9 +167,6 @@ struct LocalRulesView: View {
                     EditButton()
                 }
             }
-        }
-        .navigationDestination(isPresented: $showingLibrary) {
-            RuleSetLibraryView(tunnel: tunnel)
         }
         .navigationDestination(isPresented: $editingText) {
             RuleTextEditorView(tunnel: tunnel)
@@ -351,10 +318,10 @@ struct LocalRulesView: View {
                 next.subscriptions.move(fromOffsets: offsets, toOffset: destination)
                 commit(next)
             }
-            NavigationLink {
-                RuleSetLibraryView(tunnel: tunnel)
+            Button {
+                editingSet = RuleSetEdit(original: nil)
             } label: {
-                Label("从开源规则库添加", systemImage: "square.stack.3d.down.right")
+                Label("通过链接添加规则集", systemImage: "link")
                     .foregroundStyle(brand.primary)
             }
             .disabled(rules.subscriptions.count >= LocalRules.maxSubscriptions)
@@ -380,7 +347,7 @@ struct LocalRulesView: View {
         } header: {
             Text("规则集")
         } footer: {
-            Text("规则集由内核经代理下载，每天自动更新。常用的开源规则来自 blackmatrix7/ios_rule_script 和 Loyalsoldier/surge-rules，也可以填任意 Surge、Loon、Clash 规则列表链接。")
+            Text("填任意 Surge、Loon、Clash 规则列表的 https 链接，由内核经代理下载，每天自动更新。")
         }
         .listRowBackground(brand.surface)
     }
@@ -428,39 +395,10 @@ struct LocalRulesView: View {
         status = Dictionary(answer.ruleSets.map { ($0.name, $0) }) { first, _ in first }
     }
 
-    // MARK: - Preset
+    // MARK: - Everything else
 
-    private var presetSection: some View {
+    private var remainderSection: some View {
         Section {
-            ForEach(LocalRules.Preset.allCases) { preset in
-                Button {
-                    guard preset != rules.preset else {
-                        return
-                    }
-                    var next = rules
-                    next.preset = preset
-                    commit(next)
-                } label: {
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(LocalRulesText.title(preset))
-                                .foregroundStyle(brand.text)
-                            Text(LocalRulesText.detail(preset))
-                                .font(.caption)
-                                .foregroundStyle(brand.text2)
-                        }
-                        Spacer(minLength: 8)
-                        if preset == rules.preset {
-                            Image(systemName: "checkmark")
-                                .font(.body.weight(.semibold))
-                                .foregroundStyle(brand.primary)
-                        }
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(preset == rules.preset ? .isSelected : [])
-            }
             Toggle("局域网和本机地址直连", isOn: Binding(
                 get: { rules.bypassLAN },
                 set: { on in
@@ -473,7 +411,7 @@ struct LocalRulesView: View {
         } header: {
             Text("其余流量")
         } footer: {
-            Text("没有被上面规则和规则集匹配的流量按预设处理。大陆和 GFW 列表每天自动更新。只在规则模式下生效。")
+            Text("没有被上面规则和规则集匹配的流量都走代理。只在规则模式下生效。")
         }
         .listRowBackground(brand.surface)
     }
@@ -573,9 +511,6 @@ struct RuleSetSubscriptionSheet: View {
         subscription.name = name
         subscription.url = url.trimmingCharacters(in: .whitespaces)
         subscription.policy = policy
-        if subscription.url != edit.original?.url {
-            subscription.catalogID = nil
-        }
         do {
             commit(try rules.saving(subscription))
             dismiss()

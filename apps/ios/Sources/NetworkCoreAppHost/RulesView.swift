@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Rules: the proxy mode (rules, global or direct), the subscription's policy groups, the local rules and the DNS
 /// settings. Only subscriptions that carry rules and groups (Clash, Surge or Loon profiles) have groups to show here;
-/// any other node list routes by the local rules' preset and the user's own rules.
+/// any other node list routes by the user's own rules and sends the rest through the selected node.
 struct RulesView: View {
     var tunnel: TunnelController
     /// Pushed from another page (debug mode's exit settings) instead of being a tab's root.
