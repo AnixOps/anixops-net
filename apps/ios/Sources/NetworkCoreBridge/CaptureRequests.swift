@@ -1,8 +1,21 @@
 import Foundation
 
 extension PacketCapture {
+    /// Where an exchange sits in the capture: its connection and its place in that connection's `http` array. It
+    /// stays the same while the exchange is under way and after it ends, unlike `seq`.
+    public struct ExchangeKey: Hashable, Sendable {
+        public let connectionID: UInt64
+        public let index: Int
+
+        public init(connectionID: UInt64, index: Int) {
+            self.connectionID = connectionID
+            self.index = index
+        }
+    }
+
     /// One `capture_requests` row: a decrypted HTTP exchange, filed under its connection.
     public struct RequestRow: Decodable, Equatable, Identifiable, Sendable {
+        /// The order the exchange ended in; 0 while it is still under way.
         public let seq: UInt64
         public let connectionID: UInt64
         /// Its place in the connection's `http` array (`capture_connection`).
@@ -19,9 +32,19 @@ extension PacketCapture {
         public let requestSize: UInt64
         public let responseSize: UInt64
         public let responseContentType: String?
+        /// Bumped by the engine on every change to the exchange (`since_rev`); 0 from kernels before it.
+        public let rev: UInt64
+        /// The request or response is still under way: its row shows up as soon as the request head is read and is
+        /// updated as the response arrives.
+        public let inProgress: Bool
+        /// A rewrite rule that would have read or changed the body did not run: the response was relayed as a
+        /// stream (an event stream) or was over the size rules can hold.
+        public let rulesSkipped: Bool
+        /// Server-sent events or WebSocket messages seen so far.
+        public let messageCount: UInt64
 
-        public var id: UInt64 {
-            seq
+        public var id: ExchangeKey {
+            ExchangeKey(connectionID: connectionID, index: index)
         }
 
         enum CodingKeys: String, CodingKey {
@@ -34,6 +57,9 @@ extension PacketCapture {
             case requestSize = "request_size"
             case responseSize = "response_size"
             case responseContentType = "response_content_type"
+            case rev, state
+            case rulesSkipped = "rules_skipped"
+            case messageCount = "message_count"
         }
 
         public init(from decoder: Decoder) throws {
@@ -52,6 +78,21 @@ extension PacketCapture {
             requestSize = try container.decodeIfPresent(UInt64.self, forKey: .requestSize) ?? 0
             responseSize = try container.decodeIfPresent(UInt64.self, forKey: .responseSize) ?? 0
             responseContentType = try container.decodeIfPresent(String.self, forKey: .responseContentType)
+            rev = try container.decodeIfPresent(UInt64.self, forKey: .rev) ?? 0
+            inProgress = try container.decodeIfPresent(String.self, forKey: .state) == "in_progress"
+            rulesSkipped = try container.decodeIfPresent(Bool.self, forKey: .rulesSkipped) ?? false
+            messageCount = try container.decodeIfPresent(UInt64.self, forKey: .messageCount) ?? 0
+        }
+
+        /// What carries the messages: `SSE` for an event stream, `WS` for a WebSocket; nil for neither.
+        public var streamKind: String? {
+            if method == "GET", status == 101 {
+                return "WS"
+            }
+            if responseContentType?.lowercased().hasPrefix("text/event-stream") == true {
+                return "SSE"
+            }
+            return messageCount > 0 ? "WS" : nil
         }
 
         /// The path and query, for the row's second line.
@@ -116,6 +157,8 @@ extension PacketCapture {
     public struct RequestsAnswer: Decodable, Equatable, Sendable {
         public let requests: [RequestRow]
         public let lastSeq: UInt64
+        /// The newest change in the capture (`since_rev`); nil from kernels that list only ended exchanges.
+        public let lastRev: UInt64?
         /// Rows up to this `seq` were dropped with their connection (capture budget, clear, a loaded session).
         public let droppedBeforeSeq: UInt64
         /// The 0-based character the filter stopped parsing at.
@@ -124,6 +167,7 @@ extension PacketCapture {
         enum CodingKeys: String, CodingKey {
             case requests
             case lastSeq = "last_seq"
+            case lastRev = "last_rev"
             case droppedBeforeSeq = "dropped_before_seq"
             case error
         }
@@ -133,9 +177,16 @@ extension PacketCapture {
             let at: Int?
         }
 
-        public init(requests: [RequestRow], lastSeq: UInt64, droppedBeforeSeq: UInt64, invalidFilterAt: Int? = nil) {
+        public init(
+            requests: [RequestRow],
+            lastSeq: UInt64,
+            lastRev: UInt64? = nil,
+            droppedBeforeSeq: UInt64,
+            invalidFilterAt: Int? = nil
+        ) {
             self.requests = requests
             self.lastSeq = lastSeq
+            self.lastRev = lastRev
             self.droppedBeforeSeq = droppedBeforeSeq
             self.invalidFilterAt = invalidFilterAt
         }
@@ -152,6 +203,7 @@ extension PacketCapture {
             self.init(
                 requests: try container.decode([RequestRow].self, forKey: .requests),
                 lastSeq: try container.decode(UInt64.self, forKey: .lastSeq),
+                lastRev: try container.decodeIfPresent(UInt64.self, forKey: .lastRev),
                 droppedBeforeSeq: try container.decodeIfPresent(UInt64.self, forKey: .droppedBeforeSeq) ?? 0
             )
         }
@@ -290,36 +342,63 @@ public enum CaptureFilter {
     }
 }
 
-/// The rows the request list shows, kept in step with the engine: new rows arrive after `nextSeq`, and rows the
-/// engine dropped go away. Rows are oldest first; `maxRows` keeps the newest.
+/// The rows the request list shows, kept in step with the engine. With a kernel that numbers changes (`since_rev`),
+/// a request shows up as soon as its head is read and its row is updated in place as the response arrives; rows are
+/// in the order they first appeared. Older kernels list only ended exchanges, after `nextSeq`. Rows the engine
+/// dropped go away; `maxRows` keeps the newest.
 public struct CaptureRequestLog: Equatable, Sendable {
     public static let pageSize = 500
     public static let maxRows = 5000
 
     public private(set) var rows: [PacketCapture.RequestRow] = []
-    /// What to ask for next (`since_seq`).
+    /// What to ask for next (`since_seq`), for kernels without `since_rev`.
     public private(set) var nextSeq: UInt64 = 0
+    /// What to ask for next (`since_rev`).
+    public private(set) var nextRev: UInt64 = 0
+    /// Where each row is in `rows`.
+    private var positions: [PacketCapture.ExchangeKey: Int] = [:]
 
     public init() {}
 
-    /// Takes in one answer to `capture_requests(sinceSeq: nextSeq, …)`. Returns whether a full page came, so there
-    /// may be more to read right away.
+    /// Takes in one answer to `capture_requests(sinceSeq: nextSeq, sinceRev: nextRev, …)`. Returns whether a full
+    /// page came, so there may be more to read right away.
     @discardableResult
     public mutating func apply(_ answer: PacketCapture.RequestsAnswer, limit: Int = pageSize) -> Bool {
         if answer.droppedBeforeSeq > 0 {
-            rows.removeAll { $0.seq <= answer.droppedBeforeSeq }
-        }
-        let fresh = answer.requests.filter { $0.seq > nextSeq }
-        rows.append(contentsOf: fresh)
-        if rows.count > Self.maxRows {
-            rows.removeFirst(rows.count - Self.maxRows)
+            // A row still under way has no `seq` yet and is kept; if its connection went, it is simply not updated
+            // again, and opening it says it is gone.
+            removeRows { $0.seq != 0 && $0.seq <= answer.droppedBeforeSeq }
         }
         let full = answer.requests.count >= limit
-        if full, let last = answer.requests.last?.seq {
+        if let lastRev = answer.lastRev {
+            for row in answer.requests {
+                if let position = positions[row.id] {
+                    rows[position] = row
+                } else {
+                    positions[row.id] = rows.count
+                    rows.append(row)
+                }
+            }
+            if full, let last = answer.requests.last?.rev {
+                nextRev = max(nextRev, last)
+            } else {
+                nextRev = max(nextRev, lastRev)
+            }
+        } else {
+            for row in answer.requests where row.seq > nextSeq && positions[row.id] == nil {
+                positions[row.id] = rows.count
+                rows.append(row)
+            }
+        }
+        if full, let last = answer.requests.last?.seq, answer.lastRev == nil {
             // A filtered page can stop short of `last_seq`: carry on from the last row read.
             nextSeq = max(nextSeq, last)
         } else {
             nextSeq = max(nextSeq, answer.lastSeq)
+        }
+        if rows.count > Self.maxRows {
+            rows.removeFirst(rows.count - Self.maxRows)
+            reindex()
         }
         // A cleared capture or a loaded session starts numbering above everything shown, which the drop above has
         // already removed; the next read then starts from there.
@@ -329,6 +408,20 @@ public struct CaptureRequestLog: Equatable, Sendable {
     /// Forgets everything, for a new filter.
     public mutating func reset() {
         rows = []
+        positions = [:]
         nextSeq = 0
+        nextRev = 0
+    }
+
+    private mutating func removeRows(where drop: (PacketCapture.RequestRow) -> Bool) {
+        let before = rows.count
+        rows.removeAll(where: drop)
+        if rows.count != before {
+            reindex()
+        }
+    }
+
+    private mutating func reindex() {
+        positions = Dictionary(uniqueKeysWithValues: rows.enumerated().map { ($0.element.id, $0.offset) })
     }
 }

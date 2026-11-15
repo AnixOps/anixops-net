@@ -62,8 +62,14 @@ public enum RuntimeControl {
     /// Replaces what is captured with a saved session (and stops live capture).
     case loadCapture(String)
     case deleteCapture(String)
-    /// One row per decrypted HTTP exchange after `sinceSeq`, those matching `filter` (`CaptureFilter`).
-    case captureRequests(sinceSeq: UInt64, limit: Int, filter: String)
+    /// One row per decrypted HTTP exchange matching `filter` (`CaptureFilter`): ended after `sinceSeq`, or, with
+    /// `sinceRev`, every exchange that changed after it, including those still under way.
+    case captureRequests(sinceSeq: UInt64, sinceRev: UInt64? = nil, limit: Int, filter: String)
+    /// Exchange `index` of connection `id` with its event-stream or WebSocket messages from `sinceMessage` on
+    /// (`PacketCapture.ExchangeAnswer`).
+    case captureExchange(id: UInt64, index: Int, sinceMessage: UInt64)
+    /// The HTTP/2 frame headers kept of connection `id`, from frame `since` on (`PacketCapture.H2FramesAnswer`).
+    case captureH2Frames(id: UInt64, since: UInt64)
     /// The engine opened to phones on the local network that set this Mac as their Wi-Fi proxy (`LanShare`).
     case lanShare
     /// Starts (or restarts) the LAN share on `port`; `0` picks a free one.
@@ -149,12 +155,19 @@ public enum RuntimeControl {
             object = ["cmd": "load_capture", "session": session]
         case let .deleteCapture(session):
             object = ["cmd": "delete_capture", "session": session]
-        case let .captureRequests(sinceSeq, limit, filter):
+        case let .captureRequests(sinceSeq, sinceRev, limit, filter):
             var request: [String: Any] = ["cmd": "capture_requests", "since_seq": sinceSeq, "limit": limit]
+            if let sinceRev {
+                request["since_rev"] = sinceRev
+            }
             if !filter.isEmpty {
                 request["filter"] = filter
             }
             object = request
+        case let .captureExchange(id, index, sinceMessage):
+            object = ["cmd": "capture_exchange", "id": id, "index": index, "since_message": sinceMessage]
+        case let .captureH2Frames(id, since):
+            object = ["cmd": "capture_h2_frames", "id": id, "since": since]
         case .lanShare:
             object = ["cmd": "lan_share"]
         case let .startLanShare(port):

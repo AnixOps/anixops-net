@@ -76,7 +76,11 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含调试模式的 `deb
 - **macOS 和宽屏 iPad**（仿 Proxyman）：可排序的表格（时间、方法、状态、主机、路径、类型、大小、耗时）加右侧常驻检查器，选中一行就在检查器里看请求和响应，可以重放、生成映射、导出；工具栏按钮可以收起检查器。方向键切换行，右键可以拷贝网址。状态码按颜色区分：2xx 绿、3xx 黄、4xx/5xx 和没有响应红、等待中灰。macOS 的隧道诊断（复制诊断信息、扩展日志、导出日志）放在工具栏的“诊断”菜单里。
 - **iPhone 和窄屏 iPad**：列表，点开一条进入请求详情。
 
-- 数据来自内核 `capture_requests`（networkcore d1a8cc1 起），每秒按 `since_seq` 增量读取，`dropped_before_seq` 以内的行随内核一起删掉；本地最多保留 5000 行（`NetworkCoreBridge/CaptureRequests.swift`）。
+- 数据来自内核 `capture_requests`（networkcore d1a8cc1 起），每秒按 `since_rev` 增量读取（networkcore d9ff54f 起）：请求头读到就出现一行“进行中”，响应到来、结束时在原位更新；行按首次出现排序，以连接 id 加序号标识。`dropped_before_seq` 以内已结束的行随内核一起删掉；本地最多保留 5000 行（`NetworkCoreBridge/CaptureRequests.swift`）。旧内核没有 `last_rev` 时退回按 `since_seq` 只列已结束的请求。
+- 行上的标签：`SSE n` / `WS n`（事件流或 WebSocket 及已收到的消息数）、“改写未生效”（改写规则因为流式响应或正文超过 1 MiB 没有执行）、“进行中”。
+- 请求详情：进行中的请求每秒重读（`capture_exchange`）；“事件” / “WebSocket 消息”逐条列出方向、事件名或帧类型、大小和内容开头，点开看全文，进行中时每秒追加（`since_message`）。WebSocket 只读，消息原样转发；permessage-deflate 由内核解压，解不开的标出来。每个请求保留最近 512 条、每条前 4 KiB，更早的显示为“未保留”。
+- HTTP/2 连接有“HTTP/2 帧”：App ↔ AnixOps 与 AnixOps ↔ 服务器两段的帧头（类型、流、标志、长度、错误码、窗口增量），可按链路筛选，或只看 RST_STREAM、GOAWAY 和错误（`capture_h2_frames`）。
+- 正文解压在 App 进程里调内核 `networkcore_ios_decode_body`（gzip、deflate、br、zstd，可叠加，最多 16 MiB），与桌面和导出一致；内核解不开时退回系统 Compression 框架。
 - 快捷筛选（出错、JSON、图片、非 GET、HTTP/2、大于 100 KB、本地应答）和搜索框拼成同一个过滤表达式交给内核解析，语法见 project files `debug-client/kernel-capture-api.md` §4。快捷筛选的条件会加到搜索框每个 `OR` 分组里。
 - 表达式有误时内核返回出错位置，列表上方标红提示。
 - 只列 MITM 解密后的请求和明文 HTTP 请求；抓包未开启时空白页给出“开始抓包”。
