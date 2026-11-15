@@ -38,6 +38,7 @@ BANNED = [
      "a preset routing mode"),
     (re.compile(r"builtin_(ad_block|bilibili)|BUILTIN_(AD_BLOCK|BILIBILI)|bilibiliWebAdBlock|native_mitm_policy_source"),
      "a built-in MITM ad-block plugin"),
+    (re.compile(r"DnsSettings\.split\b|dns_split|value: \"split\""), "the DNS split preset"),
 ]
 
 PACKAGED_DIRS = [

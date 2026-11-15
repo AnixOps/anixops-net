@@ -65,7 +65,7 @@ export function routingLabel(mode: RuntimeSnapshot["routingMode"] | undefined): 
   return t(routingModes.find((item) => item.value === mode)?.label ?? routingModes[0].label);
 }
 
-const dnsPresetLabels: Record<DnsPreset, string> = { system: "系统 DNS", encrypted: "加密 DNS", split: "国内外分流", custom: "自定义 DNS" };
+const dnsPresetLabels: Record<DnsPreset, string> = { system: "系统 DNS", encrypted: "加密 DNS", custom: "自定义 DNS" };
 
 /** The short name of a DNS choice; backends that do not report one use the system's. */
 export function dnsPresetLabel(preset: DnsPreset | undefined): string {

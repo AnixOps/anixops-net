@@ -1207,22 +1207,6 @@
         }
       }
     },
-    "使用推荐的国内外分流": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Use the recommended domestic/overseas split"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "使用推薦的國內外分流"
-          }
-        }
-      }
-    },
     "保存": {
       "localizations": {
         "en": {
@@ -7319,34 +7303,18 @@
         }
       }
     },
-    "推荐分流：国内域名（.cn 和 geosite-cn 列表）直连阿里 DNS，其余经代理用 Cloudflare 解析。默认设置下所有查询经代理发往 1.1.1.1。": {
+    "默认设置下所有查询经代理发往 1.1.1.1。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Recommended split: domestic names (.cn and the geosite-cn list) go directly to AliDNS, everything else to Cloudflare through the proxy. By default every query goes to 1.1.1.1 through the proxy."
+            "value": "By default every query goes to 1.1.1.1 through the proxy."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "推薦分流：國內網域（.cn 和 geosite-cn 清單）直連阿里 DNS，其餘經代理用 Cloudflare 解析。預設設定下所有查詢經代理發往 1.1.1.1。"
-          }
-        }
-      }
-    },
-    "用推荐分流替换现有 DNS 设置？": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Replace the current DNS settings with the recommended split?"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "用推薦分流替換現有 DNS 設定？"
+            "value": "預設設定下所有查詢經代理發往 1.1.1.1。"
           }
         }
       }

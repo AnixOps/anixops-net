@@ -45,7 +45,6 @@ struct DnsSettingsView: View {
     @State private var editing: ServerEdit?
     @State private var addingRule = false
     @State private var addingHost = false
-    @State private var confirmingSplit = false
     @State private var confirmingReset = false
     @State private var failure: String?
 
@@ -62,14 +61,6 @@ struct DnsSettingsView: View {
             }
             hostsSection
             Section {
-                Button("使用推荐的国内外分流") {
-                    if dns.isEmpty {
-                        commit(DnsSettings.split)
-                    } else {
-                        confirmingSplit = true
-                    }
-                }
-                .listRowBackground(brand.surface)
                 if !dns.isEmpty {
                     Button("恢复默认", role: .destructive) {
                         confirmingReset = true
@@ -77,7 +68,7 @@ struct DnsSettingsView: View {
                     .listRowBackground(brand.surface)
                 }
             } footer: {
-                Text("推荐分流：国内域名（.cn 和 geosite-cn 列表）直连阿里 DNS，其余经代理用 Cloudflare 解析。默认设置下所有查询经代理发往 1.1.1.1。")
+                Text("默认设置下所有查询经代理发往 1.1.1.1。")
             }
         }
         .scrollContentBackground(.hidden)
@@ -101,16 +92,6 @@ struct DnsSettingsView: View {
                 commit { try dns.settingHost(name, addresses: addresses) }
             }
             .formSheetFrame()
-        }
-        .confirmationDialog("用推荐分流替换现有 DNS 设置？", isPresented: $confirmingSplit, titleVisibility: .visible) {
-            Button("替换", role: .destructive) {
-                var next = DnsSettings.split
-                next.hosts = dns.hosts
-                next.fakeIP = dns.fakeIP
-                commit(next)
-            }
-        } message: {
-            Text("Hosts 与 Fake-IP 开关会保留。")
         }
         .confirmationDialog("清除所有 DNS 设置？", isPresented: $confirmingReset, titleVisibility: .visible) {
             Button("恢复默认", role: .destructive) {

@@ -61,7 +61,6 @@ private data class Choice(val value: String, @param:StringRes val label: Int, @p
 private val DnsChoices = listOf(
     Choice("system", R.string.dns_system, R.string.dns_system_hint),
     Choice("encrypted", R.string.dns_encrypted, R.string.dns_encrypted_hint),
-    Choice("split", R.string.dns_split, R.string.dns_split_hint),
     Choice("custom", R.string.dns_custom, R.string.dns_custom_hint),
 )
 
@@ -71,7 +70,7 @@ private const val RulesPlaceholder =
 private const val ServersPlaceholder =
     "cloudflare = https://1.1.1.1/dns-query, server-name=cloudflare-dns.com\n" +
         "alidns = tls://223.5.5.5, server-name=dns.alidns.com, direct"
-private const val DnsRulesPlaceholder = "DOMAIN-SUFFIX,cn,alidns\nRULE-SET,china,alidns"
+private const val DnsRulesPlaceholder = "DOMAIN-SUFFIX,example.cn,alidns\nDOMAIN-KEYWORD,intranet,alidns"
 private const val HostsPlaceholder = "router.lan = 192.168.1.1\n*.home.lan = 192.168.1.20, fd00::20"
 
 /**
