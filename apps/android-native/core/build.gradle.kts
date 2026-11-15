@@ -42,4 +42,6 @@ dependencies {
 // The shared request and answer samples (crates/client-core/tests/fixtures) the Rust tests also read.
 tasks.withType<Test>().configureEach {
     systemProperty("fixtures", rootDir.resolve("../../crates/client-core/tests/fixtures").absolutePath)
+    // The page models' samples (crates/client-view), which the Rust tests check against the view commands.
+    systemProperty("viewCases", rootDir.resolve("../../crates/client-view/fixtures/cases.json").absolutePath)
 }

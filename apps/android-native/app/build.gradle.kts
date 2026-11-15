@@ -21,9 +21,11 @@ android {
         targetSdk = 35
         versionCode = 300
         versionName = "0.3.0"
+        // arm64 only in the APK; CI's emulator smoke test builds x86_64 instead (-Panixops.abis=x86_64).
         ndk {
-            abiFilters += setOf("arm64-v8a")
+            abiFilters += (findProperty("anixops.abis") as String? ?: "arm64-v8a").split(",")
         }
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // The launcher name; "（预览）" until the cutover, so the two apps are told apart.
         manifestPlaceholders["appLabel"] = "AnixOps Net（预览）"
     }
@@ -91,6 +93,11 @@ dependencies {
     implementation(libs.compose.material3.navigation.suite)
     implementation(libs.compose.material.icons.core)
     implementation(libs.kotlinx.coroutines.android)
+    // QR import: CameraX for the preview, ZXing core (Apache-2.0) to decode; no Google Play services.
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.zxing.core)
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)
 
@@ -100,4 +107,9 @@ dependencies {
     testImplementation(libs.compose.ui.test.junit4)
     testImplementation(libs.roborazzi)
     testImplementation(libs.roborazzi.compose)
+
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.compose.ui.test.junit4)
 }

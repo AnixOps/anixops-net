@@ -1,5 +1,6 @@
 package io.anixops.net.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -33,7 +34,7 @@ import io.anixops.net.ui.theme.LocalBrandPalette
 private val ContentMaxWidth = 640.dp
 
 /** Minimum touch height of a row (docs/ui-ux.md: 48dp on Android). */
-private val RowMinHeight = 48.dp
+val RowMinHeight = 48.dp
 
 /** A scrolling page: its title, then [content] in one column, clear of the status bar and centred on tablets. */
 @Composable
@@ -58,17 +59,30 @@ fun Page(title: String, modifier: Modifier = Modifier, content: @Composable Colu
     }
 }
 
-/** A titled group of rows on one card, as the grouped lists of the other clients. */
+/** A titled group of rows on one card, as the grouped lists of the other clients; [action] sits right of the title. */
 @Composable
-fun Section(title: String?, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+fun Section(
+    title: String?,
+    modifier: Modifier = Modifier,
+    action: (@Composable () -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(BrandSpacing.xs)) {
-        if (title != null) {
-            Text(
-                title,
-                style = MaterialTheme.typography.labelMedium,
-                color = LocalBrandPalette.current.text2,
-                modifier = Modifier.padding(horizontal = BrandSpacing.md),
-            )
+        if (title != null || action != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = BrandSpacing.md),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    title.orEmpty(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = LocalBrandPalette.current.text2,
+                    modifier = Modifier.weight(1f),
+                )
+                action?.invoke()
+            }
         }
         Surface(
             shape = MaterialTheme.shapes.medium,
@@ -81,18 +95,20 @@ fun Section(title: String?, modifier: Modifier = Modifier, content: @Composable 
     }
 }
 
-/** One label and value line in a [Section]; [divider] draws the hairline above it. */
+/** One label and value line in a [Section]; [divider] draws the hairline above it, [onClick] makes it a button. */
 @Composable
-fun InfoRow(label: String, value: String, modifier: Modifier = Modifier, divider: Boolean = false) {
-    if (divider) {
-        HorizontalDivider(
-            color = LocalBrandPalette.current.border,
-            modifier = Modifier.padding(start = BrandSpacing.md),
-        )
-    }
+fun InfoRow(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    divider: Boolean = false,
+    onClick: (() -> Unit)? = null,
+) {
+    if (divider) RowDivider()
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .heightIn(min = RowMinHeight)
             .padding(horizontal = BrandSpacing.md, vertical = BrandSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
@@ -102,11 +118,20 @@ fun InfoRow(label: String, value: String, modifier: Modifier = Modifier, divider
         Text(
             value,
             style = MaterialTheme.typography.bodyLarge,
-            color = LocalBrandPalette.current.text2,
+            color = if (onClick != null) LocalBrandPalette.current.primary else LocalBrandPalette.current.text2,
             textAlign = TextAlign.End,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
     }
+}
+
+/** The hairline between rows of a [Section], inset like the rows' text. */
+@Composable
+fun RowDivider() {
+    HorizontalDivider(
+        color = LocalBrandPalette.current.border,
+        modifier = Modifier.padding(start = BrandSpacing.md),
+    )
 }

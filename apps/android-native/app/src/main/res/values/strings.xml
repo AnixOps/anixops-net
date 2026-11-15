@@ -19,7 +19,6 @@
     <string name="status_core_error">内核出错</string>
     <string name="status_working">正在处理…</string>
     <string name="home_connection">连接</string>
-    <string name="home_node">节点</string>
     <string name="home_subscription">订阅</string>
     <string name="home_routing">分流模式</string>
     <string name="home_no_node">未选择</string>
@@ -34,7 +33,7 @@
     <string name="routing_rule">规则</string>
 
     <string name="pending_title">这一页还在迁移</string>
-    <string name="pending_body">原生界面预览版目前只有首页和设置，其他功能请先用现有版本。</string>
+    <string name="pending_body">原生界面预览版还没有这一页，请先用现有版本。</string>
 
     <string name="settings_usage">使用方式</string>
     <string name="mode_proxy">代理</string>
@@ -45,4 +44,76 @@
     <string name="notification_channel_vpn">连接状态</string>
     <string name="notification_channel_notices">通知</string>
     <string name="notification_connected">已连接</string>
+
+    <string name="home_traffic">实时流量</string>
+    <string name="home_upload">上传</string>
+    <string name="home_download">下载</string>
+    <string name="home_total">共 %1$s</string>
+    <string name="home_egress">出口</string>
+    <string name="home_egress_direct">直连</string>
+    <string name="home_exit_ip">出口 IP</string>
+    <string name="home_after_connect">连接后显示</string>
+    <string name="home_choose_node">先在“代理”里选择一个节点</string>
+    <string name="home_connections">活跃连接</string>
+    <string name="home_no_connections">还没有连接</string>
+    <string name="home_close_all">全部断开</string>
+    <string name="home_close_connection">断开 %1$s</string>
+    <string name="proxies_search">搜索节点</string>
+    <string name="proxies_test_all">全部测速</string>
+    <string name="proxies_testing">正在测速…</string>
+    <string name="proxies_fastest">选最快的节点</string>
+    <string name="proxies_empty">还没有节点</string>
+    <string name="proxies_empty_body">导入订阅后可以在这里切换节点和测速。</string>
+    <string name="proxies_no_match">没有符合条件的节点。</string>
+    <string name="proxies_other_nodes">其他节点</string>
+    <string name="proxies_in_use">使用中</string>
+    <string name="proxies_timed_out">超时</string>
+    <string name="proxies_more">%1$s 的更多操作</string>
+    <string name="proxies_share">复制分享链接</string>
+    <string name="proxies_shared">已复制 %1$s 的分享链接</string>
+    <string name="proxies_edit">编辑节点</string>
+    <string name="proxies_remove">删除节点</string>
+    <string name="proxies_confirm_remove">确认删除 %1$s</string>
+    <string name="node_name">名称</string>
+    <string name="node_server">服务器地址</string>
+    <string name="node_port">端口</string>
+    <string name="node_edit_note">改动只保存在本机，更新订阅后恢复为订阅里的内容。</string>
+    <string name="action_save">保存</string>
+    <string name="action_cancel">取消</string>
+    <string name="action_remove">删除</string>
+    <string name="subscriptions">订阅</string>
+    <string name="subscription_import">导入订阅</string>
+    <string name="subscription_link">订阅链接</string>
+    <string name="subscription_import_action">导入</string>
+    <string name="subscription_scan">扫码</string>
+    <string name="subscription_scan_title">扫描二维码</string>
+    <string name="subscription_scan_hint">把订阅或节点的二维码放进框内</string>
+    <string name="subscription_camera_denied">没有相机权限，请在系统设置里允许本应用使用相机</string>
+    <string name="subscription_use">使用</string>
+    <string name="subscription_update">更新</string>
+    <string name="subscription_rename">重命名</string>
+    <string name="subscription_remove">删除订阅</string>
+    <string name="subscription_confirm_remove">确认删除 %1$s</string>
+    <string name="subscription_updated_at">更新于 %1$s</string>
+    <string name="subscription_never">从未更新</string>
+    <string name="subscription_failed">更新失败</string>
+    <string name="subscription_used_of">已用 %1$s / %2$s</string>
+    <string name="subscription_used">已用 %1$s</string>
+    <string name="subscription_expires">到期 %1$s</string>
+    <string name="subscription_interval">自动更新</string>
+    <string name="interval_manual">手动更新</string>
+    <string name="interval_weekly">每周自动更新</string>
+    <plurals name="home_connection_count">
+        <item quantity="other">%d 个连接</item>
+    </plurals>
+    <plurals name="proxies_node_count">
+        <item quantity="other">%d 个节点</item>
+    </plurals>
+    <plurals name="interval_hours">
+        <item quantity="other">每 %d 小时自动更新</item>
+    </plurals>
+    <plurals name="interval_days">
+        <item quantity="other">每 %d 天自动更新</item>
+    </plurals>
+    <string name="proxies_delay_ms" translatable="false">%1$d ms</string>
 </resources>

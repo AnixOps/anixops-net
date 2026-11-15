@@ -1,10 +1,13 @@
 package io.anixops.net.ui
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.net.VpnService
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.List
@@ -16,14 +19,18 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -55,32 +62,73 @@ enum class Destination(@param:StringRes val label: Int, val icon: ImageVector, v
 }
 
 /**
- * The app over [viewModel]: reads the client's snapshot while the screen is started and asks for the VPN
- * consent before the first connect.
+ * The app over its view models: reads the client while the screen is started, asks for the VPN consent before
+ * the first connect, and shows what commands answered in a snackbar.
  */
 @Composable
-fun AnixApp(viewModel: AppViewModel, version: String) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    val mode by viewModel.mode.collectAsStateWithLifecycle()
+fun AnixApp(app: AppViewModel, proxies: ProxiesViewModel, version: String) {
+    val state by app.state.collectAsStateWithLifecycle()
+    val mode by app.mode.collectAsStateWithLifecycle()
+    val proxiesState by proxies.state.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(lifecycle) {
-        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { viewModel.poll() }
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { app.poll() }
     }
     val context = LocalContext.current
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(app) { app.messages.collect { snackbar.showSnackbar(it) } }
+    LaunchedEffect(proxies) {
+        proxies.events.collect { event ->
+            when (event) {
+                is ProxiesEvent.Message -> if (event.text.isNotBlank()) snackbar.showSnackbar(event.text)
+                is ProxiesEvent.ShareLink -> {
+                    val clipboard = context.getSystemService(ClipboardManager::class.java)
+                    clipboard.setPrimaryClip(ClipData.newPlainText(event.node, event.link))
+                    snackbar.showSnackbar(context.getString(R.string.proxies_shared, event.node))
+                }
+            }
+        }
+    }
     val denied = stringResource(R.string.home_vpn_denied)
     val consent = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) viewModel.connect() else viewModel.showNotice(denied)
+        if (result.resultCode == Activity.RESULT_OK) app.connect() else app.showNotice(denied)
     }
     AnixScaffold(
         state = state,
         mode = mode,
         version = version,
-        onConnect = {
-            val ask = VpnService.prepare(context)
-            if (ask == null) viewModel.connect() else consent.launch(ask)
+        home = HomeActions(
+            connect = {
+                val ask = VpnService.prepare(context)
+                if (ask == null) app.connect() else consent.launch(ask)
+            },
+            disconnect = app::disconnect,
+            setRoutingMode = app::setRoutingMode,
+            closeConnection = { app.closeConnection(it) },
+            closeAll = { app.closeAllConnections() },
+        ),
+        proxiesState = proxiesState,
+        proxies = ProxiesActions(
+            search = proxies::search,
+            select = proxies::select,
+            testAll = proxies::testShown,
+            selectFastest = proxies::selectFastest,
+            share = { id, label -> proxies.share(id, label) },
+            loadForm = proxies::form,
+            edit = proxies::edit,
+            remove = proxies::remove,
+            importSubscription = proxies::importSubscription,
+            useSubscription = proxies::useSubscription,
+            updateSubscription = proxies::updateSubscription,
+            renameSubscription = proxies::renameSubscription,
+            setInterval = proxies::setInterval,
+            removeSubscription = proxies::removeSubscription,
+        ),
+        onModeChange = app::setMode,
+        snackbar = snackbar,
+        pollProxies = {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { proxies.poll() }
         },
-        onDisconnect = viewModel::disconnect,
-        onModeChange = viewModel::setMode,
     )
 }
 
@@ -90,10 +138,13 @@ fun AnixScaffold(
     state: UiState,
     mode: AppMode,
     version: String,
-    onConnect: () -> Unit,
-    onDisconnect: () -> Unit,
     onModeChange: (AppMode) -> Unit,
     modifier: Modifier = Modifier,
+    home: HomeActions = HomeActions(),
+    proxiesState: ProxiesState = ProxiesState(),
+    proxies: ProxiesActions = ProxiesActions(),
+    snackbar: SnackbarHostState = remember { SnackbarHostState() },
+    pollProxies: suspend () -> Unit = {},
     initial: Destination? = null,
 ) {
     val destinations = Destination.of(mode)
@@ -112,10 +163,17 @@ fun AnixScaffold(
             }
         },
     ) {
-        when (selected) {
-            Destination.Home -> HomeScreen(state, onConnect, onDisconnect)
-            Destination.Settings -> SettingsScreen(mode, version, onModeChange)
-            else -> PendingScreen(stringResource(selected.label))
+        Box {
+            when (selected) {
+                Destination.Home -> HomeScreen(state, home)
+                Destination.Proxies -> {
+                    LaunchedEffect(Unit) { pollProxies() }
+                    ProxiesScreen(proxiesState, proxies)
+                }
+                Destination.Settings -> SettingsScreen(mode, version, onModeChange)
+                else -> PendingScreen(stringResource(selected.label))
+            }
+            SnackbarHost(snackbar, modifier = Modifier.align(Alignment.BottomCenter))
         }
     }
 }
