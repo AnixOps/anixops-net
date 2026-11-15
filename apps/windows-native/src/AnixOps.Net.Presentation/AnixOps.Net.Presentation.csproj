@@ -3,4 +3,8 @@
     <RootNamespace>AnixOps.Net.Presentation</RootNamespace>
     <Description>What the Windows app shows and how it is started, without any window: sections, wording, launch options. Tested without a desktop.</Description>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- The wording every native window shares; built in as it is, so there is no copy to keep in step. -->
+    <EmbeddedResource Include="..\..\..\..\crates\client-strings\catalogue.json" LogicalName="catalogue.json" Link="catalogue.json" />
+  </ItemGroup>
 </Project>

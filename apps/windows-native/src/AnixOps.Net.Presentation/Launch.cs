@@ -11,7 +11,7 @@ public enum Appearance
 
 /// <summary>
 /// How the app was started. The options exist so that tests and screenshots can fix what otherwise follows
-/// the system: <c>--language zh|en</c>, <c>--theme light|dark</c>, <c>--page &lt;id&gt;</c>,
+/// the system: <c>--language zh|zh-Hant|en</c>, <c>--theme light|dark</c>, <c>--page &lt;id&gt;</c>,
 /// <c>--demo-rows &lt;count&gt;</c>, <c>--measure &lt;file&gt;</c>, <c>--pipe &lt;name&gt;</c>.
 /// </summary>
 /// <param name="Language">The language asked for, or null to follow Windows.</param>

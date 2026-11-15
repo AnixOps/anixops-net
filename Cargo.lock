@@ -877,6 +877,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "client-strings"
+version = "0.3.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "client-view"
 version = "0.3.0"
 dependencies = [
