@@ -17,7 +17,7 @@ pipe.
 - `tests/`: unit tests, and `AnixOps.Net.App.UiTests`, which starts the built app and drives it through UI
   Automation. All run in the "Windows native app" job in CI, which also uploads a picture of every page.
 
-Options for tests and screenshots: `--language zh|en`, `--theme light|dark`, `--page <id>`.
+Options for tests and screenshots: `--language zh|zh-Hant|en`, `--theme light|dark`, `--page <id>`.
 `--pipe <name>` makes the window talk to a service on another pipe than the installed one's.
 
 The tests against the real service need `ANIXOPS_NET_SERVICE_EXE` (the built `anixops-net-service.exe`); CI

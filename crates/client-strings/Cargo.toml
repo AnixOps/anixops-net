@@ -1,0 +1,10 @@
+[package]
+name = "client-strings"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The wording of the native AnixOps Net windows, written once: one catalogue with a stable id per sentence, in Simplified Chinese, Traditional Chinese and English."
+
+[dependencies]
+serde_json = "1"

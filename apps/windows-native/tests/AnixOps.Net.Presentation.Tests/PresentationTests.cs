@@ -7,9 +7,39 @@ public sealed class StringsTests
     [Fact]
     public void EveryLanguageHasTheSameKeys()
     {
-        var chinese = Strings.For(Strings.Chinese).Keys.Order().ToArray();
         var english = Strings.For(Strings.English).Keys.Order().ToArray();
-        Assert.Equal(chinese, english);
+        Assert.NotEmpty(english);
+        foreach (var language in Strings.Languages)
+        {
+            Assert.Equal(english, Strings.For(language).Keys.Order().ToArray());
+        }
+    }
+
+    [Fact]
+    public void TheThreeLanguagesAreOffered()
+    {
+        Assert.Equal(new[] { "zh", "zh-Hant", "en" }, Strings.Languages);
+        Assert.All(Strings.Languages, language => Assert.Equal(language, Strings.For(language).Language));
+    }
+
+    [Fact]
+    public void TraditionalChineseHasItsOwnWording()
+    {
+        Assert.Equal("设置", Strings.For(Strings.Chinese)["nav.settings"]);
+        Assert.Equal("設定", Strings.For(Strings.TraditionalChinese)["nav.settings"]);
+        Assert.Equal("Settings", Strings.For(Strings.English)["nav.settings"]);
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("""{"a": "text"}""")]
+    [InlineData("""{"a": {"zh": "一", "en": "one"}}""")]
+    [InlineData("""{"a": {"zh": "一", "zh-Hant": "一", "en": 1}}""")]
+    [InlineData("""{"a": {"zh": "一", "zh-Hant": "一", "en": "one", "fr": "un"}}""")]
+    public void ABrokenCatalogueIsRefused(string catalogue)
+    {
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(catalogue));
+        Assert.Throws<InvalidDataException>(() => Strings.Read(stream));
     }
 
     [Fact]
@@ -32,7 +62,13 @@ public sealed class StringsTests
     [InlineData("zh-CN", Strings.Chinese)]
     [InlineData("zh-Hans-CN", Strings.Chinese)]
     [InlineData("zh", Strings.Chinese)]
-    [InlineData("ZH-TW", Strings.Chinese)]
+    [InlineData("zh-Hans-HK", Strings.Chinese)]
+    [InlineData("ZH-TW", Strings.TraditionalChinese)]
+    [InlineData("zh-HK", Strings.TraditionalChinese)]
+    [InlineData("zh-MO", Strings.TraditionalChinese)]
+    [InlineData("zh-Hant", Strings.TraditionalChinese)]
+    [InlineData("zh-Hant-CN", Strings.TraditionalChinese)]
+    [InlineData("zh-CHT", Strings.TraditionalChinese)]
     [InlineData("en-US", Strings.English)]
     [InlineData("de-DE", Strings.English)]
     [InlineData("zhx", Strings.English)]
@@ -242,6 +278,7 @@ public sealed class RequestsTests
     {
         Assert.Equal("1234 of 50000 requests", Strings.For(Strings.English).Format("requests.count", 1234, 50000));
         Assert.Equal("1234 / 50000 条请求", Strings.For(Strings.Chinese).Format("requests.count", 1234, 50000));
+        Assert.Equal("1234 / 50000 筆請求", Strings.For(Strings.TraditionalChinese).Format("requests.count", 1234, 50000));
     }
 }
 

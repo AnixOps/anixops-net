@@ -121,8 +121,18 @@ Tauri（过渡期）        ── 同进程调用                             P
    - `crates/client-view/fixtures/cases.json` 是唯一一份样例（命令、参数、应答），Rust 测试跑全部，并检查每个命令都有
      样例；其他语言的界面可以拿同一个文件对着自己的通道跑。
    网页界面里的 TypeScript 版本在 Tauri 版删除前保持原样，不改成调命令：它只修 bug，行为以这里为准。
-5. **文案单一来源。** 简体、繁体、英文只保留一份目录，CI 生成 `strings.xml`、`.resw`、gettext 和 TypeScript，并检查
-   生成物与源一致。现在 TypeScript 的 key 是简体原文，迁移时换成稳定 id。
+5. **文案单一来源。** 简体、繁体、英文只保留一份目录：`crates/client-strings/catalogue.json`，每句话一个稳定 id
+   （小写单词用点连接，如 `nav.settings`），下面是三种语言的句子，语言 id 沿用偏好设置里已有的 `zh`、`zh-Hant`、`en`。
+   - 原生的两个桌面窗口不生成副本，直接用这一个文件：GTK 窗口经 `client-strings`（`include_str!`），Windows 窗口把同一
+     个文件作为资源编进 `AnixOps.Net.Presentation`。没有生成物，也就没有“生成物与源不一致”这种问题。
+   - 占位符写作 `{0}`、`{1}`，三种语言里含义相同。数量、字节、时长由各端按平台的区域设置格式化后再填进去。
+   - `client-strings` 的测试检查目录本身：每个 id 三种语言齐全且不为空、占位符一致且不跳号、id 按顺序且不重复
+     （两个分支各加句子时只在真正重叠的地方冲突）、繁体里没有留下常见的简体字、没有多余空格和三个点的省略号。
+     C# 一侧再检查它读到的 key 三种语言一致、读坏的目录会被拒绝。
+   - 系统语言的判断两边一致：台湾、香港、澳门和繁体字区域用繁体，其余中文区域用简体，其他语言用英文。
+   - 句子随页面一起加：做哪一页，就把那一页的句子从 TypeScript 搬进目录并换成稳定 id，不一次性搬完没人用的句子。
+   - 安卓和 iOS 现在各自有平台格式的文案文件（`strings.xml`、`Localizable.xcstrings`），这一步没有动。它们要并进来时
+     由 CI 从目录生成平台文件并检查与源一致。Tauri 版的 TypeScript 文案（key 是简体原文）不迁移，随 Tauri 版一起删除。
 
 ## 服务、TUN 与提权
 
@@ -339,7 +349,7 @@ WinUI 3 没有自带的数据表格控件，请求列表要自己做虚拟化表
 - 每个可操作控件有 `AutomationId`（侧栏是 `Nav.<页面 id>`，页面标题是 `Page.Title`）。`AnixOps.Net.App.UiTests` 启动
   构建出的程序，经 UI Automation 逐页切换、核对名称，并检查能接收键盘焦点的控件都有名称。
 - 截图由同一批测试按 页面 × 语言 × 深浅色 生成，作为 CI 产物上传。入库做基线比对要等页面有了真实内容。
-- 启动参数 `--language zh|en`、`--theme light|dark`、`--page <id>` 只为测试和截图固定环境，不认识的参数忽略。
+- 启动参数 `--language zh|zh-Hant|en`、`--theme light|dark`、`--page <id>` 只为测试和截图固定环境，不认识的参数忽略。
 
 ## 迁移清单与 PR 顺序
 
@@ -352,7 +362,7 @@ WinUI 3 没有自带的数据表格控件，请求列表要自己做虚拟化表
 | 1a | `crates/client-core`：`backend` 和 `client` 从 `apps/linux-gui` 挪成独立 crate，行为不变 | 安卓线的 `Client` 模块合并 |
 | 1b | Windows 后端并入 `client-core`，Tauri Windows 行为不变 | 1a |
 | 2 | `client-ipc`、Windows 服务、Linux 守护进程，MSI / deb / rpm 安装与卸载 | 1 |
-| 3 | `client-view`、文案单一来源 | 1 |
+| 3 | `client-view`；文案单一来源（`crates/client-strings`，原生 Windows 窗口已改为读它，并补上繁体） | 1 |
 | 4a | `apps/windows-native/src/AnixOps.Net.Ipc`：界面一侧的通道（C#），帧、四种消息、握手、双向请求；测试读 `crates/client-ipc/fixtures/` 的同一批样例，CI 任务“Windows native app” | 2 |
 | 4b | Windows 验证：WinUI 3 工程骨架（`AnixOps.Net.App`）、自绘标题栏、侧栏导航、Mica、设计 tokens 生成 XAML 资源字典、CI 里启动真实窗口做 UIA 检查并截图 | 4a |
 | 4c | Windows 验证：请求列表原型（虚拟化表格、筛选），量“过关标准”第 1 项 | 4b |
