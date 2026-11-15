@@ -992,9 +992,9 @@ jobs:
           $tag = gh release list --repo $env:GITHUB_REPOSITORY --limit 1 --json tagName --jq ".[0].tagName"
           if (-not $tag) { throw "no release to compare against" }
           $dir = Join-Path $env:RUNNER_TEMP "web-client"
-          gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern "networkcore-windows-portable-*.zip" --dir $dir
+          gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern "anixops-net-*-windows-x64-portable.zip" --dir $dir
           if ($LASTEXITCODE -ne 0) { throw "could not download the portable web client of $tag" }
-          $zip = Get-ChildItem $dir -Filter "*.zip" | Sort-Object { $_.Name -notmatch "x86_64" } | Select-Object -First 1
+          $zip = Get-ChildItem $dir -Filter "*.zip" | Select-Object -First 1
           Expand-Archive -Path $zip.FullName -DestinationPath (Join-Path $dir "files")
           $exe = Get-ChildItem (Join-Path $dir "files") -Recurse -Filter "networkcore-windows-gui.exe" | Select-Object -First 1
           if (-not $exe) { throw "$($zip.Name) has no networkcore-windows-gui.exe" }
