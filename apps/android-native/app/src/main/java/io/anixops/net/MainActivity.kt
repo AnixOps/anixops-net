@@ -10,6 +10,7 @@ import io.anixops.net.ui.AnixApp
 import io.anixops.net.ui.AppViewModel
 import io.anixops.net.ui.ExtensionsViewModel
 import io.anixops.net.ui.ProxiesViewModel
+import io.anixops.net.ui.RequestsViewModel
 import io.anixops.net.ui.RulesViewModel
 import io.anixops.net.ui.SettingsViewModel
 import io.anixops.net.ui.theme.AnixTheme
@@ -29,6 +30,7 @@ class MainActivity : ComponentActivity() {
                     settings = viewModel { SettingsViewModel(app.core) },
                     activity = viewModel { ActivityViewModel(app.core) },
                     extensions = viewModel { ExtensionsViewModel(app.core, preferences) },
+                    requests = viewModel { RequestsViewModel(app.core) },
                     version = BuildConfig.VERSION_NAME,
                 )
             }

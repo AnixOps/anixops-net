@@ -345,16 +345,6 @@ private fun CoreSection(core: StatusFact?, enabled: Boolean, actions: SettingsAc
 
 private val StatusDot = 8.dp
 
-@Composable
-private fun toneColor(tone: String) = LocalBrandPalette.current.let { palette ->
-    when (tone) {
-        "success" -> palette.success
-        "danger" -> palette.danger
-        "warning" -> palette.warning
-        else -> palette.text2
-    }
-}
-
 /** The client's short status words, translated; anything unknown is shown as is (`labels.ts` `factLabel`). */
 @Composable
 private fun coreLabel(label: String?): String = when {

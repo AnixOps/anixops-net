@@ -308,7 +308,7 @@ private fun ErrorCard(message: String) {
 }
 
 @Composable
-private fun statusLabel(state: String): String = stringResource(
+internal fun statusLabel(state: String): String = stringResource(
     when (state) {
         "connected" -> R.string.status_connected
         "failed" -> R.string.status_failed

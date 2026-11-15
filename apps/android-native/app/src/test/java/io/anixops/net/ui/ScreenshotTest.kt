@@ -1,10 +1,15 @@
 package io.anixops.net.ui
 
 import com.github.takahirom.roborazzi.captureRoboImage
+import io.anixops.net.core.CaptureBody
+import io.anixops.net.core.CaptureExchange
+import io.anixops.net.core.CaptureMessage
+import io.anixops.net.core.CaptureStatus
 import io.anixops.net.core.ConnectionSnapshot
 import io.anixops.net.core.DebugMapping
 import io.anixops.net.core.Delay
 import io.anixops.net.core.DnsText
+import io.anixops.net.core.FilterError
 import io.anixops.net.core.HeaderField
 import io.anixops.net.core.HealthStatus
 import io.anixops.net.core.LogEntry
@@ -23,6 +28,7 @@ import io.anixops.net.core.Overview
 import io.anixops.net.core.ProxiesPage
 import io.anixops.net.core.ProxiesView
 import io.anixops.net.core.RedirectDraft
+import io.anixops.net.core.RequestRow
 import io.anixops.net.core.RuleSetStatus
 import io.anixops.net.core.RuntimeSnapshot
 import io.anixops.net.core.StatusFact
@@ -227,8 +233,62 @@ class ScreenshotTest {
     )
 
     @Test
-    fun debugRequestsPhoneLightZh() =
-        capture("debug-requests-phone-light-zh", PHONE, "zh-rCN", dark = false, mode = AppMode.Debug)
+    fun requestsPhoneLightZh() = captureRequests("requests-phone-light-zh", PHONE, "zh-rCN", dark = false)
+
+    @Test
+    fun requestsPhoneDarkEn() = captureRequests("requests-phone-dark-en", PHONE, "en", dark = true)
+
+    @Test
+    fun requestsTabletLightZh() = captureRequests("requests-tablet-light-zh", TABLET, "zh-rCN", dark = false)
+
+    @Test
+    fun requestsFilterErrorPhoneLightEn() = captureRequests(
+        "requests-filter-error-phone-light-en",
+        PHONE,
+        "en",
+        dark = false,
+        requests = requestsState.copy(typed = "status:>=4x", quick = setOf("json"), rows = emptyList(), error = FilterError("invalid_filter", at = 10)),
+    )
+
+    @Test
+    fun requestsNotConnectedPhoneLightZh() = captureRequests(
+        "requests-not-connected-phone-light-zh",
+        PHONE,
+        "zh-rCN",
+        dark = false,
+        state = UiState(
+            snapshot = snapshot.copy(connection = "Not connected", directEgress = true),
+            overview = Overview(state = "disconnected", egress = "direct", canConnect = true),
+        ),
+        requests = RequestsState(loaded = true),
+    )
+
+    @Test
+    fun requestsCaptureOffPhoneDarkZh() = captureRequests(
+        "requests-capture-off-phone-dark-zh",
+        PHONE,
+        "zh-rCN",
+        dark = true,
+        requests = RequestsState(capture = CaptureStatus(maxTotalBytes = 268_435_456), loaded = true),
+    )
+
+    @Test
+    fun requestDetailPhoneLightZh() = captureRequests(
+        "request-detail-phone-light-zh",
+        PHONE,
+        "zh-rCN",
+        dark = false,
+        requests = requestsState.copy(opened = openedRequest),
+    )
+
+    @Test
+    fun requestDetailWholePagePhoneDarkEn() = captureRequests(
+        "request-detail-whole-page-phone-dark-en",
+        TALL_PHONE,
+        "en",
+        dark = true,
+        requests = requestsState.copy(opened = openedRequest),
+    )
 
     @Test
     fun extensionsPhoneLightZh() =
@@ -358,6 +418,7 @@ class ScreenshotTest {
         extensions: ExtensionsState = extensionsState,
         debugExit: DebugExit = DebugExit.Direct,
         egressRules: Boolean = false,
+        requests: RequestsState = requestsState,
     ) {
         TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
         RuntimeEnvironment.setQualifiers("$locale-$device-${if (dark) "night" else "notnight"}-xhdpi")
@@ -377,6 +438,7 @@ class ScreenshotTest {
                     trafficState = traffic,
                     extensionsState = extensions,
                     debugExit = debugExit,
+                    requestsState = requests,
                     initialSettingsPage = settingsPage,
                     initialEgressRules = egressRules,
                     initial = destination,
@@ -384,6 +446,15 @@ class ScreenshotTest {
             }
         }
     }
+
+    private fun captureRequests(
+        name: String,
+        device: String,
+        locale: String,
+        dark: Boolean,
+        state: UiState = connectedState.copy(overview = overview.copy(egress = "direct", node = null)),
+        requests: RequestsState = requestsState,
+    ) = capture(name, device, locale, dark, state = state, mode = AppMode.Debug, destination = Destination.Requests, requests = requests)
 
     private fun captureTerms(name: String, device: String, locale: String, dark: Boolean, consent: Boolean) {
         RuntimeEnvironment.setQualifiers("$locale-$device-${if (dark) "night" else "notnight"}-xhdpi")
@@ -624,6 +695,76 @@ class ScreenshotTest {
                 ),
                 editable = setOf("tokyo-01", "osaka-02", "hk-03"),
             ),
+        )
+
+        /** 2026-11-15 09:41 UTC, the samples' clock. */
+        private const val NOW = 1_794_735_660_000L
+
+        val requestRows = listOf(
+            RequestRow(
+                connectionId = 9, index = 0, method = "POST", url = "https://upload.example.com/v1/files",
+                host = "upload.example.com", httpVersion = "h2", startedAtMs = NOW - 400, requestSize = 2_097_152,
+                state = "in_progress", path = "/v1/files", tone = "pending",
+            ),
+            RequestRow(
+                seq = 41, connectionId = 7, index = 2, method = "GET", url = "https://api.example.com/v1/profile?fields=name",
+                host = "api.example.com", status = 200, httpVersion = "h2", startedAtMs = NOW - 2_400, endedAtMs = NOW - 2_262,
+                responseSize = 612, responseContentType = "application/json", state = "done",
+                path = "/v1/profile?fields=name", tone = "success",
+            ),
+            RequestRow(
+                seq = 40, connectionId = 7, index = 1, method = "GET", url = "https://api.example.com/v1/orders/8812",
+                host = "api.example.com", status = 404, httpVersion = "h2", startedAtMs = NOW - 3_100, endedAtMs = NOW - 3_020,
+                responseSize = 96, state = "done", path = "/v1/orders/8812", tone = "danger",
+            ),
+            RequestRow(
+                seq = 39, connectionId = 6, index = 0, method = "GET", url = "https://cdn.example.net/img/banner.webp",
+                host = "cdn.example.net", status = 304, httpVersion = "HTTP/1.1", startedAtMs = NOW - 5_000, endedAtMs = NOW - 3_650,
+                state = "done", path = "/img/banner.webp", tone = "warning",
+            ),
+            RequestRow(
+                seq = 38, connectionId = 5, index = 0, method = "GET", url = "https://api.example.com/v1/feature-flags",
+                host = "api.example.com", httpVersion = "HTTP/1.1", startedAtMs = NOW - 7_000, endedAtMs = NOW - 6_998,
+                responseSize = 48, note = "answered_locally", state = "done", path = "/v1/feature-flags", tone = "neutral",
+            ),
+        )
+
+        val requestsState = RequestsState(
+            capture = CaptureStatus(enabled = true, maxTotalBytes = 268_435_456, usedBytes = 3_407_872, connections = 5),
+            rows = requestRows,
+            loaded = true,
+        )
+
+        private const val PROFILE_JSON = """{"id":42,"name":"Ada","plan":"pro","tags":["beta","ios"]}"""
+
+        val openedRequest = OpenedRequest(
+            row = requestRows[1],
+            exchange = CaptureExchange(
+                startedAtMs = NOW - 2_400,
+                endedAtMs = NOW - 2_262,
+                method = "GET",
+                url = "https://api.example.com/v1/profile?fields=name",
+                status = 200,
+                request = CaptureMessage(
+                    headers = listOf(
+                        listOf(":authority", "api.example.com"),
+                        listOf("accept", "application/json"),
+                        listOf("authorization", "Bearer •••"),
+                        listOf("user-agent", "Example/3.2 (Android 15)"),
+                    ),
+                ),
+                response = CaptureMessage(
+                    headers = listOf(
+                        listOf("content-type", "application/json; charset=utf-8"),
+                        listOf("content-encoding", "br"),
+                        listOf("cache-control", "no-store"),
+                    ),
+                    body = CaptureBody(size = 412),
+                ),
+                state = "done",
+            ),
+            requestBody = BodyText("", 0),
+            responseBody = BodyText(BodyText.text(PROFILE_JSON.toByteArray(), "application/json"), PROFILE_JSON.length.toLong()),
         )
     }
 }

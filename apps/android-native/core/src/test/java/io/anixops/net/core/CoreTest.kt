@@ -122,6 +122,48 @@ class CoreTest {
         )
     }
 
+    /** Answers the request list's commands as the client would, recording what each was asked. */
+    private class RequestsTransport(private val engine: String) : CoreTransport {
+        val calls = mutableListOf<Pair<String, String>>()
+
+        override fun invoke(command: String, args: String): String {
+            calls += command to args
+            return when (command) {
+                "view.next_since" -> """{"ok":0}"""
+                "runtime_control" -> engine
+                "view.merge_requests" -> """{"ok":[{"seq":0,"connection_id":3,"index":0,"method":"GET","state":"in_progress"}]}"""
+                "view.next_rev" -> """{"ok":5}"""
+                "view.request_rows" -> """{"ok":[{"seq":0,"connection_id":3,"index":0,"method":"GET","path":"/a","tone":"pending"}]}"""
+                else -> error("unexpected $command")
+            }
+        }
+    }
+
+    @Test
+    fun theRequestListReadsByRevisionThroughTheFilter() = runTest {
+        val transport = RequestsTransport("""{"ok":{"requests":[{"seq":0,"connection_id":3,"index":0,"rev":5}],"last_seq":0,"last_rev":5}}""")
+        val page = Core(transport, StandardTestDispatcher(testScheduler)).requests(RequestFeed(), "type:json", "seq", true)
+        assertEquals(
+            """{"request":{"cmd":"capture_requests","since_seq":0,"since_rev":0,"limit":2000,"filter":"type:json"}}""",
+            transport.calls.first { it.first == "runtime_control" }.second,
+        )
+        assertEquals(5L, page.feed.lastRev)
+        assertEquals(1, page.feed.rows.size)
+        assertEquals(RequestKey(3, 0), page.shown.single().key)
+        assertEquals("pending", page.shown.single().tone)
+        assertNull(page.error)
+    }
+
+    @Test
+    fun aRefusedFilterKeepsWhatWasRead() = runTest {
+        val transport = RequestsTransport("""{"ok":{"error":{"code":"invalid_filter","at":7}}}""")
+        val feed = RequestFeed(lastSeq = 9, lastRev = 4)
+        val page = Core(transport, StandardTestDispatcher(testScheduler)).requests(feed, "status:", "seq", true)
+        assertEquals(feed, page.feed)
+        assertEquals(FilterError("invalid_filter", at = 7), page.error)
+        assertTrue(transport.calls.none { it.first == "view.merge_requests" })
+    }
+
     @Test
     fun ruleSetsGoThroughRuntimeControl() = runTest {
         val transport = Recording(

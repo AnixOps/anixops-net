@@ -555,6 +555,62 @@
   "answer": 0
  },
  {
+  "command": "view.next_rev",
+  "args": {
+   "current": 3,
+   "answer": {
+    "requests": [
+     {
+      "seq": 0,
+      "connection_id": 1,
+      "index": 0,
+      "rev": 7
+     },
+     {
+      "seq": 0,
+      "connection_id": 1,
+      "index": 1,
+      "rev": 9
+     }
+    ],
+    "last_rev": 12
+   },
+   "page": 2
+  },
+  "answer": 9
+ },
+ {
+  "command": "view.next_rev",
+  "args": {
+   "current": 3,
+   "answer": {
+    "requests": [
+     {
+      "seq": 0,
+      "connection_id": 1,
+      "index": 0,
+      "rev": 7
+     }
+    ],
+    "last_rev": 12
+   },
+   "page": 100
+  },
+  "answer": 12
+ },
+ {
+  "command": "view.next_rev",
+  "args": {
+   "current": null,
+   "answer": {
+    "requests": [],
+    "last_seq": 4
+   },
+   "page": 100
+  },
+  "answer": null
+ },
+ {
   "command": "view.merge_requests",
   "args": {
    "rows": [
@@ -1541,6 +1597,111 @@
     }
    ],
    "by": "colour",
+   "descending": false
+  },
+  "refused": true
+ },
+ {
+  "command": "view.request_rows",
+  "args": {
+   "rows": [
+    {
+     "seq": 1,
+     "connection_id": 1,
+     "index": 0,
+     "method": "GET",
+     "url": "https://a.test/v1/items?page=2",
+     "host": "a.test",
+     "status": 404,
+     "http_version": "h2",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1040,
+     "request_size": 0,
+     "response_size": 120,
+     "state": "done",
+     "rev": 2
+    },
+    {
+     "seq": 0,
+     "connection_id": 2,
+     "index": 0,
+     "method": "POST",
+     "url": "https://b.test/upload",
+     "host": "b.test",
+     "status": null,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1200,
+     "ended_at_ms": null,
+     "request_size": 2048,
+     "response_size": 0,
+     "state": "in_progress",
+     "rev": 3
+    }
+   ],
+   "by": "seq",
+   "descending": true
+  },
+  "answer": [
+   {
+    "seq": 0,
+    "connection_id": 2,
+    "index": 0,
+    "method": "POST",
+    "url": "https://b.test/upload",
+    "host": "b.test",
+    "status": null,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1200,
+    "ended_at_ms": null,
+    "request_size": 2048,
+    "response_size": 0,
+    "state": "in_progress",
+    "rev": 3,
+    "path": "/upload",
+    "tone": "pending"
+   },
+   {
+    "seq": 1,
+    "connection_id": 1,
+    "index": 0,
+    "method": "GET",
+    "url": "https://a.test/v1/items?page=2",
+    "host": "a.test",
+    "status": 404,
+    "http_version": "h2",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1040,
+    "request_size": 0,
+    "response_size": 120,
+    "state": "done",
+    "rev": 2,
+    "path": "/v1/items?page=2",
+    "tone": "danger"
+   }
+  ]
+ },
+ {
+  "command": "view.request_rows",
+  "args": {
+   "rows": [
+    {
+     "seq": 1,
+     "connection_id": 1,
+     "index": 0,
+     "method": "GET",
+     "url": "https://a.test/v1/items?page=2",
+     "host": "a.test",
+     "status": 404,
+     "http_version": "h2",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1040,
+     "request_size": 0,
+     "response_size": 120,
+     "state": "done",
+     "rev": 2
+    }
+   ],
+   "by": "weight",
    "descending": false
   },
   "refused": true

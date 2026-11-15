@@ -28,8 +28,6 @@
     <string name="routing_direct">直連</string>
     <string name="routing_rule">規則</string>
 
-    <string name="pending_title">這一頁還在遷移</string>
-    <string name="pending_body">原生介面預覽版還沒有這一頁，請先用現有版本。</string>
 
     <string name="settings_usage">使用方式</string>
     <string name="mode_proxy">代理</string>
@@ -392,4 +390,62 @@
     <string name="egress_no_nodes_note">還沒有節點，暫時直連。匯入訂閱或節點後依下面的節點和規則送出。</string>
     <string name="egress_node_note">依下面選定的節點和訂閱規則送出，可以切換節點比較不同地區的出口。</string>
     <string name="egress_rules">規則與 DNS</string>
+    <string name="requests_capture">擷取封包</string>
+    <string name="requests_not_connected">還沒有連線</string>
+    <string name="requests_not_connected_body">連線後，經過本機的 HTTP 請求會逐條列在這裡。偵錯模式預設直連，不需要節點。</string>
+    <string name="requests_capture_off">還沒有開始擷取</string>
+    <string name="requests_capture_off_body">開啟上面的「擷取封包」後，新的請求會逐條出現在這裡。要看到 HTTPS 明文，還要在「改寫」裡信任解密憑證，並為要看的網域開啟解密。</string>
+    <string name="requests_filter">篩選：網址、host:、status:、type:…</string>
+    <string name="requests_filter_hint">例如 host:api.example.com status:4xx type:json，多組條件用 OR 連接</string>
+    <string name="requests_filter_error_at">篩選運算式在第 %1$d 個字元處有誤</string>
+    <string name="requests_filter_error">篩選運算式有誤</string>
+    <string name="quick_errors">出錯</string>
+    <string name="quick_json">JSON</string>
+    <string name="quick_images">圖片</string>
+    <string name="quick_h2">HTTP/2</string>
+    <string name="quick_large">大於 100 KB</string>
+    <string name="requests_paused">已暫停重新整理，新的請求仍在記錄。</string>
+    <string name="requests_empty">還沒有解密的請求。HTTPS 請求要先在「改寫」裡為網域開啟解密。</string>
+    <string name="requests_no_match">沒有符合的請求。</string>
+    <string name="requests_more">更多擷取操作</string>
+    <string name="requests_pause">暫停重新整理</string>
+    <string name="requests_resume">繼續重新整理</string>
+    <string name="requests_clear">清空擷取</string>
+    <string name="order_time">依時間</string>
+    <string name="order_status">依狀態</string>
+    <string name="order_host">依主機</string>
+    <string name="order_size">依大小</string>
+    <string name="order_duration">依耗時</string>
+    <string name="order_descending">（由大到小）</string>
+    <string name="order_ascending">（由小到大）</string>
+    <string name="request_detail">請求詳情</string>
+    <string name="request_summary">概要</string>
+    <string name="request_version">協定</string>
+    <string name="request_started">開始</string>
+    <string name="request_duration">耗時</string>
+    <string name="request_in_progress">進行中</string>
+    <string name="request_sizes">請求 / 回應大小</string>
+    <string name="request_note">說明</string>
+    <string name="request_local">本機回應</string>
+    <string name="request_streaming">串流回應</string>
+    <string name="request_too_large">超過儲存上限</string>
+    <string name="request_rules_skipped">有改寫規則因為回應是串流的或超過 1 MiB 沒有執行。</string>
+    <string name="request_headers">請求標頭</string>
+    <string name="request_body">請求內文</string>
+    <string name="response_headers">回應標頭</string>
+    <string name="response_body">回應內文</string>
+    <string name="request_no_headers">沒有標頭</string>
+    <string name="request_no_body">沒有內文</string>
+    <string name="request_binary_body">二進位內容，無法以文字顯示。</string>
+    <string name="request_body_truncated">擷取只保存了內文的前一部分。</string>
+    <string name="request_body_undecoded">無法解開壓縮，顯示的是擷取到的原始位元組。</string>
+    <string name="request_gone">擷取裡已經沒有這條請求：已清空，或被新的流量擠出。</string>
+    <string name="request_loading">正在讀取…</string>
+    <plurals name="requests_capture_usage">
+        <item quantity="other">已用 %2$s / %3$s · %1$d 個連線</item>
+    </plurals>
+    <plurals name="requests_count">
+        <item quantity="other">%d 個請求</item>
+    </plurals>
+    <string name="request_local_short">本機</string>
 </resources>
