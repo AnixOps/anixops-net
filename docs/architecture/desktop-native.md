@@ -96,6 +96,14 @@ Tauri（过渡期）        ── 同进程调用                             P
    需要区分的动作以后走 polkit。收到 SIGTERM 时先停内核、让界面把系统代理还原，再删套接字。
    守护进程还没做的：TUN 模式现在仍走 `pkexec` 助手，守护进程里要改成直接打开设备；Linux Tauri 版放在用户目录下的
    数据搬到 `/var/lib/anixops-net`；deb / rpm 里装单元文件并启用。
+   Windows 服务是 `apps/windows-service`（程序 `anixops-net-service.exe`，服务名 `AnixOpsNetCore`，以 LocalSystem 运行）：
+   数据放 `%ProgramData%\AnixOps\Net`，和旧版的 `%ProgramData%\AnixOps\NetworkCore` 分开，两个版本可以同时装着。
+   `%ProgramData%` 下任何用户都能建目录，所以数据目录建的时候就带自己的访问表（只有系统和管理员，不继承上级）；目录
+   已经存在而所有者不是系统或管理员时服务拒绝启动，防止普通用户抢先放一个自己的目录。目录关好之后才搬旧版数据
+   （`legacy_windows::migrate`，搬不动不阻止启动）。服务管理器要求停止或关机时先停内核、让界面还原系统代理再报告
+   已停止。`--console` 参数可以不经服务管理器在前台运行，排查用。
+   服务还没做的：注册服务和失败后自动重启的设置由 MSI 完成；机器级的 WinHTTP 代理；Wintun 驱动；系统代理备份按用户
+   分开存。
 3. **契约有类型。** 每个命令的请求和应答样例放在 `client-core/tests/fixtures/*.json`。C# 和 Kotlin 的数据类型必须
    无损解析同一批样例；命令改字段时 Rust、Kotlin、C# 三边测试一起失败。GTK 界面直接用 Rust 类型。
 4. **`crates/client-view`。** 现在 TypeScript 里有行为的纯逻辑（抓包筛选表达式、请求表排序、节点筛选、`anixops://`
