@@ -826,6 +826,7 @@ dependencies = [
  "app-log",
  "app-notifications",
  "client-health",
+ "client-view",
  "config-core",
  "control-domain",
  "desktop-dns",
@@ -873,6 +874,14 @@ dependencies = [
  "client-ipc",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "client-view"
+version = "0.3.0"
+dependencies = [
+ "serde_json",
+ "url",
 ]
 
 [[package]]

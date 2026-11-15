@@ -1,0 +1,2185 @@
+[
+ {
+  "command": "view.parse_app_link",
+  "args": {
+   "link": "anixops://connect"
+  },
+  "answer": {
+   "action": "connect"
+  }
+ },
+ {
+  "command": "view.parse_app_link",
+  "args": {
+   "link": "anixops:///disconnect"
+  },
+  "answer": {
+   "action": "disconnect"
+  }
+ },
+ {
+  "command": "view.parse_app_link",
+  "args": {
+   "link": "anixops://x-callback-url/toggle"
+  },
+  "answer": {
+   "action": "toggle"
+  }
+ },
+ {
+  "command": "view.parse_app_link",
+  "args": {
+   "link": "ANIXOPS://Start"
+  },
+  "answer": {
+   "action": "connect"
+  }
+ },
+ {
+  "command": "view.parse_app_link",
+  "args": {
+   "link": "  anixops://off  "
+  },
+  "answer": {
+   "action": "disconnect"
+  }
+ },
+ {
+  "command": "view.parse_app_link",
+  "args": {
+   "link": "anixops://mode?set=Rule"
+  },
+  "answer": {
+   "action": "mode",
+   "mode": "rule"
+  }
+ },
+ {
+  "command": "view.parse_app_link",
+  "args": {
+   "link": "anixops://mode?MODE=gfw_list"
+  },
+  "answer": {
+   "action": "mode",
+   "mode": "gfw_list"
+  }
+ },
+ {
+  "command": "view.parse_app_link",
+  "args": {
+   "link": "anixops://mode?set=global"
+  },
+  "answer": {
+   "error": "unknown_mode",
+   "detail": "global"
+  }
+ },
+ {
+  "command": "view.parse_app_link",
+  "args": {
+   "link": "anixops://mode"
+  },
+  "answer": {
+   "error": "missing_parameter",
+   "detail": "set"
+  }
+ },
+ {
+  "command": "view.parse_app_link",
+  "args": {
+   "link": "anixops://select?node=%E9%A6%99%E6%B8%AF&group=Main"
+  },
+  "answer": {
+   "action": "select",
+   "node": "香港",
+   "group": "Main"
+  }
+ },
+ {
+  "command": "view.parse_app_link",
+  "args": {
+   "link": "anixops://select?node=HK&node=JP"
+  },
+  "answer": {
+   "action": "select",
+   "node": "HK"
+  }
+ },
+ {
+  "command": "view.parse_app_link",
+  "args": {
+   "link": "anixops://select?policy=Proxy&node=HK"
+  },
+  "answer": {
+   "action": "select_member",
+   "policy": "Proxy",
+   "member": "HK"
+  }
+ },
+ {
+  "command": "view.parse_app_link",
+  "args": {
+   "link": "anixops://select"
+  },
+  "answer": {
+   "error": "missing_parameter",
+   "detail": "node"
+  }
+ },
+ {
+  "command": "view.parse_app_link",
+  "args": {
+   "link": "anixops://import?url=https%3A%2F%2Fa.example%2Fsub%3Ftoken%3Dx"
+  },
+  "answer": {
+   "action": "import",
+   "url": "https://a.example/sub?token=x"
+  }
+ },
+ {
+  "command": "view.parse_app_link",
+  "args": {
+   "link": "anixops://add?url=ss%3A%2F%2Fabc"
+  },
+  "answer": {
+   "action": "import",
+   "url": "ss://abc"
+  }
+ },
+ {
+  "command": "view.parse_app_link",
+  "args": {
+   "link": "anixops://import"
+  },
+  "answer": {
+   "error": "missing_parameter",
+   "detail": "url"
+  }
+ },
+ {
+  "command": "view.parse_app_link",
+  "args": {
+   "link": "anixops://import?url=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "answer": {
+   "error": "too_long"
+  }
+ },
+ {
+  "command": "view.parse_app_link",
+  "args": {
+   "link": "https://a.example"
+  },
+  "answer": {
+   "error": "not_app_link"
+  }
+ },
+ {
+  "command": "view.parse_app_link",
+  "args": {
+   "link": "anixops://"
+  },
+  "answer": {
+   "error": "missing_action"
+  }
+ },
+ {
+  "command": "view.parse_app_link",
+  "args": {
+   "link": "anixops://reboot"
+  },
+  "answer": {
+   "error": "unknown_action",
+   "detail": "reboot"
+  }
+ },
+ {
+  "command": "view.parse_app_link",
+  "args": {
+   "link": "not a url"
+  },
+  "answer": {
+   "error": "invalid"
+  }
+ },
+ {
+  "command": "view.find_link_node",
+  "args": {
+   "nodes": [
+    {
+     "id": "1",
+     "label": "HK",
+     "protocol": "ss",
+     "selected": false,
+     "group": "Main"
+    },
+    {
+     "id": "2",
+     "label": "hk",
+     "protocol": "ss",
+     "selected": false,
+     "group": "Backup"
+    }
+   ],
+   "name": "HK"
+  },
+  "answer": {
+   "id": "1",
+   "label": "HK",
+   "protocol": "ss",
+   "selected": false,
+   "group": "Main"
+  }
+ },
+ {
+  "command": "view.find_link_node",
+  "args": {
+   "nodes": [
+    {
+     "id": "1",
+     "label": "HK",
+     "protocol": "ss",
+     "selected": false,
+     "group": "Main"
+    },
+    {
+     "id": "2",
+     "label": "hk",
+     "protocol": "ss",
+     "selected": false,
+     "group": "Backup"
+    }
+   ],
+   "name": "HK",
+   "group": "backup"
+  },
+  "answer": {
+   "id": "2",
+   "label": "hk",
+   "protocol": "ss",
+   "selected": false,
+   "group": "Backup"
+  }
+ },
+ {
+  "command": "view.find_link_node",
+  "args": {
+   "nodes": [
+    {
+     "id": "1",
+     "label": "HK",
+     "protocol": "ss",
+     "selected": false,
+     "group": "Main"
+    },
+    {
+     "id": "2",
+     "label": "hk",
+     "protocol": "ss",
+     "selected": false,
+     "group": "Backup"
+    }
+   ],
+   "name": "2"
+  },
+  "answer": {
+   "id": "2",
+   "label": "hk",
+   "protocol": "ss",
+   "selected": false,
+   "group": "Backup"
+  }
+ },
+ {
+  "command": "view.find_link_node",
+  "args": {
+   "nodes": [
+    {
+     "id": "1",
+     "label": "HK",
+     "protocol": "ss",
+     "selected": false,
+     "group": "Main"
+    },
+    {
+     "id": "2",
+     "label": "hk",
+     "protocol": "ss",
+     "selected": false,
+     "group": "Backup"
+    }
+   ],
+   "name": "JP"
+  },
+  "answer": null
+ },
+ {
+  "command": "view.find_link_member",
+  "args": {
+   "groups": [
+    {
+     "tag": "Proxy",
+     "groupType": "select",
+     "outbounds": [
+      "n1",
+      "n2"
+     ],
+     "outboundLabels": [
+      "香港",
+      "日本"
+     ]
+    }
+   ],
+   "policy": "proxy",
+   "member": "日本"
+  },
+  "answer": {
+   "tag": "Proxy",
+   "outbound": "n2"
+  }
+ },
+ {
+  "command": "view.find_link_member",
+  "args": {
+   "groups": [
+    {
+     "tag": "Proxy",
+     "groupType": "select",
+     "outbounds": [
+      "n1",
+      "n2"
+     ],
+     "outboundLabels": [
+      "香港",
+      "日本"
+     ]
+    }
+   ],
+   "policy": "Proxy",
+   "member": "n1"
+  },
+  "answer": {
+   "tag": "Proxy",
+   "outbound": "n1"
+  }
+ },
+ {
+  "command": "view.find_link_member",
+  "args": {
+   "groups": [
+    {
+     "tag": "Proxy",
+     "groupType": "select",
+     "outbounds": [
+      "n1",
+      "n2"
+     ],
+     "outboundLabels": [
+      "香港",
+      "日本"
+     ]
+    }
+   ],
+   "policy": "Proxy",
+   "member": "美国"
+  },
+  "answer": null
+ },
+ {
+  "command": "view.find_link_member",
+  "args": {
+   "groups": [
+    {
+     "tag": "Proxy",
+     "groupType": "select",
+     "outbounds": [
+      "n1",
+      "n2"
+     ],
+     "outboundLabels": [
+      "香港",
+      "日本"
+     ]
+    }
+   ],
+   "policy": "Other",
+   "member": "n1"
+  },
+  "answer": null
+ },
+ {
+  "command": "view.combine_filter",
+  "args": {
+   "quick": [],
+   "typed": "  api "
+  },
+  "answer": "api"
+ },
+ {
+  "command": "view.combine_filter",
+  "args": {
+   "quick": [
+    "errors"
+   ],
+   "typed": ""
+  },
+  "answer": "status:>=400"
+ },
+ {
+  "command": "view.combine_filter",
+  "args": {
+   "quick": [
+    "json",
+    "errors"
+   ],
+   "typed": "host:a.test"
+  },
+  "answer": "status:>=400 type:json host:a.test"
+ },
+ {
+  "command": "view.combine_filter",
+  "args": {
+   "quick": [
+    "errors"
+   ],
+   "typed": "a OR b"
+  },
+  "answer": "status:>=400 a OR status:>=400 b"
+ },
+ {
+  "command": "view.combine_filter",
+  "args": {
+   "quick": [
+    "large",
+    "h2",
+    "images"
+   ],
+   "typed": "header:\"x OR y\" OR z"
+  },
+  "answer": "type:image version:h2 size:>100k header:\"x OR y\" OR type:image version:h2 size:>100k z"
+ },
+ {
+  "command": "view.next_since",
+  "args": {
+   "rows": [
+    {
+     "seq": 3,
+     "connection_id": 1,
+     "index": 3,
+     "method": "GET",
+     "url": "https://a.test/3?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1003,
+     "request_size": 0,
+     "response_size": 30
+    },
+    {
+     "seq": 4,
+     "connection_id": 1,
+     "index": 4,
+     "method": "GET",
+     "url": "https://a.test/4?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1004,
+     "request_size": 0,
+     "response_size": 40
+    }
+   ],
+   "lastSeq": 4
+  },
+  "answer": 4
+ },
+ {
+  "command": "view.next_since",
+  "args": {
+   "rows": [
+    {
+     "seq": 3,
+     "connection_id": 1,
+     "index": 3,
+     "method": "GET",
+     "url": "https://a.test/3?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1003,
+     "request_size": 0,
+     "response_size": 30
+    },
+    {
+     "seq": 4,
+     "connection_id": 1,
+     "index": 4,
+     "method": "GET",
+     "url": "https://a.test/4?q=1",
+     "host": "a.test",
+     "status": null,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": null,
+     "request_size": 0,
+     "response_size": 40
+    },
+    {
+     "seq": 5,
+     "connection_id": 1,
+     "index": 5,
+     "method": "GET",
+     "url": "https://a.test/5?q=1",
+     "host": "a.test",
+     "status": null,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": null,
+     "request_size": 0,
+     "response_size": 50
+    }
+   ],
+   "lastSeq": 5
+  },
+  "answer": 3
+ },
+ {
+  "command": "view.next_since",
+  "args": {
+   "rows": [],
+   "lastSeq": 0
+  },
+  "answer": 0
+ },
+ {
+  "command": "view.merge_requests",
+  "args": {
+   "rows": [
+    {
+     "seq": 1,
+     "connection_id": 1,
+     "index": 1,
+     "method": "GET",
+     "url": "https://a.test/1?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1001,
+     "request_size": 0,
+     "response_size": 10
+    },
+    {
+     "seq": 2,
+     "connection_id": 1,
+     "index": 2,
+     "method": "GET",
+     "url": "https://a.test/2?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1002,
+     "request_size": 0,
+     "response_size": 20
+    },
+    {
+     "seq": 3,
+     "connection_id": 1,
+     "index": 3,
+     "method": "GET",
+     "url": "https://a.test/3?q=1",
+     "host": "a.test",
+     "status": null,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": null,
+     "request_size": 0,
+     "response_size": 30
+    }
+   ],
+   "answer": {
+    "requests": [
+     {
+      "seq": 3,
+      "connection_id": 1,
+      "index": 3,
+      "method": "GET",
+      "url": "https://a.test/3?q=1",
+      "host": "a.test",
+      "status": 200,
+      "http_version": "HTTP/1.1",
+      "started_at_ms": 1000,
+      "ended_at_ms": 1003,
+      "request_size": 0,
+      "response_size": 30
+     },
+     {
+      "seq": 4,
+      "connection_id": 1,
+      "index": 4,
+      "method": "GET",
+      "url": "https://a.test/4?q=1",
+      "host": "a.test",
+      "status": 200,
+      "http_version": "HTTP/1.1",
+      "started_at_ms": 1000,
+      "ended_at_ms": 1004,
+      "request_size": 0,
+      "response_size": 40
+     }
+    ],
+    "last_seq": 4,
+    "dropped_before_seq": 2
+   }
+  },
+  "answer": [
+   {
+    "seq": 3,
+    "connection_id": 1,
+    "index": 3,
+    "method": "GET",
+    "url": "https://a.test/3?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1003,
+    "request_size": 0,
+    "response_size": 30
+   },
+   {
+    "seq": 4,
+    "connection_id": 1,
+    "index": 4,
+    "method": "GET",
+    "url": "https://a.test/4?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1004,
+    "request_size": 0,
+    "response_size": 40
+   }
+  ]
+ },
+ {
+  "command": "view.merge_requests",
+  "args": {
+   "rows": [
+    {
+     "seq": 2,
+     "connection_id": 1,
+     "index": 2,
+     "method": "GET",
+     "url": "https://a.test/2?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1002,
+     "request_size": 0,
+     "response_size": 20
+    },
+    {
+     "seq": 1,
+     "connection_id": 1,
+     "index": 1,
+     "method": "GET",
+     "url": "https://a.test/1?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1001,
+     "request_size": 0,
+     "response_size": 10
+    }
+   ],
+   "answer": {}
+  },
+  "answer": [
+   {
+    "seq": 1,
+    "connection_id": 1,
+    "index": 1,
+    "method": "GET",
+    "url": "https://a.test/1?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1001,
+    "request_size": 0,
+    "response_size": 10
+   },
+   {
+    "seq": 2,
+    "connection_id": 1,
+    "index": 2,
+    "method": "GET",
+    "url": "https://a.test/2?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1002,
+    "request_size": 0,
+    "response_size": 20
+   }
+  ]
+ },
+ {
+  "command": "view.sort_requests",
+  "args": {
+   "rows": [
+    {
+     "seq": 1,
+     "connection_id": 1,
+     "index": 1,
+     "method": "GET",
+     "url": "https://a.test/1?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1001,
+     "request_size": 0,
+     "response_size": 10
+    },
+    {
+     "seq": 3,
+     "connection_id": 1,
+     "index": 3,
+     "method": "GET",
+     "url": "https://a.test/3?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1003,
+     "request_size": 0,
+     "response_size": 30
+    },
+    {
+     "seq": 2,
+     "connection_id": 1,
+     "index": 2,
+     "method": "GET",
+     "url": "https://a.test/2?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1002,
+     "request_size": 0,
+     "response_size": 20
+    }
+   ],
+   "by": "seq",
+   "descending": true
+  },
+  "answer": [
+   {
+    "seq": 3,
+    "connection_id": 1,
+    "index": 3,
+    "method": "GET",
+    "url": "https://a.test/3?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1003,
+    "request_size": 0,
+    "response_size": 30
+   },
+   {
+    "seq": 2,
+    "connection_id": 1,
+    "index": 2,
+    "method": "GET",
+    "url": "https://a.test/2?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1002,
+    "request_size": 0,
+    "response_size": 20
+   },
+   {
+    "seq": 1,
+    "connection_id": 1,
+    "index": 1,
+    "method": "GET",
+    "url": "https://a.test/1?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1001,
+    "request_size": 0,
+    "response_size": 10
+   }
+  ]
+ },
+ {
+  "command": "view.sort_requests",
+  "args": {
+   "rows": [
+    {
+     "seq": 1,
+     "connection_id": 1,
+     "index": 1,
+     "method": "GET",
+     "url": "https://a.test/1?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1001,
+     "request_size": 0,
+     "response_size": 10
+    },
+    {
+     "seq": 2,
+     "connection_id": 1,
+     "index": 2,
+     "method": "GET",
+     "url": "https://a.test/2?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": null,
+     "request_size": 0,
+     "response_size": 20
+    },
+    {
+     "seq": 3,
+     "connection_id": 1,
+     "index": 3,
+     "method": "GET",
+     "url": "https://a.test/3?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1003,
+     "request_size": 0,
+     "response_size": 30
+    }
+   ],
+   "by": "duration",
+   "descending": true
+  },
+  "answer": [
+   {
+    "seq": 3,
+    "connection_id": 1,
+    "index": 3,
+    "method": "GET",
+    "url": "https://a.test/3?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1003,
+    "request_size": 0,
+    "response_size": 30
+   },
+   {
+    "seq": 1,
+    "connection_id": 1,
+    "index": 1,
+    "method": "GET",
+    "url": "https://a.test/1?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1001,
+    "request_size": 0,
+    "response_size": 10
+   },
+   {
+    "seq": 2,
+    "connection_id": 1,
+    "index": 2,
+    "method": "GET",
+    "url": "https://a.test/2?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": null,
+    "request_size": 0,
+    "response_size": 20
+   }
+  ]
+ },
+ {
+  "command": "view.sort_requests",
+  "args": {
+   "rows": [
+    {
+     "seq": 1,
+     "connection_id": 1,
+     "index": 1,
+     "method": "GET",
+     "url": "https://a.test/1?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1001,
+     "request_size": 0,
+     "response_size": 10
+    },
+    {
+     "seq": 2,
+     "connection_id": 1,
+     "index": 2,
+     "method": "GET",
+     "url": "https://a.test/2?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": null,
+     "request_size": 0,
+     "response_size": 20
+    },
+    {
+     "seq": 3,
+     "connection_id": 1,
+     "index": 3,
+     "method": "GET",
+     "url": "https://a.test/3?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1003,
+     "request_size": 0,
+     "response_size": 30
+    }
+   ],
+   "by": "duration",
+   "descending": false
+  },
+  "answer": [
+   {
+    "seq": 1,
+    "connection_id": 1,
+    "index": 1,
+    "method": "GET",
+    "url": "https://a.test/1?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1001,
+    "request_size": 0,
+    "response_size": 10
+   },
+   {
+    "seq": 3,
+    "connection_id": 1,
+    "index": 3,
+    "method": "GET",
+    "url": "https://a.test/3?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1003,
+    "request_size": 0,
+    "response_size": 30
+   },
+   {
+    "seq": 2,
+    "connection_id": 1,
+    "index": 2,
+    "method": "GET",
+    "url": "https://a.test/2?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": null,
+    "request_size": 0,
+    "response_size": 20
+   }
+  ]
+ },
+ {
+  "command": "view.sort_requests",
+  "args": {
+   "rows": [
+    {
+     "seq": 1,
+     "connection_id": 1,
+     "index": 1,
+     "method": "GET",
+     "url": "https://a.test/1?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1001,
+     "request_size": 0,
+     "response_size": 10
+    },
+    {
+     "seq": 2,
+     "connection_id": 1,
+     "index": 2,
+     "method": "GET",
+     "url": "https://a.test/2?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": null,
+     "request_size": 0,
+     "response_size": 20
+    },
+    {
+     "seq": 3,
+     "connection_id": 1,
+     "index": 3,
+     "method": "GET",
+     "url": "https://a.test/3?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1003,
+     "request_size": 0,
+     "response_size": 30
+    }
+   ],
+   "by": "size",
+   "descending": true
+  },
+  "answer": [
+   {
+    "seq": 3,
+    "connection_id": 1,
+    "index": 3,
+    "method": "GET",
+    "url": "https://a.test/3?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1003,
+    "request_size": 0,
+    "response_size": 30
+   },
+   {
+    "seq": 2,
+    "connection_id": 1,
+    "index": 2,
+    "method": "GET",
+    "url": "https://a.test/2?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": null,
+    "request_size": 0,
+    "response_size": 20
+   },
+   {
+    "seq": 1,
+    "connection_id": 1,
+    "index": 1,
+    "method": "GET",
+    "url": "https://a.test/1?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1001,
+    "request_size": 0,
+    "response_size": 10
+   }
+  ]
+ },
+ {
+  "command": "view.sort_requests",
+  "args": {
+   "rows": [
+    {
+     "seq": 1,
+     "connection_id": 1,
+     "index": 1,
+     "method": "GET",
+     "url": "https://a.test/1?q=1",
+     "host": "a.test",
+     "status": 404,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1001,
+     "request_size": 0,
+     "response_size": 10
+    },
+    {
+     "seq": 2,
+     "connection_id": 1,
+     "index": 2,
+     "method": "GET",
+     "url": "https://a.test/2?q=1",
+     "host": "a.test",
+     "status": null,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1002,
+     "request_size": 0,
+     "response_size": 20
+    },
+    {
+     "seq": 3,
+     "connection_id": 1,
+     "index": 3,
+     "method": "GET",
+     "url": "https://a.test/3?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1003,
+     "request_size": 0,
+     "response_size": 30
+    },
+    {
+     "seq": 4,
+     "connection_id": 1,
+     "index": 4,
+     "method": "GET",
+     "url": "https://a.test/4?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1004,
+     "request_size": 0,
+     "response_size": 40
+    }
+   ],
+   "by": "status",
+   "descending": false
+  },
+  "answer": [
+   {
+    "seq": 3,
+    "connection_id": 1,
+    "index": 3,
+    "method": "GET",
+    "url": "https://a.test/3?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1003,
+    "request_size": 0,
+    "response_size": 30
+   },
+   {
+    "seq": 4,
+    "connection_id": 1,
+    "index": 4,
+    "method": "GET",
+    "url": "https://a.test/4?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1004,
+    "request_size": 0,
+    "response_size": 40
+   },
+   {
+    "seq": 1,
+    "connection_id": 1,
+    "index": 1,
+    "method": "GET",
+    "url": "https://a.test/1?q=1",
+    "host": "a.test",
+    "status": 404,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1001,
+    "request_size": 0,
+    "response_size": 10
+   },
+   {
+    "seq": 2,
+    "connection_id": 1,
+    "index": 2,
+    "method": "GET",
+    "url": "https://a.test/2?q=1",
+    "host": "a.test",
+    "status": null,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1002,
+    "request_size": 0,
+    "response_size": 20
+   }
+  ]
+ },
+ {
+  "command": "view.sort_requests",
+  "args": {
+   "rows": [
+    {
+     "seq": 1,
+     "connection_id": 1,
+     "index": 1,
+     "method": "GET",
+     "url": "https://a.test/1?q=1",
+     "host": "a.test",
+     "status": 404,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1001,
+     "request_size": 0,
+     "response_size": 10
+    },
+    {
+     "seq": 2,
+     "connection_id": 1,
+     "index": 2,
+     "method": "GET",
+     "url": "https://a.test/2?q=1",
+     "host": "a.test",
+     "status": null,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1002,
+     "request_size": 0,
+     "response_size": 20
+    },
+    {
+     "seq": 3,
+     "connection_id": 1,
+     "index": 3,
+     "method": "GET",
+     "url": "https://a.test/3?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1003,
+     "request_size": 0,
+     "response_size": 30
+    },
+    {
+     "seq": 4,
+     "connection_id": 1,
+     "index": 4,
+     "method": "GET",
+     "url": "https://a.test/4?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1004,
+     "request_size": 0,
+     "response_size": 40
+    }
+   ],
+   "by": "status",
+   "descending": true
+  },
+  "answer": [
+   {
+    "seq": 1,
+    "connection_id": 1,
+    "index": 1,
+    "method": "GET",
+    "url": "https://a.test/1?q=1",
+    "host": "a.test",
+    "status": 404,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1001,
+    "request_size": 0,
+    "response_size": 10
+   },
+   {
+    "seq": 4,
+    "connection_id": 1,
+    "index": 4,
+    "method": "GET",
+    "url": "https://a.test/4?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1004,
+    "request_size": 0,
+    "response_size": 40
+   },
+   {
+    "seq": 3,
+    "connection_id": 1,
+    "index": 3,
+    "method": "GET",
+    "url": "https://a.test/3?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1003,
+    "request_size": 0,
+    "response_size": 30
+   },
+   {
+    "seq": 2,
+    "connection_id": 1,
+    "index": 2,
+    "method": "GET",
+    "url": "https://a.test/2?q=1",
+    "host": "a.test",
+    "status": null,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1002,
+    "request_size": 0,
+    "response_size": 20
+   }
+  ]
+ },
+ {
+  "command": "view.sort_requests",
+  "args": {
+   "rows": [
+    {
+     "seq": 1,
+     "connection_id": 1,
+     "index": 1,
+     "method": "GET",
+     "url": "https://a.test/1?q=1",
+     "host": "b.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1001,
+     "request_size": 0,
+     "response_size": 10
+    },
+    {
+     "seq": 2,
+     "connection_id": 1,
+     "index": 2,
+     "method": "GET",
+     "url": "https://a.test/2?q=1",
+     "host": "A.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1002,
+     "request_size": 0,
+     "response_size": 20
+    },
+    {
+     "seq": 3,
+     "connection_id": 1,
+     "index": 3,
+     "method": "GET",
+     "url": "https://a.test/3?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1003,
+     "request_size": 0,
+     "response_size": 30
+    }
+   ],
+   "by": "host",
+   "descending": false
+  },
+  "answer": [
+   {
+    "seq": 2,
+    "connection_id": 1,
+    "index": 2,
+    "method": "GET",
+    "url": "https://a.test/2?q=1",
+    "host": "A.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1002,
+    "request_size": 0,
+    "response_size": 20
+   },
+   {
+    "seq": 3,
+    "connection_id": 1,
+    "index": 3,
+    "method": "GET",
+    "url": "https://a.test/3?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1003,
+    "request_size": 0,
+    "response_size": 30
+   },
+   {
+    "seq": 1,
+    "connection_id": 1,
+    "index": 1,
+    "method": "GET",
+    "url": "https://a.test/1?q=1",
+    "host": "b.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1001,
+    "request_size": 0,
+    "response_size": 10
+   }
+  ]
+ },
+ {
+  "command": "view.sort_requests",
+  "args": {
+   "rows": [
+    {
+     "seq": 2,
+     "connection_id": 1,
+     "index": 2,
+     "method": "GET",
+     "url": "https://a.test/2?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1002,
+     "request_size": 0,
+     "response_size": 20
+    },
+    {
+     "seq": 1,
+     "connection_id": 1,
+     "index": 1,
+     "method": "GET",
+     "url": "https://a.test/1?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1001,
+     "request_size": 0,
+     "response_size": 10
+    }
+   ],
+   "by": "path",
+   "descending": false
+  },
+  "answer": [
+   {
+    "seq": 1,
+    "connection_id": 1,
+    "index": 1,
+    "method": "GET",
+    "url": "https://a.test/1?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1001,
+    "request_size": 0,
+    "response_size": 10
+   },
+   {
+    "seq": 2,
+    "connection_id": 1,
+    "index": 2,
+    "method": "GET",
+    "url": "https://a.test/2?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1002,
+    "request_size": 0,
+    "response_size": 20
+   }
+  ]
+ },
+ {
+  "command": "view.sort_requests",
+  "args": {
+   "rows": [
+    {
+     "seq": 1,
+     "connection_id": 1,
+     "index": 1,
+     "method": "GET",
+     "url": "https://a.test/1?q=1",
+     "host": "a.test",
+     "status": 200,
+     "http_version": "HTTP/1.1",
+     "started_at_ms": 1000,
+     "ended_at_ms": 1001,
+     "request_size": 0,
+     "response_size": 10
+    }
+   ],
+   "by": "colour",
+   "descending": false
+  },
+  "refused": true
+ },
+ {
+  "command": "view.describe_request",
+  "args": {
+   "request": {
+    "seq": 7,
+    "connection_id": 1,
+    "index": 7,
+    "method": "GET",
+    "url": "https://a.test/7?q=1",
+    "host": "a.test",
+    "status": 200,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1007,
+    "request_size": 0,
+    "response_size": 70
+   }
+  },
+  "answer": {
+   "path": "/7?q=1",
+   "tone": "success"
+  }
+ },
+ {
+  "command": "view.describe_request",
+  "args": {
+   "request": {
+    "seq": 1,
+    "connection_id": 1,
+    "index": 1,
+    "method": "GET",
+    "url": "not a url",
+    "host": "a.test",
+    "status": 302,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1001,
+    "request_size": 0,
+    "response_size": 10
+   }
+  },
+  "answer": {
+   "path": "not a url",
+   "tone": "warning"
+  }
+ },
+ {
+  "command": "view.describe_request",
+  "args": {
+   "request": {
+    "seq": 1,
+    "connection_id": 1,
+    "index": 1,
+    "method": "GET",
+    "url": "https://a.test",
+    "host": "a.test",
+    "status": 500,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1001,
+    "request_size": 0,
+    "response_size": 10
+   }
+  },
+  "answer": {
+   "path": "/",
+   "tone": "danger"
+  }
+ },
+ {
+  "command": "view.describe_request",
+  "args": {
+   "request": {
+    "seq": 1,
+    "connection_id": 1,
+    "index": 1,
+    "method": "GET",
+    "url": "https://a.test/1?q=1",
+    "host": "a.test",
+    "status": null,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": null,
+    "request_size": 0,
+    "response_size": 10
+   }
+  },
+  "answer": {
+   "path": "/1?q=1",
+   "tone": "pending"
+  }
+ },
+ {
+  "command": "view.describe_request",
+  "args": {
+   "request": {
+    "seq": 1,
+    "connection_id": 1,
+    "index": 1,
+    "method": "GET",
+    "url": "https://a.test/1?q=1",
+    "host": "a.test",
+    "status": null,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1001,
+    "request_size": 0,
+    "response_size": 10
+   }
+  },
+  "answer": {
+   "path": "/1?q=1",
+   "tone": "danger"
+  }
+ },
+ {
+  "command": "view.describe_request",
+  "args": {
+   "request": {
+    "seq": 1,
+    "connection_id": 1,
+    "index": 1,
+    "method": "GET",
+    "url": "https://a.test/1?q=1",
+    "host": "a.test",
+    "status": null,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1001,
+    "request_size": 0,
+    "response_size": 10,
+    "note": "answered_locally"
+   }
+  },
+  "answer": {
+   "path": "/1?q=1",
+   "tone": "neutral"
+  }
+ },
+ {
+  "command": "view.describe_request",
+  "args": {
+   "request": {
+    "seq": 1,
+    "connection_id": 1,
+    "index": 1,
+    "method": "GET",
+    "url": "https://a.test/1?q=1",
+    "host": "a.test",
+    "status": 101,
+    "http_version": "HTTP/1.1",
+    "started_at_ms": 1000,
+    "ended_at_ms": 1001,
+    "request_size": 0,
+    "response_size": 10
+   }
+  },
+  "answer": {
+   "path": "/1?q=1",
+   "tone": "neutral"
+  }
+ },
+ {
+  "command": "view.filter_nodes",
+  "args": {
+   "nodes": [
+    {
+     "id": "a",
+     "label": "Tokyo Primary",
+     "protocol": "Shadowsocks",
+     "selected": true
+    },
+    {
+     "id": "b",
+     "label": "Berlin Edge",
+     "protocol": "VLESS",
+     "selected": false
+    }
+   ],
+   "query": "tokyo",
+   "protocol": "All"
+  },
+  "answer": [
+   {
+    "id": "a",
+    "label": "Tokyo Primary",
+    "protocol": "Shadowsocks",
+    "selected": true
+   }
+  ]
+ },
+ {
+  "command": "view.filter_nodes",
+  "args": {
+   "nodes": [
+    {
+     "id": "a",
+     "label": "Tokyo Primary",
+     "protocol": "Shadowsocks",
+     "selected": true
+    },
+    {
+     "id": "b",
+     "label": "Berlin Edge",
+     "protocol": "VLESS",
+     "selected": false
+    }
+   ],
+   "query": "",
+   "protocol": "VLESS"
+  },
+  "answer": [
+   {
+    "id": "b",
+    "label": "Berlin Edge",
+    "protocol": "VLESS",
+    "selected": false
+   }
+  ]
+ },
+ {
+  "command": "view.filter_nodes",
+  "args": {
+   "nodes": [
+    {
+     "id": "a",
+     "label": "Tokyo Primary",
+     "protocol": "Shadowsocks",
+     "selected": true
+    },
+    {
+     "id": "b",
+     "label": "Berlin Edge",
+     "protocol": "VLESS",
+     "selected": false
+    }
+   ],
+   "query": "primary",
+   "protocol": "VLESS"
+  },
+  "answer": []
+ },
+ {
+  "command": "view.filter_nodes",
+  "args": {
+   "nodes": [
+    {
+     "id": "a",
+     "label": "Tokyo",
+     "protocol": "trojan",
+     "selected": false,
+     "group": "One"
+    },
+    {
+     "id": "b",
+     "label": "Osaka",
+     "protocol": "trojan",
+     "selected": false,
+     "group": "One"
+    },
+    {
+     "id": "s2.a",
+     "label": "Paris",
+     "protocol": "vless",
+     "selected": true,
+     "group": "Two"
+    }
+   ],
+   "query": "two",
+   "protocol": "All"
+  },
+  "answer": [
+   {
+    "id": "s2.a",
+    "label": "Paris",
+    "protocol": "vless",
+    "selected": true,
+    "group": "Two"
+   }
+  ]
+ },
+ {
+  "command": "view.group_nodes",
+  "args": {
+   "nodes": [
+    {
+     "id": "a",
+     "label": "Tokyo",
+     "protocol": "trojan",
+     "selected": false,
+     "group": "One"
+    },
+    {
+     "id": "b",
+     "label": "Osaka",
+     "protocol": "trojan",
+     "selected": false,
+     "group": "One"
+    },
+    {
+     "id": "s2.a",
+     "label": "Paris",
+     "protocol": "vless",
+     "selected": true,
+     "group": "Two"
+    }
+   ]
+  },
+  "answer": [
+   {
+    "group": "One",
+    "nodes": [
+     {
+      "id": "a",
+      "label": "Tokyo",
+      "protocol": "trojan",
+      "selected": false,
+      "group": "One"
+     },
+     {
+      "id": "b",
+      "label": "Osaka",
+      "protocol": "trojan",
+      "selected": false,
+      "group": "One"
+     }
+    ]
+   },
+   {
+    "group": "Two",
+    "nodes": [
+     {
+      "id": "s2.a",
+      "label": "Paris",
+      "protocol": "vless",
+      "selected": true,
+      "group": "Two"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "command": "view.group_nodes",
+  "args": {
+   "nodes": [
+    {
+     "id": "a",
+     "label": "Tokyo Primary",
+     "protocol": "Shadowsocks",
+     "selected": true
+    },
+    {
+     "id": "b",
+     "label": "Berlin Edge",
+     "protocol": "VLESS",
+     "selected": false
+    }
+   ]
+  },
+  "answer": [
+   {
+    "group": null,
+    "nodes": [
+     {
+      "id": "a",
+      "label": "Tokyo Primary",
+      "protocol": "Shadowsocks",
+      "selected": true
+     },
+     {
+      "id": "b",
+      "label": "Berlin Edge",
+      "protocol": "VLESS",
+      "selected": false
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "command": "view.group_nodes",
+  "args": {
+   "nodes": []
+  },
+  "answer": []
+ },
+ {
+  "command": "view.sort_nodes",
+  "args": {
+   "nodes": [
+    {
+     "id": "a",
+     "label": "Tokyo Primary",
+     "protocol": "Shadowsocks",
+     "selected": true
+    },
+    {
+     "id": "b",
+     "label": "Berlin Edge",
+     "protocol": "VLESS",
+     "selected": false
+    },
+    {
+     "id": "c",
+     "label": "Amsterdam",
+     "protocol": "Trojan",
+     "selected": false
+    }
+   ],
+   "sort": "default",
+   "delays": {
+    "b": {
+     "nodeId": "b",
+     "delayMs": 320
+    },
+    "c": {
+     "nodeId": "c",
+     "error": "timed out"
+    }
+   }
+  },
+  "answer": [
+   {
+    "id": "a",
+    "label": "Tokyo Primary",
+    "protocol": "Shadowsocks",
+    "selected": true
+   },
+   {
+    "id": "b",
+    "label": "Berlin Edge",
+    "protocol": "VLESS",
+    "selected": false
+   },
+   {
+    "id": "c",
+    "label": "Amsterdam",
+    "protocol": "Trojan",
+    "selected": false
+   }
+  ]
+ },
+ {
+  "command": "view.sort_nodes",
+  "args": {
+   "nodes": [
+    {
+     "id": "a",
+     "label": "Tokyo Primary",
+     "protocol": "Shadowsocks",
+     "selected": true
+    },
+    {
+     "id": "b",
+     "label": "Berlin Edge",
+     "protocol": "VLESS",
+     "selected": false
+    },
+    {
+     "id": "c",
+     "label": "Amsterdam",
+     "protocol": "Trojan",
+     "selected": false
+    }
+   ],
+   "sort": "name",
+   "delays": {
+    "b": {
+     "nodeId": "b",
+     "delayMs": 320
+    },
+    "c": {
+     "nodeId": "c",
+     "error": "timed out"
+    }
+   }
+  },
+  "answer": [
+   {
+    "id": "c",
+    "label": "Amsterdam",
+    "protocol": "Trojan",
+    "selected": false
+   },
+   {
+    "id": "b",
+    "label": "Berlin Edge",
+    "protocol": "VLESS",
+    "selected": false
+   },
+   {
+    "id": "a",
+    "label": "Tokyo Primary",
+    "protocol": "Shadowsocks",
+    "selected": true
+   }
+  ]
+ },
+ {
+  "command": "view.sort_nodes",
+  "args": {
+   "nodes": [
+    {
+     "id": "a",
+     "label": "Tokyo Primary",
+     "protocol": "Shadowsocks",
+     "selected": true
+    },
+    {
+     "id": "b",
+     "label": "Berlin Edge",
+     "protocol": "VLESS",
+     "selected": false
+    },
+    {
+     "id": "c",
+     "label": "Amsterdam",
+     "protocol": "Trojan",
+     "selected": false
+    }
+   ],
+   "sort": "delay",
+   "delays": {
+    "b": {
+     "nodeId": "b",
+     "delayMs": 320
+    },
+    "c": {
+     "nodeId": "c",
+     "error": "timed out"
+    }
+   }
+  },
+  "answer": [
+   {
+    "id": "b",
+    "label": "Berlin Edge",
+    "protocol": "VLESS",
+    "selected": false
+   },
+   {
+    "id": "c",
+    "label": "Amsterdam",
+    "protocol": "Trojan",
+    "selected": false
+   },
+   {
+    "id": "a",
+    "label": "Tokyo Primary",
+    "protocol": "Shadowsocks",
+    "selected": true
+   }
+  ]
+ },
+ {
+  "command": "view.sort_nodes",
+  "args": {
+   "nodes": [
+    {
+     "id": "a",
+     "label": "Tokyo Primary",
+     "protocol": "Shadowsocks",
+     "selected": true
+    },
+    {
+     "id": "b",
+     "label": "Berlin Edge",
+     "protocol": "VLESS",
+     "selected": false
+    },
+    {
+     "id": "c",
+     "label": "Amsterdam",
+     "protocol": "Trojan",
+     "selected": false
+    }
+   ],
+   "sort": "speed",
+   "delays": {
+    "b": {
+     "nodeId": "b",
+     "delayMs": 320
+    },
+    "c": {
+     "nodeId": "c",
+     "error": "timed out"
+    }
+   }
+  },
+  "refused": true
+ },
+ {
+  "command": "view.delay_tone",
+  "args": {
+   "delay": {
+    "nodeId": "b",
+    "delayMs": 320
+   }
+  },
+  "answer": "fast"
+ },
+ {
+  "command": "view.delay_tone",
+  "args": {
+   "delay": {
+    "nodeId": "b",
+    "delayMs": 900
+   }
+  },
+  "answer": "slow"
+ },
+ {
+  "command": "view.delay_tone",
+  "args": {
+   "delay": {
+    "nodeId": "c",
+    "error": "timed out"
+   }
+  },
+  "answer": "failed"
+ },
+ {
+  "command": "view.delay_tone",
+  "args": {
+   "delay": {
+    "nodeId": "c",
+    "delayMs": null
+   }
+  },
+  "answer": "failed"
+ },
+ {
+  "command": "view.reboot",
+  "args": {},
+  "refused": true
+ }
+]

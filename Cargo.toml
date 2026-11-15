@@ -12,6 +12,7 @@ members = [
     "crates/client-health",
     "crates/client-ipc",
     "crates/client-service",
+    "crates/client-view",
     "crates/desktop-dns",
     "crates/desktop-mitm",
     "crates/network-watch",

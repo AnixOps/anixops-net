@@ -109,6 +109,16 @@ Tauri（过渡期）        ── 同进程调用                             P
 4. **`crates/client-view`。** 现在 TypeScript 里有行为的纯逻辑（抓包筛选表达式、请求表排序、节点筛选、`anixops://`
    解析）在 Rust 里写一次，作为命令暴露，各端调用，样例测试只保留一份。字节、时长、日期这类显示格式由各端用平台的
    区域设置格式化。
+   已有的命令（名字都以 `view.` 开头，和核心的命令走同一个入口 `Client::invoke`，所以经通道、JNI 都能调）：
+   `parse_app_link`、`find_link_node`、`find_link_member`、`combine_filter`、`next_since`、`merge_requests`、
+   `sort_requests`、`describe_request`、`filter_nodes`、`group_nodes`、`sort_nodes`、`delay_tone`。约定：
+   - 行（请求、节点）原样传入传出，这个 crate 不认识的字段保留。
+   - 被拒绝的链接返回稳定的原因 id（`invalid`、`not_app_link`、`too_long`、`missing_action`、`unknown_action`、
+     `missing_parameter`、`unknown_mode`），句子由各端自己的文案给出，不再用简体原文当 key。
+   - 名称排序不区分大小写，不按某一种语言的规则；要按用户语言排序的界面自己排。
+   - `crates/client-view/fixtures/cases.json` 是唯一一份样例（命令、参数、应答），Rust 测试跑全部，并检查每个命令都有
+     样例；其他语言的界面可以拿同一个文件对着自己的通道跑。
+   网页界面里的 TypeScript 版本在 Tauri 版删除前保持原样，不改成调命令：它只修 bug，行为以这里为准。
 5. **文案单一来源。** 简体、繁体、英文只保留一份目录，CI 生成 `strings.xml`、`.resw`、gettext 和 TypeScript，并检查
    生成物与源一致。现在 TypeScript 的 key 是简体原文，迁移时换成稳定 id。
 

@@ -1,0 +1,11 @@
+[package]
+name = "client-view"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "What every AnixOps Net window decides the same way, written once: reading anixops:// links, the capture filter, and the order of the request and node lists."
+
+[dependencies]
+serde_json = "1"
+url = "2"

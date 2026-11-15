@@ -273,6 +273,10 @@ impl Client {
         } else {
             args
         };
+        // What every window decides the same way (`view.` commands) needs nothing of this client.
+        if let Some(answer) = client_view::invoke(command, &args) {
+            return answer;
+        }
         match handler(command) {
             Some(handler) => handler(self, args),
             None if WINDOWS_ONLY.contains(&command) => Err(UNAVAILABLE.to_string()),
@@ -1573,6 +1577,14 @@ mod tests {
         );
         let snapshot = client.invoke("runtime_snapshot", Value::Null).unwrap();
         assert!(snapshot.get("connection").is_some());
+        // The windows' shared logic answers through the same door.
+        assert_eq!(
+            client.invoke(
+                "view.parse_app_link",
+                serde_json::json!({ "link": "anixops://connect" })
+            ),
+            Ok(serde_json::json!({ "action": "connect" }))
+        );
         assert_eq!(
             client
                 .invoke("list_subscriptions", serde_json::json!({}))
