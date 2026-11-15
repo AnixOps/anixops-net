@@ -1888,9 +1888,6 @@ extension TunnelController {
     /// When the demo subscription expires: a fixed day, for the same reason.
     static let demoExpiry = Date(timeIntervalSince1970: 1_796_731_200)
 
-    /// How long the demo has been connected, in seconds.
-    static let demoConnectedSeconds = 4521
-
     func loadDemo() {
         let credentials = "YWVzLTI1Ni1nY206ZGVtby1wYXNzd29yZA"
         let names = [("hk1", "香港 01"), ("hk2", "香港 02"), ("jp1", "日本 01"), ("sg1", "新加坡 01"), ("us1", "美国 01"), ("de1", "德国 01")]
