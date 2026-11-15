@@ -536,7 +536,7 @@ fun AnixScaffold(
                 }
                 Destination.Requests -> {
                     LaunchedEffect(Unit) { pollRequests() }
-                    BackTo(requests.close, enabled = requestsState.opened != null)
+                    BackTo(enabled = requestsState.opened != null, close = requests.close)
                     RequestsScreen(state, requestsState, requests.copy(connect = home.connect, disconnect = home.disconnect))
                 }
             }
@@ -547,6 +547,6 @@ fun AnixScaffold(
 
 /** The system back gesture closes a page opened from another; screenshots have no dispatcher to hook into. */
 @Composable
-internal fun BackTo(close: () -> Unit, enabled: Boolean = true) {
+internal fun BackTo(enabled: Boolean = true, close: () -> Unit) {
     if (LocalOnBackPressedDispatcherOwner.current != null) BackHandler(enabled = enabled, onBack = close)
 }
