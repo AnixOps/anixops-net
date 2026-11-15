@@ -1,12 +1,12 @@
 import Foundation
 
-/// The public lists behind the `GEOSITE` and `GEOIP` categories subscriptions use most, so their rules match
-/// without a rule set in the subscription. The engine downloads them itself, directly, once a day; they are the same
-/// lists the desktop routing modes use (`engine-embedded/src/profile.rs`).
+/// The public lists behind the mainland China `GEOSITE` and `GEOIP` categories, so a subscription's or the user's
+/// `GEOSITE,cn` and `GEOIP,CN` rules match without a rule set of their own. Only these two: no GFW or other list is
+/// built in (docs/no-presets.md). The engine downloads them itself, directly, once a day, and only when a rule names
+/// them; a set the subscription defines under the same name is used instead.
 public enum RuleSetCatalog {
     public static let known: [String: EmbeddedRuntimeConfig.RuleSet] = [
         "geosite-cn": .init(url: "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/china-list.txt"),
-        "geosite-gfw": .init(url: "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/gfw.txt"),
         "geoip-cn": .init(url: "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/ip-lists/china.txt"),
     ]
 

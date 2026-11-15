@@ -22,8 +22,8 @@ import subprocess
 import sys
 from pathlib import PurePosixPath
 
-# Public list URLs that back GEOSITE/GEOIP categories. They are used only when a rule the user imported or wrote
-# names that category (decided 2026-11-15: not a preset), never on their own.
+# Public list URLs that back the GEOSITE,cn and GEOIP,CN categories. They are used only when a rule the user imported
+# or wrote names that category (decided 2026-11-15: not a preset), never on their own. No GFW list (user, 2026-11-15).
 ALLOWED_LIST_URL_FILES = {
     "apps/ios/Sources/NetworkCoreBridge/RuleSetCatalog.swift",
 }
@@ -39,6 +39,7 @@ BANNED = [
     (re.compile(r"builtin_(ad_block|bilibili)|BUILTIN_(AD_BLOCK|BILIBILI)|bilibiliWebAdBlock|native_mitm_policy_source"),
      "a built-in MITM ad-block plugin"),
     (re.compile(r"DnsSettings\.split\b|dns_split|value: \"split\""), "the DNS split preset"),
+    (re.compile(r"geosite-gfw|release/gfw\.txt"), "a built-in GFW list (only the cn lists are kept)"),
 ]
 
 PACKAGED_DIRS = [

@@ -638,7 +638,7 @@ private struct LocalRuleSheet: View {
         case "DOMAIN-SUFFIX":
             return String(localized: "匹配这个域名和它的所有子域名。")
         case "GEOSITE":
-            return String(localized: "可用 cn 或 gfw 两个列表。")
+            return String(localized: "内置 cn 列表；订阅自带同名规则集时用订阅的。")
         case "GEOIP":
             return String(localized: "两位国家或地区代码，例如 CN。")
         case "DST-PORT":

@@ -14,8 +14,10 @@ Android APK 与 Google Play、原生桌面预览版，以及 anx 私有构建出
 ## 保留的东西（用户 2026-11-15 确认不算预设分流）
 
 - **局域网和本机地址直连**开关（默认开）：私有地址、`*.local` 不进代理，和 Surge / Loon 的 skip-proxy 一样。
-- **GEOSITE / GEOIP 对应的公开列表**：只有在用户自己导入或写的规则引用 `GEOSITE,cn`、`GEOIP,CN` 这类分类时才下载，
-  不会自己生效（iOS 的 `RuleSetCatalog`）。
+- **GEOSITE,cn / GEOIP,CN 对应的公开列表**：只有在用户自己导入或写的规则引用这两个分类时才下载，不会自己生效
+  （iOS 的 `RuleSetCatalog`）。只内置这两份：`geoip-cn`（gaoyifan/china-operator-ip，MIT）和 `geosite-cn`
+  （Loyalsoldier/v2ray-rules-dat，GPL-3.0）。App 里只有地址，列表由设备自己下载，来源写在规则页的说明里。
+  用户 2026-11-15 确认不内置 GFW 列表；订阅自带的同名规则集优先于内置地址。
 - 全局、直连、规则三种代理模式本身；规则模式下订阅没有规则时，只按用户自己的规则分流，其余走代理。
 - DNS 服务器的一键选择（阿里 DNS、Cloudflare 等）：只是服务器地址，不带分流规则。
 
@@ -34,7 +36,7 @@ Android APK 与 Google Play、原生桌面预览版，以及 anx 私有构建出
 CI 的 “No preset scripts or routing rules” 步骤（`.github/scripts/no_presets.py`）检查会打进安装包的源码：
 
 - 不得出现 `raw.githubusercontent.com/<owner>/…` 形式的规则列表、插件或脚本地址（GEOSITE/GEOIP 对应表除外）；
-- 不得出现已去掉的预设的名字；
+- 不得出现已去掉的预设的名字（包括 `geosite-gfw` 和 GFW 列表地址）；
 - 打进 App 的资源目录（Apple `Resources/`、Android `assets/`、`res/raw/`）不得有插件、脚本或规则列表文件。
 
 测试、文档和 `examples/` 不打进安装包，不检查。要加例外须经用户同意，并在脚本里写明原因。
