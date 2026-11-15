@@ -73,6 +73,7 @@ fun Section(title: String?, modifier: Modifier = Modifier, content: @Composable 
         Surface(
             shape = MaterialTheme.shapes.medium,
             color = LocalBrandPalette.current.surface,
+            contentColor = LocalBrandPalette.current.text,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(content = content)

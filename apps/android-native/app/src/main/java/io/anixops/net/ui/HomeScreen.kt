@@ -135,6 +135,7 @@ private fun ErrorCard(message: String) {
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = palette.dangerSoft,
+        contentColor = palette.text,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
