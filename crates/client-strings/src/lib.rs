@@ -51,9 +51,9 @@ impl Language {
             .find(|language| language.id() == id)
     }
 
-    /// The language to use for a system locale such as `zh_CN.UTF-8`, `zh-Hant-TW` or `en-US`. Taiwan, Hong
-    /// Kong, Macau and anything written in the Traditional script read Traditional Chinese; other Chinese
-    /// locales read Simplified Chinese; everything else reads English.
+    /// The language to use for a system locale such as `zh_CN.UTF-8`, `zh-Hant-TW` or `en-US`. The script
+    /// decides when the locale names one; otherwise Taiwan, Hong Kong and Macau read Traditional Chinese and
+    /// other Chinese locales read Simplified Chinese. Everything else reads English.
     pub fn preferred(locale: &str) -> Language {
         let locale = locale
             .split(['.', '@'])
@@ -64,11 +64,18 @@ impl Language {
         if parts.next() != Some("zh") {
             return Language::English;
         }
-        if parts.any(|part| matches!(part, "hant" | "tw" | "hk" | "mo")) {
-            Language::TraditionalChinese
-        } else {
-            Language::Chinese
+        // A script that is written out decides; the region only speaks when there is none ("zh-Hans-HK" is
+        // Simplified Chinese as written in Hong Kong).
+        let mut region = Language::Chinese;
+        for part in parts {
+            match part {
+                "hans" => return Language::Chinese,
+                "hant" => return Language::TraditionalChinese,
+                "tw" | "hk" | "mo" => region = Language::TraditionalChinese,
+                _ => {}
+            }
         }
+        region
     }
 }
 
@@ -347,6 +354,8 @@ mod tests {
             ("zh-MO", Language::TraditionalChinese),
             ("zh-Hant", Language::TraditionalChinese),
             ("zh-Hant-CN", Language::TraditionalChinese),
+            ("zh_TW.Big5@stroke", Language::TraditionalChinese),
+            ("zh-Hans-TW", Language::Chinese),
             ("en_US.UTF-8", Language::English),
             ("de-DE", Language::English),
             ("zhx", Language::English),

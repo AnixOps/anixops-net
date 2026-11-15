@@ -69,6 +69,8 @@ public sealed class StringsTests
     [InlineData("zh-Hant", Strings.TraditionalChinese)]
     [InlineData("zh-Hant-CN", Strings.TraditionalChinese)]
     [InlineData("zh-CHT", Strings.TraditionalChinese)]
+    [InlineData("zh-Hans-TW", Strings.Chinese)]
+    [InlineData("zh-CHS", Strings.Chinese)]
     [InlineData("en-US", Strings.English)]
     [InlineData("de-DE", Strings.English)]
     [InlineData("zhx", Strings.English)]

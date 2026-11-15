@@ -49,8 +49,8 @@ public sealed class Strings
     }
 
     /// <summary>The language to use for a system culture name such as "zh-CN", "zh-Hant-TW" or "en-US".
-    /// Taiwan, Hong Kong, Macau and anything written in the Traditional script read Traditional Chinese, other
-    /// Chinese cultures read Simplified Chinese, everything else reads English.</summary>
+    /// The script decides when the culture names one; otherwise Taiwan, Hong Kong and Macau read Traditional
+    /// Chinese and other Chinese cultures read Simplified Chinese. Everything else reads English.</summary>
     public static string Preferred(string? culture)
     {
         var parts = (culture ?? "").ToLowerInvariant().Split('-', '_');
@@ -58,7 +58,23 @@ public sealed class Strings
         {
             return English;
         }
-        return parts.Skip(1).Any(part => part is "hant" or "cht" or "tw" or "hk" or "mo") ? TraditionalChinese : Chinese;
+        // A script that is written out decides; the region only speaks when there is none ("zh-Hans-HK" is
+        // Simplified Chinese as written in Hong Kong). "zh-CHS" and "zh-CHT" are the names older Windows used.
+        var region = Chinese;
+        foreach (var part in parts.Skip(1))
+        {
+            switch (part)
+            {
+                case "hans" or "chs":
+                    return Chinese;
+                case "hant" or "cht":
+                    return TraditionalChinese;
+                case "tw" or "hk" or "mo":
+                    region = TraditionalChinese;
+                    break;
+            }
+        }
+        return region;
     }
 
     /// <summary>Reads a catalogue: every id carries one sentence in every language and nothing else.</summary>
