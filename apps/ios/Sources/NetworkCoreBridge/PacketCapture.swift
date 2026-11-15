@@ -104,11 +104,19 @@ public enum PacketCapture {
         public let note: String?
         public let request: Message
         public let response: Message
+        /// Still under way: the response, or its event stream or WebSocket, has not ended.
+        public let inProgress: Bool
+        /// A rewrite rule that would have read or changed the body did not run (a streamed response, or one over
+        /// the size rules can hold).
+        public let rulesSkipped: Bool
+        /// Server-sent events or WebSocket messages; nil from kernels before them.
+        public let messages: StreamMessages?
 
         enum CodingKeys: String, CodingKey {
             case startedAtMs = "started_at_ms"
             case endedAtMs = "ended_at_ms"
-            case seq, method, url, status, note, request, response
+            case seq, method, url, status, note, request, response, state, messages
+            case rulesSkipped = "rules_skipped"
         }
 
         public init(from decoder: Decoder) throws {
@@ -122,6 +130,15 @@ public enum PacketCapture {
             note = try container.decodeIfPresent(String.self, forKey: .note)
             request = try container.decode(Message.self, forKey: .request)
             response = try container.decode(Message.self, forKey: .response)
+            inProgress = try container.decodeIfPresent(String.self, forKey: .state) == "in_progress"
+            rulesSkipped = try container.decodeIfPresent(Bool.self, forKey: .rulesSkipped) ?? false
+            messages = try container.decodeIfPresent(StreamMessages.self, forKey: .messages)
+        }
+
+        /// Its WebSocket messages or server-sent events, when there are any to show.
+        public var hasMessages: Bool {
+            (messages?.seen ?? 0) > 0 || status == 101
+                || response.header("Content-Type")?.lowercased().hasPrefix("text/event-stream") == true
         }
     }
 
@@ -163,6 +180,19 @@ public enum PacketCapture {
         public let download: DirectionTotals
         public let chunks: [Chunk]
         public let http: [Exchange]
+        /// HTTP/2 frame headers seen on the connection's two links; nil from kernels before them.
+        public let h2Frames: FrameTotals?
+
+        /// How many HTTP/2 frames went by and how many of the oldest were not kept.
+        public struct FrameTotals: Decodable, Equatable {
+            public let seen: UInt64
+            public let dropped: UInt64
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id, network, decrypted, upload, download, chunks, http
+            case h2Frames = "h2_frames"
+        }
 
         /// The first bytes look like TLS records: the content is encrypted end to end.
         public var looksLikeTLS: Bool {

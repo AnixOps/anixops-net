@@ -178,11 +178,29 @@ struct CaptureDetailView: View {
                     Section("HTTP 请求") {
                         ForEach(Array(capture.http.enumerated()), id: \.offset) { index, exchange in
                             NavigationLink {
-                                HttpExchangeView(tunnel: tunnel, exchange: exchange, connectionID: connection.id, index: index)
+                                HttpExchangeView(
+                                    tunnel: tunnel,
+                                    exchange: exchange,
+                                    connectionID: connection.id,
+                                    index: index,
+                                    hasFrames: (capture.h2Frames?.seen ?? 0) > 0
+                                )
                             } label: {
                                 ExchangeRow(exchange: exchange)
                             }
                         }
+                    }
+                    .listRowBackground(brand.surface)
+                }
+                if let frames = capture.h2Frames, frames.seen > 0 {
+                    Section {
+                        NavigationLink {
+                            H2FramesView(tunnel: tunnel, connectionID: connection.id)
+                        } label: {
+                            LabeledContent("HTTP/2 帧", value: String(frames.seen))
+                        }
+                    } footer: {
+                        Text("App 与 AnixOps、AnixOps 与服务器两段的帧头，用来看流控、RST_STREAM 和 GOAWAY。")
                     }
                     .listRowBackground(brand.surface)
                 }
@@ -387,6 +405,8 @@ private struct HttpExchangeView: View {
     /// Where the exchange sits in the capture, for exporting it alone.
     let connectionID: UInt64
     let index: Int
+    /// The connection is HTTP/2 and its frame headers were kept.
+    var hasFrames = false
     @Environment(\.brand) private var brand
     @State private var mapping: MappingDraft?
     /// Cookies, tokens and passwords are hidden in exports unless turned off (plan F5).
@@ -404,11 +424,40 @@ private struct HttpExchangeView: View {
                 if let ended = exchange.endedAt {
                     LabeledContent("耗时", value: "\(Int((ended.timeIntervalSince(exchange.startedAt) * 1000).rounded())) ms")
                 }
+                if exchange.inProgress {
+                    LabeledContent("状态", value: String(localized: "进行中"))
+                }
                 if let note = Self.noteText(exchange.note) {
                     LabeledContent("说明", value: note)
                 }
+                if exchange.rulesSkipped {
+                    LabeledContent("改写", value: Self.skippedText(exchange.note))
+                        .foregroundStyle(brand.warning)
+                }
             }
             .listRowBackground(brand.surface)
+            if exchange.hasMessages || hasFrames {
+                Section {
+                    if exchange.hasMessages {
+                        NavigationLink {
+                            StreamMessagesView(tunnel: tunnel, exchange: exchange, connectionID: connectionID, index: index)
+                        } label: {
+                            LabeledContent(
+                                exchange.status == 101 ? "WebSocket 消息" : "事件",
+                                value: String(exchange.messages?.seen ?? 0)
+                            )
+                        }
+                    }
+                    if hasFrames {
+                        NavigationLink {
+                            H2FramesView(tunnel: tunnel, connectionID: connectionID)
+                        } label: {
+                            Label("HTTP/2 帧", systemImage: "list.bullet.rectangle")
+                        }
+                    }
+                }
+                .listRowBackground(brand.surface)
+            }
             message("请求", exchange.request)
             if exchange.status != nil {
                 message("响应", exchange.response)
@@ -547,12 +596,19 @@ private struct HttpExchangeView: View {
         return body.truncated ? String(localized: "\(size)（保留前 \(TrafficFormat.bytes(UInt64(body.data.count)))）") : size
     }
 
+    /// Why a rewrite rule that would have read or changed the body did not run.
+    static func skippedText(_ note: String?) -> String {
+        note == "too_large"
+            ? String(localized: "改写未生效：内容超过 1 MiB")
+            : String(localized: "改写未生效：流式响应")
+    }
+
     static func noteText(_ note: String?) -> String? {
         switch note {
         case "answered_locally":
             return String(localized: "由改写规则直接应答")
         case "streaming":
-            return String(localized: "流式响应，未保留内容")
+            return String(localized: "流式响应，未保留正文")
         case "too_large":
             return String(localized: "内容过大，之后不再解密")
         default:
@@ -569,13 +625,19 @@ private struct BodyView: View {
 
     var body: some View {
         let encoding = message.header("Content-Encoding")
-        let text = PacketCapture.text(message.body.data, contentEncoding: encoding)
+        let decoded = CaptureBodyDecoder.decode(message.body, contentEncoding: encoding)
+        let text = decoded.map { PacketCapture.text($0.data) } ?? PacketCapture.text(message.body.data, contentEncoding: encoding)
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text([message.header("Content-Type"), encoding, HttpExchangeView.bodySize(message.body)].compactMap { $0 }.joined(separator: " · "))
                     .font(.footnote)
                     .foregroundStyle(brand.text2)
-                BytesText(text: text ?? PacketCapture.hexDump(message.body.data))
+                if let decoded, decoded.truncated {
+                    Text("只解压出开头部分（正文没有完整抓到，或解压后超过 16 MiB）")
+                        .font(.footnote)
+                        .foregroundStyle(brand.text2)
+                }
+                BytesText(text: text ?? PacketCapture.hexDump(decoded?.data ?? message.body.data))
             }
             .padding()
         }
@@ -622,20 +684,20 @@ enum Pasteboard {
     }
 }
 
-/// One row of the HTTP request list opened: reads its connection's capture and shows the exchange, found by its
-/// `seq` (its place in the connection as a fallback).
+/// One row of the HTTP request list opened: reads the exchange by its place in the capture and shows it. While it
+/// is under way (a slow response, an event stream, a WebSocket) it is read again every second.
 struct CapturedRequestView: View {
     var tunnel: TunnelController
     let row: PacketCapture.RequestRow
     @Environment(\.brand) private var brand
     @State private var exchange: PacketCapture.Exchange?
-    @State private var index: Int?
+    @State private var hasFrames = false
     @State private var loaded = false
 
     var body: some View {
         Group {
-            if let exchange, let index {
-                HttpExchangeView(tunnel: tunnel, exchange: exchange, connectionID: row.connectionID, index: index)
+            if let exchange {
+                HttpExchangeView(tunnel: tunnel, exchange: exchange, connectionID: row.connectionID, index: row.index, hasFrames: hasFrames)
             } else {
                 List {
                     Text(loaded ? "这个请求已被更新的抓包挤出（抓包内存有上限），或抓包已清空。" : "正在读取…")
@@ -651,14 +713,34 @@ struct CapturedRequestView: View {
         .task {
             let data = await tunnel.control(.captureConnection(row.connectionID))
             if let capture = RuntimeControl.decode(PacketCapture.ConnectionAnswer.self, from: data)?.capture {
-                if let found = capture.http.firstIndex(where: { $0.seq == row.seq }) {
-                    index = found
-                } else if capture.http.indices.contains(row.index), capture.http[row.index].seq == nil {
-                    index = row.index
-                }
-                exchange = index.map { capture.http[$0] }
+                hasFrames = (capture.h2Frames?.seen ?? 0) > 0
+                exchange = Self.find(row, in: capture.http)
             }
             loaded = true
+            // Messages are read on their own page; here only the head, status and bodies change.
+            while !Task.isCancelled, exchange?.inProgress == true {
+                try? await Task.sleep(for: .seconds(1))
+                let data = await tunnel.control(.captureExchange(id: row.connectionID, index: row.index, sinceMessage: UInt64.max))
+                guard let answer = RuntimeControl.decode(PacketCapture.ExchangeAnswer.self, from: data) else {
+                    continue
+                }
+                exchange = answer.exchange.flatMap { Self.matches(row, $0) ? $0 : nil }
+            }
         }
+    }
+
+    /// The row's exchange: by `seq` once it ended, else at its index if it is the same request.
+    static func find(_ row: PacketCapture.RequestRow, in http: [PacketCapture.Exchange]) -> PacketCapture.Exchange? {
+        if row.seq != 0, let found = http.first(where: { $0.seq == row.seq }) {
+            return found
+        }
+        guard http.indices.contains(row.index), matches(row, http[row.index]) else {
+            return nil
+        }
+        return http[row.index]
+    }
+
+    private static func matches(_ row: PacketCapture.RequestRow, _ exchange: PacketCapture.Exchange) -> Bool {
+        exchange.url == row.url && exchange.method == row.method && exchange.startedAt == row.startedAt
     }
 }

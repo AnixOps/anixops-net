@@ -16,7 +16,7 @@ struct CaptureRequestsView: View {
     #endif
     @State private var selection: PacketCapture.RequestRow.ID?
     /// Newest first until a column header is clicked.
-    @State private var sortOrder = [KeyPathComparator(\PacketCapture.RequestRow.seq, order: .reverse)]
+    @State private var sortOrder = [KeyPathComparator(\PacketCapture.RequestRow.startedAt, order: .reverse)]
     @State private var showsInspector = true
     @State private var log = CaptureRequestLog()
     @State private var query = ""
@@ -364,7 +364,12 @@ struct CaptureRequestsView: View {
         capture = RuntimeControl.decode(PacketCapture.Status.self, from: await tunnel.control(.captureStatus))
         // Read up to a few pages at once, so a burst of requests shows up without waiting a second per page.
         for _ in 0..<4 {
-            let request = RuntimeControl.captureRequests(sinceSeq: log.nextSeq, limit: CaptureRequestLog.pageSize, filter: filter)
+            let request = RuntimeControl.captureRequests(
+                sinceSeq: log.nextSeq,
+                sinceRev: log.nextRev,
+                limit: CaptureRequestLog.pageSize,
+                filter: filter
+            )
             guard let data = await tunnel.control(request) else {
                 return
             }
@@ -399,7 +404,7 @@ struct CaptureRequestRow: View {
                     Text(row.method)
                         .font(.caption.weight(.bold))
                         .foregroundStyle(brand.primary)
-                    Text(row.status.map { String($0) } ?? "—")
+                    Text(row.status.map { String($0) } ?? (row.inProgress ? "…" : "—"))
                         .font(.caption.weight(.semibold).monospacedDigit())
                         .foregroundStyle(statusColor)
                     Text(row.host)
@@ -420,8 +425,17 @@ struct CaptureRequestRow: View {
                     if row.isHTTP2 {
                         tag("H2")
                     }
+                    if let stream = row.streamKind {
+                        tag(row.messageCount > 0 ? "\(stream) \(row.messageCount)" : stream)
+                    }
                     if row.note == "answered_locally" {
                         tag(String(localized: "本地应答"))
+                    }
+                    if row.rulesSkipped {
+                        tag(String(localized: "改写未生效"))
+                    }
+                    if row.inProgress {
+                        tag(String(localized: "进行中"))
                     }
                     Text(CaptureClock.time(row.startedAt))
                         .font(.caption2.monospacedDigit())
@@ -446,7 +460,7 @@ struct CaptureRequestRow: View {
 
     private var statusColor: Color {
         guard let status = row.status else {
-            return brand.danger
+            return row.inProgress ? brand.text3 : brand.danger
         }
         if status >= 400 {
             return brand.danger
@@ -478,7 +492,7 @@ struct CaptureRequestTable: View {
 
     var body: some View {
         Table(rows.sorted(using: sortOrder), selection: $selection, sortOrder: $sortOrder) {
-            TableColumn("时间", value: \.seq) { row in
+            TableColumn("时间", value: \.startedAt) { row in
                 Text(CaptureClock.time(row.startedAt))
                     .monospacedDigit()
                     .foregroundStyle(brand.text2)
@@ -548,8 +562,14 @@ struct CaptureRequestTable: View {
         if let kind = row.kind {
             parts.append(kind)
         }
+        if let stream = row.streamKind {
+            parts.append(row.messageCount > 0 ? "\(stream) \(row.messageCount)" : stream)
+        }
         if row.note == "answered_locally" {
             parts.append(String(localized: "本地应答"))
+        }
+        if row.rulesSkipped {
+            parts.append(String(localized: "改写未生效"))
         }
         return parts.joined(separator: " · ")
     }
@@ -558,13 +578,13 @@ struct CaptureRequestTable: View {
         if let status = row.status {
             return String(status)
         }
-        return row.endedAt == nil && row.note == nil ? "…" : String(localized: "失败")
+        return row.inProgress || (row.endedAt == nil && row.note == nil) ? "…" : String(localized: "失败")
     }
 
     /// Green 2xx, amber 3xx, red 4xx/5xx or no response, gray while waiting.
     private func statusColor(_ row: PacketCapture.RequestRow) -> Color {
         guard let status = row.status else {
-            if row.note == "answered_locally" || (row.endedAt == nil && row.note == nil) {
+            if row.note == "answered_locally" || row.inProgress || (row.endedAt == nil && row.note == nil) {
                 return brand.text3
             }
             return brand.danger
