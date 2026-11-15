@@ -241,6 +241,46 @@ class Core(
     suspend fun removeMitmPlugin(id: String): OperationResult =
         call("remove_mitm_plugin", OperationResult.serializer(), args("id" to JsonPrimitive(id)))
 
+    /** The Map Local / Map Remote mappings. */
+    suspend fun debugMappings(): List<DebugMapping> =
+        call("list_debug_mappings", ListSerializer(DebugMapping.serializer()))
+
+    /** Adds a mapping ([DebugMapping.id] empty) or changes one; its domain joins the decrypted domains. */
+    suspend fun saveDebugMapping(entry: DebugMapping): OperationResult = call(
+        "save_debug_mapping",
+        OperationResult.serializer(),
+        args("entry" to Envelope.json.encodeToJsonElement(DebugMapping.serializer(), entry)),
+    )
+
+    suspend fun removeDebugMapping(id: String): OperationResult =
+        call("remove_debug_mapping", OperationResult.serializer(), args("id" to JsonPrimitive(id)))
+
+    /** The destination rewrites, in order. */
+    suspend fun trafficRedirects(): List<TrafficRedirect> =
+        call("traffic_redirects", ListSerializer(TrafficRedirect.serializer()))
+
+    /** Adds a rewrite from the editor's fields, or changes the one with id [replacing]; a running engine restarts. */
+    suspend fun addTrafficRedirect(draft: RedirectDraft, replacing: String?): OperationResult = call(
+        "add_traffic_redirect",
+        OperationResult.serializer(),
+        args(
+            "draft" to Envelope.json.encodeToJsonElement(RedirectDraft.serializer(), draft),
+            "replacing" to (replacing?.let(::JsonPrimitive) ?: JsonNull),
+        ),
+    )
+
+    /** Saves the list as changed on the page (switches, removals). */
+    suspend fun saveTrafficRedirects(entries: List<TrafficRedirect>): OperationResult = call(
+        "save_traffic_redirects",
+        OperationResult.serializer(),
+        args(
+            "entries" to Envelope.json.encodeToJsonElement(
+                ListSerializer(SavedRedirect.serializer()),
+                entries.map { SavedRedirect(it.id, it.match, it.target, it.enabled) },
+            ),
+        ),
+    )
+
     // The settings page.
 
     /** The notification switches, changed to [update] first when given; [language] sets that of the texts. */

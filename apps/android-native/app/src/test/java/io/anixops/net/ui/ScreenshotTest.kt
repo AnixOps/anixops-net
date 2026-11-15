@@ -2,11 +2,14 @@ package io.anixops.net.ui
 
 import com.github.takahirom.roborazzi.captureRoboImage
 import io.anixops.net.core.ConnectionSnapshot
+import io.anixops.net.core.DebugMapping
 import io.anixops.net.core.Delay
 import io.anixops.net.core.DnsText
+import io.anixops.net.core.HeaderField
 import io.anixops.net.core.HealthStatus
 import io.anixops.net.core.LogEntry
 import io.anixops.net.core.LogsView
+import io.anixops.net.core.MappingText
 import io.anixops.net.core.MitmPlugin
 import io.anixops.net.core.MyRules
 import io.anixops.net.core.NativeGroup
@@ -19,6 +22,7 @@ import io.anixops.net.core.OnDemandSettings
 import io.anixops.net.core.Overview
 import io.anixops.net.core.ProxiesPage
 import io.anixops.net.core.ProxiesView
+import io.anixops.net.core.RedirectDraft
 import io.anixops.net.core.RuleSetStatus
 import io.anixops.net.core.RuntimeSnapshot
 import io.anixops.net.core.StatusFact
@@ -26,6 +30,7 @@ import io.anixops.net.core.SubscriptionRow
 import io.anixops.net.core.Traffic
 import io.anixops.net.core.TrafficBar
 import io.anixops.net.core.TrafficPage
+import io.anixops.net.core.TrafficRedirect
 import io.anixops.net.core.TrafficShare
 import io.anixops.net.core.TrafficStatsView
 import io.anixops.net.core.WifiRule
@@ -248,6 +253,28 @@ class ScreenshotTest {
     )
 
     @Test
+    fun mappingEditorPhoneLightZh() = capture(
+        "mapping-editor-phone-light-zh",
+        PHONE,
+        "zh-rCN",
+        dark = false,
+        mode = AppMode.Debug,
+        destination = Destination.Rewrite,
+        extensions = extensionsState.copy(editingMapping = extensionsState.mappings.first()),
+    )
+
+    @Test
+    fun mappingEditorRemotePhoneDarkEn() = capture(
+        "mapping-editor-remote-phone-dark-en",
+        PHONE,
+        "en",
+        dark = true,
+        mode = AppMode.Debug,
+        destination = Destination.Rewrite,
+        extensions = extensionsState.copy(editingMapping = extensionsState.mappings.last()),
+    )
+
+    @Test
     fun rewriteEmptyPhoneLightEn() = capture(
         "rewrite-empty-phone-light-en",
         PHONE,
@@ -408,6 +435,32 @@ class ScreenshotTest {
                     scriptCount = 1,
                 ),
                 MitmPlugin(id = "p3", name = "Header tweaks", level = "unsupported"),
+            ),
+            mappings = listOf(
+                DebugMapping(
+                    id = "m1",
+                    name = "Mock profile",
+                    pattern = "https://api.example.com/v1/profile",
+                    headers = listOf(HeaderField("Content-Type", "application/json; charset=utf-8")),
+                    body = MappingText.base64("{\n  \"name\": \"Ada\",\n  \"plan\": \"pro\"\n}"),
+                ),
+                DebugMapping(
+                    id = "m2",
+                    enabled = false,
+                    kind = "remote",
+                    match = "prefix",
+                    pattern = "https://api.example.com/v2/",
+                    target = "https://staging.example.com/v2/",
+                ),
+            ),
+            redirects = listOf(
+                TrafficRedirect(
+                    id = "r1",
+                    match = "AND,((IP-CIDR,203.0.113.10/32),(DEST-PORT,7000-7100),(PROTOCOL,UDP))",
+                    target = "192.168.1.20:7001",
+                    draft = RedirectDraft("203.0.113.10", "7000-7100", "udp", "192.168.1.20:7001"),
+                ),
+                TrafficRedirect(id = "r2", match = "DOMAIN-SUFFIX,game.example.com", target = ":9000", enabled = false),
             ),
         )
 

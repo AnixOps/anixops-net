@@ -94,6 +94,35 @@ class CoreTest {
     }
 
     @Test
+    fun aRedirectEditSaysWhichOneItReplaces() = runTest {
+        val transport = Recording("""{"ok":{"message":"saved"}}""")
+        val core = Core(transport, StandardTestDispatcher(testScheduler))
+        core.addTrafficRedirect(RedirectDraft(source = "203.0.113.10", target = ":7001"), null)
+        core.addTrafficRedirect(RedirectDraft(source = "game.example.com", network = "udp", target = "192.0.2.1"), "r1")
+        assertEquals(
+            listOf(
+                "add_traffic_redirect" to
+                    """{"draft":{"source":"203.0.113.10","ports":"","network":"any","target":":7001"},"replacing":null}""",
+                "add_traffic_redirect" to
+                    """{"draft":{"source":"game.example.com","ports":"","network":"udp","target":"192.0.2.1"},"replacing":"r1"}""",
+            ),
+            transport.calls,
+        )
+    }
+
+    @Test
+    fun savedRedirectsLeaveTheEditorFieldsOut() = runTest {
+        val transport = Recording("""{"ok":{"message":"saved"}}""")
+        val entry = TrafficRedirect("r1", "IP-CIDR,203.0.113.10/32", "192.0.2.1:7001", enabled = false, draft = RedirectDraft())
+        Core(transport, StandardTestDispatcher(testScheduler)).saveTrafficRedirects(listOf(entry))
+        assertEquals(
+            "save_traffic_redirects" to
+                """{"entries":[{"id":"r1","match":"IP-CIDR,203.0.113.10/32","target":"192.0.2.1:7001","enabled":false}]}""",
+            transport.calls.single(),
+        )
+    }
+
+    @Test
     fun ruleSetsGoThroughRuntimeControl() = runTest {
         val transport = Recording(
             """{"ok":{"rule_sets":[{"name":"china","source":"remote","entries":8412,"updated_at_ms":1763198400000}]}}""",

@@ -32,9 +32,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import io.anixops.net.R
+import io.anixops.net.core.DebugMapping
 import io.anixops.net.core.MitmPlugin
 import io.anixops.net.core.MitmPluginDetails
+import io.anixops.net.core.RedirectDraft
 import io.anixops.net.core.RuntimeSnapshot
+import io.anixops.net.core.TrafficRedirect
 import io.anixops.net.ui.theme.BrandSpacing
 import io.anixops.net.ui.theme.LocalBrandPalette
 
@@ -55,6 +58,18 @@ data class ExtensionsActions(
     val removePlugin: (String) -> Unit = {},
     val inspect: (MitmPlugin) -> Unit = {},
     val closeInspector: () -> Unit = {},
+    /** Opens the mapping editor; null starts a new mapping. */
+    val editMapping: (DebugMapping?) -> Unit = {},
+    val closeMappingEditor: () -> Unit = {},
+    val saveMapping: (DebugMapping) -> Unit = {},
+    val setMappingEnabled: (DebugMapping, Boolean) -> Unit = { _, _ -> },
+    val removeMapping: (String) -> Unit = {},
+    /** Opens the rewrite editor; null starts a new rewrite. */
+    val editRedirect: (TrafficRedirect?) -> Unit = {},
+    val closeRedirectEditor: () -> Unit = {},
+    val saveRedirect: (id: String?, draft: RedirectDraft) -> Unit = { _, _ -> },
+    val setRedirectEnabled: (id: String, enabled: Boolean) -> Unit = { _, _ -> },
+    val removeRedirect: (String) -> Unit = {},
 )
 
 /** A dialog the page has open. */
@@ -66,6 +81,10 @@ private sealed interface ExtensionsDialog {
     data object Paste : ExtensionsDialog
 
     data class RemovePlugin(val plugin: MitmPlugin) : ExtensionsDialog
+
+    data class RemoveMapping(val id: String, val label: String) : ExtensionsDialog
+
+    data class RemoveRedirect(val id: String, val label: String) : ExtensionsDialog
 }
 
 /**
@@ -80,6 +99,11 @@ fun ExtensionsScreen(
     actions: ExtensionsActions,
     modifier: Modifier = Modifier,
 ) {
+    state.editingMapping?.let { mapping ->
+        BackTo(actions.closeMappingEditor)
+        MappingEditorScreen(mapping, state.busy, onSave = actions.saveMapping, onBack = actions.closeMappingEditor, modifier = modifier)
+        return
+    }
     var dialog by rememberSaveable(stateSaver = ExtensionsDialogSaver) { mutableStateOf<ExtensionsDialog?>(null) }
     val enabled = !state.busy && snapshot != null
     Page(title, modifier) {
@@ -102,6 +126,25 @@ fun ExtensionsScreen(
             onImportUrl = { dialog = ExtensionsDialog.ImportUrl },
             onPaste = { dialog = ExtensionsDialog.Paste },
             onRemove = { dialog = ExtensionsDialog.RemovePlugin(it) },
+        )
+        MappingsSection(
+            state.mappings,
+            loaded = state.loaded,
+            enabled = !state.busy,
+            onNew = { actions.editMapping(null) },
+            onEdit = actions.editMapping,
+            onToggle = actions.setMappingEnabled,
+            onRemove = { dialog = ExtensionsDialog.RemoveMapping(it.id, mappingLabel(it)) },
+        )
+        val redirectLabels = state.redirects.associate { it.id to redirectLabel(it) }
+        RedirectsSection(
+            state.redirects,
+            loaded = state.loaded,
+            enabled = !state.busy,
+            onNew = { actions.editRedirect(null) },
+            onEdit = actions.editRedirect,
+            onToggle = { entry, on -> actions.setRedirectEnabled(entry.id, on) },
+            onRemove = { dialog = ExtensionsDialog.RemoveRedirect(it.id, redirectLabels[it.id].orEmpty()) },
         )
     }
     val dismiss = { dialog = null }
@@ -140,7 +183,31 @@ fun ExtensionsScreen(
             },
             onDismiss = dismiss,
         )
+        is ExtensionsDialog.RemoveMapping -> ConfirmDialog(
+            stringResource(R.string.plugin_confirm_remove, open.label),
+            onConfirm = {
+                dismiss()
+                actions.removeMapping(open.id)
+            },
+            onDismiss = dismiss,
+        )
+        is ExtensionsDialog.RemoveRedirect -> ConfirmDialog(
+            stringResource(R.string.plugin_confirm_remove, open.label),
+            onConfirm = {
+                dismiss()
+                actions.removeRedirect(open.id)
+            },
+            onDismiss = dismiss,
+        )
         null -> Unit
+    }
+    state.editingRedirect?.let { editor ->
+        RedirectDialog(
+            editor,
+            state.busy,
+            onSave = { actions.saveRedirect(editor.id, it) },
+            onDismiss = actions.closeRedirectEditor,
+        )
     }
     state.inspected?.let { (plugin, details) -> PluginInspector(plugin, details, actions.closeInspector) }
 }
