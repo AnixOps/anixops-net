@@ -1,0 +1,189 @@
+<Page
+    x:Class="AnixOps.Net.App.Pages.ProxiesPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:AnixOps.Net.App.Pages"
+    xmlns:p="using:AnixOps.Net.Presentation">
+
+    <Page.Resources>
+        <!-- The nodes, run by run: each group is one subscription's nodes under its name. -->
+        <CollectionViewSource x:Name="Groups" IsSourceGrouped="True" />
+    </Page.Resources>
+
+    <!-- Where a subscription is imported, the search, the delay test and the list of nodes. What stands here
+         is decided in AnixOps.Net.Presentation.Proxies; this draws it. Only the rows near the viewport exist
+         as controls. The row that is selected is the node in use. -->
+    <Grid Padding="32,24,32,0" RowSpacing="12">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" MaxWidth="960" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock
+            x:Name="Heading"
+            Grid.Row="0"
+            AutomationProperties.AutomationId="Page.Title"
+            AutomationProperties.HeadingLevel="Level1"
+            Style="{StaticResource TitleTextBlockStyle}" />
+
+        <Grid Grid.Row="1" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox
+                x:Name="LinkBox"
+                Grid.Column="0"
+                AutomationProperties.AutomationId="Proxies.Link"
+                InputScope="Url"
+                IsSpellCheckEnabled="False"
+                KeyDown="OnLinkKeyDown" />
+            <Button
+                x:Name="ImportButton"
+                Grid.Column="1"
+                MinWidth="96"
+                AutomationProperties.AutomationId="Proxies.Import"
+                Click="OnImport"
+                IsEnabled="False"
+                Style="{StaticResource AccentButtonStyle}" />
+        </Grid>
+
+        <Grid Grid.Row="2" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox
+                x:Name="SearchBox"
+                Grid.Column="0"
+                AutomationProperties.AutomationId="Proxies.Search"
+                IsSpellCheckEnabled="False"
+                TextChanged="OnSearchChanged" />
+            <Button
+                x:Name="TestButton"
+                Grid.Column="1"
+                MinWidth="96"
+                AutomationProperties.AutomationId="Proxies.Test"
+                Click="OnTest"
+                IsEnabled="False" />
+        </Grid>
+
+        <TextBlock
+            x:Name="CountText"
+            Grid.Row="3"
+            AutomationProperties.AutomationId="Proxies.Count"
+            AutomationProperties.LiveSetting="Polite"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Style="{StaticResource CaptionTextBlockStyle}" />
+
+        <!-- Selectable, so that the reason can be copied into a message asking for help. -->
+        <TextBlock
+            x:Name="ErrorText"
+            Grid.Row="4"
+            AutomationProperties.AutomationId="Proxies.Error"
+            AutomationProperties.LiveSetting="Polite"
+            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+            IsTextSelectionEnabled="True"
+            Style="{StaticResource BodyTextBlockStyle}"
+            TextWrapping="Wrap"
+            Visibility="Collapsed" />
+
+        <ListView
+            x:Name="NodeList"
+            Grid.Row="5"
+            AutomationProperties.AutomationId="Proxies.List"
+            ContainerContentChanging="OnContainerContentChanging"
+            ItemsSource="{x:Bind Groups.View, Mode=OneWay}"
+            SelectionChanged="OnSelectionChanged"
+            SelectionMode="Single"
+            ShowsScrollingPlaceholders="False">
+            <ListView.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <ItemsStackPanel AreStickyGroupHeadersEnabled="True" CacheLength="2" />
+                </ItemsPanelTemplate>
+            </ListView.ItemsPanel>
+            <ListView.ItemContainerStyle>
+                <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
+                    <Setter Property="MinHeight" Value="52" />
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.GroupStyle>
+                <GroupStyle>
+                    <GroupStyle.HeaderTemplate>
+                        <DataTemplate x:DataType="local:NodeGroup">
+                            <TextBlock
+                                AutomationProperties.HeadingLevel="Level2"
+                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                Text="{x:Bind Heading}"
+                                TextTrimming="CharacterEllipsis" />
+                        </DataTemplate>
+                    </GroupStyle.HeaderTemplate>
+                </GroupStyle>
+            </ListView.GroupStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="p:ProxyRow">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="16" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <!-- The mark of the node in use. -->
+                        <FontIcon
+                            Grid.Column="0"
+                            VerticalAlignment="Center"
+                            FontSize="14"
+                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                            Glyph="&#xE73E;"
+                            Opacity="{x:Bind MarkOpacity}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="{x:Bind Label}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="{x:Bind Protocol}"
+                                TextTrimming="CharacterEllipsis"
+                                Visibility="{x:Bind HasProtocol}" />
+                        </StackPanel>
+                        <!-- The delay, once per tone, so that each keeps its theme colour. -->
+                        <Grid Grid.Column="2" VerticalAlignment="Center">
+                            <TextBlock Text="{x:Bind Delay}" Visibility="{x:Bind IsPlain}" />
+                            <TextBlock
+                                Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                Text="{x:Bind Delay}"
+                                Visibility="{x:Bind IsFast}" />
+                            <TextBlock
+                                Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                Text="{x:Bind Delay}"
+                                Visibility="{x:Bind IsSlow}" />
+                            <TextBlock
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                Text="{x:Bind Delay}"
+                                Visibility="{x:Bind IsFailed}" />
+                        </Grid>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <TextBlock
+            x:Name="NoticeText"
+            Grid.Row="5"
+            Margin="0,48,0,0"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Top"
+            AutomationProperties.AutomationId="Proxies.Notice"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Style="{StaticResource BodyTextBlockStyle}"
+            TextWrapping="Wrap"
+            Visibility="Collapsed" />
+    </Grid>
+</Page>

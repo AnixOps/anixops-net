@@ -1,14 +1,10 @@
 using System;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Automation;
-using AnixOps.Net.Ipc;
 using AnixOps.Net.Presentation;
-using AnixOps.Net.Session;
 using AnixOps.Net.Testing;
-using Microsoft.Win32;
 using Xunit;
 
 namespace AnixOps.Net.App.UiTests;
@@ -93,79 +89,45 @@ public sealed class OverviewTests
             return;
         }
         var strings = Strings.For(language);
-        var scratch = $@"Software\AnixOps\Net\Tests\{Guid.NewGuid():N}";
-        try
-        {
-            using var service = ServiceProcess.Start();
-            using var app = AppSession.Start("--language", language, "--theme", theme, "--pipe", service.PipeName);
+        using var service = ServiceProcess.Start();
+        using var app = AppSession.Start("--language", language, "--theme", theme, "--pipe", service.PipeName);
 
-            // A new installation: no node, so nothing to connect through.
-            app.WaitForName(Node, strings["overview.node.none"]);
-            Assert.Equal(strings["overview.state.disconnected"], Name(app, State));
-            Assert.False(app.Find(Connect).Current.IsEnabled);
+        // A new installation: no node, so nothing to connect through.
+        app.WaitForName(Node, strings["overview.node.none"]);
+        Assert.Equal(strings["overview.state.disconnected"], Name(app, State));
+        Assert.False(app.Find(Connect).Current.IsEnabled);
 
-            // A second window of this user, opened after the app's: the service asks the newest window to
-            // change the user's settings, so connecting writes this test's registry keys, not the machine's
-            // real proxy settings.
-            var proxy = new RegistryProxyStore($@"{scratch}\Proxy", announce: false);
-            var handler = new SessionHandler(proxy, new RegistryLoginEntry(@"C:\Program Files\AnixOps\Net\AnixOpsNet.exe", $@"{scratch}\Run"));
-            await using var link = new CoreLink("0.3.0", handler, service.PipeName, TimeSpan.FromMilliseconds(100));
-            link.Start();
-            var deadline = DateTime.UtcNow + Patience;
-            while (true)
-            {
-                // Once this is answered the service has taken the second window in and can ask it.
-                try
-                {
-                    await link.AskAsync("save_preferences", Json("""{ "preferences": { "startAfterLogin": false, "autoConnect": false } }"""));
-                    break;
-                }
-                catch (Exception problem) when (problem is RefusedException or ChannelClosedException)
-                {
-                    Assert.True(DateTime.UtcNow < deadline, $"the service did not take the second window in: {problem.Message}; the link is {link.Status}");
-                    await Task.Delay(100);
-                }
-            }
+        // Connecting writes the second window's proxy settings, not the machine's real ones.
+        await using var second = await SecondWindow.JoinAsync(service.PipeName);
 
-            // Traffic leaves directly: connecting works without a node, and needs no server anywhere.
-            await link.AskAsync("set_direct_egress", Json("""{ "enabled": true }"""));
-            app.WaitForName(Node, strings["overview.node.direct"]);
-            WaitForEnabled(app, Connect, true);
-            Assert.Equal(strings["overview.connect"], Name(app, Connect));
+        // Traffic leaves directly: connecting works without a node, and needs no server anywhere.
+        await second.AskAsync("set_direct_egress", """{ "enabled": true }""");
+        app.WaitForName(Node, strings["overview.node.direct"]);
+        WaitForEnabled(app, Connect, true);
+        Assert.Equal(strings["overview.connect"], Name(app, Connect));
 
-            Press(app, Connect);
-            WaitFor(app, State, text => text == strings["overview.state.connected"], $"'{strings["overview.state.connected"]}'");
-            WaitFor(app, Connect, text => text == strings["overview.disconnect"], $"'{strings["overview.disconnect"]}'");
-            WaitForEnabled(app, Connect, true);
-            // The counters are the engine's own: numbers with units, not the mark for "unknown".
-            var rate = new Regex(@"^\d+(\.\d)? (B|KB|MB|GB)/s$");
-            WaitFor(app, DownloadRate, rate.IsMatch, "a rate");
-            Assert.Matches(rate, Name(app, UploadRate));
-            Assert.Matches(@"^\d+$", Name(app, Connections));
-            var total = new Regex(Regex.Escape(strings["overview.total"]).Replace(@"\{0}", @"\d+(\.\d)? (B|KB|MB|GB)"));
-            Assert.Matches(total, Name(app, DownloadTotal));
-            Assert.Matches(total, Name(app, UploadTotal));
-            Assert.True(proxy.Read().Enabled, "connecting did not point the second window's proxy settings at the engine");
-            Assert.Equal("connected", (await link.AskAsync(Overview.Command)).GetProperty("state").GetString());
-            app.Screenshot($"overview-connected-{language}-{theme}");
+        Press(app, Connect);
+        WaitFor(app, State, text => text == strings["overview.state.connected"], $"'{strings["overview.state.connected"]}'");
+        WaitFor(app, Connect, text => text == strings["overview.disconnect"], $"'{strings["overview.disconnect"]}'");
+        WaitForEnabled(app, Connect, true);
+        // The counters are the engine's own: numbers with units, not the mark for "unknown".
+        var rate = new Regex(@"^\d+(\.\d)? (B|KB|MB|GB)/s$");
+        WaitFor(app, DownloadRate, rate.IsMatch, "a rate");
+        Assert.Matches(rate, Name(app, UploadRate));
+        Assert.Matches(@"^\d+$", Name(app, Connections));
+        var total = new Regex(Regex.Escape(strings["overview.total"]).Replace(@"\{0}", @"\d+(\.\d)? (B|KB|MB|GB)"));
+        Assert.Matches(total, Name(app, DownloadTotal));
+        Assert.Matches(total, Name(app, UploadTotal));
+        Assert.True(second.Proxy.Read().Enabled, "connecting did not point the second window's proxy settings at the engine");
+        Assert.Equal("connected", (await second.AskAsync(Overview.Command)).GetProperty("state").GetString());
+        app.Screenshot($"overview-connected-{language}-{theme}");
 
-            Press(app, Connect);
-            WaitFor(app, State, text => text == strings["overview.state.disconnected"], $"'{strings["overview.state.disconnected"]}'");
-            WaitFor(app, Connect, text => text == strings["overview.connect"], $"'{strings["overview.connect"]}'");
-            WaitFor(app, DownloadRate, text => text == Overview.Unknown, "no rate");
-            Assert.Equal(Overview.Unknown, Name(app, Connections));
-            Assert.False(proxy.Read().Enabled, "disconnecting left the proxy settings pointing at the engine");
-            Assert.Equal("disconnected", (await link.AskAsync(Overview.Command)).GetProperty("state").GetString());
-        }
-        finally
-        {
-            Registry.CurrentUser.DeleteSubKeyTree(scratch, throwOnMissingSubKey: false);
-        }
-    }
-
-    private static JsonElement Json(string text)
-    {
-        using var document = JsonDocument.Parse(text);
-        return document.RootElement.Clone();
+        Press(app, Connect);
+        WaitFor(app, State, text => text == strings["overview.state.disconnected"], $"'{strings["overview.state.disconnected"]}'");
+        WaitFor(app, Connect, text => text == strings["overview.connect"], $"'{strings["overview.connect"]}'");
+        WaitFor(app, DownloadRate, text => text == Overview.Unknown, "no rate");
+        Assert.Equal(Overview.Unknown, Name(app, Connections));
+        Assert.False(second.Proxy.Read().Enabled, "disconnecting left the proxy settings pointing at the engine");
+        Assert.Equal("disconnected", (await second.AskAsync(Overview.Command)).GetProperty("state").GetString());
     }
 }
