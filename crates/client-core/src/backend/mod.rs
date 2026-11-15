@@ -4,6 +4,7 @@
 
 pub mod autostart;
 pub mod engine;
+pub mod legacy_windows;
 pub mod session;
 #[cfg(not(any(target_os = "android", windows)))]
 pub mod session_key;
