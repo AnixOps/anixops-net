@@ -39,7 +39,6 @@ struct Line {
 
 /// The dialog while it is shown.
 struct Open {
-    dialog: adw::Dialog,
     search: gtk::SearchEntry,
     count: gtk::Label,
     close_all: gtk::Button,
@@ -155,7 +154,6 @@ impl ConnectionList {
         });
 
         let mut open = Open {
-            dialog: dialog.clone(),
             search,
             count,
             close_all,
