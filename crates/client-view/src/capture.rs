@@ -324,17 +324,24 @@ mod tests {
         assert_eq!(first.len(), 2);
         assert_eq!(key(&first[0]), (1, 0));
         // The engine pushed out seq 1; the row still under way has no seq and stays until it ends.
-        let next = merge(&first, &serde_json::json!({ "requests": [done], "dropped_before_seq": 1 }));
+        let next = merge(
+            &first,
+            &serde_json::json!({ "requests": [done], "dropped_before_seq": 1 }),
+        );
         assert_eq!(next, vec![done]);
     }
 
     #[test]
     fn the_next_read_follows_the_newest_change() {
-        let answer = serde_json::json!({ "requests": [{ "rev": 7 }, { "rev": 9 }], "last_rev": 12 });
+        let answer =
+            serde_json::json!({ "requests": [{ "rev": 7 }, { "rev": 9 }], "last_rev": 12 });
         // A full page carries on from its last row; a short one from the newest change.
         assert_eq!(next_rev(Some(3), &answer, 2), Some(9));
         assert_eq!(next_rev(Some(3), &answer, 10), Some(12));
         assert_eq!(next_rev(Some(20), &answer, 10), Some(20));
-        assert_eq!(next_rev(None, &serde_json::json!({ "requests": [] }), 10), None);
+        assert_eq!(
+            next_rev(None, &serde_json::json!({ "requests": [] }), 10),
+            None
+        );
     }
 }
