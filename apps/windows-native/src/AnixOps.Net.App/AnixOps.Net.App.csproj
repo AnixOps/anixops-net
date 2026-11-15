@@ -12,9 +12,6 @@
     <!-- Not an MSIX package: the MSI installs plain files, and the Windows App SDK runtime ships beside them. -->
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-    <!-- The XAML compiler runs inside the build, not as a program of its own: as a program it exits with
-         code 1 and says nothing about what in the XAML it could not take. -->
-    <UseXamlCompilerExecutable>false</UseXamlCompilerExecutable>
     <EnableMsixTooling>true</EnableMsixTooling>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
     <SelfContained>false</SelfContained>

@@ -2,7 +2,6 @@
     x:Class="AnixOps.Net.App.Pages.ProxiesPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:AnixOps.Net.App.Pages"
     xmlns:p="using:AnixOps.Net.Presentation">
 
     <Page.Resources>
@@ -118,11 +117,14 @@
             <ListView.GroupStyle>
                 <GroupStyle>
                     <GroupStyle.HeaderTemplate>
-                        <DataTemplate x:DataType="local:NodeGroup">
+                        <!-- The name is written by the page when the heading gets its group: the group is a
+                             collection of the page's own, a type the XAML compiler stops on when it is named
+                             here. -->
+                        <DataTemplate>
                             <TextBlock
                                 AutomationProperties.HeadingLevel="Level2"
+                                DataContextChanged="OnGroupHeading"
                                 Style="{StaticResource BodyStrongTextBlockStyle}"
-                                Text="{x:Bind Heading}"
                                 TextTrimming="CharacterEllipsis" />
                         </DataTemplate>
                     </GroupStyle.HeaderTemplate>

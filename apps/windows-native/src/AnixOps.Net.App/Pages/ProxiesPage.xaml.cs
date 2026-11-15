@@ -294,6 +294,14 @@ public sealed partial class ProxiesPage : Page
         }
     }
 
+    private void OnGroupHeading(FrameworkElement sender, DataContextChangedEventArgs args)
+    {
+        if (sender is TextBlock heading)
+        {
+            heading.Text = (args.NewValue as NodeGroup)?.Heading ?? "";
+        }
+    }
+
     private void OnContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
         if (!args.InRecycleQueue && args.Item is ProxyRow row && strings is not null)
