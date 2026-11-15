@@ -7,6 +7,7 @@ import io.anixops.net.core.DnsText
 import io.anixops.net.core.HealthStatus
 import io.anixops.net.core.LogEntry
 import io.anixops.net.core.LogsView
+import io.anixops.net.core.MitmPlugin
 import io.anixops.net.core.MyRules
 import io.anixops.net.core.NativeGroup
 import io.anixops.net.core.NetworkProbe
@@ -224,8 +225,40 @@ class ScreenshotTest {
     fun debugRequestsPhoneLightZh() =
         capture("debug-requests-phone-light-zh", PHONE, "zh-rCN", dark = false, mode = AppMode.Debug)
 
-    private fun capture(
-        name: String,
+    @Test
+    fun extensionsPhoneLightZh() =
+        capture("extensions-phone-light-zh", PHONE, "zh-rCN", dark = false, state = decryptingState, destination = Destination.Extensions)
+
+    @Test
+    fun extensionsPhoneDarkEn() =
+        capture("extensions-phone-dark-en", PHONE, "en", dark = true, state = decryptingState, destination = Destination.Extensions)
+
+    @Test
+    fun extensionsTabletLightZh() =
+        capture("extensions-tablet-light-zh", TABLET, "zh-rCN", dark = false, state = decryptingState, destination = Destination.Extensions)
+
+    @Test
+    fun extensionsWholePagePhoneDarkZh() = capture(
+        "extensions-whole-page-phone-dark-zh",
+        TALL_PHONE,
+        "zh-rCN",
+        dark = true,
+        state = decryptingState,
+        destination = Destination.Extensions,
+    )
+
+    @Test
+    fun rewriteEmptyPhoneLightEn() = capture(
+        "rewrite-empty-phone-light-en",
+        PHONE,
+        "en",
+        dark = false,
+        mode = AppMode.Debug,
+        destination = Destination.Rewrite,
+        extensions = ExtensionsState(loaded = true),
+    )
+
+    private fun capture(        name: String,
         device: String,
         locale: String,
         dark: Boolean,
@@ -236,6 +269,7 @@ class ScreenshotTest {
         rules: RulesState = rulesState,
         settingsPage: SettingsPage? = null,
         traffic: TrafficState = trafficState,
+        extensions: ExtensionsState = extensionsState,
     ) {
         TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
         RuntimeEnvironment.setQualifiers("$locale-$device-${if (dark) "night" else "notnight"}-xhdpi")
@@ -253,6 +287,7 @@ class ScreenshotTest {
                     termsVersion = "2.1.0",
                     logsState = logsState,
                     trafficState = traffic,
+                    extensionsState = extensions,
                     initialSettingsPage = settingsPage,
                     initial = destination,
                 )
@@ -348,6 +383,34 @@ class ScreenshotTest {
         /** 2026-11-15 09:20 UTC, and the lines a few seconds apart. */
         private const val LOG_TIME = 1_794_734_400_000
 
+        val decryptingState = connectedState.copy(snapshot = snapshot.copy(httpsDecryptionEnabled = true))
+
+        val extensionsState = ExtensionsState(
+            loaded = true,
+            consented = true,
+            hosts = listOf("api.example.com", "*.example.org"),
+            plugins = listOf(
+                MitmPlugin(
+                    id = "p1",
+                    name = "去广告",
+                    url = "https://plugins.example.com/ads.plugin",
+                    enabled = true,
+                    hostnames = listOf("api.example.com", "ads.example.net", "m.example.cn", "img.example.cn"),
+                    scriptCount = 2,
+                ),
+                MitmPlugin(
+                    id = "p2",
+                    name = "Check-in",
+                    url = "https://plugins.example.com/checkin.sgmodule",
+                    enabled = false,
+                    level = "partial",
+                    hostnames = listOf("checkin.example.com"),
+                    scriptCount = 1,
+                ),
+                MitmPlugin(id = "p3", name = "Header tweaks", level = "unsupported"),
+            ),
+        )
+
         val logsState = LogsState(
             logs = LogsView(
                 modules = listOf("app", "mitm"),
@@ -364,11 +427,11 @@ class ScreenshotTest {
         val trafficState = TrafficState(
             page = TrafficPage(
                 TrafficStatsView(
-                    start = 1_794_672_000,
+                    start = 1_794_700_800,
                     upload = 52_428_800,
                     download = 1_181_116_416,
                     bars = List(24) { hour ->
-                        TrafficBar(1_794_672_000L + hour * 3_600, listOf(0L, 0L, 0L, 0L, 0L, 0L, 0L, 12, 48, 96, 160, 40).getOrElse(hour) { 0L } * 4_194_304)
+                        TrafficBar(1_794_700_800L + hour * 3_600, listOf(0L, 0L, 0L, 0L, 0L, 0L, 0L, 12, 48, 96, 160, 40).getOrElse(hour) { 0L } * 4_194_304)
                     },
                     hosts = listOf(
                         TrafficShare("video.example.com", 734_003_200),

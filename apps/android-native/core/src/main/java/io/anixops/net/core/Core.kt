@@ -201,6 +201,46 @@ class Core(
         args("text" to Envelope.json.encodeToJsonElement(DnsText.serializer(), text)),
     )
 
+    // Extensions / 改写: HTTPS decryption, the decrypted domains and the plugins.
+
+    /** Turns decryption on; on Android the root certificate is saved to Downloads for the user to install. */
+    suspend fun enableHttpsMitm(): OperationResult = call("enable_https_mitm", OperationResult.serializer())
+
+    suspend fun disableHttpsMitm(): OperationResult = call("disable_https_mitm", OperationResult.serializer())
+
+    /** The domains decryption was turned on for one by one. */
+    suspend fun decryptHosts(): List<String> = call("list_decrypt_hosts", ListSerializer(String.serializer()))
+
+    suspend fun addDecryptHost(host: String): OperationResult =
+        call("add_decrypt_host", OperationResult.serializer(), args("host" to JsonPrimitive(host)))
+
+    suspend fun removeDecryptHost(host: String): OperationResult =
+        call("remove_decrypt_host", OperationResult.serializer(), args("host" to JsonPrimitive(host)))
+
+    suspend fun mitmPlugins(): List<MitmPlugin> = call("list_mitm_plugins", ListSerializer(MitmPlugin.serializer()))
+
+    suspend fun importMitmPlugin(url: String): OperationResult =
+        call("import_mitm_plugin", OperationResult.serializer(), args("url" to JsonPrimitive(url)))
+
+    /** A plugin opened from a file ([source] is its name) or pasted ([source] is empty). */
+    suspend fun importMitmPluginText(text: String, source: String): OperationResult = call(
+        "import_mitm_plugin_text",
+        OperationResult.serializer(),
+        args("text" to JsonPrimitive(text), "source" to JsonPrimitive(source)),
+    )
+
+    suspend fun mitmPluginDetails(id: String): MitmPluginDetails =
+        call("mitm_plugin_details", MitmPluginDetails.serializer(), args("id" to JsonPrimitive(id)))
+
+    suspend fun setMitmPluginEnabled(id: String, enabled: Boolean): OperationResult = call(
+        "set_mitm_plugin_enabled",
+        OperationResult.serializer(),
+        args("id" to JsonPrimitive(id), "enabled" to JsonPrimitive(enabled)),
+    )
+
+    suspend fun removeMitmPlugin(id: String): OperationResult =
+        call("remove_mitm_plugin", OperationResult.serializer(), args("id" to JsonPrimitive(id)))
+
     // The settings page.
 
     /** The notification switches, changed to [update] first when given; [language] sets that of the texts. */

@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.net.VpnService
 import android.os.Build
+import android.provider.OpenableColumns
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
@@ -38,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,8 +54,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import io.anixops.net.R
+import java.io.IOException
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -87,6 +91,7 @@ fun AnixApp(
     rules: RulesViewModel,
     settings: SettingsViewModel,
     activity: ActivityViewModel,
+    extensions: ExtensionsViewModel,
     version: String,
 ) {
     val state by app.state.collectAsStateWithLifecycle()
@@ -97,6 +102,7 @@ fun AnixApp(
     val termsAccepted by app.termsAccepted.collectAsStateWithLifecycle()
     val logsState by activity.logs.collectAsStateWithLifecycle()
     val trafficState by activity.traffic.collectAsStateWithLifecycle()
+    val extensionsState by extensions.state.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { app.poll() }
@@ -135,6 +141,9 @@ fun AnixApp(
             if (text.isNotBlank()) snackbar.showSnackbar(text)
         }
     }
+    LaunchedEffect(extensions) {
+        extensions.messages.collect { if (it.isNotBlank()) snackbar.showSnackbar(it) }
+    }
     LaunchedEffect(activity) {
         activity.events.collect { event ->
             val text = when (event) {
@@ -167,6 +176,7 @@ fun AnixApp(
     }
     val language = clientLanguage(LocalConfiguration.current.locales[0])
     val settingsActions = rememberSettingsActions(settings, app) { readingTerms = true }
+    val extensionsActions = rememberExtensionsActions(extensions, snackbar)
     val denied = stringResource(R.string.home_vpn_denied)
     val consent = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) app.connect() else app.showNotice(denied)
@@ -229,6 +239,8 @@ fun AnixApp(
             setView = activity::setView,
             clearTraffic = { activity.clearTraffic() },
         ),
+        extensionsState = extensionsState,
+        extensions = extensionsActions,
         onModeChange = app::setMode,
         snackbar = snackbar,
         pollProxies = {
@@ -245,6 +257,9 @@ fun AnixApp(
         },
         pollTraffic = {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { activity.pollTraffic() }
+        },
+        pollExtensions = {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { extensions.poll() }
         },
     )
 }
@@ -322,6 +337,57 @@ private fun clientLanguage(locale: Locale): String = when {
     else -> "zh"
 }
 
+/**
+ * The extensions page's actions: the system's security settings for installing the root certificate, and the
+ * file picker whose file is imported as a plugin under its own name.
+ */
+@Composable
+private fun rememberExtensionsActions(extensions: ExtensionsViewModel, snackbar: SnackbarHostState): ExtensionsActions {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val unreadable = stringResource(R.string.plugin_file_unreadable)
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val file = withContext(Dispatchers.IO) {
+                try {
+                    val name = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                        ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+                    val text = context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+                    text?.let { it to name.orEmpty() }
+                } catch (error: IOException) {
+                    null
+                } catch (error: SecurityException) {
+                    null
+                }
+            }
+            if (file == null) snackbar.showSnackbar(unreadable) else extensions.importPluginText(file.first, file.second)
+        }
+    }
+    return ExtensionsActions(
+        enableDecryption = extensions::enableDecryption,
+        disableDecryption = extensions::disableDecryption,
+        confirmDecryption = extensions::confirmDecryption,
+        openSecuritySettings = {
+            try {
+                context.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS))
+            } catch (error: ActivityNotFoundException) {
+                context.startActivity(Intent(Settings.ACTION_SETTINGS))
+            }
+        },
+        addHost = extensions::addHost,
+        removeHost = extensions::removeHost,
+        importPlugin = extensions::importPlugin,
+        importPluginText = extensions::importPluginText,
+        // Plugins come as .plugin, .sgmodule, .lpx, .conf or .txt, which carry no MIME type of their own.
+        pickPluginFile = { picker.launch(arrayOf("*/*")) },
+        setPluginEnabled = extensions::setPluginEnabled,
+        removePlugin = extensions::removePlugin,
+        inspect = { extensions.inspect(it) },
+        closeInspector = extensions::closeInspector,
+    )
+}
+
 /** The pages opened from 设置. */
 enum class SettingsPage { Logs, Traffic }
 
@@ -343,6 +409,8 @@ fun AnixScaffold(
     logsState: LogsState = LogsState(),
     trafficState: TrafficState = TrafficState(),
     activity: ActivityActions = ActivityActions(),
+    extensionsState: ExtensionsState = ExtensionsState(),
+    extensions: ExtensionsActions = ExtensionsActions(),
     termsVersion: String = "",
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
     pollProxies: suspend () -> Unit = {},
@@ -350,6 +418,7 @@ fun AnixScaffold(
     pollSettings: suspend () -> Unit = {},
     pollLogs: suspend () -> Unit = {},
     pollTraffic: suspend () -> Unit = {},
+    pollExtensions: suspend () -> Unit = {},
     initial: Destination? = null,
     initialSettingsPage: SettingsPage? = null,
 ) {
@@ -408,6 +477,10 @@ fun AnixScaffold(
                             ),
                         )
                     }
+                }
+                Destination.Extensions, Destination.Rewrite -> {
+                    LaunchedEffect(Unit) { pollExtensions() }
+                    ExtensionsScreen(stringResource(selected.label), state.snapshot, extensionsState, extensions)
                 }
                 else -> PendingScreen(stringResource(selected.label))
             }

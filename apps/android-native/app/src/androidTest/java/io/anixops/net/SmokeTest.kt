@@ -46,6 +46,10 @@ class SmokeTest {
         compose.onNodeWithText(text(R.string.nav_rules)).performClick()
         waitForText(compose.activity.resources.getQuantityString(R.plurals.rules_count, 0, 0))
 
+        // Extensions: the plugin library and the decrypted domains answer (both empty on a new install).
+        compose.onNodeWithText(text(R.string.nav_extensions)).performClick()
+        waitFor(R.string.plugins_empty)
+
         // The notification switches show once `notification_settings` has answered.
         compose.onNodeWithText(text(R.string.nav_settings)).performClick()
         waitFor(R.string.notifications_scripts)

@@ -269,4 +269,75 @@
     <plurals name="logs_show_more">
         <item quantity="other">再顯示 %d 條</item>
     </plurals>
+
+    <!-- 扩展 / 改写 -->
+    <string name="decryption">HTTPS 解密</string>
+    <string name="decryption_switch">解密 HTTPS 流量</string>
+    <string name="decryption_switch_hint">外掛和腳本需要它才能改寫網頁請求</string>
+    <string name="decryption_root">根憑證</string>
+    <string name="decryption_root_hint">開啟解密時儲存到「下載」資料夾。在系統設定的「安全性 › 加密與憑證 › 安裝憑證 › CA 憑證」裡手動安裝；不信任使用者憑證的應用程式不會被解密。</string>
+    <string name="decryption_root_open">安全性設定</string>
+    <string name="decryption_note">只解密下方「解密網域」、外掛和對應裡列出的網域，其餘網站原樣轉送。根憑證在本機產生，由你手動安裝，App 不會自動信任。</string>
+    <string name="decrypt_hosts">解密網域</string>
+    <string name="decrypt_host_field">要解密的網域</string>
+    <string name="decrypt_host_example">api.example.com 或 *.example.com</string>
+    <string name="decrypt_host_remove">不再解密 %1$s</string>
+    <string name="decrypt_hosts_note">只解密這裡、外掛和對應裡列出的網域，其餘 HTTPS 原樣轉送。寫 *.example.com 包含它的所有子網域。</string>
+    <string name="action_add">新增</string>
+    <string name="action_import">匯入</string>
+    <string name="action_close">關閉</string>
+    <string name="plugins">外掛</string>
+    <string name="plugin_import">匯入外掛</string>
+    <string name="plugin_url">https:// 外掛網址</string>
+    <string name="plugin_more_imports">更多匯入方式</string>
+    <string name="plugin_import_file">從檔案匯入</string>
+    <string name="plugin_paste">貼上外掛內容</string>
+    <string name="plugin_text">外掛內容</string>
+    <string name="plugin_file_unreadable">讀不了這個檔案</string>
+    <string name="plugins_empty">還沒有外掛</string>
+    <string name="plugins_empty_body">匯入一個外掛的 https 網址，開啟 HTTPS 解密後生效。</string>
+    <string name="plugins_note">支援 Loon、Surge 和 Quantumult X 的外掛。匯入時會一併下載外掛裡的腳本，匯入即表示允許這些腳本執行。</string>
+    <string name="plugin_partial">部分支援</string>
+    <string name="plugin_unsupported">不支援</string>
+    <string name="plugin_view">檢視內容</string>
+    <string name="plugin_remove">刪除外掛</string>
+    <string name="plugin_confirm_remove">確認刪除 %1$s</string>
+    <string name="plugin_no_hosts">沒有解密網域</string>
+    <string name="plugin_no_scripts">無腳本</string>
+    <string name="plugin_local">本機匯入</string>
+    <string name="plugin_lines">規則行</string>
+    <string name="plugin_excluded">排除的網域</string>
+    <string name="plugin_script_list">腳本</string>
+    <string name="plugin_resources">資料檔案</string>
+    <string name="decryption_consent_title">開啟 HTTPS 解密前請確認</string>
+    <string name="decryption_consent_intro">HTTPS 解密能看到加密連線裡的明文。只在下面的範圍內使用：</string>
+    <string name="decryption_consent_own">只解密你自己裝置上的流量，或你有權除錯的應用程式、裝置和網路的流量。</string>
+    <string name="decryption_consent_others">不擷取、不解密別人的流量。把其他裝置接入抓包前，先取得裝置所有者的同意。</string>
+    <string name="decryption_consent_secrets">解密後的內容可能含有密碼、權杖和個人資訊，只儲存在本機；匯出或分享前請先去識別化。</string>
+    <string name="decryption_consent_abuse">不得用於入侵、竊取資料或繞過他人的安全機制。詳見用戶協議第 4 節。</string>
+    <string name="decryption_consent_confirm">我確認，開啟</string>
+    <plurals name="decrypt_host_count">
+        <item quantity="other">%1$d 個網域</item>
+    </plurals>
+    <plurals name="plugin_count">
+        <item quantity="other">%1$d 個外掛</item>
+    </plurals>
+    <plurals name="plugin_more_hosts">
+        <item quantity="other">等 %1$d 個網域</item>
+    </plurals>
+    <plurals name="plugin_scripts">
+        <item quantity="other">%1$d 個腳本</item>
+    </plurals>
+    <plurals name="plugin_lines_supported">
+        <item quantity="other">%1$d 行支援</item>
+    </plurals>
+    <plurals name="plugin_lines_partial">
+        <item quantity="other">%1$d 行部分支援</item>
+    </plurals>
+    <plurals name="plugin_lines_unsupported">
+        <item quantity="other">%1$d 行不支援</item>
+    </plurals>
+    <plurals name="plugin_lines_deferred">
+        <item quantity="other">%1$d 行暫不處理</item>
+    </plurals>
 </resources>
