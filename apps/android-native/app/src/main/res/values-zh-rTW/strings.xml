@@ -133,11 +133,9 @@
     <string name="rule_set_failed">上次下載失敗：%1$s</string>
     <string name="dns_system">系統 DNS</string>
     <string name="dns_encrypted">加密 DNS</string>
-    <string name="dns_split">國內外分流</string>
     <string name="dns_custom">自訂 DNS</string>
     <string name="dns_system_hint">內建引擎用系統 DNS 解析規則裡需要 IP 的網域；經節點的連線由節點伺服器解析網域。</string>
     <string name="dns_encrypted_hint">所有網域經節點用 Cloudflare DNS over HTTPS 解析，本機網路看不到查詢內容。</string>
-    <string name="dns_split_hint">國內網域直連阿里 DNS over HTTPS 解析，其餘經節點用 Cloudflare 解析，國內網站拿到就近的位址。</string>
     <string name="dns_custom_hint">使用下方填寫的伺服器、分域規則和 Hosts。</string>
     <string name="dns_fake_ip_hint">應用查詢網域時立刻拿到 198.18.0.0/15 裡的位址，連線時還原成網域依規則分流，由節點解析。區域網路、校時、STUN 和推播等網域仍拿真實位址。</string>
     <string name="dns_custom_note">每行一條，# 開頭的行是註解。沒有填伺服器時，引擎經節點用 TCP 查詢預設伺服器。</string>

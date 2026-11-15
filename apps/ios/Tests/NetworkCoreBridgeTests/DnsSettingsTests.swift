@@ -3,8 +3,21 @@ import NetworkCoreBridge
 import XCTest
 
 final class DnsSettingsTests: XCTestCase {
+    /// A user's own split, as they might set it up: the app ships no such preset (docs/no-presets.md).
+    private let split = DnsSettings(
+        servers: [
+            DnsSettings.Server(name: "cloudflare", url: "https://1.1.1.1/dns-query", serverName: "cloudflare-dns.com"),
+            DnsSettings.Server(name: "alidns", url: "https://223.5.5.5/dns-query", serverName: "dns.alidns.com", via: .direct),
+        ],
+        defaultServer: "cloudflare",
+        rules: [
+            DnsSettings.Rule(domainSuffix: ["cn"], server: "alidns"),
+            DnsSettings.Rule(ruleSet: "geosite-cn", server: "alidns"),
+        ]
+    )
+
     func testEncodesTheEngineSection() throws {
-        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(DnsSettings.split)) as? [String: Any])
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(split)) as? [String: Any])
         XCTAssertEqual(json["default"] as? String, "cloudflare")
         let servers = try XCTUnwrap(json["servers"] as? [[String: Any]])
         XCTAssertEqual(servers.first?["server_name"] as? String, "cloudflare-dns.com")
@@ -76,7 +89,7 @@ final class DnsSettingsTests: XCTestCase {
             profileID: "test"
         )
         .withRouting(routing)
-        .withDns(DnsSettings.split)
+        .withDns(split)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: config.encoded()) as? [String: Any])
         let dns = try XCTUnwrap(json["dns"] as? [String: Any])
         XCTAssertEqual(dns["default"] as? String, "cloudflare")
@@ -87,7 +100,7 @@ final class DnsSettingsTests: XCTestCase {
     }
 
     func testFakeIPIsWrittenOnlyWhenOn() throws {
-        let off = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(DnsSettings.split)) as? [String: Any])
+        let off = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(split)) as? [String: Any])
         XCTAssertNil(off["fake_ip"])
         let on = try DnsSettings().settingFakeIP(true)
         XCTAssertFalse(on.isEmpty)

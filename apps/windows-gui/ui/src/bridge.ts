@@ -55,7 +55,7 @@ export interface RuntimeSnapshot {
   embeddedEngine?: boolean;
 }
 
-export type DnsPreset = "system" | "encrypted" | "split" | "custom";
+export type DnsPreset = "system" | "encrypted" | "custom";
 
 /** The "自定义" DNS choice as written, and the Fake-IP switch (Windows TUN mode and Android). */
 export interface DnsText {

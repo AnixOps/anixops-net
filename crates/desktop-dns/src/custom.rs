@@ -11,7 +11,7 @@
 //!   `tls://host[:853]` or `https://host[:443][/dns-query]`. Without `direct` the server is reached through the
 //!   proxy.
 //! - Per-domain servers, first match wins: `DOMAIN-SUFFIX,cn,alidns`, `DOMAIN,…`, `DOMAIN-KEYWORD,…` or
-//!   `RULE-SET,china,alidns` (only while the routing mode defines that rule set).
+//!   `RULE-SET,<name>,alidns` (only while the envelope defines that rule set, such as one of the subscription's).
 //! - Hosts: `name = address[, address…]`, `*.name` for its subdomains.
 
 use std::collections::BTreeMap;

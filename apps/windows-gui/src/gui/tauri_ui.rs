@@ -490,12 +490,20 @@ struct PreferenceValues {
 }
 
 pub(super) fn run(debug: bool) -> Result<(), String> {
-    let desktop = load_desktop_state()?;
+    let mut desktop = load_desktop_state()?;
     let _ = append_managed_log(APP_LOG_SCOPE, &format!("startup debug={debug}"));
     // Saved capture sessions expire after a week even when the engine does not run to delete them.
     capture_sessions::purge_expired();
     desktop_dns::custom::use_file(dns_settings_path());
     desktop_dns::redirects::use_file(windows_managed_data_directory().join("redirects.json"));
+    // The removed 国内外分流 DNS choice becomes the user's own settings (docs/no-presets.md). Until that
+    // works it is applied as "自定义", never as a preset.
+    if let Ok(adopted) = desktop_dns::adopt_legacy_split(desktop.dns_preset) {
+        if adopted != desktop.dns_preset {
+            desktop.dns_preset = adopted;
+            let _ = save_desktop_state(&desktop);
+        }
+    }
     let health_dir = desktop_state_path()
         .parent()
         .map(Path::to_path_buf)

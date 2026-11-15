@@ -306,9 +306,17 @@ pub struct Backend {
 impl Backend {
     /// Loads the saved state and first puts back proxy settings a previous run left changed.
     pub fn open(store: Store, session: Box<dyn UserSession>) -> Self {
-        let state = store.load();
+        let mut state = store.load();
         desktop_dns::custom::use_file(store.dir().join("dns-settings.json"));
         desktop_dns::redirects::use_file(store.dir().join("redirects.json"));
+        // The removed 国内外分流 DNS choice becomes the user's own settings (docs/no-presets.md). Until that
+        // works it is applied as "自定义", never as a preset.
+        if let Ok(adopted) = desktop_dns::adopt_legacy_split(state.dns_preset) {
+            if adopted != state.dns_preset {
+                state.dns_preset = adopted;
+                let _ = store.save(&state);
+            }
+        }
         let mut backend = Self {
             store,
             state,
