@@ -4,7 +4,10 @@
 // Everything here is a pure function of the (frozen) clock: no randomness and no call counters, so two renders
 // of the same build give the same pixels. When bridge.ts gains a command a page needs, add its answer here.
 (() => {
-  const start = Date.now();
+  // render.cjs lets the clock run for the minute before the frozen time while the page loads, so how long the
+  // load takes would move every timestamp below by a fraction of a second (and now and then across a second).
+  // The whole minute is the same in every run.
+  const start = Math.floor(Date.now() / 60_000) * 60_000;
   const utf8 = (text) => btoa(String.fromCharCode(...new TextEncoder().encode(text)));
   const hosts = ["api.example.com", "cdn.example.com", "events.example.com", "auth.example.com", "img.example.net", "telemetry.example.org"];
   // path, method, response type, request body kind
