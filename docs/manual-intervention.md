@@ -326,7 +326,7 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 - [ ] Windows 原生版 HTTPS 解密根证书的真机核对（扩展页有“信任根证书”之后）：标准用户账号下点信任，Windows 弹安全警告，
   选“是”后 Edge / Chrome 访问被解密的网站不报证书错误，选“否”时界面说明没有信任；同一台电脑的另一个用户不受影响
   （`certmgr.msc` 里没有这张证书）；卸载后当前用户的“受信任的根证书颁发机构”里没有 AnixOps Net HTTPS Decryption Root。
-  CI 测到了证书库和证书链验证，没测浏览器；CI 的 runner 上 Windows 不弹确认框，所以“弹框、选否”也只能在真机上看。
+  CI 测到了证书库和证书链验证，没测浏览器。
 - [ ] Linux 守护进程单元的真机核对（deb / rpm 带上 `anixops-netd` 之后）：在 Ubuntu 和 Fedora 上 `systemctl start
   anixops-netd`，确认单元里的收紧项（`ProtectSystem=strict`、`ProtectHome=yes`、`CapabilityBoundingSet`、
   `RestrictAddressFamilies`）下连接、TUN 模式、HTTPS 解密都正常；用普通登录用户能控制，用没有登录会话的账号

@@ -218,32 +218,37 @@ public sealed class RootStoreTests
             Eventually(() => !store.Trusts(pem), "the user's store still lists the root after its key was deleted");
             Eventually(() => !Accepted(root), "Windows still accepts the root after its key was deleted");
 
-            // The user says No, where Windows asks: nothing is trusted, and the reason is one the core can
-            // pass on. Windows does not ask on every machine every time; what happened is written down.
-            var answeredNo = false;
-            string outcome;
+            // The user says No to a root Windows has not been asked about before: nothing is trusted, and
+            // the reason is one the core can pass on. (Windows does not ask again about a root the user
+            // already agreed to, so this takes a root of its own.)
+            using var other = NewRoot();
+            var otherPem = other.ExportCertificatePem();
             try
             {
-                answeredNo = await RootConfirmation.AnswerAsync("No", () => Task.Run(() => store.Trust(pem)));
-                outcome = "trusted";
-            }
-            catch (RefusedException refused)
-            {
-                outcome = $"refused: {refused.Message}";
-                Assert.Contains("answered with No", refused.Message, StringComparison.Ordinal);
-            }
-            Note($"Answering No: pressed {answeredNo} {RootConfirmation.LastPressed}, outcome {outcome}");
-            if (outcome != "trusted")
-            {
-                Assert.False(store.Trusts(pem));
-                Assert.False(KeyExists(root.Thumbprint));
-            }
-            else
-            {
+                var answeredNo = false;
+                string outcome;
+                try
+                {
+                    answeredNo = await RootConfirmation.AnswerAsync("No", () => Task.Run(() => store.Trust(otherPem)));
+                    outcome = "trusted";
+                }
+                catch (RefusedException refused)
+                {
+                    outcome = $"refused: {refused.Message}";
+                    Assert.Contains("answered with No", refused.Message, StringComparison.Ordinal);
+                }
+                Note($"Answering No for a new root: pressed {answeredNo} {RootConfirmation.LastPressed}, outcome {outcome}");
                 // A root the user refused must never end up trusted.
                 Assert.False(answeredNo, $"the root is trusted although No was pressed ({RootConfirmation.LastPressed})");
-                DeleteAsTheRemovalDoes(root.Thumbprint);
-                Eventually(() => !store.Trusts(pem), "the user's store still lists the root after its key was deleted");
+                if (outcome != "trusted")
+                {
+                    Assert.False(store.Trusts(otherPem));
+                    Assert.False(KeyExists(other.Thumbprint));
+                }
+            }
+            finally
+            {
+                DeleteAsTheRemovalDoes(other.Thumbprint);
             }
 
             // The user's own request to stop trusting it.
