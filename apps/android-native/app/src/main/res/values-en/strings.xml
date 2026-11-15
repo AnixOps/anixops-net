@@ -28,8 +28,6 @@
     <string name="routing_direct">Direct</string>
     <string name="routing_rule">Rules</string>
 
-    <string name="pending_title">This page is still moving over</string>
-    <string name="pending_body">The native preview does not have this page yet; use the current app for it.</string>
 
     <string name="settings_usage">Use AnixOps Net for</string>
     <string name="mode_proxy">Proxy</string>
@@ -410,4 +408,63 @@
     <string name="egress_no_nodes_note">There are no nodes yet, so traffic leaves directly for now. After you import a subscription or nodes it follows the nodes and rules below.</string>
     <string name="egress_node_note">Traffic leaves by the node selected below and the subscription rules; switch nodes to compare exits in different regions.</string>
     <string name="egress_rules">Rules and DNS</string>
+    <string name="requests_capture">Capture</string>
+    <string name="requests_not_connected">Not connected</string>
+    <string name="requests_not_connected_body">Once connected, HTTP requests through this device are listed here one by one. Debug mode goes direct by default and needs no node.</string>
+    <string name="requests_capture_off">Capture is off</string>
+    <string name="requests_capture_off_body">Turn on Capture above and new requests appear here one by one. To see HTTPS in plain text, also trust the decryption certificate in Rewrite and turn on decryption for the domains you want to see.</string>
+    <string name="requests_filter">Filter: URL, host:, status:, type:…</string>
+    <string name="requests_filter_hint">For example host:api.example.com status:4xx type:json; join groups with OR</string>
+    <string name="requests_filter_error_at">The filter has a mistake at character %1$d</string>
+    <string name="requests_filter_error">The filter has a mistake</string>
+    <string name="quick_errors">Errors</string>
+    <string name="quick_json">JSON</string>
+    <string name="quick_images">Images</string>
+    <string name="quick_h2">HTTP/2</string>
+    <string name="quick_large">Over 100 KB</string>
+    <string name="requests_paused">Updates are paused; new requests are still recorded.</string>
+    <string name="requests_empty">No decrypted requests yet. HTTPS requests need decryption turned on for their domain in Rewrite.</string>
+    <string name="requests_no_match">No requests match.</string>
+    <string name="requests_more">More capture actions</string>
+    <string name="requests_pause">Pause updates</string>
+    <string name="requests_resume">Resume updates</string>
+    <string name="requests_clear">Clear capture</string>
+    <string name="order_time">By time</string>
+    <string name="order_status">By status</string>
+    <string name="order_host">By host</string>
+    <string name="order_size">By size</string>
+    <string name="order_duration">By duration</string>
+    <string name="order_descending">(high to low)</string>
+    <string name="order_ascending">(low to high)</string>
+    <string name="request_detail">Request</string>
+    <string name="request_summary">Summary</string>
+    <string name="request_version">Protocol</string>
+    <string name="request_started">Started</string>
+    <string name="request_duration">Duration</string>
+    <string name="request_in_progress">In progress</string>
+    <string name="request_sizes">Request / response size</string>
+    <string name="request_note">Note</string>
+    <string name="request_local">Answered locally</string>
+    <string name="request_streaming">Streamed response</string>
+    <string name="request_too_large">Over the capture limit</string>
+    <string name="request_rules_skipped">A rewrite rule did not run because the response was streamed or over 1 MiB.</string>
+    <string name="request_headers">Request headers</string>
+    <string name="request_body">Request body</string>
+    <string name="response_headers">Response headers</string>
+    <string name="response_body">Response body</string>
+    <string name="request_no_headers">No headers</string>
+    <string name="request_no_body">No body</string>
+    <string name="request_binary_body">Binary content that cannot be shown as text.</string>
+    <string name="request_body_truncated">Capture kept only the start of this body.</string>
+    <string name="request_body_undecoded">The compression could not be undone; these are the bytes as captured.</string>
+    <string name="request_gone">Capture no longer holds this request: it was cleared or pushed out by newer traffic.</string>
+    <string name="request_loading">Loading…</string>
+    <plurals name="requests_capture_usage">
+        <item quantity="one">%2$s of %3$s used · %1$d connection</item>
+        <item quantity="other">%2$s of %3$s used · %1$d connections</item>
+    </plurals>
+    <plurals name="requests_count">
+        <item quantity="one">%d request</item>
+        <item quantity="other">%d requests</item>
+    </plurals>
 </resources>

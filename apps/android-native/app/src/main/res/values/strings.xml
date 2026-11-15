@@ -32,8 +32,6 @@
     <string name="routing_direct">直连</string>
     <string name="routing_rule">规则</string>
 
-    <string name="pending_title">这一页还在迁移</string>
-    <string name="pending_body">原生界面预览版还没有这一页，请先用现有版本。</string>
 
     <string name="settings_usage">使用方式</string>
     <string name="mode_proxy">代理</string>
@@ -401,4 +399,61 @@
     <string name="egress_no_nodes_note">还没有节点，暂时直连。导入订阅或节点后按下面的节点和规则发出。</string>
     <string name="egress_node_note">按下面选中的节点和订阅规则发出，可以切换节点对比不同地区的出口。</string>
     <string name="egress_rules">规则与 DNS</string>
+    <string name="requests_capture">抓包</string>
+    <string name="requests_not_connected">还没有连接</string>
+    <string name="requests_not_connected_body">连接后，经过本机的 HTTP 请求会逐条列在这里。调试模式默认直连，不需要节点。</string>
+    <string name="requests_capture_off">还没有开始抓包</string>
+    <string name="requests_capture_off_body">打开上面的“抓包”后，新的请求会逐条出现在这里。要看到 HTTPS 明文，还要在“改写”里信任解密证书，并为要看的域名开启解密。</string>
+    <string name="requests_filter">筛选：网址、host:、status:、type:…</string>
+    <string name="requests_filter_hint">例如 host:api.example.com status:4xx type:json，多组条件用 OR 连接</string>
+    <string name="requests_filter_error_at">筛选表达式在第 %1$d 个字符处有误</string>
+    <string name="requests_filter_error">筛选表达式有误</string>
+    <string name="quick_errors">出错</string>
+    <string name="quick_json">JSON</string>
+    <string name="quick_images">图片</string>
+    <string name="quick_h2">HTTP/2</string>
+    <string name="quick_large">大于 100 KB</string>
+    <string name="requests_paused">已暂停刷新，新的请求仍在记录。</string>
+    <string name="requests_empty">还没有解密的请求。HTTPS 请求要先在“改写”里为域名开启解密。</string>
+    <string name="requests_no_match">没有匹配的请求。</string>
+    <string name="requests_more">更多抓包操作</string>
+    <string name="requests_pause">暂停刷新</string>
+    <string name="requests_resume">继续刷新</string>
+    <string name="requests_clear">清空抓包</string>
+    <string name="order_time">按时间</string>
+    <string name="order_status">按状态</string>
+    <string name="order_host">按主机</string>
+    <string name="order_size">按大小</string>
+    <string name="order_duration">按耗时</string>
+    <string name="order_descending">（从大到小）</string>
+    <string name="order_ascending">（从小到大）</string>
+    <string name="request_detail">请求详情</string>
+    <string name="request_summary">概要</string>
+    <string name="request_version">协议</string>
+    <string name="request_started">开始</string>
+    <string name="request_duration">耗时</string>
+    <string name="request_in_progress">进行中</string>
+    <string name="request_sizes">请求 / 响应大小</string>
+    <string name="request_note">说明</string>
+    <string name="request_local">本地应答</string>
+    <string name="request_streaming">流式响应</string>
+    <string name="request_too_large">超过保存上限</string>
+    <string name="request_rules_skipped">有改写规则因为响应是流式的或超过 1 MiB 没有执行。</string>
+    <string name="request_headers">请求头</string>
+    <string name="request_body">请求正文</string>
+    <string name="response_headers">响应头</string>
+    <string name="response_body">响应正文</string>
+    <string name="request_no_headers">没有头部</string>
+    <string name="request_no_body">没有正文</string>
+    <string name="request_binary_body">二进制内容，不能按文本显示。</string>
+    <string name="request_body_truncated">抓包只保存了正文的前一部分。</string>
+    <string name="request_body_undecoded">无法解开压缩，显示的是抓到的原始字节。</string>
+    <string name="request_gone">抓包里已经没有这条请求：已清空，或被新的流量挤出。</string>
+    <string name="request_loading">正在读取…</string>
+    <plurals name="requests_capture_usage">
+        <item quantity="other">已用 %2$s / %3$s · %1$d 个连接</item>
+    </plurals>
+    <plurals name="requests_count">
+        <item quantity="other">%d 个请求</item>
+    </plurals>
 </resources>

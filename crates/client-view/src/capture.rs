@@ -89,39 +89,85 @@ fn seq(request: &Value) -> u64 {
     request.get("seq").and_then(Value::as_u64).unwrap_or(0)
 }
 
-/// Whether the engine may still fill in this request's response.
+/// Whether the engine may still fill in this request's response: its `state` says, and a row from a kernel
+/// without `state` is under way while it has no status, no end and no note.
 fn pending(request: &Value) -> bool {
-    number(request, "status").is_none()
-        && number(request, "ended_at_ms").is_none()
-        && text(request, "note").is_empty()
+    match request.get("state").and_then(Value::as_str) {
+        Some(state) => state == "in_progress",
+        None => {
+            number(request, "status").is_none()
+                && number(request, "ended_at_ms").is_none()
+                && text(request, "note").is_empty()
+        }
+    }
 }
 
-/// Where the next read starts: before the oldest request still waiting for its response, so it comes back
-/// with the response, or after the newest one seen.
+/// Where the next read by `since_seq` starts (kernels without `since_rev`): before the oldest request still
+/// waiting for its response, so it comes back with the response, or after the newest one seen.
 pub fn next_since(rows: &[Value], last_seq: u64) -> u64 {
     rows.iter()
-        .find(|row| pending(row))
+        .find(|row| seq(row) > 0 && pending(row))
         .map_or(last_seq, |row| seq(row).saturating_sub(1))
 }
 
-/// The list after one answer of the engine: newer copies replace older ones, requests the engine pushed
-/// out leave, oldest first, and no more than [`MAX_REQUESTS`] stay.
+/// The `since_rev` of the next read after `answer`, or `None` for a kernel without `since_rev`: a full page
+/// (`page` rows) carries on from its last row, since the engine lists in the order things changed;
+/// otherwise the read starts after the newest change.
+pub fn next_rev(current: Option<u64>, answer: &Value, page: usize) -> Option<u64> {
+    let last_rev = answer.get("last_rev").and_then(Value::as_u64)?;
+    let rows = answer
+        .get("requests")
+        .and_then(Value::as_array)
+        .map_or(&[][..], Vec::as_slice);
+    let last = if page > 0 && rows.len() >= page {
+        rows.last()
+            .and_then(|row| row.get("rev"))
+            .and_then(Value::as_u64)
+    } else {
+        None
+    };
+    Some(current.unwrap_or(0).max(last.unwrap_or(last_rev)))
+}
+
+/// A request's place in the capture: its connection and its place there, the same while it is under way
+/// (and has no `seq` yet) and after.
+fn key(request: &Value) -> (i64, i64) {
+    (
+        number(request, "connection_id").unwrap_or(0),
+        number(request, "index").unwrap_or(0),
+    )
+}
+
+/// The order of the list: when requests started, then by connection and place.
+fn arrival(request: &Value) -> (i64, i64, i64) {
+    let (connection, index) = key(request);
+    (
+        number(request, "started_at_ms").unwrap_or(0),
+        connection,
+        index,
+    )
+}
+
+/// The list after one answer of the engine: newer copies of a request replace older ones (a request under
+/// way is updated in place as its response arrives), ended requests the engine pushed out leave, oldest
+/// first, and no more than [`MAX_REQUESTS`] stay. A request still under way has no `seq` yet; if its
+/// connection went, it is simply not updated again.
 pub fn merge(rows: &[Value], answer: &Value) -> Vec<Value> {
-    let mut by_seq: BTreeMap<u64, &Value> = rows.iter().map(|row| (seq(row), row)).collect();
+    let mut by_key: BTreeMap<(i64, i64), &Value> = rows.iter().map(|row| (key(row), row)).collect();
     if let Some(requests) = answer.get("requests").and_then(Value::as_array) {
         for request in requests {
-            by_seq.insert(seq(request), request);
+            by_key.insert(key(request), request);
         }
     }
     let dropped = answer
         .get("dropped_before_seq")
         .and_then(Value::as_u64)
         .unwrap_or(0);
-    let merged: Vec<&Value> = by_seq
-        .into_iter()
-        .filter(|(seq, _)| *seq > dropped)
-        .map(|(_, row)| row)
+    let mut merged: Vec<&Value> = by_key
+        .into_values()
+        .filter(|row| seq(row) == 0 || seq(row) > dropped)
         .collect();
+    merged.sort_by_key(|row| arrival(row));
     let skip = merged.len().saturating_sub(MAX_REQUESTS);
     merged.into_iter().skip(skip).cloned().collect()
 }
@@ -190,11 +236,12 @@ pub(crate) fn compare_text(a: &str, b: &str) -> Ordering {
         .then_with(|| a.cmp(b))
 }
 
-/// Compares two requests for the list. Ties keep the engine's order (`seq`), and requests without a value
-/// in the column come last whichever way the list runs.
+/// Compares two requests for the list. `Seq` is the time column: when requests started, so a request still
+/// under way (no `seq` yet) has its place too. Ties keep that order, and requests without a value in the
+/// column come last whichever way the list runs.
 pub fn compare(a: &Value, b: &Value, by: Column, descending: bool) -> Ordering {
     let directed = |order: Ordering| if descending { order.reverse() } else { order };
-    let by_seq = directed(seq(a).cmp(&seq(b)));
+    let by_seq = directed(arrival(a).cmp(&arrival(b)));
     let missing_last = |x: Option<i64>, y: Option<i64>| match (x, y) {
         (None, None) => by_seq,
         (None, Some(_)) => Ordering::Greater,
@@ -218,6 +265,23 @@ pub fn sort(rows: &[Value], by: Column, descending: bool) -> Vec<Value> {
     sorted.into_iter().cloned().collect()
 }
 
+/// The requests in the list's order, each with its `path` and status `tone` added: what a window that
+/// cannot afford a command per row (one second's poll of up to [`MAX_REQUESTS`]) shows.
+pub fn rows(rows: &[Value], by: Column, descending: bool) -> Vec<Value> {
+    sort(rows, by, descending)
+        .into_iter()
+        .map(|mut row| {
+            let path = path(&row);
+            let tone = status_tone(&row);
+            if let Some(fields) = row.as_object_mut() {
+                fields.insert("path".into(), Value::String(path));
+                fields.insert("tone".into(), Value::String(tone.into()));
+            }
+            row
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -238,10 +302,39 @@ mod tests {
     #[test]
     fn the_list_is_capped_at_its_newest_requests() {
         let many: Vec<Value> = (1..=MAX_REQUESTS as u64 + 5)
-            .map(|seq| serde_json::json!({ "seq": seq }))
+            .map(|seq| serde_json::json!({ "seq": seq, "connection_id": 1, "index": seq }))
             .collect();
         let merged = merge(&[], &serde_json::json!({ "requests": many }));
         assert_eq!(merged.len(), MAX_REQUESTS);
         assert_eq!(seq(&merged[0]), 6);
+    }
+
+    #[test]
+    fn a_request_under_way_is_updated_in_place() {
+        let under_way = serde_json::json!({
+            "seq": 0, "connection_id": 2, "index": 0, "started_at_ms": 5, "state": "in_progress", "rev": 1,
+        });
+        let older = serde_json::json!({
+            "seq": 1, "connection_id": 1, "index": 0, "started_at_ms": 1, "state": "done", "rev": 2,
+        });
+        let done = serde_json::json!({
+            "seq": 2, "connection_id": 2, "index": 0, "started_at_ms": 5, "state": "done", "rev": 3,
+        });
+        let first = merge(&[], &serde_json::json!({ "requests": [under_way, older] }));
+        assert_eq!(first.len(), 2);
+        assert_eq!(key(&first[0]), (1, 0));
+        // The engine pushed out seq 1; the row still under way has no seq and stays until it ends.
+        let next = merge(&first, &serde_json::json!({ "requests": [done], "dropped_before_seq": 1 }));
+        assert_eq!(next, vec![done]);
+    }
+
+    #[test]
+    fn the_next_read_follows_the_newest_change() {
+        let answer = serde_json::json!({ "requests": [{ "rev": 7 }, { "rev": 9 }], "last_rev": 12 });
+        // A full page carries on from its last row; a short one from the newest change.
+        assert_eq!(next_rev(Some(3), &answer, 2), Some(9));
+        assert_eq!(next_rev(Some(3), &answer, 10), Some(12));
+        assert_eq!(next_rev(Some(20), &answer, 10), Some(20));
+        assert_eq!(next_rev(None, &serde_json::json!({ "requests": [] }), 10), None);
     }
 }

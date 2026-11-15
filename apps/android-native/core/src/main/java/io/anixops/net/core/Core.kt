@@ -368,6 +368,102 @@ class Core(
         raw("traffic_stats", args("clear" to JsonPrimitive(true)))
     }
 
+    // Debug › Requests: the decrypted requests the engine captured.
+
+    /** Whether capture is on and how much it holds; null while the engine is not running. */
+    suspend fun captureStatus(): CaptureStatus? = orNull { decode(CaptureStatus.serializer(), control("capture")) }
+
+    suspend fun setCapture(enabled: Boolean): CaptureStatus = decode(
+        CaptureStatus.serializer(),
+        controlRequest(
+            buildJsonObject {
+                put("cmd", "set_capture")
+                put("enabled", enabled)
+            },
+        ),
+    )
+
+    suspend fun clearCapture(): CaptureStatus = decode(CaptureStatus.serializer(), control("clear_capture"))
+
+    /** The engine's filter expression for the quick filters [quick] (by id) and what the user [typed]. */
+    suspend fun combineFilter(quick: Collection<String>, typed: String): String = call(
+        "view.combine_filter",
+        String.serializer(),
+        args("quick" to JsonArray(quick.map(::JsonPrimitive)), "typed" to JsonPrimitive(typed)),
+    )
+
+    /**
+     * Reads what changed since [feed] (requests still under way included) through [filter], and lists every row
+     * ordered by the column [by] (`seq`, `status`, `host`, `path`, `size` or `duration`). A refused filter leaves
+     * [feed] as it was.
+     */
+    suspend fun requests(feed: RequestFeed, filter: String, by: String, descending: Boolean): RequestPage {
+        val since = call(
+            "view.next_since",
+            Long.serializer(),
+            args("rows" to feed.rows, "lastSeq" to JsonPrimitive(feed.lastSeq)),
+        )
+        val answer = controlRequest(
+            buildJsonObject {
+                put("cmd", "capture_requests")
+                put("since_seq", since)
+                put("since_rev", feed.lastRev ?: 0)
+                put("limit", REQUEST_PAGE)
+                if (filter.isNotEmpty()) put("filter", filter)
+            },
+        )
+        (answer as? JsonObject)?.get("error")?.let { error ->
+            return RequestPage(feed, requestRows(feed.rows, by, descending), decode(FilterError.serializer(), error))
+        }
+        val merged = raw("view.merge_requests", args("rows" to feed.rows, "answer" to answer)) as? JsonArray
+            ?: throw CoreException("Unexpected answer to view.merge_requests")
+        val lastSeq = ((answer as? JsonObject)?.get("last_seq") as? JsonPrimitive)?.content?.toLongOrNull() ?: 0
+        val nextRev = raw(
+            "view.next_rev",
+            args(
+                "current" to (feed.lastRev?.let(::JsonPrimitive) ?: JsonNull),
+                "answer" to answer,
+                "page" to JsonPrimitive(REQUEST_PAGE),
+            ),
+        )
+        val lastRev = (nextRev as? JsonPrimitive)?.content?.toLongOrNull()
+        return RequestPage(RequestFeed(merged, maxOf(feed.lastSeq, lastSeq), lastRev), requestRows(merged, by, descending))
+    }
+
+    /** The rows read so far, ordered by the column [by]; see [requests]. */
+    suspend fun requestRows(rows: JsonArray, by: String, descending: Boolean): List<RequestRow> = call(
+        "view.request_rows",
+        ListSerializer(RequestRow.serializer()),
+        args("rows" to rows, "by" to JsonPrimitive(by), "descending" to JsonPrimitive(descending)),
+    )
+
+    /** One exchange with its headers and bodies; null once capture no longer holds it. */
+    suspend fun captureExchange(key: RequestKey): CaptureExchange? {
+        val answer = controlRequest(
+            buildJsonObject {
+                put("cmd", "capture_exchange")
+                put("id", key.connection)
+                put("index", key.index)
+                put("since_message", 0)
+            },
+        )
+        val exchange = (answer as? JsonObject)?.get("exchange")
+        return if (exchange == null || exchange is JsonNull) null else decode(CaptureExchange.serializer(), exchange)
+    }
+
+    /** [body] with its [contentEncoding] undone (gzip, deflate, br, zstd); refused when it cannot be. */
+    suspend fun decodeBody(body: CaptureBody, contentEncoding: String): DecodedBody = call(
+        "decode_body",
+        DecodedBody.serializer(),
+        buildJsonObject {
+            putJsonObject("request") {
+                put("dataBase64", body.dataBase64)
+                put("contentEncoding", contentEncoding)
+                put("complete", !body.truncated)
+            }
+        },
+    )
+
     // Plumbing.
 
     suspend fun <T> call(
@@ -406,6 +502,9 @@ class Core(
     companion object {
         /** The delay test target every client uses. */
         const val DELAY_URL = "https://www.gstatic.com/generate_204"
+
+        /** Most rows one read of the request list asks for, as on the desktop client. */
+        const val REQUEST_PAGE = 2000
     }
 }
 
