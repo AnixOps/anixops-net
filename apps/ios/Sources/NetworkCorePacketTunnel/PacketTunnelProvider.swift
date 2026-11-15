@@ -431,7 +431,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     /// Adds the subscription's rules and groups from the node library in the Keychain, with the user's local rules in
-    /// front; a node list without subscription rules gets the local rules and their preset. They are an extra like
+    /// front; a node list without subscription rules gets the local rules, then everything else through the selected node. They are an extra like
     /// HTTPS decryption: without a readable library the selected node carries all traffic, and the reason goes to
     /// the diagnostics.
     private func withSubscriptionRules(_ config: EmbeddedRuntimeConfig, localRules: LocalRules) -> EmbeddedRuntimeConfig {
