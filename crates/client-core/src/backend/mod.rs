@@ -1227,6 +1227,31 @@ impl Backend {
         done(format!("Connected through {label} on {address}"))
     }
 
+    /// Sets the system proxy now when the engine already runs and the user's session could not be reached
+    /// when it started: a service that connects at boot has no window to ask until the user signs in.
+    pub fn session_arrived(&mut self) {
+        let Some(address) = self.engine.address() else {
+            return;
+        };
+        if !self.state.preferences.system_proxy
+            || self.state.proxy_backup.is_some()
+            || self.session.proxy_settings().is_none()
+        {
+            return;
+        }
+        match self.session.apply_proxy(address.port()) {
+            Ok(backup) => {
+                self.state.proxy_backup = Some(backup);
+                self.save();
+            }
+            Err(error) => {
+                let error = format!("the system proxy could not be set: {error}");
+                self.log(LogLevel::Error, &error);
+                self.last_error = Some(error);
+            }
+        }
+    }
+
     /// Stops the engine without touching the saved state or the last error; on Android this also lets go of
     /// the VPN's TUN descriptor.
     pub fn stop_engine(&mut self) {

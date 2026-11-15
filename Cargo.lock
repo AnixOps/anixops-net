@@ -842,6 +842,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "client-service"
+version = "0.3.0"
+dependencies = [
+ "app-notifications",
+ "client-core",
+ "client-ipc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "combine"
 version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
