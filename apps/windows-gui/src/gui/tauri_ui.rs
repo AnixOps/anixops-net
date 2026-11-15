@@ -2906,9 +2906,13 @@ fn record_subscription_import(location: &str, desktop: &mut DesktopState) -> Res
             desktop.profile_removed_node_count = 0;
             desktop.profile_changed_node_count = 0;
             desktop.profile_refresh_error_code = Some(error_code.clone());
-            desktop.profile_last_update_error = Some(
-                "Subscription refresh failed; inspect diagnostics for the redacted error code."
-                    .to_string(),
+            desktop.profile_last_update_error =
+                Some(format!("Subscription refresh failed ({error_code})."));
+            // Only the code goes to the app log, which the diagnostics report includes: the raw error can
+            // carry the subscription URL's token or a piece of the payload.
+            let _ = append_managed_log(
+                APP_LOG_SCOPE,
+                &format!("subscription refresh failed: {error_code}"),
             );
             record_subscription_result(
                 desktop,
@@ -3051,7 +3055,17 @@ fn redacted_subscription_error_code(error: &str) -> String {
     let normalized = error.to_ascii_lowercase();
     if normalized.contains("timed out") || normalized.contains("timeout") {
         "windows.subscription.fetch_timeout".to_string()
-    } else if normalized.contains("status") || normalized.contains("http") {
+    } else if let Some(status) = normalized
+        .strip_prefix("subscription server answered http status ")
+        .and_then(|status| status.parse::<u16>().ok())
+    {
+        format!("windows.subscription.http_status_{status}")
+    } else if normalized.starts_with("subscription server could not be reached") {
+        "windows.subscription.fetch_unreachable".to_string()
+    } else if normalized.starts_with("subscription download")
+        || normalized.contains("status")
+        || normalized.contains("http")
+    {
         "windows.subscription.fetch_failed".to_string()
     } else if normalized.contains("disconnect") {
         "windows.subscription.runtime_active".to_string()
@@ -3434,7 +3448,7 @@ fn download_subscription(
     let response = request
         .send()
         .and_then(reqwest::blocking::Response::error_for_status)
-        .map_err(|error| error.to_string())?;
+        .map_err(describe_download_error)?;
     let header = |name: &str| {
         response
             .headers()
@@ -3445,8 +3459,25 @@ fn download_subscription(
     let meta = subscription_meta::ResponseMeta::from_headers(header);
     // A license problem never fails the subscription.
     let offered = licenses.record(location, header).unwrap_or(false);
-    let payload = response.text().map_err(|error| error.to_string())?;
+    let payload = response.text().map_err(describe_download_error)?;
     Ok((payload, meta, offered))
+}
+
+/// Says what went wrong with a download without the URL, which carries the subscription's token, in
+/// words `redacted_subscription_error_code` sorts into a code.
+fn describe_download_error(error: reqwest::Error) -> String {
+    if error.is_timeout() {
+        "Subscription download timed out".to_string()
+    } else if let Some(status) = error.status() {
+        format!(
+            "Subscription server answered HTTP status {}",
+            status.as_u16()
+        )
+    } else if error.is_connect() {
+        "Subscription server could not be reached".to_string()
+    } else {
+        "Subscription download failed".to_string()
+    }
 }
 
 /// Same token the iOS app sends, so the panel answers in the AnixOps Net format.
@@ -4813,6 +4844,22 @@ mod tests {
         assert_eq!(
             redacted_subscription_error_code("unsupported payload password=never-store"),
             "windows.subscription.refresh_failed"
+        );
+        assert_eq!(
+            redacted_subscription_error_code("Subscription server answered HTTP status 403"),
+            "windows.subscription.http_status_403"
+        );
+        assert_eq!(
+            redacted_subscription_error_code("Subscription server could not be reached"),
+            "windows.subscription.fetch_unreachable"
+        );
+        assert_eq!(
+            redacted_subscription_error_code("Subscription download failed"),
+            "windows.subscription.fetch_failed"
+        );
+        assert_eq!(
+            redacted_subscription_error_code("Profile did not contain a supported proxy node"),
+            "windows.subscription.invalid_payload"
         );
     }
 

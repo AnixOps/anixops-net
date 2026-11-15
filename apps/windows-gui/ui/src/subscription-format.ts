@@ -39,3 +39,26 @@ export function usedFraction(used: number | undefined, total: number | undefined
   if (used == null || !total) return undefined;
   return Math.min(1, used / total);
 }
+
+const errorReasons: Record<string, string> = {
+  fetch_timeout: "下载订阅超时",
+  fetch_unreachable: "连不上订阅服务器",
+  fetch_failed: "下载订阅失败",
+  invalid_payload: "订阅内容里没有可用的节点",
+  runtime_active: "先断开连接再使用这份订阅",
+};
+
+/**
+ * What a failed update's code means, with the code after it for a report. The app keeps only the code because the
+ * raw error can carry the subscription's token.
+ */
+export function subscriptionErrorText(code: string | null | undefined): string | undefined {
+  if (!code) return undefined;
+  const kind = code.slice(code.lastIndexOf(".") + 1);
+  const status = /^http_status_(\d+)$/.exec(kind)?.[1];
+  let reason: string;
+  if (status && ["401", "403", "404", "410"].includes(status)) reason = t("订阅服务器拒绝了请求（HTTP {status}），订阅可能已过期或链接已失效", { status });
+  else if (status) reason = t("订阅服务器返回了错误（HTTP {status}）", { status });
+  else reason = t(errorReasons[kind] ?? "更新订阅失败");
+  return `${reason} (${code})`;
+}
