@@ -67,6 +67,9 @@ jobs:
             while IFS= read -r path; do
               case "${path}" in
                 Cargo.toml | Cargo.lock | .github/*) all ;;
+                # AnixOps Design, vendored: every client's colours are generated from it.
+                apps/windows-gui/ui/src/design/*)
+                  ui=true; windows=true; linux=true; android=true; android_native=true; apple=true; windows_native=true ;;
                 apps/windows-gui/ui/*) ui=true; windows=true; linux=true; android=true ;;
                 apps/windows-gui/* | installer/*) rust=true; windows=true ;;
                 # The Android app is the Linux window and backend on Android.
@@ -81,7 +84,7 @@ jobs:
                 # The native Android app (Compose over crates/client-core through JNI); its colours come from the
                 # client tokens.
                 apps/android-native/*) rust=true; android_native=true ;;
-                apps/ios/Design/*) apple=true; android_native=true ;;
+                apps/ios/Design/*) apple=true; android_native=true; windows_native=true ;;
                 crates/client-ipc/fixtures/*)
                   rust=true; windows=true; linux=true; android=true; android_native=true; windows_native=true ;;
                 crates/*) rust=true; windows=true; linux=true; android=true; android_native=true ;;
@@ -954,8 +957,8 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
-  # The native Windows app (apps/windows-native, C#). So far the channel library and its tests; the tests
-  # read the same message samples as the Rust side.
+  # The native Windows app (apps/windows-native, WinUI 3 and C#): the channel library (its tests read the same
+  # message samples as the Rust side), what the app shows, and the app itself.
   windows-native:
     name: Windows native app
     runs-on: windows-latest
@@ -975,8 +978,24 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Build and test
-        run: dotnet test apps/windows-native/AnixOps.Net.slnx --configuration Release --logger "console;verbosity=normal"
+      - name: Build
+        run: dotnet build apps/windows-native/AnixOps.Net.slnx --configuration Release
+
+      # The UI tests start the built app on the runner's desktop and drive it through UI Automation; they
+      # save a picture of every page in both languages and both themes.
+      - name: Test
+        env:
+          ANIXOPS_NET_SCREENSHOTS: ${{ runner.temp }}\windows-native-screenshots
+        run: dotnet test apps/windows-native/AnixOps.Net.slnx --configuration Release --no-build --logger "console;verbosity=normal"
+
+      - name: Upload screenshots
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-native-screenshots-${{ github.sha }}
+          path: ${{ runner.temp }}\windows-native-screenshots
+          if-no-files-found: warn
+          retention-days: 3
 
   ci-summary:
     name: CI summary

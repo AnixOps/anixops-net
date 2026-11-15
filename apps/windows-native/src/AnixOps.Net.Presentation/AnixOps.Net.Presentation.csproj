@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>AnixOps.Net.Presentation</RootNamespace>
+    <Description>What the Windows app shows and how it is started, without any window: sections, wording, launch options. Tested without a desktop.</Description>
+  </PropertyGroup>
+</Project>

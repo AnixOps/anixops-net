@@ -1,0 +1,33 @@
+<Page
+    x:Class="AnixOps.Net.App.Pages.SectionPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- A page of the shell before its real content exists: the heading and what will be here. -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel
+            MaxWidth="960"
+            Margin="32,24,32,32"
+            HorizontalAlignment="Left"
+            Spacing="{StaticResource BrandSpacingXs}">
+            <TextBlock
+                x:Name="Heading"
+                AutomationProperties.AutomationId="Page.Title"
+                AutomationProperties.HeadingLevel="Level1"
+                Style="{StaticResource TitleTextBlockStyle}" />
+            <TextBlock
+                x:Name="Summary"
+                AutomationProperties.AutomationId="Page.Summary"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Style="{StaticResource BodyTextBlockStyle}"
+                TextWrapping="Wrap" />
+            <InfoBar
+                x:Name="Unfinished"
+                Margin="0,16,0,0"
+                AutomationProperties.AutomationId="Page.Unfinished"
+                IsClosable="False"
+                IsOpen="True"
+                Severity="Informational" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

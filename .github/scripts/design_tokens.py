@@ -11,6 +11,7 @@ vendored AnixOps Design tokens.json (see .github/scripts/sync_design.py). Output
     apps/windows-gui/ui/src/design/tokens.css               (Windows and Linux desktop: aliases over the
                                                              vendored tokens.css, which styles.css imports first)
     apps/android-native/app/src/main/java/io/anixops/net/ui/theme/BrandTokens.kt   (native Android)
+    apps/windows-native/src/AnixOps.Net.App/Theme/BrandTokens.xaml                 (native Windows)
 
 Standard library only, so CI needs nothing but python3.
 """
@@ -27,6 +28,7 @@ SOURCE = ROOT / "apps/ios/Design/tokens.json"
 SWIFT_OUT = ROOT / "apps/ios/Sources/NetworkCoreAppHost/BrandTokens.swift"
 CSS_OUT = ROOT / "apps/windows-gui/ui/src/design/tokens.css"
 KOTLIN_OUT = ROOT / "apps/android-native/app/src/main/java/io/anixops/net/ui/theme/BrandTokens.kt"
+XAML_OUT = ROOT / "apps/windows-native/src/AnixOps.Net.App/Theme/BrandTokens.xaml"
 
 THEMES = ("light", "dark")
 HEADER = (
@@ -293,6 +295,76 @@ def kotlin(tokens: dict, upstream: dict, version: str) -> str:
     return "\n".join(out)
 
 
+def xaml_color(value: str, where: str) -> str:
+    if match := HEX.match(value):
+        return f"#FF{match.group(1).upper()}"
+    if match := RGBA.match(value):
+        red, green, blue, alpha = match.groups()
+        opacity = round(float(alpha) * 255)
+        return f"#{opacity:02X}{int(red):02X}{int(green):02X}{int(blue):02X}"
+    fail(f"{where} = {value!r} is neither #RRGGBB nor rgba()")
+    return ""
+
+
+def pascal(name: str) -> str:
+    return "".join(part[:1].upper() + part[1:] for part in re.split(r"[-_]", name))
+
+
+def xaml(tokens: dict, upstream: dict, version: str) -> str:
+    """A WinUI resource dictionary: Brand<Name>Color / Brand<Name>Brush per theme, radii, spacing, durations.
+
+    The app keeps the system's own type ramp and control styles; these are the colours and measures on top.
+    """
+    out = [
+        f"<!-- {HEADER.format(version=version)} -->",
+        "<ResourceDictionary",
+        '    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"',
+        '    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">',
+        "",
+        "    <!-- Per-theme colours. High contrast keeps the system's colours, so it has no entry here: use these",
+        "         brushes only where a control's own theme resources do not already apply. -->",
+        "    <ResourceDictionary.ThemeDictionaries>",
+    ]
+    for theme, key in (("light", "Light"), ("dark", "Default")):
+        out.append(f'        <ResourceDictionary x:Key="{key}">')
+        for name, value in palette(tokens, upstream, theme).items():
+            color = xaml_color(value, f"{theme}.{name}")
+            out.append(f'            <Color x:Key="Brand{pascal(name)}Color">{color}</Color>')
+            out.append(f'            <SolidColorBrush x:Key="Brand{pascal(name)}Brush" Color="{color}" />')
+        out.append("        </ResourceDictionary>")
+    out += ["    </ResourceDictionary.ThemeDictionaries>", ""]
+
+    out.append("    <!-- Brand colours, the same in every theme. Brand moments only: never controls or body text. -->")
+    for name, value in brand_colors(tokens, upstream).items():
+        color = xaml_color(value, "brand." + name)
+        out.append(f'    <Color x:Key="BrandMark{pascal(name)}Color">{color}</Color>')
+        out.append(f'    <SolidColorBrush x:Key="BrandMark{pascal(name)}Brush" Color="{color}" />')
+    out.append("")
+
+    radius = upstream["radius"]
+    out.append("    <!-- Corner radii (AnixOps Design radius steps). -->")
+    for name, step in tokens["radius"].items():
+        value = number(px(lookup(radius, step, "radius." + name), step))
+        out.append(f'    <CornerRadius x:Key="Brand{pascal(name)}Radius">{value}</CornerRadius>')
+    out.append("")
+
+    space = upstream["space"]
+    out.append("    <!-- Spacing steps (AnixOps Design 4/8 grid), in effective pixels. -->")
+    for name, step in tokens["spacing"].items():
+        value = number(px(lookup(space, step, "spacing." + name), step))
+        out.append(f'    <x:Double x:Key="BrandSpacing{pascal(name)}">{value}</x:Double>')
+    out.append("")
+
+    motion = tokens["motion"]
+    durations = upstream["motion"]["duration"]
+    out.append("    <!-- Animation durations in milliseconds (AnixOps Design motion). -->")
+    for key in ("micro", "standard", "emphasis", "page"):
+        value = number(ms(lookup(durations, motion[key], f"motion.{key}"), motion[key]))
+        out.append(f'    <x:Double x:Key="BrandMotion{pascal(key)}Ms">{value}</x:Double>')
+    out += ["", "</ResourceDictionary>", ""]
+    return "\n".join(out)
+
+
 def main() -> None:
     check = "--check" in sys.argv[1:]
     tokens = json.loads(SOURCE.read_text(encoding="utf-8"))
@@ -306,6 +378,7 @@ def main() -> None:
         (SWIFT_OUT, swift(tokens, upstream, version)),
         (CSS_OUT, css(tokens, upstream, version)),
         (KOTLIN_OUT, kotlin(tokens, upstream, version)),
+        (XAML_OUT, xaml(tokens, upstream, version)),
     )
     for path, text in outputs:
         current = path.read_text(encoding="utf-8") if path.exists() else None

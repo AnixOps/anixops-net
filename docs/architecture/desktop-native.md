@@ -236,6 +236,18 @@ WinUI 3 没有自带的数据表格控件，请求列表要自己做虚拟化表
 3. **服务链路。** 不提权的界面经命名管道控制服务完成连接、TUN、解密；MSI 安装、升级、卸载各跑一遍，卸载后不留服务、
    网卡和证书。
 
+骨架（4b）已有的做法，后面的页面照此继续：
+
+- 界面不带窗口的部分（页面清单、文案、启动参数）在 `AnixOps.Net.Presentation`，普通单元测试覆盖；`AnixOps.Net.App`
+  只放 XAML 和接线。
+- 控件样式和字号用系统自带的，品牌色和间距来自生成的 `Theme/BrandTokens.xaml`（`Brand…Brush`、`Brand…Radius`、
+  `BrandSpacing…`）。高对比度主题不套品牌色。系统强调色（按钮、开关的填充）目前仍是 Windows 的设置，换成品牌色需要
+  一组深浅色阶，AnixOps Design 里还没有，补上之后再接。
+- 每个可操作控件有 `AutomationId`（侧栏是 `Nav.<页面 id>`，页面标题是 `Page.Title`）。`AnixOps.Net.App.UiTests` 启动
+  构建出的程序，经 UI Automation 逐页切换、核对名称，并检查能接收键盘焦点的控件都有名称。
+- 截图由同一批测试按 页面 × 语言 × 深浅色 生成，作为 CI 产物上传。入库做基线比对要等页面有了真实内容。
+- 启动参数 `--language zh|en`、`--theme light|dark`、`--page <id>` 只为测试和截图固定环境，不认识的参数忽略。
+
 ## 迁移清单与 PR 顺序
 
 原生版在 `apps/windows-native` 和 `apps/linux-native` 平行开发，以“预览”名称并存安装。`platform-parity.md` 里该平台
@@ -249,7 +261,8 @@ WinUI 3 没有自带的数据表格控件，请求列表要自己做虚拟化表
 | 2 | `client-ipc`、Windows 服务、Linux 守护进程，MSI / deb / rpm 安装与卸载 | 1 |
 | 3 | `client-view`、文案单一来源 | 1 |
 | 4a | `apps/windows-native/src/AnixOps.Net.Ipc`：界面一侧的通道（C#），帧、四种消息、握手、双向请求；测试读 `crates/client-ipc/fixtures/` 的同一批样例，CI 任务“Windows native app” | 2 |
-| 4b | Windows 验证：工程骨架、导航、主题 tokens、请求列表原型、CI 截图与 UIA 检查 | 4a |
+| 4b | Windows 验证：WinUI 3 工程骨架（`AnixOps.Net.App`）、自绘标题栏、侧栏导航、Mica、设计 tokens 生成 XAML 资源字典、CI 里启动真实窗口做 UIA 检查并截图 | 4a |
+| 4c | Windows 验证：请求列表原型和服务链路，量“过关标准”三项 | 4b |
 | 5 | Linux 骨架：导航、主题、CI 截图与 AT-SPI 检查 | 2 |
 | 6 | 代理 › 首页与代理：连接、状态、流量、连接列表、出口地址、订阅、节点、测速、策略组、分享、节点编辑 | 4、5 |
 | 7 | 规则与设置：分流模式、我的规则、规则集、DNS、Fake-IP、屏蔽 QUIC、流量重定向、通知、Wi-Fi 规则、日志、流量统计、诊断、协议、语言 | 6 |
