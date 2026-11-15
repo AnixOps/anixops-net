@@ -9,7 +9,7 @@
          button that closes it. What the rows say is decided in AnixOps.Net.Presentation.Connections; this
          draws it. -->
     <Grid
-        Width="520"
+        Width="480"
         MinHeight="320"
         RowSpacing="8">
         <Grid.RowDefinitions>
