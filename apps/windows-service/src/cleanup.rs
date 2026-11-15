@@ -5,7 +5,8 @@
 //!
 //! - `--close-windows` (upgrade): ends the windows that are still open, so that their files can be replaced.
 //! - `--purge` (removal): the same, and then removes the entry that starts the window after login from every
-//!   signed-in user's settings. The client's data under `%ProgramData%` is kept, as the user's own.
+//!   signed-in user's settings, and the TUN mode's driver (Wintun) from the machine unless another program
+//!   still uses it. The client's data under `%ProgramData%` is kept, as the user's own.
 //!
 //! The service has stopped by then and, while stopping, has had the open window put the user's proxy
 //! settings back; only after that are the windows ended.
@@ -129,6 +130,73 @@ fn remove_login_entries(folder: &Path, problems: &mut Vec<String>) {
     }
 }
 
+/// Takes the TUN mode's driver out of the machine. Wintun itself leaves it in place while any adapter of
+/// any program still uses it, which is then not a problem of this removal. Without `wintun.dll` in `folder`
+/// there is nothing to ask.
+fn remove_tun_driver(folder: &Path, problems: &mut Vec<String>) {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Foundation::{FreeLibrary, GetLastError, ERROR_SUCCESS};
+    use windows_sys::Win32::System::LibraryLoader::{
+        GetProcAddress, LoadLibraryExW, LOAD_WITH_ALTERED_SEARCH_PATH,
+    };
+
+    // In use by another program's adapter, or busy being installed.
+    const ERROR_SHARING_VIOLATION: u32 = 32;
+    const ERROR_BUSY: u32 = 170;
+
+    let library = folder.join("wintun.dll");
+    if !library.is_absolute() || !library.is_file() {
+        return;
+    }
+    let wide: Vec<u16> = library
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    // SAFETY: `wide` is a NUL-terminated absolute path; the library is the one the installer put beside
+    // this program, loaded by that path and never from the search path.
+    let module = unsafe {
+        LoadLibraryExW(
+            wide.as_ptr(),
+            std::ptr::null_mut(),
+            LOAD_WITH_ALTERED_SEARCH_PATH,
+        )
+    };
+    if module.is_null() {
+        problems.push(format!(
+            "wintun.dll could not be loaded: {}",
+            std::io::Error::last_os_error()
+        ));
+        return;
+    }
+    // SAFETY: `module` is loaded and the name is NUL-terminated.
+    match unsafe { GetProcAddress(module, c"WintunDeleteDriver".as_ptr().cast()) } {
+        Some(function) => {
+            // SAFETY: the Wintun export has this signature (wintun.h, Wintun 0.14): `BOOL WintunDeleteDriver(void)`.
+            let delete = unsafe {
+                std::mem::transmute::<
+                    unsafe extern "system" fn() -> isize,
+                    unsafe extern "system" fn() -> i32,
+                >(function)
+            };
+            // SAFETY: takes nothing and reports through its result and the thread's last error.
+            if unsafe { delete() } == 0 {
+                // SAFETY: reads this thread's last error.
+                let code = unsafe { GetLastError() };
+                if !matches!(code, ERROR_SUCCESS | ERROR_SHARING_VIOLATION | ERROR_BUSY) {
+                    problems.push(format!(
+                        "the TUN driver could not be removed: {}",
+                        std::io::Error::from_raw_os_error(code as i32)
+                    ));
+                }
+            }
+        }
+        None => problems.push("wintun.dll has no WintunDeleteDriver".to_string()),
+    }
+    // SAFETY: `module` came from LoadLibraryExW above and nothing of it is used afterwards.
+    unsafe { FreeLibrary(module) };
+}
+
 /// Does what the installer asked and says what could not be done. Nothing here stops an upgrade or a
 /// removal: the installer goes on either way.
 pub fn run(cleanup: Cleanup) -> Vec<String> {
@@ -139,6 +207,7 @@ pub fn run(cleanup: Cleanup) -> Vec<String> {
             Ok(program) => {
                 if let Some(folder) = program.parent() {
                     remove_login_entries(folder, &mut problems);
+                    remove_tun_driver(folder, &mut problems);
                 }
             }
             Err(error) => problems.push(format!("this program's folder is not known: {error}")),

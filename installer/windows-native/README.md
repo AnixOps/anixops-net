@@ -26,5 +26,9 @@ What it does:
 While the service stops it has the open window put the user's proxy settings back; only then are the windows
 closed (`apps/windows-service/src/cleanup.rs`).
 
-Not in the package yet: Wintun and the TUN mode, trusting the HTTPS decryption root, a licence page and an
-icon. The package is not signed in CI.
+TUN mode: `wintun.dll` (WireGuard's signed build, unchanged, with `wintun-LICENSE.txt`) is installed beside
+the service, which loads it by that path. Wintun installs its driver the first time an adapter is made; on
+removal `anixops-net-service --purge` has Wintun delete the driver again, which Wintun does only when no
+adapter of any program still uses it.
+
+Not in the package yet: trusting the HTTPS decryption root, a licence page and an icon. The package is not signed in CI.

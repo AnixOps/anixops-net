@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- The installer of the native Windows client (apps/windows-native and apps/windows-service). WiX 5.
-     Built in CI with: ProductVersion, AppDir (the published window, self-contained) and ServiceExe. -->
+     Built in CI with: ProductVersion, AppDir (the published window, self-contained), ServiceExe and WintunDir
+     (wintun.dll and its licence, from .github/scripts/fetch-wintun.ps1). -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <!-- Its own upgrade code and folder: it installs beside the web client (AnixOps NetworkCore) until the
        cutover, and never replaces it by accident. -->
@@ -65,6 +66,20 @@
                 Remove="uninstall"
                 Wait="yes" />
           </Component>
+
+          <!-- TUN mode: the service loads Wintun from its own folder, by path. The library is WireGuard's
+               signed build, unchanged, with its licence beside it. The driver inside it is installed by
+               Wintun the first time TUN mode is used and removed again when the client is removed (the PurgeUserSettings action). -->
+          <Component Id="WintunComponent" Guid="*">
+            <File Id="WintunDll" Source="$(WintunDir)\wintun.dll" Name="wintun.dll" KeyPath="yes" />
+          </Component>
+          <Component Id="WintunLicenceComponent" Guid="*">
+            <File
+                Id="WintunLicence"
+                Source="$(WintunDir)\wintun-LICENSE.txt"
+                Name="wintun-LICENSE.txt"
+                KeyPath="yes" />
+          </Component>
         </Directory>
       </Directory>
     </StandardDirectory>
@@ -80,6 +95,8 @@
     <Feature Id="Complete" Title="AnixOps Net" Level="1">
       <ComponentRef Id="WindowComponent" />
       <ComponentRef Id="ServiceComponent" />
+      <ComponentRef Id="WintunComponent" />
+      <ComponentRef Id="WintunLicenceComponent" />
       <ComponentGroupRef Id="WindowFiles" />
     </Feature>
 
@@ -106,7 +123,8 @@
           Action="CloseWindows"
           Before="RemoveFiles"
           Condition="Installed AND REMOVE=&quot;ALL&quot; AND UPGRADINGPRODUCTCODE" />
-      <!-- A removal: also take the login entry out of the users' settings. -->
+      <!-- A removal: also take the login entry out of the users' settings and the TUN driver out of the
+           machine. -->
       <Custom
           Action="PurgeUserSettings"
           Before="RemoveFiles"

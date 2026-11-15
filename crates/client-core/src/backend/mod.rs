@@ -20,6 +20,9 @@ pub mod system_proxy;
 pub mod trust;
 #[cfg(any(target_os = "android", target_os = "linux"))]
 pub mod tun;
+#[cfg(windows)]
+#[path = "tun_windows.rs"]
+pub mod tun;
 #[cfg(all(target_os = "linux", not(target_os = "android")))]
 pub mod tun_helper;
 
@@ -127,7 +130,7 @@ pub struct RuntimeSnapshot {
     pub block_quic: bool,
     /// Debug mode's direct egress is on: the engine runs with no node.
     pub direct_egress: bool,
-    /// Linux desktop TUN mode is on (`set_tun_mode`).
+    /// Desktop TUN mode (Linux, Windows) is on (`set_tun_mode`).
     pub tun_mode_enabled: bool,
     /// Always true: the interface then offers the subscription rules mode and explains the engine's DNS.
     pub embedded_engine: bool,
@@ -828,12 +831,12 @@ impl Backend {
         })
     }
 
-    /// Whether a connect opens the TUN device first (Linux desktop TUN mode).
+    /// Whether a connect opens the TUN device first (desktop TUN mode).
     pub fn tun_mode(&self) -> bool {
         self.state.tun_mode
     }
 
-    /// Turns Linux desktop TUN mode on or off; only while disconnected, since the device is opened when
+    /// Turns desktop TUN mode (Linux, Windows) on or off; only while disconnected, since the device is opened when
     /// connecting.
     pub fn set_tun_mode(&mut self, on: bool) -> Result<OperationResult, String> {
         if self.engine.is_running() {
@@ -841,10 +844,12 @@ impl Backend {
         }
         self.state.tun_mode = on;
         self.save();
-        done(if on {
-            "TUN mode is on; the next connection asks for the administrator password"
-        } else {
+        done(if !on {
             "TUN mode is off; the next connection uses the system proxy"
+        } else if cfg!(windows) {
+            "TUN mode is on; the next connection carries every application"
+        } else {
+            "TUN mode is on; the next connection asks for the administrator password"
         })
     }
 

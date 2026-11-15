@@ -4,7 +4,8 @@ param(
   [Parameter(Mandatory = $true)][string]$First,
   [Parameter(Mandatory = $true)][string]$Second,
   [Parameter(Mandatory = $true)][string]$SecondVersion,
-  [Parameter(Mandatory = $true)][string]$TestProject
+  [Parameter(Mandatory = $true)][string]$TestProject,
+  [Parameter(Mandatory = $true)][string]$SessionTestProject
 )
 $ErrorActionPreference = "Stop"
 
@@ -52,7 +53,7 @@ function Assert-Installed {
   if ($registered.StartMode -ne "Auto") { throw "The service starts '$($registered.StartMode)', not with Windows." }
   if ($registered.StartName -ne "LocalSystem") { throw "The service runs as $($registered.StartName)." }
   if ($registered.PathName.Trim('"') -ne $service) { throw "The service runs $($registered.PathName)." }
-  foreach ($file in @($window, $service, $shortcut)) {
+  foreach ($file in @($window, $service, $shortcut, (Join-Path $installDir "wintun.dll"), (Join-Path $installDir "wintun-LICENSE.txt"))) {
     if (-not (Test-Path $file -PathType Leaf)) { throw "$file is not there." }
   }
   $products = Get-Products
@@ -72,6 +73,25 @@ function Assert-WindowReachesService {
     Remove-Item Env:ANIXOPS_NET_APP_EXE
     Remove-Item Env:ANIXOPS_NET_INSTALLED
   }
+}
+
+function Assert-TunModeWorks {
+  # TUN mode against the installed service, which runs as LocalSystem and loads the installed wintun.dll.
+  $env:ANIXOPS_NET_TUN_TESTS = "1"
+  $env:ANIXOPS_NET_INSTALLED = "1"
+  try {
+    dotnet test $SessionTestProject --configuration Release --no-build --filter "FullyQualifiedName~TunModeTests" --logger "console;verbosity=normal"
+    if ($LASTEXITCODE -ne 0) { throw "TUN mode did not work through the installed service." }
+  } finally {
+    Remove-Item Env:ANIXOPS_NET_TUN_TESTS
+    Remove-Item Env:ANIXOPS_NET_INSTALLED
+  }
+}
+
+function Test-TunDriver {
+  # The driver package Wintun puts into the driver store the first time an adapter is made.
+  $drivers = & (Join-Path $env:SystemRoot "System32\pnputil.exe") /enum-drivers
+  [bool]($drivers | Select-String -SimpleMatch "wintun.inf")
 }
 
 function Start-Window {
@@ -102,7 +122,11 @@ if (-not (Get-RunEntry)) { throw "The upgrade removed the user's login entry." }
 if (-not (Test-Path $marker)) { throw "The upgrade removed the client's data." }
 Assert-WindowReachesService
 
-# 3. Remove with the window open.
+# 3. TUN mode through the installed service; what it leaves on the machine is the driver.
+Assert-TunModeWorks
+if (-not (Test-TunDriver)) { throw "TUN mode worked, but no Wintun driver is in the driver store; the check after removal would prove nothing." }
+
+# 4. Remove with the window open.
 Start-Window
 Invoke-Msi -Arguments @("/x", "`"$Second`"") -Operation "uninstall"
 if ($null -ne (Get-Service -Name $serviceName -ErrorAction SilentlyContinue)) { throw "The removal left the service registered." }
@@ -114,9 +138,11 @@ if (Test-Path $installDir) {
   throw "The removal left files in ${installDir}: $left"
 }
 if (Test-Path $shortcut) { throw "The removal left the Start menu shortcut." }
+if ($null -ne (Get-NetAdapter -Name "AnixOps Net" -ErrorAction SilentlyContinue)) { throw "The removal left the TUN adapter." }
+if (Test-TunDriver) { throw "The removal left the Wintun driver in the driver store." }
 if (Get-RunEntry) { throw "The removal left the user's login entry." }
 if ((Get-Products).Count -ne 0) { throw "The removal left the product registered." }
 # The client's data is the user's and is kept on purpose (subscriptions, settings).
 if (-not (Test-Path $marker)) { throw "The removal deleted the client's data." }
 Remove-Item -Path $dataDir -Recurse -Force -ErrorAction SilentlyContinue
-Write-Host "removed: no service, no process, no files, no shortcut, no login entry; data kept"
+Write-Host "removed: no service, no process, no files, no shortcut, no login entry, no TUN adapter, no TUN driver; data kept"
