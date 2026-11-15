@@ -19,6 +19,7 @@ pub mod app_link;
 pub mod capture;
 pub mod nodes;
 pub mod overview;
+pub mod proxies;
 
 use serde_json::{json, Value};
 
@@ -107,6 +108,11 @@ pub fn invoke(command: &str, args: &Value) -> Option<Result<Value, String>> {
             ))
         }
         "delay_tone" => json!(nodes::delay_tone(args.get("delay").unwrap_or(&Value::Null))),
+        "proxies" => proxies::proxies(
+            rows(args, "nodes"),
+            args.get("delays").unwrap_or(&Value::Null),
+            text(args, "query"),
+        ),
         "overview" => overview::overview(
             args.get("snapshot").unwrap_or(&Value::Null),
             rows(args, "nodes"),
@@ -155,6 +161,7 @@ mod tests {
             "sort_nodes",
             "delay_tone",
             "overview",
+            "proxies",
         ] {
             let command = format!("{PREFIX}{name}");
             assert!(

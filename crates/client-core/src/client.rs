@@ -7,6 +7,7 @@
 //! What the platform does itself (the system VPN, the shared Downloads folder, the key store, the current
 //! network, system notifications) sits behind [`Platform`].
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -151,6 +152,9 @@ pub struct Client {
     session_key: Mutex<Option<desktop_mitm::sessions::SessionKey>>,
     /// `anixops://` links the interface has not read yet (`take_app_links`).
     links: Mutex<Vec<String>>,
+    /// What each node's last delay test said (`None`: no answer), by node id. Kept for as long as the core
+    /// runs, so that every window shows the same delays and a window that is opened again still has them.
+    delays: Mutex<HashMap<String, Option<u64>>>,
 }
 
 fn lock<T>(value: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -215,6 +219,7 @@ impl Client {
             platform,
             session_key: Mutex::new(None),
             links: Mutex::new(Vec::new()),
+            delays: Mutex::new(HashMap::new()),
         });
         if auto_connect && !client.platform.has_system_vpn() {
             let starting = client.clone();
@@ -505,6 +510,35 @@ impl Client {
             }
             None => probe_network(connected.then_some(port)),
         }
+    }
+
+    /// The node list as the interface gets it from `list_nodes`.
+    fn node_rows(&self) -> Result<Vec<Value>, String> {
+        self.backend().nodes().into_iter().map(json).collect()
+    }
+
+    /// Keeps what a round of delay tests said, over what was known about those nodes.
+    fn remember_delays(&self, results: &[NodeDelay]) {
+        let mut delays = lock(&self.delays);
+        for result in results {
+            delays.insert(result.node_id.clone(), result.delay_ms);
+        }
+    }
+
+    /// The delays known so far, in the shape `client-view` reads: `{ id: { "delayMs": … } }`, without
+    /// `delayMs` for a test that got no answer.
+    fn known_delays(&self) -> Value {
+        lock(&self.delays)
+            .iter()
+            .map(|(id, delay)| {
+                let entry = match delay {
+                    Some(delay) => serde_json::json!({ "delayMs": delay }),
+                    None => serde_json::json!({}),
+                };
+                (id.clone(), entry)
+            })
+            .collect::<serde_json::Map<String, Value>>()
+            .into()
     }
 
     fn select_fastest_node(&self) -> Result<OperationResult, String> {
@@ -833,6 +867,30 @@ fn handler(name: &str) -> Option<Handler> {
             };
             Ok(client_view::overview::overview(&snapshot, &nodes, &traffic))
         },
+        // The proxies page in one answer: the nodes `query` leaves, split by subscription, each with what
+        // its last delay test said.
+        "proxies" => |client, args| {
+            let query = query(args)?;
+            let nodes = client.node_rows()?;
+            Ok(client_view::proxies::proxies(
+                &nodes,
+                &client.known_delays(),
+                &query,
+            ))
+        },
+        // Tests the delay of the nodes the proxies page shows for `query` and remembers what each said.
+        "test_proxies" => |client, args| {
+            let query = query(args)?;
+            let ids = client_view::proxies::shown_ids(&client.node_rows()?, &query);
+            let nodes = client.backend().delay_nodes(&ids);
+            let results = node_delays(engine::node_delays(&nodes, DELAY_URL));
+            client.remember_delays(&results);
+            let answered = results
+                .iter()
+                .filter(|result| result.delay_ms.is_some())
+                .count();
+            Ok(serde_json::json!({ "tested": results.len(), "answered": answered }))
+        },
         "list_native_groups" => |client, _| json(client.backend().groups()),
         "list_subscriptions" => |client, _| json(client.backend().subscriptions()),
         "connect" | "restart_service" => |client, _| json(client.connect_through_tunnel()?),
@@ -940,7 +998,9 @@ fn handler(name: &str) -> Option<Handler> {
         "test_node_delays" => |client, args| {
             let NodeDelaysArgs { node_ids, url } = parse(args)?;
             let nodes = client.backend().delay_nodes(&node_ids);
-            json(node_delays(engine::node_delays(&nodes, &url)))
+            let results = node_delays(engine::node_delays(&nodes, &url));
+            client.remember_delays(&results);
+            json(results)
         },
         "network_probe" => |client, args| {
             let Connected { connected } = parse(args)?;
@@ -1181,6 +1241,15 @@ fn parse<T: DeserializeOwned>(args: Value) -> Result<T, String> {
     serde_json::from_value(args).map_err(|error| format!("invalid arguments: {error}"))
 }
 
+/// The search of a command that takes one; no arguments at all is the empty search.
+fn query(args: Value) -> Result<String, String> {
+    if args.is_null() {
+        return Ok(String::new());
+    }
+    let Query { query } = parse(args)?;
+    Ok(query)
+}
+
 fn unix_seconds() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1312,6 +1381,13 @@ struct EditNode {
 #[derive(Deserialize)]
 struct Preferences {
     preferences: PreferencesInput,
+}
+
+/// A search, for the commands that take one; no `query` is the empty search.
+#[derive(Deserialize)]
+struct Query {
+    #[serde(default)]
+    query: String,
 }
 
 #[derive(Deserialize)]
@@ -1664,6 +1740,23 @@ mod tests {
         assert_eq!(overview["error"], Value::Null);
         assert_eq!(overview["traffic"], Value::Null);
         assert!(overview["canConnect"].is_boolean());
+        // The proxies page's answer: no subscription, so no node, searched or not.
+        for args in [
+            serde_json::json!({}),
+            serde_json::json!({ "query": "tokyo" }),
+        ] {
+            let proxies = client.invoke("proxies", args).unwrap();
+            assert_eq!(
+                proxies,
+                serde_json::json!({ "total": 0, "shown": 0, "sections": [] })
+            );
+        }
+        assert_eq!(
+            client
+                .invoke("test_proxies", serde_json::json!({}))
+                .unwrap(),
+            serde_json::json!({ "tested": 0, "answered": 0 })
+        );
         // The windows' shared logic answers through the same door.
         assert_eq!(
             client.invoke(

@@ -2500,6 +2500,430 @@
   }
  },
  {
+  "command": "view.proxies",
+  "args": {
+   "nodes": [
+    {
+     "id": "a",
+     "label": "Tokyo",
+     "protocol": "trojan",
+     "selected": true,
+     "group": "One",
+     "editable": true
+    },
+    {
+     "id": "b",
+     "label": "Osaka",
+     "protocol": "vless",
+     "selected": false,
+     "group": "One",
+     "editable": true
+    },
+    {
+     "id": "c",
+     "label": "Berlin <b>Edge</b>",
+     "protocol": "shadowsocks",
+     "selected": false,
+     "group": "Two",
+     "editable": false
+    },
+    {
+     "id": "d",
+     "label": "Pasted",
+     "protocol": "vless",
+     "selected": false,
+     "editable": false
+    }
+   ],
+   "delays": {
+    "a": {
+     "delayMs": 120
+    },
+    "b": {
+     "delayMs": 800
+    },
+    "c": {},
+    "x": {
+     "delayMs": 1
+    }
+   },
+   "query": ""
+  },
+  "answer": {
+   "total": 4,
+   "shown": 4,
+   "sections": [
+    {
+     "group": "One",
+     "nodes": [
+      {
+       "id": "a",
+       "label": "Tokyo",
+       "protocol": "trojan",
+       "group": "One",
+       "selected": true,
+       "delay": {
+        "ms": 120,
+        "tone": "fast"
+       }
+      },
+      {
+       "id": "b",
+       "label": "Osaka",
+       "protocol": "vless",
+       "group": "One",
+       "selected": false,
+       "delay": {
+        "ms": 800,
+        "tone": "slow"
+       }
+      }
+     ]
+    },
+    {
+     "group": "Two",
+     "nodes": [
+      {
+       "id": "c",
+       "label": "Berlin <b>Edge</b>",
+       "protocol": "shadowsocks",
+       "group": "Two",
+       "selected": false,
+       "delay": {
+        "ms": null,
+        "tone": "failed"
+       }
+      }
+     ]
+    },
+    {
+     "group": null,
+     "nodes": [
+      {
+       "id": "d",
+       "label": "Pasted",
+       "protocol": "vless",
+       "group": null,
+       "selected": false,
+       "delay": null
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "command": "view.proxies",
+  "args": {
+   "nodes": [
+    {
+     "id": "a",
+     "label": "Tokyo",
+     "protocol": "trojan",
+     "selected": true,
+     "group": "One",
+     "editable": true
+    },
+    {
+     "id": "b",
+     "label": "Osaka",
+     "protocol": "vless",
+     "selected": false,
+     "group": "One",
+     "editable": true
+    },
+    {
+     "id": "c",
+     "label": "Berlin <b>Edge</b>",
+     "protocol": "shadowsocks",
+     "selected": false,
+     "group": "Two",
+     "editable": false
+    },
+    {
+     "id": "d",
+     "label": "Pasted",
+     "protocol": "vless",
+     "selected": false,
+     "editable": false
+    }
+   ],
+   "delays": {
+    "a": {
+     "delayMs": 120
+    },
+    "b": {
+     "delayMs": 800
+    },
+    "c": {},
+    "x": {
+     "delayMs": 1
+    }
+   },
+   "query": " VLESS "
+  },
+  "answer": {
+   "total": 4,
+   "shown": 2,
+   "sections": [
+    {
+     "group": "One",
+     "nodes": [
+      {
+       "id": "b",
+       "label": "Osaka",
+       "protocol": "vless",
+       "group": "One",
+       "selected": false,
+       "delay": {
+        "ms": 800,
+        "tone": "slow"
+       }
+      }
+     ]
+    },
+    {
+     "group": null,
+     "nodes": [
+      {
+       "id": "d",
+       "label": "Pasted",
+       "protocol": "vless",
+       "group": null,
+       "selected": false,
+       "delay": null
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "command": "view.proxies",
+  "args": {
+   "nodes": [
+    {
+     "id": "a",
+     "label": "Tokyo",
+     "protocol": "trojan",
+     "selected": true,
+     "group": "One",
+     "editable": true
+    },
+    {
+     "id": "b",
+     "label": "Osaka",
+     "protocol": "vless",
+     "selected": false,
+     "group": "One",
+     "editable": true
+    },
+    {
+     "id": "c",
+     "label": "Berlin <b>Edge</b>",
+     "protocol": "shadowsocks",
+     "selected": false,
+     "group": "Two",
+     "editable": false
+    },
+    {
+     "id": "d",
+     "label": "Pasted",
+     "protocol": "vless",
+     "selected": false,
+     "editable": false
+    }
+   ],
+   "delays": {},
+   "query": "two"
+  },
+  "answer": {
+   "total": 4,
+   "shown": 1,
+   "sections": [
+    {
+     "group": "Two",
+     "nodes": [
+      {
+       "id": "c",
+       "label": "Berlin <b>Edge</b>",
+       "protocol": "shadowsocks",
+       "group": "Two",
+       "selected": false,
+       "delay": null
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "command": "view.proxies",
+  "args": {
+   "nodes": [
+    {
+     "id": "a",
+     "label": "Tokyo",
+     "protocol": "trojan",
+     "selected": true,
+     "group": "One",
+     "editable": true
+    },
+    {
+     "id": "b",
+     "label": "Osaka",
+     "protocol": "vless",
+     "selected": false,
+     "group": "One",
+     "editable": true
+    },
+    {
+     "id": "c",
+     "label": "Berlin <b>Edge</b>",
+     "protocol": "shadowsocks",
+     "selected": false,
+     "group": "Two",
+     "editable": false
+    },
+    {
+     "id": "d",
+     "label": "Pasted",
+     "protocol": "vless",
+     "selected": false,
+     "editable": false
+    }
+   ],
+   "query": "nothing like this"
+  },
+  "answer": {
+   "total": 4,
+   "shown": 0,
+   "sections": []
+  }
+ },
+ {
+  "command": "view.proxies",
+  "args": {
+   "nodes": [
+    {
+     "id": "a",
+     "label": "Tokyo",
+     "protocol": "trojan",
+     "selected": true,
+     "group": "One",
+     "editable": true
+    },
+    {
+     "id": "b",
+     "label": "Osaka",
+     "protocol": "vless",
+     "selected": false,
+     "group": "One",
+     "editable": true
+    },
+    {
+     "id": "c",
+     "label": "Berlin <b>Edge</b>",
+     "protocol": "shadowsocks",
+     "selected": false,
+     "group": "Two",
+     "editable": false
+    },
+    {
+     "id": "d",
+     "label": "Pasted",
+     "protocol": "vless",
+     "selected": false,
+     "editable": false
+    }
+   ],
+   "delays": {
+    "a": {
+     "delayMs": 499
+    },
+    "b": {
+     "delayMs": 500
+    },
+    "c": "slow",
+    "d": {
+     "delayMs": -3
+    }
+   },
+   "query": ""
+  },
+  "answer": {
+   "total": 4,
+   "shown": 4,
+   "sections": [
+    {
+     "group": "One",
+     "nodes": [
+      {
+       "id": "a",
+       "label": "Tokyo",
+       "protocol": "trojan",
+       "group": "One",
+       "selected": true,
+       "delay": {
+        "ms": 499,
+        "tone": "fast"
+       }
+      },
+      {
+       "id": "b",
+       "label": "Osaka",
+       "protocol": "vless",
+       "group": "One",
+       "selected": false,
+       "delay": {
+        "ms": 500,
+        "tone": "slow"
+       }
+      }
+     ]
+    },
+    {
+     "group": "Two",
+     "nodes": [
+      {
+       "id": "c",
+       "label": "Berlin <b>Edge</b>",
+       "protocol": "shadowsocks",
+       "group": "Two",
+       "selected": false,
+       "delay": null
+      }
+     ]
+    },
+    {
+     "group": null,
+     "nodes": [
+      {
+       "id": "d",
+       "label": "Pasted",
+       "protocol": "vless",
+       "group": null,
+       "selected": false,
+       "delay": {
+        "ms": null,
+        "tone": "failed"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "command": "view.proxies",
+  "args": {},
+  "answer": {
+   "total": 0,
+   "shown": 0,
+   "sections": []
+  }
+ },
+ {
   "command": "view.reboot",
   "args": {},
   "refused": true

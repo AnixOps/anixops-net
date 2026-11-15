@@ -13,6 +13,11 @@ link to the daemon, whose state the foot of the sidebar shows, and the first rea
   numbers and whether the button can be pressed. What the daemon's state means is decided by the daemon (its
   `overview` command, asked once a second), the same answer the Windows window gets.
 - `src/overview_page.rs`: the overview page's widgets.
+- `src/proxies.rs`: the proxies page without GTK: the daemon's `proxies` answer (the nodes a search leaves,
+  split by subscription, each with its last delay test) turned into the list's rows and the page's
+  sentences, and what the page asks of the daemon (import, test, use a node).
+- `src/proxies_page.rs`: the proxies page's widgets. The node list is a `GtkListView` with the subscriptions
+  as section headings; the selected row is the node in use.
 - `src/window.rs`: the window (relm4 over gtk4-rs and libadwaita). Only built with the `gui` feature, on Linux,
   because it needs the GTK 4 and libadwaita development files. It links `crates/client-window` (the standing
   link to the daemon and the answers to what the daemon asks of the user's session) and none of the engine.
