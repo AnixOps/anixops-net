@@ -86,9 +86,10 @@ fun RulesScreen(
     state: RulesState,
     actions: RulesActions,
     modifier: Modifier = Modifier,
+    onBack: (() -> Unit)? = null,
 ) {
     val enabled = snapshot != null && !appBusy && !state.busy
-    Page(stringResource(R.string.nav_rules), modifier) {
+    Page(stringResource(R.string.nav_rules), modifier, onBack) {
         RoutingSection(snapshot?.routingMode, enabled, actions)
         state.myRules?.let { MyRulesSection(it, enabled, actions.saveMyRules) }
         GroupsSection(state.groups, enabled, actions.selectGroupOutbound)
@@ -413,7 +414,7 @@ private fun SaveRow(changed: Boolean, enabled: Boolean, onRevert: () -> Unit, on
 
 /** One option of a one-of list, with its sentence under the name and a check when chosen. */
 @Composable
-private fun ChoiceRow(label: String, hint: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+internal fun ChoiceRow(label: String, hint: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
     val palette = LocalBrandPalette.current
     Row(
         modifier = Modifier

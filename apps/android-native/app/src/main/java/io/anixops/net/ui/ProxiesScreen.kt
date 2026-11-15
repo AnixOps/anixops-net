@@ -3,6 +3,7 @@ package io.anixops.net.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -79,12 +80,22 @@ private sealed interface ProxiesDialog {
     data class RemoveNode(val node: NodeRow) : ProxiesDialog
 }
 
-/** 代理: subscriptions, then every node by subscription, with search, delay tests and node management. */
+/**
+ * 代理: subscriptions, then every node by subscription, with search, delay tests and node management. Debug mode's
+ * 出口 shows the same page under its own [title], with its exit choice in [header].
+ */
 @Composable
-fun ProxiesScreen(state: ProxiesState, actions: ProxiesActions, modifier: Modifier = Modifier) {
+fun ProxiesScreen(
+    state: ProxiesState,
+    actions: ProxiesActions,
+    modifier: Modifier = Modifier,
+    title: String = stringResource(R.string.nav_proxies),
+    header: @Composable ColumnScope.() -> Unit = {},
+) {
     var dialog by remember { mutableStateOf<ProxiesDialog?>(null) }
     val scope = rememberCoroutineScope()
-    Page(stringResource(R.string.nav_proxies), modifier) {
+    Page(title, modifier) {
+        header()
         SubscriptionsSection(
             state.subscriptions,
             enabled = !state.busy,
