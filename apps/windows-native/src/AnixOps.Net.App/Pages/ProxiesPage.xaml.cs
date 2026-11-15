@@ -23,7 +23,8 @@ public sealed class NodeGroup : ObservableCollection<ProxyRow>
 /// The proxies page: where a subscription is imported, the search, the delay test and the list of nodes
 /// under their subscriptions. It asks the core once a second while it is shown; what the answer means for
 /// the page is decided in <see cref="Proxies"/>. The selected row is the node in use; selecting another row
-/// asks the core to use that node.
+/// asks the core to use that node. A row's button opens the node's details, where it is changed, removed or
+/// shared.
 /// </summary>
 public sealed partial class ProxiesPage : Page
 {
@@ -62,6 +63,15 @@ public sealed partial class ProxiesPage : Page
     private IReadOnlyList<Group>? policies;
     private readonly HashSet<string> choosing = [];
     private GroupsDialog? policyDialog;
+
+    // The node whose details are open (null when none are), whether the core is saving or removing it, why
+    // that did not work, and the dialog that shows it. "opening" is set while the core is asked for a
+    // node's details, so that a second press does not ask again.
+    private NodeDetails? node;
+    private bool nodeBusy;
+    private string? nodeProblem;
+    private NodeDialog? nodeDialog;
+    private bool opening;
     private string query = "";
     private ProxiesBusy busy;
 
@@ -133,6 +143,7 @@ public sealed partial class ProxiesPage : Page
         timer.Stop();
         dialog?.Close();
         policyDialog?.Close();
+        nodeDialog?.Close();
         if (core is not null)
         {
             core.Changed -= OnCoreChanged;
@@ -156,6 +167,9 @@ public sealed partial class ProxiesPage : Page
         changing.Clear();
         policies = null;
         choosing.Clear();
+        node = null;
+        nodeBusy = false;
+        nodeProblem = null;
         busy = default;
         failure = null;
         trouble = null;
@@ -382,10 +396,179 @@ public sealed partial class ProxiesPage : Page
         }
     }
 
+    /// <summary>Whether a dialog is over the page: Windows shows one at a time.</summary>
+    private bool DialogOpen => dialog is not null || policyDialog is not null || nodeDialog is not null;
+
+    private void OnDetailsLoaded(object sender, RoutedEventArgs e)
+    {
+        // The button shows only a picture: what it does is said in its tooltip and to a screen reader.
+        if (sender is Button button && strings is not null)
+        {
+            AutomationProperties.SetName(button, strings["node.details"]);
+            ToolTipService.SetToolTip(button, strings["node.details"]);
+        }
+    }
+
+    /// <summary>Asks the core about the node of the row whose button was pressed and shows the answer in a dialog.</summary>
+    private async void OnDetails(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not ProxyRow row
+            || strings is null || core is null || !active || !Connected || DialogOpen || opening)
+        {
+            return;
+        }
+        var asking = era;
+        opening = true;
+        NodeDetails details;
+        try
+        {
+            details = Node.Read(await core.AskAsync(Node.Command, Node.Args(row.Id), AskPatience));
+        }
+        catch (Exception error) when (error is RefusedException or IOException or TimeoutException or OperationCanceledException or ObjectDisposedException)
+        {
+            if (asking == era && active)
+            {
+                failure = error.Message;
+                Draw();
+            }
+            return;
+        }
+        finally
+        {
+            opening = false;
+        }
+        if (asking != era || !active || DialogOpen)
+        {
+            return;
+        }
+        node = details;
+        nodeBusy = false;
+        nodeProblem = null;
+        failure = null;
+        var opened = new NodeDialog(strings, SaveNode, RemoveNode) { XamlRoot = XamlRoot, RequestedTheme = ActualTheme };
+        nodeDialog = opened;
+        Draw();
+        try
+        {
+            await opened.ShowAsync();
+        }
+        finally
+        {
+            nodeDialog = null;
+            node = null;
+            nodeProblem = null;
+            if (active)
+            {
+                NodeList.Focus(FocusState.Programmatic);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Saves what the user typed for the node whose details are open: the core says first whether it can be
+    /// saved, and afterwards what the node is now.
+    /// </summary>
+    private async void SaveNode(NodeDraft draft)
+    {
+        if (core is null || strings is null || !active || !Connected || nodeBusy || node is not { } details)
+        {
+            return;
+        }
+        var asking = era;
+        nodeBusy = true;
+        nodeProblem = null;
+        Draw();
+
+        string? problem = null;
+        NodeDetails? now = null;
+        try
+        {
+            problem = Node.Problem(strings, await core.AskAsync(NodeDraft.CheckCommand, draft.CheckArgs(), AskPatience));
+            if (problem is null)
+            {
+                await core.AskAsync(NodeDraft.SaveCommand, draft.SaveArgs(details.Id), ActPatience);
+                now = Node.Read(await core.AskAsync(Node.Command, Node.Args(details.Id), AskPatience));
+            }
+        }
+        catch (Exception error) when (error is RefusedException or IOException or TimeoutException or OperationCanceledException or ObjectDisposedException)
+        {
+            problem ??= error.Message;
+        }
+        if (asking != era)
+        {
+            // The core that was asked is gone; what it was busy with went with it.
+            return;
+        }
+        // The list as it is after this, before the node can be saved again.
+        await RefreshAsync();
+        if (asking != era)
+        {
+            return;
+        }
+        nodeBusy = false;
+        if (node?.Id == details.Id)
+        {
+            nodeProblem = problem;
+            node = now ?? node;
+        }
+        if (active)
+        {
+            Draw();
+        }
+    }
+
+    /// <summary>Removes the node whose details are open. Its dialog goes with it.</summary>
+    private async void RemoveNode()
+    {
+        if (core is null || !active || !Connected || nodeBusy || node is not { } details)
+        {
+            return;
+        }
+        var asking = era;
+        nodeBusy = true;
+        nodeProblem = null;
+        Draw();
+
+        string? problem = null;
+        try
+        {
+            await core.AskAsync(Node.Remove, Node.Args(details.Id), ActPatience);
+        }
+        catch (Exception error) when (error is RefusedException or IOException or TimeoutException or OperationCanceledException or ObjectDisposedException)
+        {
+            problem = error.Message;
+        }
+        if (asking != era)
+        {
+            return;
+        }
+        await RefreshAsync();
+        if (asking != era)
+        {
+            return;
+        }
+        nodeBusy = false;
+        if (node?.Id == details.Id)
+        {
+            if (problem is null)
+            {
+                node = null;
+            }
+            else
+            {
+                nodeProblem = problem;
+            }
+        }
+        if (active)
+        {
+            Draw();
+        }
+    }
+
     private async void OnGroups(object sender, RoutedEventArgs e)
     {
         // One dialog at a time.
-        if (strings is null || dialog is not null || policyDialog is not null || policies is not { Count: > 0 })
+        if (strings is null || DialogOpen || policies is not { Count: > 0 })
         {
             return;
         }
@@ -408,7 +591,7 @@ public sealed partial class ProxiesPage : Page
 
     private async void OnSubscriptions(object sender, RoutedEventArgs e)
     {
-        if (strings is null || dialog is not null || policyDialog is not null || subscriptions is null)
+        if (strings is null || DialogOpen || subscriptions is null)
         {
             return;
         }
@@ -526,6 +709,18 @@ public sealed partial class ProxiesPage : Page
             else
             {
                 policyDialog.Show(PolicyGroups.Show(strings, policies, choosing));
+            }
+        }
+        if (nodeDialog is not null)
+        {
+            if (node is null)
+            {
+                // The node was removed, or the core that described it is gone.
+                nodeDialog.Close();
+            }
+            else
+            {
+                nodeDialog.Show(Node.Show(strings, node, nodeBusy, nodeProblem));
             }
         }
         if (dialog is not null)

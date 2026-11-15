@@ -44,13 +44,28 @@ xcrun simctl status_bar "${device}" override --time "9:41" --dataNetwork wifi --
     --cellularMode active --cellularBars 4 --operatorName "" --batteryState charged --batteryLevel 100
 xcrun simctl install "${device}" "${app}"
 
+# Puts the simulator into the light or dark appearance and waits until it says that it is there: now and then
+# the simulator does not take the change, and every picture after it would be of the other appearance.
+look() {
+    local wanted="$1"
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        if [ "$(xcrun simctl ui "${device}" appearance 2> /dev/null)" = "${wanted}" ]; then
+            return 0
+        fi
+        xcrun simctl ui "${device}" appearance "${wanted}" || true
+        sleep 1
+    done
+    echo "the simulator did not change to the ${wanted} appearance" >&2
+    return 1
+}
+
 shoot() {
     local section="$1" appearance="$2" mode="${3:-proxy}"
     local file="${out}/${section}-${appearance}.png"
     if [ "${mode}" != proxy ]; then
         file="${out}/${mode}-${section}-${appearance}.png"
     fi
-    xcrun simctl ui "${device}" appearance "${appearance}"
+    look "${appearance}"
     xcrun simctl launch "${device}" "${bundle}" -AnixOpsDemo YES -AnixOpsMode "${mode}" -AnixOpsSection "${section}" \
         -AppleLanguages "(${language})" -terms-accepted-version "${terms}" > /dev/null
     # The app is up; give the page time to lay out, load its demo data and finish its first transitions.
@@ -60,13 +75,14 @@ shoot() {
     sleep 1
 }
 
+# Every light picture first, then the dark ones: the appearance changes once, and never back.
 shoot home light
-shoot home dark
 shoot proxies light
 shoot rules light
 shoot extensions light
 shoot settings light
 # Debug mode: requests · rewrite · exit · settings.
 shoot requests light debug
-shoot requests dark debug
 shoot exit light debug
+shoot home dark
+shoot requests dark debug

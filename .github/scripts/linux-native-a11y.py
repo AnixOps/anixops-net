@@ -409,6 +409,172 @@ def check_proxies(app, binary: str, endpoint: str, text, button, press, sentence
     return f"imported, {total} nodes, searched ({left}), chose {target!r}, tested"
 
 
+def check_node(app, binary: str, endpoint: str, text, shots: str | None) -> str:
+    """One node's dialog against the real daemon: what it shows, a change that is refused, a change that is
+    saved, and the removal of the node."""
+
+    def showing(node) -> bool:
+        return node.get_state_set().contains(Atspi.StateType.SHOWING)
+
+    def nodes() -> dict[str, str]:
+        answer = core_ask(endpoint, "proxies", {})
+        return {node["label"]: node["id"] for section in answer["sections"] for node in section["nodes"]}
+
+    def item(name: str):
+        found = next(
+            (node for node, _ in walk(app) if node.get_name() == text("proxies.list") and showing(node)),
+            None,
+        )
+        if found is None:
+            return None
+        return next(
+            (node for node, _ in walk(found)
+             if role(node) == "list item" and node.get_name() == name and showing(node)),
+            None,
+        )
+
+    def named_button(name: str, inside=None):
+        return next(
+            (node for node, _ in walk(inside or app)
+             if role(node) in ("push button", "button") and node.get_name() == name and showing(node)
+             and node.get_state_set().contains(Atspi.StateType.SENSITIVE)),
+            None,
+        )
+
+    def push(node, what: str) -> None:
+        action = node.get_action_iface()
+        if action is None or not action.do_action(0):
+            fail(f"{what} could not be pressed through the accessibility interface")
+
+    def box(wording_id: str):
+        """The text box under that name, as (what reads it, what writes it)."""
+        for node, _ in walk(app):
+            if node.get_name() != text(wording_id) or not showing(node):
+                continue
+            for candidate, _ in walk(node):
+                try:
+                    writer = candidate.get_editable_text_iface()
+                except GLib.Error:
+                    writer = None
+                if writer is not None:
+                    return candidate, writer
+        return None
+
+    def written(wording_id: str) -> str | None:
+        found = box(wording_id)
+        if found is None:
+            return None
+        reader = found[0].get_text_iface()
+        if reader is None:
+            return None
+        return Atspi.Text.get_text(reader, 0, Atspi.Text.get_character_count(reader))
+
+    def write(wording_id: str, value: str) -> None:
+        _, writer = until(f"the text box {text(wording_id)!r}", lambda: box(wording_id))
+        if not writer.set_text_contents(value):
+            fail(f"the text box {text(wording_id)!r} did not take {value!r}")
+
+    def said(sentence: str):
+        return next(
+            (node for node, _ in walk(app)
+             if role(node) == "label" and node.get_name() == sentence and showing(node)),
+            None,
+        )
+
+    def question(heading: str, answer: str):
+        """The button of that name in the question under that heading, not one of the same name elsewhere."""
+
+        def probe():
+            asked = said(heading)
+            while asked is not None:
+                buttons = [
+                    node for node, _ in walk(asked)
+                    if role(node) in ("push button", "button") and showing(node)
+                ]
+                if any(node.get_name() == text("action.cancel") for node in buttons):
+                    return next((node for node in buttons if node.get_name() == answer), None)
+                asked = asked.get_parent()
+            return None
+
+        return until(f"the answer {answer!r} to {heading!r}", probe)
+
+    before = nodes()
+    if "Test" not in before or len(before) < 2:
+        fail(f"the daemon lists {sorted(before)}, expected the node 'Test' among at least two")
+    identity = before["Test"]
+    details = core_ask(endpoint, "node_details", {"nodeId": identity})
+    expected = {"name": "Test", "server": "203.0.113.9", "port": 11111, "editable": True, "keep": None}
+    wrong = {name: details.get(name) for name, value in expected.items() if details.get(name) != value}
+    if wrong or not (details.get("link") or "").startswith("ss://") or not details.get("qr"):
+        fail(f"the daemon describes the node 'Test' as {details}, expected {expected} with a link and a QR code")
+
+    # The row's button opens the node's dialog: its name, server and port, its share link and the QR code.
+    row = until("the row of the node 'Test'", lambda: item("Test"))
+    opener = until("the details button of the node 'Test'", lambda: named_button(text("node.details"), row))
+    push(opener, "the details button")
+    try:
+        until("the dialog to show the node's name, server and port",
+              lambda: (written("node.name"), written("node.server"), written("node.port"))
+              == ("Test", "203.0.113.9", "11111"))
+    except SystemExit:
+        dump(app)
+        raise
+    until("the dialog to show the node's share link", lambda: said(details["link"]))
+    until("the QR code to be there under its name",
+          lambda: next((node for node, _ in walk(app) if node.get_name() == text("node.qr") and showing(node)), None))
+    until("the dialog to say how long a change lasts", lambda: said(text("node.edit.note")))
+
+    # A port that is none is refused in the window's language, and nothing changes at the daemon.
+    write("node.port", "0")
+    push(until("the save button", lambda: named_button(text("action.save"))), "the save button")
+    until(f"the dialog to say {text('node.problem.port')!r}", lambda: said(text("node.problem.port")))
+    if core_ask(endpoint, "node_details", {"nodeId": identity})["port"] != 11111:
+        fail("a port of 0 was saved")
+
+    # Another name, server and port are saved: the daemon has them, and the list shows the new name.
+    write("node.name", "Renamed")
+    write("node.server", "example.org")
+    write("node.port", "8443")
+    push(until("the save button", lambda: named_button(text("action.save"))), "the save button")
+
+    def saved() -> bool:
+        now = core_ask(endpoint, "node_details", {"nodeId": identity})
+        return (now["name"], now["server"], now["port"]) == ("Renamed", "example.org", 8443)
+
+    until("the daemon to have the node's new name, server and port", saved)
+    until("the list to show the node as 'Renamed'", lambda: item("Renamed") is not None and item("Test") is None)
+    until("the refusal to be gone", lambda: said(text("node.problem.port")) is None)
+    link = core_ask(endpoint, "node_details", {"nodeId": identity})["link"]
+    if link == details["link"]:
+        fail("the share link is the same after the node's server changed")
+    until("the dialog to show the new share link", lambda: said(link))
+
+    if shots:
+        picture = os.path.join(shots, "core-node-zh-light.png")
+        subprocess.run(
+            [binary, "--language", "zh", "--theme", "light", "--socket", endpoint, "--page", "proxies",
+             "--show", "node", "--screenshot", picture],
+            check=True,
+            timeout=60,
+        )
+        if not os.path.getsize(picture):
+            fail(f"{picture} is empty")
+
+    # Remove: asked first, and "cancel" leaves the node where it is.
+    heading = text("node.remove.confirm").replace("{0}", "Renamed")
+    push(until("the remove button", lambda: named_button(text("node.remove"))), "the remove button")
+    push(question(heading, text("action.cancel")), "the cancel button")
+    until("the question to be gone", lambda: said(heading) is None)
+    if "Renamed" not in nodes():
+        fail("cancelling the removal removed the node")
+    push(until("the remove button", lambda: named_button(text("node.remove"))), "the remove button")
+    push(question(heading, text("subscriptions.remove")), "the remove answer")
+    until("the daemon to have removed the node", lambda: "Renamed" not in nodes())
+    until("the node's row and its dialog to be gone",
+          lambda: item("Renamed") is None and box("node.name") is None)
+    return f"node 'Test': shown, port 0 refused, saved as 'Renamed', removed ({len(nodes())} left)"
+
+
 # What the script's own subscription server hands out: one node at first, two from the second download on.
 THIRD_NODE = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@203.0.113.20:11111#Alpha"
 FOURTH_NODE = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@203.0.113.21:11111#Beta"
@@ -898,6 +1064,7 @@ def check_core(binary: str, daemon: str, wording: dict, shots: str | None) -> No
             sentence("overview.state.disconnected")
             button("overview.connect")
             nodes = check_proxies(app, binary, endpoint, text, button, press, sentence, shots)
+            node = check_node(app, binary, endpoint, text, shots)
             groups = check_groups(app, binary, endpoint, text, press, shots)
             subscriptions = check_subscriptions(app, binary, endpoint, text, press, shots)
             stop(core)
@@ -906,7 +1073,7 @@ def check_core(binary: str, daemon: str, wording: dict, shots: str | None) -> No
             core = start_daemon()
             found("after the daemon started again")
             print(f"[core] not running, found ({line!r}), connected ({', '.join(rates)}), disconnected, "
-                  f"proxies ({nodes}), {groups}, {subscriptions}, stopped, found again")
+                  f"proxies ({nodes}), {node}, {groups}, {subscriptions}, stopped, found again")
         finally:
             stop(window)
             stop(core)

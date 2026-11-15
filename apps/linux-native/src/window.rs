@@ -22,6 +22,8 @@ use serde_json::json;
 
 use crate::groups::{self, Choice, Group};
 use crate::launch::{Appearance, Launch};
+use crate::node::{self, Details, Draft};
+use crate::node_dialog::Wish;
 use crate::overview::{self, Overview, Pending, Press};
 use crate::overview_page::OverviewPage;
 use crate::proxies::{self, Action, Busy, Proxies};
@@ -120,6 +122,14 @@ struct Shell {
     grouping: Arc<AtomicBool>,
     /// The policy groups the daemon is still choosing a member for.
     choosing: Vec<String>,
+    /// The node whose dialog is shown, as the daemon last described it.
+    node: Option<Details>,
+    /// Whether the daemon is saving or removing that node, and why the last time it could not.
+    node_busy: bool,
+    node_problem: Option<String>,
+    /// Set until the details of the list's first node were asked for, when the window was started to
+    /// show them.
+    first_node: bool,
     /// How many subscriptions the daemon took in for this window; the link's box empties at each.
     imports: u32,
     /// Counts the changes of the link to the daemon, so that the answer to something asked of a daemon
@@ -156,6 +166,14 @@ enum Show {
     /// The daemon uses the member chosen for a policy group, or could not; the number as in `Done`. With
     /// it, the groups as they are after that, if the daemon said.
     Chose(u32, Choice, Result<(), String>, Option<Vec<Group>>),
+    /// The daemon's details of the node whose button was pressed; the number as in `Done`.
+    Node(u32, Result<Details, String>),
+    /// What the daemon said to a change of the node with this id: whether it saved it (`Ok(None)`), why
+    /// it will not (`Ok(Some(..))`, in the window's language), or that it could not be asked. With it, the
+    /// node as it is after that, if the daemon said.
+    Saved(u32, String, Result<Option<String>, String>, Option<Details>),
+    /// The daemon removed the node with this id, or could not.
+    Removed(u32, String, Result<(), String>),
 }
 
 struct ShellWidgets {
@@ -284,6 +302,69 @@ impl Shell {
                 .map(|answer| groups::read(&answer))
                 .ok();
             let _ = input.send(Show::Chose(era, choice, answer, after));
+        });
+    }
+
+    /// Asks the daemon for the details of one node, on another thread.
+    fn details(&self, id: String, sender: &ComponentSender<Self>) {
+        let link = Arc::clone(&self.link);
+        let input = sender.input_sender().clone();
+        let era = self.era;
+        thread::spawn(move || {
+            let answer = link
+                .ask(node::COMMAND, node::args(&id), ASK_PATIENCE)
+                .map(|answer| node::read(&answer));
+            let _ = input.send(Show::Node(era, answer));
+        });
+    }
+
+    /// Has the daemon check what the user typed for the node that is shown and save it, on another thread.
+    fn save_node(&mut self, draft: Draft, sender: &ComponentSender<Self>) {
+        let Some(id) = self.node.as_ref().map(|node| node.id.clone()) else {
+            return;
+        };
+        self.node_busy = true;
+        self.node_problem = None;
+        let link = Arc::clone(&self.link);
+        let input = sender.input_sender().clone();
+        let era = self.era;
+        let language = self.language;
+        thread::spawn(move || {
+            let (command, args) = draft.check();
+            let answer = link
+                .ask(command, args, ASK_PATIENCE)
+                .map(|answer| node::problem(language, &answer))
+                .and_then(|problem| match problem {
+                    Some(problem) => Ok(Some(problem)),
+                    None => {
+                        let (command, args) = draft.save(&id);
+                        link.ask(command, args, PRESS_PATIENCE).map(|_| None)
+                    }
+                });
+            // The node as it is after this, before it can be changed again.
+            let after = link
+                .ask(node::COMMAND, node::args(&id), ASK_PATIENCE)
+                .map(|answer| node::read(&answer))
+                .ok();
+            let _ = input.send(Show::Saved(era, id, answer, after));
+        });
+    }
+
+    /// Has the daemon remove the node that is shown, on another thread.
+    fn remove_node(&mut self, sender: &ComponentSender<Self>) {
+        let Some(id) = self.node.as_ref().map(|node| node.id.clone()) else {
+            return;
+        };
+        self.node_busy = true;
+        self.node_problem = None;
+        let link = Arc::clone(&self.link);
+        let input = sender.input_sender().clone();
+        let era = self.era;
+        thread::spawn(move || {
+            let answer = link
+                .ask(node::REMOVE, node::args(&id), PRESS_PATIENCE)
+                .map(|_| ());
+            let _ = input.send(Show::Removed(era, id, answer));
         });
     }
 
@@ -469,6 +550,10 @@ impl SimpleComponent for Shell {
             groups: None,
             grouping: Arc::new(AtomicBool::new(false)),
             choosing: Vec::new(),
+            node: None,
+            node_busy: false,
+            node_problem: None,
+            first_node: launch.node,
             imports: 0,
             era: 0,
         };
@@ -659,6 +744,9 @@ impl SimpleComponent for Shell {
                 self.changing.clear();
                 self.groups = None;
                 self.choosing.clear();
+                self.node = None;
+                self.node_busy = false;
+                self.node_problem = None;
                 self.era = self.era.wrapping_add(1);
                 self.refresh(&sender);
                 self.list(&sender);
@@ -694,8 +782,17 @@ impl SimpleComponent for Shell {
             // An answer to a search the user has typed past: ask for the one that stands now.
             Show::Proxies(query, _) if query != self.query => self.list(&sender),
             Show::Proxies(_, Ok(proxies)) => {
+                let first = proxies
+                    .sections
+                    .iter()
+                    .find_map(|section| section.nodes.first())
+                    .map(|node| node.id.clone());
                 self.proxies = Some(proxies);
                 self.list_trouble = None;
+                if let Some(id) = first.filter(|_| self.first_node) {
+                    self.first_node = false;
+                    self.details(id, &sender);
+                }
             }
             Show::Proxies(_, Err(problem)) => {
                 self.proxies = None;
@@ -717,6 +814,21 @@ impl SimpleComponent for Shell {
                     self.choose(choice, &sender);
                 }
             }
+            Show::Ask(Asked::Details(id)) => {
+                if self.core_answers() {
+                    self.list_failure = None;
+                    self.details(id, &sender);
+                }
+            }
+            Show::Ask(Asked::Node(Wish::Closed)) => {
+                self.node = None;
+                self.node_busy = false;
+                self.node_problem = None;
+            }
+            // One thing at a time is asked of a node.
+            Show::Ask(Asked::Node(_)) if !self.core_answers() || self.node_busy => {}
+            Show::Ask(Asked::Node(Wish::Save(draft))) => self.save_node(draft, &sender),
+            Show::Ask(Asked::Node(Wish::Remove)) => self.remove_node(&sender),
             Show::Ask(asked) => {
                 let shown = self.proxies_shown();
                 let action = match asked {
@@ -766,6 +878,44 @@ impl SimpleComponent for Shell {
                 self.list(&sender);
                 self.refresh(&sender);
             }
+            Show::Node(era, _) if era != self.era => {}
+            Show::Node(_, Ok(details)) => {
+                self.node = Some(details);
+                self.node_busy = false;
+                self.node_problem = None;
+            }
+            Show::Node(_, Err(problem)) => self.list_failure = Some(problem),
+            Show::Saved(era, ..) | Show::Removed(era, ..) if era != self.era => {}
+            // The dialog was closed, or shows another node, since.
+            Show::Saved(_, id, ..) | Show::Removed(_, id, _)
+                if self.node.as_ref().map(|node| node.id.as_str()) != Some(id.as_str()) =>
+            {
+                self.list(&sender);
+                self.refresh(&sender);
+            }
+            Show::Saved(_, _, answer, after) => {
+                self.node_busy = false;
+                self.node_problem = match answer {
+                    Ok(problem) => problem,
+                    Err(problem) => Some(problem),
+                };
+                if after.is_some() {
+                    self.node = after;
+                }
+                // The node's name in the list and on the overview, as it is after this.
+                self.list(&sender);
+                self.refresh(&sender);
+            }
+            Show::Removed(_, _, answer) => {
+                self.node_busy = false;
+                match answer {
+                    // The node is gone, and its dialog with it.
+                    Ok(()) => self.node = None,
+                    Err(problem) => self.node_problem = Some(problem),
+                }
+                self.list(&sender);
+                self.refresh(&sender);
+            }
             Show::Changed(era, ..) if era != self.era => {}
             Show::Changed(_, change, answer, after) => {
                 self.changing.retain(|id| id != change.id());
@@ -804,11 +954,20 @@ impl SimpleComponent for Shell {
             .groups
             .as_ref()
             .map(|groups| groups::shown(self.language, groups, &self.choosing));
+        let node = self.node.as_ref().map(|details| {
+            node::shown(
+                self.language,
+                details,
+                self.node_busy,
+                self.node_problem.as_deref(),
+            )
+        });
         widgets.proxies.show(
             &self.proxies_shown(),
             self.busy.switching,
             subscriptions.as_deref(),
             groups.as_deref(),
+            node.as_ref(),
         );
         if widgets.emptied != self.imports {
             widgets.proxies.clear_link();

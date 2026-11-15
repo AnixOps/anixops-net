@@ -28,6 +28,12 @@ link to the daemon, whose state the foot of the sidebar shows, and the first rea
 - `src/group_list.rs`: the groups' widgets, a dialog over the proxies page opened with the page's "Policy
   groups" button, which is only there when the subscription in use has groups. A group the user chooses in
   opens a second page with its members; the selected one is the member in use.
+- `src/node.rs`: one node's details without GTK: the daemon's `node_details` answer (name, protocol, server,
+  port, whether it can be changed or removed, share link and QR code) turned into what the dialog shows, and
+  what saving and removing ask of the daemon. Whether what was typed can be saved is the daemon's answer too
+  (`check_node`).
+- `src/node_dialog.rs`: the dialog's widgets, opened with the button at the end of a node's row: three boxes,
+  "save" and "remove" (asked first; Enter answers "cancel"), the share link, its QR code and "copy link".
 - `src/window.rs`: the window (relm4 over gtk4-rs and libadwaita). Only built with the `gui` feature, on Linux,
   because it needs the GTK 4 and libadwaita development files. It links `crates/client-window` (the standing
   link to the daemon and the answers to what the daemon asks of the user's session) and none of the engine.
@@ -39,7 +45,8 @@ It needs GTK 4.14 and libadwaita 1.5 or later (Ubuntu 24.04, Debian 13, Fedora 4
 
 Options for tests and screenshots: `--language zh|zh-Hant|en`, `--theme light|dark`, `--page <id>`,
 `--size <width>x<height>`, `--socket <path>` (where the daemon listens, instead of
-`/run/anixops-net/core.sock`), `--show subscriptions|groups` (open the list of subscriptions or of policy groups), and
+`/run/anixops-net/core.sock`), `--show subscriptions|groups|node` (open the list of subscriptions, the policy groups or the first node's
+details), and
 `--screenshot <file.png>`, which draws the window into the file with the
 window's own renderer and quits.
 
@@ -47,7 +54,8 @@ The "Linux native app" job in CI builds and lints the window, draws every page i
 (`.github/scripts/linux-native-screenshots.sh`, uploaded as an artifact) and operates the running window
 through AT-SPI the way a screen reader does (`.github/scripts/linux-native-a11y.py`). The same script then
 runs the window against the real `anixops-netd`: not running, found, connected and disconnected with the
-overview's button, the proxies page (import, search, choosing a node, delay test), the list of subscriptions
+overview's button, the proxies page (import, search, choosing a node, delay test), a node's details (shown,
+a port of 0 refused, another name, server and port saved, removed after asking), the list of subscriptions
 (a subscription served by the script itself is listed with its use and expiry, updated, renamed and removed),
 the policy groups (a subscription with rules and groups is imported, its groups are listed and a member is chosen),
 stopped, found again.

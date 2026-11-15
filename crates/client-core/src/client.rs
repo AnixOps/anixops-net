@@ -1076,6 +1076,24 @@ fn handler(name: &str) -> Option<Handler> {
                     .ok_or("this platform does not read the Wi-Fi network")?,
             )
         },
+        // What the windows' node dialog shows: name, server and port, whether they can be changed or the
+        // node removed, and the node as a share link and a QR code.
+        "node_details" => |client, args| {
+            let NodeId { node_id } = parse(args)?;
+            json(client.backend().node_details(&node_id)?)
+        },
+        // Whether a name, server and port can be saved for a node, before `edit_node` is asked:
+        // `{ "problem": null | "server.empty" | "server.invalid" | "port.invalid" }`.
+        "check_node" => |_, args| {
+            let CheckNode { name, server, port } = parse(args)?;
+            let problem = match node_edits::check(&name, &server, &port) {
+                Ok(_) => None,
+                Err(node_edits::SERVER_EMPTY) => Some("server.empty"),
+                Err(node_edits::SERVER_INVALID) => Some("server.invalid"),
+                Err(_) => Some("port.invalid"),
+            };
+            Ok(serde_json::json!({ "problem": problem }))
+        },
         "node_form" => |client, args| {
             let NodeId { node_id } = parse(args)?;
             json(client.backend().node_form(&node_id)?)
@@ -1393,6 +1411,13 @@ struct Redirects {
 #[derive(Deserialize)]
 struct Ask {
     ask: bool,
+}
+
+#[derive(Deserialize)]
+struct CheckNode {
+    name: String,
+    server: String,
+    port: String,
 }
 
 #[derive(Deserialize)]
@@ -1787,6 +1812,22 @@ mod tests {
             client.invoke("groups", serde_json::json!({})).unwrap(),
             serde_json::json!({ "groups": [] })
         );
+        for (server, port, problem) in [
+            ("hk.example", "443", None),
+            ("", "443", Some("server.empty")),
+            ("hk example", "443", Some("server.invalid")),
+            ("hk.example", "0", Some("port.invalid")),
+        ] {
+            assert_eq!(
+                client
+                    .invoke(
+                        "check_node",
+                        serde_json::json!({ "name": "HK", "server": server, "port": port })
+                    )
+                    .unwrap(),
+                serde_json::json!({ "problem": problem })
+            );
+        }
         assert_eq!(
             client
                 .invoke("test_proxies", serde_json::json!({}))

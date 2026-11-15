@@ -26,6 +26,36 @@ pub fn qr_svg(text: &str) -> Result<String, String> {
         .build())
 }
 
+/// Longest text [`qr_rows`] makes a code of: a share link with its keys still fits and can still be read
+/// off a screen.
+const MAX_QR_ROWS_TEXT: usize = 1024;
+
+/// A QR code of `text` as its rows from the top, one character per module (`#` dark, `.` light), without
+/// the quiet zone, for a window that draws it itself; or why there is none.
+pub fn qr_rows(text: &str) -> Result<Vec<String>, String> {
+    if text.is_empty() || text.len() > MAX_QR_ROWS_TEXT {
+        return Err("the QR code text is empty or too long".to_string());
+    }
+    let code = QrCode::with_error_correction_level(text.as_bytes(), EcLevel::M)
+        .map_err(|error| error.to_string())?;
+    let width = code.width();
+    Ok(code
+        .to_colors()
+        .chunks(width)
+        .map(|row| {
+            row.iter()
+                .map(|module| {
+                    if *module == qrcode::Color::Dark {
+                        '#'
+                    } else {
+                        '.'
+                    }
+                })
+                .collect()
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -37,5 +67,20 @@ mod tests {
         assert!(svg.contains("#000000"));
         assert!(qr_svg("").is_err());
         assert!(qr_svg(&"x".repeat(MAX_QR_TEXT + 1)).is_err());
+    }
+
+    #[test]
+    fn qr_rows_are_a_square_with_the_finder_pattern_in_its_corner() {
+        let rows = qr_rows("ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ@203.0.113.9:11111#Test").unwrap();
+        assert!(rows.len() >= 21);
+        assert!(rows.iter().all(|row| row.chars().count() == rows.len()));
+        assert!(rows
+            .iter()
+            .all(|row| row.chars().all(|c| c == '#' || c == '.')));
+        // The finder pattern: a dark bar of seven, then a light module.
+        assert!(rows[0].starts_with("#######."));
+        assert!(rows[1].starts_with("#.....#."));
+        assert!(qr_rows("").is_err());
+        assert!(qr_rows(&"x".repeat(MAX_QR_ROWS_TEXT + 1)).is_err());
     }
 }
