@@ -93,10 +93,8 @@ impl Launch {
                         launch.size = Some(size);
                     }
                 }
-                "--screenshot" => {
-                    if !value.is_empty() {
-                        launch.screenshot = Some(PathBuf::from(value));
-                    }
+                "--screenshot" if !value.is_empty() => {
+                    launch.screenshot = Some(PathBuf::from(value));
                 }
                 _ => {}
             }
