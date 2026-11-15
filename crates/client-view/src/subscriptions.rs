@@ -55,7 +55,7 @@ fn row(subscription: &Value, now: u64) -> Value {
 }
 
 /// The day (UTC) of a time in Unix seconds, as `YYYY-MM-DD`.
-fn date(seconds: u64) -> String {
+pub(crate) fn date(seconds: u64) -> String {
     // Days since 1970-01-01 to a civil date (Howard Hinnant's algorithm), for years 1970 and later.
     let z = seconds / 86_400 + 719_468;
     let era = z / 146_097;

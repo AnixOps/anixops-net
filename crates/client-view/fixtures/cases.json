@@ -3386,5 +3386,813 @@
   "answer": {
    "subscriptions": []
   }
+ },
+ {
+  "command": "view.logs",
+  "args": {
+   "entries": [
+    {
+     "timeMs": 1,
+     "module": "app",
+     "level": "info",
+     "message": "Connected through HK"
+    },
+    {
+     "timeMs": 2,
+     "module": "gui",
+     "level": "warn",
+     "message": "slow start"
+    },
+    {
+     "timeMs": 3,
+     "module": "app",
+     "level": "error",
+     "message": "subscription update failed"
+    }
+   ],
+   "level": "all",
+   "module": "",
+   "query": ""
+  },
+  "answer": {
+   "modules": [
+    "app",
+    "gui"
+   ],
+   "shown": [
+    {
+     "timeMs": 3,
+     "module": "app",
+     "level": "error",
+     "message": "subscription update failed"
+    },
+    {
+     "timeMs": 2,
+     "module": "gui",
+     "level": "warn",
+     "message": "slow start"
+    },
+    {
+     "timeMs": 1,
+     "module": "app",
+     "level": "info",
+     "message": "Connected through HK"
+    }
+   ],
+   "text": "1970-01-01T00:00:00.001Z INFO [app] Connected through HK\n1970-01-01T00:00:00.002Z WARN [gui] slow start\n1970-01-01T00:00:00.003Z ERROR [app] subscription update failed"
+  }
+ },
+ {
+  "command": "view.logs",
+  "args": {
+   "entries": [
+    {
+     "timeMs": 1,
+     "module": "app",
+     "level": "info",
+     "message": "Connected through HK"
+    },
+    {
+     "timeMs": 2,
+     "module": "gui",
+     "level": "warn",
+     "message": "slow start"
+    },
+    {
+     "timeMs": 3,
+     "module": "app",
+     "level": "error",
+     "message": "subscription update failed"
+    }
+   ],
+   "level": "warn",
+   "module": "",
+   "query": ""
+  },
+  "answer": {
+   "modules": [
+    "app",
+    "gui"
+   ],
+   "shown": [
+    {
+     "timeMs": 3,
+     "module": "app",
+     "level": "error",
+     "message": "subscription update failed"
+    },
+    {
+     "timeMs": 2,
+     "module": "gui",
+     "level": "warn",
+     "message": "slow start"
+    }
+   ],
+   "text": "1970-01-01T00:00:00.002Z WARN [gui] slow start\n1970-01-01T00:00:00.003Z ERROR [app] subscription update failed"
+  }
+ },
+ {
+  "command": "view.logs",
+  "args": {
+   "entries": [
+    {
+     "timeMs": 1,
+     "module": "app",
+     "level": "info",
+     "message": "Connected through HK"
+    },
+    {
+     "timeMs": 2,
+     "module": "gui",
+     "level": "warn",
+     "message": "slow start"
+    },
+    {
+     "timeMs": 3,
+     "module": "app",
+     "level": "error",
+     "message": "subscription update failed"
+    }
+   ],
+   "level": "error",
+   "module": "",
+   "query": ""
+  },
+  "answer": {
+   "modules": [
+    "app",
+    "gui"
+   ],
+   "shown": [
+    {
+     "timeMs": 3,
+     "module": "app",
+     "level": "error",
+     "message": "subscription update failed"
+    }
+   ],
+   "text": "1970-01-01T00:00:00.003Z ERROR [app] subscription update failed"
+  }
+ },
+ {
+  "command": "view.logs",
+  "args": {
+   "entries": [
+    {
+     "timeMs": 1,
+     "module": "app",
+     "level": "info",
+     "message": "Connected through HK"
+    },
+    {
+     "timeMs": 2,
+     "module": "gui",
+     "level": "warn",
+     "message": "slow start"
+    },
+    {
+     "timeMs": 3,
+     "module": "app",
+     "level": "error",
+     "message": "subscription update failed"
+    }
+   ],
+   "level": "all",
+   "module": "app",
+   "query": ""
+  },
+  "answer": {
+   "modules": [
+    "app",
+    "gui"
+   ],
+   "shown": [
+    {
+     "timeMs": 3,
+     "module": "app",
+     "level": "error",
+     "message": "subscription update failed"
+    },
+    {
+     "timeMs": 1,
+     "module": "app",
+     "level": "info",
+     "message": "Connected through HK"
+    }
+   ],
+   "text": "1970-01-01T00:00:00.001Z INFO [app] Connected through HK\n1970-01-01T00:00:00.003Z ERROR [app] subscription update failed"
+  }
+ },
+ {
+  "command": "view.logs",
+  "args": {
+   "entries": [
+    {
+     "timeMs": 1,
+     "module": "app",
+     "level": "info",
+     "message": "Connected through HK"
+    },
+    {
+     "timeMs": 2,
+     "module": "gui",
+     "level": "warn",
+     "message": "slow start"
+    },
+    {
+     "timeMs": 3,
+     "module": "app",
+     "level": "error",
+     "message": "subscription update failed"
+    }
+   ],
+   "level": "all",
+   "module": "",
+   "query": " hk "
+  },
+  "answer": {
+   "modules": [
+    "app",
+    "gui"
+   ],
+   "shown": [
+    {
+     "timeMs": 1,
+     "module": "app",
+     "level": "info",
+     "message": "Connected through HK"
+    }
+   ],
+   "text": "1970-01-01T00:00:00.001Z INFO [app] Connected through HK"
+  }
+ },
+ {
+  "command": "view.logs",
+  "args": {
+   "entries": [
+    {
+     "timeMs": 0,
+     "module": "app",
+     "level": "info",
+     "message": "x"
+    }
+   ]
+  },
+  "answer": {
+   "modules": [
+    "app"
+   ],
+   "shown": [
+    {
+     "timeMs": 0,
+     "module": "app",
+     "level": "info",
+     "message": "x"
+    }
+   ],
+   "text": "- INFO [app] x"
+  }
+ },
+ {
+  "command": "view.logs",
+  "args": {
+   "entries": []
+  },
+  "answer": {
+   "modules": [],
+   "shown": [],
+   "text": ""
+  }
+ },
+ {
+  "command": "view.traffic_stats",
+  "args": {
+   "hours": [
+    {
+     "start": 1794477600,
+     "upload": 100,
+     "download": 100,
+     "hosts": {
+      "old": 200
+     },
+     "policies": {}
+    },
+    {
+     "start": 1794589200,
+     "upload": 10,
+     "download": 20,
+     "hosts": {
+      "a": 20,
+      "b": 10
+     },
+     "policies": {}
+    },
+    {
+     "start": 1794596400,
+     "upload": 5,
+     "download": 5,
+     "hosts": {
+      "b": 10
+     },
+     "policies": {
+      "Proxy": 10
+     }
+    }
+   ],
+   "period": "today",
+   "now": 1794641400,
+   "offset": 28800
+  },
+  "answer": {
+   "start": 1794585600,
+   "upload": 15,
+   "download": 25,
+   "bars": [
+    {
+     "start": 1794585600,
+     "bytes": 0
+    },
+    {
+     "start": 1794589200,
+     "bytes": 30
+    },
+    {
+     "start": 1794592800,
+     "bytes": 0
+    },
+    {
+     "start": 1794596400,
+     "bytes": 10
+    },
+    {
+     "start": 1794600000,
+     "bytes": 0
+    },
+    {
+     "start": 1794603600,
+     "bytes": 0
+    },
+    {
+     "start": 1794607200,
+     "bytes": 0
+    },
+    {
+     "start": 1794610800,
+     "bytes": 0
+    },
+    {
+     "start": 1794614400,
+     "bytes": 0
+    },
+    {
+     "start": 1794618000,
+     "bytes": 0
+    },
+    {
+     "start": 1794621600,
+     "bytes": 0
+    },
+    {
+     "start": 1794625200,
+     "bytes": 0
+    },
+    {
+     "start": 1794628800,
+     "bytes": 0
+    },
+    {
+     "start": 1794632400,
+     "bytes": 0
+    },
+    {
+     "start": 1794636000,
+     "bytes": 0
+    },
+    {
+     "start": 1794639600,
+     "bytes": 0
+    },
+    {
+     "start": 1794643200,
+     "bytes": 0
+    },
+    {
+     "start": 1794646800,
+     "bytes": 0
+    },
+    {
+     "start": 1794650400,
+     "bytes": 0
+    },
+    {
+     "start": 1794654000,
+     "bytes": 0
+    },
+    {
+     "start": 1794657600,
+     "bytes": 0
+    },
+    {
+     "start": 1794661200,
+     "bytes": 0
+    },
+    {
+     "start": 1794664800,
+     "bytes": 0
+    },
+    {
+     "start": 1794668400,
+     "bytes": 0
+    }
+   ],
+   "hosts": [
+    {
+     "name": "a",
+     "bytes": 20
+    },
+    {
+     "name": "b",
+     "bytes": 20
+    }
+   ],
+   "policies": [
+    {
+     "name": "Proxy",
+     "bytes": 10
+    }
+   ]
+  }
+ },
+ {
+  "command": "view.traffic_stats",
+  "args": {
+   "hours": [
+    {
+     "start": 1794589200,
+     "upload": 10,
+     "download": 20,
+     "hosts": {},
+     "policies": {}
+    },
+    {
+     "start": 1794477600,
+     "upload": 1,
+     "download": 1,
+     "hosts": {},
+     "policies": {}
+    }
+   ],
+   "period": "week",
+   "now": 1794641400,
+   "offset": 28800
+  },
+  "answer": {
+   "start": 1794067200,
+   "upload": 11,
+   "download": 21,
+   "bars": [
+    {
+     "start": 1794067200,
+     "bytes": 0
+    },
+    {
+     "start": 1794153600,
+     "bytes": 0
+    },
+    {
+     "start": 1794240000,
+     "bytes": 0
+    },
+    {
+     "start": 1794326400,
+     "bytes": 0
+    },
+    {
+     "start": 1794412800,
+     "bytes": 2
+    },
+    {
+     "start": 1794499200,
+     "bytes": 0
+    },
+    {
+     "start": 1794585600,
+     "bytes": 30
+    }
+   ],
+   "hosts": [],
+   "policies": []
+  }
+ },
+ {
+  "command": "view.traffic_stats",
+  "args": {
+   "hours": [],
+   "period": "today",
+   "now": 1794641400,
+   "offset": -18000
+  },
+  "answer": {
+   "start": 1794632400,
+   "upload": 0,
+   "download": 0,
+   "bars": [
+    {
+     "start": 1794632400,
+     "bytes": 0
+    },
+    {
+     "start": 1794636000,
+     "bytes": 0
+    },
+    {
+     "start": 1794639600,
+     "bytes": 0
+    },
+    {
+     "start": 1794643200,
+     "bytes": 0
+    },
+    {
+     "start": 1794646800,
+     "bytes": 0
+    },
+    {
+     "start": 1794650400,
+     "bytes": 0
+    },
+    {
+     "start": 1794654000,
+     "bytes": 0
+    },
+    {
+     "start": 1794657600,
+     "bytes": 0
+    },
+    {
+     "start": 1794661200,
+     "bytes": 0
+    },
+    {
+     "start": 1794664800,
+     "bytes": 0
+    },
+    {
+     "start": 1794668400,
+     "bytes": 0
+    },
+    {
+     "start": 1794672000,
+     "bytes": 0
+    },
+    {
+     "start": 1794675600,
+     "bytes": 0
+    },
+    {
+     "start": 1794679200,
+     "bytes": 0
+    },
+    {
+     "start": 1794682800,
+     "bytes": 0
+    },
+    {
+     "start": 1794686400,
+     "bytes": 0
+    },
+    {
+     "start": 1794690000,
+     "bytes": 0
+    },
+    {
+     "start": 1794693600,
+     "bytes": 0
+    },
+    {
+     "start": 1794697200,
+     "bytes": 0
+    },
+    {
+     "start": 1794700800,
+     "bytes": 0
+    },
+    {
+     "start": 1794704400,
+     "bytes": 0
+    },
+    {
+     "start": 1794708000,
+     "bytes": 0
+    },
+    {
+     "start": 1794711600,
+     "bytes": 0
+    },
+    {
+     "start": 1794715200,
+     "bytes": 0
+    }
+   ],
+   "hosts": [],
+   "policies": []
+  }
+ },
+ {
+  "command": "view.decrypt_hosts",
+  "args": {
+   "host": "api.example.com",
+   "hosts": []
+  },
+  "answer": {
+   "decryptable": true,
+   "host": "api.example.com",
+   "covered": false
+  }
+ },
+ {
+  "command": "view.decrypt_hosts",
+  "args": {
+   "host": "API.example.com:443",
+   "hosts": []
+  },
+  "answer": {
+   "decryptable": true,
+   "host": "api.example.com",
+   "covered": false
+  }
+ },
+ {
+  "command": "view.decrypt_hosts",
+  "args": {
+   "host": "1.2.3.4",
+   "hosts": []
+  },
+  "answer": {
+   "decryptable": false,
+   "host": null,
+   "covered": false
+  }
+ },
+ {
+  "command": "view.decrypt_hosts",
+  "args": {
+   "host": "[2001:db8::1]",
+   "hosts": []
+  },
+  "answer": {
+   "decryptable": false,
+   "host": null,
+   "covered": false
+  }
+ },
+ {
+  "command": "view.decrypt_hosts",
+  "args": {
+   "host": "localhost",
+   "hosts": []
+  },
+  "answer": {
+   "decryptable": false,
+   "host": null,
+   "covered": false
+  }
+ },
+ {
+  "command": "view.decrypt_hosts",
+  "args": {
+   "host": "",
+   "hosts": []
+  },
+  "answer": {
+   "decryptable": false,
+   "host": null,
+   "covered": false
+  }
+ },
+ {
+  "command": "view.decrypt_hosts",
+  "args": {
+   "host": "example.com.",
+   "hosts": []
+  },
+  "answer": {
+   "decryptable": true,
+   "host": "example.com",
+   "covered": false
+  }
+ },
+ {
+  "command": "view.decrypt_hosts",
+  "args": {
+   "host": "-bad.example.com",
+   "hosts": []
+  },
+  "answer": {
+   "decryptable": false,
+   "host": null,
+   "covered": false
+  }
+ },
+ {
+  "command": "view.decrypt_hosts",
+  "args": {
+   "host": "api.example.com:443",
+   "hosts": [
+    "api.example.com"
+   ]
+  },
+  "answer": {
+   "decryptable": true,
+   "host": "api.example.com",
+   "covered": true
+  }
+ },
+ {
+  "command": "view.decrypt_hosts",
+  "args": {
+   "host": "img.cdn.example.com",
+   "hosts": [
+    "*.cdn.example.com"
+   ]
+  },
+  "answer": {
+   "decryptable": true,
+   "host": "img.cdn.example.com",
+   "covered": true
+  }
+ },
+ {
+  "command": "view.decrypt_hosts",
+  "args": {
+   "host": "cdn.example.com",
+   "hosts": [
+    "*.cdn.example.com"
+   ]
+  },
+  "answer": {
+   "decryptable": true,
+   "host": "cdn.example.com",
+   "covered": false
+  }
+ },
+ {
+  "command": "view.decrypt_hosts",
+  "args": {
+   "host": "other.com",
+   "hosts": [
+    "api.example.com"
+   ]
+  },
+  "answer": {
+   "decryptable": true,
+   "host": "other.com",
+   "covered": false
+  }
+ },
+ {
+  "command": "view.decrypt_setup",
+  "args": {
+   "connected": true,
+   "trusted": true,
+   "decrypting": true,
+   "domains": 2,
+   "capturing": true
+  },
+  "answer": {
+   "steps": []
+  }
+ },
+ {
+  "command": "view.decrypt_setup",
+  "args": {
+   "connected": true,
+   "trusted": null,
+   "decrypting": true,
+   "domains": 2,
+   "capturing": true
+  },
+  "answer": {
+   "steps": []
+  }
+ },
+ {
+  "command": "view.decrypt_setup",
+  "args": {
+   "connected": false,
+   "trusted": false,
+   "decrypting": false,
+   "domains": 0,
+   "capturing": false
+  },
+  "answer": {
+   "steps": [
+    "connect",
+    "certificate",
+    "decryption",
+    "domains",
+    "capture"
+   ]
+  }
  }
 ]
