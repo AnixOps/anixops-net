@@ -5,11 +5,17 @@
 //!
 //! `PROXY` is the selected node, or with subscription rules the subscription's first policy group. Without any node
 //! (debug mode's direct egress) `PROXY` lines go direct.
+//!
+//! Rule lists the user imports are `RULE-SET,<https URL>,<policy>` lines: the engine downloads each list itself,
+//! through `PROXY`, once a day. `GEOSITE,cn` and `GEOIP,CN` use the built-in public lists ([`crate::catalog`]) unless
+//! the profile has its own set of that name; other categories need a set of that name in the subscription.
 
 use std::fs;
 use std::path::Path;
 
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
+
+use crate::catalog;
 
 /// The most lines kept, as on iOS and macOS.
 pub const MAX_RULES: usize = 1000;
@@ -17,8 +23,12 @@ pub const MAX_RULES: usize = 1000;
 /// Longest text accepted, so a pasted file cannot grow the envelope without bound.
 pub const MAX_TEXT_BYTES: usize = 256 * 1024;
 
-/// The rule types a line can use. Rule sets, `GEOSITE` and `GEOIP` need lists the desktop modes do not download.
-pub const KINDS: [&str; 11] = [
+/// The most rule lists the user can import. The engine takes 32 rule sets in all, and the built-in categories and a
+/// subscription's own sets need some of them (as on iOS and macOS).
+pub const MAX_RULE_SETS: usize = 20;
+
+/// The rule types a line can use.
+pub const KINDS: [&str; 14] = [
     "DOMAIN-SUFFIX",
     "DOMAIN",
     "DOMAIN-KEYWORD",
@@ -30,6 +40,9 @@ pub const KINDS: [&str; 11] = [
     "USER-AGENT",
     "URL-REGEX",
     "PROTOCOL",
+    "RULE-SET",
+    "GEOSITE",
+    "GEOIP",
 ];
 
 /// Where a line sends traffic. `PROXY` is replaced when the envelope is made.
@@ -50,6 +63,8 @@ impl LineError {
             "policy" => "must end with PROXY, DIRECT or REJECT",
             "option" => "has an option other than no-resolve",
             "too_many" => "is past the limit of 1000 rules",
+            "url" => "must name an https:// rule list",
+            "too_many_sets" => "is past the limit of 20 rule lists",
             _ => "is not a rule",
         };
         format!("line {} {reason}", self.line + 1)
@@ -60,6 +75,7 @@ impl LineError {
 /// spelled `DST-PORT`, a group name as policy refused rather than guessed.
 pub fn parse(text: &str) -> Result<Vec<String>, LineError> {
     let mut lines = Vec::new();
+    let mut urls: Vec<String> = Vec::new();
     for (index, raw) in text.lines().enumerate() {
         let line = raw.trim();
         if line.is_empty()
@@ -100,9 +116,25 @@ pub fn parse(text: &str) -> Result<Vec<String>, LineError> {
         if !POLICIES.contains(&policy.as_str()) {
             return Err(error("policy"));
         }
-        let value = rest.join(",");
+        let mut value = rest.join(",");
         if value.is_empty() {
             return Err(error("empty"));
+        }
+        match kind.as_str() {
+            "RULE-SET" => {
+                if !value.starts_with("https://") || value.contains(char::is_whitespace) {
+                    return Err(error("url"));
+                }
+                if !urls.contains(&value) {
+                    if urls.len() == MAX_RULE_SETS {
+                        return Err(error("too_many_sets"));
+                    }
+                    urls.push(value.clone());
+                }
+            }
+            "GEOSITE" => value = value.to_ascii_lowercase(),
+            "GEOIP" => value = value.to_ascii_uppercase(),
+            _ => {}
         }
         if value.contains(',') && !matches!(kind.as_str(), "URL-REGEX" | "USER-AGENT") {
             return Err(error("option"));
@@ -117,10 +149,13 @@ pub fn parse(text: &str) -> Result<Vec<String>, LineError> {
 }
 
 /// `envelope` with `lines` (from [`parse`]) in front of its rules. A single-node envelope becomes a routing one so
-/// the lines have somewhere to go. No lines leave the envelope as it is.
+/// the lines have somewhere to go. Each imported list becomes a rule set `local-<n>` the engine downloads through
+/// `PROXY`, and the built-in category lists are added for the rules that name them. A `GEOSITE` line whose category
+/// has no list is left out, since the engine refuses the whole profile for it (a missing `GEOIP` list only never
+/// matches). No lines leave a single-node envelope as it is.
 pub fn apply(envelope: &str, lines: &[String]) -> Result<String, String> {
     if lines.is_empty() {
-        return Ok(envelope.to_string());
+        return with_category_lists(envelope);
     }
     let mut value: Value = serde_json::from_str(envelope).map_err(|error| error.to_string())?;
     let object = value
@@ -143,16 +178,88 @@ pub fn apply(envelope: &str, lines: &[String]) -> Result<String, String> {
         .and_then(Value::as_object_mut)
         .ok_or("the envelope's routing must be a JSON object")?;
     let proxy = proxy_target(routing);
-    let mut rules: Vec<Value> = lines
-        .iter()
-        .map(|line| Value::String(with_target(line, proxy.as_deref())))
-        .collect();
+    let had_sets = routing.contains_key("rule_sets");
+    let mut sets = match routing.remove("rule_sets") {
+        Some(Value::Object(sets)) => sets,
+        None | Some(Value::Null) => Map::new(),
+        Some(_) => return Err("the envelope's rule sets must be a JSON object".to_string()),
+    };
+    let mut urls: Vec<String> = Vec::new();
+    let mut rules: Vec<Value> = Vec::new();
+    for line in lines {
+        let mut line = with_target(line, proxy.as_deref());
+        // A list URL holds no comma ([`parse`] refuses one), so the rest of the line follows the first comma.
+        if let Some((url, tail)) = line
+            .strip_prefix("RULE-SET,")
+            .filter(|rest| rest.starts_with("https://"))
+            .and_then(|rest| rest.split_once(','))
+            .map(|(url, tail)| (url.to_string(), tail.to_string()))
+        {
+            let index = match urls.iter().position(|known| *known == url) {
+                Some(index) => index,
+                None => {
+                    urls.push(url.clone());
+                    urls.len() - 1
+                }
+            };
+            let name = format!("local-{}", index + 1);
+            let mut set = json!({ "url": url });
+            if let Some(proxy) = proxy.as_deref() {
+                set["via"] = Value::String(proxy.to_string());
+            }
+            sets.insert(name.clone(), set);
+            line = format!("RULE-SET,{name},{tail}");
+        }
+        rules.push(Value::String(line));
+    }
     let existing = routing
         .get("rules")
         .and_then(Value::as_array)
         .ok_or("the envelope's routing has no rules")?;
     rules.extend(existing.iter().cloned());
+    catalog::fill(&rules, &mut sets);
+    let user = lines.len();
+    let mut index = 0;
+    rules.retain(|rule| {
+        index += 1;
+        index > user
+            || !rule.as_str().is_some_and(|rule| {
+                rule.starts_with("GEOSITE,")
+                    && catalog::referenced_names(rule)
+                        .iter()
+                        .any(|name| !sets.contains_key(name))
+            })
+    });
     routing.insert("rules".to_string(), Value::Array(rules));
+    if had_sets || !sets.is_empty() {
+        routing.insert("rule_sets".to_string(), Value::Object(sets));
+    }
+    Ok(value.to_string())
+}
+
+/// A routing `envelope` with the built-in category lists added for the rules that name them; any other envelope as
+/// it is.
+fn with_category_lists(envelope: &str) -> Result<String, String> {
+    let Ok(mut value) = serde_json::from_str::<Value>(envelope) else {
+        return Ok(envelope.to_string());
+    };
+    let Some(routing) = value.get_mut("routing").and_then(Value::as_object_mut) else {
+        return Ok(envelope.to_string());
+    };
+    let Some(rules) = routing.get("rules").and_then(Value::as_array).cloned() else {
+        return Ok(envelope.to_string());
+    };
+    let mut sets = match routing.get("rule_sets") {
+        Some(Value::Object(sets)) => sets.clone(),
+        None | Some(Value::Null) => Map::new(),
+        Some(_) => return Ok(envelope.to_string()),
+    };
+    let before = sets.len();
+    catalog::fill(&rules, &mut sets);
+    if sets.len() == before {
+        return Ok(envelope.to_string());
+    }
+    routing.insert("rule_sets".to_string(), Value::Object(sets));
     Ok(value.to_string())
 }
 
@@ -267,7 +374,7 @@ mod tests {
     #[test]
     fn refuses_bad_lines_with_their_number() {
         assert_eq!(
-            parse("DOMAIN,a.test,PROXY\nGEOSITE,cn,DIRECT").unwrap_err(),
+            parse("DOMAIN,a.test,PROXY\nSRC-IP,10.0.0.1,DIRECT").unwrap_err(),
             LineError {
                 line: 1,
                 code: "kind"
@@ -279,12 +386,17 @@ mod tests {
         );
         assert_eq!(parse("DOMAIN,a.test").unwrap_err().code, "empty");
         assert_eq!(parse("DOMAIN,a,b,PROXY").unwrap_err().code, "option");
+        assert_eq!(parse("RULE-SET,ads,PROXY").unwrap_err().code, "url");
         assert_eq!(
-            parse("RULE-SET,https://x.test/l.list,PROXY")
+            parse("RULE-SET,http://x.test/l.list,PROXY")
                 .unwrap_err()
                 .code,
-            "kind"
+            "url"
         );
+        let lists: String = (0..=MAX_RULE_SETS)
+            .map(|n| format!("RULE-SET,https://x.test/{n}.list,REJECT\n"))
+            .collect();
+        assert_eq!(parse(&lists).unwrap_err().code, "too_many_sets");
         let many = "DOMAIN,a.test,DIRECT\n".repeat(MAX_RULES + 1);
         assert_eq!(
             parse(&many).unwrap_err(),
@@ -333,9 +445,9 @@ mod tests {
 
     #[test]
     fn a_mode_envelope_keeps_its_proxy_and_direct_egress_has_none() {
-        let gfw = r#"{"routing":{"outbounds":{"proxy":{"type":"trojan"}},"rules":["RULE-SET,gfw,proxy","FINAL,DIRECT"],"rule_sets":{}}}"#;
+        let routed = r#"{"routing":{"outbounds":{"proxy":{"type":"trojan"}},"rules":["RULE-SET,own,proxy","FINAL,DIRECT"],"rule_sets":{}}}"#;
         let lines = parse("DOMAIN,a.test,PROXY").unwrap();
-        let value: Value = serde_json::from_str(&apply(gfw, &lines).unwrap()).unwrap();
+        let value: Value = serde_json::from_str(&apply(routed, &lines).unwrap()).unwrap();
         assert_eq!(value["routing"]["rules"][0], "DOMAIN,a.test,proxy");
 
         let direct = r#"{"outbound":{"type":"direct"}}"#;
@@ -349,6 +461,69 @@ mod tests {
                 "FINAL,DIRECT"
             ])
         );
+    }
+
+    #[test]
+    fn imported_lists_become_rule_sets_downloaded_through_proxy() {
+        let envelope = r#"{"routing":{"outbounds":{"n1":{"type":"vless"}},"groups":[{"id":"Proxy","type":"select","members":["n1"]}],"rules":["FINAL,Proxy"]}}"#;
+        let text = "RULE-SET,https://lists.test/ads.list,REJECT\nrule-set,https://lists.test/media.list,PROXY\nRULE-SET,https://lists.test/ads.list,REJECT";
+        let lines = parse(text).unwrap();
+        assert_eq!(lines[0], "RULE-SET,https://lists.test/ads.list,REJECT");
+        let value: Value = serde_json::from_str(&apply(envelope, &lines).unwrap()).unwrap();
+        assert_eq!(
+            value["routing"]["rules"],
+            json!([
+                "RULE-SET,local-1,REJECT",
+                "RULE-SET,local-2,Proxy",
+                "RULE-SET,local-1,REJECT",
+                "FINAL,Proxy"
+            ])
+        );
+        assert_eq!(
+            value["routing"]["rule_sets"],
+            json!({
+                "local-1": { "url": "https://lists.test/ads.list", "via": "Proxy" },
+                "local-2": { "url": "https://lists.test/media.list", "via": "Proxy" }
+            })
+        );
+
+        // Without a node the lists download directly.
+        let direct = r#"{"outbound":{"type":"direct"}}"#;
+        let value: Value = serde_json::from_str(&apply(direct, &lines).unwrap()).unwrap();
+        assert!(value["routing"]["rule_sets"]["local-1"]
+            .get("via")
+            .is_none());
+    }
+
+    #[test]
+    fn only_the_cn_categories_are_built_in() {
+        let envelope = r#"{"outbound":{"type":"trojan"}}"#;
+        let lines =
+            parse("geosite,CN,DIRECT\nGEOIP,cn,DIRECT,no-resolve\nGEOSITE,google,PROXY").unwrap();
+        let value: Value = serde_json::from_str(&apply(envelope, &lines).unwrap()).unwrap();
+        assert_eq!(
+            value["routing"]["rules"],
+            json!([
+                "GEOSITE,cn,DIRECT",
+                "GEOIP,CN,DIRECT,no-resolve",
+                "FINAL,proxy"
+            ])
+        );
+        let sets = value["routing"]["rule_sets"].as_object().unwrap();
+        assert_eq!(sets.len(), 2);
+        assert!(sets.contains_key("geosite-cn") && sets.contains_key("geoip-cn"));
+
+        // A subscription's own set of that name wins, and its rules get the built-in lists too.
+        let own = r#"{"routing":{"outbounds":{"proxy":{"type":"trojan"}},"rules":["GEOIP,CN,DIRECT","GEOSITE,google,proxy","FINAL,proxy"],"rule_sets":{"geosite-google":{"url":"https://lists.test/google.txt"}}}}"#;
+        let value: Value = serde_json::from_str(&apply(own, &[]).unwrap()).unwrap();
+        assert_eq!(
+            value["routing"]["rule_sets"]["geosite-google"]["url"],
+            "https://lists.test/google.txt"
+        );
+        assert!(value["routing"]["rule_sets"]["geoip-cn"]["url"].is_string());
+        let lines = parse("GEOSITE,google,PROXY").unwrap();
+        let value: Value = serde_json::from_str(&apply(own, &lines).unwrap()).unwrap();
+        assert_eq!(value["routing"]["rules"][0], "GEOSITE,google,proxy");
     }
 
     #[test]

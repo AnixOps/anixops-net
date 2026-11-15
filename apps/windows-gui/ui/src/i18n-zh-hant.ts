@@ -517,7 +517,7 @@ export const traditional: Record<string, string> = {
   "删除会话": "刪除會話",
   "确认删除会话 {name}": "確認刪除會話 {name}",
   "我的规则": "我的規則",
-  "每行一条，从上到下匹配，排在分流模式和订阅规则前面。策略写 PROXY（当前节点或订阅的第一个策略组）、DIRECT 或 REJECT。支持 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD、DOMAIN-WILDCARD、IP-CIDR、IP-CIDR6、DST-PORT、PROCESS-NAME、USER-AGENT、URL-REGEX、PROTOCOL；# 开头的行是注释。": "每行一條，從上到下比對，排在分流模式和訂閱規則前面。策略寫 PROXY（目前節點或訂閱的第一個策略群組）、DIRECT 或 REJECT。支援 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD、DOMAIN-WILDCARD、IP-CIDR、IP-CIDR6、DST-PORT、PROCESS-NAME、USER-AGENT、URL-REGEX、PROTOCOL；# 開頭的行是註解。",
+  "每行一条，从上到下匹配，排在分流模式和订阅规则前面。策略写 PROXY（当前节点或订阅的第一个策略组）、DIRECT 或 REJECT。支持 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD、DOMAIN-WILDCARD、IP-CIDR、IP-CIDR6、DST-PORT、PROCESS-NAME、USER-AGENT、URL-REGEX、PROTOCOL、GEOIP、GEOSITE；# 开头的行是注释。导入规则集写 RULE-SET,https://规则列表地址,策略，经 PROXY 每天下载一次；GEOSITE,cn 和 GEOIP,CN 使用内置的公开列表（gaoyifan/china-operator-ip、Loyalsoldier/v2ray-rules-dat）。": "每行一條，從上到下比對，排在分流模式和訂閱規則前面。策略寫 PROXY（目前節點或訂閱的第一個策略群組）、DIRECT 或 REJECT。支援 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD、DOMAIN-WILDCARD、IP-CIDR、IP-CIDR6、DST-PORT、PROCESS-NAME、USER-AGENT、URL-REGEX、PROTOCOL、GEOIP、GEOSITE；# 開頭的行是註解。匯入規則集寫 RULE-SET,https://規則清單網址,策略，經 PROXY 每天下載一次；GEOSITE,cn 和 GEOIP,CN 使用內建的公開清單（gaoyifan/china-operator-ip、Loyalsoldier/v2ray-rules-dat）。",
   "{count} 条规则": "{count} 條規則",
   "还原": "還原",
   "自定义 DNS": "自訂 DNS",

@@ -31,7 +31,7 @@ export function MyRules({ busy, run }: { busy: string | null; run: Run }) {
   return (
     <Card
       title={t("我的规则")}
-      description={t("每行一条，从上到下匹配，排在分流模式和订阅规则前面。策略写 PROXY（当前节点或订阅的第一个策略组）、DIRECT 或 REJECT。支持 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD、DOMAIN-WILDCARD、IP-CIDR、IP-CIDR6、DST-PORT、PROCESS-NAME、USER-AGENT、URL-REGEX、PROTOCOL；# 开头的行是注释。")}
+      description={t("每行一条，从上到下匹配，排在分流模式和订阅规则前面。策略写 PROXY（当前节点或订阅的第一个策略组）、DIRECT 或 REJECT。支持 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD、DOMAIN-WILDCARD、IP-CIDR、IP-CIDR6、DST-PORT、PROCESS-NAME、USER-AGENT、URL-REGEX、PROTOCOL、GEOIP、GEOSITE；# 开头的行是注释。导入规则集写 RULE-SET,https://规则列表地址,策略，经 PROXY 每天下载一次；GEOSITE,cn 和 GEOIP,CN 使用内置的公开列表（gaoyifan/china-operator-ip、Loyalsoldier/v2ray-rules-dat）。")}
       actions={saved && <span className="count">{t("{count} 条规则", { count: saved.count })}</span>}
     >
       <div className="rule-editor">
