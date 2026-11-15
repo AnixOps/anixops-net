@@ -92,6 +92,7 @@ fun AnixApp(
     settings: SettingsViewModel,
     activity: ActivityViewModel,
     extensions: ExtensionsViewModel,
+    requests: RequestsViewModel,
     version: String,
 ) {
     val state by app.state.collectAsStateWithLifecycle()
@@ -104,6 +105,7 @@ fun AnixApp(
     val logsState by activity.logs.collectAsStateWithLifecycle()
     val trafficState by activity.traffic.collectAsStateWithLifecycle()
     val extensionsState by extensions.state.collectAsStateWithLifecycle()
+    val requestsState by requests.state.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { app.poll() }
@@ -111,6 +113,7 @@ fun AnixApp(
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(app) { app.messages.collect { snackbar.showSnackbar(it) } }
+    LaunchedEffect(requests) { requests.messages.collect { if (it.isNotBlank()) snackbar.showSnackbar(it) } }
     LaunchedEffect(proxies) {
         proxies.events.collect { event ->
             when (event) {
@@ -198,6 +201,17 @@ fun AnixApp(
         ),
         debugExit = debugExit,
         egress = EgressActions(setExit = app::setDebugExit),
+        requestsState = requestsState,
+        requests = RequestsActions(
+            setCapture = requests::setCapture,
+            clear = requests::clear,
+            toggleQuick = requests::toggleQuick,
+            setTyped = requests::setTyped,
+            setOrder = requests::setOrder,
+            setPaused = requests::setPaused,
+            open = requests::open,
+            close = requests::close,
+        ),
         proxiesState = proxiesState,
         proxies = ProxiesActions(
             search = proxies::search,
@@ -263,6 +277,9 @@ fun AnixApp(
         },
         pollExtensions = {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { extensions.poll() }
+        },
+        pollRequests = {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { requests.poll() }
         },
     )
 }
@@ -426,6 +443,8 @@ fun AnixScaffold(
     extensions: ExtensionsActions = ExtensionsActions(),
     debugExit: DebugExit = DebugExit.Direct,
     egress: EgressActions = EgressActions(),
+    requestsState: RequestsState = RequestsState(),
+    requests: RequestsActions = RequestsActions(),
     termsVersion: String = "",
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
     pollProxies: suspend () -> Unit = {},
@@ -434,6 +453,7 @@ fun AnixScaffold(
     pollLogs: suspend () -> Unit = {},
     pollTraffic: suspend () -> Unit = {},
     pollExtensions: suspend () -> Unit = {},
+    pollRequests: suspend () -> Unit = {},
     initial: Destination? = null,
     initialSettingsPage: SettingsPage? = null,
     initialEgressRules: Boolean = false,
@@ -514,7 +534,11 @@ fun AnixScaffold(
                     LaunchedEffect(Unit) { pollExtensions() }
                     ExtensionsScreen(stringResource(selected.label), state.snapshot, extensionsState, extensions)
                 }
-                else -> PendingScreen(stringResource(selected.label))
+                Destination.Requests -> {
+                    LaunchedEffect(Unit) { pollRequests() }
+                    if (requestsState.opened != null) BackTo(requests.close)
+                    RequestsScreen(state, requestsState, requests.copy(connect = home.connect, disconnect = home.disconnect))
+                }
             }
             SnackbarHost(snackbar, modifier = Modifier.align(Alignment.BottomCenter))
         }

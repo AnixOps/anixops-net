@@ -59,7 +59,7 @@ import io.anixops.net.ui.theme.BrandSpacing
 import io.anixops.net.ui.theme.LocalBrandPalette
 
 /** Widest a page's content grows on tablets, so rows stay readable (docs/ui-ux.md layout rules). */
-private val ContentMaxWidth = 640.dp
+internal val ContentMaxWidth = 640.dp
 
 /** Minimum touch height of a row (docs/ui-ux.md: 48dp on Android). */
 val RowMinHeight = 48.dp

@@ -69,6 +69,11 @@ pub fn invoke(command: &str, args: &Value) -> Option<Result<Value, String>> {
             rows(args, "rows"),
             args.get("lastSeq").and_then(Value::as_u64).unwrap_or(0),
         )),
+        "next_rev" => json!(capture::next_rev(
+            args.get("current").and_then(Value::as_u64),
+            args.get("answer").unwrap_or(&Value::Null),
+            args.get("page").and_then(Value::as_u64).unwrap_or(0) as usize,
+        )),
         "merge_requests" => Value::Array(capture::merge(
             rows(args, "rows"),
             args.get("answer").unwrap_or(&Value::Null),
@@ -85,6 +90,19 @@ pub fn invoke(command: &str, args: &Value) -> Option<Result<Value, String>> {
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
             Value::Array(capture::sort(rows(args, "rows"), by, descending))
+        }
+        "request_rows" => {
+            let Some(by) = capture::Column::from_id(text(args, "by")) else {
+                return Some(Err(format!(
+                    "the request list has no column {}",
+                    text(args, "by")
+                )));
+            };
+            let descending = args
+                .get("descending")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            Value::Array(capture::rows(rows(args, "rows"), by, descending))
         }
         "describe_request" => {
             let request = args.get("request").unwrap_or(&Value::Null);
@@ -177,8 +195,10 @@ mod tests {
             "find_link_member",
             "combine_filter",
             "next_since",
+            "next_rev",
             "merge_requests",
             "sort_requests",
+            "request_rows",
             "describe_request",
             "filter_nodes",
             "group_nodes",

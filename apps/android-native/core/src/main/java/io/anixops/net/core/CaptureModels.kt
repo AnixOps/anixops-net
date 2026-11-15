@@ -1,0 +1,115 @@
+package io.anixops.net.core
+
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
+
+/** Whether the engine keeps captured traffic, and how much of its budget it holds (`capture`). */
+@Serializable
+data class CaptureStatus(
+    val enabled: Boolean = false,
+    @SerialName("max_total_bytes") val maxTotalBytes: Long = 0,
+    @SerialName("used_bytes") val usedBytes: Long = 0,
+    val connections: Int = 0,
+)
+
+/**
+ * One decrypted request as `view.request_rows` lists it: the engine's row (`capture_requests`) with its [path] and
+ * status [tone] (`success`, `warning`, `danger`, `pending` or `neutral`) added.
+ */
+@Serializable
+data class RequestRow(
+    val seq: Long = 0,
+    @SerialName("connection_id") val connectionId: Long = 0,
+    /** Its place in the connection's exchanges. */
+    val index: Int = 0,
+    val method: String = "",
+    val url: String = "",
+    val host: String = "",
+    val status: Int? = null,
+    /** `answered_locally`, `streaming` or `too_large`. */
+    val note: String? = null,
+    @SerialName("http_version") val httpVersion: String = "",
+    @SerialName("started_at_ms") val startedAtMs: Long = 0,
+    @SerialName("ended_at_ms") val endedAtMs: Long? = null,
+    @SerialName("request_size") val requestSize: Long = 0,
+    @SerialName("response_size") val responseSize: Long = 0,
+    @SerialName("response_content_type") val responseContentType: String? = null,
+    /** `in_progress` until the response ends, then `done`. */
+    val state: String? = null,
+    @SerialName("message_count") val messageCount: Int? = null,
+    val path: String = "",
+    val tone: String = "neutral",
+) {
+    /** The request's place in the capture, the same while it is under way and after. */
+    val key: RequestKey get() = RequestKey(connectionId, index)
+
+    val durationMs: Long? get() = endedAtMs?.let { it - startedAtMs }
+}
+
+/** A request by its connection and its place there. */
+@Serializable
+data class RequestKey(val connection: Long, val index: Int)
+
+/**
+ * What the request list has read so far: the engine's rows as they came (so fields this app does not know stay on
+ * them), and where the next read starts.
+ */
+data class RequestFeed(
+    val rows: JsonArray = JsonArray(emptyList()),
+    val lastSeq: Long = 0,
+    /** Null until the first answer, and for a kernel without `since_rev`. */
+    val lastRev: Long? = null,
+)
+
+/** One read of the list: what was read, the rows to show in order, and why the engine refused the filter. */
+data class RequestPage(
+    val feed: RequestFeed,
+    val shown: List<RequestRow>,
+    val error: FilterError? = null,
+)
+
+/** The engine refused the filter expression: `invalid_filter` with the position of the mistake when it says. */
+@Serializable
+data class FilterError(val code: String = "", val at: Int? = null, val message: String? = null)
+
+/** A captured body: its size, whether capture kept all of it, and the bytes it kept. */
+@Serializable
+data class CaptureBody(
+    val size: Long = 0,
+    val truncated: Boolean = false,
+    @SerialName("data_base64") val dataBase64: String = "",
+)
+
+/** One side of an exchange: its headers as name and value pairs, and its body. */
+@Serializable
+data class CaptureMessage(
+    val headers: List<List<String>> = emptyList(),
+    val body: CaptureBody = CaptureBody(),
+) {
+    /** The value of the first header named [name], in any case. */
+    fun header(name: String): String? =
+        headers.firstOrNull { it.size == 2 && it[0].equals(name, ignoreCase = true) }?.get(1)
+}
+
+/** One decrypted request and its response (`capture_exchange`). */
+@Serializable
+data class CaptureExchange(
+    @SerialName("started_at_ms") val startedAtMs: Long = 0,
+    @SerialName("ended_at_ms") val endedAtMs: Long? = null,
+    val method: String = "",
+    val url: String = "",
+    val status: Int? = null,
+    val note: String? = null,
+    val request: CaptureMessage = CaptureMessage(),
+    val response: CaptureMessage = CaptureMessage(),
+    val state: String? = null,
+    @SerialName("rules_skipped") val rulesSkipped: Boolean = false,
+)
+
+/** A body with its Content-Encoding undone (`decode_body`). */
+@Serializable
+data class DecodedBody(
+    @SerialName("data_base64") val dataBase64: String = "",
+    val truncated: Boolean = false,
+)
