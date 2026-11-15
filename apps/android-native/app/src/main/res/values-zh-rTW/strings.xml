@@ -38,6 +38,9 @@
     <string name="notification_channel_vpn">連線狀態</string>
     <string name="notification_channel_notices">通知</string>
     <string name="notification_connected">已連線</string>
+    <string name="tile_working">正在切換…</string>
+    <string name="tile_failed">連線失敗</string>
+    <string name="tile_off">未連線</string>
 
     <string name="home_traffic">即時流量</string>
     <string name="home_upload">上傳</string>

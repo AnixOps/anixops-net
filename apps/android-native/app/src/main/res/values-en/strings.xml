@@ -38,6 +38,9 @@
     <string name="notification_channel_vpn">Connection status</string>
     <string name="notification_channel_notices">Notifications</string>
     <string name="notification_connected">Connected</string>
+    <string name="tile_working">Switching…</string>
+    <string name="tile_failed">Connection failed</string>
+    <string name="tile_off">Not connected</string>
 
     <string name="home_traffic">Live traffic</string>
     <string name="home_upload">Upload</string>
