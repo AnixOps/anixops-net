@@ -310,3 +310,8 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 - [ ] 原生预览版真机验收（预览版发布后）：Windows 11 上检查贴靠布局、125% 和 150% 缩放、中文输入法、讲述人朗读；
   Linux 上在 GNOME 和 KDE 各检查一次窗口、托盘、深浅色和触控板滚动。
 
+## macOS 自有根证书与指标端口真机验收（A2、A3）
+
+- [ ] 用 `openssl ecparam -name prime256v1 -genkey -noout -out ca.key && openssl req -x509 -new -key ca.key -subj /CN=Team -days 365 -addext basicConstraints=critical,CA:true -out ca.pem` 生成团队 CA；扩展页“使用自己的根证书…”粘贴两段 PEM，替换后名称变为 Team，信任后重新连接，Safari 打开解密的站点证书链指向 Team。
+- [ ] 粘贴 RSA 私钥、别的证书的私钥、非 CA 证书时分别给出对应提示，原证书不变。
+- [ ] 设置页打开“Prometheus 指标”，`curl http://127.0.0.1:9477/metrics` 断开时只有 `anixops_client_*`，连接后加上内核指标；`curl -X POST` 返回 405；关掉开关后端口关闭。
