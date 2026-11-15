@@ -190,7 +190,20 @@ CI 的 `android-native` job 每次都产出原生版 arm64 APK（artifact `anixo
 - [ ] 真机验收：安装 APK，首次启动同意用户协议，导入订阅，点连接时允许 VPN，浏览器能打开网页，断开后网络恢复。
 - [ ] 原生版另验：快捷设置里加“AnixOps”磁贴，点它连接 / 断开；系统设置 › VPN 里设为“始终开启”，重启手机后自动连上；
   浏览器打开 `anixops://toggle` 能切换连接；另一个 VPN 接管后 App 与磁贴显示已断开。
-- [ ] 上架 Google Play（暂不需要）：开发者账号、AAB 构建和 Play App Signing 另行处理。
+- [ ] targetSdk 升到 36 后（Google Play 要求）重新做上面两项真机验收，重点看 VPN 连接、前台通知、磁贴和始终开启。
+
+## Google Play
+
+Play 版是开源版（用户 2026-11-15 决定），包名 `io.anixops.net.android`。
+
+- [x] Environment `google-play`（需维护者审批）里配了 `PLAY_SERVICE_ACCOUNT_JSON`、`PLAY_UPLOAD_KEYSTORE_BASE64`、
+  `PLAY_UPLOAD_KEYSTORE_PASSWORD`、`PLAY_UPLOAD_KEY_ALIAS`、`PLAY_UPLOAD_KEY_PASSWORD`。
+- [ ] 手动运行 `play-bundle.yml`（Actions → Google Play bundle → Run workflow），审批后下载 artifact
+  `anixops-net-play-<versionCode>-<sha>` 里的 AAB，在 Play Console 上传。`google-play` 只允许 `v*` tag 时，从 main 运行要先在
+  Environment 的 Deployment branches 里临时加上 `main`。
+- [ ] 每次上传的 versionCode 必须比上一次大（`apps/android-native/app/build.gradle.kts`）。
+- [ ] Play Console 里的应用签名、商店信息、隐私政策、数据安全、内容分级、VPN 和前台服务声明只能人工填写。
+- [ ] 以后自动上传到内部测试轨道：服务账号 `play-publisher` 只有测试轨道权限，正式版由维护者在 Play Console 推广。
 
 
 ## 开源版下载页（GitHub Pages）

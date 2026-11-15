@@ -919,6 +919,9 @@ jobs:
         uses: ./.github/actions/android-apk
         with:
           checks: lint testDebugUnitTest :app:recordRoborazziDebug
+          # The Google Play bundle is built too (left unsigned here: the upload key lives in the google-play
+          # environment, used only by play-bundle.yml).
+          bundle: "true"
           keystore-base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}

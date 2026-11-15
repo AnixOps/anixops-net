@@ -60,7 +60,9 @@ runs:
           kind=debug
         fi
         aligned="${RUNNER_TEMP}/aligned-${NAME}.apk"
-        "${tools}/zipalign" -f -p 4 "${UNSIGNED}" "${aligned}"
+        # -P 16: uncompressed native libraries on 16 KB page boundaries (Google Play requires 16 KB page support).
+        "${tools}/zipalign" -f -P 16 4 "${UNSIGNED}" "${aligned}"
+        "${tools}/zipalign" -c -P 16 -v 4 "${aligned}" > /dev/null
         mkdir -p "${RUNNER_TEMP}/apk"
         out="${RUNNER_TEMP}/apk/${NAME}-${kind}.apk"
         "${tools}/apksigner" sign --ks "${keystore}" --ks-pass "pass:${KEYSTORE_PASSWORD}" \

@@ -17,7 +17,8 @@ android {
         // it with the same key and keeps its data directory.
         applicationId = "io.anixops.net.android"
         minSdk = 26
-        targetSdk = 35
+        // Google Play has required API 36 for new apps and updates since 2026-08-31 (extensions ended 2026-11-01).
+        targetSdk = 36
         // Above the Tauri app's last code (3000: Tauri's major × 1000000 + minor × 1000 + patch for 0.3.0), so
         // Android takes this as an upgrade; raise it with each release.
         versionCode = 3001

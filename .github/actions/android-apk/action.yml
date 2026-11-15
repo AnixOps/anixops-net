@@ -1,8 +1,10 @@
 name: Android APK
 description: >-
   Builds the arm64 Android APK (apps/android-native: the Rust bridge by cargo-ndk, then Gradle) and signs it with
-  the given keystore, or with a throwaway debug key when no keystore is given. Shared by ci.yml, which also runs
-  lint, the unit tests and the screenshots in the same Gradle call, and release.yml.
+  the given keystore, or with a throwaway debug key when no keystore is given. With bundle: true it also builds the
+  Android App Bundle (AAB) for Google Play and signs it with the Play upload key when one is given. Shared by
+  ci.yml, which also runs lint, the unit tests and the screenshots in the same Gradle call, release.yml and
+  play-bundle.yml.
 
 inputs:
   keystore-base64:
@@ -26,6 +28,23 @@ inputs:
     description: Gradle tasks to run before the release build in the same call (CI's lint, tests and screenshots)
     required: false
     default: ""
+  bundle:
+    description: Also build the AAB (:app:bundleRelease)
+    required: false
+    default: "false"
+  upload-keystore-base64:
+    description: Base64 of the Google Play upload keystore (PLAY_UPLOAD_KEYSTORE_BASE64); empty = AAB left unsigned
+    required: false
+    default: ""
+  upload-keystore-password:
+    required: false
+    default: ""
+  upload-key-alias:
+    required: false
+    default: ""
+  upload-key-password:
+    required: false
+    default: ""
 
 outputs:
   apk:
@@ -34,6 +53,12 @@ outputs:
   kind:
     description: release (signed with the keystore) or debug (throwaway key)
     value: ${{ steps.sign.outputs.kind }}
+  aab:
+    description: Absolute path of the AAB (bundle true only)
+    value: ${{ steps.sign-aab.outputs.aab }}
+  aab-kind:
+    description: upload (signed with the Play upload key) or unsigned (bundle true only)
+    value: ${{ steps.sign-aab.outputs.kind }}
 
 runs:
   using: composite
@@ -69,9 +94,28 @@ runs:
         # rquickjs-sys generates its Android bindings with bindgen against the NDK headers (API level = minSdk).
         export BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android="--target=aarch64-linux-android26 --sysroot=${ndk}/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
         export ANDROID_NDK_HOME="${ndk}"
+        # 16 KB pages: Google Play requires native libraries whose LOAD segments are 16 KB aligned (checked below).
+        export CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS="-C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wl,-z,common-page-size=16384"
         cargo ndk -t arm64-v8a --platform 26 -o apps/android-native/app/src/main/jniLibs \
           build --release --locked -p anixops-net-android
         ls -l apps/android-native/app/src/main/jniLibs/arm64-v8a
+
+    - name: Native libraries are 16 KB page aligned
+      shell: bash
+      run: |
+        set -euo pipefail
+        readelf="${ANDROID_NDK_LATEST_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+        bad=0
+        for so in apps/android-native/app/src/main/jniLibs/arm64-v8a/*.so; do
+          # Every LOAD segment's alignment (last column) must be at least 2**14.
+          while read -r align; do
+            if [ $((align)) -lt 16384 ]; then
+              echo "::error::${so}: LOAD segment aligned to ${align}, Google Play needs 16 KB (0x4000)"
+              bad=1
+            fi
+          done < <("${readelf}" -lW "${so}" | awk '$1 == "LOAD" { print $NF }')
+        done
+        exit "${bad}"
 
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
@@ -83,11 +127,16 @@ runs:
       shell: bash
       env:
         CHECKS: ${{ inputs.checks }}
+        BUNDLE: ${{ inputs.bundle }}
       run: |
         set -euo pipefail
-        # Word splitting is wanted: CHECKS is a list of Gradle task names.
+        tasks=":app:assembleRelease"
+        if [ "${BUNDLE}" = "true" ]; then
+          tasks="${tasks} :app:bundleRelease"
+        fi
+        # Word splitting is wanted: CHECKS and tasks are lists of Gradle task names.
         # shellcheck disable=SC2086
-        gradle -p apps/android-native --no-daemon ${CHECKS} :app:assembleRelease
+        gradle -p apps/android-native --no-daemon ${CHECKS} ${tasks}
 
     - name: Sign the APK
       id: sign
@@ -99,3 +148,40 @@ runs:
         keystore-password: ${{ inputs.keystore-password }}
         key-alias: ${{ inputs.key-alias }}
         key-password: ${{ inputs.key-password }}
+
+    # Google Play takes the AAB signed with the upload key (jarsigner; apksigner does not sign bundles) and re-signs
+    # it with the app signing key it holds (Play App Signing).
+    - name: Sign the AAB
+      id: sign-aab
+      if: ${{ inputs.bundle == 'true' }}
+      shell: bash
+      env:
+        KEYSTORE_BASE64: ${{ inputs.upload-keystore-base64 }}
+        KEYSTORE_PASSWORD: ${{ inputs.upload-keystore-password }}
+        KEY_ALIAS: ${{ inputs.upload-key-alias }}
+        KEY_PASSWORD: ${{ inputs.upload-key-password }}
+      run: |
+        set -euo pipefail
+        unsigned="${GITHUB_WORKSPACE}/apps/android-native/app/build/outputs/bundle/release/app-release.aab"
+        test -f "${unsigned}"
+        mkdir -p "${RUNNER_TEMP}/aab"
+        if [ -z "${KEYSTORE_BASE64}" ]; then
+          out="${RUNNER_TEMP}/aab/anixops-net-android-unsigned.aab"
+          cp "${unsigned}" "${out}"
+          kind=unsigned
+        else
+          keystore="${RUNNER_TEMP}/play-upload.jks"
+          echo "${KEYSTORE_BASE64}" | base64 --decode > "${keystore}"
+          out="${RUNNER_TEMP}/aab/anixops-net-android-upload.aab"
+          cp "${unsigned}" "${out}"
+          jarsigner -sigalg SHA256withRSA -digestalg SHA-256 -keystore "${keystore}" \
+            -storepass:env KEYSTORE_PASSWORD -keypass:env KEY_PASSWORD "${out}" "${KEY_ALIAS}"
+          jarsigner -verify "${out}" | tee "${RUNNER_TEMP}/aab-verify.txt"
+          grep -q "jar verified" "${RUNNER_TEMP}/aab-verify.txt"
+          keytool -printcert -jarfile "${out}"
+          rm -f "${keystore}"
+          kind=upload
+        fi
+        ls -l "${out}"
+        echo "aab=${out}" >> "$GITHUB_OUTPUT"
+        echo "kind=${kind}" >> "$GITHUB_OUTPUT"
