@@ -139,3 +139,36 @@ data class ReplayResponse(
 /** Where an export was saved (`export_capture`). */
 @Serializable
 data class SavedFile(val location: String = "")
+
+/** One saved capture session (`capture_session` list); [name] is empty when it was saved without one. */
+@Serializable
+data class CaptureSession(
+    val session: String = "",
+    val name: String? = null,
+    @SerialName("saved_at_ms") val savedAtMs: Long = 0,
+    @SerialName("expires_at_ms") val expiresAtMs: Long = 0,
+    val size: Long = 0,
+    val connections: Int = 0,
+    val requests: Int = 0,
+    /** Sealed with another key (a reinstall): it cannot be opened and expires on its own. */
+    val unreadable: Boolean = false,
+)
+
+/**
+ * The saved sessions, newest first, with what keeps their key on this device ([protection]: `keystore` on Android)
+ * and how many days they are kept.
+ */
+@Serializable
+data class CaptureSessions(
+    val sessions: List<CaptureSession> = emptyList(),
+    val protection: String = "",
+    @SerialName("retention_days") val retentionDays: Int = 7,
+)
+
+/** The answer to saving a session. */
+@Serializable
+data class SavedSession(val session: CaptureSession = CaptureSession())
+
+/** The answer to deleting a session. */
+@Serializable
+data class DeletedSession(val deleted: Boolean = false)

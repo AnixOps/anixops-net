@@ -10,6 +10,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -494,6 +495,37 @@ class Core(
         ReplayResponse.serializer(),
         args("request" to Envelope.json.encodeToJsonElement(ReplayRequest.serializer(), request)),
     )
+
+    /** Saves everything capture holds (`har` or `pcapng`) to Downloads and says where. */
+    suspend fun exportCapture(format: String): SavedFile =
+        call("export_capture", SavedFile.serializer(), args("format" to JsonPrimitive(format)))
+
+    // Saved capture sessions: the engine seals them, the client keeps the key (the Android Keystore here).
+
+    /** The saved sessions, newest first. */
+    suspend fun captureSessions(): CaptureSessions =
+        call("capture_session", CaptureSessions.serializer(), sessionAction("list"))
+
+    /** Seals what capture holds into a new session; a blank [name] saves it under the time. */
+    suspend fun saveCaptureSession(name: String): CaptureSession = call(
+        "capture_session",
+        SavedSession.serializer(),
+        sessionAction("save") { if (name.isNotBlank()) put("name", name.trim()) },
+    ).session
+
+    /** Replaces what capture holds with a saved session; live capture goes off. */
+    suspend fun loadCaptureSession(session: String): CaptureStatus =
+        call("capture_session", CaptureStatus.serializer(), sessionAction("load") { put("session", session) })
+
+    suspend fun deleteCaptureSession(session: String): Boolean =
+        call("capture_session", DeletedSession.serializer(), sessionAction("delete") { put("session", session) }).deleted
+
+    private fun sessionAction(action: String, more: JsonObjectBuilder.() -> Unit = {}) = buildJsonObject {
+        putJsonObject("action") {
+            put("action", action)
+            more()
+        }
+    }
 
     // Plumbing.
 

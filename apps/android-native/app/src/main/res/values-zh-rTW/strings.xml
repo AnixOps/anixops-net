@@ -468,4 +468,31 @@
     <string name="export_redact_hint">匯出的檔案裡把這些值換成 &lt;redacted&gt;</string>
     <string name="export_save">匯出</string>
     <string name="export_note">儲存到「下載」資料夾。匯出內容可能包含帳號等敏感資訊，請只傳給信任的人。</string>
+    <string name="requests_export_har">全部匯出為 HAR</string>
+    <string name="requests_export_pcapng">全部匯出為 pcapng</string>
+    <string name="sessions">抓包工作階段</string>
+    <string name="sessions_save">儲存目前抓包</string>
+    <string name="sessions_nothing">還沒有抓到內容</string>
+    <string name="sessions_name">工作階段名稱（選填）</string>
+    <string name="sessions_saved">已儲存的工作階段</string>
+    <string name="sessions_loading">正在讀取…</string>
+    <string name="sessions_empty">還沒有儲存的工作階段。儲存後可以在這裡載入，查看當時的請求並匯出。</string>
+    <string name="sessions_keystore">用 Android Keystore 中的金鑰加密。</string>
+    <string name="sessions_unreadable">本機的金鑰打不開這個工作階段（可能是重新安裝前儲存的），到期後自動刪除</string>
+    <string name="sessions_expires">%1$s 刪除</string>
+    <string name="sessions_load">載入</string>
+    <string name="sessions_delete">刪除工作階段</string>
+    <string name="sessions_replace_title">載入「%1$s」？</string>
+    <string name="sessions_replace_body">目前抓到的內容會被取代，即時抓包會停止。</string>
+    <string name="sessions_replace">取代並載入</string>
+    <string name="sessions_delete_confirm">確認刪除工作階段「%1$s」</string>
+    <string name="sessions_saved_message">已儲存工作階段：%1$s</string>
+    <string name="sessions_loaded_message">已載入工作階段：%1$s。即時抓包已停止。</string>
+    <string name="sessions_deleted_message">已刪除工作階段：%1$s</string>
+    <plurals name="sessions_connections">
+        <item quantity="other">%d 個連線</item>
+    </plurals>
+    <plurals name="sessions_kept">
+        <item quantity="other">工作階段只保存在本機，%d 天後自動刪除。</item>
+    </plurals>
 </resources>

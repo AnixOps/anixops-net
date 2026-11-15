@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.anixops.net.R
+import io.anixops.net.core.CaptureSession
 import io.anixops.net.core.CaptureStatus
 import io.anixops.net.core.FilterError
 import io.anixops.net.core.RequestRow
@@ -69,6 +70,13 @@ data class RequestsActions(
     val editReplay: ((ReplayDraft) -> ReplayDraft) -> Unit = {},
     val sendReplay: () -> Unit = {},
     val closeReplay: () -> Unit = {},
+    val exportAll: (String) -> Unit = {},
+    val openSessions: () -> Unit = {},
+    val closeSessions: () -> Unit = {},
+    val setSessionName: (String) -> Unit = {},
+    val saveSession: () -> Unit = {},
+    val loadSession: (CaptureSession) -> Unit = {},
+    val deleteSession: (CaptureSession) -> Unit = {},
 )
 
 /** Width of the status column: a code, "…", or the short word for a request answered on the device. */
@@ -80,6 +88,10 @@ private val StatusWidth = 48.dp
  */
 @Composable
 fun RequestsScreen(state: UiState, requests: RequestsState, actions: RequestsActions, modifier: Modifier = Modifier) {
+    requests.sessions?.let { page ->
+        SessionsScreen(requests.capture, page, actions, modifier)
+        return
+    }
     requests.replay?.let { draft ->
         ReplayScreen(draft, actions, modifier)
         return
@@ -209,6 +221,25 @@ private fun RequestsMenu(requests: RequestsState, actions: RequestsActions) {
                 },
             )
         }
+        HorizontalDivider()
+        val holding = (requests.capture?.connections ?: 0) > 0
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.requests_export_har)) },
+            enabled = holding,
+            onClick = {
+                close()
+                actions.exportAll("har")
+            },
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.requests_export_pcapng)) },
+            enabled = holding,
+            onClick = {
+                close()
+                actions.exportAll("pcapng")
+            },
+        )
+        MenuItem(R.string.sessions, close, actions.openSessions)
         HorizontalDivider()
         MenuItem(R.string.requests_clear, close, actions.clear)
     }

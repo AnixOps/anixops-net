@@ -4,6 +4,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import io.anixops.net.core.CaptureBody
 import io.anixops.net.core.CaptureExchange
 import io.anixops.net.core.CaptureMessage
+import io.anixops.net.core.CaptureSession
 import io.anixops.net.core.CaptureStatus
 import io.anixops.net.core.ConnectionSnapshot
 import io.anixops.net.core.DebugMapping
@@ -307,6 +308,24 @@ class ScreenshotTest {
         "en",
         dark = true,
         requests = requestsState.copy(opened = openedRequest, replay = replayAnswered),
+    )
+
+    @Test
+    fun sessionsPhoneLightZh() = captureRequests(
+        "sessions-phone-light-zh",
+        PHONE,
+        "zh-rCN",
+        dark = false,
+        requests = requestsState.copy(sessions = sessionsPage),
+    )
+
+    @Test
+    fun sessionsEmptyPhoneDarkEn() = captureRequests(
+        "sessions-empty-phone-dark-en",
+        PHONE,
+        "en",
+        dark = true,
+        requests = requestsState.copy(sessions = SessionsPage(loaded = true, protection = "keystore")),
     )
 
     @Test
@@ -791,6 +810,32 @@ class ScreenshotTest {
             url = "https://api.example.com/v1/profile",
             headers = "accept: application/json\ncontent-type: application/json\nuser-agent: Example/3.2 (Android 15)",
             body = "{\"name\": \"Mika\"}",
+        )
+
+        val sessionsPage = SessionsPage(
+            loaded = true,
+            protection = "keystore",
+            name = "登录流程",
+            sessions = listOf(
+                CaptureSession(
+                    session = "1794730000000-a1b2c3d4",
+                    name = "登录流程",
+                    savedAtMs = LOG_TIME - 3_600_000,
+                    expiresAtMs = LOG_TIME + 6 * 86_400_000L,
+                    size = 1_843_200,
+                    connections = 12,
+                    requests = 86,
+                ),
+                CaptureSession(
+                    session = "1794640000000-e5f6a7b8",
+                    savedAtMs = LOG_TIME - 90_000_000,
+                    expiresAtMs = LOG_TIME + 5 * 86_400_000L,
+                    size = 204_800,
+                    connections = 3,
+                    requests = 1,
+                ),
+                CaptureSession(session = "1794000000000-c9d0e1f2", name = "重装前", savedAtMs = LOG_TIME - 600_000_000, unreadable = true),
+            ),
         )
 
         val replayAnswered = replayDraft.copy(
