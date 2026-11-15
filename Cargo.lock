@@ -835,8 +835,10 @@ dependencies = [
 name = "client-ipc"
 version = "0.3.0"
 dependencies = [
+ "libc",
  "serde",
  "serde_json",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
