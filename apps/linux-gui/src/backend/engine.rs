@@ -19,9 +19,9 @@ use engine_embedded::local_proxy::LocalProxy;
 use engine_embedded::nodes::{outbound_for_node, routing_envelope, single_node_envelope};
 use inbound_mixed::MixedSettings;
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "linux"))]
 use super::tun::{self, TunEngine};
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "linux"))]
 pub use super::tun::{attach as attach_tunnel, attached as tunnel_attached};
 use serde_json::{json, Value};
 
@@ -258,22 +258,23 @@ pub fn activity_request(request: &serde_json::Value) -> Result<Vec<u8>, String> 
     serde_json::to_vec(request).map_err(|error| error.to_string())
 }
 
-/// The running engine, if any: a local proxy on the desktop, the VPN's TUN interface on Android.
+/// The running engine, if any: a local proxy on the desktop, the VPN's TUN interface on Android, and on the Linux
+/// desktop in TUN mode the device the polkit helper made ([`super::tun_helper`]).
 #[derive(Default)]
 pub struct Engine {
     #[cfg(not(target_os = "android"))]
     proxy: Option<LocalProxy>,
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "linux"))]
     tunnel: Option<TunEngine>,
     /// The running configuration, for the exit address probe ([`Engine::probe_envelope`]).
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "linux"))]
     envelope: Option<String>,
     node_id: Option<String>,
 }
 
 impl Engine {
-    /// Starts (or restarts) the engine. The desktop listens on `port`; Android runs on the kept VPN descriptor
-    /// and returns the interface address.
+    /// Starts (or restarts) the engine. The desktop listens on `port`; on a kept TUN descriptor (Android's VPN,
+    /// Linux TUN mode) it runs on the interface and returns the interface address.
     pub fn start(
         &mut self,
         envelope: &str,
@@ -281,24 +282,36 @@ impl Engine {
         port: u16,
     ) -> Result<SocketAddr, String> {
         self.stop_runtime();
-        #[cfg(not(target_os = "android"))]
-        let address = {
-            let listen = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
-            let proxy = LocalProxy::start(envelope.as_bytes(), listen, MixedSettings::default())
-                .map_err(|error| error.message.to_string())?;
-            let address = proxy.local_addr();
-            self.proxy = Some(proxy);
-            address
-        };
-        #[cfg(target_os = "android")]
-        let address = {
-            let _ = port;
-            self.tunnel = Some(TunEngine::start(envelope)?);
-            self.envelope = Some(envelope.to_string());
-            SocketAddr::from((Ipv4Addr::new(198, 18, 0, 1), 0))
-        };
+        let address = self.start_runtime(envelope, port)?;
         self.node_id = Some(node_id.to_string());
         Ok(address)
+    }
+
+    #[cfg(target_os = "android")]
+    fn start_runtime(&mut self, envelope: &str, port: u16) -> Result<SocketAddr, String> {
+        let _ = port;
+        self.start_tunnel(envelope)
+    }
+
+    #[cfg(not(target_os = "android"))]
+    fn start_runtime(&mut self, envelope: &str, port: u16) -> Result<SocketAddr, String> {
+        #[cfg(target_os = "linux")]
+        if tun::attached() {
+            return self.start_tunnel(envelope);
+        }
+        let listen = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
+        let proxy = LocalProxy::start(envelope.as_bytes(), listen, MixedSettings::default())
+            .map_err(|error| error.message.to_string())?;
+        let address = proxy.local_addr();
+        self.proxy = Some(proxy);
+        Ok(address)
+    }
+
+    #[cfg(any(target_os = "android", target_os = "linux"))]
+    fn start_tunnel(&mut self, envelope: &str) -> Result<SocketAddr, String> {
+        self.tunnel = Some(TunEngine::start(envelope)?);
+        self.envelope = Some(envelope.to_string());
+        Ok(SocketAddr::from((Ipv4Addr::new(198, 18, 0, 1), 0)))
     }
 
     fn stop_runtime(&mut self) {
@@ -306,33 +319,58 @@ impl Engine {
         if let Some(mut proxy) = self.proxy.take() {
             proxy.stop();
         }
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "linux"))]
         if let Some(mut tunnel) = self.tunnel.take() {
             tunnel.stop();
         }
     }
 
-    /// Stops the engine; on Android this also closes the VPN interface.
+    /// Stops the engine; a kept TUN descriptor is closed too, which takes the interface (and on the Linux
+    /// desktop its routes) down.
     pub fn stop(&mut self) {
         self.stop_runtime();
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "linux"))]
         tun::detach();
+        #[cfg(target_os = "linux")]
+        super::tun_helper::release();
         self.node_id = None;
     }
 
-    #[cfg(not(target_os = "android"))]
     pub fn is_running(&self) -> bool {
+        self.tunnel_running() || self.proxy_running()
+    }
+
+    #[cfg(any(target_os = "android", target_os = "linux"))]
+    fn tunnel_running(&self) -> bool {
+        self.tunnel.as_ref().is_some_and(TunEngine::is_running)
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "linux")))]
+    fn tunnel_running(&self) -> bool {
+        false
+    }
+
+    #[cfg(not(target_os = "android"))]
+    fn proxy_running(&self) -> bool {
         self.proxy.as_ref().is_some_and(LocalProxy::is_running)
     }
 
     #[cfg(target_os = "android")]
-    pub fn is_running(&self) -> bool {
-        self.tunnel.as_ref().is_some_and(TunEngine::is_running)
+    fn proxy_running(&self) -> bool {
+        false
     }
 
     /// One kernel control request to the running engine.
-    #[cfg(not(target_os = "android"))]
     fn control_bytes(&self, request: &[u8]) -> Result<Vec<u8>, String> {
+        #[cfg(any(target_os = "android", target_os = "linux"))]
+        if let Some(tunnel) = self.tunnel.as_ref().filter(|tunnel| tunnel.is_running()) {
+            return tunnel.control_json(request);
+        }
+        self.proxy_control(request)
+    }
+
+    #[cfg(not(target_os = "android"))]
+    fn proxy_control(&self, request: &[u8]) -> Result<Vec<u8>, String> {
         self.proxy
             .as_ref()
             .filter(|proxy| proxy.is_running())
@@ -342,12 +380,8 @@ impl Engine {
     }
 
     #[cfg(target_os = "android")]
-    fn control_bytes(&self, request: &[u8]) -> Result<Vec<u8>, String> {
-        self.tunnel
-            .as_ref()
-            .filter(|tunnel| tunnel.is_running())
-            .ok_or("the engine is not running")?
-            .control_json(request)
+    fn proxy_control(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
+        Err("the engine is not running".to_string())
     }
 
     /// Answers one activity page request (see [`activity_request`]) while the engine runs.
@@ -393,7 +427,7 @@ impl Engine {
         self.control_bytes(&reset.request()).map(|_| ())
     }
 
-    /// The local proxy's address.
+    /// The local proxy's address; none through a TUN interface, where traffic comes in through the device.
     #[cfg(not(target_os = "android"))]
     pub fn address(&self) -> Option<SocketAddr> {
         self.proxy.as_ref().map(LocalProxy::local_addr)
@@ -405,17 +439,16 @@ impl Engine {
         None
     }
 
-    /// The running configuration where the exit address cannot be probed through the engine's own listener:
-    /// Android's VPN leaves the app's sockets out, so the probe runs a short-lived local proxy on it
-    /// ([`through_temporary_proxy`]).
-    #[cfg(not(target_os = "android"))]
+    /// The running configuration where the exit address cannot be probed through the engine's own listener: on
+    /// a TUN interface the probe runs a short-lived local proxy on it ([`through_temporary_proxy`]).
+    #[cfg(any(target_os = "android", target_os = "linux"))]
     pub fn probe_envelope(&self) -> Option<String> {
-        None
+        self.envelope.clone().filter(|_| self.tunnel_running())
     }
 
-    #[cfg(target_os = "android")]
+    #[cfg(not(any(target_os = "android", target_os = "linux")))]
     pub fn probe_envelope(&self) -> Option<String> {
-        self.envelope.clone().filter(|_| self.is_running())
+        None
     }
 
     pub fn node_id(&self) -> Option<&str> {

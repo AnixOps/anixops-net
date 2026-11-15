@@ -295,6 +295,13 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 - [ ] Windows 打开 TUN 模式、Android 连接 VPN 后，在“流量重定向”新建一条（例如游戏服务器 IP → 开发服务器 `IP:端口`，协议选 UDP），游戏或 `nc -u` 的流量到达开发服务器，UDP 回包正常。
 - [ ] 域名写法（`game.example.com`）匹配子域名；关掉开关或删除后恢复原地址；连接列表里能看到改发后的地址。
 
+## Linux TUN 模式真机验收（T14）
+
+- [ ] 装 `.deb`（Ubuntu 22.04+ 或 Debian 12，内核 5.7+），设置页“运行方式”打开 TUN 模式后连接：弹出 polkit 授权对话框，说明写的是“创建 AnixOps Net 虚拟网卡”；授权后 `ip addr` 能看到 `anxtun0`（198.18.0.1/24），`ps` 里没有以 root 运行的 anixops-net。
+- [ ] 不走系统代理的程序（`curl --noproxy '*' https://ip.sb`、游戏、`nc -u`）也经过节点；流量重定向对它们生效；断开或退出后 `anxtun0` 和两条半默认路由消失，网络恢复。
+- [ ] 授权对话框点“取消”时提示“TUN mode was not allowed”，不会留下网卡；关闭 TUN 模式后连接回到系统代理方式。
+- [ ] tarball 版本（未装 polkit 规则）用通用的“以其他用户运行程序”授权，同样能连上。
+
 ## Windows / Linux 原生界面（`docs/architecture/desktop-native.md`）
 
 - [ ] Windows 代码签名证书：发布物现在没有 Authenticode 签名。原生版把内核放进系统服务，未签名的服务更容易被安全软件

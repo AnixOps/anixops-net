@@ -48,7 +48,6 @@ const NO_DOWNLOADS: &str = "this platform has no shared Downloads folder";
 
 /// Commands the Windows client has and this backend does not; the interface hides their controls.
 const WINDOWS_ONLY: &[&str] = &[
-    "set_tun_mode",
     "configure_script_runtime",
     "clear_script_runtime",
     "install_certificate",
@@ -208,7 +207,8 @@ impl Client {
         if auto_connect && !client.platform.has_system_vpn() {
             let starting = client.clone();
             thread::spawn(move || {
-                let _ = starting.connect_with_rules();
+                // TUN mode asks for the password at login; refused, the client stays disconnected.
+                let _ = starting.connect_through_tunnel();
             });
         }
         client.start_network_watch();
@@ -312,13 +312,34 @@ impl Client {
         self.backend().connect()
     }
 
-    /// Where the platform carries traffic through a system VPN, opens it first so the engine has its TUN
-    /// descriptor.
+    /// Where the platform carries traffic through a system VPN, or the Linux desktop is in TUN mode, opens it
+    /// first so the engine has its TUN descriptor.
     fn open_tunnel(&self) -> Result<(), String> {
-        if !self.platform.has_system_vpn() {
+        if self.platform.has_system_vpn() {
+            return self.open_system_tunnel();
+        }
+        if !self.backend().tun_mode() {
             return Ok(());
         }
-        self.open_system_tunnel()
+        self.open_helper_tunnel()
+    }
+
+    /// Linux desktop TUN mode: the polkit helper makes the device (the desktop asks for the administrator
+    /// password) and the engine runs on it. A device already open is kept.
+    #[cfg(target_os = "linux")]
+    fn open_helper_tunnel(&self) -> Result<(), String> {
+        if engine::tunnel_attached() {
+            return Ok(());
+        }
+        self.backend().stop_engine();
+        let fd = crate::backend::tun_helper::open(TunnelInterface::proxy().mtu)?;
+        engine::attach_tunnel(fd);
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn open_helper_tunnel(&self) -> Result<(), String> {
+        Err(UNAVAILABLE.to_string())
     }
 
     /// Keeps a live descriptor; one whose VPN was taken away (another VPN, or the system settings) is dropped
@@ -339,11 +360,13 @@ impl Client {
         Err("this platform has no system VPN".to_string())
     }
 
-    /// Stops the engine and closes the system VPN, if the platform has one.
+    /// Stops the engine and closes the system VPN, if the platform has one, or the Linux TUN mode device.
     fn close_tunnel(&self) {
         if self.platform.has_system_vpn() {
             self.backend().stop_engine();
             self.platform.close_tunnel();
+        } else if self.backend().tun_mode() {
+            self.backend().stop_engine();
         }
     }
 
@@ -935,6 +958,13 @@ fn handler(name: &str) -> Option<Handler> {
             let Preset { preset } = parse(args)?;
             let preset = DnsPreset::parse(&preset).ok_or("unknown DNS choice")?;
             json(client.backend().set_dns_preset(preset)?)
+        },
+        "set_tun_mode" => |client, args| {
+            let Enabled { enabled } = parse(args)?;
+            if !cfg!(target_os = "linux") {
+                return Err(UNAVAILABLE.to_string());
+            }
+            json(client.backend().set_tun_mode(enabled)?)
         },
         "set_block_quic" => |client, args| {
             let Enabled { enabled } = parse(args)?;

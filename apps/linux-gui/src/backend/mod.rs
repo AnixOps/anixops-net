@@ -9,8 +9,10 @@ pub mod session_key;
 pub mod state;
 pub mod system_proxy;
 pub mod trust;
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "linux"))]
 pub mod tun;
+#[cfg(all(target_os = "linux", not(target_os = "android")))]
+pub mod tun_helper;
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -116,6 +118,8 @@ pub struct RuntimeSnapshot {
     pub block_quic: bool,
     /// Debug mode's direct egress is on: the engine runs with no node.
     pub direct_egress: bool,
+    /// Linux desktop TUN mode is on (`set_tun_mode`).
+    pub tun_mode_enabled: bool,
     /// Always true: the interface then offers the subscription rules mode and explains the engine's DNS.
     pub embedded_engine: bool,
 }
@@ -672,6 +676,7 @@ impl Backend {
             dns_preset: self.state.dns_preset.as_str(),
             block_quic: self.state.block_quic,
             direct_egress: self.state.direct_egress,
+            tun_mode_enabled: self.state.tun_mode,
             embedded_engine: true,
         }
     }
@@ -822,6 +827,26 @@ impl Backend {
             "DNS settings saved"
         } else {
             "DNS settings saved; choose Custom to use them"
+        })
+    }
+
+    /// Whether a connect opens the TUN device first (Linux desktop TUN mode).
+    pub fn tun_mode(&self) -> bool {
+        self.state.tun_mode
+    }
+
+    /// Turns Linux desktop TUN mode on or off; only while disconnected, since the device is opened when
+    /// connecting.
+    pub fn set_tun_mode(&mut self, on: bool) -> Result<OperationResult, String> {
+        if self.engine.is_running() {
+            return Err("Disconnect before switching TUN mode".to_string());
+        }
+        self.state.tun_mode = on;
+        self.save();
+        done(if on {
+            "TUN mode is on; the next connection asks for the administrator password"
+        } else {
+            "TUN mode is off; the next connection uses the system proxy"
         })
     }
 
@@ -1182,6 +1207,10 @@ impl Backend {
 
     fn start(&mut self) -> Result<OperationResult, String> {
         let (label, address) = self.launch()?;
+        // Through the TUN device every application is carried already; the system proxy stays as it is.
+        if self.engine.address().is_none() {
+            return done(format!("Connected through {label}"));
+        }
         if self.state.preferences.system_proxy && self.state.proxy_backup.is_none() {
             if let Some(desktop) = self.desktop {
                 match system_proxy::apply(desktop, address.port()) {
@@ -1195,9 +1224,6 @@ impl Backend {
                     }
                 }
             }
-        }
-        if cfg!(target_os = "android") {
-            return done(format!("Connected through {label}"));
         }
         done(format!("Connected through {label} on {address}"))
     }
