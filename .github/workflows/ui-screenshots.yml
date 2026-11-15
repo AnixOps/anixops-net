@@ -81,7 +81,7 @@ jobs:
 
       - name: Test the comparison tools
         shell: bash
-        run: node --test .github/scripts/screenshot-diff/
+        run: node --test .github/scripts/screenshot-diff/ack.test.cjs
 
       - name: Build the interface
         shell: bash
