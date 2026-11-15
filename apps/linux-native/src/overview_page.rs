@@ -1,8 +1,11 @@
 //! The overview page's widgets: the state in large letters, the button that connects and disconnects, the
-//! node in use and the traffic counters. What they say is decided in [`crate::overview`]; this only draws it.
+//! node in use and the traffic counters. The row that counts the open connections opens their list
+//! ([`crate::connection_list`]). What they say is decided in [`crate::overview`]; this only draws it.
 
 use adw::prelude::*;
 
+use crate::connection_list::{ConnectionList, Wish};
+use crate::connections;
 use crate::overview::{Press, Shown};
 use crate::Language;
 
@@ -21,6 +24,8 @@ pub struct OverviewPage {
     upload: adw::ActionRow,
     upload_rate: gtk::Label,
     connections: gtk::Label,
+    /// The list of open connections, a dialog over the page.
+    list: std::rc::Rc<ConnectionList>,
 }
 
 /// A line of text that wraps and sits in the middle.
@@ -52,8 +57,13 @@ fn value(row: &adw::ActionRow) -> gtk::Label {
 }
 
 impl OverviewPage {
-    /// Builds the page. `pressed` is called when the user presses the button.
-    pub fn new(language: Language, pressed: impl Fn() + 'static) -> Self {
+    /// Builds the page. `pressed` is called when the user presses the button, `wished` with what the user
+    /// asks for in the list of open connections.
+    pub fn new(
+        language: Language,
+        pressed: impl Fn() + 'static,
+        wished: impl Fn(Wish) + 'static,
+    ) -> Self {
         let text = |id: &str| client_strings::text(language, id);
 
         let headline = centred(&["title-1"]);
@@ -85,6 +95,20 @@ impl OverviewPage {
         let upload_rate = value(&upload);
         let connection_row = row(text("overview.connections"));
         let connections = value(&connection_row);
+        let list = std::rc::Rc::new(ConnectionList::new(language, wished));
+        // The row opens the list of the connections it counts. To a screen reader the button is called by
+        // the row's title; what it does is in its tooltip.
+        let open = gtk::Button::from_icon_name("go-next-symbolic");
+        open.set_widget_name("connections");
+        open.set_valign(gtk::Align::Center);
+        open.add_css_class("flat");
+        open.set_tooltip_text(Some(text("overview.connections.open")));
+        open.connect_clicked({
+            let list = std::rc::Rc::clone(&list);
+            move |button| list.present(button)
+        });
+        connection_row.add_suffix(&open);
+        connection_row.set_activatable_widget(Some(&open));
         let traffic_group = adw::PreferencesGroup::new();
         traffic_group.set_title(text("overview.traffic"));
         traffic_group.add(&download);
@@ -118,6 +142,7 @@ impl OverviewPage {
             upload,
             upload_rate,
             connections,
+            list,
         }
     }
 
@@ -126,8 +151,13 @@ impl OverviewPage {
         &self.root
     }
 
-    /// Draws what is known now.
-    pub fn show(&self, shown: &Shown) {
+    /// Opens the list of open connections over the window the page is in.
+    pub fn open_connections(&self) {
+        self.list.present(&self.root);
+    }
+
+    /// Draws what is known now: the page, and the list of open connections while it is shown.
+    pub fn show(&self, shown: &Shown, connections: Option<&connections::Shown>) {
         self.headline.set_label(&shown.headline);
         for (label, text) in [(&self.detail, &shown.detail), (&self.error, &shown.error)] {
             label.set_label(text.as_deref().unwrap_or_default());
@@ -149,5 +179,6 @@ impl OverviewPage {
         self.upload
             .set_subtitle(shown.upload_total.as_deref().unwrap_or_default());
         self.connections.set_label(&shown.connections);
+        self.list.show(connections);
     }
 }
