@@ -11,6 +11,7 @@
 
 #![cfg(windows)]
 
+pub mod cleanup;
 pub mod data_dir;
 pub mod scm;
 
@@ -30,7 +31,8 @@ pub const SERVICE_NAME: &str = "AnixOpsNetCore";
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-const USAGE: &str = "usage: anixops-net-service [--console] [--dir <folder>] [--pipe <name>]";
+const USAGE: &str =
+    "usage: anixops-net-service [--console] [--dir <folder>] [--pipe <name>] | --close-windows | --purge";
 
 /// `%ProgramData%`, where programs keep data that belongs to the machine.
 fn program_data() -> PathBuf {
@@ -48,6 +50,8 @@ pub struct Options {
     pub legacy_dir: Option<PathBuf>,
     /// Run in the foreground instead of under the service manager, for looking at it by hand.
     pub console: bool,
+    /// Do what the installer asks at an upgrade or a removal instead of running the service.
+    pub cleanup: Option<cleanup::Cleanup>,
 }
 
 impl Default for Options {
@@ -57,6 +61,7 @@ impl Default for Options {
             endpoint: DEFAULT_ENDPOINT.to_string(),
             legacy_dir: Some(platform_windows::managed::windows_managed_data_directory()),
             console: false,
+            cleanup: None,
         }
     }
 }
@@ -76,6 +81,8 @@ impl Options {
             };
             match argument.as_str() {
                 "--console" => options.console = true,
+                "--close-windows" => options.cleanup = Some(cleanup::Cleanup::CloseWindows),
+                "--purge" => options.cleanup = Some(cleanup::Cleanup::Purge),
                 "--dir" => options.dir = PathBuf::from(value()?),
                 "--pipe" => options.endpoint = value()?,
                 _ => return Err(format!("{argument} is not understood\n{USAGE}")),
@@ -173,6 +180,19 @@ mod tests {
         assert!(options.console);
         assert_eq!(options.endpoint, r"\\.\pipe\test");
         assert_eq!(options.dir, PathBuf::from(r"C:\data"));
+    }
+
+    #[test]
+    fn the_installers_requests_are_understood() {
+        assert_eq!(parse(&[]).unwrap().cleanup, None);
+        assert_eq!(
+            parse(&["--close-windows"]).unwrap().cleanup,
+            Some(cleanup::Cleanup::CloseWindows)
+        );
+        assert_eq!(
+            parse(&["--purge"]).unwrap().cleanup,
+            Some(cleanup::Cleanup::Purge)
+        );
     }
 
     #[test]

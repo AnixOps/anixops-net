@@ -24,3 +24,5 @@ The tests against the real service need `ANIXOPS_NET_SERVICE_EXE` (the built `an
 builds it. They run it with `--console` on a pipe and a data folder of their own.
 
 Like the rest of the repository, this is built and tested in GitHub Actions only.
+
+The installer is `installer/windows-native` (service registration, upgrade and removal).

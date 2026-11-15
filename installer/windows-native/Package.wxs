@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The installer of the native Windows client (apps/windows-native and apps/windows-service). WiX 5.
+     Built in CI with: ProductVersion, AppDir (the published window, self-contained) and ServiceExe. -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <!-- Its own upgrade code and folder: it installs beside the web client (AnixOps NetworkCore) until the
+       cutover, and never replaces it by accident. -->
+  <Package
+      Name="AnixOps Net"
+      Manufacturer="AnixOps"
+      Version="$(ProductVersion)"
+      UpgradeCode="FEAD52DB-0AE1-4623-9F50-67F8B85F12CD"
+      Scope="perMachine"
+      InstallerVersion="500"
+      Compressed="yes">
+    <SummaryInformation Description="AnixOps Net for Windows" />
+    <!-- The old version is removed completely first (its service stopped and deleted, its windows closed),
+         then the new one is installed. The client's data under ProgramData is not part of the package and
+         stays. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="ManufacturerFolder" Name="AnixOps">
+        <Directory Id="INSTALLFOLDER" Name="Net">
+          <!-- The window. It runs as the signed-in user, without administrator rights. -->
+          <Component Id="WindowComponent" Guid="*">
+            <File
+                Id="WindowExe"
+                Source="$(AppDir)\AnixOpsNet.exe"
+                Name="AnixOpsNet.exe"
+                KeyPath="yes">
+              <Shortcut
+                  Id="StartMenuShortcut"
+                  Directory="ProgramMenuFolder"
+                  Name="AnixOps Net"
+                  Description="AnixOps Net"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Advertise="yes" />
+            </File>
+          </Component>
+
+          <!-- The core: a service that runs as LocalSystem, starts with Windows and answers the windows of
+               signed-in users over a named pipe. -->
+          <Component Id="ServiceComponent" Guid="*">
+            <File
+                Id="ServiceExe"
+                Source="$(ServiceExe)"
+                Name="anixops-net-service.exe"
+                KeyPath="yes" />
+            <ServiceInstall
+                Id="CoreService"
+                Name="AnixOpsNetCore"
+                DisplayName="AnixOps Net Core"
+                Description="Runs the AnixOps Net engine and keeps its data. The AnixOps Net window controls it."
+                Type="ownProcess"
+                Start="auto"
+                ErrorControl="normal"
+                Account="LocalSystem"
+                Vital="yes" />
+            <ServiceControl
+                Id="CoreServiceControl"
+                Name="AnixOpsNetCore"
+                Start="install"
+                Stop="both"
+                Remove="uninstall"
+                Wait="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Everything else the window was published with: the .NET runtime and the Windows App SDK. -->
+    <ComponentGroup Id="WindowFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(AppDir)\**">
+        <Exclude Files="$(AppDir)\AnixOpsNet.exe" />
+        <Exclude Files="$(AppDir)\**\*.pdb" />
+      </Files>
+    </ComponentGroup>
+
+    <Feature Id="Complete" Title="AnixOps Net" Level="1">
+      <ComponentRef Id="WindowComponent" />
+      <ComponentRef Id="ServiceComponent" />
+      <ComponentGroupRef Id="WindowFiles" />
+    </Feature>
+
+    <!-- Both run as LocalSystem after the service has stopped (while stopping it has the open window put
+         the user's proxy settings back) and before the files are removed; see
+         apps/windows-service/src/cleanup.rs. Neither stops the installer when it fails. -->
+    <CustomAction
+        Id="CloseWindows"
+        FileRef="ServiceExe"
+        ExeCommand="--close-windows"
+        Execute="deferred"
+        Impersonate="no"
+        Return="ignore" />
+    <CustomAction
+        Id="PurgeUserSettings"
+        FileRef="ServiceExe"
+        ExeCommand="--purge"
+        Execute="deferred"
+        Impersonate="no"
+        Return="ignore" />
+    <InstallExecuteSequence>
+      <!-- An upgrade: only close the windows, the users keep their settings. -->
+      <Custom
+          Action="CloseWindows"
+          Before="RemoveFiles"
+          Condition="Installed AND REMOVE=&quot;ALL&quot; AND UPGRADINGPRODUCTCODE" />
+      <!-- A removal: also take the login entry out of the users' settings. -->
+      <Custom
+          Action="PurgeUserSettings"
+          Before="RemoveFiles"
+          Condition="Installed AND REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+    </InstallExecuteSequence>
+  </Package>
+</Wix>
