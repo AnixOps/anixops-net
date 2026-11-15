@@ -1122,7 +1122,9 @@ jobs:
               -o (Join-Path $out "anixops-net-$version.msi")
             if ($LASTEXITCODE -ne 0) { throw "the installer $version was not built" }
           }
-          wix msi validate (Join-Path $out "anixops-net-0.3.0.msi")
+          # ICE03 is left out: it rejects the language lists in the version resources of some of the .NET
+          # and Windows App SDK libraries, which are Microsoft's files and installed as they are.
+          wix msi validate -sice ICE03 (Join-Path $out "anixops-net-0.3.0.msi")
           if ($LASTEXITCODE -ne 0) { throw "the installer did not pass validation" }
           $size = (Get-Item (Join-Path $out "anixops-net-0.3.0.msi")).Length
           Write-Host ("installer size: {0:N1} MB" -f ($size / 1MB))
