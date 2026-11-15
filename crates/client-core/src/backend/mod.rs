@@ -28,7 +28,14 @@ pub mod tun_helper;
 
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+/// The file in the data directory `dir` that lists the thumbprints of the roots users trusted in their own
+/// stores ([`Backend::note_trusted_root`]).
+pub fn trusted_roots_path(dir: &Path) -> PathBuf {
+    dir.join("trusted-roots.txt")
+}
 
 /// The capture folder in the data directory `dir`: the key file (when there is one) and `sessions/`.
 pub fn capture_dir(dir: &Path) -> PathBuf {
@@ -227,7 +234,7 @@ pub struct Backend {
     /// The other sources' runnable nodes, listed after the selected source's.
     others: Vec<OtherSource>,
     /// The system proxy and the login entry, which belong to the user's session.
-    session: Box<dyn UserSession>,
+    session: Arc<dyn UserSession>,
     last_error: Option<String>,
     configuration_error: Option<String>,
     /// Seven days of traffic by hour, host and policy (`traffic_stats`).
@@ -255,7 +262,7 @@ impl Backend {
             nodes: Vec::new(),
             routed_profile: None,
             others: Vec::new(),
-            session,
+            session: Arc::from(session),
             last_error: None,
             configuration_error: None,
             traffic: TrafficStats::default(),
@@ -480,6 +487,27 @@ impl Backend {
     /// installs it in a trust store when decryption is turned on.
     pub fn ensure_mitm_root(&self) -> Result<Root, String> {
         Root::ensure(&self.mitm_dir())
+    }
+
+    /// The user's session, to ask without holding the backend: what it is asked may wait for the user.
+    pub fn session(&self) -> Arc<dyn UserSession> {
+        Arc::clone(&self.session)
+    }
+
+    /// Remembers that a user's own store trusts the root with this thumbprint, so that removing the client
+    /// can take it out again (Windows: `anixops-net-service --purge`). One thumbprint per line.
+    pub fn note_trusted_root(&self, thumbprint: &str) {
+        let path = trusted_roots_path(self.store.dir());
+        let known = std::fs::read_to_string(&path).unwrap_or_default();
+        if known.lines().any(|line| line.trim() == thumbprint) {
+            return;
+        }
+        if let Err(error) = std::fs::write(&path, format!("{known}{thumbprint}\n")) {
+            self.log(
+                LogLevel::Error,
+                &format!("the trusted root could not be noted: {error}"),
+            );
+        }
     }
 
     /// The local port the mixed proxy listens on.

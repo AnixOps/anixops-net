@@ -20,6 +20,10 @@ use crate::{ask, event};
 /// writes the registry on Windows; a window that takes longer is not answering.
 const PATIENCE: Duration = Duration::from_secs(15);
 
+/// How long a window gets where the system asks the user to confirm (trusting a root certificate): as long
+/// as a person may take to read a warning.
+const USER_PATIENCE: Duration = Duration::from_secs(300);
+
 const NO_WINDOW: &str =
     "the AnixOps Net window is not open, and only it can change this user's settings";
 
@@ -141,8 +145,17 @@ impl Windows {
     }
 
     fn ask<T: DeserializeOwned>(&self, command: &str, args: Value) -> Result<T, String> {
+        self.ask_within(command, args, PATIENCE)
+    }
+
+    fn ask_within<T: DeserializeOwned>(
+        &self,
+        command: &str,
+        args: Value,
+        patience: Duration,
+    ) -> Result<T, String> {
         let (peer, _) = self.current().ok_or(NO_WINDOW)?;
-        let answer = peer.ask(command, args, PATIENCE)?;
+        let answer = peer.ask(command, args, patience)?;
         serde_json::from_value(answer).map_err(|error| {
             format!("the window's answer to {command} was not understood: {error}")
         })
@@ -192,6 +205,33 @@ impl UserSession for WindowSession {
     fn set_start_after_login(&self, enabled: bool) -> Result<(), String> {
         self.0
             .ask::<Value>(ask::SET_START_AFTER_LOGIN, json!({ "enabled": enabled }))
+            .map(|_| ())
+    }
+
+    fn trusts_root(&self, certificate_pem: &str) -> Option<bool> {
+        // Without a window to ask, the user sees "not trusted" and is told why when trying to change it.
+        self.0
+            .ask::<Option<bool>>(ask::ROOT_TRUSTED, json!({ "certificate": certificate_pem }))
+            .unwrap_or(Some(false))
+    }
+
+    fn trust_root(&self, certificate_pem: &str) -> Result<(), String> {
+        self.0
+            .ask_within::<Value>(
+                ask::TRUST_ROOT,
+                json!({ "certificate": certificate_pem }),
+                USER_PATIENCE,
+            )
+            .map(|_| ())
+    }
+
+    fn untrust_root(&self, certificate_pem: &str) -> Result<(), String> {
+        self.0
+            .ask_within::<Value>(
+                ask::UNTRUST_ROOT,
+                json!({ "certificate": certificate_pem }),
+                USER_PATIENCE,
+            )
             .map(|_| ())
     }
 }

@@ -323,6 +323,10 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
   出现 AnixOps Net 网卡，不走系统代理的程序（命令行的 `curl`、游戏）也经节点出去；断开后网卡消失、网络正常；睡眠唤醒和
   切换 Wi-Fi 后仍然可用；卸载后网卡和 Wintun 驱动都不在（设备管理器、`pnputil /enum-drivers`）。CI 只测到分流模式为直连、
   管理员账号的情况。Tauri 版和原生版用同一个网卡名，两个版本不要同时开 TUN 模式。
+- [ ] Windows 原生版 HTTPS 解密根证书的真机核对（扩展页有“信任根证书”之后）：标准用户账号下点信任，Windows 弹安全警告，
+  选“是”后 Edge / Chrome 访问被解密的网站不报证书错误，选“否”时界面说明没有信任；同一台电脑的另一个用户不受影响
+  （`certmgr.msc` 里没有这张证书）；卸载后当前用户的“受信任的根证书颁发机构”里没有 AnixOps Net HTTPS Decryption Root。
+  CI 测到了证书库和证书链验证，没测浏览器。
 - [ ] Linux 守护进程单元的真机核对（deb / rpm 带上 `anixops-netd` 之后）：在 Ubuntu 和 Fedora 上 `systemctl start
   anixops-netd`，确认单元里的收紧项（`ProtectSystem=strict`、`ProtectHome=yes`、`CapabilityBoundingSet`、
   `RestrictAddressFamilies`）下连接、TUN 模式、HTTPS 解密都正常；用普通登录用户能控制，用没有登录会话的账号

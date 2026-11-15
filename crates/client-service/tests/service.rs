@@ -160,8 +160,11 @@ impl Handler for Scripted {
         match command {
             ask::DESCRIBE => Ok(described()),
             ask::APPLY_PROXY => Ok(applied()),
-            ask::RESTORE_PROXY | ask::SET_START_AFTER_LOGIN => Ok(Value::Null),
-            ask::STARTS_AFTER_LOGIN => Ok(json!(true)),
+            ask::RESTORE_PROXY
+            | ask::SET_START_AFTER_LOGIN
+            | ask::TRUST_ROOT
+            | ask::UNTRUST_ROOT => Ok(Value::Null),
+            ask::STARTS_AFTER_LOGIN | ask::ROOT_TRUSTED => Ok(json!(true)),
             _ => Err(format!("{command} is not something a window does")),
         }
     }
@@ -184,6 +187,11 @@ fn without_a_window_the_users_settings_are_out_of_reach() {
     assert!(service.session.restore_proxy(&backup()).is_err());
     assert!(!service.session.starts_after_login());
     assert!(service.session.set_start_after_login(true).is_err());
+    // Not trusted as far as anyone can tell, and the reason is given when the user tries to change it.
+    assert_eq!(service.session.trusts_root("certificate"), Some(false));
+    let error = service.session.trust_root("certificate").unwrap_err();
+    assert!(error.contains("window is not open"), "{error}");
+    assert!(service.session.untrust_root("certificate").is_err());
 }
 
 #[test]
@@ -223,6 +231,22 @@ fn the_core_asks_the_window_what_the_samples_say() {
             fixture!("set-start-after-login-request")
         )
     );
+
+    // Trust in the decryption root is the user's own, kept by the window in the user's store.
+    let root = fixture!("root-request");
+    let certificate = root["certificate"].as_str().unwrap();
+    assert_eq!(service.session.trusts_root(certificate), Some(true));
+    assert_eq!(
+        next(&questions),
+        (ask::ROOT_TRUSTED.to_string(), root.clone())
+    );
+    assert_eq!(service.session.trust_root(certificate), Ok(()));
+    assert_eq!(
+        next(&questions),
+        (ask::TRUST_ROOT.to_string(), root.clone())
+    );
+    assert_eq!(service.session.untrust_root(certificate), Ok(()));
+    assert_eq!(next(&questions), (ask::UNTRUST_ROOT.to_string(), root));
 }
 
 #[test]

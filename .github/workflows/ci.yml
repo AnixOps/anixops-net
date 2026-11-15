@@ -1112,6 +1112,15 @@ jobs:
           ANIXOPS_NET_TUN_TESTS: "1"
         run: dotnet test apps/windows-native/tests/AnixOps.Net.Session.Tests/AnixOps.Net.Session.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~TunModeTests" --logger "console;verbosity=normal"
 
+      # Pass mark 3, HTTPS decryption part: the root is trusted in the user's own store (no administrator
+      # rights), Windows asks the user first, and what the removal does takes the trust away. A step of
+      # its own because Windows shows its confirmation on the desktop, which the test answers.
+      - name: Root certificate in the user's store
+        env:
+          ANIXOPS_NET_ROOT_TESTS: "1"
+          ANIXOPS_NET_SCREENSHOTS: ${{ runner.temp }}\windows-native-screenshots
+        run: dotnet test apps/windows-native/tests/AnixOps.Net.App.UiTests/AnixOps.Net.App.UiTests.csproj --configuration Release --no-build --filter "FullyQualifiedName~RootStoreTests" --logger "console;verbosity=normal"
+
       # The installer: the window published with its runtime, and the service. Two versions of the same
       # files, so that an upgrade can be tested.
       - name: Build the installer
@@ -1143,9 +1152,9 @@ jobs:
           $size = (Get-Item (Join-Path $out "anixops-net-0.3.0.msi")).Length
           Write-Host ("installer size: {0:N1} MB" -f ($size / 1MB))
 
-      # Pass mark 3: install, upgrade with the window open, TUN mode through the installed service, remove
-      # with the window open; after removal no service, process, file, shortcut, login entry, network
-      # adapter or driver is left.
+      # Pass mark 3: install, upgrade with the window open, TUN mode through the installed service, its root
+      # trusted in the user's store, remove with the window open; after removal no service, process, file,
+      # shortcut, login entry, network adapter, driver or trusted root is left.
       - name: Install, upgrade and remove
         shell: pwsh
         env:

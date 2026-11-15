@@ -180,6 +180,19 @@ pub fn envelope_with_mitm(
     serde_json::to_vec(&envelope).map_err(|error| error.to_string())
 }
 
+/// SHA-1 of the certificate `pem`, 40 upper-case hex digits: the name Windows keeps a certificate under in
+/// its stores (the "thumbprint").
+pub fn thumbprint(pem: &str) -> Result<String, String> {
+    let der = certificate_der(pem)?;
+    Ok(
+        ring::digest::digest(&ring::digest::SHA1_FOR_LEGACY_USE_ONLY, &der)
+            .as_ref()
+            .iter()
+            .map(|byte| format!("{byte:02X}"))
+            .collect(),
+    )
+}
+
 /// The DER of the first PEM block of `pem`.
 fn certificate_der(pem: &str) -> Result<Vec<u8>, String> {
     use base64::Engine as _;
@@ -260,6 +273,13 @@ mod tests {
         assert!(envelope["mitm"]["ca_private_key"].as_str().is_some());
         assert!(root.envelope(b"[]", "", None).is_err());
         assert_eq!(root.fingerprint().unwrap().len(), 32 * 3 - 1);
+        let pem = fs::read_to_string(&root.certificate_path).unwrap();
+        let thumbprint = thumbprint(&pem).unwrap();
+        assert_eq!(thumbprint.len(), 40);
+        assert!(thumbprint
+            .chars()
+            .all(|digit| digit.is_ascii_digit() || ('A'..='F').contains(&digit)));
+        assert!(super::thumbprint("not a certificate").is_err());
         let _ = fs::remove_dir_all(&directory);
     }
 

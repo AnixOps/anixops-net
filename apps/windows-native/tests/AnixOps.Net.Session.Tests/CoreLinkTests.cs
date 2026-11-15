@@ -205,6 +205,62 @@ public sealed class ServiceTests
     }
 
     [Fact]
+    public async Task TheRootIsTrustedInTheUsersOwnStoreAndTheServiceNotesIt()
+    {
+        if (!ServiceProcess.Available())
+        {
+            return;
+        }
+        using var proxyKey = new ScratchKey();
+        using var runKey = new ScratchKey();
+        var roots = new FakeRootStore();
+        var handler = new SessionHandler(new RegistryProxyStore(proxyKey.Path, announce: false), new RegistryLoginEntry(Executable, runKey.Path), roots);
+
+        using var service = ServiceProcess.Start();
+        await using var link = new CoreLink("0.3.0", handler, service.PipeName, TimeSpan.FromMilliseconds(100));
+        link.Start();
+        await Until.StateAsync(link, LinkState.Connected);
+
+        // Once this is answered the core has taken the window in and can ask it.
+        await AskOnceAdmittedAsync(link, "save_preferences", """{ "preferences": { "startAfterLogin": false, "autoConnect": false } }""");
+
+        // Nothing is generated or trusted before the user asks.
+        var status = await link.AskAsync("mitm_root_status");
+        Assert.False(status.GetProperty("generated").GetBoolean());
+        Assert.False(status.GetProperty("trusted").GetBoolean());
+        Assert.Empty(roots.Trusted);
+
+        // The user's own request: the service makes the root and has the window add it to the user's store.
+        await link.AskAsync("open_mitm_root", patience: TimeSpan.FromSeconds(60));
+        var certificate = Assert.Single(roots.Trusted);
+        Assert.StartsWith("-----BEGIN CERTIFICATE-----", certificate, StringComparison.Ordinal);
+        status = await link.AskAsync("mitm_root_status");
+        Assert.True(status.GetProperty("generated").GetBoolean());
+        Assert.True(status.GetProperty("trusted").GetBoolean());
+
+        // What removing the client takes out again is written down beside the service's data.
+        using var parsed = System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromPem(certificate);
+        var noted = await File.ReadAllLinesAsync(Path.Combine(service.Directory, "trusted-roots.txt"));
+        Assert.Equal(new[] { parsed.Thumbprint }, noted);
+        Assert.Contains("AnixOps Net HTTPS Decryption Root", parsed.Subject, StringComparison.Ordinal);
+
+        // A second request changes nothing.
+        await link.AskAsync("open_mitm_root", patience: TimeSpan.FromSeconds(60));
+        Assert.Single(roots.Trusted);
+        Assert.Single(await File.ReadAllLinesAsync(Path.Combine(service.Directory, "trusted-roots.txt")));
+
+        await link.AskAsync("remove_mitm_root_trust", patience: TimeSpan.FromSeconds(60));
+        Assert.Empty(roots.Trusted);
+        Assert.False((await link.AskAsync("mitm_root_status")).GetProperty("trusted").GetBoolean());
+
+        // The user answers No to Windows: the request fails with the reason.
+        roots.UserAgrees = false;
+        var refused = await Assert.ThrowsAsync<RefusedException>(() => link.AskAsync("open_mitm_root", patience: TimeSpan.FromSeconds(60)));
+        Assert.Contains("answered with No", refused.Message, StringComparison.Ordinal);
+        Assert.False((await link.AskAsync("mitm_root_status")).GetProperty("trusted").GetBoolean());
+    }
+
+    [Fact]
     public async Task TheWindowFindsTheServiceAgainAfterItRestarted()
     {
         if (!ServiceProcess.Available())

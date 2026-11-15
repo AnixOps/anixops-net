@@ -40,6 +40,27 @@ public sealed class FakeLoginEntry : ILoginEntry
     public void Set(bool enabled) => Enabled = enabled;
 }
 
+public sealed class FakeRootStore : IRootStore
+{
+    public HashSet<string> Trusted { get; } = new();
+
+    /// <summary>What the user answers when Windows asks to confirm.</summary>
+    public bool UserAgrees { get; set; } = true;
+
+    public bool Trusts(string certificatePem) => Trusted.Contains(certificatePem);
+
+    public void Trust(string certificatePem)
+    {
+        if (!UserAgrees)
+        {
+            throw new RefusedException("the Windows security warning was answered with No");
+        }
+        Trusted.Add(certificatePem);
+    }
+
+    public void Untrust(string certificatePem) => Trusted.Remove(certificatePem);
+}
+
 public sealed class SessionHandlerTests
 {
     private static readonly ProxySettings Off = new(false, "", "");
@@ -59,6 +80,41 @@ public sealed class SessionHandlerTests
         var proxy = new FakeProxyStore(current ?? Off);
         var login = new FakeLoginEntry();
         return (new SessionHandler(proxy, login), proxy, login);
+    }
+
+    [Fact]
+    public async Task TheUsersTrustInTheRootIsKeptByTheWindow()
+    {
+        var roots = new FakeRootStore();
+        var handler = new SessionHandler(new FakeProxyStore(Off), new FakeLoginEntry(), roots);
+        var request = Sample("root-request.json");
+        var certificate = request.GetProperty("certificate").GetString()!;
+
+        Assert.False((await handler.RequestAsync(SessionHandler.RootTrusted, request)).GetBoolean());
+        await handler.RequestAsync(SessionHandler.TrustRoot, request);
+        Assert.Contains(certificate, roots.Trusted);
+        Assert.True((await handler.RequestAsync(SessionHandler.RootTrusted, request)).GetBoolean());
+        await handler.RequestAsync(SessionHandler.UntrustRoot, request);
+        Assert.Empty(roots.Trusted);
+
+        // The user says No to Windows: the core gets the reason, and nothing is trusted.
+        roots.UserAgrees = false;
+        var refused = await Assert.ThrowsAsync<RefusedException>(() => handler.RequestAsync(SessionHandler.TrustRoot, request));
+        Assert.Contains("answered with No", refused.Message, StringComparison.Ordinal);
+        Assert.Empty(roots.Trusted);
+
+        await Assert.ThrowsAsync<RefusedException>(() => handler.RequestAsync(SessionHandler.TrustRoot, Message.EmptyObject));
+        await Assert.ThrowsAsync<RefusedException>(() => handler.RequestAsync(SessionHandler.RootTrusted, Json("""{ "certificate": "" }""")));
+    }
+
+    [Fact]
+    public async Task AWindowWithoutACertificateStoreSaysSo()
+    {
+        var (handler, _, _) = Make();
+        var request = Sample("root-request.json");
+        Assert.Equal(JsonValueKind.Null, (await handler.RequestAsync(SessionHandler.RootTrusted, request)).ValueKind);
+        await Assert.ThrowsAsync<RefusedException>(() => handler.RequestAsync(SessionHandler.TrustRoot, request));
+        await Assert.ThrowsAsync<RefusedException>(() => handler.RequestAsync(SessionHandler.UntrustRoot, request));
     }
 
     [Fact]

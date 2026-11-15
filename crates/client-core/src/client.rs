@@ -592,8 +592,8 @@ impl Client {
     /// trusted here: the user does that with `open_mitm_root` (TERMS.md section 4).
     #[cfg(not(target_os = "android"))]
     fn enable_https_mitm(&self) -> Result<OperationResult, String> {
-        self.backend().ensure_mitm_root()?;
-        let trusted = trust::is_trusted();
+        let root = self.backend().ensure_mitm_root()?;
+        let trusted = self.root_trusted(&root);
         let result = self.backend().set_https_decryption(true)?;
         let note = if trusted {
             ""
@@ -634,8 +634,9 @@ impl Client {
     /// Whether the root exists and a browser database or the system store holds it. Read only.
     #[cfg(not(target_os = "android"))]
     fn mitm_root_status(&self) -> Result<MitmRootStatus, String> {
-        let generated = self.backend().mitm_root().exists();
-        let trusted = generated && trust::is_trusted();
+        let root = self.backend().mitm_root();
+        let generated = root.exists();
+        let trusted = generated && self.root_trusted(&root);
         Ok(MitmRootStatus { generated, trusted })
     }
 
@@ -645,15 +646,66 @@ impl Client {
         Err(UNAVAILABLE.to_string())
     }
 
-    /// The user's own request to trust the root: the browsers' databases and, after polkit asks, the
-    /// system store.
+    /// Whether the root is trusted: in the user's own store where the session keeps one (the core runs in
+    /// a service and the window answers), otherwise in a browser database or the system store.
+    #[cfg(not(target_os = "android"))]
+    fn root_trusted(&self, root: &desktop_mitm::Root) -> bool {
+        // The session is asked without the backend held: its window may be busy with the user.
+        let session = self.backend().session();
+        let Ok(pem) = fs::read_to_string(&root.certificate_path) else {
+            return false;
+        };
+        session.trusts_root(&pem).unwrap_or_else(trust::is_trusted)
+    }
+
+    /// The user's own request to trust the root. Where the session keeps the user's store, the window adds
+    /// it there and the system asks the user to confirm; otherwise the browsers' databases and, after
+    /// polkit asks, the system store.
     #[cfg(not(target_os = "android"))]
     fn open_mitm_root(&self) -> Result<OperationResult, String> {
         let root = self.backend().ensure_mitm_root()?;
-        let trusted = trust::install(&root.certificate_path);
+        let session = self.backend().session();
+        let pem = fs::read_to_string(&root.certificate_path)
+            .map_err(|error| format!("the root certificate could not be read: {error}"))?;
+        if session.trusts_root(&pem).is_none() {
+            let trusted = trust::install(&root.certificate_path);
+            return Ok(OperationResult {
+                message: trusted.summary("trusted"),
+            });
+        }
+        let thumbprint = desktop_mitm::thumbprint(&pem)?;
+        // Noted before the user answers: a root that was noted and then refused costs nothing, one that
+        // was trusted and not noted would stay behind when the client is removed.
+        self.backend().note_trusted_root(&thumbprint);
+        session.trust_root(&pem)?;
         Ok(OperationResult {
-            message: trusted.summary("trusted"),
+            message: "Root certificate trusted for this user".to_string(),
         })
+    }
+
+    /// The user's own request to stop trusting the root: the user's own store where the session keeps
+    /// one, otherwise the browsers' databases and, after polkit asks, the system store.
+    #[cfg(not(target_os = "android"))]
+    fn remove_mitm_root_trust(&self) -> Result<OperationResult, String> {
+        let root = self.backend().mitm_root();
+        let session = self.backend().session();
+        let pem = fs::read_to_string(&root.certificate_path).ok();
+        match pem.filter(|pem| session.trusts_root(pem).is_some()) {
+            Some(pem) => {
+                session.untrust_root(&pem)?;
+                Ok(OperationResult {
+                    message: "Root certificate removed for this user".to_string(),
+                })
+            }
+            None => Ok(OperationResult {
+                message: trust::remove().summary("removed"),
+            }),
+        }
+    }
+
+    #[cfg(target_os = "android")]
+    fn remove_mitm_root_trust(&self) -> Result<OperationResult, String> {
+        Err(UNAVAILABLE.to_string())
     }
 
     #[cfg(target_os = "android")]
@@ -1031,7 +1083,7 @@ fn handler(name: &str) -> Option<Handler> {
         },
         "mitm_root_status" => |client, _| json(client.mitm_root_status()?),
         "open_mitm_root" => |client, _| json(client.open_mitm_root()?),
-        "remove_mitm_root_trust" => |_, _| json(remove_mitm_root_trust()?),
+        "remove_mitm_root_trust" => |client, _| json(client.remove_mitm_root_trust()?),
         "list_mitm_plugins" => |client, _| {
             let directory = client.backend().plugins_dir();
             json(plugins::list(&directory)?)
@@ -1093,21 +1145,6 @@ fn handler(name: &str) -> Option<Handler> {
         _ => return None,
     };
     Some(handler)
-}
-
-/// The user's own request to stop trusting the root: the browsers' databases and, after polkit asks, the
-/// system store.
-#[cfg(not(target_os = "android"))]
-fn remove_mitm_root_trust() -> Result<OperationResult, String> {
-    let removed = trust::remove();
-    Ok(OperationResult {
-        message: removed.summary("removed"),
-    })
-}
-
-#[cfg(target_os = "android")]
-fn remove_mitm_root_trust() -> Result<OperationResult, String> {
-    Err(UNAVAILABLE.to_string())
 }
 
 /// The name the decryption root gets in Downloads.
