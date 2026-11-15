@@ -9,6 +9,7 @@ members = [
     "crates/client-core",
     "crates/client-health",
     "crates/client-ipc",
+    "crates/client-service",
     "crates/desktop-dns",
     "crates/desktop-mitm",
     "crates/network-watch",

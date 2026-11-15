@@ -25,7 +25,7 @@ use serde_json::Value;
 use subscription_meta::ResponseMeta;
 
 use crate::backend::engine;
-use crate::backend::session::LocalSession;
+use crate::backend::session::{LocalSession, UserSession};
 use crate::backend::state::Store;
 use crate::backend::system_proxy::Desktop;
 #[cfg(not(target_os = "android"))]
@@ -162,6 +162,26 @@ impl Client {
     /// for that at start (only without a system VPN, which needs the user's consent in the window) and watches
     /// the network. Call [`Client::start_background`] once the platform can post notifications.
     pub fn open(config: Config, platform: Arc<dyn Platform>) -> Arc<Self> {
+        let session = LocalSession::new(
+            Desktop::from_env(),
+            // Android has no login entries; the Windows one is not an XDG autostart file.
+            if cfg!(any(target_os = "android", windows)) {
+                None
+            } else {
+                autostart::autostart_dir()
+            },
+            config.executable.clone(),
+        );
+        Self::open_with_session(config, platform, Box::new(session))
+    }
+
+    /// As [`Client::open`], for a client that does not run in the user's own session (a system service):
+    /// `session` reaches the user's proxy settings and login entry for it.
+    pub fn open_with_session(
+        config: Config,
+        platform: Arc<dyn Platform>,
+        session: Box<dyn UserSession>,
+    ) -> Arc<Self> {
         let Config { dir, executable } = config;
         let health = Health::start(
             &dir,
@@ -174,19 +194,7 @@ impl Client {
             &crate::backend::capture_dir(&dir).join("sessions"),
             desktop_mitm::sessions::now_ms(),
         );
-        let backend = Backend::open(
-            Store::new(dir),
-            Box::new(LocalSession::new(
-                Desktop::from_env(),
-                // Android has no login entries; the Windows one is not an XDG autostart file.
-                if cfg!(any(target_os = "android", windows)) {
-                    None
-                } else {
-                    autostart::autostart_dir()
-                },
-                executable,
-            )),
-        );
+        let backend = Backend::open(Store::new(dir), session);
         let auto_connect = backend.auto_connect();
         let shared = Arc::new(Mutex::new(backend));
         // The endpoint skips the engine while another command holds the backend, rather than waiting on it.
@@ -225,6 +233,12 @@ impl Client {
         self.start_subscription_updates();
         self.start_on_demand();
         self.start_monitor();
+    }
+
+    /// Call when the user's session becomes reachable after the client was opened (a window connected to
+    /// the service): what was waiting for it, the system proxy of a connection made earlier, is done now.
+    pub fn session_arrived(&self) {
+        self.backend().session_arrived();
     }
 
     /// Puts the desktop's proxy settings back; call when the app exits.
