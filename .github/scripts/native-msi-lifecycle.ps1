@@ -94,6 +94,26 @@ function Test-TunDriver {
   [bool]($drivers | Select-String -SimpleMatch "wintun.inf")
 }
 
+function Assert-RootGetsTrusted {
+  # The installed service has this user's window trust its HTTPS decryption root; the test answers the
+  # confirmation Windows shows.
+  $env:ANIXOPS_NET_ROOT_TESTS = "1"
+  $env:ANIXOPS_NET_INSTALLED = "1"
+  try {
+    dotnet test $TestProject --configuration Release --no-build --filter "FullyQualifiedName~RootStoreTests" --logger "console;verbosity=normal"
+    if ($LASTEXITCODE -ne 0) { throw "The installed service's root was not trusted in the user's store." }
+  } finally {
+    Remove-Item Env:ANIXOPS_NET_ROOT_TESTS
+    Remove-Item Env:ANIXOPS_NET_INSTALLED
+  }
+}
+
+function Get-TrustedRoots {
+  # The client's root in this user's own store and in the machine's.
+  @(Get-ChildItem Cert:\CurrentUser\Root, Cert:\LocalMachine\Root |
+      Where-Object { $_.Subject -like "*AnixOps Net HTTPS Decryption Root*" })
+}
+
 function Start-Window {
   $started = Start-Process -FilePath $window -PassThru
   Start-Sleep -Seconds 5
@@ -126,7 +146,14 @@ Assert-WindowReachesService
 Assert-TunModeWorks
 if (-not (Test-TunDriver)) { throw "TUN mode worked, but no Wintun driver is in the driver store; the check after removal would prove nothing." }
 
-# 4. Remove with the window open.
+# 4. The user trusts the HTTPS decryption root: it goes into this user's own store, never the machine's.
+if ((Get-TrustedRoots).Count -ne 0) { throw "A client root is trusted before the test." }
+Assert-RootGetsTrusted
+$trusted = Get-TrustedRoots
+if ($trusted.Count -ne 1) { throw "$($trusted.Count) client roots are trusted, expected the one in the user's store." }
+if ($trusted[0].PSParentPath -notlike "*CurrentUser*") { throw "The root was trusted in $($trusted[0].PSParentPath), not in the user's own store." }
+
+# 5. Remove with the window open.
 Start-Window
 Invoke-Msi -Arguments @("/x", "`"$Second`"") -Operation "uninstall"
 if ($null -ne (Get-Service -Name $serviceName -ErrorAction SilentlyContinue)) { throw "The removal left the service registered." }
@@ -140,9 +167,10 @@ if (Test-Path $installDir) {
 if (Test-Path $shortcut) { throw "The removal left the Start menu shortcut." }
 if ($null -ne (Get-NetAdapter -Name "AnixOps Net" -ErrorAction SilentlyContinue)) { throw "The removal left the TUN adapter." }
 if (Test-TunDriver) { throw "The removal left the Wintun driver in the driver store." }
+if ((Get-TrustedRoots).Count -ne 0) { throw "The removal left the HTTPS decryption root trusted." }
 if (Get-RunEntry) { throw "The removal left the user's login entry." }
 if ((Get-Products).Count -ne 0) { throw "The removal left the product registered." }
 # The client's data is the user's and is kept on purpose (subscriptions, settings).
 if (-not (Test-Path $marker)) { throw "The removal deleted the client's data." }
 Remove-Item -Path $dataDir -Recurse -Force -ErrorAction SilentlyContinue
-Write-Host "removed: no service, no process, no files, no shortcut, no login entry, no TUN adapter, no TUN driver; data kept"
+Write-Host "removed: no service, no process, no files, no shortcut, no login entry, no TUN adapter, no TUN driver, no trusted root; data kept"

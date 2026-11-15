@@ -1,5 +1,6 @@
-//! What the client changes in the signed-in user's own session: the system proxy settings and the entry that
-//! starts the client after login.
+//! What the client changes in the signed-in user's own session: the system proxy settings, the entry that
+//! starts the client after login and, where the core runs in a service, the user's trust in the HTTPS
+//! decryption root.
 //!
 //! These belong to the user, not to the machine. A client whose engine runs in the window's own process (the
 //! Tauri desktop app, the portable build) does them itself, through [`LocalSession`]. Where the engine runs
@@ -28,6 +29,28 @@ pub trait UserSession: Send + Sync {
     /// Adds or removes the entry that starts the client after login. Where the session has no such entry
     /// nothing is changed.
     fn set_start_after_login(&self, enabled: bool) -> Result<(), String>;
+
+    /// Whether the user's own certificate store trusts the HTTPS decryption root `certificate_pem`. `None`
+    /// where the core itself runs in the user's session and asks the system (`backend::trust`). A core in
+    /// a background service must not trust a root for the whole machine at one user's word, so there the
+    /// user's window keeps it in that user's store and answers here.
+    fn trusts_root(&self, certificate_pem: &str) -> Option<bool> {
+        let _ = certificate_pem;
+        None
+    }
+
+    /// Adds the root to the user's own certificate store; the system may ask the user to confirm, so this
+    /// can take as long as the user does. Only called where [`UserSession::trusts_root`] answers.
+    fn trust_root(&self, certificate_pem: &str) -> Result<(), String> {
+        let _ = certificate_pem;
+        Err("this session keeps no certificate store of its own".to_string())
+    }
+
+    /// Takes the root out of the user's own certificate store again.
+    fn untrust_root(&self, certificate_pem: &str) -> Result<(), String> {
+        let _ = certificate_pem;
+        Err("this session keeps no certificate store of its own".to_string())
+    }
 }
 
 /// The session of the process the backend runs in.

@@ -61,6 +61,20 @@ impl Handler for WindowEnd {
                     .set_start_after_login(argument(&args, "enabled")?)?;
                 Ok(Value::Null)
             }
+            ask::ROOT_TRUSTED => {
+                let certificate: String = argument(&args, "certificate")?;
+                Ok(json!(self.session.trusts_root(&certificate)))
+            }
+            ask::TRUST_ROOT => {
+                let certificate: String = argument(&args, "certificate")?;
+                self.session.trust_root(&certificate)?;
+                Ok(Value::Null)
+            }
+            ask::UNTRUST_ROOT => {
+                let certificate: String = argument(&args, "certificate")?;
+                self.session.untrust_root(&certificate)?;
+                Ok(Value::Null)
+            }
             _ => Err(format!("{command} is not something a window does")),
         }
     }

@@ -5,7 +5,8 @@
 //!
 //! - `--close-windows` (upgrade): ends the windows that are still open, so that their files can be replaced.
 //! - `--purge` (removal): the same, and then removes the entry that starts the window after login from every
-//!   signed-in user's settings, and the TUN mode's driver (Wintun) from the machine unless another program
+//!   signed-in user's settings, the HTTPS decryption roots those users trusted out of their own certificate
+//!   stores, and the TUN mode's driver (Wintun) from the machine unless another program
 //!   still uses it. The client's data under `%ProgramData%` is kept, as the user's own.
 //!
 //! The service has stopped by then and, while stopping, has had the open window put the user's proxy
@@ -21,6 +22,9 @@ pub const WINDOW_PROGRAM: &str = "AnixOpsNet.exe";
 pub const LOGIN_VALUE: &str = "AnixOpsNet";
 
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+
+/// Where Windows keeps a user's own trusted roots, one key per certificate, named by its thumbprint.
+const USER_ROOTS_KEY: &str = r"Software\Microsoft\SystemCertificates\Root\Certificates";
 
 /// What the installer asks for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,6 +73,16 @@ pub fn starts_window_in(output: &str, folder: &Path) -> bool {
         ))
 }
 
+/// The thumbprints in the core's list of roots that users trusted (`client_core::backend::trusted_roots_path`):
+/// only lines that are a thumbprint, since each becomes part of a registry key's name.
+pub fn thumbprints(list: &str) -> Vec<String> {
+    list.lines()
+        .map(str::trim)
+        .filter(|line| line.len() == 40 && line.chars().all(|digit| digit.is_ascii_hexdigit()))
+        .map(str::to_ascii_uppercase)
+        .collect()
+}
+
 fn close_windows(problems: &mut Vec<String>) {
     match Command::new(system_program("taskkill.exe"))
         .args(["/F", "/IM", WINDOW_PROGRAM])
@@ -84,25 +98,63 @@ fn close_windows(problems: &mut Vec<String>) {
     }
 }
 
-fn remove_login_entries(folder: &Path, problems: &mut Vec<String>) {
-    let reg = system_program("reg.exe");
-    let listing = match Command::new(&reg).args(["query", "HKU"]).output() {
+/// The settings of the users signed in now, as `reg` names them.
+fn signed_in_users(problems: &mut Vec<String>) -> Vec<String> {
+    match Command::new(system_program("reg.exe"))
+        .args(["query", "HKU"])
+        .output()
+    {
         Ok(output) if output.status.success() => {
-            String::from_utf8_lossy(&output.stdout).into_owned()
+            user_hives(&String::from_utf8_lossy(&output.stdout))
         }
         Ok(output) => {
             problems.push(format!(
                 "the users' settings could not be listed: {}",
                 String::from_utf8_lossy(&output.stderr).trim()
             ));
-            return;
+            Vec::new()
         }
         Err(error) => {
             problems.push(format!("reg could not be run: {error}"));
-            return;
+            Vec::new()
         }
+    }
+}
+
+/// Takes the HTTPS decryption roots that users trusted out of the signed-in users' own certificate stores.
+/// Deleting needs no confirmation from the user, unlike adding. A user who is not signed in keeps the
+/// root; its key stays in the client's data folder, which is closed to ordinary users.
+fn remove_trusted_roots(users: &[String], data: &Path, problems: &mut Vec<String>) {
+    let Ok(list) = std::fs::read_to_string(data.join("trusted-roots.txt")) else {
+        // Nobody trusted a root.
+        return;
     };
-    for hive in user_hives(&listing) {
+    let reg = system_program("reg.exe");
+    for thumbprint in thumbprints(&list) {
+        for hive in users {
+            let key = format!(r"{hive}\{USER_ROOTS_KEY}\{thumbprint}");
+            // A user who never trusted it is the usual case and not a problem.
+            let Ok(found) = Command::new(&reg).args(["query", &key]).output() else {
+                continue;
+            };
+            if !found.status.success() {
+                continue;
+            }
+            match Command::new(&reg).args(["delete", &key, "/f"]).output() {
+                Ok(output) if output.status.success() => {}
+                Ok(output) => problems.push(format!(
+                    "the root certificate under {hive} could not be removed: {}",
+                    String::from_utf8_lossy(&output.stderr).trim()
+                )),
+                Err(error) => problems.push(format!("reg could not be run: {error}")),
+            }
+        }
+    }
+}
+
+fn remove_login_entries(users: &[String], folder: &Path, problems: &mut Vec<String>) {
+    let reg = system_program("reg.exe");
+    for hive in users {
         let key = format!(r"{hive}\{RUN_KEY}");
         // A user without the value is the usual case and not a problem.
         let Ok(found) = Command::new(&reg)
@@ -197,16 +249,18 @@ fn remove_tun_driver(folder: &Path, problems: &mut Vec<String>) {
     unsafe { FreeLibrary(module) };
 }
 
-/// Does what the installer asked and says what could not be done. Nothing here stops an upgrade or a
+/// Does what the installer asked and says what could not be done. `data` is the service's data folder. Nothing here stops an upgrade or a
 /// removal: the installer goes on either way.
-pub fn run(cleanup: Cleanup) -> Vec<String> {
+pub fn run(cleanup: Cleanup, data: &Path) -> Vec<String> {
     let mut problems = Vec::new();
     close_windows(&mut problems);
     if cleanup == Cleanup::Purge {
+        let users = signed_in_users(&mut problems);
+        remove_trusted_roots(&users, data, &mut problems);
         match std::env::current_exe() {
             Ok(program) => {
                 if let Some(folder) = program.parent() {
-                    remove_login_entries(folder, &mut problems);
+                    remove_login_entries(&users, folder, &mut problems);
                     remove_tun_driver(folder, &mut problems);
                 }
             }
@@ -236,6 +290,19 @@ mod tests {
             ]
         );
         assert!(user_hives("").is_empty());
+    }
+
+    #[test]
+    fn only_thumbprints_become_registry_key_names() {
+        let list = "0123456789ABCDEF0123456789abcdef01234567\r\n\r\n..\\..\\Run\nABC\n             FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF \n0123456789ABCDEF0123456789ABCDEF0123456G\n";
+        assert_eq!(
+            thumbprints(list),
+            [
+                "0123456789ABCDEF0123456789ABCDEF01234567",
+                "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            ]
+        );
+        assert!(thumbprints("").is_empty());
     }
 
     #[test]

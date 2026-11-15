@@ -24,7 +24,8 @@ public partial class App : Application
         // administrator rights, and the core runs as a system service.
         var session = new SessionHandler(
             new RegistryProxyStore(),
-            new RegistryLoginEntry(Environment.ProcessPath ?? System.IO.Path.Combine(AppContext.BaseDirectory, "AnixOpsNet.exe")));
+            new RegistryLoginEntry(Environment.ProcessPath ?? System.IO.Path.Combine(AppContext.BaseDirectory, "AnixOpsNet.exe")),
+            new UserRootStore());
         var version = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
         var core = new CoreLink(version, session, launch.Pipe ?? Channel.DefaultPipeName);
         window = new MainWindow(launch, strings, core);

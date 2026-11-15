@@ -22,6 +22,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AnixOps.Net.Presentation\AnixOps.Net.Presentation.csproj" />
+    <!-- The user's certificate store and the link to the core, for the tests that answer Windows' own
+         confirmation through UI Automation. -->
+    <ProjectReference Include="..\..\src\AnixOps.Net.Session\AnixOps.Net.Session.csproj" />
   </ItemGroup>
 
   <!-- Starts the real service; shared with the other test project that needs it. -->

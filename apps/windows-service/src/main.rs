@@ -19,7 +19,7 @@ fn main() {
     };
     if let Some(cleanup) = options.cleanup {
         // The installer does not stop for what could not be cleaned up; it is said for its log.
-        for problem in anixops_net_service::cleanup::run(cleanup) {
+        for problem in anixops_net_service::cleanup::run(cleanup, &options.dir) {
             eprintln!("{problem}");
         }
         return;

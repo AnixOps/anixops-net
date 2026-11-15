@@ -17,8 +17,8 @@ What it does:
 - Upgrade: the old version is removed first (service stopped and deleted, open windows closed), then the new
   one is installed and its service started. The users' login entries and the client's data stay.
 - Removal: the service is stopped and deleted, open windows are closed, the files and the shortcut are
-  removed, and the entry that starts the window after login is taken out of every signed-in user's
-  settings. A user who is not signed in at that moment keeps a login entry that points at nothing; Windows
+  removed, and the entry that starts the window after login and the HTTPS decryption root are taken out
+  of every signed-in user's settings. A user who is not signed in at that moment keeps a login entry that points at nothing; Windows
   ignores it.
 - The client's data under `%ProgramData%\AnixOps\Net` (subscriptions, settings, logs) is kept on removal. It
   is closed to ordinary users.
@@ -31,4 +31,9 @@ the service, which loads it by that path. Wintun installs its driver the first t
 removal `anixops-net-service --purge` has Wintun delete the driver again, which Wintun does only when no
 adapter of any program still uses it.
 
-Not in the package yet: trusting the HTTPS decryption root, a licence page and an icon. The package is not signed in CI.
+HTTPS decryption: the installer trusts no certificate. When a user asks for it, that user's window adds
+the client's root to the user's own certificate store (Windows asks to confirm), and the service notes its
+thumbprint in `trusted-roots.txt` in its data folder. On removal `anixops-net-service --purge` takes the
+noted roots out of the signed-in users' stores again.
+
+Not in the package yet: a licence page and an icon. The package is not signed in CI.
