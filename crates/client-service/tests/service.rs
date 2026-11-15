@@ -10,7 +10,6 @@ use std::time::Duration;
 use app_notifications::Notice;
 use client_core::backend::session::UserSession;
 use client_core::backend::system_proxy::{Desktop, ProxyBackup};
-use client_core::client::Platform;
 use client_ipc::{Connection, Handler, Peer, Role};
 use client_service::{ask, event, Commands, WindowEnd, Windows};
 use serde_json::{json, Value};
