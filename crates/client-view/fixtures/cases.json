@@ -3150,7 +3150,7 @@
      "upload": 100,
      "download": 900,
      "total": 5000,
-     "expire": 2000,
+     "expire": 1999999999,
      "updateIntervalHours": 24,
      "refreshable": true,
      "pasted": false
@@ -3202,7 +3202,7 @@
      "pasted": true
     }
    ],
-   "now": 1999
+   "now": 1999999998
   },
   "answer": {
    "subscriptions": [
@@ -3217,7 +3217,8 @@
      "error": null,
      "used": 1000,
      "total": 5000,
-     "expire": 2000,
+     "expire": 1999999999,
+     "expireDate": "2033-05-18",
      "expired": false
     },
     {
@@ -3232,6 +3233,7 @@
      "used": null,
      "total": null,
      "expire": null,
+     "expireDate": null,
      "expired": false
     },
     {
@@ -3246,6 +3248,7 @@
      "used": 7,
      "total": null,
      "expire": null,
+     "expireDate": null,
      "expired": false
     }
    ]
@@ -3273,7 +3276,7 @@
      "upload": 100,
      "download": 900,
      "total": 5000,
-     "expire": 2000,
+     "expire": 1999999999,
      "updateIntervalHours": 24,
      "refreshable": true,
      "pasted": false
@@ -3325,7 +3328,7 @@
      "pasted": true
     }
    ],
-   "now": 2000
+   "now": 1999999999
   },
   "answer": {
    "subscriptions": [
@@ -3340,7 +3343,8 @@
      "error": null,
      "used": 1000,
      "total": 5000,
-     "expire": 2000,
+     "expire": 1999999999,
+     "expireDate": "2033-05-18",
      "expired": true
     },
     {
@@ -3355,6 +3359,7 @@
      "used": null,
      "total": null,
      "expire": null,
+     "expireDate": null,
      "expired": false
     },
     {
@@ -3369,6 +3374,7 @@
      "used": 7,
      "total": null,
      "expire": null,
+     "expireDate": null,
      "expired": false
     }
    ]
