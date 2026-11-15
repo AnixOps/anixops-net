@@ -3263,6 +3263,7 @@ dependencies = [
  "app-notifications",
  "client-core",
  "client-health",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-deep-link",
