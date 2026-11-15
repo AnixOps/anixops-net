@@ -73,7 +73,7 @@ export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, l
       </Card>}
 
       {linux
-        ? !android && <LinuxProxyCard busy={busy} run={run} />
+        ? !android && <LinuxProxyCard busy={busy} run={run} snapshot={snapshot} />
         : <Card title={t("运行方式")} description={t("内核在客户端窗口进程里运行，关闭窗口会断开连接。")}>
           <ToggleRow
             icon={Network}
@@ -189,10 +189,25 @@ function HealthCard({ busy, run }: { busy: string | null; run: Run }) {
   );
 }
 
-/** Linux: the desktop's proxy settings, which connecting points at the local listener. */
-function LinuxProxyCard({ busy, run }: { busy: string | null; run: Run }) {
+/** Linux desktop: TUN mode through the polkit helper, or the desktop's proxy settings pointed at the local listener. */
+function LinuxProxyCard({ busy, run, snapshot }: { busy: string | null; run: Run; snapshot: RuntimeSnapshot }) {
+  const tun = Boolean(snapshot.tunModeEnabled);
   return (
-    <Card title={t("系统代理")} description={t("连接时把 GNOME 或 KDE 的系统代理指向本地端口，断开或退出时改回原来的设置。")}>
+    <Card
+      title={t("运行方式")}
+      description={tun
+        ? t("连接时请求一次管理员授权，创建虚拟网卡并接管全部流量；应用本身不以管理员身份运行。")
+        : t("连接时把 GNOME 或 KDE 的系统代理指向本地端口，断开或退出时改回原来的设置。")}
+    >
+      <ToggleRow
+        icon={Network}
+        color="purple"
+        label={t("TUN 模式")}
+        hint={t("用虚拟网卡接管全部流量，不走系统代理的游戏和命令行程序也会经过代理。需要先断开连接才能切换。")}
+        checked={tun}
+        disabled={Boolean(busy)}
+        onChange={() => void run("TUN", () => desktop.setTunMode(!tun))}
+      />
       <Row icon={LifeBuoy} color="gray" label={t("恢复网络设置")} hint={t("只恢复本应用这次改过、且仍归它管理的代理设置。")}>
         <button className="secondary compact" disabled={Boolean(busy)} onClick={() => void run("network recovery", desktop.restoreNetworkSettings)}>{t("恢复")}</button>
       </Row>

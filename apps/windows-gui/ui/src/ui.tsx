@@ -1,6 +1,6 @@
-import { ChevronRight, Ellipsis, LoaderCircle } from "lucide-react";
+import { Check, ChevronRight, Copy, LoaderCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { Tone } from "./bridge";
 import { t } from "./i18n";
@@ -137,106 +137,68 @@ export function StatusPill({ label, tone }: { label: string; tone: Tone | string
   return <span className={`status-pill ${tone}`}>{label}</span>;
 }
 
-export function IconButton({ label, children, onClick, disabled = false }: {
-  label: string;
-  children: ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
-}) {
-  return <button className="icon-button" title={label} aria-label={label} onClick={onClick} disabled={disabled}>{children}</button>;
-}
-
-/** One entry of a `MoreMenu`. A `danger` entry is listed last, in red, and with `confirm` asks once more in place. */
-export type MenuItem = {
-  label: string;
-  icon?: LucideIcon;
-  onSelect: () => void;
-  disabled?: boolean;
-  danger?: boolean;
-  /** Shown instead of the label after the first click; the second click runs the action. Names what is lost. */
-  confirm?: string;
-};
+export { IconButton, MoreMenu, type MenuEntry as MenuItem } from "./controls";
 
 /**
- * The "more" menu of a row or a section header (AnixOps Design, actions S3 and D1): everything beyond the one
- * labelled and the one icon action goes here, destructive entries last after a separator.
+ * Copies text and shows a tick for a moment, so the click has an answer. `text` may be a function, read on click,
+ * when working the text out is not free.
  */
-export function MoreMenu({ label, items, disabled = false }: { label: string; items: MenuItem[]; disabled?: boolean }) {
-  const [place, setPlace] = useState<{ top: number; right: number } | null>(null);
-  const [confirming, setConfirming] = useState<string | null>(null);
-  const root = useRef<HTMLSpanElement>(null);
-  const everyday = items.filter((item) => !item.danger);
-  const dangerous = items.filter((item) => item.danger);
-
+export function CopyButton({ label, text, disabled = false }: { label: string; text: string | (() => string); disabled?: boolean }) {
+  const [copied, setCopied] = useState(false);
   useEffect(() => {
-    if (!place) return;
-    const close = () => setPlace(null);
-    const outside = (event: Event) => {
-      if (!root.current?.contains(event.target as Node)) close();
-    };
-    const key = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-    document.addEventListener("pointerdown", outside);
-    document.addEventListener("keydown", key);
-    window.addEventListener("resize", close);
-    window.addEventListener("scroll", close, true);
-    return () => {
-      document.removeEventListener("pointerdown", outside);
-      document.removeEventListener("keydown", key);
-      window.removeEventListener("resize", close);
-      window.removeEventListener("scroll", close, true);
-    };
-  }, [place]);
-
-  const toggle = () => {
-    setConfirming(null);
-    if (place) {
-      setPlace(null);
-      return;
-    }
-    const box = root.current?.getBoundingClientRect();
-    // Fixed to the window, so a rounded group that clips its rows does not clip the menu.
-    if (box) setPlace({ top: box.bottom + 4, right: window.innerWidth - box.right });
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 1200);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+  const copy = () => {
+    const value = typeof text === "function" ? text() : text;
+    void navigator.clipboard?.writeText(value).then(() => setCopied(true)).catch(() => undefined);
   };
-
-  const entry = (item: MenuItem) => {
-    const asking = confirming === item.label;
-    const Icon = item.icon;
-    return (
-      <button
-        key={item.label}
-        role="menuitem"
-        className={item.danger ? "menu-item danger" : "menu-item"}
-        disabled={item.disabled}
-        onClick={() => {
-          if (item.confirm && !asking) {
-            setConfirming(item.label);
-            return;
-          }
-          setPlace(null);
-          item.onSelect();
-        }}
-      >
-        {Icon && <Icon size={14} aria-hidden="true" />}
-        <span>{asking ? item.confirm : item.label}</span>
-      </button>
-    );
-  };
-
   return (
-    <span className="more-menu" ref={root}>
-      <button className="icon-button" title={label} aria-label={label} aria-haspopup="menu" aria-expanded={Boolean(place)} disabled={disabled} onClick={toggle}>
-        <Ellipsis size={15} />
-      </button>
-      {place && (
-        <span className="menu" role="menu" style={{ top: place.top, right: place.right }}>
-          {everyday.map(entry)}
-          {everyday.length > 0 && dangerous.length > 0 && <span className="menu-separator" role="separator" />}
-          {dangerous.map(entry)}
-        </span>
-      )}
-    </span>
+    <button className={copied ? "icon-button copied" : "icon-button"} title={copied ? t("已拷贝") : label} aria-label={label} onClick={copy} disabled={disabled}>
+      {copied ? <Check size={14} /> : <Copy size={14} />}
+      <span className="visually-hidden" role="status">{copied ? t("已拷贝") : ""}</span>
+    </button>
+  );
+}
+
+/**
+ * Tabs over one pane (the request inspector): one is shown at a time. Left and right arrows move between them, as
+ * the ARIA tabs pattern asks; only the selected tab is in the Tab order.
+ */
+export function Tabs<T extends string>({ label, options, value, onChange }: {
+  label: string;
+  options: Array<{ value: T; label: string; badge?: string | number }>;
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  const move = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+    const edge = event.key === "Home" ? 0 : event.key === "End" ? options.length - 1 : null;
+    if (step === 0 && edge === null) return;
+    event.preventDefault();
+    const at = options.findIndex((option) => option.value === value);
+    const next = edge ?? (at + step + options.length) % options.length;
+    onChange(options[next].value);
+    const buttons = event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+    buttons[next]?.focus();
+  };
+  return (
+    <div className="tabs" role="tablist" aria-label={label} onKeyDown={move}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          role="tab"
+          aria-selected={value === option.value}
+          tabIndex={value === option.value ? 0 : -1}
+          className={value === option.value ? "selected" : ""}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+          {option.badge !== undefined && <span className="tab-badge">{option.badge}</span>}
+        </button>
+      ))}
+    </div>
   );
 }
 

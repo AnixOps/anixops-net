@@ -56,6 +56,8 @@ struct NetworkCoreMacApp: App {
                     await tunnel.load()
                     // The `anixops` command-line tool talks to this app (MacControlService).
                     state.startControl(tunnel)
+                    // The loopback Prometheus endpoint, when turned on in Settings (MacMetricsService).
+                    state.startMetrics(tunnel)
                     // Subscription groups update on their own while the app runs; a Mac app stays open for long.
                     while !Task.isCancelled {
                         await tunnel.refreshDueSubscriptions()
@@ -65,7 +67,8 @@ struct NetworkCoreMacApp: App {
                     }
                 }
         }
-        .defaultSize(width: 980, height: 680)
+        // Wide enough for the request table beside its inspector without squeezing the table's columns.
+        .defaultSize(width: 1240, height: 800)
         .commands {
             MacCommands(tunnel: tunnel, state: state)
         }
@@ -108,6 +111,16 @@ final class MacAppState: ObservableObject {
             control = MacControlService(tunnel: tunnel)
         }
         control?.start()
+    }
+
+    /// The Prometheus endpoint; nil until the configuration is loaded.
+    @Published private(set) var metrics: MacMetricsService?
+
+    func startMetrics(_ tunnel: TunnelController) {
+        if metrics == nil {
+            metrics = MacMetricsService(tunnel: tunnel)
+        }
+        metrics?.apply()
     }
 
     init() {

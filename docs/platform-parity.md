@@ -13,7 +13,7 @@
 
 图例：✅ 已有 · ◐ 部分（见备注） · ❌ 缺，计划补齐 · ⛔ 系统限制或产品决定不做（见“系统限制”） · — 不适用
 
-核对基准：2026-11-14，main `1cc1921`，内核 `e5e158a`；进行中的 PR 单独标出。
+核对基准：2026-11-15，main `2731671`，内核 `e5e158a`；进行中的 PR 单独标出。
 
 ## 调试（网络调试客户端计划）
 
@@ -24,16 +24,16 @@
 | 开始 / 停止 / 清空抓包 | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 连接抓包内容（文本 / 十六进制） | ✅ | ✅ | ◐ | ✅ | ✅ | 同上 |
 | 导出 pcapng / HAR | ✅ | ✅ | ◐ | ✅ | ✅ | 同上 |
-| HTTP 请求列表、快捷筛选、表达式搜索 | ⏳ | ⏳ | ◐ | ✅ | ✅ | Apple 见 #126（进行中） |
-| 单条请求导出 cURL / 代码 / Postman / Insomnia，默认脱敏 | ❌ | ❌ | ◐ | ✅ | ✅ | Apple 由 Apple 调试线程在 #126 之后做（A1） |
-| 抓包会话加密保存、7 天清理、载入回看 | ❌ | ❌ | ✅ | ✅ | ✅ | Tauri 见 `debug-mode.md`；Apple 见 A1 |
+| HTTP 请求列表、快捷筛选、表达式搜索 | ✅ | ✅ | ◐ | ✅ | ✅ | Apple #126 |
+| 单条请求导出 cURL / 代码 / Postman / Insomnia，默认脱敏 | ✅ | ✅ | ◐ | ✅ | ✅ | Apple #137（A1） |
+| 抓包会话加密保存、7 天清理、载入回看 | ✅ | ✅ | ✅ | ✅ | ✅ | Tauri 见 `debug-mode.md`；Apple #137（A1） |
 | 单条重放、编辑后重放 | ✅ | ✅ | ◐ | ✅ | ✅ | Android 经内核重放代理（#128） |
 | Map Local / Map Remote | ✅ | ✅ | ✅ | ✅ | ✅ | 需开启 HTTPS 解密 |
 | HTTP/2 MITM | ✅ | ✅ | ✅ | ✅ | ✅ | 内核 #233，各平台共用 |
 | HTTPS 解密开关 + 首次开启确认条款 | ✅ | ✅ | ✅ | ✅ | ✅ | #117 |
-| 根证书由用户手动信任、关闭解密保留证书 | ✅ | ✅ | ⏳ | ⏳ | ✅ | 桌面见 #123（进行中）；Android 本来就在系统设置里手动安装 |
+| 根证书由用户手动信任、关闭解密保留证书 | ✅ | ✅ | ✅ | ✅ | ✅ | 桌面 #123；Android 本来就在系统设置里手动安装 |
 | 手机连电脑抓包（局域网共享 + 证书页） | — | ✅ | ✅ | ✅ | — | 手机本身不需要 |
-| 导入自有根证书（团队 CA） | ❌ | ❌ | ✅ | ✅ | ❌ | macOS 计划补（A2）；iOS / Android 见系统限制 |
+| 导入自有根证书（团队 CA） | ⛔ | ✅ | ✅ | ✅ | ⛔ | macOS 在扩展页“使用自己的根证书…”粘贴 PEM（A2），密钥须为 P-256；iOS / Android 见系统限制 |
 | 解密对第三方 App 生效 | ✅ | ✅ | ✅ | ✅ | ⛔ | Android 7 起 App 默认不信任用户证书 |
 
 ## 代理与规则
@@ -52,8 +52,8 @@
 | 自定义 DNS 服务器、分域 DNS、Hosts | ✅ | ✅ | ✅ | ✅ | ✅ | T3：桌面与 Android 用文本编辑（`名称 = 地址`、`DOMAIN-SUFFIX,cn,服务器`、`域名 = 地址`），iOS / macOS 是表单 |
 | Fake-IP | ✅ | ✅ | ✅ | — | ✅ | 只在接管 IP 流量时有意义：Windows 在 TUN 模式下生效，Android 在 VPN 里生效（T3）；Linux 只有系统代理，代理拿到的就是域名 |
 | 屏蔽 QUIC | ✅ | ✅ | ✅ | ✅ | ✅ | #106 |
-| 流量重定向（TCP / UDP 劫持到开发服务器） | ✅ | ✅ | ✅ | ◐ | ✅ | 扩展 / 改写页“流量重定向”，与 iOS 相同的地址 / 域名 / 端口 / 协议 → 目标写法（引擎 `redirects`，`desktop_dns::redirects`）。Windows 不走系统代理的程序要开 TUN 模式；Linux 暂时只改走系统代理的连接，见系统限制（T6） |
-| TUN（接管全部流量） | ✅ | ✅ | ✅ | ⛔ | ✅ | Linux 现在只有系统代理，见系统限制 |
+| 流量重定向（TCP / UDP 劫持到开发服务器） | ✅ | ✅ | ✅ | ✅ | ✅ | 扩展 / 改写页“流量重定向”，与 iOS 相同的地址 / 域名 / 端口 / 协议 → 目标写法（引擎 `redirects`，`desktop_dns::redirects`）。Windows 和 Linux 不走系统代理的程序要开 TUN 模式（T6） |
+| TUN（接管全部流量） | ✅ | ✅ | ✅ | ✅ | ✅ | Linux 每次连接经 pkexec（polkit）提权助手创建虚拟网卡，App 本身不提权，见系统限制（T14） |
 | 系统代理 | — | — | ✅ | ✅ | — | |
 
 ## 扩展（插件与脚本）
@@ -81,7 +81,7 @@
 | 开机 / 登录后启动、自动连接 | ✅ | ✅ | ✅ | ✅ | ⛔ | Android 每次连接要系统 VPN 授权，见系统限制 |
 | `anixops://` 链接 | ✅ | ✅ | ✅ | ✅ | ✅ | 与 iOS 相同的动作：connect / disconnect / toggle、`mode?set=`、`select?node=&group=` 或 `policy=`、`import?url=`（只填进导入框，用户点“导入”才保存）。桌面没有 `global` 模式，`mode` 另外接受 `bypass_china` 等桌面模式名。Windows 写当前用户的 `HKCU\Software\Classes\anixops`，Linux 写 `~/.local/share/applications` 里的 handler 并调 `xdg-mime`，都在启动时注册；第二次启动把链接交给已运行的窗口（Linux 因此改为单实例）。Android 在 manifest 里声明 scheme（tauri-plugin-deep-link，T13） |
 | 崩溃报告（本机、脱敏） | ✅ | ✅ | ✅ | ✅ | ✅ | |
-| 本机 Prometheus 指标 | ❌ | ❌ | ✅ | ✅ | ✅ | iOS 扩展不能开监听端口给别的 App；macOS 可补（A3） |
+| 本机 Prometheus 指标 | ⛔ | ✅ | ✅ | ✅ | ✅ | macOS 在设置页打开，`127.0.0.1:9477/metrics`，默认关闭（A3）；iOS 见系统限制 |
 | 用户协议同意、协议入口 | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 简体 / 繁体中文 / 英文 | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 应用内更新 | — | ✅ | ❌ | ❌ | ❌ | macOS 渠道未开；其余平台目前从下载页更新 |
@@ -103,13 +103,20 @@ MSI 升级时旧服务随旧版本一起卸载；便携版注册过的服务由�
 - **Android 自动连接**：VpnService 每次建立前要用户在系统对话框授权（或在系统设置里设为“始终开启的 VPN”）。App 不能自己在
   开机后连上。
 - **Android 导入自有根证书**：解密在手机本机进行，不需要把团队 CA 装进别的设备；如需统一证书，见上一条，用户仍要在系统设置里装。
-- **Linux TUN / 流量重定向**：创建 TUN 需要 `CAP_NET_ADMIN`，改路由需要 root。Linux 客户端现在只做系统代理，不在 App 里提权。
-  可以通过 polkit 启动一个有权限的辅助进程实现，属于新的安装形态，需要维护者决定是否做。
+- **Linux TUN**：创建 TUN 需要 `CAP_NET_ADMIN`，改路由需要 root。App 本身不提权：每次在 TUN 模式下连接时，用 `pkexec`
+  以 root 启动同一个程序的 `--tun-helper`，它只创建非持久的 `anxtun` 网卡、配地址和 `0.0.0.0/1`、`128.0.0.0/1`（IPv6
+  同理）两半默认路由，把描述符交回 App 后退出；App 退出或断开时网卡随描述符消失，路由一起删除。所以每次连接会询问一次
+  管理员密码（`.deb` 装的 polkit 规则在同一会话里短时间内不再询问）。引擎自己的连接用 `SO_BINDTODEVICE` 绑到原来的默认
+  网卡避免回环，需要 Linux 5.7 以上。需要系统装有 `pkexec`；AppImage 运行在只有本用户可读的挂载点上，root 进程读不到，
+  不支持 TUN 模式。Linux 的 TUN 模式暂不提供 Fake-IP 开关；打开“启动时自动连接”时，启动后也会先弹出一次授权。
 - **Wi-Fi 规则（Windows、Android、Linux）**：iOS / macOS 由系统执行规则，App 不运行也生效；Windows 和 Android 没有对应的系统
   功能，规则只在 App 运行时（Android 包括后台）生效。读 Wi-Fi 名称都要位置权限：Android 在打开规则时询问一次，Windows 11 要在
   “隐私和安全性 > 位置”里允许桌面应用访问位置，否则只能区分“Wi-Fi / 有线”。Linux 桌面的网络管理器各不相同（NetworkManager、
   systemd-networkd、iwd），自带按连接执行脚本的办法，客户端不做。
 - **iOS 指标端口**：Packet Tunnel 扩展的监听端口对其他 App 不可见，iOS 上用导出日志代替。
+- **macOS 指标端口与自有根证书**：端口由 App 自己在 127.0.0.1 上监听（沙盒加了 `network.server`），每次抓取时向系统扩展里的
+  引擎要指标，所以 App 退出后端口关闭；为免意外开放端口默认关闭，Windows / Linux 默认打开。引擎只用 ECDSA P-256 签发证书，
+  所以自有根证书的私钥必须是 P-256。
 
 ## 补齐计划
 
@@ -117,15 +124,15 @@ MSI 升级时旧服务随旧版本一起卸载；便携版注册过的服务由�
 
 | 编号 | 内容 | 平台 | 状态 |
 |---|---|---|---|
-| A1 | 单条请求导出（cURL / 代码 / Postman / Insomnia）、抓包会话加密保存 | iOS、macOS | Apple 调试线程在 #126 之后做 |
-| A2 | macOS 导入自有根证书 | macOS | 待做 |
-| A3 | macOS 本机指标端口 | macOS | 待评估 |
+| A1 | 单条请求导出（cURL / 代码 / Postman / Insomnia）、抓包会话加密保存 | iOS、macOS | 已完成（#137） |
+| A2 | macOS 导入自有根证书 | macOS | 已完成 |
+| A3 | macOS 本机指标端口 | macOS | 已完成 |
 | T1 | 抓包会话加密保存、列表、载入、删除 | Windows、Linux、Android | 已完成 |
 | T2 | 我的规则：规则文本编辑，连接中原地换规则 | Windows、Linux、Android | 已完成 |
 | T3 | DNS：自定义服务器、分域 DNS、Hosts、Fake-IP | Windows、Linux、Android | 已完成 |
 | T4 | 节点分享链接入口 | Windows、Linux、Android | 已完成 |
 | T5 | 手动添加 / 编辑节点，Android 扫码导入 | Windows、Linux、Android | 已完成 |
-| T6 | 流量重定向 | Windows（TUN 模式）、Android | 已完成（Linux 等 TUN） |
+| T6 | 流量重定向 | Windows、Linux（TUN 模式）、Android | 已完成 |
 | T7 | 插件从文件 / 剪贴板导入、插件内容查看 | Windows、Linux、Android | 已完成 |
 | T8 | Android 诊断报告保存到“下载”、出口地址 | Android | 已完成 |
 | T9 | 按天流量统计 | Windows、Linux、Android | 已完成 |
@@ -133,4 +140,5 @@ MSI 升级时旧服务随旧版本一起卸载；便携版注册过的服务由�
 | T11 | 系统通知 | Windows、Linux、Android | 已完成 |
 | T12 | 按 Wi-Fi 自动连接 / 断开 | Windows、Android | 已完成（Linux 桌面不做，见“系统限制”） |
 | T13 | `anixops://` 链接 | Windows、Linux、Android | 已完成 |
+| T14 | Linux TUN 模式（polkit 提权助手） | Linux | 已完成 |
 | W1 | Windows 服务模式下的调试功能 | Windows | 已完成（删除服务模式，调试固定在窗口进程） |

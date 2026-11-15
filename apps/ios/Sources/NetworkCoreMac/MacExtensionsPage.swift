@@ -11,6 +11,7 @@ struct MacExtensionsPage: View {
     @StateObject private var certificate = MacCertificateModel()
     @StateObject private var plugins = PluginsModel()
     @State private var confirmingRegenerate = false
+    @State private var importingRoot = false
 
     var body: some View {
         Form {
@@ -29,6 +30,13 @@ struct MacExtensionsPage: View {
             }
         } message: {
             Text("旧证书立即失效，需要重新加入钥匙串并信任。")
+        }
+        .sheet(isPresented: $importingRoot) {
+            MacImportRootSheet { certificatePEM, privateKeyPEM in
+                let refused = certificate.importRoot(certificatePEM: certificatePEM, privateKeyPEM: privateKeyPEM)
+                plugins.refreshTrust()
+                return refused
+            }
         }
         .task {
             certificate.load()
@@ -105,6 +113,11 @@ struct MacExtensionsPage: View {
                 }
             }
 
+            Button("使用自己的根证书…") {
+                importingRoot = true
+            }
+            .help("团队已有 CA 时换成它，Mac 和其他设备信任同一张根证书。")
+
             if let error = certificate.error {
                 Text(error)
                     .font(.footnote)
@@ -114,7 +127,7 @@ struct MacExtensionsPage: View {
         } header: {
             Text("HTTPS 解密证书")
         } footer: {
-            Text("证书和私钥只保存在本机钥匙串。如果“信任证书”没有成功：在“钥匙串访问”中双击这张证书，展开“信任”，把“使用此证书时”设为“始终信任”。Firefox 使用自己的证书列表，需要另外导入。")
+            Text("证书和私钥只保存在本机钥匙串。换成自己的根证书后需要重新连接，已安装旧证书的设备要改装新证书。如果“信任证书”没有成功：在“钥匙串访问”中双击这张证书，展开“信任”，把“使用此证书时”设为“始终信任”。Firefox 使用自己的证书列表，需要另外导入。")
         }
     }
 }
@@ -152,6 +165,32 @@ final class MacCertificateModel: ObservableObject {
             Self.removeFromLoginKeychain(previous)
         }
         refresh()
+    }
+
+    /// Replaces the root with the user's own CA (`MitmCertificateAuthority.importing`). Returns the reason it was
+    /// refused, or nil once it is saved.
+    func importRoot(certificatePEM: String, privateKeyPEM: String) -> String? {
+        let imported: MitmCertificateAuthority
+        do {
+            imported = try MitmCertificateAuthority.importing(certificatePEM: certificatePEM, privateKeyPEM: privateKeyPEM)
+        } catch let failure as MitmCertificateAuthority.ImportFailure {
+            return Self.describe(failure)
+        } catch {
+            return Self.describe(error)
+        }
+        let previous = authority
+        do {
+            try MitmCertificateStore.save(imported)
+        } catch {
+            return String(localized: "保存证书失败（\(Self.describe(error))）")
+        }
+        authority = imported
+        self.error = nil
+        if let previous, previous.certificateDER != imported.certificateDER {
+            Self.removeFromLoginKeychain(previous)
+        }
+        refresh()
+        return nil
     }
 
     func refresh() {
@@ -216,10 +255,83 @@ final class MacCertificateModel: ObservableObject {
         ]
     }
 
+    private static func describe(_ failure: MitmCertificateAuthority.ImportFailure) -> String {
+        switch failure {
+        case .notCertificate:
+            return String(localized: "没有读到证书，请粘贴以 BEGIN CERTIFICATE 开头的 PEM 文本。")
+        case .notCertificateAuthority:
+            return String(localized: "这张证书不是 CA 证书，不能用来签发其他证书。")
+        case .unsupportedKey:
+            return String(localized: "私钥需要是 P-256（prime256v1）的 PEM 私钥，以 BEGIN PRIVATE KEY 或 BEGIN EC PRIVATE KEY 开头。")
+        case .keyMismatch:
+            return String(localized: "私钥和证书不是一对。")
+        }
+    }
+
     private static func describe(_ error: Error) -> String {
         if let failure = error as? MitmCertificateStore.Failure {
             return "OSStatus \(failure.status)"
         }
         return String(describing: error)
+    }
+}
+
+/// Pasting a team CA: the PEM certificate and its P-256 private key, checked before anything is replaced.
+private struct MacImportRootSheet: View {
+    /// Saves the pair; returns why it was refused, or nil on success.
+    var save: (String, String) -> String?
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.brand) private var brand
+    @State private var certificatePEM = ""
+    @State private var privateKeyPEM = ""
+    @State private var failure: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("使用自己的根证书")
+                .font(.headline)
+            Text("粘贴 PEM 格式的 CA 证书和它的私钥。私钥需要是 P-256（prime256v1）密钥，只保存在本机钥匙串。替换后旧证书立即失效。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("CA 证书")
+            editor($certificatePEM, label: "CA 证书")
+            Text("私钥")
+            editor($privateKeyPEM, label: "私钥")
+            if let failure {
+                Text(failure)
+                    .font(.footnote)
+                    .foregroundStyle(brand.danger)
+                    .textSelection(.enabled)
+            }
+            HStack {
+                Spacer()
+                Button("取消", role: .cancel) {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+                Button("替换根证书") {
+                    if let reason = save(certificatePEM, privateKeyPEM) {
+                        failure = reason
+                    } else {
+                        dismiss()
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(certificatePEM.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || privateKeyPEM.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 520)
+    }
+
+    private func editor(_ text: Binding<String>, label: LocalizedStringKey) -> some View {
+        TextEditor(text: text)
+            .font(.system(.caption, design: .monospaced))
+            .autocorrectionDisabled()
+            .frame(height: 110)
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+            .accessibilityLabel(label)
     }
 }

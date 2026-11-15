@@ -27,6 +27,6 @@ serde_json = "1"
 subscription-meta = { path = "../subscription-meta" }
 traffic-stats = { path = "../traffic-stats" }
 
-# Android: the VPN's TUN descriptor is read and written directly (`backend::tun`).
-[target.'cfg(target_os = "android")'.dependencies]
+# Android's VPN and Linux TUN mode: the TUN descriptor is read and written directly (`backend::tun`).
+[target.'cfg(any(target_os = "android", target_os = "linux"))'.dependencies]
 libc = "0.2"

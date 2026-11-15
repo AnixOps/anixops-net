@@ -2,6 +2,7 @@ import { Cable, Smartphone, Trash2, Wifi, WifiOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { desktop, OnDemandAction, OnDemandSettings } from "../bridge";
 import { Card, IconButton, Row, Run, ToggleRow } from "../ui";
+import { Select } from "../controls";
 import { t } from "../i18n";
 
 const actions: Array<{ value: OnDemandAction; label: string }> = [
@@ -25,9 +26,7 @@ function ActionPicker({ label, value, disabled, onChange }: {
   onChange: (value: OnDemandAction) => void;
 }) {
   return (
-    <select className="pop-up" aria-label={label} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value as OnDemandAction)}>
-      {actions.map((action) => <option key={action.value} value={action.value}>{t(action.label)}</option>)}
-    </select>
+    <Select label={label} value={value} disabled={disabled} onChange={onChange} choices={actions.map((action) => ({ value: action.value, label: t(action.label) }))} />
   );
 }
 

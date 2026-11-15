@@ -52,9 +52,7 @@ export function TrafficRedirectsCard({ busy, run, platform }: { busy: string | n
       title={t("流量重定向")}
       description={platform === "android"
         ? t("把匹配的 TCP 连接和 UDP 流量改发到另一个地址，例如把游戏服务器换成开发服务器。在路由之前生效，VPN 接管的所有应用都适用。")
-        : platform === "linux"
-          ? t("把匹配的 TCP 连接和 UDP 流量改发到另一个地址，例如把游戏服务器换成开发服务器。在路由之前生效；Linux 现在只接管走系统代理的连接。")
-          : t("把匹配的 TCP 连接和 UDP 流量改发到另一个地址，例如把游戏服务器换成开发服务器。在路由之前生效；不走系统代理的游戏需要打开 TUN 模式。")}
+        : t("把匹配的 TCP 连接和 UDP 流量改发到另一个地址，例如把游戏服务器换成开发服务器。在路由之前生效；不走系统代理的游戏需要打开 TUN 模式。")}
       actions={!editing && (
         <button className="secondary compact" disabled={disabled} onClick={() => setEditing({ id: null, draft: emptyDraft })}>
           <Plus size={14} />{t("新建重定向")}

@@ -344,6 +344,8 @@ jobs:
           # Install integrity list the client checks at start (crates/client-health): paths beside bin/anixops-net.
           mkdir -p "${staging}/share/anixops-net"
           (cd "${staging}/bin" && sha256sum anixops-net) > "${staging}/share/anixops-net/integrity.sha256"
+          mkdir -p "${staging}/share/polkit-1/actions"
+          install -m 0644 apps/linux-gui/packaging/io.anixops.net.tun.policy "${staging}/share/polkit-1/actions/io.anixops.net.tun.policy"
           cat > "${staging}/INSTALL.md" <<EOF
           # AnixOps Net for Linux ${version}
 
@@ -356,6 +358,11 @@ jobs:
 
           Connecting points the desktop proxy setting at 127.0.0.1:7890 and restores the previous setting
           on disconnect, exit or next start. Settings live in \$XDG_CONFIG_HOME/anixops-net.
+
+          TUN mode (Settings > 运行方式) captures all traffic through a virtual adapter. Each connection
+          asks once, through pkexec (polkit), for the administrator password to create the adapter; the
+          app itself stays unprivileged. It needs pkexec and Linux 5.7 or later. The .deb also installs
+          share/polkit-1/actions/io.anixops.net.tun.policy so the prompt names the app.
 
           Uninstall: quit the app, delete this directory and ~/.config/autostart/anixops-net.desktop if
           you enabled start after login. Rollback: run the previous version's extracted directory.
@@ -375,6 +382,9 @@ jobs:
           install -m 0644 LICENSE "${deb_root}/usr/share/doc/anixops-net/copyright"
           mkdir -p "${deb_root}/usr/share/anixops-net"
           (cd "${deb_root}/usr/bin" && sha256sum anixops-net) > "${deb_root}/usr/share/anixops-net/integrity.sha256"
+          # TUN mode: pkexec runs /usr/bin/anixops-net --tun-helper under this action (tun_helper.rs).
+          mkdir -p "${deb_root}/usr/share/polkit-1/actions"
+          install -m 0644 apps/linux-gui/packaging/io.anixops.net.tun.policy "${deb_root}/usr/share/polkit-1/actions/io.anixops.net.tun.policy"
           installed_size="$(du -sk "${deb_root}/usr" | cut -f1)"
           cat > "${deb_root}/DEBIAN/control" <<EOF
           Package: anixops-net
@@ -383,12 +393,14 @@ jobs:
           Priority: optional
           Architecture: amd64
           Depends: libwebkit2gtk-4.1-0, libgtk-3-0
+          Recommends: pkexec | policykit-1
           Installed-Size: ${installed_size}
           Maintainer: AnixOps <noreply@github.com>
           Homepage: https://github.com/AnixOps/anixops-net
           Description: AnixOps Net desktop proxy client
            Imports subscriptions and share links, switches nodes, runs delay tests and
-           points the desktop proxy setting at a local SOCKS5/HTTP port while connected.
+           points the desktop proxy setting at a local SOCKS5/HTTP port while connected,
+           or captures all traffic through a TUN adapter created by a polkit helper.
           EOF
           deb_name="anixops-net_${deb_version}_amd64.deb"
           dpkg-deb --root-owner-group --build "${deb_root}" "${output_dir}/${deb_name}"

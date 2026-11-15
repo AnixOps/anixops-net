@@ -4,6 +4,13 @@ fn main() {
 
     use networkcore_linux_gui::app::{self, Host};
     use networkcore_linux_gui::backend::state::Store;
+    use networkcore_linux_gui::backend::tun_helper;
+
+    // TUN mode's helper: this program again, started through pkexec; it makes the device and exits.
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some(tun_helper::HELPER_FLAG) {
+        std::process::exit(tun_helper::run_helper(&args[1..]));
+    }
 
     client_health::startup::mark_process_start();
     let Some(dir) = Store::default_dir() else {

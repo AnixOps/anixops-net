@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { ScrollText } from "lucide-react";
+import { Heading } from "react-aria-components";
+import { ModalDialog } from "./controls";
 import termsMarkdown from "../../../../TERMS.md?raw";
 import { t } from "./i18n";
 
@@ -102,43 +104,39 @@ function TermsText() {
 export function TermsConsent({ onAccept }: { onAccept: () => void }) {
   const [declined, setDeclined] = useState(false);
   return (
-    <div className="terms-overlay" role="dialog" aria-modal="true" aria-labelledby="terms-title">
-      <div className="terms-dialog">
-        <header className="terms-head">
-          <ScrollText size={22} aria-hidden />
-          <div>
-            <h2 id="terms-title">{t("使用前请阅读用户协议")}</h2>
-            <p>{t("只在自己的设备上使用；HTTPS 解密只用于你自己的流量，根证书由你手动信任；不得用于入侵、窃取数据或绕过他人的安全机制。")}</p>
-          </div>
-        </header>
-        <TermsText />
-        {declined && <p className="terms-declined" role="status">{t("不同意就不能使用 AnixOps Net。你可以关闭窗口并卸载，或重新阅读后同意。")}</p>}
-        <footer className="terms-actions">
-          <button className="secondary" onClick={() => setDeclined(true)}>{t("不同意")}</button>
-          <button className="primary" onClick={onAccept}>{t("同意并继续")}</button>
-        </footer>
-      </div>
-    </div>
+    <ModalDialog>
+      <header className="terms-head">
+        <ScrollText size={22} aria-hidden />
+        <div>
+          <Heading slot="title" level={2}>{t("使用前请阅读用户协议")}</Heading>
+          <p>{t("只在自己的设备上使用；HTTPS 解密只用于你自己的流量，根证书由你手动信任；不得用于入侵、窃取数据或绕过他人的安全机制。")}</p>
+        </div>
+      </header>
+      <TermsText />
+      {declined && <p className="terms-declined" role="status">{t("不同意就不能使用 AnixOps Net。你可以关闭窗口并卸载，或重新阅读后同意。")}</p>}
+      <footer className="terms-actions">
+        <button className="secondary" onClick={() => setDeclined(true)}>{t("不同意")}</button>
+        <button className="primary" onClick={onAccept}>{t("同意并继续")}</button>
+      </footer>
+    </ModalDialog>
   );
 }
 
 /** Settings: the same agreement to read again; closing it changes nothing. */
 export function TermsViewer({ onClose }: { onClose: () => void }) {
   return (
-    <div className="terms-overlay" role="dialog" aria-modal="true" aria-labelledby="terms-title" onKeyDown={(event) => event.key === "Escape" && onClose()}>
-      <div className="terms-dialog">
-        <header className="terms-head">
-          <ScrollText size={22} aria-hidden />
-          <div>
-            <h2 id="terms-title">{t("用户协议")}</h2>
-            <p>{t("版本 {version}，已同意。", { version: termsVersion })}</p>
-          </div>
-        </header>
-        <TermsText />
-        <footer className="terms-actions">
-          <button className="secondary" autoFocus onClick={onClose}>{t("关闭")}</button>
-        </footer>
-      </div>
-    </div>
+    <ModalDialog onClose={onClose}>
+      <header className="terms-head">
+        <ScrollText size={22} aria-hidden />
+        <div>
+          <Heading slot="title" level={2}>{t("用户协议")}</Heading>
+          <p>{t("版本 {version}，已同意。", { version: termsVersion })}</p>
+        </div>
+      </header>
+      <TermsText />
+      <footer className="terms-actions">
+        <button className="secondary" autoFocus onClick={onClose}>{t("关闭")}</button>
+      </footer>
+    </ModalDialog>
   );
 }

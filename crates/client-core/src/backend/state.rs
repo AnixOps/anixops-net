@@ -31,6 +31,9 @@ pub struct SavedState {
     /// Debug mode's direct egress: the engine runs a profile with no node (the engine's `direct` outbound), so
     /// capture, HTTPS decryption and rewrites work before anything is imported.
     pub direct_egress: bool,
+    /// Linux desktop TUN mode: a polkit helper creates the TUN device and its routes, and the engine carries
+    /// every application through it instead of the local proxy.
+    pub tun_mode: bool,
     /// The member picked in each select policy group of the selected source, by group id.
     pub group_choices: BTreeMap<String, String>,
     /// Set while the client has changed the desktop's proxy settings; cleared once they are restored.
@@ -49,6 +52,7 @@ impl Default for SavedState {
             dns_preset: DnsPreset::default(),
             block_quic: false,
             direct_egress: false,
+            tun_mode: false,
             group_choices: BTreeMap::new(),
             proxy_backup: None,
             next_source: 1,
