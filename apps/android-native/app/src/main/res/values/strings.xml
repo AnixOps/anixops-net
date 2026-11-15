@@ -66,6 +66,7 @@
     <string name="proxies_empty_body">导入订阅后可以在这里切换节点和测速。</string>
     <string name="proxies_no_match">没有符合条件的节点。</string>
     <string name="proxies_other_nodes">其他节点</string>
+    <string name="proxies_pasted">粘贴的链接</string>
     <string name="proxies_in_use">使用中</string>
     <string name="proxies_timed_out">超时</string>
     <string name="proxies_more">%1$s 的更多操作</string>
@@ -96,7 +97,8 @@
     <string name="subscription_confirm_remove">确认删除 %1$s</string>
     <string name="subscription_updated_at">更新于 %1$s</string>
     <string name="subscription_never">从未更新</string>
-    <string name="subscription_failed">更新失败</string>
+    <string name="subscription_error">上次更新没有成功：%1$s</string>
+    <string name="subscription_expired">已到期</string>
     <string name="subscription_used_of">已用 %1$s / %2$s</string>
     <string name="subscription_used">已用 %1$s</string>
     <string name="subscription_expires">到期 %1$s</string>
@@ -233,4 +235,47 @@
     <string name="terms_full_text">用户协议全文</string>
     <string name="action_done">完成</string>
     <string name="duration_ms" translatable="false">%1$d ms</string>
+    <string name="activity">活动</string>
+    <string name="action_view">查看</string>
+    <string name="action_clear">清空</string>
+    <string name="action_back">返回</string>
+    <string name="logs">日志</string>
+    <string name="logs_note">应用自己的运行记录：连接、断开、订阅更新和出错原因，网址不含查询参数。内核不单独记日志。</string>
+    <string name="logs_more">更多日志操作</string>
+    <string name="logs_refresh">刷新日志</string>
+    <string name="logs_copy">拷贝筛选出的日志</string>
+    <string name="logs_clear">清空日志</string>
+    <string name="logs_confirm_clear">确认清空全部日志</string>
+    <string name="logs_cleared">已清空日志</string>
+    <string name="logs_all">全部</string>
+    <string name="logs_warnings">警告</string>
+    <string name="logs_errors">错误</string>
+    <string name="logs_all_modules">全部模块</string>
+    <string name="logs_filter">筛选日志内容</string>
+    <string name="logs_none">还没有日志</string>
+    <string name="logs_no_match">没有匹配的日志</string>
+    <string name="logs_module_app">应用</string>
+    <string name="logs_module_window">窗口</string>
+    <string name="logs_module_mitm">HTTPS 解密</string>
+    <string name="traffic_stats">流量统计</string>
+    <string name="traffic_note">每 5 秒从连接列表累计，只记主机名和字节数，保存在本机，保留 7 天。</string>
+    <string name="traffic_clear">清空统计</string>
+    <string name="traffic_confirm_clear">确认清空全部流量统计</string>
+    <string name="traffic_cleared">已清空流量统计</string>
+    <string name="traffic_today">今天</string>
+    <string name="traffic_week">7 天</string>
+    <string name="traffic_by_hour">按小时</string>
+    <string name="traffic_by_day">按天</string>
+    <string name="traffic_by_host">按主机</string>
+    <string name="traffic_by_policy">按策略</string>
+    <string name="traffic_up_down">上传 %1$s · 下载 %2$s</string>
+    <string name="traffic_none">这段时间没有流量</string>
+    <string name="traffic_after_connect">连接后开始统计</string>
+    <string name="traffic_other_hosts">其他主机</string>
+    <plurals name="logs_copied">
+        <item quantity="other">已拷贝 %d 行日志</item>
+    </plurals>
+    <plurals name="logs_show_more">
+        <item quantity="other">再显示 %d 条</item>
+    </plurals>
 </resources>

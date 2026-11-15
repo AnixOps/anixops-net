@@ -62,6 +62,7 @@
     <string name="proxies_empty_body">Import a subscription to switch nodes and test delays here.</string>
     <string name="proxies_no_match">No nodes match.</string>
     <string name="proxies_other_nodes">Other nodes</string>
+    <string name="proxies_pasted">Pasted links</string>
     <string name="proxies_in_use">In use</string>
     <string name="proxies_timed_out">Timed out</string>
     <string name="proxies_more">More for %1$s</string>
@@ -92,7 +93,8 @@
     <string name="subscription_confirm_remove">Delete %1$s?</string>
     <string name="subscription_updated_at">Updated %1$s</string>
     <string name="subscription_never">Never updated</string>
-    <string name="subscription_failed">Update failed</string>
+    <string name="subscription_error">The last update did not work: %1$s</string>
+    <string name="subscription_expired">Expired</string>
     <string name="subscription_used_of">Used %1$s / %2$s</string>
     <string name="subscription_used">Used %1$s</string>
     <string name="subscription_expires">Expires %1$s</string>
@@ -232,4 +234,49 @@
     <string name="terms_accept">Agree and continue</string>
     <string name="terms_full_text">Full user agreement</string>
     <string name="action_done">Done</string>
+    <string name="activity">Activity</string>
+    <string name="action_view">View</string>
+    <string name="action_clear">Clear</string>
+    <string name="action_back">Back</string>
+    <string name="logs">Logs</string>
+    <string name="logs_note">The app\'s own record: connects, disconnects, subscription updates and why things failed, with URL queries left out. The engine keeps no separate log.</string>
+    <string name="logs_more">More log actions</string>
+    <string name="logs_refresh">Refresh logs</string>
+    <string name="logs_copy">Copy filtered logs</string>
+    <string name="logs_clear">Clear logs</string>
+    <string name="logs_confirm_clear">Clear all logs?</string>
+    <string name="logs_cleared">Logs cleared</string>
+    <string name="logs_all">All</string>
+    <string name="logs_warnings">Warnings</string>
+    <string name="logs_errors">Errors</string>
+    <string name="logs_all_modules">All modules</string>
+    <string name="logs_filter">Filter log text</string>
+    <string name="logs_none">No logs yet</string>
+    <string name="logs_no_match">No matching logs</string>
+    <string name="logs_module_app">App</string>
+    <string name="logs_module_window">Window</string>
+    <string name="logs_module_mitm">HTTPS decryption</string>
+    <string name="traffic_stats">Traffic statistics</string>
+    <string name="traffic_note">Counted from the connection list every 5 seconds; only host names and byte counts are kept, on this device, for 7 days.</string>
+    <string name="traffic_clear">Clear statistics</string>
+    <string name="traffic_confirm_clear">Clear all traffic statistics?</string>
+    <string name="traffic_cleared">Traffic statistics cleared</string>
+    <string name="traffic_today">Today</string>
+    <string name="traffic_week">7 days</string>
+    <string name="traffic_by_hour">By hour</string>
+    <string name="traffic_by_day">By day</string>
+    <string name="traffic_by_host">By host</string>
+    <string name="traffic_by_policy">By policy</string>
+    <string name="traffic_up_down">Uploaded %1$s · downloaded %2$s</string>
+    <string name="traffic_none">No traffic in this period</string>
+    <string name="traffic_after_connect">Counting starts once connected</string>
+    <string name="traffic_other_hosts">Other hosts</string>
+    <plurals name="logs_copied">
+        <item quantity="one">Copied %d log line</item>
+        <item quantity="other">Copied %d log lines</item>
+    </plurals>
+    <plurals name="logs_show_more">
+        <item quantity="one">Show %d more</item>
+        <item quantity="other">Show %d more</item>
+    </plurals>
 </resources>

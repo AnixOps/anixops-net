@@ -18,7 +18,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -26,10 +30,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.anixops.net.R
 import io.anixops.net.ui.theme.BrandSpacing
 import io.anixops.net.ui.theme.LocalBrandPalette
 
@@ -39,9 +45,17 @@ private val ContentMaxWidth = 640.dp
 /** Minimum touch height of a row (docs/ui-ux.md: 48dp on Android). */
 val RowMinHeight = 48.dp
 
-/** A scrolling page: its title, then [content] in one column, clear of the status bar and centred on tablets. */
+/**
+ * A scrolling page: its title, then [content] in one column, clear of the status bar and centred on tablets.
+ * [onBack] puts a back button before the title, for a page opened from another.
+ */
 @Composable
-fun Page(title: String, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+fun Page(
+    title: String,
+    modifier: Modifier = Modifier,
+    onBack: (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -56,7 +70,14 @@ fun Page(title: String, modifier: Modifier = Modifier, content: @Composable Colu
                 .padding(horizontal = BrandSpacing.md, vertical = BrandSpacing.lg),
             verticalArrangement = Arrangement.spacedBy(BrandSpacing.lg),
         ) {
-            Text(title, style = MaterialTheme.typography.headlineSmall)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (onBack != null) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                    }
+                }
+                Text(title, style = MaterialTheme.typography.headlineSmall)
+            }
             content()
         }
     }

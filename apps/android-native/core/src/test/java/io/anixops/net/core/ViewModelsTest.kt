@@ -9,7 +9,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Every `view.overview` and `view.proxies` answer in the client-view samples decodes into the app's models. */
+/** Every `view.*` answer the app reads in the client-view samples decodes into its models. */
 class ViewModelsTest {
     private val cases: List<JsonObject> by lazy {
         val path = System.getProperty("viewCases") ?: error("the viewCases system property is not set")
@@ -39,6 +39,37 @@ class ViewModelsTest {
             view.sections.flatMap { it.nodes }.mapNotNull { it.delay }.forEach { delay ->
                 assertTrue(delay.tone in setOf("fast", "slow", "failed"))
             }
+        }
+    }
+
+    @Test
+    fun subscriptionsAnswersDecode() {
+        val answers = answers("view.subscriptions")
+        assertTrue("no view.subscriptions samples", answers.isNotEmpty())
+        val rows = answers.flatMap { Envelope.json.decodeFromJsonElement(SubscriptionsView.serializer(), it).subscriptions }
+        assertTrue(rows.all { it.id.isNotEmpty() })
+        assertTrue(rows.filter { it.expired }.all { it.expire != null })
+    }
+
+    @Test
+    fun logsAnswersDecode() {
+        val answers = answers("view.logs")
+        assertTrue("no view.logs samples", answers.isNotEmpty())
+        answers.forEach { answer ->
+            val view = Envelope.json.decodeFromJsonElement(LogsView.serializer(), answer)
+            assertTrue(view.shown.all { it.module in view.modules })
+            assertEquals(view.shown.size, if (view.text.isEmpty()) 0 else view.text.lines().size)
+        }
+    }
+
+    @Test
+    fun trafficStatsAnswersDecode() {
+        val answers = answers("view.traffic_stats")
+        assertTrue("no view.traffic_stats samples", answers.isNotEmpty())
+        answers.forEach { answer ->
+            val view = Envelope.json.decodeFromJsonElement(TrafficStatsView.serializer(), answer)
+            assertTrue(view.bars.size == 24 || view.bars.size == 7)
+            assertEquals(view.upload + view.download, view.bars.sumOf { it.bytes })
         }
     }
 }
