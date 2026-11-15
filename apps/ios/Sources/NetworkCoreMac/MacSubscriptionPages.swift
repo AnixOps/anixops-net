@@ -586,6 +586,20 @@ private struct MacNodeRow: View {
         .help(Text(verbatim: name))
     }
 
+    /// Green, amber or orange by the delay's grade (`LatencyGrade`: under 120 ms, under 250 ms, slower).
+    private func gradeColor(_ milliseconds: Int) -> Color {
+        switch LatencyGrade(milliseconds: UInt32(clamping: milliseconds)) {
+        case .good:
+            return brand.success
+        case .fair:
+            return brand.amberText
+        case .poor:
+            return brand.warning
+        case .unknown:
+            return brand.border
+        }
+    }
+
     @ViewBuilder
     private var delay: some View {
         switch latency {
@@ -601,7 +615,7 @@ private struct MacNodeRow: View {
         case let .millis(value):
             HStack(spacing: 5) {
                 Circle()
-                    .fill(brand.color(for: LatencyGrade(milliseconds: UInt32(clamping: value))))
+                    .fill(gradeColor(value))
                     .frame(width: 6, height: 6)
                     .accessibilityHidden(true)
                 Text(verbatim: "\(value)")
