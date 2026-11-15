@@ -69,6 +69,8 @@ data class SettingsActions(
     val setCrashReports: (Boolean) -> Unit = {},
     val createDiagnostics: () -> Unit = {},
     val openTerms: () -> Unit = {},
+    val openLogs: () -> Unit = {},
+    val openTraffic: () -> Unit = {},
 )
 
 /** The Wi-Fi rule actions, in the order every client offers them. */
@@ -114,6 +116,15 @@ fun SettingsScreen(
             }
         }
         state.onDemand?.let { WifiRulesSection(it, state.currentSsid, enabled, actions) }
+        Section(stringResource(R.string.activity)) {
+            InfoRow(stringResource(R.string.logs), stringResource(R.string.action_view), onClick = actions.openLogs)
+            InfoRow(
+                stringResource(R.string.traffic_stats),
+                stringResource(R.string.action_view),
+                divider = true,
+                onClick = actions.openTraffic,
+            )
+        }
         CoreSection(snapshot?.core, enabled, actions)
         DiagnosticsSection(state, enabled, actions)
         Section(stringResource(R.string.settings_about)) {

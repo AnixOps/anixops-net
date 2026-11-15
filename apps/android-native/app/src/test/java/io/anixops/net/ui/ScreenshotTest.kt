@@ -5,6 +5,8 @@ import io.anixops.net.core.ConnectionSnapshot
 import io.anixops.net.core.Delay
 import io.anixops.net.core.DnsText
 import io.anixops.net.core.HealthStatus
+import io.anixops.net.core.LogEntry
+import io.anixops.net.core.LogsView
 import io.anixops.net.core.MyRules
 import io.anixops.net.core.NativeGroup
 import io.anixops.net.core.NetworkProbe
@@ -19,8 +21,12 @@ import io.anixops.net.core.ProxiesView
 import io.anixops.net.core.RuleSetStatus
 import io.anixops.net.core.RuntimeSnapshot
 import io.anixops.net.core.StatusFact
-import io.anixops.net.core.SubscriptionSummary
+import io.anixops.net.core.SubscriptionRow
 import io.anixops.net.core.Traffic
+import io.anixops.net.core.TrafficBar
+import io.anixops.net.core.TrafficPage
+import io.anixops.net.core.TrafficShare
+import io.anixops.net.core.TrafficStatsView
 import io.anixops.net.core.WifiRule
 import io.anixops.net.ui.theme.AnixTheme
 import java.io.File
@@ -102,6 +108,57 @@ class ScreenshotTest {
         capture("settings-whole-page-phone-dark-en", TALL_PHONE, "en", dark = true, destination = Destination.Settings)
 
     @Test
+    fun logsPhoneLightZh() = capture(
+        "logs-phone-light-zh",
+        PHONE,
+        "zh-rCN",
+        dark = false,
+        destination = Destination.Settings,
+        settingsPage = SettingsPage.Logs,
+    )
+
+    @Test
+    fun logsPhoneDarkEn() = capture(
+        "logs-phone-dark-en",
+        PHONE,
+        "en",
+        dark = true,
+        destination = Destination.Settings,
+        settingsPage = SettingsPage.Logs,
+    )
+
+    @Test
+    fun trafficPhoneLightZh() = capture(
+        "traffic-phone-light-zh",
+        PHONE,
+        "zh-rCN",
+        dark = false,
+        destination = Destination.Settings,
+        settingsPage = SettingsPage.Traffic,
+    )
+
+    @Test
+    fun trafficHostsPhoneDarkEn() = capture(
+        "traffic-hosts-phone-dark-en",
+        PHONE,
+        "en",
+        dark = true,
+        destination = Destination.Settings,
+        settingsPage = SettingsPage.Traffic,
+        traffic = trafficState.copy(view = StatsView.Hosts),
+    )
+
+    @Test
+    fun trafficTabletLightZh() = capture(
+        "traffic-tablet-light-zh",
+        TABLET,
+        "zh-rCN",
+        dark = false,
+        destination = Destination.Settings,
+        settingsPage = SettingsPage.Traffic,
+    )
+
+    @Test
     fun termsConsentPhoneLightZh() = captureTerms("terms-consent-phone-light-zh", PHONE, "zh-rCN", dark = false, consent = true)
 
     @Test
@@ -177,6 +234,8 @@ class ScreenshotTest {
         destination: Destination? = null,
         proxies: ProxiesState = proxiesState,
         rules: RulesState = rulesState,
+        settingsPage: SettingsPage? = null,
+        traffic: TrafficState = trafficState,
     ) {
         TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
         RuntimeEnvironment.setQualifiers("$locale-$device-${if (dark) "night" else "notnight"}-xhdpi")
@@ -192,6 +251,9 @@ class ScreenshotTest {
                     settingsState = settingsState,
                     settings = SettingsActions(openLanguageSettings = {}),
                     termsVersion = "2.1.0",
+                    logsState = logsState,
+                    trafficState = traffic,
+                    initialSettingsPage = settingsPage,
                     initial = destination,
                 )
             }
@@ -283,6 +345,43 @@ class ScreenshotTest {
             ),
         )
 
+        /** 2026-11-15 09:20 UTC, and the lines a few seconds apart. */
+        private const val LOG_TIME = 1_794_734_400_000
+
+        val logsState = LogsState(
+            logs = LogsView(
+                modules = listOf("app", "mitm"),
+                shown = listOf(
+                    LogEntry(LOG_TIME + 9_000, "app", "error", "订阅更新失败：HTTP 503（panel.example.com/api/v1/client/subscribe）"),
+                    LogEntry(LOG_TIME + 6_000, "mitm", "warn", "api.example.com 的证书不受信任，已直连"),
+                    LogEntry(LOG_TIME + 3_000, "app", "info", "Connected through 东京 01"),
+                    LogEntry(LOG_TIME, "app", "info", "Engine started (rule mode)"),
+                ),
+                text = "",
+            ),
+        )
+
+        val trafficState = TrafficState(
+            page = TrafficPage(
+                TrafficStatsView(
+                    start = 1_794_672_000,
+                    upload = 52_428_800,
+                    download = 1_181_116_416,
+                    bars = List(24) { hour ->
+                        TrafficBar(1_794_672_000L + hour * 3_600, listOf(0L, 0L, 0L, 0L, 0L, 0L, 0L, 12, 48, 96, 160, 40).getOrElse(hour) { 0L } * 4_194_304)
+                    },
+                    hosts = listOf(
+                        TrafficShare("video.example.com", 734_003_200),
+                        TrafficShare("api.example.org", 209_715_200),
+                        TrafficShare("cdn.example.net", 104_857_600),
+                        TrafficShare("*", 31_457_280),
+                    ),
+                    policies = listOf(TrafficShare("Proxy", 943_718_400), TrafficShare("DIRECT", 136_314_880)),
+                ),
+                recorded = true,
+            ),
+        )
+
         val settingsState = SettingsState(
             notifications = NotificationSettings(scripts = true, connection = true, subscriptions = false, language = "zh"),
             onDemand = OnDemandSettings(
@@ -298,21 +397,29 @@ class ScreenshotTest {
         val proxiesState = ProxiesState(
             loaded = true,
             subscriptions = listOf(
-                SubscriptionSummary(
+                SubscriptionRow(
                     id = "s1",
-                    location = "https://panel.example.com/sub",
                     selected = true,
                     name = "Panel",
-                    lastSuccessfulUpdate = "2026-11-15 09:30",
-                    nodeCount = 3,
-                    upload = 3_221_225_472,
-                    download = 42_949_672_960,
+                    updated = "2026-11-15 09:30",
+                    nodes = 3,
+                    used = 46_170_898_432,
                     total = 214_748_364_800,
                     expire = 1_798_675_200,
-                    updateIntervalHours = 24,
+                    intervalHours = 24,
                     refreshable = true,
                 ),
-                SubscriptionSummary(id = "s2", location = "backup", name = "Backup", nodeCount = 1),
+                SubscriptionRow(
+                    id = "s2",
+                    name = "Backup",
+                    nodes = 2,
+                    refreshable = true,
+                    updated = "2026-11-01 08:00",
+                    error = "HTTP 403",
+                    expire = 1_762_000_000,
+                    expired = true,
+                ),
+                SubscriptionRow(id = "pasted", name = "粘贴的节点", pasted = true, nodes = 1),
             ),
             page = ProxiesPage(
                 view = ProxiesView(
@@ -321,13 +428,19 @@ class ScreenshotTest {
                     sections = listOf(
                         NodeSection(
                             "Panel",
-                            listOf(
+                            source = "s1",
+                            nodes = listOf(
                                 NodeRow("tokyo-01", "东京 01", "VLESS", "Panel", selected = true, delay = Delay(86, "fast")),
                                 NodeRow("osaka-02", "大阪 02", "Trojan", "Panel", delay = Delay(642, "slow")),
                                 NodeRow("hk-03", "香港 03", "Shadowsocks", "Panel", delay = Delay(null, "failed")),
                             ),
                         ),
-                        NodeSection(null, listOf(NodeRow("pasted", "Singapore", "Hysteria2"))),
+                        NodeSection(
+                            "粘贴的节点",
+                            source = "pasted",
+                            pasted = true,
+                            nodes = listOf(NodeRow("pasted-sg", "Singapore", "Hysteria2", "粘贴的节点")),
+                        ),
                     ),
                 ),
                 editable = setOf("tokyo-01", "osaka-02", "hk-03"),

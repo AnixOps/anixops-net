@@ -43,7 +43,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import io.anixops.net.R
 import io.anixops.net.core.NodeForm
 import io.anixops.net.core.NodeRow
-import io.anixops.net.core.SubscriptionSummary
+import io.anixops.net.core.NodeSection
+import io.anixops.net.core.SubscriptionRow
 import io.anixops.net.ui.theme.BrandSpacing
 import io.anixops.net.ui.theme.LocalBrandPalette
 import kotlinx.coroutines.launch
@@ -72,11 +73,11 @@ private sealed interface ProxiesDialog {
 
     data object Scan : ProxiesDialog
 
-    data class Rename(val subscription: SubscriptionSummary) : ProxiesDialog
+    data class Rename(val subscription: SubscriptionRow) : ProxiesDialog
 
-    data class Interval(val subscription: SubscriptionSummary) : ProxiesDialog
+    data class Interval(val subscription: SubscriptionRow) : ProxiesDialog
 
-    data class RemoveSubscription(val subscription: SubscriptionSummary) : ProxiesDialog
+    data class RemoveSubscription(val subscription: SubscriptionRow) : ProxiesDialog
 
     data class Edit(val node: NodeRow, val form: NodeForm) : ProxiesDialog
 
@@ -127,7 +128,7 @@ fun ProxiesScreen(state: ProxiesState, actions: ProxiesActions, modifier: Modifi
             }
             view.sections.forEach { section ->
                 Section(
-                    (section.group ?: stringResource(R.string.proxies_other_nodes)) + " · " +
+                    sectionTitle(section) + " · " +
                         pluralStringResource(R.plurals.proxies_node_count, section.nodes.size, section.nodes.size),
                 ) {
                     section.nodes.forEachIndexed { index, node ->
@@ -153,6 +154,18 @@ fun ProxiesScreen(state: ProxiesState, actions: ProxiesActions, modifier: Modifi
     ProxiesDialogs(dialog, actions, onChange = { dialog = it })
 }
 
+/** A subscription's name; pasted links are named in the app's language rather than the core's. */
+@Composable
+private fun subscriptionName(subscription: SubscriptionRow): String =
+    if (subscription.pasted) stringResource(R.string.proxies_pasted) else subscription.name
+
+/** A node section's heading: its subscription, pasted links, or nodes that belong to none. */
+@Composable
+private fun sectionTitle(section: NodeSection): String = when {
+    section.pasted -> stringResource(R.string.proxies_pasted)
+    else -> section.group ?: stringResource(R.string.proxies_other_nodes)
+}
+
 @Composable
 private fun EmptyNodes() {
     Section(title = null) {
@@ -174,13 +187,13 @@ private fun EmptyNodes() {
 
 @Composable
 private fun SubscriptionsSection(
-    subscriptions: List<SubscriptionSummary>,
+    subscriptions: List<SubscriptionRow>,
     enabled: Boolean,
     actions: ProxiesActions,
     onImport: () -> Unit,
-    onRename: (SubscriptionSummary) -> Unit,
-    onInterval: (SubscriptionSummary) -> Unit,
-    onRemove: (SubscriptionSummary) -> Unit,
+    onRename: (SubscriptionRow) -> Unit,
+    onInterval: (SubscriptionRow) -> Unit,
+    onRemove: (SubscriptionRow) -> Unit,
 ) {
     Section(
         stringResource(R.string.subscriptions),
@@ -211,7 +224,7 @@ private fun SubscriptionsSection(
 
 @Composable
 private fun SubscriptionLine(
-    subscription: SubscriptionSummary,
+    subscription: SubscriptionRow,
     enabled: Boolean,
     onUse: () -> Unit,
     onUpdate: () -> Unit,
@@ -221,27 +234,31 @@ private fun SubscriptionLine(
 ) {
     val palette = LocalBrandPalette.current
     val locale = LocalConfiguration.current.locales[0]
-    val updated = subscription.lastSuccessfulUpdate
     val facts = buildList {
-        subscription.nodeCount?.let { add(pluralStringResource(R.plurals.proxies_node_count, it, it)) }
-        add(
-            when {
-                subscription.lastUpdateError != null -> stringResource(R.string.subscription_failed)
-                updated != null -> stringResource(R.string.subscription_updated_at, updated)
-                else -> stringResource(R.string.subscription_never)
-            },
-        )
+        subscription.nodes?.let { add(pluralStringResource(R.plurals.proxies_node_count, it, it)) }
+        if (!subscription.pasted) {
+            add(
+                subscription.updated?.let { stringResource(R.string.subscription_updated_at, it) }
+                    ?: stringResource(R.string.subscription_never),
+            )
+        }
     }
     val usage = buildList {
         val used = subscription.used
         val total = subscription.total
-        if (used != null && total != null && total > 0) {
+        if (used != null && total != null) {
             add(stringResource(R.string.subscription_used_of, formatBytes(used), formatBytes(total)))
         } else if (used != null) {
             add(stringResource(R.string.subscription_used, formatBytes(used)))
         }
-        subscription.expire?.takeIf { it > 0 }?.let { add(stringResource(R.string.subscription_expires, formatDay(it, locale))) }
+        subscription.expire?.let {
+            add(
+                if (subscription.expired) stringResource(R.string.subscription_expired)
+                else stringResource(R.string.subscription_expires, formatDay(it, locale)),
+            )
+        }
     }
+    val name = subscriptionName(subscription)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -253,7 +270,7 @@ private fun SubscriptionLine(
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(BrandSpacing.xxs)) {
             Row(horizontalArrangement = Arrangement.spacedBy(BrandSpacing.xs), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    subscription.name,
+                    name,
                     style = MaterialTheme.typography.bodyLarge,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -263,12 +280,25 @@ private fun SubscriptionLine(
                     Text(stringResource(R.string.proxies_in_use), style = MaterialTheme.typography.labelMedium, color = palette.primary)
                 }
             }
-            Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = palette.text2)
+            if (facts.isNotEmpty()) {
+                Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = palette.text2)
+            }
             if (usage.isNotEmpty()) {
-                Text(usage.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = palette.text2)
+                Text(
+                    usage.joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (subscription.expired) palette.warning else palette.text2,
+                )
+            }
+            subscription.error?.let {
+                Text(
+                    stringResource(R.string.subscription_error, it),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = palette.danger,
+                )
             }
         }
-        OverflowMenu(stringResource(R.string.proxies_more, subscription.name), enabled) { close ->
+        OverflowMenu(stringResource(R.string.proxies_more, name), enabled) { close ->
             if (!subscription.selected) MenuItem(R.string.subscription_use, close, onUse)
             if (subscription.refreshable) MenuItem(R.string.subscription_update, close, onUpdate)
             MenuItem(R.string.subscription_rename, close, onRename)
@@ -370,7 +400,7 @@ private fun ProxiesDialogs(dialog: ProxiesDialog?, actions: ProxiesActions, onCh
         is ProxiesDialog.Rename -> TextDialog(
             title = stringResource(R.string.subscription_rename),
             label = stringResource(R.string.node_name),
-            initial = dialog.subscription.name,
+            initial = subscriptionName(dialog.subscription),
             onConfirm = {
                 dismiss()
                 actions.renameSubscription(dialog.subscription.id, it)
@@ -382,7 +412,7 @@ private fun ProxiesDialogs(dialog: ProxiesDialog?, actions: ProxiesActions, onCh
             actions.setInterval(dialog.subscription.id, it)
         }, onDismiss = dismiss)
         is ProxiesDialog.RemoveSubscription -> ConfirmDialog(
-            stringResource(R.string.subscription_confirm_remove, dialog.subscription.name),
+            stringResource(R.string.subscription_confirm_remove, subscriptionName(dialog.subscription)),
             onConfirm = {
                 dismiss()
                 actions.removeSubscription(dialog.subscription.id)
@@ -454,8 +484,8 @@ private fun TextDialog(title: String, label: String, initial: String, onConfirm:
 }
 
 @Composable
-private fun IntervalDialog(subscription: SubscriptionSummary, onChoose: (Int) -> Unit, onDismiss: () -> Unit) {
-    val choices = (ProxiesViewModel.INTERVALS + subscription.updateIntervalHours).distinct().sorted()
+private fun IntervalDialog(subscription: SubscriptionRow, onChoose: (Int) -> Unit, onDismiss: () -> Unit) {
+    val choices = (ProxiesViewModel.INTERVALS + subscription.intervalHours).distinct().sorted()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.subscription_interval)) },
@@ -466,14 +496,14 @@ private fun IntervalDialog(subscription: SubscriptionSummary, onChoose: (Int) ->
                         modifier = Modifier
                             .fillMaxWidth()
                             .selectable(
-                                selected = hours == subscription.updateIntervalHours,
+                                selected = hours == subscription.intervalHours,
                                 role = Role.RadioButton,
                                 onClick = { onChoose(hours) },
                             )
                             .heightIn(min = RowMinHeight),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        RadioButton(selected = hours == subscription.updateIntervalHours, onClick = null)
+                        RadioButton(selected = hours == subscription.intervalHours, onClick = null)
                         Text(intervalLabel(hours), modifier = Modifier.padding(start = BrandSpacing.sm))
                     }
                 }

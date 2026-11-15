@@ -17,11 +17,14 @@
 
 pub mod app_link;
 pub mod capture;
+pub mod decrypt;
 pub mod groups;
+pub mod logs;
 pub mod nodes;
 pub mod overview;
 pub mod proxies;
 pub mod subscriptions;
+pub mod traffic;
 
 use serde_json::{json, Value};
 
@@ -125,6 +128,20 @@ pub fn invoke(command: &str, args: &Value) -> Option<Result<Value, String>> {
             rows(args, "nodes"),
             args.get("traffic").unwrap_or(&Value::Null),
         ),
+        "logs" => logs::logs(
+            rows(args, "entries"),
+            text(args, "level"),
+            text(args, "module"),
+            text(args, "query"),
+        ),
+        "traffic_stats" => traffic::traffic_stats(
+            rows(args, "hours"),
+            text(args, "period"),
+            args.get("now").and_then(Value::as_i64).unwrap_or(0),
+            args.get("offset").and_then(Value::as_i64).unwrap_or(0),
+        ),
+        "decrypt_hosts" => decrypt::decrypt_hosts(text(args, "host"), rows(args, "hosts")),
+        "decrypt_setup" => decrypt::decrypt_setup(args),
         _ => return Some(Err(format!("unknown command {command}"))),
     };
     Some(Ok(answer))
@@ -171,6 +188,10 @@ mod tests {
             "proxies",
             "subscriptions",
             "groups",
+            "logs",
+            "traffic_stats",
+            "decrypt_hosts",
+            "decrypt_setup",
         ] {
             let command = format!("{PREFIX}{name}");
             assert!(

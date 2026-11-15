@@ -23,31 +23,39 @@ data class NodeForm(
     val keepReason: String? = null,
 )
 
-/** One subscription as `list_subscriptions` lists it (`bridge.ts` `SubscriptionSummary`). */
+/** One subscription's row on the proxies page (`view.subscriptions`, crates/client-view). */
 @Serializable
-data class SubscriptionSummary(
+data class SubscriptionRow(
     val id: String,
-    val location: String,
-    val selected: Boolean = false,
+    /** The core's name; for [pasted] links the window writes its own wording instead. */
     val name: String,
-    val lastSuccessfulUpdate: String? = null,
-    val lastAttempt: String? = null,
-    val result: String = "",
-    val lastUpdateError: String? = null,
-    val nodeCount: Int? = null,
-    val upload: Long? = null,
-    val download: Long? = null,
-    val total: Long? = null,
-    /** Unix seconds. */
-    val expire: Long? = null,
-    /** 0 updates by hand only. */
-    val updateIntervalHours: Int = 0,
+    val pasted: Boolean = false,
+    val selected: Boolean = false,
     /** A link that can be downloaded again, not a file or pasted links. */
     val refreshable: Boolean = false,
-) {
-    /** Bytes used, when the server reports either direction. */
-    val used: Long? get() = if (upload == null && download == null) null else (upload ?: 0) + (download ?: 0)
-}
+    /** Null when the core has not counted them. */
+    val nodes: Int? = null,
+    /** When it was last downloaded, in the core's words. */
+    val updated: String? = null,
+    /** Why the last update did not work. */
+    val error: String? = null,
+    /** Bytes used, up and down together; null when the server did not say. */
+    val used: Long? = null,
+    /** Bytes allowed; null when the server did not say. */
+    val total: Long? = null,
+    /** Unix seconds; null when it does not expire or the server did not say. */
+    val expire: Long? = null,
+    val expired: Boolean = false,
+    /** Hours between automatic updates, 0 by hand; read from `list_subscriptions`. */
+    val intervalHours: Int = 0,
+)
+
+@Serializable
+internal data class SubscriptionsView(val subscriptions: List<SubscriptionRow> = emptyList())
+
+/** The part of a `list_subscriptions` entry the page needs beside `view.subscriptions`. */
+@Serializable
+internal data class SubscriptionInterval(val id: String, val updateIntervalHours: Int = 0)
 
 /** One node's result in a batch delay test (`test_node_delays`). */
 @Serializable
@@ -126,8 +134,12 @@ data class ProxiesView(
 
 @Serializable
 data class NodeSection(
-    /** The subscription; null for nodes that belong to none. */
+    /** The subscription's name; null for nodes that belong to none. */
     val group: String? = null,
+    /** The subscription's id. */
+    val source: String? = null,
+    /** Share links pasted into the client: the window writes its own heading. */
+    val pasted: Boolean = false,
     val nodes: List<NodeRow>,
 )
 

@@ -12,6 +12,7 @@ import android.net.VpnService
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
@@ -85,6 +86,7 @@ fun AnixApp(
     proxies: ProxiesViewModel,
     rules: RulesViewModel,
     settings: SettingsViewModel,
+    activity: ActivityViewModel,
     version: String,
 ) {
     val state by app.state.collectAsStateWithLifecycle()
@@ -93,6 +95,8 @@ fun AnixApp(
     val rulesState by rules.state.collectAsStateWithLifecycle()
     val settingsState by settings.state.collectAsStateWithLifecycle()
     val termsAccepted by app.termsAccepted.collectAsStateWithLifecycle()
+    val logsState by activity.logs.collectAsStateWithLifecycle()
+    val trafficState by activity.traffic.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { app.poll() }
@@ -131,6 +135,21 @@ fun AnixApp(
             if (text.isNotBlank()) snackbar.showSnackbar(text)
         }
     }
+    LaunchedEffect(activity) {
+        activity.events.collect { event ->
+            val text = when (event) {
+                is ActivityEvent.Message -> event.text
+                ActivityEvent.LogsCleared -> context.getString(R.string.logs_cleared)
+                ActivityEvent.StatsCleared -> context.getString(R.string.traffic_cleared)
+                is ActivityEvent.CopyLogs -> {
+                    val clipboard = context.getSystemService(ClipboardManager::class.java)
+                    clipboard.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.logs), event.text))
+                    context.resources.getQuantityString(R.plurals.logs_copied, event.lines, event.lines)
+                }
+            }
+            if (text.isNotBlank()) snackbar.showSnackbar(text)
+        }
+    }
     val terms by produceState<String?>(null) {
         value = withContext(Dispatchers.IO) { context.assets.open(Terms.ASSET).bufferedReader().use { it.readText() } }
     }
@@ -142,7 +161,7 @@ fun AnixApp(
     }
     var readingTerms by rememberSaveable { mutableStateOf(false) }
     if (readingTerms) {
-        BackHandler { readingTerms = false }
+        BackTo { readingTerms = false }
         TermsScreen(termsText, onClose = { readingTerms = false })
         return
     }
@@ -197,6 +216,19 @@ fun AnixApp(
         settingsState = settingsState,
         settings = settingsActions,
         termsVersion = termsVersion,
+        logsState = logsState,
+        trafficState = trafficState,
+        activity = ActivityActions(
+            setLevel = activity::setLevel,
+            setModule = activity::setModule,
+            setQuery = activity::setQuery,
+            refreshLogs = { activity.refreshLogs() },
+            copyLogs = { activity.copyLogs() },
+            clearLogs = { activity.clearLogs() },
+            setPeriod = activity::setPeriod,
+            setView = activity::setView,
+            clearTraffic = { activity.clearTraffic() },
+        ),
         onModeChange = app::setMode,
         snackbar = snackbar,
         pollProxies = {
@@ -207,6 +239,12 @@ fun AnixApp(
         },
         pollSettings = {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { settings.poll(language) }
+        },
+        pollLogs = {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { activity.pollLogs() }
+        },
+        pollTraffic = {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { activity.pollTraffic() }
         },
     )
 }
@@ -284,6 +322,9 @@ private fun clientLanguage(locale: Locale): String = when {
     else -> "zh"
 }
 
+/** The pages opened from 设置. */
+enum class SettingsPage { Logs, Traffic }
+
 /** The navigation and the current page: a bottom bar on phones, a side rail on wide windows. */
 @Composable
 fun AnixScaffold(
@@ -299,13 +340,21 @@ fun AnixScaffold(
     rules: RulesActions = RulesActions(),
     settingsState: SettingsState = SettingsState(),
     settings: SettingsActions = SettingsActions(),
+    logsState: LogsState = LogsState(),
+    trafficState: TrafficState = TrafficState(),
+    activity: ActivityActions = ActivityActions(),
     termsVersion: String = "",
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
     pollProxies: suspend () -> Unit = {},
     pollRules: suspend () -> Unit = {},
     pollSettings: suspend () -> Unit = {},
+    pollLogs: suspend () -> Unit = {},
+    pollTraffic: suspend () -> Unit = {},
     initial: Destination? = null,
+    initialSettingsPage: SettingsPage? = null,
 ) {
+    var settingsPage by rememberSaveable { mutableStateOf(initialSettingsPage) }
+    val closePage = { settingsPage = null }
     val destinations = Destination.of(mode)
     var selected by rememberSaveable(mode) { mutableStateOf(initial?.takeIf { it in destinations } ?: destinations.first()) }
     NavigationSuiteScaffold(
@@ -333,13 +382,42 @@ fun AnixScaffold(
                     LaunchedEffect(Unit) { pollRules() }
                     RulesScreen(state.snapshot, state.busy, rulesState, rules)
                 }
-                Destination.Settings -> {
-                    LaunchedEffect(Unit) { pollSettings() }
-                    SettingsScreen(mode, version, termsVersion, state.snapshot, settingsState, settings.copy(setMode = onModeChange))
+                Destination.Settings -> when (settingsPage) {
+                    SettingsPage.Logs -> {
+                        BackTo(closePage)
+                        LaunchedEffect(Unit) { pollLogs() }
+                        LogsScreen(logsState, activity.copy(back = closePage))
+                    }
+                    SettingsPage.Traffic -> {
+                        BackTo(closePage)
+                        LaunchedEffect(Unit) { pollTraffic() }
+                        TrafficScreen(trafficState, activity.copy(back = closePage))
+                    }
+                    null -> {
+                        LaunchedEffect(Unit) { pollSettings() }
+                        SettingsScreen(
+                            mode,
+                            version,
+                            termsVersion,
+                            state.snapshot,
+                            settingsState,
+                            settings.copy(
+                                setMode = onModeChange,
+                                openLogs = { settingsPage = SettingsPage.Logs },
+                                openTraffic = { settingsPage = SettingsPage.Traffic },
+                            ),
+                        )
+                    }
                 }
                 else -> PendingScreen(stringResource(selected.label))
             }
             SnackbarHost(snackbar, modifier = Modifier.align(Alignment.BottomCenter))
         }
     }
+}
+
+/** The system back gesture closes a page opened from another; screenshots have no dispatcher to hook into. */
+@Composable
+private fun BackTo(close: () -> Unit) {
+    if (LocalOnBackPressedDispatcherOwner.current != null) BackHandler(onBack = close)
 }

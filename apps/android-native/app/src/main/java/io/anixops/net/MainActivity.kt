@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.anixops.net.ui.ActivityViewModel
 import io.anixops.net.ui.AnixApp
 import io.anixops.net.ui.AppViewModel
 import io.anixops.net.ui.ProxiesViewModel
@@ -25,6 +26,7 @@ class MainActivity : ComponentActivity() {
                     proxies = viewModel { ProxiesViewModel(app.core) },
                     rules = viewModel { RulesViewModel(app.core) },
                     settings = viewModel { SettingsViewModel(app.core) },
+                    activity = viewModel { ActivityViewModel(app.core) },
                     version = BuildConfig.VERSION_NAME,
                 )
             }

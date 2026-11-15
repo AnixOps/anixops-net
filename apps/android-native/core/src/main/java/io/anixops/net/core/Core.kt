@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -129,8 +130,13 @@ class Core(
     suspend fun removeNode(nodeId: String): OperationResult =
         call("remove_node", OperationResult.serializer(), args("nodeId" to JsonPrimitive(nodeId)))
 
-    suspend fun subscriptions(): List<SubscriptionSummary> =
-        call("list_subscriptions", ListSerializer(SubscriptionSummary.serializer()))
+    /** The subscriptions as the proxies page lists them (`view.subscriptions`), with their update intervals. */
+    suspend fun subscriptions(): List<SubscriptionRow> {
+        val intervals = call("list_subscriptions", ListSerializer(SubscriptionInterval.serializer()))
+            .associate { it.id to it.updateIntervalHours }
+        return call("subscriptions", SubscriptionsView.serializer()).subscriptions
+            .map { it.copy(intervalHours = intervals[it.id] ?: 0) }
+    }
 
     suspend fun importSubscription(location: String): OperationResult =
         call("import_subscription", OperationResult.serializer(), args("location" to JsonPrimitive(location)))
@@ -226,6 +232,52 @@ class Core(
 
     /** Writes the diagnostics report to Downloads; the answer names the file. */
     suspend fun createDiagnostics(): OperationResult = call("create_diagnostics", OperationResult.serializer())
+
+    // Activity: the app's log and the traffic statistics.
+
+    /** The log lines at or above [level] (`all`, `warn`, `error`), of [module] (empty for all), containing [query]. */
+    suspend fun logs(level: String, module: String, query: String): LogsView {
+        val entries = raw("app_logs", args("clear" to JsonPrimitive(false)))
+        return call(
+            "view.logs",
+            LogsView.serializer(),
+            args(
+                "entries" to entries,
+                "level" to JsonPrimitive(level),
+                "module" to JsonPrimitive(module),
+                "query" to JsonPrimitive(query),
+            ),
+        )
+    }
+
+    suspend fun clearLogs() {
+        raw("app_logs", args("clear" to JsonPrimitive(true)))
+    }
+
+    /**
+     * The traffic statistics for [period] (`today` or `week`) at [nowSeconds], in the time zone [offsetSeconds]
+     * east of UTC.
+     */
+    suspend fun trafficStats(period: String, nowSeconds: Long, offsetSeconds: Int): TrafficPage {
+        val hours = raw("traffic_stats", args("clear" to JsonPrimitive(false))).let { answer ->
+            (answer as? JsonObject)?.get("hours") as? JsonArray ?: JsonArray(emptyList())
+        }
+        val view = call(
+            "view.traffic_stats",
+            TrafficStatsView.serializer(),
+            args(
+                "hours" to hours,
+                "period" to JsonPrimitive(period),
+                "now" to JsonPrimitive(nowSeconds),
+                "offset" to JsonPrimitive(offsetSeconds),
+            ),
+        )
+        return TrafficPage(view, recorded = hours.isNotEmpty())
+    }
+
+    suspend fun clearTrafficStats() {
+        raw("traffic_stats", args("clear" to JsonPrimitive(true)))
+    }
 
     // Plumbing.
 
