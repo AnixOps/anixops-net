@@ -11,7 +11,7 @@ import org.junit.runner.RunWith
 
 /**
  * CI's emulator smoke test (x86_64): the app starts, loads libanixops_net.so, opens the Rust client and shows
- * what it answers on the overview, proxies and settings pages. A fresh install has no subscription, so each
+ * what it answers on the overview, proxies, rules and settings pages. A fresh install has no subscription, so each
  * page shows its empty state, which only appears once the client has answered.
  */
 @RunWith(AndroidJUnit4::class)
@@ -21,9 +21,11 @@ class SmokeTest {
 
     private fun text(id: Int) = compose.activity.getString(id)
 
-    private fun waitFor(id: Int) {
+    private fun waitFor(id: Int) = waitForText(text(id))
+
+    private fun waitForText(value: String) {
         compose.waitUntil(TIMEOUT_MILLIS) {
-            compose.onAllNodes(hasText(text(id))).fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodes(hasText(value)).fetchSemanticsNodes().isNotEmpty()
         }
     }
 
@@ -35,6 +37,10 @@ class SmokeTest {
 
         compose.onNodeWithText(text(R.string.nav_proxies)).performClick()
         waitFor(R.string.proxies_empty)
+
+        // 我的规则 shows once `my_rules` has answered; a fresh install has none.
+        compose.onNodeWithText(text(R.string.nav_rules)).performClick()
+        waitForText(compose.activity.resources.getQuantityString(R.plurals.rules_count, 0, 0))
 
         compose.onNodeWithText(text(R.string.nav_settings)).performClick()
         waitFor(R.string.settings_version)

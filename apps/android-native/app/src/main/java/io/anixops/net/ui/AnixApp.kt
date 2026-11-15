@@ -66,10 +66,11 @@ enum class Destination(@param:StringRes val label: Int, val icon: ImageVector, v
  * the first connect, and shows what commands answered in a snackbar.
  */
 @Composable
-fun AnixApp(app: AppViewModel, proxies: ProxiesViewModel, version: String) {
+fun AnixApp(app: AppViewModel, proxies: ProxiesViewModel, rules: RulesViewModel, version: String) {
     val state by app.state.collectAsStateWithLifecycle()
     val mode by app.mode.collectAsStateWithLifecycle()
     val proxiesState by proxies.state.collectAsStateWithLifecycle()
+    val rulesState by rules.state.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { app.poll() }
@@ -87,6 +88,16 @@ fun AnixApp(app: AppViewModel, proxies: ProxiesViewModel, version: String) {
                     snackbar.showSnackbar(context.getString(R.string.proxies_shared, event.node))
                 }
             }
+        }
+    }
+    LaunchedEffect(rules) {
+        rules.events.collect { event ->
+            val text = when (event) {
+                is RulesEvent.Message -> event.text
+                is RulesEvent.RuleSetsStarted ->
+                    context.resources.getQuantityString(R.plurals.rules_sets_started, event.count, event.count)
+            }
+            if (text.isNotBlank()) snackbar.showSnackbar(text)
         }
     }
     val denied = stringResource(R.string.home_vpn_denied)
@@ -124,10 +135,24 @@ fun AnixApp(app: AppViewModel, proxies: ProxiesViewModel, version: String) {
             setInterval = proxies::setInterval,
             removeSubscription = proxies::removeSubscription,
         ),
+        rulesState = rulesState,
+        rules = RulesActions(
+            setRoutingMode = app::setRoutingMode,
+            refreshRoutingRules = rules::refreshRoutingRules,
+            saveMyRules = rules::saveMyRules,
+            selectGroupOutbound = rules::selectGroupOutbound,
+            updateRuleSets = rules::updateRuleSets,
+            setDnsPreset = app::setDnsPreset,
+            saveDns = rules::saveDns,
+            setBlockQuic = app::setBlockQuic,
+        ),
         onModeChange = app::setMode,
         snackbar = snackbar,
         pollProxies = {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { proxies.poll() }
+        },
+        pollRules = {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { rules.poll() }
         },
     )
 }
@@ -143,8 +168,11 @@ fun AnixScaffold(
     home: HomeActions = HomeActions(),
     proxiesState: ProxiesState = ProxiesState(),
     proxies: ProxiesActions = ProxiesActions(),
+    rulesState: RulesState = RulesState(),
+    rules: RulesActions = RulesActions(),
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
     pollProxies: suspend () -> Unit = {},
+    pollRules: suspend () -> Unit = {},
     initial: Destination? = null,
 ) {
     val destinations = Destination.of(mode)
@@ -169,6 +197,10 @@ fun AnixScaffold(
                 Destination.Proxies -> {
                     LaunchedEffect(Unit) { pollProxies() }
                     ProxiesScreen(proxiesState, proxies)
+                }
+                Destination.Rules -> {
+                    LaunchedEffect(Unit) { pollRules() }
+                    RulesScreen(state.snapshot, state.busy, rulesState, rules)
                 }
                 Destination.Settings -> SettingsScreen(mode, version, onModeChange)
                 else -> PendingScreen(stringResource(selected.label))

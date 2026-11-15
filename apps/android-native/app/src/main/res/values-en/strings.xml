@@ -115,4 +115,61 @@
         <item quantity="one">Every day</item>
         <item quantity="other">Every %d days</item>
     </plurals>
+    <string name="rules_refresh">Refresh rule resources</string>
+    <string name="rules_routing_note">Rule resources are cached on this device from public sources and take effect on the next connection.</string>
+    <string name="routing_bypass_china_hint">Mainland China sites go direct, everything else through the proxy</string>
+    <string name="routing_gfw_list_hint">Only sites on the list go through the proxy</string>
+    <string name="routing_return_china_hint">Mainland China sites go through the proxy, for use abroad</string>
+    <string name="routing_direct_hint">All traffic goes direct, never through a node</string>
+    <string name="routing_rule_hint">Follows the subscription\'s own rules and policy groups</string>
+    <string name="rules_mine">My rules</string>
+    <string name="rules_mine_note">One rule per line, matched top to bottom before the routing mode\'s and the subscription\'s rules. The policy is PROXY (the current node or the subscription\'s first policy group), DIRECT or REJECT. Supports DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD, DOMAIN-WILDCARD, IP-CIDR, IP-CIDR6, DST-PORT, PROCESS-NAME, USER-AGENT, URL-REGEX and PROTOCOL; lines starting with # are comments.</string>
+    <string name="action_revert">Revert</string>
+    <string name="rules_groups">Policy groups</string>
+    <string name="rules_groups_note">Set the default outbound for manual policy groups.</string>
+    <string name="rules_no_groups">The current configuration has no policy groups.</string>
+    <string name="group_selector">Manual</string>
+    <string name="group_urltest">Auto speed test</string>
+    <string name="group_none">None selected</string>
+    <string name="rules_sets">Rule sets</string>
+    <string name="rules_sets_note">The rule sets the current connection uses.</string>
+    <string name="rules_sets_update">Update remote rule sets</string>
+    <string name="rule_set_remote">Remote</string>
+    <string name="rule_set_builtin">Built-in</string>
+    <string name="rule_set_updated">Updated %1$s</string>
+    <string name="rule_set_not_downloaded">Not downloaded yet</string>
+    <string name="rule_set_failed">Last download failed: %1$s</string>
+    <string name="dns_system">System DNS</string>
+    <string name="dns_encrypted">Encrypted DNS</string>
+    <string name="dns_split">Split by region</string>
+    <string name="dns_custom">Custom DNS</string>
+    <string name="dns_system_hint">The embedded engine resolves domains that IP rules need with the system DNS; connections through a node have the node server resolve the domain.</string>
+    <string name="dns_encrypted_hint">Every name is resolved with Cloudflare DNS over HTTPS through the node, so the local network cannot see the queries.</string>
+    <string name="dns_split_hint">Mainland names go directly to AliDNS over HTTPS and the rest to Cloudflare through the node, so mainland sites get nearby addresses.</string>
+    <string name="dns_custom_hint">Uses the servers, per-domain servers and hosts below.</string>
+    <string name="dns_fake_ip_hint">Apps get an address in 198.18.0.0/15 at once when they look up a name; when they connect, the name is restored, matched against the rules and resolved by the node. LAN, time, STUN and push names still get real addresses.</string>
+    <string name="dns_custom_note">One per line; lines starting with # are comments. Without servers the engine asks its default server over TCP through the node.</string>
+    <string name="dns_servers">Servers</string>
+    <string name="dns_servers_hint">name = address; the first is the default server. The address is an IP, tcp://, tls:// or https://; add direct to reach it directly, otherwise it goes through the node.</string>
+    <string name="dns_rules">Per-domain servers</string>
+    <string name="dns_rules_hint">type,domain,server name, matched top to bottom. The type is DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD or RULE-SET (a rule set the routing mode has).</string>
+    <string name="dns_hosts_hint">domain = address, up to 8 addresses; *.domain matches its subdomains.</string>
+    <string name="block_quic">Block QUIC</string>
+    <string name="block_quic_hint">Refuses QUIC (HTTP/3) on UDP port 443 so browsers and apps use TCP instead, where MITM plugins and domain rules apply.</string>
+    <plurals name="rules_count">
+        <item quantity="one">%d rule</item>
+        <item quantity="other">%d rules</item>
+    </plurals>
+    <plurals name="rules_group_count">
+        <item quantity="one">%d policy group</item>
+        <item quantity="other">%d policy groups</item>
+    </plurals>
+    <plurals name="rules_sets_started">
+        <item quantity="one">Updating %d remote rule set</item>
+        <item quantity="other">Updating %d remote rule sets</item>
+    </plurals>
+    <plurals name="rule_set_entries">
+        <item quantity="one">%d entry</item>
+        <item quantity="other">%d entries</item>
+    </plurals>
 </resources>

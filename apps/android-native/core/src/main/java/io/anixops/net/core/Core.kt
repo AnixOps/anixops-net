@@ -156,6 +156,45 @@ class Core(
     suspend fun removeSubscription(id: String): OperationResult =
         call("remove_subscription", OperationResult.serializer(), args("id" to JsonPrimitive(id)))
 
+    // The rules page.
+
+    suspend fun refreshRoutingRules(): OperationResult = call("refresh_routing_rules", OperationResult.serializer())
+
+    suspend fun myRules(): MyRules = call("my_rules", MyRules.serializer())
+
+    suspend fun saveMyRules(text: String): OperationResult =
+        call("save_my_rules", OperationResult.serializer(), args("text" to JsonPrimitive(text)))
+
+    suspend fun nativeGroups(): List<NativeGroup> =
+        call("list_native_groups", ListSerializer(NativeGroup.serializer()))
+
+    suspend fun selectGroupOutbound(groupTag: String, outboundTag: String): OperationResult = call(
+        "select_native_group_outbound",
+        OperationResult.serializer(),
+        args("groupTag" to JsonPrimitive(groupTag), "outboundTag" to JsonPrimitive(outboundTag)),
+    )
+
+    /** The running engine's rule sets; empty while it does not run. */
+    suspend fun ruleSets(): List<RuleSetStatus> =
+        orNull { decode(RuleSetsAnswer.serializer(), control("rule_sets"), "rule_sets").ruleSets }.orEmpty()
+
+    /** Starts downloading the remote rule sets again; answers how many. */
+    suspend fun updateRuleSets(): Int = decode(ScheduledAnswer.serializer(), control("update_rule_sets"), "update_rule_sets").scheduled
+
+    suspend fun setDnsPreset(preset: String): OperationResult =
+        call("set_dns_preset", OperationResult.serializer(), args("preset" to JsonPrimitive(preset)))
+
+    suspend fun setBlockQuic(enabled: Boolean): OperationResult =
+        call("set_block_quic", OperationResult.serializer(), args("enabled" to JsonPrimitive(enabled)))
+
+    suspend fun customDns(): DnsText = call("custom_dns", DnsText.serializer())
+
+    suspend fun saveCustomDns(text: DnsText): OperationResult = call(
+        "save_custom_dns",
+        OperationResult.serializer(),
+        args("text" to Envelope.json.encodeToJsonElement(DnsText.serializer(), text)),
+    )
+
     // Plumbing.
 
     suspend fun <T> call(

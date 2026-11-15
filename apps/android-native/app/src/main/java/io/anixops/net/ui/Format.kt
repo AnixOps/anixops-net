@@ -27,3 +27,7 @@ fun formatRate(bytesPerSecond: Long): String = "${formatBytes(bytesPerSecond)}/s
 /** A day in the user's locale from Unix seconds. */
 fun formatDay(unixSeconds: Long, locale: Locale): String =
     DateFormat.getDateInstance(DateFormat.MEDIUM, locale).format(Date(unixSeconds * 1000))
+
+/** A moment as date and time in [locale], for "updated at" lines. */
+fun formatTime(unixMillis: Long, locale: Locale): String =
+    DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, locale).format(Date(unixMillis))
