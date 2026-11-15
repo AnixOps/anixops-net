@@ -17,6 +17,13 @@ fn main() {
             std::process::exit(2);
         }
     };
+    if let Some(cleanup) = options.cleanup {
+        // The installer does not stop for what could not be cleaned up; it is said for its log.
+        for problem in anixops_net_service::cleanup::run(cleanup) {
+            eprintln!("{problem}");
+        }
+        return;
+    }
     if !options.console {
         if let Err(error) = scm::dispatch(options) {
             eprintln!(

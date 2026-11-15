@@ -315,6 +315,10 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 - [ ] Windows 旧版数据搬运的真机核对（原生预览版发布后、正式切换之前）：在一台用过 Tauri 版的 Windows 机器上装原生预览版，
   核对订阅、选中的节点、分流模式、DNS、我的规则、插件和解密根证书都在，旧版程序仍能照常启动。CI 里的夹具是照着旧版的
   结构体写的，不是真机上取的文件，所以要这一步。
+- [ ] Windows 原生版 MSI 的真机核对（预览版发布后）：CI 的 runner 是管理员账号，测不到普通用户。在 Windows 10 和 11 上
+  用标准用户账号（非管理员）登录，由管理员装好 MSI 后：窗口启动不弹 UAC，标题栏显示“核心服务 <版本>”；连接后浏览器走
+  代理，断开后系统代理恢复；另一个用户同时登录时各自的系统代理互不影响；升级和卸载时窗口被关闭，卸载后“服务”里没有
+  AnixOps Net Core，`Program Files\AnixOps\Net` 不存在。未签名的安装包会有 SmartScreen 警告，见上面的证书一项。
 - [ ] Linux 守护进程单元的真机核对（deb / rpm 带上 `anixops-netd` 之后）：在 Ubuntu 和 Fedora 上 `systemctl start
   anixops-netd`，确认单元里的收紧项（`ProtectSystem=strict`、`ProtectHome=yes`、`CapabilityBoundingSet`、
   `RestrictAddressFamilies`）下连接、TUN 模式、HTTPS 解密都正常；用普通登录用户能控制，用没有登录会话的账号

@@ -45,6 +45,7 @@ fn the_service_answers_a_window_and_keeps_its_data_closed() {
         // An old folder without saved state: nothing to carry over, and that is not an error.
         legacy_dir: Some(root.join("old")),
         console: true,
+        cleanup: None,
     };
     let service = Service::start(&options).unwrap();
     {

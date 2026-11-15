@@ -15,7 +15,7 @@ public sealed class CoreTests
     /// <summary>What the status reads once connected, up to the version.</summary>
     internal static string ConnectedPrefix(Strings strings) => strings.Format("core.connected", "").TrimEnd();
 
-    private static string WaitForStatus(AppSession app, Func<string, bool> done, string expected)
+    internal static string WaitForStatus(AppSession app, Func<string, bool> done, string expected)
     {
         var deadline = DateTime.UtcNow + Patience;
         while (true)
@@ -66,5 +66,31 @@ public sealed class CoreTests
 
         using var again = ServiceProcess.Start(service.PipeName, service.Directory);
         WaitForStatus(app, text => text.StartsWith(prefix, StringComparison.Ordinal) && text.Length > prefix.Length, $"'{prefix} <version>'");
+    }
+}
+
+/// <summary>
+/// The installed client: run by the installer's test in CI (.github/scripts/native-msi-lifecycle.ps1) with
+/// ANIXOPS_NET_APP_EXE naming the installed window. Elsewhere it does nothing.
+/// </summary>
+public sealed class InstalledTests
+{
+    /// <summary>Set to 1 when the client is installed on this machine and its service runs.</summary>
+    public const string InstalledVariable = "ANIXOPS_NET_INSTALLED";
+
+    [Fact]
+    public void TheInstalledWindowReachesTheInstalledService()
+    {
+        if (Environment.GetEnvironmentVariable(InstalledVariable) != "1")
+        {
+            return;
+        }
+        var strings = Strings.For(Strings.English);
+        var prefix = CoreTests.ConnectedPrefix(strings);
+        // No pipe is named: the window finds the service the installer registered.
+        using var app = AppSession.Start("--language", "en");
+        var connected = CoreTests.WaitForStatus(app, text => text.StartsWith(prefix, StringComparison.Ordinal) && text.Length > prefix.Length, $"'{prefix} <version>'");
+        Assert.Matches(@"\d+\.\d+\.\d+", connected[prefix.Length..]);
+        app.Screenshot("installed-connected");
     }
 }

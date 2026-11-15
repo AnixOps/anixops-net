@@ -71,6 +71,8 @@ jobs:
                 apps/windows-gui/ui/src/design/*)
                   ui=true; windows=true; linux=true; android=true; android_native=true; apple=true; windows_native=true ;;
                 apps/windows-gui/ui/*) ui=true; windows=true; linux=true; android=true ;;
+                # The native client's installer; the native job builds it and installs, upgrades and removes it.
+                installer/windows-native/*) windows_native=true ;;
                 apps/windows-gui/* | installer/*) rust=true; windows=true ;;
                 # The Android app is the Linux window and backend on Android.
                 apps/linux-gui/*) rust=true; linux=true; android=true ;;
@@ -1096,6 +1098,50 @@ jobs:
         run: |
           $file = Join-Path $env:RUNNER_TEMP "windows-native-screenshots\startup-measurement.json"
           if (Test-Path $file) { Get-Content $file } else { Write-Host "no comparison was written" }
+
+      # The installer: the window published with its runtime, and the service. Two versions of the same
+      # files, so that an upgrade can be tested.
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $app = Join-Path $env:RUNNER_TEMP "native-app"
+          dotnet publish apps/windows-native/src/AnixOps.Net.App/AnixOps.Net.App.csproj --configuration Release --runtime win-x64 --self-contained true --output $app
+          if ($LASTEXITCODE -ne 0) { throw "the window was not published" }
+          if (-not (Test-Path (Join-Path $app "AnixOpsNet.exe"))) { throw "the published window has no AnixOpsNet.exe" }
+          dotnet tool install --global wix --version 5.0.2
+          if ($LASTEXITCODE -ne 0) { throw "WiX was not installed" }
+          $out = Join-Path $env:RUNNER_TEMP "native-msi"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          foreach ($version in @("0.3.0", "0.3.1")) {
+            wix build installer/windows-native/Package.wxs `
+              -arch x64 `
+              -d "ProductVersion=$version" `
+              -d "AppDir=$app" `
+              -d "ServiceExe=$env:ANIXOPS_NET_SERVICE_EXE" `
+              -o (Join-Path $out "anixops-net-$version.msi")
+            if ($LASTEXITCODE -ne 0) { throw "the installer $version was not built" }
+          }
+          # ICE03 is left out: it rejects the language lists in the version resources of some of the .NET
+          # and Windows App SDK libraries, which are Microsoft's files and installed as they are.
+          wix msi validate -sice ICE03 (Join-Path $out "anixops-net-0.3.0.msi")
+          if ($LASTEXITCODE -ne 0) { throw "the installer did not pass validation" }
+          $size = (Get-Item (Join-Path $out "anixops-net-0.3.0.msi")).Length
+          Write-Host ("installer size: {0:N1} MB" -f ($size / 1MB))
+
+      # Pass mark 3: install, upgrade with the window open, remove with the window open; after removal no
+      # service, process, file, shortcut or login entry is left.
+      - name: Install, upgrade and remove
+        shell: pwsh
+        env:
+          ANIXOPS_NET_SCREENSHOTS: ${{ runner.temp }}\windows-native-screenshots
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP "native-msi"
+          .github/scripts/native-msi-lifecycle.ps1 `
+            -First (Join-Path $out "anixops-net-0.3.0.msi") `
+            -Second (Join-Path $out "anixops-net-0.3.1.msi") `
+            -SecondVersion "0.3.1" `
+            -TestProject apps/windows-native/tests/AnixOps.Net.App.UiTests/AnixOps.Net.App.UiTests.csproj
 
       - name: Upload screenshots
         if: ${{ always() }}
