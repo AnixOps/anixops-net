@@ -10,6 +10,7 @@ vendored AnixOps Design tokens.json (see .github/scripts/sync_design.py). Output
     apps/ios/Sources/NetworkCoreAppHost/BrandTokens.swift   (iOS, iPadOS, macOS, widget)
     apps/windows-gui/ui/src/design/tokens.css               (Windows and Linux desktop: aliases over the
                                                              vendored tokens.css, which styles.css imports first)
+    apps/android-native/app/src/main/java/io/anixops/net/ui/theme/BrandTokens.kt   (native Android)
 
 Standard library only, so CI needs nothing but python3.
 """
@@ -25,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "apps/ios/Design/tokens.json"
 SWIFT_OUT = ROOT / "apps/ios/Sources/NetworkCoreAppHost/BrandTokens.swift"
 CSS_OUT = ROOT / "apps/windows-gui/ui/src/design/tokens.css"
+KOTLIN_OUT = ROOT / "apps/android-native/app/src/main/java/io/anixops/net/ui/theme/BrandTokens.kt"
 
 THEMES = ("light", "dark")
 HEADER = (
@@ -194,6 +196,103 @@ def css(tokens: dict, upstream: dict, version: str) -> str:
     return "\n".join(out)
 
 
+def kotlin_color(value: str, where: str) -> str:
+    if match := HEX.match(value):
+        return f"Color(0xFF{match.group(1).upper()})"
+    if match := RGBA.match(value):
+        red, green, blue, alpha = match.groups()
+        opacity = round(float(alpha) * 255)
+        return f"Color(0x{opacity:02X}{int(red):02X}{int(green):02X}{int(blue):02X})"
+    fail(f"{where} = {value!r} is neither #RRGGBB nor rgba()")
+    return ""
+
+
+def camel(name: str) -> str:
+    head, *rest = name.split("-")
+    return head + "".join(part.capitalize() for part in rest)
+
+
+def kotlin(tokens: dict, upstream: dict, version: str) -> str:
+    out = [
+        f"// {HEADER.format(version=version)}",
+        "@file:Suppress(\"MagicNumber\")",
+        "",
+        "package io.anixops.net.ui.theme",
+        "",
+        "import androidx.compose.ui.graphics.Color",
+        "import androidx.compose.ui.text.TextStyle",
+        "import androidx.compose.ui.text.font.FontWeight",
+        "import androidx.compose.ui.unit.dp",
+        "import androidx.compose.ui.unit.sp",
+        "",
+        "/** AnixOps Design brand colours, the same in every theme. Brand moments only: never controls or body text. */",
+        "object Brand {",
+    ]
+    for name, value in brand_colors(tokens, upstream).items():
+        out.append(f"    val {name} = {kotlin_color(value, 'brand.' + name)}")
+    out += ["}", ""]
+
+    keys = list(tokens["palette"].keys())
+    out += ["/** The per-theme colours ([BrandPalette.Light], [BrandPalette.Dark]). */", "data class BrandPalette("]
+    out += [f"    val {key}: Color," for key in keys]
+    out += [") {", "    companion object {"]
+    for theme in THEMES:
+        colors = palette(tokens, upstream, theme)
+        out.append(f"        val {theme.capitalize()} = BrandPalette(")
+        out += [f"            {key} = {kotlin_color(value, f'{theme}.{key}')}," for key, value in colors.items()]
+        out.append("        )")
+    out += ["    }", "}", ""]
+
+    radius = upstream["radius"]
+    out += ["/** Corner radii (AnixOps Design radius steps). */", "object BrandRadius {"]
+    for name, step in tokens["radius"].items():
+        out.append(f"    val {name} = {number(px(lookup(radius, step, 'radius.' + name), step))}.dp")
+    out += ["}", ""]
+
+    space = upstream["space"]
+    out += ["/** Spacing steps (AnixOps Design 4/8 dp grid). */", "object BrandSpacing {"]
+    for name, step in tokens["spacing"].items():
+        out.append(f"    val {name} = {number(px(lookup(space, step, 'spacing.' + name), step))}.dp")
+    out += ["}", ""]
+
+    motion = tokens["motion"]
+    durations = upstream["motion"]["duration"]
+
+    def millis(key: str) -> str:
+        return number(ms(lookup(durations, motion[key], f"motion.{key}"), motion[key]))
+
+    out += [
+        "/** Animation durations in milliseconds (AnixOps Design motion). */",
+        "object BrandMotion {",
+        f"    const val MICRO = {millis('micro')}",
+        f"    const val STANDARD = {millis('standard')}",
+        f"    const val EMPHASIS = {millis('emphasis')}",
+        f"    const val PAGE = {millis('page')}",
+        f"    const val CONNECT_DRAW = {number(motion['connectDrawMs'])}",
+        "}",
+        "",
+    ]
+
+    type_steps = upstream["type"]
+    weights = {"regular": "Normal", "medium": "Medium", "semibold": "SemiBold", "bold": "Bold"}
+    out += ["/** The type scale, from the desktop type steps; sizes in sp so they follow the system font size. */",
+            "object BrandType {"]
+    for name, style in tokens["typography"].items():
+        step = type_steps.get(style["desktop"])
+        if step is None:
+            fail(f"typography.{name}.desktop = {style['desktop']!r} is not an AnixOps Design type step")
+        if style["weight"] not in weights:
+            fail(f"typography.{name}.weight = {style['weight']!r} is unknown")
+        size = px(value_of(step, style["desktop"])["fontSize"], style["desktop"])
+        line = float(value_of(step, style["desktop"])["lineHeight"])
+        out.append(
+            f"    val {camel(name)} = TextStyle(fontSize = {number(size)}.sp, lineHeight = {number(round(size * line, 1))}.sp, "
+            f"fontWeight = FontWeight.{weights[style['weight']]})"
+        )
+    out += ["}", ""]
+    return "\n".join(out)
+
+
 def main() -> None:
     check = "--check" in sys.argv[1:]
     tokens = json.loads(SOURCE.read_text(encoding="utf-8"))
@@ -203,7 +302,12 @@ def main() -> None:
     upstream = json.loads(upstream_path.read_text(encoding="utf-8"))
     version = (upstream_path.with_name("VERSION")).read_text(encoding="utf-8").strip()
     stale = []
-    for path, text in ((SWIFT_OUT, swift(tokens, upstream, version)), (CSS_OUT, css(tokens, upstream, version))):
+    outputs = (
+        (SWIFT_OUT, swift(tokens, upstream, version)),
+        (CSS_OUT, css(tokens, upstream, version)),
+        (KOTLIN_OUT, kotlin(tokens, upstream, version)),
+    )
+    for path, text in outputs:
         current = path.read_text(encoding="utf-8") if path.exists() else None
         if current == text:
             continue

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_home">首頁</string>
+    <string name="nav_proxies">代理</string>
+    <string name="nav_rules">規則</string>
+    <string name="nav_extensions">擴充功能</string>
+    <string name="nav_settings">設定</string>
+    <string name="nav_requests">請求</string>
+    <string name="nav_rewrite">改寫</string>
+    <string name="nav_egress">出口</string>
+
+    <string name="status_connected">已連線</string>
+    <string name="status_not_connected">未連線</string>
+    <string name="status_failed">連線失敗</string>
+    <string name="status_core_error">核心出錯</string>
+    <string name="status_working">正在處理…</string>
+    <string name="home_connection">連線</string>
+    <string name="home_node">節點</string>
+    <string name="home_subscription">訂閱</string>
+    <string name="home_routing">分流模式</string>
+    <string name="home_no_node">未選擇</string>
+    <string name="home_no_subscription">未匯入</string>
+    <string name="home_last_error">上次出錯</string>
+    <string name="home_vpn_denied">沒有允許建立 VPN，無法連線</string>
+
+    <string name="routing_bypass_china">繞過大陸</string>
+    <string name="routing_gfw_list">GFW 清單</string>
+    <string name="routing_return_china">回國</string>
+    <string name="routing_direct">直連</string>
+    <string name="routing_rule">規則</string>
+
+    <string name="pending_title">這一頁還在遷移</string>
+    <string name="pending_body">原生介面預覽版目前只有首頁和設定，其他功能請先用現有版本。</string>
+
+    <string name="settings_usage">使用方式</string>
+    <string name="mode_proxy">代理</string>
+    <string name="mode_debug">調試網路</string>
+    <string name="settings_about">關於</string>
+    <string name="settings_version">版本</string>
+
+    <string name="notification_channel_vpn">連線狀態</string>
+    <string name="notification_channel_notices">通知</string>
+    <string name="notification_connected">已連線</string>
+</resources>
