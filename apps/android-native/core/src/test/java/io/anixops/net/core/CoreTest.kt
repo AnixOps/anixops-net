@@ -274,6 +274,38 @@ class CoreTest {
     }
 
     @Test
+    fun appLinksAreReadByTheSharedView() = runTest {
+        val transport = Recording("""{"ok":{"action":"select","node":"东京 01","group":"Panel"}}""")
+        val link = Core(transport, StandardTestDispatcher(testScheduler)).parseAppLink("anixops://select?node=东京 01&group=Panel")
+        assertEquals(listOf("view.parse_app_link" to """{"link":"anixops://select?node=东京 01&group=Panel"}"""), transport.calls)
+        assertEquals(AppLink(action = "select", node = "东京 01", group = "Panel"), link)
+    }
+
+    @Test
+    fun aRefusedLinkSaysWhy() = runTest {
+        val core = Core(Recording("""{"ok":{"error":"unknown_mode","detail":"fast"}}"""), StandardTestDispatcher(testScheduler))
+        assertEquals(AppLink(error = "unknown_mode", detail = "fast"), core.parseAppLink("anixops://mode?set=fast"))
+    }
+
+    @Test
+    fun aLinkNodeIsFoundAmongTheNodesListed() = runTest {
+        val transport = Recording("""{"ok":null}""")
+        val core = Core(transport, StandardTestDispatcher(testScheduler))
+        val nodes = listOf(NodeSummary(id = "n1", label = "东京 01", protocol = "VLESS", group = "Panel"))
+        assertNull(core.findLinkNode(nodes, "大阪", null))
+        assertNull(core.findLinkMember(listOf(NativeGroup("Proxy", "selector", outbounds = listOf("n1"))), "Proxy", "n2"))
+        assertEquals(
+            listOf(
+                "view.find_link_node" to
+                    """{"nodes":[{"id":"n1","label":"东京 01","protocol":"VLESS","selected":false,"group":"Panel","editable":false}],"name":"大阪"}""",
+                "view.find_link_member" to
+                    """{"groups":[{"tag":"Proxy","groupType":"selector","outbounds":["n1"],"outboundLabels":[]}],"policy":"Proxy","member":"n2"}""",
+            ),
+            transport.calls,
+        )
+    }
+
+    @Test
     fun ruleSetsGoThroughRuntimeControl() = runTest {
         val transport = Recording(
             """{"ok":{"rule_sets":[{"name":"china","source":"remote","entries":8412,"updated_at_ms":1763198400000}]}}""",

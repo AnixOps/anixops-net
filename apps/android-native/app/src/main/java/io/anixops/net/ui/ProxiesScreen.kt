@@ -22,6 +22,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +57,8 @@ data class ProxiesActions(
     val edit: (id: String, name: String, server: String, port: String) -> Unit = { _, _, _, _ -> },
     val remove: (String) -> Unit = {},
     val importSubscription: (String) -> Unit = {},
+    /** The import form took the link an `anixops://import` link brought. */
+    val takeImport: () -> Unit = {},
     val useSubscription: (String) -> Unit = {},
     val updateSubscription: (String) -> Unit = {},
     val renameSubscription: (id: String, name: String) -> Unit = { _, _ -> },
@@ -94,6 +97,12 @@ fun ProxiesScreen(
 ) {
     var dialog by remember { mutableStateOf<ProxiesDialog?>(null) }
     val scope = rememberCoroutineScope()
+    state.pendingImport?.let { link ->
+        LaunchedEffect(link) {
+            dialog = ProxiesDialog.Import(scanned = link)
+            actions.takeImport()
+        }
+    }
     Page(title, modifier) {
         header()
         SubscriptionsSection(

@@ -555,4 +555,15 @@
     <string name="connection_export_note">Saved to the Downloads folder. pcapng opens in Wireshark; HAR imports into browser developer tools, Charles or Proxyman. Exports can hold account details and cookies, so share them only with people you trust.</string>
     <string name="bytes_text">Show as Text</string>
     <string name="bytes_hex">Show as Hex</string>
+    <string name="link_refused">Cannot open the link: %1$s</string>
+    <string name="link_invalid">Invalid link</string>
+    <string name="link_not_app_link">Not an anixops:// link</string>
+    <string name="link_too_long">The link is too long</string>
+    <string name="link_missing_action">The link names no action</string>
+    <string name="link_missing_parameter">The link is missing a parameter</string>
+    <string name="link_unknown_action">Unknown action</string>
+    <string name="link_unknown_mode">This client has no such routing mode</string>
+    <string name="link_no_node">Node %1$s not found</string>
+    <string name="link_no_member">Policy group %1$s has no %2$s</string>
+    <string name="link_import_offered">Check the subscription link, then tap Import</string>
 </resources>

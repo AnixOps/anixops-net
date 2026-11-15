@@ -533,4 +533,15 @@
     <string name="connection_export_note">儲存到「下載」資料夾。pcapng 可用 Wireshark 開啟，HAR 可匯入瀏覽器開發者工具、Charles 或 Proxyman。匯出內容可能包含帳號、Cookie 等敏感資訊，請只傳給信任的人。</string>
     <string name="bytes_text">顯示為文字</string>
     <string name="bytes_hex">顯示為十六進位</string>
+    <string name="link_refused">無法開啟連結：%1$s</string>
+    <string name="link_invalid">連結無效</string>
+    <string name="link_not_app_link">不是 anixops:// 連結</string>
+    <string name="link_too_long">連結太長</string>
+    <string name="link_missing_action">連結缺少操作</string>
+    <string name="link_missing_parameter">連結缺少參數</string>
+    <string name="link_unknown_action">不認識的操作</string>
+    <string name="link_unknown_mode">這個用戶端沒有該分流模式</string>
+    <string name="link_no_node">找不到節點 %1$s</string>
+    <string name="link_no_member">策略組 %1$s 裡沒有 %2$s</string>
+    <string name="link_import_offered">核對訂閱連結後點「匯入」</string>
 </resources>
