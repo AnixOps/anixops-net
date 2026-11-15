@@ -126,6 +126,8 @@ fn show_members(
         ) {
             // Names are shown as they are written, not read as markup.
             label.set_label(name.string().as_str());
+            // What a screen reader calls the row.
+            item.set_accessible_label(name.string().as_str());
         }
     });
     let list = gtk::ListView::new(Some(selection.clone()), Some(names));
