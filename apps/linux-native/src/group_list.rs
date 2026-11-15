@@ -318,8 +318,9 @@ impl GroupList {
             choose.set_widget_name("choose");
             choose.set_valign(gtk::Align::Center);
             choose.add_css_class("flat");
+            // To a screen reader the button is called by the group's name: the row names the widget that
+            // pressing it activates after its title. What it does is in its tooltip.
             choose.set_tooltip_text(Some(says));
-            choose.update_property(&[gtk::accessible::Property::Label(says)]);
             choose.connect_clicked({
                 let pages = open.pages.clone();
                 let members = Rc::clone(&open.members);

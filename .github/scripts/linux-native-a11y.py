@@ -698,15 +698,22 @@ def check_groups(app, binary: str, endpoint: str, text, press, shots: str | None
         return next((found for found in rows(text("proxies.groups")) if tag in says(found)), None)
 
     def chooser(tag: str):
+        """The button that opens the members of that group. It is called by the group's name: the row names
+        the widget that pressing it activates after its title."""
         found = row(tag)
         if found is None:
             return None
         return next(
             (node for node, _ in walk(found)
-             if role(node) in ("push button", "button") and node.get_name() == text("groups.choose")
-             and showing(node)),
+             if role(node) in ("push button", "button") and node.get_name() == tag and showing(node)),
             None,
         )
+
+    def buttons(tag: str) -> list:
+        found = row(tag)
+        return [] if found is None else [
+            node for node, _ in walk(found) if role(node) in ("push button", "button") and showing(node)
+        ]
 
     def opener():
         """The page's button that opens the groups, if it is on the screen."""
@@ -743,7 +750,7 @@ def check_groups(app, binary: str, endpoint: str, text, press, shots: str | None
               lambda: (lambda found: found is not None
                        and any(line.startswith(text("groups.kind.auto")) for line in says(found)))(row("Auto")))
         # Only a group the user chooses in opens its members.
-        if chooser("Auto") is not None:
+        if buttons("Auto"):
             fail("the group Auto, which chooses by itself, offers to choose a member")
 
         button = until("the button that opens the members of Proxy", lambda: chooser("Proxy"))
