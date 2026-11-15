@@ -9,6 +9,7 @@
 //! - [`message`]: the JSON itself. Either side sends requests and answers the other's; the core also sends
 //!   events that expect no answer.
 //! - [`Connection`]: frames and messages over any reader and writer, used for the greeting.
+//! - [`transport`]: the Unix socket and the named pipe that carry the frames.
 //! - [`peer`]: after the greeting, each side answers the other's requests, asks its own and takes events.
 //!
 //! The window is written in another language on Windows, so the wire format is fixed by the samples under
@@ -18,6 +19,7 @@
 pub mod frame;
 pub mod message;
 pub mod peer;
+pub mod transport;
 
 use std::io::{self, Read, Write};
 
