@@ -1,0 +1,167 @@
+<Page
+    x:Class="AnixOps.Net.App.Pages.OverviewPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Page.Resources>
+        <!-- A card as Windows' own settings pages draw one. -->
+        <Style x:Key="OverviewCard" TargetType="Border">
+            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+            <Setter Property="Padding" Value="16" />
+        </Style>
+    </Page.Resources>
+
+    <!-- Whether the client is connected, the button that connects and disconnects, the node in use and how
+         much is moving. What stands here is decided in AnixOps.Net.Presentation.Overview; this draws it. -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="32,24,32,32">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MaxWidth="960" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Spacing="{StaticResource BrandSpacingXs}">
+                <TextBlock
+                    x:Name="Heading"
+                    Margin="0,0,0,8"
+                    AutomationProperties.AutomationId="Page.Title"
+                    AutomationProperties.HeadingLevel="Level1"
+                    Style="{StaticResource TitleTextBlockStyle}" />
+
+                <Border Padding="20" Style="{StaticResource OverviewCard}">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel
+                            Grid.Column="0"
+                            VerticalAlignment="Center"
+                            Spacing="{StaticResource BrandSpacingXxs}">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <!-- One dot per state, so each keeps its theme colour. -->
+                                <Grid
+                                    Width="10"
+                                    Height="10"
+                                    VerticalAlignment="Center">
+                                    <Ellipse x:Name="DotOff" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                                    <Ellipse
+                                        x:Name="DotOn"
+                                        Fill="{ThemeResource SystemFillColorSuccessBrush}"
+                                        Visibility="Collapsed" />
+                                </Grid>
+                                <TextBlock
+                                    x:Name="StateText"
+                                    AutomationProperties.AutomationId="Overview.State"
+                                    AutomationProperties.LiveSetting="Polite"
+                                    Style="{StaticResource SubtitleTextBlockStyle}" />
+                            </StackPanel>
+                            <TextBlock
+                                x:Name="DetailText"
+                                AutomationProperties.AutomationId="Overview.Detail"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource BodyTextBlockStyle}"
+                                TextWrapping="Wrap"
+                                Visibility="Collapsed" />
+                            <!-- Selectable, so that the reason can be copied into a message asking for help. -->
+                            <TextBlock
+                                x:Name="ErrorText"
+                                AutomationProperties.AutomationId="Overview.Error"
+                                AutomationProperties.LiveSetting="Polite"
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                IsTextSelectionEnabled="True"
+                                Style="{StaticResource BodyTextBlockStyle}"
+                                TextWrapping="Wrap"
+                                Visibility="Collapsed" />
+                        </StackPanel>
+                        <Button
+                            x:Name="ConnectButton"
+                            Grid.Column="1"
+                            MinWidth="140"
+                            MinHeight="36"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="Overview.Connect"
+                            Click="OnPressed"
+                            IsEnabled="False" />
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource OverviewCard}">
+                    <StackPanel Spacing="{StaticResource BrandSpacingXxs}">
+                        <TextBlock
+                            x:Name="NodeLabel"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}" />
+                        <TextBlock
+                            x:Name="NodeText"
+                            AutomationProperties.AutomationId="Overview.Node"
+                            Style="{StaticResource BodyStrongTextBlockStyle}"
+                            TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock
+                    x:Name="TrafficHeading"
+                    Margin="0,16,0,0"
+                    AutomationProperties.HeadingLevel="Level2"
+                    Style="{StaticResource BodyStrongTextBlockStyle}" />
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource OverviewCard}">
+                        <StackPanel Spacing="{StaticResource BrandSpacingXxs}">
+                            <TextBlock
+                                x:Name="DownloadLabel"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}" />
+                            <TextBlock
+                                x:Name="DownloadRate"
+                                AutomationProperties.AutomationId="Overview.DownloadRate"
+                                Style="{StaticResource SubtitleTextBlockStyle}" />
+                            <TextBlock
+                                x:Name="DownloadTotal"
+                                AutomationProperties.AutomationId="Overview.DownloadTotal"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="1" Style="{StaticResource OverviewCard}">
+                        <StackPanel Spacing="{StaticResource BrandSpacingXxs}">
+                            <TextBlock
+                                x:Name="UploadLabel"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}" />
+                            <TextBlock
+                                x:Name="UploadRate"
+                                AutomationProperties.AutomationId="Overview.UploadRate"
+                                Style="{StaticResource SubtitleTextBlockStyle}" />
+                            <TextBlock
+                                x:Name="UploadTotal"
+                                AutomationProperties.AutomationId="Overview.UploadTotal"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="2" Style="{StaticResource OverviewCard}">
+                        <StackPanel Spacing="{StaticResource BrandSpacingXxs}">
+                            <TextBlock
+                                x:Name="ConnectionsLabel"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}" />
+                            <TextBlock
+                                x:Name="ConnectionsText"
+                                AutomationProperties.AutomationId="Overview.Connections"
+                                Style="{StaticResource SubtitleTextBlockStyle}" />
+                            <!-- Keeps the three cards the same height: the other two have a line here. -->
+                            <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text=" " />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</Page>

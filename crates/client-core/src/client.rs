@@ -811,6 +811,28 @@ fn handler(name: &str) -> Option<Handler> {
     let handler: Handler = match name {
         "runtime_snapshot" => |client, _| json(client.backend().snapshot()),
         "list_nodes" => |client, _| json(client.backend().nodes()),
+        // The overview page in one answer, read under one lock so that its parts agree: the state, the node
+        // in use, and the engine's counters while it runs. What they mean is `client-view`'s to say.
+        "overview" => |client, _| {
+            let backend = client.backend();
+            let snapshot = json(backend.snapshot())?;
+            let chosen = snapshot.get("selectedNode").and_then(Value::as_str);
+            // The list can be thousands long; the page needs the node in use, which is one of these.
+            let nodes = backend
+                .nodes()
+                .into_iter()
+                .filter(|node| node.selected || chosen == Some(node.id.as_str()))
+                .map(json)
+                .collect::<Result<Vec<Value>, String>>()?;
+            let traffic = if client_view::overview::state(&snapshot) == "connected" {
+                backend
+                    .runtime_control(&serde_json::json!({ "cmd": "traffic" }))
+                    .unwrap_or(Value::Null)
+            } else {
+                Value::Null
+            };
+            Ok(client_view::overview::overview(&snapshot, &nodes, &traffic))
+        },
         "list_native_groups" => |client, _| json(client.backend().groups()),
         "list_subscriptions" => |client, _| json(client.backend().subscriptions()),
         "connect" | "restart_service" => |client, _| json(client.connect_through_tunnel()?),
@@ -1635,6 +1657,13 @@ mod tests {
         );
         let snapshot = client.invoke("runtime_snapshot", Value::Null).unwrap();
         assert!(snapshot.get("connection").is_some());
+        // The overview page's answer: a client that was never given anything is not connected.
+        let overview = client.invoke("overview", Value::Null).unwrap();
+        assert_eq!(overview["state"], "disconnected");
+        assert_eq!(overview["node"], Value::Null);
+        assert_eq!(overview["error"], Value::Null);
+        assert_eq!(overview["traffic"], Value::Null);
+        assert!(overview["canConnect"].is_boolean());
         // The windows' shared logic answers through the same door.
         assert_eq!(
             client.invoke(

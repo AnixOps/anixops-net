@@ -9,9 +9,9 @@ link to the daemon, whose state the foot of the sidebar shows, and the first rea
 - `src/sections.rs`, `src/launch.rs`: what the window shows and how it is started, without GTK. Built and
   tested on every system by the workspace jobs. A test checks that the pages are the ones the Windows window
   has.
-- `src/overview.rs`: the overview page without GTK: asking the daemon once a second and turning the answer
-  into the page's sentences, numbers and whether the button can be pressed. What the daemon's state means is
-  decided in `crates/client-view` (`view.overview`), the same code the other windows use.
+- `src/overview.rs`: the overview page without GTK: turning the daemon's answer into the page's sentences,
+  numbers and whether the button can be pressed. What the daemon's state means is decided by the daemon (its
+  `overview` command, asked once a second), the same answer the Windows window gets.
 - `src/overview_page.rs`: the overview page's widgets.
 - `src/window.rs`: the window (relm4 over gtk4-rs and libadwaita). Only built with the `gui` feature, on Linux,
   because it needs the GTK 4 and libadwaita development files. It links `crates/client-window` (the standing

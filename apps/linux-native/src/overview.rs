@@ -1,17 +1,15 @@
 //! The overview page without GTK: what the core says, read into what the page shows.
 //!
 //! What the core's state means (connected or not, which node, whether connecting can work) is decided by
-//! `client-view`, the same code the other windows reach through the core. This module asks the core for
-//! that state ([`Feed`]) and turns it into the page's sentences and numbers ([`shown`]).
+//! the core (its `overview` command, which is `client-view`'s `view.overview` over its own state), the same
+//! answer every window gets. This module reads that answer ([`Overview::read`]) and turns it into the
+//! page's sentences and numbers ([`shown`]).
 
 use client_strings::Language;
-use serde_json::{json, Value};
+use serde_json::Value;
 
 /// What stands where a number is not known.
 pub const UNKNOWN: &str = "—";
-
-/// How often the node list is asked for again while nothing says it changed, in refreshes.
-const NODES_EVERY: u32 = 10;
 
 /// Whether the client is connected.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -53,7 +51,10 @@ pub struct Overview {
 }
 
 impl Overview {
-    /// Reads the answer of `view.overview`. What is missing reads as "not connected, nothing known".
+    /// The core's command that answers with the overview. It takes no arguments.
+    pub const COMMAND: &'static str = "overview";
+
+    /// Reads the core's answer. What is missing reads as "not connected, nothing known".
     pub fn read(answer: &Value) -> Self {
         let text = |value: &Value, name: &str| {
             value
@@ -94,64 +95,6 @@ impl Overview {
                 .map(str::to_owned),
             traffic,
         }
-    }
-}
-
-/// Asks the core for the overview, once per refresh. The node list can be long and seldom changes, so it is
-/// kept and asked for again only when the chosen node is not in it, or every few refreshes.
-#[derive(Debug, Default)]
-pub struct Feed {
-    nodes: Vec<Value>,
-    /// Refreshes since the node list was asked for; `None` before the first time.
-    age: Option<u32>,
-}
-
-impl Feed {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Forgets the node list, so the next refresh asks for it: after the core went away, or after something
-    /// the user did that may have changed it.
-    pub fn forget(&mut self) {
-        self.age = None;
-    }
-
-    /// One refresh. `ask` sends a command to the core and waits for the answer. The snapshot failing is the
-    /// error; the traffic counters failing only leaves them unknown.
-    pub fn refresh(
-        &mut self,
-        ask: &dyn Fn(&str, Value) -> Result<Value, String>,
-    ) -> Result<Overview, String> {
-        let snapshot = ask("runtime_snapshot", json!({}))?;
-        let chosen = snapshot.get("selectedNode").and_then(Value::as_str);
-        let known = chosen.is_none_or(|id| {
-            self.nodes
-                .iter()
-                .any(|node| node.get("id").and_then(Value::as_str) == Some(id))
-        });
-        if !known || self.age.is_none_or(|age| age >= NODES_EVERY) {
-            self.nodes = match ask("list_nodes", json!({}))? {
-                Value::Array(nodes) => nodes,
-                _ => Vec::new(),
-            };
-            self.age = Some(0);
-        }
-        self.age = self.age.map(|age| age + 1);
-        let traffic = if client_view::overview::state(&snapshot) == "connected" {
-            ask(
-                "runtime_control",
-                json!({ "request": { "cmd": "traffic" } }),
-            )
-            .unwrap_or(Value::Null)
-        } else {
-            Value::Null
-        };
-        Ok(Overview::read(&client_view::overview::overview(
-            &snapshot,
-            &self.nodes,
-            &traffic,
-        )))
     }
 }
 
@@ -303,7 +246,6 @@ pub fn rate(bytes_per_second: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::RefCell;
 
     fn cases() -> Vec<Value> {
         let cases: Vec<Value> = serde_json::from_str(include_str!(
@@ -354,125 +296,6 @@ mod tests {
             })
         );
         assert_eq!(Overview::read(&Value::Null).state, State::Disconnected);
-    }
-
-    /// A core that answers from a script and writes down what it was asked.
-    struct Core {
-        asked: RefCell<Vec<String>>,
-        snapshot: RefCell<Value>,
-        traffic: Result<Value, String>,
-    }
-
-    impl Core {
-        fn new(snapshot: Value) -> Self {
-            Self {
-                asked: RefCell::new(Vec::new()),
-                snapshot: RefCell::new(snapshot),
-                traffic: Ok(json!({
-                    "upload_total": 10, "download_total": 20, "upload_rate": 1, "download_rate": 2, "active": 3
-                })),
-            }
-        }
-
-        fn ask(&self, command: &str, args: Value) -> Result<Value, String> {
-            self.asked.borrow_mut().push(command.to_owned());
-            match command {
-                "runtime_snapshot" => Ok(self.snapshot.borrow().clone()),
-                "list_nodes" => Ok(json!([
-                    { "id": "a", "label": "Tokyo", "protocol": "trojan", "selected": true },
-                    { "id": "b", "label": "Osaka", "protocol": "vless", "selected": false },
-                ])),
-                "runtime_control" => {
-                    assert_eq!(args, json!({ "request": { "cmd": "traffic" } }));
-                    self.traffic.clone()
-                }
-                other => Err(format!("unexpected command {other}")),
-            }
-        }
-
-        fn asked(&self) -> Vec<String> {
-            std::mem::take(&mut *self.asked.borrow_mut())
-        }
-    }
-
-    fn snapshot(connection: &str, node: &str) -> Value {
-        json!({ "connection": connection, "selectedNode": node, "routingMode": "rule" })
-    }
-
-    #[test]
-    fn the_feed_asks_for_traffic_only_while_connected_and_for_nodes_seldom() {
-        let core = Core::new(snapshot("Not connected", "a"));
-        let ask = |command: &str, args: Value| core.ask(command, args);
-        let mut feed = Feed::new();
-
-        let first = feed.refresh(&ask).unwrap();
-        assert_eq!(first.state, State::Disconnected);
-        assert_eq!(first.node, Some(("Tokyo".to_owned(), "trojan".to_owned())));
-        assert_eq!(first.traffic, None);
-        assert_eq!(core.asked(), ["runtime_snapshot", "list_nodes"]);
-
-        // Nothing changed: only the snapshot is asked for.
-        feed.refresh(&ask).unwrap();
-        assert_eq!(core.asked(), ["runtime_snapshot"]);
-
-        // Connected: the counters too.
-        *core.snapshot.borrow_mut() = snapshot("Connected", "a");
-        let connected = feed.refresh(&ask).unwrap();
-        assert_eq!(connected.state, State::Connected);
-        assert_eq!(
-            connected.traffic.map(|traffic| traffic.connections),
-            Some(3)
-        );
-        assert_eq!(core.asked(), ["runtime_snapshot", "runtime_control"]);
-
-        // A node the list does not know: the list is asked for again.
-        *core.snapshot.borrow_mut() = snapshot("Connected", "b");
-        let switched = feed.refresh(&ask).unwrap();
-        assert_eq!(
-            switched.node,
-            Some(("Osaka".to_owned(), "vless".to_owned()))
-        );
-        assert_eq!(core.asked(), ["runtime_snapshot", "runtime_control"]);
-        *core.snapshot.borrow_mut() = snapshot("Connected", "new");
-        feed.refresh(&ask).unwrap();
-        assert_eq!(
-            core.asked(),
-            ["runtime_snapshot", "list_nodes", "runtime_control"]
-        );
-
-        // After being told to forget, and every few refreshes by itself.
-        *core.snapshot.borrow_mut() = snapshot("Not connected", "a");
-        feed.forget();
-        feed.refresh(&ask).unwrap();
-        assert_eq!(core.asked(), ["runtime_snapshot", "list_nodes"]);
-        let mut asked_again = 0;
-        for _ in 0..NODES_EVERY {
-            feed.refresh(&ask).unwrap();
-            asked_again += core
-                .asked()
-                .iter()
-                .filter(|command| *command == "list_nodes")
-                .count();
-        }
-        assert_eq!(asked_again, 1);
-    }
-
-    #[test]
-    fn counters_that_fail_are_unknown_and_a_snapshot_that_fails_is_the_error() {
-        let mut core = Core::new(snapshot("Connected", "a"));
-        core.traffic = Err("the engine did not answer".to_owned());
-        let mut feed = Feed::new();
-        let overview = feed
-            .refresh(&|command: &str, args: Value| core.ask(command, args))
-            .unwrap();
-        assert_eq!(overview.state, State::Connected);
-        assert_eq!(overview.traffic, None);
-
-        let refused = |_: &str, _: Value| Err::<Value, _>("not for this user".to_owned());
-        assert_eq!(
-            Feed::new().refresh(&refused),
-            Err("not for this user".to_owned())
-        );
     }
 
     fn overview(state: State) -> Overview {
@@ -618,6 +441,9 @@ mod tests {
             (0, "0 B"),
             (1023, "1023 B"),
             (1024, "1.0 KB"),
+            // Exactly half way between two tenths goes to the even one.
+            (1280, "1.2 KB"),
+            (1331, "1.3 KB"),
             (1536, "1.5 KB"),
             (1_048_575, "1.0 MB"),
             (1_048_576, "1.0 MB"),

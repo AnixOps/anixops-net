@@ -388,21 +388,29 @@ Linux 窗口接上守护进程（PR 5b）：
 - 守护进程拒绝当前用户时（没有在本机登录的账号）握手仍然成功，侧栏显示已连上核心；概览页的第一个请求会被拒绝，
   拒绝的原因显示在概览页上，按钮不可用。
 
-概览页（PR 6a，先做 Linux）：
+概览页（PR 6a Linux，PR 6b Windows）：
 
 - 页面内容：连接状态、连接 / 断开按钮、当前节点、上下行速率和累计、活动连接数；连不上时显示核心给的原因。
 - "核心状态对这一页意味着什么"只写一份，在 `crates/client-view` 的 `view.overview`：入参是核心的 `runtime_snapshot`、
   `list_nodes` 和引擎的流量计数，出参是状态（`connected`、`disconnected`、`failed`、`core_error`）、出口（节点或直连）、
-  当前节点、能不能连接、原因和流量。样例在 `fixtures/cases.json`。Linux 窗口直接链接 `client-view`，C# 窗口经核心调用
-  同一个命令。句子和数字的格式（`1.5 MB/s`）是各窗口自己的。
-- Linux 窗口里不带 GTK 的部分在 `apps/linux-native/src/overview.rs`：`Feed` 每秒问一次核心（节点列表只在选中的节点
-  不在手头的列表里、或每 10 次时重新问；流量只在已连接时问），`shown` 把结果变成页面上的每一句话和按钮能不能按。
-  所有系统的 workspace 任务都测。控件在 `overview_page.rs`。
+  当前节点、能不能连接、原因和流量。样例在 `fixtures/cases.json`。
+- 窗口不自己凑这三样：核心有一个 `overview` 命令（`crates/client-core`），拿自己的状态、选中的节点和引擎的流量计数
+  （只在已连接时问引擎）调用 `view.overview`，一次往返给出整页内容。两个窗口每秒问一次这个命令，得到的是同一个回答。
+- 把回答变成页面上的每一句话、每个数字和按钮能不能按，各窗口各写一份、测试对齐：Linux 在
+  `apps/linux-native/src/overview.rs`（控件在 `overview_page.rs`），Windows 在
+  `apps/windows-native/src/AnixOps.Net.Presentation/Overview.cs`（控件在 `AnixOps.Net.App/Pages/OverviewPage.xaml`）。
+  两边读同一份 `fixtures/cases.json`，数字写法一致：按 1024 进位，一位小数（`1.5 MB/s`），正好落在两个一位小数
+  中间时取偶数那个（1280 字节是 `1.2 KB`）。
+- Windows 页面按系统设置页的样子排：标题、状态卡片（状态和按钮）、当前节点卡片、三张流量卡片。"连接"用强调色按钮，
+  "断开"用普通按钮。
 - 向核心发请求都在后台线程，界面线程不等；按钮按下后到核心答复前显示"正在连接 / 正在断开"并禁用。核心离开时
   清空已知状态。
 - CI 用真实的 `anixops-netd`：新装的守护进程没有节点，窗口显示"还没有选择节点"、按钮不可用；脚本以另一个程序的身份
   让守护进程改成直连出口，然后经 AT-SPI 按下"连接"，等窗口显示"已连接"和两个速率，截图，再按"断开"。
   守护进程只应答在本机登录的用户，runner 的任务不是登录会话，所以 CI 里先按登录管理器的做法建好 `/run/user/<uid>`。
+- Windows 的 CI 用真实的服务（前台运行）做同一件事，经 UI Automation 读字和按按钮，两种语言各一遍并截图。服务把
+  "改这个用户的系统代理"交给最新打开的窗口去做，所以测试在应用之后再连一个自己的窗口，代理写进测试自己的注册表键，
+  不动 runner 的真实代理设置；测试同时检查连接后这个键指向引擎、断开后恢复。
 - 还没有的：流量曲线、出口地址、订阅用量；核心的错误原因目前是英文原文。
 
 ## 迁移清单与 PR 顺序
@@ -429,7 +437,7 @@ Linux 窗口接上守护进程（PR 5b）：
 | 5 | Linux 骨架（`apps/linux-native`）：导航、主题、三种语言、CI 截图与 AT-SPI 检查。和守护进程的连接、打包在后面的 PR | 2 |
 | 5b | Linux 窗口接上守护进程：`crates/client-session`、`crates/client-window`（`CoreLink`、`WindowEnd`，不带内核），侧栏底部的连接状态，CI 里和真实的 `anixops-netd` 跑"没启动、连上、停掉、重连" | 5 |
 | 6a | 概览页（Linux）：`view.overview`、连接 / 断开、当前节点、速率和流量；CI 里对真实守护进程连接和断开 | 5b |
-| 6b | 概览页（Windows）：同样的内容，经核心调用 `view.overview` | 6a |
+| 6b | 概览页（Windows）：同样的内容；核心新增 `overview` 命令，两个窗口都改用它 | 6a |
 | 6 | 代理 › 首页与代理：连接、状态、流量、连接列表、出口地址、订阅、节点、测速、策略组、分享、节点编辑 | 4、5 |
 | 7 | 规则与设置：分流模式、我的规则、规则集、DNS、Fake-IP、屏蔽 QUIC、流量重定向、通知、Wi-Fi 规则、日志、流量统计、诊断、协议、语言 | 6 |
 | 8 | 扩展与改写：插件导入 / 开关 / 查看，HTTPS 解密与根证书，解密域名，Map Local / Remote，团队 CA，手机连电脑抓包 | 6 |
