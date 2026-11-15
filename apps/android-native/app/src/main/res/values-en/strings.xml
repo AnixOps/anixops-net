@@ -409,10 +409,6 @@
     <string name="egress_node_note">Traffic leaves by the node selected below and the subscription rules; switch nodes to compare exits in different regions.</string>
     <string name="egress_rules">Rules and DNS</string>
     <string name="requests_capture">Capture</string>
-    <string name="requests_not_connected">Not connected</string>
-    <string name="requests_not_connected_body">Once connected, HTTP requests through this device are listed here one by one. Debug mode goes direct by default and needs no node.</string>
-    <string name="requests_capture_off">Capture is off</string>
-    <string name="requests_capture_off_body">Turn on Capture above and new requests appear here one by one. To see HTTPS in plain text, also trust the decryption certificate in Rewrite and turn on decryption for the domains you want to see.</string>
     <string name="requests_filter">Filter: URL, host:, status:, type:…</string>
     <string name="requests_filter_hint">For example host:api.example.com status:4xx type:json; join groups with OR</string>
     <string name="requests_filter_error_at">The filter has a mistake at character %1$d</string>
@@ -517,4 +513,16 @@
         <item quantity="one">Sessions stay on this device and are deleted after %d day.</item>
         <item quantity="other">Sessions stay on this device and are deleted after %d days.</item>
     </plurals>
+    <string name="setup_title">A few steps before HTTPS requests show</string>
+    <string name="setup_connect">Connect</string>
+    <string name="setup_connect_hint">Turn on Connection above. Network debugging goes direct by default, so no node is needed.</string>
+    <string name="setup_certificate">Trust the decryption certificate</string>
+    <string name="setup_certificate_hint">Install the decryption certificate in Rewrite and trust it in system settings.</string>
+    <string name="setup_decryption">Turn on HTTPS decryption</string>
+    <string name="setup_decryption_hint">Turn it on in Rewrite and install the decryption certificate as it asks.</string>
+    <string name="setup_domains">Add domains to decrypt</string>
+    <string name="setup_domains_hint">Turn on decryption for the domains you want to see in Rewrite; it applies to new connections.</string>
+    <string name="setup_capture">Start capture</string>
+    <string name="setup_capture_hint">Turn on Capture above and new requests appear below one by one.</string>
+    <string name="setup_go">Go</string>
 </resources>

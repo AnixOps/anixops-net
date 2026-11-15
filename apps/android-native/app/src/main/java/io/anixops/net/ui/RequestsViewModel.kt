@@ -111,6 +111,8 @@ data class RequestsState(
     val redact: Boolean = true,
     val replay: ReplayDraft? = null,
     val sessions: SessionsPage? = null,
+    /** What is left before HTTPS requests show (`view.decrypt_setup`); empty once they can. */
+    val setup: List<String> = emptyList(),
 )
 
 /** A sentence for the snackbar, or where an export was saved. */
@@ -140,12 +142,24 @@ class RequestsViewModel(private val core: Core) : ViewModel() {
 
     private val reading = Mutex()
 
+    /** Whether the app is connected and decrypting, which the checklist needs; the app's own state says. */
+    private var connected = false
+    private var decrypting = false
+
     /** Reads capture and the list every [POLL_MILLIS] until cancelled; the requests page runs it while it shows. */
     suspend fun poll() {
         while (true) {
             read()
             delay(POLL_MILLIS)
         }
+    }
+
+    /** The connection and decryption as the app shows them, for the checklist. */
+    fun setSetupInputs(connected: Boolean, decrypting: Boolean) {
+        if (connected == this.connected && decrypting == this.decrypting) return
+        this.connected = connected
+        this.decrypting = decrypting
+        viewModelScope.launch { read() }
     }
 
     fun toggleQuick(id: String) = refilter { it.copy(quick = if (id in it.quick) it.quick - id else it.quick + id) }
@@ -357,7 +371,9 @@ class RequestsViewModel(private val core: Core) : ViewModel() {
 
     private suspend fun readLocked() {
         val capture = quiet { core.captureStatus() }
-        _state.update { it.copy(capture = capture) }
+        val domains = quiet { core.decryptHosts().size } ?: 0
+        val setup = quiet { core.decryptSetup(connected, decrypting, domains, capturing = capture?.enabled == true) }
+        _state.update { it.copy(capture = capture, setup = setup ?: it.setup) }
         val asked = _state.value
         if (capture == null) {
             _state.update { it.copy(loaded = true) }

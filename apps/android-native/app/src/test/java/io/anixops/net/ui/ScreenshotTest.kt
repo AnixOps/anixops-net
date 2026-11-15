@@ -262,7 +262,7 @@ class ScreenshotTest {
             snapshot = snapshot.copy(connection = "Not connected", directEgress = true),
             overview = Overview(state = "disconnected", egress = "direct", canConnect = true),
         ),
-        requests = RequestsState(loaded = true),
+        requests = RequestsState(loaded = true, setup = listOf("connect", "decryption", "domains", "capture")),
     )
 
     @Test
@@ -271,7 +271,16 @@ class ScreenshotTest {
         PHONE,
         "zh-rCN",
         dark = true,
-        requests = RequestsState(capture = CaptureStatus(maxTotalBytes = 268_435_456), loaded = true),
+        requests = RequestsState(capture = CaptureStatus(maxTotalBytes = 268_435_456), loaded = true, setup = listOf("domains", "capture")),
+    )
+
+    @Test
+    fun requestsSetupPhoneLightEn() = captureRequests(
+        "requests-setup-phone-light-en",
+        PHONE,
+        "en",
+        dark = false,
+        requests = requestsState.copy(setup = listOf("certificate", "domains")),
     )
 
     @Test

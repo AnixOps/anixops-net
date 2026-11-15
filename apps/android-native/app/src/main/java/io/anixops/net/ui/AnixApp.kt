@@ -115,6 +115,9 @@ fun AnixApp(
     val locale by rememberUpdatedState(LocalConfiguration.current.locales[0])
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(app) { app.messages.collect { snackbar.showSnackbar(it) } }
+    val connected = state.overview?.state == "connected"
+    val decrypting = state.snapshot?.httpsDecryptionEnabled == true
+    LaunchedEffect(requests, connected, decrypting) { requests.setSetupInputs(connected, decrypting) }
     LaunchedEffect(requests) {
         requests.events.collect { event ->
             val text = when (event) {
@@ -573,7 +576,11 @@ fun AnixScaffold(
                         requestsState.replay != null -> BackTo(requests.closeReplay)
                         requestsState.opened != null -> BackTo(requests.close)
                     }
-                    RequestsScreen(state, requestsState, requests.copy(connect = home.connect, disconnect = home.disconnect))
+                    RequestsScreen(
+                        state,
+                        requestsState,
+                        requests.copy(connect = home.connect, disconnect = home.disconnect, openRewrite = { selected = Destination.Rewrite }),
+                    )
                 }
             }
             SnackbarHost(snackbar, modifier = Modifier.align(Alignment.BottomCenter))
