@@ -614,6 +614,182 @@ def check_subscriptions(app, binary: str, endpoint: str, text, press, shots: str
         server.shutdown()
 
 
+# A subscription with rules and policy groups, as the script's own server hands it out.
+ROUTED = """\
+proxies:
+  - name: HK
+    type: ss
+    server: 203.0.113.30
+    port: 11111
+    cipher: aes-256-gcm
+    password: f43c0eee-13b9-4f07-bec9-d4b744141503
+  - name: JP
+    type: ss
+    server: 203.0.113.31
+    port: 11112
+    cipher: aes-256-gcm
+    password: f43c0eee-13b9-4f07-bec9-d4b744141504
+proxy-groups:
+  - name: Proxy
+    type: select
+    proxies:
+      - Auto
+      - HK
+      - DIRECT
+  - name: Auto
+    type: url-test
+    proxies:
+      - JP
+      - HK
+    url: http://www.gstatic.com/generate_204
+    interval: 300
+rules:
+  - DOMAIN-SUFFIX,example.org,DIRECT
+  - MATCH,Proxy
+"""
+
+
+def routed_server():
+    """A subscription with policy groups on this machine. Returns the server and its link."""
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            body = ROUTED.encode()
+            self.send_response(200)
+            self.send_header("content-type", "text/yaml; charset=utf-8")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    Thread(target=server.serve_forever, daemon=True).start()
+    return server, f"http://127.0.0.1:{server.server_address[1]}/routed"
+
+
+def check_groups(app, binary: str, endpoint: str, text, press, shots: str | None) -> str:
+    """The policy groups against the real daemon: what a row says, and choosing a member of a group."""
+
+    def showing(node) -> bool:
+        return node.get_state_set().contains(Atspi.StateType.SHOWING)
+
+    def group(tag: str) -> dict | None:
+        return next((row for row in core_ask(endpoint, "groups", {})["groups"] if row["tag"] == tag), None)
+
+    def listing(name: str):
+        """The list under that name that is on the screen now."""
+        return next(
+            (node for node, _ in walk(app) if role(node) == "list" and node.get_name() == name and showing(node)),
+            None,
+        )
+
+    def rows(name: str) -> list:
+        found = listing(name)
+        if found is None:
+            return []
+        return [node for node, _ in walk(found) if role(node) == "list item" and showing(node)]
+
+    def says(row) -> list[str]:
+        return [node.get_name() or "" for node, _ in walk(row) if role(node) == "label" and showing(node)]
+
+    def row(tag: str):
+        return next((found for found in rows(text("proxies.groups")) if tag in says(found)), None)
+
+    def chooser(tag: str):
+        found = row(tag)
+        if found is None:
+            return None
+        return next(
+            (node for node, _ in walk(found)
+             if role(node) in ("push button", "button") and node.get_name() == text("groups.choose")
+             and showing(node)),
+            None,
+        )
+
+    def opener():
+        """The page's button that opens the groups, if it is on the screen."""
+        return next(
+            (node for node, _ in walk(app)
+             if role(node) in ("push button", "button") and node.get_name() == text("proxies.groups")
+             and showing(node)),
+            None,
+        )
+
+    if opener() is not None:
+        fail("the page offers policy groups before a subscription with groups is in use")
+    server, link = routed_server()
+    try:
+        before = {row["id"] for row in core_ask(endpoint, "subscriptions", {})["subscriptions"]}
+        core_ask(endpoint, "import_subscription", {"location": link})
+        added = [row["id"] for row in core_ask(endpoint, "subscriptions", {})["subscriptions"]
+                 if row["id"] not in before]
+        if len(added) != 1:
+            fail(f"importing {link} added {len(added)} subscriptions at the daemon")
+        proxy = group("Proxy")
+        if proxy is None or not proxy["choosable"] or proxy["selectedLabel"] != "Auto":
+            fail(f"the daemon describes the group Proxy of {link} as {proxy}")
+        automatic = group("Auto")
+        if automatic is None or automatic["choosable"] or automatic["kind"] != "auto":
+            fail(f"the daemon describes the group Auto of {link} as {automatic}")
+
+        until("the page to offer the policy groups", opener)
+        press("proxies.groups")
+        using = text("groups.kind.select") + " · " + text("groups.using").replace("{0}", "Auto")
+        until(f"the row of Proxy to say {using!r}", lambda: (lambda found: found is not None
+                                                             and using in says(found))(row("Proxy")))
+        until("the row of Auto to say that the group chooses the fastest",
+              lambda: (lambda found: found is not None
+                       and any(line.startswith(text("groups.kind.auto")) for line in says(found)))(row("Auto")))
+        # Only a group the user chooses in opens its members.
+        if chooser("Auto") is not None:
+            fail("the group Auto, which chooses by itself, offers to choose a member")
+
+        button = until("the button that opens the members of Proxy", lambda: chooser("Proxy"))
+        action = button.get_action_iface()
+        if action is None or not action.do_action(0):
+            fail("the members of Proxy could not be opened through the accessibility interface")
+        wanted = [member["label"] for member in proxy["members"]]
+        until(f"the members {wanted} of Proxy", lambda: [node.get_name() for node in rows("Proxy")] == wanted)
+
+        def chosen() -> list[str]:
+            return [node.get_name() for node in rows("Proxy")
+                    if node.get_state_set().contains(Atspi.StateType.SELECTED)]
+
+        until("the member Auto to be the selected one", lambda: chosen() == ["Auto"])
+        selection = listing("Proxy").get_selection_iface()
+        if selection is None:
+            dump(app)
+            fail("the members of a group cannot be chosen through the accessibility interface")
+        if not selection.select_child(wanted.index("HK")):
+            fail("choosing the member HK was refused")
+        until("the daemon to use HK in the group Proxy",
+              lambda: (group("Proxy") or {}).get("selectedLabel") == "HK")
+        until("the member HK to be the selected one", lambda: chosen() == ["HK"])
+
+        if shots:
+            picture = os.path.join(shots, "core-groups-zh-light.png")
+            subprocess.run(
+                [binary, "--language", "zh", "--theme", "light", "--socket", endpoint, "--page", "proxies",
+                 "--show", "groups", "--screenshot", picture],
+                check=True,
+                timeout=60,
+            )
+            if not os.path.getsize(picture):
+                fail(f"{picture} is empty")
+
+        # Without the subscription there are no groups: the dialog goes, and the page's button with it.
+        core_ask(endpoint, "remove_subscription", {"id": added[0]})
+        until("the daemon to have no policy groups", lambda: not core_ask(endpoint, "groups", {})["groups"])
+        until("the members and the groups to be gone",
+              lambda: listing("Proxy") is None and listing(text("proxies.groups")) is None)
+        until("the page to offer no policy groups", lambda: opener() is None)
+        return f"groups {[row['tag'] for row in (proxy, automatic)]}: listed, chose 'HK' in 'Proxy', gone"
+    finally:
+        server.shutdown()
+
+
 def check_core(binary: str, daemon: str, wording: dict, shots: str | None) -> None:
     """The window against a real daemon: away, found, connected, disconnected, away again, found again."""
     language = "zh"
@@ -710,6 +886,7 @@ def check_core(binary: str, daemon: str, wording: dict, shots: str | None) -> No
             sentence("overview.state.disconnected")
             button("overview.connect")
             nodes = check_proxies(app, binary, endpoint, text, button, press, sentence, shots)
+            groups = check_groups(app, binary, endpoint, text, press, shots)
             subscriptions = check_subscriptions(app, binary, endpoint, text, press, shots)
             stop(core)
             core = None
@@ -717,7 +894,7 @@ def check_core(binary: str, daemon: str, wording: dict, shots: str | None) -> No
             core = start_daemon()
             found("after the daemon started again")
             print(f"[core] not running, found ({line!r}), connected ({', '.join(rates)}), disconnected, "
-                  f"proxies ({nodes}), {subscriptions}, stopped, found again")
+                  f"proxies ({nodes}), {groups}, {subscriptions}, stopped, found again")
         finally:
             stop(window)
             stop(core)

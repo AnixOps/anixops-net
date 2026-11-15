@@ -1,6 +1,6 @@
 //! How the window is started. The options fix the surroundings for tests and screenshots; a user starts the
 //! window without any: `--language zh|zh-Hant|en`, `--theme light|dark`, `--page <id>`, `--size <w>x<h>`,
-//! `--screenshot <file.png>`, `--socket <path>`, `--show subscriptions`. What is not understood is ignored.
+//! `--screenshot <file.png>`, `--socket <path>`, `--show subscriptions|groups`. What is not understood is ignored.
 
 use std::path::PathBuf;
 
@@ -36,6 +36,8 @@ pub struct Launch {
     pub socket: Option<String>,
     /// Open the proxies page's list of subscriptions over the window (`--show subscriptions`).
     pub subscriptions: bool,
+    /// Open the proxies page's list of policy groups over the window (`--show groups`).
+    pub groups: bool,
 }
 
 impl Default for Launch {
@@ -48,6 +50,7 @@ impl Default for Launch {
             screenshot: None,
             socket: None,
             subscriptions: false,
+            groups: false,
         }
     }
 }
@@ -112,6 +115,7 @@ impl Launch {
                     launch.socket = Some(value);
                 }
                 "--show" if value == "subscriptions" => launch.subscriptions = true,
+                "--show" if value == "groups" => launch.groups = true,
                 _ => {}
             }
         }
@@ -157,6 +161,9 @@ mod tests {
         assert!(Launch::parse(["--show", "subscriptions"]).subscriptions);
         assert!(Launch::parse(["--show=subscriptions"]).subscriptions);
         assert!(!Launch::parse(["--show", "everything"]).subscriptions);
+        assert!(!Launch::default().groups);
+        assert!(Launch::parse(["--show", "groups"]).groups);
+        assert!(!Launch::parse(["--show", "groups"]).subscriptions);
     }
 
     #[test]

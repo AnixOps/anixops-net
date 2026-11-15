@@ -11,6 +11,8 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::{gio, glib};
 
+use crate::group_list::GroupList;
+use crate::groups::{self, Choice};
 use crate::proxies::{Row, Shown, Tone};
 use crate::subscription_list::SubscriptionList;
 use crate::subscriptions::{self, Change};
@@ -36,6 +38,8 @@ pub enum Asked {
     Switch(String),
     /// Download a subscription again, give it another name or remove it.
     Change(Change),
+    /// Use this member in a policy group.
+    Choose(Choice),
 }
 
 pub struct ProxiesPage {
@@ -46,6 +50,10 @@ pub struct ProxiesPage {
     count: gtk::Label,
     manage: gtk::Button,
     subscriptions: Rc<SubscriptionList>,
+    choose: gtk::Button,
+    groups: Rc<GroupList>,
+    /// Whether the core said which policy groups there are the last time the page was drawn.
+    grouped: Cell<bool>,
     /// Whether the core said which subscriptions there are the last time the page was drawn.
     listed: Cell<bool>,
     error: gtk::Label,
@@ -206,8 +214,23 @@ impl ProxiesPage {
             let subscriptions = Rc::clone(&subscriptions);
             move |button| subscriptions.present(button)
         });
+        // The policy groups of the subscription in use, in a dialog of their own. Most subscriptions have
+        // none; the button is only there when there are some.
+        let choose = gtk::Button::with_label(text("proxies.groups"));
+        choose.set_widget_name("groups");
+        choose.add_css_class("flat");
+        choose.set_visible(false);
+        let groups = Rc::new(GroupList::new(language, {
+            let asked = asked.clone();
+            move |choice| asked(Asked::Choose(choice))
+        }));
+        choose.connect_clicked({
+            let groups = Rc::clone(&groups);
+            move |button| groups.present(button)
+        });
         let count_line = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         count_line.append(&count);
+        count_line.append(&choose);
         count_line.append(&manage);
         let error = gtk::Label::new(None);
         error.set_xalign(0.0);
@@ -329,6 +352,9 @@ impl ProxiesPage {
             manage,
             subscriptions,
             listed: Cell::new(false),
+            choose,
+            groups,
+            grouped: Cell::new(false),
             error,
             stack,
             notice,
@@ -352,6 +378,14 @@ impl ProxiesPage {
         glib::idle_add_local_once(move || subscriptions.present(&root));
     }
 
+    /// Opens the list of policy groups over the window once the window is up, as pressing the page's
+    /// button does.
+    pub fn open_groups(&self) {
+        let groups = Rc::clone(&self.groups);
+        let root = self.root.clone();
+        glib::idle_add_local_once(move || groups.present(&root));
+    }
+
     /// Empties the box a subscription's link is written in, once the core has taken the link.
     pub fn clear_link(&self) {
         self.link.set_text("");
@@ -359,13 +393,31 @@ impl ProxiesPage {
 
     /// Draws what is known now. While the core is switching nodes the row the user chose stays selected,
     /// whatever the core still says is in use. `subscriptions` is `None` while the core does not say which
-    /// there are: there is then nothing to open, and what was open is closed.
+    /// there are: there is then nothing to open, and what was open is closed. The same goes for `groups`.
     pub fn show(
         &self,
         shown: &Shown,
         switching: bool,
         subscriptions: Option<&[subscriptions::Row]>,
+        groups: Option<&[groups::Row]>,
     ) {
+        self.choose
+            .set_visible(groups.is_some_and(|rows| !rows.is_empty()));
+        match groups {
+            Some(rows) => {
+                // A subscription without groups came into use: there is nothing left to choose in.
+                if rows.is_empty() {
+                    self.groups.close();
+                }
+                self.groups.show(rows);
+            }
+            None if self.grouped.get() => {
+                self.groups.close();
+                self.groups.show(&[]);
+            }
+            None => {}
+        }
+        self.grouped.set(groups.is_some());
         self.manage.set_sensitive(subscriptions.is_some());
         match subscriptions {
             Some(rows) => self.subscriptions.show(rows),

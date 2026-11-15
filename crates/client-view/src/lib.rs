@@ -17,6 +17,7 @@
 
 pub mod app_link;
 pub mod capture;
+pub mod groups;
 pub mod nodes;
 pub mod overview;
 pub mod proxies;
@@ -118,6 +119,7 @@ pub fn invoke(command: &str, args: &Value) -> Option<Result<Value, String>> {
             rows(args, "subscriptions"),
             args.get("now").and_then(Value::as_u64).unwrap_or(0),
         ),
+        "groups" => groups::groups(rows(args, "groups")),
         "overview" => overview::overview(
             args.get("snapshot").unwrap_or(&Value::Null),
             rows(args, "nodes"),
@@ -168,6 +170,7 @@ mod tests {
             "overview",
             "proxies",
             "subscriptions",
+            "groups",
         ] {
             let command = format!("{PREFIX}{name}");
             assert!(

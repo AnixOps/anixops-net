@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
+using PolicyGroups = AnixOps.Net.Presentation.Groups;
 
 namespace AnixOps.Net.App.Pages;
 
@@ -55,6 +56,12 @@ public sealed partial class ProxiesPage : Page
     private IReadOnlyList<Subscription>? subscriptions;
     private readonly HashSet<string> changing = [];
     private SubscriptionsDialog? dialog;
+
+    // The policy groups the core says there are (null while it has not said), the ones it is still choosing
+    // a member for, and the list of them while it is open.
+    private IReadOnlyList<Group>? policies;
+    private readonly HashSet<string> choosing = [];
+    private GroupsDialog? policyDialog;
     private string query = "";
     private ProxiesBusy busy;
 
@@ -102,6 +109,7 @@ public sealed partial class ProxiesPage : Page
         AutomationProperties.SetName(SearchBox, strings["proxies.search"]);
         AutomationProperties.SetName(NodeList, strings["proxies.list"]);
         SubscriptionsButton.Content = strings["proxies.subscriptions"];
+        GroupsButton.Content = strings["proxies.groups"];
         Draw();
 
         core.Changed += OnCoreChanged;
@@ -124,6 +132,7 @@ public sealed partial class ProxiesPage : Page
         active = false;
         timer.Stop();
         dialog?.Close();
+        policyDialog?.Close();
         if (core is not null)
         {
             core.Changed -= OnCoreChanged;
@@ -145,6 +154,8 @@ public sealed partial class ProxiesPage : Page
         proxies = null;
         subscriptions = null;
         changing.Clear();
+        policies = null;
+        choosing.Clear();
         busy = default;
         failure = null;
         trouble = null;
@@ -202,7 +213,7 @@ public sealed partial class ProxiesPage : Page
         await RefreshSubscriptionsAsync();
     }
 
-    /// <summary>Asks the core which subscriptions there are. An answer that does not come leaves what was known.</summary>
+    /// <summary>Asks the core which subscriptions and which policy groups there are. An answer that does not come leaves what was known.</summary>
     private async Task RefreshSubscriptionsAsync()
     {
         if (core is null)
@@ -216,6 +227,18 @@ public sealed partial class ProxiesPage : Page
             if (asking == era && Connected)
             {
                 subscriptions = Subscriptions.Read(answer);
+            }
+        }
+        catch (Exception error) when (error is RefusedException or IOException or TimeoutException or OperationCanceledException or ObjectDisposedException)
+        {
+            // Asked for again at the next tick.
+        }
+        try
+        {
+            var answer = await core.AskAsync(PolicyGroups.Command, NoArgs, AskPatience);
+            if (asking == era && Connected)
+            {
+                policies = PolicyGroups.Read(answer);
             }
         }
         catch (Exception error) when (error is RefusedException or IOException or TimeoutException or OperationCanceledException or ObjectDisposedException)
@@ -320,9 +343,72 @@ public sealed partial class ProxiesPage : Page
         }
     }
 
+    /// <summary>Tells the core which member the user chose for a policy group. The other groups do not wait for it.</summary>
+    private async void Choose(GroupChoice choice)
+    {
+        if (core is null || !active || !Connected || !choosing.Add(choice.Group))
+        {
+            return;
+        }
+        var asking = era;
+        failure = null;
+        Draw();
+
+        string? problem = null;
+        try
+        {
+            await core.AskAsync(GroupChoice.Command, choice.Args(), ActPatience);
+        }
+        catch (Exception error) when (error is RefusedException or IOException or TimeoutException or OperationCanceledException or ObjectDisposedException)
+        {
+            problem = error.Message;
+        }
+        if (asking != era)
+        {
+            // The core that was asked is gone; what it was busy with went with it.
+            return;
+        }
+        // The nodes and the groups as they are after this, before a member can be chosen in the group again.
+        await RefreshAsync();
+        if (asking != era)
+        {
+            return;
+        }
+        choosing.Remove(choice.Group);
+        failure = problem;
+        if (active)
+        {
+            Draw();
+        }
+    }
+
+    private async void OnGroups(object sender, RoutedEventArgs e)
+    {
+        // One dialog at a time.
+        if (strings is null || dialog is not null || policyDialog is not null || policies is not { Count: > 0 })
+        {
+            return;
+        }
+        var opened = new GroupsDialog(strings, Choose) { XamlRoot = XamlRoot, RequestedTheme = ActualTheme };
+        policyDialog = opened;
+        Draw();
+        try
+        {
+            await opened.ShowAsync();
+        }
+        finally
+        {
+            policyDialog = null;
+            if (active && GroupsButton.Visibility == Visibility.Visible)
+            {
+                GroupsButton.Focus(FocusState.Programmatic);
+            }
+        }
+    }
+
     private async void OnSubscriptions(object sender, RoutedEventArgs e)
     {
-        if (strings is null || dialog is not null || subscriptions is null)
+        if (strings is null || dialog is not null || policyDialog is not null || subscriptions is null)
         {
             return;
         }
@@ -428,6 +514,20 @@ public sealed partial class ProxiesPage : Page
         Write(NoticeText, shown.Notice);
         NodeList.Visibility = shown.Notice is null ? Visibility.Visible : Visibility.Collapsed;
         SubscriptionsButton.IsEnabled = subscriptions is not null;
+        GroupsButton.Visibility = policies is { Count: > 0 } ? Visibility.Visible : Visibility.Collapsed;
+        if (policyDialog is not null)
+        {
+            if (policies is not { Count: > 0 })
+            {
+                // The core that listed them is gone, or a subscription without groups came into use: there
+                // is nothing left to choose in.
+                policyDialog.Close();
+            }
+            else
+            {
+                policyDialog.Show(PolicyGroups.Show(strings, policies, choosing));
+            }
+        }
         if (dialog is not null)
         {
             if (subscriptions is null)
