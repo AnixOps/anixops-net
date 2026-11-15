@@ -11,6 +11,10 @@ pub mod session_key;
 #[path = "session_key_windows.rs"]
 pub mod session_key;
 pub mod state;
+#[cfg(not(windows))]
+pub mod system_proxy;
+#[cfg(windows)]
+#[path = "system_proxy_windows.rs"]
 pub mod system_proxy;
 pub mod trust;
 #[cfg(any(target_os = "android", target_os = "linux"))]

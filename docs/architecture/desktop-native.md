@@ -109,8 +109,13 @@ Linux 守护进程相对 T14 辅助进程要补的地方：
 现在 `backend` 里的模块，行为不变；在后台进程形态里由界面进程经本机通道应答。
 
 Windows 上现有的代理写入（内核仓库 `platform-windows` 的 `apply_system_proxy`）同时写当前用户的 WinINet 设置和整机的
-WinHTTP 设置，后者需要管理员权限。原生版里要拆开：界面进程只写 WinINet，WinHTTP 由后台进程写。这一拆分在内核仓库做，
-先于共用核心的 Windows 代理实现。
+WinHTTP 设置，后者需要管理员权限。原生版里拆开：界面进程只写 WinINet，WinHTTP 由后台进程写。内核仓库已经提供分开的
+函数（`apply_current_user_system_proxy`、`apply_winhttp_proxy`）。共用核心的 Windows 代理实现
+（`backend/system_proxy_windows.rs`）只写当前用户的设置；恢复前读一次当前值，已经不是客户端写入的那一份就不动它。
+WinHTTP 的写入随后台服务一起做（PR 2）。
+
+Windows 的登录启动项还没有接：内核仓库现有的函数建的是提权的计划任务（给需要管理员权限的 Tauri 版用），原生版的
+托盘不提权，要用当前用户的 Run 项，随 Windows 的其余系统集成一起补。
 
 | 事情 | 后台进程（核心） | 用户会话（界面进程） |
 |---|---|---|

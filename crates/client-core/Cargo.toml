@@ -33,4 +33,5 @@ libc = "0.2"
 
 # Windows: Data Protection (DPAPI) seals the capture session key (`backend::session_key`).
 [target.'cfg(windows)'.dependencies]
+platform-windows = { workspace = true }
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
