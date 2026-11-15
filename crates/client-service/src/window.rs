@@ -8,12 +8,15 @@ use serde_json::{json, Value};
 
 use crate::ask;
 
+/// What takes the core's events: the event's name and what it carries.
+type Events = Box<dyn Fn(&str, Value) + Send + Sync>;
+
 /// Answers the core's questions about the session the window runs in, and passes the core's events on.
 /// Give it to [`client_ipc::Peer::run`] after greeting the core as the window.
 pub struct WindowEnd {
     desktop: Option<Desktop>,
     session: Box<dyn UserSession>,
-    events: Box<dyn Fn(&str, Value) + Send + Sync>,
+    events: Events,
 }
 
 impl WindowEnd {
