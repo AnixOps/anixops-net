@@ -427,11 +427,11 @@ class ScreenshotTest {
         val trafficState = TrafficState(
             page = TrafficPage(
                 TrafficStatsView(
-                    start = 1_794_672_000,
+                    start = 1_794_700_800,
                     upload = 52_428_800,
                     download = 1_181_116_416,
                     bars = List(24) { hour ->
-                        TrafficBar(1_794_672_000L + hour * 3_600, listOf(0L, 0L, 0L, 0L, 0L, 0L, 0L, 12, 48, 96, 160, 40).getOrElse(hour) { 0L } * 4_194_304)
+                        TrafficBar(1_794_700_800L + hour * 3_600, listOf(0L, 0L, 0L, 0L, 0L, 0L, 0L, 12, 48, 96, 160, 40).getOrElse(hour) { 0L } * 4_194_304)
                     },
                     hosts = listOf(
                         TrafficShare("video.example.com", 734_003_200),

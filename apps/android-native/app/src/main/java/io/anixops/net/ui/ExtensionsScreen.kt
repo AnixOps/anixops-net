@@ -182,23 +182,23 @@ private fun DecryptionSection(
                 onChange = onToggle,
             )
             RowDivider()
-            Row(
+            // The steps are long: the button goes under them rather than squeezing them.
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = RowMinHeight)
                     .padding(horizontal = BrandSpacing.md, vertical = BrandSpacing.sm),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(BrandSpacing.sm),
+                verticalArrangement = Arrangement.spacedBy(BrandSpacing.xxs),
             ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(BrandSpacing.xxs)) {
-                    Text(stringResource(R.string.decryption_root), style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        stringResource(R.string.decryption_root_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = LocalBrandPalette.current.text2,
-                    )
-                }
-                OutlinedButton(onClick = openSecuritySettings) { Text(stringResource(R.string.decryption_root_open)) }
+                Text(stringResource(R.string.decryption_root), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    stringResource(R.string.decryption_root_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LocalBrandPalette.current.text2,
+                )
+                OutlinedButton(
+                    onClick = openSecuritySettings,
+                    modifier = Modifier.padding(top = BrandSpacing.xs),
+                ) { Text(stringResource(R.string.decryption_root_open)) }
             }
         }
         Note(stringResource(R.string.decryption_note))
