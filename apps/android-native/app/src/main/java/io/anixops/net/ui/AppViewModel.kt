@@ -74,6 +74,10 @@ class AppViewModel(
 
     fun setRoutingMode(mode: String) = perform(report = true) { core.setRoutingMode(mode) }
 
+    fun setDnsPreset(preset: String) = perform(report = true) { core.setDnsPreset(preset) }
+
+    fun setBlockQuic(enabled: Boolean) = perform(report = true) { core.setBlockQuic(enabled) }
+
     fun closeConnection(id: Long) = viewModelScope.launch {
         guard { core.closeConnection(id) }
         refresh()

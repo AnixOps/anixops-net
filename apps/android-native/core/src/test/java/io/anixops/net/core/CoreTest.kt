@@ -55,6 +55,34 @@ class CoreTest {
     }
 
     @Test
+    fun ruleSetsGoThroughRuntimeControl() = runTest {
+        val transport = Recording(
+            """{"ok":{"rule_sets":[{"name":"china","source":"remote","entries":8412,"updated_at_ms":1763198400000}]}}""",
+        )
+        val core = Core(transport, StandardTestDispatcher(testScheduler))
+        val sets = core.ruleSets()
+        assertEquals(listOf("runtime_control" to """{"request":{"cmd":"rule_sets"}}"""), transport.calls)
+        assertEquals(RuleSetStatus("china", "remote", 8412, updatedAtMs = 1_763_198_400_000), sets.single())
+    }
+
+    @Test
+    fun ruleSetsAreEmptyWhileTheEngineIsOff() = runTest {
+        val core = Core(Recording("""{"error":"the engine is not running"}"""), StandardTestDispatcher(testScheduler))
+        assertTrue(core.ruleSets().isEmpty())
+    }
+
+    @Test
+    fun customDnsKeepsTheSharedFieldNames() = runTest {
+        val transport = Recording("""{"ok":{"message":"saved"}}""")
+        val core = Core(transport, StandardTestDispatcher(testScheduler))
+        core.saveCustomDns(DnsText(servers = "a = 1.1.1.1", fakeIp = true))
+        assertEquals(
+            "save_custom_dns" to """{"text":{"servers":"a = 1.1.1.1","rules":"","hosts":"","fake_ip":true}}""",
+            transport.calls.single(),
+        )
+    }
+
+    @Test
     fun envelopesRoundTrip() {
         val answer = buildJsonObject { put("fd", JsonPrimitive(42)) }
         assertEquals("""{"ok":{"fd":42}}""", Envelope.ok(answer))

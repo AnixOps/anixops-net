@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.anixops.net.ui.AnixApp
 import io.anixops.net.ui.AppViewModel
 import io.anixops.net.ui.ProxiesViewModel
+import io.anixops.net.ui.RulesViewModel
 import io.anixops.net.ui.theme.AnixTheme
 
 class MainActivity : ComponentActivity() {
@@ -21,6 +22,7 @@ class MainActivity : ComponentActivity() {
                 AnixApp(
                     app = viewModel { AppViewModel(app.core, preferences) },
                     proxies = viewModel { ProxiesViewModel(app.core) },
+                    rules = viewModel { RulesViewModel(app.core) },
                     version = BuildConfig.VERSION_NAME,
                 )
             }

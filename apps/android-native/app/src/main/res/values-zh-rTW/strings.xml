@@ -111,4 +111,57 @@
     <plurals name="interval_days">
         <item quantity="other">每 %d 天自動更新</item>
     </plurals>
+    <string name="rules_refresh">重新整理規則資源</string>
+    <string name="rules_routing_note">規則資源從公開來源快取到本機，下次連線時生效。</string>
+    <string name="routing_bypass_china_hint">大陸網站直連，其餘走代理</string>
+    <string name="routing_gfw_list_hint">只有清單內的網站走代理</string>
+    <string name="routing_return_china_hint">大陸網站走代理，適合在海外使用</string>
+    <string name="routing_direct_hint">所有流量直連，不經過節點</string>
+    <string name="routing_rule_hint">按訂閱自帶的規則和策略組分流</string>
+    <string name="rules_mine">我的規則</string>
+    <string name="rules_mine_note">每行一條，從上到下比對，排在分流模式和訂閱規則前面。策略寫 PROXY（目前節點或訂閱的第一個策略群組）、DIRECT 或 REJECT。支援 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD、DOMAIN-WILDCARD、IP-CIDR、IP-CIDR6、DST-PORT、PROCESS-NAME、USER-AGENT、URL-REGEX、PROTOCOL；# 開頭的行是註解。</string>
+    <string name="action_revert">還原</string>
+    <string name="rules_groups">策略組</string>
+    <string name="rules_groups_note">為手動選擇的策略組設定預設出口。</string>
+    <string name="rules_no_groups">目前設定裡沒有策略組。</string>
+    <string name="group_selector">手動選擇</string>
+    <string name="group_urltest">自動測速</string>
+    <string name="group_none">未選擇</string>
+    <string name="rules_sets">規則集</string>
+    <string name="rules_sets_note">目前連線正在使用的規則集。</string>
+    <string name="rules_sets_update">更新遠端規則集</string>
+    <string name="rule_set_remote">遠端</string>
+    <string name="rule_set_builtin">內建</string>
+    <string name="rule_set_updated">更新於 %1$s</string>
+    <string name="rule_set_not_downloaded">尚未下載</string>
+    <string name="rule_set_failed">上次下載失敗：%1$s</string>
+    <string name="dns_system">系統 DNS</string>
+    <string name="dns_encrypted">加密 DNS</string>
+    <string name="dns_split">國內外分流</string>
+    <string name="dns_custom">自訂 DNS</string>
+    <string name="dns_system_hint">內建引擎用系統 DNS 解析規則裡需要 IP 的網域；經節點的連線由節點伺服器解析網域。</string>
+    <string name="dns_encrypted_hint">所有網域經節點用 Cloudflare DNS over HTTPS 解析，本機網路看不到查詢內容。</string>
+    <string name="dns_split_hint">國內網域直連阿里 DNS over HTTPS 解析，其餘經節點用 Cloudflare 解析，國內網站拿到就近的位址。</string>
+    <string name="dns_custom_hint">使用下方填寫的伺服器、分域規則和 Hosts。</string>
+    <string name="dns_fake_ip_hint">應用查詢網域時立刻拿到 198.18.0.0/15 裡的位址，連線時還原成網域依規則分流，由節點解析。區域網路、校時、STUN 和推播等網域仍拿真實位址。</string>
+    <string name="dns_custom_note">每行一條，# 開頭的行是註解。沒有填伺服器時，引擎經節點用 TCP 查詢預設伺服器。</string>
+    <string name="dns_servers">伺服器</string>
+    <string name="dns_servers_hint">名稱 = 位址，第一個是預設伺服器。位址可以是 IP、tcp://、tls:// 或 https://；加 direct 表示直連，不加則經節點。</string>
+    <string name="dns_rules">分域伺服器</string>
+    <string name="dns_rules_hint">類型,網域,伺服器名稱，從上到下比對。類型是 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD 或 RULE-SET（分流模式裡有的規則集）。</string>
+    <string name="dns_hosts_hint">網域 = 位址，最多 8 個位址；*.網域 比對它的子網域。</string>
+    <string name="block_quic">封鎖 QUIC</string>
+    <string name="block_quic_hint">拒絕送往 UDP 443 埠的 QUIC（HTTP/3）流量，瀏覽器和應用程式會改用 TCP，這樣 MITM 外掛和依網域分流的規則都能生效。</string>
+    <plurals name="rules_count">
+        <item quantity="other">%d 條規則</item>
+    </plurals>
+    <plurals name="rules_group_count">
+        <item quantity="other">%d 個策略組</item>
+    </plurals>
+    <plurals name="rules_sets_started">
+        <item quantity="other">已開始更新 %d 個遠端規則集</item>
+    </plurals>
+    <plurals name="rule_set_entries">
+        <item quantity="other">%d 條</item>
+    </plurals>
 </resources>

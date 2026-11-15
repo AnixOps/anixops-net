@@ -3,6 +3,9 @@ package io.anixops.net.ui
 import com.github.takahirom.roborazzi.captureRoboImage
 import io.anixops.net.core.ConnectionSnapshot
 import io.anixops.net.core.Delay
+import io.anixops.net.core.DnsText
+import io.anixops.net.core.MyRules
+import io.anixops.net.core.NativeGroup
 import io.anixops.net.core.NetworkProbe
 import io.anixops.net.core.NodeRow
 import io.anixops.net.core.NodeSection
@@ -10,11 +13,13 @@ import io.anixops.net.core.NodeSummary
 import io.anixops.net.core.Overview
 import io.anixops.net.core.ProxiesPage
 import io.anixops.net.core.ProxiesView
+import io.anixops.net.core.RuleSetStatus
 import io.anixops.net.core.RuntimeSnapshot
 import io.anixops.net.core.StatusFact
 import io.anixops.net.core.SubscriptionSummary
 import io.anixops.net.core.Traffic
 import io.anixops.net.ui.theme.AnixTheme
+import java.util.TimeZone
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -101,6 +106,37 @@ class ScreenshotTest {
     )
 
     @Test
+    fun rulesPhoneLightZh() = capture("rules-phone-light-zh", PHONE, "zh-rCN", dark = false, destination = Destination.Rules)
+
+    @Test
+    fun rulesPhoneDarkEn() = capture("rules-phone-dark-en", PHONE, "en", dark = true, destination = Destination.Rules)
+
+    @Test
+    fun rulesTabletLightZh() =
+        capture("rules-tablet-light-zh", TABLET, "zh-rCN", dark = false, destination = Destination.Rules)
+
+    /** The whole page on one tall screen, with 自定义 DNS chosen so its editor shows too. */
+    @Test
+    fun rulesWholePagePhoneLightZh() = capture(
+        "rules-whole-page-phone-light-zh",
+        TALL_PHONE,
+        "zh-rCN",
+        dark = false,
+        state = connectedState.copy(snapshot = snapshot.copy(dnsPreset = "custom", blockQuic = true)),
+        destination = Destination.Rules,
+    )
+
+    @Test
+    fun rulesWholePagePhoneDarkEn() = capture(
+        "rules-whole-page-phone-dark-en",
+        TALL_PHONE,
+        "en",
+        dark = true,
+        state = connectedState.copy(snapshot = snapshot.copy(dnsPreset = "custom", blockQuic = true)),
+        destination = Destination.Rules,
+    )
+
+    @Test
     fun debugRequestsPhoneLightZh() =
         capture("debug-requests-phone-light-zh", PHONE, "zh-rCN", dark = false, mode = AppMode.Debug)
 
@@ -113,7 +149,9 @@ class ScreenshotTest {
         mode: AppMode = AppMode.Proxy,
         destination: Destination? = null,
         proxies: ProxiesState = proxiesState,
+        rules: RulesState = rulesState,
     ) {
+        TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
         RuntimeEnvironment.setQualifiers("$locale-$device-${if (dark) "night" else "notnight"}-xhdpi")
         captureRoboImage("src/test/screenshots/$name.png") {
             AnixTheme {
@@ -123,6 +161,7 @@ class ScreenshotTest {
                     version = "0.3.0",
                     onModeChange = {},
                     proxiesState = proxies,
+                    rulesState = rules,
                     initial = destination,
                 )
             }
@@ -132,6 +171,7 @@ class ScreenshotTest {
     private companion object {
         const val PHONE = "w411dp-h891dp"
         const val TABLET = "w1280dp-h800dp"
+        const val TALL_PHONE = "w411dp-h3000dp"
 
         val snapshot = RuntimeSnapshot(
             platform = "android",
@@ -168,6 +208,39 @@ class ScreenshotTest {
                 ConnectionSnapshot(3, "tcp", "api.example.org", "api.example.org:443", "GEOIP", listOf("DIRECT"), upload = 512, download = 2_048),
             ),
             probe = NetworkProbe(exitIp = "198.51.100.24", exitLocation = "JP"),
+        )
+
+        val rulesState = RulesState(
+            myRules = MyRules(
+                text = "# 公司内网直连\nDOMAIN-SUFFIX,corp.example.com,DIRECT\nDOMAIN-KEYWORD,ads,REJECT\nIP-CIDR,10.0.0.0/8,DIRECT,no-resolve",
+                count = 3,
+            ),
+            groups = listOf(
+                NativeGroup(
+                    tag = "Proxy",
+                    groupType = "selector",
+                    selected = "tokyo-01",
+                    outbounds = listOf("tokyo-01", "osaka-02", "Auto"),
+                    outboundLabels = listOf("东京 01", "大阪 02", "Auto"),
+                ),
+                NativeGroup(
+                    tag = "Auto",
+                    groupType = "urltest",
+                    selected = "osaka-02",
+                    outbounds = listOf("tokyo-01", "osaka-02"),
+                    outboundLabels = listOf("东京 01", "大阪 02"),
+                ),
+            ),
+            ruleSets = listOf(
+                RuleSetStatus("china", "remote", entries = 8_412, updatedAtMs = 1_763_198_400_000),
+                RuleSetStatus("ads", "remote", entries = 0, lastError = "HTTP 404"),
+                RuleSetStatus("lan", "inline", entries = 12),
+            ),
+            dns = DnsText(
+                servers = "cloudflare = https://1.1.1.1/dns-query, server-name=cloudflare-dns.com",
+                rules = "DOMAIN-SUFFIX,cn,alidns",
+                fakeIp = true,
+            ),
         )
 
         val proxiesState = ProxiesState(

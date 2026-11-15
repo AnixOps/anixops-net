@@ -50,7 +50,7 @@ import java.net.URI
 private val StatusDot = 10.dp
 
 /** The routing modes, in the order the other clients offer them. */
-private val RoutingModes = listOf("rule", "bypass_china", "gfw_list", "return_china", "direct")
+internal val RoutingModes = listOf("rule", "bypass_china", "gfw_list", "return_china", "direct")
 
 /** How many open connections the page lists; the rest are counted in the traffic card. */
 private const val ConnectionRows = 20
@@ -318,7 +318,7 @@ private fun statusLabel(state: String): String = stringResource(
 )
 
 @Composable
-private fun routingLabel(mode: String?): String = when (mode) {
+internal fun routingLabel(mode: String?): String = when (mode) {
     "bypass_china" -> stringResource(R.string.routing_bypass_china)
     "gfw_list" -> stringResource(R.string.routing_gfw_list)
     "return_china" -> stringResource(R.string.routing_return_china)
