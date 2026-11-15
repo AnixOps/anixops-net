@@ -1,7 +1,7 @@
 name: Sign APK
 description: >-
   Zipaligns and signs an unsigned APK with the release keystore (ANDROID_KEYSTORE_* secrets), or with a throwaway
-  debug key made for this run when no keystore is given. Shared by the Tauri app (android-apk) and the native app.
+  debug key made for this run when no keystore is given. Used by android-apk.
 
 inputs:
   unsigned:

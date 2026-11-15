@@ -3,8 +3,9 @@
 //! interface's `bridge.ts`); this file only adds what needs Tauri: the window, plugins, `anixops://` links and
 //! system notifications.
 //!
-//! The Android app (`apps/android`) runs this same window and backend. There the engine carries the system
-//! VPN's TUN interface instead of a local proxy, and [`TunnelHost`] opens and closes that VPN.
+//! [`TunnelHost`] served the Tauri Android app, which ran this same window over the system VPN's TUN interface.
+//! That app was replaced by the native one (`apps/android-native`, over `crates/client-core` directly), so no
+//! build passes a host any more; removing it is a separate change to this window.
 
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};

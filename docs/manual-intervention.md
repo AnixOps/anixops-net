@@ -178,7 +178,7 @@ CI 只能跑规则与重建逻辑的单元测试（`OnDemandSettingsTests`、`Ne
 
 ## 安卓 APK 签名与真机验收
 
-CI 的 `android` job 每次都产出 arm64 APK（artifact `anixops-net-android-<sha>`）。没有签名密钥时用临时调试密钥签名，
+CI 的 `android-native` job 每次都产出原生版 arm64 APK（artifact `anixops-net-android-<sha>`）。没有签名密钥时用临时调试密钥签名，
 每次构建的密钥都不同，装新版前要先卸载旧版。
 
 - [ ] 生成正式签名密钥（只做一次，丢了就无法给已安装的用户升级）：
@@ -188,6 +188,8 @@ CI 的 `android` job 每次都产出 arm64 APK（artifact `anixops-net-android-<
 - [ ] 发版时 `release.yml` 会把 APK 作为 `anixops-net-<版本>-android-arm64.apk` 放进 GitHub Release。配置正式密钥前，
   Release 说明会写明「临时签名，装新版前要先卸载旧版」。
 - [ ] 真机验收：安装 APK，首次启动同意用户协议，导入订阅，点连接时允许 VPN，浏览器能打开网页，断开后网络恢复。
+- [ ] 原生版另验：快捷设置里加“AnixOps”磁贴，点它连接 / 断开；系统设置 › VPN 里设为“始终开启”，重启手机后自动连上；
+  浏览器打开 `anixops://toggle` 能切换连接；另一个 VPN 接管后 App 与磁贴显示已断开。
 - [ ] 上架 Google Play（暂不需要）：开发者账号、AAB 构建和 Play App Signing 另行处理。
 
 
