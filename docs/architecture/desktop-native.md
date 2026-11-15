@@ -247,6 +247,16 @@ WinUI 3 没有自带的数据表格控件，请求列表要自己做虚拟化表
 - 这里量的是界面一侧（表格换数据和绘制）。演示数据和筛选在界面进程里（`DemoRequests`、`RequestFilter`），正式版的
   筛选由引擎做，往返服务的耗时在 4d 接上服务后另量。触控板惯性滚动的手感 CI 量不了，列入人工验收。
 
+第 2 项的量法（4d）：CI 在同一台 runner 上下载最新发布的 Tauri 便携版，和刚构建的原生版交替各启动 6 次
+（`StartupTests`），第一次单列（会建缓存），后 5 次取中位数，原始数字打印在 CI 日志里。
+
+- 启动时间：从创建进程到 UI Automation 能找到内容为止。原生版找页面标题，Tauri 版找网页文档里第一个有名称的按钮。
+  两边都是 10 毫秒轮询一次。UI Automation 查询网页内容本身有开销，这个量法对 Tauri 版略微不利，差距小的时候不能
+  只看结论，要看原始数字。
+- 空闲内存：可操作后静置 10 秒，把整棵进程树（Tauri 版含 WebView2 的子进程）的专用内存和工作集分别相加。
+- 三个中位数（启动时间、专用内存、工作集）原生版都必须更低。
+- 原生版现在是普通 JIT 构建，没有做 ReadyToRun 或裁剪；发布打包时再定，届时重新量。
+
 骨架（4b）已有的做法，后面的页面照此继续：
 
 - 界面不带窗口的部分（页面清单、文案、启动参数）在 `AnixOps.Net.Presentation`，普通单元测试覆盖；`AnixOps.Net.App`
@@ -274,7 +284,8 @@ WinUI 3 没有自带的数据表格控件，请求列表要自己做虚拟化表
 | 4a | `apps/windows-native/src/AnixOps.Net.Ipc`：界面一侧的通道（C#），帧、四种消息、握手、双向请求；测试读 `crates/client-ipc/fixtures/` 的同一批样例，CI 任务“Windows native app” | 2 |
 | 4b | Windows 验证：WinUI 3 工程骨架（`AnixOps.Net.App`）、自绘标题栏、侧栏导航、Mica、设计 tokens 生成 XAML 资源字典、CI 里启动真实窗口做 UIA 检查并截图 | 4a |
 | 4c | Windows 验证：请求列表原型（虚拟化表格、筛选），量“过关标准”第 1 项 | 4b |
-| 4d | Windows 验证：界面接上服务（`session.*` 处理方、和 `anixops-net-service --console` 的端到端测试、MSI），量“过关标准”第 2、3 项 | 4c |
+| 4d | Windows 验证：量“过关标准”第 2 项（启动时间和空闲内存对比已发布的 Tauri 版） | 4c |
+| 4e | Windows 验证：界面接上服务（`session.*` 处理方、和 `anixops-net-service --console` 的端到端测试、MSI），量“过关标准”第 3 项 | 4d |
 | 5 | Linux 骨架：导航、主题、CI 截图与 AT-SPI 检查 | 2 |
 | 6 | 代理 › 首页与代理：连接、状态、流量、连接列表、出口地址、订阅、节点、测速、策略组、分享、节点编辑 | 4、5 |
 | 7 | 规则与设置：分流模式、我的规则、规则集、DNS、Fake-IP、屏蔽 QUIC、流量重定向、通知、Wi-Fi 规则、日志、流量统计、诊断、协议、语言 | 6 |
