@@ -1,8 +1,8 @@
 import { ArrowDown, ArrowUp, Search } from "lucide-react";
 import { forwardRef, type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { CaptureRequest, desktop } from "../bridge";
-import { combineFilter, mergeRequests, nextSince, QuickFilter, quickFilters } from "../capture-filter";
-import { durationMs, noteText, timeOfDay } from "../capture-format";
+import { CaptureRequest, desktop, REQUEST_PAGE } from "../bridge";
+import { combineFilter, mergeRequests, nextRev, nextSince, QuickFilter, quickFilters, requestKey } from "../capture-filter";
+import { durationMs, noteText, streamKind, timeOfDay } from "../capture-format";
 import { compareRequests, requestPath, RequestSort, statusTone } from "../request-table";
 import { usePageVisible } from "../live";
 import { formatBytes } from "../subscription-format";
@@ -17,7 +17,7 @@ function filterError(error: { code: string; at?: number; message?: string }): st
 }
 
 export interface RequestFeed {
-  /** Oldest first, as the engine numbers them. */
+  /** Oldest first, by when they started; a request shows up while it is still under way. */
   rows: CaptureRequest[];
   error: string | null;
 }
@@ -31,10 +31,10 @@ export function useRequestFeed(capturing: boolean, filter: string, paused: boole
   const [error, setError] = useState<string | null>(null);
   const visible = usePageVisible();
   // The poll reads the latest list without restarting its timer.
-  const state = useRef<{ rows: CaptureRequest[]; lastSeq: number }>({ rows: [], lastSeq: 0 });
+  const state = useRef<{ rows: CaptureRequest[]; lastSeq: number; lastRev: number | null }>({ rows: [], lastSeq: 0, lastRev: null });
 
   useEffect(() => {
-    state.current = { rows: [], lastSeq: 0 };
+    state.current = { rows: [], lastSeq: 0, lastRev: null };
     setRows([]);
     setError(null);
   }, [filter]);
@@ -48,7 +48,7 @@ export function useRequestFeed(capturing: boolean, filter: string, paused: boole
     async function poll() {
       try {
         const since = nextSince(state.current.rows, state.current.lastSeq);
-        const answer = await desktop.captureRequests(since, filter);
+        const answer = await desktop.captureRequests(since, state.current.lastRev ?? 0, filter);
         if (cancelled) return;
         if (answer.error) {
           setError(filterError(answer.error));
@@ -56,7 +56,11 @@ export function useRequestFeed(capturing: boolean, filter: string, paused: boole
         }
         setError(null);
         const next = mergeRequests(state.current.rows, answer);
-        state.current = { rows: next, lastSeq: Math.max(state.current.lastSeq, answer.last_seq ?? 0) };
+        state.current = {
+          rows: next,
+          lastSeq: Math.max(state.current.lastSeq, answer.last_seq ?? 0),
+          lastRev: nextRev(state.current.lastRev, answer, REQUEST_PAGE),
+        };
         setRows(next);
       } catch (failure) {
         if (cancelled) return;
@@ -144,10 +148,11 @@ const columns = (): Column[] => [
  */
 export function RequestTable({ rows, selected, onSelect, onOpen, sort, onSort }: {
   rows: CaptureRequest[];
-  selected: number | null;
-  onSelect: (seq: number) => void;
+  /** The selected request's `requestKey`. */
+  selected: string | null;
+  onSelect: (key: string) => void;
   /** Enter or a double click; on a narrow window this shows the request in place of the table. */
-  onOpen: (seq: number) => void;
+  onOpen: (key: string) => void;
   sort: RequestSort;
   onSort: (sort: RequestSort) => void;
 }) {
@@ -165,7 +170,7 @@ export function RequestTable({ rows, selected, onSelect, onOpen, sort, onSort }:
     return () => observer.disconnect();
   }, []);
 
-  const index = selected == null ? -1 : sorted.findIndex((row) => row.seq === selected);
+  const index = selected == null ? -1 : sorted.findIndex((row) => requestKey(row) === selected);
 
   // Keeps the selected row in view when the keyboard moves it.
   const reveal = (at: number) => {
@@ -211,7 +216,7 @@ export function RequestTable({ rows, selected, onSelect, onOpen, sort, onSort }:
         return;
     }
     event.preventDefault();
-    onSelect(sorted[next].seq);
+    onSelect(requestKey(sorted[next]));
     reveal(next);
   };
 
@@ -225,7 +230,7 @@ export function RequestTable({ rows, selected, onSelect, onOpen, sort, onSort }:
       role="grid"
       aria-label={t("请求列表")}
       aria-rowcount={sorted.length + 1}
-      aria-activedescendant={selected != null ? `request-${selected}` : undefined}
+      aria-activedescendant={selected != null ? rowId(selected) : undefined}
       tabIndex={0}
       onKeyDown={onKey}
     >
@@ -250,17 +255,20 @@ export function RequestTable({ rows, selected, onSelect, onOpen, sort, onSort }:
       </div>
       <div className="request-body" ref={body} onScroll={(event) => setView({ top: event.currentTarget.scrollTop, height: event.currentTarget.clientHeight })}>
         <div style={{ height: sorted.length * ROW, position: "relative" }}>
-          {sorted.slice(first, last).map((request, offset) => (
-            <RequestRow
-              key={request.seq}
-              request={request}
-              top={(first + offset) * ROW}
-              rowIndex={first + offset + 2}
-              selected={request.seq === selected}
-              onSelect={() => onSelect(request.seq)}
-              onOpen={() => onOpen(request.seq)}
-            />
-          ))}
+          {sorted.slice(first, last).map((request, offset) => {
+            const key = requestKey(request);
+            return (
+              <RequestRow
+                key={key}
+                request={request}
+                top={(first + offset) * ROW}
+                rowIndex={first + offset + 2}
+                selected={key === selected}
+                onSelect={() => onSelect(key)}
+                onOpen={() => onOpen(key)}
+              />
+            );
+          })}
         </div>
       </div>
     </div>
@@ -281,7 +289,7 @@ function RequestRow({ request, top, rowIndex, selected, onSelect, onOpen }: {
   const path = requestPath(request);
   return (
     <div
-      id={`request-${request.seq}`}
+      id={rowId(requestKey(request))}
       role="row"
       aria-rowindex={rowIndex}
       aria-selected={selected}
@@ -298,11 +306,27 @@ function RequestRow({ request, top, rowIndex, selected, onSelect, onOpen }: {
       </span>
       <span role="gridcell" className="col-host">{request.host}</span>
       <span role="gridcell" className="col-path">{path}</span>
-      <span role="gridcell" className="col-type">{[request.http_version === "HTTP/2" ? "h2" : null, shortType(request.response_content_type)].filter(Boolean).join(" · ")}</span>
+      <span role="gridcell" className="col-type">{typeText(request)}</span>
       <span role="gridcell" className="col-size">{request.response_size > 0 ? formatBytes(request.response_size) : ""}</span>
       <span role="gridcell" className="col-duration">{took != null ? `${took} ms` : ""}</span>
     </div>
   );
+}
+
+/** The DOM id of a request's row, for the table's active descendant. */
+function rowId(key: string): string {
+  return `request-${key.replace(":", "-")}`;
+}
+
+/** h2, the kind of body, SSE / WS with how many messages, and a rewrite that did not run, in one short cell. */
+function typeText(request: CaptureRequest): string {
+  const stream = streamKind(request);
+  return [
+    request.http_version === "HTTP/2" ? "h2" : null,
+    shortType(request.response_content_type),
+    stream ? (request.message_count ? `${stream} ${request.message_count}` : stream) : null,
+    request.rules_skipped ? t("改写未生效") : null,
+  ].filter(Boolean).join(" · ");
 }
 
 /** "application/json; charset=utf-8" → "json". */

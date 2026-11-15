@@ -791,6 +791,10 @@ fn handler(name: &str) -> Option<Handler> {
             } = parse(args)?;
             json(client.export_capture(&format, id, options.unwrap_or_default())?)
         },
+        "decode_body" => |_, args| {
+            let DecodeBody { request } = parse(args)?;
+            desktop_mitm::capture::decode_body(&request)
+        },
         "capture_session" => |client, args| {
             let CaptureSession { action } = parse(args)?;
             client.capture_session(action)
@@ -1130,6 +1134,11 @@ struct GroupOutbound {
 #[derive(Deserialize)]
 struct Request {
     request: Value,
+}
+
+#[derive(Deserialize)]
+struct DecodeBody {
+    request: desktop_mitm::capture::DecodeRequest,
 }
 
 #[derive(Deserialize)]

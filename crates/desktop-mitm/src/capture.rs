@@ -193,6 +193,37 @@ fn user_dirs_download(text: &str, home: &Path) -> Option<PathBuf> {
     value.starts_with('/').then(|| PathBuf::from(value))
 }
 
+/// A captured body to show decoded (`decode_body`): its bytes as base64, the response's `Content-Encoding` and
+/// whether capture kept all of it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DecodeRequest {
+    pub data_base64: String,
+    pub content_encoding: String,
+    #[serde(default)]
+    pub complete: bool,
+}
+
+/// Undoes a captured body's `Content-Encoding` with the kernel's decoder (gzip, deflate, br, zstd, several in a
+/// row), in the window's process with the inspector's limits: at most 16 MiB out, brotli windows up to 16 MiB and
+/// zstd up to 8 MiB. Answers `{"data_base64", "truncated", "codings"}`; an unknown coding, a damaged body or a
+/// window over the limit is an error, and the inspector then shows the bytes as captured.
+pub fn decode_body(request: &DecodeRequest) -> Result<Value, String> {
+    let data = decode_base64(&request.data_base64)?;
+    let decoded = engine_embedded::capture::decode::decode_body(
+        &data,
+        &request.content_encoding,
+        request.complete,
+        engine_embedded::capture::decode::DecodeLimits::APP,
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(serde_json::json!({
+        "data_base64": encode_base64(&decoded.data),
+        "truncated": decoded.truncated,
+        "codings": decoded.codings,
+    }))
+}
+
 /// Writes `data` as `name` in `dir`, adding " (2)", " (3)"... before the extension instead of replacing a file.
 pub fn save_new_file(dir: &Path, name: &str, data: &[u8]) -> Result<PathBuf, String> {
     fs::create_dir_all(dir).map_err(|error| format!("{}: {error}", dir.display()))?;
@@ -340,5 +371,27 @@ mod tests {
         assert_eq!(export.file_name, "anixops-capture-3.har");
         assert_eq!(export.bytes().unwrap(), b"{}");
         assert!(Export::from_answer(&serde_json::json!({})).is_err());
+    }
+    #[test]
+    fn decodes_bodies_with_the_kernel() {
+        // "hello" gzipped (RFC 1952 member, no name).
+        let gzip = [
+            0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00,
+            0x86, 0xa6, 0x10, 0x36, 0x05, 0x00, 0x00, 0x00,
+        ];
+        let request = |coding: &str, data: &[u8], complete: bool| DecodeRequest {
+            data_base64: encode_base64(data),
+            content_encoding: coding.to_string(),
+            complete,
+        };
+        let answer = decode_body(&request("gzip", &gzip, true)).unwrap();
+        assert_eq!(decode_base64(answer["data_base64"].as_str().unwrap()).unwrap(), b"hello");
+        assert_eq!(answer["truncated"], false);
+        assert_eq!(answer["codings"], serde_json::json!(["gzip"]));
+        // Kept only in part: what came out so far, marked truncated.
+        let cut = decode_body(&request("gzip", &gzip[..16], false)).unwrap();
+        assert_eq!(cut["truncated"], true);
+        assert!(decode_body(&request("compress", b"x", true)).is_err());
+        assert!(decode_body(&request("gzip", b"not gzip", true)).is_err());
     }
 }

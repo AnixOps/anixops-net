@@ -177,6 +177,63 @@ export interface CaptureExchange {
   note?: string | null;
   request: CaptureMessage;
   response: CaptureMessage;
+  /** `in_progress` until the response (or its event stream or WebSocket) ends. */
+  state?: "in_progress" | "done";
+  /** A rewrite rule that would have read or changed the body did not run (a streamed response, or over 1 MiB). */
+  rules_skipped?: boolean;
+  /** Server-sent events or WebSocket messages, the last 512 kept. */
+  messages?: StreamMessages;
+}
+
+/** The messages kept of one exchange: server-sent events, or WebSocket messages passed on unchanged. */
+export interface StreamMessages {
+  seen: number;
+  /** The oldest ones dropped to stay within the engine's limits. */
+  dropped: number;
+  kept: StreamMessage[];
+}
+
+/** One server-sent event or WebSocket message. */
+export interface StreamMessage {
+  index: number;
+  at_ms: number;
+  /** `up` from the app, `down` to it. */
+  dir: "up" | "down";
+  kind: "sse" | "text" | "binary" | "ping" | "pong" | "close";
+  /** The event's name, or `permessage-deflate` for a WebSocket message that could not be inflated. */
+  label?: string | null;
+  /** The event's `id:`. */
+  id?: string | null;
+  /** A WebSocket close code. */
+  code?: number | null;
+  /** Its whole length; the data may be only the start (4 KiB kept). */
+  size: number;
+  truncated: boolean;
+  /** The data when it is UTF-8 text; otherwise `data_base64`. */
+  text?: string | null;
+  data_base64?: string | null;
+}
+
+/** One HTTP/2 frame header seen on a decrypted connection (no payload is kept). */
+export interface H2Frame {
+  index: number;
+  at_ms: number;
+  /** `app`: between the app and AnixOps; `origin`: between AnixOps and the server. */
+  link: "app" | "origin";
+  /** `up` is sent by the app's side of the link. */
+  dir: "up" | "down";
+  type: string;
+  flag_names: string[];
+  stream: number;
+  length: number;
+  /** The error code of RST_STREAM and GOAWAY, such as `CANCEL`. */
+  error?: string | null;
+  /** WINDOW_UPDATE: the increment; GOAWAY: the last stream id; SETTINGS: how many settings it carries. */
+  value?: number | null;
+}
+
+export interface H2FramesAnswer {
+  h2_frames: { seen: number; dropped: number; frames: H2Frame[] } | null;
 }
 
 /** What capture kept of one connection: raw bytes, or the HTTP messages when HTTPS decryption took it over. */
@@ -192,6 +249,8 @@ export interface CaptureConnection {
   download: CaptureDirection;
   chunks: CaptureChunk[];
   http: CaptureExchange[];
+  /** HTTP/2 frame headers seen on this connection's two links. */
+  h2_frames?: { seen: number; dropped: number };
 }
 
 export type CaptureFormat = "pcapng" | "har" | "curl" | "code" | "postman" | "insomnia";
@@ -209,7 +268,7 @@ export interface ExportOptions {
 
 /** One decrypted request in the engine's request list (`capture_requests`). */
 export interface CaptureRequest {
-  /** Rises with every request; the list is read again from the last one seen. */
+  /** The order requests ended in; 0 while it is under way. */
   seq: number;
   connection_id: number;
   /** Its place in the connection's `http` list. */
@@ -225,6 +284,12 @@ export interface CaptureRequest {
   request_size: number;
   response_size: number;
   response_content_type?: string | null;
+  /** Bumped on every change to the request; the list is read again from the last one seen (`since_rev`). */
+  rev?: number;
+  state?: "in_progress" | "done";
+  rules_skipped?: boolean;
+  /** Server-sent events or WebSocket messages seen so far. */
+  message_count?: number;
 }
 
 /** What keeps the key of saved capture sessions on this device. */
@@ -259,6 +324,8 @@ export type CaptureSessionAction =
 export interface CaptureRequestsAnswer {
   requests?: CaptureRequest[];
   last_seq?: number;
+  /** The newest change; a kernel that has it also lists requests still under way. */
+  last_rev?: number;
   /** The highest seq the engine dropped (capture budget, cleared, a session loaded); it and older rows are gone. */
   dropped_before_seq?: number;
   /** `invalid_filter` with the character position of the mistake. */
@@ -507,6 +574,9 @@ export function preferencesFrom(snapshot: RuntimeSnapshot, changes: Partial<Pref
   };
 }
 
+/** Rows read at most per `capture_requests` call. */
+export const REQUEST_PAGE = 2000;
+
 export const desktop = {
   snapshot: () => invoke<RuntimeSnapshot>("runtime_snapshot"),
   nodes: () => invoke<NodeSummary[]>("list_nodes"),
@@ -547,9 +617,25 @@ export const desktop = {
     invoke<SessionAnswer & CaptureStatus>("capture_session", { action: { action: "load", session } satisfies CaptureSessionAction }),
   deleteCaptureSession: (session: string) =>
     invoke<SessionAnswer & { deleted: boolean }>("capture_session", { action: { action: "delete", session } satisfies CaptureSessionAction }),
-  /** Decrypted requests after `since`, the newest last; `filter` is the engine's filter expression. */
-  captureRequests: (since: number, filter: string) =>
-    invoke<CaptureRequestsAnswer>("runtime_control", { request: { cmd: "capture_requests", since_seq: since, limit: 2000, ...(filter ? { filter } : {}) } }),
+  /**
+   * Decrypted requests that changed after `sinceRev` (still under way or ended), in the order they changed;
+   * `filter` is the engine's filter expression. A kernel without `since_rev` lists ended ones after `since`.
+   */
+  captureRequests: (since: number, sinceRev: number, filter: string) =>
+    invoke<CaptureRequestsAnswer>("runtime_control", {
+      request: { cmd: "capture_requests", since_seq: since, since_rev: sinceRev, limit: REQUEST_PAGE, ...(filter ? { filter } : {}) },
+    }),
+  /** One exchange with its messages from `sinceMessage` on; null once capture no longer holds it. */
+  captureExchange: (id: number, index: number, sinceMessage: number) =>
+    invoke<{ exchange: CaptureExchange | null }>("runtime_control", {
+      request: { cmd: "capture_exchange", id, index, since_message: sinceMessage },
+    }),
+  /** The HTTP/2 frame headers of connection `id` from frame `since` on. */
+  captureH2Frames: (id: number, since: number) =>
+    invoke<H2FramesAnswer>("runtime_control", { request: { cmd: "capture_h2_frames", id, since } }),
+  /** Undoes a body's Content-Encoding with the kernel (gzip, deflate, br, zstd); rejects when it cannot. */
+  decodeBody: (dataBase64: string, contentEncoding: string, complete: boolean) =>
+    invoke<{ data_base64: string; truncated: boolean }>("decode_body", { request: { dataBase64, contentEncoding, complete } }),
   /** Sends a request through the engine (its local proxy, or the replay proxy on Android) without following redirects. */
   replayRequest: (request: ReplayRequest) => invoke<ReplayResponse>("replay_request", { request }),
   debugMappings: () => invoke<DebugMapping[]>("list_debug_mappings"),

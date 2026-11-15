@@ -45,25 +45,51 @@ export function splitOr(text: string): string[] {
   return groups.filter(Boolean);
 }
 
+/** A request's place in the capture (its connection and its place there): the same while it is under way and after. */
+export function requestKey(request: Pick<CaptureRequest, "connection_id" | "index">): string {
+  return `${request.connection_id}:${request.index}`;
+}
+
 /** Whether the engine may still fill in this request's response. */
 function pending(request: CaptureRequest): boolean {
+  if (request.state) return request.state === "in_progress";
   return request.status == null && request.ended_at_ms == null && !request.note;
 }
 
 /**
- * Where the next read starts: before the oldest request still waiting for its response, so it comes back with
- * the response, or after the newest one seen.
+ * Where the next read starts, for kernels that list only by `seq`: before the oldest request still waiting for its
+ * response, so it comes back with the response, or after the newest one seen.
  */
 export function nextSince(rows: CaptureRequest[], lastSeq: number): number {
-  const waiting = rows.find(pending);
+  const waiting = rows.find((row) => row.seq > 0 && pending(row));
   return waiting ? waiting.seq - 1 : lastSeq;
 }
 
-/** The list after one answer: newer copies replace older ones, pushed-out requests leave, oldest first. */
+/**
+ * The `since_rev` of the next read after `answer`: a full page carries on from its last row (the engine lists in
+ * the order things changed), otherwise from the newest change. Null for a kernel without `since_rev`.
+ */
+export function nextRev(current: number | null, answer: CaptureRequestsAnswer, page: number): number | null {
+  if (answer.last_rev == null) return null;
+  const rows = answer.requests ?? [];
+  const last = rows.length >= page ? rows[rows.length - 1].rev : undefined;
+  return Math.max(current ?? 0, last ?? answer.last_rev);
+}
+
+/** The order rows are listed in: when they started, then by connection and place. */
+export function compareArrival(a: CaptureRequest, b: CaptureRequest): number {
+  return a.started_at_ms - b.started_at_ms || a.connection_id - b.connection_id || a.index - b.index;
+}
+
+/**
+ * The list after one answer: newer copies of a request replace older ones (a request under way is updated in place
+ * as its response arrives), ended requests the engine dropped leave, oldest first.
+ */
 export function mergeRequests(rows: CaptureRequest[], answer: CaptureRequestsAnswer): CaptureRequest[] {
-  const bySeq = new Map(rows.map((row) => [row.seq, row]));
-  for (const request of answer.requests ?? []) bySeq.set(request.seq, request);
+  const byKey = new Map(rows.map((row) => [requestKey(row), row]));
+  for (const request of answer.requests ?? []) byKey.set(requestKey(request), request);
   const dropped = answer.dropped_before_seq ?? 0;
-  const merged = [...bySeq.values()].filter((row) => row.seq > dropped).sort((a, b) => a.seq - b.seq);
+  // A request still under way has no seq yet; if its connection went, it is simply not updated again.
+  const merged = [...byKey.values()].filter((row) => row.seq === 0 || row.seq > dropped).sort(compareArrival);
   return merged.length > MAX_REQUESTS ? merged.slice(merged.length - MAX_REQUESTS) : merged;
 }

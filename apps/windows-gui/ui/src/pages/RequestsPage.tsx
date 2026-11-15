@@ -1,7 +1,7 @@
 import { FileSearch, PanelBottom, PanelRight, Pause, Play, PlugZap } from "lucide-react";
 import { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from "react";
 import { desktop, RuntimeSnapshot } from "../bridge";
-import { combineFilter, QuickFilter } from "../capture-filter";
+import { combineFilter, QuickFilter, requestKey } from "../capture-filter";
 import { liveEngine, usePolling } from "../live";
 import { defaultSort, RequestSort } from "../request-table";
 import { defaultShare, Dock, inspectorSize, parseDock, parseShare, shareFor } from "../split-pane";
@@ -95,7 +95,8 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
   const [typed, setTyped] = useState("");
   const [quick, setQuick] = useState<QuickFilter[]>([]);
   const [sort, setSort] = useState<RequestSort>(defaultSort);
-  const [selected, setSelected] = useState<number | null>(null);
+  /** The selected request's `requestKey`. */
+  const [selected, setSelected] = useState<string | null>(null);
   // On a narrow window: the inspector shows in place of the table.
   const [opened, setOpened] = useState(false);
   const [replayAsked, setReplayAsked] = useState(false);
@@ -147,7 +148,7 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
   // A stopped capture or a loaded session still holds requests to list.
   const holding = Boolean(capture?.enabled) || (capture?.connections ?? 0) > 0;
   const feed = useRequestFeed(live && holding, filter, paused);
-  const request = feed.rows.find((row) => row.seq === selected) ?? null;
+  const request = feed.rows.find((row) => requestKey(row) === selected) ?? null;
   const captured = capture?.connections ?? 0;
 
   const change = useCallback((task: () => Promise<unknown>) => {
@@ -268,13 +269,13 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
         <RequestTable
           rows={feed.rows}
           selected={selected}
-          onSelect={(seq) => {
-            setSelected(seq);
+          onSelect={(key) => {
+            setSelected(key);
             // A tap on a phone opens the request; a wide window shows it beside the table already.
             if (!wide) setOpened(true);
           }}
-          onOpen={(seq) => {
-            setSelected(seq);
+          onOpen={(key) => {
+            setSelected(key);
             setOpened(true);
           }}
           sort={sort}
