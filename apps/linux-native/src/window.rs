@@ -26,6 +26,7 @@ use crate::overview_page::OverviewPage;
 use crate::proxies::{self, Action, Busy, Proxies};
 use crate::proxies_page::{Asked, ProxiesPage};
 use crate::sections::{self, Section};
+use crate::subscriptions::{self, Change, Subscription};
 use crate::{Language, APP_ID};
 
 const BRAND_LIGHT: &str = include_str!("../data/brand-light.css");
@@ -106,6 +107,12 @@ struct Shell {
     busy: Busy,
     /// Why the last thing asked for on the proxies page did not work.
     list_failure: Option<String>,
+    /// The subscriptions as the daemon last described them; `None` while it does not say.
+    subscriptions: Option<Vec<Subscription>>,
+    /// A question about the subscriptions is out; the next one waits for its answer.
+    subscribing: Arc<AtomicBool>,
+    /// The subscriptions the daemon is still downloading, renaming or removing.
+    changing: Vec<String>,
     /// How many subscriptions the daemon took in for this window; the link's box empties at each.
     imports: u32,
     /// Counts the changes of the link to the daemon, so that the answer to something asked of a daemon
@@ -132,6 +139,11 @@ enum Show {
     Ask(Asked),
     /// The daemon finished that, or could not. The number is the [`Shell::era`] it was asked in.
     Done(u32, Action, Result<(), String>),
+    /// The daemon's subscriptions.
+    Subscriptions(Result<Vec<Subscription>, String>),
+    /// The daemon finished what was asked of a subscription, or could not; the number as in `Done`. With
+    /// it, the subscriptions as they are after that, if the daemon said.
+    Changed(u32, Change, Result<(), String>, Option<Vec<Subscription>>),
 }
 
 struct ShellWidgets {
@@ -195,6 +207,7 @@ impl Shell {
         {
             return;
         }
+        self.list_subscriptions(sender);
         let link = Arc::clone(&self.link);
         let listing = Arc::clone(&self.listing);
         let input = sender.input_sender().clone();
@@ -205,6 +218,42 @@ impl Shell {
                 .map(|answer| Proxies::read(&answer));
             listing.store(false, Ordering::SeqCst);
             let _ = input.send(Show::Proxies(query, answer));
+        });
+    }
+
+    /// Asks the daemon for the subscriptions on another thread, unless an earlier question is still out.
+    fn list_subscriptions(&self, sender: &ComponentSender<Self>) {
+        if self.subscribing.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let link = Arc::clone(&self.link);
+        let subscribing = Arc::clone(&self.subscribing);
+        let input = sender.input_sender().clone();
+        thread::spawn(move || {
+            let answer = link
+                .ask(subscriptions::COMMAND, json!({}), ASK_PATIENCE)
+                .map(|answer| subscriptions::read(&answer));
+            subscribing.store(false, Ordering::SeqCst);
+            let _ = input.send(Show::Subscriptions(answer));
+        });
+    }
+
+    /// Sends what the user asked of a subscription to the daemon, on another thread.
+    fn change(&mut self, change: Change, sender: &ComponentSender<Self>) {
+        self.changing.push(change.id().to_owned());
+        self.list_failure = None;
+        let link = Arc::clone(&self.link);
+        let input = sender.input_sender().clone();
+        let era = self.era;
+        thread::spawn(move || {
+            let (command, args) = change.ask();
+            let answer = link.ask(command, args, PRESS_PATIENCE).map(|_| ());
+            // What the row says after this, before it can be asked again.
+            let after = link
+                .ask(subscriptions::COMMAND, json!({}), ASK_PATIENCE)
+                .map(|answer| subscriptions::read(&answer))
+                .ok();
+            let _ = input.send(Show::Changed(era, change, answer, after));
         });
     }
 
@@ -365,6 +414,9 @@ impl SimpleComponent for Shell {
             list_trouble: None,
             busy: Busy::default(),
             list_failure: None,
+            subscriptions: None,
+            subscribing: Arc::new(AtomicBool::new(false)),
+            changing: Vec::new(),
             imports: 0,
             era: 0,
         };
@@ -506,6 +558,9 @@ impl SimpleComponent for Shell {
         .row_at_index(at);
         gtk::prelude::GtkWindowExt::set_focus(&window, chosen.as_ref());
 
+        if launch.subscriptions {
+            widgets.proxies.open_subscriptions();
+        }
         if let Some(file) = launch.screenshot {
             // The page the screenshot is of, not the sidebar, when only one of them fits.
             split.set_show_content(true);
@@ -543,6 +598,8 @@ impl SimpleComponent for Shell {
                 self.list_trouble = None;
                 self.list_failure = None;
                 self.busy = Busy::default();
+                self.subscriptions = None;
+                self.changing.clear();
                 self.era = self.era.wrapping_add(1);
                 self.refresh(&sender);
                 self.list(&sender);
@@ -589,6 +646,12 @@ impl SimpleComponent for Shell {
                 self.query = query;
                 self.list(&sender);
             }
+            Show::Ask(Asked::Change(change)) => {
+                // One thing at a time is asked of a subscription.
+                if self.core_answers() && !self.changing.iter().any(|id| id == change.id()) {
+                    self.change(change, &sender);
+                }
+            }
             Show::Ask(asked) => {
                 let shown = self.proxies_shown();
                 let action = match asked {
@@ -619,6 +682,22 @@ impl SimpleComponent for Shell {
                 self.list(&sender);
                 self.refresh(&sender);
             }
+            // An answer that comes after the daemon went away says nothing about now.
+            Show::Subscriptions(_) if !self.core_answers() => {}
+            // An answer that did not come leaves what was known; the question goes out again.
+            Show::Subscriptions(Err(_)) => {}
+            Show::Subscriptions(Ok(subscriptions)) => self.subscriptions = Some(subscriptions),
+            Show::Changed(era, ..) if era != self.era => {}
+            Show::Changed(_, change, answer, after) => {
+                self.changing.retain(|id| id != change.id());
+                if after.is_some() {
+                    self.subscriptions = after;
+                }
+                self.list_failure = answer.err();
+                // The subscriptions, their nodes, and the overview's node in use, as they are after this.
+                self.list(&sender);
+                self.refresh(&sender);
+            }
         }
     }
 
@@ -639,9 +718,14 @@ impl SimpleComponent for Shell {
 
         widgets.content.set_title(self.text(section.title));
         widgets.overview.show(&self.overview_shown());
-        widgets
-            .proxies
-            .show(&self.proxies_shown(), self.busy.switching);
+        let subscriptions = self.subscriptions.as_ref().map(|subscriptions| {
+            subscriptions::shown(self.language, subscriptions, &self.changing)
+        });
+        widgets.proxies.show(
+            &self.proxies_shown(),
+            self.busy.switching,
+            subscriptions.as_deref(),
+        );
         if widgets.emptied != self.imports {
             widgets.proxies.clear_link();
             widgets.emptied = self.imports;

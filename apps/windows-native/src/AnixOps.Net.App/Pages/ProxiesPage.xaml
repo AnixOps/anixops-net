@@ -74,13 +74,27 @@
                 IsEnabled="False" />
         </Grid>
 
-        <TextBlock
-            x:Name="CountText"
-            Grid.Row="3"
-            AutomationProperties.AutomationId="Proxies.Count"
-            AutomationProperties.LiveSetting="Polite"
-            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-            Style="{StaticResource CaptionTextBlockStyle}" />
+        <Grid Grid.Row="3" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock
+                x:Name="CountText"
+                Grid.Column="0"
+                VerticalAlignment="Center"
+                AutomationProperties.AutomationId="Proxies.Count"
+                AutomationProperties.LiveSetting="Polite"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Style="{StaticResource CaptionTextBlockStyle}" />
+            <!-- Opens the list of subscriptions, where one is updated, renamed or removed. -->
+            <HyperlinkButton
+                x:Name="SubscriptionsButton"
+                Grid.Column="1"
+                AutomationProperties.AutomationId="Proxies.Subscriptions"
+                Click="OnSubscriptions"
+                IsEnabled="False" />
+        </Grid>
 
         <!-- Selectable, so that the reason can be copied into a message asking for help. -->
         <TextBlock

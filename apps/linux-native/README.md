@@ -18,6 +18,11 @@ link to the daemon, whose state the foot of the sidebar shows, and the first rea
   sentences, and what the page asks of the daemon (import, test, use a node).
 - `src/proxies_page.rs`: the proxies page's widgets. The node list is a `GtkListView` with the subscriptions
   as section headings; the selected row is the node in use.
+- `src/subscriptions.rs`: the list of subscriptions without GTK: the daemon's `subscriptions` answer turned
+  into one row per subscription (name, node count, last update, use, expiry, why the last update did not
+  work), and what a row asks of the daemon (update, rename, remove).
+- `src/subscription_list.rs`: the list's widgets, a dialog over the proxies page opened with the page's
+  "Subscriptions" button. Renaming and removing ask first; "remove" is never the answer Enter gives.
 - `src/window.rs`: the window (relm4 over gtk4-rs and libadwaita). Only built with the `gui` feature, on Linux,
   because it needs the GTK 4 and libadwaita development files. It links `crates/client-window` (the standing
   link to the daemon and the answers to what the daemon asks of the user's session) and none of the engine.
@@ -29,13 +34,16 @@ It needs GTK 4.14 and libadwaita 1.5 or later (Ubuntu 24.04, Debian 13, Fedora 4
 
 Options for tests and screenshots: `--language zh|zh-Hant|en`, `--theme light|dark`, `--page <id>`,
 `--size <width>x<height>`, `--socket <path>` (where the daemon listens, instead of
-`/run/anixops-net/core.sock`), and `--screenshot <file.png>`, which draws the window into the file with the
+`/run/anixops-net/core.sock`), `--show subscriptions` (open the list of subscriptions), and
+`--screenshot <file.png>`, which draws the window into the file with the
 window's own renderer and quits.
 
 The "Linux native app" job in CI builds and lints the window, draws every page in every language and theme
 (`.github/scripts/linux-native-screenshots.sh`, uploaded as an artifact) and operates the running window
 through AT-SPI the way a screen reader does (`.github/scripts/linux-native-a11y.py`). The same script then
 runs the window against the real `anixops-netd`: not running, found, connected and disconnected with the
-overview's button, stopped, found again.
+overview's button, the proxies page (import, search, choosing a node, delay test), the list of subscriptions
+(a subscription served by the script itself is listed with its use and expiry, updated, renamed and removed),
+stopped, found again.
 
 Like the rest of the repository, this is built and tested in GitHub Actions only.

@@ -12,6 +12,8 @@ use adw::prelude::*;
 use gtk::{gio, glib};
 
 use crate::proxies::{Row, Shown, Tone};
+use crate::subscription_list::SubscriptionList;
+use crate::subscriptions::{self, Change};
 use crate::Language;
 
 /// The widest the page's column gets, in logical pixels.
@@ -32,6 +34,8 @@ pub enum Asked {
     Test,
     /// Use the node with this id.
     Switch(String),
+    /// Download a subscription again, give it another name or remove it.
+    Change(Change),
 }
 
 pub struct ProxiesPage {
@@ -40,6 +44,10 @@ pub struct ProxiesPage {
     import: gtk::Button,
     test: gtk::Button,
     count: gtk::Label,
+    manage: gtk::Button,
+    subscriptions: Rc<SubscriptionList>,
+    /// Whether the core said which subscriptions there are the last time the page was drawn.
+    listed: Cell<bool>,
     error: gtk::Label,
     stack: gtk::Stack,
     notice: adw::StatusPage,
@@ -183,8 +191,24 @@ impl ProxiesPage {
 
         let count = gtk::Label::new(None);
         count.set_xalign(0.0);
+        count.set_hexpand(true);
         count.add_css_class("caption");
         count.add_css_class("dim-label");
+        // The subscriptions the nodes come from, in a dialog over the page.
+        let manage = gtk::Button::with_label(text("proxies.subscriptions"));
+        manage.set_widget_name("subscriptions");
+        manage.add_css_class("flat");
+        let subscriptions = Rc::new(SubscriptionList::new(language, {
+            let asked = asked.clone();
+            move |change| asked(Asked::Change(change))
+        }));
+        manage.connect_clicked({
+            let subscriptions = Rc::clone(&subscriptions);
+            move |button| subscriptions.present(button)
+        });
+        let count_line = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        count_line.append(&count);
+        count_line.append(&manage);
         let error = gtk::Label::new(None);
         error.set_xalign(0.0);
         error.set_wrap(true);
@@ -201,7 +225,7 @@ impl ProxiesPage {
         controls.append(&link_caption);
         controls.append(&import_line);
         controls.append(&search_line);
-        controls.append(&count);
+        controls.append(&count_line);
         controls.append(&error);
         let controls_clamp = adw::Clamp::new();
         controls_clamp.set_maximum_size(COLUMN);
@@ -302,6 +326,9 @@ impl ProxiesPage {
             import,
             test,
             count,
+            manage,
+            subscriptions,
+            listed: Cell::new(false),
             error,
             stack,
             notice,
@@ -317,14 +344,39 @@ impl ProxiesPage {
         &self.root
     }
 
+    /// Opens the list of subscriptions over the window once the window is up, as pressing the page's
+    /// button does.
+    pub fn open_subscriptions(&self) {
+        let subscriptions = Rc::clone(&self.subscriptions);
+        let root = self.root.clone();
+        glib::idle_add_local_once(move || subscriptions.present(&root));
+    }
+
     /// Empties the box a subscription's link is written in, once the core has taken the link.
     pub fn clear_link(&self) {
         self.link.set_text("");
     }
 
     /// Draws what is known now. While the core is switching nodes the row the user chose stays selected,
-    /// whatever the core still says is in use.
-    pub fn show(&self, shown: &Shown, switching: bool) {
+    /// whatever the core still says is in use. `subscriptions` is `None` while the core does not say which
+    /// there are: there is then nothing to open, and what was open is closed.
+    pub fn show(
+        &self,
+        shown: &Shown,
+        switching: bool,
+        subscriptions: Option<&[subscriptions::Row]>,
+    ) {
+        self.manage.set_sensitive(subscriptions.is_some());
+        match subscriptions {
+            Some(rows) => self.subscriptions.show(rows),
+            // The core that listed them is gone: nothing of what the dialog shows can be asked for.
+            None if self.listed.get() => {
+                self.subscriptions.close();
+                self.subscriptions.show(&[]);
+            }
+            None => {}
+        }
+        self.listed.set(subscriptions.is_some());
         self.import.set_label(&shown.import);
         self.import.set_sensitive(shown.can_import);
         self.test.set_label(&shown.test);

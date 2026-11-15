@@ -11,7 +11,10 @@ using Xunit;
 
 namespace AnixOps.Net.App.UiTests;
 
-/// <summary>The proxies page: it imports links, lists the core's nodes, searches them, switches and tests them.</summary>
+/// <summary>
+/// The proxies page: it imports links, lists the core's nodes, searches them, switches and tests them, and
+/// its list of subscriptions updates, renames and removes one.
+/// </summary>
 public sealed class ProxiesTests
 {
     private const string Link = "Proxies.Link";
@@ -21,9 +24,20 @@ public sealed class ProxiesTests
     private const string Count = "Proxies.Count";
     private const string Nodes = "Proxies.List";
     private const string Notice = "Proxies.Notice";
+    private const string OpenSubscriptions = "Proxies.Subscriptions";
+    private const string SubscriptionList = "Subscriptions.List";
+    private const string Update = "Subscriptions.Update";
+    private const string Rename = "Subscriptions.Rename";
+    private const string Remove = "Subscriptions.Remove";
+    private const string Question = "Subscriptions.Question";
+    private const string NewName = "Subscriptions.Name";
+    private const string Confirm = "Subscriptions.Confirm";
+    private const string Cancel = "Subscriptions.Cancel";
 
     // Addresses kept for documentation (RFC 5737): nothing answers there, so a delay test ends in "no answer".
     private const string FirstNode = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@203.0.113.9:11111#Test";
+    private const string ThirdNode = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@203.0.113.20:11111#Alpha";
+    private const string FourthNode = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@203.0.113.21:11111#Beta";
     private const string SecondNode = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@203.0.113.10:11111#Second";
 
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(90);
@@ -221,5 +235,180 @@ public sealed class ProxiesTests
         var answer = await second.AskAsync(Proxies.Command);
         Assert.All(Proxies.Read(answer).Sections.SelectMany(section => section.Nodes), node => Assert.Equal(NodeDelay.Failed, node.Delay));
         app.Screenshot($"proxies-nodes-{language}-{theme}");
+    }
+
+    /// <summary>The row of the subscription with this name in the open list, or null.</summary>
+    private static AutomationElement? Row(AppSession app, string title)
+    {
+        try
+        {
+            return app.Find(SubscriptionList)
+                .FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem))
+                .Cast<AutomationElement>()
+                .FirstOrDefault(item => item.Current.Name == title);
+        }
+        catch (ElementNotAvailableException)
+        {
+            // The list changed while it was read.
+            return null;
+        }
+    }
+
+    /// <summary>The sentences a row shows.</summary>
+    private static List<string> Says(AutomationElement? row)
+    {
+        if (row is null)
+        {
+            return [];
+        }
+        try
+        {
+            return row
+                .FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text))
+                .Cast<AutomationElement>()
+                .Select(text => text.Current.Name)
+                .ToList();
+        }
+        catch (ElementNotAvailableException)
+        {
+            return [];
+        }
+    }
+
+    private static AutomationElement? ButtonIn(AutomationElement row, string automationId) =>
+        row.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, automationId));
+
+    /// <summary>Presses a row's button once the row is there and the button can be pressed.</summary>
+    private static void PressIn(AppSession app, string title, string automationId)
+    {
+        AutomationElement? button = null;
+        Wait(
+            () =>
+            {
+                try
+                {
+                    button = Row(app, title) is { } row ? ButtonIn(row, automationId) : null;
+                    return button is { Current.IsEnabled: true };
+                }
+                catch (ElementNotAvailableException)
+                {
+                    return false;
+                }
+            },
+            () => $"the subscription '{title}' has no '{automationId}' that can be pressed");
+        Assert.True(button!.TryGetCurrentPattern(InvokePattern.Pattern, out var invoke), $"'{automationId}' cannot be pressed");
+        ((InvokePattern)invoke).Invoke();
+    }
+
+    [Theory]
+    [InlineData(Strings.Chinese, "light")]
+    [InlineData(Strings.English, "dark")]
+    public async Task SubscriptionsAreListedUpdatedRenamedAndRemovedThroughTheService(string language, string theme)
+    {
+        if (!ServiceProcess.Available())
+        {
+            return;
+        }
+        var strings = Strings.For(language);
+        using var service = ServiceProcess.Start();
+        using var app = AppSession.Start(
+            "--language", language, "--theme", theme, "--page", Sections.Proxies, "--pipe", service.PipeName);
+        app.WaitForName(Notice, strings["proxies.empty"]);
+        Assert.Equal(strings["proxies.subscriptions"], app.Find(OpenSubscriptions).Current.Name);
+        WaitForEnabled(app, OpenSubscriptions);
+        await using var second = await SecondWindow.JoinAsync(service.PipeName);
+
+        async Task<IReadOnlyList<Subscription>> ListedAsync() => Subscriptions.Read(await second.AskAsync(Subscriptions.Command));
+
+        // Share links pasted into the client, and a subscription this test hands out: one node at first, two
+        // from the second download on.
+        await second.AskAsync("import_subscription", JsonSerializer.Serialize(new { location = FirstNode }));
+        var before = (await ListedAsync()).Select(subscription => subscription.Id).ToHashSet();
+        using var server = new SubscriptionServer(download => download == 1 ? ThirdNode : ThirdNode + "\n" + FourthNode);
+        await second.AskAsync("import_subscription", JsonSerializer.Serialize(new { location = server.Link }));
+        var mine = Assert.Single(await ListedAsync(), subscription => !before.Contains(subscription.Id));
+        Assert.False(mine.Pasted);
+        Assert.True(mine.Refreshable);
+        Assert.Equal(1UL, mine.Nodes);
+        Assert.Equal(1000UL, mine.Used);
+        Assert.Equal(5000UL, mine.Total);
+        Assert.Equal("2033-05-18", mine.ExpireDate);
+        Assert.False(mine.Expired);
+        Assert.Null(mine.Error);
+        var title = mine.Name;
+
+        async Task<Subscription?> MineAsync() => (await ListedAsync()).FirstOrDefault(subscription => subscription.Id == mine.Id);
+
+        async Task UntilAsync(Func<Subscription?, bool> done, string otherwise)
+        {
+            var deadline = DateTime.UtcNow + Patience;
+            while (!done(await MineAsync()))
+            {
+                Assert.True(DateTime.UtcNow < deadline, otherwise);
+                await Task.Delay(100);
+            }
+        }
+
+        // The list: the subscription's row says how many nodes, how much was used and when it expires, in
+        // one line.
+        Press(app, OpenSubscriptions);
+        Assert.Equal(strings["proxies.subscriptions"], app.Find(SubscriptionList).Current.Name);
+        string[] expected =
+        [
+            strings.Format("proxies.count", 1),
+            strings.Format("subscriptions.usage", "1000 B", "4.9 KB"),
+            strings.Format("subscriptions.expire", "2033-05-18"),
+        ];
+        Wait(
+            () => Says(Row(app, title)).Any(line => expected.All(part => line.Contains(part))),
+            () => $"the row of '{title}' says [{string.Join(" | ", Says(Row(app, title)))}], expected one line with [{string.Join(" | ", expected)}]");
+
+        // Pasted links have a row too, named in the window's language, and nothing to download again.
+        var pasted = strings["proxies.group.pasted"];
+        Wait(() => Row(app, pasted) is not null, () => $"no row '{pasted}'");
+        Assert.Null(ButtonIn(Row(app, pasted)!, Update));
+        Assert.NotNull(ButtonIn(Row(app, pasted)!, Rename));
+        Assert.Equal(strings["subscriptions.rename"], ButtonIn(Row(app, title)!, Rename)!.Current.Name);
+        Assert.Equal(strings["subscriptions.remove"], ButtonIn(Row(app, title)!, Remove)!.Current.Name);
+        Assert.Equal(strings["subscriptions.update"], ButtonIn(Row(app, title)!, Update)!.Current.Name);
+
+        // Update: the link is downloaded again and now hands out two nodes.
+        PressIn(app, title, Update);
+        Wait(() => server.Downloads >= 2, () => $"the link was downloaded {server.Downloads} times");
+        await UntilAsync(subscription => subscription?.Nodes == 2, "the core does not hold the subscription's two nodes");
+        var two = strings.Format("proxies.count", 2);
+        Wait(
+            () => Says(Row(app, title)).Any(line => line.Contains(two)),
+            () => $"the row of '{title}' says [{string.Join(" | ", Says(Row(app, title)))}], expected '{two}'");
+
+        // Rename: the question starts with the name as it is and takes another.
+        const string renamed = "My nodes";
+        PressIn(app, title, Rename);
+        app.WaitForName(Question, strings["subscriptions.rename"]);
+        Assert.Equal(strings["subscriptions.name"], app.Find(NewName).Current.Name);
+        Assert.Equal(title, ((ValuePattern)app.Find(NewName).GetCurrentPattern(ValuePattern.Pattern)).Current.Value);
+        Assert.Equal(strings["subscriptions.save"], app.Find(Confirm).Current.Name);
+        Assert.Equal(strings["action.cancel"], app.Find(Cancel).Current.Name);
+        app.SetText(NewName, renamed);
+        Press(app, Confirm);
+        await UntilAsync(subscription => subscription?.Name == renamed, $"the core does not call the subscription '{renamed}'");
+        Wait(() => Row(app, renamed) is not null && Row(app, title) is null, () => $"the list does not show the subscription as '{renamed}'");
+        app.Screenshot($"proxies-subscriptions-{language}-{theme}");
+
+        // Remove: asked first, and "cancel" leaves everything as it is.
+        PressIn(app, renamed, Remove);
+        app.WaitForName(Question, strings.Format("subscriptions.remove.confirm", renamed));
+        Assert.Equal(strings["subscriptions.remove"], app.Find(Confirm).Current.Name);
+        Press(app, Cancel);
+        Wait(() => Row(app, renamed) is not null, () => "cancelling the removal took the row away");
+        Assert.NotNull(await MineAsync());
+        PressIn(app, renamed, Remove);
+        app.WaitForName(Question, strings.Format("subscriptions.remove.confirm", renamed));
+        Press(app, Confirm);
+        await UntilAsync(subscription => subscription is null, "the core still has the subscription");
+        Wait(() => Row(app, pasted) is not null && Row(app, renamed) is null, () => "the removed subscription is still listed");
+        // Its nodes went with it: the pasted link's node is the one left.
+        var nodes = await NodesAsync(second);
+        Assert.Equal(new[] { "Test" }, nodes.Select(node => node.Label));
     }
 }

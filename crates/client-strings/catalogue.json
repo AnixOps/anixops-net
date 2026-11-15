@@ -1,5 +1,6 @@
 {
   "action.cancel": { "zh": "取消", "zh-Hant": "取消", "en": "Cancel" },
+  "action.close": { "zh": "关闭", "zh-Hant": "關閉", "en": "Close" },
   "app.name": { "zh": "AnixOps Net", "zh-Hant": "AnixOps Net", "en": "AnixOps Net" },
   "app.preview": { "zh": "预览", "zh-Hant": "預覽", "en": "Preview" },
   "column.duration": { "zh": "耗时", "zh-Hant": "耗時", "en": "Time" },
@@ -71,7 +72,6 @@
   "subscriptions.error": { "zh": "上次更新没有成功：{0}", "zh-Hant": "上次更新沒有成功：{0}", "en": "The last update did not work: {0}" },
   "subscriptions.expire": { "zh": "{0} 到期", "zh-Hant": "{0} 到期", "en": "Expires {0}" },
   "subscriptions.expired": { "zh": "已到期", "zh-Hant": "已到期", "en": "Expired" },
-  "subscriptions.more": { "zh": "更多操作", "zh-Hant": "更多操作", "en": "More actions" },
   "subscriptions.name": { "zh": "名称", "zh-Hant": "名稱", "en": "Name" },
   "subscriptions.remove": { "zh": "删除", "zh-Hant": "刪除", "en": "Remove" },
   "subscriptions.remove.confirm": { "zh": "删除“{0}”和它的节点？", "zh-Hant": "刪除「{0}」和它的節點？", "en": "Remove “{0}” and its nodes?" },
