@@ -14,4 +14,9 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\AnixOps.Net.Presentation\AnixOps.Net.Presentation.csproj" />
   </ItemGroup>
+
+  <!-- The samples of what the core answers are the Rust side's own file, not a copy. -->
+  <ItemGroup>
+    <None Include="..\..\..\..\crates\client-view\fixtures\cases.json" Link="fixtures\view\cases.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

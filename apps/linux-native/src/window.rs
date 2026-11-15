@@ -8,7 +8,7 @@
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -18,10 +18,10 @@ use client_session::system_proxy::Desktop;
 use client_window::{CoreLink, LinkOptions, LinkState, WindowEnd};
 use gtk::{gdk, gio, glib};
 use relm4::{ComponentParts, ComponentSender, RelmApp, SimpleComponent};
-use serde_json::Value;
+use serde_json::json;
 
 use crate::launch::{Appearance, Launch};
-use crate::overview::{self, Feed, Overview, Pending, Press};
+use crate::overview::{self, Overview, Pending, Press};
 use crate::overview_page::OverviewPage;
 use crate::sections::{self, Section};
 use crate::{Language, APP_ID};
@@ -81,8 +81,7 @@ struct Shell {
     link: Arc<CoreLink>,
     /// The overview as the daemon last described it; `None` while it does not answer.
     overview: Option<Overview>,
-    /// Asks the daemon for the overview, on a thread of its own, one refresh at a time.
-    feed: Arc<Mutex<Feed>>,
+    /// A question about the overview is out; the next one waits for its answer.
     refreshing: Arc<AtomicBool>,
     /// Why the last refresh got no answer.
     trouble: Option<String>,
@@ -148,14 +147,12 @@ impl Shell {
             return;
         }
         let link = Arc::clone(&self.link);
-        let feed = Arc::clone(&self.feed);
         let refreshing = Arc::clone(&self.refreshing);
         let input = sender.input_sender().clone();
         thread::spawn(move || {
-            let answer = feed
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .refresh(&|command: &str, args: Value| link.ask(command, args, ASK_PATIENCE));
+            let answer = link
+                .ask(Overview::COMMAND, json!({}), ASK_PATIENCE)
+                .map(|answer| Overview::read(&answer));
             refreshing.store(false, Ordering::SeqCst);
             let _ = input.send(Show::Overview(answer));
         });
@@ -169,17 +166,10 @@ impl Shell {
         let input = sender.input_sender().clone();
         thread::spawn(move || {
             let answer = link
-                .ask(press.command(), serde_json::json!({}), PRESS_PATIENCE)
+                .ask(press.command(), json!({}), PRESS_PATIENCE)
                 .map(|_| ());
             let _ = input.send(Show::Pressed(answer));
         });
-    }
-
-    fn forget_nodes(&self) {
-        self.feed
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .forget();
     }
 
     /// The line at the foot of the sidebar. Why the daemon does not answer is for the log, not for here.
@@ -280,7 +270,6 @@ impl SimpleComponent for Shell {
             core: LinkState::Connecting,
             link: Arc::new(link(launch.socket, &sender)),
             overview: None,
-            feed: Arc::new(Mutex::new(Feed::new())),
             refreshing: Arc::new(AtomicBool::new(false)),
             trouble: None,
             pending: Pending::Nothing,
@@ -447,7 +436,6 @@ impl SimpleComponent for Shell {
                 self.trouble = None;
                 self.failure = None;
                 self.pending = Pending::Nothing;
-                self.forget_nodes();
                 self.refresh(&sender);
             }
             Show::Tick => self.refresh(&sender),
@@ -470,8 +458,7 @@ impl SimpleComponent for Shell {
             Show::Pressed(answer) => {
                 self.pending = Pending::Nothing;
                 self.failure = answer.err();
-                // Connecting can change which node is in use; ask again at once, not at the next tick.
-                self.forget_nodes();
+                // Ask again at once, not at the next tick.
                 self.refresh(&sender);
             }
         }
