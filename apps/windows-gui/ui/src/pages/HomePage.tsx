@@ -172,7 +172,7 @@ function Hero({ snapshot, nodes, phase, busy, run, toggle, goTo, delays, probe }
         <Segmented
           label={t("分流模式")}
           className="fill"
-          options={availableRoutingModes(snapshot).map((item) => ({ value: item.value, label: t(item.label), hint: t(item.hint) }))}
+          options={availableRoutingModes().map((item) => ({ value: item.value, label: t(item.label), hint: t(item.hint) }))}
           value={snapshot?.routingMode}
           disabled={Boolean(busy) || !snapshot}
           onChange={(value) => void run("routing", () => desktop.setRoutingMode(value))}

@@ -26,9 +26,6 @@ from pathlib import PurePosixPath
 # names that category (decided 2026-11-15: not a preset), never on their own.
 ALLOWED_LIST_URL_FILES = {
     "apps/ios/Sources/NetworkCoreBridge/RuleSetCatalog.swift",
-    # The desktop routing modes (绕过大陆 / GFW 列表 / 回国) still download these; that PR removes the modes and
-    # this line together.
-    "apps/windows-gui/src/gui/tauri_ui.rs",
 }
 
 LIST_URL = re.compile(r"raw\.githubusercontent\.com/[A-Za-z0-9_.-]+/")
@@ -37,6 +34,10 @@ LIST_URL = re.compile(r"raw\.githubusercontent\.com/[A-Za-z0-9_.-]+/")
 BANNED = [
     (re.compile(r"\bOpenRuleSets\b"), "the recommended rule-list catalog"),
     (re.compile(r"blackmatrix7|ios_rule_script|Loyalsoldier/surge-rules"), "a recommended rule-list source"),
+    (re.compile(r"\b(BypassChina|GfwList|ReturnChina)\b|refresh_routing_rules|refreshRoutingRules"),
+     "a preset routing mode"),
+    (re.compile(r"builtin_(ad_block|bilibili)|BUILTIN_(AD_BLOCK|BILIBILI)|bilibiliWebAdBlock|native_mitm_policy_source"),
+     "a built-in MITM ad-block plugin"),
 ]
 
 PACKAGED_DIRS = [

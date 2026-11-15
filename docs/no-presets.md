@@ -23,6 +23,11 @@ Android APK 与 Google Play、原生桌面预览版，以及 anx 私有构建出
 
 没有订阅和规则时，客户端照常启动，提示导入订阅或节点；规则页只显示“添加第一条规则”和“通过链接添加规则集”。
 
+## 从旧版本升级
+
+- 桌面 / Android 保存过绕过大陆、GFW 列表或回国模式的，读入时变成规则模式；以前下载到 `rules/` 的列表不再读取。
+- 打开过哔哩哔哩网页去广告的，开关读入时忽略，MITM 不再加载任何内置插件。
+
 ## 防止再带进来
 
 CI 的 “No preset scripts or routing rules” 步骤（`.github/scripts/no_presets.py`）检查会打进安装包的源码：

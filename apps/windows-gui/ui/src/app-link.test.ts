@@ -13,6 +13,8 @@ describe("anixops:// links", () => {
   it("reads modes, selections and imports", () => {
     expect(parseAppLink("anixops://mode?set=Rule")).toEqual({ action: "mode", mode: "rule" });
     expect(parseAppLink("anixops://mode?set=global")).toEqual({ error: "这个客户端没有该分流模式", detail: "global" });
+    // No preset list modes in public builds (docs/no-presets.md).
+    expect(parseAppLink("anixops://mode?set=bypass_china")).toEqual({ error: "这个客户端没有该分流模式", detail: "bypass_china" });
     expect(parseAppLink("anixops://select?node=%E9%A6%99%E6%B8%AF&group=Main")).toEqual({ action: "select", node: "香港", group: "Main" });
     expect(parseAppLink("anixops://select?policy=Proxy&node=HK")).toEqual({ action: "selectMember", policy: "Proxy", member: "HK" });
     expect(parseAppLink("anixops://import?url=https%3A%2F%2Fa.example%2Fsub%3Ftoken%3Dx")).toEqual({ action: "import", url: "https://a.example/sub?token=x" });

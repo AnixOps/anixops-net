@@ -49,8 +49,8 @@ import java.net.URI
 
 private val StatusDot = 10.dp
 
-/** The routing modes, in the order the other clients offer them. */
-internal val RoutingModes = listOf("rule", "bypass_china", "gfw_list", "return_china", "direct")
+/** The routing modes, in the order the other clients offer them. Public builds ship no preset list modes. */
+internal val RoutingModes = listOf("rule", "direct")
 
 /** How many open connections the page lists; the rest are counted in the traffic card. */
 private const val ConnectionRows = 20
@@ -319,9 +319,6 @@ internal fun statusLabel(state: String): String = stringResource(
 
 @Composable
 internal fun routingLabel(mode: String?): String = when (mode) {
-    "bypass_china" -> stringResource(R.string.routing_bypass_china)
-    "gfw_list" -> stringResource(R.string.routing_gfw_list)
-    "return_china" -> stringResource(R.string.routing_return_china)
     "direct" -> stringResource(R.string.routing_direct)
     "rule" -> stringResource(R.string.routing_rule)
     else -> mode.orEmpty()

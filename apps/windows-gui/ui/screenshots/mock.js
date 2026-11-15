@@ -122,8 +122,8 @@
     platform: "windows", connection: "Connected", connectionLabel: "已连接", core: { label: "运行中", tone: "success" }, proxy: { label: "已启用", tone: "success" },
     selectedNode: "香港 01", subscription: "AnixOps", subscriptionLastUpdated: stamp, subscriptionRefreshResult: "success",
     subscriptionAddedNodeCount: 0, subscriptionRemovedNodeCount: 0, subscriptionChangedNodeCount: 0,
-    startAfterLogin: true, autoConnect: true, autoRecoverCore: true, autoSubscriptionRefresh: true, autoSelectFastestNode: false, bilibiliWebAdBlockEnabled: false,
-    tunModeEnabled: false, scriptRuntimeConfigured: true, httpsDecryptionEnabled: true, darkTheme: false, routingMode: "bypass_china", dnsPreset: "encrypted", blockQuic: false, directEgress: false, embeddedEngine: true,
+    startAfterLogin: true, autoConnect: true, autoRecoverCore: true, autoSubscriptionRefresh: true, autoSelectFastestNode: false,
+    tunModeEnabled: false, scriptRuntimeConfigured: true, httpsDecryptionEnabled: true, darkTheme: false, routingMode: "rule", dnsPreset: "encrypted", blockQuic: false, directEgress: false, embeddedEngine: true,
   };
   const hours = Array.from({ length: 24 }, (_, i) => ({
     start: Math.floor(start / 3600e3) * 3600 - (23 - i) * 3600, upload: 2e6 * (1 + (i % 5)), download: 60e6 * (1 + ((i * 3) % 7)),

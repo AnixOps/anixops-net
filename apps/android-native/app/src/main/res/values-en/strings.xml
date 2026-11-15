@@ -22,9 +22,6 @@
     <string name="home_last_error">Last error</string>
     <string name="home_vpn_denied">The VPN was not allowed, so AnixOps Net cannot connect</string>
 
-    <string name="routing_bypass_china">Bypass mainland China</string>
-    <string name="routing_gfw_list">GFW list</string>
-    <string name="routing_return_china">Return to China</string>
     <string name="routing_direct">Direct</string>
     <string name="routing_rule">Rules</string>
 
@@ -118,13 +115,9 @@
         <item quantity="one">Every day</item>
         <item quantity="other">Every %d days</item>
     </plurals>
-    <string name="rules_refresh">Refresh rule resources</string>
-    <string name="rules_routing_note">Rule resources are cached on this device from public sources and take effect on the next connection.</string>
-    <string name="routing_bypass_china_hint">Mainland China sites go direct, everything else through the proxy</string>
-    <string name="routing_gfw_list_hint">Only sites on the list go through the proxy</string>
-    <string name="routing_return_china_hint">Mainland China sites go through the proxy, for use abroad</string>
+    <string name="rules_routing_note">The client ships no preset rules: rule mode follows only the subscription\'s rules and your own.</string>
     <string name="routing_direct_hint">All traffic goes direct, never through a node</string>
-    <string name="routing_rule_hint">Follows the subscription\'s own rules and policy groups</string>
+    <string name="routing_rule_hint">Follows the subscription\'s rules and your own rules; everything else goes through the proxy</string>
     <string name="rules_mine">My rules</string>
     <string name="rules_mine_note">One rule per line, matched top to bottom before the routing mode\'s and the subscription\'s rules. The policy is PROXY (the current node or the subscription\'s first policy group), DIRECT or REJECT. Supports DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD, DOMAIN-WILDCARD, IP-CIDR, IP-CIDR6, DST-PORT, PROCESS-NAME, USER-AGENT, URL-REGEX and PROTOCOL; lines starting with # are comments.</string>
     <string name="action_revert">Revert</string>

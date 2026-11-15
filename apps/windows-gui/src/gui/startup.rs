@@ -8,16 +8,26 @@ use std::path::PathBuf;
 
 const DESKTOP_STATE_FILE: &str = "desktop-state.json";
 
+/// How traffic is split. Public builds ship no preset list modes (docs/no-presets.md): a state saved by an
+/// earlier version with 绕过大陆, GFW 列表 or 回国 loads as [`DesktopRoutingMode::Rule`].
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", from = "String")]
 pub enum DesktopRoutingMode {
+    /// The subscription's own rules and policy groups and the user's rules; a single-node profile sends
+    /// everything through its node.
     #[default]
-    BypassChina,
-    GfwList,
-    Direct,
-    ReturnChina,
-    /// The subscription's own rules and policy groups (embedded engine only).
     Rule,
+    Direct,
+}
+
+impl From<String> for DesktopRoutingMode {
+    fn from(value: String) -> Self {
+        if value == "direct" {
+            Self::Direct
+        } else {
+            Self::Rule
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -92,8 +102,6 @@ pub struct DesktopState {
     /// Debug mode's direct egress: the window's engine runs with no node.
     #[serde(default)]
     pub direct_egress: bool,
-    #[serde(default)]
-    pub bilibili_web_ad_block_enabled: bool,
     /// Desktop mode also captures system traffic with a Wintun adapter.
     #[serde(default)]
     pub tun_mode_enabled: bool,
@@ -206,10 +214,26 @@ mod tests {
         assert!(!state.auto_recover_core);
         assert!(!state.auto_subscription_refresh);
         assert!(!state.auto_select_fastest_node);
-        assert_eq!(state.routing_mode, DesktopRoutingMode::BypassChina);
-        assert!(!state.bilibili_web_ad_block_enabled);
+        assert_eq!(state.routing_mode, DesktopRoutingMode::Rule);
         assert!(state.applied_proxy.is_none());
         assert!(state.profile_node_catalog.is_empty());
+    }
+
+    #[test]
+    fn preset_list_modes_saved_by_earlier_versions_load_as_rule_mode() {
+        for mode in ["bypass_china", "gfw_list", "return_china", "rule"] {
+            let state: DesktopState = serde_json::from_str(&format!(
+                r#"{{"routing_mode":"{mode}","bilibili_web_ad_block_enabled":true}}"#
+            ))
+            .unwrap();
+            assert_eq!(state.routing_mode, DesktopRoutingMode::Rule, "{mode}");
+        }
+        let direct: DesktopState = serde_json::from_str(r#"{"routing_mode":"direct"}"#).unwrap();
+        assert_eq!(direct.routing_mode, DesktopRoutingMode::Direct);
+        assert_eq!(
+            serde_json::to_value(DesktopRoutingMode::Rule).unwrap(),
+            serde_json::json!("rule")
+        );
     }
 
     #[test]

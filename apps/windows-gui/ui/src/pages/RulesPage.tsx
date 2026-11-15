@@ -14,11 +14,10 @@ export function RulesPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot |
     <div className="page-stack">
       <Card
         title={t("分流模式")}
-        description={t("规则资源从公开来源缓存到本机，下次连接时生效。")}
-        actions={<button className="link-button" disabled={Boolean(busy)} onClick={() => void run("routing rules", desktop.refreshRoutingRules)}><RefreshCw size={13} />{t("刷新规则资源")}</button>}
+        description={t("客户端不带预设规则：规则模式只按订阅自带的规则和你的规则分流。")}
       >
         <div role="radiogroup" aria-label={t("分流模式")}>
-        {availableRoutingModes(snapshot).map((mode) => {
+        {availableRoutingModes().map((mode) => {
           const selected = snapshot?.routingMode === mode.value;
           return (
             <button

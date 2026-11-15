@@ -117,15 +117,10 @@ into LocalMachine ROOT and the embedded engine decrypts HTTPS itself on the
 system proxy port, with the same MITM the iOS app uses. Disable removes the
 managed ROOT entry and deletes the generated private key.
 
-Advanced settings includes an opt-in `Bilibili web promotional request blocking
-(trial)` selection. When selected before `Enable HTTPS MITM`, the engine loads
-the first-party `networkcore.bilibili-web-adblock` request-only policy instead
-of the general ad-block pack. It rejects only four independent recommendation,
-topic, dynamic-follow-list, and live shopping endpoints. It does not fetch or
-execute BiliUniverse, Loon, Surge, or other third-party scripts; it does not
-modify response bodies, video playback, comments, the home feed, or HTTP/2,
-HTTP/3, and QUIC traffic. The selection is persisted with a default of off and
-requires HTTPS MITM to be enabled again before it takes effect.
+Public builds ship no built-in MITM plugin, rewrite or script
+([no-presets.md](../no-presets.md)): with HTTPS decryption on, only the plugins
+the user imports rewrite anything. The former general ad-block pack and the
+Bilibili web trial are gone; a saved `bilibili_web_ad_block_enabled` is ignored.
 
 When the engine started by this GUI run stops unexpectedly, the GUI makes one
 controlled reconnect if `auto_recover_core` is on; disconnect, exit and a
