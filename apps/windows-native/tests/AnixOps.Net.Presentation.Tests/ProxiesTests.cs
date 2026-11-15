@@ -41,6 +41,7 @@ public sealed class ProxiesTests
             foreach (var (section, readSection) in sections.Zip(read.Sections))
             {
                 Assert.Equal(section.GetProperty("group").GetString(), readSection.Group);
+                Assert.Equal(section.GetProperty("pasted").GetBoolean(), readSection.Pasted);
                 var nodes = section.GetProperty("nodes").EnumerateArray().ToList();
                 Assert.Equal(nodes.Count, readSection.Nodes.Count);
                 foreach (var (node, readNode) in nodes.Zip(readSection.Nodes))
@@ -116,6 +117,19 @@ public sealed class ProxiesTests
         Assert.Equal("4 个节点", page.Count);
         Assert.Equal("未归入订阅的节点", page.Rows[3].Heading);
         Assert.Equal("shadowsocks, 超时", page.Rows[2].Description(Chinese));
+    }
+
+    [Fact]
+    public void SubscriptionsOfOneNameStayApartAndPastedLinksAreNamedInTheWindowsLanguage()
+    {
+        // Two subscriptions called "One", then links pasted into the client.
+        var all = Sample(6);
+        var page = Proxies.Show(English, true, all, Idle, null);
+        Assert.Equal(
+            new[] { (0, "One"), (1, "One"), (2, "Pasted links"), (2, "Pasted links") },
+            page.Rows.Select(row => (row.Section, row.Heading)));
+        Assert.Equal("粘贴的链接", Proxies.Show(Strings.For(Strings.Chinese), true, all, Idle, null).Rows[3].Heading);
+        Assert.Equal("貼上的連結", Proxies.Show(Strings.For(Strings.TraditionalChinese), true, all, Idle, null).Rows[3].Heading);
     }
 
     [Fact]
