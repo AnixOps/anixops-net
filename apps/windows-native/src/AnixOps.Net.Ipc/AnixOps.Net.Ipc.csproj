@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>AnixOps.Net.Ipc</RootNamespace>
+    <Description>The window's end of the channel to the AnixOps Net core: length-prefixed JSON frames carrying commands, their answers and events.</Description>
+  </PropertyGroup>
+</Project>

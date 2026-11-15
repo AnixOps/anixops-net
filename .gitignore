@@ -36,3 +36,7 @@ apps/android-native/.gradle/
 apps/android-native/.kotlin/
 apps/android-native/local.properties
 apps/android-native/app/src/main/jniLibs/
+
+# Native Windows app: .NET build output
+apps/windows-native/**/bin/
+apps/windows-native/**/obj/
