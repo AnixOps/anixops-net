@@ -6,9 +6,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.anixops.net.core.Core
 import io.anixops.net.core.CoreException
+import io.anixops.net.core.DebugMapping
+import io.anixops.net.core.HeaderField
 import io.anixops.net.core.MitmPlugin
 import io.anixops.net.core.MitmPluginDetails
 import io.anixops.net.core.OperationResult
+import io.anixops.net.core.RedirectDraft
+import io.anixops.net.core.TrafficRedirect
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -19,18 +23,27 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/** The destination rewrite open in the editor: [id] null for a new one. */
+data class RedirectEditor(val id: String?, val draft: RedirectDraft)
+
 /**
- * What 扩展 (改写 in debug mode) reads beyond the snapshot: the plugins and the domains decrypted one by one.
+ * What 扩展 (改写 in debug mode) reads beyond the snapshot: the plugins, the domains decrypted one by one, the
+ * Map Local / Remote mappings and the destination rewrites.
  * [consented] says the user has confirmed once that decryption is only for traffic they may see (TERMS.md §4).
  */
 data class ExtensionsState(
     val plugins: List<MitmPlugin> = emptyList(),
     val hosts: List<String> = emptyList(),
+    val mappings: List<DebugMapping> = emptyList(),
+    val redirects: List<TrafficRedirect> = emptyList(),
     val loaded: Boolean = false,
     val busy: Boolean = false,
     val consented: Boolean = false,
     /** The plugin whose contents are open, with what the engine read of it. */
     val inspected: Pair<MitmPlugin, MitmPluginDetails>? = null,
+    /** The mapping open in its editor page; a new one has an empty id. */
+    val editingMapping: DebugMapping? = null,
+    val editingRedirect: RedirectEditor? = null,
 )
 
 class ExtensionsViewModel(private val core: Core, private val preferences: SharedPreferences) : ViewModel() {
@@ -83,23 +96,58 @@ class ExtensionsViewModel(private val core: Core, private val preferences: Share
 
     fun closeInspector() = _state.update { it.copy(inspected = null) }
 
+    /** Opens the mapping editor on [entry], or on a new mapping answering JSON locally. */
+    fun editMapping(entry: DebugMapping?) = _state.update { it.copy(editingMapping = entry ?: NEW_MAPPING) }
+
+    fun closeMappingEditor() = _state.update { it.copy(editingMapping = null) }
+
+    /** Saves the edited mapping and closes the editor once the core has taken it. */
+    fun saveMapping(entry: DebugMapping) = perform(onSuccess = { closeMappingEditor() }) { core.saveDebugMapping(entry) }
+
+    fun setMappingEnabled(entry: DebugMapping, enabled: Boolean) =
+        perform { core.saveDebugMapping(entry.copy(enabled = enabled)) }
+
+    fun removeMapping(id: String) = perform { core.removeDebugMapping(id) }
+
+    fun editRedirect(entry: TrafficRedirect?) = _state.update {
+        it.copy(editingRedirect = RedirectEditor(entry?.id, entry?.draft ?: RedirectDraft()))
+    }
+
+    fun closeRedirectEditor() = _state.update { it.copy(editingRedirect = null) }
+
+    fun saveRedirect(id: String?, draft: RedirectDraft) =
+        perform(onSuccess = { closeRedirectEditor() }) { core.addTrafficRedirect(draft, id) }
+
+    fun setRedirectEnabled(id: String, enabled: Boolean) = perform {
+        core.saveTrafficRedirects(_state.value.redirects.map { if (it.id == id) it.copy(enabled = enabled) else it })
+    }
+
+    fun removeRedirect(id: String) = perform { core.saveTrafficRedirects(_state.value.redirects.filter { it.id != id }) }
+
     /** Quiet: a poll that fails keeps what the page shows rather than repeating the refusal. */
     private suspend fun refresh() {
         try {
             val plugins = core.mitmPlugins()
             val hosts = core.decryptHosts()
-            _state.update { it.copy(plugins = plugins, hosts = hosts, loaded = true) }
+            val mappings = core.debugMappings()
+            val redirects = core.trafficRedirects()
+            _state.update {
+                it.copy(plugins = plugins, hosts = hosts, mappings = mappings, redirects = redirects, loaded = true)
+            }
         } catch (error: CoreException) {
             _state.update { it.copy(loaded = true) }
         }
     }
 
-    private fun perform(command: suspend () -> OperationResult) {
+    /** Runs [command] once at a time; [onSuccess] runs when the core took it (an editor then closes). */
+    private fun perform(onSuccess: () -> Unit = {}, command: suspend () -> OperationResult) {
         if (_state.value.busy) return
         _state.update { it.copy(busy = true) }
         viewModelScope.launch {
             try {
-                _messages.send(command().message)
+                val result = command()
+                onSuccess()
+                _messages.send(result.message)
             } catch (error: CoreException) {
                 _messages.send(error.message.orEmpty())
             } finally {
@@ -112,5 +160,8 @@ class ExtensionsViewModel(private val core: Core, private val preferences: Share
     companion object {
         private const val POLL_MILLIS = 5_000L
         const val CONSENT_KEY = "https-decryption-consent"
+
+        /** A new mapping, as the desktop editor starts one: Map Local answering JSON. */
+        val NEW_MAPPING = DebugMapping(headers = listOf(HeaderField("Content-Type", "application/json; charset=utf-8")))
     }
 }

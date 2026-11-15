@@ -385,6 +385,16 @@ private fun rememberExtensionsActions(extensions: ExtensionsViewModel, snackbar:
         removePlugin = extensions::removePlugin,
         inspect = { extensions.inspect(it) },
         closeInspector = extensions::closeInspector,
+        editMapping = extensions::editMapping,
+        closeMappingEditor = extensions::closeMappingEditor,
+        saveMapping = extensions::saveMapping,
+        setMappingEnabled = extensions::setMappingEnabled,
+        removeMapping = extensions::removeMapping,
+        editRedirect = extensions::editRedirect,
+        closeRedirectEditor = extensions::closeRedirectEditor,
+        saveRedirect = extensions::saveRedirect,
+        setRedirectEnabled = extensions::setRedirectEnabled,
+        removeRedirect = extensions::removeRedirect,
     )
 }
 
@@ -491,6 +501,6 @@ fun AnixScaffold(
 
 /** The system back gesture closes a page opened from another; screenshots have no dispatcher to hook into. */
 @Composable
-private fun BackTo(close: () -> Unit) {
+internal fun BackTo(close: () -> Unit) {
     if (LocalOnBackPressedDispatcherOwner.current != null) BackHandler(onBack = close)
 }
