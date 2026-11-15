@@ -35,9 +35,14 @@ jobs:
     timeout-minutes: 25
     env:
       UI: apps/windows-gui/ui
-      TOOLS: ${{ runner.temp }}/screenshot-tools
-      SHOTS: ${{ runner.temp }}/ui-screenshots
     steps:
+      # The runner's temporary directory is not known where a job's `env` is read, so these are set here.
+      - name: Choose the working directories
+        shell: bash
+        run: |
+          echo "TOOLS=${RUNNER_TEMP}/screenshot-tools" >> "${GITHUB_ENV}"
+          echo "SHOTS=${RUNNER_TEMP}/ui-screenshots" >> "${GITHUB_ENV}"
+
       # On a pull request this is the merge of the branch into its base, so the comparison below shows exactly
       # what merging would change; the base is the merge's first parent.
       - name: Checkout
