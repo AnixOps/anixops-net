@@ -11,10 +11,10 @@ using Microsoft.UI.Xaml.Navigation;
 namespace AnixOps.Net.App.Pages;
 
 /// <summary>One subscription's nodes under its name: a group of the node list.</summary>
-public sealed class NodeGroup(string heading) : ObservableCollection<ProxyRow>
+public sealed class NodeGroup : ObservableCollection<ProxyRow>
 {
     /// <summary>The subscription's name.</summary>
-    public string Heading { get; } = heading;
+    public string Heading { get; set; } = "";
 }
 
 /// <summary>
@@ -370,7 +370,7 @@ public sealed partial class ProxiesPage : Page
             groups.Clear();
             foreach (var run in rows.GroupBy(row => row.Section))
             {
-                var group = new NodeGroup(run.First().Heading);
+                var group = new NodeGroup { Heading = run.First().Heading };
                 foreach (var row in run)
                 {
                     group.Add(row);
