@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using AnixOps.Net.App.Pages;
 using AnixOps.Net.Presentation;
+using AnixOps.Net.Session;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -18,12 +19,14 @@ public sealed partial class MainWindow : Window
 
     private readonly Strings strings;
     private readonly Launch launch;
+    private readonly CoreLink core;
     private IReadOnlyList<RequestRow>? demoRequests;
 
-    public MainWindow(Launch launch, Strings strings)
+    public MainWindow(Launch launch, Strings strings, CoreLink core)
     {
         this.strings = strings;
         this.launch = launch;
+        this.core = core;
         InitializeComponent();
 
         Title = strings["app.name"];
@@ -67,6 +70,26 @@ public sealed partial class MainWindow : Window
             }
         }
         Navigation.SelectedItem = first;
+
+        Show(core.Status);
+        core.Changed += OnCoreChanged;
+        Closed += (_, _) => core.Changed -= OnCoreChanged;
+    }
+
+    // Raised on a thread of the link; the window is touched on its own.
+    private void OnCoreChanged(LinkStatus status) => DispatcherQueue.TryEnqueue(() => Show(core.Status));
+
+    private void Show(LinkStatus status)
+    {
+        CoreStatus.Text = status.State switch
+        {
+            LinkState.Connected => strings.Format("core.connected", status.CoreVersion ?? ""),
+            LinkState.Unavailable => strings["core.unavailable"],
+            _ => strings["core.connecting"],
+        };
+        CoreConnecting.Visibility = status.State == LinkState.Connecting ? Visibility.Visible : Visibility.Collapsed;
+        CoreConnected.Visibility = status.State == LinkState.Connected ? Visibility.Visible : Visibility.Collapsed;
+        CoreUnavailable.Visibility = status.State == LinkState.Unavailable ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)

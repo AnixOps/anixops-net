@@ -24,5 +24,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AnixOps.Net.Presentation\AnixOps.Net.Presentation.csproj" />
+    <ProjectReference Include="..\AnixOps.Net.Session\AnixOps.Net.Session.csproj" />
   </ItemGroup>
 </Project>

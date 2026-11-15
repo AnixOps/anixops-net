@@ -20,4 +20,9 @@
   <ItemGroup>
     <None Include="..\..\..\..\crates\client-service\fixtures\*.json" Link="fixtures\service\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- Starts the real service; shared with the other test project that needs it. -->
+  <ItemGroup>
+    <Compile Include="..\Shared\ServiceProcess.cs" Link="Shared\ServiceProcess.cs" />
+  </ItemGroup>
 </Project>

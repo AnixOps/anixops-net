@@ -35,6 +35,29 @@
                     VerticalAlignment="Center"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Style="{StaticResource CaptionTextBlockStyle}" />
+                <!-- Whether the core service answers. One dot per state, so each keeps its theme colour. -->
+                <Grid
+                    Width="8"
+                    Height="8"
+                    Margin="12,0,0,0"
+                    VerticalAlignment="Center">
+                    <Ellipse x:Name="CoreConnecting" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                    <Ellipse
+                        x:Name="CoreConnected"
+                        Fill="{ThemeResource SystemFillColorSuccessBrush}"
+                        Visibility="Collapsed" />
+                    <Ellipse
+                        x:Name="CoreUnavailable"
+                        Fill="{ThemeResource SystemFillColorCautionBrush}"
+                        Visibility="Collapsed" />
+                </Grid>
+                <TextBlock
+                    x:Name="CoreStatus"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="Core.Status"
+                    AutomationProperties.LiveSetting="Polite"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource CaptionTextBlockStyle}" />
             </StackPanel>
         </Grid>
 

@@ -23,4 +23,9 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\AnixOps.Net.Presentation\AnixOps.Net.Presentation.csproj" />
   </ItemGroup>
+
+  <!-- Starts the real service; shared with the other test project that needs it. -->
+  <ItemGroup>
+    <Compile Include="..\Shared\ServiceProcess.cs" Link="Shared\ServiceProcess.cs" />
+  </ItemGroup>
 </Project>

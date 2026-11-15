@@ -130,6 +130,16 @@ public sealed class LaunchTests
     }
 
     [Fact]
+    public void ThePipeOfAnotherServiceCanBeNamed()
+    {
+        Assert.Null(Launch.Parse([]).Pipe);
+        Assert.Equal("AnixOpsNet.Test", Launch.Parse(["--pipe", "AnixOpsNet.Test"]).Pipe);
+        // A name, not a path: the window only ever opens a pipe on this machine.
+        Assert.Null(Launch.Parse(["--pipe", @"\\other\pipe\AnixOpsNet.Core"]).Pipe);
+        Assert.Null(Launch.Parse(["--pipe", ""]).Pipe);
+    }
+
+    [Fact]
     public void TheLastValueWins()
     {
         Assert.Equal(Appearance.Light, Launch.Parse(["--theme", "dark", "--theme", "light"]).Appearance);

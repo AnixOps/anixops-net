@@ -7,6 +7,8 @@ using System.Management;
 using System.Text.Json;
 using System.Threading;
 using System.Windows.Automation;
+using AnixOps.Net.Presentation;
+using AnixOps.Net.Testing;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -47,7 +49,14 @@ public sealed class StartupTests
         public double MedianWorkingSetBytes => Median(Later.Select(run => (double)run.WorkingSetBytes));
     }
 
-    public sealed record Comparison(Subject Native, Subject Web);
+    /// <param name="Native">The native window alone, with no core to talk to.</param>
+    /// <param name="Web">The released web client, which runs the core inside itself.</param>
+    /// <param name="NativeWithService">
+    /// The native window together with the core service: started with the service already running (as after
+    /// boot) and usable once the window says the core answers; its memory includes the service's process.
+    /// This is the like-for-like comparison with the web client. Null when no service was given.
+    /// </param>
+    public sealed record Comparison(Subject Native, Subject Web, Subject? NativeWithService);
 
     [Fact]
     public void TheNativeAppStartsSoonerAndIdlesLighterThanTheWebClient()
@@ -64,16 +73,26 @@ public sealed class StartupTests
         var native = AppSession.Executable();
 
         // Alternating, so that whatever else the machine is doing falls on both alike.
+        var withService = ServiceProcess.Available();
         var nativeRuns = new List<Run>();
         var webRuns = new List<Run>();
+        var serviceRuns = new List<Run>();
         for (var run = 0; run < Runs; run++)
         {
-            nativeRuns.Add(Measure(native, ["--language", "en"], NativeIsReady));
+            nativeRuns.Add(Measure(native, ["--language", "en", "--pipe", "AnixOpsNet.Test.Nobody"], NativeIsReady));
             webRuns.Add(Measure(web, [], WebIsReady));
+            if (withService)
+            {
+                // A fresh service each time, as the web client starts its core afresh each time.
+                using var service = ServiceProcess.Start();
+                WaitForPipe(service);
+                serviceRuns.Add(Measure(native, ["--language", "en", "--pipe", service.PipeName], NativeIsConnected, service.Id));
+            }
         }
         var comparison = new Comparison(
             new Subject("native", native, nativeRuns[0], nativeRuns.Skip(1).ToList()),
-            new Subject("web", web, webRuns[0], webRuns.Skip(1).ToList()));
+            new Subject("web", web, webRuns[0], webRuns.Skip(1).ToList()),
+            withService ? new Subject("native with service", native, serviceRuns[0], serviceRuns.Skip(1).ToList()) : null);
 
         var text = JsonSerializer.Serialize(comparison, new JsonSerializerOptions { WriteIndented = true });
         output.WriteLine(text);
@@ -91,6 +110,51 @@ public sealed class StartupTests
         Assert.True(
             comparison.Native.MedianWorkingSetBytes < comparison.Web.MedianWorkingSetBytes,
             $"idle working set: native {comparison.Native.MedianWorkingSetBytes / 1e6:0.0} MB, web {comparison.Web.MedianWorkingSetBytes / 1e6:0.0} MB");
+
+        if (comparison.NativeWithService is { } both)
+        {
+            Assert.True(
+                both.MedianStartMilliseconds < comparison.Web.MedianStartMilliseconds,
+                $"start: native with service {both.MedianStartMilliseconds:0} ms, web {comparison.Web.MedianStartMilliseconds:0} ms");
+            Assert.True(
+                both.MedianPrivateBytes < comparison.Web.MedianPrivateBytes,
+                $"idle private memory: native with service {both.MedianPrivateBytes / 1e6:0.0} MB, web {comparison.Web.MedianPrivateBytes / 1e6:0.0} MB");
+            Assert.True(
+                both.MedianWorkingSetBytes < comparison.Web.MedianWorkingSetBytes,
+                $"idle working set: native with service {both.MedianWorkingSetBytes / 1e6:0.0} MB, web {comparison.Web.MedianWorkingSetBytes / 1e6:0.0} MB");
+        }
+    }
+
+    // With the service, the native app is usable when its page is there and it says the core answers.
+    private static bool NativeIsConnected(AutomationElement window)
+    {
+        if (!NativeIsReady(window))
+        {
+            return false;
+        }
+        var status = window.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, "Core.Status"));
+        var prefix = CoreTests.ConnectedPrefix(Strings.For(Strings.English));
+        return status is not null && status.Current.Name.StartsWith(prefix, StringComparison.Ordinal) && status.Current.Name.Length > prefix.Length;
+    }
+
+    // The service listens before it opens its data; the measurement starts once its pipe is there.
+    private static void WaitForPipe(ServiceProcess service)
+    {
+        var watch = Stopwatch.StartNew();
+        while (!Directory.EnumerateFiles(@"\\.\pipe\").Any(path => path.EndsWith(service.PipeName, StringComparison.OrdinalIgnoreCase)))
+        {
+            if (service.HasExited(out var code))
+            {
+                throw new InvalidOperationException($"the service exited with code {code}");
+            }
+            if (watch.Elapsed > StartPatience)
+            {
+                throw new TimeoutException("the service did not listen in time");
+            }
+            Thread.Sleep(50);
+        }
+        // Past listening, it opens its data and starts its background work; let that settle as after boot.
+        Thread.Sleep(2000);
     }
 
     // The native app is usable when its page heading is there.
@@ -109,7 +173,7 @@ public sealed class StartupTests
         return buttons.Cast<AutomationElement>().Any(button => !string.IsNullOrWhiteSpace(button.Current.Name));
     }
 
-    private static Run Measure(string executable, string[] arguments, Func<AutomationElement, bool> ready)
+    private static Run Measure(string executable, string[] arguments, Func<AutomationElement, bool> ready, params int[] others)
     {
         var start = new ProcessStartInfo(executable)
         {
@@ -145,6 +209,8 @@ public sealed class StartupTests
 
             Thread.Sleep(Idle);
             var tree = Tree(process.Id);
+            // Processes that belong to the program without being started by it (the core service).
+            tree.AddRange(others.SelectMany(other => Tree(other)).Where(id => !tree.Contains(id)).ToList());
             long privateBytes = 0;
             long workingSet = 0;
             var counted = 0;
