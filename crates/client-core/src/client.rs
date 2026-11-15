@@ -25,6 +25,7 @@ use serde_json::Value;
 use subscription_meta::ResponseMeta;
 
 use crate::backend::engine;
+use crate::backend::session::LocalSession;
 use crate::backend::state::Store;
 use crate::backend::system_proxy::Desktop;
 #[cfg(not(target_os = "android"))]
@@ -175,13 +176,15 @@ impl Client {
         );
         let backend = Backend::open(
             Store::new(dir),
-            Desktop::from_env(),
-            if cfg!(target_os = "android") {
-                None
-            } else {
-                autostart::autostart_dir()
-            },
-            executable,
+            Box::new(LocalSession::new(
+                Desktop::from_env(),
+                if cfg!(target_os = "android") {
+                    None
+                } else {
+                    autostart::autostart_dir()
+                },
+                executable,
+            )),
         );
         let auto_connect = backend.auto_connect();
         let shared = Arc::new(Mutex::new(backend));

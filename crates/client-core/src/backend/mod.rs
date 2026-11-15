@@ -4,6 +4,7 @@
 
 pub mod autostart;
 pub mod engine;
+pub mod session;
 #[cfg(not(any(target_os = "android", windows)))]
 pub mod session_key;
 #[cfg(windows)]
@@ -46,8 +47,8 @@ use traffic_stats::{Counter as TrafficCounter, TrafficStats};
 pub use desktop_dns::DnsPreset;
 
 use self::engine::{Engine, OtherSource};
+use self::session::UserSession;
 use self::state::{SavedSource, SavedState, Store};
-use self::system_proxy::Desktop;
 
 /// The source label for share links pasted into the import field.
 /// Lines the log viewer shows.
@@ -217,9 +218,8 @@ pub struct Backend {
     routed_profile: Option<String>,
     /// The other sources' runnable nodes, listed after the selected source's.
     others: Vec<OtherSource>,
-    desktop: Option<Desktop>,
-    autostart_dir: Option<PathBuf>,
-    executable: PathBuf,
+    /// The system proxy and the login entry, which belong to the user's session.
+    session: Box<dyn UserSession>,
     last_error: Option<String>,
     configuration_error: Option<String>,
     /// Seven days of traffic by hour, host and policy (`traffic_stats`).
@@ -236,12 +236,7 @@ pub struct Backend {
 
 impl Backend {
     /// Loads the saved state and first puts back proxy settings a previous run left changed.
-    pub fn open(
-        store: Store,
-        desktop: Option<Desktop>,
-        autostart_dir: Option<PathBuf>,
-        executable: PathBuf,
-    ) -> Self {
+    pub fn open(store: Store, session: Box<dyn UserSession>) -> Self {
         let state = store.load();
         desktop_dns::custom::use_file(store.dir().join("dns-settings.json"));
         desktop_dns::redirects::use_file(store.dir().join("redirects.json"));
@@ -252,9 +247,7 @@ impl Backend {
             nodes: Vec::new(),
             routed_profile: None,
             others: Vec::new(),
-            desktop,
-            autostart_dir,
-            executable,
+            session,
             last_error: None,
             configuration_error: None,
             traffic: TrafficStats::default(),
@@ -598,7 +591,7 @@ impl Backend {
         if !self.state.preferences.system_proxy {
             return StatusFact::new("Not used", address, "neutral");
         }
-        match (self.desktop, &self.state.proxy_backup) {
+        match (self.session.proxy_settings(), &self.state.proxy_backup) {
             (None, _) => StatusFact::new(
                 "Unavailable",
                 Some(address.map_or_else(
@@ -610,11 +603,11 @@ impl Backend {
                 )),
                 "warning",
             ),
-            (Some(desktop), Some(_)) => {
-                StatusFact::new("Enabled", Some(desktop.name().to_string()), "success")
+            (Some(settings), Some(_)) => {
+                StatusFact::new("Enabled", Some(settings.to_string()), "success")
             }
-            (Some(desktop), None) => {
-                StatusFact::new("Disabled", Some(desktop.name().to_string()), "neutral")
+            (Some(settings), None) => {
+                StatusFact::new("Disabled", Some(settings.to_string()), "neutral")
             }
         }
     }
@@ -663,10 +656,7 @@ impl Backend {
             subscription_error: source.and_then(|source| source.last_error.clone()),
             last_error: self.last_error.clone(),
             configuration_error: self.configuration_error.clone(),
-            start_after_login: self
-                .autostart_dir
-                .as_deref()
-                .is_some_and(autostart::is_enabled),
+            start_after_login: self.session.starts_after_login(),
             auto_connect: self.state.preferences.auto_connect,
             auto_recover_core: false,
             auto_subscription_refresh: false,
@@ -1214,17 +1204,18 @@ impl Backend {
         if self.engine.address().is_none() {
             return done(format!("Connected through {label}"));
         }
-        if self.state.preferences.system_proxy && self.state.proxy_backup.is_none() {
-            if let Some(desktop) = self.desktop {
-                match system_proxy::apply(desktop, address.port()) {
-                    Ok(backup) => {
-                        self.state.proxy_backup = Some(backup);
-                        self.save();
-                    }
-                    Err(error) => {
-                        self.engine.stop();
-                        return Err(format!("the system proxy could not be set: {error}"));
-                    }
+        if self.state.preferences.system_proxy
+            && self.state.proxy_backup.is_none()
+            && self.session.proxy_settings().is_some()
+        {
+            match self.session.apply_proxy(address.port()) {
+                Ok(backup) => {
+                    self.state.proxy_backup = Some(backup);
+                    self.save();
+                }
+                Err(error) => {
+                    self.engine.stop();
+                    return Err(format!("the system proxy could not be set: {error}"));
                 }
             }
         }
@@ -1248,7 +1239,7 @@ impl Backend {
 
     fn restore_proxy(&mut self) {
         if let Some(backup) = self.state.proxy_backup.clone() {
-            match system_proxy::restore(&backup) {
+            match self.session.restore_proxy(&backup) {
                 Ok(()) => {
                     self.state.proxy_backup = None;
                     self.save();
@@ -1639,12 +1630,9 @@ impl Backend {
         &mut self,
         input: &PreferencesInput,
     ) -> Result<OperationResult, String> {
-        if let Some(dir) = &self.autostart_dir {
-            if autostart::is_enabled(dir) != input.start_after_login {
-                autostart::set_enabled(dir, input.start_after_login, &self.executable).map_err(
-                    |error| format!("the autostart entry could not be changed: {error}"),
-                )?;
-            }
+        if self.session.starts_after_login() != input.start_after_login {
+            self.session
+                .set_start_after_login(input.start_after_login)?;
         }
         self.state.preferences.auto_connect = input.auto_connect;
         self.save();
@@ -1697,7 +1685,7 @@ impl Backend {
             snapshot.core.label,
             snapshot.proxy.label,
             snapshot.proxy.detail.as_deref().unwrap_or("-"),
-            self.desktop.map_or("unsupported", Desktop::name),
+            self.session.proxy_settings().unwrap_or("unsupported"),
             self.state.sources.len(),
             self.nodes.len(),
             self.nodes.iter().filter(|node| engine::is_supported(node)).count(),
@@ -1758,6 +1746,7 @@ pub fn format_delay(delay: Duration) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::session::LocalSession;
     use super::*;
 
     const LINK: &str = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@82.47.34.99:11111#HK";
@@ -1768,9 +1757,11 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         let backend = Backend::open(
             Store::new(dir.join("config")),
-            None,
-            Some(dir.join("autostart")),
-            PathBuf::from("/usr/bin/anixops-net"),
+            Box::new(LocalSession::new(
+                None,
+                Some(dir.join("autostart")),
+                PathBuf::from("/usr/bin/anixops-net"),
+            )),
         );
         (backend, dir)
     }
@@ -1888,9 +1879,11 @@ mod tests {
         // The choice is saved, and turning it off leaves the root for the next time.
         let reopened = Backend::open(
             Store::new(dir.join("config")),
-            None,
-            None,
-            PathBuf::from("/usr/bin/anixops-net"),
+            Box::new(LocalSession::new(
+                None,
+                None,
+                PathBuf::from("/usr/bin/anixops-net"),
+            )),
         );
         assert!(reopened.https_decryption());
         backend.set_https_decryption(false).unwrap();
@@ -2125,9 +2118,11 @@ rules:
         // Edits survive a restart and go away with an update.
         let reopened = Backend::open(
             Store::new(dir.join("config")),
-            None,
-            None,
-            PathBuf::from("/usr/bin/anixops-net"),
+            Box::new(LocalSession::new(
+                None,
+                None,
+                PathBuf::from("/usr/bin/anixops-net"),
+            )),
         );
         assert_eq!(reopened.nodes().len(), 1);
         let id = backend.subscriptions()[0].id.clone();
