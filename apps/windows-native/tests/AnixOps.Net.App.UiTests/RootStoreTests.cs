@@ -71,9 +71,10 @@ internal static class RootConfirmation
 
     /// <summary>
     /// Runs <paramref name="work"/> and presses <paramref name="button"/> ("Yes" or "No") on every
-    /// confirmation Windows shows until the work has ended. Fails when Windows never asked.
+    /// confirmation Windows shows until the work has ended. Answers whether Windows asked at all: it does
+    /// on a person's desktop, and does not on the CI machine, whose account is not asked.
     /// </summary>
-    public static async Task AnswerAsync(string button, Func<Task> work)
+    public static async Task<bool> AnswerAsync(string button, Func<Task> work)
     {
         var running = Task.Run(work);
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(60);
@@ -92,13 +93,14 @@ internal static class RootConfirmation
             await Task.Delay(100);
         }
         await running;
-        Assert.True(pressed > 0, "Windows did not ask the user to confirm");
+        return pressed > 0;
     }
 }
 
 /// <summary>
-/// The user's own certificate store, for real: Windows asks the user before a root is added, and what
+/// The user's own certificate store, for real: a root added there is accepted by Windows, and what
 /// removing the client does (deleting the certificate's key in the user's settings) takes the trust away.
+/// Where Windows asks the user before adding a root, the test answers, also with No.
 ///
 /// These show a dialog on the desktop, so they run only where they are asked for
 /// (<see cref="Variable"/>), in a CI step of their own.
@@ -152,6 +154,18 @@ public sealed class RootStoreTests
         process.WaitForExit();
     }
 
+    /// <summary>Writes down what this machine did, for the CI log (beside the screenshots).</summary>
+    private static void Note(string line)
+    {
+        var folder = Environment.GetEnvironmentVariable(AppSession.ScreenshotsVariable);
+        if (string.IsNullOrEmpty(folder))
+        {
+            return;
+        }
+        Directory.CreateDirectory(folder);
+        File.AppendAllText(Path.Combine(folder, "root-confirmation.txt"), line + Environment.NewLine);
+    }
+
     private static void Eventually(Func<bool> done, string failure)
     {
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(60);
@@ -177,14 +191,9 @@ public sealed class RootStoreTests
             Assert.False(store.Trusts(pem));
             Assert.False(Accepted(root));
 
-            // The user says No: nothing is trusted, and the reason is one the core can pass on.
-            var refused = await Assert.ThrowsAsync<RefusedException>(() => RootConfirmation.AnswerAsync("No", () => Task.Run(() => store.Trust(pem))));
-            Assert.Contains("answered with No", refused.Message, StringComparison.Ordinal);
-            Assert.False(store.Trusts(pem));
-            Assert.False(KeyExists(root.Thumbprint));
-
-            // The user says Yes: trusted for this user, kept where the removal looks for it.
-            await RootConfirmation.AnswerAsync("Yes", () => Task.Run(() => store.Trust(pem)));
+            // The user says Yes (where Windows asks): trusted for this user, kept where the removal looks.
+            var asked = await RootConfirmation.AnswerAsync("Yes", () => Task.Run(() => store.Trust(pem)));
+            Note($"Windows asked before adding the root: {asked}");
             Assert.True(store.Trusts(pem));
             Assert.True(KeyExists(root.Thumbprint));
             Eventually(() => Accepted(root), "Windows does not accept the root although it is in the user's store");
@@ -195,12 +204,22 @@ public sealed class RootStoreTests
             Eventually(() => !store.Trusts(pem), "the user's store still lists the root after its key was deleted");
             Eventually(() => !Accepted(root), "Windows still accepts the root after its key was deleted");
 
-            // The user's own request to stop trusting it, which Windows asks to confirm too.
+            if (asked)
+            {
+                // The user says No: nothing is trusted, and the reason is one the core can pass on.
+                var refused = await Assert.ThrowsAsync<RefusedException>(() => RootConfirmation.AnswerAsync("No", () => Task.Run(() => store.Trust(pem))));
+                Assert.Contains("answered with No", refused.Message, StringComparison.Ordinal);
+                Assert.False(store.Trusts(pem));
+                Assert.False(KeyExists(root.Thumbprint));
+            }
+
+            // The user's own request to stop trusting it.
             await RootConfirmation.AnswerAsync("Yes", () => Task.Run(() => store.Trust(pem)));
             Assert.True(store.Trusts(pem));
             await RootConfirmation.AnswerAsync("Yes", () => Task.Run(() => store.Untrust(pem)));
             Assert.False(store.Trusts(pem));
             Assert.False(KeyExists(root.Thumbprint));
+            Eventually(() => !Accepted(root), "Windows still accepts the root after the user stopped trusting it");
         }
         finally
         {
