@@ -29,7 +29,6 @@ jobs:
       windows: ${{ steps.changes.outputs.windows }}
       linux: ${{ steps.changes.outputs.linux }}
       apple: ${{ steps.changes.outputs.apple }}
-      android: ${{ steps.changes.outputs.android }}
       android_native: ${{ steps.changes.outputs.android_native }}
       windows_native: ${{ steps.changes.outputs.windows_native }}
       linux_native: ${{ steps.changes.outputs.linux_native }}
@@ -59,9 +58,9 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          rust=false; ui=false; windows=false; linux=false; apple=false; android=false; android_native=false
+          rust=false; ui=false; windows=false; linux=false; apple=false; android_native=false
           windows_native=false; linux_native=false
-          all() { rust=true; ui=true; windows=true; linux=true; apple=true; android=true; android_native=true; windows_native=true; linux_native=true; }
+          all() { rust=true; ui=true; windows=true; linux=true; apple=true; android_native=true; windows_native=true; linux_native=true; }
           if [[ "${EVENT_NAME}" != pull_request ]]; then
             all
           else
@@ -70,14 +69,13 @@ jobs:
                 Cargo.toml | Cargo.lock | .github/*) all ;;
                 # AnixOps Design, vendored: every client's colours are generated from it.
                 apps/windows-gui/ui/src/design/*)
-                  ui=true; windows=true; linux=true; android=true; android_native=true; apple=true; windows_native=true
+                  ui=true; windows=true; linux=true; android_native=true; apple=true; windows_native=true
                   linux_native=true ;;
-                apps/windows-gui/ui/*) ui=true; windows=true; linux=true; android=true ;;
+                apps/windows-gui/ui/*) ui=true; windows=true; linux=true ;;
                 # The native client's installer; the native job builds it and installs, upgrades and removes it.
                 installer/windows-native/*) windows_native=true ;;
                 apps/windows-gui/* | installer/*) rust=true; windows=true ;;
-                # The Android app is the Linux window and backend on Android.
-                apps/linux-gui/*) rust=true; linux=true; android=true ;;
+                apps/linux-gui/*) rust=true; linux=true ;;
                 # The Linux daemon; the workspace job builds and tests it, and the native window is run against it.
                 apps/linux-daemon/*) rust=true; linux_native=true ;;
                 # The Windows service; the Windows job builds and tests it, and the native app is tested against it.
@@ -88,22 +86,21 @@ jobs:
                 apps/windows-native/*) windows_native=true ;;
                 # The native Linux window (GTK 4 and libadwaita); the workspace job tests its pages and options.
                 apps/linux-native/*) rust=true; linux_native=true ;;
-                apps/android/*) android=true ;;
                 # The native Android app (Compose over crates/client-core through JNI); its colours come from the
                 # client tokens.
                 apps/android-native/*) rust=true; android_native=true ;;
                 apps/ios/Design/*) apple=true; android_native=true; windows_native=true; linux_native=true ;;
                 crates/client-ipc/fixtures/* | crates/client-service/fixtures/*)
-                  rust=true; windows=true; linux=true; android=true; android_native=true; windows_native=true ;;
+                  rust=true; windows=true; linux=true; android_native=true; windows_native=true ;;
                 # The native Windows app is tested against the real service, which is built from these; the
                 # native Linux window takes its wording from crates/client-strings.
                 crates/*)
-                  rust=true; windows=true; linux=true; android=true; android_native=true; windows_native=true
+                  rust=true; windows=true; linux=true; android_native=true; windows_native=true
                   linux_native=true ;;
                 apps/ios/*) apple=true ;;
                 # The desktop UI and the native Android app bundle TERMS.md and the Apple tests check its version
                 # (first-start consent).
-                TERMS.md) ui=true; windows=true; linux=true; apple=true; android=true; android_native=true ;;
+                TERMS.md) ui=true; windows=true; linux=true; apple=true; android_native=true ;;
                 *) ;;
               esac
             done < <(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")
@@ -114,7 +111,6 @@ jobs:
             echo "windows=${windows}"
             echo "linux=${linux}"
             echo "apple=${apple}"
-            echo "android=${android}"
             echo "android_native=${android_native}"
             echo "windows_native=${windows_native}"
             echo "linux_native=${linux_native}"
@@ -898,44 +894,12 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
 
-  # The Android app (apps/android): the Linux window and backend with the VpnService plugin, built for arm64 by
-  # the Tauri CLI. The Gradle project is generated here (`tauri android init`) and never committed. The APK is
-  # signed with ANDROID_KEYSTORE_* secrets when they are set, otherwise with a throwaway debug key made for this
-  # run (installing a later build then needs the old one uninstalled first).
-  android:
-    name: Android APK
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    env:
-      CARGO_INCREMENTAL: "0"
-    needs: changes
-    if: ${{ needs.changes.outputs.android == 'true' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Build and sign the APK
-        uses: ./.github/actions/android-apk
-        with:
-          keystore-base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
-          key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          save-cache: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-
-      - name: Upload the APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: anixops-net-android-${{ github.sha }}
-          path: ${{ runner.temp }}/apk/*.apk
-          if-no-files-found: error
-          retention-days: 3
-
   # The native Android app (apps/android-native, docs/architecture/android-native-compose.md): the Rust bridge
   # built for arm64 by cargo-ndk, then Gradle runs lint (warnings are errors), the unit tests (the Kotlin side of
   # the command bridge against the shared fixtures) and the Roborazzi screenshots. The screenshots are recorded
-  # again and must equal the committed ones; when they differ the job fails and uploads the new images. The
-  # preview APK (io.anixops.net.android.next) is signed like the Tauri one.
+  # again and must equal the committed ones; when they differ the job fails and uploads the new images. The APK
+  # (io.anixops.net.android) is signed with ANDROID_KEYSTORE_* secrets when they are set, otherwise with a throwaway
+  # debug key made for this run.
   android-native:
     name: Android native app
     runs-on: ubuntu-latest
@@ -948,46 +912,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      # Lint (warnings are errors), the unit tests and the screenshots run in the same Gradle call as the release
+      # build; the APK is signed like the release one.
+      - name: Lint, unit tests, screenshots and the signed APK
+        id: apk
+        uses: ./.github/actions/android-apk
         with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Setup Rust
-        run: |
-          rustup toolchain install stable --profile minimal
-          rustup default stable
-          rustup target add aarch64-linux-android
-
-      - name: Restore Rust build cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: android-native
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-
-      - name: Install cargo-ndk
-        run: cargo install cargo-ndk --version 3.5.4 --locked
-
-      - name: Build the Rust bridge
-        run: |
-          set -euo pipefail
-          ndk="${ANDROID_NDK_LATEST_HOME}"
-          # rquickjs-sys generates its Android bindings with bindgen against the NDK headers (API level = minSdk).
-          export BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android="--target=aarch64-linux-android26 --sysroot=${ndk}/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
-          export ANDROID_NDK_HOME="${ndk}"
-          cargo ndk -t arm64-v8a --platform 26 -o apps/android-native/app/src/main/jniLibs \
-            build --release --locked -p anixops-net-android
-          ls -l apps/android-native/app/src/main/jniLibs/arm64-v8a
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.14.3"
-          cache-read-only: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
-
-      - name: Lint, unit tests, screenshots and release build
-        run: gradle -p apps/android-native --no-daemon lint testDebugUnitTest :app:recordRoborazziDebug :app:assembleRelease
+          checks: lint testDebugUnitTest :app:recordRoborazziDebug
+          keystore-base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          save-cache: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
       - name: Screenshots match the committed baselines
         id: screenshots
@@ -1018,22 +954,11 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
 
-      - name: Sign the APK
-        id: sign
-        uses: ./.github/actions/sign-apk
-        with:
-          unsigned: apps/android-native/app/build/outputs/apk/release/app-release-unsigned.apk
-          name: anixops-net-android-next-arm64
-          keystore-base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
-          key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
-
       - name: Upload the APK
         uses: actions/upload-artifact@v4
         with:
-          name: anixops-net-android-next-${{ github.sha }}
-          path: ${{ steps.sign.outputs.apk }}
+          name: anixops-net-android-${{ github.sha }}
+          path: ${{ steps.apk.outputs.apk }}
           if-no-files-found: error
           retention-days: 3
 
@@ -1454,7 +1379,6 @@ jobs:
       - rust-deps
       - rust-linux
       - linux-gui
-      - android
       - android-native
       - android-native-smoke
       - windows

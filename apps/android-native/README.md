@@ -3,9 +3,9 @@
 The Android client rewritten in Kotlin, Jetpack Compose and Material 3, over the same Rust client as the desktop
 (`crates/client-core`). Plan, decisions and migration checklist: [docs/architecture/android-native-compose.md](../../docs/architecture/android-native-compose.md).
 
-Until the cutover it builds as a preview app (`io.anixops.net.android.next`, “AnixOps Net（预览）”) that installs beside
-the current Tauri app (`apps/android`). The cutover PR drops the suffix, so the native app then upgrades the Tauri
-one in place with the same signing key and keeps its data directory (`files/anixops-net`).
+It replaced the Tauri app (`apps/android`, removed at the cutover) under the same id, `io.anixops.net.android`: with
+the same signing key it installs over that app and keeps its data directory (`files/anixops-net`), so subscriptions,
+nodes, plugins and settings stay.
 
 ## Layout
 
@@ -20,14 +20,14 @@ from the web interface calls the same command with the same arguments.
 
 ## Build and checks
 
-Everything runs in CI (job `android-native` in `.github/workflows/ci.yml`); nothing is built locally in this repo.
-The job:
+Everything runs in CI (job `android-native` in `.github/workflows/ci.yml`, through `.github/actions/android-apk`,
+which `release.yml` uses for the published APK); nothing is built locally in this repo. The job:
 
 1. builds `rust/` for arm64 with `cargo ndk` into `app/src/main/jniLibs` (not committed);
 2. runs `gradle lint testDebugUnitTest :app:recordRoborazziDebug :app:assembleRelease` (lint warnings fail);
 3. fails when the recorded screenshots differ from `app/src/test/screenshots` and uploads the new ones;
 4. signs the APK with `.github/actions/sign-apk` (the release keystore when the secrets are set, otherwise a
-   throwaway key) and uploads it as `anixops-net-android-next-<sha>`.
+   throwaway key) and uploads it as `anixops-net-android-<sha>`.
 
 ### Screenshot baselines
 

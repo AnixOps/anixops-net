@@ -2,7 +2,7 @@
 //! Network Extension (`EmbeddedRuntime`: IP packets in, IP packets out), with the userspace TCP/IP stack in
 //! process.
 //!
-//! On Android the VpnService (apps/android) hands over the descriptor once the user allows the VPN, and the
+//! On Android the VpnService (apps/android-native) hands over the descriptor once the user allows the VPN, and the
 //! app's own sockets are left out of the VPN. On Linux the polkit helper ([`super::tun_helper`]) creates the
 //! device and hands it over, and the engine's sockets are bound to the physical interface. Either way
 //! [`attach`] keeps the descriptor across engine restarts (a node switch starts a new runtime on the same
