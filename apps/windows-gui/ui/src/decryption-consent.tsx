@@ -1,5 +1,7 @@
 import { useState, type ReactElement } from "react";
 import { ShieldAlert } from "lucide-react";
+import { Heading } from "react-aria-components";
+import { ModalDialog } from "./controls";
 import { t } from "./i18n";
 
 // The first time someone turns HTTPS decryption on, the app asks once more that they will only capture and decrypt
@@ -54,23 +56,21 @@ export function useDecryptionConsent(): { guard: (enable: () => void) => void; d
 
 function DecryptionConsentDialog({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
   return (
-    <div className="terms-overlay" role="dialog" aria-modal="true" aria-labelledby="decryption-consent-title" onKeyDown={(event) => event.key === "Escape" && onCancel()}>
-      <div className="terms-dialog">
-        <header className="terms-head">
-          <ShieldAlert size={22} aria-hidden />
-          <div>
-            <h2 id="decryption-consent-title">{t("开启 HTTPS 解密前请确认")}</h2>
-            <p>{t("HTTPS 解密能看到加密连接里的明文。只在下面的范围内使用：")}</p>
-          </div>
-        </header>
-        <div className="terms-text">
-          {decryptionConsentPoints.map((point) => <p key={point} className="terms-item">{t(point)}</p>)}
+    <ModalDialog onClose={onCancel}>
+      <header className="terms-head">
+        <ShieldAlert size={22} aria-hidden />
+        <div>
+          <Heading slot="title" level={2}>{t("开启 HTTPS 解密前请确认")}</Heading>
+          <p>{t("HTTPS 解密能看到加密连接里的明文。只在下面的范围内使用：")}</p>
         </div>
-        <footer className="terms-actions">
-          <button className="secondary" autoFocus onClick={onCancel}>{t("取消")}</button>
-          <button className="primary" onClick={onConfirm}>{t("我确认，开启")}</button>
-        </footer>
+      </header>
+      <div className="terms-text">
+        {decryptionConsentPoints.map((point) => <p key={point} className="terms-item">{t(point)}</p>)}
       </div>
-    </div>
+      <footer className="terms-actions">
+        <button className="secondary" autoFocus onClick={onCancel}>{t("取消")}</button>
+        <button className="primary" onClick={onConfirm}>{t("我确认，开启")}</button>
+      </footer>
+    </ModalDialog>
   );
 }
