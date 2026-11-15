@@ -962,7 +962,7 @@ jobs:
   windows-native:
     name: Windows native app
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     needs:
       - changes
     if: ${{ needs.changes.outputs.windows_native == 'true' }}
@@ -981,6 +981,26 @@ jobs:
       - name: Build
         run: dotnet build apps/windows-native/AnixOps.Net.slnx --configuration Release
 
+      # The released web client (the Tauri one), to compare start time and idle memory against on this
+      # same machine.
+      - name: Fetch the released web client
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tag = gh release list --repo $env:GITHUB_REPOSITORY --limit 1 --json tagName --jq ".[0].tagName"
+          if (-not $tag) { throw "no release to compare against" }
+          $dir = Join-Path $env:RUNNER_TEMP "web-client"
+          gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern "networkcore-windows-portable-*.zip" --dir $dir
+          if ($LASTEXITCODE -ne 0) { throw "could not download the portable web client of $tag" }
+          $zip = Get-ChildItem $dir -Filter "*.zip" | Sort-Object { $_.Name -notmatch "x86_64" } | Select-Object -First 1
+          Expand-Archive -Path $zip.FullName -DestinationPath (Join-Path $dir "files")
+          $exe = Get-ChildItem (Join-Path $dir "files") -Recurse -Filter "networkcore-windows-gui.exe" | Select-Object -First 1
+          if (-not $exe) { throw "$($zip.Name) has no networkcore-windows-gui.exe" }
+          Write-Host "comparing against $tag ($($zip.Name))"
+          "ANIXOPS_NET_WEB_CLIENT_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       # The UI tests start the built app on the runner's desktop and drive it through UI Automation; they
       # save a picture of every page in both languages and both themes.
       - name: Test
@@ -995,6 +1015,14 @@ jobs:
         run: |
           $file = Join-Path $env:RUNNER_TEMP "windows-native-screenshots\requests-measurement.json"
           if (Test-Path $file) { Get-Content $file } else { Write-Host "no measurement was written" }
+
+      # Start time and idle memory of the native app and the released web client, as measured above.
+      - name: Show the startup comparison
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          $file = Join-Path $env:RUNNER_TEMP "windows-native-screenshots\startup-measurement.json"
+          if (Test-Path $file) { Get-Content $file } else { Write-Host "no comparison was written" }
 
       - name: Upload screenshots
         if: ${{ always() }}

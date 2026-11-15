@@ -216,7 +216,8 @@ public sealed class AppSession : IDisposable
         }
     }
 
-    private static string Executable()
+    /// <summary>The app's executable: named by ANIXOPS_NET_APP_EXE, or the one this solution built.</summary>
+    public static string Executable()
     {
         var named = Environment.GetEnvironmentVariable(ExecutableVariable);
         if (!string.IsNullOrEmpty(named))
