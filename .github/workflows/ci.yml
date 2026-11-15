@@ -1047,6 +1047,11 @@ jobs:
           $exe = Join-Path $env:GITHUB_WORKSPACE "target\x86_64-pc-windows-gnu\release\anixops-net-service.exe"
           if (-not (Test-Path $exe)) { throw "$exe was not built" }
           "ANIXOPS_NET_SERVICE_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          # TUN mode: the service loads wintun.dll from its own folder, here as in the installation.
+          $wintunDir = Join-Path $env:RUNNER_TEMP "native-wintun"
+          $wintun = & .github/scripts/fetch-wintun.ps1 -Destination $wintunDir
+          Copy-Item -Path $wintun -Destination (Join-Path (Split-Path $exe) "wintun.dll") -Force
+          "ANIXOPS_NET_WINTUN_DIR=$wintunDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
@@ -1099,6 +1104,14 @@ jobs:
           $file = Join-Path $env:RUNNER_TEMP "windows-native-screenshots\startup-measurement.json"
           if (Test-Path $file) { Get-Content $file } else { Write-Host "no comparison was written" }
 
+      # Pass mark 3, TUN part: the service (the window has no rights for it) makes the Wintun adapter, the
+      # machine's traffic leaves through it and arrives, and disconnecting leaves no adapter. A step of
+      # its own because it changes this machine's routes for a few seconds.
+      - name: TUN mode through the service
+        env:
+          ANIXOPS_NET_TUN_TESTS: "1"
+        run: dotnet test apps/windows-native/tests/AnixOps.Net.Session.Tests/AnixOps.Net.Session.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~TunModeTests" --logger "console;verbosity=normal"
+
       # The installer: the window published with its runtime, and the service. Two versions of the same
       # files, so that an upgrade can be tested.
       - name: Build the installer
@@ -1119,6 +1132,7 @@ jobs:
               -d "ProductVersion=$version" `
               -d "AppDir=$app" `
               -d "ServiceExe=$env:ANIXOPS_NET_SERVICE_EXE" `
+              -d "WintunDir=$env:ANIXOPS_NET_WINTUN_DIR" `
               -o (Join-Path $out "anixops-net-$version.msi")
             if ($LASTEXITCODE -ne 0) { throw "the installer $version was not built" }
           }
@@ -1129,8 +1143,9 @@ jobs:
           $size = (Get-Item (Join-Path $out "anixops-net-0.3.0.msi")).Length
           Write-Host ("installer size: {0:N1} MB" -f ($size / 1MB))
 
-      # Pass mark 3: install, upgrade with the window open, remove with the window open; after removal no
-      # service, process, file, shortcut or login entry is left.
+      # Pass mark 3: install, upgrade with the window open, TUN mode through the installed service, remove
+      # with the window open; after removal no service, process, file, shortcut, login entry, network
+      # adapter or driver is left.
       - name: Install, upgrade and remove
         shell: pwsh
         env:
@@ -1141,7 +1156,8 @@ jobs:
             -First (Join-Path $out "anixops-net-0.3.0.msi") `
             -Second (Join-Path $out "anixops-net-0.3.1.msi") `
             -SecondVersion "0.3.1" `
-            -TestProject apps/windows-native/tests/AnixOps.Net.App.UiTests/AnixOps.Net.App.UiTests.csproj
+            -TestProject apps/windows-native/tests/AnixOps.Net.App.UiTests/AnixOps.Net.App.UiTests.csproj `
+            -SessionTestProject apps/windows-native/tests/AnixOps.Net.Session.Tests/AnixOps.Net.Session.Tests.csproj
 
       - name: Upload screenshots
         if: ${{ always() }}

@@ -132,15 +132,15 @@ public sealed class ServiceTests
     private const string Executable = @"C:\Program Files\AnixOps\Net\AnixOpsNet.exe";
 
     // A node nobody answers at: connecting only has to start the local proxy.
-    private const string Node = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@203.0.113.9:11111#Test";
+    internal const string Node = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@203.0.113.9:11111#Test";
 
-    private static JsonElement Json(string text) => JsonDocument.Parse(text).RootElement.Clone();
+    internal static JsonElement Json(string text) => JsonDocument.Parse(text).RootElement.Clone();
 
     /// <summary>
     /// Asks until the core has taken this window in: it asks who the window is right after the greeting, and
     /// until that is answered it refuses what needs the user's session.
     /// </summary>
-    private static async Task<JsonElement> AskOnceAdmittedAsync(CoreLink link, string command, string args)
+    internal static async Task<JsonElement> AskOnceAdmittedAsync(CoreLink link, string command, string args)
     {
         var deadline = DateTime.UtcNow + Until.Soon;
         while (true)

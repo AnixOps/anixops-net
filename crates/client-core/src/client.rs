@@ -334,8 +334,8 @@ impl Client {
         self.backend().connect()
     }
 
-    /// Where the platform carries traffic through a system VPN, or the Linux desktop is in TUN mode, opens it
-    /// first so the engine has its TUN descriptor.
+    /// Where the platform carries traffic through a system VPN, or the desktop is in TUN mode, opens it
+    /// first so the engine has its TUN device.
     fn open_tunnel(&self) -> Result<(), String> {
         if self.platform.has_system_vpn() {
             return self.open_system_tunnel();
@@ -359,7 +359,19 @@ impl Client {
         Ok(())
     }
 
-    #[cfg(not(target_os = "linux"))]
+    /// Windows TUN mode: nothing to open ahead, the engine makes its own Wintun adapter when it starts
+    /// (`backend::tun`). The core runs in the system service, which may create one.
+    #[cfg(windows)]
+    fn open_helper_tunnel(&self) -> Result<(), String> {
+        if engine::tunnel_attached() {
+            return Ok(());
+        }
+        self.backend().stop_engine();
+        engine::attach_tunnel();
+        Ok(())
+    }
+
+    #[cfg(not(any(target_os = "linux", windows)))]
     fn open_helper_tunnel(&self) -> Result<(), String> {
         Err(UNAVAILABLE.to_string())
     }
@@ -382,7 +394,7 @@ impl Client {
         Err("this platform has no system VPN".to_string())
     }
 
-    /// Stops the engine and closes the system VPN, if the platform has one, or the Linux TUN mode device.
+    /// Stops the engine and closes the system VPN, if the platform has one, or the desktop's TUN mode device.
     fn close_tunnel(&self) {
         if self.platform.has_system_vpn() {
             self.backend().stop_engine();
@@ -987,7 +999,7 @@ fn handler(name: &str) -> Option<Handler> {
         },
         "set_tun_mode" => |client, args| {
             let Enabled { enabled } = parse(args)?;
-            if !cfg!(target_os = "linux") {
+            if !cfg!(any(target_os = "linux", windows)) {
                 return Err(UNAVAILABLE.to_string());
             }
             json(client.backend().set_tun_mode(enabled)?)

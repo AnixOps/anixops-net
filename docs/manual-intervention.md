@@ -319,6 +319,10 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
   用标准用户账号（非管理员）登录，由管理员装好 MSI 后：窗口启动不弹 UAC，标题栏显示“核心服务 <版本>”；连接后浏览器走
   代理，断开后系统代理恢复；另一个用户同时登录时各自的系统代理互不影响；升级和卸载时窗口被关闭，卸载后“服务”里没有
   AnixOps Net Core，`Program Files\AnixOps\Net` 不存在。未签名的安装包会有 SmartScreen 警告，见上面的证书一项。
+- [ ] Windows 原生版 TUN 模式的真机核对（设置页有开关之后）：标准用户账号下打开 TUN 模式并连接，不弹 UAC；“网络连接”里
+  出现 AnixOps Net 网卡，不走系统代理的程序（命令行的 `curl`、游戏）也经节点出去；断开后网卡消失、网络正常；睡眠唤醒和
+  切换 Wi-Fi 后仍然可用；卸载后网卡和 Wintun 驱动都不在（设备管理器、`pnputil /enum-drivers`）。CI 只测到分流模式为直连、
+  管理员账号的情况。Tauri 版和原生版用同一个网卡名，两个版本不要同时开 TUN 模式。
 - [ ] Linux 守护进程单元的真机核对（deb / rpm 带上 `anixops-netd` 之后）：在 Ubuntu 和 Fedora 上 `systemctl start
   anixops-netd`，确认单元里的收紧项（`ProtectSystem=strict`、`ProtectHome=yes`、`CapabilityBoundingSet`、
   `RestrictAddressFamilies`）下连接、TUN 模式、HTTPS 解密都正常；用普通登录用户能控制，用没有登录会话的账号

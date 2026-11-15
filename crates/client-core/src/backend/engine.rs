@@ -19,9 +19,9 @@ use engine_embedded::local_proxy::LocalProxy;
 use engine_embedded::nodes::{outbound_for_node, routing_envelope, single_node_envelope};
 use inbound_mixed::MixedSettings;
 
-#[cfg(any(target_os = "android", target_os = "linux"))]
+#[cfg(any(target_os = "android", target_os = "linux", windows))]
 use super::tun::{self, TunEngine};
-#[cfg(any(target_os = "android", target_os = "linux"))]
+#[cfg(any(target_os = "android", target_os = "linux", windows))]
 pub use super::tun::{attach as attach_tunnel, attached as tunnel_attached};
 use serde_json::{json, Value};
 
@@ -266,10 +266,10 @@ pub fn activity_request(request: &serde_json::Value) -> Result<Vec<u8>, String> 
 pub struct Engine {
     #[cfg(not(target_os = "android"))]
     proxy: Option<LocalProxy>,
-    #[cfg(any(target_os = "android", target_os = "linux"))]
+    #[cfg(any(target_os = "android", target_os = "linux", windows))]
     tunnel: Option<TunEngine>,
     /// The running configuration, for the exit address probe ([`Engine::probe_envelope`]).
-    #[cfg(any(target_os = "android", target_os = "linux"))]
+    #[cfg(any(target_os = "android", target_os = "linux", windows))]
     envelope: Option<String>,
     node_id: Option<String>,
 }
@@ -297,7 +297,7 @@ impl Engine {
 
     #[cfg(not(target_os = "android"))]
     fn start_runtime(&mut self, envelope: &str, port: u16) -> Result<SocketAddr, String> {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", windows))]
         if tun::attached() {
             return self.start_tunnel(envelope);
         }
@@ -309,7 +309,7 @@ impl Engine {
         Ok(address)
     }
 
-    #[cfg(any(target_os = "android", target_os = "linux"))]
+    #[cfg(any(target_os = "android", target_os = "linux", windows))]
     fn start_tunnel(&mut self, envelope: &str) -> Result<SocketAddr, String> {
         self.tunnel = Some(TunEngine::start(envelope)?);
         self.envelope = Some(envelope.to_string());
@@ -321,7 +321,7 @@ impl Engine {
         if let Some(mut proxy) = self.proxy.take() {
             proxy.stop();
         }
-        #[cfg(any(target_os = "android", target_os = "linux"))]
+        #[cfg(any(target_os = "android", target_os = "linux", windows))]
         if let Some(mut tunnel) = self.tunnel.take() {
             tunnel.stop();
         }
@@ -331,7 +331,7 @@ impl Engine {
     /// desktop its routes) down.
     pub fn stop(&mut self) {
         self.stop_runtime();
-        #[cfg(any(target_os = "android", target_os = "linux"))]
+        #[cfg(any(target_os = "android", target_os = "linux", windows))]
         tun::detach();
         #[cfg(target_os = "linux")]
         super::tun_helper::release();
@@ -342,12 +342,12 @@ impl Engine {
         self.tunnel_running() || self.proxy_running()
     }
 
-    #[cfg(any(target_os = "android", target_os = "linux"))]
+    #[cfg(any(target_os = "android", target_os = "linux", windows))]
     fn tunnel_running(&self) -> bool {
         self.tunnel.as_ref().is_some_and(TunEngine::is_running)
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "linux")))]
+    #[cfg(not(any(target_os = "android", target_os = "linux", windows)))]
     fn tunnel_running(&self) -> bool {
         false
     }
@@ -364,7 +364,7 @@ impl Engine {
 
     /// One kernel control request to the running engine.
     fn control_bytes(&self, request: &[u8]) -> Result<Vec<u8>, String> {
-        #[cfg(any(target_os = "android", target_os = "linux"))]
+        #[cfg(any(target_os = "android", target_os = "linux", windows))]
         if let Some(tunnel) = self.tunnel.as_ref().filter(|tunnel| tunnel.is_running()) {
             return tunnel.control_json(request);
         }
@@ -443,12 +443,12 @@ impl Engine {
 
     /// The running configuration where the exit address cannot be probed through the engine's own listener: on
     /// a TUN interface the probe runs a short-lived local proxy on it ([`through_temporary_proxy`]).
-    #[cfg(any(target_os = "android", target_os = "linux"))]
+    #[cfg(any(target_os = "android", target_os = "linux", windows))]
     pub fn probe_envelope(&self) -> Option<String> {
         self.envelope.clone().filter(|_| self.tunnel_running())
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "linux")))]
+    #[cfg(not(any(target_os = "android", target_os = "linux", windows)))]
     pub fn probe_envelope(&self) -> Option<String> {
         None
     }
