@@ -172,6 +172,20 @@ WinUI 3 没有自带的数据表格控件，请求列表要自己做虚拟化表
 | 10 | 系统集成：托盘、`anixops://`、系统通知、开机启动、本机指标、命令面板与快捷键 | 6 |
 | 11 | 切换：发布流程改出原生包，删除该平台的 Tauri 版，更新文档和下载页 | 全部打勾 |
 
+### PR 1b 的步骤
+
+Windows 后端不是 Linux 后端的变体，而是另一套实现：`tauri_ui.rs` 里 79 个命令，自己的状态结构，存储走
+`platform_windows::managed`（受管配置和状态、内嵌配置、`source.txt`、节点修改、Wi-Fi 规则、通知、DNS、我的规则、流量
+统计），系统代理恢复前会核对当前值是否仍是客户端写入的，根证书由用户在系统对话框里手动信任。并入时这些行为和用户
+已保存的数据都要保留，所以分四步，每一步合并后 Tauri Windows 版都照常可用：
+
+| 步骤 | 内容 | 验证 |
+|---|---|---|
+| 1b-1 | `client_core::backend` 里的系统集成收成一个接缝：系统代理（含归属核对）、开机启动、根证书信任、抓包会话密钥、TUN。Linux 实现是现有模块；Windows 实现从 `apps/windows-gui` 搬入（DPAPI 密钥、`platform-windows` 的代理快照与恢复、启动任务、证书对话框、Wintun），`apps/windows-gui` 改为调用它们，代码只留一份 | 两个系统的 CI 各跑各的实现的测试 |
+| 1b-2 | 数据迁移：`Store` 能读 Windows 旧版的全部已存文件并转成 `client-core` 的格式。单向、可重复执行；新存储成功载入一次之前不删旧文件 | 用旧版真实文件样例做夹具测试，逐项核对订阅、节点、选择、规则、DNS、设置 |
+| 1b-3 | 命令对齐：Windows 的每个命令都由 `Client::invoke` 应答，去掉 `WINDOWS_ONLY` 清单（TUN 模式、脚本运行时、证书与驱动命令）。两边行为不同的地方逐条列出，取更严格的那个（代理归属核对、手动信任） | 契约样例测试；`every_interface_command_is_answered` 不再有例外 |
+| 1b-4 | `tauri_ui.rs` 缩成窗口、托盘、Mica、链接和通知的薄包装，删除旧后端；`platform-parity.md` 里 Windows 的“部分”逐格复核 | CI 全量；`docs/alpha-windows-smoke-test.md` 由维护者在真机上过一遍 |
+
 - PR 1 到 3 不碰界面，对现在的 Tauri 版也有好处。
 - PR 6 到 10 每个平台各一个 PR，Windows 先、Linux 后；如果 Windows 卡在验证上，Linux 先走。
 - 骨架 PR 合并时在 `platform-parity.md` 加“Windows 原生”“Linux 原生”两列，每个 PR 合并后打勾。
