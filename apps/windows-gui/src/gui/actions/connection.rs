@@ -638,7 +638,6 @@ mod tests {
             ca_certificate_path: PathBuf::from("root-ca.pem"),
             ca_private_key_path: PathBuf::from("root-ca-key.pem"),
             log_path: PathBuf::from("native-mitm.log"),
-            bilibili_web_ad_block_enabled: false,
             script_runtime: None,
         });
         let plan = direct_connection_plan(managed.clone())
@@ -665,7 +664,6 @@ mod tests {
             ca_certificate_path: PathBuf::from("root-ca.pem"),
             ca_private_key_path: PathBuf::from("root-ca-key.pem"),
             log_path: PathBuf::from("native-mitm.log"),
-            bilibili_web_ad_block_enabled: false,
             script_runtime: None,
         }
     }

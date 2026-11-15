@@ -19,7 +19,6 @@ desktop-dns = { path = "../../crates/desktop-dns" }
 desktop-mitm = { path = "../../crates/desktop-mitm" }
 engine-embedded = { workspace = true }
 inbound-mixed = { workspace = true }
-mitm-policy = { workspace = true }
 anx-license = { path = "../../crates/anx-license" }
 node-edits = { path = "../../crates/node-edits" }
 on-demand = { path = "../../crates/on-demand" }
