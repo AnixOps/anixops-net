@@ -63,6 +63,9 @@ android {
             "NewerVersionAvailable",
             "AndroidGradlePluginVersion",
             "OldTargetApi",
+            // arm64 only, as the Tauri app: ChromeOS runs it through its ARM translation; an x86_64 library would
+            // double the Rust build for a platform we do not target.
+            "ChromeOsAbiSupport",
             // One launcher bitmap until the icon set is generated from AppIcon.svg (cutover checklist).
             "IconDensities",
             "IconMissingDensityFolder",
