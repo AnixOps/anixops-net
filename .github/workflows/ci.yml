@@ -30,6 +30,7 @@ jobs:
       linux: ${{ steps.changes.outputs.linux }}
       apple: ${{ steps.changes.outputs.apple }}
       android: ${{ steps.changes.outputs.android }}
+      android_native: ${{ steps.changes.outputs.android_native }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -56,8 +57,8 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          rust=false; ui=false; windows=false; linux=false; apple=false; android=false
-          all() { rust=true; ui=true; windows=true; linux=true; apple=true; android=true; }
+          rust=false; ui=false; windows=false; linux=false; apple=false; android=false; android_native=false
+          all() { rust=true; ui=true; windows=true; linux=true; apple=true; android=true; android_native=true; }
           if [[ "${EVENT_NAME}" != pull_request ]]; then
             all
           else
@@ -69,7 +70,11 @@ jobs:
                 # The Android app is the Linux window and backend on Android.
                 apps/linux-gui/*) rust=true; linux=true; android=true ;;
                 apps/android/*) android=true ;;
-                crates/*) rust=true; windows=true; linux=true; android=true ;;
+                # The native Android app (Compose over crates/client-core through JNI); its colours come from the
+                # client tokens.
+                apps/android-native/*) rust=true; android_native=true ;;
+                apps/ios/Design/*) apple=true; android_native=true ;;
+                crates/*) rust=true; windows=true; linux=true; android=true; android_native=true ;;
                 apps/ios/*) apple=true ;;
                 # The desktop UI bundles TERMS.md and the Apple tests check its version (first-start consent).
                 TERMS.md) ui=true; windows=true; linux=true; apple=true; android=true ;;
@@ -84,6 +89,7 @@ jobs:
             echo "linux=${linux}"
             echo "apple=${apple}"
             echo "android=${android}"
+            echo "android_native=${android_native}"
           } | tee -a "$GITHUB_OUTPUT"
 
   ui:
@@ -831,6 +837,112 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
+  # The native Android app (apps/android-native, docs/architecture/android-native-compose.md): the Rust bridge
+  # built for arm64 by cargo-ndk, then Gradle runs lint (warnings are errors), the unit tests (the Kotlin side of
+  # the command bridge against the shared fixtures) and the Roborazzi screenshots. The screenshots are recorded
+  # again and must equal the committed ones; when they differ the job fails and uploads the new images. The
+  # preview APK (io.anixops.net.android.next) is signed like the Tauri one.
+  android-native:
+    name: Android native app
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: "0"
+    needs: changes
+    if: ${{ needs.changes.outputs.android_native == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add aarch64-linux-android
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: android-native
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --version 3.5.4 --locked
+
+      - name: Build the Rust bridge
+        run: |
+          set -euo pipefail
+          ndk="${ANDROID_NDK_LATEST_HOME}"
+          # rquickjs-sys generates its Android bindings with bindgen against the NDK headers (API level = minSdk).
+          export BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android="--target=aarch64-linux-android26 --sysroot=${ndk}/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          export ANDROID_NDK_HOME="${ndk}"
+          cargo ndk -t arm64-v8a --platform 26 -o apps/android-native/app/src/main/jniLibs \
+            build --release --locked -p anixops-net-android
+          ls -l apps/android-native/app/src/main/jniLibs/arm64-v8a
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.3"
+          cache-read-only: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+
+      - name: Lint, unit tests, screenshots and release build
+        run: gradle -p apps/android-native --no-daemon lint testDebugUnitTest :app:recordRoborazziDebug :app:assembleRelease
+
+      - name: Screenshots match the committed baselines
+        id: screenshots
+        run: |
+          set -euo pipefail
+          changed="$(git status --porcelain -- apps/android-native/app/src/test/screenshots)"
+          if [ -n "${changed}" ]; then
+            echo "${changed}"
+            echo "::error::screenshots differ from apps/android-native/app/src/test/screenshots; check the uploaded images and commit them if the change is intended"
+            exit 1
+          fi
+
+      - name: Upload the screenshots
+        if: ${{ failure() && steps.screenshots.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-native-screenshots-${{ github.sha }}
+          path: apps/android-native/app/src/test/screenshots
+          retention-days: 3
+
+      - name: Upload the lint and test reports
+        if: ${{ failure() && steps.screenshots.outcome != 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-native-reports-${{ github.sha }}
+          path: |
+            apps/android-native/*/build/reports
+          if-no-files-found: ignore
+          retention-days: 3
+
+      - name: Sign the APK
+        id: sign
+        uses: ./.github/actions/sign-apk
+        with:
+          unsigned: apps/android-native/app/build/outputs/apk/release/app-release-unsigned.apk
+          name: anixops-net-android-next-arm64
+          keystore-base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: anixops-net-android-next-${{ github.sha }}
+          path: ${{ steps.sign.outputs.apk }}
+          if-no-files-found: error
+          retention-days: 3
+
   ci-summary:
     name: CI summary
     runs-on: ubuntu-latest
@@ -843,6 +955,7 @@ jobs:
       - rust-linux
       - linux-gui
       - android
+      - android-native
       - windows
       - swift
       - ios-xcode-build

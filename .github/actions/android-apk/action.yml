@@ -95,38 +95,23 @@ runs:
       working-directory: apps/android
       run: npx tauri android build --apk --target aarch64 --ci
 
-    - name: Sign the APK
-      id: sign
+    - name: Find the unsigned APK
+      id: unsigned
       shell: bash
       working-directory: apps/android
-      env:
-        KEYSTORE_BASE64: ${{ inputs.keystore-base64 }}
-        KEYSTORE_PASSWORD: ${{ inputs.keystore-password }}
-        KEY_ALIAS: ${{ inputs.key-alias }}
-        KEY_PASSWORD: ${{ inputs.key-password }}
       run: |
         set -euo pipefail
         unsigned="$(find gen/android/app/build/outputs/apk -name '*-unsigned.apk' | head -n 1)"
         test -n "${unsigned}"
-        tools="$(ls -d "${ANDROID_HOME}"/build-tools/* | sort -V | tail -n 1)"
-        keystore="${RUNNER_TEMP}/signing.jks"
-        if [ -n "${KEYSTORE_BASE64}" ]; then
-          echo "${KEYSTORE_BASE64}" | base64 --decode > "${keystore}"
-          kind=release
-        else
-          KEYSTORE_PASSWORD=android KEY_ALIAS=androiddebugkey KEY_PASSWORD=android
-          keytool -genkeypair -keystore "${keystore}" -storepass "${KEYSTORE_PASSWORD}" -keypass "${KEY_PASSWORD}" \
-            -alias "${KEY_ALIAS}" -keyalg RSA -keysize 2048 -validity 3650 -dname "CN=AnixOps Net Debug"
-          kind=debug
-        fi
-        aligned="${RUNNER_TEMP}/aligned.apk"
-        "${tools}/zipalign" -f -p 4 "${unsigned}" "${aligned}"
-        mkdir -p "${RUNNER_TEMP}/apk"
-        out="${RUNNER_TEMP}/apk/anixops-net-android-arm64-${kind}.apk"
-        "${tools}/apksigner" sign --ks "${keystore}" --ks-pass "pass:${KEYSTORE_PASSWORD}" \
-          --ks-key-alias "${KEY_ALIAS}" --key-pass "pass:${KEY_PASSWORD}" --out "${out}" "${aligned}"
-        "${tools}/apksigner" verify --print-certs "${out}"
-        rm -f "${keystore}"
-        ls -l "${out}"
-        echo "apk=${out}" >> "$GITHUB_OUTPUT"
-        echo "kind=${kind}" >> "$GITHUB_OUTPUT"
+        echo "path=$(pwd)/${unsigned}" >> "$GITHUB_OUTPUT"
+
+    - name: Sign the APK
+      id: sign
+      uses: ./.github/actions/sign-apk
+      with:
+        unsigned: ${{ steps.unsigned.outputs.path }}
+        name: anixops-net-android-arm64
+        keystore-base64: ${{ inputs.keystore-base64 }}
+        keystore-password: ${{ inputs.keystore-password }}
+        key-alias: ${{ inputs.key-alias }}
+        key-password: ${{ inputs.key-password }}

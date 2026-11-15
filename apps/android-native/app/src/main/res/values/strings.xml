@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Simplified Chinese (default). Wording follows the shared interface (apps/windows-gui/ui/src/labels.ts, i18n-*.ts)
+     until the strings come from one catalog for every client (docs/architecture/android-native-compose.md §7). -->
+<resources>
+    <string name="app_name" translatable="false">AnixOps Net</string>
+
+    <string name="nav_home">首页</string>
+    <string name="nav_proxies">代理</string>
+    <string name="nav_rules">规则</string>
+    <string name="nav_extensions">扩展</string>
+    <string name="nav_settings">设置</string>
+    <string name="nav_requests">请求</string>
+    <string name="nav_rewrite">改写</string>
+    <string name="nav_egress">出口</string>
+
+    <string name="status_connected">已连接</string>
+    <string name="status_not_connected">未连接</string>
+    <string name="status_failed">连接失败</string>
+    <string name="status_core_error">内核出错</string>
+    <string name="status_working">正在处理…</string>
+    <string name="home_connection">连接</string>
+    <string name="home_node">节点</string>
+    <string name="home_subscription">订阅</string>
+    <string name="home_routing">分流模式</string>
+    <string name="home_no_node">未选择</string>
+    <string name="home_no_subscription">未导入</string>
+    <string name="home_last_error">上次出错</string>
+    <string name="home_vpn_denied">没有允许建立 VPN，无法连接</string>
+
+    <string name="routing_bypass_china">绕过大陆</string>
+    <string name="routing_gfw_list">GFW 列表</string>
+    <string name="routing_return_china">回国</string>
+    <string name="routing_direct">直连</string>
+    <string name="routing_rule">规则</string>
+
+    <string name="pending_title">这一页还在迁移</string>
+    <string name="pending_body">原生界面预览版目前只有首页和设置，其他功能请先用现有版本。</string>
+
+    <string name="settings_usage">使用方式</string>
+    <string name="mode_proxy">代理</string>
+    <string name="mode_debug">调试网络</string>
+    <string name="settings_about">关于</string>
+    <string name="settings_version">版本</string>
+
+    <string name="notification_channel_vpn">连接状态</string>
+    <string name="notification_channel_notices">通知</string>
+    <string name="notification_connected">已连接</string>
+</resources>

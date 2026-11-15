@@ -24,10 +24,11 @@ Tauri WebView（apps/windows-gui/ui，React，与 Windows / Linux 共用）
 
 ```text
 apps/android-native/                 Gradle 工程（提交进仓库，不再 `tauri android init` 生成）
-  app/                               Compose 界面、导航、ViewModel
-  core/                              Kotlin 侧的内核桥：Core（JNI）、命令与数据类型、事件 Flow
-  vpn/                               VpnService、前台通知、快捷设置磁贴、始终开启的 VPN
-  rust/                              cdylib crate `anixops_net_core`：JNI 入口，调 `Client`
+  app/                               Compose 界面、导航、ViewModel；platform/ 下是 VpnService、前台通知、
+                                     Rust 回调的安卓能力（PlatformBridge）、Keystore 会话密钥，以后加快捷设置磁贴、
+                                     始终开启的 VPN
+  core/                              Kotlin 侧的内核桥：NativeCore（JNI）、JSON 信封、命令与数据类型（无界面，JVM 测试）
+  rust/                              crate `anixops-net-android`（库名 `anixops_net`，cdylib + rlib）：JNI 入口，调 `Client`
 crates/client-core/src/client.rs         从 app.rs 抽出的、不依赖 Tauri 的客户端服务层（`client_core::client`）
 ```
 
@@ -126,15 +127,16 @@ Tauri 的 TS 表），与原生 Windows / Linux 方案共用。现在 TS 表以�
 
 CI 新 job `android-native`（GitHub 托管 runner，变更范围检测同现有 `android`）：
 
-1. `cargo ndk -t arm64-v8a -t x86_64` 构建 `libanixops_net_core.so`（x86_64 只用于模拟器测试，不进发布包）；沿用
+1. `cargo ndk -t arm64-v8a` 构建 `libanixops_net.so`（模拟器冒烟测试加 x86_64，只用于测试，不进发布包）；沿用
    rquickjs 的 bindgen 设置。
-2. `./gradlew lint testDebugUnitTest` ：Kotlin 单元测试、契约样例测试、Android Lint（警告即失败）。
+2. `gradle lint testDebugUnitTest`（不提交 Gradle wrapper，CI 用 setup-gradle 固定版本）：Kotlin 单元测试、契约样例
+   测试（Rust 与 Kotlin 读同一份 `crates/client-core/tests/fixtures`）、Android Lint（警告即失败）。
 3. 截图基线：Roborazzi（JVM 上用 Robolectric 原生绘制，不需要模拟器）对每个页面拍 浅色 / 深色 × 简体 / 英文 ×
    手机（411×891 dp）/ 平板（1280×800 dp），对比提交在仓库里的基线图；有差异则失败并上传差异图。基线只能在 PR 里
    随界面改动一起更新，PR 描述附前后对照。
-4. 模拟器冒烟测试（x86_64，API 34）：启动 → 同意协议 → 调试模式直连出口 → 连接（VPN 授权用测试专用的
+4. 模拟器冒烟测试（x86_64，API 34，PR 2 之后单独一个 PR，随首页迁移一起）：启动 → 同意协议 → 调试模式直连出口 → 连接（VPN 授权用测试专用的
    `prepare` 预授权）→ 本机 HTTP 请求出现在请求列表 → 断开。
-5. 组装 arm64 release APK，签名沿用 `.github/actions/android-apk` 的签名步骤（见下节）。
+5. 组装 arm64 release APK，用与 Tauri 版共用的 `.github/actions/sign-apk` 签名（见下节）。
 
 ### 9. 包名与签名延续
 

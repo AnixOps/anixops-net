@@ -1,0 +1,24 @@
+[package]
+name = "anixops-net-android"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The native Android app's bridge to the client service: JNI entry points over client_core::client::Client."
+publish = false
+
+[lib]
+# The app loads it as libanixops_net.so (System.loadLibrary("anixops_net")). `rlib` lets the workspace test it.
+name = "anixops_net"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+app-notifications = { path = "../../../crates/app-notifications" }
+client-core = { path = "../../../crates/client-core" }
+jni = "0.21"
+serde_json = "1"
+
+# QuickJS (MITM scripts) ships no prebuilt bindings for Android: generate them with bindgen against the NDK
+# sysroot (BINDGEN_EXTRA_CLANG_ARGS in CI). Cargo unifies the feature into the kernel's rquickjs.
+[target.'cfg(target_os = "android")'.dependencies]
+rquickjs-sys = { version = "0.13", features = ["bindgen"] }

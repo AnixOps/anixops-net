@@ -1,0 +1,72 @@
+name: Sign APK
+description: >-
+  Zipaligns and signs an unsigned APK with the release keystore (ANDROID_KEYSTORE_* secrets), or with a throwaway
+  debug key made for this run when no keystore is given. Shared by the Tauri app (android-apk) and the native app.
+
+inputs:
+  unsigned:
+    description: Path of the unsigned APK
+    required: true
+  name:
+    description: File name stem of the signed APK; "-<kind>.apk" is appended
+    required: true
+  keystore-base64:
+    description: Base64 of the release keystore (ANDROID_KEYSTORE_BASE64); empty = throwaway debug key
+    required: false
+    default: ""
+  keystore-password:
+    required: false
+    default: ""
+  key-alias:
+    required: false
+    default: ""
+  key-password:
+    required: false
+    default: ""
+
+outputs:
+  apk:
+    description: Absolute path of the signed APK (in $RUNNER_TEMP/apk)
+    value: ${{ steps.sign.outputs.apk }}
+  kind:
+    description: release (signed with the keystore) or debug (throwaway key)
+    value: ${{ steps.sign.outputs.kind }}
+
+runs:
+  using: composite
+  steps:
+    - name: Sign the APK
+      id: sign
+      shell: bash
+      env:
+        UNSIGNED: ${{ inputs.unsigned }}
+        NAME: ${{ inputs.name }}
+        KEYSTORE_BASE64: ${{ inputs.keystore-base64 }}
+        KEYSTORE_PASSWORD: ${{ inputs.keystore-password }}
+        KEY_ALIAS: ${{ inputs.key-alias }}
+        KEY_PASSWORD: ${{ inputs.key-password }}
+      run: |
+        set -euo pipefail
+        test -f "${UNSIGNED}"
+        tools="$(ls -d "${ANDROID_HOME}"/build-tools/* | sort -V | tail -n 1)"
+        keystore="${RUNNER_TEMP}/signing-${NAME}.jks"
+        if [ -n "${KEYSTORE_BASE64}" ]; then
+          echo "${KEYSTORE_BASE64}" | base64 --decode > "${keystore}"
+          kind=release
+        else
+          KEYSTORE_PASSWORD=android KEY_ALIAS=androiddebugkey KEY_PASSWORD=android
+          keytool -genkeypair -keystore "${keystore}" -storepass "${KEYSTORE_PASSWORD}" -keypass "${KEY_PASSWORD}" \
+            -alias "${KEY_ALIAS}" -keyalg RSA -keysize 2048 -validity 3650 -dname "CN=AnixOps Net Debug"
+          kind=debug
+        fi
+        aligned="${RUNNER_TEMP}/aligned-${NAME}.apk"
+        "${tools}/zipalign" -f -p 4 "${UNSIGNED}" "${aligned}"
+        mkdir -p "${RUNNER_TEMP}/apk"
+        out="${RUNNER_TEMP}/apk/${NAME}-${kind}.apk"
+        "${tools}/apksigner" sign --ks "${keystore}" --ks-pass "pass:${KEYSTORE_PASSWORD}" \
+          --ks-key-alias "${KEY_ALIAS}" --key-pass "pass:${KEY_PASSWORD}" --out "${out}" "${aligned}"
+        "${tools}/apksigner" verify --print-certs "${out}"
+        rm -f "${keystore}" "${aligned}"
+        ls -l "${out}"
+        echo "apk=${out}" >> "$GITHUB_OUTPUT"
+        echo "kind=${kind}" >> "$GITHUB_OUTPUT"
