@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text.Json;
 using AnixOps.Net.Ipc;
 using AnixOps.Net.Presentation;
 using AnixOps.Net.Session;
@@ -39,6 +40,8 @@ public sealed partial class ProxiesPage : Page
     // A node that does not answer takes seconds, and a subscription can have thousands.
     private static readonly TimeSpan TestPatience = TimeSpan.FromMinutes(30);
 
+    private static readonly JsonElement NoArgs = JsonSerializer.SerializeToElement(new Dictionary<string, string>());
+
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly ObservableCollection<NodeGroup> groups = [];
     private Strings? strings;
@@ -46,6 +49,12 @@ public sealed partial class ProxiesPage : Page
     private bool active;
 
     private Proxies? proxies;
+
+    // The subscriptions the core says there are (null while it has not said), the ones it is still working
+    // on, and the list of them while it is open.
+    private IReadOnlyList<Subscription>? subscriptions;
+    private readonly HashSet<string> changing = [];
+    private SubscriptionsDialog? dialog;
     private string query = "";
     private ProxiesBusy busy;
 
@@ -92,6 +101,7 @@ public sealed partial class ProxiesPage : Page
         SearchBox.PlaceholderText = strings["proxies.search"];
         AutomationProperties.SetName(SearchBox, strings["proxies.search"]);
         AutomationProperties.SetName(NodeList, strings["proxies.list"]);
+        SubscriptionsButton.Content = strings["proxies.subscriptions"];
         Draw();
 
         core.Changed += OnCoreChanged;
@@ -113,6 +123,7 @@ public sealed partial class ProxiesPage : Page
         }
         active = false;
         timer.Stop();
+        dialog?.Close();
         if (core is not null)
         {
             core.Changed -= OnCoreChanged;
@@ -132,6 +143,8 @@ public sealed partial class ProxiesPage : Page
         era++;
         asked++;
         proxies = null;
+        subscriptions = null;
+        changing.Clear();
         busy = default;
         failure = null;
         trouble = null;
@@ -185,6 +198,29 @@ public sealed partial class ProxiesPage : Page
         finally
         {
             unanswered--;
+        }
+        await RefreshSubscriptionsAsync();
+    }
+
+    /// <summary>Asks the core which subscriptions there are. An answer that does not come leaves what was known.</summary>
+    private async Task RefreshSubscriptionsAsync()
+    {
+        if (core is null)
+        {
+            return;
+        }
+        var asking = era;
+        try
+        {
+            var answer = await core.AskAsync(Subscriptions.Command, NoArgs, AskPatience);
+            if (asking == era && Connected)
+            {
+                subscriptions = Subscriptions.Read(answer);
+            }
+        }
+        catch (Exception error) when (error is RefusedException or IOException or TimeoutException or OperationCanceledException or ObjectDisposedException)
+        {
+            // Asked for again at the next tick.
         }
     }
 
@@ -242,6 +278,68 @@ public sealed partial class ProxiesPage : Page
         if (active)
         {
             Draw();
+        }
+    }
+
+    /// <summary>Asks the core for a change to one subscription. The others do not wait for it.</summary>
+    private async void Change(SubscriptionChange change)
+    {
+        if (core is null || !active || !Connected || !changing.Add(change.Id))
+        {
+            return;
+        }
+        var asking = era;
+        failure = null;
+        Draw();
+
+        string? problem = null;
+        try
+        {
+            await core.AskAsync(change.Command, change.Args(), ActPatience);
+        }
+        catch (Exception error) when (error is RefusedException or IOException or TimeoutException or OperationCanceledException or ObjectDisposedException)
+        {
+            problem = error.Message;
+        }
+        if (asking != era)
+        {
+            // The core that was asked is gone; what it was busy with went with it.
+            return;
+        }
+        // The nodes and the subscriptions as they are after this, before the row can be asked again.
+        await RefreshAsync();
+        if (asking != era)
+        {
+            return;
+        }
+        changing.Remove(change.Id);
+        failure = problem;
+        if (active)
+        {
+            Draw();
+        }
+    }
+
+    private async void OnSubscriptions(object sender, RoutedEventArgs e)
+    {
+        if (strings is null || dialog is not null || subscriptions is null)
+        {
+            return;
+        }
+        var opened = new SubscriptionsDialog(strings, Change) { XamlRoot = XamlRoot, RequestedTheme = ActualTheme };
+        dialog = opened;
+        Draw();
+        try
+        {
+            await opened.ShowAsync();
+        }
+        finally
+        {
+            dialog = null;
+            if (active)
+            {
+                SubscriptionsButton.Focus(FocusState.Programmatic);
+            }
         }
     }
 
@@ -329,6 +427,19 @@ public sealed partial class ProxiesPage : Page
         Write(ErrorText, shown.Error);
         Write(NoticeText, shown.Notice);
         NodeList.Visibility = shown.Notice is null ? Visibility.Visible : Visibility.Collapsed;
+        SubscriptionsButton.IsEnabled = subscriptions is not null;
+        if (dialog is not null)
+        {
+            if (subscriptions is null)
+            {
+                // The core that listed them is gone: nothing of what the dialog shows can be asked for.
+                dialog.Close();
+            }
+            else
+            {
+                dialog.Show(Subscriptions.Show(strings, subscriptions, changing));
+            }
+        }
 
         syncing = true;
         try

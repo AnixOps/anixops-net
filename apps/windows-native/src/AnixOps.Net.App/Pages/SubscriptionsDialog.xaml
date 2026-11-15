@@ -1,0 +1,150 @@
+<ContentDialog
+    x:Class="AnixOps.Net.App.Pages.SubscriptionsDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:AnixOps.Net.App.Pages"
+    Closing="OnClosing"
+    Style="{StaticResource DefaultContentDialogStyle}">
+
+    <!-- The subscriptions, one row each, where one is downloaded again, given another name or removed. What a
+         row says is decided in AnixOps.Net.Presentation.Subscriptions; this draws it. A rename or a removal
+         is asked about in this same dialog, in place of the list: Windows shows one dialog at a time. -->
+    <Grid Width="480" MinHeight="200">
+        <ListView
+            x:Name="List"
+            MaxHeight="420"
+            AutomationProperties.AutomationId="Subscriptions.List"
+            ContainerContentChanging="OnContainerContentChanging"
+            IsItemClickEnabled="False"
+            SelectionMode="None">
+            <ListView.ItemContainerStyle>
+                <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="Padding" Value="4,0,4,0" />
+                    <!-- The buttons of a row are reached with Tab, one after the other. -->
+                    <Setter Property="IsTabStop" Value="False" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="local:SubscriptionLine">
+                    <Grid Padding="0,10,0,10" ColumnSpacing="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel
+                            Grid.Column="0"
+                            Margin="0,0,8,0"
+                            VerticalAlignment="Center"
+                            Spacing="2">
+                            <TextBlock
+                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                Text="{x:Bind Title, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="{x:Bind Details, Mode=OneWay}"
+                                TextWrapping="Wrap"
+                                Visibility="{x:Bind HasDetails, Mode=OneWay}" />
+                            <!-- Selectable, so that the reason can be copied into a message asking for help. -->
+                            <TextBlock
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                IsTextSelectionEnabled="True"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="{x:Bind Error, Mode=OneWay}"
+                                TextWrapping="Wrap"
+                                Visibility="{x:Bind HasError, Mode=OneWay}" />
+                        </StackPanel>
+                        <Button
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="Subscriptions.Update"
+                            Click="OnUpdate"
+                            Content="{x:Bind Update, Mode=OneWay}"
+                            IsEnabled="{x:Bind Enabled, Mode=OneWay}"
+                            Visibility="{x:Bind CanUpdate, Mode=OneWay}" />
+                        <Button
+                            Grid.Column="2"
+                            Width="36"
+                            Height="32"
+                            Padding="0"
+                            VerticalAlignment="Center"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            AutomationProperties.AutomationId="Subscriptions.Rename"
+                            AutomationProperties.Name="{x:Bind RenameSays}"
+                            Click="OnRename"
+                            IsEnabled="{x:Bind Enabled, Mode=OneWay}"
+                            ToolTipService.ToolTip="{x:Bind RenameSays}">
+                            <FontIcon FontSize="16" Glyph="&#xE70F;" />
+                        </Button>
+                        <Button
+                            Grid.Column="3"
+                            Width="36"
+                            Height="32"
+                            Padding="0"
+                            VerticalAlignment="Center"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            AutomationProperties.AutomationId="Subscriptions.Remove"
+                            AutomationProperties.Name="{x:Bind RemoveSays}"
+                            Click="OnRemove"
+                            IsEnabled="{x:Bind Enabled, Mode=OneWay}"
+                            ToolTipService.ToolTip="{x:Bind RemoveSays}">
+                            <FontIcon FontSize="16" Glyph="&#xE74D;" />
+                        </Button>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <TextBlock
+            x:Name="EmptyText"
+            Margin="0,48,0,0"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Top"
+            AutomationProperties.AutomationId="Subscriptions.Empty"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Style="{StaticResource BodyTextBlockStyle}"
+            TextWrapping="Wrap"
+            Visibility="Collapsed" />
+
+        <!-- The question asked before a rename or a removal. -->
+        <StackPanel
+            x:Name="Question"
+            VerticalAlignment="Top"
+            Spacing="16"
+            Visibility="Collapsed">
+            <TextBlock
+                x:Name="QuestionText"
+                AutomationProperties.AutomationId="Subscriptions.Question"
+                AutomationProperties.HeadingLevel="Level2"
+                Style="{StaticResource BodyStrongTextBlockStyle}"
+                TextWrapping="Wrap" />
+            <TextBox
+                x:Name="NameBox"
+                AutomationProperties.AutomationId="Subscriptions.Name"
+                IsSpellCheckEnabled="False"
+                KeyDown="OnNameKeyDown"
+                MaxLength="200" />
+            <StackPanel
+                HorizontalAlignment="Right"
+                Orientation="Horizontal"
+                Spacing="8">
+                <Button
+                    x:Name="ConfirmButton"
+                    MinWidth="96"
+                    AutomationProperties.AutomationId="Subscriptions.Confirm"
+                    Click="OnConfirm" />
+                <Button
+                    x:Name="CancelButton"
+                    MinWidth="96"
+                    AutomationProperties.AutomationId="Subscriptions.Cancel"
+                    Click="OnCancel" />
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</ContentDialog>

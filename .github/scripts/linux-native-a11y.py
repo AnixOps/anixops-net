@@ -15,8 +15,10 @@ With the daemon's program given, the window is also run against a real daemon on
 says that the core service is not running, finds the daemon when it starts, connects and disconnects with
 the overview's button (the daemon is first told to send traffic out directly, since it has no subscription),
 shows the engine's counters while connected, imports share links on the proxies page, searches the node
-list, chooses another node, tests the nodes' delay, notices when the daemon stops, and finds it again. With
-a directory given too, the connected window and the proxies page are drawn into it.
+list, chooses another node, tests the nodes' delay, opens the list of subscriptions and updates, renames and
+removes one that a server of this script's own hands out, notices when the daemon stops, and finds it again.
+With a directory given too, the connected window, the proxies page and the list of subscriptions are drawn
+into it.
 
 Needs at-spi2-core, gir1.2-atspi-2.0 and python3-gi.
 """
@@ -32,6 +34,8 @@ import subprocess
 import sys
 import tempfile
 import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 
 import gi
 
@@ -405,6 +409,209 @@ def check_proxies(app, binary: str, endpoint: str, text, button, press, sentence
     return f"imported, {total} nodes, searched ({left}), chose {target!r}, tested"
 
 
+# What the script's own subscription server hands out: one node at first, two from the second download on.
+THIRD_NODE = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@203.0.113.20:11111#Alpha"
+FOURTH_NODE = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@203.0.113.21:11111#Beta"
+# 1000 bytes of 5000 used, and the last second of 2033-05-17 UTC as the end: the day it expires is the 18th.
+USERINFO = "upload=100; download=900; total=5000; expire=1999999999"
+
+
+def subscription_server():
+    """A subscription on this machine. Returns the server, its link and the list its downloads are counted in."""
+    hits: list[str] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            hits.append(self.path)
+            body = (THIRD_NODE if len(hits) == 1 else THIRD_NODE + "\n" + FOURTH_NODE).encode()
+            self.send_response(200)
+            self.send_header("content-type", "text/plain; charset=utf-8")
+            self.send_header("content-length", str(len(body)))
+            self.send_header("subscription-userinfo", USERINFO)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    Thread(target=server.serve_forever, daemon=True).start()
+    return server, f"http://127.0.0.1:{server.server_address[1]}/nodes", hits
+
+
+def check_subscriptions(app, binary: str, endpoint: str, text, press, shots: str | None) -> str:
+    """The list of subscriptions against the real daemon: what a row says, update, rename, remove."""
+
+    def showing(node) -> bool:
+        return node.get_state_set().contains(Atspi.StateType.SHOWING)
+
+    def listed() -> list[dict]:
+        return core_ask(endpoint, "subscriptions", {})["subscriptions"]
+
+    def one(identity: str) -> dict | None:
+        return next((row for row in listed() if row["id"] == identity), None)
+
+    def rows() -> list:
+        found = next(
+            (
+                node
+                for node, _ in walk(app)
+                if role(node) == "list" and node.get_name() == text("proxies.subscriptions") and showing(node)
+            ),
+            None,
+        )
+        if found is None:
+            return []
+        return [node for node, _ in walk(found) if role(node) == "list item" and showing(node)]
+
+    def says(row) -> list[str]:
+        return [node.get_name() or "" for node, _ in walk(row) if role(node) == "label" and showing(node)]
+
+    def row(title: str):
+        return next((found for found in rows() if title in says(found)), None)
+
+    def row_button(title: str, wording_id: str):
+        """The button of that name in the row of that title, once it can be pressed."""
+
+        def probe():
+            found = row(title)
+            if found is None:
+                return None
+            for node, _ in walk(found):
+                if role(node) in ("push button", "button") and node.get_name() == text(wording_id) \
+                        and showing(node) and node.get_state_set().contains(Atspi.StateType.SENSITIVE):
+                    return node
+            return None
+
+        return until(f"the button {text(wording_id)!r} of the subscription {title!r}", probe)
+
+    def push(node, what: str) -> None:
+        action = node.get_action_iface()
+        if action is None or not action.do_action(0):
+            fail(f"{what} could not be pressed through the accessibility interface")
+
+    def question(heading: str, answer: str):
+        """The button of that name in the question under that heading, not one of the same name elsewhere."""
+
+        def probe():
+            asked = next(
+                (node for node, _ in walk(app) if role(node) == "label" and node.get_name() == heading
+                 and showing(node)),
+                None,
+            )
+            # Upwards from the heading to the first thing that also holds the question's "cancel".
+            while asked is not None:
+                buttons = [
+                    node for node, _ in walk(asked)
+                    if role(node) in ("push button", "button") and showing(node)
+                ]
+                if any(node.get_name() == text("action.cancel") for node in buttons):
+                    return next((node for node in buttons if node.get_name() == answer), None)
+                asked = asked.get_parent()
+            return None
+
+        return until(f"the answer {answer!r} to {heading!r}", probe)
+
+    server, link, hits = subscription_server()
+    try:
+        before = {row["id"] for row in listed()}
+        nodes_before = core_ask(endpoint, "proxies", {})["total"]
+        core_ask(endpoint, "import_subscription", {"location": link})
+        added = [row for row in listed() if row["id"] not in before]
+        if len(added) != 1:
+            fail(f"importing {link} added {len(added)} subscriptions at the daemon")
+        mine = added[0]
+        identity, title = mine["id"], mine["name"]
+        expected = {"pasted": False, "refreshable": True, "nodes": 1, "used": 1000, "total": 5000,
+                    "expireDate": "2033-05-18", "expired": False, "error": None}
+        wrong = {name: mine.get(name) for name, value in expected.items() if mine.get(name) != value}
+        if wrong:
+            fail(f"the daemon describes the subscription from {link} with {wrong}, expected {expected}")
+
+        press("proxies.subscriptions")
+        until(f"the row of the subscription {title!r}", lambda: row(title))
+
+        def details(*parts: str):
+            return lambda: (lambda found: found is not None
+                            and any(all(part in line for part in parts) for line in says(found)))(row(title))
+
+        nodes = lambda count: text("proxies.count").replace("{0}", str(count))  # noqa: E731
+        used = text("subscriptions.usage").replace("{0}", "1000 B").replace("{1}", "4.9 KB")
+        expires = text("subscriptions.expire").replace("{0}", "2033-05-18")
+        until(f"the row to say {nodes(1)!r}, {used!r} and {expires!r} in one line", details(nodes(1), used, expires))
+
+        # Pasted links have a row too, named in the window's language, and nothing to download again.
+        pasted = until("the row of the pasted links", lambda: row(text("proxies.group.pasted")))
+        if any(role(node) in ("push button", "button") and node.get_name() == text("subscriptions.update")
+               and showing(node) for node, _ in walk(pasted)):
+            fail("the pasted links offer to be updated")
+
+        # Update: the server is asked again and now hands out two nodes.
+        push(row_button(title, "subscriptions.update"), "the update button")
+        until("the subscription to be downloaded again", lambda: len(hits) >= 2)
+        until("the daemon to hold the subscription's two nodes", lambda: (one(identity) or {}).get("nodes") == 2)
+        until(f"the row to say {nodes(2)!r}", details(nodes(2)))
+        row_button(title, "subscriptions.update")
+
+        # Rename: the question starts with the name as it is and takes another.
+        renamed = "My nodes"
+        push(row_button(title, "subscriptions.rename"), "the rename button")
+
+        def name_box():
+            for node, _ in walk(app):
+                if node.get_name() != text("subscriptions.name") or not showing(node):
+                    continue
+                for candidate, _ in walk(node):
+                    try:
+                        iface = candidate.get_editable_text_iface()
+                    except GLib.Error:
+                        iface = None
+                    if iface is not None:
+                        return candidate, iface
+            return None
+
+        box, editable = until(f"the text box {text('subscriptions.name')!r}", name_box)
+        text_iface = box.get_text_iface()
+        if text_iface is not None:
+            written = Atspi.Text.get_text(text_iface, 0, Atspi.Text.get_character_count(text_iface))
+            if written != title:
+                fail(f"the box for the new name starts with {written!r}, not {title!r}")
+        if not editable.set_text_contents(renamed):
+            fail("the box for the new name did not take a name through the accessibility interface")
+        push(question(text("subscriptions.rename"), text("subscriptions.save")), "the save button")
+        until(f"the daemon to call the subscription {renamed!r}", lambda: (one(identity) or {}).get("name") == renamed)
+        until(f"the row of {renamed!r}", lambda: row(renamed) is not None and row(title) is None)
+
+        if shots:
+            picture = os.path.join(shots, "core-subscriptions-zh-light.png")
+            subprocess.run(
+                [binary, "--language", "zh", "--theme", "light", "--socket", endpoint, "--page", "proxies",
+                 "--show", "subscriptions", "--screenshot", picture],
+                check=True,
+                timeout=60,
+            )
+            if not os.path.getsize(picture):
+                fail(f"{picture} is empty")
+
+        # Remove: asked first, and "cancel" leaves everything as it is.
+        heading = text("subscriptions.remove.confirm").replace("{0}", renamed)
+        push(row_button(renamed, "subscriptions.remove"), "the remove button")
+        push(question(heading, text("action.cancel")), "the cancel button")
+        until("the question to be gone", lambda: not any(
+            role(node) == "label" and node.get_name() == heading and showing(node) for node, _ in walk(app)))
+        if one(identity) is None or row(renamed) is None:
+            fail("cancelling the removal removed the subscription")
+        push(row_button(renamed, "subscriptions.remove"), "the remove button")
+        push(question(heading, text("subscriptions.remove")), "the remove answer")
+        until("the daemon to have removed the subscription", lambda: one(identity) is None)
+        until("the row to be gone", lambda: rows() and row(renamed) is None)
+        until("the subscription's nodes to be gone",
+              lambda: core_ask(endpoint, "proxies", {})["total"] == nodes_before)
+        return f"subscription {title!r}: listed, updated ({len(hits)} downloads), renamed, removed"
+    finally:
+        server.shutdown()
+
+
 def check_core(binary: str, daemon: str, wording: dict, shots: str | None) -> None:
     """The window against a real daemon: away, found, connected, disconnected, away again, found again."""
     language = "zh"
@@ -501,13 +708,14 @@ def check_core(binary: str, daemon: str, wording: dict, shots: str | None) -> No
             sentence("overview.state.disconnected")
             button("overview.connect")
             nodes = check_proxies(app, binary, endpoint, text, button, press, sentence, shots)
+            subscriptions = check_subscriptions(app, binary, endpoint, text, press, shots)
             stop(core)
             core = None
             away("after the daemon stopped")
             core = start_daemon()
             found("after the daemon started again")
             print(f"[core] not running, found ({line!r}), connected ({', '.join(rates)}), disconnected, "
-                  f"proxies ({nodes}), stopped, found again")
+                  f"proxies ({nodes}), {subscriptions}, stopped, found again")
         finally:
             stop(window)
             stop(core)

@@ -1,6 +1,6 @@
 //! How the window is started. The options fix the surroundings for tests and screenshots; a user starts the
 //! window without any: `--language zh|zh-Hant|en`, `--theme light|dark`, `--page <id>`, `--size <w>x<h>`,
-//! `--screenshot <file.png>`, `--socket <path>`. What is not understood is ignored.
+//! `--screenshot <file.png>`, `--socket <path>`, `--show subscriptions`. What is not understood is ignored.
 
 use std::path::PathBuf;
 
@@ -34,6 +34,8 @@ pub struct Launch {
     pub screenshot: Option<PathBuf>,
     /// The socket the core daemon listens on; `None` is the daemon's usual one.
     pub socket: Option<String>,
+    /// Open the proxies page's list of subscriptions over the window (`--show subscriptions`).
+    pub subscriptions: bool,
 }
 
 impl Default for Launch {
@@ -45,6 +47,7 @@ impl Default for Launch {
             size: None,
             screenshot: None,
             socket: None,
+            subscriptions: false,
         }
     }
 }
@@ -67,7 +70,13 @@ impl Launch {
             };
             if !matches!(
                 name,
-                "--language" | "--theme" | "--page" | "--size" | "--screenshot" | "--socket"
+                "--language"
+                    | "--theme"
+                    | "--page"
+                    | "--size"
+                    | "--screenshot"
+                    | "--socket"
+                    | "--show"
             ) {
                 continue;
             }
@@ -102,6 +111,7 @@ impl Launch {
                 "--socket" if !value.is_empty() => {
                     launch.socket = Some(value);
                 }
+                "--show" if value == "subscriptions" => launch.subscriptions = true,
                 _ => {}
             }
         }
@@ -139,6 +149,14 @@ mod tests {
         assert_eq!(launch.language, Some(Language::English));
         assert_eq!(launch.appearance, Appearance::Dark);
         assert_eq!(launch.page, sections::RULES);
+    }
+
+    #[test]
+    fn the_list_of_subscriptions_is_opened_when_asked_for() {
+        assert!(!Launch::default().subscriptions);
+        assert!(Launch::parse(["--show", "subscriptions"]).subscriptions);
+        assert!(Launch::parse(["--show=subscriptions"]).subscriptions);
+        assert!(!Launch::parse(["--show", "everything"]).subscriptions);
     }
 
     #[test]
