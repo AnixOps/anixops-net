@@ -1,6 +1,8 @@
 package io.anixops.net.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,10 +12,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -28,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -36,6 +41,10 @@ import androidx.compose.ui.unit.dp
 import io.anixops.net.R
 import io.anixops.net.ui.theme.BrandSpacing
 import io.anixops.net.ui.theme.LocalBrandPalette
+
+/** The list dot: its size, and its distance from the top of the first line, near the middle of the text. */
+private val BulletSize = 4.dp
+private val BulletTop = 8.dp
 
 /** Widest the agreement's text grows on tablets. */
 private val TermsMaxWidth = 720.dp
@@ -135,7 +144,14 @@ private fun TermsBlock(block: Terms.Block) {
         )
         Terms.Kind.Paragraph -> Text(block.text, style = MaterialTheme.typography.bodyMedium)
         Terms.Kind.Item -> Row {
-            Text("•", style = MaterialTheme.typography.bodyMedium, color = LocalBrandPalette.current.text2)
+            // A drawn dot: the font's bullet sits high beside Chinese text.
+            Box(
+                Modifier
+                    .padding(top = BulletTop)
+                    .size(BulletSize)
+                    .clip(CircleShape)
+                    .background(LocalBrandPalette.current.text2),
+            )
             Spacer(Modifier.width(BrandSpacing.xs))
             Text(block.text, style = MaterialTheme.typography.bodyMedium)
         }
