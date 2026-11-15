@@ -352,6 +352,23 @@ WinUI 3 没有自带的数据表格控件，请求列表要自己做虚拟化表
 - 截图由同一批测试按 页面 × 语言 × 深浅色 生成，作为 CI 产物上传。入库做基线比对要等页面有了真实内容。
 - 启动参数 `--language zh|zh-Hant|en`、`--theme light|dark`、`--page <id>` 只为测试和截图固定环境，不认识的参数忽略。
 
+Linux 骨架（PR 5，`apps/linux-native`）的做法：
+
+- 结构和 Windows 一致：不带窗口的部分（页面清单 `sections`、启动参数 `launch`）不依赖 GTK，所有系统的 workspace 任务
+  都测；窗口（`window.rs`，relm4 + gtk4-rs + libadwaita）在 `gui` feature 后面，只在 Linux 上、装了 GTK 4 和 libadwaita
+  开发包时构建。有一个测试直接读 `AnixOps.Net.Presentation/Section.cs`，两个窗口的页面清单不一致时失败。
+- 布局用 libadwaita 自己的：`AdwNavigationSplitView`，窗口窄于 640sp 时折成一栏；侧栏是 `navigation-sidebar` 列表，
+  设置固定在底部。窗口、卡片、文字的颜色都是 libadwaita 的，只把强调色和状态色换成品牌色
+  （`data/brand-light.css`、`brand-dark.css`，由 `design_tokens.py` 生成）。GTK 4.14 的样式表里不能判断深浅色，所以
+  生成两份、由窗口按当前配色加载；高对比度下不加载。
+- 截图不用抓屏：`--screenshot <文件>` 让窗口用自己的渲染器把自己画进 PNG 后退出，CI 在 Xvfb 里用 Cairo 渲染器跑，
+  每台机器画出来一样。组合：6 页 × 3 种语言 × 深浅色，加一张窄窗口、一张 2× 缩放；脚本检查尺寸，并检查任意两张
+  都不相同（参数没生效或什么都没画时会撞图）。入库做基线比对同样等页面有真实内容。
+- 无障碍检查从外面做：`.github/scripts/linux-native-a11y.py` 启动真实窗口，经 AT-SPI（读屏软件用的接口）核对窗口名、
+  侧栏两个列表的名称和六个页面的顺序，逐页经无障碍接口选中并等页面内容出现，检查两个列表里始终只有一行被选中、
+  每个可操作控件都有名称。三种语言各跑一遍。
+- 这一步没有的：和守护进程的连接（标题栏状态）、托盘、deb / rpm 包、Wayland 下的实测（CI 是 X11）。
+
 ## 迁移清单与 PR 顺序
 
 原生版在 `apps/windows-native` 和 `apps/linux-native` 平行开发，以“预览”名称并存安装。`platform-parity.md` 里该平台
@@ -373,7 +390,7 @@ WinUI 3 没有自带的数据表格控件，请求列表要自己做虚拟化表
 | 4g | Windows 验证：原生版 MSI（`installer/windows-native`，WiX 5）：注册并启动服务；CI 里安装、带着打开的窗口升级、带着打开的窗口卸载，卸载后不残留服务、进程、文件、快捷方式和登录启动项。“过关标准”第 3 项里除 TUN 和解密以外的部分 | 4f |
 | 4h | Windows 验证：TUN 模式经服务（Wintun 由服务加载，MSI 带上 `wintun.dll`，卸载后不残留网卡和驱动），第 3 项的 TUN 部分 | 4g |
 | 4i | Windows 验证：HTTPS 解密的根证书信任（只信任到当前用户的证书库，由窗口添加、Windows 弹确认框；卸载时移除），第 3 项的解密部分 | 4g |
-| 5 | Linux 骨架：导航、主题、CI 截图与 AT-SPI 检查 | 2 |
+| 5 | Linux 骨架（`apps/linux-native`）：导航、主题、三种语言、CI 截图与 AT-SPI 检查。和守护进程的连接、打包在后面的 PR | 2 |
 | 6 | 代理 › 首页与代理：连接、状态、流量、连接列表、出口地址、订阅、节点、测速、策略组、分享、节点编辑 | 4、5 |
 | 7 | 规则与设置：分流模式、我的规则、规则集、DNS、Fake-IP、屏蔽 QUIC、流量重定向、通知、Wi-Fi 规则、日志、流量统计、诊断、协议、语言 | 6 |
 | 8 | 扩展与改写：插件导入 / 开关 / 查看，HTTPS 解密与根证书，解密域名，Map Local / Remote，团队 CA，手机连电脑抓包 | 6 |
