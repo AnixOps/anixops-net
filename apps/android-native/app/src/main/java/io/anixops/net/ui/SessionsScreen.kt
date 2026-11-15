@@ -161,7 +161,7 @@ private fun SessionRow(session: CaptureSession, locale: Locale, enabled: Boolean
             TextButton(onClick = onLoad, enabled = enabled) { Text(stringResource(R.string.sessions_load)) }
         }
         IconButton(onClick = onDelete, enabled = enabled) {
-            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.sessions_delete))
+            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.sessions_delete), tint = LocalBrandPalette.current.text2)
         }
     }
 }
@@ -185,5 +185,5 @@ private fun sessionHint(session: CaptureSession, locale: Locale): String {
 @Composable
 private fun protectionText(protection: String, days: Int): String {
     val kept = pluralStringResource(R.plurals.sessions_kept, days, days)
-    return if (protection == "keystore") kept + " " + stringResource(R.string.sessions_keystore) else kept
+    return if (protection == "keystore") kept + stringResource(R.string.sessions_keystore) else kept
 }
