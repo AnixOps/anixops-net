@@ -681,7 +681,7 @@ def check_groups(app, binary: str, endpoint: str, text, press, shots: str | None
     def listing(name: str):
         """The list under that name that is on the screen now: the first thing of that name with rows in it."""
         for node, _ in walk(app):
-            if node.get_name() != name or not showing(node) or role(node) in ("push button", "button", "label"):
+            if node.get_name() != name or not showing(node) or role(node) in ("push button", "button", "label", "list item"):
                 continue
             if any(role(inner) == "list item" for inner, _ in walk(node)):
                 return node
