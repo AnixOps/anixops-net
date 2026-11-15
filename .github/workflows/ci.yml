@@ -246,7 +246,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo clippy --locked -p networkcore-linux-gui --features gui --all-targets -- -D warnings
-          cargo test --locked -p networkcore-linux-gui
+          cargo test --locked -p networkcore-linux-gui -p client-core
           cargo build --locked -p networkcore-linux-gui --features gui --release
           test -x target/release/anixops-net
 

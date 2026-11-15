@@ -11,7 +11,7 @@ App ──▶ VpnService（vpn-plugin，Kotlin）──TUN 描述符──▶ �
   全局路由，DNS 198.18.0.2 由内核应答），把 TUN 描述符交给 Rust；`stop` 结束服务。App 自己的流量用
   `addDisallowedApplication` 排除在 VPN 外，内核连节点不会绕回隧道。
 - `src/lib.rs`：移动端入口，告诉窗口数据目录在哪、怎么开关 VPN。
-- 后端在 `apps/linux-gui/src/backend/tun.rs`（只在 `target_os = "android"` 编译）：读写 TUN、节点切换时在同一个接口上
+- 后端在 `crates/client-core/src/backend/tun.rs`（只在 `target_os = "android"` 编译）：读写 TUN、节点切换时在同一个接口上
   重启内核。
 
 ## 构建

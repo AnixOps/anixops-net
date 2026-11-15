@@ -1,0 +1,32 @@
+[package]
+name = "client-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The client service behind every AnixOps Net window, free of any window toolkit: saved state, the embedded engine, and the interface's commands answered by name."
+
+[dependencies]
+anx-license = { path = "../anx-license" }
+app-log = { path = "../app-log" }
+app-notifications = { path = "../app-notifications" }
+client-health = { path = "../client-health" }
+config-core = { workspace = true }
+control-domain = { workspace = true }
+desktop-dns = { path = "../desktop-dns" }
+desktop-mitm = { path = "../desktop-mitm" }
+engine-embedded = { workspace = true }
+inbound-mixed = { workspace = true }
+network-watch = { path = "../network-watch" }
+node-edits = { path = "../node-edits" }
+node-import = { workspace = true }
+on-demand = { path = "../on-demand" }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+subscription-meta = { path = "../subscription-meta" }
+traffic-stats = { path = "../traffic-stats" }
+
+# Android's VPN and Linux TUN mode: the TUN descriptor is read and written directly (`backend::tun`).
+[target.'cfg(any(target_os = "android", target_os = "linux"))'.dependencies]
+libc = "0.2"

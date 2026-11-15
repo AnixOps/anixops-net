@@ -821,6 +821,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "client-core"
+version = "0.3.0"
+dependencies = [
+ "anx-license",
+ "app-log",
+ "app-notifications",
+ "client-health",
+ "config-core",
+ "control-domain",
+ "desktop-dns",
+ "desktop-mitm",
+ "engine-embedded",
+ "inbound-mixed",
+ "libc",
+ "network-watch",
+ "node-edits",
+ "node-import",
+ "on-demand",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "subscription-meta",
+ "traffic-stats",
+]
+
+[[package]]
 name = "client-health"
 version = "0.3.0"
 dependencies = [
@@ -3234,31 +3260,15 @@ dependencies = [
 name = "networkcore-linux-gui"
 version = "0.3.0"
 dependencies = [
- "anx-license",
- "app-log",
  "app-notifications",
+ "client-core",
  "client-health",
- "config-core",
- "control-domain",
- "desktop-dns",
- "desktop-mitm",
- "engine-embedded",
- "inbound-mixed",
- "libc",
- "network-watch",
- "node-edits",
- "node-import",
- "on-demand",
- "reqwest 0.12.28",
- "serde",
  "serde_json",
- "subscription-meta",
  "tauri",
  "tauri-build",
  "tauri-plugin-deep-link",
  "tauri-plugin-notification",
  "tauri-plugin-single-instance",
- "traffic-stats",
 ]
 
 [[package]]

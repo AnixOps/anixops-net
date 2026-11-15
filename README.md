@@ -19,7 +19,8 @@ AnixOps Net 的全平台客户端：iOS / macOS App、Windows 与 Linux 桌面 G
 | --- | --- |
 | `apps/ios` | iOS + macOS App、Packet Tunnel、Widget（Swift，XcodeGen 生成工程） |
 | `apps/windows-gui` | Windows Tauri GUI，`ui/` 是 Windows、Linux 与安卓共用的 React 界面 |
-| `apps/linux-gui` | Linux Tauri GUI，也是安卓 App 的后端 |
+| `apps/linux-gui` | Linux Tauri GUI，也是安卓 App 的窗口 |
+| `crates/client-core` | 不依赖界面框架的客户端服务层：状态、内核控制、按名字应答界面命令（Linux、安卓共用） |
 | `apps/android` | 安卓 App（Tauri 移动端 + VpnService 插件），见 [apps/android/README.md](apps/android/README.md) |
 | `installer/windows` | WiX MSI 安装器（同时打包内核仓库的 Windows CLI） |
 | `docs/` | 客户端相关的设计与合同文档 |

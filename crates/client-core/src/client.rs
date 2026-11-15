@@ -1502,7 +1502,7 @@ mod tests {
     /// windows at run time.
     #[test]
     fn every_interface_command_is_answered() {
-        let bridge = include_str!("../../windows-gui/ui/src/bridge.ts");
+        let bridge = include_str!("../../../apps/windows-gui/ui/src/bridge.ts");
         let mut names = Vec::new();
         for line in bridge.lines() {
             let mut rest = line;

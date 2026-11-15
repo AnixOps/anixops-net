@@ -159,7 +159,8 @@ WinUI 3 没有自带的数据表格控件，请求列表要自己做虚拟化表
 | PR | 内容 | 前置 |
 |---|---|---|
 | 0 | 本方案 | — |
-| 1 | `crates/client-core`：Windows 后端并入，Tauri Windows 行为不变 | 安卓线的 `Client` 模块合并 |
+| 1a | `crates/client-core`：`backend` 和 `client` 从 `apps/linux-gui` 挪成独立 crate，行为不变 | 安卓线的 `Client` 模块合并 |
+| 1b | Windows 后端并入 `client-core`，Tauri Windows 行为不变 | 1a |
 | 2 | `client-ipc`、Windows 服务、Linux 守护进程，MSI / deb / rpm 安装与卸载 | 1 |
 | 3 | `client-view`、文案单一来源 | 1 |
 | 4 | Windows 验证：工程骨架、导航、主题 tokens、请求列表原型、CI 截图与 UIA 检查 | 2 |
