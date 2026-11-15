@@ -43,6 +43,15 @@ class ViewModelsTest {
     }
 
     @Test
+    fun subscriptionsAnswersDecode() {
+        val answers = answers("view.subscriptions")
+        assertTrue("no view.subscriptions samples", answers.isNotEmpty())
+        val rows = answers.flatMap { Envelope.json.decodeFromJsonElement(SubscriptionsView.serializer(), it).subscriptions }
+        assertTrue(rows.all { it.id.isNotEmpty() })
+        assertTrue(rows.filter { it.expired }.all { it.expire != null })
+    }
+
+    @Test
     fun logsAnswersDecode() {
         val answers = answers("view.logs")
         assertTrue("no view.logs samples", answers.isNotEmpty())

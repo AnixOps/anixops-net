@@ -66,6 +66,7 @@
     <string name="proxies_empty_body">导入订阅后可以在这里切换节点和测速。</string>
     <string name="proxies_no_match">没有符合条件的节点。</string>
     <string name="proxies_other_nodes">其他节点</string>
+    <string name="proxies_pasted">粘贴的链接</string>
     <string name="proxies_in_use">使用中</string>
     <string name="proxies_timed_out">超时</string>
     <string name="proxies_more">%1$s 的更多操作</string>
@@ -96,7 +97,8 @@
     <string name="subscription_confirm_remove">确认删除 %1$s</string>
     <string name="subscription_updated_at">更新于 %1$s</string>
     <string name="subscription_never">从未更新</string>
-    <string name="subscription_failed">更新失败</string>
+    <string name="subscription_error">上次更新没有成功：%1$s</string>
+    <string name="subscription_expired">已到期</string>
     <string name="subscription_used_of">已用 %1$s / %2$s</string>
     <string name="subscription_used">已用 %1$s</string>
     <string name="subscription_expires">到期 %1$s</string>

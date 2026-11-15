@@ -21,7 +21,7 @@ import io.anixops.net.core.ProxiesView
 import io.anixops.net.core.RuleSetStatus
 import io.anixops.net.core.RuntimeSnapshot
 import io.anixops.net.core.StatusFact
-import io.anixops.net.core.SubscriptionSummary
+import io.anixops.net.core.SubscriptionRow
 import io.anixops.net.core.Traffic
 import io.anixops.net.core.TrafficBar
 import io.anixops.net.core.TrafficPage
@@ -397,21 +397,29 @@ class ScreenshotTest {
         val proxiesState = ProxiesState(
             loaded = true,
             subscriptions = listOf(
-                SubscriptionSummary(
+                SubscriptionRow(
                     id = "s1",
-                    location = "https://panel.example.com/sub",
                     selected = true,
                     name = "Panel",
-                    lastSuccessfulUpdate = "2026-11-15 09:30",
-                    nodeCount = 3,
-                    upload = 3_221_225_472,
-                    download = 42_949_672_960,
+                    updated = "2026-11-15 09:30",
+                    nodes = 3,
+                    used = 46_170_898_432,
                     total = 214_748_364_800,
                     expire = 1_798_675_200,
-                    updateIntervalHours = 24,
+                    intervalHours = 24,
                     refreshable = true,
                 ),
-                SubscriptionSummary(id = "s2", location = "backup", name = "Backup", nodeCount = 1),
+                SubscriptionRow(
+                    id = "s2",
+                    name = "Backup",
+                    nodes = 2,
+                    refreshable = true,
+                    updated = "2026-11-01 08:00",
+                    error = "HTTP 403",
+                    expire = 1_762_000_000,
+                    expired = true,
+                ),
+                SubscriptionRow(id = "pasted", name = "粘贴的节点", pasted = true, nodes = 1),
             ),
             page = ProxiesPage(
                 view = ProxiesView(
@@ -420,13 +428,19 @@ class ScreenshotTest {
                     sections = listOf(
                         NodeSection(
                             "Panel",
-                            listOf(
+                            source = "s1",
+                            nodes = listOf(
                                 NodeRow("tokyo-01", "东京 01", "VLESS", "Panel", selected = true, delay = Delay(86, "fast")),
                                 NodeRow("osaka-02", "大阪 02", "Trojan", "Panel", delay = Delay(642, "slow")),
                                 NodeRow("hk-03", "香港 03", "Shadowsocks", "Panel", delay = Delay(null, "failed")),
                             ),
                         ),
-                        NodeSection(null, listOf(NodeRow("pasted", "Singapore", "Hysteria2"))),
+                        NodeSection(
+                            "粘贴的节点",
+                            source = "pasted",
+                            pasted = true,
+                            nodes = listOf(NodeRow("pasted-sg", "Singapore", "Hysteria2", "粘贴的节点")),
+                        ),
                     ),
                 ),
                 editable = setOf("tokyo-01", "osaka-02", "hk-03"),

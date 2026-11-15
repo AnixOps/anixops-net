@@ -130,8 +130,13 @@ class Core(
     suspend fun removeNode(nodeId: String): OperationResult =
         call("remove_node", OperationResult.serializer(), args("nodeId" to JsonPrimitive(nodeId)))
 
-    suspend fun subscriptions(): List<SubscriptionSummary> =
-        call("list_subscriptions", ListSerializer(SubscriptionSummary.serializer()))
+    /** The subscriptions as the proxies page lists them (`view.subscriptions`), with their update intervals. */
+    suspend fun subscriptions(): List<SubscriptionRow> {
+        val intervals = call("list_subscriptions", ListSerializer(SubscriptionInterval.serializer()))
+            .associate { it.id to it.updateIntervalHours }
+        return call("subscriptions", SubscriptionsView.serializer()).subscriptions
+            .map { it.copy(intervalHours = intervals[it.id] ?: 0) }
+    }
 
     suspend fun importSubscription(location: String): OperationResult =
         call("import_subscription", OperationResult.serializer(), args("location" to JsonPrimitive(location)))

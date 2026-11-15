@@ -55,6 +55,25 @@ class CoreTest {
     }
 
     @Test
+    fun subscriptionRowsGetTheirUpdateInterval() = runTest {
+        val transport = object : CoreTransport {
+            override fun invoke(command: String, args: String): String = when (command) {
+                "list_subscriptions" -> """{"ok":[{"id":"s1","location":"https://example.com/sub","name":"One","updateIntervalHours":24}]}"""
+                "subscriptions" -> """{"ok":{"subscriptions":[
+                    {"id":"s1","name":"One","pasted":false,"selected":true,"refreshable":true,"nodes":3,"updated":null,
+                     "error":null,"used":null,"total":null,"expire":null,"expireDate":null,"expired":false},
+                    {"id":"p","name":"粘贴的节点","pasted":true,"selected":false,"refreshable":false,"nodes":1,"updated":null,
+                     "error":"timed out","used":7,"total":null,"expire":100,"expireDate":"1970-01-01","expired":true}]}}"""
+                else -> error("unexpected $command")
+            }
+        }
+        val rows = Core(transport, StandardTestDispatcher(testScheduler)).subscriptions()
+        assertEquals(listOf(24, 0), rows.map { it.intervalHours })
+        assertTrue(rows[1].pasted && rows[1].expired)
+        assertEquals("timed out", rows[1].error)
+    }
+
+    @Test
     fun ruleSetsGoThroughRuntimeControl() = runTest {
         val transport = Recording(
             """{"ok":{"rule_sets":[{"name":"china","source":"remote","entries":8412,"updated_at_ms":1763198400000}]}}""",

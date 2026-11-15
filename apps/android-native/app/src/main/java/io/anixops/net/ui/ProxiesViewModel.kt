@@ -8,7 +8,7 @@ import io.anixops.net.core.NodeDelay
 import io.anixops.net.core.NodeForm
 import io.anixops.net.core.OperationResult
 import io.anixops.net.core.ProxiesPage
-import io.anixops.net.core.SubscriptionSummary
+import io.anixops.net.core.SubscriptionRow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
 
 /** What the proxies page shows: subscriptions, then the nodes as `view.proxies` reads them. */
 data class ProxiesState(
-    val subscriptions: List<SubscriptionSummary> = emptyList(),
+    val subscriptions: List<SubscriptionRow> = emptyList(),
     val page: ProxiesPage = ProxiesPage(),
     val query: String = "",
     val testing: Boolean = false,
