@@ -393,4 +393,12 @@
     <string name="redirect_network">协议</string>
     <string name="redirect_network_any">TCP 和 UDP</string>
     <string name="redirect_target">改发到（地址、地址:端口，或只写 :端口）</string>
+    <string name="egress_direct">直连</string>
+    <string name="egress_direct_hint">不经过节点，抓到的流量直接发出</string>
+    <string name="egress_node">经过节点</string>
+    <string name="egress_node_hint">按选中的节点和分流规则发出</string>
+    <string name="egress_direct_note">抓到的流量直接从这台设备发出，不需要任何节点。选节点和更新订阅不影响它。</string>
+    <string name="egress_no_nodes_note">还没有节点，暂时直连。导入订阅或节点后按下面的节点和规则发出。</string>
+    <string name="egress_node_note">按下面选中的节点和订阅规则发出，可以切换节点对比不同地区的出口。</string>
+    <string name="egress_rules">规则与 DNS</string>
 </resources>

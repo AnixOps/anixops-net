@@ -55,8 +55,17 @@ class Core(
         } else {
             null
         }
-        return OverviewData(decode(RuntimeSnapshot.serializer(), snapshot), overview, connections?.active.orEmpty())
+        return OverviewData(
+            decode(RuntimeSnapshot.serializer(), snapshot),
+            overview,
+            connections?.active.orEmpty(),
+            nodeCount = (nodes as? JsonArray)?.size ?: 0,
+        )
     }
+
+    /** Debug mode's direct exit: the engine runs with no node. */
+    suspend fun setDirectEgress(enabled: Boolean): OperationResult =
+        call("set_direct_egress", OperationResult.serializer(), args("enabled" to JsonPrimitive(enabled)))
 
     suspend fun setRoutingMode(mode: String): OperationResult =
         call("set_routing_mode", OperationResult.serializer(), args("mode" to JsonPrimitive(mode)))
@@ -412,5 +421,7 @@ data class OverviewData(
     val overview: Overview,
     /** Open connections, oldest first; empty while not connected. */
     val connections: List<ConnectionSnapshot>,
+    /** How many nodes the client has, in every subscription. */
+    val nodeCount: Int = 0,
 )
 

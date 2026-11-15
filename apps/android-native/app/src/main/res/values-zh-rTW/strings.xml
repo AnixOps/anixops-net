@@ -384,4 +384,12 @@
     <string name="redirect_network">協定</string>
     <string name="redirect_network_any">TCP 和 UDP</string>
     <string name="redirect_target">改送到（位址、位址:連接埠，或只寫 :連接埠）</string>
+    <string name="egress_direct">直連</string>
+    <string name="egress_direct_hint">不經過節點，擷取到的流量直接送出</string>
+    <string name="egress_node">經過節點</string>
+    <string name="egress_node_hint">依選定的節點和分流規則送出</string>
+    <string name="egress_direct_note">擷取到的流量直接從這台裝置送出，不需要任何節點。選節點和更新訂閱不影響它。</string>
+    <string name="egress_no_nodes_note">還沒有節點，暫時直連。匯入訂閱或節點後依下面的節點和規則送出。</string>
+    <string name="egress_node_note">依下面選定的節點和訂閱規則送出，可以切換節點比較不同地區的出口。</string>
+    <string name="egress_rules">規則與 DNS</string>
 </resources>

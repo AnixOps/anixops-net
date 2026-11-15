@@ -32,7 +32,24 @@ data class UiState(
     val probe: NetworkProbe? = null,
     val busy: Boolean = false,
     val notice: String? = null,
+    val nodeCount: Int = 0,
 )
+
+/** Where debug mode's traffic leaves: straight out, or through the nodes and rules of proxy mode. */
+enum class DebugExit(val key: String) {
+    Direct("direct"),
+    Node("node"),
+    ;
+
+    companion object {
+        /** Direct until the user picks the nodes or imports some in debug mode. */
+        fun of(key: String?): DebugExit = if (key == Node.key) Node else Direct
+    }
+}
+
+/** The engine runs with no node in debug mode with the direct exit, and in debug mode before any node exists. */
+fun wantsDirectEgress(mode: AppMode, exit: DebugExit, hasNodes: Boolean): Boolean =
+    mode == AppMode.Debug && (exit == DebugExit.Direct || !hasNodes)
 
 /** Proxy (connect and route) or debug (capture and rewrite), as on the other clients' 使用方式 switch. */
 enum class AppMode(val key: String) {
@@ -54,6 +71,15 @@ class AppViewModel(
 
     private val _mode = MutableStateFlow(AppMode.of(preferences.getString(MODE_KEY, null)))
     val mode: StateFlow<AppMode> = _mode.asStateFlow()
+
+    private val _debugExit = MutableStateFlow(DebugExit.of(preferences.getString(EXIT_KEY, null)))
+    val debugExit: StateFlow<DebugExit> = _debugExit.asStateFlow()
+
+    /** The direct-exit value last sent, so that it is sent once per wanted value. */
+    private var sentDirect: Boolean? = null
+
+    /** The node count of the last read; null before the first. */
+    private var knownNodes: Int? = null
 
     private val _termsAccepted = MutableStateFlow(preferences.getString(TERMS_KEY, null))
 
@@ -98,6 +124,13 @@ class AppViewModel(
     fun setMode(mode: AppMode) {
         preferences.edit { putString(MODE_KEY, mode.key) }
         _mode.value = mode
+        viewModelScope.launch { refresh() }
+    }
+
+    fun setDebugExit(exit: DebugExit) {
+        preferences.edit { putString(EXIT_KEY, exit.key) }
+        _debugExit.value = exit
+        viewModelScope.launch { refresh() }
     }
 
     fun acceptTerms(version: String) {
@@ -115,8 +148,16 @@ class AppViewModel(
                 overview = data.overview,
                 connections = data.connections,
                 probe = if (connected) it.probe else null,
+                nodeCount = data.nodeCount,
             )
         }
+        // Importing nodes in debug mode means they are wanted as the exit.
+        if (knownNodes == 0 && data.nodeCount > 0 && _mode.value == AppMode.Debug) {
+            preferences.edit { putString(EXIT_KEY, DebugExit.Node.key) }
+            _debugExit.value = DebugExit.Node
+        }
+        knownNodes = data.nodeCount
+        syncDirectEgress(data.snapshot.directEgress, data.nodeCount)
         // The exit address once per connection: it costs a request through the tunnel.
         if (connected && !wasConnected) {
             viewModelScope.launch {
@@ -124,6 +165,14 @@ class AppViewModel(
                 _state.update { if (it.overview?.state == "connected") it.copy(probe = probe) else it }
             }
         }
+    }
+
+    /** Tells the backend [wantsDirectEgress]; it keeps the choice, so it is sent only when it differs. */
+    private fun syncDirectEgress(current: Boolean, nodeCount: Int) {
+        val want = wantsDirectEgress(_mode.value, _debugExit.value, hasNodes = nodeCount > 0)
+        if (current == want || sentDirect == want) return
+        sentDirect = want
+        viewModelScope.launch { guard { core.setDirectEgress(want) } }
     }
 
     private fun perform(report: Boolean = false, command: suspend () -> OperationResult) {
@@ -153,6 +202,7 @@ class AppViewModel(
         const val PREFERENCES = "anixops"
         private const val MODE_KEY = "app-mode"
         private const val TERMS_KEY = "terms-accepted"
+        private const val EXIT_KEY = "debug-exit"
         private const val POLL_MILLIS = 1_000L
     }
 }

@@ -96,6 +96,7 @@ fun AnixApp(
 ) {
     val state by app.state.collectAsStateWithLifecycle()
     val mode by app.mode.collectAsStateWithLifecycle()
+    val debugExit by app.debugExit.collectAsStateWithLifecycle()
     val proxiesState by proxies.state.collectAsStateWithLifecycle()
     val rulesState by rules.state.collectAsStateWithLifecycle()
     val settingsState by settings.state.collectAsStateWithLifecycle()
@@ -195,6 +196,8 @@ fun AnixApp(
             closeConnection = { app.closeConnection(it) },
             closeAll = { app.closeAllConnections() },
         ),
+        debugExit = debugExit,
+        egress = EgressActions(setExit = app::setDebugExit),
         proxiesState = proxiesState,
         proxies = ProxiesActions(
             search = proxies::search,
@@ -421,6 +424,8 @@ fun AnixScaffold(
     activity: ActivityActions = ActivityActions(),
     extensionsState: ExtensionsState = ExtensionsState(),
     extensions: ExtensionsActions = ExtensionsActions(),
+    debugExit: DebugExit = DebugExit.Direct,
+    egress: EgressActions = EgressActions(),
     termsVersion: String = "",
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
     pollProxies: suspend () -> Unit = {},
@@ -431,9 +436,12 @@ fun AnixScaffold(
     pollExtensions: suspend () -> Unit = {},
     initial: Destination? = null,
     initialSettingsPage: SettingsPage? = null,
+    initialEgressRules: Boolean = false,
 ) {
     var settingsPage by rememberSaveable { mutableStateOf(initialSettingsPage) }
     val closePage = { settingsPage = null }
+    var egressRules by rememberSaveable { mutableStateOf(initialEgressRules) }
+    val closeRules = { egressRules = false }
     val destinations = Destination.of(mode)
     var selected by rememberSaveable(mode) { mutableStateOf(initial?.takeIf { it in destinations } ?: destinations.first()) }
     NavigationSuiteScaffold(
@@ -487,6 +495,20 @@ fun AnixScaffold(
                             ),
                         )
                     }
+                }
+                Destination.Egress -> if (egressRules) {
+                    BackTo(closeRules)
+                    LaunchedEffect(Unit) { pollRules() }
+                    RulesScreen(state.snapshot, state.busy, rulesState, rules, onBack = closeRules)
+                } else {
+                    LaunchedEffect(Unit) { pollProxies() }
+                    EgressScreen(
+                        debugExit,
+                        state.nodeCount,
+                        proxiesState,
+                        proxies,
+                        egress.copy(openRules = { egressRules = true }),
+                    )
                 }
                 Destination.Extensions, Destination.Rewrite -> {
                     LaunchedEffect(Unit) { pollExtensions() }

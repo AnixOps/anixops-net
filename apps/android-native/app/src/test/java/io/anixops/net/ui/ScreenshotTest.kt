@@ -285,7 +285,66 @@ class ScreenshotTest {
         extensions = ExtensionsState(loaded = true),
     )
 
-    private fun capture(        name: String,
+    @Test
+    fun egressPhoneLightZh() = capture(
+        "egress-phone-light-zh",
+        PHONE,
+        "zh-rCN",
+        dark = false,
+        state = connectedState.copy(nodeCount = 4),
+        mode = AppMode.Debug,
+        destination = Destination.Egress,
+        debugExit = DebugExit.Node,
+    )
+
+    @Test
+    fun egressDirectPhoneDarkEn() = capture(
+        "egress-direct-phone-dark-en",
+        PHONE,
+        "en",
+        dark = true,
+        state = connectedState.copy(nodeCount = 4),
+        mode = AppMode.Debug,
+        destination = Destination.Egress,
+    )
+
+    @Test
+    fun egressNoNodesPhoneLightZh() = capture(
+        "egress-no-nodes-phone-light-zh",
+        PHONE,
+        "zh-rCN",
+        dark = false,
+        mode = AppMode.Debug,
+        destination = Destination.Egress,
+        proxies = ProxiesState(loaded = true),
+        debugExit = DebugExit.Node,
+    )
+
+    @Test
+    fun egressTabletLightZh() = capture(
+        "egress-tablet-light-zh",
+        TABLET,
+        "zh-rCN",
+        dark = false,
+        state = connectedState.copy(nodeCount = 4),
+        mode = AppMode.Debug,
+        destination = Destination.Egress,
+        debugExit = DebugExit.Node,
+    )
+
+    @Test
+    fun egressRulesPhoneDarkZh() = capture(
+        "egress-rules-phone-dark-zh",
+        PHONE,
+        "zh-rCN",
+        dark = true,
+        mode = AppMode.Debug,
+        destination = Destination.Egress,
+        egressRules = true,
+    )
+
+    private fun capture(
+        name: String,
         device: String,
         locale: String,
         dark: Boolean,
@@ -297,6 +356,8 @@ class ScreenshotTest {
         settingsPage: SettingsPage? = null,
         traffic: TrafficState = trafficState,
         extensions: ExtensionsState = extensionsState,
+        debugExit: DebugExit = DebugExit.Direct,
+        egressRules: Boolean = false,
     ) {
         TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
         RuntimeEnvironment.setQualifiers("$locale-$device-${if (dark) "night" else "notnight"}-xhdpi")
@@ -315,7 +376,9 @@ class ScreenshotTest {
                     logsState = logsState,
                     trafficState = traffic,
                     extensionsState = extensions,
+                    debugExit = debugExit,
                     initialSettingsPage = settingsPage,
+                    initialEgressRules = egressRules,
                     initial = destination,
                 )
             }
