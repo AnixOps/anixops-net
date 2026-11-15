@@ -32,6 +32,7 @@ jobs:
       android: ${{ steps.changes.outputs.android }}
       android_native: ${{ steps.changes.outputs.android_native }}
       windows_native: ${{ steps.changes.outputs.windows_native }}
+      linux_native: ${{ steps.changes.outputs.linux_native }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -59,8 +60,8 @@ jobs:
         run: |
           set -euo pipefail
           rust=false; ui=false; windows=false; linux=false; apple=false; android=false; android_native=false
-          windows_native=false
-          all() { rust=true; ui=true; windows=true; linux=true; apple=true; android=true; android_native=true; windows_native=true; }
+          windows_native=false; linux_native=false
+          all() { rust=true; ui=true; windows=true; linux=true; apple=true; android=true; android_native=true; windows_native=true; linux_native=true; }
           if [[ "${EVENT_NAME}" != pull_request ]]; then
             all
           else
@@ -69,7 +70,8 @@ jobs:
                 Cargo.toml | Cargo.lock | .github/*) all ;;
                 # AnixOps Design, vendored: every client's colours are generated from it.
                 apps/windows-gui/ui/src/design/*)
-                  ui=true; windows=true; linux=true; android=true; android_native=true; apple=true; windows_native=true ;;
+                  ui=true; windows=true; linux=true; android=true; android_native=true; apple=true; windows_native=true
+                  linux_native=true ;;
                 apps/windows-gui/ui/*) ui=true; windows=true; linux=true; android=true ;;
                 # The native client's installer; the native job builds it and installs, upgrades and removes it.
                 installer/windows-native/*) windows_native=true ;;
@@ -80,17 +82,24 @@ jobs:
                 apps/linux-daemon/*) rust=true ;;
                 # The Windows service; the Windows job builds and tests it, and the native app is tested against it.
                 apps/windows-service/*) rust=true; windows=true; windows_native=true ;;
+                # The list of pages: the native Linux window's tests check that it has the same ones.
+                apps/windows-native/src/AnixOps.Net.Presentation/Section.cs) rust=true; windows_native=true ;;
                 # The native Windows app (C#); its tests read the message samples under crates/client-ipc.
                 apps/windows-native/*) windows_native=true ;;
+                # The native Linux window (GTK 4 and libadwaita); the workspace job tests its pages and options.
+                apps/linux-native/*) rust=true; linux_native=true ;;
                 apps/android/*) android=true ;;
                 # The native Android app (Compose over crates/client-core through JNI); its colours come from the
                 # client tokens.
                 apps/android-native/*) rust=true; android_native=true ;;
-                apps/ios/Design/*) apple=true; android_native=true; windows_native=true ;;
+                apps/ios/Design/*) apple=true; android_native=true; windows_native=true; linux_native=true ;;
                 crates/client-ipc/fixtures/* | crates/client-service/fixtures/*)
                   rust=true; windows=true; linux=true; android=true; android_native=true; windows_native=true ;;
-                # The native Windows app is tested against the real service, which is built from these.
-                crates/*) rust=true; windows=true; linux=true; android=true; android_native=true; windows_native=true ;;
+                # The native Windows app is tested against the real service, which is built from these; the
+                # native Linux window takes its wording from crates/client-strings.
+                crates/*)
+                  rust=true; windows=true; linux=true; android=true; android_native=true; windows_native=true
+                  linux_native=true ;;
                 apps/ios/*) apple=true ;;
                 # The desktop UI bundles TERMS.md and the Apple tests check its version (first-start consent).
                 TERMS.md) ui=true; windows=true; linux=true; apple=true; android=true ;;
@@ -107,6 +116,7 @@ jobs:
             echo "android=${android}"
             echo "android_native=${android_native}"
             echo "windows_native=${windows_native}"
+            echo "linux_native=${linux_native}"
           } | tee -a "$GITHUB_OUTPUT"
 
   ui:
@@ -1185,6 +1195,77 @@ jobs:
           if-no-files-found: warn
           retention-days: 3
 
+  # The native Linux window (apps/linux-native, GTK 4 and libadwaita): built and linted with the `gui` feature,
+  # then started for real under Xvfb: it draws every page in every language and theme into PNG files, and a
+  # script walks and operates it through AT-SPI the way a screen reader does.
+  linux-native:
+    name: Linux native app
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      CARGO_INCREMENTAL: "0"
+    needs: changes
+    if: ${{ needs.changes.outputs.linux_native == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Build: the GTK 4 and libadwaita development files. Run: a display, a session bus, the accessibility
+      # bus and its Python bindings, the icon theme the sidebar's icons come from, and a font with Chinese.
+      - name: Install GTK 4, libadwaita and the test tools
+        shell: bash
+        run: |
+          bash .github/scripts/apt-install.sh libgtk-4-dev libadwaita-1-dev xvfb xauth dbus at-spi2-core \
+            gir1.2-atspi-2.0 python3-gi adwaita-icon-theme fonts-noto-cjk
+          echo "GTK $(pkg-config --modversion gtk4), libadwaita $(pkg-config --modversion libadwaita-1)"
+
+      - name: Setup Rust
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy
+          rustup default stable
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: linux-native
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      - name: Lint, test and build the window
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo clippy --locked -p anixops-net-native --features gui --all-targets -- -D warnings
+          cargo test --locked -p anixops-net-native --features gui
+          cargo build --locked -p anixops-net-native --features gui --release
+          test -x target/release/anixops-net-preview
+
+      - name: Screenshots of every page, language and theme
+        shell: bash
+        run: |
+          set -euo pipefail
+          xvfb-run -a --server-args="-screen 0 2400x1600x24" dbus-run-session -- \
+            .github/scripts/linux-native-screenshots.sh target/release/anixops-net-preview \
+            "${RUNNER_TEMP}/linux-native-screenshots"
+
+      - name: The window through the accessibility interface
+        shell: bash
+        env:
+          GSK_RENDERER: cairo
+        run: |
+          set -euo pipefail
+          xvfb-run -a --server-args="-screen 0 1280x800x24" dbus-run-session -- \
+            python3 .github/scripts/linux-native-a11y.py target/release/anixops-net-preview \
+            crates/client-strings/catalogue.json
+
+      - name: Upload screenshots
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-native-screenshots-${{ github.sha }}
+          path: ${{ runner.temp }}/linux-native-screenshots
+          if-no-files-found: warn
+          retention-days: 3
+
   ci-summary:
     name: CI summary
     runs-on: ubuntu-latest
@@ -1200,6 +1281,7 @@ jobs:
       - android-native
       - windows
       - windows-native
+      - linux-native
       - swift
       - ios-xcode-build
     steps:

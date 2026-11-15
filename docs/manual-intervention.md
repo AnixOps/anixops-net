@@ -331,6 +331,9 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
   anixops-netd`，确认单元里的收紧项（`ProtectSystem=strict`、`ProtectHome=yes`、`CapabilityBoundingSet`、
   `RestrictAddressFamilies`）下连接、TUN 模式、HTTPS 解密都正常；用普通登录用户能控制，用没有登录会话的账号
   （`sudo -u nobody`）连接时得到拒绝的说明。CI 的 runner 上没有 systemd 会话，测不到这一层。
+- [ ] Linux 原生版骨架的真机核对（预览版发布后）：CI 只在 Xvfb（X11、Cairo 渲染）里跑。在 GNOME（Wayland）和 KDE
+  上各看一遍：窗口拖窄后折成一栏并能返回侧栏；系统切换深浅色时窗口跟着变；强调色是品牌色；系统开高对比度时回到
+  系统配色；Orca 能读出侧栏的六个页面；125% / 200% 缩放下文字清晰。
 
 ## macOS 自有根证书与指标端口真机验收（A2、A3）
 

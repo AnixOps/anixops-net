@@ -12,6 +12,7 @@ vendored AnixOps Design tokens.json (see .github/scripts/sync_design.py). Output
                                                              vendored tokens.css, which styles.css imports first)
     apps/android-native/app/src/main/java/io/anixops/net/ui/theme/BrandTokens.kt   (native Android)
     apps/windows-native/src/AnixOps.Net.App/Theme/BrandTokens.xaml                 (native Windows)
+    apps/linux-native/data/brand-light.css, brand-dark.css                         (native Linux)
 
 Standard library only, so CI needs nothing but python3.
 """
@@ -29,6 +30,7 @@ SWIFT_OUT = ROOT / "apps/ios/Sources/NetworkCoreAppHost/BrandTokens.swift"
 CSS_OUT = ROOT / "apps/windows-gui/ui/src/design/tokens.css"
 KOTLIN_OUT = ROOT / "apps/android-native/app/src/main/java/io/anixops/net/ui/theme/BrandTokens.kt"
 XAML_OUT = ROOT / "apps/windows-native/src/AnixOps.Net.App/Theme/BrandTokens.xaml"
+GTK_OUT = {theme: ROOT / f"apps/linux-native/data/brand-{theme}.css" for theme in ("light", "dark")}
 
 THEMES = ("light", "dark")
 HEADER = (
@@ -365,6 +367,51 @@ def xaml(tokens: dict, upstream: dict, version: str) -> str:
     return "\n".join(out)
 
 
+def gtk_color(value: str, where: str) -> str:
+    if HEX.match(value):
+        return value.upper()
+    if match := RGBA.match(value):
+        red, green, blue, alpha = match.groups()
+        return f"rgba({int(red)}, {int(green)}, {int(blue)}, {number(float(alpha))})"
+    fail(f"{where} = {value!r} is neither #RRGGBB nor rgba()")
+    return ""
+
+
+# libadwaita's own colour names and the AnixOps Net colour each one takes. Only the accent and the status
+# colours: windows, cards and text keep libadwaita's, so the app reads as a GNOME app in the brand's colour.
+GTK_NAMED = (
+    ("accent_color", "primary"),
+    ("accent_bg_color", "primaryFill"),
+    ("accent_fg_color", "onPrimary"),
+    ("destructive_color", "danger"),
+    ("destructive_bg_color", "dangerFill"),
+    ("success_color", "success"),
+    ("warning_color", "warning"),
+    ("error_color", "danger"),
+)
+
+
+def gtk(tokens: dict, upstream: dict, version: str, theme: str) -> str:
+    """One GTK stylesheet per theme: GTK 4.14 has no way to ask for the colour scheme inside a stylesheet, so
+    the window loads the file that matches (and neither in high contrast, which keeps the system's colours).
+
+    libadwaita's named colours are set for 1.5; the same values as custom properties are what 1.6 and later
+    read. `brand_*` are the app's own names for every palette colour.
+    """
+    colors = palette(tokens, upstream, theme)
+    out = [f"/* {HEADER.format(version=version)} */", ""]
+    for name, key in GTK_NAMED:
+        out.append(f"@define-color {name} {gtk_color(colors[key], f'{theme}.{key}')};")
+    out.append("")
+    for key, value in colors.items():
+        out.append(f"@define-color brand_{kebab(key).replace('-', '_')} {gtk_color(value, f'{theme}.{key}')};")
+    out += ["", ":root {"]
+    for name, key in GTK_NAMED:
+        out.append(f"  --{name.replace('_', '-')}: {gtk_color(colors[key], f'{theme}.{key}')};")
+    out += ["}", ""]
+    return "\n".join(out)
+
+
 def main() -> None:
     check = "--check" in sys.argv[1:]
     tokens = json.loads(SOURCE.read_text(encoding="utf-8"))
@@ -379,6 +426,7 @@ def main() -> None:
         (CSS_OUT, css(tokens, upstream, version)),
         (KOTLIN_OUT, kotlin(tokens, upstream, version)),
         (XAML_OUT, xaml(tokens, upstream, version)),
+        *((path, gtk(tokens, upstream, version, theme)) for theme, path in GTK_OUT.items()),
     )
     for path, text in outputs:
         current = path.read_text(encoding="utf-8") if path.exists() else None

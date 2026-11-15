@@ -1,0 +1,32 @@
+[package]
+name = "anixops-net-native"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The native Linux window of AnixOps Net (preview): GTK 4 and libadwaita over the core daemon."
+
+# The window needs the GTK 4 and libadwaita development files, which plain workspace builds do not install, so
+# it sits behind the `gui` feature. Without it the crate is only what the window shows and how it is started
+# (pages, wording, launch options), which the workspace jobs test on every system; the "Linux native app" job
+# builds, lints and drives the window with `--features gui`.
+[features]
+default = []
+gui = ["dep:adw", "dep:gtk", "dep:relm4"]
+
+[dependencies]
+client-strings = { path = "../../crates/client-strings" }
+
+# GTK 4.14 and libadwaita 1.5 are the oldest the window runs on (Ubuntu 24.04, Debian 13, Fedora 40).
+[target.'cfg(target_os = "linux")'.dependencies]
+adw = { package = "libadwaita", version = "0.9", features = ["v1_5"], optional = true }
+gtk = { package = "gtk4", version = "0.11", features = ["v4_14"], optional = true }
+relm4 = { version = "0.11", default-features = false, features = ["libadwaita"], optional = true }
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "anixops-net-preview"
+path = "src/main.rs"
+required-features = ["gui"]

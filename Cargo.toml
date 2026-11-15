@@ -3,6 +3,7 @@ members = [
     "apps/android-native/rust",
     "apps/linux-daemon",
     "apps/linux-gui",
+    "apps/linux-native",
     "apps/windows-gui",
     "apps/windows-service",
     "crates/app-log",
