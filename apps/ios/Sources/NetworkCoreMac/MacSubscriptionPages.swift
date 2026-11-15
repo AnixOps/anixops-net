@@ -125,13 +125,6 @@ struct MacProxiesPage: View {
                     }
                     .disabled(updatingAll)
                     Spacer()
-                    Picker("排序", selection: $sort) {
-                        Text("订阅顺序").tag(NodeSort.original)
-                        Text("按名称").tag(NodeSort.name)
-                        Text("按延迟").tag(NodeSort.latency)
-                    }
-                    .pickerStyle(.menu)
-                    .fixedSize()
                 }
 
                 if tunnel.subscriptions.activeID == nil, let name = tunnel.nodeName {
@@ -214,6 +207,7 @@ struct MacProxiesPage: View {
             if !isCollapsed {
                 Divider()
                 VStack(spacing: 0) {
+                    nodeHeader
                     ForEach(shownNodes(group)) { node in
                         Button {
                             guard !routed else {
@@ -223,8 +217,8 @@ struct MacProxiesPage: View {
                                 await tunnel.selectNode(node.id, inGroup: group.id)
                             }
                         } label: {
-                            nodeRow(
-                                node,
+                            MacNodeRow(
+                                node: node,
                                 latency: tunnel.latencies[TunnelController.latencyKey(group: group.id, node: node.id)],
                                 selected: isActive && !routed && node.id == group.library.selectedID
                             )
@@ -286,29 +280,41 @@ struct MacProxiesPage: View {
         }
     }
 
-    private func nodeRow(_ node: NativeImportReport.Node, latency: NodeLatency?, selected: Bool) -> some View {
-        HStack(spacing: 12) {
-            ProtocolBadge(outboundKind: node.protocol)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(node.name.isEmpty ? ImportPreview.mask(node.server) : node.name)
-                    .font(.body.weight(selected ? .semibold : .regular))
-                    .foregroundStyle(brand.text)
-                    .lineLimit(1)
-                Text(ProtocolBadge.spokenName(for: node.protocol))
-                    .font(.caption)
-                    .foregroundStyle(brand.text2)
-            }
-            Spacer()
-            NodeLatencyText(result: latency)
-            if selected {
-                Circle()
-                    .fill(Brand.amber)
-                    .frame(width: 8, height: 8)
-                    .accessibilityLabel("当前节点")
-            }
+    /// The node table's header, which is also its sort control: a click sorts by the column, a second click goes
+    /// back to the subscription's own order (AnixOps Design `guidelines/density.md` N16).
+    private var nodeHeader: some View {
+        HStack(spacing: MacNodeRow.spacing) {
+            Color.clear
+                .frame(width: MacNodeRow.dotWidth, height: 1)
+            sortHeader("名称", .name)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text("类型")
+                .frame(width: MacNodeRow.typeWidth, alignment: .leading)
+            sortHeader("延迟 ms", .latency)
+                .frame(width: MacNodeRow.latencyWidth, alignment: .trailing)
         }
-        .padding(.vertical, 6)
-        .contentShape(Rectangle())
+        .font(.callout)
+        .foregroundStyle(brand.text2)
+        .padding(.horizontal, MacNodeRow.inset)
+        .frame(height: 24)
+    }
+
+    private func sortHeader(_ title: LocalizedStringKey, _ order: NodeSort) -> some View {
+        Button {
+            sort = sort == order ? .original : order
+        } label: {
+            HStack(spacing: 3) {
+                Text(title)
+                if sort == order {
+                    Image(systemName: "chevron.up")
+                        .font(.caption2.weight(.semibold))
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(sort == order ? Text("恢复订阅顺序") : Text("按这一列排序"))
+        .accessibilityAddTraits(sort == order ? .isSelected : [])
     }
 
     private func singleNodeRow(_ name: String) -> some View {
@@ -522,5 +528,98 @@ private struct MacEditingNode: Identifiable {
 
     var id: String {
         "\(groupID)\u{1F}\(node.id)"
+    }
+}
+
+/// One node as a row of the compact node table (AnixOps Design `guidelines/density.md`): the name takes the spare
+/// width and truncates (N9, N12), the type and the delay keep fixed columns so numbers never move sideways, the
+/// delay is right-aligned in tabular digits with its unit in the header (N10), a failed test is a word and an
+/// untested node a dash (N13, N14).
+private struct MacNodeRow: View {
+    static let spacing: CGFloat = 8
+    static let inset: CGFloat = 8
+    static let dotWidth: CGFloat = 6
+    static let typeWidth: CGFloat = 120
+    static let latencyWidth: CGFloat = 72
+
+    let node: NativeImportReport.Node
+    let latency: NodeLatency?
+    let selected: Bool
+    @Environment(\.brand) private var brand
+    @State private var hovering = false
+
+    private var name: String {
+        node.name.isEmpty ? ImportPreview.mask(node.server) : node.name
+    }
+
+    var body: some View {
+        HStack(spacing: Self.spacing) {
+            Circle()
+                .fill(selected ? Brand.amber : Color.clear)
+                .frame(width: Self.dotWidth, height: Self.dotWidth)
+                .accessibilityLabel("当前节点")
+                .accessibilityHidden(!selected)
+            Text(verbatim: name)
+                .font(.callout.weight(selected ? .semibold : .regular))
+                .foregroundStyle(brand.text)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(ProtocolBadge.spokenName(for: node.protocol))
+                .font(.callout)
+                .foregroundStyle(brand.text2)
+                .lineLimit(1)
+                .frame(width: Self.typeWidth, alignment: .leading)
+            delay
+                .frame(width: Self.latencyWidth, alignment: .trailing)
+        }
+        .padding(.horizontal, Self.inset)
+        .frame(height: 28)
+        .background(
+            selected ? brand.primary.opacity(0.10) : (hovering ? brand.text.opacity(0.05) : Color.clear),
+            in: RoundedRectangle(cornerRadius: 5)
+        )
+        .contentShape(Rectangle())
+        .onHover { inside in
+            hovering = inside
+        }
+        .help(Text(verbatim: name))
+    }
+
+    @ViewBuilder
+    private var delay: some View {
+        switch latency {
+        case .none:
+            Text(verbatim: "—")
+                .font(.callout)
+                .foregroundStyle(brand.text3)
+                .accessibilityLabel("未测试")
+        case .measuring:
+            ProgressView()
+                .controlSize(.mini)
+                .accessibilityLabel("正在测速")
+        case let .millis(value):
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(brand.color(for: LatencyGrade(milliseconds: UInt32(clamping: value))))
+                    .frame(width: 6, height: 6)
+                    .accessibilityHidden(true)
+                Text(verbatim: "\(value)")
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(brand.text)
+            }
+        case .timeout:
+            Text("超时")
+                .font(.callout)
+                .foregroundStyle(brand.text2)
+        case .failed:
+            Text("失败")
+                .font(.callout)
+                .foregroundStyle(brand.text2)
+        case .unsupported:
+            Text("不支持")
+                .font(.callout)
+                .foregroundStyle(brand.text3)
+        }
     }
 }
