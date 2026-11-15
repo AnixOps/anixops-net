@@ -2,7 +2,7 @@
 //!
 //! The windows are written in different languages (C#, Rust, Kotlin, and TypeScript while the web interface
 //! lasts). Logic with behaviour of its own (how an `anixops://` link is read, how quick filters join a typed
-//! filter, how the request and node lists are ordered, what the overview page makes of the core's state)
+//! filter, how the request and node lists are ordered, what the overview page makes of the core's state and of the engine's connections)
 //! would otherwise be written and tested once per language and drift apart. It lives here instead, and a
 //! window reaches it as commands whose names start with `view.`, through the same door as the core's
 //! commands ([`invoke`]).
@@ -17,6 +17,7 @@
 
 pub mod app_link;
 pub mod capture;
+pub mod connections;
 pub mod decrypt;
 pub mod groups;
 pub mod logs;
@@ -141,6 +142,11 @@ pub fn invoke(command: &str, args: &Value) -> Option<Result<Value, String>> {
             args.get("now").and_then(Value::as_u64).unwrap_or(0),
         ),
         "groups" => groups::groups(rows(args, "groups")),
+        "connections" => connections::connections(
+            args.get("list").unwrap_or(&Value::Null),
+            rows(args, "nodes"),
+            text(args, "query"),
+        ),
         "overview" => overview::overview(
             args.get("snapshot").unwrap_or(&Value::Null),
             rows(args, "nodes"),
@@ -208,6 +214,7 @@ mod tests {
             "proxies",
             "subscriptions",
             "groups",
+            "connections",
             "logs",
             "traffic_stats",
             "decrypt_hosts",

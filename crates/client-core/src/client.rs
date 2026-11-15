@@ -917,6 +917,25 @@ fn handler(name: &str) -> Option<Handler> {
                 .collect::<Result<_, _>>()?;
             Ok(client_view::groups::groups(&groups))
         },
+        // The open connections as the overview page lists them, the newest first, searched or not; nothing
+        // while the engine is not running.
+        "connections" => |client, args| {
+            let query = query(args)?;
+            let nodes = client.node_rows()?;
+            let list = client.backend().connections();
+            Ok(client_view::connections::connections(&list, &nodes, &query))
+        },
+        "close_connection" => |client, args| {
+            let ConnectionId { id } = parse(args)?;
+            client
+                .backend()
+                .runtime_control(&serde_json::json!({ "cmd": "close_connection", "id": id }))
+        },
+        "close_connections" => |client, _| {
+            client
+                .backend()
+                .runtime_control(&serde_json::json!({ "cmd": "close_all" }))
+        },
         "list_native_groups" => |client, _| json(client.backend().groups()),
         "list_subscriptions" => |client, _| json(client.backend().subscriptions()),
         "connect" | "restart_service" => |client, _| json(client.connect_through_tunnel()?),
@@ -1306,6 +1325,11 @@ fn unix_seconds() -> u64 {
 #[serde(rename_all = "camelCase")]
 struct NodeId {
     node_id: String,
+}
+
+#[derive(Deserialize)]
+struct ConnectionId {
+    id: u64,
 }
 
 #[derive(Deserialize)]
@@ -1812,6 +1836,20 @@ mod tests {
             client.invoke("groups", serde_json::json!({})).unwrap(),
             serde_json::json!({ "groups": [] })
         );
+        // No engine runs: there is nothing to list, searched or not, and nothing to close.
+        for args in [Value::Null, serde_json::json!({ "query": "google" })] {
+            assert_eq!(
+                client.invoke("connections", args).unwrap(),
+                serde_json::json!({ "running": false, "total": 0, "connections": [] })
+            );
+        }
+        assert!(client
+            .invoke("close_connection", serde_json::json!({ "id": 1 }))
+            .is_err());
+        assert!(client
+            .invoke("close_connection", serde_json::json!({}))
+            .is_err());
+        assert!(client.invoke("close_connections", Value::Null).is_err());
         for (server, port, problem) in [
             ("hk.example", "443", None),
             ("", "443", Some("server.empty")),
