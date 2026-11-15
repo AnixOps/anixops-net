@@ -74,6 +74,26 @@ class CoreTest {
     }
 
     @Test
+    fun pluginsDecodeWithTheSharedFieldNames() = runTest {
+        val transport = Recording(
+            """{"ok":[{"id":"p1","name":"Ads","url":"https://example.com/ads.plugin","enabled":true,"level":"partial",
+                "hostnames":["api.example.com"],"scriptCount":2}]}""",
+        )
+        val plugin = Core(transport, StandardTestDispatcher(testScheduler)).mitmPlugins().single()
+        assertEquals(listOf("list_mitm_plugins" to "{}"), transport.calls)
+        assertEquals("partial", plugin.level)
+        assertEquals(listOf("api.example.com"), plugin.hostnames)
+        assertEquals(2, plugin.scriptCount)
+    }
+
+    @Test
+    fun aPastedPluginSaysWhereItCameFrom() = runTest {
+        val transport = Recording("""{"ok":{"message":"imported"}}""")
+        Core(transport, StandardTestDispatcher(testScheduler)).importMitmPluginText("#!name = x", "x.plugin")
+        assertEquals("import_mitm_plugin_text" to """{"text":"#!name = x","source":"x.plugin"}""", transport.calls.single())
+    }
+
+    @Test
     fun ruleSetsGoThroughRuntimeControl() = runTest {
         val transport = Recording(
             """{"ok":{"rule_sets":[{"name":"china","source":"remote","entries":8412,"updated_at_ms":1763198400000}]}}""",

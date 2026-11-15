@@ -279,4 +279,83 @@
         <item quantity="one">Show %d more</item>
         <item quantity="other">Show %d more</item>
     </plurals>
+
+    <!-- 扩展 / 改写 -->
+    <string name="decryption">HTTPS decryption</string>
+    <string name="decryption_switch">Decrypt HTTPS traffic</string>
+    <string name="decryption_switch_hint">Plugins and scripts need it to rewrite web requests</string>
+    <string name="decryption_root">Root certificate</string>
+    <string name="decryption_root_hint">Saved to Downloads when you turn decryption on. Install it yourself in the system settings under Security › Encryption &amp; credentials › Install a certificate › CA certificate; apps that ignore user certificates are not decrypted.</string>
+    <string name="decryption_root_open">Security settings</string>
+    <string name="decryption_note">Only the domains listed under Decrypted domains below, in plugins and in mappings are decrypted; other sites pass through untouched. The root certificate is made on this device and you install it yourself; the app never trusts it on its own.</string>
+    <string name="decrypt_hosts">Decrypted domains</string>
+    <string name="decrypt_host_field">Domain to decrypt</string>
+    <string name="decrypt_host_example">api.example.com or *.example.com</string>
+    <string name="decrypt_host_remove">Stop decrypting %1$s</string>
+    <string name="decrypt_hosts_note">Only the domains listed here, in plugins and in mappings are decrypted; other HTTPS passes through untouched. *.example.com covers all of its subdomains.</string>
+    <string name="action_add">Add</string>
+    <string name="action_import">Import</string>
+    <string name="action_close">Close</string>
+    <string name="plugins">Plugins</string>
+    <string name="plugin_import">Import plugin</string>
+    <string name="plugin_url">https:// plugin address</string>
+    <string name="plugin_more_imports">More ways to import</string>
+    <string name="plugin_import_file">Import from file</string>
+    <string name="plugin_paste">Paste plugin text</string>
+    <string name="plugin_text">Plugin text</string>
+    <string name="plugin_file_unreadable">This file could not be read</string>
+    <string name="plugins_empty">No plugins yet</string>
+    <string name="plugins_empty_body">Import a plugin by its https address. It takes effect once HTTPS decryption is on.</string>
+    <string name="plugins_note">Works with Loon, Surge and Quantumult X plugins. Importing also downloads the scripts a plugin names, and allows them to run.</string>
+    <string name="plugin_partial">Partly supported</string>
+    <string name="plugin_unsupported">Not supported</string>
+    <string name="plugin_view">View contents</string>
+    <string name="plugin_remove">Remove plugin</string>
+    <string name="plugin_confirm_remove">Remove %1$s?</string>
+    <string name="plugin_no_hosts">No domains to decrypt</string>
+    <string name="plugin_no_scripts">No scripts</string>
+    <string name="plugin_local">Imported locally</string>
+    <string name="plugin_lines">Lines</string>
+    <string name="plugin_excluded">Excluded domains</string>
+    <string name="plugin_script_list">Scripts</string>
+    <string name="plugin_resources">Data files</string>
+    <string name="decryption_consent_title">Before you turn on HTTPS decryption</string>
+    <string name="decryption_consent_intro">HTTPS decryption shows the plain text inside encrypted connections. Use it only within these limits:</string>
+    <string name="decryption_consent_own">Decrypt only traffic on your own devices, or of apps, devices and networks you are authorised to debug.</string>
+    <string name="decryption_consent_others">Never capture or decrypt other people\'s traffic. Get the owner\'s consent before you connect another device to capture.</string>
+    <string name="decryption_consent_secrets">Decrypted content can hold passwords, tokens and personal data. It stays on this device; redact it before you export or share it.</string>
+    <string name="decryption_consent_abuse">Never use it to break into systems, steal data or get around anyone else\'s security. See section 4 of the user agreement.</string>
+    <string name="decryption_consent_confirm">I confirm, turn on</string>
+    <plurals name="decrypt_host_count">
+        <item quantity="one">%1$d domain</item>
+        <item quantity="other">%1$d domains</item>
+    </plurals>
+    <plurals name="plugin_count">
+        <item quantity="one">%1$d plugin</item>
+        <item quantity="other">%1$d plugins</item>
+    </plurals>
+    <plurals name="plugin_more_hosts">
+        <item quantity="one">and more (%1$d domain)</item>
+        <item quantity="other">and more (%1$d domains)</item>
+    </plurals>
+    <plurals name="plugin_scripts">
+        <item quantity="one">%1$d script</item>
+        <item quantity="other">%1$d scripts</item>
+    </plurals>
+    <plurals name="plugin_lines_supported">
+        <item quantity="one">%1$d line supported</item>
+        <item quantity="other">%1$d lines supported</item>
+    </plurals>
+    <plurals name="plugin_lines_partial">
+        <item quantity="one">%1$d partly supported</item>
+        <item quantity="other">%1$d partly supported</item>
+    </plurals>
+    <plurals name="plugin_lines_unsupported">
+        <item quantity="one">%1$d unsupported</item>
+        <item quantity="other">%1$d unsupported</item>
+    </plurals>
+    <plurals name="plugin_lines_deferred">
+        <item quantity="one">%1$d deferred</item>
+        <item quantity="other">%1$d deferred</item>
+    </plurals>
 </resources>

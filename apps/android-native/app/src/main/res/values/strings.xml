@@ -278,4 +278,75 @@
     <plurals name="logs_show_more">
         <item quantity="other">再显示 %d 条</item>
     </plurals>
+
+    <!-- 扩展 / 改写 -->
+    <string name="decryption">HTTPS 解密</string>
+    <string name="decryption_switch">解密 HTTPS 流量</string>
+    <string name="decryption_switch_hint">插件和脚本需要它才能改写网页请求</string>
+    <string name="decryption_root">根证书</string>
+    <string name="decryption_root_hint">开启解密时保存到“下载”文件夹。在系统设置的“安全 › 加密与凭据 › 安装证书 › CA 证书”里手动安装；不信任用户证书的应用不会被解密。</string>
+    <string name="decryption_root_open">安全设置</string>
+    <string name="decryption_note">只解密下面“解密域名”、插件和映射里列出的域名，其余网站原样转发。根证书在本机生成，由你手动安装，App 不会自动信任。</string>
+    <string name="decrypt_hosts">解密域名</string>
+    <string name="decrypt_host_field">要解密的域名</string>
+    <string name="decrypt_host_example">api.example.com 或 *.example.com</string>
+    <string name="decrypt_host_remove">不再解密 %1$s</string>
+    <string name="decrypt_hosts_note">只解密这里、插件和映射里列出的域名，其余 HTTPS 原样转发。写 *.example.com 包含它的所有子域名。</string>
+    <string name="action_add">添加</string>
+    <string name="action_import">导入</string>
+    <string name="action_close">关闭</string>
+    <string name="plugins">插件</string>
+    <string name="plugin_import">导入插件</string>
+    <string name="plugin_url">https:// 插件网址</string>
+    <string name="plugin_more_imports">更多导入方式</string>
+    <string name="plugin_import_file">从文件导入</string>
+    <string name="plugin_paste">粘贴插件内容</string>
+    <string name="plugin_text">插件内容</string>
+    <string name="plugin_file_unreadable">读不了这个文件</string>
+    <string name="plugins_empty">还没有插件</string>
+    <string name="plugins_empty_body">导入一个插件的 https 网址，开启 HTTPS 解密后生效。</string>
+    <string name="plugins_note">支持 Loon、Surge 和 Quantumult X 的插件。导入时会一并下载插件里的脚本，导入即表示允许这些脚本运行。</string>
+    <string name="plugin_partial">部分支持</string>
+    <string name="plugin_unsupported">不支持</string>
+    <string name="plugin_view">查看内容</string>
+    <string name="plugin_remove">删除插件</string>
+    <string name="plugin_confirm_remove">确认删除 %1$s</string>
+    <string name="plugin_no_hosts">没有解密域名</string>
+    <string name="plugin_no_scripts">无脚本</string>
+    <string name="plugin_local">本地导入</string>
+    <string name="plugin_lines">规则行</string>
+    <string name="plugin_excluded">排除的域名</string>
+    <string name="plugin_script_list">脚本</string>
+    <string name="plugin_resources">数据文件</string>
+    <string name="decryption_consent_title">开启 HTTPS 解密前请确认</string>
+    <string name="decryption_consent_intro">HTTPS 解密能看到加密连接里的明文。只在下面的范围内使用：</string>
+    <string name="decryption_consent_own">只解密你自己设备上的流量，或你有权调试的应用、设备和网络的流量。</string>
+    <string name="decryption_consent_others">不抓取、不解密别人的流量。把其他设备接入抓包前，先取得设备所有者的同意。</string>
+    <string name="decryption_consent_secrets">解密后的内容可能含有密码、令牌和个人信息，只保存在本机；导出或分享前请先脱敏。</string>
+    <string name="decryption_consent_abuse">不得用于入侵、窃取数据或绕过他人的安全机制。详见用户协议第 4 节。</string>
+    <string name="decryption_consent_confirm">我确认，开启</string>
+    <plurals name="decrypt_host_count">
+        <item quantity="other">%1$d 个域名</item>
+    </plurals>
+    <plurals name="plugin_count">
+        <item quantity="other">%1$d 个插件</item>
+    </plurals>
+    <plurals name="plugin_more_hosts">
+        <item quantity="other">等 %1$d 个域名</item>
+    </plurals>
+    <plurals name="plugin_scripts">
+        <item quantity="other">%1$d 个脚本</item>
+    </plurals>
+    <plurals name="plugin_lines_supported">
+        <item quantity="other">%1$d 行支持</item>
+    </plurals>
+    <plurals name="plugin_lines_partial">
+        <item quantity="other">%1$d 行部分支持</item>
+    </plurals>
+    <plurals name="plugin_lines_unsupported">
+        <item quantity="other">%1$d 行不支持</item>
+    </plurals>
+    <plurals name="plugin_lines_deferred">
+        <item quantity="other">%1$d 行暂不处理</item>
+    </plurals>
 </resources>

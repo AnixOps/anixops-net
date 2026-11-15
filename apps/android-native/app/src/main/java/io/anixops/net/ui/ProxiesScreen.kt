@@ -2,7 +2,6 @@ package io.anixops.net.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,13 +11,9 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -354,31 +349,6 @@ private fun NodeLine(
     }
 }
 
-/** The ⋮ button and its menu; [items] get a `close` to call before acting. */
-@Composable
-private fun OverflowMenu(label: String, enabled: Boolean, items: @Composable (close: () -> Unit) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { open = true }, enabled = enabled) {
-            Icon(Icons.Filled.MoreVert, contentDescription = label)
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            items { open = false }
-        }
-    }
-}
-
-@Composable
-private fun MenuItem(label: Int, close: () -> Unit, onClick: () -> Unit) {
-    DropdownMenuItem(
-        text = { Text(stringResource(label)) },
-        onClick = {
-            close()
-            onClick()
-        },
-    )
-}
-
 @Composable
 private fun ProxiesDialogs(dialog: ProxiesDialog?, actions: ProxiesActions, onChange: (ProxiesDialog?) -> Unit) {
     val dismiss = { onChange(null) }
@@ -462,28 +432,6 @@ private fun ImportDialog(initial: String, onScan: () -> Unit, onImport: (String)
 }
 
 @Composable
-private fun TextDialog(title: String, label: String, initial: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
-    var text by rememberSaveable { mutableStateOf(initial) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                singleLine = true,
-                label = { Text(label) },
-                modifier = Modifier.fillMaxWidth(),
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(text) }, enabled = text.isNotBlank()) { Text(stringResource(R.string.action_save)) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
-    )
-}
-
-@Composable
 private fun IntervalDialog(subscription: SubscriptionRow, onChoose: (Int) -> Unit, onDismiss: () -> Unit) {
     val choices = (ProxiesViewModel.INTERVALS + subscription.intervalHours).distinct().sorted()
     AlertDialog(
@@ -523,20 +471,6 @@ private fun intervalLabel(hours: Int): String = when {
 
 private const val DAY_HOURS = 24
 private const val WEEK_HOURS = 168
-
-@Composable
-private fun ConfirmDialog(title: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(stringResource(R.string.action_remove), color = LocalBrandPalette.current.danger)
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
-    )
-}
 
 @Composable
 private fun EditNodeDialog(form: NodeForm, onSave: (String, String, String) -> Unit, onDismiss: () -> Unit) {
