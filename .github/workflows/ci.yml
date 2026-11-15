@@ -1269,13 +1269,21 @@ jobs:
             .github/scripts/linux-native-screenshots.sh target/release/anixops-net-preview \
             "${RUNNER_TEMP}/linux-native-screenshots"
 
-      # The last part runs the window against the real daemon: not running, found, stopped, found again.
+      # The last part runs the window against the real daemon: not running, found, connected and disconnected
+      # with the overview's button, stopped, found again.
       - name: The window through the accessibility interface, alone and with the daemon
         shell: bash
         env:
           GSK_RENDERER: cairo
         run: |
           set -euo pipefail
+          # The daemon only answers users who are signed in at the machine (a login record or a runtime
+          # folder). A runner's job is not a login session, so the runtime folder is made here as the login
+          # manager would have made it.
+          uid=$(id -u)
+          if [[ ! -e "/run/systemd/users/${uid}" && ! -e "/run/user/${uid}" ]]; then
+            sudo install -d -m 0700 -o "${uid}" "/run/user/${uid}"
+          fi
           xvfb-run -a --server-args="-screen 0 1280x800x24" dbus-run-session -- \
             python3 .github/scripts/linux-native-a11y.py target/release/anixops-net-preview \
             crates/client-strings/catalogue.json target/release/anixops-netd \

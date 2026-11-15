@@ -3,11 +3,16 @@
 The Linux client written with GTK 4, libadwaita and Rust (`docs/architecture/desktop-native.md`). It runs as
 the signed-in user; the engine runs in the daemon (`apps/linux-daemon`), which the window reaches over the
 daemon's socket. So far: the window, the sidebar with the six pages, light and dark, three languages, and the
-link to the daemon, whose state the foot of the sidebar shows. The pages themselves come next.
+link to the daemon, whose state the foot of the sidebar shows, and the first real page: the overview
+(connect and disconnect, the node in use, speed and traffic). The other pages come next.
 
 - `src/sections.rs`, `src/launch.rs`: what the window shows and how it is started, without GTK. Built and
   tested on every system by the workspace jobs. A test checks that the pages are the ones the Windows window
   has.
+- `src/overview.rs`: the overview page without GTK: asking the daemon once a second and turning the answer
+  into the page's sentences, numbers and whether the button can be pressed. What the daemon's state means is
+  decided in `crates/client-view` (`view.overview`), the same code the other windows use.
+- `src/overview_page.rs`: the overview page's widgets.
 - `src/window.rs`: the window (relm4 over gtk4-rs and libadwaita). Only built with the `gui` feature, on Linux,
   because it needs the GTK 4 and libadwaita development files. It links `crates/client-window` (the standing
   link to the daemon and the answers to what the daemon asks of the user's session) and none of the engine.
@@ -25,6 +30,7 @@ window's own renderer and quits.
 The "Linux native app" job in CI builds and lints the window, draws every page in every language and theme
 (`.github/scripts/linux-native-screenshots.sh`, uploaded as an artifact) and operates the running window
 through AT-SPI the way a screen reader does (`.github/scripts/linux-native-a11y.py`). The same script then
-runs the window against the real `anixops-netd`: not running, found, stopped, found again.
+runs the window against the real `anixops-netd`: not running, found, connected and disconnected with the
+overview's button, stopped, found again.
 
 Like the rest of the repository, this is built and tested in GitHub Actions only.
