@@ -614,6 +614,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             select_native_group_outbound,
             runtime_control,
             export_capture,
+            decode_body,
             capture_session,
             replay_request,
             list_debug_mappings,
@@ -1389,6 +1390,13 @@ async fn export_capture(
         })
     })
     .await
+}
+
+/// Undoes a captured body's `Content-Encoding` for the inspector with the kernel's decoder
+/// (`desktop_mitm::capture::decode_body`): gzip, deflate, br and zstd, the same as on Apple and in exports.
+#[tauri::command]
+async fn decode_body(request: desktop_mitm::capture::DecodeRequest) -> Result<Value, String> {
+    run_blocking(move || desktop_mitm::capture::decode_body(&request)).await
 }
 
 /// Saved capture sessions: list, save what capture holds, load one for viewing, delete

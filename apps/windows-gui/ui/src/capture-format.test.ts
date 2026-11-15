@@ -1,6 +1,28 @@
 import { describe, expect, it } from "vitest";
 import type { CaptureConnection } from "./bridge";
-import { asText, decodedBody, directionTotals, durationMs, fromBase64, header, headerLines, hexDump, looksLikeTls, noteText, parseHeaderLines, toBase64, withoutQuery } from "./capture-format";
+import {
+  appendMessages,
+  asText,
+  decodedBody,
+  directionTotals,
+  durationMs,
+  frameDetail,
+  fromBase64,
+  header,
+  headerLines,
+  hexDump,
+  looksLikeTls,
+  messageText,
+  messageTitle,
+  notableFrame,
+  noteText,
+  parseHeaderLines,
+  skippedText,
+  streamKind,
+  toBase64,
+  withoutQuery,
+} from "./capture-format";
+import type { H2Frame, StreamMessage } from "./bridge";
 
 const base64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 
@@ -88,4 +110,61 @@ describe("capture format", () => {
     expect((await decodedBody(zipped, "gzip", true)).decoded).toBe(false);
     expect((await decodedBody(zipped, "br", false)).decoded).toBe(false);
   });
+
+  it("asks the kernel first and falls back when it cannot decode", async () => {
+    const seen: Array<[string, string, boolean]> = [];
+    const kernel = async (data: string, encoding: string, complete: boolean) => {
+      seen.push([data, encoding, complete]);
+      return { data_base64: toBase64(new TextEncoder().encode("from kernel")), truncated: !complete };
+    };
+    const zstd = new Uint8Array([0x28, 0xb5, 0x2f, 0xfd]);
+    const decoded = await decodedBody(zstd, "zstd", true, kernel);
+    expect(new TextDecoder().decode(decoded.bytes)).toBe("from kernel");
+    expect(decoded).toMatchObject({ decoded: true, partial: true });
+    expect(seen).toEqual([[toBase64(zstd), "zstd", false]]);
+    // Nothing to undo: the kernel is not asked.
+    expect((await decodedBody(zstd, "identity", false, kernel)).decoded).toBe(false);
+    expect(seen).toHaveLength(1);
+    // The kernel refuses: gzip of a whole body still comes out through the webview.
+    const zipped = await gzip("hello capture");
+    const fallback = await decodedBody(zipped, "gzip", false, async () => {
+      throw new Error("corrupt");
+    });
+    expect(new TextDecoder().decode(fallback.bytes)).toBe("hello capture");
+  });
+
+  it("names streams, messages and frames", () => {
+    const row = { method: "GET", status: 101, response_content_type: null, message_count: 0 };
+    expect(streamKind(row)).toBe("WS");
+    expect(streamKind({ ...row, status: 200, response_content_type: "text/event-stream; charset=utf-8" })).toBe("SSE");
+    expect(streamKind({ ...row, status: 200 })).toBeNull();
+    expect(skippedText("too_large")).toContain("1 MiB");
+    expect(skippedText("streaming")).toContain("流式");
+
+    const message = (index: number, patch: Partial<StreamMessage> = {}): StreamMessage => ({
+      index, at_ms: 0, dir: "down", kind: "sse", size: 2, truncated: false, text: "hi", ...patch,
+    });
+    expect(messageTitle(message(0, { label: "delta" }))).toBe("delta");
+    expect(messageTitle(message(0))).toBe("message");
+    expect(messageTitle(message(0, { kind: "close", code: 1000 }))).toBe("Close 1000");
+    expect(messageText(message(0, { text: null, data_base64: "AAE=" }))).toContain("00 01");
+
+    const first = appendMessages([], [message(2), message(3)]);
+    expect(first.messages.map((item) => item.index)).toEqual([2, 3]);
+    expect(first.missed).toBe(2);
+    const again = appendMessages(first.messages, [message(3), message(4)]);
+    expect(again.messages.map((item) => item.index)).toEqual([2, 3, 4]);
+    expect(again.missed).toBe(0);
+    expect(appendMessages(again.messages, [message(5)], 2).messages.map((item) => item.index)).toEqual([4, 5]);
+
+    const frame = (patch: Partial<H2Frame>): H2Frame => ({
+      index: 0, at_ms: 0, link: "app", dir: "down", type: "DATA", flag_names: [], stream: 1, length: 0, ...patch,
+    });
+    expect(frameDetail(frame({ type: "WINDOW_UPDATE", value: 65535 }))).toBe("+65535");
+    expect(frameDetail(frame({ type: "RST_STREAM", error: "CANCEL" }))).toBe("CANCEL");
+    expect(frameDetail(frame({}))).toBeNull();
+    expect(notableFrame(frame({ type: "GOAWAY", value: 3 }))).toBe(true);
+    expect(notableFrame(frame({}))).toBe(false);
+  });
 });
+

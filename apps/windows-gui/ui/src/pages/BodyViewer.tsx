@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { createContext, KeyboardEvent, ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { CaptureMessage } from "../bridge";
+import { CaptureMessage, desktop } from "../bridge";
 import { BodyKind, BodyMode, bodyModes, bodyShape, chosenMode, formPairs, imageType } from "../body-view";
 import { asText, bodySize, decodedBody, fromBase64, header, hexDump, toBase64 } from "../capture-format";
 import { childCount, containerIds, copyText, initiallyCollapsed, JsonNode, JsonRow, jsonRows, prettyJson, prettyTokens } from "../json-view";
@@ -28,18 +28,18 @@ const SHOWN_CHARS = 400_000;
 /**
  * A captured body, shown by what it is: JSON as a folding tree or indented and coloured, an image as a picture, a
  * form as name/value pairs, other text as text, anything else as a hex dump. The user can switch views, and the
- * choice is kept per kind. gzip and deflate are undone first. `lead` goes at the left of the tool line (the
+ * choice is kept per kind. gzip, deflate, br and zstd are undone first, by the kernel. `lead` goes at the left of the tool line (the
  * inspector puts its headers/body switch there); the viewer fills the height it is given.
  */
 export function BodyViewer({ message, lead }: { message: CaptureMessage; lead?: ReactNode }) {
   const raw = useMemo(() => fromBase64(message.body.data_base64), [message.body.data_base64]);
   const encoding = header(message, "Content-Encoding");
   const contentType = header(message, "Content-Type");
-  const [body, setBody] = useState<{ bytes: Uint8Array; decoded: boolean }>({ bytes: raw, decoded: false });
+  const [body, setBody] = useState<{ bytes: Uint8Array; decoded: boolean; partial?: boolean }>({ bytes: raw, decoded: false });
   useEffect(() => {
     let cancelled = false;
     setBody({ bytes: raw, decoded: false });
-    void decodedBody(raw, encoding, message.body.truncated).then((next) => !cancelled && setBody(next));
+    void decodedBody(raw, encoding, message.body.truncated, desktop.decodeBody).then((next) => !cancelled && setBody(next));
     return () => {
       cancelled = true;
     };
@@ -64,6 +64,7 @@ export function BodyViewer({ message, lead }: { message: CaptureMessage; lead?: 
   const caption = [
     contentType,
     encoding ? (body.decoded ? t("{encoding} 已解压", { encoding }) : encoding) : null,
+    body.partial ? t("只解压出开头部分") : null,
     bodySize(message.body),
   ].filter(Boolean).join(" · ");
 

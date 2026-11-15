@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CaptureRequest } from "./bridge";
-import { combineFilter, MAX_REQUESTS, mergeRequests, nextSince, splitOr } from "./capture-filter";
+import { combineFilter, MAX_REQUESTS, mergeRequests, nextRev, nextSince, requestKey, splitOr } from "./capture-filter";
 
 function request(seq: number, done = true): CaptureRequest {
   return {
@@ -50,4 +50,41 @@ describe("capture filter", () => {
     expect(capped).toHaveLength(MAX_REQUESTS);
     expect(capped[0].seq).toBe(6);
   });
+
+  it("updates requests under way in place and keeps them when ended ones are dropped", () => {
+    const live = (index: number, rev: number, patch: Partial<CaptureRequest> = {}): CaptureRequest => ({
+      ...request(index, false),
+      seq: 0,
+      connection_id: 9,
+      index,
+      started_at_ms: 100 + index,
+      rev,
+      state: "in_progress",
+      ...patch,
+    });
+    let rows = mergeRequests([], { requests: [live(0, 1)], last_seq: 0, last_rev: 1 });
+    expect(rows.map(requestKey)).toEqual(["9:0"]);
+    rows = mergeRequests(rows, {
+      requests: [live(1, 2), live(0, 3, { status: 200, message_count: 4 })],
+      last_seq: 0,
+      last_rev: 3,
+    });
+    expect(rows.map(requestKey)).toEqual(["9:0", "9:1"]);
+    expect(rows[0].status).toBe(200);
+    expect(rows[0].message_count).toBe(4);
+    rows = mergeRequests(rows, { requests: [live(0, 4, { seq: 1, state: "done", status: 200 })], last_seq: 1, last_rev: 4 });
+    rows = mergeRequests(rows, { requests: [], last_seq: 1, last_rev: 4, dropped_before_seq: 1 });
+    expect(rows.map(requestKey)).toEqual(["9:1"]);
+    // A request under way has no seq, so the seq cursor ignores it.
+    expect(nextSince(rows, 1)).toBe(1);
+  });
+
+  it("moves the rev cursor to the newest change, or the last row of a full page", () => {
+    const rows = [{ ...request(1), rev: 5 }, { ...request(2), rev: 7 }];
+    expect(nextRev(null, { requests: rows, last_rev: 9 }, 2)).toBe(7);
+    expect(nextRev(3, { requests: rows, last_rev: 9 }, 10)).toBe(9);
+    expect(nextRev(12, { requests: [], last_rev: 9 }, 10)).toBe(12);
+    expect(nextRev(null, { requests: rows, last_seq: 2 }, 10)).toBeNull();
+  });
 });
+

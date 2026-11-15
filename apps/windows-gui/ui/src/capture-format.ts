@@ -1,4 +1,4 @@
-import type { CaptureConnection, CaptureDirection, CaptureMessage } from "./bridge";
+import type { CaptureConnection, CaptureDirection, CaptureExchange, CaptureMessage, CaptureRequest, H2Frame, StreamMessage } from "./bridge";
 import { t } from "./i18n";
 import { formatBytes } from "./subscription-format";
 
@@ -117,12 +117,30 @@ export function timeOfDay(ms: number): string {
   return new Date(ms).toLocaleTimeString(undefined, { hour12: false });
 }
 
+/** The kernel's body decoder (`desktop.decodeBody`): base64 in and out; rejects when it cannot decode. */
+export type BodyDecoder = (dataBase64: string, contentEncoding: string, complete: boolean) => Promise<{ data_base64: string; truncated: boolean }>;
+
 /**
- * The body as the app saw it: gzip and deflate are undone (the webview's DecompressionStream), other encodings and
- * cut bodies are left as they are. Resolves to the bytes and whether they were decompressed.
+ * The body as the app saw it. With the kernel's decoder, gzip, deflate, br and zstd (several in a row) are undone,
+ * a body kept only in part as far as it goes (`partial`); without it, or when it cannot, gzip and deflate of a
+ * whole body are undone by the webview's DecompressionStream. Anything else is left as it is.
  */
-export async function decodedBody(bytes: Uint8Array, contentEncoding: string | undefined, truncated: boolean): Promise<{ bytes: Uint8Array; decoded: boolean }> {
+export async function decodedBody(
+  bytes: Uint8Array,
+  contentEncoding: string | undefined,
+  truncated: boolean,
+  decoder?: BodyDecoder,
+): Promise<{ bytes: Uint8Array; decoded: boolean; partial?: boolean }> {
   const encoding = contentEncoding?.trim().toLowerCase();
+  if (!encoding || encoding === "identity" || bytes.length === 0) return { bytes, decoded: false };
+  if (decoder) {
+    try {
+      const answer = await decoder(toBase64(bytes), encoding, !truncated);
+      return { bytes: fromBase64(answer.data_base64), decoded: true, partial: answer.truncated };
+    } catch {
+      // Shown below as the webview can, or as captured.
+    }
+  }
   if (truncated || (encoding !== "gzip" && encoding !== "deflate") || typeof DecompressionStream === "undefined") {
     return { bytes, decoded: false };
   }
@@ -132,6 +150,75 @@ export async function decodedBody(bytes: Uint8Array, contentEncoding: string | u
   } catch {
     return { bytes, decoded: false };
   }
+}
+
+/** Why a rewrite rule that would have read or changed the body did not run. */
+export function skippedText(note: string | null | undefined): string {
+  return note === "too_large" ? t("改写未生效：内容超过 1 MiB") : t("改写未生效：流式响应");
+}
+
+/** `SSE` for an event stream, `WS` for a WebSocket, null for neither. */
+export function streamKind(request: Pick<CaptureRequest, "method" | "status" | "response_content_type" | "message_count">): "SSE" | "WS" | null {
+  if (request.method === "GET" && request.status === 101) return "WS";
+  if (request.response_content_type?.toLowerCase().startsWith("text/event-stream")) return "SSE";
+  return request.message_count ? "WS" : null;
+}
+
+/** Whether an exchange has server-sent events or WebSocket messages to show. */
+export function hasMessages(exchange: CaptureExchange): boolean {
+  return (exchange.messages?.seen ?? 0) > 0 || exchange.status === 101
+    || Boolean(header(exchange.response, "Content-Type")?.toLowerCase().startsWith("text/event-stream"));
+}
+
+/** A message's short name: the event's name, or the WebSocket frame kind. */
+export function messageTitle(message: StreamMessage): string {
+  switch (message.kind) {
+    case "sse": return message.label || "message";
+    case "text": return "Text";
+    case "binary": return "Binary";
+    case "ping": return "Ping";
+    case "pong": return "Pong";
+    case "close": return message.code != null ? `Close ${message.code}` : "Close";
+  }
+}
+
+/** A message's data as text, or a hex dump when it is not text. */
+export function messageText(message: StreamMessage): string {
+  if (message.text != null) return message.text;
+  return hexDump(fromBase64(message.data_base64 ?? ""));
+}
+
+/**
+ * New messages after `kept`: the ones from the engine's answer not shown yet, oldest first, and how many the engine
+ * had already dropped before they could be read. Keeps at most `limit`, the newest.
+ */
+export function appendMessages(kept: StreamMessage[], incoming: StreamMessage[], limit = 2000): { messages: StreamMessage[]; missed: number } {
+  const next = kept.length > 0 ? kept[kept.length - 1].index + 1 : 0;
+  const fresh = incoming.filter((message) => message.index >= next);
+  let missed = fresh.length > 0 && fresh[0].index > next ? fresh[0].index - next : 0;
+  let messages = [...kept, ...fresh];
+  if (messages.length > limit) {
+    missed += messages.length - limit;
+    messages = messages.slice(messages.length - limit);
+  }
+  return { messages, missed };
+}
+
+/** The error, increment or count of a frame in a few words. */
+export function frameDetail(frame: H2Frame): string | null {
+  if (frame.error) return frame.error;
+  if (frame.value == null) return null;
+  switch (frame.type) {
+    case "WINDOW_UPDATE": return `+${frame.value}`;
+    case "GOAWAY": return `last ${frame.value}`;
+    case "SETTINGS": return `${frame.value} settings`;
+    default: return String(frame.value);
+  }
+}
+
+/** Frames worth a look when tracking down a stall or a reset. */
+export function notableFrame(frame: H2Frame): boolean {
+  return frame.error != null || frame.type === "GOAWAY" || frame.type === "RST_STREAM";
 }
 
 /** The capture status line: how many connections and how much of the budget they use. */

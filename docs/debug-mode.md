@@ -101,6 +101,8 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含调试模式的 `deb
 - **侧栏**：调试网络下是“请求 · 改写”，下方是“出口 · 设置”，打开就在请求页，没有概览。“改写”就是扩展页（插件、Map Local / Remote、解密证书）；订阅、节点和分流规则（含 DNS）都在“出口”里。Android 窄屏下侧栏变成底栏。
 - **直连出口**：后端命令 `set_direct_egress` 让引擎使用不含节点的 `{"outbound":{"type":"direct"}}` 配置。Linux、Android 和 Windows 都支持。
 - **请求页**（`pages/RequestsPage.tsx`，仿 Proxyman）：左边是请求表格，右边常驻检查器（选中即看请求和响应，可重放、映射、导出）。窗口窄于 1100 px 时两者轮流显示，Android 上点一行打开详情。
+- **进行中的请求与流**：请求表按 `since_rev` 增量读取（`capture-filter.ts` 的 `mergeRequests` / `nextRev`），请求头读到就出现，响应到来时原位更新；行以 `连接 id:序号`（`requestKey`）标识。类型列附 `SSE n` / `WS n` 和“改写未生效”。检查器在进行中时每两秒重读；有事件或 WebSocket 消息时多一个“事件” / “WebSocket”标签（`capture_exchange` + `since_message`，进行中每秒追加，只读）；HTTP/2 连接多一个“HTTP/2 帧”标签（`capture_h2_frames`，可按链路、只看 RST_STREAM / GOAWAY / 错误筛选）。概览里写明改写未生效的原因。
+- **正文解压**：后端命令 `decode_body`（`desktop_mitm::capture::decode_body`，调内核 `capture::decode::decode_body`）解 gzip、deflate、br、zstd，可叠加，最多 16 MiB，只抓到开头的正文也解出能解的部分；内核解不开时退回 WebView 的 DecompressionStream（只限完整的 gzip / deflate）。
 - **检查器**（`pages/Inspector.tsx`、`pages/BodyViewer.tsx`）：顶行是方法、状态和网址，下面四个标签：概览、请求、响应、时间线。请求和响应各自在“头 / 查询 / 正文”之间切换，选择会记住。正文按内容显示：JSON 是可折叠的树（方向键移动和折叠，Ctrl+C 拷贝选中的值，下方显示并可拷贝 JSONPath）或带颜色的格式化文本，图片直接预览，表单是名值对，其余是原文，任何内容都能切到十六进制。JSON 用自己的解析器（`json-view.ts`），数字按服务器发来的原样显示，不会像 `JSON.parse` 那样把 64 位 id 取整。时间线把同一连接上的请求画在一条时间轴上；内核目前只记录每个请求的开始和结束，没有 DNS、建连、TLS 的分段。
 - **停靠与分栏**：检查器可以停靠在表格右侧或下方（检查器“更多”菜单），中间的分隔条可以拖动、用方向键调整、双击恢复默认，位置和比例记在本机（`split-pane.ts`）。右侧停靠需要窗口宽 1100 px 以上，下方停靠需要宽 720 px、高 600 px 以上，否则表格和检查器轮流显示。
   - 页面工具栏只放整份抓包的操作：视图切换（请求 / 连接 / 已保存）、抓包开关、暂停刷新、“更多”里的导出全部 pcapng / HAR 和清空抓包（红色，要确认）。

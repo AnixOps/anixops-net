@@ -8,6 +8,7 @@ import { formatBytes } from "../subscription-format";
 import { Card, CopyButton, EmptyState, MenuItem, MoreMenu, Row, Run, Segmented, ToggleRow } from "../ui";
 import { Select } from "../controls";
 import { ExchangeInspector } from "./Inspector";
+import { requestKey } from "../capture-filter";
 import { t } from "../i18n";
 import { mappingFromExchange, MappingEditor, ReplayEditor } from "./DebugTools";
 import { coveredBy, decryptHostOf, isDecryptableHost } from "../decrypt-hosts";
@@ -86,6 +87,7 @@ export function CaptureDetail({ connection, busy, run, onBack, initialExchange }
         <ExchangeInspector
           exchange={item}
           siblings={capture.http}
+          place={{ connectionId: connection.id, index: exchange, frames: capture.h2_frames?.seen ?? 0 }}
           onBack={() => setExchange(null)}
           backLabel={t("抓包内容")}
           exportCard={<ExchangeExport busy={busy} run={run} id={connection.id} index={exchange} redact={redact} onRedact={setRedact} />}
@@ -269,16 +271,20 @@ export function RequestInspector({ request, busy, run, onBack, replayAsked, onRe
   const [redact, setRedact] = useState(true);
   const [tool, setTool] = useState<{ replay: CaptureExchange } | { mapping: DebugMapping } | null>(null);
   const visible = usePageVisible();
+  const [frames, setFrames] = useState(0);
   const connectionId = request?.connection_id;
   const index = request?.index;
-  const seq = request?.seq;
+  // The row's place in the capture: the same while the request is under way and after it ends.
+  const key = request ? requestKey(request) : null;
+  const startedAt = request?.started_at_ms;
 
   useEffect(() => {
     setTool(null);
     setExchange(null);
     setSiblings([]);
+    setFrames(0);
     setState("loading");
-  }, [seq]);
+  }, [key]);
 
   useEffect(() => {
     if (connectionId == null || index == null || !visible) return;
@@ -287,12 +293,17 @@ export function RequestInspector({ request, busy, run, onBack, replayAsked, onRe
     const load = () => desktop.captureConnection(connectionId)
       .then((answer) => {
         if (cancelled) return;
-        const item = answer.capture?.http[index] ?? null;
+        const found = answer.capture?.http[index] ?? null;
+        // A loaded session can reuse a connection id: only the same request counts.
+        const item = found && found.started_at_ms === startedAt ? found : null;
         setExchange(item);
         setSiblings(answer.capture?.http ?? []);
+        setFrames(answer.capture?.h2_frames?.seen ?? 0);
         setState(item ? "loaded" : "gone");
-        // The response is still arriving: read again until it ends.
-        if (item && item.ended_at_ms == null && item.status == null) timer = window.setTimeout(() => void load(), 2000);
+        // The response (or its event stream or WebSocket) is still going: read again until it ends.
+        if (item && (item.state === "in_progress" || (item.state == null && item.ended_at_ms == null && item.status == null))) {
+          timer = window.setTimeout(() => void load(), 2000);
+        }
       })
       .catch(() => !cancelled && setState("gone"));
     void load();
@@ -300,7 +311,7 @@ export function RequestInspector({ request, busy, run, onBack, replayAsked, onRe
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [connectionId, index, visible]);
+  }, [connectionId, index, startedAt, visible]);
 
   useEffect(() => {
     if (replayAsked && exchange) {
@@ -334,6 +345,7 @@ export function RequestInspector({ request, busy, run, onBack, replayAsked, onRe
       request={request}
       exchange={exchange}
       siblings={siblings}
+      place={{ connectionId: request.connection_id, index: request.index, frames }}
       waiting={state === "gone" ? t("这个请求的内容已被更新的连接挤出（抓包内存有上限），或抓包已清空。") : undefined}
       onBack={onBack}
       backLabel={t("请求")}
