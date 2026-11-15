@@ -42,7 +42,12 @@ struct MacRootView: View {
         .tint(brand.primary)
         .environment(\.brand, brand)
         .onChange(of: tunnel.appMode, initial: true) { _, mode in
-            // Each mode opens on its first section: the overview, or the requests in debug mode.
+            // Each mode opens on its first section: the overview, or the requests in debug mode. Before the mode
+            // has been read there is nothing to check against: resetting then would drop a section that only
+            // debug mode has (the CI screenshot of "exit" showed the requests because of it).
+            guard mode != nil else {
+                return
+            }
             let sections = MacSection.sections(for: mode)
             if !sections.contains(state.section ?? .home) {
                 state.section = sections.first

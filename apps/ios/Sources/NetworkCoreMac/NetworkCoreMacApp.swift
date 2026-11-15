@@ -67,7 +67,8 @@ struct NetworkCoreMacApp: App {
                     }
                 }
         }
-        .defaultSize(width: 980, height: 680)
+        // Wide enough for the request table beside its inspector without squeezing the table's columns.
+        .defaultSize(width: 1240, height: 800)
         .commands {
             MacCommands(tunnel: tunnel, state: state)
         }

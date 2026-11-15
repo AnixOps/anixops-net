@@ -423,7 +423,7 @@ struct CaptureRequestRow: View {
                     if row.note == "answered_locally" {
                         tag(String(localized: "本地应答"))
                     }
-                    Text(row.startedAt.formatted(date: .omitted, time: .standard))
+                    Text(CaptureClock.time(row.startedAt))
                         .font(.caption2.monospacedDigit())
                         .foregroundStyle(brand.text3)
                 }
@@ -479,7 +479,7 @@ struct CaptureRequestTable: View {
     var body: some View {
         Table(rows.sorted(using: sortOrder), selection: $selection, sortOrder: $sortOrder) {
             TableColumn("时间", value: \.seq) { row in
-                Text(row.startedAt.formatted(date: .omitted, time: .standard))
+                Text(CaptureClock.time(row.startedAt))
                     .monospacedDigit()
                     .foregroundStyle(brand.text2)
             }
@@ -576,6 +576,18 @@ struct CaptureRequestTable: View {
             return brand.warning
         }
         return brand.success
+    }
+}
+
+/// Request times as `14:03:27` whatever the system's clock setting: a 12-hour time with its "下午" does not fit the
+/// table's time column and lines up badly down a list.
+enum CaptureClock {
+    static func time(_ date: Date) -> String {
+        date.formatted(Date.VerbatimFormatStyle(
+            format: "\(hour: .twoDigits(clock: .twentyFourHour, hourCycle: .zeroBased)):\(minute: .twoDigits):\(second: .twoDigits)",
+            timeZone: .current,
+            calendar: .current
+        ))
     }
 }
 

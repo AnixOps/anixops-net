@@ -1,12 +1,13 @@
 import { ArrowDownLeft, ArrowUpRight, ChevronLeft, Copy, Download, FileCode, FileSearch, Lock, MousePointerClick, Network, RotateCw } from "lucide-react";
-import { ReactNode, useEffect, useMemo, useState } from "react";
-import { CaptureChunk, CaptureConnection, CaptureExchange, CaptureFormat, CaptureMessage, CaptureRequest, CodeLanguage, ConnectionSnapshot, DebugMapping, desktop, ExportOptions } from "../bridge";
+import { useEffect, useMemo, useState } from "react";
+import { CaptureChunk, CaptureConnection, CaptureExchange, CaptureFormat, CaptureRequest, CodeLanguage, ConnectionSnapshot, DebugMapping, desktop, ExportOptions } from "../bridge";
 import { connectionName } from "../activity-format";
-import { asText, bodySize, decodedBody, directionTotals, durationMs, fromBase64, header, hexDump, looksLikeTls, noteText, timeOfDay } from "../capture-format";
+import { asText, directionTotals, durationMs, fromBase64, header, hexDump, looksLikeTls, noteText, timeOfDay } from "../capture-format";
 import { usePageVisible } from "../live";
 import { formatBytes } from "../subscription-format";
-import { Card, EmptyState, IconButton, MoreMenu, Row, Run, Segmented, ToggleRow } from "../ui";
+import { Card, CopyButton, EmptyState, MenuItem, MoreMenu, Row, Run, Segmented, ToggleRow } from "../ui";
 import { Select } from "../controls";
+import { ExchangeInspector } from "./Inspector";
 import { t } from "../i18n";
 import { mappingFromExchange, MappingEditor, ReplayEditor } from "./DebugTools";
 import { coveredBy, decryptHostOf, isDecryptableHost } from "../decrypt-hosts";
@@ -81,22 +82,27 @@ export function CaptureDetail({ connection, busy, run, onBack, initialExchange }
     const item = capture.http[exchange];
     const map = (kind: DebugMapping["kind"]) => void mappingFromExchange(item, kind).then((mapping) => setTool({ mapping }));
     return (
-      <ExchangeDetail
-        exchange={item}
-        onBack={() => setExchange(null)}
-        exportCard={<ExchangeExport busy={busy} run={run} id={connection.id} index={exchange} redact={redact} onRedact={setRedact} />}
-        actions={<>
-          <button className="secondary compact" disabled={Boolean(busy)} onClick={() => setTool({ replay: item })}><RotateCw size={14} />{t("重放")}</button>
-          <MoreMenu
-            label={t("更多")}
-            disabled={Boolean(busy)}
-            items={[
-              { label: t("映射到本地"), onSelect: () => map("local") },
-              { label: t("映射到远程"), onSelect: () => map("remote") },
-            ]}
-          />
-        </>}
-      />
+      <div className="inspector-standalone">
+        <ExchangeInspector
+          exchange={item}
+          siblings={capture.http}
+          onBack={() => setExchange(null)}
+          backLabel={t("抓包内容")}
+          exportCard={<ExchangeExport busy={busy} run={run} id={connection.id} index={exchange} redact={redact} onRedact={setRedact} />}
+          actions={<>
+            <button className="secondary compact" disabled={Boolean(busy)} onClick={() => setTool({ replay: item })}><RotateCw size={14} />{t("重放")}</button>
+            <MoreMenu
+              label={t("更多")}
+              disabled={Boolean(busy)}
+              items={[
+                { label: t("拷贝网址"), icon: Copy, onSelect: () => void navigator.clipboard?.writeText(item.url) },
+                { label: t("映射到本地"), onSelect: () => map("local") },
+                { label: t("映射到远程"), onSelect: () => map("remote") },
+              ]}
+            />
+          </>}
+        />
+      </div>
     );
   }
 
@@ -233,7 +239,7 @@ export function BytesView({ bytes, caption }: { bytes: Uint8Array; caption?: str
           onChange={setStyle}
           disabled={text === null}
         />
-        <IconButton label={t("拷贝")} onClick={() => void navigator.clipboard?.writeText(shown)}><Copy size={14} /></IconButton>
+        <CopyButton label={t("拷贝")} text={shown} />
       </div>
       <pre className="bytes">{shown || " "}</pre>
     </div>
@@ -245,7 +251,9 @@ export function BytesView({ bytes, caption }: { bytes: Uint8Array; caption?: str
  * the request's connection from the engine, again every two seconds until the response is complete. Replay and the
  * mapping editor open in its place, with the way back on top.
  */
-export function RequestInspector({ request, busy, run, onBack, replayAsked, onReplayHandled }: {
+export function RequestInspector({ request, busy, run, onBack, replayAsked, onReplayHandled, layoutItems = [] }: {
+  /** Entries for the "more" menu that belong to the pane rather than the request, such as where it docks. */
+  layoutItems?: MenuItem[];
   request: CaptureRequest | null;
   busy: string | null;
   run: Run;
@@ -256,6 +264,7 @@ export function RequestInspector({ request, busy, run, onBack, replayAsked, onRe
   onReplayHandled?: () => void;
 }) {
   const [exchange, setExchange] = useState<CaptureExchange | null>(null);
+  const [siblings, setSiblings] = useState<CaptureExchange[]>([]);
   const [state, setState] = useState<"loading" | "loaded" | "gone">("loading");
   const [redact, setRedact] = useState(true);
   const [tool, setTool] = useState<{ replay: CaptureExchange } | { mapping: DebugMapping } | null>(null);
@@ -267,6 +276,7 @@ export function RequestInspector({ request, busy, run, onBack, replayAsked, onRe
   useEffect(() => {
     setTool(null);
     setExchange(null);
+    setSiblings([]);
     setState("loading");
   }, [seq]);
 
@@ -279,6 +289,7 @@ export function RequestInspector({ request, busy, run, onBack, replayAsked, onRe
         if (cancelled) return;
         const item = answer.capture?.http[index] ?? null;
         setExchange(item);
+        setSiblings(answer.capture?.http ?? []);
         setState(item ? "loaded" : "gone");
         // The response is still arriving: read again until it ends.
         if (item && item.ended_at_ms == null && item.status == null) timer = window.setTimeout(() => void load(), 2000);
@@ -301,77 +312,37 @@ export function RequestInspector({ request, busy, run, onBack, replayAsked, onRe
   if (!request) {
     return (
       <div className="inspector-empty">
-        <EmptyState icon={MousePointerClick} title={t("选择一条请求")} message={t("在左边的列表里选一条，这里显示它的请求和响应。方向键或 j / k 切换，Ctrl+R 重放。")} />
+        <EmptyState icon={MousePointerClick} title={t("选择一条请求")} message={t("在列表里选一条，这里显示它的请求和响应。方向键或 j / k 切换，Ctrl+R 重放。")} />
       </div>
     );
   }
   if (tool && "replay" in tool) {
-    return <ReplayEditor exchange={tool.replay} busy={busy} run={run} onBack={() => setTool(null)} />;
+    return <div className="inspector-scroll padded"><ReplayEditor exchange={tool.replay} busy={busy} run={run} onBack={() => setTool(null)} /></div>;
   }
   if (tool) {
-    return <MappingEditor initial={tool.mapping} busy={busy} run={run} onDone={() => setTool(null)} />;
+    return <div className="inspector-scroll padded"><MappingEditor initial={tool.mapping} busy={busy} run={run} onDone={() => setTool(null)} /></div>;
   }
-  if (!exchange) {
-    const message = state === "loading"
-      ? t("正在读取…")
-      : t("这个请求的内容已被更新的连接挤出（抓包内存有上限），或抓包已清空。");
-    return (
-      <div className="page-stack">
-        {onBack && <BackBar label={t("请求")} onBack={onBack} />}
-        <Card title={`${request.method} ${request.host}`}>
-          <EmptyState icon={FileSearch} title={t("抓包内容")} message={message} />
-        </Card>
-      </div>
-    );
-  }
-  const map = (kind: DebugMapping["kind"]) => void mappingFromExchange(exchange, kind).then((mapping) => setTool({ mapping }));
+  const map = (kind: DebugMapping["kind"]) => exchange && void mappingFromExchange(exchange, kind).then((mapping) => setTool({ mapping }));
+  const more: MenuItem[] = [
+    { label: t("拷贝网址"), icon: Copy, onSelect: () => void navigator.clipboard?.writeText(request.url) },
+    { label: t("映射到本地"), disabled: !exchange, onSelect: () => map("local") },
+    { label: t("映射到远程"), disabled: !exchange, onSelect: () => map("remote") },
+    ...layoutItems,
+  ];
   return (
-    <ExchangeDetail
+    <ExchangeInspector
+      request={request}
       exchange={exchange}
+      siblings={siblings}
+      waiting={state === "gone" ? t("这个请求的内容已被更新的连接挤出（抓包内存有上限），或抓包已清空。") : undefined}
       onBack={onBack}
       backLabel={t("请求")}
-      exportCard={<ExchangeExport busy={busy} run={run} id={request.connection_id} index={request.index} redact={redact} onRedact={setRedact} />}
+      exportCard={exchange && <ExchangeExport busy={busy} run={run} id={request.connection_id} index={request.index} redact={redact} onRedact={setRedact} />}
       actions={<>
-        <button className="secondary compact" disabled={Boolean(busy)} onClick={() => setTool({ replay: exchange })} title="Ctrl+R"><RotateCw size={14} />{t("重放")}</button>
-        <MoreMenu
-          label={t("更多")}
-          disabled={Boolean(busy)}
-          items={[
-            { label: t("拷贝网址"), icon: Copy, onSelect: () => void navigator.clipboard?.writeText(exchange.url) },
-            { label: t("映射到本地"), onSelect: () => map("local") },
-            { label: t("映射到远程"), onSelect: () => map("remote") },
-          ]}
-        />
+        <button className="secondary compact" disabled={Boolean(busy) || !exchange} onClick={() => exchange && setTool({ replay: exchange })} title="Ctrl+R"><RotateCw size={14} />{t("重放")}</button>
+        <MoreMenu label={t("更多")} disabled={Boolean(busy)} items={more} />
       </>}
     />
-  );
-}
-
-/** One decrypted request and its response: headers, and bodies decompressed when they say gzip or deflate. */
-function ExchangeDetail({ exchange, onBack, backLabel, actions, exportCard }: {
-  exchange: CaptureExchange;
-  /** Absent in the inspector beside the table, which needs no way back. */
-  onBack?: () => void;
-  backLabel?: string;
-  actions?: ReactNode;
-  exportCard?: ReactNode;
-}) {
-  const took = durationMs(exchange.started_at_ms, exchange.ended_at_ms);
-  const note = noteText(exchange.note);
-  return (
-    <div className="page-stack">
-      {onBack && <BackBar label={backLabel ?? t("抓包内容")} onBack={onBack} />}
-      <Card title={`${exchange.method} ${exchange.status ?? ""}`.trim()} actions={actions}>
-        <div className="selectable url-line">{exchange.url}</div>
-        <Row label={t("状态")} value={exchange.status != null ? String(exchange.status) : t("没有响应")} />
-        <Row label={t("开始")} value={timeOfDay(exchange.started_at_ms)} />
-        {took != null && <Row label={t("耗时")} value={`${took} ms`} />}
-        {note && <Row label={t("说明")} value={note} />}
-      </Card>
-      <MessageView title={t("请求")} message={exchange.request} />
-      {exchange.status != null && <MessageView title={t("响应")} message={exchange.response} />}
-      {exportCard}
-    </div>
   );
 }
 
@@ -427,45 +398,6 @@ function ExchangeExport({ busy, run, id, index, redact, onRedact }: {
         <button className="secondary compact" disabled={Boolean(busy)} onClick={save}>{t("导出")}</button>
       </Row>
       <RedactRow redact={redact} onRedact={onRedact} />
-    </Card>
-  );
-}
-
-function MessageView({ title, message }: { title: string; message: CaptureMessage }) {
-  return (
-    <>
-      <Card title={t("{title}头", { title })}>
-        {message.headers.length === 0
-          ? <p className="muted">{t("无")}</p>
-          : <dl className="headers selectable">{message.headers.map(([name, value], index) => (
-            <div key={`${name}-${index}`}><dt>{name}</dt><dd>{value}</dd></div>
-          ))}</dl>}
-      </Card>
-      {message.body.size > 0 && <BodyCard title={t("{title}体", { title })} message={message} />}
-    </>
-  );
-}
-
-function BodyCard({ title, message }: { title: string; message: CaptureMessage }) {
-  const raw = useMemo(() => fromBase64(message.body.data_base64), [message.body.data_base64]);
-  const encoding = header(message, "Content-Encoding");
-  const [body, setBody] = useState<{ bytes: Uint8Array; decoded: boolean }>({ bytes: raw, decoded: false });
-  useEffect(() => {
-    let cancelled = false;
-    setBody({ bytes: raw, decoded: false });
-    void decodedBody(raw, encoding, message.body.truncated).then((next) => !cancelled && setBody(next));
-    return () => {
-      cancelled = true;
-    };
-  }, [raw, encoding, message.body.truncated]);
-  const caption = [
-    header(message, "Content-Type"),
-    encoding ? (body.decoded ? t("{encoding} 已解压", { encoding }) : encoding) : null,
-    bodySize(message.body),
-  ].filter(Boolean).join(" · ");
-  return (
-    <Card title={title}>
-      <BytesView key={body.decoded ? "decoded" : "raw"} bytes={body.bytes} caption={caption} />
     </Card>
   );
 }

@@ -1,9 +1,10 @@
-import { FileSearch, Pause, Play, PlugZap } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { FileSearch, PanelBottom, PanelRight, Pause, Play, PlugZap } from "lucide-react";
+import { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from "react";
 import { desktop, RuntimeSnapshot } from "../bridge";
 import { combineFilter, QuickFilter } from "../capture-filter";
 import { liveEngine, usePolling } from "../live";
 import { defaultSort, RequestSort } from "../request-table";
+import { defaultShare, Dock, inspectorSize, parseDock, parseShare, shareFor } from "../split-pane";
 import { EmptyState, IconButton, MoreMenu, PageTools, Run, Segmented, Switch } from "../ui";
 import { t } from "../i18n";
 import { captureMenu, ConnectionsView } from "./ActivityPage";
@@ -14,18 +15,65 @@ import { RequestFilterBar, RequestTable, useRequestFeed } from "./RequestList";
 
 type View = "requests" | "connections" | "sessions";
 
-/** Below this width the table and the inspector take turns instead of sitting side by side. */
-const SPLIT_QUERY = "(min-width: 1100px)";
+/**
+ * The window sizes that have room for the table and the inspector at once: beside each other, or one above the
+ * other. In a smaller window they take turns.
+ */
+const SPLIT_QUERY: Record<Dock, string> = {
+  right: "(min-width: 1100px)",
+  bottom: "(min-width: 720px) and (min-height: 600px)",
+};
 
-function useWideWindow(): boolean {
-  const [wide, setWide] = useState(() => window.matchMedia(SPLIT_QUERY).matches);
+function useMedia(media: string): boolean {
+  const [matches, setMatches] = useState(() => window.matchMedia(media).matches);
   useEffect(() => {
-    const query = window.matchMedia(SPLIT_QUERY);
-    const update = () => setWide(query.matches);
+    const query = window.matchMedia(media);
+    const update = () => setMatches(query.matches);
+    update();
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
-  }, []);
-  return wide;
+  }, [media]);
+  return matches;
+}
+
+const dockKey = "anixops.inspector-dock";
+const shareKey = (dock: Dock) => `anixops.inspector-share.${dock}`;
+
+function stored(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function store(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // The layout still applies for this session.
+  }
+}
+
+/**
+ * Where the inspector docks and how much of the page it takes, remembered between starts. Each dock keeps its own
+ * share, so a wide side pane does not become a tall bottom pane.
+ */
+function useInspectorLayout() {
+  const [dock, setDock] = useState<Dock>(() => parseDock(stored(dockKey)));
+  const [shares, setShares] = useState<Record<Dock, number>>(() => ({
+    right: parseShare("right", stored(shareKey("right"))),
+    bottom: parseShare("bottom", stored(shareKey("bottom"))),
+  }));
+  const chooseDock = (next: Dock) => {
+    setDock(next);
+    store(dockKey, next);
+  };
+  const setShare = (next: number) => {
+    setShares((previous) => ({ ...previous, [dock]: next }));
+    store(shareKey(dock), String(next));
+  };
+  return { dock, share: shares[dock], chooseDock, setShare };
 }
 
 /**
@@ -53,7 +101,47 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
   const [replayAsked, setReplayAsked] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const filterField = useRef<HTMLInputElement>(null);
-  const wide = useWideWindow();
+  const layout = useInspectorLayout();
+  const { dock } = layout;
+  // The window has room for both panes in the chosen arrangement.
+  const wide = useMedia(SPLIT_QUERY[dock]);
+  const workbench = useRef<HTMLDivElement | null>(null);
+  const [room, setRoom] = useState(0);
+  const measureRoom = useCallback(() => {
+    const box = workbench.current?.getBoundingClientRect();
+    if (box) setRoom(dock === "right" ? box.width : box.height);
+  }, [dock]);
+  // The workbench only exists once requests are listed, so the observer is attached by a ref callback.
+  const observer = useRef<ResizeObserver | null>(null);
+  const attachWorkbench = useCallback((element: HTMLDivElement | null) => {
+    observer.current?.disconnect();
+    workbench.current = element;
+    if (!element) return;
+    observer.current = new ResizeObserver(measureRoom);
+    observer.current.observe(element);
+    measureRoom();
+  }, [measureRoom]);
+
+  const dragDivider = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.buttons !== 1) return;
+    const box = workbench.current?.getBoundingClientRect();
+    if (!box) return;
+    const total = dock === "right" ? box.width : box.height;
+    const fromFarEdge = dock === "right" ? box.right - event.clientX : box.bottom - event.clientY;
+    layout.setShare(shareFor(dock, fromFarEdge, total));
+  };
+  const nudgeDivider = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const grow = dock === "right" ? "ArrowLeft" : "ArrowUp";
+    const shrink = dock === "right" ? "ArrowRight" : "ArrowDown";
+    if (event.key !== grow && event.key !== shrink && event.key !== "Home") return;
+    event.preventDefault();
+    if (event.key === "Home") {
+      layout.setShare(defaultShare[dock]);
+      return;
+    }
+    const size = inspectorSize(dock, layout.share, room) + (event.key === grow ? 24 : -24);
+    layout.setShare(shareFor(dock, size, room));
+  };
 
   const filter = combineFilter(quick, typed);
   // A stopped capture or a loaded session still holds requests to list.
@@ -204,8 +292,29 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
         onBack={wide ? undefined : () => setOpened(false)}
         replayAsked={replayAsked}
         onReplayHandled={clearReplay}
+        layoutItems={[dock === "right"
+          ? { label: t("检查器停靠到下方"), icon: PanelBottom, onSelect: () => layout.chooseDock("bottom") }
+          : { label: t("检查器停靠到右侧"), icon: PanelRight, onSelect: () => layout.chooseDock("right") }]}
       />
     </aside>
+  );
+  const size = inspectorSize(dock, layout.share, room);
+  const divider = (
+    <div
+      className="split-divider"
+      role="separator"
+      tabIndex={0}
+      aria-orientation={dock === "right" ? "vertical" : "horizontal"}
+      aria-label={t("调整检查器大小")}
+      aria-valuemin={0}
+      aria-valuemax={Math.round(room)}
+      aria-valuenow={size}
+      title={t("拖动调整大小，双击恢复默认")}
+      onPointerDown={(event) => event.currentTarget.setPointerCapture(event.pointerId)}
+      onPointerMove={dragDivider}
+      onDoubleClick={() => layout.setShare(defaultShare[dock])}
+      onKeyDown={nudgeDivider}
+    />
   );
 
   return (
@@ -214,7 +323,11 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
       {failure && <p className="muted danger-text" role="alert">{failure}</p>}
       <div className="setup-banner">{setupCard(true, true)}</div>
       {wide
-        ? <div className="request-workbench">{table}{inspector}</div>
+        ? (
+          <div className={`request-workbench dock-${dock}`} ref={attachWorkbench} style={{ "--inspector-size": `${size}px` } as CSSProperties}>
+            {table}{divider}{inspector}
+          </div>
+        )
         : <div className="request-workbench single">{opened && request ? inspector : table}</div>}
     </>
   );
