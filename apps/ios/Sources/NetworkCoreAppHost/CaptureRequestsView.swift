@@ -61,7 +61,10 @@ struct CaptureRequestsView: View {
         }
         .scrollContentBackground(.hidden)
         .topControlBar(brand) {
-            chipBar
+            // Beside an inspector the chips belong to the table's column, above its count (see `workbench`).
+            if !usesTable {
+                chipBar
+            }
         }
         .background(brand.bg.ignoresSafeArea())
         .navigationTitle("请求")
@@ -104,6 +107,7 @@ struct CaptureRequestsView: View {
     /// The table, its status lines above it and the inspector beside it.
     private var workbench: some View {
         VStack(alignment: .leading, spacing: 0) {
+            chipBar
             statusLines
                 .font(.footnote)
                 .foregroundStyle(brand.text2)
@@ -129,6 +133,10 @@ struct CaptureRequestsView: View {
                     }
                 }
             }
+            #if os(macOS)
+            // A navigation title in the inspector would replace the window's "请求".
+            .environment(\.inspectorEmbedded, true)
+            #endif
             .inspectorColumnWidth(min: 320, ideal: 420, max: 720)
         }
     }
