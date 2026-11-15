@@ -93,6 +93,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "anixops-netd"
+version = "0.3.0"
+dependencies = [
+ "client-core",
+ "client-ipc",
+ "client-service",
+ "libc",
+ "serde_json",
+]
+
+[[package]]
 name = "annotate-snippets"
 version = "0.12.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
