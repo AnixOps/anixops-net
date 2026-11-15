@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Drives the native Linux window through AT-SPI, the way a screen reader sees it.
 
-    xvfb-run -a dbus-run-session -- python3 linux-native-a11y.py <anixops-net-preview> <catalogue.json>
+    xvfb-run -a dbus-run-session -- python3 linux-native-a11y.py <anixops-net-preview> <catalogue.json> \
+        [<anixops-netd> [<screenshot directory>]]
 
 For every language the window is started for real and checked from the outside:
 
@@ -10,14 +11,21 @@ For every language the window is started for real and checked from the outside:
 - choosing each page through the accessibility interface shows that page;
 - every control that can be operated has a name.
 
+With the daemon's program given, the window is also run against a real daemon on a socket of its own: it
+says that the core service is not running, finds the daemon when it starts, notices when it stops, and
+finds it again. With a directory given too, the connected window is drawn into it.
+
 Needs at-spi2-core, gir1.2-atspi-2.0 and python3-gi.
 """
 
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
 import sys
+import tempfile
 import time
 
 import gi
@@ -196,16 +204,93 @@ def check(binary: str, wording: dict, language: str) -> None:
             process.kill()
 
 
+def stop(process: subprocess.Popen | None) -> None:
+    if process is None or process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
+
+
+def check_core(binary: str, daemon: str, wording: dict, shots: str | None) -> None:
+    """The window against a real daemon: away, found, away again, found again."""
+    language = "zh"
+    text = lambda key: wording[key][language]  # noqa: E731
+    before, after = text("core.connected").split("{0}")
+
+    def connected(name: str) -> bool:
+        if not (name.startswith(before) and name.endswith(after)):
+            return False
+        version = name[len(before):len(name) - len(after)]
+        return re.fullmatch(r"\d+\.\d+\.\d+\S*", version) is not None
+
+    with tempfile.TemporaryDirectory(prefix="anixops-net-core-") as folder:
+        socket = os.path.join(folder, "run", "core.sock")
+
+        def start_daemon() -> subprocess.Popen:
+            return subprocess.Popen([daemon, "--dir", os.path.join(folder, "data"), "--socket", socket])
+
+        window = subprocess.Popen([binary, "--language", language, "--theme", "light", "--socket", socket])
+        core = None
+        try:
+            app = until("the window on the accessibility bus", lambda: application(window.pid))
+
+            def says(wanted):
+                return next(
+                    (node for node, _ in walk(app) if role(node) == "label" and wanted(node.get_name() or "")),
+                    None,
+                )
+
+            def away(when: str) -> None:
+                until(f"the window to say {when} that the core service is not running",
+                      lambda: says(lambda name: name == text("core.unavailable")))
+
+            def found(when: str) -> str:
+                return until(f"the window to say {when} which core service answers",
+                             lambda: says(connected)).get_name()
+
+            away("before the daemon started")
+            core = start_daemon()
+            line = found("after the daemon started")
+            if core.poll() is not None:
+                fail(f"the daemon stopped by itself with status {core.returncode}")
+            if shots:
+                # A second window, as short-lived as every screenshot: it finds the daemon by itself.
+                picture = os.path.join(shots, "core-connected-zh-light.png")
+                subprocess.run(
+                    [binary, "--language", language, "--theme", "light", "--socket", socket, "--screenshot", picture],
+                    check=True,
+                    timeout=60,
+                )
+                if not os.path.getsize(picture):
+                    fail(f"{picture} is empty")
+            stop(core)
+            core = None
+            away("after the daemon stopped")
+            core = start_daemon()
+            found("after the daemon started again")
+            print(f"[core] not running, found ({line!r}), stopped, found again")
+        finally:
+            stop(window)
+            stop(core)
+
+
 def main() -> None:
-    if len(sys.argv) != 3:
-        fail("usage: linux-native-a11y.py <anixops-net-preview> <catalogue.json>")
-    binary, catalogue = sys.argv[1:]
+    if not 3 <= len(sys.argv) <= 5:
+        fail("usage: linux-native-a11y.py <anixops-net-preview> <catalogue.json> [<anixops-netd> [<screenshots>]]")
+    binary, catalogue = sys.argv[1:3]
+    daemon = sys.argv[3] if len(sys.argv) > 3 else None
+    shots = sys.argv[4] if len(sys.argv) > 4 else None
     with open(catalogue, encoding="utf-8") as file:
         wording = json.load(file)
     Atspi.init()
     enable_accessibility()
     for language in LANGUAGES:
         check(binary, wording, language)
+    if daemon:
+        check_core(binary, daemon, wording, shots)
 
 
 if __name__ == "__main__":

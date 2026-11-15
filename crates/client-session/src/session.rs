@@ -31,9 +31,9 @@ pub trait UserSession: Send + Sync {
     fn set_start_after_login(&self, enabled: bool) -> Result<(), String>;
 
     /// Whether the user's own certificate store trusts the HTTPS decryption root `certificate_pem`. `None`
-    /// where the core itself runs in the user's session and asks the system (`backend::trust`). A core in
-    /// a background service must not trust a root for the whole machine at one user's word, so there the
-    /// user's window keeps it in that user's store and answers here.
+    /// where the core itself runs in the user's session and asks the system (`client_core::backend::trust`).
+    /// A core in a background service must not trust a root for the whole machine at one user's word, so
+    /// there the user's window keeps it in that user's store and answers here.
     fn trusts_root(&self, certificate_pem: &str) -> Option<bool> {
         let _ = certificate_pem;
         None

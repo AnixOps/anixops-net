@@ -78,8 +78,8 @@ jobs:
                 apps/windows-gui/* | installer/*) rust=true; windows=true ;;
                 # The Android app is the Linux window and backend on Android.
                 apps/linux-gui/*) rust=true; linux=true; android=true ;;
-                # The Linux daemon; the workspace job builds and tests it.
-                apps/linux-daemon/*) rust=true ;;
+                # The Linux daemon; the workspace job builds and tests it, and the native window is run against it.
+                apps/linux-daemon/*) rust=true; linux_native=true ;;
                 # The Windows service; the Windows job builds and tests it, and the native app is tested against it.
                 apps/windows-service/*) rust=true; windows=true; windows_native=true ;;
                 # The list of pages: the native Linux window's tests check that it has the same ones.
@@ -1196,8 +1196,9 @@ jobs:
           retention-days: 3
 
   # The native Linux window (apps/linux-native, GTK 4 and libadwaita): built and linted with the `gui` feature,
-  # then started for real under Xvfb: it draws every page in every language and theme into PNG files, and a
-  # script walks and operates it through AT-SPI the way a screen reader does.
+  # then started for real under Xvfb: it draws every page in every language and theme into PNG files, a
+  # script walks and operates it through AT-SPI the way a screen reader does, and it is run against the real
+  # daemon (apps/linux-daemon), which is why changes to the daemon run this job too.
   linux-native:
     name: Linux native app
     runs-on: ubuntu-latest
@@ -1239,6 +1240,27 @@ jobs:
           cargo build --locked -p anixops-net-native --features gui --release
           test -x target/release/anixops-net-preview
 
+      # The window links no engine: it talks to the daemon. Keeps that from slipping back in.
+      - name: The window has no engine in it
+        shell: bash
+        run: |
+          set -euo pipefail
+          tree=$(cargo tree --locked -p anixops-net-native --features gui --edges normal --prefix none)
+          for crate in client-core engine-embedded; do
+            if grep -q "^${crate} " <<<"${tree}"; then
+              echo "::error::anixops-net-native depends on ${crate}; the engine belongs to the daemon"
+              exit 1
+            fi
+          done
+          grep -q "^client-window " <<<"${tree}"
+
+      - name: Build the daemon the window talks to
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked -p anixops-netd --release
+          test -x target/release/anixops-netd
+
       - name: Screenshots of every page, language and theme
         shell: bash
         run: |
@@ -1247,7 +1269,8 @@ jobs:
             .github/scripts/linux-native-screenshots.sh target/release/anixops-net-preview \
             "${RUNNER_TEMP}/linux-native-screenshots"
 
-      - name: The window through the accessibility interface
+      # The last part runs the window against the real daemon: not running, found, stopped, found again.
+      - name: The window through the accessibility interface, alone and with the daemon
         shell: bash
         env:
           GSK_RENDERER: cairo
@@ -1255,7 +1278,8 @@ jobs:
           set -euo pipefail
           xvfb-run -a --server-args="-screen 0 1280x800x24" dbus-run-session -- \
             python3 .github/scripts/linux-native-a11y.py target/release/anixops-net-preview \
-            crates/client-strings/catalogue.json
+            crates/client-strings/catalogue.json target/release/anixops-netd \
+            "${RUNNER_TEMP}/linux-native-screenshots"
 
       - name: Upload screenshots
         if: ${{ always() }}

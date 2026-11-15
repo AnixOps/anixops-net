@@ -1,8 +1,8 @@
 //! The window's side, for a window written in Rust.
 
-use client_core::backend::session::UserSession;
-use client_core::backend::system_proxy::{Desktop, ProxyBackup};
 use client_ipc::Handler;
+use client_session::session::UserSession;
+use client_session::system_proxy::{Desktop, ProxyBackup};
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 

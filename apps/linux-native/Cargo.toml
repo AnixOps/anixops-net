@@ -12,7 +12,7 @@ description = "The native Linux window of AnixOps Net (preview): GTK 4 and libad
 # builds, lints and drives the window with `--features gui`.
 [features]
 default = []
-gui = ["dep:adw", "dep:gtk", "dep:relm4"]
+gui = ["dep:adw", "dep:client-session", "dep:client-window", "dep:gtk", "dep:relm4"]
 
 [dependencies]
 client-strings = { path = "../../crates/client-strings" }
@@ -20,6 +20,9 @@ client-strings = { path = "../../crates/client-strings" }
 # GTK 4.14 and libadwaita 1.5 are the oldest the window runs on (Ubuntu 24.04, Debian 13, Fedora 40).
 [target.'cfg(target_os = "linux")'.dependencies]
 adw = { package = "libadwaita", version = "0.9", features = ["v1_5"], optional = true }
+# The window's end of the channel to the daemon. Neither crate has the engine in it.
+client-session = { path = "../../crates/client-session", optional = true }
+client-window = { path = "../../crates/client-window", optional = true }
 gtk = { package = "gtk4", version = "0.11", features = ["v4_14"], optional = true }
 relm4 = { version = "0.11", default-features = false, features = ["libadwaita"], optional = true }
 

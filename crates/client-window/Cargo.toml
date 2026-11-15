@@ -1,0 +1,13 @@
+[package]
+name = "client-window"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The window's end of the channel to a background core, for a window written in Rust: the standing link to the core and the answers to what the core asks of the user's session. Free of the engine."
+
+[dependencies]
+client-ipc = { path = "../client-ipc" }
+client-session = { path = "../client-session" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

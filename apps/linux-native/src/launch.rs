@@ -1,6 +1,6 @@
 //! How the window is started. The options fix the surroundings for tests and screenshots; a user starts the
 //! window without any: `--language zh|zh-Hant|en`, `--theme light|dark`, `--page <id>`, `--size <w>x<h>`,
-//! `--screenshot <file.png>`. What is not understood is ignored.
+//! `--screenshot <file.png>`, `--socket <path>`. What is not understood is ignored.
 
 use std::path::PathBuf;
 
@@ -32,6 +32,8 @@ pub struct Launch {
     pub size: Option<(i32, i32)>,
     /// Draw the window into this PNG once it is shown, then quit.
     pub screenshot: Option<PathBuf>,
+    /// The socket the core daemon listens on; `None` is the daemon's usual one.
+    pub socket: Option<String>,
 }
 
 impl Default for Launch {
@@ -42,6 +44,7 @@ impl Default for Launch {
             page: sections::OVERVIEW,
             size: None,
             screenshot: None,
+            socket: None,
         }
     }
 }
@@ -64,7 +67,7 @@ impl Launch {
             };
             if !matches!(
                 name,
-                "--language" | "--theme" | "--page" | "--size" | "--screenshot"
+                "--language" | "--theme" | "--page" | "--size" | "--screenshot" | "--socket"
             ) {
                 continue;
             }
@@ -95,6 +98,9 @@ impl Launch {
                 }
                 "--screenshot" if !value.is_empty() => {
                     launch.screenshot = Some(PathBuf::from(value));
+                }
+                "--socket" if !value.is_empty() => {
+                    launch.socket = Some(value);
                 }
                 _ => {}
             }
@@ -161,6 +167,7 @@ mod tests {
             ("--size", "800x"),
             ("--size", "800x600x2"),
             ("--screenshot", ""),
+            ("--socket", ""),
             ("--unknown", "value"),
         ] {
             assert_eq!(
@@ -210,5 +217,15 @@ mod tests {
         // A path may hold an equals sign after the first one.
         let launch = Launch::parse(["--screenshot=/tmp/a=b.png"]);
         assert_eq!(launch.screenshot, Some(PathBuf::from("/tmp/a=b.png")));
+    }
+
+    #[test]
+    fn a_socket_names_where_the_daemon_listens() {
+        assert_eq!(Launch::default().socket, None);
+        let launch = Launch::parse(["--socket", "/tmp/anixops/core.sock"]);
+        assert_eq!(launch.socket.as_deref(), Some("/tmp/anixops/core.sock"));
+        let launch = Launch::parse(["--socket=/tmp/core.sock", "--theme", "dark"]);
+        assert_eq!(launch.socket.as_deref(), Some("/tmp/core.sock"));
+        assert_eq!(launch.appearance, Appearance::Dark);
     }
 }
