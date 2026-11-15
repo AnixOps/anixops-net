@@ -82,7 +82,11 @@ Tauri（过渡期）        ── 同进程调用                             P
    重叠 I/O 打开，否则一个线程在读的时候别的线程写不进去。
    核心和界面怎么接上通道在 `crates/client-service`：服务一侧的 `Windows` 记着当前连着的界面，把界面的命令交给
    `Client::invoke`，同时就是核心的 `UserSession`——系统代理和登录启动项的读写都转成 `session.*` 请求发给界面
-   （名字和样例在 `crates/client-service/fixtures/`，C# 界面按同一批样例实现）。规则：
+   （名字和样例在 `crates/client-service/fixtures/`，C# 界面按同一批样例实现）。
+   界面一侧（Rust 写的窗口用）单独放在两个不带内核的 crate 里，窗口进程只链接它们，不链接 `client-core`：
+   `crates/client-session` 是"属于当前用户会话的事"（`UserSession`、`LocalSession`、系统代理、登录启动项，
+   `client_core::backend` 下的同名模块就是它）；`crates/client-window` 是 `session.*` 的名字、应答方 `WindowEnd`
+   和常驻连接 `CoreLink`（连接、握手、断开后每 2 秒重连，状态变化通知窗口；核心一直不在时只通知一次）。规则：
    - 界面连上后核心先问 `session.describe`，答得上来才算用户会话；只发命令的程序（命令行工具）不会被问。
    - 同时连着几个界面时问最后连上的那个，它离开后回到前一个。
    - 没有界面连着时，改用户设置的请求直接失败并说明原因；开机自动连接时系统代理先不设，界面连上后核心补设
@@ -173,7 +177,7 @@ Linux 守护进程相对 T14 辅助进程要补的地方：
 Windows 上现有的代理写入（内核仓库 `platform-windows` 的 `apply_system_proxy`）同时写当前用户的 WinINet 设置和整机的
 WinHTTP 设置，后者需要管理员权限。原生版里拆开：界面进程只写 WinINet，WinHTTP 由后台进程写。内核仓库已经提供分开的
 函数（`apply_current_user_system_proxy`、`apply_winhttp_proxy`）。共用核心的 Windows 代理实现
-（`backend/system_proxy_windows.rs`）只写当前用户的设置；恢复前读一次当前值，已经不是客户端写入的那一份就不动它。
+（`crates/client-session/src/system_proxy_windows.rs`）只写当前用户的设置；恢复前读一次当前值，已经不是客户端写入的那一份就不动它。
 WinHTTP 的写入随后台服务一起做（PR 2）。
 
 Windows 的登录启动项还没有接：内核仓库现有的函数建的是提权的计划任务（给需要管理员权限的 Tauri 版用），原生版的
@@ -369,6 +373,21 @@ Linux 骨架（PR 5，`apps/linux-native`）的做法：
   每个可操作控件都有名称。三种语言各跑一遍。
 - 这一步没有的：和守护进程的连接（标题栏状态）、托盘、deb / rpm 包、Wayland 下的实测（CI 是 X11）。
 
+Linux 窗口接上守护进程（PR 5b）：
+
+- 窗口进程里没有内核。它经 `client-window` 的 `CoreLink` 连守护进程的套接字（默认 `/run/anixops-net/core.sock`，
+  `--socket <路径>` 给测试换一个），CI 用 `cargo tree` 检查窗口的依赖里没有 `client-core` 和 `engine-embedded`。
+- 侧栏底部一行小字显示连接状态，文案和 Windows 标题栏用同一批（`core.connecting`、`core.connected`、
+  `core.unavailable`）。连不上的具体原因只进日志，不直接显示。
+- 窗口同时是守护进程的"用户会话"：`session.*` 由 `WindowEnd` 加 `LocalSession` 应答，系统代理按当前桌面
+  （GNOME、KDE）写。预览版不写登录启动项（登录后启动的仍是旧窗口），通知等页面做出来时一起接。
+- 检查：`client-window` 的测试用真实套接字和一个假核心，覆盖"核心没启动、启动后连上、双向请求和事件、核心离开、
+  回来后自动重连、套接字上不是核心的程序不会被当成核心"。CI 的"Linux native app"任务再用真实的 `anixops-netd`
+  跑一遍：窗口先显示核心服务没有运行，守护进程启动后显示版本，停掉后回到没有运行，再启动后重新连上；都经 AT-SPI
+  读窗口上的文字判断。连上时的窗口另存一张截图。
+- 还没有的：守护进程拒绝当前用户时（没有在本机登录的账号）握手仍然成功，窗口目前会显示已连接，拒绝的原因要到
+  第一个真实请求才看得到；做概览页时把它显示出来。
+
 ## 迁移清单与 PR 顺序
 
 原生版在 `apps/windows-native` 和 `apps/linux-native` 平行开发，以“预览”名称并存安装。`platform-parity.md` 里该平台
@@ -391,6 +410,7 @@ Linux 骨架（PR 5，`apps/linux-native`）的做法：
 | 4h | Windows 验证：TUN 模式经服务（Wintun 由服务加载，MSI 带上 `wintun.dll`，卸载后不残留网卡和驱动），第 3 项的 TUN 部分 | 4g |
 | 4i | Windows 验证：HTTPS 解密的根证书信任（只信任到当前用户的证书库，由窗口添加、Windows 弹确认框；卸载时移除），第 3 项的解密部分 | 4g |
 | 5 | Linux 骨架（`apps/linux-native`）：导航、主题、三种语言、CI 截图与 AT-SPI 检查。和守护进程的连接、打包在后面的 PR | 2 |
+| 5b | Linux 窗口接上守护进程：`crates/client-session`、`crates/client-window`（`CoreLink`、`WindowEnd`，不带内核），侧栏底部的连接状态，CI 里和真实的 `anixops-netd` 跑"没启动、连上、停掉、重连" | 5 |
 | 6 | 代理 › 首页与代理：连接、状态、流量、连接列表、出口地址、订阅、节点、测速、策略组、分享、节点编辑 | 4、5 |
 | 7 | 规则与设置：分流模式、我的规则、规则集、DNS、Fake-IP、屏蔽 QUIC、流量重定向、通知、Wi-Fi 规则、日志、流量统计、诊断、协议、语言 | 6 |
 | 8 | 扩展与改写：插件导入 / 开关 / 查看，HTTPS 解密与根证书，解密域名，Map Local / Remote，团队 CA，手机连电脑抓包 | 6 |

@@ -96,7 +96,9 @@ dependencies = [
 name = "anixops-net-native"
 version = "0.3.0"
 dependencies = [
+ "client-session",
  "client-strings",
+ "client-window",
  "gtk4",
  "libadwaita",
  "relm4",
@@ -869,6 +871,7 @@ dependencies = [
  "app-log",
  "app-notifications",
  "client-health",
+ "client-session",
  "client-view",
  "config-core",
  "control-domain",
@@ -915,6 +918,16 @@ dependencies = [
  "app-notifications",
  "client-core",
  "client-ipc",
+ "client-window",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "client-session"
+version = "0.3.0"
+dependencies = [
+ "platform-windows",
  "serde",
  "serde_json",
 ]
@@ -932,6 +945,16 @@ version = "0.3.0"
 dependencies = [
  "serde_json",
  "url",
+]
+
+[[package]]
+name = "client-window"
+version = "0.3.0"
+dependencies = [
+ "client-ipc",
+ "client-session",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

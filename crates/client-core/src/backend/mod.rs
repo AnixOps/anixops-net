@@ -2,21 +2,14 @@
 //! the desktop's proxy settings and the autostart entry. The window layer (`app.rs`) only moves values in and
 //! out and does network fetches and delay tests outside the lock.
 
-pub mod autostart;
 pub mod engine;
 pub mod legacy_windows;
-pub mod session;
 #[cfg(not(any(target_os = "android", windows)))]
 pub mod session_key;
 #[cfg(windows)]
 #[path = "session_key_windows.rs"]
 pub mod session_key;
 pub mod state;
-#[cfg(not(windows))]
-pub mod system_proxy;
-#[cfg(windows)]
-#[path = "system_proxy_windows.rs"]
-pub mod system_proxy;
 pub mod trust;
 #[cfg(any(target_os = "android", target_os = "linux"))]
 pub mod tun;
@@ -25,6 +18,10 @@ pub mod tun;
 pub mod tun;
 #[cfg(all(target_os = "linux", not(target_os = "android")))]
 pub mod tun_helper;
+
+// What belongs to the signed-in user's session lives in `client-session`, so a window that only talks to a
+// background core links it without the engine. The paths here stay as they were.
+pub use client_session::{autostart, session, system_proxy};
 
 use std::io;
 use std::path::{Path, PathBuf};

@@ -2,11 +2,19 @@
 //!
 //! The layout is libadwaita's own (a split view that folds into one column on a narrow window), the colours
 //! are the system's with the brand's accent on top, and every sentence comes from the shared catalogue.
+//!
+//! The engine is not in this process. It runs in the daemon, which the window reaches over the daemon's
+//! socket (`client-window`); the foot of the sidebar says whether the daemon answers.
 
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use adw::prelude::*;
+use client_session::session::LocalSession;
+use client_session::system_proxy::Desktop;
+use client_window::{CoreLink, LinkOptions, LinkState, WindowEnd};
 use gtk::{gdk, gio, glib};
 use relm4::{ComponentParts, ComponentSender, RelmApp, SimpleComponent};
 
@@ -57,11 +65,17 @@ struct Shell {
     language: Language,
     /// The place of the page that is shown in [`sections::ALL`].
     current: usize,
+    /// Whether the daemon answers.
+    core: LinkState,
+    /// Keeps looking for the daemon for as long as the window lives.
+    _link: CoreLink,
 }
 
 #[derive(Debug)]
 enum Show {
     Page(usize),
+    /// The link to the daemon changed.
+    Core(LinkState),
 }
 
 struct ShellWidgets {
@@ -69,12 +83,45 @@ struct ShellWidgets {
     footer: gtk::ListBox,
     content: adw::NavigationPage,
     status: adw::StatusPage,
+    core: gtk::Label,
 }
 
 impl Shell {
     fn text(&self, id: &str) -> &'static str {
         client_strings::text(self.language, id)
     }
+
+    /// The line at the foot of the sidebar. Why the daemon does not answer is for the log, not for here.
+    fn core_text(&self) -> String {
+        match &self.core {
+            LinkState::Connecting => self.text("core.connecting").to_owned(),
+            LinkState::Connected { core_version } => {
+                client_strings::format(self.language, "core.connected", &[core_version.as_str()])
+            }
+            LinkState::Unavailable { .. } => self.text("core.unavailable").to_owned(),
+        }
+    }
+}
+
+/// Starts looking for the daemon. The window answers what the daemon asks of this user's session (the
+/// desktop's proxy settings); each change of the link comes back to the window as [`Show::Core`].
+fn link(socket: Option<String>, sender: &ComponentSender<Shell>) -> CoreLink {
+    let desktop = Desktop::from_env();
+    let executable =
+        std::env::current_exe().unwrap_or_else(|_| PathBuf::from("anixops-net-preview"));
+    // No login entry while this is the preview: the window that starts after login is still the old one.
+    let session = LocalSession::new(desktop, None, executable);
+    // What the daemon tells the window without being asked (notifications) is shown once the pages are.
+    let end = WindowEnd::new(desktop, Box::new(session), |_, _| {});
+    let mut options = LinkOptions::new(env!("CARGO_PKG_VERSION"));
+    if let Some(socket) = socket {
+        options.endpoint = socket;
+    }
+    let input = sender.input_sender().clone();
+    CoreLink::start(options, Arc::new(end), move |state| {
+        // The window is gone when this fails, and the link with it.
+        let _ = input.send(Show::Core(state.clone()));
+    })
 }
 
 /// One row of the sidebar: the section's icon and name.
@@ -139,6 +186,8 @@ impl SimpleComponent for Shell {
         let model = Shell {
             language: launch.language.unwrap_or_else(desktop_language),
             current: sections::position(launch.page).unwrap_or(0),
+            core: LinkState::Connecting,
+            _link: link(launch.socket, &sender),
         };
 
         let style = adw::StyleManager::default();
@@ -178,7 +227,21 @@ impl SimpleComponent for Shell {
         let sidebar_view = adw::ToolbarView::new();
         sidebar_view.add_top_bar(&sidebar_bar);
         sidebar_view.set_content(Some(&scroller));
-        sidebar_view.add_bottom_bar(&footer);
+        // Under settings, in small print: whether the daemon answers.
+        let core = gtk::Label::new(None);
+        core.set_widget_name("core-status");
+        core.set_xalign(0.0);
+        core.set_wrap(true);
+        core.add_css_class("caption");
+        core.add_css_class("dim-label");
+        core.set_margin_start(12);
+        core.set_margin_end(12);
+        core.set_margin_top(4);
+        core.set_margin_bottom(10);
+        let foot = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        foot.append(&footer);
+        foot.append(&core);
+        sidebar_view.add_bottom_bar(&foot);
         let sidebar = adw::NavigationPage::new(&sidebar_view, model.text("app.name"));
 
         // The page. Until the real pages are built, each one says what it will hold.
@@ -226,6 +289,7 @@ impl SimpleComponent for Shell {
             footer,
             content,
             status,
+            core,
         };
         model.update_view(&mut widgets, sender);
         // The keyboard starts on the chosen page's row. Left to itself the window would focus the first row
@@ -261,6 +325,7 @@ impl SimpleComponent for Shell {
     fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>) {
         match message {
             Show::Page(index) => self.current = index,
+            Show::Core(state) => self.core = state,
         }
     }
 
@@ -288,6 +353,7 @@ impl SimpleComponent for Shell {
             glib::markup_escape_text(self.text("page.unfinished"))
         );
         widgets.status.set_description(Some(&description));
+        widgets.core.set_label(&self.core_text());
     }
 }
 

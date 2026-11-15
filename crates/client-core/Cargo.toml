@@ -11,6 +11,7 @@ anx-license = { path = "../anx-license" }
 app-log = { path = "../app-log" }
 app-notifications = { path = "../app-notifications" }
 client-health = { path = "../client-health" }
+client-session = { path = "../client-session" }
 client-view = { path = "../client-view" }
 config-core = { workspace = true }
 control-domain = { workspace = true }

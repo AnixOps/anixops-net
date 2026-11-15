@@ -1,0 +1,17 @@
+[package]
+name = "client-session"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "What the client changes in the signed-in user's own session: the system proxy settings and the entry that starts the client after login. Free of the engine, so a window can link it without the core."
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"
+
+# Windows: the user's proxy settings are read and written through the kernel's platform crate.
+[target.'cfg(windows)'.dependencies]
+platform-windows = { workspace = true }
