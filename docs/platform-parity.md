@@ -33,7 +33,7 @@
 | HTTPS 解密开关 + 首次开启确认条款 | ✅ | ✅ | ✅ | ✅ | ✅ | #117 |
 | 根证书由用户手动信任、关闭解密保留证书 | ✅ | ✅ | ⏳ | ⏳ | ✅ | 桌面见 #123（进行中）；Android 本来就在系统设置里手动安装 |
 | 手机连电脑抓包（局域网共享 + 证书页） | — | ✅ | ✅ | ✅ | — | 手机本身不需要 |
-| 导入自有根证书（团队 CA） | ❌ | ❌ | ✅ | ✅ | ❌ | macOS 计划补（A2）；iOS / Android 见系统限制 |
+| 导入自有根证书（团队 CA） | ⛔ | ✅ | ✅ | ✅ | ⛔ | macOS 在扩展页“使用自己的根证书…”粘贴 PEM（A2），密钥须为 P-256；iOS / Android 见系统限制 |
 | 解密对第三方 App 生效 | ✅ | ✅ | ✅ | ✅ | ⛔ | Android 7 起 App 默认不信任用户证书 |
 
 ## 代理与规则
@@ -81,7 +81,7 @@
 | 开机 / 登录后启动、自动连接 | ✅ | ✅ | ✅ | ✅ | ⛔ | Android 每次连接要系统 VPN 授权，见系统限制 |
 | `anixops://` 链接 | ✅ | ✅ | ✅ | ✅ | ✅ | 与 iOS 相同的动作：connect / disconnect / toggle、`mode?set=`、`select?node=&group=` 或 `policy=`、`import?url=`（只填进导入框，用户点“导入”才保存）。桌面没有 `global` 模式，`mode` 另外接受 `bypass_china` 等桌面模式名。Windows 写当前用户的 `HKCU\Software\Classes\anixops`，Linux 写 `~/.local/share/applications` 里的 handler 并调 `xdg-mime`，都在启动时注册；第二次启动把链接交给已运行的窗口（Linux 因此改为单实例）。Android 在 manifest 里声明 scheme（tauri-plugin-deep-link，T13） |
 | 崩溃报告（本机、脱敏） | ✅ | ✅ | ✅ | ✅ | ✅ | |
-| 本机 Prometheus 指标 | ❌ | ❌ | ✅ | ✅ | ✅ | iOS 扩展不能开监听端口给别的 App；macOS 可补（A3） |
+| 本机 Prometheus 指标 | ⛔ | ✅ | ✅ | ✅ | ✅ | macOS 在设置页打开，`127.0.0.1:9477/metrics`，默认关闭（A3）；iOS 见系统限制 |
 | 用户协议同意、协议入口 | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 简体 / 繁体中文 / 英文 | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 应用内更新 | — | ✅ | ❌ | ❌ | ❌ | macOS 渠道未开；其余平台目前从下载页更新 |
@@ -114,6 +114,9 @@ MSI 升级时旧服务随旧版本一起卸载；便携版注册过的服务由�
   “隐私和安全性 > 位置”里允许桌面应用访问位置，否则只能区分“Wi-Fi / 有线”。Linux 桌面的网络管理器各不相同（NetworkManager、
   systemd-networkd、iwd），自带按连接执行脚本的办法，客户端不做。
 - **iOS 指标端口**：Packet Tunnel 扩展的监听端口对其他 App 不可见，iOS 上用导出日志代替。
+- **macOS 指标端口与自有根证书**：端口由 App 自己在 127.0.0.1 上监听（沙盒加了 `network.server`），每次抓取时向系统扩展里的
+  引擎要指标，所以 App 退出后端口关闭；为免意外开放端口默认关闭，Windows / Linux 默认打开。引擎只用 ECDSA P-256 签发证书，
+  所以自有根证书的私钥必须是 P-256。
 
 ## 补齐计划
 
@@ -122,8 +125,8 @@ MSI 升级时旧服务随旧版本一起卸载；便携版注册过的服务由�
 | 编号 | 内容 | 平台 | 状态 |
 |---|---|---|---|
 | A1 | 单条请求导出（cURL / 代码 / Postman / Insomnia）、抓包会话加密保存 | iOS、macOS | Apple 调试线程在 #126 之后做 |
-| A2 | macOS 导入自有根证书 | macOS | 待做 |
-| A3 | macOS 本机指标端口 | macOS | 待评估 |
+| A2 | macOS 导入自有根证书 | macOS | 已完成 |
+| A3 | macOS 本机指标端口 | macOS | 已完成 |
 | T1 | 抓包会话加密保存、列表、载入、删除 | Windows、Linux、Android | 已完成 |
 | T2 | 我的规则：规则文本编辑，连接中原地换规则 | Windows、Linux、Android | 已完成 |
 | T3 | DNS：自定义服务器、分域 DNS、Hosts、Fake-IP | Windows、Linux、Android | 已完成 |

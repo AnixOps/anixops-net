@@ -654,6 +654,10 @@ struct MacSettingsPage: View {
 
             MacCommandLineSection()
 
+            if let metrics = state.metrics {
+                MacMetricsSection(metrics: metrics)
+            }
+
             Section("关于") {
                 LabeledContent("版本", value: Self.version)
                 LabeledContent("用户协议") {
@@ -718,6 +722,37 @@ private struct MacCommandLineSection: View {
                     copied = true
                 }
             }
+        }
+    }
+}
+
+/// Settings > Prometheus metrics: the loopback endpoint (MacMetricsService), as on Windows and Linux.
+private struct MacMetricsSection: View {
+    @ObservedObject var metrics: MacMetricsService
+    @State private var enabled = UserDefaults.standard.bool(forKey: MacMetricsService.enabledKey)
+
+    var body: some View {
+        Section {
+            Toggle("Prometheus 指标", isOn: $enabled)
+                .onChange(of: enabled) { _, on in
+                    metrics.setEnabled(on)
+                }
+            if enabled {
+                LabeledContent("地址") {
+                    if let address = metrics.address {
+                        Text("http://\(address)/metrics")
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                    } else {
+                        Text(metrics.failure ?? String(localized: "正在启动…"))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } header: {
+            Text("指标")
+        } footer: {
+            Text("只监听本机回环地址，连接时包含内核的连接、流量和节点健康指标，与 Windows、Linux 客户端相同。")
         }
     }
 }

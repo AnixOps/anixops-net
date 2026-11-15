@@ -10518,6 +10518,294 @@
           }
         }
       }
+    },
+    "使用自己的根证书…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use Your Own Root Certificate…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用自己的根憑證…"
+          }
+        }
+      }
+    },
+    "使用自己的根证书": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use Your Own Root Certificate"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用自己的根憑證"
+          }
+        }
+      }
+    },
+    "团队已有 CA 时换成它，Mac 和其他设备信任同一张根证书。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If your team already has a CA, switch to it so this Mac and your other devices trust one root."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "團隊已有 CA 時換成它，Mac 和其他裝置信任同一張根憑證。"
+          }
+        }
+      }
+    },
+    "证书和私钥只保存在本机钥匙串。换成自己的根证书后需要重新连接，已安装旧证书的设备要改装新证书。如果“信任证书”没有成功：在“钥匙串访问”中双击这张证书，展开“信任”，把“使用此证书时”设为“始终信任”。Firefox 使用自己的证书列表，需要另外导入。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The certificate and its private key stay in this Mac's keychain. After switching to your own root, reconnect, and install the new certificate on devices that have the old one. If Trust Certificate did not work: double-click the certificate in Keychain Access, expand Trust and set When using this certificate to Always Trust. Firefox keeps its own certificate list and needs a separate import."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "憑證和私鑰只保存在本機鑰匙圈。換成自己的根憑證後需要重新連線，已安裝舊憑證的裝置要改裝新憑證。如果「信任憑證」沒有成功：在「鑰匙圈存取」中按兩下這張憑證，展開「信任」，把「使用此憑證時」設為「永遠信任」。Firefox 使用自己的憑證列表，需要另外匯入。"
+          }
+        }
+      }
+    },
+    "保存证书失败（%@）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not save the certificate (%@)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存憑證失敗（%@）"
+          }
+        }
+      }
+    },
+    "没有读到证书，请粘贴以 BEGIN CERTIFICATE 开头的 PEM 文本。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No certificate found. Paste PEM text that starts with BEGIN CERTIFICATE."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有讀到憑證，請貼上以 BEGIN CERTIFICATE 開頭的 PEM 文字。"
+          }
+        }
+      }
+    },
+    "这张证书不是 CA 证书，不能用来签发其他证书。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is not a CA certificate, so it cannot sign other certificates."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這張憑證不是 CA 憑證，不能用來簽發其他憑證。"
+          }
+        }
+      }
+    },
+    "私钥需要是 P-256（prime256v1）的 PEM 私钥，以 BEGIN PRIVATE KEY 或 BEGIN EC PRIVATE KEY 开头。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The private key must be a P-256 (prime256v1) PEM key starting with BEGIN PRIVATE KEY or BEGIN EC PRIVATE KEY."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "私鑰需要是 P-256（prime256v1）的 PEM 私鑰，以 BEGIN PRIVATE KEY 或 BEGIN EC PRIVATE KEY 開頭。"
+          }
+        }
+      }
+    },
+    "私钥和证书不是一对。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The private key does not belong to the certificate."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "私鑰和憑證不是一對。"
+          }
+        }
+      }
+    },
+    "粘贴 PEM 格式的 CA 证书和它的私钥。私钥需要是 P-256（prime256v1）密钥，只保存在本机钥匙串。替换后旧证书立即失效。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste the CA certificate and its private key in PEM format. The key must be a P-256 (prime256v1) key and stays in this Mac's keychain. The old certificate stops working at once."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "貼上 PEM 格式的 CA 憑證和它的私鑰。私鑰需要是 P-256（prime256v1）金鑰，只保存在本機鑰匙圈。替換後舊憑證立即失效。"
+          }
+        }
+      }
+    },
+    "CA 证书": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CA Certificate"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CA 憑證"
+          }
+        }
+      }
+    },
+    "私钥": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Private Key"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "私鑰"
+          }
+        }
+      }
+    },
+    "替换根证书": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace Root Certificate"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "替換根憑證"
+          }
+        }
+      }
+    },
+    "端口被占用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Port in use"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連接埠被佔用"
+          }
+        }
+      }
+    },
+    "Prometheus 指标": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prometheus Metrics"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prometheus 指標"
+          }
+        }
+      }
+    },
+    "正在启动…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starting…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在啟動…"
+          }
+        }
+      }
+    },
+    "指标": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metrics"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "指標"
+          }
+        }
+      }
+    },
+    "只监听本机回环地址，连接时包含内核的连接、流量和节点健康指标，与 Windows、Linux 客户端相同。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listens on the loopback address only. While connected it includes the engine's connection, traffic and node health metrics, the same as the Windows and Linux clients."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只監聽本機迴路位址，連線時包含核心的連線、流量和節點健康指標，與 Windows、Linux 用戶端相同。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
