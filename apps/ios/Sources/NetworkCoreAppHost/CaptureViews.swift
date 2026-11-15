@@ -183,7 +183,8 @@ struct CaptureDetailView: View {
                                     exchange: exchange,
                                     connectionID: connection.id,
                                     index: index,
-                                    hasFrames: (capture.h2Frames?.seen ?? 0) > 0
+                                    hasFrames: (capture.h2Frames?.seen ?? 0) > 0,
+                                    siblings: capture.http
                                 )
                             } label: {
                                 ExchangeRow(exchange: exchange)
@@ -398,255 +399,6 @@ private struct ChunkView: View {
     }
 }
 
-/// One decrypted request and its response: URL, status, headers and bodies.
-private struct HttpExchangeView: View {
-    let tunnel: TunnelController
-    let exchange: PacketCapture.Exchange
-    /// Where the exchange sits in the capture, for exporting it alone.
-    let connectionID: UInt64
-    let index: Int
-    /// The connection is HTTP/2 and its frame headers were kept.
-    var hasFrames = false
-    @Environment(\.brand) private var brand
-    @State private var mapping: MappingDraft?
-    /// Cookies, tokens and passwords are hidden in exports unless turned off (plan F5).
-    @State private var redact = true
-
-    var body: some View {
-        List {
-            Section {
-                Text(exchange.url)
-                    .font(.footnote.monospaced())
-                    .textSelection(.enabled)
-                LabeledContent("方法", value: exchange.method)
-                LabeledContent("状态", value: exchange.status.map { String($0) } ?? String(localized: "没有响应"))
-                LabeledContent("开始", value: exchange.startedAt.formatted(date: .omitted, time: .standard))
-                if let ended = exchange.endedAt {
-                    LabeledContent("耗时", value: "\(Int((ended.timeIntervalSince(exchange.startedAt) * 1000).rounded())) ms")
-                }
-                if exchange.inProgress {
-                    LabeledContent("状态", value: String(localized: "进行中"))
-                }
-                if let note = Self.noteText(exchange.note) {
-                    LabeledContent("说明", value: note)
-                }
-                if exchange.rulesSkipped {
-                    LabeledContent("改写", value: Self.skippedText(exchange.note))
-                        .foregroundStyle(brand.warning)
-                }
-            }
-            .listRowBackground(brand.surface)
-            if exchange.hasMessages || hasFrames {
-                Section {
-                    if exchange.hasMessages {
-                        NavigationLink {
-                            StreamMessagesView(tunnel: tunnel, exchange: exchange, connectionID: connectionID, index: index)
-                        } label: {
-                            LabeledContent(
-                                exchange.status == 101 ? "WebSocket 消息" : "事件",
-                                value: String(exchange.messages?.seen ?? 0)
-                            )
-                        }
-                    }
-                    if hasFrames {
-                        NavigationLink {
-                            H2FramesView(tunnel: tunnel, connectionID: connectionID)
-                        } label: {
-                            Label("HTTP/2 帧", systemImage: "list.bullet.rectangle")
-                        }
-                    }
-                }
-                .listRowBackground(brand.surface)
-            }
-            message("请求", exchange.request)
-            if exchange.status != nil {
-                message("响应", exchange.response)
-            }
-            Section {
-                let captured = replay
-                NavigationLink {
-                    ReplayView(original: captured.replay, complete: captured.complete, sendOnAppear: true)
-                } label: {
-                    Label("重放", systemImage: "arrow.clockwise")
-                }
-                .disabled(!captured.complete)
-                NavigationLink {
-                    ReplayView(original: captured.replay, complete: captured.complete, sendOnAppear: false)
-                } label: {
-                    Label("编辑后重放", systemImage: "square.and.pencil")
-                }
-            } footer: {
-                Text(replay.complete ? "从本机重新发出这个请求，不带 Cookie 存储，不跟随重定向。" : "请求体没有完整抓到，只能编辑后重放。")
-            }
-            .listRowBackground(brand.surface)
-            Section {
-                Toggle("遮盖 Cookie、令牌和密码", isOn: $redact)
-                ForEach(PacketCapture.RequestExport.all.filter { $0.language == nil }) { export in
-                    exportLink(export)
-                }
-                Menu {
-                    ForEach(PacketCapture.CodeLanguage.allCases) { language in
-                        exportLink(.code(language))
-                    }
-                } label: {
-                    Label("导出为代码", systemImage: "chevron.left.forwardslash.chevron.right")
-                }
-            } header: {
-                Text("导出这条请求")
-            } footer: {
-                Text(redact ? "Cookie、Authorization 和名字含 token、password、session 等的请求头、参数与字段会换成 <redacted>。" : "导出内容包含完整的 Cookie 和令牌，请只发给信任的人。")
-            }
-            .listRowBackground(brand.surface)
-            Section {
-                Button {
-                    mapping = MappingDraft(entry: mapLocal, isNew: true)
-                } label: {
-                    Label("映射到本地", systemImage: "doc.text")
-                }
-                Button {
-                    mapping = MappingDraft(entry: DebugMappings.remote(url: exchange.url), isNew: true)
-                } label: {
-                    Label("映射到远程", systemImage: "arrow.uturn.right")
-                }
-            } footer: {
-                Text("用这次的响应生成 Map Local，或把这个 URL 转到另一个地址。保存后在 扩展 › Map Local / Map Remote 里管理。")
-            }
-            .listRowBackground(brand.surface)
-        }
-        .scrollContentBackground(.hidden)
-        .background(brand.bg.ignoresSafeArea())
-        .navigationTitle("\(exchange.method) \(exchange.status.map { String($0) } ?? "")")
-        .inlineNavigationTitle()
-        .sheet(item: $mapping) { draft in
-            MappingEditor(draft: draft) { entry in
-                let next = try tunnel.debugMappings.saving(entry)
-                Task {
-                    await tunnel.applyDebugMappings(next)
-                }
-            }
-            .formSheetFrame()
-            .environment(\.brand, brand)
-            .tint(brand.primary)
-        }
-    }
-
-    private func exportLink(_ export: PacketCapture.RequestExport) -> some View {
-        let file = CaptureExportFile(tunnel: tunnel, export: export, connection: connectionID, exchange: index, redact: redact)
-        return ShareLink(item: file, preview: SharePreview(file.title)) {
-            Label(file.title, systemImage: "square.and.arrow.up")
-        }
-    }
-
-    /// The request as captured, ready to send again.
-    private var replay: (replay: RequestReplay, complete: Bool) {
-        RequestReplay.captured(
-            method: exchange.method,
-            url: exchange.url,
-            headers: exchange.request.headers.map { (name: $0.name, value: $0.value) },
-            body: exchange.request.body.data,
-            bodyTruncated: exchange.request.body.truncated
-                || UInt64(exchange.request.body.data.count) != exchange.request.body.size
-        )
-    }
-
-    /// A Map Local entry answering with this response. A cut-off or still-compressed body cannot be replayed as
-    /// captured, so it starts empty for the user to fill in.
-    private var mapLocal: DebugMappings.Entry {
-        let response = exchange.response
-        let encoding = response.headers.first { $0.name.lowercased() == "content-encoding" }?.value.lowercased()
-        let usable = !response.body.truncated && UInt64(response.body.data.count) == response.body.size
-            && (encoding == nil || encoding == "identity")
-        return DebugMappings.local(
-            url: exchange.url,
-            status: exchange.status,
-            headers: response.headers.map { .init(name: $0.name, value: $0.value) },
-            body: usable ? response.body.data : Data()
-        )
-    }
-
-    @ViewBuilder
-    private func message(_ title: String, _ message: PacketCapture.Exchange.Message) -> some View {
-        Section("\(title)头") {
-            ForEach(Array(message.headers.enumerated()), id: \.offset) { _, header in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(header.name)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(brand.text2)
-                    Text(header.value)
-                        .font(.footnote.monospaced())
-                        .textSelection(.enabled)
-                }
-            }
-        }
-        .listRowBackground(brand.surface)
-        if message.body.size > 0 {
-            Section {
-                NavigationLink {
-                    BodyView(title: "\(title)体", message: message)
-                } label: {
-                    LabeledContent("\(title)体", value: Self.bodySize(message.body))
-                }
-            }
-            .listRowBackground(brand.surface)
-        }
-    }
-
-    static func bodySize(_ body: PacketCapture.Body) -> String {
-        let size = TrafficFormat.bytes(body.size)
-        return body.truncated ? String(localized: "\(size)（保留前 \(TrafficFormat.bytes(UInt64(body.data.count)))）") : size
-    }
-
-    /// Why a rewrite rule that would have read or changed the body did not run.
-    static func skippedText(_ note: String?) -> String {
-        note == "too_large"
-            ? String(localized: "改写未生效：内容超过 1 MiB")
-            : String(localized: "改写未生效：流式响应")
-    }
-
-    static func noteText(_ note: String?) -> String? {
-        switch note {
-        case "answered_locally":
-            return String(localized: "由改写规则直接应答")
-        case "streaming":
-            return String(localized: "流式响应，未保留正文")
-        case "too_large":
-            return String(localized: "内容过大，之后不再解密")
-        default:
-            return nil
-        }
-    }
-}
-
-/// A request or response body: text (decompressed when the headers say so) or a hex dump.
-private struct BodyView: View {
-    let title: String
-    let message: PacketCapture.Exchange.Message
-    @Environment(\.brand) private var brand
-
-    var body: some View {
-        let encoding = message.header("Content-Encoding")
-        let decoded = CaptureBodyDecoder.decode(message.body, contentEncoding: encoding)
-        let text = decoded.map { PacketCapture.text($0.data) } ?? PacketCapture.text(message.body.data, contentEncoding: encoding)
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text([message.header("Content-Type"), encoding, HttpExchangeView.bodySize(message.body)].compactMap { $0 }.joined(separator: " · "))
-                    .font(.footnote)
-                    .foregroundStyle(brand.text2)
-                if let decoded, decoded.truncated {
-                    Text("只解压出开头部分（正文没有完整抓到，或解压后超过 16 MiB）")
-                        .font(.footnote)
-                        .foregroundStyle(brand.text2)
-                }
-                BytesText(text: text ?? PacketCapture.hexDump(decoded?.data ?? message.body.data))
-            }
-            .padding()
-        }
-        .background(brand.bg.ignoresSafeArea())
-        .navigationTitle(title)
-        .inlineNavigationTitle()
-    }
-}
-
 /// Monospaced, selectable text with a copy button. Very long text is cut so the view stays responsive.
 private struct BytesText: View {
     let text: String
@@ -690,14 +442,17 @@ struct CapturedRequestView: View {
     var tunnel: TunnelController
     let row: PacketCapture.RequestRow
     @Environment(\.brand) private var brand
+    @Environment(\.inspectorEmbedded) private var embedded
     @State private var exchange: PacketCapture.Exchange?
     @State private var hasFrames = false
+    /// Every request of the row's connection as first read, for the timeline.
+    @State private var siblings: [PacketCapture.Exchange] = []
     @State private var loaded = false
 
     var body: some View {
         Group {
             if let exchange {
-                HttpExchangeView(tunnel: tunnel, exchange: exchange, connectionID: row.connectionID, index: row.index, hasFrames: hasFrames)
+                HttpExchangeView(tunnel: tunnel, exchange: exchange, connectionID: row.connectionID, index: row.index, hasFrames: hasFrames, siblings: siblings)
             } else {
                 List {
                     Text(loaded ? "这个请求已被更新的抓包挤出（抓包内存有上限），或抓包已清空。" : "正在读取…")
@@ -706,8 +461,7 @@ struct CapturedRequestView: View {
                 }
                 .scrollContentBackground(.hidden)
                 .background(brand.bg.ignoresSafeArea())
-                .navigationTitle("\(row.method) \(row.status.map { String($0) } ?? "")")
-                .inlineNavigationTitle()
+                .pageTitle("\(row.method) \(row.status.map { String($0) } ?? "")", embedded: embedded)
             }
         }
         .task {
@@ -715,6 +469,7 @@ struct CapturedRequestView: View {
             if let capture = RuntimeControl.decode(PacketCapture.ConnectionAnswer.self, from: data)?.capture {
                 hasFrames = (capture.h2Frames?.seen ?? 0) > 0
                 exchange = Self.find(row, in: capture.http)
+                siblings = capture.http
             }
             loaded = true
             // Messages are read on their own page; here only the head, status and bodies change.

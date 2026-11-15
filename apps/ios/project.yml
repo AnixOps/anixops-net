@@ -170,6 +170,7 @@ targets:
       - path: Sources/NetworkCoreAppHost/DashboardCards.swift
       - path: Sources/NetworkCoreAppHost/DashboardModel.swift
       - path: Sources/NetworkCoreAppHost/DnsSettingsView.swift
+      - path: Sources/NetworkCoreAppHost/ExchangeInspector.swift
       - path: Sources/NetworkCoreAppHost/ImportView.swift
       - path: Sources/NetworkCoreAppHost/MappingsViews.swift
       - path: Sources/NetworkCoreAppHost/MitmPluginInspector.swift
