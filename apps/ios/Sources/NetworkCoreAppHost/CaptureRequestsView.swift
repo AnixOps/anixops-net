@@ -51,6 +51,19 @@ struct CaptureRequestsView: View {
         #endif
     }
 
+    private var menuCommands: RequestListCommands {
+        var toggleDetails: (() -> Void)?
+        if usesTable {
+            toggleDetails = { showsInspector.toggle() }
+        }
+        return RequestListCommands(
+            paused: paused,
+            showsDetails: showsInspector,
+            togglePause: { paused.toggle() },
+            toggleDetails: toggleDetails
+        )
+    }
+
     var body: some View {
         Group {
             if usesTable {
@@ -71,6 +84,8 @@ struct CaptureRequestsView: View {
         .inlineNavigationTitle()
         .searchable(text: $query, prompt: Text("搜索或表达式，如 status:4xx"))
         .autocorrectionDisabled()
+        // The menu bar's "暂停刷新" and "显示详情" act on the list that is on screen (keyboard.md K17).
+        .focusedSceneValue(\.requestListCommands, menuCommands)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 toolbarItems
@@ -397,6 +412,26 @@ struct CaptureRequestsView: View {
                 return
             }
         }
+    }
+}
+
+/// What the request list offers to the menu bar while it is on screen.
+struct RequestListCommands {
+    let paused: Bool
+    let showsDetails: Bool
+    let togglePause: () -> Void
+    /// nil where the list has no detail pane beside it (a narrow window, a phone).
+    let toggleDetails: (() -> Void)?
+}
+
+private struct RequestListCommandsKey: FocusedValueKey {
+    typealias Value = RequestListCommands
+}
+
+extension FocusedValues {
+    var requestListCommands: RequestListCommands? {
+        get { self[RequestListCommandsKey.self] }
+        set { self[RequestListCommandsKey.self] = newValue }
     }
 }
 

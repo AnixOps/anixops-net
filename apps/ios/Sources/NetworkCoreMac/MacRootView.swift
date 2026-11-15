@@ -37,6 +37,14 @@ struct MacRootView: View {
                             .navigationTitle(state.section?.title(in: tunnel.appMode) ?? "AnixOps Net")
                     }
                 }
+                .overlay {
+                    if state.showsPalette {
+                        MacCommandPalette(tunnel: tunnel, state: state)
+                    }
+                }
+                .sheet(isPresented: $state.showsShortcuts) {
+                    MacShortcutList(mode: tunnel.appMode)
+                }
             }
         }
         .tint(brand.primary)
