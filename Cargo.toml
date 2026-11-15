@@ -5,6 +5,7 @@ members = [
     "crates/app-log",
     "crates/app-notifications",
     "crates/anx-license",
+    "crates/client-core",
     "crates/client-health",
     "crates/desktop-dns",
     "crates/desktop-mitm",

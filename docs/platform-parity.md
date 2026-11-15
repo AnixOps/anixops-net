@@ -4,7 +4,7 @@
 [`debug-mode.md`](debug-mode.md)、[`phone-debugging.md`](phone-debugging.md) 和 `apps/*/README.md`。
 
 - 界面：iOS 和 macOS 共用 SwiftUI（`apps/ios`），Windows、Linux、Android 共用 Tauri 界面（`apps/windows-gui/ui`）。
-  后端分别是 `apps/windows-gui`（Windows）和 `apps/linux-gui`（Linux，Android 复用它）。
+  后端分别是 `apps/windows-gui`（Windows）和 `crates/client-core`（Linux，Android 复用它）。
 - 内核能力都在 networkcore（固定 `rev`），客户端只决定用不用、怎么呈现。
 - Windows 和 Linux 正在改为原生界面（WinUI 3、GTK4 + libadwaita），方案和迁移清单见
   [`architecture/desktop-native.md`](architecture/desktop-native.md)。切换之前 Tauri 桌面版仍是正式版，本表的 Windows、

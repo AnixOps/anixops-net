@@ -10,7 +10,7 @@
 ```text
 Tauri WebView（apps/windows-gui/ui，React，与 Windows / Linux 共用）
   └─ Tauri 命令（apps/linux-gui/src/app.rs，76 个，命令名与 bridge.ts 一致）
-       └─ Backend（apps/linux-gui/src/backend，不依赖 Tauri）── engine_embedded::EmbeddedRuntime
+       └─ Backend（crates/client-core/src/backend，不依赖 Tauri）── engine_embedded::EmbeddedRuntime
   └─ vpn-plugin（Kotlin VpnService，Tauri 插件）── TUN 描述符 ──▶ engine::attach_tunnel
 ```
 
@@ -28,13 +28,14 @@ apps/android-native/                 Gradle 工程（提交进仓库，不再 `t
   core/                              Kotlin 侧的内核桥：Core（JNI）、命令与数据类型、事件 Flow
   vpn/                               VpnService、前台通知、快捷设置磁贴、始终开启的 VPN
   rust/                              cdylib crate `anixops_net_core`：JNI 入口，调 `Client`
-apps/linux-gui/src/client.rs         从 app.rs 抽出的、不依赖 Tauri 的客户端服务层（`networkcore_linux_gui::client`）
+crates/client-core/src/client.rs         从 app.rs 抽出的、不依赖 Tauri 的客户端服务层（`client_core::client`）
 ```
 
 ### 1. 抽出客户端服务层 `client`（Rust，PR 1）
 
-把 `app.rs` 里不属于 Tauri 的部分搬进 `apps/linux-gui/src/client.rs`（不开 `gui` feature 也编译，根 workspace 的
-测试覆盖它）。没有另建 crate：`Backend` 就在这个 crate 里，搬家只会带来大面积改名而没有收益。
+把 `app.rs` 里不属于 Tauri 的部分搬进 `crates/client-core/src/client.rs`（不开 `gui` feature 也编译，根 workspace 的
+测试覆盖它）。PR 1 先放在 `apps/linux-gui` 里；之后为了让 Windows 后端和原生桌面界面共用，`backend` 和 `client`
+原样挪成了独立的 `crates/client-core`（见 [`desktop-native.md`](desktop-native.md)），`apps/linux-gui` 重新导出它们。
 
 - `Client`：持有 `Backend`、健康状态、抓包会话密钥缓存和待读的 `anixops://` 链接；
   `invoke(command, args: serde_json::Value) -> Result<Value, String>` 按命令名分发，命令名、参数和返回 JSON 与
@@ -65,7 +66,7 @@ Rust 侧 `apps/android-native/rust`（`jni` crate，MIT/Apache）只导出四个
 Kotlin 侧 `core` 模块：`Core.invoke<T>(Command)` 用 kotlinx.serialization 把数据类编码成与 `bridge.ts` 相同的 JSON；
 事件转成 `SharedFlow<CoreEvent>`。每个命令一个类型化的 suspend 函数，页面不直接拼 JSON。
 
-契约测试：`apps/linux-gui/tests/fixtures/*.json` 存每个命令的请求和应答样例；Rust 测试检查后端产出与样例一致，
+契约测试：`crates/client-core/tests/fixtures/*.json` 存每个命令的请求和应答样例；Rust 测试检查后端产出与样例一致，
 Kotlin 单元测试检查数据类能无损解析同一批样例，命令新增或改字段时两边一起失败。
 
 ### 3. 进程与生命周期
