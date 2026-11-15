@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AnixOps.Net.Ipc/AnixOps.Net.Ipc.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AnixOps.Net.Ipc.Tests/AnixOps.Net.Ipc.Tests.csproj" />
+  </Folder>
+</Solution>

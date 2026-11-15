@@ -70,6 +70,8 @@ Tauri（过渡期）        ── 同进程调用                             P
    （同 `id`，带 `ok` 或 `error`）、`event`（`name`、`payload`，不需要应答）。两边都可以发请求：界面请求核心执行
    命令，核心请求界面做只有用户会话能做的事（写当前用户的系统代理等）。样例在 `crates/client-ipc/fixtures/`，C# 那边
    用同一批样例测试；改格式就改协议号。
+   C# 一侧是 `apps/windows-native/src/AnixOps.Net.Ipc`（`Channel`）：对方的请求各自在线程池上应答，事件按到达顺序
+   交给界面，读取不被挡住。它和真实服务（`anixops-net-service --console`）的端到端测试随界面外壳一起加。
    打完招呼之后两边都用 `client_ipc::Peer`：对方的请求每个在自己的线程上应答（核心应答界面的命令时，可能反过来
    问界面要系统代理的写入结果，读取不能被挡住），自己的请求按编号等应答，带超时；事件按发送顺序交给处理方。通道断开时
    所有还在等的请求立刻失败。
@@ -246,7 +248,8 @@ WinUI 3 没有自带的数据表格控件，请求列表要自己做虚拟化表
 | 1b | Windows 后端并入 `client-core`，Tauri Windows 行为不变 | 1a |
 | 2 | `client-ipc`、Windows 服务、Linux 守护进程，MSI / deb / rpm 安装与卸载 | 1 |
 | 3 | `client-view`、文案单一来源 | 1 |
-| 4 | Windows 验证：工程骨架、导航、主题 tokens、请求列表原型、CI 截图与 UIA 检查 | 2 |
+| 4a | `apps/windows-native/src/AnixOps.Net.Ipc`：界面一侧的通道（C#），帧、四种消息、握手、双向请求；测试读 `crates/client-ipc/fixtures/` 的同一批样例，CI 任务“Windows native app” | 2 |
+| 4b | Windows 验证：工程骨架、导航、主题 tokens、请求列表原型、CI 截图与 UIA 检查 | 4a |
 | 5 | Linux 骨架：导航、主题、CI 截图与 AT-SPI 检查 | 2 |
 | 6 | 代理 › 首页与代理：连接、状态、流量、连接列表、出口地址、订阅、节点、测速、策略组、分享、节点编辑 | 4、5 |
 | 7 | 规则与设置：分流模式、我的规则、规则集、DNS、Fake-IP、屏蔽 QUIC、流量重定向、通知、Wi-Fi 规则、日志、流量统计、诊断、协议、语言 | 6 |
