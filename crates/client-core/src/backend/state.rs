@@ -167,6 +167,28 @@ impl SavedState {
         id
     }
 
+    /// Adds a source another client knew, without selecting it and without a download time: the caller fills
+    /// in what that client recorded.
+    pub(crate) fn adopt_source(&mut self, location: &str) -> &mut SavedSource {
+        let id = format!("s{}", self.next_source.max(1));
+        self.next_source = self.next_source.max(1) + 1;
+        self.sources.push(SavedSource {
+            id,
+            location: location.to_string(),
+            selected: false,
+            last_success: None,
+            last_attempt: None,
+            last_error: None,
+            name: None,
+            user_info: None,
+            node_count: None,
+            update_interval_hours: None,
+            suggested_interval_hours: None,
+        });
+        let last = self.sources.len() - 1;
+        &mut self.sources[last]
+    }
+
     /// Selects `id`; returns false when there is no such source.
     pub fn select_source(&mut self, id: &str) -> bool {
         if !self.sources.iter().any(|source| source.id == id) {
@@ -269,6 +291,11 @@ impl Store {
 
     fn source_path(&self, id: &str) -> PathBuf {
         self.dir.join("sources").join(format!("{id}.txt"))
+    }
+
+    /// Writes a file under the store's folder, by its `/`-separated path there.
+    pub(crate) fn write_file(&self, relative: &str, bytes: &[u8]) -> io::Result<()> {
+        self.write_private(relative, bytes)
     }
 
     /// Writes through a temporary file and a rename, owner-only.
