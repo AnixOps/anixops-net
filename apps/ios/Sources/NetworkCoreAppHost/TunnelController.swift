@@ -1879,6 +1879,15 @@ extension TunnelController {
         UserDefaults.standard.bool(forKey: "AnixOpsDemo")
     }
 
+    /// The time of day the demo's requests end at, today: CI compares screenshots pixel by pixel, so what a
+    /// picture shows must not depend on when it was taken (.github/scripts/mac-screenshot-compare.sh).
+    static var demoClock: Date {
+        Calendar.current.startOfDay(for: Date()).addingTimeInterval(12 * 3600 + 36 * 60)
+    }
+
+    /// When the demo subscription expires: a fixed day, for the same reason.
+    static let demoExpiry = Date(timeIntervalSince1970: 1_796_731_200)
+
     func loadDemo() {
         let credentials = "YWVzLTI1Ni1nY206ZGVtby1wYXNzd29yZA"
         let names = [("hk1", "香港 01"), ("hk2", "香港 02"), ("jp1", "日本 01"), ("sg1", "新加坡 01"), ("us1", "美国 01"), ("de1", "德国 01")]
@@ -1888,7 +1897,6 @@ extension TunnelController {
         let delays = [38, 45, 72, 86, 164, 213]
         if let data = try? NativeNodeImporterFFI.importNodes(links.joined(separator: "\n")),
            let report = try? NativeImportReport.decoded(from: data) {
-            let day: TimeInterval = 24 * 3600
             let group = SubscriptionGroup(
                 name: "AnixOps",
                 library: NodeLibrary(
@@ -1901,7 +1909,7 @@ extension TunnelController {
                     upload: 6_400_000_000,
                     download: 61_800_000_000,
                     total: 200_000_000_000,
-                    expire: Date().addingTimeInterval(23 * day)
+                    expire: Self.demoExpiry
                 )
             )
             subscriptions = SubscriptionGroups(groups: [group], activeID: group.id)
@@ -2004,7 +2012,7 @@ extension TunnelController {
             ("GET", "https://ws.example.com/socket", nil, "", 0, 0),
             ("GET", "https://api.example.com/v2/config", 200, "application/json", 3_120, 95),
         ]
-        let now = Int(Date().timeIntervalSince1970 * 1000)
+        let now = Int(demoClock.timeIntervalSince1970 * 1000)
         return items.enumerated().map { index, item in
             let seq = index + 1
             let started = now - (items.count - index) * 1_700

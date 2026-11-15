@@ -697,8 +697,17 @@ private struct EventsTile: View {
 
 /// `hh:mm:ss` since the tunnel connected.
 enum ConnectElapsed {
+    /// How long the demo has been connected (`TunnelController.loadDemo`); read here without the main actor.
+    static let demoSeconds = 4521
+
     static func text(from start: Date, to now: Date) -> String {
-        let seconds = max(0, Int(now.timeIntervalSince(start)))
+        var seconds = max(0, Int(now.timeIntervalSince(start)))
+        #if DEBUG
+        // The demo's clock stands still, so screenshots taken a second apart are the same picture.
+        if UserDefaults.standard.bool(forKey: "AnixOpsDemo") {
+            seconds = demoSeconds
+        }
+        #endif
         return String(format: "%02d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
     }
 }
