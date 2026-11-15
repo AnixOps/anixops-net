@@ -1071,6 +1071,17 @@ jobs:
       - name: Build
         run: dotnet build apps/windows-native/AnixOps.Net.slnx --configuration Release
 
+      # The XAML compiler runs as a program of its own; when it stops on something it cannot take, the build
+      # only says "exited with code 1". What it found is in the file it leaves behind.
+      - name: What the XAML compiler left behind
+        if: ${{ failure() }}
+        shell: pwsh
+        run: |
+          Get-ChildItem apps/windows-native/src -Recurse -Filter output.json -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "== $($_.FullName)"
+            Get-Content $_.FullName
+          }
+
       # The released web client (the Tauri one), to compare start time and idle memory against on this
       # same machine.
       - name: Fetch the released web client
