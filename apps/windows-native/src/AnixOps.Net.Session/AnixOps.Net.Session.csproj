@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>AnixOps.Net.Session</RootNamespace>
+    <Description>What the core asks the window to do in the signed-in user's own session: the system proxy settings and the entry that starts the app after login.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AnixOps.Net.Ipc\AnixOps.Net.Ipc.csproj" />
+  </ItemGroup>
+</Project>

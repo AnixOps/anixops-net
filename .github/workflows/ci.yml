@@ -85,7 +85,7 @@ jobs:
                 # client tokens.
                 apps/android-native/*) rust=true; android_native=true ;;
                 apps/ios/Design/*) apple=true; android_native=true; windows_native=true ;;
-                crates/client-ipc/fixtures/*)
+                crates/client-ipc/fixtures/* | crates/client-service/fixtures/*)
                   rust=true; windows=true; linux=true; android=true; android_native=true; windows_native=true ;;
                 crates/*) rust=true; windows=true; linux=true; android=true; android_native=true ;;
                 apps/ios/*) apple=true ;;
