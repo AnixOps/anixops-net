@@ -105,7 +105,7 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
   const { dock } = layout;
   // The window has room for both panes in the chosen arrangement.
   const wide = useMedia(SPLIT_QUERY[dock]);
-  const workbench = useRef<HTMLDivElement>(null);
+  const workbench = useRef<HTMLDivElement | null>(null);
   const [room, setRoom] = useState(0);
   const measureRoom = useCallback(() => {
     const box = workbench.current?.getBoundingClientRect();
