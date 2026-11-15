@@ -632,6 +632,11 @@ jobs:
     name: iOS and macOS Xcode build
     runs-on: macos-26
     timeout-minutes: 60
+    # Reads main's screenshot artifacts and the pull request description for the screenshot comparison.
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
     needs: changes
     if: ${{ needs.changes.outputs.apple == 'true' }}
     steps:
@@ -822,12 +827,36 @@ jobs:
         shell: bash
         run: .github/scripts/mac-screenshots.sh "apps/ios/build/Build/Products/Debug/AnixOps Net.app" "${RUNNER_TEMP}/mac-screenshots"
 
+      # A pull request's pictures are compared with main's, shot by shot; a change the description does not
+      # acknowledge on a "界面变化：" line fails the job (docs/ui-ux.md). The demo data has a fixed clock, so two
+      # runs of the same code give the same pixels.
+      - name: Compare the macOS screenshots with main
+        if: ${{ github.event_name == 'pull_request' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: .github/scripts/mac-screenshot-compare.sh "${RUNNER_TEMP}/mac-screenshots" "${RUNNER_TEMP}/mac-screenshot-compare"
+
+      # Main's pictures are the baseline later pull requests compare with, so they are kept longer.
       - name: Upload the macOS screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: mac-screenshots-${{ github.sha }}
           path: ${{ runner.temp }}/mac-screenshots
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: ${{ github.event_name == 'push' && 30 || 3 }}
+
+      - name: Upload the macOS screenshot comparison
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-screenshot-report-${{ github.sha }}
+          path: ${{ runner.temp }}/mac-screenshot-compare/report
           if-no-files-found: ignore
           retention-days: 3
 

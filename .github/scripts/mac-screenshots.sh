@@ -62,6 +62,8 @@ shoot() {
     else
         echo "no window found for ${section}; saving the whole screen" >&2
         screencapture -x "${file}"
+        # A picture of the whole screen cannot be compared with a window (mac-screenshot-compare.sh).
+        touch "${out}/.incomplete"
     fi
     pkill -x "${name}" || true
     sleep 1
