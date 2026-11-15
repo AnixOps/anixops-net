@@ -169,6 +169,10 @@ data class CaptureSessions(
 @Serializable
 data class SavedSession(val session: CaptureSession = CaptureSession())
 
+/** What is left before HTTPS requests can show (`view.decrypt_setup`), in order. */
+@Serializable
+data class DecryptSetup(val steps: List<String> = emptyList())
+
 /** The answer to deleting a session. */
 @Serializable
 data class DeletedSession(val deleted: Boolean = false)

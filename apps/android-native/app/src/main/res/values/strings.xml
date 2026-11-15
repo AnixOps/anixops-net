@@ -400,10 +400,6 @@
     <string name="egress_node_note">按下面选中的节点和订阅规则发出，可以切换节点对比不同地区的出口。</string>
     <string name="egress_rules">规则与 DNS</string>
     <string name="requests_capture">抓包</string>
-    <string name="requests_not_connected">还没有连接</string>
-    <string name="requests_not_connected_body">连接后，经过本机的 HTTP 请求会逐条列在这里。调试模式默认直连，不需要节点。</string>
-    <string name="requests_capture_off">还没有开始抓包</string>
-    <string name="requests_capture_off_body">打开上面的“抓包”后，新的请求会逐条出现在这里。要看到 HTTPS 明文，还要在“改写”里信任解密证书，并为要看的域名开启解密。</string>
     <string name="requests_filter">筛选：网址、host:、status:、type:…</string>
     <string name="requests_filter_hint">例如 host:api.example.com status:4xx type:json，多组条件用 OR 连接</string>
     <string name="requests_filter_error_at">筛选表达式在第 %1$d 个字符处有误</string>
@@ -504,4 +500,16 @@
     <plurals name="sessions_kept">
         <item quantity="other">会话只保存在本机，%d 天后自动删除。</item>
     </plurals>
+    <string name="setup_title">要看到 HTTPS 请求，还差这几步</string>
+    <string name="setup_connect">连接</string>
+    <string name="setup_connect_hint">打开上面的“连接”。调试网络默认直连，不需要节点。</string>
+    <string name="setup_certificate">信任解密证书</string>
+    <string name="setup_certificate_hint">在“改写”里安装解密证书，并在系统设置里信任它。</string>
+    <string name="setup_decryption">开启 HTTPS 解密</string>
+    <string name="setup_decryption_hint">在“改写”里开启，并按提示安装解密证书。</string>
+    <string name="setup_domains">添加要解密的域名</string>
+    <string name="setup_domains_hint">在“改写”里为要看的域名开启解密，只对新连接生效。</string>
+    <string name="setup_capture">开始抓包</string>
+    <string name="setup_capture_hint">打开上面的“抓包”，新的请求会逐条出现在下面。</string>
+    <string name="setup_go">前往</string>
 </resources>

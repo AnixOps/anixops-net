@@ -496,6 +496,21 @@ class Core(
         args("request" to Envelope.json.encodeToJsonElement(ReplayRequest.serializer(), request)),
     )
 
+    /**
+     * The steps still to do before HTTPS requests show: `connect`, `decryption`, `domains`, `capture` (and
+     * `certificate` where the app can tell the root certificate is not trusted, which Android cannot).
+     */
+    suspend fun decryptSetup(connected: Boolean, decrypting: Boolean, domains: Int, capturing: Boolean): List<String> = call(
+        "view.decrypt_setup",
+        DecryptSetup.serializer(),
+        buildJsonObject {
+            put("connected", connected)
+            put("decrypting", decrypting)
+            put("domains", domains)
+            put("capturing", capturing)
+        },
+    ).steps
+
     /** Saves everything capture holds (`har` or `pcapng`) to Downloads and says where. */
     suspend fun exportCapture(format: String): SavedFile =
         call("export_capture", SavedFile.serializer(), args("format" to JsonPrimitive(format)))

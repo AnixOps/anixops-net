@@ -229,6 +229,17 @@ class CoreTest {
     }
 
     @Test
+    fun theChecklistAsksTheSharedView() = runTest {
+        val transport = Recording("""{"ok":{"steps":["domains","capture"]}}""")
+        val steps = Core(transport, StandardTestDispatcher(testScheduler)).decryptSetup(true, true, 0, capturing = false)
+        assertEquals(
+            listOf("view.decrypt_setup" to """{"connected":true,"decrypting":true,"domains":0,"capturing":false}"""),
+            transport.calls,
+        )
+        assertEquals(listOf("domains", "capture"), steps)
+    }
+
+    @Test
     fun ruleSetsGoThroughRuntimeControl() = runTest {
         val transport = Recording(
             """{"ok":{"rule_sets":[{"name":"china","source":"remote","entries":8412,"updated_at_ms":1763198400000}]}}""",
