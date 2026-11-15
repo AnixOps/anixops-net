@@ -1204,17 +1204,18 @@ impl Backend {
         if self.engine.address().is_none() {
             return done(format!("Connected through {label}"));
         }
-        if self.state.preferences.system_proxy && self.state.proxy_backup.is_none() {
-            if self.session.proxy_settings().is_some() {
-                match self.session.apply_proxy(address.port()) {
-                    Ok(backup) => {
-                        self.state.proxy_backup = Some(backup);
-                        self.save();
-                    }
-                    Err(error) => {
-                        self.engine.stop();
-                        return Err(format!("the system proxy could not be set: {error}"));
-                    }
+        if self.state.preferences.system_proxy
+            && self.state.proxy_backup.is_none()
+            && self.session.proxy_settings().is_some()
+        {
+            match self.session.apply_proxy(address.port()) {
+                Ok(backup) => {
+                    self.state.proxy_backup = Some(backup);
+                    self.save();
+                }
+                Err(error) => {
+                    self.engine.stop();
+                    return Err(format!("the system proxy could not be set: {error}"));
                 }
             }
         }
