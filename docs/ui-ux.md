@@ -140,12 +140,12 @@ macOS 的快捷键只有一张表：`apps/ios/Sources/NetworkCoreBridge/AppShort
 
   名字用逗号或空格隔开，`*` 代表任意一段字符。新增和删除的截图同样要列出。确认了却没有变化的名字会在报告里提示。
 - 新页面或新状态要在 `render.cjs` 的清单里加一张截图；后端多了页面要用的命令，在 `mock.js` 里补上它的演示数据。
-- **macOS**：CI 的 “iOS and macOS Xcode build” 用演示数据打开调试版 App 逐页截图（`.github/scripts/mac-screenshots.sh`）。main 上每次改到 Apple 端的提交都会把截图存成 `mac-screenshots-<sha>`（保留 30 天）；PR 上拿自己的截图和基线提交往前最近的一份 main 截图逐张比对（`mac-screenshot-compare.sh`），规则和桌面端一样，截图名前面加 `mac-`：
+- **macOS**：CI 的 “iOS and macOS Xcode build” 用演示数据打开调试版 App 逐页截图（`.github/scripts/mac-screenshots.sh`）。main 上每次改到 Apple 端的提交都会把截图存成 `mac-screenshots-<sha>`（保留 30 天）；PR 上拿自己的截图和基线提交往前最近的一份 main 截图逐张比对（`screenshot-compare.sh`），规则和桌面端一样，截图名前面加 `mac-`：
 
   ```
   界面变化：mac-proxies-*, mac-palette-light
   ```
 
   前后图和差异图在产物 `mac-screenshot-report-<sha>` 里。改完描述后重跑这个 job 即可，它会重新读描述。演示数据的时钟是固定的（请求时间、在线时长、到期日），同一份代码截多少次像素都一样。找不到 main 的截图（过期，或这台机器截不了图）时只给警告，不让 PR 失败。新页面或新状态在 `mac-screenshots.sh` 里加一行 `shoot`。
-- **iOS**：还没有接入截图对比。
+- **iOS**：同一个 job 里用 `.github/scripts/ios-screenshots.sh` 新建一台 iPhone 模拟器，装上模拟器版 App，用演示数据逐个标签页截图；状态栏固定为 9:41、满电。产物是 `ios-screenshots-<sha>`，比对方式和 macOS 完全一样，截图名前面加 `ios-`（例如 `ios-proxies-light`），报告在 `ios-screenshot-report-<sha>`。runner 换了新机型时所有截图尺寸都会变，报告里是“尺寸变了”，确认一次即可。
 - 比对工具（`.github/scripts/screenshot-diff/diff.cjs`）只认两个目录的 PNG，不管截图怎么来的。macOS、iOS 模拟器和真实 Windows / Linux 窗口在不同缩放下的截图，都按“同样的方法拍两遍，再交给它比”接入。
