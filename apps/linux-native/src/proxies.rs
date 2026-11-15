@@ -282,11 +282,7 @@ pub fn shown(
     }
     let count = match proxies {
         None => String::new(),
-        Some(proxies) if proxies.shown == proxies.total => client_strings::format(
-            language,
-            "proxies.count",
-            &[proxies.total.to_string().as_str()],
-        ),
+        Some(proxies) if proxies.shown == proxies.total => node_count(language, proxies.total),
         Some(proxies) => client_strings::format(
             language,
             "proxies.count.shown",
@@ -323,6 +319,15 @@ pub fn shown(
     }
 }
 
+/// "12 nodes", and "1 node" where the language tells one from many.
+pub fn node_count(language: Language, nodes: u64) -> String {
+    if nodes == 1 {
+        client_strings::text(language, "proxies.count.one").to_owned()
+    } else {
+        client_strings::format(language, "proxies.count", &[nodes.to_string().as_str()])
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -342,6 +347,14 @@ mod tests {
             .into_iter()
             .filter(|case| case["command"] == "view.proxies")
             .collect()
+    }
+
+    #[test]
+    fn one_node_is_not_many() {
+        assert_eq!(node_count(Language::English, 1), "1 node");
+        assert_eq!(node_count(Language::English, 0), "0 nodes");
+        assert_eq!(node_count(Language::English, 12), "12 nodes");
+        assert_eq!(node_count(Language::Chinese, 1), "1 个节点");
     }
 
     #[test]

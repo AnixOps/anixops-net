@@ -225,6 +225,22 @@ fn is_pasted(source: &SavedSource) -> bool {
             .is_none()
 }
 
+/// `before` with the lines of `pasted` it does not have yet, or `None` when it has them all.
+fn join_links(before: &str, pasted: &str) -> Option<String> {
+    let mut lines: Vec<&str> = before
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    let had = lines.len();
+    for line in pasted.lines().map(str::trim) {
+        if !line.is_empty() && !lines.contains(&line) {
+            lines.push(line);
+        }
+    }
+    (lines.len() > had).then(|| lines.join("\n"))
+}
+
 fn done(message: impl Into<String>) -> Result<OperationResult, String> {
     Ok(OperationResult {
         message: message.into(),
@@ -1629,13 +1645,40 @@ impl Backend {
         if supported == 0 {
             return Err("none of the nodes can run on the embedded engine yet".to_string());
         }
-        let id = self.state.add_source(location, now());
-        if let Some(source) = self.state.sources.iter_mut().find(|source| source.id == id) {
-            source.node_count = Some(nodes.len());
-        }
-        if let Err(error) = self.store.write_source(&id, content) {
-            self.state.remove_source(&id);
-            return Err(format!("the subscription could not be saved: {error}"));
+        // Share links pasted again join the ones pasted before: one "pasted links", not one per paste.
+        let earlier = (location == PASTED_LOCATION)
+            .then(|| self.pasted_links())
+            .flatten();
+        if let Some((id, before)) = earlier {
+            let Some(joined) = join_links(&before, content) else {
+                // Every link is there already. The pasted links become the subscription in use, as after
+                // any import.
+                self.state.select_source(&id);
+                self.save();
+                self.reload_nodes();
+                return done("These links were imported before");
+            };
+            let count = engine::parse_nodes(&joined)?.len();
+            if let Err(error) = self.store.write_source(&id, &joined) {
+                return Err(format!("the subscription could not be saved: {error}"));
+            }
+            let time = now();
+            self.state.select_source(&id);
+            if let Some(source) = self.state.sources.iter_mut().find(|source| source.id == id) {
+                source.node_count = Some(count);
+                source.last_success = Some(time);
+                source.last_attempt = Some(time);
+                source.last_error = None;
+            }
+        } else {
+            let id = self.state.add_source(location, now());
+            if let Some(source) = self.state.sources.iter_mut().find(|source| source.id == id) {
+                source.node_count = Some(nodes.len());
+            }
+            if let Err(error) = self.store.write_source(&id, content) {
+                self.state.remove_source(&id);
+                return Err(format!("the subscription could not be saved: {error}"));
+            }
         }
         self.state.selected_node = None;
         self.state.group_choices.clear();
@@ -1644,6 +1687,14 @@ impl Backend {
         let message = format!("Imported {supported} of {} nodes", nodes.len());
         self.log(LogLevel::Info, &message);
         done(message)
+    }
+
+    /// The share links pasted before, if the user did not give them a name of their own: their id and
+    /// what was pasted.
+    fn pasted_links(&self) -> Option<(String, String)> {
+        let source = self.state.sources.iter().find(|source| is_pasted(source))?;
+        let content = self.store.read_source(&source.id).ok()?;
+        Some((source.id.clone(), content))
     }
 
     /// The selected source's URL when it can be fetched again.
@@ -1868,6 +1919,43 @@ mod tests {
             )),
         );
         (backend, dir)
+    }
+
+    #[test]
+    fn links_pasted_again_join_the_ones_pasted_before() {
+        const SECOND: &str = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@82.47.34.98:11111#JP";
+        let (mut backend, dir) = backend("pasted-again");
+        backend.import(PASTED_LOCATION, LINK).unwrap();
+        // The link that is there already and one that is not: one subscription, two nodes.
+        backend
+            .import(PASTED_LOCATION, &format!("{LINK}\n\n  {SECOND}\n"))
+            .unwrap();
+        let subscriptions = backend.subscriptions();
+        assert_eq!(subscriptions.len(), 1);
+        assert!(subscriptions[0].pasted);
+        assert_eq!(subscriptions[0].node_count, Some(2));
+        let labels: Vec<String> = backend.nodes().into_iter().map(|node| node.label).collect();
+        assert_eq!(labels, ["HK", "JP"]);
+
+        // Nothing new: nothing is added, and it is not an error.
+        backend.import(PASTED_LOCATION, SECOND).unwrap();
+        assert_eq!(backend.subscriptions().len(), 1);
+        assert_eq!(backend.nodes().len(), 2);
+
+        // Pasted links the user named are a subscription of their own; the next paste starts a new one.
+        let id = backend.subscriptions()[0].id.clone();
+        backend.rename_subscription(&id, "Work").unwrap();
+        backend.import(PASTED_LOCATION, LINK).unwrap();
+        let subscriptions = backend.subscriptions();
+        assert_eq!(subscriptions.len(), 2);
+        assert_eq!(
+            subscriptions
+                .iter()
+                .map(|subscription| subscription.pasted)
+                .collect::<Vec<_>>(),
+            [false, true]
+        );
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

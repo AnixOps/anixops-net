@@ -198,6 +198,15 @@ public sealed class ProxiesTests
     }
 
     [Fact]
+    public void OneNodeIsNotMany()
+    {
+        Assert.Equal("1 node", Proxies.Count(English, 1));
+        Assert.Equal("0 nodes", Proxies.Count(English, 0));
+        Assert.Equal("12 nodes", Proxies.Count(English, 12));
+        Assert.Equal("1 个节点", Proxies.Count(Chinese, 1));
+    }
+
+    [Fact]
     public void ActionsNameTheCoresCommands()
     {
         var import = new ProxyAction(ProxyActionKind.Import, "ss://x");

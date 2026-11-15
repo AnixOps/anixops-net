@@ -150,7 +150,7 @@ public sealed class ProxiesTests
         app.SetText(Link, FirstNode);
         Press(app, Import);
         Wait(() => Labels(app).SequenceEqual(["Test"]), () => $"the list holds [{string.Join(", ", Labels(app))}], expected the imported node");
-        app.WaitForName(Count, strings.Format("proxies.count", 1));
+        app.WaitForName(Count, Proxies.Count(strings, 1));
         // The box is emptied once the link is in.
         Wait(
             () => ((ValuePattern)app.Find(Link).GetCurrentPattern(ValuePattern.Pattern)).Current.Value.Length == 0,
@@ -164,7 +164,7 @@ public sealed class ProxiesTests
         Wait(
             () => Labels(app).SequenceEqual(nodes.Select(node => node.Label)),
             () => $"the list holds [{string.Join(", ", Labels(app))}], expected [{string.Join(", ", nodes.Select(node => node.Label))}]");
-        app.WaitForName(Count, strings.Format("proxies.count", nodes.Count));
+        app.WaitForName(Count, Proxies.Count(strings, (ulong)nodes.Count));
 
         // The search is the core's: the page shows what it leaves, and says how many of how many.
         app.SetText(Search, "second");
@@ -355,7 +355,7 @@ public sealed class ProxiesTests
         Assert.Equal(strings["proxies.subscriptions"], app.Find(SubscriptionList).Current.Name);
         string[] expected =
         [
-            strings.Format("proxies.count", 1),
+            Proxies.Count(strings, 1),
             strings.Format("subscriptions.usage", "1000 B", "4.9 KB"),
             strings.Format("subscriptions.expire", "2033-05-18"),
         ];
@@ -376,7 +376,7 @@ public sealed class ProxiesTests
         PressIn(app, title, Update);
         Wait(() => server.Downloads >= 2, () => $"the link was downloaded {server.Downloads} times");
         await UntilAsync(subscription => subscription?.Nodes == 2, "the core does not hold the subscription's two nodes");
-        var two = strings.Format("proxies.count", 2);
+        var two = Proxies.Count(strings, 2);
         Wait(
             () => Says(Row(app, title)).Any(line => line.Contains(two)),
             () => $"the row of '{title}' says [{string.Join(" | ", Says(Row(app, title)))}], expected '{two}'");

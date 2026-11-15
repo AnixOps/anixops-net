@@ -173,6 +173,10 @@ public sealed record Proxies(ulong Total, ulong Shown, IReadOnlyList<ProxySectio
     public static JsonElement Args(string query) =>
         JsonSerializer.SerializeToElement(new Dictionary<string, string> { ["query"] = query });
 
+    /// <summary>"12 nodes", and "1 node" where the language tells one from many.</summary>
+    public static string Count(Strings strings, ulong nodes) =>
+        nodes == 1 ? strings["proxies.count.one"] : strings.Format("proxies.count", nodes);
+
     /// <summary>Reads the core's answer. What is missing reads as "no nodes".</summary>
     public static Proxies Read(JsonElement answer)
     {
@@ -228,7 +232,7 @@ public sealed record Proxies(ulong Total, ulong Shown, IReadOnlyList<ProxySectio
         if (proxies is not null)
         {
             count = proxies.Shown == proxies.Total
-                ? strings.Format("proxies.count", proxies.Total)
+                ? Count(strings, proxies.Total)
                 : strings.Format("proxies.count.shown", proxies.Shown, proxies.Total);
         }
         string? notice = null;

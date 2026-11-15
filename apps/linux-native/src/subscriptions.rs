@@ -123,7 +123,7 @@ pub fn shown(language: Language, subscriptions: &[Subscription], busy: &[String]
             let working = busy.contains(&subscription.id);
             let mut details = Vec::new();
             if let Some(nodes) = subscription.nodes {
-                details.push(format("proxies.count", &[nodes.to_string().as_str()]));
+                details.push(crate::proxies::node_count(language, nodes));
             }
             if let Some(updated) = &subscription.updated {
                 details.push(format("subscriptions.updated", &[updated.as_str()]));
