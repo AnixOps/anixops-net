@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!--
+  AnixOps Net TUN mode (apps/linux-gui/src/backend/tun_helper.rs). Connecting in TUN mode runs
+  /usr/bin/anixops-net through pkexec with the tun-helper flag: the helper creates a non-persistent anxtun device,
+  sets its address and routes, hands the descriptor back to the unprivileged app and exits.
+  The .deb installs this file to /usr/share/polkit-1/actions/; a tarball install falls back to
+  polkit's generic "run a program as another user" action.
+-->
+<policyconfig>
+  <vendor>AnixOps</vendor>
+  <vendor_url>https://github.com/AnixOps/anixops-net</vendor_url>
+  <action id="io.anixops.net.tun">
+    <description>Create the AnixOps Net virtual network adapter</description>
+    <description xml:lang="zh_CN">创建 AnixOps Net 虚拟网卡</description>
+    <description xml:lang="zh_TW">建立 AnixOps Net 虛擬網卡</description>
+    <message>AnixOps Net needs administrator approval to create a virtual network adapter for TUN mode.</message>
+    <message xml:lang="zh_CN">AnixOps Net 需要管理员授权才能为 TUN 模式创建虚拟网卡。</message>
+    <message xml:lang="zh_TW">AnixOps Net 需要管理員授權才能為 TUN 模式建立虛擬網卡。</message>
+    <icon_name>anixops-net</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/anixops-net</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">--tun-helper</annotate>
+  </action>
+</policyconfig>
