@@ -7,6 +7,7 @@ import { PhoneCaptureCards } from "./PhoneCaptureCards";
 import { useDecryptionConsent } from "../decryption-consent";
 import { MappingEditor, MappingsCard } from "./DebugTools";
 import { DecryptHostsCard } from "./DecryptHosts";
+import { TrafficRedirectsCard } from "./TrafficRedirects";
 
 export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
   const linux = inProcessEngine(snapshot);
@@ -222,6 +223,8 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
       {inspected && <PluginInspector plugin={inspected.plugin} details={inspected.details} close={() => setInspected(null)} />}
 
       <MappingsCard busy={busy} run={run} onEdit={setMapping} />
+
+      <TrafficRedirectsCard busy={busy} run={run} platform={snapshot?.platform} />
 
       {!linux && (
         <Card title={t("自定义证书")} description={t("要让 Windows 信任你自己的证书时填写路径。证书会在 Windows 证书窗口中打开，由你手动安装。")}>

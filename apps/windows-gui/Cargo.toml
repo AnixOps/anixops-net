@@ -21,6 +21,7 @@ inbound-mixed = { workspace = true }
 mitm-policy = { workspace = true }
 anx-license = { path = "../../crates/anx-license" }
 node-edits = { path = "../../crates/node-edits" }
+on-demand = { path = "../../crates/on-demand" }
 node-import = { workspace = true }
 platform-windows = { workspace = true }
 rcgen = { version = "0.14.8", features = ["x509-parser"] }
