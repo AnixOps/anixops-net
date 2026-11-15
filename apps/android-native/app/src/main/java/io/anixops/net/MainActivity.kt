@@ -1,5 +1,6 @@
 package io.anixops.net
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -14,10 +15,17 @@ import io.anixops.net.ui.RequestsViewModel
 import io.anixops.net.ui.RulesViewModel
 import io.anixops.net.ui.SettingsViewModel
 import io.anixops.net.ui.theme.AnixTheme
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 
 class MainActivity : ComponentActivity() {
+    /** `anixops://` links this activity was opened with, for the app to follow. */
+    private val links = Channel<String>(Channel.BUFFERED)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // A link that opened the activity counts once, not again when it is recreated (a rotation).
+        if (savedInstanceState == null) receive(intent)
         enableEdgeToEdge()
         val app = application as AnixApplication
         val preferences = getSharedPreferences(AppViewModel.PREFERENCES, MODE_PRIVATE)
@@ -32,8 +40,23 @@ class MainActivity : ComponentActivity() {
                     extensions = viewModel { ExtensionsViewModel(app.core, preferences) },
                     requests = viewModel { RequestsViewModel(app.core) },
                     version = BuildConfig.VERSION_NAME,
+                    links = links.receiveAsFlow(),
                 )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        receive(intent)
+    }
+
+    private fun receive(intent: Intent?) {
+        val link = intent?.takeIf { it.action == Intent.ACTION_VIEW }?.dataString ?: return
+        if (link.startsWith("$LINK_SCHEME:", ignoreCase = true)) links.trySend(link)
+    }
+
+    private companion object {
+        const val LINK_SCHEME = "anixops"
     }
 }

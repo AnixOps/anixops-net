@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -570,6 +571,33 @@ class Core(
             more()
         }
     }
+
+    // `anixops://` links: parsed and matched by the shared view, so every platform reads them the same way.
+
+    suspend fun parseAppLink(link: String): AppLink =
+        call("view.parse_app_link", AppLink.serializer(), args("link" to JsonPrimitive(link)))
+
+    /** The node a `select` link names among [nodes], or null. */
+    suspend fun findLinkNode(nodes: List<NodeSummary>, name: String, group: String?): NodeSummary? = call(
+        "view.find_link_node",
+        NodeSummary.serializer().nullable,
+        buildJsonObject {
+            put("nodes", Envelope.json.encodeToJsonElement(ListSerializer(NodeSummary.serializer()), nodes))
+            put("name", name)
+            if (group != null) put("group", group)
+        },
+    )
+
+    /** The group and member a `select_member` link names among [groups], or null. */
+    suspend fun findLinkMember(groups: List<NativeGroup>, policy: String, member: String): LinkMember? = call(
+        "view.find_link_member",
+        LinkMember.serializer().nullable,
+        buildJsonObject {
+            put("groups", Envelope.json.encodeToJsonElement(ListSerializer(NativeGroup.serializer()), groups))
+            put("policy", policy)
+            put("member", member)
+        },
+    )
 
     // Plumbing.
 

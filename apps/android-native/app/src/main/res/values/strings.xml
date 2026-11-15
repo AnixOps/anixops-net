@@ -542,4 +542,15 @@
     <string name="connection_export_note">保存到“下载”文件夹。pcapng 可用 Wireshark 打开，HAR 可导入浏览器开发者工具、Charles 或 Proxyman。导出内容可能包含账号、Cookie 等敏感信息，请只发给信任的人。</string>
     <string name="bytes_text">显示为文本</string>
     <string name="bytes_hex">显示为十六进制</string>
+    <string name="link_refused">无法打开链接：%1$s</string>
+    <string name="link_invalid">链接无效</string>
+    <string name="link_not_app_link">不是 anixops:// 链接</string>
+    <string name="link_too_long">链接太长</string>
+    <string name="link_missing_action">链接缺少操作</string>
+    <string name="link_missing_parameter">链接缺少参数</string>
+    <string name="link_unknown_action">不认识的操作</string>
+    <string name="link_unknown_mode">这个客户端没有该分流模式</string>
+    <string name="link_no_node">找不到节点 %1$s</string>
+    <string name="link_no_member">策略组 %1$s 里没有 %2$s</string>
+    <string name="link_import_offered">核对订阅链接后点“导入”</string>
 </resources>
