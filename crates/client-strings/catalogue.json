@@ -22,7 +22,7 @@
   "connections.no_match": { "zh": "没有符合搜索的连接。", "zh-Hant": "沒有符合搜尋的連線。", "en": "No connection matches the search." },
   "connections.search": { "zh": "搜索域名、规则或节点", "zh-Hant": "搜尋網域、規則或節點", "en": "Search hosts, rules or nodes" },
   "connections.stopped": { "zh": "连接后这里会列出正在使用的连接。", "zh-Hant": "連線後這裡會列出使用中的連線。", "en": "Open connections are listed here once connected." },
-  "connections.traffic": { "zh": "↑ {0}  ↓ {1}", "zh-Hant": "↑ {0}  ↓ {1}", "en": "↑ {0}  ↓ {1}" },
+  "connections.traffic": { "zh": "↑ {0} ↓ {1}", "zh-Hant": "↑ {0} ↓ {1}", "en": "↑ {0} ↓ {1}" },
   "core.connected": { "zh": "核心服务 {0}", "zh-Hant": "核心服務 {0}", "en": "Core service {0}" },
   "core.connecting": { "zh": "正在连接核心服务", "zh-Hant": "正在連線核心服務", "en": "Connecting to the core service" },
   "core.unavailable": { "zh": "核心服务没有运行", "zh-Hant": "核心服務沒有執行", "en": "The core service is not running" },

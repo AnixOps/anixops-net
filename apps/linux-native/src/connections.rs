@@ -263,11 +263,11 @@ mod tests {
         assert_eq!(
             said,
             [
-                ("example.org", "MODE,global · n2 · ↑ 0 B  ↓ 0 B"),
-                ("[2001:db8::1]:53", "UDP · FINAL · DIRECT · ↑ 64 B  ↓ 128 B"),
+                ("example.org", "MODE,global · n2 · ↑ 0 B ↓ 0 B"),
+                ("[2001:db8::1]:53", "UDP · FINAL · DIRECT · ↑ 64 B ↓ 128 B"),
                 (
                     "www.google.com:443",
-                    "DOMAIN-SUFFIX,google.com · Proxy → Tokyo · ↑ 1.5 KB  ↓ 1.0 MB"
+                    "DOMAIN-SUFFIX,google.com · Proxy → Tokyo · ↑ 1.5 KB ↓ 1.0 MB"
                 ),
             ]
         );

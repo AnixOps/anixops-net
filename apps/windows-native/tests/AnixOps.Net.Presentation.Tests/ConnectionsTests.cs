@@ -73,9 +73,9 @@ public sealed class ConnectionsTests
         Assert.Equal(
             new[]
             {
-                ("example.org", "MODE,global · n2 · ↑ 0 B  ↓ 0 B"),
-                ("[2001:db8::1]:53", "UDP · FINAL · DIRECT · ↑ 64 B  ↓ 128 B"),
-                ("www.google.com:443", "DOMAIN-SUFFIX,google.com · Proxy → Tokyo · ↑ 1.5 KB  ↓ 1.0 MB"),
+                ("example.org", "MODE,global · n2 · ↑ 0 B ↓ 0 B"),
+                ("[2001:db8::1]:53", "UDP · FINAL · DIRECT · ↑ 64 B ↓ 128 B"),
+                ("www.google.com:443", "DOMAIN-SUFFIX,google.com · Proxy → Tokyo · ↑ 1.5 KB ↓ 1.0 MB"),
             },
             shown.Rows.Select(row => (row.Title, row.Details)).ToArray());
         Assert.All(shown.Rows, row => Assert.True(row.Enabled));
