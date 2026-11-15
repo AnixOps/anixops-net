@@ -178,7 +178,8 @@ impl Client {
             Store::new(dir),
             Box::new(LocalSession::new(
                 Desktop::from_env(),
-                if cfg!(target_os = "android") {
+                // Android has no login entries; the Windows one is not an XDG autostart file.
+                if cfg!(any(target_os = "android", windows)) {
                     None
                 } else {
                     autostart::autostart_dir()
