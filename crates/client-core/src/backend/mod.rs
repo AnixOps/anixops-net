@@ -161,6 +161,28 @@ pub struct NodeSummary {
     pub pasted: bool,
 }
 
+/// What a window shows about one node: what it is called and where it is, whether that can be changed,
+/// and how it is handed to someone else.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeDetails {
+    pub id: String,
+    pub name: String,
+    pub protocol: String,
+    pub server: String,
+    pub port: u16,
+    /// A node of the selected subscription: its name, server and port can be changed.
+    pub editable: bool,
+    /// Why the node cannot be removed: `"other"` for a node of another subscription, `"last"` for the
+    /// only node left, `"used"` for one the subscription's groups or rules name; `None` when it can.
+    pub keep: Option<&'static str>,
+    /// The node as a share link, if its protocol has one.
+    pub link: Option<String>,
+    /// That link as a QR code, if it fits in one: the code's rows from the top, one character per module
+    /// (`#` dark, `.` light), without the quiet zone.
+    pub qr: Option<Vec<String>>,
+}
+
 /// A policy group in the interface's `NativeGroupSummary` shape.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1534,6 +1556,36 @@ impl Backend {
         engine::share_link(node)
     }
 
+    /// What a window shows about one node of the selected source or of another source.
+    pub fn node_details(&self, id: &str) -> Result<NodeDetails, String> {
+        let own = self.nodes.iter().find(|node| node.id == id);
+        let node = own
+            .or_else(|| self.other_node(id).map(|(_, node)| node))
+            .ok_or("the node is not in any subscription")?;
+        let keep = match own {
+            None => Some("other"),
+            Some(_) => match self.node_form(id)?.keep_reason {
+                None => None,
+                Some(node_edits::KEEP_LAST) => Some("last"),
+                Some(_) => Some("used"),
+            },
+        };
+        let link = engine::share_link(node).ok();
+        Ok(NodeDetails {
+            id: id.to_string(),
+            name: node.name.clone(),
+            protocol: engine::protocol_name(&node.protocol),
+            server: node.endpoint.host.clone(),
+            port: node.endpoint.port,
+            editable: own.is_some(),
+            keep,
+            qr: link
+                .as_deref()
+                .and_then(|link| desktop_mitm::phone::qr_rows(link).ok()),
+            link,
+        })
+    }
+
     /// The saved node edits of source `id`.
     fn node_edits_path(&self, id: &str) -> PathBuf {
         self.store
@@ -2291,6 +2343,26 @@ rules:
         assert_eq!((form.server.as_str(), form.port), ("82.47.34.99", 11111));
         assert!(form.keep_reason.is_none());
         assert!(backend.edit_node(&hk, "香港", "hk.example", "0").is_err());
+        let details = backend.node_details(&hk).unwrap();
+        assert_eq!(
+            (
+                details.name.as_str(),
+                details.server.as_str(),
+                details.port,
+                details.editable,
+                details.keep
+            ),
+            ("HK", "82.47.34.99", 11111, true, None)
+        );
+        assert!(details
+            .link
+            .as_deref()
+            .is_some_and(|link| link.starts_with("ss://")));
+        assert!(details
+            .qr
+            .as_deref()
+            .is_some_and(|qr| qr.len() >= 21 && qr[0].starts_with("#######.")));
+        assert!(backend.node_details("no such node").is_err());
         backend
             .edit_node(&hk, "香港", "hk.example", "8443")
             .unwrap();
@@ -2305,6 +2377,7 @@ rules:
         backend.remove_node(&jp).unwrap();
         assert_eq!(backend.nodes().len(), 1);
         assert!(backend.node_form(&hk).unwrap().keep_reason.is_some());
+        assert_eq!(backend.node_details(&hk).unwrap().keep, Some("last"));
         assert!(backend.remove_node(&hk).is_err());
 
         // Edits survive a restart and go away with an update.

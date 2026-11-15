@@ -13,6 +13,8 @@ use gtk::{gio, glib};
 
 use crate::group_list::GroupList;
 use crate::groups::{self, Choice};
+use crate::node;
+use crate::node_dialog::{NodeDialog, Wish};
 use crate::proxies::{Row, Shown, Tone};
 use crate::subscription_list::SubscriptionList;
 use crate::subscriptions::{self, Change};
@@ -40,6 +42,10 @@ pub enum Asked {
     Change(Change),
     /// Use this member in a policy group.
     Choose(Choice),
+    /// Show the details of the node with this id.
+    Details(String),
+    /// What the user asked for in the dialog of the node that is shown.
+    Node(Wish),
 }
 
 pub struct ProxiesPage {
@@ -52,6 +58,8 @@ pub struct ProxiesPage {
     subscriptions: Rc<SubscriptionList>,
     choose: gtk::Button,
     groups: Rc<GroupList>,
+    /// The dialog of the node whose details are shown.
+    node: NodeDialog,
     /// Whether the core said which policy groups there are the last time the page was drawn.
     grouped: Cell<bool>,
     /// Whether the core said which subscriptions there are the last time the page was drawn.
@@ -74,8 +82,10 @@ fn row_of(item: Option<glib::Object>) -> Option<Row> {
     Some(row)
 }
 
-/// Makes the widgets of one node's row: a mark for the node in use, the name over the protocol, the delay.
-fn build_row(item: &gtk::ListItem) {
+/// Makes the widgets of one node's row: a mark for the node in use, the name over the protocol, the delay,
+/// and a button that opens the node's details. `details` is called with the id of the node whose button
+/// was pressed.
+fn build_row(item: &gtk::ListItem, language: Language, details: impl Fn(String) + 'static) {
     let mark = gtk::Image::from_icon_name("object-select-symbolic");
     // The row's description says "in use"; the mark adds nothing for a screen reader.
     mark.set_accessible_role(gtk::AccessibleRole::Presentation);
@@ -98,6 +108,23 @@ fn build_row(item: &gtk::ListItem) {
     line.append(&mark);
     line.append(&texts);
     line.append(&delay);
+    let says = client_strings::text(language, "node.details");
+    let more = gtk::Button::from_icon_name("view-more-symbolic");
+    more.set_widget_name("details");
+    more.set_valign(gtk::Align::Center);
+    more.add_css_class("flat");
+    more.set_tooltip_text(Some(says));
+    more.update_property(&[gtk::accessible::Property::Label(says)]);
+    more.connect_clicked({
+        // The row shows another node each time the list reuses it: which one is asked when it is pressed.
+        let item = item.downgrade();
+        move |_| {
+            if let Some(row) = item.upgrade().and_then(|item| row_of(item.item())) {
+                details(row.id);
+            }
+        }
+    });
+    line.append(&more);
     item.set_child(Some(&line));
 }
 
@@ -228,6 +255,10 @@ impl ProxiesPage {
             let groups = Rc::clone(&groups);
             move |button| groups.present(button)
         });
+        let node = NodeDialog::new(language, {
+            let asked = asked.clone();
+            move |wish| asked(Asked::Node(wish))
+        });
         let count_line = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         count_line.append(&count);
         count_line.append(&choose);
@@ -272,9 +303,13 @@ impl ProxiesPage {
         selection.set_can_unselect(true);
 
         let rows = gtk::SignalListItemFactory::new();
-        rows.connect_setup(|_, object| {
-            if let Some(item) = object.downcast_ref::<gtk::ListItem>() {
-                build_row(item);
+        rows.connect_setup({
+            let asked = asked.clone();
+            move |_, object| {
+                if let Some(item) = object.downcast_ref::<gtk::ListItem>() {
+                    let asked = asked.clone();
+                    build_row(item, language, move |id| asked(Asked::Details(id)));
+                }
             }
         });
         rows.connect_bind(move |_, object| {
@@ -354,6 +389,7 @@ impl ProxiesPage {
             listed: Cell::new(false),
             choose,
             groups,
+            node,
             grouped: Cell::new(false),
             error,
             stack,
@@ -394,13 +430,16 @@ impl ProxiesPage {
     /// Draws what is known now. While the core is switching nodes the row the user chose stays selected,
     /// whatever the core still says is in use. `subscriptions` is `None` while the core does not say which
     /// there are: there is then nothing to open, and what was open is closed. The same goes for `groups`.
+    /// `node` is the node whose dialog is shown, if one is.
     pub fn show(
         &self,
         shown: &Shown,
         switching: bool,
         subscriptions: Option<&[subscriptions::Row]>,
         groups: Option<&[groups::Row]>,
+        node: Option<&node::Shown>,
     ) {
+        self.node.show(&self.root, node);
         self.choose
             .set_visible(groups.is_some_and(|rows| !rows.is_empty()));
         match groups {

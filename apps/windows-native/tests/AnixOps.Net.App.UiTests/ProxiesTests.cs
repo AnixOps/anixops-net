@@ -13,7 +13,8 @@ namespace AnixOps.Net.App.UiTests;
 
 /// <summary>
 /// The proxies page: it imports links, lists the core's nodes, searches them, switches and tests them, and
-/// its list of subscriptions updates, renames and removes one; its policy groups choose a member.
+/// its list of subscriptions updates, renames and removes one; its policy groups choose a member; a node's
+/// details change, remove and share it.
 /// </summary>
 public sealed class ProxiesTests
 {
@@ -39,6 +40,20 @@ public sealed class ProxiesTests
     private const string GroupName = "Groups.Group";
     private const string MemberList = "Groups.Members";
     private const string Back = "Groups.Back";
+    private const string Details = "Proxies.Details";
+    private const string NodeName = "Node.Name";
+    private const string NodeServer = "Node.Server";
+    private const string NodePort = "Node.Port";
+    private const string NodeNote = "Node.Note";
+    private const string NodeProblem = "Node.Problem";
+    private const string NodeSave = "Node.Save";
+    private const string NodeRemove = "Node.Remove";
+    private const string NodeQuestion = "Node.Question";
+    private const string NodeConfirm = "Node.Confirm";
+    private const string NodeCancel = "Node.Cancel";
+    private const string NodeLink = "Node.Link";
+    private const string NodeQr = "Node.Qr";
+    private const string NodeCopy = "Node.Copy";
 
     // Addresses kept for documentation (RFC 5737): nothing answers there, so a delay test ends in "no answer".
     private const string FirstNode = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@203.0.113.9:11111#Test";
@@ -601,5 +616,168 @@ public sealed class ProxiesTests
         Wait(
             () => Present(app, GroupList) is null && Present(app, OpenGroups) is null,
             () => "the policy groups are still offered after their subscription was removed");
+    }
+
+    private static string Value(AppSession app, string automationId) =>
+        ((ValuePattern)app.Find(automationId).GetCurrentPattern(ValuePattern.Pattern)).Current.Value;
+
+    [Theory]
+    [InlineData(Strings.Chinese, "light")]
+    [InlineData(Strings.English, "dark")]
+    public async Task ANodeIsChangedSharedAndRemovedThroughTheService(string language, string theme)
+    {
+        if (!ServiceProcess.Available())
+        {
+            return;
+        }
+        var strings = Strings.For(language);
+        using var service = ServiceProcess.Start();
+        using var app = AppSession.Start(
+            "--language", language, "--theme", theme, "--page", Sections.Proxies, "--pipe", service.PipeName);
+        app.WaitForName(Notice, strings["proxies.empty"]);
+        await using var second = await SecondWindow.JoinAsync(service.PipeName);
+
+        async Task<NodeDetails> DescribedAsync(string id) =>
+            Node.Read(await second.AskAsync(Node.Command, JsonSerializer.Serialize(new { nodeId = id })));
+
+        await second.AskAsync("import_subscription", JsonSerializer.Serialize(new { location = FirstNode + "\n" + SecondNode }));
+        var nodes = await NodesAsync(second);
+        var identity = nodes.Single(node => node.Label == "Test").Id;
+        var details = await DescribedAsync(identity);
+        Assert.Equal(("Test", "203.0.113.9", 11111UL), (details.Name, details.Server, details.Port));
+        Assert.True(details.Editable, "the node of the subscription in use cannot be changed");
+        Assert.Null(details.Keep);
+        Assert.StartsWith("ss://", details.Link);
+        Assert.NotNull(details.Qr);
+        Wait(
+            () => Labels(app).SequenceEqual(nodes.Select(node => node.Label)),
+            () => $"the list holds [{string.Join(", ", Labels(app))}], expected [{string.Join(", ", nodes.Select(node => node.Label))}]");
+
+        // The row's button opens the node's dialog: its name, server and port, its share link and the QR code.
+        void Open(string label)
+        {
+            var until = DateTime.UtcNow + Patience;
+            while (true)
+            {
+                PressDetails(label);
+                // A press while the dialog of the node before is still going is not taken: pressed again.
+                var taken = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+                while (Present(app, NodeName) is null && DateTime.UtcNow < taken)
+                {
+                    Thread.Sleep(50);
+                }
+                if (Present(app, NodeName) is not null)
+                {
+                    return;
+                }
+                Assert.True(DateTime.UtcNow < until, $"the details of the node '{label}' did not open");
+            }
+        }
+
+        void PressDetails(string label)
+        {
+            AutomationElement? button = null;
+            Wait(
+                () =>
+                {
+                    try
+                    {
+                        button = Items(app).FirstOrDefault(item => item.Current.Name == label) is { } row ? ButtonIn(row, Details) : null;
+                        return button is { Current.IsEnabled: true };
+                    }
+                    catch (ElementNotAvailableException)
+                    {
+                        return false;
+                    }
+                },
+                () => $"the node '{label}' has no details button that can be pressed");
+            Assert.Equal(strings["node.details"], button!.Current.Name);
+            Assert.True(button.TryGetCurrentPattern(InvokePattern.Pattern, out var invoke), "the details button cannot be pressed");
+            ((InvokePattern)invoke).Invoke();
+        }
+
+        Open("Test");
+        Wait(
+            () => Present(app, NodeName) is not null && (Value(app, NodeName), Value(app, NodeServer), Value(app, NodePort)) == ("Test", "203.0.113.9", "11111"),
+            () => "the dialog does not show the node's name, server and port");
+        Assert.Equal(strings["node.name"], app.Find(NodeName).Current.Name);
+        Assert.Equal(strings["node.server"], app.Find(NodeServer).Current.Name);
+        Assert.Equal(strings["node.port"], app.Find(NodePort).Current.Name);
+        app.WaitForName(NodeNote, strings["node.edit.note"]);
+        app.WaitForName(NodeLink, details.Link!);
+        app.WaitForName(NodeQr, strings["node.qr"]);
+        app.WaitForName(NodeCopy, strings["node.copy"]);
+        app.WaitForName(NodeSave, strings["action.save"]);
+        app.WaitForName(NodeRemove, strings["node.remove"]);
+        // Opening a node's details does not choose it.
+        Assert.Equal(
+            nodes.Where(node => node.Selected).Select(node => node.Id),
+            (await NodesAsync(second)).Where(node => node.Selected).Select(node => node.Id));
+
+        // A port that is none is refused in the window's language, and nothing changes at the core.
+        app.SetText(NodePort, "0");
+        Press(app, NodeSave);
+        app.WaitForName(NodeProblem, strings["node.problem.port"]);
+        Assert.Equal(11111UL, (await DescribedAsync(identity)).Port);
+        // What was typed stays in its box.
+        Assert.Equal("0", Value(app, NodePort));
+
+        // Another name, server and port are saved: the core has them, and the list shows the new name.
+        app.SetText(NodeName, "Renamed");
+        app.SetText(NodeServer, "example.org");
+        app.SetText(NodePort, "8443");
+        WaitForEnabled(app, NodeSave);
+        Press(app, NodeSave);
+        var deadline = DateTime.UtcNow + Patience;
+        NodeDetails saved;
+        while (true)
+        {
+            saved = await DescribedAsync(identity);
+            if ((saved.Name, saved.Server, saved.Port) == ("Renamed", "example.org", 8443UL))
+            {
+                break;
+            }
+            Assert.True(DateTime.UtcNow < deadline, $"the core has the node as {saved.Name} at {saved.Server}:{saved.Port}");
+            await Task.Delay(100);
+        }
+        Assert.NotEqual(details.Link, saved.Link);
+        app.WaitForName(NodeLink, saved.Link!);
+        Wait(() => Present(app, NodeProblem) is null, () => "the refusal is still shown after the node was saved");
+        Wait(
+            () => Labels(app).Contains("Renamed") && !Labels(app).Contains("Test"),
+            () => $"the list holds [{string.Join(", ", Labels(app))}], expected the node as 'Renamed'");
+
+        // Copying puts the link on the clipboard, and the button says so.
+        Press(app, NodeCopy);
+        app.WaitForName(NodeCopy, strings["node.copied"]);
+        app.Screenshot($"proxies-node-{language}-{theme}");
+
+        // Remove: asked first, and "cancel" leaves everything as it is.
+        WaitForEnabled(app, NodeRemove);
+        Press(app, NodeRemove);
+        app.WaitForName(NodeQuestion, strings.Format("node.remove.confirm", "Renamed"));
+        Assert.Equal(strings["subscriptions.remove"], app.Find(NodeConfirm).Current.Name);
+        Assert.Equal(strings["action.cancel"], app.Find(NodeCancel).Current.Name);
+        Press(app, NodeCancel);
+        Wait(() => Present(app, NodeQuestion) is null && Present(app, NodeName) is not null, () => "cancelling the removal did not bring the node back");
+        Assert.Contains(await NodesAsync(second), node => node.Id == identity);
+        Press(app, NodeRemove);
+        app.WaitForName(NodeQuestion, strings.Format("node.remove.confirm", "Renamed"));
+        Press(app, NodeConfirm);
+        deadline = DateTime.UtcNow + Patience;
+        while ((await NodesAsync(second)).Any(node => node.Id == identity))
+        {
+            Assert.True(DateTime.UtcNow < deadline, "the core still has the node");
+            await Task.Delay(100);
+        }
+        // The dialog goes with its node, and the list holds what is left.
+        Wait(() => Present(app, NodeName) is null, () => "the dialog of the removed node is still shown");
+        Wait(() => Labels(app).SequenceEqual(["Second"]), () => $"the list holds [{string.Join(", ", Labels(app))}], expected the node 'Second'");
+
+        // The node that is left is the last one: it can be changed, not removed, and the dialog says why.
+        Open("Second");
+        app.WaitForName("Node.Keep", strings["node.keep.last"]);
+        Assert.False(app.Find(NodeRemove).Current.IsEnabled, "the last node can be removed");
+        Assert.True(app.Find(NodeSave).Current.IsEnabled, "the last node cannot be saved");
     }
 }

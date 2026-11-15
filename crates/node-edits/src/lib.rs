@@ -41,21 +41,31 @@ pub struct NodeEdits {
     pub removed: BTreeSet<String>,
 }
 
+/// Why what the user typed cannot be saved ([`check`]). A window that speaks another language tells them
+/// apart by these.
+pub const SERVER_EMPTY: &str = "Enter the server address.";
+pub const SERVER_INVALID: &str = "The server address cannot contain spaces or /.";
+pub const PORT_INVALID: &str = "The port must be 1–65535.";
+
+/// Why a node cannot be removed ([`keep_reason`]).
+pub const KEEP_LAST: &str = "The last node cannot be removed.";
+pub const KEEP_USED: &str = "The subscription's policy groups or rules use this node.";
+
 /// Checks what the user typed, with the rules of the iOS edit form.
 pub fn check(name: &str, server: &str, port: &str) -> Result<Change, &'static str> {
     let server = server.trim();
     if server.is_empty() {
-        return Err("Enter the server address.");
+        return Err(SERVER_EMPTY);
     }
     if server.chars().any(|c| c.is_whitespace() || c == '/') {
-        return Err("The server address cannot contain spaces or /.");
+        return Err(SERVER_INVALID);
     }
     let port = port
         .trim()
         .parse::<u16>()
         .ok()
         .filter(|port| *port > 0)
-        .ok_or("The port must be 1–65535.")?;
+        .ok_or(PORT_INVALID)?;
     Ok(Change {
         name: name.trim().to_string(),
         server: server.to_string(),
@@ -138,7 +148,7 @@ pub fn form(nodes: &[NodeDescriptor], profile: Option<&Value>, id: &str) -> Opti
 /// Why node `id` cannot be removed from a list of `count` nodes run in `profile`.
 pub fn keep_reason(count: usize, profile: Option<&Value>, id: &str) -> Option<&'static str> {
     if count <= 1 {
-        return Some("The last node cannot be removed.");
+        return Some(KEEP_LAST);
     }
     let routing = profile.and_then(|profile| profile.get("routing"));
     if ["groups", "rules"]
@@ -146,7 +156,7 @@ pub fn keep_reason(count: usize, profile: Option<&Value>, id: &str) -> Option<&'
         .filter_map(|key| routing.and_then(|routing| routing.get(*key)))
         .any(|section| names(section, id))
     {
-        return Some("The subscription's policy groups or rules use this node.");
+        return Some(KEEP_USED);
     }
     None
 }

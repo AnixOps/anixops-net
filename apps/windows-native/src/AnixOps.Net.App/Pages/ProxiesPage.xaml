@@ -9,7 +9,8 @@
         <CollectionViewSource x:Name="Groups" IsSourceGrouped="True" />
     </Page.Resources>
 
-    <!-- Where a subscription is imported, the search, the delay test and the list of nodes. What stands here
+    <!-- Where a subscription is imported, the search, the delay test and the list of nodes, each with the
+         button that opens its details. What stands here
          is decided in AnixOps.Net.Presentation.Proxies; this draws it. Only the rows near the viewport exist
          as controls. The row that is selected is the node in use. -->
     <Grid Padding="32,24,32,0" RowSpacing="12">
@@ -160,6 +161,7 @@
                             <ColumnDefinition Width="16" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <!-- The mark of the node in use. -->
                         <FontIcon
@@ -194,6 +196,21 @@
                                 Text="{x:Bind Delay}"
                                 Visibility="{x:Bind IsFailed}" />
                         </Grid>
+                        <!-- Opens the node's dialog, where it is changed, removed or shared. Pressing it
+                             does not choose the node. -->
+                        <Button
+                            Grid.Column="3"
+                            Width="36"
+                            Height="32"
+                            Padding="0"
+                            VerticalAlignment="Center"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            AutomationProperties.AutomationId="Proxies.Details"
+                            Click="OnDetails"
+                            Loaded="OnDetailsLoaded">
+                            <FontIcon FontSize="16" Glyph="&#xE712;" />
+                        </Button>
                     </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>
