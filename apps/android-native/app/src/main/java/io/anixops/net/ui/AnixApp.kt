@@ -40,6 +40,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -111,6 +112,7 @@ fun AnixApp(
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { app.poll() }
     }
     val context = LocalContext.current
+    val locale by rememberUpdatedState(LocalConfiguration.current.locales[0])
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(app) { app.messages.collect { snackbar.showSnackbar(it) } }
     LaunchedEffect(requests) {
@@ -124,7 +126,7 @@ fun AnixApp(
                         SessionChange.Loaded -> R.string.sessions_loaded_message
                         SessionChange.Deleted -> R.string.sessions_deleted_message
                     },
-                    sessionTitle(event.session, context.resources.configuration.locales[0]),
+                    sessionTitle(event.session, locale),
                 )
             }
             if (text.isNotBlank()) snackbar.showSnackbar(text)
