@@ -4,6 +4,7 @@ members = [
     "apps/linux-daemon",
     "apps/linux-gui",
     "apps/windows-gui",
+    "apps/windows-service",
     "crates/app-log",
     "crates/app-notifications",
     "crates/anx-license",

@@ -93,6 +93,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "anixops-net-service"
+version = "0.3.0"
+dependencies = [
+ "client-core",
+ "client-ipc",
+ "client-service",
+ "platform-windows",
+ "serde_json",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "anixops-netd"
 version = "0.3.0"
 dependencies = [

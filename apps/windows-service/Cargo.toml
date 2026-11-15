@@ -1,0 +1,24 @@
+[package]
+name = "anixops-net-service"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The AnixOps Net core as a Windows service: runs the engine as LocalSystem and answers the windows of signed-in users over a named pipe."
+
+# Windows only. On other systems the crate builds to nothing, so workspace-wide commands still pass there.
+[target.'cfg(windows)'.dependencies]
+client-core = { path = "../../crates/client-core" }
+client-ipc = { path = "../../crates/client-ipc" }
+client-service = { path = "../../crates/client-service" }
+platform-windows = { workspace = true }
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Services",
+] }
+
+[target.'cfg(windows)'.dev-dependencies]
+serde_json = "1"
