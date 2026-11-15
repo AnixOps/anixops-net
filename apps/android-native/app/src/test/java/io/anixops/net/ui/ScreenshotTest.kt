@@ -4,12 +4,15 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import io.anixops.net.core.ConnectionSnapshot
 import io.anixops.net.core.Delay
 import io.anixops.net.core.DnsText
+import io.anixops.net.core.HealthStatus
 import io.anixops.net.core.MyRules
 import io.anixops.net.core.NativeGroup
 import io.anixops.net.core.NetworkProbe
 import io.anixops.net.core.NodeRow
 import io.anixops.net.core.NodeSection
 import io.anixops.net.core.NodeSummary
+import io.anixops.net.core.NotificationSettings
+import io.anixops.net.core.OnDemandSettings
 import io.anixops.net.core.Overview
 import io.anixops.net.core.ProxiesPage
 import io.anixops.net.core.ProxiesView
@@ -18,7 +21,9 @@ import io.anixops.net.core.RuntimeSnapshot
 import io.anixops.net.core.StatusFact
 import io.anixops.net.core.SubscriptionSummary
 import io.anixops.net.core.Traffic
+import io.anixops.net.core.WifiRule
 import io.anixops.net.ui.theme.AnixTheme
+import java.io.File
 import java.util.TimeZone
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -82,6 +87,28 @@ class ScreenshotTest {
     @Test
     fun settingsPhoneDarkEn() =
         capture("settings-phone-dark-en", PHONE, "en", dark = true, destination = Destination.Settings)
+
+    @Test
+    fun settingsTabletLightZh() =
+        capture("settings-tablet-light-zh", TABLET, "zh-rCN", dark = false, destination = Destination.Settings)
+
+    /** The whole page on one tall screen, with the Wi-Fi rules on so their rows show. */
+    @Test
+    fun settingsWholePagePhoneLightZh() =
+        capture("settings-whole-page-phone-light-zh", TALL_PHONE, "zh-rCN", dark = false, destination = Destination.Settings)
+
+    @Test
+    fun settingsWholePagePhoneDarkEn() =
+        capture("settings-whole-page-phone-dark-en", TALL_PHONE, "en", dark = true, destination = Destination.Settings)
+
+    @Test
+    fun termsConsentPhoneLightZh() = captureTerms("terms-consent-phone-light-zh", PHONE, "zh-rCN", dark = false, consent = true)
+
+    @Test
+    fun termsConsentPhoneDarkEn() = captureTerms("terms-consent-phone-dark-en", PHONE, "en", dark = true, consent = true)
+
+    @Test
+    fun termsViewerTabletLightZh() = captureTerms("terms-viewer-tablet-light-zh", TABLET, "zh-rCN", dark = false, consent = false)
 
     @Test
     fun proxiesPhoneLightZh() =
@@ -162,8 +189,21 @@ class ScreenshotTest {
                     onModeChange = {},
                     proxiesState = proxies,
                     rulesState = rules,
+                    settingsState = settingsState,
+                    settings = SettingsActions(openLanguageSettings = {}),
+                    termsVersion = "2.1.0",
                     initial = destination,
                 )
+            }
+        }
+    }
+
+    private fun captureTerms(name: String, device: String, locale: String, dark: Boolean, consent: Boolean) {
+        RuntimeEnvironment.setQualifiers("$locale-$device-${if (dark) "night" else "notnight"}-xhdpi")
+        val markdown = File(TermsTest.TERMS_PATH).readText()
+        captureRoboImage("src/test/screenshots/$name.png") {
+            AnixTheme {
+                TermsScreen(markdown, onAccept = if (consent) ({}) else null)
             }
         }
     }
@@ -241,6 +281,18 @@ class ScreenshotTest {
                 rules = "DOMAIN-SUFFIX,cn,alidns",
                 fakeIp = true,
             ),
+        )
+
+        val settingsState = SettingsState(
+            notifications = NotificationSettings(scripts = true, connection = true, subscriptions = false, language = "zh"),
+            onDemand = OnDemandSettings(
+                enabled = true,
+                wifi = listOf(WifiRule("Home-5G", "disconnect"), WifiRule("Office", "connect")),
+                otherWifi = "connect",
+                cellular = "connect",
+                other = "ignore",
+            ),
+            health = HealthStatus(crashReports = true, integrity = "unverified", coldStartMs = 412),
         )
 
         val proxiesState = ProxiesState(

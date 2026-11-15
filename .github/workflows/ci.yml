@@ -101,8 +101,9 @@ jobs:
                   rust=true; windows=true; linux=true; android=true; android_native=true; windows_native=true
                   linux_native=true ;;
                 apps/ios/*) apple=true ;;
-                # The desktop UI bundles TERMS.md and the Apple tests check its version (first-start consent).
-                TERMS.md) ui=true; windows=true; linux=true; apple=true; android=true ;;
+                # The desktop UI and the native Android app bundle TERMS.md and the Apple tests check its version
+                # (first-start consent).
+                TERMS.md) ui=true; windows=true; linux=true; apple=true; android=true; android_native=true ;;
                 *) ;;
               esac
             done < <(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")

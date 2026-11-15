@@ -172,4 +172,65 @@
     <string name="dns_title" translatable="false">DNS</string>
     <string name="dns_fake_ip" translatable="false">Fake-IP</string>
     <string name="dns_hosts" translatable="false">Hosts</string>
+    <string name="settings_general">通用</string>
+    <string name="settings_language">语言</string>
+    <string name="notifications">通知</string>
+    <string name="notifications_note">通过系统通知提醒，系统里关掉本应用的通知后不会显示。</string>
+    <string name="notifications_scripts">脚本通知</string>
+    <string name="notifications_scripts_hint">插件脚本发出的通知，例如签到结果。</string>
+    <string name="notifications_connection">连接意外断开</string>
+    <string name="notifications_connection_hint">内核意外退出或 VPN 被别的应用占用时提醒。</string>
+    <string name="notifications_subscriptions">订阅自动更新失败</string>
+    <string name="notifications_subscriptions_hint">按间隔自动更新订阅失败时提醒，手动更新的结果直接显示在应用里。</string>
+    <string name="notifications_turned_on">已打开这类通知</string>
+    <string name="notifications_turned_off">已关闭这类通知</string>
+    <string name="wifi_rules">Wi-Fi 规则</string>
+    <string name="wifi_rules_note">加入网络时自动连接或断开，应用在后台运行时生效。读取 Wi-Fi 名称需要位置权限，打开时会询问一次。手动连接或断开会保持到下次换网络。</string>
+    <string name="wifi_rules_enabled">按网络自动连接</string>
+    <string name="wifi_name">Wi-Fi 名称</string>
+    <string name="wifi_current_network">当前网络</string>
+    <string name="wifi_add">添加</string>
+    <string name="wifi_other">其他 Wi-Fi</string>
+    <string name="wifi_cellular">蜂窝网络</string>
+    <string name="wifi_wired_other">有线和其他网络</string>
+    <string name="wifi_action_connect">连接</string>
+    <string name="wifi_action_disconnect">断开</string>
+    <string name="wifi_action_ignore">保持不变</string>
+    <string name="wifi_not_on_wifi">现在没有连接 Wi-Fi</string>
+    <string name="wifi_name_withheld">读不到 Wi-Fi 名称，请在系统设置里允许本应用使用位置信息</string>
+    <string name="wifi_name_filled">已填入当前 Wi-Fi 名称</string>
+    <string name="wifi_rules_on">已打开 Wi-Fi 规则</string>
+    <string name="wifi_rules_off">已关闭 Wi-Fi 规则</string>
+    <string name="wifi_rule_added">已添加 Wi-Fi 规则</string>
+    <string name="wifi_rules_saved">已保存 Wi-Fi 规则</string>
+    <string name="wifi_rule_removed">已删除 Wi-Fi 规则</string>
+    <string name="wifi_rule_remove">删除 %1$s</string>
+    <string name="core">代理内核</string>
+    <string name="core_note">内核随应用一起运行，无需单独安装。</string>
+    <string name="core_validate">校验配置</string>
+    <string name="core_validate_action">校验</string>
+    <string name="core_restart">重启内核</string>
+    <string name="core_restart_action">重启</string>
+    <string name="core_reading">读取中</string>
+    <string name="core_running">运行中</string>
+    <string name="core_stopped">已停止</string>
+    <string name="core_not_used">未使用</string>
+    <string name="core_exited">已退出</string>
+    <string name="diagnostics">诊断与隐私</string>
+    <string name="crash_reports">崩溃报告</string>
+    <string name="crash_reports_hint_upload">崩溃时记录脱敏后的信息（不含网址、账号和节点地址），下次启动时发送。关闭会删除已保存的报告。</string>
+    <string name="crash_reports_hint_local">崩溃时记录脱敏后的信息（不含网址、账号和节点地址），只保存在本机，生成诊断报告时附上。关闭会删除已保存的报告。</string>
+    <string name="diagnostics_report">诊断报告</string>
+    <string name="diagnostics_report_action">生成并保存到“下载”</string>
+    <string name="cold_start">启动耗时</string>
+    <string name="terms">用户协议</string>
+    <string name="terms_version">版本 %1$s</string>
+    <string name="terms_consent_title">使用前请阅读用户协议</string>
+    <string name="terms_consent_summary">只在自己的设备上使用；HTTPS 解密只用于你自己的流量，根证书由你手动信任；不得用于入侵、窃取数据或绕过他人的安全机制。</string>
+    <string name="terms_declined">不同意就不能使用 AnixOps Net。你可以退出并卸载，或重新阅读后同意。</string>
+    <string name="terms_decline">不同意</string>
+    <string name="terms_accept">同意并继续</string>
+    <string name="terms_full_text">用户协议全文</string>
+    <string name="action_done">完成</string>
+    <string name="duration_ms" translatable="false">%1$d ms</string>
 </resources>

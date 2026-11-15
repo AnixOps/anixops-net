@@ -113,3 +113,28 @@ dependencies {
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
 }
+
+/** Packs the user agreement (TERMS.md at the repository root) into the assets, so the app shows the one it was built with. */
+abstract class TermsAsset : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val source: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val output: DirectoryProperty
+
+    @TaskAction
+    fun copy() {
+        source.get().asFile.copyTo(output.get().file("TERMS.md").asFile, overwrite = true)
+    }
+}
+
+val termsAsset = tasks.register<TermsAsset>("termsAsset") {
+    source.set(rootProject.layout.projectDirectory.file("../../TERMS.md"))
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(termsAsset, TermsAsset::output)
+    }
+}
