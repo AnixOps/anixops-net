@@ -8,7 +8,8 @@
 //!   UTF-8 JSON.
 //! - [`message`]: the JSON itself. Either side sends requests and answers the other's; the core also sends
 //!   events that expect no answer.
-//! - [`Connection`]: frames and messages over any reader and writer.
+//! - [`Connection`]: frames and messages over any reader and writer, used for the greeting.
+//! - [`peer`]: after the greeting, each side answers the other's requests, asks its own and takes events.
 //!
 //! The window is written in another language on Windows, so the wire format is fixed by the samples under
 //! `fixtures/`, which the tests here read and which the other implementation checks too. A change to the
@@ -16,10 +17,12 @@
 
 pub mod frame;
 pub mod message;
+pub mod peer;
 
 use std::io::{self, Read, Write};
 
 pub use message::{Hello, Message, Role};
+pub use peer::{Handler, Peer};
 
 /// The version of the wire format. The two sides exchange it first and stop when they differ.
 pub const PROTOCOL: u32 = 1;
@@ -50,6 +53,11 @@ impl<R: Read, W: Write> Connection<R, W> {
         serde_json::from_slice(&payload)
             .map(Some)
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+    }
+
+    /// The reader and the writer back, once the greeting is done, for [`Peer`].
+    pub fn into_parts(self) -> (R, W) {
+        (self.reader, self.writer)
     }
 
     /// Opens the conversation: says who this side is and checks that the other side, which must be
