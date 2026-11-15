@@ -1,5 +1,6 @@
 package io.anixops.net.platform
 
+import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
@@ -109,7 +110,9 @@ class ConnectTile : TileService() {
         tile.updateTile()
     }
 
-    @Suppress("DEPRECATION") // The Intent form is the only one before Android 14.
+    // The Intent form is the only one before Android 14 and runs only there; lint does not read the version check.
+    @Suppress("DEPRECATION")
+    @SuppressLint("StartActivityAndCollapseDeprecated")
     private fun openApp() {
         val open = packageManager.getLaunchIntentForPackage(packageName) ?: return
         open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
