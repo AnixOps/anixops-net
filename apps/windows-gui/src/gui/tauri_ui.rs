@@ -4148,11 +4148,6 @@ async fn enable_https_mitm(state: State<'_, DesktopAppState>) -> Result<Operatio
 }
 
 fn enable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult, String> {
-    let desktop = state
-        .desktop
-        .lock()
-        .map_err(|_| "desktop state lock failed")?
-        .clone();
     let embedded = active_embedded_config()?
         .ok_or_else(|| "Import a profile before enabling HTTPS MITM.".to_string())?;
     if managed_config_or_default()?
