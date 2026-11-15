@@ -123,7 +123,7 @@ public static class Subscriptions
             var details = new List<string>();
             if (subscription.Nodes is { } nodes)
             {
-                details.Add(strings.Format("proxies.count", nodes));
+                details.Add(Proxies.Count(strings, nodes));
             }
             if (subscription.Updated is { } updated)
             {

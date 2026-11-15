@@ -322,7 +322,7 @@ def check_proxies(app, binary: str, endpoint: str, text, button, press, sentence
 
     def count(total: int, shown: int | None = None) -> str:
         if shown is None or shown == total:
-            return text("proxies.count").replace("{0}", str(total))
+            return text("proxies.count.one") if total == 1 else text("proxies.count").replace("{0}", str(total))
         return text("proxies.count.shown").replace("{0}", str(shown)).replace("{1}", str(total))
 
     # The second row of the sidebar's first list.
@@ -535,7 +535,9 @@ def check_subscriptions(app, binary: str, endpoint: str, text, press, shots: str
             return lambda: (lambda found: found is not None
                             and any(all(part in line for part in parts) for line in says(found)))(row(title))
 
-        nodes = lambda count: text("proxies.count").replace("{0}", str(count))  # noqa: E731
+        nodes = lambda count: (  # noqa: E731
+            text("proxies.count.one") if count == 1 else text("proxies.count").replace("{0}", str(count))
+        )
         used = text("subscriptions.usage").replace("{0}", "1000 B").replace("{1}", "4.9 KB")
         expires = text("subscriptions.expire").replace("{0}", "2033-05-18")
         until(f"the row to say {nodes(1)!r}, {used!r} and {expires!r} in one line", details(nodes(1), used, expires))

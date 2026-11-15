@@ -46,6 +46,7 @@
   "page.settings.summary": { "zh": "启动、通知、语言和诊断。", "zh-Hant": "啟動、通知、語言和診斷。", "en": "Startup, notifications, language and diagnostics." },
   "page.unfinished": { "zh": "原生版预览：这一页还没有完成。", "zh-Hant": "原生版預覽：這一頁還沒有完成。", "en": "Native preview: this page is not finished yet." },
   "proxies.count": { "zh": "{0} 个节点", "zh-Hant": "{0} 個節點", "en": "{0} nodes" },
+  "proxies.count.one": { "zh": "1 个节点", "zh-Hant": "1 個節點", "en": "1 node" },
   "proxies.count.shown": { "zh": "{0} / {1} 个节点", "zh-Hant": "{0} / {1} 個節點", "en": "{0} of {1} nodes" },
   "proxies.delay.failed": { "zh": "超时", "zh-Hant": "逾時", "en": "No answer" },
   "proxies.delay.ms": { "zh": "{0} ms", "zh-Hant": "{0} ms", "en": "{0} ms" },
