@@ -47,6 +47,12 @@ fun RequestDetailScreen(opened: OpenedRequest, requests: RequestsState, actions:
                         stringResource(R.string.replay_edit),
                         onClick = actions.openReplay,
                     )
+                    InfoRow(
+                        stringResource(R.string.request_connection),
+                        stringResource(R.string.request_connection_open),
+                        divider = true,
+                        onClick = { actions.openConnectionOf(opened.row) },
+                    )
                 }
                 MessageSections(R.string.request_headers, R.string.request_body, exchange.request, opened.requestBody)
                 MessageSections(R.string.response_headers, R.string.response_body, exchange.response, opened.responseBody)
