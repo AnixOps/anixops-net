@@ -465,18 +465,18 @@
         }
       }
     },
-    "GEOIP,CN、GEOSITE,cn 和 GEOSITE,gfw 没有订阅自带的规则集时，使用公开列表（Loyalsoldier、gaoyifan），由内核每天直连下载一次。": {
+    "GEOIP,CN 和 GEOSITE,cn 没有订阅自带的规则集时，使用公开列表（gaoyifan/china-operator-ip、Loyalsoldier/v2ray-rules-dat），由内核每天直连下载一次。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "When the subscription has no rule set for GEOIP,CN, GEOSITE,cn or GEOSITE,gfw, public lists (Loyalsoldier, gaoyifan) are used; the engine downloads them directly once a day."
+            "value": "When the subscription has no rule set for GEOIP,CN or GEOSITE,cn, public lists (gaoyifan/china-operator-ip, Loyalsoldier/v2ray-rules-dat) are used; the engine downloads them directly once a day."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "GEOIP,CN、GEOSITE,cn 和 GEOSITE,gfw 沒有訂閱自帶的規則集時，使用公開清單（Loyalsoldier、gaoyifan），由核心每天直連下載一次。"
+            "value": "GEOIP,CN 和 GEOSITE,cn 沒有訂閱自帶的規則集時，使用公開清單（gaoyifan/china-operator-ip、Loyalsoldier/v2ray-rules-dat），由核心每天直連下載一次。"
           }
         }
       }
