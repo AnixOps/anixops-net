@@ -107,6 +107,10 @@ public sealed partial class MainWindow : Window
                 new RequestsPage.Model(strings, demoRequests, Demo: launch.DemoRows > 0, launch.Measure),
                 transition);
         }
+        else if (section.Id == Sections.Proxies)
+        {
+            PageFrame.Navigate(typeof(ProxiesPage), new ProxiesPage.Model(strings, core), transition);
+        }
         else if (section.Id == Sections.Overview)
         {
             PageFrame.Navigate(typeof(OverviewPage), new OverviewPage.Model(strings, core), transition);
