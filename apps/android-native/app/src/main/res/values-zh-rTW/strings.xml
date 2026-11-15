@@ -447,4 +447,5 @@
     <plurals name="requests_count">
         <item quantity="other">%d 個請求</item>
     </plurals>
+    <string name="request_local_short">本機</string>
 </resources>

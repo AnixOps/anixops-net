@@ -467,4 +467,5 @@
         <item quantity="one">%d request</item>
         <item quantity="other">%d requests</item>
     </plurals>
+    <string name="request_local_short">Local</string>
 </resources>

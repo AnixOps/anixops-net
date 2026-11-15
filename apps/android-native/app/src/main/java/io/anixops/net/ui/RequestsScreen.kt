@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -63,8 +64,8 @@ data class RequestsActions(
     val close: () -> Unit = {},
 )
 
-/** Width of the status column, wide enough for "503" or "…" in the list's type. */
-private val StatusWidth = 40.dp
+/** Width of the status column: a code, "…", or the short word for a request answered on the device. */
+private val StatusWidth = 48.dp
 
 /**
  * 调试 › 请求 (docs/debug-mode.md): the connection and capture, the filters, then every decrypted request, newest
@@ -129,7 +130,7 @@ private fun Hint(text: String) {
         color = LocalBrandPalette.current.text2,
         modifier = Modifier
             .content()
-            .padding(start = BrandSpacing.md, bottom = BrandSpacing.sm),
+            .padding(start = BrandSpacing.md, top = BrandSpacing.xs, bottom = BrandSpacing.sm),
     )
 }
 
@@ -315,12 +316,14 @@ private fun RequestLine(row: RequestRow, first: Boolean, last: Boolean, onOpen: 
                 horizontalArrangement = Arrangement.spacedBy(BrandSpacing.sm),
             ) {
                 Text(
-                    statusText(row),
+                    if (row.status == null && row.note == "answered_locally") stringResource(R.string.request_local_short) else statusText(row),
                     style = MaterialTheme.typography.labelLarge,
-                    fontFamily = FontFamily.Monospace,
+                    // Codes line up in a fixed-width face; the word for a local answer reads better in the text face.
+                    fontFamily = if (row.status != null) FontFamily.Monospace else null,
                     color = toneColor(row.tone),
                     maxLines = 1,
-                    modifier = Modifier.widthIn(min = StatusWidth),
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.width(StatusWidth),
                 )
                 Column(Modifier.weight(1f)) {
                     Text(

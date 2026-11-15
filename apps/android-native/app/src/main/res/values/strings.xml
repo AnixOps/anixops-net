@@ -456,4 +456,5 @@
     <plurals name="requests_count">
         <item quantity="other">%d 个请求</item>
     </plurals>
+    <string name="request_local_short">本地</string>
 </resources>
