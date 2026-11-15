@@ -18,7 +18,7 @@ public class ChannelTests
         var name = "anixops-net-ipc-test-" + Guid.NewGuid().ToString("N");
         var core = new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
         var window = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
-        await Task.WhenAll(core.WaitForConnectionAsync(), window.ConnectAsync(Soon));
+        await Task.WhenAll(core.WaitForConnectionAsync(), window.ConnectAsync(Soon, CancellationToken.None));
         return (core, window);
     }
 
