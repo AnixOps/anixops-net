@@ -1,10 +1,7 @@
 package io.anixops.net.ui
 
 import io.anixops.net.core.Envelope
-import java.nio.ByteBuffer
-import java.nio.charset.CharacterCodingException
-import java.nio.charset.CodingErrorAction
-import java.util.Base64
+import io.anixops.net.core.MappingText
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 
@@ -28,22 +25,13 @@ data class BodyText(
 
         /** The bytes ([base64]) of a body sent with [contentType]. */
         fun of(base64: String, contentType: String?, truncated: Boolean, undecoded: Boolean = false): BodyText {
-            val bytes = runCatching { Base64.getDecoder().decode(base64) }.getOrDefault(ByteArray(0))
+            val bytes = MappingText.bytes(base64)
             return BodyText(text(bytes, contentType), bytes.size.toLong(), truncated, undecoded)
         }
 
-        /** UTF-8 text, indented when it is JSON; null when the bytes are not UTF-8 or hold control characters. */
+        /** UTF-8 text ([MappingText.text]), indented when it is JSON; null for bytes that are not text. */
         internal fun text(bytes: ByteArray, contentType: String?): String? {
-            if (bytes.isEmpty()) return ""
-            val decoder = Charsets.UTF_8.newDecoder()
-                .onMalformedInput(CodingErrorAction.REPORT)
-                .onUnmappableCharacter(CodingErrorAction.REPORT)
-            val text = try {
-                decoder.decode(ByteBuffer.wrap(bytes)).toString()
-            } catch (error: CharacterCodingException) {
-                return null
-            }
-            if (text.any { it.isISOControl() && it !in "\n\r\t" }) return null
+            val text = MappingText.text(bytes) ?: return null
             val shown = if (contentType.orEmpty().contains("json", ignoreCase = true)) indent(text) ?: text else text
             return if (shown.length > MAX_CHARS) shown.take(MAX_CHARS) else shown
         }

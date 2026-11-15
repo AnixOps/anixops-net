@@ -8,6 +8,10 @@ import io.anixops.net.core.CaptureStatus
 import io.anixops.net.core.Core
 import io.anixops.net.core.CoreException
 import io.anixops.net.core.FilterError
+import io.anixops.net.core.HeaderField
+import io.anixops.net.core.MappingText
+import io.anixops.net.core.ReplayRequest
+import io.anixops.net.core.ReplayResponse
 import io.anixops.net.core.RequestFeed
 import io.anixops.net.core.RequestKey
 import io.anixops.net.core.RequestPage
@@ -40,6 +44,39 @@ data class OpenedRequest(
     val responseBody: BodyText? = null,
 )
 
+/** The formats one request exports to, by id, with their names; the code formats are `code` in that language. */
+val ExportFormats = listOf(
+    "curl" to "cURL",
+    "python" to "Python (requests)",
+    "javascript" to "JavaScript (fetch)",
+    "swift" to "Swift (URLSession)",
+    "kotlin" to "Kotlin (OkHttp)",
+    "go" to "Go (net/http)",
+    "postman" to "Postman",
+    "insomnia" to "Insomnia",
+    "har" to "HAR",
+)
+
+/** The languages of the `code` export. */
+private val CodeLanguages = setOf("python", "javascript", "swift", "kotlin", "go")
+
+/**
+ * The replay editor over the opened request: what will be sent, and what came back. [body] is the request body as
+ * text, or null when it is bytes that are not text and go as captured ([binaryBase64]).
+ */
+data class ReplayDraft(
+    val method: String,
+    val url: String,
+    val headers: String,
+    val body: String?,
+    val binaryBase64: String = "",
+    /** Capture kept only the start of the body, so the copy sends only that. */
+    val cut: Boolean = false,
+    val sending: Boolean = false,
+    val answer: ReplayResponse? = null,
+    val answerBody: BodyText? = null,
+)
+
 /** The requests page: capture, the filters and order, the rows shown, and the request opened. */
 data class RequestsState(
     /** Null while the engine is not running. */
@@ -54,14 +91,25 @@ data class RequestsState(
     val loaded: Boolean = false,
     val busy: Boolean = false,
     val opened: OpenedRequest? = null,
+    val exportFormat: String = "curl",
+    /** Exports mask cookies, tokens and passwords unless this is turned off. */
+    val redact: Boolean = true,
+    val replay: ReplayDraft? = null,
 )
+
+/** A sentence for the snackbar, or where an export was saved. */
+sealed interface RequestsEvent {
+    data class Message(val text: String) : RequestsEvent
+
+    data class Saved(val location: String) : RequestsEvent
+}
 
 class RequestsViewModel(private val core: Core) : ViewModel() {
     private val _state = MutableStateFlow(RequestsState())
     val state: StateFlow<RequestsState> = _state.asStateFlow()
 
-    private val _messages = Channel<String>(Channel.BUFFERED)
-    val messages: Flow<String> = _messages.receiveAsFlow()
+    private val _events = Channel<RequestsEvent>(Channel.BUFFERED)
+    val events: Flow<RequestsEvent> = _events.receiveAsFlow()
 
     /** What has been read through the current filter; a new filter starts it over. */
     private var feed = RequestFeed()
@@ -110,7 +158,80 @@ class RequestsViewModel(private val core: Core) : ViewModel() {
         viewModelScope.launch { readOpened(row.key) }
     }
 
-    fun close() = _state.update { it.copy(opened = null) }
+    fun close() = _state.update { it.copy(opened = null, replay = null) }
+
+    fun setExportFormat(format: String) = _state.update { it.copy(exportFormat = format) }
+
+    fun setRedact(redact: Boolean) = _state.update { it.copy(redact = redact) }
+
+    /** Saves the opened request to Downloads in the chosen format and says where. */
+    fun export() {
+        val state = _state.value
+        val row = state.opened?.row ?: return
+        val format = state.exportFormat
+        val code = format in CodeLanguages
+        viewModelScope.launch {
+            try {
+                val saved = core.exportExchange(
+                    row.connectionId,
+                    row.index,
+                    if (code) "code" else format,
+                    language = format.takeIf { code },
+                    redact = state.redact,
+                )
+                _events.send(RequestsEvent.Saved(saved.location))
+            } catch (error: CoreException) {
+                _events.send(RequestsEvent.Message(error.message.orEmpty()))
+            }
+        }
+    }
+
+    /** Opens the replay editor on a copy of the opened request; HTTP/2 pseudo-headers are left out. */
+    fun openReplay() {
+        val exchange = _state.value.opened?.exchange ?: return
+        val request = exchange.request
+        val headers = request.headers.filter { it.size == 2 && !it[0].startsWith(":") }.map { HeaderField(it[0], it[1]) }
+        val bytes = MappingText.bytes(request.body.dataBase64)
+        val text = MappingText.text(bytes)
+        _state.update {
+            it.copy(
+                replay = ReplayDraft(
+                    method = exchange.method,
+                    url = exchange.url,
+                    headers = MappingText.headerLines(headers),
+                    body = text,
+                    binaryBase64 = if (text == null) request.body.dataBase64 else "",
+                    cut = request.body.truncated,
+                ),
+            )
+        }
+    }
+
+    fun editReplay(change: (ReplayDraft) -> ReplayDraft) = _state.update { state -> state.copy(replay = state.replay?.let(change)) }
+
+    fun closeReplay() = _state.update { it.copy(replay = null) }
+
+    fun sendReplay() {
+        val draft = _state.value.replay ?: return
+        if (draft.sending || draft.url.isBlank()) return
+        editReplay { it.copy(sending = true, answer = null, answerBody = null) }
+        viewModelScope.launch {
+            val request = ReplayRequest(
+                method = draft.method.trim().ifEmpty { "GET" },
+                url = draft.url.trim(),
+                headers = MappingText.parseHeaderLines(draft.headers).map { listOf(it.name, it.value) },
+                bodyBase64 = draft.body?.let { MappingText.base64(it) } ?: draft.binaryBase64,
+            )
+            try {
+                val answer = core.replay(request)
+                val body = body(answer.message)
+                editReplay { it.copy(sending = false, answer = answer, answerBody = body) }
+            } catch (error: CoreException) {
+                editReplay { it.copy(sending = false) }
+                _events.send(RequestsEvent.Message(error.message.orEmpty()))
+            }
+        }
+    }
 
     private fun refilter(change: (RequestsState) -> RequestsState) {
         _state.update(change)
@@ -124,7 +245,7 @@ class RequestsViewModel(private val core: Core) : ViewModel() {
             val status = try {
                 command()
             } catch (error: CoreException) {
-                _messages.send(error.message.orEmpty())
+                _events.send(RequestsEvent.Message(error.message.orEmpty()))
                 null
             }
             _state.update { it.copy(busy = false, capture = status ?: it.capture) }

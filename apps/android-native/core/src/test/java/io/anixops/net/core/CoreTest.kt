@@ -165,6 +165,36 @@ class CoreTest {
     }
 
     @Test
+    fun oneRequestExportsWithItsExchangeAndLanguage() = runTest {
+        val transport = Recording("""{"ok":{"location":"Download/api.example.com.go"}}""")
+        val saved = Core(transport, StandardTestDispatcher(testScheduler)).exportExchange(3, 1, "code", language = "go", redact = false)
+        assertEquals(
+            listOf("export_capture" to """{"format":"code","id":3,"options":{"exchange":1,"language":"go","redact":false}}"""),
+            transport.calls,
+        )
+        assertEquals(SavedFile("Download/api.example.com.go"), saved)
+    }
+
+    @Test
+    fun aReplayKeepsTheSharedFieldNames() = runTest {
+        val transport = Recording(
+            """{"ok":{"status":201,"headers":[["content-type","application/json"]],"bodyBase64":"e30=","truncated":false,"elapsedMs":184}}""",
+        )
+        val answer = Core(transport, StandardTestDispatcher(testScheduler))
+            .replay(ReplayRequest("POST", "https://api.example.com/v1", listOf(listOf("accept", "*/*")), "e30="))
+        assertEquals(
+            listOf(
+                "replay_request" to
+                    """{"request":{"method":"POST","url":"https://api.example.com/v1","headers":[["accept","*/*"]],"bodyBase64":"e30="}}""",
+            ),
+            transport.calls,
+        )
+        assertEquals(201, answer.status)
+        assertEquals(184L, answer.elapsedMs)
+        assertEquals("application/json", answer.message.header("content-type"))
+    }
+
+    @Test
     fun ruleSetsGoThroughRuntimeControl() = runTest {
         val transport = Recording(
             """{"ok":{"rule_sets":[{"name":"china","source":"remote","entries":8412,"updated_at_ms":1763198400000}]}}""",

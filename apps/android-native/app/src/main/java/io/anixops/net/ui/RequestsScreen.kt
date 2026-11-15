@@ -62,6 +62,13 @@ data class RequestsActions(
     val setPaused: (Boolean) -> Unit = {},
     val open: (RequestRow) -> Unit = {},
     val close: () -> Unit = {},
+    val setExportFormat: (String) -> Unit = {},
+    val setRedact: (Boolean) -> Unit = {},
+    val export: () -> Unit = {},
+    val openReplay: () -> Unit = {},
+    val editReplay: ((ReplayDraft) -> ReplayDraft) -> Unit = {},
+    val sendReplay: () -> Unit = {},
+    val closeReplay: () -> Unit = {},
 )
 
 /** Width of the status column: a code, "…", or the short word for a request answered on the device. */
@@ -73,8 +80,12 @@ private val StatusWidth = 48.dp
  */
 @Composable
 fun RequestsScreen(state: UiState, requests: RequestsState, actions: RequestsActions, modifier: Modifier = Modifier) {
+    requests.replay?.let { draft ->
+        ReplayScreen(draft, actions, modifier)
+        return
+    }
     requests.opened?.let { opened ->
-        RequestDetailScreen(opened, onBack = actions.close, modifier = modifier)
+        RequestDetailScreen(opened, requests, actions, modifier)
         return
     }
     val capture = requests.capture
