@@ -64,22 +64,31 @@ files = sorted(out.glob("*.png"))
 if len(files) != 6 * 3 * 2 + 2:
     sys.exit(f"expected 38 screenshots, found {len(files)}")
 digests = {}
+sizes = {}
 for path in files:
-    width, height = size(path)
-    if path.name.startswith("narrow-"):
-        expected = (420, 720)
-    elif path.name.startswith("scale2-"):
-        expected = (2160, 1440)
-    else:
-        expected = (1080, 720)
-    if (width, height) != expected:
-        sys.exit(f"{path.name} is {width}x{height}, expected {expected[0]}x{expected[1]}")
+    sizes[path.name] = size(path)
     # Every page, language and theme draws something of its own: two equal files mean an option was not
     # applied (or nothing was drawn at all).
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     if digest in digests:
         sys.exit(f"{path.name} is the same picture as {digests[digest]}")
     digests[digest] = path.name
-    print(f"{path.name}: {width}x{height}, {path.stat().st_size} bytes")
+    print(f"{path.name}: {sizes[path.name][0]}x{sizes[path.name][1]}, {path.stat().st_size} bytes")
+
+# The window is asked for 1080x720 (420x720 when narrow). What it gets differs by a few pixels with the
+# window's own frame, so the pictures are checked against each other and against a small margin.
+MARGIN = 24
+usual = {size for name, size in sizes.items() if not name.startswith(("narrow-", "scale2-"))}
+if len(usual) != 1:
+    sys.exit(f"the pages were drawn at different sizes: {sorted(usual)}")
+width, height = usual.pop()
+if not (1080 - MARGIN <= width <= 1080 and 720 - MARGIN <= height <= 720):
+    sys.exit(f"the pages are {width}x{height}, expected about 1080x720")
+narrow = sizes["narrow-rules-en-light.png"]
+if not (420 - MARGIN <= narrow[0] <= 420 and narrow[1] == height):
+    sys.exit(f"the narrow window is {narrow[0]}x{narrow[1]}, expected about 420 wide and {height} high")
+doubled = sizes["scale2-overview-en-light.png"]
+if doubled != (2 * width, 2 * height):
+    sys.exit(f"at twice the scale the picture is {doubled[0]}x{doubled[1]}, expected {2 * width}x{2 * height}")
 print(f"{len(files)} screenshots, all different")
 PY

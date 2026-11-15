@@ -228,6 +228,16 @@ impl SimpleComponent for Shell {
             status,
         };
         model.update_view(&mut widgets, sender);
+        // The keyboard starts on the chosen page's row. Left to itself the window would focus the first row
+        // of the sidebar, and a list selects the row the keyboard lands on: `--page` would open on Overview.
+        let (in_footer, at) = place(model.current);
+        let chosen = if in_footer {
+            &widgets.footer
+        } else {
+            &widgets.pages
+        }
+        .row_at_index(at);
+        gtk::prelude::GtkWindowExt::set_focus(&window, chosen.as_ref());
 
         if let Some(file) = launch.screenshot {
             // The page the screenshot is of, not the sidebar, when only one of them fits.
