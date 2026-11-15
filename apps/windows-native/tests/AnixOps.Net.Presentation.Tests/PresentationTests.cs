@@ -141,3 +141,117 @@ public sealed class LaunchTests
         Assert.Equal(Appearance.Dark, Launch.Parse(["--verbose", "--theme", "dark"]).Appearance);
     }
 }
+
+public sealed class RequestsTests
+{
+    [Fact]
+    public void DemoRequestsAreTheSameEveryTime()
+    {
+        var first = DemoRequests.Make(500);
+        var second = DemoRequests.Make(500);
+        Assert.Equal(first.Select(row => row.ToString()), second.Select(row => row.ToString()));
+        Assert.Equal(first.Select(row => row.Size), second.Select(row => row.Size));
+    }
+
+    [Fact]
+    public void ALongerDemoListStartsWithTheShorterOne()
+    {
+        var shorter = DemoRequests.Make(100);
+        var longer = DemoRequests.Make(1000);
+        Assert.Equal(shorter.Select(row => row.ToString()), longer.Take(100).Select(row => row.ToString()));
+    }
+
+    [Fact]
+    public void DemoRequestsAreNumberedFromOneAndVaried()
+    {
+        var rows = DemoRequests.Make(5000);
+        Assert.Equal(Enumerable.Range(1, 5000).Select(number => (long)number), rows.Select(row => row.Seq));
+        Assert.True(rows.Select(row => row.Host).Distinct().Count() >= 8);
+        Assert.True(rows.Select(row => row.Method).Distinct().Count() >= 5);
+        Assert.Contains(rows, row => row.Status is null);
+        Assert.Contains(rows, row => row.Status == 404);
+        Assert.All(rows, row => Assert.Matches(@"\.example\.(com|org|net)$", row.Host));
+    }
+
+    [Fact]
+    public void AnEmptyFilterKeepsTheListItself()
+    {
+        var rows = DemoRequests.Make(50);
+        Assert.Same(rows, RequestFilter.Apply(rows, ""));
+        Assert.Same(rows, RequestFilter.Apply(rows, "   "));
+        Assert.Same(rows, RequestFilter.Apply(rows, null));
+    }
+
+    [Fact]
+    public void EveryWordMustOccurInAnyCase()
+    {
+        RequestRow[] rows =
+        [
+            new(1, "GET", 200, "api.example.com", "/v1/items/1", "json", 10, 5),
+            new(2, "POST", 404, "www.example.org", "/users/profile/2", "html", 10, 5),
+            new(3, "GET", null, "api.example.com", "/v1/users/3", "json", 0, 5),
+        ];
+        Assert.Equal(new long[] { 1, 3 }, RequestFilter.Apply(rows, "API").Select(row => row.Seq));
+        Assert.Equal(new long[] { 3 }, RequestFilter.Apply(rows, "api users").Select(row => row.Seq));
+        Assert.Equal(new long[] { 2 }, RequestFilter.Apply(rows, " 404  post ").Select(row => row.Seq));
+        Assert.Empty(RequestFilter.Apply(rows, "api 404"));
+    }
+
+    [Fact]
+    public void ARequestWithoutAResponseShowsAnEllipsis()
+    {
+        var row = new RequestRow(7, "GET", null, "api.example.com", "/v1", "json", 0, 12);
+        Assert.Equal("…", row.StatusText);
+        Assert.Equal("GET … api.example.com/v1", row.ToString());
+    }
+
+    [Theory]
+    [InlineData(0, "0 B")]
+    [InlineData(999, "999 B")]
+    [InlineData(1000, "1.0 kB")]
+    [InlineData(1500, "1.5 kB")]
+    [InlineData(2_000_000, "2.0 MB")]
+    [InlineData(3_500_000_000, "3.5 GB")]
+    public void SizesUseDecimalUnits(long bytes, string expected)
+    {
+        Assert.Equal(expected, Measures.Size(bytes));
+    }
+
+    [Theory]
+    [InlineData(0, "0 ms")]
+    [InlineData(999, "999 ms")]
+    [InlineData(1000, "1.00 s")]
+    [InlineData(1234, "1.23 s")]
+    public void DurationsSwitchToSecondsAtOneSecond(int milliseconds, string expected)
+    {
+        Assert.Equal(expected, Measures.Duration(milliseconds));
+    }
+
+    [Fact]
+    public void ACountIsWrittenWithoutGrouping()
+    {
+        Assert.Equal("1234 of 50000 requests", Strings.For(Strings.English).Format("requests.count", 1234, 50000));
+        Assert.Equal("1234 / 50000 条请求", Strings.For(Strings.Chinese).Format("requests.count", 1234, 50000));
+    }
+}
+
+public sealed class LaunchRequestsTests
+{
+    [Fact]
+    public void DemoRowsAndMeasureAreRead()
+    {
+        var launch = Launch.Parse(["--demo-rows", "50000", "--measure=C:\\out\\m.json"]);
+        Assert.Equal(50000, launch.DemoRows);
+        Assert.Equal("C:\\out\\m.json", launch.Measure);
+    }
+
+    [Theory]
+    [InlineData("-1")]
+    [InlineData("many")]
+    [InlineData("1000001")]
+    [InlineData("1e3")]
+    public void ACountThatIsNotAPlainNumberInRangeIsIgnored(string value)
+    {
+        Assert.Equal(0, Launch.Parse(["--demo-rows", value]).DemoRows);
+    }
+}

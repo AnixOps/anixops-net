@@ -1,0 +1,139 @@
+<Page
+    x:Class="AnixOps.Net.App.Pages.RequestsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:p="using:AnixOps.Net.Presentation">
+
+    <!-- The request list. WinUI has no data grid, so the table is a virtualising list whose rows and header
+         share one set of column widths. Only the rows near the viewport exist as controls. -->
+    <Grid Padding="32,24,32,0" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock
+            x:Name="Heading"
+            Grid.Row="0"
+            AutomationProperties.AutomationId="Page.Title"
+            AutomationProperties.HeadingLevel="Level1"
+            Style="{StaticResource TitleTextBlockStyle}" />
+
+        <InfoBar
+            x:Name="Notice"
+            Grid.Row="1"
+            AutomationProperties.AutomationId="Requests.Notice"
+            IsClosable="False"
+            IsOpen="True"
+            Severity="Informational" />
+
+        <Grid Grid.Row="2" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBox
+                x:Name="FilterBox"
+                Grid.Column="0"
+                Width="320"
+                AutomationProperties.AutomationId="Requests.Filter"
+                TextChanged="OnFilterChanged" />
+            <TextBlock
+                x:Name="CountText"
+                Grid.Column="1"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Center"
+                AutomationProperties.AutomationId="Requests.Count"
+                AutomationProperties.LiveSetting="Polite"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Style="{StaticResource CaptionTextBlockStyle}" />
+        </Grid>
+
+        <!-- The header's padding is the list item's own, so that the columns line up. -->
+        <Grid
+            Grid.Row="3"
+            Padding="16,0,12,8"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+            BorderThickness="0,0,0,1"
+            ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="64" />
+                <ColumnDefinition Width="72" />
+                <ColumnDefinition Width="56" />
+                <ColumnDefinition Width="200" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="64" />
+                <ColumnDefinition Width="80" />
+                <ColumnDefinition Width="80" />
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="SeqHeader" Grid.Column="0" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" />
+            <TextBlock x:Name="MethodHeader" Grid.Column="1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" />
+            <TextBlock x:Name="StatusHeader" Grid.Column="2" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" />
+            <TextBlock x:Name="HostHeader" Grid.Column="3" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" />
+            <TextBlock x:Name="PathHeader" Grid.Column="4" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" />
+            <TextBlock x:Name="TypeHeader" Grid.Column="5" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" />
+            <TextBlock x:Name="SizeHeader" Grid.Column="6" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" />
+            <TextBlock x:Name="DurationHeader" Grid.Column="7" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" />
+        </Grid>
+
+        <ListView
+            x:Name="Table"
+            Grid.Row="4"
+            AutomationProperties.AutomationId="Requests.Table"
+            ContainerContentChanging="OnContainerContentChanging"
+            SelectionMode="Single"
+            ShowsScrollingPlaceholders="False">
+            <ListView.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <!-- Rows kept ready beyond the viewport, in viewport heights, split above and below. -->
+                    <ItemsStackPanel CacheLength="2" />
+                </ItemsPanelTemplate>
+            </ListView.ItemsPanel>
+            <ListView.ItemContainerStyle>
+                <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
+                    <Setter Property="MinHeight" Value="32" />
+                    <Setter Property="Height" Value="32" />
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="p:RequestRow">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="64" />
+                            <ColumnDefinition Width="72" />
+                            <ColumnDefinition Width="56" />
+                            <ColumnDefinition Width="200" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="64" />
+                            <ColumnDefinition Width="80" />
+                            <ColumnDefinition Width="80" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind SeqText}" />
+                        <TextBlock Grid.Column="1" VerticalAlignment="Center" Text="{x:Bind Method}" />
+                        <TextBlock Grid.Column="2" VerticalAlignment="Center" Text="{x:Bind StatusText}" />
+                        <TextBlock Grid.Column="3" VerticalAlignment="Center" Text="{x:Bind Host}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="4" VerticalAlignment="Center" Text="{x:Bind Path}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="5" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Type}" />
+                        <TextBlock Grid.Column="6" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind SizeText}" />
+                        <TextBlock Grid.Column="7" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind DurationText}" />
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <TextBlock
+            x:Name="Empty"
+            Grid.Row="4"
+            Margin="0,48,0,0"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Top"
+            AutomationProperties.AutomationId="Requests.Empty"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Style="{StaticResource BodyTextBlockStyle}"
+            Visibility="Collapsed" />
+    </Grid>
+</Page>

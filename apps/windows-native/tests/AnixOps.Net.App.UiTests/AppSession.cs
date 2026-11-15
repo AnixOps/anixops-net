@@ -142,6 +142,39 @@ public sealed class AppSession : IDisposable
         return path;
     }
 
+    /// <summary>Types into a text box the way assistive technology does.</summary>
+    public void SetText(string automationId, string text)
+    {
+        var box = Find(automationId);
+        if (!box.TryGetCurrentPattern(ValuePattern.Pattern, out var value))
+        {
+            throw new InvalidOperationException($"'{automationId}' takes no text");
+        }
+        ((ValuePattern)value).SetValue(text);
+    }
+
+    /// <summary>Waits for the app to exit by itself and gives its exit code.</summary>
+    public int WaitForExit(TimeSpan patience)
+    {
+        if (!process.WaitForExit((int)patience.TotalMilliseconds))
+        {
+            throw new TimeoutException($"the app was still running after {patience.TotalSeconds:0} s");
+        }
+        return process.ExitCode;
+    }
+
+    /// <summary>The directory for screenshots and other things worth keeping from a run, or null.</summary>
+    public static string? KeepDirectory()
+    {
+        var directory = Environment.GetEnvironmentVariable(ScreenshotsVariable);
+        if (string.IsNullOrEmpty(directory))
+        {
+            return null;
+        }
+        Directory.CreateDirectory(directory);
+        return directory;
+    }
+
     public void Dispose() => Stop(process);
 
     private static void Stop(Process process)
