@@ -20,6 +20,7 @@ pub mod capture;
 pub mod nodes;
 pub mod overview;
 pub mod proxies;
+pub mod subscriptions;
 
 use serde_json::{json, Value};
 
@@ -113,6 +114,10 @@ pub fn invoke(command: &str, args: &Value) -> Option<Result<Value, String>> {
             args.get("delays").unwrap_or(&Value::Null),
             text(args, "query"),
         ),
+        "subscriptions" => subscriptions::subscriptions(
+            rows(args, "subscriptions"),
+            args.get("now").and_then(Value::as_u64).unwrap_or(0),
+        ),
         "overview" => overview::overview(
             args.get("snapshot").unwrap_or(&Value::Null),
             rows(args, "nodes"),
@@ -162,6 +167,7 @@ mod tests {
             "delay_tone",
             "overview",
             "proxies",
+            "subscriptions",
         ] {
             let command = format!("{PREFIX}{name}");
             assert!(

@@ -891,6 +891,22 @@ fn handler(name: &str) -> Option<Handler> {
                 .count();
             Ok(serde_json::json!({ "tested": results.len(), "answered": answered }))
         },
+        // The subscriptions as the proxies page lists them: what each one's row says.
+        "subscriptions" => |client, _| {
+            let subscriptions: Vec<Value> = client
+                .backend()
+                .subscriptions()
+                .into_iter()
+                .map(json)
+                .collect::<Result<_, _>>()?;
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |since| since.as_secs());
+            Ok(client_view::subscriptions::subscriptions(
+                &subscriptions,
+                now,
+            ))
+        },
         "list_native_groups" => |client, _| json(client.backend().groups()),
         "list_subscriptions" => |client, _| json(client.backend().subscriptions()),
         "connect" | "restart_service" => |client, _| json(client.connect_through_tunnel()?),
@@ -1751,6 +1767,12 @@ mod tests {
                 serde_json::json!({ "total": 0, "shown": 0, "sections": [] })
             );
         }
+        assert_eq!(
+            client
+                .invoke("subscriptions", serde_json::json!({}))
+                .unwrap(),
+            serde_json::json!({ "subscriptions": [] })
+        );
         assert_eq!(
             client
                 .invoke("test_proxies", serde_json::json!({}))

@@ -152,6 +152,13 @@ pub struct NodeSummary {
     pub group: Option<String>,
     /// A node of the selected subscription, which can be edited and removed (`node_edits`).
     pub editable: bool,
+    /// The id of the subscription the node comes from.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// The node came from share links pasted into the client, not from a subscription with a name of its
+    /// own: `group` is then [`PASTED_LOCATION`], which a window replaces by its own wording.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub pasted: bool,
 }
 
 /// A policy group in the interface's `NativeGroupSummary` shape.
@@ -191,6 +198,9 @@ pub struct SubscriptionSummary {
     pub expire: Option<u64>,
     pub update_interval_hours: u32,
     pub refreshable: bool,
+    /// Share links pasted into the client, under no name of their own: `name` is then
+    /// [`PASTED_LOCATION`], which a window replaces by its own wording.
+    pub pasted: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -203,6 +213,16 @@ pub struct OperationResult {
 pub struct MyRules {
     pub text: String,
     pub count: usize,
+}
+
+/// Whether `source` is share links pasted into the client that the user gave no name.
+fn is_pasted(source: &SavedSource) -> bool {
+    source.location == PASTED_LOCATION
+        && source
+            .name
+            .as_deref()
+            .and_then(subscription_meta::clean_name)
+            .is_none()
 }
 
 fn done(message: impl Into<String>) -> Result<OperationResult, String> {
@@ -710,12 +730,17 @@ impl Backend {
     /// The selected source's nodes, then every other source's, each with its subscription's name.
     pub fn nodes(&self) -> Vec<NodeSummary> {
         let selected = self.current_node_id();
-        let group = self.state.selected_source().map(|source| {
+        let own_source = self.state.selected_source();
+        let group = own_source.map(|source| {
             subscription_meta::display_name(source.name.as_deref(), &source.location)
         });
+        let own_id = own_source.map(|source| source.id.clone());
+        let own_pasted = own_source.is_some_and(is_pasted);
         let summary = |id: String,
                        node: &NodeDescriptor,
                        group: &Option<String>,
+                       source: &Option<String>,
+                       pasted: bool,
                        editable: bool| NodeSummary {
             selected: selected.as_deref() == Some(id.as_str()),
             id,
@@ -723,18 +748,36 @@ impl Backend {
             protocol: engine::protocol_name(&node.protocol),
             group: group.clone(),
             editable,
+            source: source.clone(),
+            pasted,
         };
         let own = self
             .nodes
             .iter()
             .filter(|node| engine::is_supported(node))
-            .map(|node| summary(node.id.clone(), node, &group, true));
+            .map(|node| summary(node.id.clone(), node, &group, &own_id, own_pasted, true));
         let others = self.others.iter().flat_map(|other| {
             let group = Some(other.name.clone());
+            let source = Some(other.id.clone());
+            let pasted = self
+                .state
+                .sources
+                .iter()
+                .find(|source| source.id == other.id)
+                .is_some_and(is_pasted);
             other
                 .nodes
                 .iter()
-                .map(move |node| summary(other.outbound_id(&node.id), node, &group, false))
+                .map(|node| {
+                    summary(
+                        other.outbound_id(&node.id),
+                        node,
+                        &group,
+                        &source,
+                        pasted,
+                        false,
+                    )
+                })
                 .collect::<Vec<_>>()
         });
         own.chain(others).collect()
@@ -1023,6 +1066,7 @@ impl Backend {
                 expire: source.user_info.and_then(|info| info.expire),
                 update_interval_hours: source.effective_interval_hours(),
                 refreshable: source.refreshable(),
+                pasted: is_pasted(source),
             })
             .collect()
     }
