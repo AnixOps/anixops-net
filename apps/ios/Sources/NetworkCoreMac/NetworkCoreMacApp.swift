@@ -81,7 +81,7 @@ struct NetworkCoreMacApp: App {
                 }
         }
         .defaultSize(width: 760, height: 560)
-        .keyboardShortcut("d", modifiers: [.command, .option])
+        .keyboardShortcut(AppShortcut.dashboard.keyboardShortcut)
 
         MenuBarExtra {
             MenuBarContent(tunnel: tunnel, state: state)
@@ -100,6 +100,9 @@ final class MacAppState: ObservableObject {
 
     @Published var section: MacSection? = .home
     @Published var importing = false
+    /// The command palette (⌘K) lies over the main window; the shortcut list (⌘/) is a sheet of it.
+    @Published var showsPalette = false
+    @Published var showsShortcuts = false
     /// The one dashboard sampler every window shows (the overview page and the dashboard window).
     let dashboard = DashboardModel()
 
@@ -129,6 +132,8 @@ final class MacAppState: ObservableObject {
         if let name = UserDefaults.standard.string(forKey: "AnixOpsSection"), let section = MacSection(rawValue: name) {
             self.section = section
         }
+        // … and the command palette over it: `-AnixOpsPalette YES`.
+        showsPalette = UserDefaults.standard.bool(forKey: "AnixOpsPalette")
         #endif
     }
 }
@@ -250,28 +255,85 @@ extension TunnelController {
     }
 }
 
-/// The app menu additions: import, connect or disconnect, and Settings opening the Settings section.
+/// The app menu additions: import, connect or disconnect, Settings opening the Settings section, the pages, the
+/// command palette and the request list's own commands. Every shortcut comes from `AppShortcut`, which the
+/// shortcut list also shows (AnixOps Design `guidelines/keyboard.md` K1, K9, K17).
 struct MacCommands: Commands {
     var tunnel: TunnelController
     @ObservedObject var state: MacAppState
+    /// Set by the request list while it is on screen (`CaptureRequestsView`).
+    @FocusedValue(\.requestListCommands) private var requests
+
+    private var pauseTitle: LocalizedStringKey {
+        requests?.paused == true ? "继续刷新" : "暂停刷新"
+    }
+
+    private var detailsTitle: LocalizedStringKey {
+        requests?.showsDetails == true ? "隐藏详情" : "显示详情"
+    }
 
     var body: some Commands {
         CommandGroup(replacing: .appSettings) {
             OpenSectionButton(state: state, section: .settings, title: "设置…")
-                .keyboardShortcut(",", modifiers: .command)
+                .keyboardShortcut(AppShortcut.settings.keyboardShortcut)
         }
         CommandGroup(replacing: .newItem) {
             Button("导入节点…") {
                 state.importing = true
             }
-            .keyboardShortcut("i", modifiers: .command)
+            .keyboardShortcut(AppShortcut.importNodes.keyboardShortcut)
+        }
+        CommandGroup(before: .sidebar) {
+            OpenPaletteButton(state: state)
+                .keyboardShortcut(AppShortcut.palette.keyboardShortcut)
+            Divider()
+            Button(pauseTitle) {
+                requests?.togglePause()
+            }
+            .keyboardShortcut(AppShortcut.pauseRequests.keyboardShortcut)
+            .disabled(requests == nil)
+            Button(detailsTitle) {
+                requests?.toggleDetails?()
+            }
+            .keyboardShortcut(AppShortcut.requestDetails.keyboardShortcut)
+            .disabled(requests?.toggleDetails == nil)
+            Divider()
+        }
+        CommandMenu("前往") {
+            let sections = MacSection.sections(for: tunnel.appMode).filter { $0 != .settings }
+            ForEach(Array(sections.enumerated()), id: \.element) { index, section in
+                if let shortcut = AppShortcut.page(index) {
+                    OpenSectionButton(state: state, section: section, title: section.title(in: tunnel.appMode))
+                        .keyboardShortcut(shortcut.keyboardShortcut)
+                }
+            }
         }
         CommandMenu("连接") {
             Button(tunnel.toggleTitle) {
                 tunnel.toggle()
             }
-            .keyboardShortcut("c", modifiers: [.command, .shift])
+            .keyboardShortcut(AppShortcut.toggle.keyboardShortcut)
             .disabled(tunnel.phase == .unconfigured || tunnel.phase == .disconnecting)
+        }
+        CommandGroup(replacing: .help) {
+            Button("键盘快捷键") {
+                state.showsShortcuts = true
+            }
+            .keyboardShortcut(AppShortcut.shortcuts.keyboardShortcut)
+        }
+    }
+}
+
+/// Opens the command palette over the main window, bringing the window back if it was closed.
+private struct OpenPaletteButton: View {
+    @Environment(\.openWindow) private var openWindow
+    @ObservedObject var state: MacAppState
+
+    var body: some View {
+        Button("命令面板…") {
+            openWindow(id: MacAppState.mainWindowID)
+            NSApp.activate(ignoringOtherApps: true)
+            state.showsPalette.toggle()
         }
     }
 }

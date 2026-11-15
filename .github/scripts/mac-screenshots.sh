@@ -30,17 +30,23 @@ for window in windows {
 SWIFT
 
 shoot() {
-    local section="$1" appearance="$2" mode="${3:-proxy}"
+    # A fourth argument opens the command palette over the page and names the picture after it.
+    local section="$1" appearance="$2" mode="${3:-proxy}" palette="${4:-}"
     local file="${out}/${section}-${appearance}.png"
     if [ "${mode}" != proxy ]; then
         file="${out}/${mode}-${section}-${appearance}.png"
+    fi
+    local show_palette=NO
+    if [ -n "${palette}" ]; then
+        file="${out}/${palette}-${appearance}.png"
+        show_palette=YES
     fi
     local accepted="${terms}"
     if [ "${section}" = terms ]; then
         accepted="none"
     fi
     open -n "${app}" --args -AnixOpsDemo YES -AnixOpsMode "${mode}" -AnixOpsSection "${section}" -appearance "${appearance}" \
-        -AppleLanguages "(${language})" -terms-accepted-version "${accepted}"
+        -AnixOpsPalette "${show_palette}" -AppleLanguages "(${language})" -terms-accepted-version "${accepted}"
     local id=""
     for _ in 1 2 3 4 5 6 7 8 9 10; do
         sleep 2
@@ -76,6 +82,8 @@ shoot activity dark debug
 shoot exit light debug
 shoot settings light debug
 shoot home light choose
+# The command palette (⌘K) over the overview.
+shoot home light proxy palette
 
 rm -f "${finder}"
 ls -l "${out}"
