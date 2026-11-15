@@ -105,15 +105,25 @@ runs:
       run: |
         set -euo pipefail
         readelf="${ANDROID_NDK_LATEST_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+        test -x "${readelf}"
         bad=0
         for so in apps/android-native/app/src/main/jniLibs/arm64-v8a/*.so; do
-          # Every LOAD segment's alignment (last column) must be at least 2**14.
-          while read -r align; do
+          test -f "${so}"
+          # Every LOAD segment's alignment (last column) must be at least 2**14; a library with no LOAD segment
+          # read means the check itself failed.
+          aligns="$("${readelf}" -lW "${so}" | awk '$1 == "LOAD" { print $NF }')"
+          if [ -z "${aligns}" ]; then
+            echo "::error::${so}: no LOAD segments read"
+            bad=1
+            continue
+          fi
+          for align in ${aligns}; do
+            echo "${so}: LOAD align ${align}"
             if [ $((align)) -lt 16384 ]; then
               echo "::error::${so}: LOAD segment aligned to ${align}, Google Play needs 16 KB (0x4000)"
               bad=1
             fi
-          done < <("${readelf}" -lW "${so}" | awk '$1 == "LOAD" { print $NF }')
+          done
         done
         exit "${bad}"
 
