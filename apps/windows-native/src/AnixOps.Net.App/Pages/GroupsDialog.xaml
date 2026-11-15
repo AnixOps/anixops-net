@@ -1,0 +1,133 @@
+<ContentDialog
+    x:Class="AnixOps.Net.App.Pages.GroupsDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:AnixOps.Net.App.Pages"
+    Style="{StaticResource DefaultContentDialogStyle}">
+
+    <!-- The policy groups, one row each. A group the user chooses in opens its members in this same dialog, in
+         place of the list (Windows shows one dialog at a time): the selected member is the one in use, as the
+         selected row of the proxies page is the node in use. "Back" returns to the groups; "close" and Escape
+         close the dialog from either. What a row says is decided in AnixOps.Net.Presentation.Groups; this
+         draws it. -->
+    <Grid Width="480" MinHeight="200">
+        <ListView
+            x:Name="List"
+            MaxHeight="420"
+            AutomationProperties.AutomationId="Groups.List"
+            ContainerContentChanging="OnContainerContentChanging"
+            IsItemClickEnabled="False"
+            SelectionMode="None">
+            <ListView.ItemContainerStyle>
+                <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="Padding" Value="4,0,4,0" />
+                    <!-- The button of a row is reached with Tab. -->
+                    <Setter Property="IsTabStop" Value="False" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="local:GroupLine">
+                    <Grid Padding="0,10,0,10" ColumnSpacing="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel
+                            Grid.Column="0"
+                            Margin="0,0,8,0"
+                            VerticalAlignment="Center"
+                            Spacing="2">
+                            <TextBlock
+                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                Text="{x:Bind Title, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="{x:Bind Details, Mode=OneWay}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Button
+                            Grid.Column="1"
+                            Width="36"
+                            Height="32"
+                            Padding="0"
+                            VerticalAlignment="Center"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            AutomationProperties.AutomationId="Groups.Choose"
+                            AutomationProperties.Name="{x:Bind ChooseSays}"
+                            Click="OnChoose"
+                            ToolTipService.ToolTip="{x:Bind ChooseSays}"
+                            Visibility="{x:Bind CanChoose, Mode=OneWay}">
+                            <FontIcon
+                                FontSize="14"
+                                Glyph="&#xE76C;"
+                                MirroredWhenRightToLeft="True" />
+                        </Button>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <TextBlock
+            x:Name="EmptyText"
+            Margin="0,48,0,0"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Top"
+            AutomationProperties.AutomationId="Groups.Empty"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Style="{StaticResource BodyTextBlockStyle}"
+            TextWrapping="Wrap"
+            Visibility="Collapsed" />
+
+        <!-- The members of the group that was opened. -->
+        <Grid
+            x:Name="Members"
+            RowSpacing="8"
+            Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid Grid.Row="0" ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button
+                    x:Name="BackButton"
+                    Grid.Column="0"
+                    Width="36"
+                    Height="32"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    AutomationProperties.AutomationId="Groups.Back"
+                    Click="OnBack">
+                    <FontIcon
+                        FontSize="14"
+                        Glyph="&#xE72B;"
+                        MirroredWhenRightToLeft="True" />
+                </Button>
+                <TextBlock
+                    x:Name="GroupText"
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="Groups.Group"
+                    AutomationProperties.HeadingLevel="Level2"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    TextTrimming="CharacterEllipsis" />
+            </Grid>
+            <ListView
+                x:Name="MemberList"
+                Grid.Row="1"
+                MaxHeight="380"
+                AutomationProperties.AutomationId="Groups.Members"
+                SelectionChanged="OnMemberChosen"
+                SelectionMode="Single" />
+        </Grid>
+    </Grid>
+</ContentDialog>

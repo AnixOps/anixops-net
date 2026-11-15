@@ -13,7 +13,7 @@ namespace AnixOps.Net.App.UiTests;
 
 /// <summary>
 /// The proxies page: it imports links, lists the core's nodes, searches them, switches and tests them, and
-/// its list of subscriptions updates, renames and removes one.
+/// its list of subscriptions updates, renames and removes one; its policy groups choose a member.
 /// </summary>
 public sealed class ProxiesTests
 {
@@ -33,12 +33,53 @@ public sealed class ProxiesTests
     private const string NewName = "Subscriptions.Name";
     private const string Confirm = "Subscriptions.Confirm";
     private const string Cancel = "Subscriptions.Cancel";
+    private const string OpenGroups = "Proxies.Groups";
+    private const string GroupList = "Groups.List";
+    private const string Choose = "Groups.Choose";
+    private const string GroupName = "Groups.Group";
+    private const string MemberList = "Groups.Members";
+    private const string Back = "Groups.Back";
 
     // Addresses kept for documentation (RFC 5737): nothing answers there, so a delay test ends in "no answer".
     private const string FirstNode = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@203.0.113.9:11111#Test";
     private const string ThirdNode = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@203.0.113.20:11111#Alpha";
     private const string FourthNode = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@203.0.113.21:11111#Beta";
     private const string SecondNode = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@203.0.113.10:11111#Second";
+
+    // A subscription with rules and policy groups.
+    private const string Routed = """
+        proxies:
+          - name: HK
+            type: ss
+            server: 203.0.113.30
+            port: 11111
+            cipher: aes-256-gcm
+            password: f43c0eee-13b9-4f07-bec9-d4b744141503
+          - name: JP
+            type: ss
+            server: 203.0.113.31
+            port: 11112
+            cipher: aes-256-gcm
+            password: f43c0eee-13b9-4f07-bec9-d4b744141504
+        proxy-groups:
+          - name: Proxy
+            type: select
+            proxies:
+              - Auto
+              - HK
+              - DIRECT
+          - name: Auto
+            type: url-test
+            proxies:
+              - JP
+              - HK
+            url: http://www.gstatic.com/generate_204
+            interval: 300
+        rules:
+          - DOMAIN-SUFFIX,example.org,DIRECT
+          - MATCH,Proxy
+
+        """;
 
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(90);
 
@@ -410,5 +451,155 @@ public sealed class ProxiesTests
         // Its nodes went with it: the pasted link's node is the one left.
         var nodes = await NodesAsync(second);
         Assert.Equal(new[] { "Test" }, nodes.Select(node => node.Label));
+    }
+
+    /// <summary>The element with this automation id if it is on screen now, without waiting for it.</summary>
+    private static AutomationElement? Present(AppSession app, string automationId) =>
+        app.Window.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, automationId));
+
+    /// <summary>The rows of the list with this automation id that exist as controls, in order; none when the list is not there.</summary>
+    private static List<AutomationElement> RowsOf(AppSession app, string list)
+    {
+        try
+        {
+            return Present(app, list) is { } found
+                ? found
+                    .FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem))
+                    .Cast<AutomationElement>()
+                    .ToList()
+                : [];
+        }
+        catch (ElementNotAvailableException)
+        {
+            // The list changed while it was read.
+            return [];
+        }
+    }
+
+    private static AutomationElement? RowOfGroup(AppSession app, string tag)
+    {
+        try
+        {
+            return RowsOf(app, GroupList).FirstOrDefault(item => item.Current.Name == tag);
+        }
+        catch (ElementNotAvailableException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The members on screen as (name, selected), in order.</summary>
+    private static List<(string Name, bool Selected)> Members(AppSession app)
+    {
+        try
+        {
+            return RowsOf(app, MemberList)
+                .Select(item => (
+                    item.Current.Name,
+                    ((SelectionItemPattern)item.GetCurrentPattern(SelectionItemPattern.Pattern)).Current.IsSelected))
+                .ToList();
+        }
+        catch (Exception problem) when (problem is ElementNotAvailableException or InvalidOperationException)
+        {
+            return [];
+        }
+    }
+
+    [Theory]
+    [InlineData(Strings.Chinese, "light")]
+    [InlineData(Strings.English, "dark")]
+    public async Task PolicyGroupsAreListedAndAMemberIsChosenThroughTheService(string language, string theme)
+    {
+        if (!ServiceProcess.Available())
+        {
+            return;
+        }
+        var strings = Strings.For(language);
+        using var service = ServiceProcess.Start();
+        using var app = AppSession.Start(
+            "--language", language, "--theme", theme, "--page", Sections.Proxies, "--pipe", service.PipeName);
+        app.WaitForName(Notice, strings["proxies.empty"]);
+        WaitForEnabled(app, OpenSubscriptions);
+        // Without a subscription that has groups there is nothing to open.
+        Assert.Null(Present(app, OpenGroups));
+        await using var second = await SecondWindow.JoinAsync(service.PipeName);
+
+        async Task<IReadOnlyList<Group>> ListedAsync() => Groups.Read(await second.AskAsync(Groups.Command));
+
+        Assert.Empty(await ListedAsync());
+        using var server = new SubscriptionServer(_ => Routed);
+        await second.AskAsync("import_subscription", JsonSerializer.Serialize(new { location = server.Link }));
+        var mine = Assert.Single(Subscriptions.Read(await second.AskAsync(Subscriptions.Command)));
+        var groups = await ListedAsync();
+        var proxy = Assert.Single(groups, group => group.Tag == "Proxy");
+        Assert.Equal(GroupKind.Select, proxy.Kind);
+        Assert.True(proxy.Choosable);
+        Assert.Equal("Auto", proxy.Selected is { } inUse ? proxy.Members[inUse].Label : null);
+        var automatic = Assert.Single(groups, group => group.Tag == "Auto");
+        Assert.Equal(GroupKind.Auto, automatic.Kind);
+        Assert.False(automatic.Choosable);
+
+        // The groups: each row says how the group chooses and what it uses.
+        app.WaitForName(OpenGroups, strings["proxies.groups"]);
+        Press(app, OpenGroups);
+        Assert.Equal(strings["proxies.groups"], app.Find(GroupList).Current.Name);
+        var manual = strings["groups.kind.select"] + " · " + strings.Format("groups.using", "Auto");
+        Wait(
+            () => Says(RowOfGroup(app, "Proxy")).Contains(manual),
+            () => $"the row of 'Proxy' says [{string.Join(" | ", Says(RowOfGroup(app, "Proxy")))}], expected '{manual}'");
+        Wait(
+            () => Says(RowOfGroup(app, "Auto")).Any(line => line.StartsWith(strings["groups.kind.auto"], StringComparison.Ordinal)),
+            () => $"the row of 'Auto' says [{string.Join(" | ", Says(RowOfGroup(app, "Auto")))}]");
+        // Only a group the user chooses in opens its members.
+        Assert.Null(ButtonIn(RowOfGroup(app, "Auto")!, Choose));
+        var open = ButtonIn(RowOfGroup(app, "Proxy")!, Choose);
+        Assert.True(open is not null, "the group 'Proxy' does not offer to choose a member");
+        Assert.Equal(strings["groups.choose"], open!.Current.Name);
+
+        // The members: the selected one is the member in use, and selecting another uses that one.
+        Assert.True(open.TryGetCurrentPattern(InvokePattern.Pattern, out var invoke), "the members of 'Proxy' cannot be opened");
+        ((InvokePattern)invoke).Invoke();
+        app.WaitForName(GroupName, "Proxy");
+        Assert.Equal("Proxy", app.Find(MemberList).Current.Name);
+        Assert.Equal(strings["action.back"], app.Find(Back).Current.Name);
+        var expected = proxy.Members.Select(member => (member.Label, member.Label == "Auto")).ToList();
+        Wait(
+            () => Members(app).SequenceEqual(expected),
+            () => $"the members are [{string.Join(", ", Members(app))}], expected [{string.Join(", ", expected)}]");
+        var target = RowsOf(app, MemberList).First(item => item.Current.Name == "HK");
+        Assert.True(target.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var selection), "a member cannot be selected");
+        ((SelectionItemPattern)selection).Select();
+        var deadline = DateTime.UtcNow + Patience;
+        while (true)
+        {
+            var now = (await ListedAsync()).FirstOrDefault(group => group.Tag == "Proxy");
+            var label = now?.Selected is { } at ? now.Members[at].Label : null;
+            if (label == "HK")
+            {
+                break;
+            }
+            Assert.True(DateTime.UtcNow < deadline, $"the group 'Proxy' uses '{label}' at the core, expected 'HK'");
+            await Task.Delay(100);
+        }
+        var chosen = proxy.Members.Select(member => (member.Label, member.Label == "HK")).ToList();
+        Wait(
+            () => Members(app).SequenceEqual(chosen),
+            () => $"the members are [{string.Join(", ", Members(app))}], expected [{string.Join(", ", chosen)}]");
+        app.Screenshot($"proxies-group-members-{language}-{theme}");
+
+        // Back at the groups, the row says what the group uses now.
+        Press(app, Back);
+        var uses = strings["groups.kind.select"] + " · " + strings.Format("groups.using", "HK");
+        Wait(
+            () => Says(RowOfGroup(app, "Proxy")).Contains(uses),
+            () => $"the row of 'Proxy' says [{string.Join(" | ", Says(RowOfGroup(app, "Proxy")))}], expected '{uses}'");
+        app.Screenshot($"proxies-groups-{language}-{theme}");
+
+        // Without the subscription there are no groups: the dialog goes, and the page's button with it.
+        await second.AskAsync("remove_subscription", JsonSerializer.Serialize(new { id = mine.Id }));
+        Assert.Empty(await ListedAsync());
+        Wait(
+            () => Present(app, GroupList) is null && Present(app, OpenGroups) is null,
+            () => "the policy groups are still offered after their subscription was removed");
     }
 }

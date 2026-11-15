@@ -4194,5 +4194,164 @@
     "capture"
    ]
   }
+ },
+ {
+  "command": "view.groups",
+  "args": {
+   "groups": [
+    {
+     "tag": "Proxy",
+     "groupType": "selector",
+     "selected": "n2",
+     "outbounds": [
+      "Auto",
+      "n1",
+      "n2",
+      "DIRECT"
+     ],
+     "outboundLabels": [
+      "Auto",
+      "Tokyo",
+      "Osaka",
+      "DIRECT"
+     ]
+    },
+    {
+     "tag": "Auto",
+     "groupType": "urltest",
+     "outbounds": [
+      "n1",
+      "n2"
+     ],
+     "outboundLabels": [
+      "Tokyo",
+      "Osaka"
+     ]
+    },
+    {
+     "tag": "Backup",
+     "groupType": "fallback",
+     "selected": "n1",
+     "outbounds": [
+      "n1",
+      "n2"
+     ],
+     "outboundLabels": [
+      "Tokyo"
+     ]
+    }
+   ]
+  },
+  "answer": {
+   "groups": [
+    {
+     "tag": "Proxy",
+     "kind": "select",
+     "choosable": true,
+     "members": [
+      {
+       "id": "Auto",
+       "label": "Auto",
+       "selected": false
+      },
+      {
+       "id": "n1",
+       "label": "Tokyo",
+       "selected": false
+      },
+      {
+       "id": "n2",
+       "label": "Osaka",
+       "selected": true
+      },
+      {
+       "id": "DIRECT",
+       "label": "DIRECT",
+       "selected": false
+      }
+     ],
+     "selected": "n2",
+     "selectedLabel": "Osaka"
+    },
+    {
+     "tag": "Auto",
+     "kind": "auto",
+     "choosable": false,
+     "members": [
+      {
+       "id": "n1",
+       "label": "Tokyo",
+       "selected": false
+      },
+      {
+       "id": "n2",
+       "label": "Osaka",
+       "selected": false
+      }
+     ],
+     "selected": null,
+     "selectedLabel": null
+    },
+    {
+     "tag": "Backup",
+     "kind": "fallback",
+     "choosable": false,
+     "members": [
+      {
+       "id": "n1",
+       "label": "Tokyo",
+       "selected": true
+      },
+      {
+       "id": "n2",
+       "label": "n2",
+       "selected": false
+      }
+     ],
+     "selected": "n1",
+     "selectedLabel": "Tokyo"
+    }
+   ]
+  }
+ },
+ {
+  "command": "view.groups",
+  "args": {
+   "groups": [
+    {
+     "tag": "Old",
+     "groupType": "relay",
+     "selected": "gone",
+     "outbounds": [
+      "n1"
+     ]
+    }
+   ]
+  },
+  "answer": {
+   "groups": [
+    {
+     "tag": "Old",
+     "kind": "other",
+     "choosable": false,
+     "members": [
+      {
+       "id": "n1",
+       "label": "n1",
+       "selected": false
+      }
+     ],
+     "selected": null,
+     "selectedLabel": null
+    }
+   ]
+  }
+ },
+ {
+  "command": "view.groups",
+  "args": {},
+  "answer": {
+   "groups": []
+  }
  }
 ]

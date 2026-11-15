@@ -20,6 +20,7 @@ use gtk::{gdk, gio, glib};
 use relm4::{ComponentParts, ComponentSender, RelmApp, SimpleComponent};
 use serde_json::json;
 
+use crate::groups::{self, Choice, Group};
 use crate::launch::{Appearance, Launch};
 use crate::overview::{self, Overview, Pending, Press};
 use crate::overview_page::OverviewPage;
@@ -113,6 +114,12 @@ struct Shell {
     subscribing: Arc<AtomicBool>,
     /// The subscriptions the daemon is still downloading, renaming or removing.
     changing: Vec<String>,
+    /// The policy groups as the daemon last described them; `None` while it does not say.
+    groups: Option<Vec<Group>>,
+    /// A question about the policy groups is out; the next one waits for its answer.
+    grouping: Arc<AtomicBool>,
+    /// The policy groups the daemon is still choosing a member for.
+    choosing: Vec<String>,
     /// How many subscriptions the daemon took in for this window; the link's box empties at each.
     imports: u32,
     /// Counts the changes of the link to the daemon, so that the answer to something asked of a daemon
@@ -144,6 +151,11 @@ enum Show {
     /// The daemon finished what was asked of a subscription, or could not; the number as in `Done`. With
     /// it, the subscriptions as they are after that, if the daemon said.
     Changed(u32, Change, Result<(), String>, Option<Vec<Subscription>>),
+    /// The daemon's policy groups.
+    Groups(Result<Vec<Group>, String>),
+    /// The daemon uses the member chosen for a policy group, or could not; the number as in `Done`. With
+    /// it, the groups as they are after that, if the daemon said.
+    Chose(u32, Choice, Result<(), String>, Option<Vec<Group>>),
 }
 
 struct ShellWidgets {
@@ -208,6 +220,7 @@ impl Shell {
             return;
         }
         self.list_subscriptions(sender);
+        self.list_groups(sender);
         let link = Arc::clone(&self.link);
         let listing = Arc::clone(&self.listing);
         let input = sender.input_sender().clone();
@@ -235,6 +248,42 @@ impl Shell {
                 .map(|answer| subscriptions::read(&answer));
             subscribing.store(false, Ordering::SeqCst);
             let _ = input.send(Show::Subscriptions(answer));
+        });
+    }
+
+    /// Asks the daemon for the policy groups on another thread, unless an earlier question is still out.
+    fn list_groups(&self, sender: &ComponentSender<Self>) {
+        if self.grouping.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let link = Arc::clone(&self.link);
+        let grouping = Arc::clone(&self.grouping);
+        let input = sender.input_sender().clone();
+        thread::spawn(move || {
+            let answer = link
+                .ask(groups::COMMAND, json!({}), ASK_PATIENCE)
+                .map(|answer| groups::read(&answer));
+            grouping.store(false, Ordering::SeqCst);
+            let _ = input.send(Show::Groups(answer));
+        });
+    }
+
+    /// Tells the daemon which member the user chose for a policy group, on another thread.
+    fn choose(&mut self, choice: Choice, sender: &ComponentSender<Self>) {
+        self.choosing.push(choice.group.clone());
+        self.list_failure = None;
+        let link = Arc::clone(&self.link);
+        let input = sender.input_sender().clone();
+        let era = self.era;
+        thread::spawn(move || {
+            let (command, args) = choice.ask();
+            let answer = link.ask(command, args, PRESS_PATIENCE).map(|_| ());
+            // What the row says after this, before a member can be chosen in it again.
+            let after = link
+                .ask(groups::COMMAND, json!({}), ASK_PATIENCE)
+                .map(|answer| groups::read(&answer))
+                .ok();
+            let _ = input.send(Show::Chose(era, choice, answer, after));
         });
     }
 
@@ -417,6 +466,9 @@ impl SimpleComponent for Shell {
             subscriptions: None,
             subscribing: Arc::new(AtomicBool::new(false)),
             changing: Vec::new(),
+            groups: None,
+            grouping: Arc::new(AtomicBool::new(false)),
+            choosing: Vec::new(),
             imports: 0,
             era: 0,
         };
@@ -561,6 +613,9 @@ impl SimpleComponent for Shell {
         if launch.subscriptions {
             widgets.proxies.open_subscriptions();
         }
+        if launch.groups {
+            widgets.proxies.open_groups();
+        }
         if let Some(file) = launch.screenshot {
             // The page the screenshot is of, not the sidebar, when only one of them fits.
             split.set_show_content(true);
@@ -602,6 +657,8 @@ impl SimpleComponent for Shell {
                 self.busy = Busy::default();
                 self.subscriptions = None;
                 self.changing.clear();
+                self.groups = None;
+                self.choosing.clear();
                 self.era = self.era.wrapping_add(1);
                 self.refresh(&sender);
                 self.list(&sender);
@@ -654,6 +711,12 @@ impl SimpleComponent for Shell {
                     self.change(change, &sender);
                 }
             }
+            Show::Ask(Asked::Choose(choice)) => {
+                // One member at a time is chosen for a group.
+                if self.core_answers() && !self.choosing.contains(&choice.group) {
+                    self.choose(choice, &sender);
+                }
+            }
             Show::Ask(asked) => {
                 let shown = self.proxies_shown();
                 let action = match asked {
@@ -689,6 +752,20 @@ impl SimpleComponent for Shell {
             // An answer that did not come leaves what was known; the question goes out again.
             Show::Subscriptions(Err(_)) => {}
             Show::Subscriptions(Ok(subscriptions)) => self.subscriptions = Some(subscriptions),
+            Show::Groups(_) if !self.core_answers() => {}
+            Show::Groups(Err(_)) => {}
+            Show::Groups(Ok(groups)) => self.groups = Some(groups),
+            Show::Chose(era, ..) if era != self.era => {}
+            Show::Chose(_, choice, answer, after) => {
+                self.choosing.retain(|group| *group != choice.group);
+                if after.is_some() {
+                    self.groups = after;
+                }
+                self.list_failure = answer.err();
+                // The nodes and the overview's node in use, as they are after this.
+                self.list(&sender);
+                self.refresh(&sender);
+            }
             Show::Changed(era, ..) if era != self.era => {}
             Show::Changed(_, change, answer, after) => {
                 self.changing.retain(|id| id != change.id());
@@ -723,10 +800,15 @@ impl SimpleComponent for Shell {
         let subscriptions = self.subscriptions.as_ref().map(|subscriptions| {
             subscriptions::shown(self.language, subscriptions, &self.changing)
         });
+        let groups = self
+            .groups
+            .as_ref()
+            .map(|groups| groups::shown(self.language, groups, &self.choosing));
         widgets.proxies.show(
             &self.proxies_shown(),
             self.busy.switching,
             subscriptions.as_deref(),
+            groups.as_deref(),
         );
         if widgets.emptied != self.imports {
             widgets.proxies.clear_link();

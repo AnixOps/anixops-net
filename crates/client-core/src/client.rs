@@ -907,6 +907,16 @@ fn handler(name: &str) -> Option<Handler> {
                 now,
             ))
         },
+        // The policy groups as the proxies page lists them: what each one's row says and offers.
+        "groups" => |client, _| {
+            let groups: Vec<Value> = client
+                .backend()
+                .groups()
+                .into_iter()
+                .map(json)
+                .collect::<Result<_, _>>()?;
+            Ok(client_view::groups::groups(&groups))
+        },
         "list_native_groups" => |client, _| json(client.backend().groups()),
         "list_subscriptions" => |client, _| json(client.backend().subscriptions()),
         "connect" | "restart_service" => |client, _| json(client.connect_through_tunnel()?),
@@ -1772,6 +1782,10 @@ mod tests {
                 .invoke("subscriptions", serde_json::json!({}))
                 .unwrap(),
             serde_json::json!({ "subscriptions": [] })
+        );
+        assert_eq!(
+            client.invoke("groups", serde_json::json!({})).unwrap(),
+            serde_json::json!({ "groups": [] })
         );
         assert_eq!(
             client

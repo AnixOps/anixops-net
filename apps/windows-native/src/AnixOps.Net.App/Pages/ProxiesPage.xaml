@@ -78,6 +78,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock
                 x:Name="CountText"
@@ -87,10 +88,18 @@
                 AutomationProperties.LiveSetting="Polite"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 Style="{StaticResource CaptionTextBlockStyle}" />
+            <!-- Opens the policy groups of the subscription in use. Most subscriptions have none; the button is
+                 only there when there are some. -->
+            <HyperlinkButton
+                x:Name="GroupsButton"
+                Grid.Column="1"
+                AutomationProperties.AutomationId="Proxies.Groups"
+                Click="OnGroups"
+                Visibility="Collapsed" />
             <!-- Opens the list of subscriptions, where one is updated, renamed or removed. -->
             <HyperlinkButton
                 x:Name="SubscriptionsButton"
-                Grid.Column="1"
+                Grid.Column="2"
                 AutomationProperties.AutomationId="Proxies.Subscriptions"
                 Click="OnSubscriptions"
                 IsEnabled="False" />
