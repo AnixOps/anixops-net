@@ -246,6 +246,13 @@ fun AnixApp(
             saveSession = requests::saveSession,
             loadSession = requests::loadSession,
             deleteSession = requests::deleteSession,
+            setShowConnections = requests::setShowConnections,
+            openConnection = requests::openConnection,
+            closeConnection = requests::closeConnection,
+            openExchange = requests::openExchange,
+            openConnectionOf = requests::openConnectionOf,
+            decryptConnectionHost = requests::decryptConnectionHost,
+            exportConnection = requests::exportConnection,
         ),
         proxiesState = proxiesState,
         proxies = ProxiesActions(
@@ -575,6 +582,7 @@ fun AnixScaffold(
                         requestsState.sessions != null -> BackTo(requests.closeSessions)
                         requestsState.replay != null -> BackTo(requests.closeReplay)
                         requestsState.opened != null -> BackTo(requests.close)
+                        requestsState.connection != null -> BackTo(requests.closeConnection)
                     }
                     RequestsScreen(
                         state,

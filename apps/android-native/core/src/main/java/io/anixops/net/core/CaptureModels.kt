@@ -176,3 +176,50 @@ data class DecryptSetup(val steps: List<String> = emptyList())
 /** The answer to deleting a session. */
 @Serializable
 data class DeletedSession(val deleted: Boolean = false)
+
+/** One direction of a captured connection: bytes seen, bytes kept, and whether keeping stopped partway. */
+@Serializable
+data class CaptureDirection(
+    val seen: Long = 0,
+    val captured: Long = 0,
+    val truncated: Boolean = false,
+)
+
+/** One read or write of a captured connection; [dir] is `upload` or `download`. */
+@Serializable
+data class CaptureChunk(
+    val dir: String = "",
+    @SerialName("at_ms") val atMs: Long = 0,
+    @SerialName("data_base64") val dataBase64: String = "",
+)
+
+/** What capture holds of one connection (`capture_connection`): its bytes and its decrypted requests. */
+@Serializable
+data class CaptureConnection(
+    val id: Long = 0,
+    val network: String = "",
+    val host: String? = null,
+    val destination: String = "",
+    @SerialName("started_at_ms") val startedAtMs: Long = 0,
+    @SerialName("ended_at_ms") val endedAtMs: Long? = null,
+    val decrypted: Boolean = false,
+    val upload: CaptureDirection = CaptureDirection(),
+    val download: CaptureDirection = CaptureDirection(),
+    val chunks: List<CaptureChunk> = emptyList(),
+    val http: List<CaptureExchange> = emptyList(),
+)
+
+/** The answer to `capture_connection`: null once capture no longer holds the connection. */
+@Serializable
+data class CaptureConnectionAnswer(val capture: CaptureConnection? = null)
+
+/**
+ * A connection's host against the decrypt list (`view.decrypt_hosts`): whether decryption can be turned on for it,
+ * the name the list would keep, and whether an entry already covers it.
+ */
+@Serializable
+data class DecryptHost(
+    val decryptable: Boolean = false,
+    val host: String? = null,
+    val covered: Boolean = false,
+)

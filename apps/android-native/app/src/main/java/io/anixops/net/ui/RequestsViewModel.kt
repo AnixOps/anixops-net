@@ -3,11 +3,13 @@ package io.anixops.net.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.anixops.net.core.CaptureExchange
+import io.anixops.net.core.CaptureConnection
 import io.anixops.net.core.CaptureMessage
 import io.anixops.net.core.CaptureSession
 import io.anixops.net.core.CaptureStatus
 import io.anixops.net.core.Core
 import io.anixops.net.core.CoreException
+import io.anixops.net.core.DecryptHost
 import io.anixops.net.core.FilterError
 import io.anixops.net.core.HeaderField
 import io.anixops.net.core.MappingText
@@ -92,6 +94,18 @@ data class SessionsPage(
     val working: Boolean = false,
 )
 
+/** One connection opened from the connections list: what capture holds of it, read again while it is open. */
+data class ConnectionView(
+    val id: Long,
+    val name: String,
+    val capture: CaptureConnection? = null,
+    val loaded: Boolean = false,
+    /** Capture no longer holds it (cleared, or pushed out by newer connections). */
+    val gone: Boolean = false,
+    /** Its host against the decrypt list, when its data is TLS; null otherwise. */
+    val decrypt: DecryptHost? = null,
+)
+
 /** The requests page: capture, the filters and order, the rows shown, and the request opened. */
 data class RequestsState(
     /** Null while the engine is not running. */
@@ -113,6 +127,9 @@ data class RequestsState(
     val sessions: SessionsPage? = null,
     /** What is left before HTTPS requests show (`view.decrypt_setup`); empty once they can. */
     val setup: List<String> = emptyList(),
+    /** The list shows connections rather than requests. */
+    val showConnections: Boolean = false,
+    val connection: ConnectionView? = null,
 )
 
 /** A sentence for the snackbar, or where an export was saved. */
@@ -160,6 +177,57 @@ class RequestsViewModel(private val core: Core) : ViewModel() {
         this.connected = connected
         this.decrypting = decrypting
         viewModelScope.launch { read() }
+    }
+
+    fun setShowConnections(show: Boolean) = _state.update { it.copy(showConnections = show) }
+
+    fun openConnection(id: Long, name: String) {
+        _state.update { it.copy(connection = ConnectionView(id, name)) }
+        viewModelScope.launch { readConnection(id) }
+    }
+
+    fun closeConnection() = _state.update { it.copy(connection = null) }
+
+    /** Opens request [index] of the open connection, when the list has it. */
+    fun openExchange(index: Int) {
+        val view = _state.value.connection ?: return
+        val row = _state.value.rows.firstOrNull { it.key == RequestKey(view.id, index) } ?: return
+        open(row)
+    }
+
+    /** Opens the connection request [row] went over. */
+    fun openConnectionOf(row: RequestRow) {
+        _state.update { it.copy(opened = null) }
+        openConnection(row.connectionId, row.host)
+    }
+
+    /** Adds the open connection's domain to the decrypt list; its new connections are decrypted. */
+    fun decryptConnectionHost() {
+        val view = _state.value.connection ?: return
+        val host = view.decrypt?.host ?: return
+        viewModelScope.launch {
+            val message = try {
+                core.addDecryptHost(host).message
+            } catch (error: CoreException) {
+                error.message.orEmpty()
+            }
+            _events.send(RequestsEvent.Message(message))
+            readConnection(view.id)
+            read()
+        }
+    }
+
+    /** Saves what capture holds of the open connection (`pcapng` or `har`) to Downloads. */
+    fun exportConnection(format: String) {
+        val view = _state.value.connection ?: return
+        val redact = _state.value.redact
+        viewModelScope.launch {
+            try {
+                _events.send(RequestsEvent.Saved(core.exportConnection(view.id, format, redact).location))
+            } catch (error: CoreException) {
+                _events.send(RequestsEvent.Message(error.message.orEmpty()))
+            }
+        }
     }
 
     fun toggleQuick(id: String) = refilter { it.copy(quick = if (id in it.quick) it.quick - id else it.quick + id) }
@@ -398,6 +466,10 @@ class RequestsViewModel(private val core: Core) : ViewModel() {
                 it.copy(rows = page.shown, error = page.error, loaded = true)
             }
         }
+        // An open connection that is still under way is read again.
+        _state.value.connection?.let { view ->
+            if (!view.gone && view.capture?.endedAtMs == null) readConnection(view.id)
+        }
         // The opened request fills in as its response arrives.
         val opened = _state.value.opened ?: return
         val row = page.shown.firstOrNull { it.key == opened.row.key }
@@ -407,6 +479,24 @@ class RequestsViewModel(private val core: Core) : ViewModel() {
                 if (current != null && current.row.key == row.key) state.copy(opened = current.copy(row = row)) else state
             }
             readOpened(row.key)
+        }
+    }
+
+    private suspend fun readConnection(id: Long) {
+        val capture = try {
+            core.captureConnection(id)
+        } catch (error: CoreException) {
+            return
+        }
+        val host = capture?.host
+        val decrypt = if (capture != null && host != null && CaptureBytes.looksLikeTls(capture)) {
+            quiet { core.decryptHost(host, core.decryptHosts()) }
+        } else {
+            null
+        }
+        _state.update { state ->
+            val view = state.connection?.takeIf { it.id == id } ?: return@update state
+            state.copy(connection = view.copy(capture = capture, loaded = true, gone = capture == null, decrypt = decrypt))
         }
     }
 

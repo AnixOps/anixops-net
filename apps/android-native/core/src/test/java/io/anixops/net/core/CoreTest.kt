@@ -240,6 +240,40 @@ class CoreTest {
     }
 
     @Test
+    fun aConnectionReadsThroughRuntimeControl() = runTest {
+        val transport = Recording(
+            """{"ok":{"capture":{"id":7,"network":"tcp","destination":"203.0.113.20:443","decrypted":true,""" +
+                """"upload":{"seen":10,"captured":10,"truncated":false},"download":{"seen":20,"captured":8,"truncated":true},""" +
+                """"chunks":[{"dir":"upload","at_ms":1,"data_base64":"R0VU"}],"http":[]}}}""",
+        )
+        val capture = Core(transport, StandardTestDispatcher(testScheduler)).captureConnection(7)
+        assertEquals(listOf("runtime_control" to """{"request":{"cmd":"capture_connection","id":7}}"""), transport.calls)
+        assertEquals(true, capture?.download?.truncated)
+        assertEquals("R0VU", capture?.chunks?.single()?.dataBase64)
+    }
+
+    @Test
+    fun aConnectionCaptureCanBeGone() = runTest {
+        assertNull(Core(Recording("""{"ok":{"capture":null}}"""), StandardTestDispatcher(testScheduler)).captureConnection(7))
+    }
+
+    @Test
+    fun oneConnectionExportsWithItsIdAndTheHostIsAskedOfTheSharedView() = runTest {
+        val transport = Recording("""{"ok":{"location":"Download/x.pcapng","decryptable":true,"host":"a.example.com","covered":false}}""")
+        val core = Core(transport, StandardTestDispatcher(testScheduler))
+        core.exportConnection(7, "pcapng", redact = true)
+        val host = core.decryptHost("a.example.com:443", listOf("*.example.org"))
+        assertEquals(
+            listOf(
+                "export_capture" to """{"format":"pcapng","id":7,"options":{"redact":true}}""",
+                "view.decrypt_hosts" to """{"host":"a.example.com:443","hosts":["*.example.org"]}""",
+            ),
+            transport.calls,
+        )
+        assertEquals(DecryptHost(true, "a.example.com", false), host)
+    }
+
+    @Test
     fun ruleSetsGoThroughRuntimeControl() = runTest {
         val transport = Recording(
             """{"ok":{"rule_sets":[{"name":"china","source":"remote","entries":8412,"updated_at_ms":1763198400000}]}}""",

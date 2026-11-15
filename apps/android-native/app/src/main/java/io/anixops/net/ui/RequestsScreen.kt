@@ -47,10 +47,12 @@ import androidx.compose.ui.unit.dp
 import io.anixops.net.R
 import io.anixops.net.core.CaptureSession
 import io.anixops.net.core.CaptureStatus
+import io.anixops.net.core.ConnectionSnapshot
 import io.anixops.net.core.FilterError
 import io.anixops.net.core.RequestRow
 import io.anixops.net.ui.theme.BrandSpacing
 import io.anixops.net.ui.theme.LocalBrandPalette
+import java.util.Locale
 
 /** What the requests page asks of its view models. */
 data class RequestsActions(
@@ -80,6 +82,13 @@ data class RequestsActions(
     val deleteSession: (CaptureSession) -> Unit = {},
     /** Goes to 改写, where decryption and its domains are turned on. */
     val openRewrite: () -> Unit = {},
+    val setShowConnections: (Boolean) -> Unit = {},
+    val openConnection: (Long, String) -> Unit = { _, _ -> },
+    val closeConnection: () -> Unit = {},
+    val openExchange: (Int) -> Unit = {},
+    val openConnectionOf: (RequestRow) -> Unit = {},
+    val decryptConnectionHost: () -> Unit = {},
+    val exportConnection: (String) -> Unit = {},
 )
 
 /** Width of a checklist step's number. */
@@ -106,6 +115,10 @@ fun RequestsScreen(state: UiState, requests: RequestsState, actions: RequestsAct
         RequestDetailScreen(opened, requests, actions, modifier)
         return
     }
+    requests.connection?.let { view ->
+        ConnectionScreen(view, requests, actions, modifier)
+        return
+    }
     val capture = requests.capture
     val holding = capture != null && (capture.enabled || capture.connections > 0)
     LazyColumn(
@@ -127,10 +140,34 @@ fun RequestsScreen(state: UiState, requests: RequestsState, actions: RequestsAct
                 }
                 ConnectionSection(state, capture, requests.busy, actions)
                 if (requests.setup.isNotEmpty()) SetupSection(requests.setup, actions)
-                if (holding) FilterBar(requests, actions)
+                if (holding) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(BrandSpacing.xs)) {
+                        FilterChip(
+                            selected = !requests.showConnections,
+                            onClick = { actions.setShowConnections(false) },
+                            label = { Text(stringResource(R.string.requests_tab_requests)) },
+                        )
+                        FilterChip(
+                            selected = requests.showConnections,
+                            onClick = { actions.setShowConnections(true) },
+                            label = { Text(stringResource(R.string.requests_tab_connections)) },
+                        )
+                    }
+                    if (!requests.showConnections) FilterBar(requests, actions)
+                }
             }
         }
-        if (holding) {
+        if (holding && requests.showConnections) {
+            // Newest first, as the requests.
+            val connections = state.connections.asReversed()
+            if (connections.isEmpty()) item { Hint(stringResource(R.string.connections_empty)) }
+            itemsIndexed(connections, key = { _, connection -> connection.id }) { index, connection ->
+                ConnectionLine(connection, first = index == 0, last = index == connections.lastIndex) {
+                    actions.openConnection(connection.id, connection.name)
+                }
+            }
+        }
+        if (holding && !requests.showConnections) {
             if (requests.paused) item { Hint(stringResource(R.string.requests_paused)) }
             if (requests.loaded && requests.rows.isEmpty()) {
                 val filtered = requests.quick.isNotEmpty() || requests.typed.isNotBlank()
@@ -138,6 +175,49 @@ fun RequestsScreen(state: UiState, requests: RequestsState, actions: RequestsAct
             }
             itemsIndexed(requests.rows, key = { _, row -> "${row.connectionId}:${row.index}" }) { index, row ->
                 RequestLine(row, first = index == 0, last = index == requests.rows.lastIndex) { actions.open(row) }
+            }
+        }
+    }
+}
+
+/** A line of a list drawn as one card: the first rounds its top corners, the last its bottom ones. */
+@Composable
+private fun lineShape(first: Boolean, last: Boolean): RoundedCornerShape {
+    val corner = MaterialTheme.shapes.medium.topStart
+    val none = CornerSize(0.dp)
+    return RoundedCornerShape(
+        topStart = if (first) corner else none,
+        topEnd = if (first) corner else none,
+        bottomStart = if (last) corner else none,
+        bottomEnd = if (last) corner else none,
+    )
+}
+
+/** One open connection: its name, and how it goes and how much it moved; a tap opens what capture holds of it. */
+@Composable
+private fun ConnectionLine(connection: ConnectionSnapshot, first: Boolean, last: Boolean, onOpen: () -> Unit) {
+    val palette = LocalBrandPalette.current
+    Surface(shape = lineShape(first, last), color = palette.surface, contentColor = palette.text, modifier = Modifier.content()) {
+        Column {
+            if (!first) RowDivider()
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpen)
+                    .heightIn(min = RowMinHeight)
+                    .padding(horizontal = BrandSpacing.md, vertical = BrandSpacing.xs),
+                verticalArrangement = Arrangement.spacedBy(BrandSpacing.xxs),
+            ) {
+                Text(connection.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    listOf(connection.network.uppercase(Locale.ROOT), connection.via, formatBytes(connection.upload + connection.download))
+                        .filter { it.isNotBlank() }
+                        .joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = palette.text2,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
@@ -373,15 +453,8 @@ internal fun statusText(row: RequestRow): String = when {
 @Composable
 private fun RequestLine(row: RequestRow, first: Boolean, last: Boolean, onOpen: () -> Unit) {
     val palette = LocalBrandPalette.current
-    val corner = MaterialTheme.shapes.medium.topStart
-    val none = CornerSize(0.dp)
     Surface(
-        shape = RoundedCornerShape(
-            topStart = if (first) corner else none,
-            topEnd = if (first) corner else none,
-            bottomStart = if (last) corner else none,
-            bottomEnd = if (last) corner else none,
-        ),
+        shape = lineShape(first, last),
         color = palette.surface,
         contentColor = palette.text,
         modifier = Modifier.content(),

@@ -511,6 +511,35 @@ class Core(
         },
     ).steps
 
+    /** What capture holds of connection [id]; null once newer connections pushed it out or capture was cleared. */
+    suspend fun captureConnection(id: Long): CaptureConnection? = decode(
+        CaptureConnectionAnswer.serializer(),
+        controlRequest(
+            buildJsonObject {
+                put("cmd", "capture_connection")
+                put("id", id)
+            },
+        ),
+    ).capture
+
+    /** Saves what capture holds of connection [id] (`pcapng` or `har`) to Downloads and says where. */
+    suspend fun exportConnection(id: Long, format: String, redact: Boolean): SavedFile = call(
+        "export_capture",
+        SavedFile.serializer(),
+        buildJsonObject {
+            put("format", format)
+            put("id", id)
+            putJsonObject("options") { put("redact", redact) }
+        },
+    )
+
+    /** [host] (a domain, maybe with a port) against the decrypt list [hosts]. */
+    suspend fun decryptHost(host: String, hosts: List<String>): DecryptHost = call(
+        "view.decrypt_hosts",
+        DecryptHost.serializer(),
+        args("host" to JsonPrimitive(host), "hosts" to JsonArray(hosts.map(::JsonPrimitive))),
+    )
+
     /** Saves everything capture holds (`har` or `pcapng`) to Downloads and says where. */
     suspend fun exportCapture(format: String): SavedFile =
         call("export_capture", SavedFile.serializer(), args("format" to JsonPrimitive(format)))
