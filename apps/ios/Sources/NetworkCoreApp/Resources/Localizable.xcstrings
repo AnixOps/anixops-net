@@ -11606,6 +11606,22 @@
           }
         }
       }
+    },
+    "已用流量": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Traffic used"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已用流量"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

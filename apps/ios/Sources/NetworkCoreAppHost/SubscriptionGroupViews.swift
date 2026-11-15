@@ -110,8 +110,7 @@ struct SubscriptionGroupSummary: View {
 
             if let info = group.userInfo {
                 if let fraction = info.usedFraction {
-                    ProgressView(value: fraction)
-                        .tint(fraction > 0.9 ? brand.danger : brand.primary)
+                    UsageBar(fraction: fraction, color: fraction > 0.9 ? brand.danger : brand.primary)
                 }
                 HStack(spacing: 6) {
                     if let used = info.used {
@@ -166,5 +165,29 @@ enum UpdateInterval {
         default:
             return String(localized: "每 \(hours) 小时自动更新")
         }
+    }
+}
+
+/// How much of a subscription's traffic is used. Drawn here instead of a `ProgressView`: on macOS the system
+/// bar sometimes ignores its tint and shows the accent blue, which CI's screenshot comparison caught.
+private struct UsageBar: View {
+    let fraction: Double
+    let color: Color
+    @Environment(\.brand) private var brand
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(brand.border.opacity(0.6))
+                Capsule()
+                    .fill(color)
+                    .frame(width: proxy.size.width * min(max(fraction, 0), 1))
+            }
+        }
+        .frame(height: 6)
+        .accessibilityElement()
+        .accessibilityLabel("已用流量")
+        .accessibilityValue(Text(fraction, format: .percent.precision(.fractionLength(0))))
     }
 }
