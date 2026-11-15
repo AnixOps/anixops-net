@@ -1,5 +1,6 @@
 package io.anixops.net.ui
 
+import android.text.format.DateFormat as AndroidDateFormat
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,10 +48,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.anixops.net.R
 import io.anixops.net.core.LogEntry
+import io.anixops.net.core.TrafficBar
 import io.anixops.net.core.TrafficShare
 import io.anixops.net.ui.theme.BrandSpacing
 import io.anixops.net.ui.theme.LocalBrandPalette
 import java.text.DateFormat
+import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
@@ -307,7 +310,7 @@ fun TrafficScreen(state: TrafficState, actions: ActivityActions, modifier: Modif
                         color = palette.text2,
                         modifier = Modifier.padding(BrandSpacing.md),
                     )
-                    state.view == StatsView.Time -> Bars(view.bars.map { it.bytes })
+                    state.view == StatsView.Time -> Bars(view.bars)
                     else -> Shares(if (state.view == StatsView.Hosts) view.hosts else view.policies)
                 }
             }
@@ -345,9 +348,10 @@ private fun <T> Choice(options: List<Pair<T, String>>, selected: T, onChoose: (T
 private val ChartHeight = 120.dp
 private val BarRadius = 2.dp
 
-/** The bars of the period, oldest first, scaled to the largest. */
+/** The bars of the period, oldest first, scaled to the largest, with the first, middle and last bar's time under them. */
 @Composable
-private fun Bars(bytes: List<Long>) {
+private fun Bars(bars: List<TrafficBar>) {
+    val bytes = bars.map { it.bytes }
     val color = LocalBrandPalette.current.primary
     val track = LocalBrandPalette.current.border
     val label = stringResource(R.string.traffic_stats)
@@ -376,7 +380,30 @@ private fun Bars(bytes: List<Long>) {
             }
         }
     }
+    if (bars.isEmpty()) return
+    val locale = LocalConfiguration.current.locales[0]
+    // Hours for a day's 24 bars, days for a week's 7.
+    val format = remember(locale, bars.size) {
+        SimpleDateFormat(AndroidDateFormat.getBestDateTimePattern(locale, if (bars.size > DAYS_IN_WEEK) "Hm" else "Md"), locale)
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = BrandSpacing.md, end = BrandSpacing.md, bottom = BrandSpacing.sm),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        listOf(bars.first(), bars[bars.size / 2], bars.last()).forEach { bar ->
+            Text(
+                format.format(Date(bar.start * MILLIS_PER_SECOND)),
+                style = MaterialTheme.typography.labelSmall,
+                color = LocalBrandPalette.current.text2,
+            )
+        }
+    }
 }
+
+private const val DAYS_IN_WEEK = 7
+private const val MILLIS_PER_SECOND = 1_000L
 
 private const val GAP_SHARE = 0.25f
 
