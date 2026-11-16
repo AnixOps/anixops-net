@@ -45,6 +45,40 @@ export function connectionTitle(connection: string | undefined, phase: ConnectPh
   return t((connection && connectionTitles[connection]) || phaseTitles[phase]);
 }
 
+/**
+ * Why the connection failed, in the backend's words, or where to read more when it gave none. Only while it has
+ * failed. The overview shows it under the state; the sidebar shows it on every page, because debug mode has no
+ * overview and a failure must never go unexplained (docs/ui-ux.md, "提示在所有页面可见").
+ */
+export function failureReason(
+  snapshot: Pick<RuntimeSnapshot, "configurationError" | "lastError"> | null | undefined,
+  phase: ConnectPhase,
+  mode: "proxy" | "debug",
+): string | undefined {
+  if (phase !== "failed") return undefined;
+  return snapshot?.configurationError ?? snapshot?.lastError
+    ?? (mode === "debug" ? t("查看“请求 › 连接”了解原因") : t("查看“活动”了解原因"));
+}
+
+/**
+ * The small line under the sidebar's connection state: the reason after a failure, what to do while there is nothing
+ * to connect with (the switch is disabled then, and a disabled switch alone does not say why), the node and routing
+ * while connected, and the shortcut while off.
+ */
+export function sidebarDetail(input: {
+  phase: ConnectPhase;
+  reason?: string;
+  unconfigured: boolean;
+  node?: string;
+  routing?: string;
+}): { text: string; danger: boolean } {
+  if (input.phase === "failed" && input.reason) return { text: input.reason, danger: true };
+  if (input.unconfigured && input.phase !== "on") return { text: t("先导入订阅或配置文件"), danger: false };
+  if (input.phase === "on") return { text: [input.node, input.routing].filter(Boolean).join(" · "), danger: false };
+  if (input.phase === "off") return { text: "Ctrl+Shift+C", danger: false };
+  return { text: "", danger: false };
+}
+
 export const routingModes: Array<{ value: RuntimeSnapshot["routingMode"]; label: string; hint: string }> = [
   { value: "rule", label: "规则", hint: "按订阅自带的规则和你的规则分流，其余走代理" },
   { value: "direct", label: "直连", hint: "所有流量直连，不经过节点" },

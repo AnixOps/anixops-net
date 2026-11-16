@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { availableRoutingModes, connectionTitle, connectPhase, factLabel, groupMemberLabel, protocolAbbreviation, routingLabel } from "./labels";
+import { availableRoutingModes, connectionTitle, connectPhase, factLabel, failureReason, groupMemberLabel, protocolAbbreviation, routingLabel, sidebarDetail } from "./labels";
 
 describe("connectPhase", () => {
   it("prefers a running connect or disconnect operation over the reported state", () => {
@@ -18,6 +18,40 @@ describe("connectPhase", () => {
   it("names failures specifically", () => {
     expect(connectionTitle("Configuration error", "failed")).toBe("配置有误");
     expect(connectionTitle("Connected", "on")).toBe("已连接");
+  });
+});
+
+describe("failureReason", () => {
+  it("gives nothing unless the connection failed", () => {
+    expect(failureReason({ lastError: "boom" }, "off", "proxy")).toBeUndefined();
+    expect(failureReason({ lastError: "boom" }, "on", "debug")).toBeUndefined();
+  });
+
+  it("prefers the configuration error, then the last error", () => {
+    expect(failureReason({ configurationError: "bad config", lastError: "boom" }, "failed", "proxy")).toBe("bad config");
+    expect(failureReason({ lastError: "boom" }, "failed", "debug")).toBe("boom");
+  });
+
+  it("points to a page the mode has when the backend gave no reason", () => {
+    expect(failureReason({}, "failed", "proxy")).toBe("查看“活动”了解原因");
+    // Debug mode has no Activity page: the session facts are under Requests › Connections.
+    expect(failureReason(null, "failed", "debug")).toBe("查看“请求 › 连接”了解原因");
+  });
+});
+
+describe("sidebarDetail", () => {
+  it("shows the failure reason in the danger tone", () => {
+    expect(sidebarDetail({ phase: "failed", reason: "boom", unconfigured: false })).toEqual({ text: "boom", danger: true });
+  });
+
+  it("says what to do while the switch cannot be turned on", () => {
+    expect(sidebarDetail({ phase: "off", unconfigured: true })).toEqual({ text: "先导入订阅或配置文件", danger: false });
+  });
+
+  it("shows the node and routing while connected and the shortcut while off", () => {
+    expect(sidebarDetail({ phase: "on", unconfigured: false, node: "HK 01", routing: "规则" }).text).toBe("HK 01 · 规则");
+    expect(sidebarDetail({ phase: "off", unconfigured: false }).text).toBe("Ctrl+Shift+C");
+    expect(sidebarDetail({ phase: "connecting", unconfigured: false }).text).toBe("");
   });
 });
 
