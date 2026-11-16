@@ -638,12 +638,16 @@ sys = system, direct, fallback",
         assert!(section["servers"][2].get("via").is_none());
         assert_eq!(section["rules"][0]["server"], "sys");
 
-        let one = text("a = udp://1.1.1.1
-b = 8.8.8.8, default", "", "")
-            .parse()
-            .unwrap()
-            .section(&json!({}))
-            .unwrap();
+        let one = text(
+            "a = udp://1.1.1.1
+b = 8.8.8.8, default",
+            "",
+            "",
+        )
+        .parse()
+        .unwrap()
+        .section(&json!({}))
+        .unwrap();
         assert_eq!(one["default"], "b");
         assert!(one.get("fallback").is_none());
         assert!(one.get("system_servers").is_none());
@@ -651,14 +655,37 @@ b = 8.8.8.8, default", "", "")
 
     #[test]
     fn race_limits_and_urls_are_checked() {
-        let five: String = (0..5).map(|i| format!("s{i} = 1.1.1.{i}, default\n")).collect();
-        assert!(text(&five, "", "").parse().unwrap_err().contains("4 default"));
-        let five: String = (0..5).map(|i| format!("s{i} = 1.1.1.{i}, fallback\n")).collect();
-        assert!(text(&five, "", "").parse().unwrap_err().contains("4 fallback"));
-        for url in ["udp://1.1.1.1/x", "quic://", "systems", "quic://dns.example/dns-query"] {
-            assert!(text(&format!("a = {url}"), "", "").parse().is_err(), "{url}");
+        let five: String = (0..5)
+            .map(|i| format!("s{i} = 1.1.1.{i}, default\n"))
+            .collect();
+        assert!(text(&five, "", "")
+            .parse()
+            .unwrap_err()
+            .contains("4 default"));
+        let five: String = (0..5)
+            .map(|i| format!("s{i} = 1.1.1.{i}, fallback\n"))
+            .collect();
+        assert!(text(&five, "", "")
+            .parse()
+            .unwrap_err()
+            .contains("4 fallback"));
+        for url in [
+            "udp://1.1.1.1/x",
+            "quic://",
+            "systems",
+            "quic://dns.example/dns-query",
+        ] {
+            assert!(
+                text(&format!("a = {url}"), "", "").parse().is_err(),
+                "{url}"
+            );
         }
-        for url in ["udp://[2606:4700::1111]:53", "quic://dns.adguard-dns.com", "SYSTEM", "https://dns.google/dns-query"] {
+        for url in [
+            "udp://[2606:4700::1111]:53",
+            "quic://dns.adguard-dns.com",
+            "SYSTEM",
+            "https://dns.google/dns-query",
+        ] {
             assert!(text(&format!("a = {url}"), "", "").parse().is_ok(), "{url}");
         }
     }

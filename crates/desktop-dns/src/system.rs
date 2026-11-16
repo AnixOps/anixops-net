@@ -91,8 +91,9 @@ mod windows {
 
     use windows_sys::Win32::Foundation::{ERROR_BUFFER_OVERFLOW, NO_ERROR};
     use windows_sys::Win32::NetworkManagement::IpHelper::{
-        GetAdaptersAddresses, GAA_FLAG_INCLUDE_GATEWAYS, GAA_FLAG_SKIP_ANYCAST, GAA_FLAG_SKIP_MULTICAST,
-        GAA_FLAG_SKIP_UNICAST, IF_TYPE_SOFTWARE_LOOPBACK, IP_ADAPTER_ADDRESSES_LH,
+        GetAdaptersAddresses, GAA_FLAG_INCLUDE_GATEWAYS, GAA_FLAG_SKIP_ANYCAST,
+        GAA_FLAG_SKIP_MULTICAST, GAA_FLAG_SKIP_UNICAST, IF_TYPE_SOFTWARE_LOOPBACK,
+        IP_ADAPTER_ADDRESSES_LH,
     };
     use windows_sys::Win32::NetworkManagement::Ndis::IfOperStatusUp;
     use windows_sys::Win32::Networking::WinSock::{
@@ -178,7 +179,9 @@ mod windows {
             AF_INET => {
                 let v4 = &*(raw as *const SOCKADDR_IN);
                 // The address is in network byte order.
-                Some(IpAddr::V4(Ipv4Addr::from(u32::from_be(v4.sin_addr.S_un.S_addr))))
+                Some(IpAddr::V4(Ipv4Addr::from(u32::from_be(
+                    v4.sin_addr.S_un.S_addr,
+                ))))
             }
             AF_INET6 => {
                 let v6 = &*(raw as *const SOCKADDR_IN6);
