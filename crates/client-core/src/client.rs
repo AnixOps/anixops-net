@@ -714,7 +714,7 @@ impl Client {
                 let path = network_watch::current_path();
                 // The Wi-Fi name can change without the addresses (Windows asks `netsh`, a process): read it
                 // when the path changes and every thirty seconds.
-                if path != last_path || samples % NETWORK_READ_EVERY == 0 {
+                if path != last_path || samples.is_multiple_of(NETWORK_READ_EVERY) {
                     network = platform.current_network(false);
                 }
                 samples = samples.wrapping_add(1);
