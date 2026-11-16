@@ -380,3 +380,7 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 - [ ] 安卓 `anixops://` 链接与扫码导入：浏览器点链接能拉起 App 并导入订阅；扫码导入节点和订阅。
 - [ ] 从 beta.6 升级的桌面：原来选“绕过大陆 / GFW / 回国”的变成规则模式；原来选 DNS 国内外分流的变成等价的自定义 DNS；
   Windows 旧服务被卸载。
+
+2026-11-16：beta.7 的第一次 tag 发布在 “Publish GitHub Release” 失败。配好 `ANDROID_KEY_ALIAS`（`anixops`）后，GitHub 把含有
+secret 值的 job output（安卓 artifact 名和 APK 名都含 `anixops`）丢弃，发布步骤拿不到安卓包。修复后 release.yml 由版本号直接推出这两个名字。
+tag 当时指向的 d225b10 还是旧 workflow，需要把 tag 移到包含修复的 commit 再推（Release 没有发出，移动 tag 不影响用户）。
