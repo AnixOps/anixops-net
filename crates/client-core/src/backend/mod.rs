@@ -2010,7 +2010,7 @@ mod tests {
         let (mut backend, dir) = backend("my-rules");
         // Without a profile the lines are only checked and kept.
         backend.save_my_rules("DOMAIN,kept.test,DIRECT").unwrap();
-        assert!(backend.save_my_rules("GEOSITE,cn,DIRECT").is_err());
+        assert!(backend.save_my_rules("RULE-SET,ads,DIRECT").is_err());
         assert_eq!(backend.my_rules().count, 1);
 
         backend.import(PASTED_LOCATION, LINK).unwrap();
@@ -2028,6 +2028,30 @@ mod tests {
         let rules = desktop_dns::rules::rules_of(&envelope).unwrap();
         assert_eq!(rules[0], "DOMAIN-SUFFIX,ads.test,REJECT");
         assert_eq!(rules[2], "DOMAIN,a.test,proxy");
+
+        // Imported lists and the built-in cn categories become rule sets the engine downloads itself.
+        backend
+            .save_my_rules(
+                "DOMAIN-SUFFIX,ads.test,REJECT\nPROCESS-NAME,curl,DIRECT\nDOMAIN,a.test,PROXY\n\
+                 RULE-SET,https://lists.test/ads.list,REJECT\nGEOIP,CN,DIRECT,no-resolve",
+            )
+            .unwrap();
+        let routed = backend.envelope().unwrap();
+        assert!(
+            RuntimeConfig::from_json(routed.as_bytes()).is_ok(),
+            "{routed}"
+        );
+        let value: serde_json::Value = serde_json::from_str(&routed).unwrap();
+        assert_eq!(
+            value["routing"]["rule_sets"]["local-1"]["url"],
+            "https://lists.test/ads.list"
+        );
+        assert!(value["routing"]["rule_sets"]["geoip-cn"]["url"].is_string());
+        backend
+            .save_my_rules(
+                "DOMAIN-SUFFIX,ads.test,REJECT\nPROCESS-NAME,curl,DIRECT\nDOMAIN,a.test,PROXY",
+            )
+            .unwrap();
 
         // Debug mode's direct egress has no node: PROXY lines go direct, the others still apply.
         backend.set_direct_egress(true).unwrap();

@@ -47,7 +47,7 @@
 | 手动添加 / 编辑节点 | ✅ | ✅ | ✅ | ✅ | ✅ | 添加 = 粘贴分享链接导入；编辑名称、服务器、端口和删除节点只改本机，更新订阅后恢复，与 iOS 相同（`crates/node-edits`，T5）。策略组或规则用到的节点和最后一个节点不能删 |
 | 扫码导入 | ✅ | — | — | — | ✅ | Android：订阅页“扫码”用相机读订阅或分享链接二维码，填进链接框后点“导入”（CameraX + ZXing，T5） |
 | 分流模式（规则 / 全局 / 直连；不带预设分流模式，见 [no-presets.md](no-presets.md)） | ✅ | ✅ | ✅ | ✅ | ✅ | |
-| 我的规则（规则文本编辑、连接中原地换规则） | ✅ | ✅ | ◐ | ◐ | ◐ | 内核 `reload_rules`（T2）。桌面与 Android 不收 RULE-SET / GEOIP / GEOSITE 行（这些要下载规则集）；Windows TUN 模式下次连接生效 |
+| 我的规则（规则文本编辑、连接中原地换规则） | ✅ | ✅ | ◐ | ◐ | ◐ | 内核 `reload_rules`（T2）。桌面与 Android 用 `RULE-SET,https://…,策略` 导入规则集（经 PROXY 每天下载），GEOSITE,cn / GEOIP,CN 用内置公开列表，其他 GEOSITE 分类要订阅自带同名规则集；Windows TUN 模式下次连接生效 |
 | 规则集查看、更新远程规则集 | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | DNS 预设 | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 自定义 DNS 服务器、分域 DNS、Hosts | ✅ | ✅ | ✅ | ✅ | ✅ | T3：桌面与 Android 用文本编辑（`名称 = 地址`、`DOMAIN-SUFFIX,cn,服务器`、`域名 = 地址`），iOS / macOS 是表单 |

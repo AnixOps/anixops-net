@@ -26,6 +26,7 @@ from pathlib import PurePosixPath
 # or wrote names that category (decided 2026-11-15: not a preset), never on their own. No GFW list (user, 2026-11-15).
 ALLOWED_LIST_URL_FILES = {
     "apps/ios/Sources/NetworkCoreBridge/RuleSetCatalog.swift",
+    "crates/desktop-dns/src/catalog.rs",
 }
 
 LIST_URL = re.compile(r"raw\.githubusercontent\.com/[A-Za-z0-9_.-]+/")

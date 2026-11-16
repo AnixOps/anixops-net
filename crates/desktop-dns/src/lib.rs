@@ -5,6 +5,7 @@
 //! [`custom`] holds the user's own servers, hosts and the Fake-IP switch;
 //! [`redirects`] the destination rewrites (the engine's `redirects`).
 
+pub mod catalog;
 pub mod custom;
 pub mod redirects;
 pub mod rules;
