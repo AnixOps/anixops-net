@@ -632,6 +632,8 @@ public enum TunnelProfileKeys {
     /// `Data` holding a JSON array of the system proxy's exceptions (`ProxyExceptions.profileValue`). Absent is
     /// `ProxyExceptions.defaults`.
     public static let proxyExceptions = "networkcore.proxy-exceptions"
+    /// `true` when the Mac acts as the gateway of other devices on the local network (`GatewayMode`). Absent is off.
+    public static let gateway = "networkcore.gateway"
 }
 
 extension EmbeddedRuntimeConfig {

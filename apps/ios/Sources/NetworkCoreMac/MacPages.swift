@@ -635,6 +635,7 @@ struct MacSettingsPage: View {
 
             OnDemandSections(tunnel: tunnel)
             TakeoverSection(tunnel: tunnel)
+            MacGatewaySection(tunnel: tunnel)
             BlockQuicSection(tunnel: tunnel)
             NotificationSettingsSection(tunnel: tunnel)
 

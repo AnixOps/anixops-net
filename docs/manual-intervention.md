@@ -326,6 +326,8 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 - [ ] macOS 有 `PROCESS-NAME` 规则时，经系统代理的连接在连接列表里显示进程名，规则生效。
 - [ ] 编辑“跳过代理的地址”加入 `*.example.com` 后重连，访问它不经过代理（连接列表里看不到经代理的连接；“VPN + 系统代理”下仍经 VPN）。
 - [ ] 开着 HTTPS 解密时，经系统代理的 HTTPS 也被解密，抓包和改写与 VPN 路径一致。
+- [ ] macOS 网关模式：打开后重连，诊断事件里是 “gateway: ip forwarding on” 还是 “may not turn it on”（沙盒里的系统扩展能否改 sysctl 待真机确认）；后一种情况按设置页命令手动开启，状态变成“已开启”。
+- [ ] 另一台设备（手机或游戏机）把路由器设为 Mac 的局域网地址、DNS 设为 198.18.0.2：能上网，Mac 的连接列表里出现它的连接，规则、MITM 生效；断开 VPN 后 `sysctl net.inet.ip.forwarding` 回到 0（如果是隧道打开的）。
 
 ## Windows / Linux 原生界面（`docs/architecture/desktop-native.md`）
 

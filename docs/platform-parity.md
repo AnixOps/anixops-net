@@ -55,7 +55,7 @@
 | 屏蔽 QUIC | ✅ | ✅ | ✅ | ✅ | ✅ | #106 |
 | 流量重定向（TCP / UDP 劫持到开发服务器） | ✅ | ✅ | ✅ | ✅ | ✅ | 扩展 / 改写页“流量重定向”，与 iOS 相同的地址 / 域名 / 端口 / 协议 → 目标写法（引擎 `redirects`，`desktop_dns::redirects`）。Windows 和 Linux 不走系统代理的程序要开 TUN 模式（T6） |
 | TUN（接管全部流量） | ✅ | ✅ | ✅ | ✅ | ✅ | Linux 每次连接经 pkexec（polkit）提权助手创建虚拟网卡，App 本身不提权，见系统限制（T14） |
-| 系统代理 | ✅ | ✅ | ✅ | ✅ | — | 苹果平台的“接管方式”：iOS 默认 VPN + 系统代理（隧道里同时注册 `NEProxySettings`，指向内核 `127.0.0.1` 的 `system_proxy` 监听），可改仅 VPN；macOS 另有仅系统代理（不建默认路由）。跳过代理的地址可编辑，见 [`system-proxy.md`](system-proxy.md) |
+| 系统代理 | ✅ | ✅ | ✅ | ✅ | — | 苹果平台的“接管方式”：iOS 默认 VPN + 系统代理（隧道里同时注册 `NEProxySettings`，指向内核 `127.0.0.1` 的 `system_proxy` 监听），可改仅 VPN；macOS 另有仅系统代理（不建默认路由）。跳过代理的地址可编辑；macOS 还有网关模式（局域网设备把路由器设为 Mac），见 [`system-proxy.md`](system-proxy.md) |
 
 ## 扩展（插件与脚本）
 

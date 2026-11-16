@@ -11862,6 +11862,198 @@
           }
         }
       }
+    },
+    "保存网关模式到 VPN 配置失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not save the gateway mode to the VPN configuration"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法將閘道模式儲存到 VPN 設定"
+          }
+        }
+      }
+    },
+    "把这台 Mac 当作网关": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use This Mac as a Gateway"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "把這台 Mac 當作閘道"
+          }
+        }
+      }
+    },
+    "设备的路由器填": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Router on the Device"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "裝置的路由器填"
+          }
+        }
+      }
+    },
+    "设备的 DNS 填": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DNS on the Device"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "裝置的 DNS 填"
+          }
+        }
+      }
+    },
+    "没有连上局域网": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not on a local network"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有連上區域網路"
+          }
+        }
+      }
+    },
+    "IP 转发": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "IP Forwarding"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "IP 轉送"
+          }
+        }
+      }
+    },
+    "已开启": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已開啟"
+          }
+        }
+      }
+    },
+    "未开启": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未開啟"
+          }
+        }
+      }
+    },
+    "复制命令": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Command"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拷貝指令"
+          }
+        }
+      }
+    },
+    "网关模式": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway Mode"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "閘道模式"
+          }
+        }
+      }
+    },
+    "网关模式要用 VPN 接管流量，“仅系统代理”下不能开启。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway mode needs the VPN to take traffic; it is not available with System Proxy Only."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "閘道模式要用 VPN 接管流量，「僅系統代理」下不能開啟。"
+          }
+        }
+      }
+    },
+    "开启后，同一局域网的设备（游戏机、电视、手机）把路由器和 DNS 改成上面的地址，它们的流量就经过这台 Mac 按规则走，MITM、抓包和连接列表同样生效。需要 IPv4 转发：连接时会尝试自动开启、断开时关闭；系统不允许时，在“终端”里运行一次上面的命令（重启 Mac 后失效）。只支持 IPv4；单个 WireGuard 节点不支持。切换时如果已连接，会自动重连一次。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When on, devices on the same local network (consoles, TVs, phones) that set their router and DNS to the addresses above send their traffic through this Mac by the rules, with MITM, capture and the connection list. It needs IPv4 forwarding: connecting tries to turn it on and disconnecting turns it off; if the system does not allow that, run the command above once in Terminal (it lasts until the Mac restarts). IPv4 only; a single WireGuard node is not supported. If connected, switching reconnects once."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開啟後，同一區域網路的裝置（遊戲機、電視、手機）把路由器和 DNS 改成上面的位址，它們的流量就經過這台 Mac 按規則走，MITM、封包擷取和連線列表同樣生效。需要 IPv4 轉送：連線時會嘗試自動開啟、中斷時關閉；系統不允許時，在「終端機」裡執行一次上面的指令（重新啟動 Mac 後失效）。只支援 IPv4；單個 WireGuard 節點不支援。切換時如果已連線，會自動重新連線一次。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

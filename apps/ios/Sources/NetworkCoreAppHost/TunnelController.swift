@@ -73,6 +73,9 @@ final class TunnelController {
     private(set) var proxyExceptions = ProxyExceptions.fromProfileValue(
         UserDefaults.standard.data(forKey: ProxyExceptions.storageKey)
     )
+    /// Whether the Mac forwards other devices' traffic into the tunnel (`GatewayMode`); macOS only, and only in a
+    /// mode that routes traffic. The saved profile carries a copy (`TunnelProfileKeys.gateway`).
+    private(set) var gateway = TunnelController.isMac && UserDefaults.standard.bool(forKey: GatewayMode.storageKey)
     /// When the running tunnel last took new local rules in place, without a restart.
     private(set) var lastRulesReload: Date?
     /// Proxy client or debugging tool (`AppMode`); nil until the user picks one on first launch. Read in `load()`.
@@ -529,6 +532,20 @@ final class TunnelController {
         await saveTakeoverSettings(failure: String(localized: "保存接管方式到 VPN 配置失败"))
     }
 
+    /// Turns the gateway mode on or off (macOS). A running tunnel restarts so the extension turns IPv4 forwarding
+    /// on or back off.
+    func setGateway(_ on: Bool) async {
+        let on = on && Self.isMac
+        guard on != gateway else {
+            return
+        }
+        gateway = on
+        UserDefaults.standard.set(on, forKey: GatewayMode.storageKey)
+        await saveTakeoverSettings(
+            failure: String(localized: "保存网关模式到 VPN 配置失败"), restarts: takeover.routesTraffic
+        )
+    }
+
     /// Replaces what the system proxy leaves alone. A running tunnel that uses the proxy restarts on it.
     func setProxyExceptions(_ exceptions: ProxyExceptions) async {
         guard exceptions != proxyExceptions else {
@@ -541,13 +558,14 @@ final class TunnelController {
         )
     }
 
-    /// Writes `takeover` and `proxyExceptions` into the saved profile and restarts a running tunnel on them.
+    /// Writes `takeover`, `proxyExceptions` and `gateway` into the saved profile and restarts a running tunnel on
+    /// them.
     private func saveTakeoverSettings(failure: String, restarts: Bool = true) async {
         guard let manager, let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol else {
             return
         }
         var configuration = tunnelProtocol.providerConfiguration ?? [:]
-        Self.applyTakeover(takeover, exceptions: proxyExceptions, to: &configuration)
+        Self.applyTakeover(takeover, exceptions: proxyExceptions, gateway: gateway, to: &configuration)
         tunnelProtocol.providerConfiguration = configuration
         manager.protocolConfiguration = tunnelProtocol
         do {
@@ -563,13 +581,19 @@ final class TunnelController {
         }
     }
 
-    /// The profile entries for `takeover` and `exceptions`; the defaults are left out.
+    /// The profile entries for `takeover`, `exceptions` and `gateway`; the defaults are left out.
     static func applyTakeover(
         _ takeover: TrafficTakeover,
         exceptions: ProxyExceptions,
+        gateway: Bool,
         to configuration: inout [String: Any]
     ) {
         configuration[TunnelProfileKeys.takeover] = takeover.rawValue
+        if gateway {
+            configuration[TunnelProfileKeys.gateway] = true
+        } else {
+            configuration.removeValue(forKey: TunnelProfileKeys.gateway)
+        }
         if exceptions.isDefault {
             configuration.removeValue(forKey: TunnelProfileKeys.proxyExceptions)
         } else {
@@ -973,7 +997,7 @@ final class TunnelController {
         if blockQuic {
             providerConfiguration[TunnelProfileKeys.blockQuic] = true
         }
-        Self.applyTakeover(takeover, exceptions: proxyExceptions, to: &providerConfiguration)
+        Self.applyTakeover(takeover, exceptions: proxyExceptions, gateway: gateway, to: &providerConfiguration)
         if let value = try? localRules.profileValue() {
             providerConfiguration[TunnelProfileKeys.localRules] = value
         }

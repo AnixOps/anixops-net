@@ -54,4 +54,22 @@ final class TrafficTakeoverTests: XCTestCase {
         let tampered = Data(#"["localhost","0.0.0.0/0"]"#.utf8)
         XCTAssertEqual(ProxyExceptions.fromProfileValue(tampered).entries, ["localhost"])
     }
+
+    func testGatewayNeedsMacOSAndARoutingMode() {
+        let on: [String: Any] = [TunnelProfileKeys.gateway: true]
+        XCTAssertTrue(GatewayMode.saved(in: on, takeover: .tunnelAndProxy, macOS: true))
+        XCTAssertTrue(GatewayMode.saved(in: on, takeover: .tunnel, macOS: true))
+        XCTAssertFalse(GatewayMode.saved(in: on, takeover: .systemProxy, macOS: true))
+        XCTAssertFalse(GatewayMode.saved(in: on, takeover: .tunnelAndProxy, macOS: false))
+        XCTAssertFalse(GatewayMode.saved(in: nil, takeover: .tunnel, macOS: true))
+    }
+
+    func testPrivateAddressesForTheGatewayInstructions() {
+        for address in ["10.0.0.2", "172.16.5.1", "172.31.255.254", "192.168.1.20"] {
+            XCTAssertTrue(LocalNetworkAddresses.isPrivateIPv4(address), address)
+        }
+        for address in ["198.18.0.1", "172.32.0.1", "169.254.1.1", "100.64.0.1", "8.8.8.8", "192.168.1", "fe80::1"] {
+            XCTAssertFalse(LocalNetworkAddresses.isPrivateIPv4(address), address)
+        }
+    }
 }

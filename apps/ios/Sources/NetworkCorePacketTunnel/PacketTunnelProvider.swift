@@ -60,6 +60,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     #if os(macOS)
     /// Pins the engine's sockets to the physical interface (see `BoundInterfaceMonitor`).
     private let boundInterface = BoundInterfaceMonitor()
+    /// Set when this tunnel turned IPv4 forwarding on for the gateway mode, so stopping turns it back off.
+    private var turnedForwardingOn = false
     #endif
 
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
@@ -145,6 +147,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         ))
         let blockQuic = tunnelProtocol.providerConfiguration?[TunnelProfileKeys.blockQuic] as? Bool == true
         let takeover = TrafficTakeover.saved(in: tunnelProtocol.providerConfiguration, macOS: Self.isMac)
+        let gateway = GatewayMode.saved(in: tunnelProtocol.providerConfiguration, takeover: takeover, macOS: Self.isMac)
         let proxyExceptions = ProxyExceptions.fromProfileValue(
             tunnelProtocol.providerConfiguration?[TunnelProfileKeys.proxyExceptions] as? Data
         )
@@ -228,6 +231,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 self.watchNetworkPath()
                 self.watchPhysicalNetwork(session)
                 self.setUpCaptureStorage(session)
+                if gateway, routesTraffic {
+                    self.enableGatewayForwarding()
+                }
                 completionHandler(nil)
             } catch let failure as EmbeddedRuntimeSession.Failure {
                 completionHandler(PacketTunnelFailure(reason: "embedded runtime could not start (code \(failure.code))"))
@@ -254,6 +260,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         runningConfig = nil
         #if os(macOS)
         boundInterface.stop()
+        if turnedForwardingOn {
+            turnedForwardingOn = false
+            let restored = IPv4Forwarding.set(false)
+            events.record("gateway: ip forwarding \(restored ? "off again" : "could not be turned off")")
+        }
         #endif
         memoryPressure?.cancel()
         memoryPressure = nil
@@ -696,6 +707,24 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             }
         }
         return result == KERN_SUCCESS ? info : nil
+    }
+
+    /// Gateway mode: other devices route through this Mac, which needs IPv4 forwarding. Turned on here when the
+    /// system lets the extension (and off again on stop); otherwise the app shows the user the command to run.
+    private func enableGatewayForwarding() {
+        #if os(macOS)
+        switch IPv4Forwarding.isOn() {
+        case true?:
+            events.record("gateway: ip forwarding already on")
+        default:
+            if IPv4Forwarding.set(true) {
+                turnedForwardingOn = true
+                events.record("gateway: ip forwarding on")
+            } else {
+                events.record("gateway: ip forwarding is off and the extension may not turn it on (errno \(errno))")
+            }
+        }
+        #endif
     }
 
     /// Where the system proxy points and what it leaves alone.
