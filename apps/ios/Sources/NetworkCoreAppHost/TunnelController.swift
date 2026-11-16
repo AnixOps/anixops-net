@@ -66,6 +66,13 @@ final class TunnelController {
     /// domain rules see them. Kept in the app's defaults; the saved profile carries a copy
     /// (`TunnelProfileKeys.blockQuic`). Off by default.
     private(set) var blockQuic = UserDefaults.standard.bool(forKey: TunnelController.blockQuicKey)
+    /// How the tunnel takes over traffic: the tunnel interface, the system proxy, or both (`TrafficTakeover`). Kept
+    /// in the app's defaults; the saved profile carries a copy (`TunnelProfileKeys.takeover`).
+    private(set) var takeover = TunnelController.savedTakeover()
+    /// What the system proxy leaves alone; the saved profile carries a copy (`TunnelProfileKeys.proxyExceptions`).
+    private(set) var proxyExceptions = ProxyExceptions.fromProfileValue(
+        UserDefaults.standard.data(forKey: ProxyExceptions.storageKey)
+    )
     /// When the running tunnel last took new local rules in place, without a restart.
     private(set) var lastRulesReload: Date?
     /// Proxy client or debugging tool (`AppMode`); nil until the user picks one on first launch. Read in `load()`.
@@ -497,6 +504,79 @@ final class TunnelController {
     /// The app's defaults key of `blockQuic`.
     static let blockQuicKey = "networkcore.block-quic"
 
+    static var isMac: Bool {
+        #if os(macOS)
+        true
+        #else
+        false
+        #endif
+    }
+
+    private static func savedTakeover() -> TrafficTakeover {
+        let raw = UserDefaults.standard.string(forKey: TrafficTakeover.storageKey) ?? ""
+        return (TrafficTakeover(rawValue: raw) ?? .default).supported(macOS: isMac)
+    }
+
+    /// Switches between the tunnel interface, the system proxy, or both. The interface settings change with it, so
+    /// a running tunnel restarts.
+    func setTakeover(_ next: TrafficTakeover) async {
+        let next = next.supported(macOS: Self.isMac)
+        guard next != takeover else {
+            return
+        }
+        takeover = next
+        UserDefaults.standard.set(next.rawValue, forKey: TrafficTakeover.storageKey)
+        await saveTakeoverSettings(failure: String(localized: "保存接管方式到 VPN 配置失败"))
+    }
+
+    /// Replaces what the system proxy leaves alone. A running tunnel that uses the proxy restarts on it.
+    func setProxyExceptions(_ exceptions: ProxyExceptions) async {
+        guard exceptions != proxyExceptions else {
+            return
+        }
+        proxyExceptions = exceptions
+        UserDefaults.standard.set(exceptions.profileValue, forKey: ProxyExceptions.storageKey)
+        await saveTakeoverSettings(
+            failure: String(localized: "保存跳过代理的地址到 VPN 配置失败"), restarts: takeover.usesSystemProxy
+        )
+    }
+
+    /// Writes `takeover` and `proxyExceptions` into the saved profile and restarts a running tunnel on them.
+    private func saveTakeoverSettings(failure: String, restarts: Bool = true) async {
+        guard let manager, let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol else {
+            return
+        }
+        var configuration = tunnelProtocol.providerConfiguration ?? [:]
+        Self.applyTakeover(takeover, exceptions: proxyExceptions, to: &configuration)
+        tunnelProtocol.providerConfiguration = configuration
+        manager.protocolConfiguration = tunnelProtocol
+        do {
+            self.manager = try await persist(manager)
+        } catch {
+            message = failure + Self.errorCode(error)
+            refresh()
+            return
+        }
+        refresh()
+        if restarts, isConnected {
+            restart()
+        }
+    }
+
+    /// The profile entries for `takeover` and `exceptions`; the defaults are left out.
+    static func applyTakeover(
+        _ takeover: TrafficTakeover,
+        exceptions: ProxyExceptions,
+        to configuration: inout [String: Any]
+    ) {
+        configuration[TunnelProfileKeys.takeover] = takeover.rawValue
+        if exceptions.isDefault {
+            configuration.removeValue(forKey: TunnelProfileKeys.proxyExceptions)
+        } else {
+            configuration[TunnelProfileKeys.proxyExceptions] = exceptions.profileValue
+        }
+    }
+
     /// Turns QUIC blocking on or off. A running engine switches in place and closes its open UDP flows to port 443,
     /// so apps already on QUIC fall back to TCP at once; an older engine restarts the tunnel instead.
     func setBlockQuic(_ on: Bool) async {
@@ -893,6 +973,7 @@ final class TunnelController {
         if blockQuic {
             providerConfiguration[TunnelProfileKeys.blockQuic] = true
         }
+        Self.applyTakeover(takeover, exceptions: proxyExceptions, to: &providerConfiguration)
         if let value = try? localRules.profileValue() {
             providerConfiguration[TunnelProfileKeys.localRules] = value
         }

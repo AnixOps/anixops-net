@@ -11622,6 +11622,246 @@
           }
         }
       }
+    },
+    "接管方式": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Takeover"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "接管方式"
+          }
+        }
+      }
+    },
+    "跳过代理的地址": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proxy Exceptions"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "略過代理的位址"
+          }
+        }
+      }
+    },
+    "%lld 项": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld items"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 項"
+          }
+        }
+      }
+    },
+    "VPN + 系统代理": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VPN + System Proxy"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VPN + 系統代理"
+          }
+        }
+      }
+    },
+    "仅 VPN": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VPN Only"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "僅 VPN"
+          }
+        }
+      }
+    },
+    "仅系统代理": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System Proxy Only"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "僅系統代理"
+          }
+        }
+      }
+    },
+    "切换时如果已连接，会自动重连一次。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If connected, switching reconnects once."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換時如果已連線，會自動重新連線一次。"
+          }
+        }
+      }
+    },
+    "VPN 接管全部流量，同时把系统 HTTP / HTTPS 代理指向本机。遵守代理设置的 App（大部分网页和系统网络请求）直接交给代理，不经过 VPN 里的 TCP/IP 协议栈，更省电，规则也能直接看到域名和明文 HTTP 的完整网址；其余流量照常走 VPN。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The VPN takes all traffic, and the system HTTP / HTTPS proxy points to this device too. Apps that honor the proxy (most web pages and system network requests) hand their connections to the proxy instead of the TCP/IP stack inside the VPN, which saves battery, and rules see the domain and the full URL of plain HTTP directly. Everything else still goes through the VPN."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VPN 接管全部流量，同時把系統 HTTP / HTTPS 代理指向本機。遵守代理設定的 App（大部分網頁和系統網路請求）直接交給代理，不經過 VPN 裡的 TCP/IP 協定堆疊，更省電，規則也能直接看到網域和明文 HTTP 的完整網址；其餘流量照常走 VPN。"
+          }
+        }
+      }
+    },
+    "只用 VPN 接管全部流量，不设置系统代理。某个 App 用代理时出问题，可以先换成这一项排查。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The VPN alone takes all traffic, with no system proxy. If an app misbehaves behind the proxy, switch to this to rule it out."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只用 VPN 接管全部流量，不設定系統代理。某個 App 用代理時出問題，可以先換成這一項排查。"
+          }
+        }
+      }
+    },
+    "只设置系统 HTTP / HTTPS 代理，不创建默认路由。遵守代理设置的 App 按规则走；不遵守的 App 和 UDP 流量直接出去，不经过规则、MITM 和抓包。最省资源。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only the system HTTP / HTTPS proxy is set, with no default route. Apps that honor the proxy follow the rules; apps that ignore it and UDP traffic go out directly, without rules, MITM or capture. Uses the fewest resources."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只設定系統 HTTP / HTTPS 代理，不建立預設路由。遵守代理設定的 App 按規則走；不遵守的 App 和 UDP 流量直接出去，不經過規則、MITM 和封包擷取。最省資源。"
+          }
+        }
+      }
+    },
+    "每行一项：域名（router.lan）、通配符（*.local）、IP 或网段（192.168.0.0/16）。这些地址不走系统代理；VPN 接管时仍按规则走 VPN。# 开头的行是注释。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One per line: a domain (router.lan), a wildcard (*.local), an IP or a network (192.168.0.0/16). These skip the system proxy; while the VPN takes traffic they still follow the rules through the VPN. Lines starting with # are comments."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每行一項：網域（router.lan）、萬用字元（*.local）、IP 或網段（192.168.0.0/16）。這些位址不走系統代理；VPN 接管時仍按規則走 VPN。# 開頭的行是註解。"
+          }
+        }
+      }
+    },
+    "第 %@ 行不是域名、通配符或网段，保存时会去掉。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Line %@ is not a domain, wildcard or network and will be left out when saved."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "第 %@ 行不是網域、萬用字元或網段，儲存時會去掉。"
+          }
+        }
+      }
+    },
+    "填入默认列表": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fill In Default List"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "填入預設清單"
+          }
+        }
+      }
+    },
+    "保存接管方式到 VPN 配置失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not save the takeover mode to the VPN configuration"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法將接管方式儲存到 VPN 設定"
+          }
+        }
+      }
+    },
+    "保存跳过代理的地址到 VPN 配置失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not save the proxy exceptions to the VPN configuration"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法將略過代理的位址儲存到 VPN 設定"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

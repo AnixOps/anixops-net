@@ -626,6 +626,12 @@ public enum TunnelProfileKeys {
     public static let localRules = "networkcore.local-rules"
     /// `Data` holding the encoded `NotificationSettings`. Absent posts every kind of notification.
     public static let notifications = "networkcore.notifications"
+    /// The `TrafficTakeover` raw value: the tunnel interface, the system proxy, or both. Absent is
+    /// `TrafficTakeover.default`.
+    public static let takeover = "networkcore.takeover"
+    /// `Data` holding a JSON array of the system proxy's exceptions (`ProxyExceptions.profileValue`). Absent is
+    /// `ProxyExceptions.defaults`.
+    public static let proxyExceptions = "networkcore.proxy-exceptions"
 }
 
 extension EmbeddedRuntimeConfig {
