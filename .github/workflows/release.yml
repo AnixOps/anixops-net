@@ -1180,8 +1180,8 @@ jobs:
     env:
       CARGO_INCREMENTAL: "0"
     outputs:
-      artifact_name: ${{ steps.stage.outputs.artifact_name }}
-      apk_name: ${{ steps.stage.outputs.apk_name }}
+      # No artifact or APK name here: GitHub drops a job output that contains a secret's value, and the key alias
+      # secret ("anixops") is part of every name. Publish GitHub Release derives both names from the version.
       signing_kind: ${{ steps.apk.outputs.kind }}
     steps:
       - name: Checkout
@@ -1267,7 +1267,7 @@ jobs:
       - name: Download Android APK
         uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.package-android.outputs.artifact_name }}
+          name: anixops-net-android-${{ needs.release-policy.outputs.version }}
           path: dist/android
 
       - name: Create GitHub Release
@@ -1284,13 +1284,18 @@ jobs:
           WINDOWS_ZIP: ${{ needs.package-windows.outputs.portable_artifact_name }}
           LINUX_TARBALL: ${{ needs.package-linux-gui.outputs.archive_name }}
           LINUX_DEB: ${{ needs.package-linux-gui.outputs.deb_name }}
-          ANDROID_APK: ${{ needs.package-android.outputs.apk_name }}
+          ANDROID_APK: anixops-net-${{ needs.release-policy.outputs.version }}-android-arm64.apk
           ANDROID_SIGNING: ${{ needs.package-android.outputs.signing_kind }}
           KERNEL_REV_SOURCE: Cargo.toml
         run: |
           set -euo pipefail
           test "${LINUX_GUI_ATTESTATION_STATUS}" = "attested"
           test "${WINDOWS_ATTESTATION_STATUS}" = "attested"
+          # Empty when GitHub dropped the output (see package-android); the note below must not guess.
+          case "${ANDROID_SIGNING}" in
+            release|debug) ;;
+            *) echo "::error::Android signing kind is missing ('${ANDROID_SIGNING}')."; exit 1 ;;
+          esac
           test "$(find dist/release -maxdepth 1 -type f | wc -l | tr -d ' ')" = "16"
           (
             cd dist/release
