@@ -28,6 +28,10 @@ inputs:
     description: Gradle tasks to run before the release build in the same call (CI's lint, tests and screenshots)
     required: false
     default: ""
+  version-name:
+    description: versionName for the build (release.yml passes the tag without "v"); empty = the one in build.gradle.kts
+    required: false
+    default: ""
   bundle:
     description: Also build the AAB (:app:bundleRelease)
     required: false
@@ -138,15 +142,24 @@ runs:
       env:
         CHECKS: ${{ inputs.checks }}
         BUNDLE: ${{ inputs.bundle }}
+        VERSION_NAME: ${{ inputs.version-name }}
       run: |
         set -euo pipefail
         tasks=":app:assembleRelease"
         if [ "${BUNDLE}" = "true" ]; then
           tasks="${tasks} :app:bundleRelease"
         fi
+        props=()
+        if [ -n "${VERSION_NAME}" ]; then
+          if [[ ! "${VERSION_NAME}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[1-9][0-9]*)?$ ]]; then
+            echo "::error::version-name must look like 0.3.0 or 0.3.0-beta.7, got ${VERSION_NAME}"
+            exit 1
+          fi
+          props+=("-Panixops.versionName=${VERSION_NAME}")
+        fi
         # Word splitting is wanted: CHECKS and tasks are lists of Gradle task names.
         # shellcheck disable=SC2086
-        gradle -p apps/android-native --no-daemon ${CHECKS} ${tasks}
+        gradle -p apps/android-native --no-daemon "${props[@]}" ${CHECKS} ${tasks}
 
     - name: Sign the APK
       id: sign
