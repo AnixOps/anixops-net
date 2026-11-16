@@ -1402,6 +1402,16 @@ impl Backend {
         self.engine.control(request)
     }
 
+    /// The running engine's answer to `{"cmd":"connections"}`; `null` while there is no engine to ask.
+    pub fn connections(&self) -> serde_json::Value {
+        if !self.engine.is_running() {
+            return serde_json::Value::Null;
+        }
+        self.engine
+            .control(&serde_json::json!({ "cmd": "connections" }))
+            .unwrap_or(serde_json::Value::Null)
+    }
+
     fn traffic_path(&self) -> PathBuf {
         self.store.dir().join("traffic-stats.json")
     }

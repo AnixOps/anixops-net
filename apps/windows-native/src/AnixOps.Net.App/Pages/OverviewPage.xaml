@@ -15,7 +15,7 @@
     </Page.Resources>
 
     <!-- Whether the client is connected, the button that connects and disconnects, the node in use and how
-         much is moving. What stands here is decided in AnixOps.Net.Presentation.Overview; this draws it. -->
+         much is moving; the card that counts the open connections opens their list. What stands here is decided in AnixOps.Net.Presentation.Overview; this draws it. -->
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <Grid Margin="32,24,32,32">
             <Grid.ColumnDefinitions>
@@ -147,18 +147,41 @@
                         </StackPanel>
                     </Border>
                     <Border Grid.Column="2" Style="{StaticResource OverviewCard}">
-                        <StackPanel Spacing="{StaticResource BrandSpacingXxs}">
-                            <TextBlock
-                                x:Name="ConnectionsLabel"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Style="{StaticResource CaptionTextBlockStyle}" />
-                            <TextBlock
-                                x:Name="ConnectionsText"
-                                AutomationProperties.AutomationId="Overview.Connections"
-                                Style="{StaticResource SubtitleTextBlockStyle}" />
-                            <!-- Keeps the three cards the same height: the other two have a line here. -->
-                            <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text=" " />
-                        </StackPanel>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Spacing="{StaticResource BrandSpacingXxs}">
+                                <TextBlock
+                                    x:Name="ConnectionsLabel"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}" />
+                                <TextBlock
+                                    x:Name="ConnectionsText"
+                                    AutomationProperties.AutomationId="Overview.Connections"
+                                    Style="{StaticResource SubtitleTextBlockStyle}" />
+                                <!-- Keeps the three cards the same height: the other two have a line here. -->
+                                <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text=" " />
+                            </StackPanel>
+                            <!-- Opens the list of the connections the card counts. -->
+                            <Button
+                                x:Name="OpenConnectionsButton"
+                                Grid.Column="1"
+                                Width="36"
+                                Height="32"
+                                Padding="0"
+                                VerticalAlignment="Center"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                AutomationProperties.AutomationId="Overview.OpenConnections"
+                                Click="OnOpenConnections">
+                                <FontIcon
+                                    FontSize="14"
+                                    Glyph="&#xE76C;"
+                                    MirroredWhenRightToLeft="True" />
+                            </Button>
+                        </Grid>
                     </Border>
                 </Grid>
             </StackPanel>

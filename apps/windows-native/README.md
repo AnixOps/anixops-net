@@ -11,12 +11,13 @@ pipe.
   service. Requests and answers are fixed by the samples in
   `crates/client-service/fixtures`.
 - `src/AnixOps.Net.Presentation`: what the app shows and how it is started, without any window (sections,
-  wording, launch options, and `Overview`, `Proxies`, `Subscriptions`, `Groups` and `Node`: the core's
-  `overview`, `proxies`, `subscriptions`, `groups` and `node_details` answers turned into those pages'
+  wording, launch options, and `Overview`, `Connections`, `Proxies`, `Subscriptions`, `Groups` and `Node`: the
+  core's `overview`, `connections`, `proxies`, `subscriptions`, `groups` and `node_details` answers turned into those pages'
   sentences, numbers and rows,
   written the same way as in the Linux window).
 - `src/AnixOps.Net.App`: the app. Its title bar, sidebar and pages. `Pages/OverviewPage` asks the core once
-  a second and its button connects and disconnects; `Pages/ProxiesPage` imports a subscription or share
+  a second and its button connects and disconnects; the card that counts the open connections opens
+  `Pages/ConnectionsDialog`, which lists them, searches them and closes one or all of them. `Pages/ProxiesPage` imports a subscription or share
   links, lists the nodes under their subscriptions, searches them, tests their delay, and uses the node
   whose row is selected. Its "Subscriptions" button opens `Pages/SubscriptionsDialog`: one row per
   subscription with its node count, last update, use and expiry, where a subscription is updated, renamed or

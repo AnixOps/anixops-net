@@ -1,0 +1,118 @@
+<ContentDialog
+    x:Class="AnixOps.Net.App.Pages.ConnectionsDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:AnixOps.Net.App.Pages"
+    Style="{StaticResource DefaultContentDialogStyle}">
+
+    <!-- The open connections: a search, how many there are, "close all", and one row per connection with the
+         button that closes it. What the rows say is decided in AnixOps.Net.Presentation.Connections; this
+         draws it. -->
+    <Grid
+        Width="480"
+        MinHeight="320"
+        RowSpacing="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid Grid.Row="0" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox
+                x:Name="SearchBox"
+                Grid.Column="0"
+                AutomationProperties.AutomationId="Connections.Search"
+                IsSpellCheckEnabled="False"
+                TextChanged="OnSearchChanged" />
+            <Button
+                x:Name="CloseAllButton"
+                Grid.Column="1"
+                MinWidth="96"
+                AutomationProperties.AutomationId="Connections.CloseAll"
+                Click="OnCloseAll"
+                IsEnabled="False" />
+        </Grid>
+        <TextBlock
+            x:Name="CountText"
+            Grid.Row="1"
+            AutomationProperties.AutomationId="Connections.Count"
+            AutomationProperties.LiveSetting="Polite"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Style="{StaticResource CaptionTextBlockStyle}" />
+
+        <ListView
+            x:Name="List"
+            Grid.Row="2"
+            MaxHeight="380"
+            AutomationProperties.AutomationId="Connections.List"
+            ContainerContentChanging="OnContainerContentChanging"
+            IsItemClickEnabled="False"
+            SelectionMode="None">
+            <ListView.ItemContainerStyle>
+                <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="Padding" Value="4,0,4,0" />
+                    <!-- The button of a row is reached with Tab. -->
+                    <Setter Property="IsTabStop" Value="False" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="local:ConnectionLine">
+                    <Grid Padding="0,8,0,8" ColumnSpacing="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel
+                            Grid.Column="0"
+                            Margin="0,0,8,0"
+                            VerticalAlignment="Center"
+                            Spacing="2">
+                            <TextBlock
+                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                Text="{x:Bind Title, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="{x:Bind Details, Mode=OneWay}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Button
+                            Grid.Column="1"
+                            Width="36"
+                            Height="32"
+                            Padding="0"
+                            VerticalAlignment="Center"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            AutomationProperties.AutomationId="Connections.Close"
+                            AutomationProperties.Name="{x:Bind CloseSays}"
+                            Click="OnClose"
+                            IsEnabled="{x:Bind CanClose, Mode=OneWay}"
+                            ToolTipService.ToolTip="{x:Bind CloseSays}">
+                            <FontIcon FontSize="12" Glyph="&#xE711;" />
+                        </Button>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <TextBlock
+            x:Name="NoticeText"
+            Grid.Row="2"
+            Margin="0,48,0,0"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Top"
+            AutomationProperties.AutomationId="Connections.Notice"
+            AutomationProperties.LiveSetting="Polite"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Style="{StaticResource BodyTextBlockStyle}"
+            TextWrapping="Wrap"
+            Visibility="Collapsed" />
+    </Grid>
+</ContentDialog>
