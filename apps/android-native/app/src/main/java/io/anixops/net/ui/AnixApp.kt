@@ -18,6 +18,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.List
@@ -242,6 +243,9 @@ fun AnixApp(
             setRoutingMode = app::setRoutingMode,
             closeConnection = { app.closeConnection(it) },
             closeAll = { app.closeAllConnections() },
+            dismissNotice = app::clearNotice,
+            // An empty offer opens the import form on 代理 (or 出口), like an `anixops://import` link.
+            openImport = { proxies.offerImport("") },
         ),
         debugExit = debugExit,
         egress = EgressActions(setExit = app::setDebugExit),
@@ -529,12 +533,20 @@ fun AnixScaffold(
     val closeRules = { egressRules = false }
     val destinations = Destination.of(mode)
     var selected by rememberSaveable(mode) { mutableStateOf(initial?.takeIf { it in destinations } ?: destinations.first()) }
-    // An `anixops://import` link opens the import form where the nodes are: 代理, or 出口 in debug mode.
+    // An `anixops://import` link, or 首页's import button, opens the import form where the nodes are: 代理, or 出口 in
+    // debug mode.
     if (proxiesState.pendingImport != null) {
         LaunchedEffect(proxiesState.pendingImport) {
             egressRules = false
             selected = if (Destination.Proxies in destinations) Destination.Proxies else Destination.Egress
         }
+    }
+    // A failure must show on the page where it happened: 首页 has its card and debug mode its bar; elsewhere in proxy
+    // mode (规则, 代理, 设置…) it comes up in the snackbar once, when it is new.
+    val problem = state.problem()
+    val onHome = selected == Destination.Home
+    LaunchedEffect(problem) {
+        if (problem != null && mode == AppMode.Proxy && !onHome) snackbar.showSnackbar(problem)
     }
     NavigationSuiteScaffold(
         modifier = modifier,
@@ -550,78 +562,82 @@ fun AnixScaffold(
             }
         },
     ) {
-        Box {
-            when (selected) {
-                Destination.Home -> HomeScreen(state, home)
-                Destination.Proxies -> {
-                    LaunchedEffect(Unit) { pollProxies() }
-                    ProxiesScreen(proxiesState, proxies)
-                }
-                Destination.Rules -> {
-                    LaunchedEffect(Unit) { pollRules() }
-                    RulesScreen(state.snapshot, state.busy, rulesState, rules)
-                }
-                Destination.Settings -> when (settingsPage) {
-                    SettingsPage.Logs -> {
-                        BackTo(closePage)
-                        LaunchedEffect(Unit) { pollLogs() }
-                        LogsScreen(logsState, activity.copy(back = closePage))
+        Column {
+            Box(Modifier.weight(1f)) {
+                when (selected) {
+                    Destination.Home -> HomeScreen(state, home)
+                    Destination.Proxies -> {
+                        LaunchedEffect(Unit) { pollProxies() }
+                        ProxiesScreen(proxiesState, proxies)
                     }
-                    SettingsPage.Traffic -> {
-                        BackTo(closePage)
-                        LaunchedEffect(Unit) { pollTraffic() }
-                        TrafficScreen(trafficState, activity.copy(back = closePage))
+                    Destination.Rules -> {
+                        LaunchedEffect(Unit) { pollRules() }
+                        RulesScreen(state.snapshot, state.busy, rulesState, rules)
                     }
-                    null -> {
-                        LaunchedEffect(Unit) { pollSettings() }
-                        SettingsScreen(
-                            mode,
-                            version,
-                            termsVersion,
-                            state.snapshot,
-                            settingsState,
-                            settings.copy(
-                                setMode = onModeChange,
-                                openLogs = { settingsPage = SettingsPage.Logs },
-                                openTraffic = { settingsPage = SettingsPage.Traffic },
-                            ),
+                    Destination.Settings -> when (settingsPage) {
+                        SettingsPage.Logs -> {
+                            BackTo(closePage)
+                            LaunchedEffect(Unit) { pollLogs() }
+                            LogsScreen(logsState, activity.copy(back = closePage))
+                        }
+                        SettingsPage.Traffic -> {
+                            BackTo(closePage)
+                            LaunchedEffect(Unit) { pollTraffic() }
+                            TrafficScreen(trafficState, activity.copy(back = closePage))
+                        }
+                        null -> {
+                            LaunchedEffect(Unit) { pollSettings() }
+                            SettingsScreen(
+                                mode,
+                                version,
+                                termsVersion,
+                                state.snapshot,
+                                settingsState,
+                                settings.copy(
+                                    setMode = onModeChange,
+                                    openLogs = { settingsPage = SettingsPage.Logs },
+                                    openTraffic = { settingsPage = SettingsPage.Traffic },
+                                ),
+                            )
+                        }
+                    }
+                    Destination.Egress -> if (egressRules) {
+                        BackTo(closeRules)
+                        LaunchedEffect(Unit) { pollRules() }
+                        RulesScreen(state.snapshot, state.busy, rulesState, rules, onBack = closeRules)
+                    } else {
+                        LaunchedEffect(Unit) { pollProxies() }
+                        EgressScreen(
+                            debugExit,
+                            state.nodeCount,
+                            proxiesState,
+                            proxies,
+                            egress.copy(openRules = { egressRules = true }),
+                        )
+                    }
+                    Destination.Extensions, Destination.Rewrite -> {
+                        LaunchedEffect(Unit) { pollExtensions() }
+                        ExtensionsScreen(stringResource(selected.label), state.snapshot, extensionsState, extensions)
+                    }
+                    Destination.Requests -> {
+                        LaunchedEffect(Unit) { pollRequests() }
+                        when {
+                            requestsState.sessions != null -> BackTo(requests.closeSessions)
+                            requestsState.replay != null -> BackTo(requests.closeReplay)
+                            requestsState.opened != null -> BackTo(requests.close)
+                            requestsState.connection != null -> BackTo(requests.closeConnection)
+                        }
+                        RequestsScreen(
+                            state,
+                            requestsState,
+                            requests.copy(openRewrite = { selected = Destination.Rewrite }),
                         )
                     }
                 }
-                Destination.Egress -> if (egressRules) {
-                    BackTo(closeRules)
-                    LaunchedEffect(Unit) { pollRules() }
-                    RulesScreen(state.snapshot, state.busy, rulesState, rules, onBack = closeRules)
-                } else {
-                    LaunchedEffect(Unit) { pollProxies() }
-                    EgressScreen(
-                        debugExit,
-                        state.nodeCount,
-                        proxiesState,
-                        proxies,
-                        egress.copy(openRules = { egressRules = true }),
-                    )
-                }
-                Destination.Extensions, Destination.Rewrite -> {
-                    LaunchedEffect(Unit) { pollExtensions() }
-                    ExtensionsScreen(stringResource(selected.label), state.snapshot, extensionsState, extensions)
-                }
-                Destination.Requests -> {
-                    LaunchedEffect(Unit) { pollRequests() }
-                    when {
-                        requestsState.sessions != null -> BackTo(requests.closeSessions)
-                        requestsState.replay != null -> BackTo(requests.closeReplay)
-                        requestsState.opened != null -> BackTo(requests.close)
-                        requestsState.connection != null -> BackTo(requests.closeConnection)
-                    }
-                    RequestsScreen(
-                        state,
-                        requestsState,
-                        requests.copy(connect = home.connect, disconnect = home.disconnect, openRewrite = { selected = Destination.Rewrite }),
-                    )
-                }
+                SnackbarHost(snackbar, modifier = Modifier.align(Alignment.BottomCenter))
             }
-            SnackbarHost(snackbar, modifier = Modifier.align(Alignment.BottomCenter))
+            // Debug mode has no 首页: the connection switch and the last failure stay in a bar under every page.
+            if (mode == AppMode.Debug) DebugConnectionBar(state, home)
         }
     }
 }
