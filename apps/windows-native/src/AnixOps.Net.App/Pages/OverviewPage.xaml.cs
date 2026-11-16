@@ -2,6 +2,7 @@ using AnixOps.Net.Ipc;
 using AnixOps.Net.Presentation;
 using AnixOps.Net.Session;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 
@@ -10,7 +11,8 @@ namespace AnixOps.Net.App.Pages;
 /// <summary>
 /// The overview page: whether the client is connected, the button that connects and disconnects, the node
 /// in use and the traffic counters. It asks the core once a second while it is shown; what the answer means
-/// for the page is decided in <see cref="Overview"/>.
+/// for the page is decided in <see cref="Overview"/>. The card that counts the open connections opens their
+/// list (<see cref="ConnectionsDialog"/>), which is asked for once a second too while it is shown.
 /// </summary>
 public sealed partial class OverviewPage : Page
 {
@@ -41,6 +43,18 @@ public sealed partial class OverviewPage : Page
     private int asked;
     private int unanswered;
 
+    // The list of open connections while it is shown: what its search holds, what the core listed for that,
+    // and what the core is still closing.
+    private ConnectionsDialog? listDialog;
+    private string query = "";
+    private ConnectionList? listed;
+    private readonly HashSet<ulong> closing = [];
+    private bool closingAll;
+    private bool listing;
+
+    // Counts the cores that went away: what was asked of one says nothing about the next.
+    private int era;
+
     public OverviewPage()
     {
         InitializeComponent();
@@ -65,6 +79,9 @@ public sealed partial class OverviewPage : Page
         DownloadLabel.Text = strings["overview.download"];
         UploadLabel.Text = strings["overview.upload"];
         ConnectionsLabel.Text = strings["overview.connections"];
+        // The button shows only a picture: what it does is said in its tooltip and to a screen reader.
+        AutomationProperties.SetName(OpenConnectionsButton, strings["overview.connections.open"]);
+        ToolTipService.SetToolTip(OpenConnectionsButton, strings["overview.connections.open"]);
         Draw();
 
         core.Changed += OnCoreChanged;
@@ -90,6 +107,8 @@ public sealed partial class OverviewPage : Page
         {
             core.Changed -= OnCoreChanged;
         }
+        // A dialog does not outlive the page it is over.
+        listDialog?.Hide();
     }
 
     private bool Connected => core?.Status.State == LinkState.Connected;
@@ -105,16 +124,22 @@ public sealed partial class OverviewPage : Page
         {
             // What a core that is gone said last is not what the one that comes back will say.
             asked++;
+            era++;
             overview = null;
             failure = null;
             trouble = null;
+            listed = null;
+            closing.Clear();
+            closingAll = false;
         }
         Draw();
         OnTick(this, EventArgs.Empty);
+        ListConnections();
     });
 
     private async void OnTick(object? sender, object e)
     {
+        ListConnections();
         // While the core is busy connecting or disconnecting it is asked again once that is done.
         if (!active || unanswered > 0 || pending != Pending.Nothing || !Connected)
         {
@@ -194,6 +219,159 @@ public sealed partial class OverviewPage : Page
         }
     }
 
+    private async void OnOpenConnections(object sender, RoutedEventArgs e)
+    {
+        // One dialog at a time.
+        if (strings is null || !active || listDialog is not null)
+        {
+            return;
+        }
+        var opened = new ConnectionsDialog(strings, Search, CloseConnection, CloseConnections) { XamlRoot = XamlRoot, RequestedTheme = ActualTheme };
+        listDialog = opened;
+        DrawConnections();
+        ListConnections();
+        try
+        {
+            await opened.ShowAsync();
+        }
+        finally
+        {
+            listDialog = null;
+            query = "";
+            listed = null;
+            if (active)
+            {
+                OpenConnectionsButton.Focus(FocusState.Programmatic);
+            }
+        }
+    }
+
+    /// <summary>Asks the core for the open connections while their list is shown, unless an earlier question is still out.</summary>
+    private async void ListConnections()
+    {
+        if (core is null || !active || listDialog is null || listing || !Connected)
+        {
+            return;
+        }
+        listing = true;
+        var mine = query;
+        var from = era;
+        ConnectionList? answer = null;
+        try
+        {
+            answer = Connections.Read(await core.AskAsync(Connections.Command, Connections.Args(mine), AskPatience));
+        }
+        catch (Exception error) when (error is RefusedException or IOException or TimeoutException or OperationCanceledException or ObjectDisposedException)
+        {
+            // Asked again at the next tick; what was listed stays until then.
+        }
+        finally
+        {
+            listing = false;
+        }
+        if (!active || listDialog is null || !Connected || from != era)
+        {
+            // The list was closed meanwhile, or the answer is from a core that has gone since.
+            return;
+        }
+        if (mine != query)
+        {
+            // An answer to a search the user has typed past: ask for the one that stands now.
+            ListConnections();
+            return;
+        }
+        if (answer is not null)
+        {
+            listed = answer;
+            DrawConnections();
+        }
+    }
+
+    private void Search(string typed)
+    {
+        if (typed == query)
+        {
+            return;
+        }
+        query = typed;
+        ListConnections();
+    }
+
+    private void CloseConnection(ulong id)
+    {
+        // A connection is closed once.
+        if (!closingAll && closing.Add(id))
+        {
+            Close(id);
+        }
+    }
+
+    private void CloseConnections()
+    {
+        if (!closingAll)
+        {
+            closingAll = true;
+            Close(null);
+        }
+    }
+
+    /// <summary>Has the core close one connection, or all of them for null.</summary>
+    private async void Close(ulong? id)
+    {
+        if (core is null || !Connected)
+        {
+            closing.Clear();
+            closingAll = false;
+            return;
+        }
+        DrawConnections();
+        var from = era;
+        try
+        {
+            if (id is { } one)
+            {
+                await core.AskAsync(Connections.CloseCommand, Connections.CloseArgs(one), AskPatience);
+            }
+            else
+            {
+                await core.AskAsync(Connections.CloseAllCommand, patience: AskPatience);
+            }
+        }
+        catch (Exception error) when (error is RefusedException or IOException or TimeoutException or OperationCanceledException or ObjectDisposedException)
+        {
+            // A connection that ended by itself meanwhile is as closed as one the core closed: the list that
+            // is asked for next says what is open.
+        }
+        if (from != era)
+        {
+            // The core went away meanwhile, and what it was closing with it.
+            return;
+        }
+        if (id is { } done)
+        {
+            closing.Remove(done);
+        }
+        else
+        {
+            closingAll = false;
+        }
+        DrawConnections();
+        // The list as it is after this, not at the next tick.
+        ListConnections();
+    }
+
+    /// <summary>Draws the list of open connections, if it is shown.</summary>
+    private void DrawConnections()
+    {
+        if (strings is null || listDialog is not { } dialog)
+        {
+            return;
+        }
+        // Without an engine the list says so; with one, it waits for what the core lists.
+        var known = listed ?? (Connected && overview?.State == ConnectionState.Connected ? null : ConnectionList.Nothing);
+        dialog.Show(known is null ? null : Connections.Show(strings, known, query, closing, closingAll));
+    }
+
     private OverviewShown Shown() =>
         Overview.Show(strings!, core?.Status.State != LinkState.Unavailable, overview, pending, failure ?? trouble);
 
@@ -223,6 +401,7 @@ public sealed partial class OverviewPage : Page
         DownloadTotal.Text = shown.DownloadTotal ?? " ";
         UploadTotal.Text = shown.UploadTotal ?? " ";
         ConnectionsText.Text = shown.Connections;
+        DrawConnections();
     }
 
     private static void Write(TextBlock block, string? text)

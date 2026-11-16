@@ -14,7 +14,8 @@ For every language the window is started for real and checked from the outside:
 With the daemon's program given, the window is also run against a real daemon on a socket of its own: it
 says that the core service is not running, finds the daemon when it starts, connects and disconnects with
 the overview's button (the daemon is first told to send traffic out directly, since it has no subscription),
-shows the engine's counters while connected, imports share links on the proxies page, searches the node
+shows the engine's counters while connected, lists, searches and closes connections held open through the
+engine, imports share links on the proxies page, searches the node
 list, chooses another node, tests the nodes' delay, opens the list of subscriptions and updates, renames and
 removes one that a server of this script's own hands out, notices when the daemon stops, and finds it again.
 With a directory given too, the connected window, the proxies page and the list of subscriptions are drawn
@@ -968,6 +969,228 @@ def check_groups(app, binary: str, endpoint: str, text, press, shots: str | None
         server.shutdown()
 
 
+def held_server():
+    """A TCP server on this machine that keeps open whatever connects to it. Returns the listener."""
+    listener = socket.create_server(("127.0.0.1", 0))
+    held = []
+
+    def accept():
+        while True:
+            try:
+                channel, _ = listener.accept()
+            except OSError:
+                return
+            held.append(channel)
+
+    Thread(target=accept, daemon=True).start()
+    return listener
+
+
+def through_proxy(proxy: int, host: str, port: int) -> socket.socket:
+    """A connection to host:port through the engine's local proxy, left open."""
+    channel = socket.create_connection(("127.0.0.1", proxy), timeout=WAIT)
+    channel.sendall(f"CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\n\r\n".encode())
+    head = b""
+    while b"\r\n\r\n" not in head:
+        chunk = channel.recv(4096)
+        if not chunk:
+            fail(f"the engine's proxy closed the connection to {host}:{port} before it answered: {head!r}")
+        head += chunk
+    status = head.split(b"\r\n", 1)[0].split()
+    if len(status) < 2 or status[1] != b"200":
+        fail(f"the engine's proxy answered the connection to {host}:{port} with {head!r}")
+    return channel
+
+
+def ended(channel: socket.socket) -> bool:
+    """Whether the other side has closed that connection."""
+    channel.settimeout(0.2)
+    try:
+        return channel.recv(4096) == b""
+    except TimeoutError:
+        return False
+    except OSError:
+        return True
+
+
+def check_connections(app, binary: str, endpoint: str, text, press, shots: str | None) -> str:
+    """The list of open connections against the real daemon, while it is connected: two connections held
+    open through the engine are listed, searched, closed one by one and all at once."""
+
+    def showing(node) -> bool:
+        return node.get_state_set().contains(Atspi.StateType.SHOWING)
+
+    def open_now(query: str = "") -> dict:
+        return core_ask(endpoint, "connections", {"query": query})
+
+    def listing():
+        return next(
+            (node for node, _ in walk(app)
+             if role(node) == "list" and node.get_name() == text("overview.connections") and showing(node)),
+            None,
+        )
+
+    def rows() -> list:
+        found = listing()
+        if found is None:
+            return []
+        return [node for node, _ in walk(found) if role(node) == "list item" and showing(node)]
+
+    def says(row) -> list[str]:
+        return [node.get_name() or "" for node, _ in walk(row) if role(node) == "label" and showing(node)]
+
+    def titles() -> list[str]:
+        """Where each listed connection goes: the first thing its row says."""
+        return [(says(row) or [""])[0] for row in rows()]
+
+    def said(sentence: str):
+        return next(
+            (node for node, _ in walk(app)
+             if role(node) == "label" and node.get_name() == sentence and showing(node)),
+            None,
+        )
+
+    def named_button(name: str, inside=None):
+        return next(
+            (node for node, _ in walk(inside or app)
+             if role(node) in ("push button", "button") and node.get_name() == name and showing(node)
+             and node.get_state_set().contains(Atspi.StateType.SENSITIVE)),
+            None,
+        )
+
+    def push(node, what: str) -> None:
+        action = node.get_action_iface()
+        if action is None or not action.do_action(0):
+            fail(f"{what} could not be pressed through the accessibility interface")
+
+    def search(value: str) -> None:
+        name = text("connections.search")
+
+        def probe():
+            for node, _ in walk(app):
+                if node.get_name() != name or not showing(node):
+                    continue
+                for candidate, _ in walk(node):
+                    try:
+                        writer = candidate.get_editable_text_iface()
+                    except GLib.Error:
+                        writer = None
+                    if writer is not None:
+                        return writer
+            return None
+
+        if not until(f"the text box {name!r}", probe).set_text_contents(value):
+            fail(f"the text box {name!r} did not take {value!r} through the accessibility interface")
+
+    def count(total: int, shown: int | None = None) -> str:
+        if shown is not None:
+            return text("connections.count.shown").replace("{0}", str(shown)).replace("{1}", str(total))
+        return text("connections.count.one") if total == 1 else text("connections.count").replace("{0}", str(total))
+
+    def listed(query: str = ""):
+        """What the daemon lists, once the dialog lists the same and counts it the same."""
+        answer = open_now(query)
+        wanted = [row["target"] for row in answer["connections"]]
+        counted = count(answer["total"], len(wanted) if query else None)
+        return answer if titles() == wanted and said(counted) is not None else None
+
+    address = core_ask(endpoint, "runtime_snapshot", {})["core"].get("detail") or ""
+    if not re.fullmatch(r"127\.0\.0\.1:\d+", address):
+        fail(f"the daemon says that its engine listens at {address!r}")
+    proxy = int(address.rsplit(":", 1)[1])
+    listener = held_server()
+    port = listener.getsockname()[1]
+    by_name, by_address = f"localhost:{port}", f"127.0.0.1:{port}"
+    channels = {}
+    try:
+        channels[by_address] = through_proxy(proxy, "127.0.0.1", port)
+        channels[by_name] = through_proxy(proxy, "localhost", port)
+        until(
+            f"the daemon to list the connections to {by_address} and {by_name}",
+            lambda: {by_name, by_address} <= {row["target"] for row in open_now()["connections"]},
+        )
+
+        # The overview's row that counts the connections opens their list.
+        press("overview.connections")
+        try:
+            answer = until("the dialog to list what the daemon lists", listed)
+        except SystemExit:
+            dump(app)
+            raise
+        for row in answer["connections"]:
+            # Under where it goes, a row says by which rule and through which exit.
+            drawn = next(found for found in rows() if (says(found) or [""])[0] == row["target"])
+            how = " · ".join(part for part in (row["rule"], " → ".join(row["route"])) if part)
+            if not any(how in line for line in says(drawn)[1:]):
+                fail(f"the row of {row['target']} says {says(drawn)}, not {how!r}")
+            if named_button(text("connections.close"), drawn) is None:
+                fail(f"the row of {row['target']} has no button that closes the connection")
+
+        # A search leaves the connections it names, and says how many of how many.
+        search("localhost")
+        until(f"the search to leave only {by_name}",
+              lambda: titles() == [by_name] and listed("localhost") is not None)
+        search("no such connection")
+        until("the dialog to say that the search leaves nothing",
+              lambda: not rows() and said(text("connections.no_match")) is not None)
+        search("")
+        until("the dialog to list every connection again", listed)
+
+        if shots:
+            picture = os.path.join(shots, "core-connections-zh-light.png")
+            subprocess.run(
+                [binary, "--language", "zh", "--theme", "light", "--socket", endpoint, "--show", "connections",
+                 "--screenshot", picture],
+                check=True,
+                timeout=60,
+            )
+            if not os.path.getsize(picture):
+                fail(f"{picture} is empty")
+
+        # Closing one connection ends that one, for the program that holds it too.
+        drawn = next(found for found in rows() if (says(found) or [""])[0] == by_name)
+        push(named_button(text("connections.close"), drawn), f"the button that closes {by_name}")
+        until(f"the connection to {by_name} to be closed", lambda: ended(channels[by_name]))
+        until(f"the dialog to list no connection to {by_name}",
+              lambda: by_name not in titles() and by_address in titles() and listed() is not None)
+        if ended(channels[by_address]):
+            fail(f"closing the connection to {by_name} closed the one to {by_address} too")
+
+        # "Close all" ends the rest.
+        closer = until("the button that closes every connection",
+                       lambda: named_button(text("connections.close_all")))
+        push(closer, "the button that closes every connection")
+        until(f"the connection to {by_address} to be closed", lambda: ended(channels[by_address]))
+        until("the dialog to say that no connections are open",
+              lambda: not rows() and said(text("connections.empty")) is not None
+              and said(count(0)) is not None)
+        if named_button(text("connections.close_all")) is not None:
+            fail("the dialog offers to close every connection while none is open")
+
+        # The dialog's own way out: the one button in it that is neither of the list's.
+        dialog = closer
+        while dialog is not None and role(dialog) != "dialog":
+            dialog = dialog.get_parent()
+        if dialog is None:
+            dump(app)
+            fail("the list of connections is not in a dialog")
+        others = [
+            node for node, _ in walk(dialog)
+            if role(node) in ("push button", "button") and showing(node)
+            and node.get_name() not in (text("connections.close_all"), text("connections.close"))
+        ]
+        if len(others) != 1:
+            dump(app)
+            fail(f"the dialog has {len(others)} buttons that could close it")
+        push(others[0], "the button that closes the dialog")
+        until("the dialog to be gone", lambda: said(text("connections.empty")) is None and listing() is None)
+        return f"connections ({by_address}, {by_name}): listed, searched, closed one, closed all"
+    finally:
+        for channel in channels.values():
+            channel.close()
+        listener.close()
+
+
 def check_core(binary: str, daemon: str, wording: dict, shots: str | None) -> None:
     """The window against a real daemon: away, found, connected, disconnected, away again, found again."""
     language = "zh"
@@ -1060,6 +1283,7 @@ def check_core(binary: str, daemon: str, wording: dict, shots: str | None) -> No
                 )
                 if not os.path.getsize(picture):
                     fail(f"{picture} is empty")
+            open_connections = check_connections(app, binary, endpoint, text, press, shots)
             press("overview.disconnect")
             sentence("overview.state.disconnected")
             button("overview.connect")
@@ -1072,7 +1296,8 @@ def check_core(binary: str, daemon: str, wording: dict, shots: str | None) -> No
             away("after the daemon stopped")
             core = start_daemon()
             found("after the daemon started again")
-            print(f"[core] not running, found ({line!r}), connected ({', '.join(rates)}), disconnected, "
+            print(f"[core] not running, found ({line!r}), connected ({', '.join(rates)}), "
+                  f"{open_connections}, disconnected, "
                   f"proxies ({nodes}), {node}, {groups}, {subscriptions}, stopped, found again")
         finally:
             stop(window)

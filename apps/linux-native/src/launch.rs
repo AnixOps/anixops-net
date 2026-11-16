@@ -1,6 +1,6 @@
 //! How the window is started. The options fix the surroundings for tests and screenshots; a user starts the
 //! window without any: `--language zh|zh-Hant|en`, `--theme light|dark`, `--page <id>`, `--size <w>x<h>`,
-//! `--screenshot <file.png>`, `--socket <path>`, `--show subscriptions|groups|node`. What is not understood is ignored.
+//! `--screenshot <file.png>`, `--socket <path>`, `--show subscriptions|groups|node|connections`. What is not understood is ignored.
 
 use std::path::PathBuf;
 
@@ -40,6 +40,8 @@ pub struct Launch {
     pub groups: bool,
     /// Open the details of the first node of the list over the window (`--show node`).
     pub node: bool,
+    /// Open the overview page's list of open connections over the window (`--show connections`).
+    pub connections: bool,
 }
 
 impl Default for Launch {
@@ -54,6 +56,7 @@ impl Default for Launch {
             subscriptions: false,
             groups: false,
             node: false,
+            connections: false,
         }
     }
 }
@@ -120,6 +123,7 @@ impl Launch {
                 "--show" if value == "subscriptions" => launch.subscriptions = true,
                 "--show" if value == "groups" => launch.groups = true,
                 "--show" if value == "node" => launch.node = true,
+                "--show" if value == "connections" => launch.connections = true,
                 _ => {}
             }
         }
@@ -171,6 +175,9 @@ mod tests {
         assert!(!Launch::default().node);
         assert!(Launch::parse(["--show=node"]).node);
         assert!(!Launch::parse(["--show", "node"]).groups);
+        assert!(!Launch::default().connections);
+        assert!(Launch::parse(["--show", "connections"]).connections);
+        assert!(!Launch::parse(["--show", "connections"]).node);
     }
 
     #[test]

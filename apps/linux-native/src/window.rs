@@ -20,6 +20,8 @@ use gtk::{gdk, gio, glib};
 use relm4::{ComponentParts, ComponentSender, RelmApp, SimpleComponent};
 use serde_json::json;
 
+use crate::connection_list;
+use crate::connections;
 use crate::groups::{self, Choice, Group};
 use crate::launch::{Appearance, Launch};
 use crate::node::{self, Details, Draft};
@@ -130,6 +132,16 @@ struct Shell {
     /// Set until the details of the list's first node were asked for, when the window was started to
     /// show them.
     first_node: bool,
+    /// Whether the list of open connections is shown, what it is searched for, and the connections as the
+    /// daemon last described them.
+    watching: bool,
+    connection_query: String,
+    connections: Option<connections::List>,
+    /// A question about the connections is out; the next one waits for its answer.
+    counting: Arc<AtomicBool>,
+    /// The connections the daemon is still closing, and whether it is closing all of them.
+    closing: Vec<u64>,
+    closing_all: bool,
     /// How many subscriptions the daemon took in for this window; the link's box empties at each.
     imports: u32,
     /// Counts the changes of the link to the daemon, so that the answer to something asked of a daemon
@@ -174,6 +186,13 @@ enum Show {
     Saved(u32, String, Result<Option<String>, String>, Option<Details>),
     /// The daemon removed the node with this id, or could not.
     Removed(u32, String, Result<(), String>),
+    /// The user asked for something in the list of open connections.
+    Connections(connection_list::Wish),
+    /// The daemon's open connections for a search; the number as in `Done`.
+    Listed(u32, String, Result<connections::List, String>),
+    /// The daemon closed the connection with this id (all of them for `None`), or could not; the number as
+    /// in `Done`.
+    Closed(u32, Option<u64>),
 }
 
 struct ShellWidgets {
@@ -250,6 +269,72 @@ impl Shell {
             listing.store(false, Ordering::SeqCst);
             let _ = input.send(Show::Proxies(query, answer));
         });
+    }
+
+    /// Asks the daemon for the open connections on another thread, while their list is shown and unless an
+    /// earlier question is still out.
+    fn list_connections(&self, sender: &ComponentSender<Self>) {
+        if !self.core_answers() || !self.watching || self.counting.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let link = Arc::clone(&self.link);
+        let counting = Arc::clone(&self.counting);
+        let input = sender.input_sender().clone();
+        let query = self.connection_query.clone();
+        let era = self.era;
+        thread::spawn(move || {
+            let answer = link
+                .ask(
+                    connections::COMMAND,
+                    connections::args(&query),
+                    ASK_PATIENCE,
+                )
+                .map(|answer| connections::read(&answer));
+            counting.store(false, Ordering::SeqCst);
+            let _ = input.send(Show::Listed(era, query, answer));
+        });
+    }
+
+    /// Has the daemon close one connection, or all of them for `None`, on another thread.
+    fn close_connections(&mut self, id: Option<u64>, sender: &ComponentSender<Self>) {
+        match id {
+            Some(id) => self.closing.push(id),
+            None => self.closing_all = true,
+        }
+        let link = Arc::clone(&self.link);
+        let input = sender.input_sender().clone();
+        let era = self.era;
+        thread::spawn(move || {
+            let (command, args) = match id {
+                Some(id) => connections::close(id),
+                None => (connections::CLOSE_ALL, json!({})),
+            };
+            // A connection that ended by itself meanwhile is as closed as one the daemon closed: the list
+            // that is asked for next says what is open.
+            let _ = link.ask(command, args, ASK_PATIENCE);
+            let _ = input.send(Show::Closed(era, id));
+        });
+    }
+
+    /// The list of open connections for what is known now; `None` while it is not shown, and while a daemon
+    /// that answers has not said yet.
+    fn connections_shown(&self) -> Option<connections::Shown> {
+        // Without a daemon the list says what it says without an engine.
+        let nothing = connections::List::default();
+        let list = match &self.connections {
+            Some(list) => list,
+            None if !self.core_answers() => &nothing,
+            None => return None,
+        };
+        self.watching.then(|| {
+            connections::shown(
+                self.language,
+                list,
+                &self.connection_query,
+                &self.closing,
+                self.closing_all,
+            )
+        })
     }
 
     /// Asks the daemon for the subscriptions on another thread, unless an earlier question is still out.
@@ -554,6 +639,12 @@ impl SimpleComponent for Shell {
             node_busy: false,
             node_problem: None,
             first_node: launch.node,
+            watching: false,
+            connection_query: String::new(),
+            connections: None,
+            counting: Arc::new(AtomicBool::new(false)),
+            closing: Vec::new(),
+            closing_all: false,
             imports: 0,
             era: 0,
         };
@@ -613,10 +704,17 @@ impl SimpleComponent for Shell {
         let sidebar = adw::NavigationPage::new(&sidebar_view, model.text("app.name"));
 
         // The page: the overview, or for a page that is not built yet, what it will hold.
-        let overview = OverviewPage::new(model.language, {
-            let sender = sender.clone();
-            move || sender.input(Show::Press)
-        });
+        let overview = OverviewPage::new(
+            model.language,
+            {
+                let sender = sender.clone();
+                move || sender.input(Show::Press)
+            },
+            {
+                let sender = sender.clone();
+                move |wish| sender.input(Show::Connections(wish))
+            },
+        );
         let proxies = ProxiesPage::new(model.language, {
             let sender = sender.clone();
             move |asked| sender.input(Show::Ask(asked))
@@ -701,6 +799,9 @@ impl SimpleComponent for Shell {
         if launch.groups {
             widgets.proxies.open_groups();
         }
+        if launch.connections {
+            widgets.overview.open_connections();
+        }
         if let Some(file) = launch.screenshot {
             // The page the screenshot is of, not the sidebar, when only one of them fits.
             split.set_show_content(true);
@@ -747,13 +848,59 @@ impl SimpleComponent for Shell {
                 self.node = None;
                 self.node_busy = false;
                 self.node_problem = None;
+                self.connections = None;
+                self.closing.clear();
+                self.closing_all = false;
                 self.era = self.era.wrapping_add(1);
                 self.refresh(&sender);
                 self.list(&sender);
+                self.list_connections(&sender);
             }
             Show::Tick => {
                 self.refresh(&sender);
                 self.list(&sender);
+                self.list_connections(&sender);
+            }
+            Show::Connections(connection_list::Wish::Opened) => {
+                self.watching = true;
+                self.list_connections(&sender);
+            }
+            Show::Connections(connection_list::Wish::Closed) => {
+                self.watching = false;
+                self.connection_query.clear();
+                self.connections = None;
+            }
+            Show::Connections(connection_list::Wish::Search(query)) => {
+                self.connection_query = query;
+                self.list_connections(&sender);
+            }
+            Show::Connections(connection_list::Wish::Close(id)) => {
+                // A connection is closed once.
+                if self.core_answers() && !self.closing_all && !self.closing.contains(&id) {
+                    self.close_connections(Some(id), &sender);
+                }
+            }
+            Show::Connections(connection_list::Wish::CloseAll) => {
+                if self.core_answers() && !self.closing_all {
+                    self.close_connections(None, &sender);
+                }
+            }
+            // An answer from a daemon that has gone since says nothing about now.
+            Show::Listed(era, ..) | Show::Closed(era, _) if era != self.era => {}
+            // An answer to a search the user has typed past: ask for the one that stands now.
+            Show::Listed(_, query, _) if query != self.connection_query => {
+                self.list_connections(&sender);
+            }
+            Show::Listed(_, _, Ok(list)) => self.connections = Some(list),
+            // Asked again at the next tick; what was listed stays until then.
+            Show::Listed(_, _, Err(_)) => {}
+            Show::Closed(_, id) => {
+                match id {
+                    Some(id) => self.closing.retain(|closing| *closing != id),
+                    None => self.closing_all = false,
+                }
+                // The list as it is after this, not at the next tick.
+                self.list_connections(&sender);
             }
             // An answer that comes after the daemon went away says nothing about now.
             Show::Overview(_) if !self.core_answers() => {}
@@ -946,7 +1093,9 @@ impl SimpleComponent for Shell {
         }
 
         widgets.content.set_title(self.text(section.title));
-        widgets.overview.show(&self.overview_shown());
+        widgets
+            .overview
+            .show(&self.overview_shown(), self.connections_shown().as_ref());
         let subscriptions = self.subscriptions.as_ref().map(|subscriptions| {
             subscriptions::shown(self.language, subscriptions, &self.changing)
         });
