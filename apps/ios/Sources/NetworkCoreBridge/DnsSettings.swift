@@ -245,7 +245,8 @@ public struct DnsSettings: Codable, Equatable {
             return false
         }
         let bytes = withUnsafeBytes(of: &v6) { Array($0) }
-        return bytes[0] == 0xFC && bytes[1] & 0xC0 == 0
+        // fc00::/18: the first two bytes, then the top two bits of the third.
+        return bytes[0] == 0xFC && bytes[1] == 0 && bytes[2] & 0xC0 == 0
     }
 
     /// The servers that answer names no rule picks: `defaultServers`, otherwise the first server.
