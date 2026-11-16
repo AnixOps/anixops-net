@@ -56,6 +56,16 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    // Proxy mode reaches the usage history from the overview's usage card; debug mode has no
+                    // overview, so it is here.
+                    if tunnel.appMode == .debug {
+                        NavigationLink {
+                            TrafficStatsView(tunnel: tunnel)
+                        } label: {
+                            Text("流量统计")
+                        }
+                        .listRowBackground(brand.surface)
+                    }
                     LogExportButton(tunnel: tunnel)
                         .listRowBackground(brand.surface)
                 } header: {

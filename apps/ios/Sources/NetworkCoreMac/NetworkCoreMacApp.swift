@@ -362,8 +362,17 @@ private struct MenuBarContent: View {
 
     var body: some View {
         Text(tunnel.phase.title)
-        if let name = tunnel.nodeName {
+        if tunnel.appMode == .debug {
+            Text(tunnel.debugExitSummary)
+        } else if let name = tunnel.nodeName {
             Text(name)
+        }
+        // A connect from here may fail while the window is closed: say so here too.
+        if let message = tunnel.message {
+            Text(message)
+            Button("打开 AnixOps Net 查看") {
+                showWindow()
+            }
         }
         Divider()
         if tunnel.phase == .unconfigured {

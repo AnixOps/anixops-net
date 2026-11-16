@@ -426,6 +426,8 @@ struct MacActivityPage: View {
     private var diagnosticsMenu: some View {
         Menu {
             Text(tunnel.runtimeStatus ?? String(localized: "隧道未运行"))
+            // Proxy mode shows it in the activity strip; debug mode has only this menu.
+            Text("上次停止原因：\(tunnel.lastDisconnectError ?? String(localized: "无记录"))")
             Divider()
             Button(copied ? "已复制" : "复制诊断信息") {
                 copyDiagnostics()
@@ -652,6 +654,16 @@ struct MacSettingsPage: View {
                 Text("崩溃时记录脱敏后的信息（不含网址、账号和节点地址），只保存在本机，复制诊断信息时附上。关闭会删除已保存的报告。")
             }
 
+            // Proxy mode reaches the usage history from the overview's usage card; debug mode has no overview.
+            if tunnel.appMode == .debug {
+                Section("诊断") {
+                    NavigationLink {
+                        TrafficStatsView(tunnel: tunnel)
+                    } label: {
+                        MacTileLabel(title: "流量统计", systemImage: "chart.bar", color: MacTileColor.teal)
+                    }
+                }
+            }
             MacUpdateSection()
 
             MacCommandLineSection()
@@ -877,8 +889,8 @@ struct MacCard<Content: View>: View {
     }
 }
 
-/// An error or notice with a dismiss button.
-private struct MacNotice: View {
+/// An error or notice with a dismiss button: on the overview, and over every other page (`MacRootView`).
+struct MacNotice: View {
     @Environment(\.brand) private var brand
     let text: String
     let dismiss: () -> Void
@@ -893,6 +905,7 @@ private struct MacNotice: View {
                 .foregroundStyle(brand.text)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .textSelection(.enabled)
+                .accessibilityIdentifier("app-notice")
             Button(action: dismiss) {
                 Image(systemName: "xmark")
             }
