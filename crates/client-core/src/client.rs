@@ -25,6 +25,7 @@ use serde_json::Value;
 use subscription_meta::ResponseMeta;
 
 use crate::backend::engine;
+use crate::backend::engine::NetworkFacts;
 use crate::backend::session::{LocalSession, UserSession};
 use crate::backend::state::{RoutingMode, Store};
 use crate::backend::system_proxy::Desktop;
@@ -40,6 +41,9 @@ pub use on_demand::Network;
 /// The URL the delay tests fetch, as on Windows.
 const DELAY_URL: &str = "https://www.gstatic.com/generate_204";
 const FETCH_TIMEOUT: Duration = Duration::from_secs(30);
+/// The network watch reads the Wi-Fi name every this many samples (`network_watch::POLL` apart) besides on a
+/// path change.
+const NETWORK_READ_EVERY: u32 = 10;
 const UNAVAILABLE: &str = if cfg!(target_os = "android") {
     "Not available on Android yet"
 } else {
@@ -696,16 +700,35 @@ impl Client {
         Err(UNAVAILABLE.to_string())
     }
 
-    /// Rebuilds the engine's connections when the network changes or the computer wakes (`network_watch`).
+    /// Rebuilds the engine's connections when the network changes or the computer wakes (`network_watch`), and
+    /// tells it the network for its `subnet` groups.
     fn start_network_watch(&self) {
         let backend = self.backend.clone();
+        let platform = self.platform.clone();
         thread::spawn(move || {
             let mut watch = network_watch::NetworkWatch::new();
+            let mut last_path = None;
+            let mut network = None;
+            let mut samples: u32 = 0;
             loop {
                 let path = network_watch::current_path();
-                if let Some(reset) = watch.observe(std::time::SystemTime::now(), path) {
-                    lock(&backend).reset_network(reset);
+                // The Wi-Fi name can change without the addresses (Windows asks `netsh`, a process): read it
+                // when the path changes and every thirty seconds.
+                if path != last_path || samples % NETWORK_READ_EVERY == 0 {
+                    network = platform.current_network(false);
                 }
+                samples = samples.wrapping_add(1);
+                last_path = path.clone();
+                let reset = watch.observe(std::time::SystemTime::now(), path);
+                let facts = NetworkFacts::new(network.as_ref(), network_watch::current_addresses());
+                // Every sample, so an engine started since the last one learns the network too (the engine only
+                // acts when it changed), and before the reset, so the rebuilt connections pick by the new one.
+                let guard = lock(&backend);
+                guard.set_network(&facts);
+                if let Some(reset) = reset {
+                    guard.reset_network(reset);
+                }
+                drop(guard);
                 thread::sleep(network_watch::POLL);
             }
         });

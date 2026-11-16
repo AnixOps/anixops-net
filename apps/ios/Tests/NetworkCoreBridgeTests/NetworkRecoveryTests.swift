@@ -69,6 +69,29 @@ final class NetworkRecoveryTests: XCTestCase {
         XCTAssertEqual(resets, 20)
     }
 
+    func testTheNetworkRequestCarriesWhatIsKnown() {
+        let facts = NetworkFacts(kind: "wifi", router: "192.168.1.1", addresses: ["192.168.1.5", "2001:db8::5"])
+        XCTAssertEqual(
+            request(.setNetwork(facts)),
+            #"{"addresses":["192.168.1.5","2001:db8::5"],"cmd":"set_network","router":"192.168.1.1","type":"wifi"}"#
+        )
+        XCTAssertEqual(
+            request(.setNetwork(NetworkFacts(kind: "cellular", router: nil, addresses: []))),
+            #"{"cmd":"set_network","type":"cellular"}"#
+        )
+        XCTAssertEqual(request(.setNetwork(nil)), #"{"cmd":"set_network"}"#)
+    }
+
+    func testTheNetworkKeepsAtMostSixteenAddresses() {
+        let many = (1...20).map { "10.0.0.\($0)" }
+        XCTAssertEqual(NetworkFacts(kind: nil, router: nil, addresses: many).addresses.count, 16)
+    }
+
+    func testDecodesTheNetworkAnswer() {
+        let answer = RuntimeControl.decode(RuntimeControl.NetworkSet.self, from: Data(#"{"changed":true}"#.utf8))
+        XCTAssertEqual(answer, RuntimeControl.NetworkSet(changed: true))
+    }
+
     func testDecodesTheAnswer() {
         let answer = RuntimeControl.decode(RuntimeControl.NetworkReset.self, from: Data(#"{"reset":2,"closed":7}"#.utf8))
         XCTAssertEqual(answer, RuntimeControl.NetworkReset(reset: 2, closed: 7))

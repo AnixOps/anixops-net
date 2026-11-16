@@ -29,6 +29,9 @@ public enum RuntimeControl {
     /// open connections, after the network under the tunnel changed or the device woke from a long sleep
     /// (`{"reset": count, "closed": count}`).
     case resetNetwork(closeConnections: Bool)
+    /// The physical network under the tunnel, for `subnet` policy groups (`{"changed": bool}`); nil fields stay
+    /// unknown. The extension sends it with every path, before `resetNetwork`.
+    case setNetwork(NetworkFacts?)
     /// Runs one scheduled script now.
     case runScript(tag: String)
     /// Dial health of the nodes that keep it (`OutboundHealth`).
@@ -109,6 +112,10 @@ public enum RuntimeControl {
             object = ["cmd": "network_changed"]
         case let .resetNetwork(closeConnections):
             object = ["cmd": "reset_network", "close_connections": closeConnections]
+        case let .setNetwork(facts):
+            var request = facts?.fields ?? [:]
+            request["cmd"] = "set_network"
+            object = request
         case let .runScript(tag):
             object = ["cmd": "run_script", "tag": tag]
         case .outboundHealth:
@@ -214,6 +221,15 @@ public enum RuntimeControl {
         enum CodingKeys: String, CodingKey {
             case contentType = "content_type"
             case text
+        }
+    }
+
+    /// The `set_network` answer: whether the network the `subnet` groups match changed.
+    public struct NetworkSet: Decodable, Equatable {
+        public let changed: Bool
+
+        public init(changed: Bool) {
+            self.changed = changed
         }
     }
 
