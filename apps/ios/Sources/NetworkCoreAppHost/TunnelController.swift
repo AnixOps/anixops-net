@@ -164,6 +164,15 @@ final class TunnelController {
         DebugExit.usesDirect(mode: appMode, exit: debugExit, hasNodes: !hasNoNodes)
     }
 
+    /// Where debug mode's traffic goes out, for the connect switch's caption: direct, or the selected node. Exit
+    /// "through a node" without any node runs direct for now (`DebugExit.usesDirect`).
+    var debugExitSummary: String {
+        if !usesDirectExit, !runsDirectProfile, let name = nodeName {
+            return String(localized: "出口 · \(name)")
+        }
+        return String(localized: "出口 · 直连")
+    }
+
     /// The connect switch can start a tunnel: there is a node, or debug mode goes direct.
     var canConnect: Bool {
         !hasNoNodes || usesDirectExit

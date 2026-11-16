@@ -11590,6 +11590,38 @@
           }
         }
       }
+    },
+    "出口 · 直连": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exit · Direct"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "出口 · 直連"
+          }
+        }
+      }
+    },
+    "出口 · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exit · %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "出口 · %@"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

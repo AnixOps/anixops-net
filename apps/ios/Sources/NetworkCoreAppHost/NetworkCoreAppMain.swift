@@ -51,7 +51,8 @@ struct NetworkCoreAppMain: App {
 }
 
 /// The top-level sections shared by every AnixOps Net client: five in proxy mode; in debug mode the requests take
-/// the place of proxies and rules, which move into Settings › Exit.
+/// the place of proxies and rules, which move into Settings › Exit. Debug mode has no overview, so its connect
+/// switch sits in a bar under every tab instead (`DebugConnectBar`).
 enum AppTab: Hashable, CaseIterable, Identifiable {
     case home
     case requests
@@ -277,6 +278,7 @@ struct RootView: View {
         TabView(selection: $tab) {
             ForEach(AppTab.tabs(for: tunnel.appMode)) { section in
                 content(section)
+                    .debugConnectBar(tunnel)
                     .tabItem { Label(section.title(in: tunnel.appMode), systemImage: section.systemImage) }
                     .tag(section)
             }
@@ -296,6 +298,7 @@ struct RootView: View {
             .background(brand.bg.ignoresSafeArea())
         } detail: {
             content(tab)
+                .debugConnectBar(tunnel)
                 .id(tab)
         }
         .navigationSplitViewStyle(.balanced)

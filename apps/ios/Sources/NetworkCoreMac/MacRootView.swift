@@ -172,6 +172,15 @@ private struct MacSidebarStatus: View {
     var tunnel: TunnelController
     @ObservedObject var state: MacAppState
 
+    /// The node, or in debug mode where the traffic goes out: the direct exit needs no node, so "no nodes yet"
+    /// would read as if the switch could not connect.
+    private var caption: String {
+        if tunnel.appMode == .debug {
+            return tunnel.debugExitSummary
+        }
+        return tunnel.nodeName ?? String(localized: "还没有节点")
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             Divider()
@@ -183,7 +192,7 @@ private struct MacSidebarStatus: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(tunnel.phase.title)
                         .font(.callout.weight(.semibold))
-                    Text(tunnel.nodeName ?? String(localized: "还没有节点"))
+                    Text(caption)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
