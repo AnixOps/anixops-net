@@ -2967,6 +2967,54 @@
         }
       }
     },
+    "拒绝（不转静默）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reject (never silent)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拒絕（不轉靜默）"
+          }
+        }
+      }
+    },
+    "拒绝（不回应）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reject (no answer)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拒絕（不回應）"
+          }
+        }
+      }
+    },
+    "拒绝（回透明图片）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reject (transparent image)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拒絕（回透明圖片）"
+          }
+        }
+      }
+    },
     "拖动右侧把手调整顺序，关掉的卡片不在首页显示。": {
       "localizations": {
         "en": {

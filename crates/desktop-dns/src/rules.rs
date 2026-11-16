@@ -28,7 +28,7 @@ pub const MAX_TEXT_BYTES: usize = 256 * 1024;
 pub const MAX_RULE_SETS: usize = 20;
 
 /// The rule types a line can use.
-pub const KINDS: [&str; 14] = [
+pub const KINDS: [&str; 17] = [
     "DOMAIN-SUFFIX",
     "DOMAIN",
     "DOMAIN-KEYWORD",
@@ -37,6 +37,9 @@ pub const KINDS: [&str; 14] = [
     "IP-CIDR6",
     "DST-PORT",
     "PROCESS-NAME",
+    "SRC-IP",
+    "SRC-IP-CIDR",
+    "IN-PORT",
     "USER-AGENT",
     "URL-REGEX",
     "PROTOCOL",
@@ -45,8 +48,17 @@ pub const KINDS: [&str; 14] = [
     "GEOIP",
 ];
 
-/// Where a line sends traffic. `PROXY` is replaced when the envelope is made.
-pub const POLICIES: [&str; 3] = ["PROXY", "DIRECT", "REJECT"];
+/// Where a line sends traffic. `PROXY` is replaced when the envelope is made. `REJECT-DROP` answers nothing,
+/// `REJECT-TINYGIF` answers a plain HTTP request with a transparent 1x1 GIF, and `REJECT-NO-DROP` is a `REJECT` the
+/// engine never turns into a drop when an app retries it too often.
+pub const POLICIES: [&str; 6] = [
+    "PROXY",
+    "DIRECT",
+    "REJECT",
+    "REJECT-NO-DROP",
+    "REJECT-DROP",
+    "REJECT-TINYGIF",
+];
 
 /// Why a line was refused: its 0-based number among all lines of the text, and a fixed reason.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -60,7 +72,9 @@ impl LineError {
         let reason = match self.code {
             "empty" => "has no type or value",
             "kind" => "uses a rule type this client does not support",
-            "policy" => "must end with PROXY, DIRECT or REJECT",
+            "policy" => {
+                "must end with PROXY, DIRECT, REJECT, REJECT-NO-DROP, REJECT-DROP or REJECT-TINYGIF"
+            }
             "option" => "has an option other than no-resolve",
             "too_many" => "is past the limit of 1000 rules",
             "url" => "must name an https:// rule list",
@@ -110,9 +124,13 @@ pub fn parse(text: &str) -> Result<Vec<String>, LineError> {
             rest.pop();
             no_resolve = true;
         }
-        let Some(policy) = rest.pop().map(str::to_ascii_uppercase) else {
+        let Some(mut policy) = rest.pop().map(str::to_ascii_uppercase) else {
             return Err(error("empty"));
         };
+        // Loon's name for the GIF answer.
+        if policy == "REJECT-IMG" {
+            policy = "REJECT-TINYGIF".to_string();
+        }
         if !POLICIES.contains(&policy.as_str()) {
             return Err(error("policy"));
         }
@@ -134,13 +152,15 @@ pub fn parse(text: &str) -> Result<Vec<String>, LineError> {
             }
             "GEOSITE" => value = value.to_ascii_lowercase(),
             "GEOIP" => value = value.to_ascii_uppercase(),
+            "SRC-IP-CIDR" => kind = "SRC-IP".to_string(),
             _ => {}
         }
         if value.contains(',') && !matches!(kind.as_str(), "URL-REGEX" | "USER-AGENT") {
             return Err(error("option"));
         }
         let mut engine = format!("{kind},{value},{policy}");
-        if no_resolve {
+        // A source address or listener port never needs a lookup; the engine refuses the option on IN-PORT.
+        if no_resolve && !matches!(kind.as_str(), "SRC-IP" | "IN-PORT") {
             engine.push_str(",no-resolve");
         }
         lines.push(engine);
@@ -372,9 +392,30 @@ mod tests {
     }
 
     #[test]
+    fn reject_variants_and_source_rules_are_kept() {
+        let text = "DOMAIN,ads.test,reject-drop\nDOMAIN,img.test,REJECT-IMG\nDOMAIN,keep.test,REJECT-NO-DROP\nDOMAIN,gif.test,REJECT-TINYGIF\nSRC-IP-CIDR,192.168.1.0/24,DIRECT,no-resolve\nSRC-IP,10.0.0.7,PROXY\nIN-PORT,7891,REJECT\n";
+        assert_eq!(
+            parse(text).unwrap(),
+            vec![
+                "DOMAIN,ads.test,REJECT-DROP",
+                "DOMAIN,img.test,REJECT-TINYGIF",
+                "DOMAIN,keep.test,REJECT-NO-DROP",
+                "DOMAIN,gif.test,REJECT-TINYGIF",
+                "SRC-IP,192.168.1.0/24,DIRECT",
+                "SRC-IP,10.0.0.7,PROXY",
+                "IN-PORT,7891,REJECT",
+            ]
+        );
+        assert_eq!(
+            parse("DOMAIN,a.test,REJECT-200").unwrap_err().code,
+            "policy"
+        );
+    }
+
+    #[test]
     fn refuses_bad_lines_with_their_number() {
         assert_eq!(
-            parse("DOMAIN,a.test,PROXY\nSRC-IP,10.0.0.1,DIRECT").unwrap_err(),
+            parse("DOMAIN,a.test,PROXY\nSCRIPT,corp,DIRECT").unwrap_err(),
             LineError {
                 line: 1,
                 code: "kind"

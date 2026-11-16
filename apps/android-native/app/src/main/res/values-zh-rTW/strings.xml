@@ -115,7 +115,7 @@
     <string name="routing_direct_hint">所有流量直連，不經過節點</string>
     <string name="routing_rule_hint">按訂閱自帶的規則和你的規則分流，其餘走代理</string>
     <string name="rules_mine">我的規則</string>
-    <string name="rules_mine_note">每行一條，從上到下比對，排在分流模式和訂閱規則前面。策略寫 PROXY（目前節點或訂閱的第一個策略群組）、DIRECT 或 REJECT。支援 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD、DOMAIN-WILDCARD、IP-CIDR、IP-CIDR6、DST-PORT、PROCESS-NAME、USER-AGENT、URL-REGEX、PROTOCOL、GEOIP、GEOSITE；# 開頭的行是註解。匯入規則集寫 RULE-SET,https://規則清單網址,策略，經 PROXY 每天下載一次；GEOSITE,cn 和 GEOIP,CN 使用內建的公開清單（gaoyifan/china-operator-ip、Loyalsoldier/v2ray-rules-dat）。</string>
+    <string name="rules_mine_note">每行一條，從上到下比對，排在分流模式和訂閱規則前面。策略寫 PROXY（目前節點或訂閱的第一個策略群組）、DIRECT 或 REJECT（REJECT-DROP 不回應，REJECT-TINYGIF 對網頁請求回透明圖片，REJECT-NO-DROP 不會因頻繁重試改成靜默）。支援 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD、DOMAIN-WILDCARD、IP-CIDR、IP-CIDR6、DST-PORT、SRC-IP、IN-PORT、PROCESS-NAME、USER-AGENT、URL-REGEX、PROTOCOL、GEOIP、GEOSITE；# 開頭的行是註解。匯入規則集寫 RULE-SET,https://規則清單網址,策略，經 PROXY 每天下載一次；GEOSITE,cn 和 GEOIP,CN 使用內建的公開清單（gaoyifan/china-operator-ip、Loyalsoldier/v2ray-rules-dat）。</string>
     <string name="action_revert">還原</string>
     <string name="rules_groups">策略組</string>
     <string name="rules_groups_note">為手動選擇的策略組設定預設出口。</string>

@@ -54,6 +54,12 @@ enum LocalRulesText {
             return String(localized: "直连")
         case .reject:
             return String(localized: "拒绝")
+        case .rejectNoDrop:
+            return String(localized: "拒绝（不转静默）")
+        case .rejectDrop:
+            return String(localized: "拒绝（不回应）")
+        case .rejectTinyGif:
+            return String(localized: "拒绝（回透明图片）")
         }
     }
 }
@@ -78,7 +84,7 @@ struct PolicyChip: View {
             return brand.primary
         case .direct:
             return brand.text2
-        case .reject:
+        case .reject, .rejectNoDrop, .rejectDrop, .rejectTinyGif:
             return brand.danger
         }
     }
