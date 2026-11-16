@@ -355,3 +355,28 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 - [ ] 用 `openssl ecparam -name prime256v1 -genkey -noout -out ca.key && openssl req -x509 -new -key ca.key -subj /CN=Team -days 365 -addext basicConstraints=critical,CA:true -out ca.pem` 生成团队 CA；扩展页“使用自己的根证书…”粘贴两段 PEM，替换后名称变为 Team，信任后重新连接，Safari 打开解密的站点证书链指向 Team。
 - [ ] 粘贴 RSA 私钥、别的证书的私钥、非 CA 证书时分别给出对应提示，原证书不变。
 - [ ] 设置页打开“Prometheus 指标”，`curl http://127.0.0.1:9477/metrics` 断开时只有 `anixops_client_*`，连接后加上内核指标；`curl -X POST` 返回 405；关掉开关后端口关闭。
+
+## v0.3.0-beta.7 发布前后的人工事项
+
+发布说明在 `docs/release-notes/v0.3.0-beta.7.md`。`release.yml` 在打包前检查：发布说明存在且没有占位符，
+安卓 versionCode 高于上一个发布 tag 里的值（本版 3002；3001 已用于 2026-11-16 的 Google Play 内部测试包）。
+
+发布前（维护者）：
+
+- [ ] 仓库级 secrets `ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD`
+  （Google Play 应用签名密钥，别名 `anixops`）。没有设置时 APK 用每次构建临时生成的密钥签名，以后的版本无法覆盖安装，
+  发布说明会提示先卸载。2026-11-16 main 上的 CI 显示这组 secrets 仍为空。
+- [ ] 推送 tag `v0.3.0-beta.7`（云端会话推 tag 会被拒，维护者在本机推）。
+- [ ] anx 仓库的 Cargo.lock 内核与本仓库 `Cargo.toml` 固定的内核一致后，再触发 anx 的 iOS / macOS / Windows / Linux / Android
+  ANX 构建和 `publish-client.yml`。
+
+发布后真机验收（CI 只有单元测试、模拟器冒烟测试和截图对比）：
+
+- [ ] Linux TUN 模式：Ubuntu 24.04 / Debian 13 上打开 TUN，polkit 询问一次；`ip route` 有接管路由，不走系统代理的程序
+  （`curl --noproxy '*'`）经过代理；关闭或断开后网卡和路由消失。
+- [ ] 流量重定向：桌面和安卓各建一条重定向，命中的请求发往目标地址，检查器里能看到重定向标记。
+- [ ] 安卓快捷设置磁贴：添加磁贴，点按连接 / 断开，状态与 App 内一致。
+- [ ] 安卓“始终开启的 VPN”：系统设置里选 AnixOps Net 并开启，重启手机后自动连接；在 App 内断开时系统不会立刻拉起。
+- [ ] 安卓 `anixops://` 链接与扫码导入：浏览器点链接能拉起 App 并导入订阅；扫码导入节点和订阅。
+- [ ] 从 beta.6 升级的桌面：原来选“绕过大陆 / GFW / 回国”的变成规则模式；原来选 DNS 国内外分流的变成等价的自定义 DNS；
+  Windows 旧服务被卸载。
