@@ -33,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,10 +47,12 @@ import androidx.compose.ui.unit.dp
 import io.anixops.net.R
 import io.anixops.net.core.CaptureSession
 import io.anixops.net.core.CaptureStatus
+import io.anixops.net.core.ConnectionSnapshot
 import io.anixops.net.core.FilterError
 import io.anixops.net.core.RequestRow
 import io.anixops.net.ui.theme.BrandSpacing
 import io.anixops.net.ui.theme.LocalBrandPalette
+import java.util.Locale
 
 /** What the requests page asks of its view models. */
 data class RequestsActions(
@@ -77,7 +80,19 @@ data class RequestsActions(
     val saveSession: () -> Unit = {},
     val loadSession: (CaptureSession) -> Unit = {},
     val deleteSession: (CaptureSession) -> Unit = {},
+    /** Goes to 改写, where decryption and its domains are turned on. */
+    val openRewrite: () -> Unit = {},
+    val setShowConnections: (Boolean) -> Unit = {},
+    val openConnection: (Long, String) -> Unit = { _, _ -> },
+    val closeConnection: () -> Unit = {},
+    val openExchange: (Int) -> Unit = {},
+    val openConnectionOf: (RequestRow) -> Unit = {},
+    val decryptConnectionHost: () -> Unit = {},
+    val exportConnection: (String) -> Unit = {},
 )
+
+/** Width of a checklist step's number. */
+private val StepNumberWidth = 20.dp
 
 /** Width of the status column: a code, "…", or the short word for a request answered on the device. */
 private val StatusWidth = 48.dp
@@ -100,6 +115,10 @@ fun RequestsScreen(state: UiState, requests: RequestsState, actions: RequestsAct
         RequestDetailScreen(opened, requests, actions, modifier)
         return
     }
+    requests.connection?.let { view ->
+        ConnectionScreen(view, requests, actions, modifier)
+        return
+    }
     val capture = requests.capture
     val holding = capture != null && (capture.enabled || capture.connections > 0)
     LazyColumn(
@@ -120,14 +139,35 @@ fun RequestsScreen(state: UiState, requests: RequestsState, actions: RequestsAct
                     if (capture != null) RequestsMenu(requests, actions)
                 }
                 ConnectionSection(state, capture, requests.busy, actions)
-                when {
-                    capture == null -> Empty(R.string.requests_not_connected, R.string.requests_not_connected_body)
-                    !holding -> Empty(R.string.requests_capture_off, R.string.requests_capture_off_body)
-                    else -> FilterBar(requests, actions)
+                if (requests.setup.isNotEmpty()) SetupSection(requests.setup, actions)
+                if (holding) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(BrandSpacing.xs)) {
+                        FilterChip(
+                            selected = !requests.showConnections,
+                            onClick = { actions.setShowConnections(false) },
+                            label = { Text(stringResource(R.string.requests_tab_requests)) },
+                        )
+                        FilterChip(
+                            selected = requests.showConnections,
+                            onClick = { actions.setShowConnections(true) },
+                            label = { Text(stringResource(R.string.requests_tab_connections)) },
+                        )
+                    }
+                    if (!requests.showConnections) FilterBar(requests, actions)
                 }
             }
         }
-        if (holding) {
+        if (holding && requests.showConnections) {
+            // Newest first, as the requests.
+            val connections = state.connections.asReversed()
+            if (connections.isEmpty()) item { Hint(stringResource(R.string.connections_empty)) }
+            itemsIndexed(connections, key = { _, connection -> connection.id }) { index, connection ->
+                ConnectionLine(connection, first = index == 0, last = index == connections.lastIndex) {
+                    actions.openConnection(connection.id, connection.name)
+                }
+            }
+        }
+        if (holding && !requests.showConnections) {
             if (requests.paused) item { Hint(stringResource(R.string.requests_paused)) }
             if (requests.loaded && requests.rows.isEmpty()) {
                 val filtered = requests.quick.isNotEmpty() || requests.typed.isNotBlank()
@@ -135,6 +175,49 @@ fun RequestsScreen(state: UiState, requests: RequestsState, actions: RequestsAct
             }
             itemsIndexed(requests.rows, key = { _, row -> "${row.connectionId}:${row.index}" }) { index, row ->
                 RequestLine(row, first = index == 0, last = index == requests.rows.lastIndex) { actions.open(row) }
+            }
+        }
+    }
+}
+
+/** A line of a list drawn as one card: the first rounds its top corners, the last its bottom ones. */
+@Composable
+private fun lineShape(first: Boolean, last: Boolean): RoundedCornerShape {
+    val corner = MaterialTheme.shapes.medium.topStart
+    val none = CornerSize(0.dp)
+    return RoundedCornerShape(
+        topStart = if (first) corner else none,
+        topEnd = if (first) corner else none,
+        bottomStart = if (last) corner else none,
+        bottomEnd = if (last) corner else none,
+    )
+}
+
+/** One open connection: its name, and how it goes and how much it moved; a tap opens what capture holds of it. */
+@Composable
+private fun ConnectionLine(connection: ConnectionSnapshot, first: Boolean, last: Boolean, onOpen: () -> Unit) {
+    val palette = LocalBrandPalette.current
+    Surface(shape = lineShape(first, last), color = palette.surface, contentColor = palette.text, modifier = Modifier.content()) {
+        Column {
+            if (!first) RowDivider()
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpen)
+                    .heightIn(min = RowMinHeight)
+                    .padding(horizontal = BrandSpacing.md, vertical = BrandSpacing.xs),
+                verticalArrangement = Arrangement.spacedBy(BrandSpacing.xxs),
+            ) {
+                Text(connection.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    listOf(connection.network.uppercase(Locale.ROOT), connection.via, formatBytes(connection.upload + connection.download))
+                        .filter { it.isNotBlank() }
+                        .joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = palette.text2,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
@@ -189,11 +272,48 @@ private fun ConnectionSection(state: UiState, capture: CaptureStatus?, busy: Boo
     }
 }
 
+/**
+ * What is left before HTTPS requests show (docs/debug-mode.md), in the order it has to happen, each saying where it
+ * is done; it goes once nothing is left. The switches above do the first and last steps; 改写 does the others.
+ */
 @Composable
-private fun Empty(@StringRes title: Int, @StringRes body: Int) {
-    Column(verticalArrangement = Arrangement.spacedBy(BrandSpacing.xxs), modifier = Modifier.padding(horizontal = BrandSpacing.md)) {
-        Text(stringResource(title), style = MaterialTheme.typography.titleMedium)
-        Text(stringResource(body), style = MaterialTheme.typography.bodyMedium, color = LocalBrandPalette.current.text2)
+private fun SetupSection(steps: List<String>, actions: RequestsActions) {
+    Section(stringResource(R.string.setup_title)) {
+        steps.forEachIndexed { index, step ->
+            val (title, hint) = when (step) {
+                "connect" -> R.string.setup_connect to R.string.setup_connect_hint
+                "certificate" -> R.string.setup_certificate to R.string.setup_certificate_hint
+                "decryption" -> R.string.setup_decryption to R.string.setup_decryption_hint
+                "domains" -> R.string.setup_domains to R.string.setup_domains_hint
+                else -> R.string.setup_capture to R.string.setup_capture_hint
+            }
+            if (index > 0) RowDivider()
+            SetupStep(index + 1, title, hint, inRewrite = step == "certificate" || step == "decryption" || step == "domains", actions)
+        }
+    }
+}
+
+@Composable
+private fun SetupStep(number: Int, @StringRes title: Int, @StringRes hint: Int, inRewrite: Boolean, actions: RequestsActions) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = RowMinHeight)
+            .padding(start = BrandSpacing.md, end = BrandSpacing.xs, top = BrandSpacing.sm, bottom = BrandSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(BrandSpacing.sm),
+    ) {
+        Text(
+            number.toString(),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.width(StepNumberWidth),
+        )
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(BrandSpacing.xxs)) {
+            Text(stringResource(title), style = MaterialTheme.typography.bodyLarge)
+            Text(stringResource(hint), style = MaterialTheme.typography.bodySmall, color = LocalBrandPalette.current.text2)
+        }
+        if (inRewrite) TextButton(onClick = actions.openRewrite) { Text(stringResource(R.string.setup_go)) }
     }
 }
 
@@ -333,15 +453,8 @@ internal fun statusText(row: RequestRow): String = when {
 @Composable
 private fun RequestLine(row: RequestRow, first: Boolean, last: Boolean, onOpen: () -> Unit) {
     val palette = LocalBrandPalette.current
-    val corner = MaterialTheme.shapes.medium.topStart
-    val none = CornerSize(0.dp)
     Surface(
-        shape = RoundedCornerShape(
-            topStart = if (first) corner else none,
-            topEnd = if (first) corner else none,
-            bottomStart = if (last) corner else none,
-            bottomEnd = if (last) corner else none,
-        ),
+        shape = lineShape(first, last),
         color = palette.surface,
         contentColor = palette.text,
         modifier = Modifier.content(),

@@ -27,6 +27,8 @@ data class ProxiesState(
     val testing: Boolean = false,
     val busy: Boolean = false,
     val loaded: Boolean = false,
+    /** A link an `anixops://import` link brought, for the import form; null once the form took it. */
+    val pendingImport: String? = null,
 )
 
 /** A message for the snackbar, or a share link to put on the clipboard. */
@@ -101,6 +103,11 @@ class ProxiesViewModel(private val core: Core) : ViewModel() {
         perform { core.editNode(nodeId, name, server, port) }
 
     fun remove(nodeId: String) = perform { core.removeNode(nodeId) }
+
+    /** Puts [link] in the import form; nothing is saved until the user confirms there. */
+    fun offerImport(link: String) = _state.update { it.copy(pendingImport = link) }
+
+    fun takeImport() = _state.update { it.copy(pendingImport = null) }
 
     fun importSubscription(location: String) = perform { core.importSubscription(location.trim()) }
 

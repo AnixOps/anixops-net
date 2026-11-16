@@ -136,7 +136,7 @@ public struct NodeLibrary: Codable, Equatable {
 
     /// The `routing` section whatever the rules switch says, so the engine can move between the rule, global and
     /// direct modes without a restart: the global mode goes to the selected node. With subscription rules the user's
-    /// `localRules` go in front of them; without, `localRules` alone (its preset after the user's rules) make the rule
+    /// `localRules` go in front of them; without, `localRules` alone (the user's rules, then `FINAL` to the node) make the rule
     /// mode, sending `PROXY` to the selected node. Nil without subscription rules and without `localRules`.
     public func routingForModes(localRules: LocalRules? = nil) -> EmbeddedRuntimeConfig.Routing? {
         let outbounds = Dictionary(nodes.map { ($0.id, $0.outbound) }) { first, _ in first }

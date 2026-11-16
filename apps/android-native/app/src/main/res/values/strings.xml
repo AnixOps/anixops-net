@@ -26,9 +26,6 @@
     <string name="home_last_error">上次出错</string>
     <string name="home_vpn_denied">没有允许建立 VPN，无法连接</string>
 
-    <string name="routing_bypass_china">绕过大陆</string>
-    <string name="routing_gfw_list">GFW 列表</string>
-    <string name="routing_return_china">回国</string>
     <string name="routing_direct">直连</string>
     <string name="routing_rule">规则</string>
 
@@ -42,6 +39,10 @@
     <string name="notification_channel_vpn">连接状态</string>
     <string name="notification_channel_notices">通知</string>
     <string name="notification_connected">已连接</string>
+    <string name="tile_label" translatable="false">AnixOps</string>
+    <string name="tile_working">正在切换…</string>
+    <string name="tile_failed">连接失败</string>
+    <string name="tile_off">未连接</string>
 
     <string name="home_traffic">实时流量</string>
     <string name="home_upload">上传</string>
@@ -116,15 +117,11 @@
         <item quantity="other">每 %d 天自动更新</item>
     </plurals>
     <string name="proxies_delay_ms" translatable="false">%1$d ms</string>
-    <string name="rules_refresh">刷新规则资源</string>
-    <string name="rules_routing_note">规则资源从公开来源缓存到本机，下次连接时生效。</string>
-    <string name="routing_bypass_china_hint">大陆网站直连，其余走代理</string>
-    <string name="routing_gfw_list_hint">只有列表内的网站走代理</string>
-    <string name="routing_return_china_hint">大陆网站走代理，适合在海外使用</string>
+    <string name="rules_routing_note">客户端不带预设规则：规则模式只按订阅自带的规则和你的规则分流。</string>
     <string name="routing_direct_hint">所有流量直连，不经过节点</string>
-    <string name="routing_rule_hint">按订阅自带的规则和策略组分流</string>
+    <string name="routing_rule_hint">按订阅自带的规则和你的规则分流，其余走代理</string>
     <string name="rules_mine">我的规则</string>
-    <string name="rules_mine_note">每行一条，从上到下匹配，排在分流模式和订阅规则前面。策略写 PROXY（当前节点或订阅的第一个策略组）、DIRECT 或 REJECT。支持 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD、DOMAIN-WILDCARD、IP-CIDR、IP-CIDR6、DST-PORT、PROCESS-NAME、USER-AGENT、URL-REGEX、PROTOCOL；# 开头的行是注释。</string>
+    <string name="rules_mine_note">每行一条，从上到下匹配，排在分流模式和订阅规则前面。策略写 PROXY（当前节点或订阅的第一个策略组）、DIRECT 或 REJECT。支持 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD、DOMAIN-WILDCARD、IP-CIDR、IP-CIDR6、DST-PORT、PROCESS-NAME、USER-AGENT、URL-REGEX、PROTOCOL、GEOIP、GEOSITE；# 开头的行是注释。导入规则集写 RULE-SET,https://规则列表地址,策略，经 PROXY 每天下载一次；GEOSITE,cn 和 GEOIP,CN 使用内置的公开列表（gaoyifan/china-operator-ip、Loyalsoldier/v2ray-rules-dat）。</string>
     <string name="action_revert">还原</string>
     <string name="rules_groups">策略组</string>
     <string name="rules_groups_note">为手动选择的策略组设定默认出口。</string>
@@ -142,11 +139,9 @@
     <string name="rule_set_failed">上次下载失败：%1$s</string>
     <string name="dns_system">系统 DNS</string>
     <string name="dns_encrypted">加密 DNS</string>
-    <string name="dns_split">国内外分流</string>
     <string name="dns_custom">自定义 DNS</string>
     <string name="dns_system_hint">内置引擎用系统 DNS 解析规则里需要 IP 的域名；经节点的连接由节点服务器解析域名。</string>
     <string name="dns_encrypted_hint">所有域名经节点用 Cloudflare DNS over HTTPS 解析，本地网络看不到查询内容。</string>
-    <string name="dns_split_hint">国内域名直连阿里 DNS over HTTPS 解析，其余经节点用 Cloudflare 解析，国内网站拿到就近的地址。</string>
     <string name="dns_custom_hint">用下面填写的服务器、分域规则和 Hosts。</string>
     <string name="dns_fake_ip_hint">应用查询域名时立刻拿到 198.18.0.0/15 里的地址，连接时还原成域名按规则分流，由节点解析。局域网、对时、STUN 和推送等域名仍拿真实地址。</string>
     <string name="dns_custom_note">每行一条，# 开头的行是注释。没有填服务器时，引擎经节点用 TCP 查询默认服务器。</string>
@@ -400,10 +395,6 @@
     <string name="egress_node_note">按下面选中的节点和订阅规则发出，可以切换节点对比不同地区的出口。</string>
     <string name="egress_rules">规则与 DNS</string>
     <string name="requests_capture">抓包</string>
-    <string name="requests_not_connected">还没有连接</string>
-    <string name="requests_not_connected_body">连接后，经过本机的 HTTP 请求会逐条列在这里。调试模式默认直连，不需要节点。</string>
-    <string name="requests_capture_off">还没有开始抓包</string>
-    <string name="requests_capture_off_body">打开上面的“抓包”后，新的请求会逐条出现在这里。要看到 HTTPS 明文，还要在“改写”里信任解密证书，并为要看的域名开启解密。</string>
     <string name="requests_filter">筛选：网址、host:、status:、type:…</string>
     <string name="requests_filter_hint">例如 host:api.example.com status:4xx type:json，多组条件用 OR 连接</string>
     <string name="requests_filter_error_at">筛选表达式在第 %1$d 个字符处有误</string>
@@ -504,4 +495,57 @@
     <plurals name="sessions_kept">
         <item quantity="other">会话只保存在本机，%d 天后自动删除。</item>
     </plurals>
+    <string name="setup_title">要看到 HTTPS 请求，还差这几步</string>
+    <string name="setup_connect">连接</string>
+    <string name="setup_connect_hint">打开上面的“连接”。调试网络默认直连，不需要节点。</string>
+    <string name="setup_certificate">信任解密证书</string>
+    <string name="setup_certificate_hint">在“改写”里安装解密证书，并在系统设置里信任它。</string>
+    <string name="setup_decryption">开启 HTTPS 解密</string>
+    <string name="setup_decryption_hint">在“改写”里开启，并按提示安装解密证书。</string>
+    <string name="setup_domains">添加要解密的域名</string>
+    <string name="setup_domains_hint">在“改写”里为要看的域名开启解密，只对新连接生效。</string>
+    <string name="setup_capture">开始抓包</string>
+    <string name="setup_capture_hint">打开上面的“抓包”，新的请求会逐条出现在下面。</string>
+    <string name="setup_go">前往</string>
+    <string name="requests_tab_requests">请求</string>
+    <string name="requests_tab_connections">连接</string>
+    <string name="connections_empty">现在没有连接。</string>
+    <string name="request_connection">所在连接</string>
+    <string name="request_connection_open">查看抓包内容</string>
+    <string name="connection_gone">这个连接的抓包内容已被更新的连接挤出（抓包内存有上限），或抓包已清空。</string>
+    <string name="connection_upload">上传</string>
+    <string name="connection_download">下载</string>
+    <string name="connection_kept">已保留 %1$s / 共 %2$s</string>
+    <string name="connection_target">目标</string>
+    <string name="connection_content">内容</string>
+    <string name="connection_decrypted">HTTPS 已解密</string>
+    <string name="connection_kept_note">每个方向保留前 64 KiB。</string>
+    <string name="connection_requests">HTTP 请求</string>
+    <string name="connection_no_response">没有响应</string>
+    <string name="connection_data">数据</string>
+    <string name="connection_datagrams">数据报</string>
+    <string name="connection_sent">发出</string>
+    <string name="connection_received">收到</string>
+    <string name="connection_nothing">还没有数据。</string>
+    <string name="connection_decrypt_host">解密此域名</string>
+    <string name="connection_tls_address">这是加密的 TLS 数据。目标只有 IP 地址，没有域名，无法按域名解密。</string>
+    <string name="connection_tls_covered">这个域名已在解密列表里。解密只对新连接生效；如果仍看不到明文，请确认 HTTPS 解密已开启、根证书已信任，或者这个应用固定了证书。</string>
+    <string name="connection_tls_add">这是加密的 TLS 数据。点“解密此域名”后，这个域名的新连接会被解密（需要开启 HTTPS 解密并信任根证书）。</string>
+    <string name="connection_export">导出这个连接</string>
+    <string name="connection_export_pcapng">导出 pcapng</string>
+    <string name="connection_export_har">导出 HAR</string>
+    <string name="connection_export_note">保存到“下载”文件夹。pcapng 可用 Wireshark 打开，HAR 可导入浏览器开发者工具、Charles 或 Proxyman。导出内容可能包含账号、Cookie 等敏感信息，请只发给信任的人。</string>
+    <string name="bytes_text">显示为文本</string>
+    <string name="bytes_hex">显示为十六进制</string>
+    <string name="link_refused">无法打开链接：%1$s</string>
+    <string name="link_invalid">链接无效</string>
+    <string name="link_not_app_link">不是 anixops:// 链接</string>
+    <string name="link_too_long">链接太长</string>
+    <string name="link_missing_action">链接缺少操作</string>
+    <string name="link_missing_parameter">链接缺少参数</string>
+    <string name="link_unknown_action">不认识的操作</string>
+    <string name="link_unknown_mode">这个客户端没有该分流模式</string>
+    <string name="link_no_node">找不到节点 %1$s</string>
+    <string name="link_no_member">策略组 %1$s 里没有 %2$s</string>
+    <string name="link_import_offered">核对订阅链接后点“导入”</string>
 </resources>

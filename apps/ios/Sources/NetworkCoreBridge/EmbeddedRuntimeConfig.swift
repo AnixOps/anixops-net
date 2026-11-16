@@ -622,7 +622,7 @@ public enum TunnelProfileKeys {
     /// decryption and domain rules see them. Absent is off.
     public static let blockQuic = "networkcore.block-quic"
     /// `Data` holding the encoded `LocalRules`: the rule mode of a node list without subscription rules, and the
-    /// user's rules in front of a subscription's. Absent is the default preset with no rules of the user's.
+    /// user's rules in front of a subscription's. Absent is no rules of the user's.
     public static let localRules = "networkcore.local-rules"
     /// `Data` holding the encoded `NotificationSettings`. Absent posts every kind of notification.
     public static let notifications = "networkcore.notifications"

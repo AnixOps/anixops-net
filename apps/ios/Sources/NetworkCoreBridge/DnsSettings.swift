@@ -493,21 +493,8 @@ public struct DnsSettings: Codable, Equatable {
     ]
 
     // Presets name their servers by address: the extension cannot rely on the system resolver to find a
-    // resolver's own host name while the tunnel holds the system's DNS.
-
-    /// Domestic names to a domestic resolver directly, everything else to Cloudflare through the proxy; the usual
-    /// split that keeps domestic CDNs close without leaking other names.
-    public static let split = DnsSettings(
-        servers: [
-            Server(name: "cloudflare", url: "https://1.1.1.1/dns-query", serverName: "cloudflare-dns.com"),
-            Server(name: "alidns", url: "https://223.5.5.5/dns-query", serverName: "dns.alidns.com", via: .direct),
-        ],
-        defaultServer: "cloudflare",
-        rules: [
-            Rule(domainSuffix: ["cn"], server: "alidns"),
-            Rule(ruleSet: "geosite-cn", server: "alidns"),
-        ]
-    )
+    // resolver's own host name while the tunnel holds the system's DNS. They are servers only: public builds ship
+    // no preset per-domain rules (docs/no-presets.md), so which names go where is always the user's own setting.
 }
 
 /// Why a DNS setting was refused. The messages are fixed text without the values typed.

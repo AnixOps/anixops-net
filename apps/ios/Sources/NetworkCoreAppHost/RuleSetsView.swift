@@ -50,7 +50,7 @@ struct RuleSetsSection: View {
         } header: {
             Text("规则与规则集")
         } footer: {
-            Text("GEOIP,CN、GEOSITE,cn 和 GEOSITE,gfw 没有订阅自带的规则集时，使用公开列表（Loyalsoldier、gaoyifan），由内核每天直连下载一次。")
+            Text("GEOIP,CN 和 GEOSITE,cn 没有订阅自带的规则集时，使用公开列表（gaoyifan/china-operator-ip、Loyalsoldier/v2ray-rules-dat），由内核每天直连下载一次。")
         }
         .task(id: tunnel.connection) {
             await load()

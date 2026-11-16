@@ -22,9 +22,6 @@
     <string name="home_last_error">Last error</string>
     <string name="home_vpn_denied">The VPN was not allowed, so AnixOps Net cannot connect</string>
 
-    <string name="routing_bypass_china">Bypass mainland China</string>
-    <string name="routing_gfw_list">GFW list</string>
-    <string name="routing_return_china">Return to China</string>
     <string name="routing_direct">Direct</string>
     <string name="routing_rule">Rules</string>
 
@@ -38,6 +35,9 @@
     <string name="notification_channel_vpn">Connection status</string>
     <string name="notification_channel_notices">Notifications</string>
     <string name="notification_connected">Connected</string>
+    <string name="tile_working">Switching…</string>
+    <string name="tile_failed">Connection failed</string>
+    <string name="tile_off">Not connected</string>
 
     <string name="home_traffic">Live traffic</string>
     <string name="home_upload">Upload</string>
@@ -115,15 +115,11 @@
         <item quantity="one">Every day</item>
         <item quantity="other">Every %d days</item>
     </plurals>
-    <string name="rules_refresh">Refresh rule resources</string>
-    <string name="rules_routing_note">Rule resources are cached on this device from public sources and take effect on the next connection.</string>
-    <string name="routing_bypass_china_hint">Mainland China sites go direct, everything else through the proxy</string>
-    <string name="routing_gfw_list_hint">Only sites on the list go through the proxy</string>
-    <string name="routing_return_china_hint">Mainland China sites go through the proxy, for use abroad</string>
+    <string name="rules_routing_note">The client ships no preset rules: rule mode follows only the subscription\'s rules and your own.</string>
     <string name="routing_direct_hint">All traffic goes direct, never through a node</string>
-    <string name="routing_rule_hint">Follows the subscription\'s own rules and policy groups</string>
+    <string name="routing_rule_hint">Follows the subscription\'s rules and your own rules; everything else goes through the proxy</string>
     <string name="rules_mine">My rules</string>
-    <string name="rules_mine_note">One rule per line, matched top to bottom before the routing mode\'s and the subscription\'s rules. The policy is PROXY (the current node or the subscription\'s first policy group), DIRECT or REJECT. Supports DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD, DOMAIN-WILDCARD, IP-CIDR, IP-CIDR6, DST-PORT, PROCESS-NAME, USER-AGENT, URL-REGEX and PROTOCOL; lines starting with # are comments.</string>
+    <string name="rules_mine_note">One rule per line, matched top to bottom before the routing mode\'s and the subscription\'s rules. The policy is PROXY (the current node or the subscription\'s first policy group), DIRECT or REJECT. Supports DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD, DOMAIN-WILDCARD, IP-CIDR, IP-CIDR6, DST-PORT, PROCESS-NAME, USER-AGENT, URL-REGEX, PROTOCOL, GEOIP and GEOSITE; lines starting with # are comments. To import a rule set, write RULE-SET,https://list URL,policy; it is downloaded through PROXY once a day. GEOSITE,cn and GEOIP,CN use built-in public lists (gaoyifan/china-operator-ip, Loyalsoldier/v2ray-rules-dat).</string>
     <string name="action_revert">Revert</string>
     <string name="rules_groups">Policy groups</string>
     <string name="rules_groups_note">Set the default outbound for manual policy groups.</string>
@@ -141,11 +137,9 @@
     <string name="rule_set_failed">Last download failed: %1$s</string>
     <string name="dns_system">System DNS</string>
     <string name="dns_encrypted">Encrypted DNS</string>
-    <string name="dns_split">Split by region</string>
     <string name="dns_custom">Custom DNS</string>
     <string name="dns_system_hint">The embedded engine resolves domains that IP rules need with the system DNS; connections through a node have the node server resolve the domain.</string>
     <string name="dns_encrypted_hint">Every name is resolved with Cloudflare DNS over HTTPS through the node, so the local network cannot see the queries.</string>
-    <string name="dns_split_hint">Mainland names go directly to AliDNS over HTTPS and the rest to Cloudflare through the node, so mainland sites get nearby addresses.</string>
     <string name="dns_custom_hint">Uses the servers, per-domain servers and hosts below.</string>
     <string name="dns_fake_ip_hint">Apps get an address in 198.18.0.0/15 at once when they look up a name; when they connect, the name is restored, matched against the rules and resolved by the node. LAN, time, STUN and push names still get real addresses.</string>
     <string name="dns_custom_note">One per line; lines starting with # are comments. Without servers the engine asks its default server over TCP through the node.</string>
@@ -409,10 +403,6 @@
     <string name="egress_node_note">Traffic leaves by the node selected below and the subscription rules; switch nodes to compare exits in different regions.</string>
     <string name="egress_rules">Rules and DNS</string>
     <string name="requests_capture">Capture</string>
-    <string name="requests_not_connected">Not connected</string>
-    <string name="requests_not_connected_body">Once connected, HTTP requests through this device are listed here one by one. Debug mode goes direct by default and needs no node.</string>
-    <string name="requests_capture_off">Capture is off</string>
-    <string name="requests_capture_off_body">Turn on Capture above and new requests appear here one by one. To see HTTPS in plain text, also trust the decryption certificate in Rewrite and turn on decryption for the domains you want to see.</string>
     <string name="requests_filter">Filter: URL, host:, status:, type:…</string>
     <string name="requests_filter_hint">For example host:api.example.com status:4xx type:json; join groups with OR</string>
     <string name="requests_filter_error_at">The filter has a mistake at character %1$d</string>
@@ -517,4 +507,57 @@
         <item quantity="one">Sessions stay on this device and are deleted after %d day.</item>
         <item quantity="other">Sessions stay on this device and are deleted after %d days.</item>
     </plurals>
+    <string name="setup_title">A few steps before HTTPS requests show</string>
+    <string name="setup_connect">Connect</string>
+    <string name="setup_connect_hint">Turn on Connection above. Network debugging goes direct by default, so no node is needed.</string>
+    <string name="setup_certificate">Trust the decryption certificate</string>
+    <string name="setup_certificate_hint">Install the decryption certificate in Rewrite and trust it in system settings.</string>
+    <string name="setup_decryption">Turn on HTTPS decryption</string>
+    <string name="setup_decryption_hint">Turn it on in Rewrite and install the decryption certificate as it asks.</string>
+    <string name="setup_domains">Add domains to decrypt</string>
+    <string name="setup_domains_hint">Turn on decryption for the domains you want to see in Rewrite; it applies to new connections.</string>
+    <string name="setup_capture">Start capture</string>
+    <string name="setup_capture_hint">Turn on Capture above and new requests appear below one by one.</string>
+    <string name="setup_go">Go</string>
+    <string name="requests_tab_requests">Requests</string>
+    <string name="requests_tab_connections">Connections</string>
+    <string name="connections_empty">No connections right now.</string>
+    <string name="request_connection">Connection</string>
+    <string name="request_connection_open">View capture</string>
+    <string name="connection_gone">Capture no longer holds this connection: newer connections pushed it out (capture memory is limited), or capture was cleared.</string>
+    <string name="connection_upload">Upload</string>
+    <string name="connection_download">Download</string>
+    <string name="connection_kept">%1$s of %2$s kept</string>
+    <string name="connection_target">Destination</string>
+    <string name="connection_content">Content</string>
+    <string name="connection_decrypted">HTTPS decrypted</string>
+    <string name="connection_kept_note">The first 64 KiB of each direction is kept.</string>
+    <string name="connection_requests">HTTP Requests</string>
+    <string name="connection_no_response">No response</string>
+    <string name="connection_data">Data</string>
+    <string name="connection_datagrams">Datagrams</string>
+    <string name="connection_sent">Sent</string>
+    <string name="connection_received">Received</string>
+    <string name="connection_nothing">No data yet.</string>
+    <string name="connection_decrypt_host">Decrypt This Domain</string>
+    <string name="connection_tls_address">This is encrypted TLS data. The destination is only an IP address with no domain, so it cannot be decrypted by domain.</string>
+    <string name="connection_tls_covered">This domain is already on the decryption list. Decryption applies to new connections only; if you still see no plain text, check that HTTPS decryption is on and the root certificate is trusted, or the app may pin its certificate.</string>
+    <string name="connection_tls_add">This is encrypted TLS data. Tap Decrypt This Domain and new connections to this domain are decrypted (HTTPS decryption must be on and the root certificate trusted).</string>
+    <string name="connection_export">Export This Connection</string>
+    <string name="connection_export_pcapng">Export pcapng</string>
+    <string name="connection_export_har">Export HAR</string>
+    <string name="connection_export_note">Saved to the Downloads folder. pcapng opens in Wireshark; HAR imports into browser developer tools, Charles or Proxyman. Exports can hold account details and cookies, so share them only with people you trust.</string>
+    <string name="bytes_text">Show as Text</string>
+    <string name="bytes_hex">Show as Hex</string>
+    <string name="link_refused">Cannot open the link: %1$s</string>
+    <string name="link_invalid">Invalid link</string>
+    <string name="link_not_app_link">Not an anixops:// link</string>
+    <string name="link_too_long">The link is too long</string>
+    <string name="link_missing_action">The link names no action</string>
+    <string name="link_missing_parameter">The link is missing a parameter</string>
+    <string name="link_unknown_action">Unknown action</string>
+    <string name="link_unknown_mode">This client has no such routing mode</string>
+    <string name="link_no_node">Node %1$s not found</string>
+    <string name="link_no_member">Policy group %1$s has no %2$s</string>
+    <string name="link_import_offered">Check the subscription link, then tap Import</string>
 </resources>

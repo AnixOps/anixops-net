@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { RuntimeSnapshot } from "./bridge";
 import { availableRoutingModes, connectionTitle, connectPhase, factLabel, groupMemberLabel, protocolAbbreviation, routingLabel } from "./labels";
 
 describe("connectPhase", () => {
@@ -35,16 +34,12 @@ describe("labels", () => {
     expect(protocolAbbreviation("Shadowsocks")).toBe("SS");
     expect(protocolAbbreviation("WireGuard")).toBe("WG");
     expect(protocolAbbreviation("Custom")).toBe("Custom");
-    expect(routingLabel("return_china")).toBe("回国");
-    expect(routingLabel(undefined)).toBe("绕过大陆");
+    expect(routingLabel("direct")).toBe("直连");
+    expect(routingLabel(undefined)).toBe("规则");
   });
 
-  it("offers subscription rules only on the embedded engine", () => {
-    const modes = (snapshot: Partial<RuntimeSnapshot> | null) =>
-      availableRoutingModes(snapshot as RuntimeSnapshot | null).map((mode) => mode.value);
-    expect(modes(null)).not.toContain("rule");
-    expect(modes({ routingMode: "bypass_china" })).not.toContain("rule");
-    expect(modes({ routingMode: "bypass_china", embeddedEngine: true })).toContain("rule");
+  it("offers rules and direct and no preset list modes", () => {
+    expect(availableRoutingModes().map((mode) => mode.value)).toEqual(["rule", "direct"]);
     expect(routingLabel("rule")).toBe("规则");
   });
 

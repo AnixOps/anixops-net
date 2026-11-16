@@ -229,6 +229,83 @@ class CoreTest {
     }
 
     @Test
+    fun theChecklistAsksTheSharedView() = runTest {
+        val transport = Recording("""{"ok":{"steps":["domains","capture"]}}""")
+        val steps = Core(transport, StandardTestDispatcher(testScheduler)).decryptSetup(true, true, 0, capturing = false)
+        assertEquals(
+            listOf("view.decrypt_setup" to """{"connected":true,"decrypting":true,"domains":0,"capturing":false}"""),
+            transport.calls,
+        )
+        assertEquals(listOf("domains", "capture"), steps)
+    }
+
+    @Test
+    fun aConnectionReadsThroughRuntimeControl() = runTest {
+        val transport = Recording(
+            """{"ok":{"capture":{"id":7,"network":"tcp","destination":"203.0.113.20:443","decrypted":true,""" +
+                """"upload":{"seen":10,"captured":10,"truncated":false},"download":{"seen":20,"captured":8,"truncated":true},""" +
+                """"chunks":[{"dir":"upload","at_ms":1,"data_base64":"R0VU"}],"http":[]}}}""",
+        )
+        val capture = Core(transport, StandardTestDispatcher(testScheduler)).captureConnection(7)
+        assertEquals(listOf("runtime_control" to """{"request":{"cmd":"capture_connection","id":7}}"""), transport.calls)
+        assertEquals(true, capture?.download?.truncated)
+        assertEquals("R0VU", capture?.chunks?.single()?.dataBase64)
+    }
+
+    @Test
+    fun aConnectionCaptureCanBeGone() = runTest {
+        assertNull(Core(Recording("""{"ok":{"capture":null}}"""), StandardTestDispatcher(testScheduler)).captureConnection(7))
+    }
+
+    @Test
+    fun oneConnectionExportsWithItsIdAndTheHostIsAskedOfTheSharedView() = runTest {
+        val transport = Recording("""{"ok":{"location":"Download/x.pcapng","decryptable":true,"host":"a.example.com","covered":false}}""")
+        val core = Core(transport, StandardTestDispatcher(testScheduler))
+        core.exportConnection(7, "pcapng", redact = true)
+        val host = core.decryptHost("a.example.com:443", listOf("*.example.org"))
+        assertEquals(
+            listOf(
+                "export_capture" to """{"format":"pcapng","id":7,"options":{"redact":true}}""",
+                "view.decrypt_hosts" to """{"host":"a.example.com:443","hosts":["*.example.org"]}""",
+            ),
+            transport.calls,
+        )
+        assertEquals(DecryptHost(true, "a.example.com", false), host)
+    }
+
+    @Test
+    fun appLinksAreReadByTheSharedView() = runTest {
+        val transport = Recording("""{"ok":{"action":"select","node":"东京 01","group":"Panel"}}""")
+        val link = Core(transport, StandardTestDispatcher(testScheduler)).parseAppLink("anixops://select?node=东京 01&group=Panel")
+        assertEquals(listOf("view.parse_app_link" to """{"link":"anixops://select?node=东京 01&group=Panel"}"""), transport.calls)
+        assertEquals(AppLink(action = "select", node = "东京 01", group = "Panel"), link)
+    }
+
+    @Test
+    fun aRefusedLinkSaysWhy() = runTest {
+        val core = Core(Recording("""{"ok":{"error":"unknown_mode","detail":"fast"}}"""), StandardTestDispatcher(testScheduler))
+        assertEquals(AppLink(error = "unknown_mode", detail = "fast"), core.parseAppLink("anixops://mode?set=fast"))
+    }
+
+    @Test
+    fun aLinkNodeIsFoundAmongTheNodesListed() = runTest {
+        val transport = Recording("""{"ok":null}""")
+        val core = Core(transport, StandardTestDispatcher(testScheduler))
+        val nodes = listOf(NodeSummary(id = "n1", label = "东京 01", protocol = "VLESS", group = "Panel"))
+        assertNull(core.findLinkNode(nodes, "大阪", null))
+        assertNull(core.findLinkMember(listOf(NativeGroup("Proxy", "selector", outbounds = listOf("n1"))), "Proxy", "n2"))
+        assertEquals(
+            listOf(
+                "view.find_link_node" to
+                    """{"nodes":[{"id":"n1","label":"东京 01","protocol":"VLESS","selected":false,"group":"Panel","editable":false}],"name":"大阪"}""",
+                "view.find_link_member" to
+                    """{"groups":[{"tag":"Proxy","groupType":"selector","outbounds":["n1"],"outboundLabels":[]}],"policy":"Proxy","member":"n2"}""",
+            ),
+            transport.calls,
+        )
+    }
+
+    @Test
     fun ruleSetsGoThroughRuntimeControl() = runTest {
         val transport = Recording(
             """{"ok":{"rule_sets":[{"name":"china","source":"remote","entries":8412,"updated_at_ms":1763198400000}]}}""",

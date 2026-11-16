@@ -13,21 +13,27 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        // The Tauri app's id: the cutover (docs/architecture/android-native-compose.md) installs over it and keeps
-        // its data directory. Until then the preview build carries the ".next" suffix and installs beside it.
+        // The Tauri app's id, which this app replaced (docs/architecture/android-native-compose.md): it installs over
+        // it with the same key and keeps its data directory.
         applicationId = "io.anixops.net.android"
-        applicationIdSuffix = ".next"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 300
-        versionName = "0.3.0"
+        // Google Play has required API 36 for new apps and updates since 2026-08-31 (extensions ended 2026-11-01).
+        targetSdk = 36
+        // Above the Tauri app's last code (3000: Tauri's major × 1000000 + minor × 1000 + patch for 0.3.0), so
+        // Android takes this as an upgrade. Raise it with each release: release.yml refuses a tag whose versionCode
+        // is not above the previous release's, and Google Play refuses a code it has already seen (3001 went to
+        // internal testing on 2026-11-16).
+        versionCode = 3002
+        // release.yml passes the tag without its "v" (-Panixops.versionName=0.3.0-beta.7); local and CI builds
+        // show the plain version.
+        versionName = findProperty("anixops.versionName") as String? ?: "0.3.0"
         // arm64 only in the APK; CI's emulator smoke test builds x86_64 instead (-Panixops.abis=x86_64).
         ndk {
             abiFilters += (findProperty("anixops.abis") as String? ?: "arm64-v8a").split(",")
         }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        // The launcher name; "（预览）" until the cutover, so the two apps are told apart.
-        manifestPlaceholders["appLabel"] = "AnixOps Net（预览）"
+        // The launcher name.
+        manifestPlaceholders["appLabel"] = "AnixOps Net"
     }
 
     buildTypes {

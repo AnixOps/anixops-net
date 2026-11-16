@@ -4,7 +4,7 @@ import { ConnectionSnapshot, desktop, RuntimeSnapshot } from "../bridge";
 import { connectionDetail, connectionName, formatRate, matchesConnection } from "../activity-format";
 import { captureSummary } from "../capture-format";
 import { listPage, liveEngine, usePolling } from "../live";
-import { formatBytes } from "../subscription-format";
+import { formatBytes, subscriptionErrorText } from "../subscription-format";
 import { Card, EmptyState, IconButton, MenuItem, MoreMenu, Row, Run, Segmented, Switch } from "../ui";
 import { t } from "../i18n";
 import { CaptureDetail, exportCapture } from "./CaptureViews";
@@ -22,7 +22,7 @@ export function ActivityPage({ snapshot, busy, run }: { snapshot: RuntimeSnapsho
  */
 export function ConnectionsView({ snapshot, busy, run, debug = false }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run; debug?: boolean }) {
   const refresh = snapshot?.subscriptionLastAttempt
-    ? [snapshot.subscriptionRefreshResult || t("等待中"), snapshot.subscriptionLastAttempt, snapshot.subscriptionRefreshErrorCode].filter(Boolean).join(" · ")
+    ? [snapshot.subscriptionRefreshResult || t("等待中"), snapshot.subscriptionLastAttempt, subscriptionErrorText(snapshot.subscriptionRefreshErrorCode)].filter(Boolean).join(" · ")
     : t("还没有自动更新记录");
 
   const [detail, setDetail] = useState<ConnectionSnapshot | null>(null);
@@ -36,7 +36,7 @@ export function ConnectionsView({ snapshot, busy, run, debug = false }: { snapsh
       <Row icon={CircleDot} color={snapshot?.connection === "Connected" ? "green" : "gray"} label={t("运行状态")} value={snapshot?.connectionLabel ?? t("读取中")} />
       <Row icon={TriangleAlert} color={snapshot?.lastError ? "red" : "gray"} label={t("最近错误")} value={snapshot?.lastError ?? t("无")} />
       <Row icon={BadgeCheck} color={snapshot?.configurationError ? "red" : "gray"} label={t("配置校验")} value={snapshot?.configurationError ?? t("通过")} />
-      <Row icon={RefreshCw} color={snapshot?.subscriptionError ? "red" : "gray"} label={t("订阅自动更新")} value={snapshot?.subscriptionError ?? refresh} />
+      <Row icon={RefreshCw} color={snapshot?.subscriptionError ? "red" : "gray"} label={t("订阅自动更新")} value={snapshot?.subscriptionRefreshErrorCode ? refresh : snapshot?.subscriptionError ?? refresh} />
       <Row icon={ClipboardList} color="indigo" label={t("诊断报告")} hint={t("从受管的运行状态和日志生成一份有大小限制的报告，不包含节点密码。")}>
         <button className="secondary compact" disabled={Boolean(busy)} onClick={() => void run("diagnostics", desktop.diagnostics)}>{t("生成诊断报告")}</button>
       </Row>

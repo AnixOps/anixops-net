@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBytes, updateIntervalChoices, updateIntervalLabel, usedFraction } from "./subscription-format";
+import { formatBytes, subscriptionErrorText, updateIntervalChoices, updateIntervalLabel, usedFraction } from "./subscription-format";
 
 describe("subscription format", () => {
   it("shows traffic in binary units", () => {
@@ -22,5 +22,13 @@ describe("subscription format", () => {
     expect(usedFraction(20, 10)).toBe(1);
     expect(usedFraction(5, 0)).toBeUndefined();
     expect(usedFraction(undefined, 10)).toBeUndefined();
+  });
+
+  it("says what a failed update's code means and keeps the code", () => {
+    expect(subscriptionErrorText(undefined)).toBeUndefined();
+    expect(subscriptionErrorText("windows.subscription.fetch_timeout")).toBe("下载订阅超时 (windows.subscription.fetch_timeout)");
+    expect(subscriptionErrorText("windows.subscription.http_status_403")).toBe("订阅服务器拒绝了请求（HTTP 403），订阅可能已过期或链接已失效 (windows.subscription.http_status_403)");
+    expect(subscriptionErrorText("windows.subscription.http_status_502")).toBe("订阅服务器返回了错误（HTTP 502） (windows.subscription.http_status_502)");
+    expect(subscriptionErrorText("windows.subscription.something_new")).toBe("更新订阅失败 (windows.subscription.something_new)");
   });
 });

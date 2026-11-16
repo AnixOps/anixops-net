@@ -58,6 +58,8 @@ import io.anixops.net.R
 import java.io.IOException
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -95,6 +97,8 @@ fun AnixApp(
     extensions: ExtensionsViewModel,
     requests: RequestsViewModel,
     version: String,
+    /** `anixops://` links the activity received, followed once the user agreement is accepted. */
+    links: Flow<String> = emptyFlow(),
 ) {
     val state by app.state.collectAsStateWithLifecycle()
     val mode by app.mode.collectAsStateWithLifecycle()
@@ -115,6 +119,9 @@ fun AnixApp(
     val locale by rememberUpdatedState(LocalConfiguration.current.locales[0])
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(app) { app.messages.collect { snackbar.showSnackbar(it) } }
+    val connected = state.overview?.state == "connected"
+    val decrypting = state.snapshot?.httpsDecryptionEnabled == true
+    LaunchedEffect(requests, connected, decrypting) { requests.setSetupInputs(connected, decrypting) }
     LaunchedEffect(requests) {
         requests.events.collect { event ->
             val text = when (event) {
@@ -203,15 +210,34 @@ fun AnixApp(
     val consent = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) app.connect() else app.showNotice(denied)
     }
+    val connect = {
+        val ask = VpnService.prepare(context)
+        if (ask == null) app.connect() else consent.launch(ask)
+    }
+    val following by rememberUpdatedState(connect)
+    LaunchedEffect(links) {
+        links.collect { link -> app.followLink(link, connect = { following() }, offerImport = proxies::offerImport) }
+    }
+    LaunchedEffect(app) {
+        app.links.collect { event ->
+            val text = when (event) {
+                is LinkEvent.Refused -> context.getString(
+                    R.string.link_refused,
+                    context.getString(linkReason(event.reason)) + (event.detail?.let { " ($it)" } ?: ""),
+                )
+                is LinkEvent.NoNode -> context.getString(R.string.link_no_node, event.node)
+                is LinkEvent.NoMember -> context.getString(R.string.link_no_member, event.policy, event.member)
+                LinkEvent.ImportOffered -> context.getString(R.string.link_import_offered)
+            }
+            snackbar.showSnackbar(text)
+        }
+    }
     AnixScaffold(
         state = state,
         mode = mode,
         version = version,
         home = HomeActions(
-            connect = {
-                val ask = VpnService.prepare(context)
-                if (ask == null) app.connect() else consent.launch(ask)
-            },
+            connect = connect,
             disconnect = app::disconnect,
             setRoutingMode = app::setRoutingMode,
             closeConnection = { app.closeConnection(it) },
@@ -243,6 +269,13 @@ fun AnixApp(
             saveSession = requests::saveSession,
             loadSession = requests::loadSession,
             deleteSession = requests::deleteSession,
+            setShowConnections = requests::setShowConnections,
+            openConnection = requests::openConnection,
+            closeConnection = requests::closeConnection,
+            openExchange = requests::openExchange,
+            openConnectionOf = requests::openConnectionOf,
+            decryptConnectionHost = requests::decryptConnectionHost,
+            exportConnection = requests::exportConnection,
         ),
         proxiesState = proxiesState,
         proxies = ProxiesActions(
@@ -255,6 +288,7 @@ fun AnixApp(
             edit = proxies::edit,
             remove = proxies::remove,
             importSubscription = proxies::importSubscription,
+            takeImport = proxies::takeImport,
             useSubscription = proxies::useSubscription,
             updateSubscription = proxies::updateSubscription,
             renameSubscription = proxies::renameSubscription,
@@ -264,7 +298,6 @@ fun AnixApp(
         rulesState = rulesState,
         rules = RulesActions(
             setRoutingMode = app::setRoutingMode,
-            refreshRoutingRules = rules::refreshRoutingRules,
             saveMyRules = rules::saveMyRules,
             selectGroupOutbound = rules::selectGroupOutbound,
             updateRuleSets = rules::updateRuleSets,
@@ -496,6 +529,13 @@ fun AnixScaffold(
     val closeRules = { egressRules = false }
     val destinations = Destination.of(mode)
     var selected by rememberSaveable(mode) { mutableStateOf(initial?.takeIf { it in destinations } ?: destinations.first()) }
+    // An `anixops://import` link opens the import form where the nodes are: 代理, or 出口 in debug mode.
+    if (proxiesState.pendingImport != null) {
+        LaunchedEffect(proxiesState.pendingImport) {
+            egressRules = false
+            selected = if (Destination.Proxies in destinations) Destination.Proxies else Destination.Egress
+        }
+    }
     NavigationSuiteScaffold(
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.background,
@@ -572,8 +612,13 @@ fun AnixScaffold(
                         requestsState.sessions != null -> BackTo(requests.closeSessions)
                         requestsState.replay != null -> BackTo(requests.closeReplay)
                         requestsState.opened != null -> BackTo(requests.close)
+                        requestsState.connection != null -> BackTo(requests.closeConnection)
                     }
-                    RequestsScreen(state, requestsState, requests.copy(connect = home.connect, disconnect = home.disconnect))
+                    RequestsScreen(
+                        state,
+                        requestsState,
+                        requests.copy(connect = home.connect, disconnect = home.disconnect, openRewrite = { selected = Destination.Rewrite }),
+                    )
                 }
             }
             SnackbarHost(snackbar, modifier = Modifier.align(Alignment.BottomCenter))
@@ -582,6 +627,18 @@ fun AnixScaffold(
 }
 
 /** The system back gesture closes a page opened from another; screenshots have no dispatcher to hook into. */
+/** Why a link was refused, by the shared view's id. */
+@StringRes
+private fun linkReason(reason: String): Int = when (reason) {
+    "invalid" -> R.string.link_invalid
+    "not_app_link" -> R.string.link_not_app_link
+    "too_long" -> R.string.link_too_long
+    "missing_action" -> R.string.link_missing_action
+    "missing_parameter" -> R.string.link_missing_parameter
+    "unknown_mode" -> R.string.link_unknown_mode
+    else -> R.string.link_unknown_action
+}
+
 @Composable
 internal fun BackTo(close: () -> Unit) {
     if (LocalOnBackPressedDispatcherOwner.current != null) BackHandler(onBack = close)

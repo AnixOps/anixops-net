@@ -34,14 +34,24 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- anixops:// links (connect, disconnect, toggle, mode, select, import), as on the other clients.
+                 The app parses them with the shared view; import only fills in the form. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="anixops" />
+            </intent-filter>
         </activity>
 
-        <!-- Only the system may bind it (BIND_VPN_SERVICE); the app starts it when the client opens the tunnel. -->
+        <!-- Only the system may bind it (BIND_VPN_SERVICE); the app starts it when the client opens the tunnel, and
+             the system starts it when the user sets the app as the always-on VPN. -->
         <service
             android:name=".platform.AnxVpnService"
             android:exported="false"
@@ -53,6 +63,21 @@
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="vpn" />
+        </service>
+
+        <!-- Quick Settings tile: connects and disconnects without opening the app (only the system binds it). -->
+        <service
+            android:name=".platform.ConnectTile"
+            android:exported="true"
+            android:icon="@drawable/ic_notification"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.TOGGLEABLE_TILE"
+                android:value="true" />
         </service>
     </application>
 </manifest>

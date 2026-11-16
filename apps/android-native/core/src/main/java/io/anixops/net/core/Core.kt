@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -173,8 +174,6 @@ class Core(
         call("remove_subscription", OperationResult.serializer(), args("id" to JsonPrimitive(id)))
 
     // The rules page.
-
-    suspend fun refreshRoutingRules(): OperationResult = call("refresh_routing_rules", OperationResult.serializer())
 
     suspend fun myRules(): MyRules = call("my_rules", MyRules.serializer())
 
@@ -496,6 +495,50 @@ class Core(
         args("request" to Envelope.json.encodeToJsonElement(ReplayRequest.serializer(), request)),
     )
 
+    /**
+     * The steps still to do before HTTPS requests show: `connect`, `decryption`, `domains`, `capture` (and
+     * `certificate` where the app can tell the root certificate is not trusted, which Android cannot).
+     */
+    suspend fun decryptSetup(connected: Boolean, decrypting: Boolean, domains: Int, capturing: Boolean): List<String> = call(
+        "view.decrypt_setup",
+        DecryptSetup.serializer(),
+        buildJsonObject {
+            put("connected", connected)
+            put("decrypting", decrypting)
+            put("domains", domains)
+            put("capturing", capturing)
+        },
+    ).steps
+
+    /** What capture holds of connection [id]; null once newer connections pushed it out or capture was cleared. */
+    suspend fun captureConnection(id: Long): CaptureConnection? = decode(
+        CaptureConnectionAnswer.serializer(),
+        controlRequest(
+            buildJsonObject {
+                put("cmd", "capture_connection")
+                put("id", id)
+            },
+        ),
+    ).capture
+
+    /** Saves what capture holds of connection [id] (`pcapng` or `har`) to Downloads and says where. */
+    suspend fun exportConnection(id: Long, format: String, redact: Boolean): SavedFile = call(
+        "export_capture",
+        SavedFile.serializer(),
+        buildJsonObject {
+            put("format", format)
+            put("id", id)
+            putJsonObject("options") { put("redact", redact) }
+        },
+    )
+
+    /** [host] (a domain, maybe with a port) against the decrypt list [hosts]. */
+    suspend fun decryptHost(host: String, hosts: List<String>): DecryptHost = call(
+        "view.decrypt_hosts",
+        DecryptHost.serializer(),
+        args("host" to JsonPrimitive(host), "hosts" to JsonArray(hosts.map(::JsonPrimitive))),
+    )
+
     /** Saves everything capture holds (`har` or `pcapng`) to Downloads and says where. */
     suspend fun exportCapture(format: String): SavedFile =
         call("export_capture", SavedFile.serializer(), args("format" to JsonPrimitive(format)))
@@ -526,6 +569,33 @@ class Core(
             more()
         }
     }
+
+    // `anixops://` links: parsed and matched by the shared view, so every platform reads them the same way.
+
+    suspend fun parseAppLink(link: String): AppLink =
+        call("view.parse_app_link", AppLink.serializer(), args("link" to JsonPrimitive(link)))
+
+    /** The node a `select` link names among [nodes], or null. */
+    suspend fun findLinkNode(nodes: List<NodeSummary>, name: String, group: String?): NodeSummary? = call(
+        "view.find_link_node",
+        NodeSummary.serializer().nullable,
+        buildJsonObject {
+            put("nodes", Envelope.json.encodeToJsonElement(ListSerializer(NodeSummary.serializer()), nodes))
+            put("name", name)
+            if (group != null) put("group", group)
+        },
+    )
+
+    /** The group and member a `select_member` link names among [groups], or null. */
+    suspend fun findLinkMember(groups: List<NativeGroup>, policy: String, member: String): LinkMember? = call(
+        "view.find_link_member",
+        LinkMember.serializer().nullable,
+        buildJsonObject {
+            put("groups", Envelope.json.encodeToJsonElement(ListSerializer(NativeGroup.serializer()), groups))
+            put("policy", policy)
+            put("member", member)
+        },
+    )
 
     // Plumbing.
 

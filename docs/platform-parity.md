@@ -3,8 +3,9 @@
 本页对照 iOS、macOS、Windows、Linux、Android 五个客户端的功能，列出缺口和补齐计划。各平台实现细节分别见
 [`debug-mode.md`](debug-mode.md)、[`phone-debugging.md`](phone-debugging.md) 和 `apps/*/README.md`。
 
-- 界面：iOS 和 macOS 共用 SwiftUI（`apps/ios`），Windows、Linux、Android 共用 Tauri 界面（`apps/windows-gui/ui`）。
-  后端分别是 `apps/windows-gui`（Windows）和 `crates/client-core`（Linux，Android 复用它）。
+- 界面：iOS 和 macOS 共用 SwiftUI（`apps/ios`），Windows、Linux 共用 Tauri 界面（`apps/windows-gui/ui`），Android 是
+  原生 Kotlin + Jetpack Compose（`apps/android-native`，见 [`architecture/android-native-compose.md`](architecture/android-native-compose.md)）。
+  后端分别是 `apps/windows-gui`（Windows）和 `crates/client-core`（Linux 与 Android 共用，Android 经 JNI 调用）。
 - 内核能力都在 networkcore（固定 `rev`），客户端只决定用不用、怎么呈现。
 - Windows 和 Linux 正在改为原生界面（WinUI 3、GTK4 + libadwaita），方案和迁移清单见
   [`architecture/desktop-native.md`](architecture/desktop-native.md)。切换之前 Tauri 桌面版仍是正式版，本表的 Windows、
@@ -44,9 +45,9 @@
 | 节点测速、选择最快、策略组切换 | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 节点分享链接 | ✅ | ✅ | ✅ | ✅ | ✅ | Tauri 在节点卡片的“更多”菜单里；触屏上菜单按钮常显（T4） |
 | 手动添加 / 编辑节点 | ✅ | ✅ | ✅ | ✅ | ✅ | 添加 = 粘贴分享链接导入；编辑名称、服务器、端口和删除节点只改本机，更新订阅后恢复，与 iOS 相同（`crates/node-edits`，T5）。策略组或规则用到的节点和最后一个节点不能删 |
-| 扫码导入 | ✅ | — | — | — | ✅ | Android：订阅页“扫码”用相机读订阅或分享链接二维码，填进链接框后点“导入”（`tauri-plugin-barcode-scanner`，T5） |
-| 分流模式（规则 / 全局 / 直连等） | ✅ | ✅ | ✅ | ✅ | ✅ | |
-| 我的规则（规则文本编辑、连接中原地换规则） | ✅ | ✅ | ◐ | ◐ | ◐ | 内核 `reload_rules`（T2）。桌面与 Android 不收 RULE-SET / GEOIP / GEOSITE 行（这些要下载规则集，分流模式已覆盖）；Windows TUN 模式下次连接生效 |
+| 扫码导入 | ✅ | — | — | — | ✅ | Android：订阅页“扫码”用相机读订阅或分享链接二维码，填进链接框后点“导入”（CameraX + ZXing，T5） |
+| 分流模式（规则 / 全局 / 直连；不带预设分流模式，见 [no-presets.md](no-presets.md)） | ✅ | ✅ | ✅ | ✅ | ✅ | |
+| 我的规则（规则文本编辑、连接中原地换规则） | ✅ | ✅ | ◐ | ◐ | ◐ | 内核 `reload_rules`（T2）。桌面与 Android 用 `RULE-SET,https://…,策略` 导入规则集（经 PROXY 每天下载），GEOSITE,cn / GEOIP,CN 用内置公开列表，其他 GEOSITE 分类要订阅自带同名规则集；Windows TUN 模式下次连接生效 |
 | 规则集查看、更新远程规则集 | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | DNS 预设 | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 自定义 DNS 服务器、分域 DNS、Hosts | ✅ | ✅ | ✅ | ✅ | ✅ | T3：桌面与 Android 用文本编辑（`名称 = 地址`、`DOMAIN-SUFFIX,cn,服务器`、`域名 = 地址`），iOS / macOS 是表单 |
@@ -78,15 +79,15 @@
 | 系统通知（脚本通知、意外断开、订阅更新失败） | ✅ | ✅ | ✅ | ✅ | ✅ | 设置页“通知”三个开关，默认全开（`crates/app-notifications`，tauri-plugin-notification，T11）。点击脚本通知不能打开它附带的链接：桌面通知插件不支持点击回调 |
 | 网络变化后重建连接 | ✅ | ✅ | ✅ | ✅ | ◐ | Android 共用 `network_watch`，Wi-Fi / 移动网络切换待真机确认 |
 | 按 Wi-Fi 自动连接 / 断开（On Demand） | ✅ | ✅ | ✅ | ⛔ | ✅ | 设置页“Wi-Fi 规则”：指定 Wi-Fi、其他 Wi-Fi、蜂窝（Android）、有线和其他网络各选连接 / 断开 / 保持不变；Windows、Android 由 App 运行时每 10–12 秒取样、换网络时执行一次（T12） |
-| 开机 / 登录后启动、自动连接 | ✅ | ✅ | ✅ | ✅ | ⛔ | Android 每次连接要系统 VPN 授权，见系统限制 |
-| `anixops://` 链接 | ✅ | ✅ | ✅ | ✅ | ✅ | 与 iOS 相同的动作：connect / disconnect / toggle、`mode?set=`、`select?node=&group=` 或 `policy=`、`import?url=`（只填进导入框，用户点“导入”才保存）。桌面没有 `global` 模式，`mode` 另外接受 `bypass_china` 等桌面模式名。Windows 写当前用户的 `HKCU\Software\Classes\anixops`，Linux 写 `~/.local/share/applications` 里的 handler 并调 `xdg-mime`，都在启动时注册；第二次启动把链接交给已运行的窗口（Linux 因此改为单实例）。Android 在 manifest 里声明 scheme（tauri-plugin-deep-link，T13） |
+| 开机 / 登录后启动、自动连接 | ✅ | ✅ | ✅ | ✅ | ◐ | Android 在系统设置里把本 App 设为“始终开启的 VPN”后，开机由系统启动并自动连接；App 自己不能开机连接，见系统限制 |
+| `anixops://` 链接 | ✅ | ✅ | ✅ | ✅ | ✅ | 与 iOS 相同的动作：connect / disconnect / toggle、`mode?set=`、`select?node=&group=` 或 `policy=`、`import?url=`（只填进导入框，用户点“导入”才保存）。桌面没有 `global` 模式；公开版不带预设分流模式（[no-presets.md](no-presets.md)），`bypass_china` 等旧模式名一律拒绝。Windows 写当前用户的 `HKCU\Software\Classes\anixops`，Linux 写 `~/.local/share/applications` 里的 handler 并调 `xdg-mime`，都在启动时注册；第二次启动把链接交给已运行的窗口（Linux 因此改为单实例）。Android 在 manifest 里声明 scheme，由共用的 `view.parse_app_link` 解析（T13） |
 | 崩溃报告（本机、脱敏） | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 本机 Prometheus 指标 | ⛔ | ✅ | ✅ | ✅ | ✅ | macOS 在设置页打开，`127.0.0.1:9477/metrics`，默认关闭（A3）；iOS 见系统限制 |
 | 用户协议同意、协议入口 | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 简体 / 繁体中文 / 英文 | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 应用内更新 | — | ✅ | ❌ | ❌ | ❌ | macOS 渠道未开；其余平台目前从下载页更新 |
 | 命令行工具 | — | ✅ | ❌ | ❌ | — | 计划 D 决定桌面 UI 之后再做 |
-| 小组件、灵动岛、快捷指令 | ✅ | ◐ | — | — | ❌ | 系统能力不同，不做对齐 |
+| 小组件、灵动岛、快捷指令 | ✅ | ◐ | — | — | ◐ | Android 有快捷设置磁贴（连接 / 断开，显示所用节点）；系统能力不同，其余不做对齐 |
 
 ## Windows 运行方式（W1）
 
@@ -100,8 +101,8 @@ MSI 升级时旧服务随旧版本一起卸载；便携版注册过的服务由�
   用户自己安装描述文件，和现在的流程相同，所以不单独提供“导入”。
 - **Android 解密第三方 App**：Android 7 起 App 默认只信任系统证书，用户安装的 CA 只对声明信任用户证书的 App（多数浏览器、
   调试构建）生效；装系统证书需要 root。
-- **Android 自动连接**：VpnService 每次建立前要用户在系统对话框授权（或在系统设置里设为“始终开启的 VPN”）。App 不能自己在
-  开机后连上。
+- **Android 自动连接**：VpnService 第一次建立前要用户在系统对话框授权。App 不能自己在开机后连上；用户在系统设置里把它设为
+  “始终开启的 VPN”后，由系统在开机时启动并连接。
 - **Android 导入自有根证书**：解密在手机本机进行，不需要把团队 CA 装进别的设备；如需统一证书，见上一条，用户仍要在系统设置里装。
 - **Linux TUN**：创建 TUN 需要 `CAP_NET_ADMIN`，改路由需要 root。App 本身不提权：每次在 TUN 模式下连接时，用 `pkexec`
   以 root 启动同一个程序的 `--tun-helper`，它只创建非持久的 `anxtun` 网卡、配地址和 `0.0.0.0/1`、`128.0.0.0/1`（IPv6

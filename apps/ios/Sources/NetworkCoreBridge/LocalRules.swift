@@ -1,8 +1,9 @@
 import Foundation
 
-/// The rule mode of a node list without subscription rules (a plain link or base64 subscription): a built-in preset
-/// (the same lists the desktop modes use) after the user's own rules. The user's rules also go in front of a Clash,
-/// Surge or Loon subscription's rules. Not secret; the app keeps them in `local-rules.json` and copies them into the
+/// The rule mode of a node list without subscription rules (a plain link or base64 subscription): the user's own
+/// rules and rule sets, then everything else through the proxy. The app ships no preset rules or rule lists of its
+/// own (`docs/no-presets.md`); what is here is only what the user wrote, pasted or added by URL. The user's rules also
+/// go in front of a Clash, Surge or Loon subscription's rules. Not secret; the app keeps them in `local-rules.json` and copies them into the
 /// tunnel profile (`TunnelProfileKeys.localRules`), and the extension builds the engine `routing` with
 /// `NodeLibrary.routingForModes(localRules:)`.
 ///
@@ -11,22 +12,6 @@ import Foundation
 public struct LocalRules: Codable, Equatable {
     /// The engine accepts more, but a hand-kept list this long is already hard to read on a phone.
     public static let maxRules = 1000
-
-    /// What the traffic no rule of the user's matched does.
-    public enum Preset: String, Codable, CaseIterable, Identifiable {
-        /// Mainland China sites and addresses direct, everything else through the proxy.
-        case bypassChina
-        /// Only the GFW list through the proxy, everything else direct.
-        case gfwList
-        /// Mainland China sites and addresses through the proxy, everything else direct (back to China from abroad).
-        case returnChina
-        /// No list: only the user's rules, everything else through the proxy.
-        case proxyAll
-
-        public var id: String {
-            rawValue
-        }
-    }
 
     /// Where a rule sends matching traffic. `proxy` is the selected node, or with subscription rules the
     /// subscription's first policy group.
@@ -77,8 +62,8 @@ public struct LocalRules: Codable, Equatable {
         }
     }
 
-    /// A rule list the engine downloads and refreshes itself, such as one of the open-source lists on GitHub
-    /// (`OpenRuleSets`) or any Surge, Loon or Clash list URL. Matching traffic goes to `policy`.
+    /// A rule list the user added by URL (any Surge, Loon or Clash list), which the engine downloads and refreshes
+    /// itself. Matching traffic goes to `policy`.
     public struct Subscription: Codable, Equatable, Identifiable {
         public var id: UUID
         public var name: String
@@ -86,23 +71,19 @@ public struct LocalRules: Codable, Equatable {
         public var url: String
         public var policy: Policy
         public var enabled: Bool
-        /// The `OpenRuleSets` entry it was added from, if any.
-        public var catalogID: String?
 
         public init(
             id: UUID = UUID(),
             name: String,
             url: String,
             policy: Policy,
-            enabled: Bool = true,
-            catalogID: String? = nil
+            enabled: Bool = true
         ) {
             self.id = id
             self.name = name
             self.url = url
             self.policy = policy
             self.enabled = enabled
-            self.catalogID = catalogID
         }
 
         /// The name the engine knows the list by, stable across edits and reordering.
@@ -115,7 +96,6 @@ public struct LocalRules: Codable, Equatable {
     /// sets need some of them.
     public static let maxSubscriptions = 20
 
-    public var preset: Preset
     /// Private and local networks (`10.0.0.0/8`, `192.168.0.0/16`, `*.local` and the like) go direct.
     public var bypassLAN: Bool
     public var rules: [Rule]
@@ -123,19 +103,18 @@ public struct LocalRules: Codable, Equatable {
     public var subscriptions: [Subscription]
 
     public init(
-        preset: Preset = .bypassChina,
         bypassLAN: Bool = true,
         rules: [Rule] = [],
         subscriptions: [Subscription] = []
     ) {
-        self.preset = preset
         self.bypassLAN = bypassLAN
         self.rules = rules
         self.subscriptions = subscriptions
     }
 
+    /// Values saved by earlier versions may still carry a `preset` (绕过大陆 and the like); it is ignored, since the
+    /// app no longer ships preset lists, and unmatched traffic goes through the proxy.
     enum CodingKeys: String, CodingKey {
-        case preset
         case bypassLAN = "bypass_lan"
         case rules
         case subscriptions
@@ -143,9 +122,7 @@ public struct LocalRules: Codable, Equatable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let preset = try container.decodeIfPresent(String.self, forKey: .preset).flatMap(Preset.init(rawValue:))
         self.init(
-            preset: preset ?? .bypassChina,
             bypassLAN: try container.decodeIfPresent(Bool.self, forKey: .bypassLAN) ?? true,
             rules: try container.decodeIfPresent([Rule].self, forKey: .rules) ?? [],
             subscriptions: try container.decodeIfPresent([Subscription].self, forKey: .subscriptions) ?? []
@@ -212,23 +189,14 @@ public struct LocalRules: Codable, Equatable {
         return (lines, sets)
     }
 
-    /// Every engine line for a node list without subscription rules: the user's rules, the private networks, then
-    /// the preset ending in `FINAL`.
+    /// Every engine line for a node list without subscription rules: the user's rules and rule sets, the private
+    /// networks, then `FINAL` through the proxy.
     public func engineLines(proxy: String) -> (lines: [String], ruleSets: [String: EmbeddedRuntimeConfig.RuleSet]) {
         var (lines, sets) = userLines(proxy: proxy)
         if bypassLAN {
             lines += Self.lanLines
         }
-        switch preset {
-        case .bypassChina:
-            lines += ["GEOSITE,cn,DIRECT", "GEOIP,cn,DIRECT", "FINAL,\(proxy)"]
-        case .gfwList:
-            lines += ["GEOSITE,gfw,\(proxy)", "FINAL,DIRECT"]
-        case .returnChina:
-            lines += ["GEOSITE,cn,\(proxy)", "GEOIP,cn,\(proxy)", "FINAL,DIRECT"]
-        case .proxyAll:
-            lines += ["FINAL,\(proxy)"]
-        }
+        lines += ["FINAL,\(proxy)"]
         for (name, set) in RuleSetCatalog.ruleSets(for: lines, defined: nil) ?? [:] where sets[name] == nil {
             sets[name] = set
         }
@@ -492,7 +460,7 @@ public struct LocalRules: Codable, Equatable {
         return try encoder.encode(self)
     }
 
-    /// The saved rules; profiles saved before local rules existed get the default preset.
+    /// The saved rules; profiles saved before local rules existed get none.
     public static func fromProfileValue(_ value: Data?) -> LocalRules {
         value.flatMap { try? JSONDecoder().decode(LocalRules.self, from: $0) } ?? LocalRules()
     }

@@ -7,7 +7,6 @@ use crate::gui::{
 use desktop_mitm::envelope_with_mitm;
 use engine_embedded::local_proxy::LocalProxy;
 use inbound_mixed::MixedSettings;
-use mitm_policy::{builtin_ad_block_plugin_package, builtin_bilibili_web_ad_block_plugin_package};
 use platform_windows::managed::{
     windows_managed_config_path, WindowsManagedConfig, WindowsManagedEmbeddedConfig,
     WindowsManagedNativeMitmConfig, WindowsProxySettings, WindowsProxySnapshot,
@@ -366,7 +365,7 @@ fn with_native_mitm(
         &envelope,
         &certificate,
         &private_key,
-        &native_mitm_policy_source(mitm.bilibili_web_ad_block_enabled),
+        NATIVE_MITM_POLICY,
         Some(&mitm_plugins::directory()),
     )
 }
@@ -456,14 +455,9 @@ fn apply_proxy_after_direct_readiness(
     })
 }
 
-/// The built-in HTTPS decryption policy text for a managed profile.
-pub fn native_mitm_policy_source(bilibili_web_ad_block_enabled: bool) -> String {
-    if bilibili_web_ad_block_enabled {
-        builtin_bilibili_web_ad_block_plugin_package().source
-    } else {
-        builtin_ad_block_plugin_package().source
-    }
-}
+/// The HTTPS decryption policy besides the user's imported plugins: none. Public builds ship no built-in
+/// plugin, rewrite or script (docs/no-presets.md); only plugins the user imports decrypt or rewrite anything.
+pub const NATIVE_MITM_POLICY: &str = "";
 
 /// What [`remove_legacy_service`] did.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -644,7 +638,6 @@ mod tests {
             ca_certificate_path: PathBuf::from("root-ca.pem"),
             ca_private_key_path: PathBuf::from("root-ca-key.pem"),
             log_path: PathBuf::from("native-mitm.log"),
-            bilibili_web_ad_block_enabled: false,
             script_runtime: None,
         });
         let plan = direct_connection_plan(managed.clone())
@@ -671,7 +664,6 @@ mod tests {
             ca_certificate_path: PathBuf::from("root-ca.pem"),
             ca_private_key_path: PathBuf::from("root-ca-key.pem"),
             log_path: PathBuf::from("native-mitm.log"),
-            bilibili_web_ad_block_enabled: false,
             script_runtime: None,
         }
     }
@@ -717,7 +709,7 @@ mod tests {
             ENVELOPE,
             &certificate.pem(),
             &key.serialize_pem(),
-            &native_mitm_policy_source(false),
+            NATIVE_MITM_POLICY,
             None,
         )
         .unwrap();
@@ -725,17 +717,6 @@ mod tests {
         let proxy = LocalProxy::start(&envelope, listen, MixedSettings::default())
             .unwrap_or_else(|error| panic!("engine refused the envelope: {}", error.message));
         assert!(proxy.decrypts_https());
-        for bilibili in [false, true] {
-            let envelope = envelope_with_mitm(
-                ENVELOPE,
-                &certificate.pem(),
-                &key.serialize_pem(),
-                &native_mitm_policy_source(bilibili),
-                None,
-            )
-            .unwrap();
-            assert!(LocalProxy::start(&envelope, listen, MixedSettings::default()).is_ok());
-        }
 
         assert!(envelope_with_mitm(ENVELOPE, "no pem", &key.serialize_pem(), "", None).is_err());
         assert!(
@@ -769,7 +750,7 @@ mod tests {
             ENVELOPE,
             &certificate.pem(),
             &key.serialize_pem(),
-            &native_mitm_policy_source(false),
+            NATIVE_MITM_POLICY,
             Some(&plugins),
         )
         .unwrap();

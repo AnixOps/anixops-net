@@ -2,12 +2,16 @@ package io.anixops.net.ui
 
 import com.github.takahirom.roborazzi.captureRoboImage
 import io.anixops.net.core.CaptureBody
+import io.anixops.net.core.CaptureChunk
+import io.anixops.net.core.CaptureConnection
+import io.anixops.net.core.CaptureDirection
 import io.anixops.net.core.CaptureExchange
 import io.anixops.net.core.CaptureMessage
 import io.anixops.net.core.CaptureSession
 import io.anixops.net.core.CaptureStatus
 import io.anixops.net.core.ConnectionSnapshot
 import io.anixops.net.core.DebugMapping
+import io.anixops.net.core.DecryptHost
 import io.anixops.net.core.Delay
 import io.anixops.net.core.DnsText
 import io.anixops.net.core.FilterError
@@ -262,7 +266,7 @@ class ScreenshotTest {
             snapshot = snapshot.copy(connection = "Not connected", directEgress = true),
             overview = Overview(state = "disconnected", egress = "direct", canConnect = true),
         ),
-        requests = RequestsState(loaded = true),
+        requests = RequestsState(loaded = true, setup = listOf("connect", "decryption", "domains", "capture")),
     )
 
     @Test
@@ -271,7 +275,16 @@ class ScreenshotTest {
         PHONE,
         "zh-rCN",
         dark = true,
-        requests = RequestsState(capture = CaptureStatus(maxTotalBytes = 268_435_456), loaded = true),
+        requests = RequestsState(capture = CaptureStatus(maxTotalBytes = 268_435_456), loaded = true, setup = listOf("domains", "capture")),
+    )
+
+    @Test
+    fun requestsSetupPhoneLightEn() = captureRequests(
+        "requests-setup-phone-light-en",
+        PHONE,
+        "en",
+        dark = false,
+        requests = requestsState.copy(setup = listOf("certificate", "domains")),
     )
 
     @Test
@@ -326,6 +339,34 @@ class ScreenshotTest {
         "en",
         dark = true,
         requests = requestsState.copy(sessions = SessionsPage(loaded = true, protection = "keystore")),
+    )
+
+    @Test
+    fun requestsConnectionsPhoneLightZh() = captureRequests(
+        "requests-connections-phone-light-zh",
+        PHONE,
+        "zh-rCN",
+        dark = false,
+        state = connectedState,
+        requests = requestsState.copy(showConnections = true),
+    )
+
+    @Test
+    fun connectionWholePagePhoneDarkEn() = captureRequests(
+        "connection-whole-page-phone-dark-en",
+        TALL_PHONE,
+        "en",
+        dark = true,
+        requests = requestsState.copy(connection = connectionView),
+    )
+
+    @Test
+    fun connectionTlsPhoneLightZh() = captureRequests(
+        "connection-tls-phone-light-zh",
+        PHONE,
+        "zh-rCN",
+        dark = false,
+        requests = requestsState.copy(connection = tlsConnectionView),
     )
 
     @Test
@@ -835,6 +876,59 @@ class ScreenshotTest {
                     requests = 1,
                 ),
                 CaptureSession(session = "1794000000000-c9d0e1f2", name = "重装前", savedAtMs = LOG_TIME - 600_000_000, unreadable = true),
+            ),
+        )
+
+        val connectionView = ConnectionView(
+            id = 7,
+            name = "api.example.com",
+            loaded = true,
+            capture = CaptureConnection(
+                id = 7,
+                network = "tcp",
+                host = "api.example.com",
+                destination = "203.0.113.20:443",
+                startedAtMs = LOG_TIME,
+                decrypted = true,
+                upload = CaptureDirection(seen = 1_812, captured = 1_812),
+                download = CaptureDirection(seen = 2_400_000, captured = 65_536, truncated = true),
+                chunks = listOf(
+                    CaptureChunk("upload", LOG_TIME + 12, MappingText.base64("GET /v1/profile HTTP/1.1\r\nHost: api.example.com\r\n\r\n")),
+                    CaptureChunk("download", LOG_TIME + 150, MappingText.base64("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{}")),
+                ),
+                http = listOf(
+                    CaptureExchange(
+                        startedAtMs = LOG_TIME + 12,
+                        endedAtMs = LOG_TIME + 150,
+                        method = "GET",
+                        url = "https://api.example.com/v1/profile?fields=name",
+                        status = 200,
+                        response = CaptureMessage(
+                            headers = listOf(listOf("content-type", "application/json")),
+                            body = CaptureBody(size = 412),
+                        ),
+                    ),
+                    CaptureExchange(startedAtMs = LOG_TIME + 900, method = "POST", url = "https://api.example.com/v1/events"),
+                ),
+            ),
+        )
+
+        val tlsConnectionView = ConnectionView(
+            id = 9,
+            name = "img.example.net",
+            loaded = true,
+            decrypt = DecryptHost(decryptable = true, host = "img.example.net"),
+            capture = CaptureConnection(
+                id = 9,
+                network = "tcp",
+                host = "img.example.net",
+                destination = "198.51.100.7:443",
+                upload = CaptureDirection(seen = 517, captured = 517),
+                download = CaptureDirection(seen = 4_096, captured = 4_096),
+                chunks = listOf(
+                    CaptureChunk("upload", LOG_TIME, MappingText.base64(byteArrayOf(0x16, 0x03, 0x01, 0x02, 0x00, 0x01, 0x00, 0x01, 0xfc.toByte()))),
+                    CaptureChunk("download", LOG_TIME + 80, MappingText.base64(byteArrayOf(0x16, 0x03, 0x03, 0x00, 0x7a, 0x02))),
+                ),
             ),
         )
 

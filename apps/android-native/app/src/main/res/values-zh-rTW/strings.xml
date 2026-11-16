@@ -22,9 +22,6 @@
     <string name="home_last_error">上次出錯</string>
     <string name="home_vpn_denied">沒有允許建立 VPN，無法連線</string>
 
-    <string name="routing_bypass_china">繞過大陸</string>
-    <string name="routing_gfw_list">GFW 清單</string>
-    <string name="routing_return_china">回國</string>
     <string name="routing_direct">直連</string>
     <string name="routing_rule">規則</string>
 
@@ -38,6 +35,9 @@
     <string name="notification_channel_vpn">連線狀態</string>
     <string name="notification_channel_notices">通知</string>
     <string name="notification_connected">已連線</string>
+    <string name="tile_working">正在切換…</string>
+    <string name="tile_failed">連線失敗</string>
+    <string name="tile_off">未連線</string>
 
     <string name="home_traffic">即時流量</string>
     <string name="home_upload">上傳</string>
@@ -111,15 +111,11 @@
     <plurals name="interval_days">
         <item quantity="other">每 %d 天自動更新</item>
     </plurals>
-    <string name="rules_refresh">重新整理規則資源</string>
-    <string name="rules_routing_note">規則資源從公開來源快取到本機，下次連線時生效。</string>
-    <string name="routing_bypass_china_hint">大陸網站直連，其餘走代理</string>
-    <string name="routing_gfw_list_hint">只有清單內的網站走代理</string>
-    <string name="routing_return_china_hint">大陸網站走代理，適合在海外使用</string>
+    <string name="rules_routing_note">用戶端不帶預設規則：規則模式只按訂閱自帶的規則和你的規則分流。</string>
     <string name="routing_direct_hint">所有流量直連，不經過節點</string>
-    <string name="routing_rule_hint">按訂閱自帶的規則和策略組分流</string>
+    <string name="routing_rule_hint">按訂閱自帶的規則和你的規則分流，其餘走代理</string>
     <string name="rules_mine">我的規則</string>
-    <string name="rules_mine_note">每行一條，從上到下比對，排在分流模式和訂閱規則前面。策略寫 PROXY（目前節點或訂閱的第一個策略群組）、DIRECT 或 REJECT。支援 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD、DOMAIN-WILDCARD、IP-CIDR、IP-CIDR6、DST-PORT、PROCESS-NAME、USER-AGENT、URL-REGEX、PROTOCOL；# 開頭的行是註解。</string>
+    <string name="rules_mine_note">每行一條，從上到下比對，排在分流模式和訂閱規則前面。策略寫 PROXY（目前節點或訂閱的第一個策略群組）、DIRECT 或 REJECT。支援 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD、DOMAIN-WILDCARD、IP-CIDR、IP-CIDR6、DST-PORT、PROCESS-NAME、USER-AGENT、URL-REGEX、PROTOCOL、GEOIP、GEOSITE；# 開頭的行是註解。匯入規則集寫 RULE-SET,https://規則清單網址,策略，經 PROXY 每天下載一次；GEOSITE,cn 和 GEOIP,CN 使用內建的公開清單（gaoyifan/china-operator-ip、Loyalsoldier/v2ray-rules-dat）。</string>
     <string name="action_revert">還原</string>
     <string name="rules_groups">策略組</string>
     <string name="rules_groups_note">為手動選擇的策略組設定預設出口。</string>
@@ -137,11 +133,9 @@
     <string name="rule_set_failed">上次下載失敗：%1$s</string>
     <string name="dns_system">系統 DNS</string>
     <string name="dns_encrypted">加密 DNS</string>
-    <string name="dns_split">國內外分流</string>
     <string name="dns_custom">自訂 DNS</string>
     <string name="dns_system_hint">內建引擎用系統 DNS 解析規則裡需要 IP 的網域；經節點的連線由節點伺服器解析網域。</string>
     <string name="dns_encrypted_hint">所有網域經節點用 Cloudflare DNS over HTTPS 解析，本機網路看不到查詢內容。</string>
-    <string name="dns_split_hint">國內網域直連阿里 DNS over HTTPS 解析，其餘經節點用 Cloudflare 解析，國內網站拿到就近的位址。</string>
     <string name="dns_custom_hint">使用下方填寫的伺服器、分域規則和 Hosts。</string>
     <string name="dns_fake_ip_hint">應用查詢網域時立刻拿到 198.18.0.0/15 裡的位址，連線時還原成網域依規則分流，由節點解析。區域網路、校時、STUN 和推播等網域仍拿真實位址。</string>
     <string name="dns_custom_note">每行一條，# 開頭的行是註解。沒有填伺服器時，引擎經節點用 TCP 查詢預設伺服器。</string>
@@ -391,10 +385,6 @@
     <string name="egress_node_note">依下面選定的節點和訂閱規則送出，可以切換節點比較不同地區的出口。</string>
     <string name="egress_rules">規則與 DNS</string>
     <string name="requests_capture">擷取封包</string>
-    <string name="requests_not_connected">還沒有連線</string>
-    <string name="requests_not_connected_body">連線後，經過本機的 HTTP 請求會逐條列在這裡。偵錯模式預設直連，不需要節點。</string>
-    <string name="requests_capture_off">還沒有開始擷取</string>
-    <string name="requests_capture_off_body">開啟上面的「擷取封包」後，新的請求會逐條出現在這裡。要看到 HTTPS 明文，還要在「改寫」裡信任解密憑證，並為要看的網域開啟解密。</string>
     <string name="requests_filter">篩選：網址、host:、status:、type:…</string>
     <string name="requests_filter_hint">例如 host:api.example.com status:4xx type:json，多組條件用 OR 連接</string>
     <string name="requests_filter_error_at">篩選運算式在第 %1$d 個字元處有誤</string>
@@ -495,4 +485,57 @@
     <plurals name="sessions_kept">
         <item quantity="other">工作階段只保存在本機，%d 天後自動刪除。</item>
     </plurals>
+    <string name="setup_title">要看到 HTTPS 請求，還差這幾步</string>
+    <string name="setup_connect">連線</string>
+    <string name="setup_connect_hint">開啟上面的「連線」。調試網路預設直連，不需要節點。</string>
+    <string name="setup_certificate">信任解密憑證</string>
+    <string name="setup_certificate_hint">在「改寫」裡安裝解密憑證，並在系統設定裡信任它。</string>
+    <string name="setup_decryption">開啟 HTTPS 解密</string>
+    <string name="setup_decryption_hint">在「改寫」裡開啟，並依提示安裝解密憑證。</string>
+    <string name="setup_domains">新增要解密的網域</string>
+    <string name="setup_domains_hint">在「改寫」裡為要看的網域開啟解密，只對新連線生效。</string>
+    <string name="setup_capture">開始擷取封包</string>
+    <string name="setup_capture_hint">開啟上面的「擷取封包」，新的請求會逐條出現在下面。</string>
+    <string name="setup_go">前往</string>
+    <string name="requests_tab_requests">請求</string>
+    <string name="requests_tab_connections">連線</string>
+    <string name="connections_empty">目前沒有連線。</string>
+    <string name="request_connection">所在連線</string>
+    <string name="request_connection_open">查看擷取內容</string>
+    <string name="connection_gone">這個連線的擷取內容已被較新的連線擠出（擷取記憶體有上限），或擷取已清空。</string>
+    <string name="connection_upload">上傳</string>
+    <string name="connection_download">下載</string>
+    <string name="connection_kept">已保留 %1$s / 共 %2$s</string>
+    <string name="connection_target">目標</string>
+    <string name="connection_content">內容</string>
+    <string name="connection_decrypted">HTTPS 已解密</string>
+    <string name="connection_kept_note">每個方向保留前 64 KiB。</string>
+    <string name="connection_requests">HTTP 請求</string>
+    <string name="connection_no_response">沒有回應</string>
+    <string name="connection_data">資料</string>
+    <string name="connection_datagrams">資料包</string>
+    <string name="connection_sent">送出</string>
+    <string name="connection_received">收到</string>
+    <string name="connection_nothing">還沒有資料。</string>
+    <string name="connection_decrypt_host">解密此網域</string>
+    <string name="connection_tls_address">這是加密的 TLS 資料。目標只有 IP 位址，沒有網域，無法依網域解密。</string>
+    <string name="connection_tls_covered">這個網域已在解密清單裡。解密只對新連線生效；如果仍看不到明文，請確認 HTTPS 解密已開啟、根憑證已信任，或者這個 App 固定了憑證。</string>
+    <string name="connection_tls_add">這是加密的 TLS 資料。點「解密此網域」後，這個網域的新連線會被解密（需要開啟 HTTPS 解密並信任根憑證）。</string>
+    <string name="connection_export">匯出這個連線</string>
+    <string name="connection_export_pcapng">匯出 pcapng</string>
+    <string name="connection_export_har">匯出 HAR</string>
+    <string name="connection_export_note">儲存到「下載」資料夾。pcapng 可用 Wireshark 開啟，HAR 可匯入瀏覽器開發者工具、Charles 或 Proxyman。匯出內容可能包含帳號、Cookie 等敏感資訊，請只傳給信任的人。</string>
+    <string name="bytes_text">顯示為文字</string>
+    <string name="bytes_hex">顯示為十六進位</string>
+    <string name="link_refused">無法開啟連結：%1$s</string>
+    <string name="link_invalid">連結無效</string>
+    <string name="link_not_app_link">不是 anixops:// 連結</string>
+    <string name="link_too_long">連結太長</string>
+    <string name="link_missing_action">連結缺少操作</string>
+    <string name="link_missing_parameter">連結缺少參數</string>
+    <string name="link_unknown_action">不認識的操作</string>
+    <string name="link_unknown_mode">這個用戶端沒有該分流模式</string>
+    <string name="link_no_node">找不到節點 %1$s</string>
+    <string name="link_no_member">策略組 %1$s 裡沒有 %2$s</string>
+    <string name="link_import_offered">核對訂閱連結後點「匯入」</string>
 </resources>

@@ -9,9 +9,18 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.VpnService
 import android.os.Build
+import io.anixops.net.AnixApplication
 import io.anixops.net.R
+import io.anixops.net.core.ConnectionState
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.launch
+
+/**
+ * Whether the system, not the app, started the service: the always-on VPN's start carries
+ * [VpnService.SERVICE_INTERFACE], and a restart after the process died carries no intent at all.
+ */
+fun alwaysOnStart(action: String?): Boolean = action == null || action == VpnService.SERVICE_INTERFACE
 
 /** The interface the client asks for (`openTunnel`); addresses and routes in CIDR form. */
 data class TunnelRequest(
@@ -91,15 +100,21 @@ class AnxVpnService : VpnService() {
         if (running === this) {
             running = null
         }
+        ConnectTile.refresh(this)
         super.onDestroy()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (alwaysOnStart(intent?.action)) {
+            connectForSystem()
+            return START_NOT_STICKY
+        }
         if (intent?.action == ACTION_START) {
             val wait = take() ?: return START_NOT_STICKY
             try {
                 wait.fd = establish(wait.request)
                 showConnected(wait.request.session)
+                ConnectTile.refresh(this)
             } catch (error: Exception) {
                 wait.error = error.message ?: error.toString()
             } finally {
@@ -162,8 +177,27 @@ class AnxVpnService : VpnService() {
         return Pair(value.substring(0, slash), value.substring(slash + 1).toInt())
     }
 
-    /** Another VPN took over, or the user turned this one off in the system settings. */
+    /**
+     * The system started the service itself: the user set this app as the always-on VPN (系统设置 › VPN), at boot
+     * or after the app was stopped. Connects as the connect button would, unless already connected; the client then
+     * opens the tunnel through [open], which this running service answers.
+     */
+    private fun connectForSystem() {
+        val app = application as AnixApplication
+        app.scope.launch {
+            runCatching {
+                if (app.core.snapshot().state != ConnectionState.Connected) app.core.connect()
+            }
+        }
+    }
+
+    /**
+     * Another VPN took over, or the user turned this one off in the system settings. The client is told too, so
+     * the app and the tile show it as disconnected instead of a tunnel that no longer carries anything.
+     */
     override fun onRevoke() {
+        val app = application as AnixApplication
+        app.scope.launch { runCatching { app.core.disconnect() } }
         stopSelf()
     }
 }

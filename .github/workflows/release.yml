@@ -44,6 +44,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # The Android versionCode check reads build.gradle.kts at the previous release tag.
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Verify release source
         id: policy
@@ -117,6 +121,50 @@ jobs:
             echo "| Ref type | ${RELEASE_REF_TYPE} |"
             echo "| Ref name | ${RELEASE_REF_NAME} |"
             echo "| Release kind | ${release_kind} |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      # Checked before anything is built, so a release never goes out without notes or with an Android versionCode
+      # that cannot install over the previous release.
+      - name: Release notes and Android versionCode
+        shell: bash
+        env:
+          VERSION: ${{ steps.policy.outputs.version }}
+        run: |
+          set -euo pipefail
+          notes="docs/release-notes/${VERSION}.md"
+          if [ ! -s "${notes}" ]; then
+            echo "::error::${notes} is missing or empty. Write the release notes (Chinese, user-facing) before tagging."
+            exit 1
+          fi
+          if grep -n -E 'TODO|TBD|待补' "${notes}"; then
+            echo "::error::${notes} still has placeholders."
+            exit 1
+          fi
+
+          gradle_file=apps/android-native/app/build.gradle.kts
+          code_of() {
+            grep -m1 -oE '^[[:space:]]*versionCode = [0-9]+' | grep -oE '[0-9]+$' || true
+          }
+          current="$(code_of < "${gradle_file}")"
+          if [ -z "${current}" ]; then
+            echo "::error::No versionCode in ${gradle_file}."
+            exit 1
+          fi
+          # The newest v* tag that is not this version: that release's APK is what users upgrade from.
+          previous="$(git tag --list 'v*' --sort=-creatordate | grep -vxF "${VERSION}" | head -n 1 || true)"
+          previous_code=""
+          if [ -n "${previous}" ]; then
+            if git show "${previous}:${gradle_file}" > "${RUNNER_TEMP}/previous-build.gradle.kts" 2>/dev/null; then
+              previous_code="$(code_of < "${RUNNER_TEMP}/previous-build.gradle.kts")"
+            fi
+          fi
+          if [ -n "${previous_code}" ] && [ "${current}" -le "${previous_code}" ]; then
+            echo "::error::Android versionCode ${current} is not above ${previous_code} in ${previous}; raise it in ${gradle_file}."
+            exit 1
+          fi
+          {
+            echo "| Release notes | \`${notes}\` |"
+            echo "| Android versionCode | ${current} (previous release ${previous:-none}: ${previous_code:-no native Android app}) |"
           } >> "${GITHUB_STEP_SUMMARY}"
 
   release-ci-gate:
@@ -1132,12 +1180,19 @@ jobs:
     env:
       CARGO_INCREMENTAL: "0"
     outputs:
-      artifact_name: ${{ steps.stage.outputs.artifact_name }}
-      apk_name: ${{ steps.stage.outputs.apk_name }}
+      # No artifact or APK name here: GitHub drops a job output that contains a secret's value, and the key alias
+      # secret ("anixops") is part of every name. Publish GitHub Release derives both names from the version.
       signing_kind: ${{ steps.apk.outputs.kind }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Android versionName
+        id: version-name
+        shell: bash
+        env:
+          VERSION: ${{ needs.release-policy.outputs.version }}
+        run: echo "name=${VERSION#v}" >> "${GITHUB_OUTPUT}"
 
       - name: Build and sign the APK
         id: apk
@@ -1147,6 +1202,7 @@ jobs:
           keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
           key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          version-name: ${{ steps.version-name.outputs.name }}
 
       - name: Stage the APK
         id: stage
@@ -1211,7 +1267,7 @@ jobs:
       - name: Download Android APK
         uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.package-android.outputs.artifact_name }}
+          name: anixops-net-android-${{ needs.release-policy.outputs.version }}
           path: dist/android
 
       - name: Create GitHub Release
@@ -1228,13 +1284,18 @@ jobs:
           WINDOWS_ZIP: ${{ needs.package-windows.outputs.portable_artifact_name }}
           LINUX_TARBALL: ${{ needs.package-linux-gui.outputs.archive_name }}
           LINUX_DEB: ${{ needs.package-linux-gui.outputs.deb_name }}
-          ANDROID_APK: ${{ needs.package-android.outputs.apk_name }}
+          ANDROID_APK: anixops-net-${{ needs.release-policy.outputs.version }}-android-arm64.apk
           ANDROID_SIGNING: ${{ needs.package-android.outputs.signing_kind }}
           KERNEL_REV_SOURCE: Cargo.toml
         run: |
           set -euo pipefail
           test "${LINUX_GUI_ATTESTATION_STATUS}" = "attested"
           test "${WINDOWS_ATTESTATION_STATUS}" = "attested"
+          # Empty when GitHub dropped the output (see package-android); the note below must not guess.
+          case "${ANDROID_SIGNING}" in
+            release|debug) ;;
+            *) echo "::error::Android signing kind is missing ('${ANDROID_SIGNING}')."; exit 1 ;;
+          esac
           test "$(find dist/release -maxdepth 1 -type f | wc -l | tr -d ' ')" = "16"
           (
             cd dist/release
@@ -1275,7 +1336,11 @@ jobs:
             android_note="${android_note}还没有正式签名密钥，本版用临时签名，装新版前要先卸载旧版。"
           fi
           kernel_rev="$(grep -m1 -oE 'rev = "[0-9a-f]{40}"' "${KERNEL_REV_SOURCE}" | cut -d'"' -f2)"
-          cat > release-body.md <<EOF
+          # The notes (checked in release-policy) go first; their own top-level heading is dropped because the
+          # release title already names the version.
+          sed '1{/^# /d}' "docs/release-notes/${VERSION}.md" > release-body.md
+          cat >> release-body.md <<EOF
+
           ## 下载
 
           | 平台 | 文件 | 说明 |

@@ -21,6 +21,18 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/** What following an `anixops://` link came to, for a snackbar. */
+sealed interface LinkEvent {
+    /** The link was refused: [reason] is the shared view's id, [detail] what it names. */
+    data class Refused(val reason: String, val detail: String?) : LinkEvent
+
+    data class NoNode(val node: String) : LinkEvent
+
+    data class NoMember(val policy: String, val member: String) : LinkEvent
+
+    data object ImportOffered : LinkEvent
+}
+
 /**
  * What the overview page shows: the client's last snapshot and its `view.overview` reading, the open
  * connections, the exit seen from outside, whether a command is running, and the last refusal.
@@ -96,6 +108,49 @@ class AppViewModel(
         while (true) {
             refresh()
             delay(POLL_MILLIS)
+        }
+    }
+
+    private val _links = Channel<LinkEvent>(Channel.BUFFERED)
+
+    /** What following an `anixops://` link came to, when it is not a command's own answer. */
+    val links: Flow<LinkEvent> = _links.receiveAsFlow()
+
+    /**
+     * Follows an `anixops://` link as every client does (`view.parse_app_link`). [connect] connects the way the
+     * screen does, asking for the VPN consent first; [offerImport] fills in the import form, which saves nothing
+     * until the user confirms.
+     */
+    fun followLink(raw: String, connect: () -> Unit, offerImport: (String) -> Unit) {
+        viewModelScope.launch {
+            val link = guard { core.parseAppLink(raw) } ?: return@launch
+            val connected = _state.value.overview?.state == "connected"
+            when (link.action) {
+                "connect" -> if (!connected) connect()
+                "disconnect" -> disconnect()
+                "toggle" -> if (connected) disconnect() else connect()
+                "mode" -> link.mode?.let(::setRoutingMode)
+                "select" -> {
+                    val name = link.node.orEmpty()
+                    val node = guard { core.findLinkNode(core.nodes(), name, link.group) }
+                    if (node != null) perform(report = true) { core.switchNode(node.id) } else _links.send(LinkEvent.NoNode(name))
+                }
+                "select_member" -> {
+                    val policy = link.policy.orEmpty()
+                    val member = link.member.orEmpty()
+                    val target = guard { core.findLinkMember(core.nativeGroups(), policy, member) }
+                    if (target != null) {
+                        perform(report = true) { core.selectGroupOutbound(target.tag, target.outbound) }
+                    } else {
+                        _links.send(LinkEvent.NoMember(policy, member))
+                    }
+                }
+                "import" -> link.url?.let {
+                    offerImport(it)
+                    _links.send(LinkEvent.ImportOffered)
+                }
+                else -> _links.send(LinkEvent.Refused(link.error ?: "unknown_action", link.detail))
+            }
         }
     }
 

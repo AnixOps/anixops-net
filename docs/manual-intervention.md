@@ -178,7 +178,7 @@ CI 只能跑规则与重建逻辑的单元测试（`OnDemandSettingsTests`、`Ne
 
 ## 安卓 APK 签名与真机验收
 
-CI 的 `android` job 每次都产出 arm64 APK（artifact `anixops-net-android-<sha>`）。没有签名密钥时用临时调试密钥签名，
+CI 的 `android-native` job 每次都产出原生版 arm64 APK（artifact `anixops-net-android-<sha>`）。没有签名密钥时用临时调试密钥签名，
 每次构建的密钥都不同，装新版前要先卸载旧版。
 
 - [ ] 生成正式签名密钥（只做一次，丢了就无法给已安装的用户升级）：
@@ -188,7 +188,22 @@ CI 的 `android` job 每次都产出 arm64 APK（artifact `anixops-net-android-<
 - [ ] 发版时 `release.yml` 会把 APK 作为 `anixops-net-<版本>-android-arm64.apk` 放进 GitHub Release。配置正式密钥前，
   Release 说明会写明「临时签名，装新版前要先卸载旧版」。
 - [ ] 真机验收：安装 APK，首次启动同意用户协议，导入订阅，点连接时允许 VPN，浏览器能打开网页，断开后网络恢复。
-- [ ] 上架 Google Play（暂不需要）：开发者账号、AAB 构建和 Play App Signing 另行处理。
+- [ ] 原生版另验：快捷设置里加“AnixOps”磁贴，点它连接 / 断开；系统设置 › VPN 里设为“始终开启”，重启手机后自动连上；
+  浏览器打开 `anixops://toggle` 能切换连接；另一个 VPN 接管后 App 与磁贴显示已断开。
+- [ ] targetSdk 升到 36 后（Google Play 要求）重新做上面两项真机验收，重点看 VPN 连接、前台通知、磁贴和始终开启。
+
+## Google Play
+
+Play 版是开源版（用户 2026-11-15 决定），包名 `io.anixops.net.android`。
+
+- [x] Environment `google-play`（需维护者审批）里配了 `PLAY_SERVICE_ACCOUNT_JSON`、`PLAY_UPLOAD_KEYSTORE_BASE64`、
+  `PLAY_UPLOAD_KEYSTORE_PASSWORD`、`PLAY_UPLOAD_KEY_ALIAS`、`PLAY_UPLOAD_KEY_PASSWORD`。
+- [ ] 手动运行 `play-bundle.yml`（Actions → Google Play bundle → Run workflow），审批后下载 artifact
+  `anixops-net-play-<versionCode>-<sha>` 里的 AAB，在 Play Console 上传。`google-play` 只允许 `v*` tag 时，从 main 运行要先在
+  Environment 的 Deployment branches 里临时加上 `main`。
+- [ ] 每次上传的 versionCode 必须比上一次大（`apps/android-native/app/build.gradle.kts`）。
+- [ ] Play Console 里的应用签名、商店信息、隐私政策、数据安全、内容分级、VPN 和前台服务声明只能人工填写。
+- [ ] 以后自动上传到内部测试轨道：服务账号 `play-publisher` 只有测试轨道权限，正式版由维护者在 Play Console 推广。
 
 
 ## 开源版下载页（GitHub Pages）
@@ -340,3 +355,32 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 - [ ] 用 `openssl ecparam -name prime256v1 -genkey -noout -out ca.key && openssl req -x509 -new -key ca.key -subj /CN=Team -days 365 -addext basicConstraints=critical,CA:true -out ca.pem` 生成团队 CA；扩展页“使用自己的根证书…”粘贴两段 PEM，替换后名称变为 Team，信任后重新连接，Safari 打开解密的站点证书链指向 Team。
 - [ ] 粘贴 RSA 私钥、别的证书的私钥、非 CA 证书时分别给出对应提示，原证书不变。
 - [ ] 设置页打开“Prometheus 指标”，`curl http://127.0.0.1:9477/metrics` 断开时只有 `anixops_client_*`，连接后加上内核指标；`curl -X POST` 返回 405；关掉开关后端口关闭。
+
+## v0.3.0-beta.7 发布前后的人工事项
+
+发布说明在 `docs/release-notes/v0.3.0-beta.7.md`。`release.yml` 在打包前检查：发布说明存在且没有占位符，
+安卓 versionCode 高于上一个发布 tag 里的值（本版 3002；3001 已用于 2026-11-16 的 Google Play 内部测试包）。
+
+发布前（维护者）：
+
+- [ ] 仓库级 secrets `ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD`
+  （Google Play 应用签名密钥，别名 `anixops`）。没有设置时 APK 用每次构建临时生成的密钥签名，以后的版本无法覆盖安装，
+  发布说明会提示先卸载。2026-11-16 main 上的 CI 显示这组 secrets 仍为空。
+- [ ] 推送 tag `v0.3.0-beta.7`（云端会话推 tag 会被拒，维护者在本机推）。
+- [ ] anx 仓库的 Cargo.lock 内核与本仓库 `Cargo.toml` 固定的内核一致后，再触发 anx 的 iOS / macOS / Windows / Linux / Android
+  ANX 构建和 `publish-client.yml`。
+
+发布后真机验收（CI 只有单元测试、模拟器冒烟测试和截图对比）：
+
+- [ ] Linux TUN 模式：Ubuntu 24.04 / Debian 13 上打开 TUN，polkit 询问一次；`ip route` 有接管路由，不走系统代理的程序
+  （`curl --noproxy '*'`）经过代理；关闭或断开后网卡和路由消失。
+- [ ] 流量重定向：桌面和安卓各建一条重定向，命中的请求发往目标地址，检查器里能看到重定向标记。
+- [ ] 安卓快捷设置磁贴：添加磁贴，点按连接 / 断开，状态与 App 内一致。
+- [ ] 安卓“始终开启的 VPN”：系统设置里选 AnixOps Net 并开启，重启手机后自动连接；在 App 内断开时系统不会立刻拉起。
+- [ ] 安卓 `anixops://` 链接与扫码导入：浏览器点链接能拉起 App 并导入订阅；扫码导入节点和订阅。
+- [ ] 从 beta.6 升级的桌面：原来选“绕过大陆 / GFW / 回国”的变成规则模式；原来选 DNS 国内外分流的变成等价的自定义 DNS；
+  Windows 旧服务被卸载。
+
+2026-11-16：beta.7 的第一次 tag 发布在 “Publish GitHub Release” 失败。配好 `ANDROID_KEY_ALIAS`（`anixops`）后，GitHub 把含有
+secret 值的 job output（安卓 artifact 名和 APK 名都含 `anixops`）丢弃，发布步骤拿不到安卓包。修复后 release.yml 由版本号直接推出这两个名字。
+tag 当时指向的 d225b10 还是旧 workflow，需要把 tag 移到包含修复的 commit 再推（Release 没有发出，移动 tag 不影响用户）。

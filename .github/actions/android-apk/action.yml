@@ -1,7 +1,10 @@
 name: Android APK
 description: >-
-  Builds the arm64 Android APK (apps/android) and signs it with the given keystore, or with a throwaway debug
-  key when no keystore is given. Shared by ci.yml and release.yml.
+  Builds the arm64 Android APK (apps/android-native: the Rust bridge by cargo-ndk, then Gradle) and signs it with
+  the given keystore, or with a throwaway debug key when no keystore is given. With bundle: true it also builds the
+  Android App Bundle (AAB) for Google Play and signs it with the Play upload key when one is given. Shared by
+  ci.yml, which also runs lint, the unit tests and the screenshots in the same Gradle call, release.yml and
+  play-bundle.yml.
 
 inputs:
   keystore-base64:
@@ -18,9 +21,34 @@ inputs:
     required: false
     default: ""
   save-cache:
-    description: Whether to save the Rust build cache
+    description: Whether to save the Rust and Gradle caches
     required: false
     default: "false"
+  checks:
+    description: Gradle tasks to run before the release build in the same call (CI's lint, tests and screenshots)
+    required: false
+    default: ""
+  version-name:
+    description: versionName for the build (release.yml passes the tag without "v"); empty = the one in build.gradle.kts
+    required: false
+    default: ""
+  bundle:
+    description: Also build the AAB (:app:bundleRelease)
+    required: false
+    default: "false"
+  upload-keystore-base64:
+    description: Base64 of the Google Play upload keystore (PLAY_UPLOAD_KEYSTORE_BASE64); empty = AAB left unsigned
+    required: false
+    default: ""
+  upload-keystore-password:
+    required: false
+    default: ""
+  upload-key-alias:
+    required: false
+    default: ""
+  upload-key-password:
+    required: false
+    default: ""
 
 outputs:
   apk:
@@ -29,28 +57,16 @@ outputs:
   kind:
     description: release (signed with the keystore) or debug (throwaway key)
     value: ${{ steps.sign.outputs.kind }}
+  aab:
+    description: Absolute path of the AAB (bundle true only)
+    value: ${{ steps.sign-aab.outputs.aab }}
+  aab-kind:
+    description: upload (signed with the Play upload key) or unsigned (bundle true only)
+    value: ${{ steps.sign-aab.outputs.kind }}
 
 runs:
   using: composite
   steps:
-    - name: Setup pnpm
-      uses: pnpm/action-setup@v4
-      with:
-        version: 9
-
-    - name: Setup Node
-      uses: actions/setup-node@v7
-      with:
-        node-version: 22
-        cache: pnpm
-        cache-dependency-path: apps/windows-gui/ui/pnpm-lock.yaml
-
-    - name: Build the shared interface
-      shell: bash
-      run: |
-        pnpm --dir apps/windows-gui/ui install --frozen-lockfile
-        pnpm --dir apps/windows-gui/ui run build
-
     - name: Setup Java
       uses: actions/setup-java@v4
       with:
@@ -67,51 +83,128 @@ runs:
     - name: Restore Rust build cache
       uses: Swatinem/rust-cache@v2
       with:
-        key: android
-        workspaces: apps/android -> target
+        key: android-native
         save-if: ${{ inputs.save-cache }}
 
-    # Installed next to tauri.conf.json: the generated Gradle project runs the CLI again from node_modules.
-    - name: Install the Tauri CLI
+    - name: Install cargo-ndk
       shell: bash
-      working-directory: apps/android
-      run: npm install --no-audit --no-fund
+      run: cargo install cargo-ndk --version 3.5.4 --locked
 
-    - name: Generate the Android project
+    - name: Build the Rust bridge
       shell: bash
-      working-directory: apps/android
       run: |
         set -euo pipefail
-        export NDK_HOME="${ANDROID_NDK_LATEST_HOME}"
-        echo "NDK_HOME=${NDK_HOME}" >> "$GITHUB_ENV"
-        # rquickjs-sys generates its Android bindings with bindgen, which needs the NDK headers and a versioned
-        # target (the API level is the app minSdkVersion).
-        echo "BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android=--target=aarch64-linux-android26 --sysroot=${NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot" >> "$GITHUB_ENV"
-        npx tauri android init --ci
-        npx tauri icon icons/networkcore.png
+        ndk="${ANDROID_NDK_LATEST_HOME}"
+        # rquickjs-sys generates its Android bindings with bindgen against the NDK headers (API level = minSdk).
+        export BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android="--target=aarch64-linux-android26 --sysroot=${ndk}/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+        export ANDROID_NDK_HOME="${ndk}"
+        # 16 KB pages: Google Play requires native libraries whose LOAD segments are 16 KB aligned (checked below).
+        export CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS="-C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wl,-z,common-page-size=16384"
+        cargo ndk -t arm64-v8a --platform 26 -o apps/android-native/app/src/main/jniLibs \
+          build --release --locked -p anixops-net-android
+        ls -l apps/android-native/app/src/main/jniLibs/arm64-v8a
+
+    - name: Native libraries are 16 KB page aligned
+      shell: bash
+      run: |
+        set -euo pipefail
+        readelf="${ANDROID_NDK_LATEST_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+        test -x "${readelf}"
+        bad=0
+        for so in apps/android-native/app/src/main/jniLibs/arm64-v8a/*.so; do
+          test -f "${so}"
+          # Every LOAD segment's alignment (last column) must be at least 2**14; a library with no LOAD segment
+          # read means the check itself failed.
+          aligns="$("${readelf}" -lW "${so}" | awk '$1 == "LOAD" { print $NF }')"
+          if [ -z "${aligns}" ]; then
+            echo "::error::${so}: no LOAD segments read"
+            bad=1
+            continue
+          fi
+          for align in ${aligns}; do
+            echo "${so}: LOAD align ${align}"
+            if [ $((align)) -lt 16384 ]; then
+              echo "::error::${so}: LOAD segment aligned to ${align}, Google Play needs 16 KB (0x4000)"
+              bad=1
+            fi
+          done
+        done
+        exit "${bad}"
+
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: "8.14.3"
+        cache-read-only: ${{ inputs.save-cache != 'true' }}
 
     - name: Build the APK
       shell: bash
-      working-directory: apps/android
-      run: npx tauri android build --apk --target aarch64 --ci
-
-    - name: Find the unsigned APK
-      id: unsigned
-      shell: bash
-      working-directory: apps/android
+      env:
+        CHECKS: ${{ inputs.checks }}
+        BUNDLE: ${{ inputs.bundle }}
+        VERSION_NAME: ${{ inputs.version-name }}
       run: |
         set -euo pipefail
-        unsigned="$(find gen/android/app/build/outputs/apk -name '*-unsigned.apk' | head -n 1)"
-        test -n "${unsigned}"
-        echo "path=$(pwd)/${unsigned}" >> "$GITHUB_OUTPUT"
+        tasks=":app:assembleRelease"
+        if [ "${BUNDLE}" = "true" ]; then
+          tasks="${tasks} :app:bundleRelease"
+        fi
+        props=()
+        if [ -n "${VERSION_NAME}" ]; then
+          if [[ ! "${VERSION_NAME}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[1-9][0-9]*)?$ ]]; then
+            echo "::error::version-name must look like 0.3.0 or 0.3.0-beta.7, got ${VERSION_NAME}"
+            exit 1
+          fi
+          props+=("-Panixops.versionName=${VERSION_NAME}")
+        fi
+        # Word splitting is wanted: CHECKS and tasks are lists of Gradle task names.
+        # shellcheck disable=SC2086
+        gradle -p apps/android-native --no-daemon "${props[@]}" ${CHECKS} ${tasks}
 
     - name: Sign the APK
       id: sign
       uses: ./.github/actions/sign-apk
       with:
-        unsigned: ${{ steps.unsigned.outputs.path }}
+        unsigned: ${{ github.workspace }}/apps/android-native/app/build/outputs/apk/release/app-release-unsigned.apk
         name: anixops-net-android-arm64
         keystore-base64: ${{ inputs.keystore-base64 }}
         keystore-password: ${{ inputs.keystore-password }}
         key-alias: ${{ inputs.key-alias }}
         key-password: ${{ inputs.key-password }}
+
+    # Google Play takes the AAB signed with the upload key (jarsigner; apksigner does not sign bundles) and re-signs
+    # it with the app signing key it holds (Play App Signing).
+    - name: Sign the AAB
+      id: sign-aab
+      if: ${{ inputs.bundle == 'true' }}
+      shell: bash
+      env:
+        KEYSTORE_BASE64: ${{ inputs.upload-keystore-base64 }}
+        KEYSTORE_PASSWORD: ${{ inputs.upload-keystore-password }}
+        KEY_ALIAS: ${{ inputs.upload-key-alias }}
+        KEY_PASSWORD: ${{ inputs.upload-key-password }}
+      run: |
+        set -euo pipefail
+        unsigned="${GITHUB_WORKSPACE}/apps/android-native/app/build/outputs/bundle/release/app-release.aab"
+        test -f "${unsigned}"
+        mkdir -p "${RUNNER_TEMP}/aab"
+        if [ -z "${KEYSTORE_BASE64}" ]; then
+          out="${RUNNER_TEMP}/aab/anixops-net-android-unsigned.aab"
+          cp "${unsigned}" "${out}"
+          kind=unsigned
+        else
+          keystore="${RUNNER_TEMP}/play-upload.jks"
+          echo "${KEYSTORE_BASE64}" | base64 --decode > "${keystore}"
+          out="${RUNNER_TEMP}/aab/anixops-net-android-upload.aab"
+          cp "${unsigned}" "${out}"
+          jarsigner -sigalg SHA256withRSA -digestalg SHA-256 -keystore "${keystore}" \
+            -storepass:env KEYSTORE_PASSWORD -keypass:env KEY_PASSWORD "${out}" "${KEY_ALIAS}"
+          jarsigner -verify "${out}" | tee "${RUNNER_TEMP}/aab-verify.txt"
+          grep -q "jar verified" "${RUNNER_TEMP}/aab-verify.txt"
+          keytool -printcert -jarfile "${out}"
+          rm -f "${keystore}"
+          kind=upload
+        fi
+        ls -l "${out}"
+        echo "aab=${out}" >> "$GITHUB_OUTPUT"
+        echo "kind=${kind}" >> "$GITHUB_OUTPUT"

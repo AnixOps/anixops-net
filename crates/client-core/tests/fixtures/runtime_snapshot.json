@@ -23,7 +23,6 @@
     "autoRecoverCore": true,
     "autoSubscriptionRefresh": true,
     "autoSelectFastestNode": false,
-    "bilibiliWebAdBlockEnabled": false,
     "scriptRuntimeConfigured": false,
     "httpsDecryptionEnabled": false,
     "darkTheme": false,

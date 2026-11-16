@@ -27,10 +27,6 @@ Thumbs.db
 apps/ios/*.xcodeproj/
 apps/ios/Generated/
 
-# Tauri mobile output: `tauri android init` generates the Gradle project in CI
-apps/android/gen/
-apps/android/package-lock.json
-
 # Native Android app: Gradle state, local SDK path, and the Rust library CI's cargo-ndk step puts in jniLibs
 apps/android-native/.gradle/
 apps/android-native/.kotlin/

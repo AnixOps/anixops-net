@@ -38,19 +38,17 @@ repository = "https://github.com/AnixOps/anixops-net"
 # CI also builds the iOS runtime and the Windows CLI from this same checkout (.github/scripts/kernel-root.sh).
 # For local kernel work, uncomment the [patch] section at the end and point it at a kernel checkout.
 [workspace.dependencies]
-config-core = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "f0d4e61374aa8123055c31637b96995fd5ad90f1" }
-control-domain = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "f0d4e61374aa8123055c31637b96995fd5ad90f1" }
-engine-embedded = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "f0d4e61374aa8123055c31637b96995fd5ad90f1" }
-inbound-mixed = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "f0d4e61374aa8123055c31637b96995fd5ad90f1" }
-mitm-policy = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "f0d4e61374aa8123055c31637b96995fd5ad90f1" }
-node-import = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "f0d4e61374aa8123055c31637b96995fd5ad90f1" }
-platform-windows = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "f0d4e61374aa8123055c31637b96995fd5ad90f1" }
+config-core = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "18d416971464bf41641cae42cba8fe9e33385269" }
+control-domain = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "18d416971464bf41641cae42cba8fe9e33385269" }
+engine-embedded = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "18d416971464bf41641cae42cba8fe9e33385269" }
+inbound-mixed = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "18d416971464bf41641cae42cba8fe9e33385269" }
+node-import = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "18d416971464bf41641cae42cba8fe9e33385269" }
+platform-windows = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "18d416971464bf41641cae42cba8fe9e33385269" }
 
 # [patch."https://github.com/AnixOps/networkcore_anixops"]
 # config-core = { path = "../networkcore_anixops/crates/config-core" }
 # control-domain = { path = "../networkcore_anixops/crates/control-domain" }
 # engine-embedded = { path = "../networkcore_anixops/crates/engine-embedded" }
 # inbound-mixed = { path = "../networkcore_anixops/crates/inbound-mixed" }
-# mitm-policy = { path = "../networkcore_anixops/crates/mitm-policy" }
 # node-import = { path = "../networkcore_anixops/crates/node-import" }
 # platform-windows = { path = "../networkcore_anixops/crates/platform-windows" }

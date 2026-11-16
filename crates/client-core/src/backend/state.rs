@@ -1,6 +1,5 @@
 //! What the client keeps between runs: subscription sources and their cached content, the selected node,
-//! preferences, the routing mode with policy group choices, the cached public rule lists and the system proxy
-//! settings to restore. Everything lives under
+//! preferences, the routing mode with policy group choices and the system proxy settings to restore. Everything lives under
 //! `$XDG_CONFIG_HOME/anixops-net` (or `~/.config/anixops-net`); files that can hold node credentials are
 //! written owner-only.
 
@@ -9,13 +8,62 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-use engine_embedded::profile::{RoutingMode, RuleList};
+use engine_embedded::profile;
 use serde::{Deserialize, Serialize};
 
 use super::system_proxy::ProxyBackup;
 use desktop_dns::DnsPreset;
 
 pub const DEFAULT_LISTEN_PORT: u16 = 7890;
+
+/// How traffic is split. Public builds ship no preset list modes (绕过大陆, GFW 列表, 回国;
+/// docs/no-presets.md): a state saved with one of them loads as [`RoutingMode::Rule`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", from = "String")]
+pub enum RoutingMode {
+    /// The subscription's own rules and policy groups and the user's rules; a single-node profile sends
+    /// everything through its node.
+    #[default]
+    Rule,
+    /// Everything direct.
+    Direct,
+}
+
+impl From<String> for RoutingMode {
+    fn from(value: String) -> Self {
+        if value == "direct" {
+            Self::Direct
+        } else {
+            Self::Rule
+        }
+    }
+}
+
+impl RoutingMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Rule => "rule",
+            Self::Direct => "direct",
+        }
+    }
+
+    /// A mode a client asks for; the removed preset modes are refused.
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "rule" => Some(Self::Rule),
+            "direct" => Some(Self::Direct),
+            _ => None,
+        }
+    }
+
+    /// The engine's name for this mode.
+    pub fn profile_mode(self) -> profile::RoutingMode {
+        match self {
+            Self::Rule => profile::RoutingMode::Rule,
+            Self::Direct => profile::RoutingMode::Direct,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -266,27 +314,6 @@ impl Store {
     pub fn write_report(&self, name: &str, content: &str) -> io::Result<PathBuf> {
         self.write_private(name, content.as_bytes())?;
         Ok(self.dir.join(name))
-    }
-
-    /// The cached entries of a public rule list, one per line; `None` before its first download.
-    pub fn read_rule_list(&self, list: RuleList) -> Option<Vec<String>> {
-        let content = fs::read_to_string(self.rule_list_path(list)).ok()?;
-        Some(content.lines().map(str::to_string).collect())
-    }
-
-    pub fn has_rule_list(&self, list: RuleList) -> bool {
-        self.rule_list_path(list).is_file()
-    }
-
-    pub fn write_rule_list(&self, list: RuleList, entries: &[String]) -> io::Result<()> {
-        self.write_private(
-            &format!("rules/{}", list.file_name()),
-            entries.join("\n").as_bytes(),
-        )
-    }
-
-    fn rule_list_path(&self, list: RuleList) -> PathBuf {
-        self.dir.join("rules").join(list.file_name())
     }
 
     fn source_path(&self, id: &str) -> PathBuf {

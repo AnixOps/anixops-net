@@ -1,0 +1,88 @@
+name: Google Play bundle
+
+# Builds the Android App Bundle (AAB) for Google Play from the chosen ref and signs it with the Play upload key
+# (PLAY_UPLOAD_KEYSTORE_* in the google-play environment, which needs the maintainer's approval). Google re-signs
+# it with the app signing key it holds (Play App Signing). The AAB is left as a workflow artifact for a manual
+# upload in Play Console; uploading it to a Play track automatically is a later step (docs/manual-intervention.md, Google Play).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: play-bundle-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  bundle:
+    name: Build and sign the Play bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: google-play
+    env:
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: The upload key is configured
+        env:
+          KEYSTORE_BASE64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.PLAY_UPLOAD_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::PLAY_UPLOAD_${name} is not set in the google-play environment"
+              missing=1
+            fi
+          done
+          exit "${missing}"
+
+      - name: Build the APK and the signed AAB
+        id: build
+        uses: ./.github/actions/android-apk
+        with:
+          bundle: "true"
+          upload-keystore-base64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_BASE64 }}
+          upload-keystore-password: ${{ secrets.PLAY_UPLOAD_KEYSTORE_PASSWORD }}
+          upload-key-alias: ${{ secrets.PLAY_UPLOAD_KEY_ALIAS }}
+          upload-key-password: ${{ secrets.PLAY_UPLOAD_KEY_PASSWORD }}
+
+      - name: Stage the AAB
+        id: stage
+        env:
+          AAB: ${{ steps.build.outputs.aab }}
+          AAB_KIND: ${{ steps.build.outputs.aab-kind }}
+        run: |
+          set -euo pipefail
+          test "${AAB_KIND}" = upload
+          gradle_file=apps/android-native/app/build.gradle.kts
+          code="$(sed -n 's/^ *versionCode = \([0-9]*\).*/\1/p' "${gradle_file}")"
+          version="$(sed -n 's/^ *versionName = "\(.*\)".*/\1/p' "${gradle_file}")"
+          test -n "${code}" && test -n "${version}"
+          name="anixops-net-${version}-${code}-play.aab"
+          mkdir -p dist/play
+          cp "${AAB}" "dist/play/${name}"
+          (cd dist/play && sha256sum -- "${name}" > "${name}.sha256")
+          echo "artifact_name=anixops-net-play-${code}-${GITHUB_SHA::7}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "### Google Play bundle"
+            echo
+            echo "- File: \`${name}\` (versionName ${version}, versionCode ${code})"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Signed with the upload key; upload it in Play Console → Test and release."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload the AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.stage.outputs.artifact_name }}
+          path: dist/play/*
+          if-no-files-found: error
+          retention-days: 7

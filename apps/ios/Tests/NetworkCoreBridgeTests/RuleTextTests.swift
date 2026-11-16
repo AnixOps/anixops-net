@@ -25,7 +25,7 @@ final class RuleTextTests: XCTestCase {
         XCTAssertEqual(next.rules.map(\.enabled), [true, false, true])
         XCTAssertEqual(next.rules[0].id, rules.rules[0].id)
         XCTAssertEqual(next.rules[1].id, rules.rules[1].id)
-        XCTAssertEqual(next.preset, rules.preset)
+        XCTAssertEqual(next.bypassLAN, rules.bypassLAN)
     }
 
     func testIssuesPointAtTheBadField() {

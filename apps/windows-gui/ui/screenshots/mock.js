@@ -4,7 +4,10 @@
 // Everything here is a pure function of the (frozen) clock: no randomness and no call counters, so two renders
 // of the same build give the same pixels. When bridge.ts gains a command a page needs, add its answer here.
 (() => {
-  const start = Date.now();
+  // render.cjs lets the clock run for the minute before the frozen time while the page loads, so how long the
+  // load takes would move every timestamp below by a fraction of a second (and now and then across a second).
+  // The whole minute is the same in every run.
+  const start = Math.floor(Date.now() / 60_000) * 60_000;
   const utf8 = (text) => btoa(String.fromCharCode(...new TextEncoder().encode(text)));
   const hosts = ["api.example.com", "cdn.example.com", "events.example.com", "auth.example.com", "img.example.net", "telemetry.example.org"];
   // path, method, response type, request body kind
@@ -122,8 +125,8 @@
     platform: "windows", connection: "Connected", connectionLabel: "已连接", core: { label: "运行中", tone: "success" }, proxy: { label: "已启用", tone: "success" },
     selectedNode: "香港 01", subscription: "AnixOps", subscriptionLastUpdated: stamp, subscriptionRefreshResult: "success",
     subscriptionAddedNodeCount: 0, subscriptionRemovedNodeCount: 0, subscriptionChangedNodeCount: 0,
-    startAfterLogin: true, autoConnect: true, autoRecoverCore: true, autoSubscriptionRefresh: true, autoSelectFastestNode: false, bilibiliWebAdBlockEnabled: false,
-    tunModeEnabled: false, scriptRuntimeConfigured: true, httpsDecryptionEnabled: true, darkTheme: false, routingMode: "bypass_china", dnsPreset: "encrypted", blockQuic: false, directEgress: false, embeddedEngine: true,
+    startAfterLogin: true, autoConnect: true, autoRecoverCore: true, autoSubscriptionRefresh: true, autoSelectFastestNode: false,
+    tunModeEnabled: false, scriptRuntimeConfigured: true, httpsDecryptionEnabled: true, darkTheme: false, routingMode: "rule", dnsPreset: "encrypted", blockQuic: false, directEgress: false, embeddedEngine: true,
   };
   const hours = Array.from({ length: 24 }, (_, i) => ({
     start: Math.floor(start / 3600e3) * 3600 - (23 - i) * 3600, upload: 2e6 * (1 + (i % 5)), download: 60e6 * (1 + ((i * 3) % 7)),

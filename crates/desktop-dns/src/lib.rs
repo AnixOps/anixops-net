@@ -5,6 +5,7 @@
 //! [`custom`] holds the user's own servers, hosts and the Fake-IP switch;
 //! [`redirects`] the destination rewrites (the engine's `redirects`).
 
+pub mod catalog;
 pub mod custom;
 pub mod redirects;
 pub mod rules;
@@ -12,10 +13,9 @@ pub mod rules;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-/// Rule set the China routing modes define; the split choice sends its names
-/// to the domestic resolver too.
-const CHINA_RULE_SET: &str = "china";
-
+/// The DNS choices. Public builds ship no preset per-domain rules (docs/no-presets.md), so the 国内外分流
+/// choice is gone: a state saved with it reads as [`DnsPreset::Split`] until [`adopt_legacy_split`] turns it
+/// into the user's own "自定义" settings.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DnsPreset {
@@ -24,8 +24,7 @@ pub enum DnsPreset {
     System,
     /// Everything over Cloudflare DNS over HTTPS, through the proxy.
     Encrypted,
-    /// Mainland names over AliDNS (direct), everything else over Cloudflare
-    /// (through the proxy).
+    /// Only read from a state an earlier version saved; never offered and never applied as a preset.
     Split,
     /// The user's own servers, per-domain servers and hosts ([`custom`]).
     Custom,
@@ -36,23 +35,45 @@ impl DnsPreset {
         match self {
             Self::System => "system",
             Self::Encrypted => "encrypted",
-            Self::Split => "split",
-            Self::Custom => "custom",
+            // Shown as what it is applied as.
+            Self::Split | Self::Custom => "custom",
         }
     }
 
+    /// A choice a client asks for; the removed 国内外分流 (`split`) is refused.
     pub fn parse(value: &str) -> Option<Self> {
         match value {
             "system" => Some(Self::System),
             "encrypted" => Some(Self::Encrypted),
-            "split" => Some(Self::Split),
             "custom" => Some(Self::Custom),
             _ => None,
         }
     }
 }
 
-/// `envelope` with the preset's `dns` section in place of its own, and
+/// The servers and per-domain servers the removed 国内外分流 choice used, as "自定义" text: what a user who had
+/// picked it gets as their own settings, so their DNS keeps working the same way.
+const LEGACY_SPLIT_SERVERS: &str = "cloudflare = https://1.1.1.1/dns-query, server-name=cloudflare-dns.com\nalidns = https://223.5.5.5/dns-query, server-name=dns.alidns.com, direct\n";
+const LEGACY_SPLIT_RULES: &str = "DOMAIN-SUFFIX,cn,alidns\n";
+
+/// `preset`, with the removed 国内外分流 choice of an earlier version turned into the user's own "自定义"
+/// settings: the same servers and `.cn` rule are written as their text when they have no servers of their own
+/// yet (their hosts and Fake-IP switch stay); when they do, their own settings are kept as they are. Call it
+/// once the settings file is known ([`custom::use_file`]) and save the state with the answer.
+pub fn adopt_legacy_split(preset: DnsPreset) -> Result<DnsPreset, String> {
+    if preset != DnsPreset::Split {
+        return Ok(preset);
+    }
+    let mut text = custom::text()?;
+    if text.servers.trim().is_empty() && text.rules.trim().is_empty() {
+        text.servers = LEGACY_SPLIT_SERVERS.to_string();
+        text.rules = LEGACY_SPLIT_RULES.to_string();
+        custom::replace(&text, || Ok(()))?;
+    }
+    Ok(DnsPreset::Custom)
+}
+
+/// `envelope` with the choice's `dns` section in place of its own, and
 /// Fake-IP on when the user turned it on ([`custom`]). The system choice
 /// without Fake-IP leaves the envelope as it is.
 pub fn apply(envelope: &str, preset: DnsPreset) -> Result<String, String> {
@@ -69,13 +90,18 @@ pub fn apply_with(
         return Ok(envelope.to_string());
     }
     let mut envelope: Value = serde_json::from_str(envelope).map_err(|error| error.to_string())?;
-    let has_china = envelope
-        .pointer(&format!("/routing/rule_sets/{CHINA_RULE_SET}"))
-        .is_some();
     let mut dns = match preset {
         DnsPreset::System => Some(json!({})),
-        DnsPreset::Encrypted | DnsPreset::Split => Some(section(preset, has_china)),
-        DnsPreset::Custom => settings.section(&envelope),
+        DnsPreset::Encrypted => Some(json!({
+            "servers": [{
+                "name": "cloudflare",
+                "url": "https://1.1.1.1/dns-query",
+                "server_name": "cloudflare-dns.com",
+            }],
+            "default": "cloudflare",
+        })),
+        // A legacy split not yet adopted is the user's own settings, never a preset.
+        DnsPreset::Split | DnsPreset::Custom => settings.section(&envelope),
     };
     if settings.fake_ip {
         if let Some(Value::Object(dns)) = dns.as_mut() {
@@ -109,34 +135,6 @@ pub fn apply_block_quic(envelope: &str, on: bool) -> Result<String, String> {
     Ok(value.to_string())
 }
 
-fn section(preset: DnsPreset, has_china: bool) -> Value {
-    let cloudflare = json!({
-        "name": "cloudflare",
-        "url": "https://1.1.1.1/dns-query",
-        "server_name": "cloudflare-dns.com",
-    });
-    if preset != DnsPreset::Split {
-        return json!({ "servers": [cloudflare], "default": "cloudflare" });
-    }
-    let mut rules = vec![json!({ "domain_suffix": ["cn"], "server": "alidns" })];
-    if has_china {
-        rules.push(json!({ "rule_set": CHINA_RULE_SET, "server": "alidns" }));
-    }
-    json!({
-        "servers": [
-            cloudflare,
-            {
-                "name": "alidns",
-                "url": "https://223.5.5.5/dns-query",
-                "server_name": "dns.alidns.com",
-                "via": "direct",
-            },
-        ],
-        "default": "cloudflare",
-        "rules": rules,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -159,25 +157,39 @@ mod tests {
     }
 
     #[test]
-    fn split_uses_the_china_rule_set_when_the_mode_defines_it() {
-        let plain: Value = serde_json::from_str(&apply(SINGLE, DnsPreset::Split).unwrap()).unwrap();
-        assert_eq!(plain["dns"]["rules"].as_array().unwrap().len(), 1);
-        assert_eq!(plain["dns"]["servers"][1]["via"], "direct");
+    fn a_legacy_split_is_never_applied_as_a_preset() {
+        // Without settings of the user's it adds nothing: no built-in servers or per-domain rules.
+        let empty = custom::DnsSettings::default();
+        let plain: Value =
+            serde_json::from_str(&apply_with(SINGLE, DnsPreset::Split, &empty).unwrap()).unwrap();
+        assert!(plain.get("dns").is_none());
+        assert_eq!(DnsPreset::parse("split"), None);
+        assert_eq!(DnsPreset::Split.as_str(), "custom");
+        let saved: DnsPreset = serde_json::from_str(r#""split""#).unwrap();
+        assert_eq!(saved, DnsPreset::Split);
+    }
 
-        let routed = r#"{"routing":{"rule_sets":{"china":{"domain_suffix":["cn"]}}}}"#;
-        let routed: Value =
-            serde_json::from_str(&apply(routed, DnsPreset::Split).unwrap()).unwrap();
-        assert_eq!(routed["dns"]["rules"][1]["rule_set"], "china");
+    #[test]
+    fn the_legacy_split_text_parses_as_custom_settings() {
+        let settings = custom::DnsText {
+            servers: LEGACY_SPLIT_SERVERS.to_string(),
+            rules: LEGACY_SPLIT_RULES.to_string(),
+            ..custom::DnsText::default()
+        }
+        .parse()
+        .unwrap();
+        let envelope: Value =
+            serde_json::from_str(&apply_with(SINGLE, DnsPreset::Custom, &settings).unwrap())
+                .unwrap();
+        assert_eq!(envelope["dns"]["default"], "cloudflare");
+        assert_eq!(envelope["dns"]["servers"][1]["via"], "direct");
+        assert_eq!(envelope["dns"]["rules"][0]["domain_suffix"], json!(["cn"]));
+        assert_eq!(envelope["dns"]["rules"].as_array().unwrap().len(), 1);
     }
 
     #[test]
     fn names_round_trip() {
-        for preset in [
-            DnsPreset::System,
-            DnsPreset::Encrypted,
-            DnsPreset::Split,
-            DnsPreset::Custom,
-        ] {
+        for preset in [DnsPreset::System, DnsPreset::Encrypted, DnsPreset::Custom] {
             assert_eq!(DnsPreset::parse(preset.as_str()), Some(preset));
         }
         assert_eq!(DnsPreset::parse("custom"), Some(DnsPreset::Custom));
@@ -202,11 +214,11 @@ mod tests {
             serde_json::from_str(&apply_with(SINGLE, DnsPreset::System, &settings).unwrap())
                 .unwrap();
         assert_eq!(system["dns"], json!({ "fake_ip": { "enabled": true } }));
-        let split: Value =
+        let legacy: Value =
             serde_json::from_str(&apply_with(SINGLE, DnsPreset::Split, &settings).unwrap())
                 .unwrap();
-        assert_eq!(split["dns"]["default"], "cloudflare");
-        assert_eq!(split["dns"]["fake_ip"]["enabled"], true);
+        assert_eq!(legacy["dns"]["default"], "a");
+        assert_eq!(legacy["dns"]["fake_ip"]["enabled"], true);
         // Nothing set: the engine keeps its default resolver.
         let empty = custom::DnsSettings::default();
         let plain: Value =
