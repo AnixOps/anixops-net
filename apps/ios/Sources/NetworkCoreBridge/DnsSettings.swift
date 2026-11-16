@@ -1,7 +1,8 @@
 import Foundation
 
-/// The engine's `dns` section as the user sets it: named upstreams (plain, DNS over TLS or over HTTPS, through the
-/// proxy or directly), the default one, local hosts, per-domain servers and the Fake-IP switch. Not secret; the app keeps it in
+/// The engine's `dns` section as the user sets it: named upstreams (UDP, TCP, DNS over TLS, HTTPS or QUIC, through
+/// the proxy or directly, or the system's own resolver), the default ones that race, the fallback, local hosts,
+/// per-domain servers and the Fake-IP switch. Not secret; the app keeps it in
 /// `dns-settings.json` and copies it into the tunnel profile (`TunnelProfileKeys.dns`). Empty leaves the engine's
 /// default: one resolver over TCP through the proxy.
 public struct DnsSettings: Codable, Equatable {
@@ -9,6 +10,10 @@ public struct DnsSettings: Codable, Equatable {
     public static let maxRules = 64
     public static let maxHosts = 1024
     public static let maxHostAddresses = 8
+    /// Most servers that race as the default, as the engine takes them.
+    public static let maxRace = 4
+    /// The `url` of the device's own resolver (`getaddrinfo` in the tunnel extension, which the tunnel excludes).
+    public static let systemURL = "system"
 
     public enum Via: String, Codable, CaseIterable, Identifiable {
         /// Through the proxy: the node a rule picks for the server or else the global target, never directly
@@ -24,7 +29,8 @@ public struct DnsSettings: Codable, Equatable {
 
     public struct Server: Codable, Equatable, Identifiable {
         public var name: String
-        /// `1.1.1.1`, `1.1.1.1:53`, `tcp://host[:53]`, `tls://host[:853]` or `https://host[:443][/dns-query]`.
+        /// `1.1.1.1`, `1.1.1.1:53`, `udp://host[:53]`, `tcp://host[:53]`, `tls://host[:853]`,
+        /// `https://host[:443][/dns-query]`, `quic://host[:853]` or `system`.
         public var url: String
         /// The TLS name when `url` gives an address, such as `cloudflare-dns.com` for `tls://1.1.1.1`.
         public var serverName: String?
@@ -48,16 +54,28 @@ public struct DnsSettings: Codable, Equatable {
             self.via = via
         }
 
-        /// `TCP`, `DoT` or `DoH`, from the URL's scheme.
+        /// `UDP`, `TCP`, `DoT`, `DoH`, `DoQ` or the system's, from the URL's scheme.
         public var kind: String {
+            if isSystem {
+                return String(localized: "系统")
+            }
             switch url.lowercased().components(separatedBy: "://").first {
+            case "udp" where url.contains("://"):
+                return "UDP"
             case "tls" where url.contains("://"):
                 return "DoT"
             case "https" where url.contains("://"):
                 return "DoH"
+            case "quic" where url.contains("://"):
+                return "DoQ"
             default:
                 return "TCP"
             }
+        }
+
+        /// The device's own resolver: always direct, no TLS name.
+        public var isSystem: Bool {
+            url == DnsSettings.systemURL
         }
     }
 
@@ -110,8 +128,11 @@ public struct DnsSettings: Codable, Equatable {
     }
 
     public var servers: [Server]
-    /// The server for names no rule picks; the first server when nil.
-    public var defaultServer: String?
+    /// The servers for names no rule picks, asked at once with the first good answer winning (at most `maxRace`);
+    /// the first server when empty.
+    public var defaultServers: [String]
+    /// The server asked when the default ones (or a rule's) fail, such as the system's for a company VPN's names.
+    public var fallbackServer: String?
     /// `example.lan` or `*.example.lan` to 1–8 addresses, answered without asking a server.
     public var hosts: [String: [String]]
     public var rules: [Rule]
@@ -122,15 +143,19 @@ public struct DnsSettings: Codable, Equatable {
 
     /// The engine's default range; its first /24 holds the tunnel's own addresses (`TunnelInterface`).
     public static let fakeIPRange = "198.18.0.0/15"
+    /// The IPv6 range: AAAA queries get an address from the same slot. The tunnel routes `::/0`, so these reach it.
+    public static let fakeIPRange6 = "fc00::/18"
 
     /// The engine's `fake_ip` section, written only when it is on.
     struct FakeIPSection: Codable, Equatable {
         var enabled: Bool
+        var range6: String?
     }
 
     enum CodingKeys: String, CodingKey {
         case servers
-        case defaultServer = "default"
+        case defaultServers = "default"
+        case fallbackServer = "fallback"
         case hosts
         case rules
         case fakeIP = "fake_ip"
@@ -138,13 +163,15 @@ public struct DnsSettings: Codable, Equatable {
 
     public init(
         servers: [Server] = [],
-        defaultServer: String? = nil,
+        defaultServers: [String] = [],
+        fallbackServer: String? = nil,
         hosts: [String: [String]] = [:],
         rules: [Rule] = [],
         fakeIP: Bool = false
     ) {
         self.servers = servers
-        self.defaultServer = defaultServer
+        self.defaultServers = defaultServers
+        self.fallbackServer = fallbackServer
         self.hosts = hosts
         self.rules = rules
         self.fakeIP = fakeIP
@@ -153,7 +180,13 @@ public struct DnsSettings: Codable, Equatable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         servers = try container.decodeIfPresent([Server].self, forKey: .servers) ?? []
-        defaultServer = try container.decodeIfPresent(String.self, forKey: .defaultServer)
+        // One name, or a list that races.
+        if let one = try? container.decodeIfPresent(String.self, forKey: .defaultServers) {
+            defaultServers = [one]
+        } else {
+            defaultServers = try container.decodeIfPresent([String].self, forKey: .defaultServers) ?? []
+        }
+        fallbackServer = try container.decodeIfPresent(String.self, forKey: .fallbackServer)
         hosts = try container.decodeIfPresent([String: [String]].self, forKey: .hosts) ?? [:]
         rules = try container.decodeIfPresent([Rule].self, forKey: .rules) ?? []
         fakeIP = try container.decodeIfPresent(FakeIPSection.self, forKey: .fakeIP)?.enabled ?? false
@@ -164,7 +197,13 @@ public struct DnsSettings: Codable, Equatable {
         // The engine refuses a default or rules without servers.
         if !servers.isEmpty {
             try container.encode(servers, forKey: .servers)
-            try container.encodeIfPresent(defaultServer, forKey: .defaultServer)
+            // A single name as a string, as engines before the race read it.
+            if defaultServers.count == 1 {
+                try container.encode(defaultServers[0], forKey: .defaultServers)
+            } else if !defaultServers.isEmpty {
+                try container.encode(defaultServers, forKey: .defaultServers)
+            }
+            try container.encodeIfPresent(fallbackServer, forKey: .fallbackServer)
             if !rules.isEmpty {
                 try container.encode(rules, forKey: .rules)
             }
@@ -174,7 +213,7 @@ public struct DnsSettings: Codable, Equatable {
         }
         // Absent when off, so a profile without Fake-IP also suits an engine that predates it.
         if fakeIP {
-            try container.encode(FakeIPSection(enabled: true), forKey: .fakeIP)
+            try container.encode(FakeIPSection(enabled: true, range6: Self.fakeIPRange6), forKey: .fakeIP)
         }
     }
 
@@ -194,19 +233,78 @@ public struct DnsSettings: Codable, Equatable {
         return copy
     }
 
-    /// Whether `text` is an IPv4 address in `fakeIPRange` (198.18.0.0/15).
+    /// Whether `text` is an address in `fakeIPRange` (198.18.0.0/15) or `fakeIPRange6` (fc00::/18).
     public static func isFakeIPAddress(_ text: String) -> Bool {
         var v4 = in_addr()
-        guard inet_pton(AF_INET, text, &v4) == 1 else {
+        if inet_pton(AF_INET, text, &v4) == 1 {
+            let address = UInt32(bigEndian: v4.s_addr)
+            return address & 0xFFFE_0000 == 0xC612_0000
+        }
+        var v6 = in6_addr()
+        guard inet_pton(AF_INET6, text, &v6) == 1 else {
             return false
         }
-        let address = UInt32(bigEndian: v4.s_addr)
-        return address & 0xFFFE_0000 == 0xC612_0000
+        let bytes = withUnsafeBytes(of: &v6) { Array($0) }
+        return bytes[0] == 0xFC && bytes[1] & 0xC0 == 0
     }
 
-    /// The server names answer: `defaultServer`, otherwise the first server.
+    /// The servers that answer names no rule picks: `defaultServers`, otherwise the first server.
+    public var effectiveDefaults: [String] {
+        if !defaultServers.isEmpty {
+            return defaultServers
+        }
+        return servers.first.map { [$0.name] } ?? []
+    }
+
+    /// The first of `effectiveDefaults`, for a one-line summary.
     public var effectiveDefault: String? {
-        defaultServer ?? servers.first?.name
+        effectiveDefaults.first
+    }
+
+    /// The settings with `name` as the only default server.
+    public func settingDefault(_ name: String) throws -> DnsSettings {
+        guard servers.contains(where: { $0.name == name }) else {
+            throw DnsSettingsError.unknownServer
+        }
+        var copy = self
+        copy.defaultServers = [name]
+        return copy
+    }
+
+    /// The settings with `name` racing alongside the default servers, or no longer among them. The last default
+    /// cannot leave: the first server would silently take its place.
+    public func settingRacing(_ name: String, _ on: Bool) throws -> DnsSettings {
+        guard servers.contains(where: { $0.name == name }) else {
+            throw DnsSettingsError.unknownServer
+        }
+        var copy = self
+        var defaults = effectiveDefaults
+        if on {
+            guard !defaults.contains(name) else {
+                return self
+            }
+            guard defaults.count < Self.maxRace else {
+                throw DnsSettingsError.tooManyDefaults
+            }
+            defaults.append(name)
+        } else {
+            guard defaults.count > 1 else {
+                return self
+            }
+            defaults.removeAll { $0 == name }
+        }
+        copy.defaultServers = defaults
+        return copy
+    }
+
+    /// The settings with `name` as the fallback server, or none.
+    public func settingFallback(_ name: String?) throws -> DnsSettings {
+        if let name, !servers.contains(where: { $0.name == name }) {
+            throw DnsSettingsError.unknownServer
+        }
+        var copy = self
+        copy.fallbackServer = name
+        return copy
     }
 
     /// The rule-set names the rules use, for the routing section to define.
@@ -223,6 +321,12 @@ public struct DnsSettings: Codable, Equatable {
     /// The settings with `server` added, or in place of the server named `replacing`; rules and the default that
     /// named the old name follow the new one.
     public func saving(_ server: Server, replacing old: String? = nil) throws -> DnsSettings {
+        var server = server
+        if server.isSystem {
+            // The engine always asks the system's resolver directly and without TLS.
+            server.via = .direct
+            server.serverName = nil
+        }
         try Self.check(server)
         var copy = self
         if let old, let index = copy.servers.firstIndex(where: { $0.name == old }) {
@@ -238,8 +342,9 @@ public struct DnsSettings: Codable, Equatable {
                     }
                     return rule
                 }
-                if copy.defaultServer == old {
-                    copy.defaultServer = server.name
+                copy.defaultServers = copy.defaultServers.map { $0 == old ? server.name : $0 }
+                if copy.fallbackServer == old {
+                    copy.fallbackServer = server.name
                 }
             }
         } else {
@@ -254,13 +359,14 @@ public struct DnsSettings: Codable, Equatable {
         return copy
     }
 
-    /// The settings without the server, its rules and, when it was the default, the default.
+    /// The settings without the server, its rules, and its place among the default servers or as the fallback.
     public func removingServer(_ name: String) -> DnsSettings {
         var copy = self
         copy.servers.removeAll { $0.name == name }
         copy.rules.removeAll { $0.server == name }
-        if copy.defaultServer == name {
-            copy.defaultServer = nil
+        copy.defaultServers.removeAll { $0 == name }
+        if copy.fallbackServer == name {
+            copy.fallbackServer = nil
         }
         if copy.servers.isEmpty {
             copy.rules = []
@@ -361,16 +467,19 @@ public struct DnsSettings: Codable, Equatable {
         }
     }
 
-    /// The URL forms the engine reads: `1.1.1.1`, `1.1.1.1:53`, `tcp://`, `tls://` or `https://` (a path only for
-    /// `https`).
+    /// The URL forms the engine reads: `1.1.1.1`, `1.1.1.1:53`, `udp://`, `tcp://`, `tls://`, `https://` (the only
+    /// one with a path), `quic://`, or `system`.
     public static func isUpstream(_ url: String) -> Bool {
+        if url == systemURL {
+            return true
+        }
         let parts = url.components(separatedBy: "://")
         guard parts.count <= 2 else {
             return false
         }
         let scheme = parts.count == 2 ? parts[0] : "tcp"
         let rest = parts.last ?? ""
-        guard ["tcp", "tls", "https"].contains(scheme) else {
+        guard ["udp", "tcp", "tls", "https", "quic"].contains(scheme) else {
             return false
         }
         let slash = rest.firstIndex(of: "/")
@@ -486,10 +595,12 @@ public struct DnsSettings: Codable, Equatable {
 
     public static let presets: [Preset] = [
         Preset(id: "alidns", title: String(localized: "阿里 DNS（DoH，直连）"), server: Server(name: "alidns", url: "https://223.5.5.5/dns-query", serverName: "dns.alidns.com", via: .direct)),
+        Preset(id: "alidns-doq", title: String(localized: "阿里 DNS（DoQ，直连）"), server: Server(name: "alidns-doq", url: "quic://223.5.5.5", serverName: "dns.alidns.com", via: .direct)),
         Preset(id: "dnspod", title: String(localized: "腾讯 DNSPod（DoH，直连）"), server: Server(name: "dnspod", url: "https://1.12.12.12/dns-query", serverName: "doh.pub", via: .direct)),
         Preset(id: "cloudflare", title: String(localized: "Cloudflare（DoH，经代理）"), server: Server(name: "cloudflare", url: "https://1.1.1.1/dns-query", serverName: "cloudflare-dns.com")),
         Preset(id: "google", title: String(localized: "Google（DoH，经代理）"), server: Server(name: "google", url: "https://8.8.8.8/dns-query", serverName: "dns.google")),
         Preset(id: "quad9", title: String(localized: "Quad9（DoT，经代理）"), server: Server(name: "quad9", url: "tls://9.9.9.9", serverName: "dns.quad9.net")),
+        Preset(id: "system", title: String(localized: "系统 DNS（本机网络，直连）"), server: Server(name: "system", url: systemURL, via: .direct)),
     ]
 
     // Presets name their servers by address: the extension cannot rely on the system resolver to find a
@@ -507,6 +618,7 @@ public enum DnsSettingsError: Error, Equatable {
     case invalidRule
     case unknownServer
     case tooMany
+    case tooManyDefaults
     case fakeIPRange
 
     public var message: String {
@@ -516,7 +628,7 @@ public enum DnsSettingsError: Error, Equatable {
         case .duplicateName:
             return String(localized: "已有同名的 DNS 服务器")
         case .invalidURL:
-            return String(localized: "地址应为 IP，或 tcp://、tls://、https:// 开头")
+            return String(localized: "地址应为 IP、system，或 udp://、tcp://、tls://、https://、quic:// 开头")
         case .invalidDomain:
             return String(localized: "域名格式不正确")
         case .invalidAddress:
@@ -527,8 +639,10 @@ public enum DnsSettingsError: Error, Equatable {
             return String(localized: "请先添加 DNS 服务器")
         case .tooMany:
             return String(localized: "已达到数量上限")
+        case .tooManyDefaults:
+            return String(localized: "最多 4 个默认服务器同时查询")
         case .fakeIPRange:
-            return String(localized: "Fake-IP 开启时，Hosts 不能使用 198.18.0.0/15 内的地址")
+            return String(localized: "Fake-IP 开启时，Hosts 不能使用 198.18.0.0/15 或 fc00::/18 内的地址")
         }
     }
 }

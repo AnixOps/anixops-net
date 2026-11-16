@@ -7431,18 +7431,18 @@
         }
       }
     },
-    "没有规则命中的域名由默认服务器解析，长按服务器可设为默认。经代理的服务器在直连模式下也直连。": {
+    "没有规则命中的域名由默认服务器解析。长按服务器可设为默认、加入默认竞速（最多 4 个同时查询，取最先的应答）或设为备用（默认或规则的服务器失败时再查，适合公司 VPN 的内部域名）。经代理的服务器在直连模式下也直连，系统 DNS 总是直连。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Names no rule picks go to the default server; long-press a server to make it the default. Servers set to go through the proxy are reached directly in direct mode."
+            "value": "Names no rule picks go to the default servers. Long-press a server to make it the default, add it to the default race (up to 4 asked at once, the first answer wins) or make it the fallback (asked when the default or a rule's servers fail, as for a company VPN's internal names). Servers set to go through the proxy go directly in direct mode; the system DNS always goes directly."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "沒有規則命中的網域由預設伺服器解析，長按伺服器可設為預設。經代理的伺服器在直連模式下也直連。"
+            "value": "沒有規則命中的網域由預設伺服器解析。長按伺服器可設為預設、加入預設競速（最多 4 個同時查詢，取最先的回應）或設為備用（預設或規則的伺服器失敗時再查，適合公司 VPN 的內部網域）。經代理的伺服器在直連模式下也直連，系統 DNS 一律直連。"
           }
         }
       }
@@ -7559,18 +7559,18 @@
         }
       }
     },
-    "地址可写 1.1.1.1、tcp://、tls://（DoT）或 https://（DoH）。用 IP 地址写 DoT/DoH 时填写证书上的 TLS 名称。": {
+    "地址可写 1.1.1.1、udp://、tcp://、tls://（DoT）、https://（DoH）、quic://（DoQ），或 system（本机网络的 DNS）。用 IP 地址写 DoT/DoH/DoQ 时填写证书上的 TLS 名称。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enter 1.1.1.1, tcp://, tls:// (DoT) or https:// (DoH). For DoT/DoH by IP address, enter the TLS name on the certificate."
+            "value": "Enter 1.1.1.1, udp://, tcp://, tls:// (DoT), https:// (DoH), quic:// (DoQ), or system (the local network's DNS). For DoT/DoH/DoQ by IP address, enter the TLS name on the certificate."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "位址可寫 1.1.1.1、tcp://、tls://（DoT）或 https://（DoH）。用 IP 位址寫 DoT/DoH 時填寫憑證上的 TLS 名稱。"
+            "value": "位址可寫 1.1.1.1、udp://、tcp://、tls://（DoT）、https://（DoH）、quic://（DoQ），或 system（本機網路的 DNS）。用 IP 位址寫 DoT/DoH/DoQ 時填寫憑證上的 TLS 名稱。"
           }
         }
       }
@@ -7719,18 +7719,18 @@
         }
       }
     },
-    "地址应为 IP，或 tcp://、tls://、https:// 开头": {
+    "地址应为 IP、system，或 udp://、tcp://、tls://、https://、quic:// 开头": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The address must be an IP, or start with tcp://, tls:// or https://"
+            "value": "The address must be an IP or system, or start with udp://, tcp://, tls://, https:// or quic://"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "位址應為 IP，或 tcp://、tls://、https:// 開頭"
+            "value": "位址應為 IP、system，或 udp://、tcp://、tls://、https://、quic:// 開頭"
           }
         }
       }
@@ -11619,6 +11619,166 @@
           "stringUnit": {
             "state": "translated",
             "value": "出口 · %@"
+          }
+        }
+      }
+    },
+    "加入默认竞速": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add to default race"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加入預設競速"
+          }
+        }
+      }
+    },
+    "退出默认竞速": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave default race"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退出預設競速"
+          }
+        }
+      }
+    },
+    "设为备用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set as fallback"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設為備用"
+          }
+        }
+      }
+    },
+    "取消备用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove fallback"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消備用"
+          }
+        }
+      }
+    },
+    "备用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fallback"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "備用"
+          }
+        }
+      }
+    },
+    "直连 · 本机网络的 DNS": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Direct · the local network's DNS"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "直連 · 本機網路的 DNS"
+          }
+        }
+      }
+    },
+    "阿里 DNS（DoQ，直连）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AliDNS (DoQ, direct)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "阿里 DNS（DoQ，直連）"
+          }
+        }
+      }
+    },
+    "系统 DNS（本机网络，直连）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System DNS (local network, direct)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系統 DNS（本機網路，直連）"
+          }
+        }
+      }
+    },
+    "最多 4 个默认服务器同时查询": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "At most 4 default servers can be asked at once"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最多 4 個預設伺服器同時查詢"
+          }
+        }
+      }
+    },
+    "Fake-IP 开启时，Hosts 不能使用 198.18.0.0/15 或 fc00::/18 内的地址": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "With Fake-IP on, hosts cannot use addresses in 198.18.0.0/15 or fc00::/18"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fake-IP 開啟時，Hosts 不能使用 198.18.0.0/15 或 fc00::/18 內的位址"
           }
         }
       }

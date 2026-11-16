@@ -69,7 +69,8 @@ private const val RulesPlaceholder =
     "DOMAIN-SUFFIX,example.com,PROXY\nDOMAIN-KEYWORD,ads,REJECT\nIP-CIDR,10.0.0.0/8,DIRECT,no-resolve"
 private const val ServersPlaceholder =
     "cloudflare = https://1.1.1.1/dns-query, server-name=cloudflare-dns.com\n" +
-        "alidns = tls://223.5.5.5, server-name=dns.alidns.com, direct"
+        "alidns = quic://223.5.5.5, server-name=dns.alidns.com, direct, default\n" +
+        "local = system, fallback"
 private const val DnsRulesPlaceholder = "DOMAIN-SUFFIX,example.cn,alidns\nDOMAIN-KEYWORD,intranet,alidns"
 private const val HostsPlaceholder = "router.lan = 192.168.1.1\n*.home.lan = 192.168.1.20, fd00::20"
 

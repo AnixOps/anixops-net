@@ -11,7 +11,7 @@ const dnsChoices: Array<{ value: DnsPreset; label: string; hint: string }> = [
 ];
 
 /** Examples shown in the empty editors; the formats follow Surge's [DNS] and [Host] lines. */
-const SERVERS_PLACEHOLDER = "cloudflare = https://1.1.1.1/dns-query, server-name=cloudflare-dns.com\nalidns = tls://223.5.5.5, server-name=dns.alidns.com, direct";
+const SERVERS_PLACEHOLDER = "cloudflare = https://1.1.1.1/dns-query, server-name=cloudflare-dns.com\nalidns = quic://223.5.5.5, server-name=dns.alidns.com, direct, default\nlocal = system, fallback";
 const RULES_PLACEHOLDER = "DOMAIN-SUFFIX,example.cn,alidns\nDOMAIN-KEYWORD,intranet,alidns";
 const HOSTS_PLACEHOLDER = "router.lan = 192.168.1.1\n*.home.lan = 192.168.1.20, fd00::20";
 
@@ -35,8 +35,8 @@ export function DnsCards({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | 
     return result;
   });
   const fakeIpHint = snapshot?.platform === "windows"
-    ? t("TUN 模式下生效。应用查询域名时立刻拿到 198.18.0.0/15 里的地址，连接时还原成域名按规则分流，由节点解析。局域网、对时、STUN 和推送等域名仍拿真实地址。")
-    : t("应用查询域名时立刻拿到 198.18.0.0/15 里的地址，连接时还原成域名按规则分流，由节点解析。局域网、对时、STUN 和推送等域名仍拿真实地址。");
+    ? t("TUN 模式下生效。应用查询域名时立刻拿到 198.18.0.0/15（IPv6 为 fc00::/18）里的地址，连接时还原成域名按规则分流，由节点解析。局域网、对时、STUN 和推送等域名仍拿真实地址。")
+    : t("应用查询域名时立刻拿到 198.18.0.0/15（IPv6 为 fc00::/18）里的地址，连接时还原成域名按规则分流，由节点解析。局域网、对时、STUN 和推送等域名仍拿真实地址。");
 
   return (
     <>
@@ -94,7 +94,7 @@ function CustomDnsCard({ saved, locked, busy, save }: {
       description={t("每行一条，# 开头的行是注释。没有填服务器时，引擎经节点用 TCP 查询默认服务器。")}
     >
       <div className="rule-editor">
-        <span className="editor-label">{t("服务器")}<small>{t("名称 = 地址，第一个是默认服务器。地址可以是 IP、tcp://、tls:// 或 https://；加 direct 表示直连，不加经节点。")}</small></span>
+        <span className="editor-label">{t("服务器")}<small>{t("名称 = 地址。地址可以是 IP、tcp://、udp://、tls://、https://、quic://（DoQ），或 system（本机网络的 DNS，总是直连）；加 direct 表示直连，不加经节点。加 default 的服务器（最多 4 个）同时查询、取最先的应答，都不加时第一个是默认服务器；加 fallback 的服务器在默认服务器失败时再查。")}</small></span>
         <textarea aria-label={t("服务器")} spellCheck={false} placeholder={SERVERS_PLACEHOLDER} value={draft.servers} onChange={edit("servers")} />
         <span className="editor-label">{t("分域服务器")}<small>{t("类型,域名,服务器名称，从上到下匹配。类型是 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD 或 RULE-SET（分流模式里有的规则集）。")}</small></span>
         <textarea aria-label={t("分域服务器")} spellCheck={false} placeholder={RULES_PLACEHOLDER} value={draft.rules} onChange={edit("rules")} />
