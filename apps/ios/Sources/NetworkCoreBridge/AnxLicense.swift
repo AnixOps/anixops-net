@@ -26,8 +26,12 @@ public struct AnxLicense: Codable, Equatable {
     /// The file name of the license in the packet tunnel's container.
     public static let licenseFileName = "anx-license.cert"
 
-    /// PKCS#8 v1 for an Ed25519 key (RFC 8410): the DER before the 32-byte seed.
-    static let pkcs8Prefix = Data([0x30, 0x2E, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2B, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20])
+    /// PKCS#8 v2 (OneAsymmetricKey, RFC 5958 / RFC 8410) for an Ed25519 key: the DER before the 32-byte seed. The
+    /// ANX outbound parses the key with ring's `Ed25519KeyPair::from_pkcs8`, which accepts only v2 (version 1 with the
+    /// public key); a v1 key makes it refuse the outbound, and the engine then rejects the whole tunnel profile.
+    static let pkcs8Prefix = Data([0x30, 0x51, 0x02, 0x01, 0x01, 0x30, 0x05, 0x06, 0x03, 0x2B, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20])
+    /// What follows the seed in PKCS#8 v2: `[1]` implicit BIT STRING, no unused bits, then the 32-byte public key.
+    static let pkcs8PublicKeyTag = Data([0x81, 0x21, 0x00])
 
     /// The longest license accepted, in hex characters (a P-256 device certificate is 160 bytes).
     static let maxLicenseHex = 1024
@@ -64,8 +68,14 @@ public struct AnxLicense: Codable, Equatable {
     /// The `X-AnixOps-Device` value.
     public var deviceHeader: String { "ed25519:" + publicKeyHex }
 
-    /// The device key as the ANX outbound takes it: PKCS#8 DER, hex.
-    public var pkcs8Hex: String { Self.hex(Self.pkcs8Prefix + deviceKey) }
+    /// The device key as the ANX outbound takes it: PKCS#8 v2 DER (seed and public key), hex, the same layout as
+    /// ring's `Ed25519KeyPair::generate_pkcs8` that the desktop clients use. Empty for a seed that is not a key.
+    public var pkcs8Hex: String {
+        guard let key = try? Curve25519.Signing.PrivateKey(rawRepresentation: deviceKey) else {
+            return ""
+        }
+        return Self.hex(Self.pkcs8Prefix + deviceKey + Self.pkcs8PublicKeyTag + key.publicKey.rawRepresentation)
+    }
 
     /// Whether some subscription offered licensing.
     public var offered: Bool { !origins.isEmpty }
