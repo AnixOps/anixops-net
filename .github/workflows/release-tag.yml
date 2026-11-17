@@ -105,6 +105,23 @@ jobs:
             exit 1
           fi
           ci_url="$(jq -r '.html_url' <<< "${ci_run}")"
+          ci_id="$(jq -r '.id' <<< "${ci_run}")"
+          # Like release.yml's CI gate: a documentation-only push skips the build jobs, so every job of the
+          # selected run must have run and passed.
+          jobs_json="$(gh api --method GET "repos/${REPO}/actions/runs/${ci_id}/jobs" -f filter=latest -f per_page=100)"
+          if [ "$(jq -r '.total_count // 0' <<< "${jobs_json}")" -gt "$(jq -r '.jobs | length' <<< "${jobs_json}")" ]; then
+            echo "::error::CI workflow jobs query returned paginated results."
+            exit 1
+          fi
+          if ! jq -e '[.jobs[] | select(.name == "CI summary" and .conclusion == "success")] | length > 0' <<< "${jobs_json}" >/dev/null; then
+            echo "::error::CI run ${ci_url} has no successful CI summary job."
+            exit 1
+          fi
+          not_run="$(jq -r '[.jobs[] | select(.conclusion != "success") | "\(.name)=\(.conclusion)"] | join(", ")' <<< "${jobs_json}")"
+          if [ -n "${not_run}" ]; then
+            echo "::error::CI run ${ci_url} did not run and pass every job (${not_run}). Run the CI workflow manually on main for ${target}, then run this again."
+            exit 1
+          fi
 
           echo "target=${target}" >> "${GITHUB_OUTPUT}"
           {
