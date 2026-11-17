@@ -60,6 +60,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     #if os(macOS)
     /// Pins the engine's sockets to the physical interface (see `BoundInterfaceMonitor`).
     private let boundInterface = BoundInterfaceMonitor()
+    /// Set when this tunnel turned IPv4 forwarding on for the gateway mode, so stopping turns it back off.
+    private var turnedForwardingOn = false
     #endif
 
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
@@ -144,6 +146,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             tunnelProtocol.providerConfiguration?[TunnelProfileKeys.notifications] as? Data
         ))
         let blockQuic = tunnelProtocol.providerConfiguration?[TunnelProfileKeys.blockQuic] as? Bool == true
+        let takeover = TrafficTakeover.saved(in: tunnelProtocol.providerConfiguration, macOS: Self.isMac)
+        let gateway = GatewayMode.saved(in: tunnelProtocol.providerConfiguration, takeover: takeover, macOS: Self.isMac)
+        let proxyExceptions = ProxyExceptions.fromProfileValue(
+            tunnelProtocol.providerConfiguration?[TunnelProfileKeys.proxyExceptions] as? Data
+        )
         let base = ReloadBase(
             config: config, mode: mode, dns: dns, redirects: redirects, blockQuic: blockQuic, anxLicense: anxLicenseFields()
         )
@@ -180,7 +187,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             return
         }
 
-        guard let settings = Self.networkSettings(interface, remoteAddress: IPAddressText.tunnelRemoteAddress(for: tunnelProtocol.serverAddress)) else {
+        let proxy = startSystemProxy(session, takeover: takeover, exceptions: proxyExceptions)
+        // Without the listener (a whole-device WireGuard tunnel, or the port could not be bound) the system proxy
+        // mode falls back to routing through the tunnel, so the connection still goes where the user expects.
+        let routesTraffic = takeover.routesTraffic || proxy == nil
+        if !takeover.routesTraffic, proxy == nil {
+            events.record("system proxy mode unavailable: routing through the tunnel")
+        }
+        guard let settings = Self.networkSettings(
+            interface,
+            remoteAddress: IPAddressText.tunnelRemoteAddress(for: tunnelProtocol.serverAddress),
+            routesTraffic: routesTraffic,
+            proxy: proxy
+        ) else {
             completionHandler(PacketTunnelFailure(reason: "tunnel profile has invalid interface addresses"))
             return
         }
@@ -212,6 +231,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 self.watchNetworkPath()
                 self.watchPhysicalNetwork(session)
                 self.setUpCaptureStorage(session)
+                if gateway, routesTraffic {
+                    self.enableGatewayForwarding()
+                }
                 completionHandler(nil)
             } catch let failure as EmbeddedRuntimeSession.Failure {
                 completionHandler(PacketTunnelFailure(reason: "embedded runtime could not start (code \(failure.code))"))
@@ -238,6 +260,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         runningConfig = nil
         #if os(macOS)
         boundInterface.stop()
+        if turnedForwardingOn {
+            turnedForwardingOn = false
+            let restored = IPv4Forwarding.set(false)
+            events.record("gateway: ip forwarding \(restored ? "off again" : "could not be turned off")")
+        }
         #endif
         memoryPressure?.cancel()
         memoryPressure = nil
@@ -682,10 +709,88 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         return result == KERN_SUCCESS ? info : nil
     }
 
+    /// Gateway mode: other devices route through this Mac, which needs IPv4 forwarding. Turned on here when the
+    /// system lets the extension (and off again on stop); otherwise the app shows the user the command to run.
+    private func enableGatewayForwarding() {
+        #if os(macOS)
+        switch IPv4Forwarding.isOn() {
+        case true?:
+            events.record("gateway: ip forwarding already on")
+        default:
+            if IPv4Forwarding.set(true) {
+                turnedForwardingOn = true
+                events.record("gateway: ip forwarding on")
+            } else {
+                events.record("gateway: ip forwarding is off and the extension may not turn it on (errno \(errno))")
+            }
+        }
+        #endif
+    }
+
+    /// Where the system proxy points and what it leaves alone.
+    struct SystemProxyEndpoint {
+        let port: UInt16
+        let exceptions: ProxyExceptions
+    }
+
+    static var isMac: Bool {
+        #if os(macOS)
+        true
+        #else
+        false
+        #endif
+    }
+
+    /// Starts the engine's `127.0.0.1` listener when the takeover mode registers a system proxy. It runs before
+    /// the interface settings, which carry its port, and stops with the session. Nil when the mode has no proxy or
+    /// the engine refused it; the tunnel then runs without one.
+    private func startSystemProxy(
+        _ session: EmbeddedRuntimeSession,
+        takeover: TrafficTakeover,
+        exceptions: ProxyExceptions
+    ) -> SystemProxyEndpoint? {
+        guard takeover.usesSystemProxy else {
+            events.record("takeover \(takeover.rawValue)")
+            return nil
+        }
+        let request = RuntimeControl.startSystemProxy(port: RuntimeControl.systemProxyPort).request
+        guard let answer = RuntimeControl.decode(RuntimeControl.SystemProxy.self, from: session.control(request)),
+              answer.running, let port = answer.port
+        else {
+            events.record("takeover \(takeover.rawValue): system proxy off, the engine refused it")
+            return nil
+        }
+        events.record("takeover \(takeover.rawValue): system proxy on port \(port), \(exceptions.entries.count) exceptions")
+        return SystemProxyEndpoint(port: port, exceptions: exceptions)
+    }
+
+    /// The system HTTP and HTTPS proxy for `proxy`, for every domain (`matchDomains = [""]`), leaving plain host
+    /// names and the exceptions alone.
+    static func proxySettings(_ proxy: SystemProxyEndpoint) -> NEProxySettings {
+        let settings = NEProxySettings()
+        let server = NEProxyServer(address: "127.0.0.1", port: Int(proxy.port))
+        settings.httpEnabled = true
+        settings.httpServer = server
+        settings.httpsEnabled = true
+        settings.httpsServer = server
+        settings.excludeSimpleHostnames = true
+        settings.exceptionList = proxy.exceptions.entries
+        settings.matchDomains = [""]
+        return settings
+    }
+
     /// Interface settings from the saved profile. The provider's own sockets (to the proxy server or the
     /// WireGuard endpoint) are never routed into the tunnel by the system. Returns nil for an address or route
     /// that does not parse.
-    static func networkSettings(_ interface: TunnelInterface, remoteAddress: String) -> NEPacketTunnelNetworkSettings? {
+    ///
+    /// Without `routesTraffic` (the macOS system proxy mode) the interface takes no routes and no DNS: only the
+    /// system proxy, when there is one, sends traffic to the engine.
+    static func networkSettings(
+        _ interface: TunnelInterface,
+        remoteAddress: String,
+        routesTraffic: Bool = true,
+        proxy: SystemProxyEndpoint? = nil
+    ) -> NEPacketTunnelNetworkSettings? {
         let addresses = interface.addresses.map(CIDR.parse)
         let routes = interface.includedRoutes.map(CIDR.parse)
         guard addresses.allSatisfy({ $0 != nil }), routes.allSatisfy({ $0 != nil }) else {
@@ -693,8 +798,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
         let v4Addresses = addresses.compactMap { $0 }.filter { !$0.isIPv6 }
         let v6Addresses = addresses.compactMap { $0 }.filter { $0.isIPv6 }
-        let v4Routes = routes.compactMap { $0 }.filter { !$0.isIPv6 }
-        let v6Routes = routes.compactMap { $0 }.filter { $0.isIPv6 }
+        let v4Routes = routesTraffic ? routes.compactMap { $0 }.filter { !$0.isIPv6 } : []
+        let v6Routes = routesTraffic ? routes.compactMap { $0 }.filter { $0.isIPv6 } : []
 
         let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: remoteAddress)
         if !v4Addresses.isEmpty {
@@ -721,10 +826,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             }
             settings.ipv6Settings = ipv6
         }
-        if !interface.dnsServers.isEmpty {
+        if routesTraffic, !interface.dnsServers.isEmpty {
             let dns = NEDNSSettings(servers: interface.dnsServers)
             dns.matchDomains = [""]
             settings.dnsSettings = dns
+        }
+        if let proxy {
+            settings.proxySettings = proxySettings(proxy)
         }
         settings.mtu = NSNumber(value: interface.mtu)
         return settings
