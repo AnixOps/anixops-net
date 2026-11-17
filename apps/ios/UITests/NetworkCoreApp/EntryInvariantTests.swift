@@ -9,7 +9,8 @@ import XCTest
 /// 2. A failure shows on the page the user is on.
 ///
 /// Each case launches the debug build with the demo data (`-AnixOpsDemo YES`, as the screenshots do) on one page.
-/// CI passes the user agreement's version as `TEST_RUNNER_ANIXOPS_TERMS`, so no case stops at the consent screen.
+/// CI installs the app and passes its bundle identifier as `TEST_RUNNER_ANIXOPS_BUNDLE`, and the user agreement's
+/// version as `TEST_RUNNER_ANIXOPS_TERMS`, so no case stops at the consent screen.
 final class EntryInvariantTests: XCTestCase {
     private static let proxyPages = ["home", "proxies", "rules", "extensions", "settings"]
     private static let debugPages = ["requests", "extensions", "exit", "settings"]
@@ -54,7 +55,11 @@ final class EntryInvariantTests: XCTestCase {
             ProcessInfo.processInfo.environment["ANIXOPS_TERMS"],
             "set TEST_RUNNER_ANIXOPS_TERMS to the user agreement's version"
         )
-        let app = XCUIApplication()
+        let bundle = try XCTUnwrap(
+            ProcessInfo.processInfo.environment["ANIXOPS_BUNDLE"],
+            "set TEST_RUNNER_ANIXOPS_BUNDLE to the installed app's bundle identifier"
+        )
+        let app = XCUIApplication(bundleIdentifier: bundle)
         var arguments = [
             "-AnixOpsDemo", "YES",
             "-AnixOpsMode", mode,

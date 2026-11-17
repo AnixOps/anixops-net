@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Runs the iPhone app's UI tests (apps/ios/UITests: the entry checks of docs/ui-ux.md, 入口不变量) in a simulator
 # made for this run, against the demo data, unsigned like the screenshots.
-# Usage: ios-ui-tests.sh <derived data path> <result bundle path>
+# Usage: ios-ui-tests.sh <path to NetworkCoreApp.app> <derived data path> <result bundle path>
 set -euo pipefail
 
-derived="$1"
-result="$2"
+app="$1"
+derived="$2"
+result="$3"
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 terms="$(grep -o '基准版本 [0-9.]*' "${root}/TERMS.md" | awk '{print $2}')"
 if [ -z "${terms}" ]; then
@@ -33,9 +34,13 @@ cleanup() {
 }
 trap cleanup EXIT
 xcrun simctl bootstatus "${device}" -b
+# The test target has no target application (apps/ios/project.yml): the app built for this commit is installed
+# here and the tests launch it by bundle identifier.
+xcrun simctl install "${device}" "${app}"
+bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${app}/Info.plist")"
 
 # xcodebuild hands TEST_RUNNER_-prefixed variables to the test process without the prefix.
-TEST_RUNNER_ANIXOPS_TERMS="${terms}" xcodebuild \
+TEST_RUNNER_ANIXOPS_TERMS="${terms}" TEST_RUNNER_ANIXOPS_BUNDLE="${bundle}" xcodebuild \
     -project "${root}/apps/ios/NetworkCore.xcodeproj" \
     -scheme NetworkCoreApp \
     -destination "id=${device}" \

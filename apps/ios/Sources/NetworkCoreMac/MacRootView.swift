@@ -231,6 +231,9 @@ private struct MacSidebarStatus: View {
 struct MacConnectSwitch: View {
     var tunnel: TunnelController
     var controlSize: ControlSize = .regular
+    /// The sidebar's switch is `connect-switch`, on every page in both modes (docs/ui-ux.md, 入口不变量); the
+    /// overview's larger copy has its own identifier, so the UI tests can tell them apart.
+    var identifier = "connect-switch"
 
     var body: some View {
         Toggle(isOn: Binding(
@@ -249,7 +252,7 @@ struct MacConnectSwitch: View {
         .tint(.green)
         .disabled(tunnel.phase == .unconfigured || tunnel.phase == .disconnecting)
         .help("连接或断开（⇧⌘C）")
-        .accessibilityIdentifier("connect-switch")
+        .accessibilityIdentifier(identifier)
     }
 }
 
