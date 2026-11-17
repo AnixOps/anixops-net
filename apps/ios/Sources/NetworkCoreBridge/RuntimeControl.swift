@@ -78,6 +78,14 @@ public enum RuntimeControl {
     /// Starts (or restarts) the LAN share on `port`; `0` picks a free one.
     case startLanShare(port: UInt16)
     case stopLanShare
+    /// The `127.0.0.1` listener the tunnel registers as the system proxy (`TrafficTakeover`).
+    case systemProxy
+    /// Starts it on `port`, or on a free port when that one is taken; the answer says which.
+    case startSystemProxy(port: UInt16)
+    case stopSystemProxy
+
+    /// The port the system proxy listener asks for first.
+    public static let systemProxyPort: UInt16 = 8890
 
     public var request: Data {
         let object: [String: Any]
@@ -181,6 +189,12 @@ public enum RuntimeControl {
             object = ["cmd": "start_lan_share", "port": Int(port)]
         case .stopLanShare:
             object = ["cmd": "stop_lan_share"]
+        case .systemProxy:
+            object = ["cmd": "system_proxy"]
+        case let .startSystemProxy(port):
+            object = ["cmd": "start_system_proxy", "port": Int(port)]
+        case .stopSystemProxy:
+            object = ["cmd": "stop_system_proxy"]
         }
         return (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
     }
@@ -210,6 +224,21 @@ public enum RuntimeControl {
                 return nil
             }
             return "http://\(address):\(port)/"
+        }
+    }
+
+    /// The answer to the system proxy commands: whether the listener runs and where.
+    public struct SystemProxy: Decodable, Equatable {
+        public let running: Bool
+        public let host: String?
+        public let port: UInt16?
+        public let httpsDecryption: Bool
+        public let accepted: UInt64
+        public let active: UInt64
+
+        enum CodingKeys: String, CodingKey {
+            case running, host, port, accepted, active
+            case httpsDecryption = "https_decryption"
         }
     }
 

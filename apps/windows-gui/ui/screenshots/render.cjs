@@ -99,6 +99,10 @@ async function shoot(browser, url, shot) {
   await page.locator(".nav-item", { hasText: shot.nav }).first().click();
   // Long enough for the pages that poll once a second to fill their lists and a few points of their charts.
   await page.clock.runFor(8000);
+  // Entry invariant (docs/ui-ux.md, 入口不变量 1): every page of either mode keeps the connection switch, once, at
+  // the foot of the sidebar. Debug mode once lost its only switch on iOS when its overview went away.
+  const switches = await page.locator('.sidebar-foot [role="switch"]').count();
+  if (switches !== 1) problems.push(`entry invariant: ${switches} connection switches at the foot of the sidebar, want 1`);
   if (shot.steps) {
     await shot.steps(page);
     await page.clock.runFor(3000);

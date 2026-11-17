@@ -34,6 +34,27 @@ final class RuntimeControlTests: XCTestCase {
         XCTAssertNil(stopped.setupURL(address: "192.168.1.5"))
     }
 
+    func testSystemProxyCommandsAndAnswer() throws {
+        XCTAssertEqual(String(decoding: RuntimeControl.systemProxy.request, as: UTF8.self), #"{"cmd":"system_proxy"}"#)
+        XCTAssertEqual(
+            String(decoding: RuntimeControl.startSystemProxy(port: RuntimeControl.systemProxyPort).request, as: UTF8.self),
+            #"{"cmd":"start_system_proxy","port":8890}"#
+        )
+        XCTAssertEqual(
+            String(decoding: RuntimeControl.stopSystemProxy.request, as: UTF8.self), #"{"cmd":"stop_system_proxy"}"#
+        )
+        let running = try XCTUnwrap(RuntimeControl.decode(RuntimeControl.SystemProxy.self, from: Data("""
+        {"running":true,"host":"127.0.0.1","port":50123,"https_decryption":true,"accepted":4,"rejected":0,"active":1}
+        """.utf8)))
+        XCTAssertTrue(running.running)
+        XCTAssertEqual(running.port, 50123)
+        XCTAssertTrue(running.httpsDecryption)
+        let stopped = try XCTUnwrap(RuntimeControl.decode(RuntimeControl.SystemProxy.self, from: Data("""
+        {"running":false,"host":null,"port":null,"https_decryption":false,"accepted":0,"rejected":0,"active":0}
+        """.utf8)))
+        XCTAssertNil(stopped.port)
+    }
+
     func testScriptCommandsAndAnswers() throws {
         XCTAssertEqual(String(decoding: RuntimeControl.networkChanged.request, as: UTF8.self), #"{"cmd":"network_changed"}"#)
         XCTAssertEqual(
