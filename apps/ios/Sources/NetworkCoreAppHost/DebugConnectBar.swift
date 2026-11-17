@@ -31,6 +31,9 @@ struct DebugConnectBar: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityElement(children: .combine)
+                // One element for the status and its detail; the UI tests find a notice by this identifier. Set on
+                // the combined element, not on the notice's text inside it, which would expose the notice twice.
+                .accessibilityIdentifier(tunnel.notice != nil ? "app-notice" : "connect-status")
                 if tunnel.notice != nil {
                     Button {
                         tunnel.clearMessage()
@@ -87,7 +90,6 @@ struct DebugConnectBar: View {
         if let notice = tunnel.notice {
             Text(notice.text)
                 .foregroundStyle(brand.danger)
-                .accessibilityIdentifier("app-notice")
         } else if phase == .on, let since = tunnel.connectedSince {
             TimelineView(.periodic(from: since, by: 1)) { context in
                 Text(verbatim: "\(ConnectElapsed.text(from: since, to: context.date)) · \(tunnel.debugExitSummary)")
