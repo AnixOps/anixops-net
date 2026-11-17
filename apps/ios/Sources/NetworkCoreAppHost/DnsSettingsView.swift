@@ -37,8 +37,8 @@ struct DnsSection: View {
     }
 }
 
-/// DNS servers (plain, DNS over TLS or over HTTPS, through the proxy or directly), which one answers by default,
-/// per-domain servers and local hosts. Saving reconnects a running tunnel.
+/// DNS servers (UDP, TCP, DNS over TLS, HTTPS or QUIC, through the proxy or directly, or the system's), which ones
+/// race to answer by default, the fallback, per-domain servers and local hosts. Saving reconnects a running tunnel.
 struct DnsSettingsView: View {
     var tunnel: TunnelController
     @Environment(\.brand) private var brand
@@ -122,13 +122,39 @@ struct DnsSettingsView: View {
                     }
                 }
                 .contextMenu {
-                    if dns.effectiveDefault != server.name {
+                    let defaults = dns.effectiveDefaults
+                    if defaults != [server.name] {
                         Button {
-                            var next = dns
-                            next.defaultServer = server.name
-                            commit(next)
+                            commit { try dns.settingDefault(server.name) }
                         } label: {
                             Label("设为默认", systemImage: "checkmark.circle")
+                        }
+                    }
+                    if !defaults.contains(server.name), defaults.count < DnsSettings.maxRace {
+                        Button {
+                            commit { try dns.settingRacing(server.name, true) }
+                        } label: {
+                            Label("加入默认竞速", systemImage: "flag.2.crossed")
+                        }
+                    }
+                    if defaults.contains(server.name), defaults.count > 1 {
+                        Button {
+                            commit { try dns.settingRacing(server.name, false) }
+                        } label: {
+                            Label("退出默认竞速", systemImage: "flag.slash")
+                        }
+                    }
+                    if dns.fallbackServer == server.name {
+                        Button {
+                            commit { try dns.settingFallback(nil) }
+                        } label: {
+                            Label("取消备用", systemImage: "arrow.uturn.backward.circle")
+                        }
+                    } else {
+                        Button {
+                            commit { try dns.settingFallback(server.name) }
+                        } label: {
+                            Label("设为备用", systemImage: "arrow.uturn.forward.circle")
                         }
                     }
                     Button(role: .destructive) {
@@ -156,7 +182,7 @@ struct DnsSettingsView: View {
         } header: {
             Text("服务器")
         } footer: {
-            Text("没有规则命中的域名由默认服务器解析，长按服务器可设为默认。经代理的服务器在直连模式下也直连。")
+            Text("没有规则命中的域名由默认服务器解析。长按服务器可设为默认、加入默认竞速（最多 4 个同时查询，取最先的应答）或设为备用（默认或规则的服务器失败时再查，适合公司 VPN 的内部域名）。经代理的服务器在直连模式下也直连，系统 DNS 总是直连。")
         }
     }
 
@@ -172,13 +198,18 @@ struct DnsSettingsView: View {
                     .background(brand.raised, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                     .foregroundStyle(brand.text2)
                 Spacer(minLength: 4)
-                if dns.effectiveDefault == server.name {
+                if dns.effectiveDefaults.contains(server.name) {
                     Text("默认")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(brand.primary)
                 }
+                if dns.fallbackServer == server.name {
+                    Text("备用")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(brand.text2)
+                }
             }
-            Text(server.via == .direct ? "直连 · \(server.url)" : "经代理 · \(server.url)")
+            Text(server.isSystem ? String(localized: "直连 · 本机网络的 DNS") : server.via == .direct ? String(localized: "直连 · \(server.url)") : String(localized: "经代理 · \(server.url)"))
                 .font(.caption)
                 .foregroundStyle(brand.text2)
                 .lineLimit(1)
@@ -242,7 +273,7 @@ struct DnsSettingsView: View {
             )
             .listRowBackground(brand.surface)
         } footer: {
-            Text("开启后，应用查询域名时立即拿到 198.18.0.0/15 内的临时地址，连接时再还原成域名按规则分流、由代理解析，首次连接更快，非 HTTP/TLS 协议也能按域名分流。局域网、NTP、STUN、Apple 推送和联网检测等域名仍返回真实地址。关闭或更改后，个别应用可能需要重新打开。")
+            Text("开启后，应用查询域名时立即拿到 198.18.0.0/15（IPv6 为 fc00::/18）内的临时地址，连接时再还原成域名按规则分流、由代理解析，首次连接更快，非 HTTP/TLS 协议也能按域名分流。局域网、NTP、STUN、Apple 推送和联网检测等域名仍返回真实地址。关闭或更改后，个别应用可能需要重新打开。")
         }
     }
 
@@ -331,7 +362,7 @@ private struct DnsServerSheet: View {
                     TextField("TLS 名称（可选）", text: $serverName, prompt: Text(verbatim: "cloudflare-dns.com"))
                         .plainTextEntry()
                 } footer: {
-                    Text("地址可写 1.1.1.1、tcp://、tls://（DoT）或 https://（DoH）。用 IP 地址写 DoT/DoH 时填写证书上的 TLS 名称。")
+                    Text("地址可写 1.1.1.1、udp://、tcp://、tls://（DoT）、https://（DoH）、quic://（DoQ），或 system（本机网络的 DNS）。用 IP 地址写 DoT/DoH/DoQ 时填写证书上的 TLS 名称。")
                 }
                 .listRowBackground(brand.surface)
                 Section {

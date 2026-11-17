@@ -51,7 +51,8 @@
 | 规则集查看、更新远程规则集 | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | DNS 预设 | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 自定义 DNS 服务器、分域 DNS、Hosts | ✅ | ✅ | ✅ | ✅ | ✅ | T3：桌面与 Android 用文本编辑（`名称 = 地址`、`DOMAIN-SUFFIX,cn,服务器`、`域名 = 地址`），iOS / macOS 是表单 |
-| Fake-IP | ✅ | ✅ | ✅ | — | ✅ | 只在接管 IP 流量时有意义：Windows 在 TUN 模式下生效，Android 在 VPN 里生效（T3）；Linux 只有系统代理，代理拿到的就是域名 |
+| DNS 上游 UDP / DoQ、默认竞速、备用与系统 DNS | ✅ | ✅ | ✅ | ✅ | ✅ | 上游可写 `udp://`、`quic://`（DoQ）、`system`（本机网络的 DNS，总是直连）；最多 4 个 `default` 同时查询取最先的应答，`fallback` 在默认或规则的服务器失败时再查（公司 VPN 内部域名）。桌面与 Android 在服务器行尾写 `default` / `fallback`，iOS / macOS 长按服务器设置。Windows / Linux 的 TUN 把系统 DNS 指向隧道，客户端读物理网卡的 DNS 填给内核（`desktop_dns::system`），iOS 与 Android 的隧道进程本身不走隧道，用系统解析 |
+| Fake-IP | ✅ | ✅ | ✅ | — | ✅ | IPv4 用 198.18.0.0/15，IPv6（AAAA）用 fc00::/18。只在接管 IP 流量时有意义：Windows 在 TUN 模式下生效，Android 在 VPN 里生效（T3）；Linux 只有系统代理，代理拿到的就是域名 |
 | 屏蔽 QUIC | ✅ | ✅ | ✅ | ✅ | ✅ | #106 |
 | 流量重定向（TCP / UDP 劫持到开发服务器） | ✅ | ✅ | ✅ | ✅ | ✅ | 扩展 / 改写页“流量重定向”，与 iOS 相同的地址 / 域名 / 端口 / 协议 → 目标写法（引擎 `redirects`，`desktop_dns::redirects`）。Windows 和 Linux 不走系统代理的程序要开 TUN 模式（T6） |
 | TUN（接管全部流量） | ✅ | ✅ | ✅ | ✅ | ✅ | Linux 每次连接经 pkexec（polkit）提权助手创建虚拟网卡，App 本身不提权，见系统限制（T14） |

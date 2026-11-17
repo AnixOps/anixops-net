@@ -139,10 +139,10 @@
     <string name="dns_system_hint">內建引擎用系統 DNS 解析規則裡需要 IP 的網域；經節點的連線由節點伺服器解析網域。</string>
     <string name="dns_encrypted_hint">所有網域經節點用 Cloudflare DNS over HTTPS 解析，本機網路看不到查詢內容。</string>
     <string name="dns_custom_hint">使用下方填寫的伺服器、分域規則和 Hosts。</string>
-    <string name="dns_fake_ip_hint">應用查詢網域時立刻拿到 198.18.0.0/15 裡的位址，連線時還原成網域依規則分流，由節點解析。區域網路、校時、STUN 和推播等網域仍拿真實位址。</string>
+    <string name="dns_fake_ip_hint">應用查詢網域時立刻拿到 198.18.0.0/15（IPv6 為 fc00::/18）裡的位址，連線時還原成網域依規則分流，由節點解析。區域網路、校時、STUN 和推播等網域仍拿真實位址。</string>
     <string name="dns_custom_note">每行一條，# 開頭的行是註解。沒有填伺服器時，引擎經節點用 TCP 查詢預設伺服器。</string>
     <string name="dns_servers">伺服器</string>
-    <string name="dns_servers_hint">名稱 = 位址，第一個是預設伺服器。位址可以是 IP、tcp://、tls:// 或 https://；加 direct 表示直連，不加則經節點。</string>
+    <string name="dns_servers_hint">名稱 = 位址。位址可以是 IP、tcp://、udp://、tls://、https://、quic://（DoQ），或 system（本機網路的 DNS，一律直連）；加 direct 表示直連，不加則經節點。加 default 的伺服器（最多 4 個）同時查詢、取最先的回應，都不加時第一個是預設伺服器；加 fallback 的伺服器在預設伺服器失敗時再查。</string>
     <string name="dns_rules">分域伺服器</string>
     <string name="dns_rules_hint">類型,網域,伺服器名稱，從上到下比對。類型是 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD 或 RULE-SET（分流模式裡有的規則集）。</string>
     <string name="dns_hosts_hint">網域 = 位址，最多 8 個位址；*.網域 比對它的子網域。</string>

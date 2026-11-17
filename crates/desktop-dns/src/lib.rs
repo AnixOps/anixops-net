@@ -9,6 +9,7 @@ pub mod catalog;
 pub mod custom;
 pub mod redirects;
 pub mod rules;
+pub mod system;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -105,7 +106,7 @@ pub fn apply_with(
     };
     if settings.fake_ip {
         if let Some(Value::Object(dns)) = dns.as_mut() {
-            dns.insert("fake_ip".to_string(), json!({ "enabled": true }));
+            dns.insert("fake_ip".to_string(), custom::fake_ip_section());
         }
     }
     let object = envelope
@@ -213,7 +214,10 @@ mod tests {
         let system: Value =
             serde_json::from_str(&apply_with(SINGLE, DnsPreset::System, &settings).unwrap())
                 .unwrap();
-        assert_eq!(system["dns"], json!({ "fake_ip": { "enabled": true } }));
+        assert_eq!(
+            system["dns"],
+            json!({ "fake_ip": { "enabled": true, "range6": "fc00::/18" } })
+        );
         let legacy: Value =
             serde_json::from_str(&apply_with(SINGLE, DnsPreset::Split, &settings).unwrap())
                 .unwrap();

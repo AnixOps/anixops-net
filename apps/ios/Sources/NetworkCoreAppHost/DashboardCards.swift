@@ -557,7 +557,7 @@ private struct DnsTile: View {
 
     var body: some View {
         let dns = tunnel.dns
-        let server = dns.servers.first { $0.name == dns.defaultServer } ?? dns.servers.first
+        let server = dns.servers.first { $0.name == dns.effectiveDefault }
         Tile(card: .dns) {
             if let server {
                 Text(server.name)
