@@ -1,7 +1,8 @@
 name: Release
 
 # Packages the Windows (MSI + portable ZIP), Linux (tarball + .deb) and Android (APK) clients.
-# A tag push publishes a GitHub Release; workflow_dispatch from main only builds and attests.
+# A tag push (or release-tag.yml, which dispatches this on the tag it creates) publishes a GitHub Release;
+# workflow_dispatch from main only builds and attests.
 # iOS ships through ios-testflight.yml. Kernel CLI releases stay in AnixOps/networkcore_anixops.
 
 on:
@@ -86,11 +87,20 @@ jobs:
 
           case "${RELEASE_EVENT}" in
             workflow_dispatch)
-              if [ "${RELEASE_REF_TYPE}" != "branch" ] || [ "${RELEASE_REF_NAME}" != "main" ]; then
-                echo "::error::workflow_dispatch release validation must run from main."
+              if [ "${RELEASE_REF_TYPE}" = "tag" ]; then
+                # release-tag.yml creates the tag with GITHUB_TOKEN, which fires no push event, and then dispatches
+                # this workflow on the tag: it publishes exactly like a pushed tag.
+                if [ "${RELEASE_VERSION}" != "${RELEASE_REF_NAME}" ]; then
+                  echo "::error::A release dispatched on a tag must use the tag name as its version."
+                  exit 1
+                fi
+                echo "is_tag_release=true" >> "${GITHUB_OUTPUT}"
+              elif [ "${RELEASE_REF_TYPE}" = "branch" ] && [ "${RELEASE_REF_NAME}" = "main" ]; then
+                echo "is_tag_release=false" >> "${GITHUB_OUTPUT}"
+              else
+                echo "::error::workflow_dispatch release validation must run from main or from a release tag."
                 exit 1
               fi
-              echo "is_tag_release=false" >> "${GITHUB_OUTPUT}"
               ;;
             push)
               if [ "${RELEASE_REF_TYPE}" != "tag" ]; then
@@ -1244,7 +1254,7 @@ jobs:
       - attest-linux-gui
       - attest-windows
       - package-android
-    if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+    if: ${{ needs.release-policy.outputs.is_tag_release == 'true' && github.ref_type == 'tag' }}
     permissions:
       contents: write
       actions: write

@@ -1,0 +1,142 @@
+name: Release tag
+
+# Creates a client release tag v* from a workflow and starts release.yml on it, because agent sessions cannot push
+# tags. A tag pushed with GITHUB_TOKEN does not trigger the tag push event, so release.yml is started with
+# workflow_dispatch on the new tag; release.yml then runs the same policy, CI gate and publish as for a pushed tag.
+# Everything release.yml checks before building is checked here first, so a tag is never created that the release
+# would reject (moving a published tag later is not allowed).
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version, for example v0.3.0-beta.8
+        required: true
+        type: string
+      commit:
+        description: Commit on main to tag (empty for the latest main)
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Tag and dispatch release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Check version, commit, notes and CI
+        id: check
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          COMMIT: ${{ inputs.commit }}
+          REPO: ${{ github.repository }}
+          RUN_REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "${RUN_REF_NAME}" != "main" ]; then
+            echo "::error::Run this workflow from main."
+            exit 1
+          fi
+          # Same pattern as release.yml's release policy.
+          version_pattern='^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[1-9][0-9]*)?$'
+          if [[ ! "${VERSION}" =~ ${version_pattern} ]]; then
+            echo "::error::Version must look like v0.3.0, v0.3.0-beta.8, v0.3.0-rc.1."
+            exit 1
+          fi
+
+          if [ -n "${COMMIT}" ]; then
+            if ! target="$(git rev-parse --verify --quiet "${COMMIT}^{commit}")"; then
+              echo "::error::${COMMIT} is not a commit in this repository."
+              exit 1
+            fi
+          else
+            target="$(git rev-parse origin/main)"
+          fi
+          if ! git merge-base --is-ancestor "${target}" origin/main; then
+            echo "::error::${target} is not on main."
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/${VERSION}" >/dev/null; then
+            echo "::error::Tag ${VERSION} already exists."
+            exit 1
+          fi
+
+          notes="docs/release-notes/${VERSION}.md"
+          if ! git cat-file -e "${target}:${notes}" 2>/dev/null || [ -z "$(git show "${target}:${notes}")" ]; then
+            echo "::error::${notes} is missing or empty at ${target}."
+            exit 1
+          fi
+          if git show "${target}:${notes}" | grep -n -E 'TODO|TBD|待补'; then
+            echo "::error::${notes} still has placeholders."
+            exit 1
+          fi
+
+          # Same-commit CI on main must have finished successfully, as release.yml's CI gate requires.
+          runs_json="$(gh api --method GET "repos/${REPO}/actions/workflows/ci.yml/runs" \
+            -f branch=main -f status=completed -f head_sha="${target}" -f per_page=20)"
+          ci_run="$(jq -c --arg sha "${target}" '
+            [ .workflow_runs[]
+              | select(.head_branch == "main" and .head_sha == $sha)
+              | select(.event == "push" or .event == "workflow_dispatch")
+              | select(.conclusion == "success") ]
+            | sort_by(.created_at, .run_attempt) | last // empty' <<< "${runs_json}")"
+          if [ -z "${ci_run}" ]; then
+            echo "::error::No successful CI run on main for ${target}. Wait for CI to pass, then run this again."
+            exit 1
+          fi
+          ci_url="$(jq -r '.html_url' <<< "${ci_run}")"
+
+          echo "target=${target}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "### Release tag"
+            echo
+            echo "| Item | Value |"
+            echo "| --- | --- |"
+            echo "| Version | ${VERSION} |"
+            echo "| Commit | ${target} |"
+            echo "| CI | ${ci_url} |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Create tag
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          TARGET: ${{ steps.check.outputs.target }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${VERSION}" -m "AnixOps Net ${VERSION}" "${TARGET}"
+          git push origin "refs/tags/${VERSION}"
+
+      - name: Start release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api --method POST "repos/${REPO}/actions/workflows/release.yml/dispatches" \
+            -f ref="${VERSION}" -f "inputs[version]=${VERSION}"
+          echo "Started release.yml on ${VERSION}: https://github.com/${REPO}/actions/workflows/release.yml" >> "${GITHUB_STEP_SUMMARY}"
