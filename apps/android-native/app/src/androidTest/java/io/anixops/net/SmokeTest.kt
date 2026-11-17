@@ -35,9 +35,10 @@ class SmokeTest {
         waitFor(R.string.terms_accept)
         compose.onNodeWithText(text(R.string.terms_accept)).performClick()
 
-        // The overview read through the bridge: with no node the hero card asks for one.
-        waitFor(R.string.home_choose_node)
+        // The overview read through the bridge: with no node the hero card offers an import instead of the switch.
+        waitFor(R.string.home_import_first)
         waitFor(R.string.status_not_connected)
+        waitFor(R.string.subscription_import)
 
         compose.onNodeWithText(text(R.string.nav_proxies)).performClick()
         waitFor(R.string.proxies_empty)
