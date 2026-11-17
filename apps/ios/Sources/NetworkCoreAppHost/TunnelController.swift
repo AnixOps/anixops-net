@@ -2017,10 +2017,7 @@ extension TunnelController {
                     report: report,
                     subscriptionURL: "https://example.com/subscription",
                     keeping: nil,
-                    // Shown as a live relative time ("更新于 1天2小时前"). Its smallest unit is the hour, so a slow
-                    // simulator taking the screenshot a minute later still draws the same text; at two hours ago
-                    // the minutes showed and changed the screenshots from run to run.
-                    at: Date().addingTimeInterval(-26 * 3600)
+                    at: Date().addingTimeInterval(-2 * 3600)
                 ),
                 userInfo: SubscriptionUserInfo(
                     upload: 6_400_000_000,
