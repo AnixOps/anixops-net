@@ -16,7 +16,16 @@ final class AnxLicenseTests: XCTestCase {
         let license = AnxLicense(deviceKey: seed)
         XCTAssertEqual(license.publicKeyHex, "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a")
         XCTAssertEqual(license.deviceHeader, "ed25519:d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a")
-        XCTAssertEqual(license.pkcs8Hex, "302e020100300506032b657004220420" + "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
+        // PKCS#8 v2 as ring's `Ed25519KeyPair::from_pkcs8` (the ANX outbound) requires: version 1, the seed, then
+        // `[1]` with the public key. A v1 key (version 0, no public key) made every ANX outbound refuse to build.
+        XCTAssertEqual(
+            license.pkcs8Hex,
+            "3051020101300506032b657004220420"
+                + "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+                + "812100"
+                + "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+        )
+        XCTAssertEqual(license.pkcs8Hex.count, 83 * 2)
         XCTAssertEqual(AnxLicense.generate().deviceKey.count, 32)
     }
 
