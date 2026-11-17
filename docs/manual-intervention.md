@@ -404,3 +404,23 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 2026-11-16：beta.7 的第一次 tag 发布在 “Publish GitHub Release” 失败。配好 `ANDROID_KEY_ALIAS`（`anixops`）后，GitHub 把含有
 secret 值的 job output（安卓 artifact 名和 APK 名都含 `anixops`）丢弃，发布步骤拿不到安卓包。修复后 release.yml 由版本号直接推出这两个名字。
 tag 当时指向的 d225b10 还是旧 workflow，需要把 tag 移到包含修复的 commit 再推（Release 没有发出，移动 tag 不影响用户）。
+
+## v0.3.0-beta.8 发布前后的人工事项
+
+发布说明在 `docs/release-notes/v0.3.0-beta.8.md`，安卓 versionCode 3003（beta.7 是 3002）。
+
+从这一版起 tag 由 GitHub Actions 打：在 Actions 里运行 “Release tag”（`release-tag.yml`），输入版本号（可选 commit，默认 main 最新）。
+它先检查版本号、commit 在 main 上、tag 不存在、发布说明存在且无占位符、同一 commit 在 main 上的 CI 已成功，再打 tag，
+然后在该 tag 上以 workflow_dispatch 启动 `release.yml`（GITHUB_TOKEN 推的 tag 不触发 push 事件）。维护者不再需要在本机推 tag。
+
+- [ ] anx 仓库的 Cargo.lock 内核与本仓库 `Cargo.toml` 固定的内核（c5f7a3f）一致后，再触发 anx 的 ANX 构建和 `publish-client.yml`；
+  这些 run 进 Environment `apple-anx` / `anx-release`，需要维护者在 Actions 页面批准。
+- [ ] 原生 Windows / Linux 窗口的连接列表（#212）还没有随安装包发布：桌面安装包仍是 Tauri 版。
+
+发布后真机验收（CI 只有单元测试、模拟器冒烟测试和截图对比）：
+
+- [ ] iOS / macOS “VPN + 系统代理”与 macOS “仅系统代理”、网关模式按 `docs/system-proxy.md` 验收（见上文接管方式一节）。
+- [ ] DNS：`quic://` 上游、4 个默认服务器竞速、备用服务器、`system` 在 Windows / Linux / 安卓 / iOS 上各查一次。
+- [ ] 策略组：拔掉自动测速组当前节点的网络，下一条连接换到其他节点；切换 Wi-Fi 后测速结果清空重测。
+- [ ] REJECT-TINYGIF 对明文 HTTP 回 1x1 GIF；同一主机 30 秒内被拒超过 10 次后改为静默丢弃。
+- [ ] iOS ANX 版：开启设备授权的订阅里 ANX 节点能连接（不再出现 code 6）。
