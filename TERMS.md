@@ -1,8 +1,7 @@
 # AnixOps Net 用户协议与免责声明
 
 适用于 AnixOps Net 客户端（iOS、macOS、Windows、Linux、Android）的源代码、官方安装包、应用商店与 TestFlight 版本和文档。
-基准版本 2.1.0，来源：AnixOps Design `legal/terms.zh-CN.md`。软件许可见 [`LICENSE`](LICENSE)（Apache-2.0），名称与标识见 [`TRADEMARKS.md`](TRADEMARKS.md)。
-
+基准版本 2.1.1，来源：AnixOps Design `legal/terms.zh-CN.md`。软件许可见 [`LICENSE`](LICENSE)（Apache-2.0），名称与标识见 [`TRADEMARKS.md`](TRADEMARKS.md)。
 
 ## 产品补充条款
 
@@ -165,8 +164,5 @@
 - 本协议任何条款被认定无效或不可执行的，不影响其余条款的效力。
 - 我们未行使或延迟行使任何权利，不构成放弃该权利。
 - 本协议以简体中文为准；其他语言版本仅供参考。
-
----
-
 
 <!-- END COMMON TERMS -->
