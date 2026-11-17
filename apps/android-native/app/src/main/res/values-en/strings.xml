@@ -29,6 +29,10 @@
     <string name="settings_usage">Use AnixOps Net for</string>
     <string name="mode_proxy">Proxy</string>
     <string name="mode_debug">Network debugging</string>
+    <string name="mode_choice_title">What will you mainly use AnixOps Net for?</string>
+    <string name="mode_choice_summary">Both use the same engine and only differ in the window. You can switch any time in Settings.</string>
+    <string name="mode_debug_hint">Capture, HTTPS decryption, rewrites and replay, for development and testing</string>
+    <string name="mode_proxy_hint">Subscriptions, nodes and routing rules, for everyday browsing</string>
     <string name="settings_about">About</string>
     <string name="settings_version">Version</string>
 
@@ -143,10 +147,10 @@
     <string name="dns_system_hint">The embedded engine resolves domains that IP rules need with the system DNS; connections through a node have the node server resolve the domain.</string>
     <string name="dns_encrypted_hint">Every name is resolved with Cloudflare DNS over HTTPS through the node, so the local network cannot see the queries.</string>
     <string name="dns_custom_hint">Uses the servers, per-domain servers and hosts below.</string>
-    <string name="dns_fake_ip_hint">Apps get an address in 198.18.0.0/15 at once when they look up a name; when they connect, the name is restored, matched against the rules and resolved by the node. LAN, time, STUN and push names still get real addresses.</string>
+    <string name="dns_fake_ip_hint">Apps get an address in 198.18.0.0/15 (fc00::/18 for IPv6) at once when they look up a name; when they connect, the name is restored, matched against the rules and resolved by the node. LAN, time, STUN and push names still get real addresses.</string>
     <string name="dns_custom_note">One per line; lines starting with # are comments. Without servers the engine asks its default server over TCP through the node.</string>
     <string name="dns_servers">Servers</string>
-    <string name="dns_servers_hint">name = address; the first is the default server. The address is an IP, tcp://, tls:// or https://; add direct to reach it directly, otherwise it goes through the node.</string>
+    <string name="dns_servers_hint">name = address. The address is an IP, tcp://, udp://, tls://, https://, quic:// (DNS over QUIC), or system (the local network\'s DNS, always direct); add direct to reach it directly, otherwise it goes through the node. Servers marked default (up to 4) are asked at once and the first answer wins; without any, the first server is the default. Servers marked fallback are asked when the default ones fail.</string>
     <string name="dns_rules">Per-domain servers</string>
     <string name="dns_rules_hint">type,domain,server name, matched top to bottom. The type is DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD or RULE-SET (a rule set the routing mode has).</string>
     <string name="dns_hosts_hint">domain = address, up to 8 addresses; *.domain matches its subdomains.</string>

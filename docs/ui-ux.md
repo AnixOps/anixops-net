@@ -142,6 +142,8 @@ macOS 的快捷键只有一张表：`apps/ios/Sources/NetworkCoreBridge/AppShort
 |---|---|
 | Windows、Linux | `screenshots/render.cjs` 每张截图都检查侧栏底部有且只有一个连接开关；`labels.test.ts` 检查失败原因和侧栏说明 |
 | Android | `apps/android-native/app/src/test/java/io/anixops/net/ui/EntryTest.kt`：每个模式的每个页面检查连接开关和失败提示，没节点时首页给出导入按钮 |
+| macOS | `apps/ios/UITests/NetworkCoreMac/MacEntryInvariantTests.swift`（XCUITest，CI 用演示数据运行）：两个模式的每一页检查侧栏底部有且只有一个连接开关（概览上的大开关另有标识 `home-connect-switch`），注入的失败提示在每一页都能看到 |
+| iOS | `apps/ios/UITests/NetworkCoreApp/EntryInvariantTests.swift`（XCUITest，CI 的 iOS 模拟器上用演示数据运行）：每个模式的每个标签检查连接开关（`connect-switch`）和失败提示（`app-notice`） |
 
 ## 截图对比
 

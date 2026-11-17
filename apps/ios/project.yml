@@ -82,6 +82,21 @@ targets:
       - framework: Generated/NetworkCoreRuntime.xcframework
         embed: false
 
+  # The entry checks of docs/ui-ux.md (入口不变量), run by CI on a simulator against the demo data.
+  NetworkCoreAppUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests/NetworkCoreApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.networkcore.ios.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+    # No target application: xcodebuild sometimes failed to resolve the host app's path ("The bundle identifier
+    # for NetworkCoreApp couldn't be read"). The app built earlier in CI is installed by the script and the tests
+    # launch it by bundle identifier or path.
+
   NetworkCorePacketTunnel:
     type: app-extension
     platform: iOS
@@ -245,6 +260,20 @@ targets:
   # a System Extension (Sources/NetworkCoreMacTunnel/main.swift). It runs as root and cannot read the user's
   # Keychain, so the app hands the node key, node library and MITM root over at start (TunnelStartSecrets).
   # Its bundle ID must start with the app's, and macOS requires the bundle to be named after its bundle ID.
+  # The macOS entry checks of docs/ui-ux.md (入口不变量), run by CI against the demo data.
+  NetworkCoreMacUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: UITests/NetworkCoreMac
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.networkcore.macos.uitests
+        GENERATE_INFOPLIST_FILE: YES
+    # No target application: xcodebuild sometimes failed to resolve the host app's path ("The bundle identifier
+    # for NetworkCoreApp couldn't be read"). The app built earlier in CI is installed by the script and the tests
+    # launch it by bundle identifier or path.
+
   NetworkCoreMacTunnel:
     type: system-extension
     platform: macOS
@@ -320,6 +349,9 @@ schemes:
         NetworkCoreApp: all
         NetworkCorePacketTunnel: all
         NetworkCoreWidget: all
+    test:
+      targets:
+        - NetworkCoreAppUITests
 
   NetworkCoreMac:
     build:
@@ -327,3 +359,6 @@ schemes:
         NetworkCoreMac: all
         NetworkCoreMacTunnel: all
         NetworkCoreCLI: all
+    test:
+      targets:
+        - NetworkCoreMacUITests

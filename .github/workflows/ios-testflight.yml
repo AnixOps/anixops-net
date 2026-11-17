@@ -176,8 +176,11 @@ jobs:
             spec = YAML.load_file("project.yml")
             spec["settings"]["base"]["CURRENT_PROJECT_VERSION"] = (ENV.fetch("BUILD_NUMBER_RUN").to_i + 1000).to_s
             # This upload is iOS only; the macOS targets would need their own profiles.
-            %w[NetworkCoreMac NetworkCoreMacTunnel].each { |name| spec["targets"].delete(name) }
+            %w[NetworkCoreMac NetworkCoreMacTunnel NetworkCoreMacUITests].each { |name| spec["targets"].delete(name) }
             spec["schemes"].delete("NetworkCoreMac")
+            # The UI tests run in CI on a simulator, never in an upload.
+            spec["targets"].delete("NetworkCoreAppUITests")
+            spec["schemes"]["NetworkCoreApp"].delete("test")
             targets = {
               "NetworkCoreApp" => [ENV.fetch("IOS_APP_BUNDLE_ID"), ENV.fetch("APP_PROFILE_NAME")],
               "NetworkCorePacketTunnel" => [ENV.fetch("IOS_TUNNEL_BUNDLE_ID"), ENV.fetch("TUNNEL_PROFILE_NAME")],

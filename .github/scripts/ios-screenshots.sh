@@ -70,24 +70,31 @@ shoot() {
         -AppleLanguages "(${language})" -terms-accepted-version "${terms}" > /dev/null
     # The app is up; give the page time to lay out, load its demo data and finish its first transitions. A fixed
     # wait alone sometimes caught the white launch screen or a passing system banner, so the picture is taken again
-    # every 2 seconds until two in a row are the same and it is not the blank launch screen (which compresses to
-    # under 100 KB; every page with demo data is well above 150 KB).
+    # every 4 seconds until three in a row are the same and it is not the blank launch screen (which compresses to
+    # under 100 KB; every page with demo data is well above 150 KB). Three alike span 8 seconds, longer than a
+    # system banner stays up (about 5 s): a fresh simulator posts "Ready for Apple Intelligence" at some point in
+    # the run, and two pictures 2 s apart could both catch it.
     sleep 6
-    local previous="" current="" size=0 tries=0
+    local previous="" current="" size=0 tries=0 same=0
     while :; do
         xcrun simctl io "${device}" screenshot --type=png "${file}" > /dev/null 2>&1
         current="$(shasum "${file}" | cut -d' ' -f1)"
         size="$(stat -f%z "${file}")"
         if [ "${current}" = "${previous}" ] && [ "${size}" -gt 120000 ]; then
+            same=$((same + 1))
+        else
+            same=0
+        fi
+        if [ "${same}" -ge 2 ]; then
             break
         fi
         tries=$((tries + 1))
-        if [ "${tries}" -ge 10 ]; then
+        if [ "${tries}" -ge 15 ]; then
             echo "::warning::${file##*/} did not settle after ${tries} pictures; keeping the last one"
             break
         fi
         previous="${current}"
-        sleep 2
+        sleep 4
     done
     xcrun simctl terminate "${device}" "${bundle}" > /dev/null 2>&1 || true
     sleep 1

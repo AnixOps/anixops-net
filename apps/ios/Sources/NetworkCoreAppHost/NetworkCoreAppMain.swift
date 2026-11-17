@@ -278,7 +278,7 @@ struct RootView: View {
         TabView(selection: $tab) {
             ForEach(AppTab.tabs(for: tunnel.appMode)) { section in
                 content(section)
-                    .debugConnectBar(tunnel)
+                    .debugConnectBar(tunnel, section: section)
                     .tabItem { Label(section.title(in: tunnel.appMode), systemImage: section.systemImage) }
                     .tag(section)
             }
@@ -298,7 +298,7 @@ struct RootView: View {
             .background(brand.bg.ignoresSafeArea())
         } detail: {
             content(tab)
-                .debugConnectBar(tunnel)
+                .debugConnectBar(tunnel, section: tab)
                 .id(tab)
         }
         .navigationSplitViewStyle(.balanced)

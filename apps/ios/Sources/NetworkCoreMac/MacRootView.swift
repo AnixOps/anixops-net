@@ -36,6 +36,18 @@ struct MacRootView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                             .navigationTitle(state.section?.title(in: tunnel.appMode) ?? "AnixOps Net")
                     }
+                    // The overview shows notices in its own place; every other page, and all of debug mode, which
+                    // has no overview, shows them above the page, so a failure is told where it happened (the
+                    // network extension waiting for approval, a node or a setting that could not be saved).
+                    .safeAreaInset(edge: .top, spacing: 0) {
+                        if currentSection != .home, let message = tunnel.message {
+                            MacNotice(text: message) {
+                                tunnel.clearMessage()
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 10)
+                        }
+                    }
                 }
                 .overlay {
                     if state.showsPalette {
@@ -67,6 +79,11 @@ struct MacRootView: View {
                 .environment(\.brand, brand)
                 .tint(brand.primary)
         }
+    }
+
+    /// The page on screen: the chosen section, or the mode's first one before a choice.
+    private var currentSection: MacSection {
+        state.section ?? MacSection.sections(for: tunnel.appMode)[0]
     }
 
     private var sidebar: some View {
@@ -103,7 +120,7 @@ struct MacRootView: View {
 
     @ViewBuilder
     private var page: some View {
-        switch state.section ?? MacSection.sections(for: tunnel.appMode)[0] {
+        switch currentSection {
         case .home:
             MacHomePage(tunnel: tunnel, state: state)
         case .proxies:
@@ -214,6 +231,9 @@ private struct MacSidebarStatus: View {
 struct MacConnectSwitch: View {
     var tunnel: TunnelController
     var controlSize: ControlSize = .regular
+    /// The sidebar's switch is `connect-switch`, on every page in both modes (docs/ui-ux.md, 入口不变量); the
+    /// overview's larger copy has its own identifier, so the UI tests can tell them apart.
+    var identifier = "connect-switch"
 
     var body: some View {
         Toggle(isOn: Binding(
@@ -232,6 +252,7 @@ struct MacConnectSwitch: View {
         .tint(.green)
         .disabled(tunnel.phase == .unconfigured || tunnel.phase == .disconnecting)
         .help("连接或断开（⇧⌘C）")
+        .accessibilityIdentifier(identifier)
     }
 }
 

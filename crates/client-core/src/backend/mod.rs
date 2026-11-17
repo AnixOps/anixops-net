@@ -1458,6 +1458,13 @@ impl Backend {
     }
 
     /// Rebuilds the engine's connections after a network change or a wake; nothing while it is stopped.
+    /// Tells the running engine which network it is on, for `subnet` policy groups; nothing while it is stopped.
+    pub fn set_network(&self, network: &engine::NetworkFacts) {
+        if self.engine.is_running() {
+            let _ = self.engine.set_network(network);
+        }
+    }
+
     pub fn reset_network(&self, reset: network_watch::Reset) {
         if self.engine.is_running() {
             self.log(LogLevel::Info, "network changed: connections rebuilt");
