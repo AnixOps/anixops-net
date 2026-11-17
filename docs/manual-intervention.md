@@ -300,6 +300,14 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 - [ ] Android：打开规则时系统询问位置权限；允许后“当前网络”能填入 Wi-Fi 名称。Wi-Fi 和移动网络来回切换时按规则连接 / 断开（App 在后台也生效），拒绝权限时“其他 Wi-Fi”规则仍生效。
 - [ ] 手动连接或断开后，在同一个网络里不会被规则改回，换网络后才按规则执行。
 
+## 按网络选择策略组（subnet 组）真机验收
+
+客户端在网络变化时（以及每次隧道启动后）向内核报告当前网络（`set_network`）：iOS / macOS 报告类型（Wi-Fi / 有线 / 蜂窝）、路由器和接口地址；Windows / Linux / Android 报告本机出口地址，加上“Wi-Fi 规则”能读到的类型与 Wi-Fi 名称（Windows 11 与 Android 需要位置权限）。TUN 模式下出口地址是隧道自己的地址，被忽略。
+
+- [ ] 配一个 `subnet` 组（如 `SUBNET:192.168.1.0/24` 选直连，默认选代理）：在该网段时连接走直连，切到蜂窝或别的网段后几秒内新连接走代理；连接列表里的策略组成员随之变化。
+- [ ] Windows / Android 允许位置权限后，`SSID:<名称>` 条件生效。
+- [ ] iOS / macOS 的 `SSID:` / `BSSID:` 条件需要 Wi-Fi 名称：要在 Apple 开发者后台给 App ID 开 “Access Wi-Fi Information” 能力并在网络扩展里用 `NEHotspotNetwork.fetchCurrent` 读取。这属于 Apple 账号配置，等维护者决定后再做；在此之前 iOS / macOS 只能用 `SUBNET:`、`ROUTER:`、`TYPE:` 条件。
+
 ## Android 扫码导入真机验收（T5）
 
 - [ ] 代理页“导入订阅”点“扫码”：第一次询问相机权限；允许后出现取景框，扫订阅链接或 `vless://` 等分享链接的二维码，链接填进输入框，点“导入”后节点出现。

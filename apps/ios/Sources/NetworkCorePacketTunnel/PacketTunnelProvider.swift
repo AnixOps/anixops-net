@@ -296,14 +296,32 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// cellular, back online), so the next flows dial on the new path instead of stalling on the old one.
     private func watchPhysicalNetwork(_ session: EmbeddedRuntimeSession) {
         var recovery = NetworkRecovery()
-        physicalNetwork.start { [weak self, weak session] key in
-            guard let request = recovery.pathChanged(to: key) else {
-                return
-            }
+        var reported: NetworkFacts??
+        physicalNetwork.start { [weak self, weak session] key, facts in
             guard let self, let session else {
                 return
             }
+            // The first path too, so `subnet` groups know the network the tunnel started on; before the reset, so
+            // the rebuilt connections pick by the new one.
+            if reported != .some(facts), facts != nil || reported != nil {
+                reported = .some(facts)
+                self.reportNetwork(facts, session: session)
+            }
+            guard let request = recovery.pathChanged(to: key) else {
+                return
+            }
             self.resetEngine(request, reason: "network change", session: session)
+        }
+    }
+
+    /// Tells the engine the network under the tunnel for its `subnet` policy groups. Only the type is logged: the
+    /// router and addresses identify the place.
+    private func reportNetwork(_ facts: NetworkFacts?, session: EmbeddedRuntimeSession) {
+        let answer = RuntimeControl.decode(
+            RuntimeControl.NetworkSet.self, from: session.control(RuntimeControl.setNetwork(facts).request)
+        )
+        if let answer, answer.changed {
+            events.record("network for subnet groups: \(facts?.kind ?? "unknown")")
         }
     }
 

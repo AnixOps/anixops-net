@@ -12,6 +12,40 @@ public struct NetworkPathKey: Equatable, Sendable {
     }
 }
 
+/// What the tunnel tells the engine about the physical network (`RuntimeControl.setNetwork`), for `subnet` policy
+/// groups: the interface type, the router (first gateway) and the interface's addresses. The Wi-Fi name is not read:
+/// that needs the Access Wi-Fi Information capability (see docs/manual-intervention.md).
+public struct NetworkFacts: Equatable, Sendable {
+    /// Most addresses the engine takes.
+    public static let maxAddresses = 16
+
+    /// `wifi`, `wired` or `cellular`; nil when the interface is something else.
+    public let kind: String?
+    public let router: String?
+    public let addresses: [String]
+
+    public init(kind: String?, router: String?, addresses: [String]) {
+        self.kind = kind
+        self.router = router
+        self.addresses = Array(addresses.prefix(Self.maxAddresses))
+    }
+
+    /// The `set_network` fields; absent ones stay unknown.
+    var fields: [String: Any] {
+        var object: [String: Any] = [:]
+        if let kind {
+            object["type"] = kind
+        }
+        if let router {
+            object["router"] = router
+        }
+        if !addresses.isEmpty {
+            object["addresses"] = addresses
+        }
+        return object
+    }
+}
+
 /// Decides when the tunnel tells the engine to rebuild its connections (`RuntimeControl.resetNetwork`).
 ///
 /// The engine's connections to proxy servers outlive a network change: a shared QUIC session keeps sending to the old
