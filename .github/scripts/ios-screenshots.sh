@@ -72,24 +72,14 @@ shoot() {
     # wait alone sometimes caught the white launch screen or a passing system banner, so the picture is taken again
     # every 2 seconds until two in a row are the same and it is not the blank launch screen (which compresses to
     # under 100 KB; every page with demo data is well above 150 KB).
-    #
-    # A system banner (for example "Ready for Apple Intelligence" on a fresh simulator) can stay up for several
-    # pictures in a row, so a settled picture must also still be the same 8 seconds later, by which time a banner
-    # has gone; if it is not, settling starts again from that later picture.
     sleep 6
-    local previous="" current="" size=0 tries=0 later=""
+    local previous="" current="" size=0 tries=0
     while :; do
         xcrun simctl io "${device}" screenshot --type=png "${file}" > /dev/null 2>&1
         current="$(shasum "${file}" | cut -d' ' -f1)"
         size="$(stat -f%z "${file}")"
         if [ "${current}" = "${previous}" ] && [ "${size}" -gt 120000 ]; then
-            sleep 8
-            xcrun simctl io "${device}" screenshot --type=png "${file}" > /dev/null 2>&1
-            later="$(shasum "${file}" | cut -d' ' -f1)"
-            if [ "${later}" = "${current}" ]; then
-                break
-            fi
-            current="${later}"
+            break
         fi
         tries=$((tries + 1))
         if [ "${tries}" -ge 10 ]; then
