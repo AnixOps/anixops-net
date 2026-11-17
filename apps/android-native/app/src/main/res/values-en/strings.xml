@@ -29,6 +29,10 @@
     <string name="settings_usage">Use AnixOps Net for</string>
     <string name="mode_proxy">Proxy</string>
     <string name="mode_debug">Network debugging</string>
+    <string name="mode_choice_title">What will you mainly use AnixOps Net for?</string>
+    <string name="mode_choice_summary">Both use the same engine and only differ in the window. You can switch any time in Settings.</string>
+    <string name="mode_debug_hint">Capture, HTTPS decryption, rewrites and replay, for development and testing</string>
+    <string name="mode_proxy_hint">Subscriptions, nodes and routing rules, for everyday browsing</string>
     <string name="settings_about">About</string>
     <string name="settings_version">Version</string>
 

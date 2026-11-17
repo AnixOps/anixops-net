@@ -10,9 +10,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * CI's emulator smoke test (x86_64): the app starts, loads libanixops_net.so, opens the Rust client and shows
- * what it answers on the overview, proxies, rules and settings pages. A fresh install has no subscription, so each
- * page shows its empty state, which only appears once the client has answered.
+ * CI's emulator smoke test (x86_64): the app starts, asks for the user agreement and the way it is used, loads
+ * libanixops_net.so, opens the Rust client and shows what it answers on the overview, proxies, rules and settings
+ * pages. A fresh install has no subscription, so each page shows its empty state, which only appears once the client
+ * has answered.
  */
 @RunWith(AndroidJUnit4::class)
 class SmokeTest {
@@ -34,6 +35,10 @@ class SmokeTest {
         // A fresh install starts with the user agreement.
         waitFor(R.string.terms_accept)
         compose.onNodeWithText(text(R.string.terms_accept)).performClick()
+
+        // Then how the app is going to be used; a fresh install has no subscription, so it asks.
+        waitFor(R.string.mode_choice_title)
+        compose.onNodeWithText(text(R.string.mode_proxy)).performClick()
 
         // The overview read through the bridge: with no node the hero card offers an import instead of the switch.
         waitFor(R.string.home_import_first)

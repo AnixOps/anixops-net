@@ -30,4 +30,18 @@ class ModeTest {
         assertEquals(DebugExit.Direct, DebugExit.of("other"))
         assertEquals(DebugExit.Node, DebugExit.of("node"))
     }
+
+    @Test
+    fun firstStartAsksANewUserOnce() {
+        assertEquals(FirstStart.Wait, firstStartMode(stored = null, hasProfile = null))
+        assertEquals(FirstStart.Ask, firstStartMode(stored = null, hasProfile = false))
+        assertEquals(FirstStart.Chosen(AppMode.Debug), firstStartMode(stored = AppMode.Debug, hasProfile = false))
+        assertEquals(FirstStart.Chosen(AppMode.Debug), firstStartMode(stored = AppMode.Debug, hasProfile = null))
+    }
+
+    @Test
+    fun someoneWithASubscriptionOrNodesStaysInProxyMode() {
+        assertEquals(FirstStart.Chosen(AppMode.Proxy), firstStartMode(stored = null, hasProfile = true))
+        assertEquals(FirstStart.Chosen(AppMode.Debug), firstStartMode(stored = AppMode.Debug, hasProfile = true))
+    }
 }

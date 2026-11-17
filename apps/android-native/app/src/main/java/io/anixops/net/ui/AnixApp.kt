@@ -198,6 +198,19 @@ fun AnixApp(
         TermsScreen(termsText, onAccept = { app.acceptTerms(termsVersion) })
         return
     }
+    // After the agreement, a new user picks proxy or debugging once; someone who already has a subscription or nodes
+    // (an upgrade, or a subscription link) stays in proxy mode without being asked. A failed first read asks too.
+    val storedMode by app.storedMode.collectAsStateWithLifecycle()
+    val hasProfile = state.snapshot?.let { !it.subscription.isNullOrBlank() || state.nodeCount > 0 }
+        ?: if (state.notice != null) false else null
+    when (val first = firstStartMode(storedMode, hasProfile)) {
+        FirstStart.Wait -> return
+        FirstStart.Ask -> {
+            ModeChoiceScreen(onChoose = app::setMode)
+            return
+        }
+        is FirstStart.Chosen -> if (storedMode == null) LaunchedEffect(first.mode) { app.setMode(first.mode) }
+    }
     var readingTerms by rememberSaveable { mutableStateOf(false) }
     if (readingTerms) {
         BackTo { readingTerms = false }
