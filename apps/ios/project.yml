@@ -259,6 +259,19 @@ targets:
   # a System Extension (Sources/NetworkCoreMacTunnel/main.swift). It runs as root and cannot read the user's
   # Keychain, so the app hands the node key, node library and MITM root over at start (TunnelStartSecrets).
   # Its bundle ID must start with the app's, and macOS requires the bundle to be named after its bundle ID.
+  # The macOS entry checks of docs/ui-ux.md (入口不变量), run by CI against the demo data.
+  NetworkCoreMacUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: UITests/NetworkCoreMac
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.networkcore.macos.uitests
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: NetworkCoreMac
+
   NetworkCoreMacTunnel:
     type: system-extension
     platform: macOS
@@ -344,3 +357,6 @@ schemes:
         NetworkCoreMac: all
         NetworkCoreMacTunnel: all
         NetworkCoreCLI: all
+    test:
+      targets:
+        - NetworkCoreMacUITests

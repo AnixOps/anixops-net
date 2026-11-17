@@ -154,7 +154,7 @@ private struct MacHeroCard: View {
                     }
                     .buttonStyle(MacHeroButtonStyle(filled: true))
                 } else {
-                    MacConnectSwitch(tunnel: tunnel, controlSize: .large)
+                    MacConnectSwitch(tunnel: tunnel, controlSize: .large, identifier: "home-connect-switch")
                 }
             }
             Spacer(minLength: 0)
