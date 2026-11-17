@@ -8,6 +8,11 @@
 //! [`POLL`] and feeds it to [`NetworkWatch::observe`], which asks for a reset
 //! when the path changed or when the gap between two samples shows the
 //! computer slept.
+//!
+//! The same thread reports the network itself (`{"cmd":"set_network"}`) so
+//! the engine's `subnet` policy groups can pick by it: the local addresses
+//! toward the internet ([`current_addresses`]) plus what the platform reads
+//! (Wi-Fi or cellular and the Wi-Fi name, see `Platform::current_network`).
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 use std::time::{Duration, SystemTime};
@@ -97,6 +102,33 @@ impl NetworkWatch {
     }
 }
 
+/// The local IPv4 and IPv6 addresses the system would use toward the
+/// internet, the ones in [`current_path`]; empty while offline. The clients'
+/// own TUN addresses (see [`is_tunnel_address`]) are left out: while the
+/// default route goes through the tunnel they say nothing about the network.
+pub fn current_addresses() -> Vec<IpAddr> {
+    [
+        local_toward("0.0.0.0:0", PROBE_V4),
+        local_toward("[::]:0", PROBE_V6),
+    ]
+    .into_iter()
+    .flatten()
+    .filter(|ip| !is_tunnel_address(*ip))
+    .collect()
+}
+
+/// Whether `ip` is in a range the clients' TUN interface uses: 198.18.0.0/15
+/// (the interface and Fake-IP) or fd00:4e43::/64.
+pub fn is_tunnel_address(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let [a, b, ..] = v4.octets();
+            a == 198 && (b & 0xfe) == 18
+        }
+        IpAddr::V6(v6) => v6.segments()[..4] == [0xfd00, 0x4e43, 0, 0],
+    }
+}
+
 /// Public addresses only used to pick a route; nothing is sent to them.
 const PROBE_V4: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)), 53);
 const PROBE_V6: SocketAddr = SocketAddr::new(
@@ -138,6 +170,16 @@ mod tests {
 
     fn path(text: &str) -> Option<String> {
         Some(text.to_string())
+    }
+
+    #[test]
+    fn the_tunnel_addresses_are_not_the_network() {
+        for ip in ["198.18.0.1", "198.19.255.1", "fd00:4e43::1"] {
+            assert!(is_tunnel_address(ip.parse().unwrap()), "{ip}");
+        }
+        for ip in ["192.168.1.5", "198.20.0.1", "fd00:4e44::1", "2001:db8::1"] {
+            assert!(!is_tunnel_address(ip.parse().unwrap()), "{ip}");
+        }
     }
 
     #[test]

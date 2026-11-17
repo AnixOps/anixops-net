@@ -176,6 +176,8 @@ class AppViewModel(
 
     fun showNotice(text: String) = _state.update { it.copy(notice = text) }
 
+    fun clearNotice() = _state.update { it.copy(notice = null) }
+
     fun setMode(mode: AppMode) {
         preferences.edit { putString(MODE_KEY, mode.key) }
         _mode.value = mode

@@ -48,6 +48,8 @@
     <string name="home_exit_ip">出口 IP</string>
     <string name="home_after_connect">連線後顯示</string>
     <string name="home_choose_node">先在「代理」裡選擇一個節點</string>
+    <string name="home_import_first">還沒有節點，先匯入訂閱或節點</string>
+    <string name="notice_dismiss">關閉提示</string>
     <string name="home_connections">活躍連線</string>
     <string name="home_no_connections">還沒有連線</string>
     <string name="home_close_all">全部中斷</string>
@@ -487,7 +489,7 @@
     </plurals>
     <string name="setup_title">要看到 HTTPS 請求，還差這幾步</string>
     <string name="setup_connect">連線</string>
-    <string name="setup_connect_hint">開啟上面的「連線」。調試網路預設直連，不需要節點。</string>
+    <string name="setup_connect_hint">開啟底部的「連線」。調試網路預設直連，不需要節點。</string>
     <string name="setup_certificate">信任解密憑證</string>
     <string name="setup_certificate_hint">在「改寫」裡安裝解密憑證，並在系統設定裡信任它。</string>
     <string name="setup_decryption">開啟 HTTPS 解密</string>

@@ -25,6 +25,50 @@ use super::tun::{self, TunEngine};
 pub use super::tun::{attach as attach_tunnel, attached as tunnel_attached};
 use serde_json::{json, Value};
 
+/// The network the engine runs on, as its `set_network` command takes it, for `subnet` policy groups.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct NetworkFacts {
+    /// `wifi`, `wired` or `cellular`; none when unknown.
+    pub kind: Option<&'static str>,
+    /// The Wi-Fi name when the system gives it (1–32 bytes).
+    pub ssid: Option<String>,
+    /// The local addresses toward the internet.
+    pub addresses: Vec<std::net::IpAddr>,
+}
+
+impl NetworkFacts {
+    /// What the Wi-Fi rules read (`Platform::current_network`) plus `addresses`.
+    pub fn new(network: Option<&on_demand::Network>, addresses: Vec<std::net::IpAddr>) -> Self {
+        let (kind, ssid) = match network {
+            Some(on_demand::Network::Wifi(ssid)) => (Some("wifi"), ssid.clone()),
+            Some(on_demand::Network::Cellular) => (Some("cellular"), None),
+            _ => (None, None),
+        };
+        let ssid = ssid.filter(|ssid| !ssid.is_empty() && ssid.len() <= on_demand::MAX_SSID_BYTES);
+        Self {
+            kind,
+            ssid,
+            addresses,
+        }
+    }
+
+    /// The engine control request; absent fields stay unknown.
+    pub fn request(&self) -> Vec<u8> {
+        let mut request = json!({"cmd": "set_network"});
+        if let Some(kind) = self.kind {
+            request["type"] = json!(kind);
+        }
+        if let Some(ssid) = &self.ssid {
+            request["ssid"] = json!(ssid);
+        }
+        if !self.addresses.is_empty() {
+            let addresses: Vec<String> = self.addresses.iter().map(ToString::to_string).collect();
+            request["addresses"] = json!(addresses);
+        }
+        request.to_string().into_bytes()
+    }
+}
+
 const PROFILE_ID: &str = "linux-gui";
 pub const DELAY_TIMEOUT: Duration = Duration::from_secs(5);
 /// Concurrent delay tests when picking the fastest node, as on Windows.
@@ -429,6 +473,12 @@ impl Engine {
         self.control_bytes(&reset.request()).map(|_| ())
     }
 
+    /// Reports the network under the engine (`set_network`, see `network_watch`) for its `subnet` groups.
+    /// Engines without the command answer an error, which is ignored.
+    pub fn set_network(&self, network: &NetworkFacts) -> Result<(), String> {
+        self.control_bytes(&network.request()).map(|_| ())
+    }
+
     /// The local proxy's address; none through a TUN interface, where traffic comes in through the device.
     #[cfg(not(target_os = "android"))]
     pub fn address(&self) -> Option<SocketAddr> {
@@ -556,6 +606,29 @@ pub fn fastest_node(nodes: &[NodeDescriptor], url: &str) -> Option<(String, Dura
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_network_request_carries_what_is_known() {
+        let addresses = vec![
+            "192.168.1.5".parse().unwrap(),
+            "2001:db8::5".parse().unwrap(),
+        ];
+        let wifi = on_demand::Network::Wifi(Some("Home \"5G\"".to_string()));
+        let request: Value =
+            serde_json::from_slice(&NetworkFacts::new(Some(&wifi), addresses).request()).unwrap();
+        assert_eq!(
+            request,
+            json!({"cmd": "set_network", "type": "wifi", "ssid": "Home \"5G\"",
+                   "addresses": ["192.168.1.5", "2001:db8::5"]})
+        );
+        let unknown = NetworkFacts::new(Some(&on_demand::Network::Other), Vec::new());
+        assert_eq!(unknown.request(), br#"{"cmd":"set_network"}"#.to_vec());
+        let hidden = NetworkFacts::new(Some(&on_demand::Network::Wifi(None)), Vec::new());
+        assert_eq!(
+            hidden.request(),
+            br#"{"cmd":"set_network","type":"wifi"}"#.to_vec()
+        );
+    }
 
     const LINK: &str = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@82.47.34.99:11111#HK";
 

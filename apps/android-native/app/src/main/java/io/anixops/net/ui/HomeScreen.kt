@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -30,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -62,6 +64,10 @@ data class HomeActions(
     val setRoutingMode: (String) -> Unit = {},
     val closeConnection: (Long) -> Unit = {},
     val closeAll: () -> Unit = {},
+    /** Clears [UiState.notice] (the connection's own error stays until the next attempt). */
+    val dismissNotice: () -> Unit = {},
+    /** Opens the import form on 代理, from the hero card while there is nothing to connect with. */
+    val openImport: () -> Unit = {},
 )
 
 /** 首页: the connection switch on the brand hero card, live traffic, what the connection uses, open connections. */
@@ -70,8 +76,8 @@ fun HomeScreen(state: UiState, actions: HomeActions, modifier: Modifier = Modifi
     val snapshot = state.snapshot
     val overview = state.overview
     Page(stringResource(R.string.nav_home), modifier) {
-        ConnectionCard(overview, state.busy, actions)
-        val error = state.notice ?: overview?.error
+        ConnectionCard(overview, state.busy, state.nodeCount, actions)
+        val error = state.problem()
         if (error != null) ErrorCard(error)
         TrafficSection(overview?.traffic)
         Section(title = null) {
@@ -101,7 +107,7 @@ fun HomeScreen(state: UiState, actions: HomeActions, modifier: Modifier = Modifi
 
 /** The hero card (brand moment, E1): always the dark brand gradient, so its colours are the dark palette's. */
 @Composable
-private fun ConnectionCard(overview: Overview?, busy: Boolean, actions: HomeActions) {
+private fun ConnectionCard(overview: Overview?, busy: Boolean, nodeCount: Int, actions: HomeActions) {
     val palette = LocalBrandPalette.current
     val heroText = BrandPalette.Dark
     val state = overview?.state ?: "disconnected"
@@ -113,8 +119,11 @@ private fun ConnectionCard(overview: Overview?, busy: Boolean, actions: HomeActi
         else -> Brand.lineMuted
     }
     val node = overview?.node
+    // Nothing to connect with: the switch would only sit there disabled, so the card says why and offers the import.
+    val needsImport = overview != null && !connected && !overview.canConnect && nodeCount == 0
     val detail = when {
         overview == null -> ""
+        needsImport -> stringResource(R.string.home_import_first)
         overview.egress == "direct" -> stringResource(R.string.home_egress_direct)
         node != null -> node.label
         else -> stringResource(R.string.home_choose_node)
@@ -147,15 +156,21 @@ private fun ConnectionCard(overview: Overview?, busy: Boolean, actions: HomeActi
                 }
                 Text(detail, style = MaterialTheme.typography.bodyMedium, color = Brand.lineMuted)
             }
-            Switch(
-                checked = connected,
-                enabled = !busy && overview != null && (connected || overview.canConnect),
-                onCheckedChange = { on -> if (on) actions.connect() else actions.disconnect() },
-                modifier = Modifier.semantics {
-                    contentDescription = switchLabel
-                    stateDescription = status
-                },
-            )
+            if (needsImport) {
+                Button(onClick = actions.openImport) { Text(stringResource(R.string.subscription_import)) }
+            } else {
+                Switch(
+                    checked = connected,
+                    enabled = !busy && overview != null && (connected || overview.canConnect),
+                    onCheckedChange = { on -> if (on) actions.connect() else actions.disconnect() },
+                    modifier = Modifier
+                        .testTag(CONNECT_SWITCH_TAG)
+                        .semantics {
+                            contentDescription = switchLabel
+                            stateDescription = status
+                        },
+                )
+            }
         }
     }
 }
@@ -291,7 +306,9 @@ private fun ErrorCard(message: String) {
         shape = MaterialTheme.shapes.medium,
         color = palette.dangerSoft,
         contentColor = palette.text,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(NOTICE_TAG),
     ) {
         Column(
             modifier = Modifier.padding(BrandSpacing.md),

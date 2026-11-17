@@ -53,6 +53,8 @@
     <string name="home_exit_ip">出口 IP</string>
     <string name="home_after_connect">连接后显示</string>
     <string name="home_choose_node">先在“代理”里选择一个节点</string>
+    <string name="home_import_first">还没有节点，先导入订阅或节点</string>
+    <string name="notice_dismiss">关闭提示</string>
     <string name="home_connections">活跃连接</string>
     <string name="home_no_connections">还没有连接</string>
     <string name="home_close_all">全部断开</string>
@@ -497,7 +499,7 @@
     </plurals>
     <string name="setup_title">要看到 HTTPS 请求，还差这几步</string>
     <string name="setup_connect">连接</string>
-    <string name="setup_connect_hint">打开上面的“连接”。调试网络默认直连，不需要节点。</string>
+    <string name="setup_connect_hint">打开底部的“连接”。调试网络默认直连，不需要节点。</string>
     <string name="setup_certificate">信任解密证书</string>
     <string name="setup_certificate_hint">在“改写”里安装解密证书，并在系统设置里信任它。</string>
     <string name="setup_decryption">开启 HTTPS 解密</string>
