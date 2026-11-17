@@ -6,7 +6,7 @@ import { formatRate } from "./activity-format";
 import { AppLink, findLinkMember, findLinkNode, parseAppLink } from "./app-link";
 import { desktop, NodeDelay, NodeSummary, RuntimeSnapshot } from "./bridge";
 import { Wordmark } from "./brand";
-import { connectionTitle, connectPhase, routingLabel } from "./labels";
+import { connectionTitle, connectPhase, failureReason, routingLabel, sidebarDetail } from "./labels";
 import { ActivityPage } from "./pages/ActivityPage";
 import { RequestsPage } from "./pages/RequestsPage";
 import { ExtensionsPage } from "./pages/ExtensionsPage";
@@ -237,9 +237,27 @@ export function App() {
   const title = t(pages.find((item) => item.page === page)?.label ?? "");
   const dotTone = phase === "on" ? "success" : phase === "failed" ? "danger" : phase === "connecting" || phase === "disconnecting" ? "warning" : "neutral";
   const node = nodes.find((item) => item.id === snapshot?.selectedNode);
-  const sideDetail = phase === "on"
-    ? [node?.label ?? snapshot?.selectedNode, routingLabel(snapshot?.routingMode)].filter(Boolean).join(" · ")
-    : phase === "off" ? "Ctrl+Shift+C" : "";
+  const unconfigured = snapshot !== null && !snapshot.subscription && nodes.length === 0 && !canRunWithoutNodes;
+  const reason = failureReason(snapshot, phase, mode);
+  const sideDetail = sidebarDetail({
+    phase,
+    reason,
+    unconfigured,
+    node: node?.label ?? snapshot?.selectedNode,
+    routing: routingLabel(snapshot?.routingMode),
+  });
+  // The sidebar line is cut to its width, so a new failure is also told in full, once, on any page but the overview
+  // (whose card already shows the whole reason). Errors stay until dismissed.
+  const toldFailure = useRef<string | null>(null);
+  useEffect(() => {
+    if (!reason) {
+      toldFailure.current = null;
+      return;
+    }
+    if (toldFailure.current === reason) return;
+    toldFailure.current = reason;
+    if (page !== "home") show(t("{state}：{reason}", { state: connectionTitle(snapshot?.connection, phase), reason }), "danger");
+  }, [reason, page, phase, show, snapshot?.connection]);
   const moving = phase === "connecting" || phase === "disconnecting";
   // Debug mode's requests are a table beside an inspector that fills the window below the title bar.
   const width = mode === "debug" && page === "activity" ? "split" : pageWidths[page] ?? "narrow";
@@ -280,14 +298,14 @@ export function App() {
             <StatusDot tone={dotTone} />
             <button className="sidebar-status-text" onClick={() => setPage(sidebar.main[0].page)}>
               <strong>{connectionTitle(snapshot?.connection, phase)}</strong>
-              {sideDetail && <small className="truncate">{sideDetail}</small>}
+              {sideDetail.text && <small className={`truncate ${sideDetail.danger ? "danger-text" : ""}`}>{sideDetail.text}</small>}
             </button>
             <Switch
               label={phase === "on" ? t("断开") : t("连接")}
               tone="go"
               checked={phase === "on" || phase === "connecting"}
               busy={moving}
-              disabled={phase === "loading" || moving || (snapshot !== null && !snapshot.subscription && nodes.length === 0 && !canRunWithoutNodes)}
+              disabled={phase === "loading" || moving || unconfigured}
               onChange={toggleConnection}
             />
           </div>
