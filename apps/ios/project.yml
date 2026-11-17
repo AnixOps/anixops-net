@@ -93,8 +93,9 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.networkcore.ios.uitests
         GENERATE_INFOPLIST_FILE: YES
         TARGETED_DEVICE_FAMILY: "1,2"
-    dependencies:
-      - target: NetworkCoreApp
+    # No target application: xcodebuild sometimes failed to resolve the host app's path ("The bundle identifier
+    # for NetworkCoreApp couldn't be read"). The app built earlier in CI is installed by the script and the tests
+    # launch it by bundle identifier or path.
 
   NetworkCorePacketTunnel:
     type: app-extension
@@ -269,8 +270,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.networkcore.macos.uitests
         GENERATE_INFOPLIST_FILE: YES
-    dependencies:
-      - target: NetworkCoreMac
+    # No target application: xcodebuild sometimes failed to resolve the host app's path ("The bundle identifier
+    # for NetworkCoreApp couldn't be read"). The app built earlier in CI is installed by the script and the tests
+    # launch it by bundle identifier or path.
 
   NetworkCoreMacTunnel:
     type: system-extension

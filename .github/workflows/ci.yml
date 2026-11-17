@@ -840,7 +840,7 @@ jobs:
       # it, exactly once, and a failure on the page the user is on. A failure here fails the build.
       - name: Run the iOS UI tests
         shell: bash
-        run: .github/scripts/ios-ui-tests.sh apps/ios/build "${RUNNER_TEMP}/ios-ui-tests.xcresult"
+        run: .github/scripts/ios-ui-tests.sh apps/ios/build/Build/Products/Debug-iphonesimulator/NetworkCoreApp.app apps/ios/build "${RUNNER_TEMP}/ios-ui-tests.xcresult"
 
       - name: Upload the iOS UI test results
         if: ${{ failure() }}
@@ -855,7 +855,7 @@ jobs:
       # the page the user is on. A failure here fails the build.
       - name: Run the macOS UI tests
         shell: bash
-        run: .github/scripts/mac-ui-tests.sh apps/ios/build "${RUNNER_TEMP}/mac-ui-tests.xcresult"
+        run: .github/scripts/mac-ui-tests.sh "apps/ios/build/Build/Products/Debug/AnixOps Net.app" apps/ios/build "${RUNNER_TEMP}/mac-ui-tests.xcresult"
 
       - name: Upload the macOS UI test results
         if: ${{ failure() }}
