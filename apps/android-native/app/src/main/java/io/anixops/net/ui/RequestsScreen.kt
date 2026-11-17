@@ -56,8 +56,6 @@ import java.util.Locale
 
 /** What the requests page asks of its view models. */
 data class RequestsActions(
-    val connect: () -> Unit = {},
-    val disconnect: () -> Unit = {},
     val setCapture: (Boolean) -> Unit = {},
     val clear: () -> Unit = {},
     val toggleQuick: (String) -> Unit = {},
@@ -138,7 +136,7 @@ fun RequestsScreen(state: UiState, requests: RequestsState, actions: RequestsAct
                     )
                     if (capture != null) RequestsMenu(requests, actions)
                 }
-                ConnectionSection(state, capture, requests.busy, actions)
+                if (capture != null) CaptureSection(capture, requests.busy, actions)
                 if (requests.setup.isNotEmpty()) SetupSection(requests.setup, actions)
                 if (holding) {
                     Row(horizontalArrangement = Arrangement.spacedBy(BrandSpacing.xs)) {
@@ -240,35 +238,26 @@ private fun Hint(text: String) {
     )
 }
 
-/** Debug mode has no 首页, so the connection switch lives here, above capture. */
+/**
+ * Capture on or off. The connection switch is not here: debug mode keeps it in the bar under every page
+ * ([DebugConnectionBar]), so it is also there on 改写, 出口, 设置 and the pages opened from this one.
+ */
 @Composable
-private fun ConnectionSection(state: UiState, capture: CaptureStatus?, busy: Boolean, actions: RequestsActions) {
-    val overview = state.overview
-    val connected = overview?.state == "connected"
+private fun CaptureSection(capture: CaptureStatus, busy: Boolean, actions: RequestsActions) {
     Section(title = null) {
         SwitchRow(
-            stringResource(R.string.home_connection),
-            if (state.busy) stringResource(R.string.status_working) else statusLabel(overview?.state ?: "disconnected"),
-            checked = connected,
-            enabled = !state.busy && overview != null && (connected || overview.canConnect),
-            onChange = { on -> if (on) actions.connect() else actions.disconnect() },
+            stringResource(R.string.requests_capture),
+            pluralStringResource(
+                R.plurals.requests_capture_usage,
+                capture.connections,
+                capture.connections,
+                formatBytes(capture.usedBytes),
+                formatBytes(capture.maxTotalBytes),
+            ),
+            checked = capture.enabled,
+            enabled = !busy,
+            onChange = actions.setCapture,
         )
-        if (capture != null) {
-            RowDivider()
-            SwitchRow(
-                stringResource(R.string.requests_capture),
-                pluralStringResource(
-                    R.plurals.requests_capture_usage,
-                    capture.connections,
-                    capture.connections,
-                    formatBytes(capture.usedBytes),
-                    formatBytes(capture.maxTotalBytes),
-                ),
-                checked = capture.enabled,
-                enabled = !busy,
-                onChange = actions.setCapture,
-            )
-        }
     }
 }
 
