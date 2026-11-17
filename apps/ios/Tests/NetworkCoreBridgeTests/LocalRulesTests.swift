@@ -62,6 +62,20 @@ final class LocalRulesTests: XCTestCase {
         XCTAssertNotNil(engine.ruleSets["geosite-cn"])
     }
 
+    func testRejectVariantsKeepTheirAnswer() throws {
+        let policy = { (line: String) in try LocalRules.rule(from: line).policy }
+        XCTAssertEqual(try policy("DOMAIN,a.example,REJECT"), .reject)
+        XCTAssertEqual(try policy("DOMAIN,a.example,reject-drop"), .rejectDrop)
+        XCTAssertEqual(try policy("DOMAIN,a.example,REJECT-NO-DROP"), .rejectNoDrop)
+        XCTAssertEqual(try policy("DOMAIN,a.example,REJECT-TINYGIF"), .rejectTinyGif)
+        XCTAssertEqual(try policy("DOMAIN,a.example,REJECT-IMG"), .rejectTinyGif)
+        // Answers that need decryption stay a plain REJECT.
+        XCTAssertEqual(try policy("DOMAIN,a.example,REJECT-200"), .reject)
+        XCTAssertEqual(try LocalRules.rule(from: "DOMAIN,a.example,REJECT-DROP").text, "DOMAIN,a.example,REJECT-DROP")
+        XCTAssertTrue(LocalRules.Policy.rejectDrop.isReject)
+        XCTAssertFalse(LocalRules.Policy.direct.isReject)
+    }
+
     func testUserRulesGoFirstWithProxyReplaced() throws {
         let report = try NativeImportReport.decoded(from: Data(plainReport.utf8))
         let library = NodeLibrary(report: report, subscriptionURL: nil, keeping: nil)
@@ -77,7 +91,7 @@ final class LocalRulesTests: XCTestCase {
         XCTAssertEqual(routing.rules, [
             "DOMAIN-SUFFIX,example.com,a",
             "IP-CIDR,203.0.113.0/24,DIRECT,no-resolve",
-            "RULE-SET,local-1,REJECT",
+            "RULE-SET,local-1,REJECT-TINYGIF",
             "FINAL,a",
         ])
         XCTAssertEqual(routing.ruleSets?["local-1"]?.url, "https://lists.example/ads.list")

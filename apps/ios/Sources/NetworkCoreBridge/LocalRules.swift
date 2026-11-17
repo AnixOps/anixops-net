@@ -14,14 +14,29 @@ public struct LocalRules: Codable, Equatable {
     public static let maxRules = 1000
 
     /// Where a rule sends matching traffic. `proxy` is the selected node, or with subscription rules the
-    /// subscription's first policy group.
+    /// subscription's first policy group. The engine answers `rejectDrop` with nothing, `rejectTinyGif` with a
+    /// transparent 1x1 GIF to a plain HTTP request, and never turns `rejectNoDrop` into a drop when an app retries
+    /// it too often (a plain `reject` it does).
     public enum Policy: String, Codable, CaseIterable, Identifiable {
         case proxy = "PROXY"
         case direct = "DIRECT"
         case reject = "REJECT"
+        case rejectNoDrop = "REJECT-NO-DROP"
+        case rejectDrop = "REJECT-DROP"
+        case rejectTinyGif = "REJECT-TINYGIF"
 
         public var id: String {
             rawValue
+        }
+
+        /// Whether the policy refuses the connection.
+        public var isReject: Bool {
+            switch self {
+            case .proxy, .direct:
+                return false
+            case .reject, .rejectNoDrop, .rejectDrop, .rejectTinyGif:
+                return true
+            }
         }
     }
 
@@ -244,6 +259,13 @@ public struct LocalRules: Codable, Equatable {
         if upper == "DIRECT" {
             return .direct
         }
+        if upper == "REJECT-IMG" {
+            return .rejectTinyGif
+        }
+        if let policy = Policy(rawValue: upper), policy.isReject {
+            return policy
+        }
+        // Loon's REJECT-200, REJECT-DICT and the like only mean something after decryption.
         if upper.hasPrefix("REJECT") {
             return .reject
         }
