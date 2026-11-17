@@ -29,6 +29,10 @@
     <string name="settings_usage">使用方式</string>
     <string name="mode_proxy">代理</string>
     <string name="mode_debug">調試網路</string>
+    <string name="mode_choice_title">你主要用 AnixOps Net 做什麼？</string>
+    <string name="mode_choice_summary">兩種模式用同一個核心，只是介面不同。之後可以隨時在設定裡切換。</string>
+    <string name="mode_debug_hint">擷取、HTTPS 解密、改寫和重播，給開發和測試用</string>
+    <string name="mode_proxy_hint">訂閱、節點和分流規則，日常上網用</string>
     <string name="settings_about">關於</string>
     <string name="settings_version">版本</string>
 

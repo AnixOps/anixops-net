@@ -183,6 +183,15 @@ class ScreenshotTest {
     fun termsConsentPhoneDarkEn() = captureTerms("terms-consent-phone-dark-en", PHONE, "en", dark = true, consent = true)
 
     @Test
+    fun modeChoicePhoneLightZh() = captureModeChoice("mode-choice-phone-light-zh", PHONE, "zh-rCN", dark = false)
+
+    @Test
+    fun modeChoicePhoneDarkEn() = captureModeChoice("mode-choice-phone-dark-en", PHONE, "en", dark = true)
+
+    @Test
+    fun modeChoiceTabletLightZh() = captureModeChoice("mode-choice-tablet-light-zh", TABLET, "zh-rCN", dark = false)
+
+    @Test
     fun termsViewerTabletLightZh() = captureTerms("terms-viewer-tablet-light-zh", TABLET, "zh-rCN", dark = false, consent = false)
 
     @Test
@@ -541,6 +550,15 @@ class ScreenshotTest {
         captureRoboImage("src/test/screenshots/$name.png") {
             AnixTheme {
                 TermsScreen(markdown, onAccept = if (consent) ({}) else null)
+            }
+        }
+    }
+
+    private fun captureModeChoice(name: String, device: String, locale: String, dark: Boolean) {
+        RuntimeEnvironment.setQualifiers("$locale-$device-${if (dark) "night" else "notnight"}-xhdpi")
+        captureRoboImage("src/test/screenshots/$name.png") {
+            AnixTheme {
+                ModeChoiceScreen(onChoose = {})
             }
         }
     }

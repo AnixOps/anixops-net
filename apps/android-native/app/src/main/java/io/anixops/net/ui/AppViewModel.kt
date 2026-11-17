@@ -84,6 +84,11 @@ class AppViewModel(
     private val _mode = MutableStateFlow(AppMode.of(preferences.getString(MODE_KEY, null)))
     val mode: StateFlow<AppMode> = _mode.asStateFlow()
 
+    private val _storedMode = MutableStateFlow(preferences.getString(MODE_KEY, null)?.let(AppMode::of))
+
+    /** The mode chosen on this device, or null before the first start's choice ([firstStartMode]). */
+    val storedMode: StateFlow<AppMode?> = _storedMode.asStateFlow()
+
     private val _debugExit = MutableStateFlow(DebugExit.of(preferences.getString(EXIT_KEY, null)))
     val debugExit: StateFlow<DebugExit> = _debugExit.asStateFlow()
 
@@ -181,6 +186,7 @@ class AppViewModel(
     fun setMode(mode: AppMode) {
         preferences.edit { putString(MODE_KEY, mode.key) }
         _mode.value = mode
+        _storedMode.value = mode
         viewModelScope.launch { refresh() }
     }
 
