@@ -7,7 +7,7 @@ import { connectionName, formatRate } from "../activity-format";
 import { BrandMark } from "../brand";
 import { chartCeiling, chartPoints, colorFor, daysLeft, siteOf, topUsage, UsageRow } from "../dashboard";
 import { liveEngine, usePolling } from "../live";
-import { availableRoutingModes, ConnectPhase, connectionTitle, dnsPresetLabel, groupMemberLabel, protocolAbbreviation, routingLabel } from "../labels";
+import { availableRoutingModes, ConnectPhase, connectionTitle, dnsPresetLabel, failureReason, groupMemberLabel, protocolAbbreviation, routingLabel } from "../labels";
 import { delayLabel, delayTone } from "../node-filter";
 import { formatBytes, formatDay, updateIntervalLabel, usedFraction } from "../subscription-format";
 import { useTraffic } from "../traffic-feed";
@@ -119,7 +119,7 @@ function Hero({ snapshot, nodes, phase, busy, run, toggle, goTo, delays, probe }
       case "disconnecting":
         return t("正在恢复系统代理设置");
       case "failed":
-        return snapshot?.configurationError ?? snapshot?.lastError ?? t("查看“活动”了解原因");
+        return failureReason(snapshot, phase, "proxy");
       case "loading":
         return " ";
       default:

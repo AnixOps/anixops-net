@@ -281,6 +281,20 @@ struct MacCommandPalette: View {
                 ))
             }
         }
+        let takeoverPrefix = String(localized: "接管方式")
+        for value in TrafficTakeover.choices(macOS: true) where value != tunnel.takeover {
+            list.append(Entry(
+                item: .init(
+                    id: "cmd.takeover.\(value.rawValue)", kind: .command,
+                    title: "\(takeoverPrefix)：\(TakeoverSection.title(value))"
+                ),
+                run: {
+                    Task {
+                        await tunnel.setTakeover(value)
+                    }
+                }
+            ))
+        }
         if !tunnel.subscriptions.groups.isEmpty {
             list.append(Entry(
                 item: .init(id: "cmd.subscriptions", kind: .command, title: String(localized: "更新全部订阅")),
