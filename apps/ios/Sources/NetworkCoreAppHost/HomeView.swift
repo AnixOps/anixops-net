@@ -219,6 +219,7 @@ private struct ConnectCard: View {
                 .buttonStyle(PressableStyle())
                 .disabled(phase == .disconnecting)
                 .accessibilityLabel(phase.accessibilityLabel)
+                .accessibilityIdentifier("connect-switch")
                 .sensoryFeedback(.success, trigger: phase) { _, new in new == .on }
                 .sensoryFeedback(.impact(weight: .light), trigger: phase) { _, new in new == .connecting }
 
@@ -371,6 +372,7 @@ private struct CompactConnectButton: View {
         .buttonStyle(PressableStyle())
         .disabled(phase == .disconnecting)
         .accessibilityLabel(phase.accessibilityLabel)
+        .accessibilityIdentifier("connect-switch")
     }
 
     @ViewBuilder
@@ -418,6 +420,7 @@ private struct NoticeCard: View {
                         .foregroundStyle(brand.text)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
+                        .accessibilityIdentifier("app-notice")
                     Button(action: dismiss) {
                         Image(systemName: "xmark")
                             .font(.footnote.weight(.semibold))

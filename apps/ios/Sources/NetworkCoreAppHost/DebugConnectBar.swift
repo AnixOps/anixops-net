@@ -31,6 +31,9 @@ struct DebugConnectBar: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityElement(children: .combine)
+                // One element for the status and its detail; the UI tests find a notice by this identifier. Set on
+                // the combined element, not on the notice's text inside it, which would expose the notice twice.
+                .accessibilityIdentifier(tunnel.notice != nil ? "app-notice" : "connect-status")
                 if tunnel.notice != nil {
                     Button {
                         tunnel.clearMessage()
@@ -59,6 +62,7 @@ struct DebugConnectBar: View {
                 .tint(brand.success)
                 .disabled(phase == .unconfigured || phase == .disconnecting)
                 .accessibilityLabel(Text("连接"))
+                .accessibilityIdentifier("connect-switch")
                 .sensoryFeedback(.success, trigger: phase) { _, new in new == .on }
             }
             .padding(.horizontal, 16)
@@ -101,13 +105,58 @@ struct DebugConnectBar: View {
     }
 }
 
+/// Proxy mode's notice on a tab other than the overview. The overview shows notices in a card with the buttons
+/// that fix them; a failure caused on another tab (switching a node or the proxy mode, saving DNS, plugins or
+/// reconnect settings) has to show where it happened too, or the tap seems to do nothing (docs/ui-ux.md,
+/// 入口不变量 2). One line of text and a way to dismiss it, above the tab bar.
+struct NoticeBar: View {
+    var tunnel: TunnelController
+    let notice: AppNotice
+    @Environment(\.brand) private var brand
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Divider()
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(brand.warning)
+                    .accessibilityHidden(true)
+                Text(notice.text)
+                    .font(.subheadline)
+                    .foregroundStyle(brand.text)
+                    .lineLimit(4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                    .accessibilityIdentifier("app-notice")
+                Button {
+                    tunnel.clearMessage()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(brand.text2)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("关闭提示")
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+        .background(.bar)
+    }
+}
+
 extension View {
-    /// Puts debug mode's connect bar under the content; proxy mode has the overview's connect card instead. The
-    /// inset is always there (empty in proxy mode), so switching modes does not rebuild the page under it.
-    func debugConnectBar(_ tunnel: TunnelController) -> some View {
+    /// Puts debug mode's connect bar under the content; proxy mode has the overview's connect card instead, and
+    /// on its other tabs a bar only while there is a notice to show. The inset is always there, so switching
+    /// modes or tabs does not rebuild the page under it.
+    func debugConnectBar(_ tunnel: TunnelController, section: AppTab) -> some View {
         safeAreaInset(edge: .bottom, spacing: 0) {
             if tunnel.appMode == .debug {
                 DebugConnectBar(tunnel: tunnel)
+            } else if section != .home, let notice = tunnel.notice {
+                NoticeBar(tunnel: tunnel, notice: notice)
             }
         }
     }

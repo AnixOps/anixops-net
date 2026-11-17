@@ -11575,6 +11575,38 @@
         }
       }
     },
+    "上次停止原因：%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last stop reason: %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上次停止原因：%@"
+          }
+        }
+      }
+    },
+    "打开 AnixOps Net 查看": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open AnixOps Net to see more"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打開 AnixOps Net 查看"
+          }
+        }
+      }
+    },
     "接管方式": {
       "localizations": {
         "en": {

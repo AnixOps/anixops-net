@@ -2043,6 +2043,10 @@ extension TunnelController {
         // Screenshots of debug mode pass `-AnixOpsMode debug`; `choose` shows the first-launch mode choice.
         let demoMode = UserDefaults.standard.string(forKey: "AnixOpsMode") ?? ""
         appMode = demoMode == "choose" ? nil : AppMode(rawValue: demoMode) ?? .proxy
+        // The UI tests pass `-AnixOpsNotice <text>` to check that a failure shows on every page.
+        if let text = UserDefaults.standard.string(forKey: "AnixOpsNotice"), !text.isEmpty {
+            message = text
+        }
         loaded = true
     }
 

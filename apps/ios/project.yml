@@ -82,6 +82,20 @@ targets:
       - framework: Generated/NetworkCoreRuntime.xcframework
         embed: false
 
+  # The entry checks of docs/ui-ux.md (入口不变量), run by CI on a simulator against the demo data.
+  NetworkCoreAppUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests/NetworkCoreApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.networkcore.ios.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+    dependencies:
+      - target: NetworkCoreApp
+
   NetworkCorePacketTunnel:
     type: app-extension
     platform: iOS
@@ -320,6 +334,9 @@ schemes:
         NetworkCoreApp: all
         NetworkCorePacketTunnel: all
         NetworkCoreWidget: all
+    test:
+      targets:
+        - NetworkCoreAppUITests
 
   NetworkCoreMac:
     build:
