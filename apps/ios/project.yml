@@ -186,6 +186,7 @@ targets:
       - path: Sources/NetworkCoreAppHost/URLCommandHandler.swift
       - path: Sources/NetworkCoreAppHost/AppNotifications.swift
       - path: Sources/NetworkCoreAppHost/BlockQuicSection.swift
+      - path: Sources/NetworkCoreAppHost/TakeoverSection.swift
       - path: Sources/NetworkCoreAppHost/DiagnosticEventsView.swift
       - path: Sources/NetworkCoreAppHost/NativeNodeImporterFFI.swift
       - path: Sources/NetworkCoreAppHost/NodeDelayFFI.swift

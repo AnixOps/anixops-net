@@ -110,6 +110,8 @@ export const english: Record<string, string> = {
   "正在建立安全隧道": "Setting up the secure tunnel",
   "正在恢复系统代理设置": "Restoring the system proxy settings",
   "查看“活动”了解原因": "See Activity for the reason",
+  "查看“请求 › 连接”了解原因": "See Requests › Connections for the reason",
+  "{state}：{reason}": "{state}: {reason}",
   "点击左侧按钮连接 · Ctrl+Shift+C": "Click the button on the left to connect · Ctrl+Shift+C",
   "断开，当前已连接": "Disconnect, currently connected",
   "正在连接": "Connecting",

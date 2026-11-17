@@ -317,6 +317,18 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 - [ ] 授权对话框点“取消”时提示“TUN mode was not allowed”，不会留下网卡；关闭 TUN 模式后连接回到系统代理方式。
 - [ ] tarball 版本（未装 polkit 规则）用通用的“以其他用户运行程序”授权，同样能连上。
 
+## 苹果平台接管方式真机验收（`docs/system-proxy.md`）
+
+- [ ] iOS 默认“VPN + 系统代理”连接后，设置 > 无线局域网 > 当前网络 > 配置代理 不需要改动；Safari 打开网页，连接列表里能看到按域名（`CONNECT` 目标）走规则的连接；`URL-REGEX` 规则对明文 HTTP 生效。
+- [ ] iOS 同样模式下，不走系统代理的 App（游戏、`ping`、UDP）仍然经过 VPN；诊断事件里有 “system proxy on port 8890”。
+- [ ] iOS 切到“仅 VPN”后自动重连一次，诊断事件里没有 system proxy，行为与之前版本一致。
+- [ ] macOS 三种模式都能连接：“仅系统代理”时 系统设置 > 网络 > 当前网络 > 代理 显示网页代理和安全网页代理为 127.0.0.1:8890（或诊断事件里的端口），`netstat -rn` 没有指向 utun 的默认路由；`curl -x '' https://ip.sb`（不走代理）直接出去。断开后系统代理恢复原样。
+- [ ] macOS 有 `PROCESS-NAME` 规则时，经系统代理的连接在连接列表里显示进程名，规则生效。
+- [ ] 编辑“跳过代理的地址”加入 `*.example.com` 后重连，访问它不经过代理（连接列表里看不到经代理的连接；“VPN + 系统代理”下仍经 VPN）。
+- [ ] 开着 HTTPS 解密时，经系统代理的 HTTPS 也被解密，抓包和改写与 VPN 路径一致。
+- [ ] macOS 网关模式：打开后重连，诊断事件里是 “gateway: ip forwarding on” 还是 “may not turn it on”（沙盒里的系统扩展能否改 sysctl 待真机确认）；后一种情况按设置页命令手动开启，状态变成“已开启”。
+- [ ] 另一台设备（手机或游戏机）把路由器设为 Mac 的局域网地址、DNS 设为 198.18.0.2：能上网，Mac 的连接列表里出现它的连接，规则、MITM 生效；断开 VPN 后 `sysctl net.inet.ip.forwarding` 回到 0（如果是隧道打开的）。
+
 ## Windows / Linux 原生界面（`docs/architecture/desktop-native.md`）
 
 - [ ] Windows 代码签名证书：发布物现在没有 Authenticode 签名。原生版把内核放进系统服务，未签名的服务更容易被安全软件
