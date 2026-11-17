@@ -51,8 +51,11 @@ jobs:
       - name: No preset scripts or routing rules
         run: python3 .github/scripts/no_presets.py
 
-      # Pull requests run only the platforms their paths touch. Pushes to main, manual runs and any change to
-      # the workspace, lockfile, workflows or scripts run everything.
+      # Pull requests run only the platforms their paths touch. Manual runs, every push to main that changes
+      # anything besides documentation, and any change to the workspace, lockfile, workflows or scripts run
+      # everything. A push to main that only changes documentation (root *.md other than TERMS.md, docs/) runs
+      # nothing: no build reads those files. Its CI summary then has skipped jobs, which release.yml does not
+      # accept, so such a commit is released only after a manual (full) run.
       - name: Classify changed paths
         id: changes
         shell: bash
@@ -60,12 +63,40 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.event.after }}
         run: |
           set -euo pipefail
           rust=false; ui=false; windows=false; linux=false; apple=false; android_native=false
           windows_native=false; linux_native=false
           all() { rust=true; ui=true; windows=true; linux=true; apple=true; android_native=true; windows_native=true; linux_native=true; }
-          if [[ "${EVENT_NAME}" != pull_request ]]; then
+          # Documentation no build, test or packaging step reads. TERMS.md is not here: the apps bundle it.
+          docs_only() {
+            local path
+            while IFS= read -r path; do
+              case "${path}" in
+                TERMS.md) return 1 ;;
+                docs/*) ;;
+                # A README.md inside a crate or app can be read by the build (rustdoc include_str!).
+                */*) return 1 ;;
+                *.md) ;;
+                *) return 1 ;;
+              esac
+            done
+          }
+          if [[ "${EVENT_NAME}" == push ]]; then
+            # A new branch, or a force push whose old commit is gone, cannot be diffed: run everything.
+            if [[ "${PUSH_BEFORE}" =~ ^0+$ ]] || ! git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then
+              all
+            elif ! changed="$(git diff --name-only "${PUSH_BEFORE}" "${PUSH_AFTER}")" || [[ -z "${changed}" ]]; then
+              all
+            elif docs_only <<< "${changed}"; then
+              echo "Documentation-only push to main; no build reads these files:"
+              echo "${changed}"
+            else
+              all
+            fi
+          elif [[ "${EVENT_NAME}" != pull_request ]]; then
             all
           else
             while IFS= read -r path; do
@@ -102,9 +133,10 @@ jobs:
                   rust=true; windows=true; linux=true; android_native=true; windows_native=true
                   linux_native=true ;;
                 apps/ios/*) apple=true ;;
-                # The desktop UI and the native Android app bundle TERMS.md and the Apple tests check its version
-                # (first-start consent).
-                TERMS.md) ui=true; windows=true; linux=true; apple=true; android_native=true ;;
+                # The desktop UI and the native Android app bundle TERMS.md (first-start consent; the Android
+                # screenshots show it) and the Apple tests check its version. The Windows and Linux desktop jobs
+                # only package the interface the ui job builds and tests, so the text needs nothing from them.
+                TERMS.md) ui=true; apple=true; android_native=true ;;
                 *) ;;
               esac
             done < <(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")

@@ -267,6 +267,13 @@ jobs:
             echo "::error::Selected CI run does not contain a successful CI summary job."
             exit 1
           fi
+          # A documentation-only push to main skips every build job (ci.yml, "Classify changed paths") and its
+          # summary still passes. A release needs a run in which every job ran and passed: run CI manually first.
+          not_run="$(jq -r '[.jobs[] | select(.conclusion != "success") | "\(.name)=\(.conclusion)"] | join(", ")' <<< "${jobs_json}")"
+          if [ -n "${not_run}" ]; then
+            echo "::error::Selected CI run did not run and pass every job (${not_run}). Run the CI workflow manually on ${RELEASE_SHA} and release again."
+            exit 1
+          fi
 
           ci_checked_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
           {
