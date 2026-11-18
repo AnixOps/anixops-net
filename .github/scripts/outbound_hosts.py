@@ -89,7 +89,9 @@ def not_packaged(path: str) -> bool:
 
 def ignorable(host: str) -> bool:
     host = host.strip(".").lower()
-    if host in NOT_NETWORK or host in RESERVED_NAMES or host.endswith(RESERVED_SUFFIXES):
+    if host in NOT_NETWORK or host.endswith(RESERVED_SUFFIXES):
+        return True
+    if any(host == name or host.endswith("." + name) for name in RESERVED_NAMES):
         return True
     if "." not in host:
         # A placeholder such as https://host or https://api in help text or a format string.
