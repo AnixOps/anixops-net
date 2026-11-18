@@ -44,6 +44,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var memoryPressure: DispatchSourceMemoryPressure?
     /// Recent events for the app's developer mode. Same rule as the system log: fixed reasons and codes only.
     private let events = TunnelDiagnosticLog()
+    /// Whether the running engine decrypts HTTPS, set by `makeRuntimeSession` (`TunnelAppMessage.httpsDecryption`).
+    private var httpsDecryption = HttpsDecryptionState(status: .unused)
     /// Hourly traffic by host and policy for the app's statistics page.
     private let trafficStats = TrafficStatsRecorder()
     /// Network changes in, script notifications out.
@@ -253,6 +255,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         pathObservation = nil
         lastPath = nil
         physicalNetwork.stop()
+        if let session {
+            saveCaptureOnStop(session)
+        }
         session?.stop()
         session = nil
         startedAt = nil
@@ -353,6 +358,22 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
     }
 
+    /// Capture lives in the engine's memory and ends with the tunnel. When it is still on and holds something, it is
+    /// sealed into a saved session first (`save_capture`, 7 days), so disconnecting stops capture without losing
+    /// what it caught. A session being viewed (`load_capture` turns capture off) is not saved again.
+    private func saveCaptureOnStop(_ session: EmbeddedRuntimeSession) {
+        guard let status = RuntimeControl.decode(PacketCapture.Status.self, from: session.control(RuntimeControl.captureStatus.request)),
+              status.enabled, status.connections > 0
+        else {
+            return
+        }
+        let answer = RuntimeControl.decode(
+            PacketCapture.SavedAnswer.self,
+            from: session.control(RuntimeControl.saveCapture(name: String(localized: "断开时自动保存")).request)
+        )
+        events.record(answer != nil ? "capture saved on stop, \(status.connections) connections" : "capture not saved on stop")
+    }
+
     private func watchNetworkPath() {
         pathObservation?.invalidate()
         pathObservation = observe(\.defaultPath, options: [.initial, .new]) { [weak self] provider, _ in
@@ -413,6 +434,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             completionHandler?(trafficStats.snapshot())
         case .clearTrafficStats:
             completionHandler?(trafficStats.clear())
+        case .httpsDecryption:
+            completionHandler?(session == nil ? nil : httpsDecryption.encoded())
         case let .notificationSettings(data):
             applyNotificationSettings(NotificationSettings.fromProfileValue(data))
             completionHandler?(Data("ok".utf8))
@@ -579,6 +602,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                                 packetFlow: packetFlow
                             )
                             events.record("https decryption on, \(mitmPlugins.count) plugins, \(mitmScripts.count) scripts")
+                            httpsDecryption = HttpsDecryptionState(status: .on, plugins: mitmPlugins.count)
                             return session
                         } catch let failure as EmbeddedRuntimeSession.Failure {
                             events.record("scripts off: runtime refused them (code \(failure.code))")
@@ -593,16 +617,23 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                         packetFlow: packetFlow
                     )
                     events.record("https decryption on, \(mitmPlugins.count) plugins")
+                    httpsDecryption = HttpsDecryptionState(status: .on, plugins: mitmPlugins.count)
                     return session
                 }
                 events.record("https decryption off: no root certificate")
+                httpsDecryption = HttpsDecryptionState(status: .off, reason: .noRoot, plugins: mitmPlugins.count)
             } catch let failure as MitmCertificateStore.Failure {
                 events.record("https decryption off: root certificate unavailable (keychain status \(failure.status))")
+                httpsDecryption = HttpsDecryptionState(status: .off, reason: .rootUnavailable, plugins: mitmPlugins.count)
             } catch let failure as EmbeddedRuntimeSession.Failure {
                 events.record("https decryption off: runtime refused the plugins (code \(failure.code))")
+                httpsDecryption = HttpsDecryptionState(status: .off, reason: .refused, plugins: mitmPlugins.count)
             } catch {
                 events.record("https decryption off: setup failed")
+                httpsDecryption = HttpsDecryptionState(status: .off, reason: .setupFailed, plugins: mitmPlugins.count)
             }
+        } else {
+            httpsDecryption = HttpsDecryptionState(status: .unused)
         }
         return try EmbeddedRuntimeSession(config: config.withoutMitm().encoded(), packetFlow: packetFlow)
     }

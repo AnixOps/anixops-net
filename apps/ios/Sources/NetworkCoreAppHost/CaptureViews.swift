@@ -499,3 +499,95 @@ struct CapturedRequestView: View {
         exchange.url == row.url && exchange.method == row.method && exchange.startedAt == row.startedAt
     }
 }
+
+/// The captured connections without a request, one row per domain or address: how many, how much, and either a
+/// "解密" button or why there is none. A row opens the newest connection's captured bytes.
+struct CaptureHostGroupRows: View {
+    var tunnel: TunnelController
+    let groups: [CaptureHostGroup]
+    let domains: DecryptionDomains
+    let decrypt: (String) -> Void
+    @Environment(\.brand) private var brand
+
+    var body: some View {
+        ForEach(groups) { group in
+            HStack(spacing: 10) {
+                NavigationLink {
+                    if let connection = group.connections.first {
+                        CaptureDetailView(tunnel: tunnel, connection: connection)
+                    }
+                } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(verbatim: group.name)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(brand.text)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Text(Self.summary(group))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(brand.text2)
+                        Text(status(group))
+                            .font(.caption)
+                            .foregroundStyle(brand.text3)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if group.isDomain, !domains.covers(group.name) {
+                    Button("解密") {
+                        decrypt(group.name)
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.subheadline.weight(.semibold))
+                    .accessibilityLabel("解密 \(group.name)")
+                }
+            }
+            .listRowBackground(brand.surface)
+        }
+    }
+
+    static func summary(_ group: CaptureHostGroup) -> String {
+        let networks = group.networks.map { $0.uppercased() }.joined(separator: "/")
+        return String(localized: "\(group.connections.count) 个连接 · \(TrafficFormat.bytes(group.bytes)) · \(networks)")
+    }
+
+    private func status(_ group: CaptureHostGroup) -> LocalizedStringKey {
+        if !group.isDomain {
+            return "只有 IP 地址，没有域名可以解密"
+        }
+        if domains.covers(group.name) {
+            // Listed, yet nothing decrypted: the connections began before the domain was added, the app pins its
+            // certificate, the traffic is not HTTPS on port 443, or capture memory pushed the requests out.
+            return "已在解密列表，但没有解密出请求：可能是加入前建立的连接、App 固定了证书，或不是 443 端口的 HTTPS"
+        }
+        return "未解密，只抓到加密数据"
+    }
+}
+
+/// Every captured connection without a request, by domain or address (the request list's "查看域名").
+struct CaptureHostGroupsView: View {
+    var tunnel: TunnelController
+    let groups: [CaptureHostGroup]
+    let domains: DecryptionDomains
+    let decrypt: (String) -> Void
+    @Environment(\.brand) private var brand
+
+    var body: some View {
+        List {
+            Section {
+                if groups.isEmpty {
+                    Text("所有抓到的连接都解密出了请求。")
+                        .font(.subheadline)
+                        .foregroundStyle(brand.text2)
+                        .listRowBackground(brand.surface)
+                }
+                CaptureHostGroupRows(tunnel: tunnel, groups: groups, domains: domains, decrypt: decrypt)
+            } footer: {
+                Text("这些连接没有解密，只抓到了加密的 TLS 数据，点进去可以看原始字节。点“解密”把域名加入解密列表，隧道会重新连接，之后的新连接会被解密并列在请求里。")
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(brand.bg.ignoresSafeArea())
+        .navigationTitle("没有请求的连接")
+        .inlineNavigationTitle()
+    }
+}
