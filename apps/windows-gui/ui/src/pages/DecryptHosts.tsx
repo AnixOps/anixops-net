@@ -56,7 +56,7 @@ export function DecryptHostsCard({ busy, run }: { busy: string | null; run: Run 
   const [typed, setTyped] = useState("");
   const [kind, setKind] = useState<"decrypt" | "exclude">("decrypt");
   const [editing, setEditing] = useState<{ pattern: string; text: string; kind: "decrypt" | "exclude" } | null>(null);
-  const change = (action: () => Promise<unknown>) => run("decrypt-host", action).then(reload);
+  const change = (action: () => Promise<{ message: string }>) => run("decrypt-host", action).then(reload);
   const add = () => {
     const host = typed.trim();
     if (!host) return;
@@ -160,7 +160,7 @@ export function DecryptHostsCard({ busy, run }: { busy: string | null; run: Run 
               icon={TriangleAlert}
               color="orange"
               label={outcome.host}
-              hint={`${t(failureReason(outcome.last_failure))} · ${t("失败 {failed} 次 · 解密 {count} 次", { failed: outcome.failed, count: outcome.decrypted })}`}
+              hint={[t(failureReason(outcome.last_failure)), t("失败 {failed} 次 · 解密 {count} 次", { failed: outcome.failed, count: outcome.decrypted })].join(" · ")}
             >
               {excludedBy(outcome.host, excluded)
                 ? <span className="muted">{t("已排除")}</span>
