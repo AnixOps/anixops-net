@@ -4168,7 +4168,8 @@
   "answer": {
    "decryptable": true,
    "host": "api.example.com",
-   "covered": false
+   "covered": false,
+   "excluded": false
   }
  },
  {
@@ -4180,7 +4181,8 @@
   "answer": {
    "decryptable": true,
    "host": "api.example.com",
-   "covered": false
+   "covered": false,
+   "excluded": false
   }
  },
  {
@@ -4192,7 +4194,8 @@
   "answer": {
    "decryptable": false,
    "host": null,
-   "covered": false
+   "covered": false,
+   "excluded": false
   }
  },
  {
@@ -4204,7 +4207,8 @@
   "answer": {
    "decryptable": false,
    "host": null,
-   "covered": false
+   "covered": false,
+   "excluded": false
   }
  },
  {
@@ -4216,7 +4220,8 @@
   "answer": {
    "decryptable": false,
    "host": null,
-   "covered": false
+   "covered": false,
+   "excluded": false
   }
  },
  {
@@ -4228,7 +4233,8 @@
   "answer": {
    "decryptable": false,
    "host": null,
-   "covered": false
+   "covered": false,
+   "excluded": false
   }
  },
  {
@@ -4240,7 +4246,8 @@
   "answer": {
    "decryptable": true,
    "host": "example.com",
-   "covered": false
+   "covered": false,
+   "excluded": false
   }
  },
  {
@@ -4252,7 +4259,8 @@
   "answer": {
    "decryptable": false,
    "host": null,
-   "covered": false
+   "covered": false,
+   "excluded": false
   }
  },
  {
@@ -4266,7 +4274,8 @@
   "answer": {
    "decryptable": true,
    "host": "api.example.com",
-   "covered": true
+   "covered": true,
+   "excluded": false
   }
  },
  {
@@ -4280,7 +4289,8 @@
   "answer": {
    "decryptable": true,
    "host": "img.cdn.example.com",
-   "covered": true
+   "covered": true,
+   "excluded": false
   }
  },
  {
@@ -4294,7 +4304,8 @@
   "answer": {
    "decryptable": true,
    "host": "cdn.example.com",
-   "covered": false
+   "covered": false,
+   "excluded": false
   }
  },
  {
@@ -4308,7 +4319,90 @@
   "answer": {
    "decryptable": true,
    "host": "other.com",
-   "covered": false
+   "covered": false,
+   "excluded": false
+  }
+ },
+ {
+  "command": "view.decrypt_hosts",
+  "args": {
+   "host": "img-3.cdn.test",
+   "hosts": [
+    "img-?.cdn.*"
+   ]
+  },
+  "answer": {
+   "decryptable": true,
+   "host": "img-3.cdn.test",
+   "covered": true,
+   "excluded": false
+  }
+ },
+ {
+  "command": "view.decrypt_hosts",
+  "args": {
+   "host": "spclient.wg.spotify.com",
+   "hosts": [
+    "*spclient*.spotify.com"
+   ]
+  },
+  "answer": {
+   "decryptable": true,
+   "host": "spclient.wg.spotify.com",
+   "covered": true,
+   "excluded": false
+  }
+ },
+ {
+  "command": "view.decrypt_hosts",
+  "args": {
+   "host": "pay.example.com",
+   "hosts": [
+    "*.example.com"
+   ],
+   "excluded": [
+    "pay.example.com"
+   ]
+  },
+  "answer": {
+   "decryptable": true,
+   "host": "pay.example.com",
+   "covered": false,
+   "excluded": true
+  }
+ },
+ {
+  "command": "view.decrypt_hosts",
+  "args": {
+   "host": "x.bank.example.com",
+   "hosts": [],
+   "excluded": [
+    "*.bank.example.com"
+   ]
+  },
+  "answer": {
+   "decryptable": true,
+   "host": "x.bank.example.com",
+   "covered": false,
+   "excluded": true
+  }
+ },
+ {
+  "command": "view.decrypt_hosts",
+  "args": {
+   "host": "api.example.com",
+   "hosts": [
+    "*.example.com"
+   ],
+   "excluded": [
+    "pay.example.com"
+   ]
+  },
+  "answer": {
+   "decryptable": true,
+   "host": "api.example.com",
+   "covered": true,
+   "excluded": false
   }
  },
  {

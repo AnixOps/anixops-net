@@ -111,7 +111,7 @@ impl DesktopCore {
 /// Kernel control commands the client may send: reading traffic, connections
 /// and rule sets, closing connections, refreshing remote rule sets and packet
 /// capture. Mode and group changes go through the saved profile instead.
-const ACTIVITY_COMMANDS: [&str; 14] = [
+const ACTIVITY_COMMANDS: [&str; 16] = [
     "traffic",
     "connections",
     "close_connection",
@@ -126,6 +126,9 @@ const ACTIVITY_COMMANDS: [&str; 14] = [
     "capture_requests",
     "capture_exchange",
     "capture_h2_frames",
+    // Per-domain decryption results for the decryption list.
+    "mitm_hosts",
+    "clear_mitm_hosts",
 ];
 
 /// The request bytes for an activity page command, or why it is refused.
@@ -547,6 +550,7 @@ mod tests {
         );
         assert!(activity_request(&serde_json::json!({"cmd": "traffic"})).is_ok());
         assert!(activity_request(&serde_json::json!({"cmd": "update_rule_sets"})).is_ok());
+        assert!(activity_request(&serde_json::json!({"cmd": "mitm_hosts"})).is_ok());
         assert!(
             activity_request(&serde_json::json!({"cmd": "set_capture", "enabled": true})).is_ok()
         );

@@ -1,46 +1,143 @@
-import { Check, Globe, LockKeyhole, Plug, Radio, ShieldCheck, X } from "lucide-react";
+import { Ban, Check, Globe, LockKeyhole, Pencil, Plug, Radio, ShieldCheck, TriangleAlert, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { CaptureStatus, desktop, MitmRootStatus, RuntimeSnapshot } from "../bridge";
-import { pendingSteps, SetupStep } from "../decrypt-hosts";
+import { CaptureStatus, DecryptDomain, desktop, MitmHostOutcome, MitmRootStatus, RuntimeSnapshot } from "../bridge";
+import { excludedBy, failureReason, isFailing, matchesPattern, pendingSteps, SetupStep } from "../decrypt-hosts";
 import { liveEngine } from "../live";
-import { Card, IconButton, Row, Run, TileColor } from "../ui";
+import { Card, IconButton, Row, Run, Segmented, Switch, TileColor } from "../ui";
 import { t } from "../i18n";
 
-/** The decrypted domains, read again after every change and when the window comes back to the front. */
-export function useDecryptHosts(): [string[], () => void] {
-  const [hosts, setHosts] = useState<string[]>([]);
+/**
+ * The decryption list's patterns that are on, its exclusions and the whole list, read again after every change and
+ * when the window comes back to the front.
+ */
+export function useDecryptHosts(): [string[], () => void, string[], DecryptDomain[]] {
+  const [domains, setDomains] = useState<DecryptDomain[]>([]);
   const load = useCallback(() => {
-    desktop.decryptHosts().then(setHosts).catch(() => setHosts([]));
+    desktop.decryptDomains().then(setDomains).catch(() => setDomains([]));
   }, []);
   useEffect(() => {
     load();
     window.addEventListener("focus", load);
     return () => window.removeEventListener("focus", load);
   }, [load]);
-  return [hosts, load];
+  const hosts = domains.filter((domain) => domain.enabled && !domain.exclude).map((domain) => domain.pattern);
+  const excluded = domains.filter((domain) => domain.enabled && domain.exclude).map((domain) => domain.pattern);
+  return [hosts, load, excluded, domains];
+}
+
+/** The engine's per-domain decryption results, read every five seconds while the engine runs. */
+function useMitmHosts(): [MitmHostOutcome[], () => void] {
+  const [hosts, setHosts] = useState<MitmHostOutcome[]>([]);
+  const load = useCallback(() => {
+    desktop.mitmHosts().then((answer) => setHosts(answer.hosts ?? [])).catch(() => setHosts([]));
+  }, []);
+  useEffect(() => {
+    load();
+    const timer = window.setInterval(load, 5000);
+    return () => window.clearInterval(timer);
+  }, [load]);
+  const clear = useCallback(() => {
+    desktop.mitmHosts(true).then((answer) => setHosts(answer.hosts ?? [])).catch(() => setHosts([]));
+  }, []);
+  return [hosts, clear];
 }
 
 /**
- * "Rewrite" › Decrypted domains: HTTPS decryption is per domain (the user's choice, 2026-11-14). Domains come from
- * this list, the plugins and the mappings; a connection's details add its domain in one tap.
+ * "Rewrite" › Decrypted domains, for developers and power users: domains and wildcard patterns to decrypt,
+ * exclusions that win over every include (plugins' too), each line on or paused and edited in place. While the
+ * engine runs, its per-domain results (`mitm_hosts`) mark the domains whose decryption failed and why, certificate
+ * pinning first, with a one-click exclusion. The list starts empty: nothing is bundled (public builds carry no
+ * presets).
  */
 export function DecryptHostsCard({ busy, run }: { busy: string | null; run: Run }) {
-  const [hosts, reload] = useDecryptHosts();
+  const [, reload, excluded, domains] = useDecryptHosts();
+  const [outcomes, clearOutcomes] = useMitmHosts();
   const [typed, setTyped] = useState("");
+  const [kind, setKind] = useState<"decrypt" | "exclude">("decrypt");
+  const [editing, setEditing] = useState<{ pattern: string; text: string; kind: "decrypt" | "exclude" } | null>(null);
+  const change = (action: () => Promise<{ message: string }>) => run("decrypt-host", action).then(reload);
   const add = () => {
     const host = typed.trim();
     if (!host) return;
-    void run("decrypt-host", () => desktop.addDecryptHost(host)).then(() => {
-      setTyped("");
-      reload();
-    });
+    void change(() => desktop.addDecryptHost(host, kind === "exclude")).then(() => setTyped(""));
   };
+  const save = () => {
+    if (!editing) return;
+    const { pattern, text, kind: next } = editing;
+    void change(() => desktop.editDecryptHost(pattern, text.trim(), next === "exclude")).then(() => setEditing(null));
+  };
+  const failing = outcomes.filter(isFailing);
+  const decrypting = domains.filter((domain) => !domain.exclude);
+  const excluding = domains.filter((domain) => domain.exclude);
+  const kinds = [
+    { value: "decrypt" as const, label: t("解密") },
+    { value: "exclude" as const, label: t("排除") },
+  ];
+  const status = (domain: DecryptDomain): string | undefined => {
+    if (!domain.enabled) return t("已停用");
+    if (domain.exclude) return undefined;
+    const seen = outcomes.filter((outcome) => matchesPattern(domain.pattern, outcome.host));
+    if (seen.length === 0) return undefined;
+    const decrypted = seen.reduce((sum, outcome) => sum + outcome.decrypted, 0);
+    const failed = seen.filter(isFailing).length;
+    return failed > 0
+      ? t("已解密 {count} 个连接，{failed} 个域名失败", { count: decrypted, failed })
+      : t("已解密 {count} 个连接", { count: decrypted });
+  };
+  const row = (domain: DecryptDomain) => editing?.pattern === domain.pattern ? (
+    <div key={domain.pattern} className="row import-row">
+      <input
+        aria-label={t("编辑域名")}
+        spellCheck={false}
+        value={editing.text}
+        onChange={(event) => setEditing({ ...editing, text: event.target.value })}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !busy) save();
+          if (event.key === "Escape") setEditing(null);
+        }}
+      />
+      <Segmented label={t("类型")} options={kinds} value={editing.kind} onChange={(next) => setEditing({ ...editing, kind: next })} />
+      <button className="secondary compact" disabled={Boolean(busy) || !editing.text.trim()} onClick={save}>{t("保存")}</button>
+      <button className="secondary compact" onClick={() => setEditing(null)}>{t("取消")}</button>
+    </div>
+  ) : (
+    <Row
+      key={domain.pattern}
+      icon={domain.exclude ? Ban : Globe}
+      color={domain.exclude ? "gray" : "pink"}
+      label={domain.exclude ? `-${domain.pattern}` : domain.pattern}
+      hint={status(domain)}
+      className={domain.enabled ? "" : "done"}
+    >
+      <IconButton
+        label={t("编辑 {host}", { host: domain.pattern })}
+        disabled={Boolean(busy)}
+        onClick={() => setEditing({ pattern: domain.pattern, text: domain.pattern, kind: domain.exclude ? "exclude" : "decrypt" })}
+      >
+        <Pencil size={15} />
+      </IconButton>
+      <Switch
+        label={t("启用 {host}", { host: domain.pattern })}
+        checked={domain.enabled}
+        disabled={Boolean(busy)}
+        onChange={() => void change(() => desktop.setDecryptHostEnabled(domain.pattern, !domain.enabled))}
+      />
+      <IconButton
+        label={t("删除 {host}", { host: domain.pattern })}
+        disabled={Boolean(busy)}
+        onClick={() => void change(() => desktop.removeDecryptHost(domain.pattern))}
+      >
+        <X size={15} />
+      </IconButton>
+    </Row>
+  );
+  const count = decrypting.filter((domain) => domain.enabled).length;
   return (
     <Card
       title={t("解密域名")}
-      description={t("只解密这里、插件和映射里列出的域名，其余 HTTPS 原样转发。也可以在加密连接的详情里点“解密此域名”。写 *.example.com 包含它的所有子域名。")}
-      actions={hosts.length > 0 ? <span className="count">{t("{count} 个域名", { count: hosts.length })}</span> : undefined}
+      description={t("只解密这里、插件和映射里列出的域名，其余 HTTPS 原样转发。* 匹配任意字符（包括点），? 匹配一个字符；*.example.com 匹配所有子域名，不含 example.com 本身。排除的域名永不解密，优先于所有解密规则；也可以直接写 -example.com。")}
+      actions={count > 0 ? <span className="count">{t("{count} 个域名", { count })}</span> : undefined}
     >
       <div className="row import-row">
         <input
@@ -51,19 +148,41 @@ export function DecryptHostsCard({ busy, run }: { busy: string | null; run: Run 
           onChange={(event) => setTyped(event.target.value)}
           onKeyDown={(event) => { if (event.key === "Enter" && !busy) add(); }}
         />
+        <Segmented label={t("类型")} options={kinds} value={kind} onChange={setKind} />
         <button className="secondary compact" disabled={Boolean(busy) || !typed.trim()} onClick={add}>{t("添加")}</button>
       </div>
-      {hosts.map((host) => (
-        <Row key={host} icon={Globe} color="pink" label={host}>
-          <IconButton
-            label={t("不再解密 {host}", { host })}
-            disabled={Boolean(busy)}
-            onClick={() => void run("decrypt-host", () => desktop.removeDecryptHost(host)).then(reload)}
-          >
-            <X size={15} />
-          </IconButton>
-        </Row>
-      ))}
+      {failing.length > 0 && (
+        <>
+          <p className="muted">{t("解密失败：根据这次连接以来的解密结果自动标出，只记录域名、次数和原因。App 拒绝证书多半是证书固定，无法解密；排除后它的连接原样转发，App 会照常联网。")}</p>
+          {failing.map((outcome) => (
+            <Row
+              key={`failing-${outcome.host}`}
+              icon={TriangleAlert}
+              color="orange"
+              label={outcome.host}
+              hint={[t(failureReason(outcome.last_failure)), t("失败 {failed} 次 · 解密 {count} 次", { failed: outcome.failed, count: outcome.decrypted })].join(" · ")}
+            >
+              {excludedBy(outcome.host, excluded)
+                ? <span className="muted">{t("已排除")}</span>
+                : (
+                  <button
+                    className="secondary compact"
+                    disabled={Boolean(busy)}
+                    onClick={() => void change(() => desktop.addDecryptHost(outcome.host, true))}
+                  >
+                    {t("排除")}
+                  </button>
+                )}
+            </Row>
+          ))}
+          <div className="row">
+            <button className="secondary compact" onClick={clearOutcomes}>{t("清除这些记录")}</button>
+          </div>
+        </>
+      )}
+      {decrypting.map(row)}
+      {excluding.map(row)}
+      <p className="muted">{t("只解密 443 端口的 HTTPS；列表里域名的 HTTP/3（QUIC）连接会被拒绝，让 App 改用可以解密的 HTTPS。固定了证书的 App（常见于银行、支付和系统服务）和只有 IP 地址的连接不能解密。")}</p>
     </Card>
   );
 }

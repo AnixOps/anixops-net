@@ -34,6 +34,8 @@ struct CaptureRequestsView: View {
     @State private var notice: String?
     /// Captured connections no request row came from, by host (`CaptureCoverage`); empty while a filter is set.
     @State private var hostGroups: [CaptureHostGroup] = []
+    /// The engine's per-domain decryption results (`mitm_hosts`), for why a listed domain gave no requests.
+    @State private var decryptionResults: [String: RuntimeControl.MitmHosts.Host] = [:]
     @State private var showsHostGroups = false
     /// Whether the running tunnel really decrypts HTTPS; nil until asked, or from an older extension.
     @State private var decryption: HttpsDecryptionState?
@@ -102,7 +104,12 @@ struct CaptureRequestsView: View {
             }
         }
         .navigationDestination(isPresented: $showsHostGroups) {
-            CaptureHostGroupsView(tunnel: tunnel, groups: hostGroups, domains: decryptionDomains) { host in
+            CaptureHostGroupsView(
+                tunnel: tunnel,
+                groups: hostGroups,
+                domains: decryptionDomains,
+                results: decryptionResults
+            ) { host in
                 decrypt(host)
             }
         }
@@ -256,7 +263,12 @@ struct CaptureRequestsView: View {
     private var hostGroupSection: some View {
         if !hostGroups.isEmpty {
             Section {
-                CaptureHostGroupRows(tunnel: tunnel, groups: hostGroups, domains: decryptionDomains) { host in
+                CaptureHostGroupRows(
+                    tunnel: tunnel,
+                    groups: hostGroups,
+                    domains: decryptionDomains,
+                    results: decryptionResults
+                ) { host in
                     decrypt(host)
                 }
             } header: {
@@ -535,6 +547,8 @@ struct CaptureRequestsView: View {
         }
         let withRequests = Set(log.rows.map(\.connectionID))
         hostGroups = CaptureCoverage.hostsWithoutRequests(list.active + list.closed, withRequests: withRequests)
+        let results = RuntimeControl.decode(RuntimeControl.MitmHosts.self, from: await tunnel.control(.mitmHosts))
+        decryptionResults = Dictionary((results?.hosts ?? []).map { ($0.host, $0) }) { first, _ in first }
     }
 }
 

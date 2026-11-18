@@ -144,6 +144,10 @@
         return { capture: { id: request.id, network: "tcp", host: rows[0].host, destination: "203.0.113.20:443", started_at_ms: rows[0].started_at_ms, ended_at_ms: null, decrypted: true, upload: { seen: 4000, captured: 4000, truncated: false }, download: { seen: 90000, captured: 90000, truncated: false }, chunks: [], http: rows.map(exchange) } };
       }
       case "rule_sets": return { rule_sets: [{ name: "geosite-cn", source: "remote", entries: 71234, updated_at_ms: start - 3600e3 }, { name: "gfwlist", source: "remote", entries: 6012, updated_at_ms: start - 86400e3 }] };
+      case "mitm_hosts": case "clear_mitm_hosts": return { enabled: true, hosts: [
+        { host: "auth.example.com", decrypted: 0, failed: 4, last_failure: "client_rejected_certificate", last_failure_at_ms: start - 30e3, failures: { client_rejected_certificate: 4 } },
+        { host: "api.example.com", decrypted: 128, failed: 0, last_decrypted_at_ms: start - 5e3 },
+      ] };
       case "lan_share": return { running: false, port: null, addresses: ["192.168.1.23"], url: null, page_host: "anixops.local", https_decryption: true, certificate: true, credentials: false, accepted: 0, rejected: 0, active: 0, pages: 0 };
       default: return {};
     }
@@ -180,6 +184,12 @@
       { id: "m2", name: "API 指到本机", enabled: false, kind: "remote", match: "prefix", pattern: "https://api.example.com/", status: 200, headers: [], body: "", target: "http://127.0.0.1:3000/" },
     ],
     list_decrypt_hosts: () => ["api.example.com", "*.example.net", "auth.example.com"],
+    list_decrypt_domains: () => [
+      { pattern: "api.example.com", exclude: false, enabled: true },
+      { pattern: "*.example.net", exclude: false, enabled: true },
+      { pattern: "auth.example.com", exclude: false, enabled: true },
+      { pattern: "pay.example.net", exclude: true, enabled: true },
+    ],
     capture_session: () => ({ protection: "dpapi", retention_days: 7, sessions: [{ session: "a1", name: "登录流程", saved_at_ms: start - 3600e3, expires_at_ms: start + 6 * 86400e3, size: 4.2e6, connections: 23, requests: COUNT }] }),
     mitm_root_status: () => ({ generated: true, trusted: true }),
     mitm_root_fingerprint: () => "9F:3C:1A:22:B4:7E:5D:08",

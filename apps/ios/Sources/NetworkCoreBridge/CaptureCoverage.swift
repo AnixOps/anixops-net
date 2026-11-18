@@ -81,39 +81,65 @@ public enum CaptureCoverage {
     }
 }
 
-/// The domains HTTPS decryption is asked for: the decrypted-domain list, the active mappings' hosts and the
-/// enabled plugins' `[MITM]` hostnames. Only for what the app shows; the engine decides from the same lists.
+/// The domains HTTPS decryption is asked for: the decryption list, the active mappings' hosts and the enabled
+/// plugins' `[MITM]` hostnames, less the exclusions of the list and the plugins (an exclusion wins over every
+/// include, as the engine merges them). Only for what the app shows; the engine decides from the same lists.
 public struct DecryptionDomains: Equatable {
     public let patterns: [String]
+    public let excluded: [String]
 
     public init(mappings: DebugMappings, plugins: MitmPluginLibrary) {
-        let pluginHosts = plugins.isEnabled
-            ? plugins.plugins.filter(\.isEnabled).flatMap(\.summary.hostnames)
-            : []
-        self.init(patterns: mappings.hosts + mappings.active.compactMap(\.host) + pluginHosts)
+        let enabled = plugins.isEnabled ? plugins.plugins.filter(\.isEnabled) : []
+        self.init(
+            patterns: mappings.hosts + mappings.active.compactMap(\.host) + enabled.flatMap(\.summary.hostnames),
+            excluded: mappings.excludedHosts + enabled.flatMap(\.summary.excludedHostnames)
+        )
     }
 
-    public init(patterns: [String]) {
+    public init(patterns: [String], excluded: [String] = []) {
+        self.patterns = Self.unique(patterns)
+        self.excluded = Self.unique(excluded)
+    }
+
+    private static func unique(_ patterns: [String]) -> [String] {
         var unique: [String] = []
         for pattern in patterns {
-            let pattern = Self.clean(pattern)
+            let pattern = clean(pattern)
             if !pattern.isEmpty, !unique.contains(pattern) {
                 unique.append(pattern)
             }
         }
-        self.patterns = unique
+        return unique
     }
 
     public var isEmpty: Bool {
         patterns.isEmpty
     }
 
-    /// Whether `host` matches one of the patterns: an exact name, or a `*` / `?` wildcard as in `*.example.com`.
+    /// Whether `host` is decrypted: it matches one of the patterns, an exact name or a `*` / `?` wildcard as in
+    /// `*.example.com`, and none of the exclusions.
     public func covers(_ host: String) -> Bool {
         guard let name = DebugMappings.normalizeHost(host) else {
             return false
         }
         return patterns.contains { Self.glob(Array($0), Array(name)) }
+            && !excluded.contains { Self.glob(Array($0), Array(name)) }
+    }
+
+    /// Whether an exclusion names `host`.
+    public func excludes(_ host: String) -> Bool {
+        guard let name = DebugMappings.normalizeHost(host) else {
+            return false
+        }
+        return excluded.contains { Self.glob(Array($0), Array(name)) }
+    }
+
+    /// Whether `pattern` matches `host`, by the same rules as `covers`.
+    public static func matches(_ pattern: String, _ host: String) -> Bool {
+        guard let name = DebugMappings.normalizeHost(host) else {
+            return false
+        }
+        return glob(Array(clean(pattern)), Array(name))
     }
 
     /// Lower-cased, without a `:port` (Loon allows `example.com:8443`) or a trailing dot.
