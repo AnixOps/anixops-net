@@ -32,6 +32,16 @@ struct CaptureRequestsView: View {
     @State private var showsSessions = false
     /// A line under the summary after saving a session, or why it failed.
     @State private var notice: String?
+    /// Captured connections no request row came from, by host (`CaptureCoverage`); empty while a filter is set.
+    @State private var hostGroups: [CaptureHostGroup] = []
+    @State private var showsHostGroups = false
+    /// Whether the running tunnel really decrypts HTTPS; nil until asked, or from an older extension.
+    @State private var decryption: HttpsDecryptionState?
+    /// The enabled plugins, for which domains are decrypted; read when the list appears.
+    @State private var pluginLibrary = MitmPluginLibrary()
+    /// The tunnel went down while capture was on and held something: capture stopped with it and the extension
+    /// sealed what it caught into a saved session.
+    @State private var stoppedWithTunnel = false
 
     private var filter: String {
         CaptureFilter.compose(chips: chips, text: query)
@@ -91,6 +101,11 @@ struct CaptureRequestsView: View {
                 toolbarItems
             }
         }
+        .navigationDestination(isPresented: $showsHostGroups) {
+            CaptureHostGroupsView(tunnel: tunnel, groups: hostGroups, domains: decryptionDomains) { host in
+                decrypt(host)
+            }
+        }
         .navigationDestination(isPresented: $showsSessions) {
             CaptureSessionsView(tunnel: tunnel) {
                 log.reset()
@@ -110,6 +125,19 @@ struct CaptureRequestsView: View {
             try? await Task.sleep(for: .milliseconds(300))
             log.reset()
             invalidFilter = nil
+            hostGroups = []
+            pluginLibrary = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)) ?? MitmPluginLibrary()
+            if tunnel.connection == .connected {
+                stoppedWithTunnel = false
+                decryption = await tunnel.httpsDecryptionState()
+            } else {
+                // Capture lives in the tunnel's engine: it ends when the tunnel does (`saveCaptureOnStop`).
+                if let capture, capture.enabled, capture.connections > 0 {
+                    stoppedWithTunnel = true
+                }
+                capture = nil
+                decryption = nil
+            }
             while !Task.isCancelled {
                 if !paused {
                     await load()
@@ -128,7 +156,15 @@ struct CaptureRequestsView: View {
                 .foregroundStyle(brand.text2)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 6)
-            if log.rows.isEmpty {
+            if log.rows.isEmpty, !hostGroups.isEmpty {
+                List {
+                    Section {
+                        emptyRow
+                    }
+                    hostGroupSection
+                }
+                .scrollContentBackground(.hidden)
+            } else if log.rows.isEmpty {
                 emptyRow
                     .frame(maxHeight: .infinity, alignment: .top)
             } else {
@@ -163,6 +199,22 @@ struct CaptureRequestsView: View {
             if let capture, capture.enabled {
                 CaptureStatusLine(status: capture)
             }
+            if let decryptionOffText {
+                Text(decryptionOffText)
+                    .foregroundStyle(brand.danger)
+            }
+            if !log.rows.isEmpty, !hostGroups.isEmpty {
+                Button {
+                    showsHostGroups = true
+                } label: {
+                    Text("另有 \(hostGroups.reduce(0) { $0 + $1.connections.count }) 个连接没有解密出请求，查看域名 ›")
+                        .multilineTextAlignment(.leading)
+                }
+                .buttonStyle(.borderless)
+            }
+            if stoppedWithTunnel, tunnel.connection != .connected {
+                Text("连接已断开，抓包随之停止。断开前抓到的内容已加密保存，连接后在 ⋯ › 已保存的会话 查看。")
+            }
             if let notice {
                 Text(notice)
             }
@@ -193,6 +245,60 @@ struct CaptureRequestsView: View {
             } footer: {
                 Text("只列出 HTTPS 解密（MITM）后的请求和明文 HTTP 请求。搜索框可以直接写表达式：host:api.example.com status:>=400 type:json -method:GET，空格表示同时满足，OR 表示或者。")
             }
+            if log.rows.isEmpty {
+                hostGroupSection
+            }
+        }
+    }
+
+    /// The captured connections without a request, by domain, while the list has no request to show.
+    @ViewBuilder
+    private var hostGroupSection: some View {
+        if !hostGroups.isEmpty {
+            Section {
+                CaptureHostGroupRows(tunnel: tunnel, groups: hostGroups, domains: decryptionDomains) { host in
+                    decrypt(host)
+                }
+            } header: {
+                Text("抓到的连接 · \(hostGroups.count) 个域名或地址")
+            } footer: {
+                Text("这些连接没有解密，只抓到了加密的 TLS 数据，点进去可以看原始字节。点“解密”把域名加入解密列表，隧道会重新连接，之后的新连接会被解密并列在上面。")
+            }
+        }
+    }
+
+    private var decryptionDomains: DecryptionDomains {
+        DecryptionDomains(mappings: tunnel.debugMappings, plugins: pluginLibrary)
+    }
+
+    /// Why the running tunnel does not decrypt HTTPS although domains are listed; nil when it does or nothing is
+    /// listed.
+    private var decryptionOffText: LocalizedStringKey? {
+        guard tunnel.connection == .connected, let decryption, decryption.status == .off else {
+            return nil
+        }
+        switch decryption.reason {
+        case .noRoot:
+            return "HTTPS 解密没有生效：隧道启动时找不到根证书。请在 改写 › HTTPS 解密证书 生成并信任，再重新连接。"
+        case .rootUnavailable:
+            return "HTTPS 解密没有生效：隧道读不到钥匙串里的根证书。请重新连接；仍不行就在 改写 › HTTPS 解密证书 重新生成。"
+        case .refused, .setupFailed, nil:
+            return "HTTPS 解密没有生效：内核没有接受解密设置。请检查已启用的插件，开发者诊断的扩展事件里有原因。"
+        }
+    }
+
+    /// Adds `host` to the decrypted-domain list; a running tunnel reconnects and capture carries on.
+    private func decrypt(_ host: String) {
+        let next: DebugMappings
+        do {
+            next = try tunnel.debugMappings.addingHost(host)
+        } catch {
+            notice = (error as? DebugMappingsError)?.message ?? String(localized: "无法保存映射")
+            return
+        }
+        notice = String(localized: "已把 \(host) 加入解密列表，隧道正在重新连接；之后的新连接会列出请求。")
+        Task {
+            await tunnel.applyDebugMappings(next)
         }
     }
 
@@ -345,6 +451,10 @@ struct CaptureRequestsView: View {
         if let capture, !capture.enabled {
             return "抓包未开启。开始抓包后，新的请求会出现在这里。"
         }
+        if !hostGroups.isEmpty {
+            let count = hostGroups.reduce(0) { $0 + $1.connections.count }
+            return "已抓到 \(count) 个连接，但没有一个解密出请求，所以这里还是空的。下面按域名列出了这些连接。"
+        }
         if invalidFilter != nil {
             return "表达式有误，改正后再筛选。"
         }
@@ -409,9 +519,22 @@ struct CaptureRequestsView: View {
             }
             invalidFilter = nil
             guard log.apply(answer) else {
-                return
+                break
             }
         }
+        await loadHostGroups()
+    }
+
+    /// The captured connections no row came from. Only without a filter: a filtered list leaves out rows on purpose.
+    private func loadHostGroups() async {
+        guard filter.isEmpty, invalidFilter == nil, let capture, capture.connections > 0,
+              let list = RuntimeControl.decode(RuntimeControl.Connections.self, from: await tunnel.control(.connections))
+        else {
+            hostGroups = []
+            return
+        }
+        let withRequests = Set(log.rows.map(\.connectionID))
+        hostGroups = CaptureCoverage.hostsWithoutRequests(list.active + list.closed, withRequests: withRequests)
     }
 }
 

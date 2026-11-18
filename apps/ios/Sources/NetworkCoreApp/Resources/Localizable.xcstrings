@@ -12295,6 +12295,326 @@
         }
       }
     },
+    "断开时自动保存": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved on disconnect"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "斷開時自動儲存"
+          }
+        }
+      }
+    },
+    "另有 %lld 个连接没有解密出请求，查看域名 ›": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld more connections showed no decrypted requests. See their domains ›"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "另有 %lld 個連線沒有解密出請求，查看網域 ›"
+          }
+        }
+      }
+    },
+    "连接已断开，抓包随之停止。断开前抓到的内容已加密保存，连接后在 ⋯ › 已保存的会话 查看。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disconnected, so capture stopped. What it caught was saved encrypted; after connecting, open ⋯ › Saved Sessions to view it."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線已斷開，抓包隨之停止。斷開前抓到的內容已加密儲存，連線後在 ⋯ › 已儲存的工作階段 查看。"
+          }
+        }
+      }
+    },
+    "抓到的连接 · %lld 个域名或地址": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Captured connections · %lld domains or addresses"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "抓到的連線 · %lld 個網域或位址"
+          }
+        }
+      }
+    },
+    "这些连接没有解密，只抓到了加密的 TLS 数据，点进去可以看原始字节。点“解密”把域名加入解密列表，隧道会重新连接，之后的新连接会被解密并列在上面。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "These connections were not decrypted, so only encrypted TLS data was captured; open one to see the raw bytes. Tap “Decrypt” to add the domain to the decryption list: the tunnel reconnects and new connections are decrypted and listed above."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這些連線沒有解密，只抓到了加密的 TLS 資料，點進去可以看原始位元組。點「解密」把網域加入解密列表，隧道會重新連線，之後的新連線會被解密並列在上面。"
+          }
+        }
+      }
+    },
+    "这些连接没有解密，只抓到了加密的 TLS 数据，点进去可以看原始字节。点“解密”把域名加入解密列表，隧道会重新连接，之后的新连接会被解密并列在请求里。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "These connections were not decrypted, so only encrypted TLS data was captured; open one to see the raw bytes. Tap “Decrypt” to add the domain to the decryption list: the tunnel reconnects and new connections are decrypted and listed with the requests."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這些連線沒有解密，只抓到了加密的 TLS 資料，點進去可以看原始位元組。點「解密」把網域加入解密列表，隧道會重新連線，之後的新連線會被解密並列在請求裡。"
+          }
+        }
+      }
+    },
+    "HTTPS 解密没有生效：隧道启动时找不到根证书。请在 改写 › HTTPS 解密证书 生成并信任，再重新连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTPS decryption is not active: the tunnel found no root certificate when it started. Create and trust one in Rewrite › HTTPS Decryption Certificate, then reconnect."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTPS 解密沒有生效：隧道啟動時找不到根憑證。請在 改寫 › HTTPS 解密憑證 產生並信任，再重新連線。"
+          }
+        }
+      }
+    },
+    "HTTPS 解密没有生效：隧道读不到钥匙串里的根证书。请重新连接；仍不行就在 改写 › HTTPS 解密证书 重新生成。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTPS decryption is not active: the tunnel could not read the root certificate from the Keychain. Reconnect; if that does not help, create it again in Rewrite › HTTPS Decryption Certificate."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTPS 解密沒有生效：隧道讀不到鑰匙圈裡的根憑證。請重新連線；仍不行就在 改寫 › HTTPS 解密憑證 重新產生。"
+          }
+        }
+      }
+    },
+    "HTTPS 解密没有生效：内核没有接受解密设置。请检查已启用的插件，开发者诊断的扩展事件里有原因。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTPS decryption is not active: the engine did not accept the decryption settings. Check the enabled plugins; the extension events in developer diagnostics give the reason."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTPS 解密沒有生效：核心沒有接受解密設定。請檢查已啟用的外掛，開發者診斷的擴充事件裡有原因。"
+          }
+        }
+      }
+    },
+    "已把 %@ 加入解密列表，隧道正在重新连接；之后的新连接会列出请求。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Added %@ to the decryption list. The tunnel is reconnecting; new connections will list their requests."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已把 %@ 加入解密列表，隧道正在重新連線；之後的新連線會列出請求。"
+          }
+        }
+      }
+    },
+    "已抓到 %lld 个连接，但没有一个解密出请求，所以这里还是空的。下面按域名列出了这些连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Captured %lld connections, but none were decrypted into requests, so this list is empty. They are listed by domain below."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已抓到 %lld 個連線，但沒有一個解密出請求，所以這裡還是空的。下面按網域列出了這些連線。"
+          }
+        }
+      }
+    },
+    "解密": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decrypt"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解密"
+          }
+        }
+      }
+    },
+    "解密 %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decrypt %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解密 %@"
+          }
+        }
+      }
+    },
+    "%lld 个连接 · %@ · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld connections · %2$@ · %3$@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 個連線 · %@ · %@"
+          }
+        }
+      }
+    },
+    "只有 IP 地址，没有域名可以解密": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "IP address only, no domain to decrypt"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只有 IP 位址，沒有網域可以解密"
+          }
+        }
+      }
+    },
+    "已在解密列表，但没有解密出请求：可能是加入前建立的连接、App 固定了证书，或不是 443 端口的 HTTPS": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In the decryption list, but no requests were decrypted: the connections may predate the domain, the app may pin its certificate, or it is not HTTPS on port 443"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已在解密列表，但沒有解密出請求：可能是加入前建立的連線、App 固定了憑證，或不是 443 埠的 HTTPS"
+          }
+        }
+      }
+    },
+    "未解密，只抓到加密数据": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not decrypted, encrypted data only"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未解密，只抓到加密資料"
+          }
+        }
+      }
+    },
+    "所有抓到的连接都解密出了请求。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every captured connection was decrypted into requests."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "所有抓到的連線都解密出了請求。"
+          }
+        }
+      }
+    },
+    "没有请求的连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connections Without Requests"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有請求的連線"
+          }
+        }
+      }
+    },
+    "已保存的会话": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved Sessions"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已儲存的工作階段"
+          }
+        }
+      }
+    },
     "导入时跳过的规则": {
       "localizations": {
         "en": {

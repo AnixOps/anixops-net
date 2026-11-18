@@ -373,7 +373,7 @@ struct LocalRulesView: View {
                         Label("下载失败：\(error)", systemImage: "exclamationmark.triangle")
                             .foregroundStyle(brand.danger)
                     } else if let loaded, let updated = loaded.updatedAt {
-                        Text("\(loaded.entries) 条 · 更新于 \(updated, style: .relative)前")
+                        Text("\(loaded.entries) 条 · 更新于 \(AgeText.coarse(since: updated))前")
                             .foregroundStyle(brand.text2)
                     } else {
                         Text(verbatim: SubscriptionLink.displayHost(subscription.url))

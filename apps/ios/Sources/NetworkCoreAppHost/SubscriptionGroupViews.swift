@@ -97,7 +97,7 @@ struct SubscriptionGroupSummary: View {
                         .controlSize(.mini)
                     Text("正在更新")
                 } else {
-                    Text("更新于 \(group.library.updatedAt, style: .relative)前")
+                    Text("更新于 \(AgeText.coarse(since: group.library.updatedAt))前")
                 }
                 Spacer(minLength: 0)
                 if group.isUpdatable {
@@ -189,5 +189,17 @@ private struct UsageBar: View {
         .accessibilityElement()
         .accessibilityLabel("已用流量")
         .accessibilityValue(Text(fraction, format: .percent.precision(.fractionLength(0))))
+    }
+}
+
+/// How long ago something was updated, in its largest unit only ("2 小时", "3 days"). A live `.relative` date ticks
+/// minutes and seconds, which reads as noise in a list and made screenshots differ by when they were taken.
+enum AgeText {
+    static func coarse(since date: Date, now: Date = Date()) -> String {
+        let formatter = DateComponentsFormatter()
+        formatter.unitsStyle = .full
+        formatter.maximumUnitCount = 1
+        formatter.allowedUnits = [.year, .month, .day, .hour, .minute, .second]
+        return formatter.string(from: max(0, now.timeIntervalSince(date))) ?? ""
     }
 }

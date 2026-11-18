@@ -102,7 +102,7 @@ struct RuleSetsSection: View {
                     Text("上次下载失败：\(error)")
                         .foregroundStyle(brand.danger)
                 } else if let updated = loaded?.updatedAt {
-                    Text("更新于 \(updated, style: .relative)前")
+                    Text("更新于 \(AgeText.coarse(since: updated))前")
                         .foregroundStyle(brand.text2)
                 } else if let url = source?.url {
                     Text(verbatim: SubscriptionLink.displayHost(url))
