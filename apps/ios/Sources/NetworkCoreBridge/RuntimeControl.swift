@@ -83,6 +83,10 @@ public enum RuntimeControl {
     /// Starts it on `port`, or on a free port when that one is taken; the answer says which.
     case startSystemProxy(port: UInt16)
     case stopSystemProxy
+    /// What HTTPS decryption did per domain since the tunnel started: decrypted and failed connections and why.
+    case mitmHosts
+    /// Forgets those results.
+    case clearMitmHosts
 
     /// The port the system proxy listener asks for first.
     public static let systemProxyPort: UInt16 = 8890
@@ -195,6 +199,10 @@ public enum RuntimeControl {
             object = ["cmd": "start_system_proxy", "port": Int(port)]
         case .stopSystemProxy:
             object = ["cmd": "stop_system_proxy"]
+        case .mitmHosts:
+            object = ["cmd": "mitm_hosts"]
+        case .clearMitmHosts:
+            object = ["cmd": "clear_mitm_hosts"]
         }
         return (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
     }
@@ -546,6 +554,109 @@ public enum RuntimeControl {
         }
 
         public let scripts: [Script]
+    }
+
+    /// The `mitm_hosts` answer: per domain, how many connections HTTPS decryption decrypted and how many failed, the
+    /// most recently seen first. `enabled` is false when the tunnel runs without decryption. Only names, counts,
+    /// times and reason codes; the engine keeps at most 256 domains until the tunnel stops.
+    public struct MitmHosts: Decodable, Equatable {
+        public struct Host: Decodable, Equatable, Identifiable {
+            public let host: String
+            public let decrypted: UInt64
+            public let failed: UInt64
+            /// A `Failure` raw value; kept as text so a newer engine's reason still decodes.
+            public let lastFailure: String?
+            public let lastFailureAtMs: UInt64?
+            public let lastDecryptedAtMs: UInt64?
+            /// Failures by reason code.
+            public let failures: [String: UInt64]
+
+            public var id: String {
+                host
+            }
+
+            public var failure: Failure? {
+                lastFailure.map { Failure(rawValue: $0) ?? .other }
+            }
+
+            /// The last connection failed: no decryption since the last failure.
+            public var failing: Bool {
+                guard failed > 0, let failedAt = lastFailureAtMs else {
+                    return false
+                }
+                return lastDecryptedAtMs.map { $0 <= failedAt } ?? true
+            }
+
+            /// The app on the device refused the engine's certificate, as certificate pinning does: excluding the
+            /// domain is the only way its connections work while it is decrypted.
+            public var looksPinned: Bool {
+                failing && (failure == .clientRejectedCertificate || failure == .clientClosed)
+            }
+
+            public init(
+                host: String,
+                decrypted: UInt64 = 0,
+                failed: UInt64 = 0,
+                lastFailure: String? = nil,
+                lastFailureAtMs: UInt64? = nil,
+                lastDecryptedAtMs: UInt64? = nil,
+                failures: [String: UInt64] = [:]
+            ) {
+                self.host = host
+                self.decrypted = decrypted
+                self.failed = failed
+                self.lastFailure = lastFailure
+                self.lastFailureAtMs = lastFailureAtMs
+                self.lastDecryptedAtMs = lastDecryptedAtMs
+                self.failures = failures
+            }
+
+            enum CodingKeys: String, CodingKey {
+                case host, decrypted, failed, failures
+                case lastFailure = "last_failure"
+                case lastFailureAtMs = "last_failure_at_ms"
+                case lastDecryptedAtMs = "last_decrypted_at_ms"
+            }
+
+            public init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                host = try container.decode(String.self, forKey: .host)
+                decrypted = try container.decodeIfPresent(UInt64.self, forKey: .decrypted) ?? 0
+                failed = try container.decodeIfPresent(UInt64.self, forKey: .failed) ?? 0
+                lastFailure = try container.decodeIfPresent(String.self, forKey: .lastFailure)
+                lastFailureAtMs = try container.decodeIfPresent(UInt64.self, forKey: .lastFailureAtMs)
+                lastDecryptedAtMs = try container.decodeIfPresent(UInt64.self, forKey: .lastDecryptedAtMs)
+                failures = try container.decodeIfPresent([String: UInt64].self, forKey: .failures) ?? [:]
+            }
+        }
+
+        /// Why a decrypted connection failed, as the engine reports it.
+        public enum Failure: String, Equatable, Sendable {
+            /// The app refused the certificate with an alert: it does not trust the root, or it pins its certificate.
+            case clientRejectedCertificate = "client_rejected_certificate"
+            /// The app closed the connection during the handshake, which certificate pinning often looks like.
+            case clientClosed = "client_closed"
+            case clientHandshakeFailed = "client_handshake_failed"
+            case clientTimeout = "client_timeout"
+            /// The origin's own TLS failed, such as a certificate not valid for the name.
+            case originTls = "origin_tls"
+            case originUnreachable = "origin_unreachable"
+            /// A reason this build does not know.
+            case other
+        }
+
+        public let enabled: Bool
+        public let hosts: [Host]
+
+        public init(enabled: Bool, hosts: [Host]) {
+            self.enabled = enabled
+            self.hosts = hosts
+        }
+
+        /// The domains whose last connection failed, the most recently seen first.
+        public var failing: [Host] {
+            hosts.filter(\.failing)
+        }
     }
 
     /// The `script_notifications` answer.

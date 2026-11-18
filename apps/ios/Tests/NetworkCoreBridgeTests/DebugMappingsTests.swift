@@ -148,6 +148,74 @@ final class DebugMappingsTests: XCTestCase {
         XCTAssertThrowsError(try DebugMappings().addingHost("not a domain"))
     }
 
+    func testTheListTakesWildcardsExclusionsAndPausedLines() throws {
+        var mappings = try DebugMappings().addingHost("*.Example.com")
+        mappings = try mappings.addingHost("img-?.cdn.*")
+        mappings = try mappings.addingHost("-pay.example.com")
+        mappings = try mappings.addingHost("ads.example.com", exclude: true)
+        mappings = try mappings.addingHost("old.example.org")
+        mappings = mappings.settingHost("old.example.org", enabled: false)
+        XCTAssertEqual(mappings.hosts, ["*.example.com", "img-?.cdn.*"])
+        XCTAssertEqual(mappings.excludedHosts, ["pay.example.com", "ads.example.com"])
+        let text = try XCTUnwrap(mappings.pluginText)
+        XCTAssertTrue(text.hasSuffix(
+            "\n[MITM]\nhostname = %APPEND% *.example.com, img-?.cdn.*, -pay.example.com, -ads.example.com\n"
+        ))
+        XCTAssertFalse(text.contains("old.example.org"), "a paused line does not reach the tunnel")
+
+        XCTAssertTrue(mappings.decrypts("api.example.com"))
+        XCTAssertFalse(mappings.decrypts("pay.example.com"), "an exclusion wins over *.example.com")
+        XCTAssertTrue(mappings.excludes("pay.example.com"))
+        XCTAssertTrue(mappings.decrypts("img-3.cdn.test"))
+        XCTAssertFalse(mappings.decrypts("img-33.cdn.test"))
+        XCTAssertFalse(mappings.decrypts("old.example.org"))
+
+        // Turning a line into the other kind keeps one line per pattern.
+        let flipped = try mappings.addingHost("pay.example.com")
+        XCTAssertTrue(flipped.decrypts("pay.example.com"))
+        XCTAssertEqual(flipped.domains.filter { $0.pattern == "pay.example.com" }.count, 1)
+
+        // Editing keeps the place and refuses a pattern another line has.
+        let edited = try mappings.editingHost("img-?.cdn.*", to: "video.cdn.test", exclude: false)
+        XCTAssertEqual(edited.domains[1], DebugMappings.Domain(pattern: "video.cdn.test"))
+        XCTAssertThrowsError(try mappings.editingHost("img-?.cdn.*", to: "*.example.com", exclude: false)) { error in
+            XCTAssertEqual(error as? DebugMappingsError, .duplicateHost)
+        }
+        XCTAssertNil(mappings.removingHost("*.example.com").removingHost("img-?.cdn.*")
+            .removingHost("pay.example.com").removingHost("ads.example.com").pluginText)
+    }
+
+    func testAnExclusionAloneStillMakesAPlugin() throws {
+        // It narrows what the imported plugins decrypt.
+        let mappings = try DebugMappings().addingHost("-bank.example.com")
+        XCTAssertTrue(try XCTUnwrap(mappings.pluginText).hasSuffix("hostname = %APPEND% -bank.example.com\n"))
+    }
+
+    func testPatternsKeepToHostNames() {
+        XCTAssertEqual(DebugMappings.normalizePattern("*Spclient.spotify.com"), "*spclient.spotify.com")
+        XCTAssertEqual(DebugMappings.normalizePattern("https://*.example.com:443/x"), "*.example.com")
+        XCTAssertEqual(DebugMappings.normalizePattern("api.example.com"), "api.example.com")
+        XCTAssertNil(DebugMappings.normalizePattern("*"), "everything is refused")
+        XCTAssertNil(DebugMappings.normalizePattern("*.*"))
+        XCTAssertNil(DebugMappings.normalizePattern("a b*.com"))
+        XCTAssertNil(DebugMappings.normalizePattern("*..example.com"))
+        XCTAssertThrowsError(try DebugMappings().addingHost("-"))
+    }
+
+    func testOlderFilesLoadAsLinesThatAreOn() throws {
+        let old = try JSONDecoder().decode(
+            DebugMappings.self,
+            from: Data(#"{"entries":[],"hosts":["api.example.com","*.cdn.test"]}"#.utf8)
+        )
+        XCTAssertEqual(old.domains, [.init(pattern: "api.example.com"), .init(pattern: "*.cdn.test")])
+        // New files still carry `hosts` for older builds.
+        let paused = old.settingHost("*.cdn.test", enabled: false)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(paused)) as? [String: Any])
+        XCTAssertEqual(json["hosts"] as? [String], ["api.example.com"])
+        XCTAssertEqual((json["domains"] as? [Any])?.count, 2)
+        XCTAssertEqual(try JSONDecoder().decode(DebugMappings.self, from: JSONEncoder().encode(paused)), paused)
+    }
+
     func testDomainsSurviveStorageAndOldFilesStillLoad() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
         defer { try? FileManager.default.removeItem(at: url) }

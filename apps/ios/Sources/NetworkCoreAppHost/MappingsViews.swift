@@ -380,7 +380,7 @@ struct MappingEditor: View {
     }
 }
 
-/// The extensions page's link to the decrypted domains, with how many the list has. HTTPS decryption is per domain
+/// The extensions page's link to the decryption list, with how many lines it has. HTTPS decryption is per domain
 /// (the user's choice, 2026-11-14): this list, the plugins' `[MITM]` and the mappings' hosts.
 struct DecryptHostsSection: View {
     var tunnel: TunnelController
@@ -404,99 +404,435 @@ struct DecryptHostsSection: View {
     }
 
     private var summary: String {
-        let count = tunnel.debugMappings.hosts.count
-        return count == 0 ? String(localized: "未添加") : String(localized: "\(count) 个域名")
+        let mappings = tunnel.debugMappings
+        let decrypted = mappings.hosts.count
+        let excluded = mappings.excludedHosts.count
+        if decrypted == 0, excluded == 0 {
+            return String(localized: "未添加")
+        }
+        return excluded == 0
+            ? String(localized: "\(decrypted) 个域名")
+            : String(localized: "\(decrypted) 个域名，\(excluded) 个排除")
     }
 }
 
-/// The domains decrypted besides the plugins' and the mappings': type one to add it, swipe or the row menu to stop
-/// decrypting it. Saved with the mappings (`debug-mappings.json`); a running tunnel reconnects.
+/// The decryption list for developers and power users: domains and wildcard patterns to decrypt, exclusions that win
+/// over every include (plugins' too), each line on or paused, edited in place. While the tunnel runs, the engine's
+/// per-domain results (`mitm_hosts`) mark the domains whose decryption failed and why, certificate pinning first,
+/// with a one-tap exclusion. The list starts empty: nothing is bundled (public builds carry no presets). Saved with
+/// the mappings (`debug-mappings.json`); a running tunnel reconnects.
 struct DecryptHostsView: View {
     var tunnel: TunnelController
     @Environment(\.brand) private var brand
     @State private var typed = ""
+    @State private var excludeTyped = false
     @State private var failure: String?
+    @State private var outcomes: RuntimeControl.MitmHosts?
+    @State private var plugins = MitmPluginLibrary()
+    @State private var editing: DebugMappings.Domain?
 
-    private var hosts: [String] {
-        tunnel.debugMappings.hosts
+    private var mappings: DebugMappings {
+        tunnel.debugMappings
+    }
+
+    private var effective: DecryptionDomains {
+        DecryptionDomains(mappings: mappings, plugins: plugins)
+    }
+
+    /// Patterns that plugins and mappings add, not in the list.
+    private var otherPatterns: [String] {
+        let listed = Set(mappings.domains.map(\.pattern))
+        return effective.patterns.filter { !listed.contains($0) }
+    }
+
+    private var otherExclusions: [String] {
+        let listed = Set(mappings.domains.map(\.pattern))
+        return effective.excluded.filter { !listed.contains($0) }
     }
 
     var body: some View {
         List {
-            Section {
-                HStack(spacing: 10) {
-                    TextField("api.example.com 或 *.example.com", text: $typed)
-                        .autocorrectionDisabled()
-                        #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.URL)
-                        #endif
-                        .onSubmit(add)
-                    Button("添加", action: add)
-                        .disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-                if let failure {
-                    Text(failure)
-                        .font(.footnote)
-                        .foregroundStyle(brand.danger)
-                }
-            } footer: {
-                Text("写 *.example.com 包含它的所有子域名。需要先信任 HTTPS 解密证书，保存后连接中的隧道会自动重连。")
+            addSection
+            if let outcomes, !outcomes.failing.isEmpty {
+                failureSection(outcomes.failing)
             }
-            .listRowBackground(brand.surface)
-
-            Section {
-                if hosts.isEmpty {
-                    Text("还没有域名。也可以在加密连接的详情里点“解密此域名”。")
-                        .font(.subheadline)
-                        .foregroundStyle(brand.text2)
-                }
-                ForEach(hosts, id: \.self) { host in
-                    Text(verbatim: host)
-                        .font(.body.monospaced())
-                        .contextMenu {
-                            Button(role: .destructive) {
-                                commit(tunnel.debugMappings.removingHost(host))
-                            } label: {
-                                Label("不再解密", systemImage: "lock")
-                            }
-                        }
-                }
-                .onDelete { offsets in
-                    var next = tunnel.debugMappings
-                    for host in offsets.map({ hosts[$0] }) {
-                        next = next.removingHost(host)
-                    }
-                    commit(next)
-                }
+            domainSection(mappings.domains.filter { !$0.exclude }, exclude: false)
+            domainSection(mappings.domains.filter(\.exclude), exclude: true)
+            if !otherPatterns.isEmpty || !otherExclusions.isEmpty {
+                otherSection
             }
-            .listRowBackground(brand.surface)
+            helpSection
         }
         .scrollContentBackground(.hidden)
         .background(brand.bg.ignoresSafeArea())
         .navigationTitle("解密域名")
         .inlineNavigationTitle()
+        .sheet(item: $editing) { domain in
+            DecryptHostEditor(domain: domain) { text, exclude in
+                commit(try mappings.editingHost(domain.pattern, to: text, exclude: exclude))
+            }
+            .formSheetFrame()
+            .environment(\.brand, brand)
+            .tint(brand.primary)
+        }
+        .task(id: tunnel.connection) {
+            plugins = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)) ?? MitmPluginLibrary()
+            outcomes = nil
+            while tunnel.connection == .connected, !Task.isCancelled {
+                await loadOutcomes()
+                try? await Task.sleep(for: .seconds(5))
+            }
+        }
     }
 
-    private func add() {
-        do {
-            let next = try tunnel.debugMappings.addingHost(typed)
-            failure = nil
+    // MARK: - Sections
+
+    private var addSection: some View {
+        Section {
+            HStack(spacing: 10) {
+                TextField("api.example.com 或 *.example.com", text: $typed)
+                    .autocorrectionDisabled()
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
+                    #endif
+                    .onSubmit(addTyped)
+                Button("添加", action: addTyped)
+                    .disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            Picker("类型", selection: $excludeTyped) {
+                Text("解密").tag(false)
+                Text("排除").tag(true)
+            }
+            .pickerStyle(.segmented)
+            if let failure {
+                Text(failure)
+                    .font(.footnote)
+                    .foregroundStyle(brand.danger)
+            }
+        } footer: {
+            Text("* 匹配任意字符（包括点），? 匹配一个字符；*.example.com 匹配所有子域名，不含 example.com 本身。排除的域名永不解密，优先于这里、插件和映射里的所有解密规则；也可以直接写 -example.com。")
+        }
+        .listRowBackground(brand.surface)
+    }
+
+    private func failureSection(_ failing: [RuntimeControl.MitmHosts.Host]) -> some View {
+        Section {
+            ForEach(failing) { host in
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(verbatim: host.host)
+                            .font(.subheadline.weight(.semibold).monospaced())
+                            .foregroundStyle(brand.text)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Text(Self.reason(host.failure))
+                            .font(.caption)
+                            .foregroundStyle(host.looksPinned ? brand.warning : brand.text2)
+                        Text(Self.counts(host))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(brand.text3)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if effective.excludes(host.host) {
+                        Text("已排除")
+                            .font(.caption)
+                            .foregroundStyle(brand.text3)
+                    } else {
+                        Button("排除") {
+                            add(host.host, exclude: true)
+                        }
+                        .buttonStyle(.borderless)
+                        .font(.subheadline.weight(.semibold))
+                        .accessibilityLabel("排除 \(host.host)")
+                    }
+                }
+            }
+            Button("清除这些记录", role: .destructive) {
+                Task {
+                    _ = await tunnel.control(.clearMitmHosts)
+                    await loadOutcomes()
+                }
+            }
+        } header: {
+            Text("解密失败")
+        } footer: {
+            Text("根据本机这次连接以来的解密结果自动标出，只记录域名、次数和原因，断开后清空。App 拒绝证书多半是证书固定：它只信任自己的证书，无法解密。排除后它的连接原样转发，App 会照常联网。")
+        }
+        .listRowBackground(brand.surface)
+    }
+
+    @ViewBuilder
+    private func domainSection(_ domains: [DebugMappings.Domain], exclude: Bool) -> some View {
+        if !exclude || !domains.isEmpty {
+            Section {
+                if domains.isEmpty {
+                    Text("还没有域名。也可以在加密连接的详情里点“解密此域名”。")
+                        .font(.subheadline)
+                        .foregroundStyle(brand.text2)
+                }
+                ForEach(domains) { domain in
+                    row(domain)
+                }
+                .onDelete { offsets in
+                    var next = mappings
+                    for domain in offsets.map({ domains[$0] }) {
+                        next = next.removingHost(domain.pattern)
+                    }
+                    commit(next)
+                }
+            } header: {
+                Text(exclude ? "排除" : "解密")
+            }
+            .listRowBackground(brand.surface)
+        }
+    }
+
+    private func row(_ domain: DebugMappings.Domain) -> some View {
+        HStack(spacing: 10) {
+            Button {
+                editing = domain
+            } label: {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(verbatim: domain.pattern)
+                        .font(.body.monospaced())
+                        .foregroundStyle(domain.enabled ? brand.text : brand.text3)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if let status = status(domain) {
+                        Text(status)
+                            .font(.caption)
+                            .foregroundStyle(brand.text2)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("编辑")
+            Toggle(isOn: Binding(
+                get: { domain.enabled },
+                set: { commit(mappings.settingHost(domain.pattern, enabled: $0)) }
+            )) {
+                Text(verbatim: domain.pattern)
+            }
+            .labelsHidden()
+        }
+        .contextMenu {
+            Button {
+                editing = domain
+            } label: {
+                Label("编辑", systemImage: "pencil")
+            }
+            Button {
+                commit(mappings.settingHost(domain.pattern, enabled: !domain.enabled))
+            } label: {
+                domain.enabled
+                    ? Label("停用", systemImage: "pause.circle")
+                    : Label("启用", systemImage: "play.circle")
+            }
+            Button {
+                add(domain.pattern, exclude: !domain.exclude)
+            } label: {
+                domain.exclude
+                    ? Label("改为解密", systemImage: "lock.open")
+                    : Label("改为排除", systemImage: "lock")
+            }
+            Button(role: .destructive) {
+                commit(mappings.removingHost(domain.pattern))
+            } label: {
+                Label("删除", systemImage: "trash")
+            }
+        }
+    }
+
+    private var otherSection: some View {
+        Section {
+            ForEach(otherPatterns, id: \.self) { pattern in
+                Text(verbatim: pattern)
+                    .font(.body.monospaced())
+                    .foregroundStyle(effective.excludes(pattern) ? brand.text3 : brand.text)
+            }
+            ForEach(otherExclusions, id: \.self) { pattern in
+                Text(verbatim: "-" + pattern)
+                    .font(.body.monospaced())
+                    .foregroundStyle(brand.text2)
+            }
+        } header: {
+            Text("来自插件和映射")
+        } footer: {
+            Text("在插件和映射里修改。这里的排除同样作用于它们。")
+        }
+        .listRowBackground(brand.surface)
+    }
+
+    private var helpSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("哪些 HTTPS 能解密")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(brand.text)
+                Text("域名在列表里（或插件、映射里）、没有被排除，并且已经信任 HTTPS 解密证书。加入后新建的连接才会解密，之前的连接要等 App 重新连接。")
+                Text("只解密 443 端口的 HTTPS。列表里域名的 HTTP/3（QUIC）连接会被拒绝，让 App 改用可以解密的 HTTPS。")
+                Text("不能解密：固定了证书的 App（常见于银行、支付和系统服务），以及只有 IP 地址、没有域名的连接。")
+            }
+            .font(.footnote)
+            .foregroundStyle(brand.text2)
+        }
+        .listRowBackground(brand.surface)
+    }
+
+    // MARK: - Actions
+
+    private func addTyped() {
+        if add(typed, exclude: excludeTyped) {
             typed = ""
+        }
+    }
+
+    @discardableResult
+    private func add(_ text: String, exclude: Bool) -> Bool {
+        do {
+            let next = try mappings.addingHost(text, exclude: exclude)
+            failure = nil
             commit(next)
+            return true
         } catch let error as DebugMappingsError {
             failure = error.message
         } catch {
             failure = String(localized: "无法保存映射")
         }
+        return false
     }
 
     private func commit(_ next: DebugMappings) {
-        guard next != tunnel.debugMappings else {
+        guard next != mappings else {
             return
         }
         Task {
             await tunnel.applyDebugMappings(next)
+        }
+    }
+
+    private func loadOutcomes() async {
+        let answer = await tunnel.control(.mitmHosts)
+        outcomes = RuntimeControl.decode(RuntimeControl.MitmHosts.self, from: answer)
+    }
+
+    /// What the engine saw for the domains a line names, while the tunnel runs.
+    private func status(_ domain: DebugMappings.Domain) -> String? {
+        if !domain.enabled {
+            return String(localized: "已停用")
+        }
+        guard let outcomes, !domain.exclude else {
+            return nil
+        }
+        let hosts = outcomes.hosts.filter { DecryptionDomains.matches(domain.pattern, $0.host) }
+        guard !hosts.isEmpty else {
+            return nil
+        }
+        let decrypted = Int(clamping: hosts.reduce(UInt64(0)) { $0 &+ $1.decrypted })
+        let failing = hosts.filter(\.failing).count
+        if failing > 0 {
+            return String(localized: "已解密 \(decrypted) 个连接，\(failing) 个域名失败")
+        }
+        return String(localized: "已解密 \(decrypted) 个连接")
+    }
+
+    static func reason(_ failure: RuntimeControl.MitmHosts.Failure?) -> LocalizedStringKey {
+        switch failure {
+        case .clientRejectedCertificate:
+            "App 拒绝了证书：可能固定了证书，或没有信任根证书"
+        case .clientClosed:
+            "App 在握手时断开：常见于证书固定"
+        case .clientHandshakeFailed:
+            "与 App 的 TLS 握手失败"
+        case .clientTimeout:
+            "App 没有在限定时间内完成握手"
+        case .originTls:
+            "源站 TLS 握手失败，例如它的证书与域名不符"
+        case .originUnreachable:
+            "连不上源站，或源站没有及时响应"
+        case .other, nil:
+            "解密失败"
+        }
+    }
+
+    static func counts(_ host: RuntimeControl.MitmHosts.Host) -> String {
+        String(localized: "失败 \(Int(clamping: host.failed)) 次 · 解密 \(Int(clamping: host.decrypted)) 次")
+    }
+}
+
+/// Edits one line of the decryption list: the pattern and whether it decrypts or excludes.
+struct DecryptHostEditor: View {
+    let domain: DebugMappings.Domain
+    let save: (String, Bool) throws -> Void
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.brand) private var brand
+    @State private var text: String
+    @State private var exclude: Bool
+    @State private var failure: String?
+
+    init(domain: DebugMappings.Domain, save: @escaping (String, Bool) throws -> Void) {
+        self.domain = domain
+        self.save = save
+        _text = State(initialValue: domain.pattern)
+        _exclude = State(initialValue: domain.exclude)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("api.example.com 或 *.example.com", text: $text)
+                        .font(.body.monospaced())
+                        .autocorrectionDisabled()
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                        #endif
+                        .onSubmit(commit)
+                    Picker("类型", selection: $exclude) {
+                        Text("解密").tag(false)
+                        Text("排除").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                } footer: {
+                    Text("* 匹配任意字符（包括点），? 匹配一个字符。排除的域名永不解密。")
+                }
+                .listRowBackground(brand.surface)
+
+                if let failure {
+                    Text(failure)
+                        .foregroundStyle(brand.danger)
+                        .listRowBackground(brand.surface)
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(brand.bg.ignoresSafeArea())
+            .navigationTitle("编辑域名")
+            .inlineNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存", action: commit)
+                }
+            }
+        }
+    }
+
+    private func commit() {
+        do {
+            try save(text, exclude)
+            dismiss()
+        } catch let error as DebugMappingsError {
+            failure = error.message
+        } catch {
+            failure = String(localized: "无法保存映射")
         }
     }
 }

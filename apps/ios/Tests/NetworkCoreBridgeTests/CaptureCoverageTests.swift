@@ -73,6 +73,47 @@ final class CaptureCoverageTests: XCTestCase {
         XCTAssertTrue(DecryptionDomains(patterns: []).isEmpty)
     }
 
+    func testExclusionsWinOverEveryInclude() throws {
+        let domains = DecryptionDomains(patterns: ["*.example.com"], excluded: ["pay.example.com", "*.bank.example.com"])
+        XCTAssertTrue(domains.covers("api.example.com"))
+        XCTAssertFalse(domains.covers("pay.example.com"))
+        XCTAssertFalse(domains.covers("x.bank.example.com"))
+        XCTAssertTrue(domains.excludes("x.bank.example.com"))
+        XCTAssertFalse(domains.excludes("api.example.com"))
+        XCTAssertTrue(DecryptionDomains.matches("img-?.cdn.test", "IMG-1.cdn.test"))
+
+        // A plugin's `-host` excludes as well.
+        let summary = MitmPlugin.summarize("[MITM]\nhostname = %APPEND% *.example.com, -pay.example.com, !x.example.com\n")
+        XCTAssertEqual(summary.hostnames, ["*.example.com"])
+        XCTAssertEqual(summary.excludedHostnames, ["pay.example.com", "x.example.com"])
+    }
+
+    func testMitmHostsDecodeAndMarkFailingDomains() throws {
+        let json = #"""
+        {"enabled":true,"hosts":[
+          {"host":"pinned.example.com","decrypted":0,"failed":3,"last_failure":"client_rejected_certificate",
+           "last_failure_at_ms":30,"failures":{"client_rejected_certificate":3}},
+          {"host":"ok.example.com","decrypted":2,"failed":1,"last_failure":"origin_unreachable",
+           "last_failure_at_ms":10,"last_decrypted_at_ms":20,"failures":{"origin_unreachable":1}},
+          {"host":"new.example.com","decrypted":0,"failed":1,"last_failure":"something_new","last_failure_at_ms":5}
+        ]}
+        """#
+        XCTAssertEqual(RuntimeControl.mitmHosts.request, Data(#"{"cmd":"mitm_hosts"}"#.utf8))
+        XCTAssertEqual(RuntimeControl.clearMitmHosts.request, Data(#"{"cmd":"clear_mitm_hosts"}"#.utf8))
+        let answer = try XCTUnwrap(RuntimeControl.decode(RuntimeControl.MitmHosts.self, from: Data(json.utf8)))
+        XCTAssertTrue(answer.enabled)
+        XCTAssertEqual(answer.failing.map(\.host), ["pinned.example.com", "new.example.com"])
+        XCTAssertTrue(answer.hosts[0].looksPinned)
+        XCTAssertEqual(answer.hosts[0].failure, .clientRejectedCertificate)
+        XCTAssertFalse(answer.hosts[1].failing, "decrypted again after the failure")
+        XCTAssertEqual(answer.hosts[2].failure, .other)
+        let off = try XCTUnwrap(RuntimeControl.decode(
+            RuntimeControl.MitmHosts.self,
+            from: Data(#"{"enabled":false,"hosts":[]}"#.utf8)
+        ))
+        XCTAssertTrue(off.failing.isEmpty)
+    }
+
     func testDecryptionDomainsTakeTheDebugListAndMappings() throws {
         let mappings = try DebugMappings().addingHost("debug.example.com")
         let domains = DecryptionDomains(mappings: mappings, plugins: MitmPluginLibrary())

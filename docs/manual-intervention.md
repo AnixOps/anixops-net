@@ -413,7 +413,7 @@ tag 当时指向的 d225b10 还是旧 workflow，需要把 tag 移到包含修�
 它先检查版本号、commit 在 main 上、tag 不存在、发布说明存在且无占位符、同一 commit 在 main 上的 CI 已成功，再打 tag，
 然后在该 tag 上以 workflow_dispatch 启动 `release.yml`（GITHUB_TOKEN 推的 tag 不触发 push 事件）。维护者不再需要在本机推 tag。
 
-- [ ] anx 仓库的 Cargo.lock 内核与本仓库 `Cargo.toml` 固定的内核（c5f7a3f）一致后，再触发 anx 的 ANX 构建和 `publish-client.yml`；
+- [ ] anx 仓库的 Cargo.lock 内核与本仓库 `Cargo.toml` 固定的内核（becc3f6）一致后，再触发 anx 的 ANX 构建和 `publish-client.yml`；
   这些 run 进 Environment `apple-anx` / `anx-release`，需要维护者在 Actions 页面批准。
 - [ ] 原生 Windows / Linux 窗口的连接列表（#212）还没有随安装包发布：桌面安装包仍是 Tauri 版。
 

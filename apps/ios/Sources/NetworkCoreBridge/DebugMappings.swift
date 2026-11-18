@@ -6,8 +6,9 @@ import Foundation
 /// imported plugins: `[Map Local]` for local responses, `[Rewrite] … 307 …` for remote ones (307 keeps the method and
 /// body), and `[MITM] hostname` for the hosts they need decrypted. Not secret; kept in `debug-mappings.json`.
 ///
-/// The same file keeps the domains the user turned decryption on for one by one (`hosts`, "解密此域名"): HTTPS
-/// decryption is per domain, and these join the plugin's `[MITM] hostname` line even when no mapping is on. The
+/// The same file keeps the decryption list (`domains`, "解密域名"): HTTPS decryption is per domain, and the list's
+/// lines join the plugin's `[MITM] hostname` line even when no mapping is on: domains and wildcard patterns to
+/// decrypt, exclusions (`-pattern`, which win over every include) and paused lines. The list starts empty. The
 /// desktop clients read and write the same shape (`crates/desktop-mitm/src/mappings.rs`).
 public struct DebugMappings: Codable, Equatable, Sendable {
     /// Most entries kept.
@@ -189,28 +190,79 @@ public struct DebugMappings: Codable, Equatable, Sendable {
         }
     }
 
+    /// One line of the decryption list: a domain or a wildcard pattern, decrypted or excluded, on or paused.
+    public struct Domain: Codable, Equatable, Hashable, Identifiable, Sendable {
+        /// Lower-cased, as `normalizePattern` gives it: `api.example.com`, `*.example.com`, `img-?.example.com`.
+        public var pattern: String
+        /// Never decrypted, even when another line, a plugin or a mapping names it. Written `-pattern` in the
+        /// plugin's `[MITM] hostname` line, and an exclusion from any plugin wins over every include.
+        public var exclude: Bool
+        /// A paused line stays in the list but does not reach the tunnel.
+        public var enabled: Bool
+
+        public init(pattern: String, exclude: Bool = false, enabled: Bool = true) {
+            self.pattern = pattern
+            self.exclude = exclude
+            self.enabled = enabled
+        }
+
+        public var id: String {
+            pattern
+        }
+
+        /// As the plugin line writes it.
+        public var item: String {
+            exclude ? "-" + pattern : pattern
+        }
+    }
+
     public var entries: [Entry]
-    /// Domains decrypted one by one, lower-cased, in the order added. `*.example.com` covers the subdomains.
-    public var hosts: [String]
+    /// The decryption list, in the order added. A pattern is listed once, as an include or an exclusion.
+    public var domains: [Domain]
+
+    /// The patterns decrypted: the list's lines that are on and not exclusions.
+    public var hosts: [String] {
+        domains.filter { $0.enabled && !$0.exclude }.map(\.pattern)
+    }
+
+    /// The patterns never decrypted: the list's exclusions that are on.
+    public var excludedHosts: [String] {
+        domains.filter { $0.enabled && $0.exclude }.map(\.pattern)
+    }
 
     public init(entries: [Entry] = [], hosts: [String] = []) {
+        self.init(entries: entries, domains: hosts.map { Domain(pattern: $0) })
+    }
+
+    public init(entries: [Entry] = [], domains: [Domain]) {
         self.entries = entries
-        self.hosts = hosts
+        self.domains = domains
     }
 
     enum CodingKeys: String, CodingKey {
-        case entries, hosts
+        case entries, hosts, domains
     }
 
+    /// Files written before the list had exclusions and pauses keep only `hosts`; they load as lines that are on.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         entries = try container.decodeIfPresent([Entry].self, forKey: .entries) ?? []
-        hosts = try container.decodeIfPresent([String].self, forKey: .hosts) ?? []
+        if let domains = try container.decodeIfPresent([Domain].self, forKey: .domains) {
+            self.domains = domains
+        } else {
+            let hosts = try container.decodeIfPresent([String].self, forKey: .hosts) ?? []
+            domains = hosts.map { Domain(pattern: $0) }
+        }
     }
 
+    /// `hosts` is still written for older builds, which read only the decrypted patterns.
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(entries, forKey: .entries)
+        if !domains.isEmpty {
+            try container.encode(domains, forKey: .domains)
+        }
+        let hosts = hosts
         if !hosts.isEmpty {
             try container.encode(hosts, forKey: .hosts)
         }
@@ -221,10 +273,11 @@ public struct DebugMappings: Codable, Equatable, Sendable {
         entries.filter { $0.enabled && (try? $0.validate()) != nil }
     }
 
-    /// The generated plugin, or nil when no entry is on and no domain is decrypted.
+    /// The generated plugin, or nil when no entry is on and no list line is on.
     public var pluginText: String? {
         let active = active
-        guard !active.isEmpty || !hosts.isEmpty else {
+        let excluded = excludedHosts
+        guard !active.isEmpty || !hosts.isEmpty || !excluded.isEmpty else {
             return nil
         }
         var lines = ["#!name=\(Self.pluginName)", "#!desc=由调试视图生成的 Map Local / Map Remote 规则和解密域名"]
@@ -240,47 +293,119 @@ public struct DebugMappings: Codable, Equatable, Sendable {
             lines.append("[Map Local]")
             lines.append(contentsOf: local.map(\.line))
         }
-        var decrypted: [String] = []
-        for host in active.compactMap(\.host) + hosts where !decrypted.contains(host) {
-            decrypted.append(host)
+        var items: [String] = []
+        for host in active.compactMap(\.host) + hosts where !items.contains(host) && !excluded.contains(host) {
+            items.append(host)
         }
-        if !decrypted.isEmpty {
+        items += excluded.map { "-" + $0 }
+        if !items.isEmpty {
             lines.append("")
             lines.append("[MITM]")
-            lines.append("hostname = %APPEND% " + decrypted.joined(separator: ", "))
+            lines.append("hostname = %APPEND% " + items.joined(separator: ", "))
         }
         return lines.joined(separator: "\n") + "\n"
     }
 
-    /// With decryption on for one more domain (typed, or a request's host); unchanged when it is already listed.
-    public func addingHost(_ text: String) throws -> DebugMappings {
-        guard let host = Self.normalizeHost(text) else {
-            throw DebugMappingsError.invalidHost
+    /// With one more line in the decryption list: a domain, a wildcard pattern, or an exclusion (`exclude`, or
+    /// typed with a leading `-`). A pattern already listed is turned on and takes the new kind.
+    public func addingHost(_ text: String, exclude: Bool = false) throws -> DebugMappings {
+        let (pattern, excluding) = try Self.parseListLine(text, exclude: exclude)
+        var copy = self
+        if let index = copy.domains.firstIndex(where: { $0.pattern == pattern }) {
+            copy.domains[index].exclude = excluding
+            copy.domains[index].enabled = true
+            return copy
         }
-        guard !hosts.contains(host) else {
-            return self
-        }
-        guard hosts.count < Self.maxHosts else {
+        guard domains.count < Self.maxHosts else {
             throw DebugMappingsError.tooMany
         }
-        var copy = self
-        copy.hosts.append(host)
+        copy.domains.append(Domain(pattern: pattern, exclude: excluding))
         return copy
     }
 
-    /// With decryption off for a domain of `hosts`.
-    public func removingHost(_ host: String) -> DebugMappings {
-        var copy = self
-        copy.hosts.removeAll { $0 == host }
-        return copy
-    }
-
-    /// Whether `host` is decrypted by the list: the same name, or a `*.` entry that covers it.
-    public func decrypts(_ host: String) -> Bool {
-        guard let name = Self.normalizeHost(host) else {
-            return false
+    /// With the line for `pattern` rewritten from `text` (and `exclude`), in the same place and on.
+    public func editingHost(_ pattern: String, to text: String, exclude: Bool) throws -> DebugMappings {
+        let (next, excluding) = try Self.parseListLine(text, exclude: exclude)
+        guard let index = domains.firstIndex(where: { $0.pattern == pattern }) else {
+            return try addingHost(text, exclude: exclude)
         }
-        return hosts.contains { $0 == name || ($0.hasPrefix("*.") && name.hasSuffix($0.dropFirst())) }
+        if next != pattern, domains.contains(where: { $0.pattern == next }) {
+            throw DebugMappingsError.duplicateHost
+        }
+        var copy = self
+        copy.domains[index] = Domain(pattern: next, exclude: excluding)
+        return copy
+    }
+
+    /// With the line for `pattern` on or paused.
+    public func settingHost(_ pattern: String, enabled: Bool) -> DebugMappings {
+        var copy = self
+        for index in copy.domains.indices where copy.domains[index].pattern == pattern {
+            copy.domains[index].enabled = enabled
+        }
+        return copy
+    }
+
+    /// Without the line for `pattern`.
+    public func removingHost(_ pattern: String) -> DebugMappings {
+        var copy = self
+        copy.domains.removeAll { $0.pattern == pattern }
+        return copy
+    }
+
+    /// Whether the list decrypts `host`: a line that is on matches it and no exclusion that is on does.
+    public func decrypts(_ host: String) -> Bool {
+        DecryptionDomains(patterns: hosts, excluded: excludedHosts).covers(host)
+    }
+
+    /// Whether an exclusion of the list that is on names `host`.
+    public func excludes(_ host: String) -> Bool {
+        DecryptionDomains(patterns: [], excluded: excludedHosts).excludes(host)
+    }
+
+    /// `text` as a list line: the pattern and whether it is an exclusion.
+    private static func parseListLine(_ text: String, exclude: Bool) throws -> (String, Bool) {
+        var text = text.trimmingCharacters(in: .whitespaces)
+        var excluding = exclude
+        if let first = text.first, first == "-" || first == "!" {
+            excluding = true
+            text.removeFirst()
+        }
+        guard let pattern = normalizePattern(text) else {
+            throw DebugMappingsError.invalidHost
+        }
+        return (pattern, excluding)
+    }
+
+    /// A list line as typed: a domain (`normalizeHost`), or a wildcard pattern where `*` is any run of characters
+    /// (dots too) and `?` one character, such as `*.example.com`, `*cdn.example.com` or `img-?.example.*`. Same
+    /// rules as the engine's `[MITM] hostname` items; a pattern must keep a dot and a literal letter or digit, so a
+    /// bare `*` (everything) is refused. Nil when it is neither.
+    public static func normalizePattern(_ text: String) -> String? {
+        let text = text.trimmingCharacters(in: .whitespaces)
+        guard text.contains("*") || text.contains("?") else {
+            return normalizeHost(text)
+        }
+        var name = Substring(text)
+        if let scheme = name.range(of: "://") {
+            name = name[scheme.upperBound...]
+        }
+        name = name.prefix { $0 != "/" && $0 != "#" }
+        if let colon = name.lastIndex(of: ":"), name[name.index(after: colon)...].allSatisfy(\.isNumber) {
+            name = name[..<colon]
+        }
+        while name.hasSuffix(".") {
+            name = name.dropLast()
+        }
+        let lower = name.lowercased()
+        let allowed = Set("abcdefghijklmnopqrstuvwxyz0123456789.-_*?")
+        guard lower.count <= 253, lower.allSatisfy(allowed.contains), lower.contains("."),
+              !lower.hasPrefix("."), !lower.hasPrefix("-"), !lower.contains(".."),
+              lower.contains(where: { $0.isLetter || $0.isNumber })
+        else {
+            return nil
+        }
+        return lower
     }
 
     /// A domain as typed or taken from a request ("API.example.com:443", "https://a.test/x", "*.example.com"),
@@ -478,6 +603,7 @@ public enum DebugMappingsError: Error, Equatable {
     case bodyTooLarge
     case invalidTarget
     case invalidHost
+    case duplicateHost
     case tooMany
 
     public var message: String {
@@ -498,6 +624,8 @@ public enum DebugMappingsError: Error, Equatable {
             return String(localized: "目标应为 http:// 或 https:// 开头的完整 URL")
         case .invalidHost:
             return String(localized: "请填写域名，例如 api.example.com 或 *.example.com")
+        case .duplicateHost:
+            return String(localized: "列表里已有这个域名")
         case .tooMany:
             return String(localized: "已达到数量上限")
         }
