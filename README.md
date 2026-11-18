@@ -33,6 +33,11 @@ XCFramework 和 MSI 里的 Windows CLI（见 `.github/scripts/kernel-root.sh`）
 
 本地联调内核时，取消根 `Cargo.toml` 末尾 `[patch]` 段的注释，指向本地内核目录。
 
+## 网络行为
+
+客户端不带任何统计、遥测或第三方错误上报，装好不配置时不发出任何连接。会发出的每一个连接、什么时候发、带什么，见
+[docs/network-behavior.md](docs/network-behavior.md)，CI 检查源码里的地址都写在这份说明里。
+
 ## 工作方式
 
 与内核仓库相同：本机只写代码和文档，所有测试、构建、打包、发布都在 GitHub Actions 中完成，详见 [AGENT.md](AGENT.md)。
