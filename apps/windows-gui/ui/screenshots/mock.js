@@ -143,7 +143,7 @@
         if (rows.length === 0) return { capture: null };
         return { capture: { id: request.id, network: "tcp", host: rows[0].host, destination: "203.0.113.20:443", started_at_ms: rows[0].started_at_ms, ended_at_ms: null, decrypted: true, upload: { seen: 4000, captured: 4000, truncated: false }, download: { seen: 90000, captured: 90000, truncated: false }, chunks: [], http: rows.map(exchange) } };
       }
-      case "rule_sets": return { rule_sets: [{ name: "geosite-cn", source: "remote", entries: 71234, updated_at_ms: start - 3600e3 }, { name: "gfwlist", source: "remote", entries: 6012, updated_at_ms: start - 86400e3 }] };
+      case "rule_sets": return { rule_sets: [{ name: "geosite-cn", source: "remote", entries: 71234, updated_at_ms: start - 3600e3 }, { name: "gfwlist", source: "remote", entries: 6012, updated_at_ms: start - 86400e3, skipped: { "IP-ASN": 3 } }] };
       case "lan_share": return { running: false, port: null, addresses: ["192.168.1.23"], url: null, page_host: "anixops.local", https_decryption: true, certificate: true, credentials: false, accepted: 0, rejected: 0, active: 0, pages: 0 };
       default: return {};
     }
@@ -188,6 +188,7 @@
       { id: "p2", name: "YouTube 去广告", url: "https://example.com/yt.plugin", enabled: true, level: "partial", hostnames: ["*.googlevideo.com"], scriptCount: 1 },
     ],
     custom_dns: () => ({ servers: "", rules: "", hosts: "", fake_ip: false }),
+    routing_warnings: () => ["2 rules of type IP-ASN were not imported: the client does not support them yet"],
     my_rules: () => ({ text: "DOMAIN-SUFFIX,example.com,PROXY\nDOMAIN-KEYWORD,ads,REJECT\n", count: 2 }),
     phone_qr_code: () => "",
   };

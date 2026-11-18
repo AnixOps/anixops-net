@@ -121,7 +121,7 @@ function ImportWarnings({ snapshot }: { snapshot: RuntimeSnapshot | null }) {
   const profile = `${snapshot?.subscription ?? ""}|${snapshot?.subscriptionLastUpdated ?? ""}`;
 
   useEffect(() => {
-    void desktop.routingWarnings().then(setWarnings).catch(() => setWarnings([]));
+    void desktop.routingWarnings().then((lines) => setWarnings(Array.isArray(lines) ? lines : [])).catch(() => setWarnings([]));
   }, [profile]);
 
   if (warnings.length === 0) return null;
