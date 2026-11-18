@@ -160,7 +160,7 @@ export function DecryptHostsCard({ busy, run }: { busy: string | null; run: Run 
               icon={TriangleAlert}
               color="orange"
               label={outcome.host}
-              hint={`${t(failureReason(outcome.last_failure))} · ${t("失败 {failed} 次 · 解密 {count} 次", { failed: outcome.failed, count: outcome.decrypted })}`}
+              hint={[t(failureReason(outcome.last_failure)), t("失败 {failed} 次 · 解密 {count} 次", { failed: outcome.failed, count: outcome.decrypted })].join(" · ")}
             >
               {excludedBy(outcome.host, excluded)
                 ? <span className="muted">{t("已排除")}</span>
