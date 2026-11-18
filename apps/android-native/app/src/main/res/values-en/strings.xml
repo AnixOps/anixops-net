@@ -297,11 +297,11 @@
     <string name="decrypt_excluded">Excluded</string>
     <string name="decrypt_paused">Paused</string>
     <string name="decrypt_edit">Edit domain</string>
-    <string name="decrypt_status">%1$d connections decrypted</string>
-    <string name="decrypt_status_failing">%1$d connections decrypted, %2$d domains failed</string>
+    <string name="decrypt_status">Connections decrypted: %1$d</string>
+    <string name="decrypt_status_failing">Connections decrypted: %1$d · Failed domains: %2$d</string>
     <string name="decrypt_failed">Decryption failed</string>
     <string name="decrypt_failed_clear">Clear</string>
-    <string name="decrypt_failed_counts">%1$d failed · %2$d decrypted</string>
+    <string name="decrypt_failed_counts">Failed: %1$d · Decrypted: %2$d</string>
     <string name="decrypt_failed_note">Marked automatically from the decryption results since this connection began. Only domains, counts and reasons are kept, and they are cleared on disconnect. An app that refuses the certificate usually pins it and cannot be decrypted; once excluded, its connections pass through untouched and the app works normally.</string>
     <string name="decrypt_what_works">Only HTTPS on port 443 is decrypted; HTTP/3 (QUIC) connections to listed domains are refused so apps fall back to HTTPS, which can be decrypted. Apps that pin their certificate (common for banking, payments and system services), apps that ignore user certificates, and connections with only an IP address cannot be decrypted.</string>
     <string name="decrypt_reason_rejected">The app refused the certificate: it may pin its certificate, or ignore user certificates</string>
