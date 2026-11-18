@@ -92,6 +92,12 @@ final class TunnelController {
     @ObservationIgnored private var statusObserver: NSObjectProtocol?
     /// Set when a node switch stopped the tunnel; the tunnel starts again once it is down.
     @ObservationIgnored private var restartAfterStop = false
+    /// Capture as the app last set it in the running engine (`set_capture`; `load_capture` turns it off).
+    @ObservationIgnored private var captureOn = false
+    /// Set when the app restarts the tunnel itself (a new node, a decrypted domain) while capture is on: the new
+    /// engine starts with capture off, so the app turns it back on once connected. A disconnect by the user, or by
+    /// the system, ends capture with the tunnel.
+    @ObservationIgnored private var resumeCapture = false
 
     init() {
         coordinator = AppCoordinator(status: Self.platformStatus(saved: false))
@@ -700,6 +706,7 @@ final class TunnelController {
     /// Stops the tunnel and starts it again once it is down, so the extension reads the new profile and node list.
     private func restart() {
         restartAfterStop = true
+        resumeCapture = captureOn
         manager?.connection.stopVPNTunnel()
     }
 
@@ -1617,7 +1624,7 @@ final class TunnelController {
         guard let session = manager?.connection as? NETunnelProviderSession, connection == .connected else {
             return nil
         }
-        return await withCheckedContinuation { continuation in
+        let answer: Data? = await withCheckedContinuation { continuation in
             do {
                 try session.sendProviderMessage(TunnelAppMessage.control(command.request).encoded) { data in
                     continuation.resume(returning: data)
@@ -1626,6 +1633,40 @@ final class TunnelController {
                 continuation.resume(returning: nil)
             }
         }
+        switch command {
+        case .setCapture, .loadCapture:
+            if let status = RuntimeControl.decode(PacketCapture.Status.self, from: answer) {
+                captureOn = status.enabled
+            } else if case .loadCapture = command {
+                captureOn = false
+            }
+        default:
+            break
+        }
+        return answer
+    }
+
+    /// Whether the running tunnel decrypts HTTPS, as its extension set it up; nil while it is not running or from
+    /// an extension older than the question.
+    func httpsDecryptionState() async -> HttpsDecryptionState? {
+        #if DEBUG
+        if Self.isDemo {
+            return HttpsDecryptionState(status: .on, plugins: 1)
+        }
+        #endif
+        guard let session = manager?.connection as? NETunnelProviderSession, connection == .connected else {
+            return nil
+        }
+        let answer: Data? = await withCheckedContinuation { continuation in
+            do {
+                try session.sendProviderMessage(TunnelAppMessage.httpsDecryption.encoded) { data in
+                    continuation.resume(returning: data)
+                }
+            } catch {
+                continuation.resume(returning: nil)
+            }
+        }
+        return HttpsDecryptionState.decoded(from: answer)
     }
 
     /// Keeps `list` as the last connection list read from the running engine.
@@ -1739,6 +1780,19 @@ final class TunnelController {
         connectedSince = connection == .connected ? manager?.connection.connectedDate : nil
         if connection == .connected, previous != .connected {
             lastConnections = nil
+            if resumeCapture {
+                resumeCapture = false
+                Task {
+                    _ = await control(.setCapture(true))
+                }
+            }
+        }
+        if connection != .connected {
+            captureOn = false
+        }
+        if connection == .disconnected, !restartAfterStop {
+            // A stop the app did not ask for (the user, the system, a failure): capture ends with the tunnel.
+            resumeCapture = false
         }
         if restartAfterStop, connection == .disconnected {
             // The node switch stopped the tunnel on purpose: no error to show, just start it on the new node.

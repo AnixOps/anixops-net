@@ -19,10 +19,14 @@ public enum TunnelAppMessage: Equatable {
     /// would start with and, when only the rule lines changed, swaps them in place. Answered with a
     /// `RuntimeControl.ReloadAnswer`; `restart` asks the app to restart the tunnel instead.
     case reloadLocalRules(Data)
+    /// Whether the running tunnel decrypts HTTPS (`HttpsDecryptionState`), answered as JSON. An older extension
+    /// answers the runtime status instead, which does not decode as one.
+    case httpsDecryption
 
     private static let diagnosticsPayload = Data("diagnostics".utf8)
     private static let trafficStatsPayload = Data("traffic-stats".utf8)
     private static let clearTrafficStatsPayload = Data("traffic-stats-clear".utf8)
+    private static let httpsDecryptionPayload = Data("https-decryption".utf8)
     private static let controlPrefix = Data("control:".utf8)
     private static let notificationsPrefix = Data("notifications:".utf8)
     private static let reloadLocalRulesPrefix = Data("local-rules:".utf8)
@@ -43,6 +47,8 @@ public enum TunnelAppMessage: Equatable {
             return Self.notificationsPrefix + settings
         case let .reloadLocalRules(value):
             return Self.reloadLocalRulesPrefix + value
+        case .httpsDecryption:
+            return Self.httpsDecryptionPayload
         }
     }
 
@@ -56,6 +62,9 @@ public enum TunnelAppMessage: Equatable {
         if data == clearTrafficStatsPayload {
             return .clearTrafficStats
         }
+        if data == httpsDecryptionPayload {
+            return .httpsDecryption
+        }
         if data.starts(with: notificationsPrefix) {
             return .notificationSettings(Data(data.dropFirst(notificationsPrefix.count)))
         }
@@ -66,6 +75,49 @@ public enum TunnelAppMessage: Equatable {
             return .control(Data(data.dropFirst(controlPrefix.count)))
         }
         return .runtimeStatus
+    }
+}
+
+/// Whether the running tunnel decrypts HTTPS, as the extension set it up at start (`makeRuntimeSession`). The app
+/// checks its own side (root trusted, domains listed); only the extension knows whether the engine took them.
+public struct HttpsDecryptionState: Codable, Equatable {
+    public enum Status: String, Codable {
+        /// The engine decrypts the plugins' and the debug list's domains.
+        case on
+        /// Domains are listed, but the tunnel started without decryption (`reason`).
+        case off
+        /// Nothing asks for decryption: no plugin and no decrypted domain.
+        case unused
+    }
+
+    /// Why decryption is off. Fixed codes, never key or profile content.
+    public enum Reason: String, Codable {
+        /// No root certificate in the Keychain.
+        case noRoot = "no_root"
+        /// The extension could not read the root from the Keychain.
+        case rootUnavailable = "root_unavailable"
+        /// The engine refused the plugins.
+        case refused
+        case setupFailed = "setup_failed"
+    }
+
+    public var status: Status
+    public var reason: Reason?
+    /// Plugins handed to the engine, the debug list's own included.
+    public var plugins: Int
+
+    public init(status: Status, reason: Reason? = nil, plugins: Int = 0) {
+        self.status = status
+        self.reason = reason
+        self.plugins = plugins
+    }
+
+    public func encoded() -> Data? {
+        try? JSONEncoder().encode(self)
+    }
+
+    public static func decoded(from data: Data?) -> HttpsDecryptionState? {
+        data.flatMap { try? JSONDecoder().decode(HttpsDecryptionState.self, from: $0) }
     }
 }
 
