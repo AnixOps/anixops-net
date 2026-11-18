@@ -80,7 +80,7 @@ private fun ConnectionContent(capture: CaptureConnection, decrypt: DecryptHost?,
     if (capture.chunks.isNotEmpty()) {
         val tls = CaptureBytes.looksLikeTls(capture)
         Column {
-            val canDecrypt = tls && decrypt != null && decrypt.decryptable && !decrypt.covered
+            val canDecrypt = tls && decrypt != null && decrypt.decryptable && !decrypt.covered && !decrypt.excluded
             val decryptAction: (@Composable () -> Unit)? = if (canDecrypt) {
                 { TextButton(onClick = actions.decryptConnectionHost) { Text(stringResource(R.string.connection_decrypt_host)) } }
             } else {
@@ -126,6 +126,7 @@ private fun ConnectionContent(capture: CaptureConnection, decrypt: DecryptHost?,
 /** What to do about TLS data: nothing for an address, wait for a new connection once covered, else add the domain. */
 private fun tlsNote(decrypt: DecryptHost?): Int = when {
     decrypt == null || !decrypt.decryptable -> R.string.connection_tls_address
+    decrypt.excluded -> R.string.connection_tls_excluded
     decrypt.covered -> R.string.connection_tls_covered
     else -> R.string.connection_tls_add
 }

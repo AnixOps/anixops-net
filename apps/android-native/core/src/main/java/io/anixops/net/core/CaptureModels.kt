@@ -222,4 +222,33 @@ data class DecryptHost(
     val decryptable: Boolean = false,
     val host: String? = null,
     val covered: Boolean = false,
+    /** An exclusion names it: it is never decrypted, whatever else lists it. */
+    val excluded: Boolean = false,
 )
+
+/** One line of the decryption list (`list_decrypt_domains`). A paused line stays listed but does not apply. */
+@Serializable
+data class DecryptDomain(
+    val pattern: String,
+    val exclude: Boolean = false,
+    val enabled: Boolean = true,
+)
+
+/** One domain of the engine's `mitm_hosts` answer: decrypted and failed connections, and the last failure's code. */
+@Serializable
+data class MitmHostOutcome(
+    val host: String,
+    val decrypted: Long = 0,
+    val failed: Long = 0,
+    @SerialName("last_failure") val lastFailure: String? = null,
+    @SerialName("last_failure_at_ms") val lastFailureAtMs: Long? = null,
+    @SerialName("last_decrypted_at_ms") val lastDecryptedAtMs: Long? = null,
+) {
+    /** The last connection failed: nothing was decrypted since the last failure. */
+    val failing: Boolean
+        get() = failed > 0 && lastFailureAtMs != null && (lastDecryptedAtMs == null || lastDecryptedAtMs <= lastFailureAtMs)
+}
+
+/** The `mitm_hosts` answer; `enabled` is false while the engine runs without decryption. */
+@Serializable
+data class MitmHosts(val enabled: Boolean = false, val hosts: List<MitmHostOutcome> = emptyList())

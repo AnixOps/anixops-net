@@ -477,8 +477,11 @@ private fun rememberExtensionsActions(extensions: ExtensionsViewModel, snackbar:
                 context.startActivity(Intent(Settings.ACTION_SETTINGS))
             }
         },
-        addHost = extensions::addHost,
+        addHost = { host, exclude -> extensions.addHost(host, exclude) },
+        editHost = extensions::editHost,
+        setHostEnabled = extensions::setHostEnabled,
         removeHost = extensions::removeHost,
+        clearOutcomes = { extensions.clearOutcomes() },
         importPlugin = extensions::importPlugin,
         importPluginText = extensions::importPluginText,
         // Plugins come as .plugin, .sgmodule, .lpx, .conf or .txt, which carry no MIME type of their own.
