@@ -34,7 +34,21 @@ data class RuleSetStatus(
     val entries: Int = 0,
     @SerialName("updated_at_ms") val updatedAtMs: Long? = null,
     @SerialName("last_error") val lastError: String? = null,
-)
+    /**
+     * Lines of the last download the set could not hold, by rule type (`IP-ASN`, `SCRIPT`, `INVALID` for malformed
+     * lines, `OTHER` past sixteen types); empty when none were.
+     */
+    val skipped: Map<String, Int> = emptyMap(),
+) {
+    /** How many lines [skipped] counts in all. */
+    val skippedCount: Int get() = skipped.values.sum()
+
+    /** [skipped] as `IP-ASN ×12, SCRIPT ×1`, most first. */
+    val skippedSummary: String
+        get() = skipped.entries
+            .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+            .joinToString(", ") { "${it.key} ×${it.value}" }
+}
 
 @Serializable
 internal data class RuleSetsAnswer(@SerialName("rule_sets") val ruleSets: List<RuleSetStatus> = emptyList())

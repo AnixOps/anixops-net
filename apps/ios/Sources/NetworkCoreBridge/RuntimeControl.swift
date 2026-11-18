@@ -491,9 +491,25 @@ public enum RuntimeControl {
             public let entries: Int
             public let updatedAt: Date?
             public let lastError: String?
+            /// Lines of the last download the set could not hold, by rule type (`IP-ASN`, `SCRIPT`, `INVALID` for
+            /// malformed lines, `OTHER` past sixteen types); empty when none were or the kernel predates the field.
+            public let skipped: [String: Int]
 
             public var id: String {
                 name
+            }
+
+            /// How many lines `skipped` counts in all.
+            public var skippedCount: Int {
+                skipped.values.reduce(0, +)
+            }
+
+            /// `skipped` as `IP-ASN ×12, SCRIPT ×1`, most first.
+            public var skippedSummary: String {
+                skipped
+                    .sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
+                    .map { "\($0.key) ×\($0.value)" }
+                    .joined(separator: ", ")
             }
 
             enum CodingKeys: String, CodingKey {
@@ -502,6 +518,7 @@ public enum RuntimeControl {
                 case entries
                 case updatedAtMs = "updated_at_ms"
                 case lastError = "last_error"
+                case skipped
             }
 
             public init(from decoder: Decoder) throws {
@@ -512,6 +529,7 @@ public enum RuntimeControl {
                 updatedAt = try container.decodeIfPresent(UInt64.self, forKey: .updatedAtMs)
                     .map { Date(timeIntervalSince1970: Double($0) / 1000) }
                 lastError = try container.decodeIfPresent(String.self, forKey: .lastError)
+                skipped = try container.decodeIfPresent([String: Int].self, forKey: .skipped) ?? [:]
             }
         }
 

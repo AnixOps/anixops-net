@@ -130,6 +130,8 @@
     <string name="group_urltest">自動測速</string>
     <string name="group_none">未選擇</string>
     <string name="rules_sets">規則集</string>
+    <string name="rules_import_warnings">匯入時略過的規則</string>
+    <string name="rules_import_warnings_note">訂閱裡的這些規則用戶端不支援，沒有生效。</string>
     <string name="rules_sets_note">目前連線正在使用的規則集。</string>
     <string name="rules_sets_update">更新遠端規則集</string>
     <string name="rule_set_remote">遠端</string>
@@ -160,6 +162,9 @@
     </plurals>
     <plurals name="rules_sets_started">
         <item quantity="other">已開始更新 %d 個遠端規則集</item>
+    </plurals>
+    <plurals name="rule_set_skipped">
+        <item quantity="other">清單裡有 %1$d 條規則不支援，已略過：%2$s</item>
     </plurals>
     <plurals name="rule_set_entries">
         <item quantity="other">%d 條</item>

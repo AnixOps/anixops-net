@@ -134,6 +134,8 @@
     <string name="group_urltest">Auto speed test</string>
     <string name="group_none">None selected</string>
     <string name="rules_sets">Rule sets</string>
+    <string name="rules_import_warnings">Rules skipped on import</string>
+    <string name="rules_import_warnings_note">The client doesn\'t support these rules from the subscription, so they don\'t apply.</string>
     <string name="rules_sets_note">The rule sets the current connection uses.</string>
     <string name="rules_sets_update">Update remote rule sets</string>
     <string name="rule_set_remote">Remote</string>
@@ -167,6 +169,10 @@
     <plurals name="rules_sets_started">
         <item quantity="one">Updating %d remote rule set</item>
         <item quantity="other">Updating %d remote rule sets</item>
+    </plurals>
+    <plurals name="rule_set_skipped">
+        <item quantity="one">%1$d rule in the list isn\'t supported and was skipped: %2$s</item>
+        <item quantity="other">%1$d rules in the list aren\'t supported and were skipped: %2$s</item>
     </plurals>
     <plurals name="rule_set_entries">
         <item quantity="one">%d entry</item>

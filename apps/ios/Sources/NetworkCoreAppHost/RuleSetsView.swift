@@ -2,11 +2,14 @@ import NetworkCoreBridge
 import SwiftUI
 
 /// The rules page's list of the subscription's rules and the rule sets they use. While connected each set shows
-/// what the engine loaded: entries, last download and the last error, with a button to download them all now.
+/// what the engine loaded: entries, last download, the last error and the list lines it could not hold, with a button
+/// to download them all now. Rules the import left out are listed below, so none fails silently.
 struct RuleSetsSection: View {
     var tunnel: TunnelController
     let rules: [String]
     let defined: [String: EmbeddedRuntimeConfig.RuleSet]?
+    /// What importing the subscription's rules left out (`NodeLibrary.routingWarnings`).
+    var warnings: [String] = []
     @Environment(\.brand) private var brand
     @State private var status: [String: RuntimeControl.RuleSets.Status] = [:]
     @State private var updating = false
@@ -55,11 +58,27 @@ struct RuleSetsSection: View {
         .task(id: tunnel.connection) {
             await load()
         }
+        if !warnings.isEmpty {
+            Section {
+                ForEach(Array(warnings.enumerated()), id: \.offset) { _, warning in
+                    Text(verbatim: warning)
+                        .font(.caption)
+                        .foregroundStyle(brand.warning)
+                        .textSelection(.enabled)
+                        .listRowBackground(brand.surface)
+                }
+            } header: {
+                Text("导入时跳过的规则")
+            } footer: {
+                Text("这些规则在导入订阅时没有导入，不会生效。")
+            }
+        }
     }
 
     private func row(_ name: String) -> some View {
         let loaded = status[name]
         let source = defined?[name] ?? RuleSetCatalog.known[name]
+        let builtIn = source == nil && RuleSetCatalog.builtIn.contains(name)
         return VStack(alignment: .leading, spacing: 3) {
             HStack {
                 Text(verbatim: name)
@@ -72,7 +91,10 @@ struct RuleSetsSection: View {
                 }
             }
             Group {
-                if source == nil {
+                if builtIn {
+                    Text("内置：本机和局域网地址")
+                        .foregroundStyle(brand.text2)
+                } else if source == nil {
                     // The engine refuses RULE-SET and GEOSITE rules without their set, so the app leaves them out.
                     Text(name.hasPrefix("geoip-") ? "订阅没有提供这个规则集，相关规则不会命中" : "订阅没有提供这个规则集，已跳过相关规则")
                         .foregroundStyle(brand.warning)
@@ -85,6 +107,10 @@ struct RuleSetsSection: View {
                 } else if let url = source?.url {
                     Text(verbatim: SubscriptionLink.displayHost(url))
                         .foregroundStyle(brand.text3)
+                }
+                if let loaded, loaded.skippedCount > 0 {
+                    Text("列表里有 \(loaded.skippedCount) 条规则不支持，已跳过：\(loaded.skippedSummary)")
+                        .foregroundStyle(brand.warning)
                 }
             }
             .font(.caption)

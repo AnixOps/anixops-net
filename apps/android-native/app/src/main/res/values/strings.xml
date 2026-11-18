@@ -136,6 +136,8 @@
     <string name="group_urltest">自动测速</string>
     <string name="group_none">未选择</string>
     <string name="rules_sets">规则集</string>
+    <string name="rules_import_warnings">导入时跳过的规则</string>
+    <string name="rules_import_warnings_note">订阅里的这些规则客户端不支持，没有生效。</string>
     <string name="rules_sets_note">当前连接正在使用的规则集。</string>
     <string name="rules_sets_update">更新远程规则集</string>
     <string name="rule_set_remote">远程</string>
@@ -166,6 +168,9 @@
     </plurals>
     <plurals name="rules_sets_started">
         <item quantity="other">已开始更新 %d 个远程规则集</item>
+    </plurals>
+    <plurals name="rule_set_skipped">
+        <item quantity="other">列表里有 %1$d 条规则不支持，已跳过：%2$s</item>
     </plurals>
     <plurals name="rule_set_entries">
         <item quantity="other">%d 条</item>
