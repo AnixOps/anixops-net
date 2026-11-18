@@ -44,13 +44,17 @@ export function HomePage({ snapshot, nodes, phase, busy, run, toggle, goTo, dela
     void desktop.subscriptions().then(setSources).catch(() => setSources([]));
   }, [snapshot?.subscription, snapshot?.subscriptionLastUpdated]);
 
-  // The exit address and the direct delay; backends without the probe leave both out.
+  // The exit address and the direct delay; backends without the probe leave both out. Measured on their own only
+  // while connected: before that the app opens no connection unless asked (docs/network-behavior.md).
   const [probe, setProbe] = useState<NetworkProbe | null>(null);
   const connected = phase === "on";
   const reprobe = useCallback(() => {
     void desktop.networkProbe(connected).then(setProbe).catch(() => setProbe(null));
   }, [connected]);
-  useEffect(reprobe, [reprobe, snapshot?.selectedNode, snapshot?.routingMode]);
+  useEffect(() => {
+    if (connected) reprobe();
+    else setProbe(null);
+  }, [connected, reprobe, snapshot?.selectedNode, snapshot?.routingMode]);
 
   const waiting = t("连接后显示");
   const programs = topUsage(connections, (item) => item.process?.split(/[\\/]/).pop(), 5);
@@ -60,7 +64,7 @@ export function HomePage({ snapshot, nodes, phase, busy, run, toggle, goTo, dela
       <Hero snapshot={snapshot} nodes={nodes} phase={phase} busy={busy} run={run} toggle={toggle} goTo={goTo} delays={delays} probe={probe} />
       <SubscriptionPanel snapshot={snapshot} source={sources.find((item) => item.selected) ?? sources[0]} nodeCount={nodes.length} busy={busy} run={run} goTo={goTo} />
       <TrafficPanel waiting={waiting} goTo={goTo} />
-      <DelayPanel snapshot={snapshot} busy={busy} run={run} goTo={goTo} setDelays={setDelays} probe={probe} reprobe={reprobe} />
+      <DelayPanel snapshot={snapshot} connected={connected} busy={busy} run={run} goTo={goTo} setDelays={setDelays} probe={probe} reprobe={reprobe} />
       <UsagePanel
         icon={ListTree}
         title={t("流量最多的网站")}
@@ -331,9 +335,13 @@ const delayTargets: Array<{ key: string; label: string; icon: LucideIcon; url: s
 let delayCache: { node: string; at: number; results: Record<string, NodeDelay> } | null = null;
 const delayMaxAge = 120_000;
 
-/** Delays through the current node to a few well-known sites, and the switches for how traffic is taken over. */
-function DelayPanel({ snapshot, busy, run, goTo, setDelays, probe, reprobe }: {
+/**
+ * Delays through the current node to a few well-known sites, and the switches for how traffic is taken over. The
+ * delays are tested on their own only while connected; before that only "Test again" does.
+ */
+function DelayPanel({ snapshot, connected, busy, run, goTo, setDelays, probe, reprobe }: {
   snapshot: RuntimeSnapshot | null;
+  connected: boolean;
   busy: string | null;
   run: Run;
   goTo: (page: Page) => void;
@@ -364,8 +372,8 @@ function DelayPanel({ snapshot, busy, run, goTo, setDelays, probe, reprobe }: {
       return;
     }
     setResults({});
-    void test(nodeId);
-  }, [nodeId, test]);
+    if (connected) void test(nodeId);
+  }, [connected, nodeId, test]);
 
   const windows = snapshot !== null && !inProcessEngine(snapshot);
   const tunSwitch = windows || snapshot?.platform === "linux";

@@ -51,6 +51,11 @@ jobs:
       - name: No preset scripts or routing rules
         run: python3 .github/scripts/no_presets.py
 
+      # Every address the client sources name is described in docs/network-behavior.md: a new update server,
+      # statistics endpoint or lookup service fails here until it is documented.
+      - name: Outbound addresses are documented
+        run: python3 .github/scripts/outbound_hosts.py
+
       # Pull requests run only the platforms their paths touch. Manual runs, every push to main that changes
       # anything besides documentation, and any change to the workspace, lockfile, workflows or scripts run
       # everything. A push to main that only changes documentation (root *.md other than TERMS.md, docs/) runs
