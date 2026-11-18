@@ -11,7 +11,9 @@ import io.anixops.net.core.CaptureSession
 import io.anixops.net.core.CaptureStatus
 import io.anixops.net.core.ConnectionSnapshot
 import io.anixops.net.core.DebugMapping
+import io.anixops.net.core.DecryptDomain
 import io.anixops.net.core.DecryptHost
+import io.anixops.net.core.MitmHostOutcome
 import io.anixops.net.core.Delay
 import io.anixops.net.core.DnsText
 import io.anixops.net.core.FilterError
@@ -647,6 +649,20 @@ class ScreenshotTest {
             loaded = true,
             consented = true,
             hosts = listOf("api.example.com", "*.example.org"),
+            domains = listOf(
+                DecryptDomain("api.example.com"),
+                DecryptDomain("*.example.org"),
+                DecryptDomain("pay.example.org", exclude = true),
+            ),
+            outcomes = listOf(
+                MitmHostOutcome("api.example.com", decrypted = 128, lastDecryptedAtMs = 2),
+                MitmHostOutcome(
+                    "auth.example.org",
+                    failed = 4,
+                    lastFailure = "client_rejected_certificate",
+                    lastFailureAtMs = 1,
+                ),
+            ),
             plugins = listOf(
                 MitmPlugin(
                     id = "p1",
