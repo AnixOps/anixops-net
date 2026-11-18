@@ -63,6 +63,7 @@ HTTPS 解密按域名逐个开启，不默认解密全部流量。
   - 排除行写成 `-pattern`，优先于列表、插件和映射里的所有解密规则（引擎合并插件时任一插件的排除都胜出）；输入框里直接写 `-example.com` 也是排除。
   - 生成的“AnixOps 调试映射”插件把解密行、映射的主机和排除行一起写进 `[MITM] hostname = %APPEND% …, -排除…`，所以只有列表（哪怕只有排除）、没有映射时也会生成这个插件。
   - 列表默认为空，不带任何预设（公开版不带预设规则）。失败标记来自本机这次连接的解密结果，不是内置名单。
+- 桌面端（Tauri，`crates/desktop-mitm/src/mappings.rs`）读写同一形状，规则相同（`normalize_pattern`、`pattern_matches`）；命令 `list_decrypt_domains`、`add_decrypt_host {host, exclude}`、`edit_decrypt_host`、`set_decrypt_host_enabled`、`remove_decrypt_host`，`list_decrypt_hosts` 只回启用的解密行。“改写 › 解密域名”卡片有解密 / 排除、开关、编辑和解密失败标记（`runtime_control` 的 `mitm_hosts`）。`client-core` 有同样的命令（Android 用），`view.decrypt_hosts` 多了 `excluded` 参数和答案字段；Android 界面另行跟进。
 - 解密失败标记（Apple）：隧道运行时解密域名页每 5 秒读内核 `mitm_hosts`，最后一次连接失败的域名列在“解密失败”里，写明原因：App 拒绝证书（证书类告警，多为证书固定或未信任根证书）、握手中断开（证书固定常见）、握手失败、超时、源站 TLS 失败、源站连不上；一键“排除”。“清除这些记录”发 `clear_mitm_hosts`。请求页“没有请求的连接”里已在列表的域名也显示同一原因。内核只记域名、次数、时间和原因码，最多 256 个，断开即清空。
 - 域名统一转成小写，去掉协议、路径和端口；IP 地址不能加入（Rust `mappings::normalize_host`、Swift `DebugMappings.normalizeHost` 规则相同）。
 - 加密连接的详情里有“解密此域名”，一键把连接的域名加进列表；已在列表里或目标是 IP 时不显示，说明文字会写明原因。

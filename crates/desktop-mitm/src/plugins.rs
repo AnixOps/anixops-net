@@ -340,7 +340,7 @@ pub fn apply(directory: &Path, mitm: &mut Map<String, Value>) {
     }
     if let Some(text) = crate::mappings::load(directory)
         .ok()
-        .and_then(|stored| crate::mappings::plugin_text(&stored.entries, &stored.hosts))
+        .and_then(|stored| stored.plugin_text())
     {
         texts.push(Value::String(text));
     }

@@ -11,7 +11,7 @@ import { ExchangeInspector } from "./Inspector";
 import { requestKey } from "../capture-filter";
 import { t } from "../i18n";
 import { mappingFromExchange, MappingEditor, ReplayEditor } from "./DebugTools";
-import { coveredBy, decryptHostOf, isDecryptableHost } from "../decrypt-hosts";
+import { coveredBy, decryptHostOf, excludedBy, isDecryptableHost } from "../decrypt-hosts";
 import { useDecryptHosts } from "./DecryptHosts";
 
 /** Saves an export to Downloads and shows where it went. */
@@ -48,12 +48,14 @@ export function CaptureDetail({ connection, busy, run, onBack, initialExchange }
   const [exchange, setExchange] = useState<number | null>(initialExchange ?? null);
   const [redact, setRedact] = useState(true);
   const [tool, setTool] = useState<{ replay: CaptureExchange } | { mapping: DebugMapping } | null>(null);
-  const [decryptHosts, reloadDecryptHosts] = useDecryptHosts();
+  const [decryptHosts, reloadDecryptHosts, excludedHosts] = useDecryptHosts();
   const visible = usePageVisible();
   const open = connection.ended_at_ms == null;
   /** The connection's domain while the decrypted-domain list does not cover it; null for an address or a covered one. */
   const host = connection.host;
-  const undecrypted = isDecryptableHost(host) && !coveredBy(host, decryptHosts) ? decryptHostOf(host) : null;
+  const undecrypted = isDecryptableHost(host) && !coveredBy(host, decryptHosts) && !excludedBy(host, excludedHosts)
+    ? decryptHostOf(host)
+    : null;
 
   useEffect(() => {
     if (!visible) return;
@@ -147,7 +149,7 @@ export function CaptureDetail({ connection, busy, run, onBack, initialExchange }
       {capture.chunks.length > 0 && (
         <Card
           title={capture.network === "udp" ? t("数据报") : t("数据")}
-          description={looksLikeTls(capture) ? encryptedNote(connection.host, decryptHosts) : undefined}
+          description={looksLikeTls(capture) ? encryptedNote(connection.host, decryptHosts, excludedHosts) : undefined}
           actions={looksLikeTls(capture) && undecrypted ? (
             <button
               className="secondary compact"
@@ -182,8 +184,9 @@ export function CaptureDetail({ connection, busy, run, onBack, initialExchange }
 }
 
 /** What to do about an encrypted connection: add its domain, or wait for a new connection once it is added. */
-function encryptedNote(host: string | null | undefined, decrypted: string[]): string {
+function encryptedNote(host: string | null | undefined, decrypted: string[], excluded: string[]): string {
   if (!isDecryptableHost(host)) return t("这是加密的 TLS 数据。目标只有 IP 地址，没有域名，无法按域名解密。");
+  if (excludedBy(host, excluded)) return t("这是加密的 TLS 数据。这个域名在解密列表里被排除，不会解密。");
   if (coveredBy(host, decrypted)) {
     return t("这个域名已在解密列表里。解密只对新连接生效；如果仍看不到明文，请确认 HTTPS 解密已开启、根证书已信任，或者这个 App 固定了证书。");
   }

@@ -5,8 +5,11 @@
 //! are kept in `debug-mappings.json` next to the plugin library, in the same shape as the Apple clients'
 //! `DebugMappings` (docs/debug-mode.md).
 //!
-//! The same file keeps the domains the user turned decryption on for one by one ("解密此域名", `hosts`): HTTPS
-//! decryption is per domain, and these join the plugin's `[MITM] hostname` line even when no mapping is on.
+//! The same file keeps the decryption list ("解密域名", `domains`): HTTPS decryption is per domain, and the list's
+//! lines join the plugin's `[MITM] hostname` line even when no mapping is on: domains and wildcard patterns to
+//! decrypt, exclusions (`-pattern`, which win over every include) and paused lines. The list starts empty. Files
+//! from before the list had exclusions keep only `hosts`, which load as lines that are on; `hosts` is still
+//! written for older builds.
 
 use std::fs;
 use std::path::Path;
@@ -93,9 +96,76 @@ fn ok_status() -> u16 {
 pub struct Stored {
     #[serde(default)]
     pub entries: Vec<Entry>,
-    /// Domains decrypted one by one, lower-cased, in the order added. `*.example.com` covers the subdomains.
+    /// The decrypted patterns (`decrypted()`), written for older builds; read only from files without `domains`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hosts: Vec<String>,
+    /// The decryption list, in the order added. A pattern is listed once, as an include or an exclusion.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub domains: Vec<Domain>,
+}
+
+/// One line of the decryption list.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Domain {
+    /// Lower-cased, as `normalize_pattern` gives it: `api.example.com`, `*.example.com`, `img-?.example.com`.
+    pub pattern: String,
+    /// Never decrypted, even when another line, a plugin or a mapping names it (`-pattern` in the plugin).
+    #[serde(default)]
+    pub exclude: bool,
+    /// A paused line stays in the list but does not reach the engine.
+    #[serde(default = "enabled")]
+    pub enabled: bool,
+}
+
+fn enabled() -> bool {
+    true
+}
+
+impl Domain {
+    fn new(pattern: String, exclude: bool) -> Self {
+        Self {
+            pattern,
+            exclude,
+            enabled: true,
+        }
+    }
+}
+
+impl Stored {
+    /// The patterns decrypted: the list's lines that are on and not exclusions.
+    pub fn decrypted(&self) -> Vec<String> {
+        self.domains
+            .iter()
+            .filter(|domain| domain.enabled && !domain.exclude)
+            .map(|domain| domain.pattern.clone())
+            .collect()
+    }
+
+    /// The patterns never decrypted: the list's exclusions that are on.
+    pub fn excluded(&self) -> Vec<String> {
+        self.domains
+            .iter()
+            .filter(|domain| domain.enabled && domain.exclude)
+            .map(|domain| domain.pattern.clone())
+            .collect()
+    }
+
+    /// The generated plugin of this file, as `plugin_text` makes it.
+    pub fn plugin_text(&self) -> Option<String> {
+        plugin_text(&self.entries, &self.decrypted(), &self.excluded())
+    }
+
+    /// An older file's `hosts` as list lines that are on.
+    fn migrate(mut self) -> Self {
+        if self.domains.is_empty() && !self.hosts.is_empty() {
+            self.domains = self
+                .hosts
+                .iter()
+                .map(|host| Domain::new(host.clone(), false))
+                .collect();
+        }
+        self
+    }
 }
 
 impl Entry {
@@ -283,13 +353,14 @@ fn quote(token: &str, always: bool) -> String {
     quoted
 }
 
-/// The generated plugin of the enabled, usable entries and the decrypted domains; none when there is neither.
-pub fn plugin_text(entries: &[Entry], decrypted: &[String]) -> Option<String> {
+/// The generated plugin of the enabled, usable entries, the decrypted patterns and the exclusions (written
+/// `-pattern`); none when there is none of them.
+pub fn plugin_text(entries: &[Entry], decrypted: &[String], excluded: &[String]) -> Option<String> {
     let active: Vec<&Entry> = entries
         .iter()
         .filter(|entry| entry.enabled && entry.validate().is_ok())
         .collect();
-    if active.is_empty() && decrypted.is_empty() {
+    if active.is_empty() && decrypted.is_empty() && excluded.is_empty() {
         return None;
     }
     let mut lines = vec![
@@ -314,10 +385,11 @@ pub fn plugin_text(entries: &[Entry], decrypted: &[String]) -> Option<String> {
         .filter_map(|entry| entry.host())
         .chain(decrypted.iter().cloned())
     {
-        if !hosts.contains(&host) {
+        if !hosts.contains(&host) && !excluded.contains(&host) {
             hosts.push(host);
         }
     }
+    hosts.extend(excluded.iter().map(|pattern| format!("-{pattern}")));
     if !hosts.is_empty() {
         lines.push(String::new());
         lines.push("[MITM]".to_string());
@@ -358,6 +430,81 @@ pub fn normalize_host(text: &str) -> Option<String> {
     Some(if wildcard { format!("*.{name}") } else { name })
 }
 
+/// A list line as typed: a domain (`normalize_host`), or a wildcard pattern where `*` is any run of characters
+/// (dots too) and `?` one character, such as `*.example.com`, `*cdn.example.com` or `img-?.example.*`. Same rules
+/// as the engine's `[MITM] hostname` items; a pattern must keep a dot and a literal letter or digit, so a bare `*`
+/// is refused. Same rules as the Apple clients' `DebugMappings.normalizePattern`.
+pub fn normalize_pattern(text: &str) -> Option<String> {
+    let text = text.trim();
+    if !text.contains(['*', '?']) {
+        return normalize_host(text);
+    }
+    let mut name = text.split_once("://").map_or(text, |(_, rest)| rest);
+    name = name.split(['/', '#']).next().unwrap_or_default();
+    if let Some((before, _)) = name
+        .rsplit_once(':')
+        .filter(|(_, port)| port.bytes().all(|byte| byte.is_ascii_digit()))
+    {
+        name = before;
+    }
+    let name = name.trim_end_matches('.').to_ascii_lowercase();
+    let allowed = name
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_' | b'*' | b'?'));
+    if name.len() > 253
+        || !allowed
+        || !name.contains('.')
+        || name.starts_with(['.', '-'])
+        || name.contains("..")
+        || !name.bytes().any(|b| b.is_ascii_alphanumeric())
+    {
+        return None;
+    }
+    Some(name)
+}
+
+/// `text` as a list line: the pattern and whether it is an exclusion (`exclude`, or a leading `-` / `!`).
+fn parse_line(text: &str, exclude: bool) -> Result<(String, bool), String> {
+    let text = text.trim();
+    let (text, exclude) = match text.strip_prefix(['-', '!']) {
+        Some(rest) => (rest, true),
+        None => (text, exclude),
+    };
+    normalize_pattern(text)
+        .map(|pattern| (pattern, exclude))
+        .ok_or_else(|| "Not a domain name or pattern.".to_string())
+}
+
+/// Whether `pattern` matches the domain `host`: `*` any run of characters, `?` one character.
+pub fn pattern_matches(pattern: &str, host: &str) -> bool {
+    let pattern = pattern.as_bytes();
+    let text = host.trim_end_matches('.').to_ascii_lowercase();
+    let text = text.as_bytes();
+    let (mut p, mut t) = (0, 0);
+    let mut star: Option<usize> = None;
+    let mut mark = 0;
+    while t < text.len() {
+        if p < pattern.len() && (pattern[p] == b'?' || pattern[p] == text[t]) {
+            p += 1;
+            t += 1;
+        } else if p < pattern.len() && pattern[p] == b'*' {
+            star = Some(p);
+            mark = t;
+            p += 1;
+        } else if let Some(at) = star {
+            p = at + 1;
+            mark += 1;
+            t = mark;
+        } else {
+            return false;
+        }
+    }
+    while p < pattern.len() && pattern[p] == b'*' {
+        p += 1;
+    }
+    p == pattern.len()
+}
+
 /// Digits and dots only: an IPv4 address, never a domain (top-level domains are never all digits). Decryption is
 /// chosen per domain, so an address is refused.
 fn is_ipv4(name: &str) -> bool {
@@ -372,29 +519,80 @@ pub fn load(directory: &Path) -> Result<Stored, String> {
     }
     let text = fs::read(&path).map_err(|error| error.to_string())?;
     serde_json::from_slice::<Stored>(&text)
+        .map(Stored::migrate)
         .map_err(|error| format!("debug mappings could not be read: {error}"))
 }
 
-/// Turns decryption on for one more domain and answers the domains now decrypted.
-pub fn add_host(directory: &Path, host: &str) -> Result<Vec<String>, String> {
-    let host = normalize_host(host).ok_or_else(|| "Not a domain name.".to_string())?;
+/// Adds a line to the decryption list (a domain, a wildcard pattern, or an exclusion with `exclude` or a leading
+/// `-`) and answers the list. A pattern already listed is turned on and takes the new kind.
+pub fn add_host(directory: &Path, text: &str, exclude: bool) -> Result<Vec<Domain>, String> {
+    let (pattern, exclude) = parse_line(text, exclude)?;
     let mut stored = load(directory)?;
-    if !stored.hosts.contains(&host) {
-        if stored.hosts.len() >= MAX_HOSTS {
-            return Err(format!("At most {MAX_HOSTS} domains can be decrypted."));
+    if let Some(domain) = stored
+        .domains
+        .iter_mut()
+        .find(|domain| domain.pattern == pattern)
+    {
+        domain.exclude = exclude;
+        domain.enabled = true;
+    } else {
+        if stored.domains.len() >= MAX_HOSTS {
+            return Err(format!("At most {MAX_HOSTS} domains can be listed."));
         }
-        stored.hosts.push(host);
-        write(directory, &stored)?;
+        stored.domains.push(Domain::new(pattern, exclude));
     }
-    Ok(stored.hosts)
+    write(directory, &stored)?;
+    Ok(stored.domains)
 }
 
-/// Turns decryption off for a domain added with `add_host` and answers the domains still decrypted.
-pub fn remove_host(directory: &Path, host: &str) -> Result<Vec<String>, String> {
+/// Rewrites the line for `pattern` from `text` and `exclude`, in the same place and on, and answers the list.
+pub fn edit_host(
+    directory: &Path,
+    pattern: &str,
+    text: &str,
+    exclude: bool,
+) -> Result<Vec<Domain>, String> {
+    let (next, exclude) = parse_line(text, exclude)?;
     let mut stored = load(directory)?;
-    stored.hosts.retain(|existing| existing != host);
+    let Some(index) = stored
+        .domains
+        .iter()
+        .position(|domain| domain.pattern == pattern)
+    else {
+        return add_host(directory, text, exclude);
+    };
+    if next != pattern && stored.domains.iter().any(|domain| domain.pattern == next) {
+        return Err("This domain is already in the list.".to_string());
+    }
+    stored.domains[index] = Domain::new(next, exclude);
     write(directory, &stored)?;
-    Ok(stored.hosts)
+    Ok(stored.domains)
+}
+
+/// Turns the line for `pattern` on or pauses it, and answers the list.
+pub fn set_host_enabled(
+    directory: &Path,
+    pattern: &str,
+    enabled: bool,
+) -> Result<Vec<Domain>, String> {
+    let mut stored = load(directory)?;
+    for domain in stored
+        .domains
+        .iter_mut()
+        .filter(|domain| domain.pattern == pattern)
+    {
+        domain.enabled = enabled;
+    }
+    write(directory, &stored)?;
+    Ok(stored.domains)
+}
+
+/// Removes the line for `pattern` and answers the list.
+pub fn remove_host(directory: &Path, pattern: &str) -> Result<Vec<Domain>, String> {
+    let mut stored = load(directory)?;
+    stored.domains.retain(|domain| domain.pattern != pattern);
+    write(directory, &stored)?;
+    Ok(stored.domains)
 }
 
 /// The saved entries, oldest first; none when nothing was saved.
@@ -404,7 +602,11 @@ pub fn list(directory: &Path) -> Result<Vec<Entry>, String> {
 
 fn write(directory: &Path, stored: &Stored) -> Result<(), String> {
     fs::create_dir_all(directory).map_err(|error| error.to_string())?;
-    let text = serde_json::to_vec_pretty(stored).map_err(|error| error.to_string())?;
+    let stored = Stored {
+        hosts: stored.decrypted(),
+        ..stored.clone()
+    };
+    let text = serde_json::to_vec_pretty(&stored).map_err(|error| error.to_string())?;
     let path = directory.join(FILE);
     let temporary = directory.join(format!("{FILE}.tmp"));
     fs::write(&temporary, text).map_err(|error| error.to_string())?;
@@ -492,7 +694,7 @@ mod tests {
             remote.line(),
             "^https://api\\.example\\.com/v1/(.*)$ 307 https://staging.example.com/v1/$1"
         );
-        let text = plugin_text(&[entry, remote], &[]).unwrap();
+        let text = plugin_text(&[entry, remote], &[], &[]).unwrap();
         assert!(text.starts_with("#!name=AnixOps 调试映射\n"), "{text}");
         assert!(text.contains("\n[Rewrite]\n^https://api"), "{text}");
         assert!(text.contains("\n[Map Local]\n^https://api"), "{text}");
@@ -548,6 +750,7 @@ mod tests {
                     enabled: false,
                     ..local("https://a.example.com/")
                 }],
+                &[],
                 &[]
             ),
             None
@@ -562,6 +765,7 @@ mod tests {
                 "api.example.com".to_string(),
                 "*.cdn.example.com".to_string(),
             ],
+            &[],
         )
         .unwrap();
         assert!(text.starts_with("#!name=AnixOps 调试映射\n"), "{text}");
@@ -577,6 +781,7 @@ mod tests {
         let text = plugin_text(
             &[local("https://api.example.com/v1")],
             &["api.example.com".to_string()],
+            &[],
         )
         .unwrap();
         assert!(
@@ -615,22 +820,127 @@ mod tests {
     fn keeps_domains_and_mappings_side_by_side() {
         let dir = std::env::temp_dir().join(format!("desktop-mitm-hosts-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
+        let api = Domain::new("api.example.com".to_string(), false);
         assert_eq!(
-            add_host(&dir, "API.example.com").unwrap(),
-            vec!["api.example.com"]
+            add_host(&dir, "API.example.com", false).unwrap(),
+            vec![api.clone()]
         );
         assert_eq!(
-            add_host(&dir, "api.example.com").unwrap(),
-            vec!["api.example.com"]
+            add_host(&dir, "api.example.com", false).unwrap(),
+            vec![api.clone()]
         );
-        assert!(add_host(&dir, "not a domain").is_err());
+        assert!(add_host(&dir, "not a domain", false).is_err());
         save(&dir, local("https://b.example.com/")).unwrap();
         let stored = load(&dir).unwrap();
+        assert_eq!(stored.domains, vec![api]);
         assert_eq!(stored.hosts, vec!["api.example.com"]);
         assert_eq!(stored.entries.len(), 1);
         assert!(remove_host(&dir, "api.example.com").unwrap().is_empty());
         assert_eq!(list(&dir).unwrap().len(), 1);
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_list_takes_wildcards_exclusions_and_paused_lines() {
+        let dir = std::env::temp_dir().join(format!("desktop-mitm-list-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        add_host(&dir, "*.Example.com", false).unwrap();
+        add_host(&dir, "img-?.cdn.*", false).unwrap();
+        add_host(&dir, "-pay.example.com", false).unwrap();
+        add_host(&dir, "ads.example.com", true).unwrap();
+        add_host(&dir, "old.example.org", false).unwrap();
+        set_host_enabled(&dir, "old.example.org", false).unwrap();
+        let stored = load(&dir).unwrap();
+        assert_eq!(stored.decrypted(), vec!["*.example.com", "img-?.cdn.*"]);
+        assert_eq!(
+            stored.excluded(),
+            vec!["pay.example.com", "ads.example.com"]
+        );
+        let text = stored.plugin_text().unwrap();
+        assert!(
+            text.ends_with(
+                "\n[MITM]\nhostname = %APPEND% *.example.com, img-?.cdn.*, -pay.example.com, -ads.example.com\n"
+            ),
+            "{text}"
+        );
+        assert!(!text.contains("old.example.org"), "{text}");
+
+        // One line per pattern: adding it again changes its kind.
+        let domains = add_host(&dir, "pay.example.com", false).unwrap();
+        assert_eq!(
+            domains
+                .iter()
+                .filter(|d| d.pattern == "pay.example.com")
+                .count(),
+            1
+        );
+        assert!(!domains[2].exclude);
+
+        let domains = edit_host(&dir, "img-?.cdn.*", "video.cdn.test", false).unwrap();
+        assert_eq!(domains[1], Domain::new("video.cdn.test".to_string(), false));
+        assert!(edit_host(&dir, "video.cdn.test", "*.example.com", false).is_err());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_exclusion_alone_still_makes_a_plugin() {
+        let text = plugin_text(&[], &[], &["bank.example.com".to_string()]).unwrap();
+        assert!(
+            text.ends_with("hostname = %APPEND% -bank.example.com\n"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn patterns_keep_to_host_names() {
+        assert_eq!(
+            normalize_pattern("*Spclient.spotify.com").as_deref(),
+            Some("*spclient.spotify.com")
+        );
+        assert_eq!(
+            normalize_pattern("https://*.example.com:443/x").as_deref(),
+            Some("*.example.com")
+        );
+        assert_eq!(
+            normalize_pattern("api.example.com").as_deref(),
+            Some("api.example.com")
+        );
+        assert_eq!(normalize_pattern("*"), None);
+        assert_eq!(normalize_pattern("*.*"), None);
+        assert_eq!(normalize_pattern("a b*.com"), None);
+        assert_eq!(normalize_pattern("*..example.com"), None);
+        assert!(pattern_matches("*.example.com", "a.b.example.com"));
+        assert!(!pattern_matches("*.example.com", "example.com"));
+        assert!(pattern_matches("img-?.cdn.*", "IMG-1.cdn.test"));
+        assert!(!pattern_matches("img-?.cdn.*", "img-12.cdn.test"));
+    }
+
+    #[test]
+    fn older_files_load_as_lines_that_are_on() {
+        let stored: Stored =
+            serde_json::from_str(r#"{"entries":[],"hosts":["api.example.com","*.cdn.test"]}"#)
+                .unwrap();
+        let stored = stored.migrate();
+        assert_eq!(
+            stored.domains,
+            vec![
+                Domain::new("api.example.com".to_string(), false),
+                Domain::new("*.cdn.test".to_string(), false)
+            ]
+        );
+        // The Apple clients write the same shape.
+        let apple: Stored = serde_json::from_str(
+            r#"{"entries":[],"domains":[{"pattern":"a.test","exclude":true,"enabled":false}],"hosts":[]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            apple.domains,
+            vec![Domain {
+                pattern: "a.test".to_string(),
+                exclude: true,
+                enabled: false
+            }]
+        );
     }
 
     #[test]

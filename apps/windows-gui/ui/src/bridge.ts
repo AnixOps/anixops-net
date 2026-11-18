@@ -351,6 +351,42 @@ export interface ReplayResponse {
 }
 
 /** A Map Local / Map Remote rule made in the debug view; saved ones become the plugin "AnixOps 调试映射". */
+/** One line of the decryption list. */
+export interface DecryptDomain {
+  /** Lower-cased: `api.example.com`, `*.example.com`, `img-?.example.com`. */
+  pattern: string;
+  /** Never decrypted, even when another line, a plugin or a mapping names it. */
+  exclude: boolean;
+  /** A paused line stays in the list but does not reach the engine. */
+  enabled: boolean;
+}
+
+/** Why a decrypted connection failed, as the engine reports it (`mitm_hosts`). */
+export type MitmFailure =
+  | "client_rejected_certificate"
+  | "client_closed"
+  | "client_handshake_failed"
+  | "client_timeout"
+  | "origin_tls"
+  | "origin_unreachable";
+
+/** One domain of the engine's `mitm_hosts` answer. */
+export interface MitmHostOutcome {
+  host: string;
+  decrypted: number;
+  failed: number;
+  last_failure?: MitmFailure | string;
+  last_failure_at_ms?: number;
+  last_decrypted_at_ms?: number;
+  failures?: Record<string, number>;
+}
+
+/** The `mitm_hosts` answer: `enabled` is false while the engine runs without decryption. */
+export interface MitmHosts {
+  enabled?: boolean;
+  hosts?: MitmHostOutcome[];
+}
+
 export interface DebugMapping {
   /** Empty for a new one. */
   id: string;
@@ -640,10 +676,20 @@ export const desktop = {
   debugMappings: () => invoke<DebugMapping[]>("list_debug_mappings"),
   saveDebugMapping: (entry: DebugMapping) => invoke<OperationResult>("save_debug_mapping", { entry }),
   removeDebugMapping: (id: string) => invoke<OperationResult>("remove_debug_mapping", { id }),
-  /** The domains decryption was turned on for one by one (kept with the mappings, `debug-mappings.json`). */
+  /** The decryption list's patterns that are on and not exclusions (kept with the mappings, `debug-mappings.json`). */
   decryptHosts: () => invoke<string[]>("list_decrypt_hosts"),
-  addDecryptHost: (host: string) => invoke<OperationResult>("add_decrypt_host", { host }),
+  /** The whole decryption list, one line per pattern, in the order added. */
+  decryptDomains: () => invoke<DecryptDomain[]>("list_decrypt_domains"),
+  /** Adds a line; `exclude` (or a leading `-`) makes it an exclusion, which wins over every include. */
+  addDecryptHost: (host: string, exclude = false) => invoke<OperationResult>("add_decrypt_host", { host, exclude }),
+  editDecryptHost: (pattern: string, host: string, exclude: boolean) =>
+    invoke<OperationResult>("edit_decrypt_host", { pattern, host, exclude }),
+  setDecryptHostEnabled: (pattern: string, enabled: boolean) =>
+    invoke<OperationResult>("set_decrypt_host_enabled", { pattern, enabled }),
   removeDecryptHost: (host: string) => invoke<OperationResult>("remove_decrypt_host", { host }),
+  /** What decryption did per domain since the engine started; `clear` forgets it first. */
+  mitmHosts: (clear = false) =>
+    invoke<MitmHosts>("runtime_control", { request: { cmd: clear ? "clear_mitm_hosts" : "mitm_hosts" } }),
   testDelay: (nodeId: string, url: string) =>
     invoke<OperationResult>("test_node_delay", { nodeId, url }),
   /** Tests each node on its own and reports every result; failures do not reject. */
