@@ -10,8 +10,8 @@ use std::time::Duration;
 use config_core::routing_import::import_subscription_routing;
 use config_core::CoreSubscriptionService;
 use control_domain::{
-    NodeDescriptor, Protocol, RawSubscription, SubscriptionService, NODE_METADATA_PATH,
-    NODE_PATH_TRUNK,
+    MetadataEntry, NodeDescriptor, Protocol, RawSubscription, SubscriptionService,
+    NODE_METADATA_ANX_LICENSE_ORIGIN, NODE_METADATA_PATH, NODE_PATH_TRUNK,
 };
 use engine_embedded::config::RuntimeConfig;
 use engine_embedded::delay::measure_delay;
@@ -139,24 +139,50 @@ pub fn license_store() -> Option<anx_license::LicenseStore> {
         .map(|dir| anx_license::LicenseStore::new(dir.join("anx-license")))
 }
 
-/// Hands this device's key and license file to the ANX outbounds the engine builds, once a subscription
-/// offers ANX licensing (`anx_license`); until then ANX outbounds stay exactly as before.
+/// Hands each subscription origin's device key and license file to the ANX outbounds of that origin's
+/// nodes (`anx_license`, marked by [`mark_license_origin`]); an origin that does not offer ANX licensing
+/// gives its nodes nothing, and no node ever carries another origin's key (anx spec §2.4.1).
 pub fn sync_anx_license() {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_secs());
-    let license = license_store().and_then(|store| {
-        if store.state(now) == anx_license::LicenseState::NotOffered {
-            return None;
-        }
-        let device = store.device().ok()?;
-        Some(node_import::AnxLicense {
-            device_key: device.private_key_hex(),
-            device_alg: device.alg().to_string(),
-            license_cert_path: store.license_path().to_string_lossy().into_owned(),
+    node_import::set_anx_license(None);
+    node_import::set_anx_licenses(anx_licenses(license_store().as_ref()));
+}
+
+/// The licenses by origin as `node_import::set_anx_licenses` takes them.
+pub fn anx_licenses(
+    store: Option<&anx_license::LicenseStore>,
+) -> std::collections::BTreeMap<String, node_import::AnxLicense> {
+    store
+        .and_then(|store| store.licenses().ok())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|license| {
+            (
+                license.origin,
+                node_import::AnxLicense {
+                    device_key: license.device.private_key_hex(),
+                    device_alg: license.device.alg().to_string(),
+                    license_cert_path: license.license_path.to_string_lossy().into_owned(),
+                },
+            )
         })
-    });
-    node_import::set_anx_license(license);
+        .collect()
+}
+
+/// Marks the ANX nodes of the source at `location` with its origin (`anx.license_origin`), so each gets
+/// that origin's license; a file or pasted links have none. Whatever the content itself put there is
+/// dropped first: only where the client fetched it decides.
+pub fn mark_license_origin(nodes: &mut [NodeDescriptor], location: &str) {
+    let origin = anx_license::origin(location);
+    for node in nodes {
+        node.metadata
+            .retain(|entry| entry.key != NODE_METADATA_ANX_LICENSE_ORIGIN);
+        if let (Some(origin), Protocol::Anx) = (&origin, &node.protocol) {
+            node.metadata.push(MetadataEntry {
+                key: NODE_METADATA_ANX_LICENSE_ORIGIN.to_string(),
+                value: origin.clone(),
+            });
+        }
+    }
 }
 
 /// A profile with no node: everything leaves through the engine's `direct` outbound.
@@ -628,6 +654,50 @@ mod tests {
             hidden.request(),
             br#"{"cmd":"set_network","type":"wifi"}"#.to_vec()
         );
+    }
+
+    #[test]
+    fn anx_nodes_are_marked_with_the_origin_they_came_from() {
+        let node = |protocol: Protocol, stamped: Option<&str>| NodeDescriptor {
+            id: "n".into(),
+            name: "n".into(),
+            protocol,
+            endpoint: control_domain::Endpoint {
+                host: "203.0.113.7".into(),
+                port: 443,
+            },
+            tags: Vec::new(),
+            metadata: stamped
+                .map(|value| MetadataEntry {
+                    key: NODE_METADATA_ANX_LICENSE_ORIGIN.into(),
+                    value: value.into(),
+                })
+                .into_iter()
+                .collect(),
+        };
+        let origin_of = |node: &NodeDescriptor| {
+            node.metadata
+                .iter()
+                .filter(|entry| entry.key == NODE_METADATA_ANX_LICENSE_ORIGIN)
+                .map(|entry| entry.value.clone())
+                .collect::<Vec<_>>()
+        };
+        // What the content claims is replaced by where it was fetched from.
+        let mut nodes = vec![
+            node(Protocol::Anx, Some("https://other.example")),
+            node(Protocol::Shadowsocks, None),
+        ];
+        mark_license_origin(&mut nodes, "https://Panel.Example/s/token");
+        assert_eq!(origin_of(&nodes[0]), ["https://panel.example"]);
+        assert!(origin_of(&nodes[1]).is_empty());
+        // A file or pasted links: no origin, so no license.
+        mark_license_origin(&mut nodes, "/home/user/nodes.txt");
+        assert!(origin_of(&nodes[0]).is_empty());
+    }
+
+    #[test]
+    fn no_licenses_without_a_store() {
+        assert!(anx_licenses(None).is_empty());
     }
 
     const LINK: &str = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@82.47.34.99:11111#HK";

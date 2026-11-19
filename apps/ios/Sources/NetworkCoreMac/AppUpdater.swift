@@ -36,7 +36,8 @@ final class AppUpdater {
     private static let checkInterval: TimeInterval = 24 * 60 * 60
 
     private(set) var state: State
-    /// Checks once a day on its own; on by default.
+    /// Checks once a day on its own. Off until the user turns it on in Settings › Software Update, so the app
+    /// opens no connection of its own (docs/network-behavior.md); "Check for Updates" works either way.
     private(set) var automatic: Bool
 
     private let feedURL: URL?
@@ -55,7 +56,7 @@ final class AppUpdater {
         feedURL = feed
         self.verifier = feed == nil ? nil : verifier
         state = feed != nil && verifier != nil ? .idle : .disabled
-        automatic = UserDefaults.standard.object(forKey: Self.automaticKey) as? Bool ?? true
+        automatic = UserDefaults.standard.object(forKey: Self.automaticKey) as? Bool ?? false
     }
 
     func setAutomatic(_ on: Bool) {
