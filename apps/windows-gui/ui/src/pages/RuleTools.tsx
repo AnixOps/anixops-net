@@ -165,7 +165,7 @@ export function RuleHits({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | 
     >
       {busiest.length === 0 && view.final.hits === 0 && <p className="muted">{t("还没有连接经过规则。")}</p>}
       {busiest.map((rule, index) => (
-        <Row key={`${index}-${rule.rule}`} icon={Gauge} color="teal" label={rule.rule} hint={rule.target} value={t("{count} 次", { count: rule.hits })} />
+        <Row key={String(index) + "-" + rule.rule} icon={Gauge} color="teal" label={rule.rule} hint={rule.target} value={t("{count} 次", { count: rule.hits })} />
       ))}
       <Row icon={Gauge} color="gray" label="FINAL" hint={view.final.target} value={t("{count} 次", { count: view.final.hits })} />
       {unused > 0 && <p className="muted">{t("另有 {count} 条规则还没有命中。", { count: unused })}</p>}

@@ -615,7 +615,7 @@
     <string name="rules_hits_clear">Reset</string>
     <string name="rules_hits_cleared">Hit counts cleared</string>
     <string name="rules_hits_none">No connection has gone through the rules yet.</string>
-    <string name="rules_hits_unused">%1$d more rules have no hits yet.</string>
+    <string name="rules_hits_unused">Rules with no hits yet: %1$d</string>
     <string name="rules_hits_note">How many connections each rule decided since the rules were loaded. Counting restarts when the rules change.</string>
     <string name="rules_process_not_effective">The Android VPN cannot tell which app opened a connection, so PROCESS-NAME rules have no effect here.</string>
 </resources>
