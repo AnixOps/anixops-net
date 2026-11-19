@@ -38,8 +38,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let dns: DnsSettings?
         let redirects: [String]
         let blockQuic: Bool
-        /// The fields every ANX outbound gets (`AnxLicense.outboundFields`), or nil without a license state.
-        let anxLicense: [String: JSONValue]?
+        /// The license fields of each ANX outbound by its node's origin (`OutboundLicenses`), or nil without a
+        /// license state.
+        let anxLicense: OutboundLicenses?
     }
     private var memoryPressure: DispatchSourceMemoryPressure?
     /// Recent events for the app's developer mode. Same rule as the system log: fixed reasons and codes only.
@@ -520,33 +521,45 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         return config
     }
 
-    /// Gives every ANX outbound this device's key and license (anx spec §2.4.1) once a subscription offered ANX
-    /// licensing. The license goes to a file in the extension's own container, which the outbound reads at each
-    /// connection. Without a license state there are no fields and the config stays unchanged; nodes that do not
-    /// require a license ignore them.
-    private func anxLicenseFields() -> [String: JSONValue]? {
+    /// Gives each ANX outbound the key and license of its node's subscription origin (anx spec §2.4.1), once some
+    /// subscription offered ANX licensing. Each origin's license goes to its own file in the extension's container,
+    /// which the outbound reads at each connection. Without a license state there is nothing and the config stays
+    /// unchanged; a node without an origin, or whose origin offers no license, gets nothing, never another origin's.
+    private func anxLicenseFields() -> OutboundLicenses? {
         guard let value = startSecrets?.anxLicense ?? (try? NodeSecretStore.value(account: AnxLicense.keychainAccount)),
               let state = try? AnxLicense.fromKeychainValue(value),
               state.offered,
-              let url = try? FileManager.default
+              let directory = try? FileManager.default
                   .url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-                  .appendingPathComponent(AnxLicense.licenseFileName),
-              let fields = state.outboundFields(licensePath: url.path)
         else {
             return nil
         }
-        do {
-            if let license = state.license {
-                try Data(license.utf8).write(to: url, options: .atomic)
-                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-            } else if FileManager.default.fileExists(atPath: url.path) {
-                try FileManager.default.removeItem(at: url)
+        var fieldsByOrigin: [String: [String: JSONValue]] = [:]
+        var written = 0
+        for origin in state.origins {
+            guard let entry = state.entries[origin] else {
+                continue
             }
-        } catch {
-            events.record("anx license not written")
+            let url = directory.appendingPathComponent(AnxLicense.licenseFileName(origin: origin))
+            do {
+                if let license = entry.license {
+                    try Data(license.utf8).write(to: url, options: .atomic)
+                    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+                    written += 1
+                } else if FileManager.default.fileExists(atPath: url.path) {
+                    try FileManager.default.removeItem(at: url)
+                }
+            } catch {
+                events.record("anx license not written")
+            }
+            fieldsByOrigin[origin] = entry.outboundFields(licensePath: url.path)
         }
-        events.record("anx license \(state.license == nil ? "missing" : "present")\(state.status.map { " (\($0))" } ?? "")")
-        return fields
+        // The single license file of versions before 2026-11-19.
+        try? FileManager.default.removeItem(at: directory.appendingPathComponent("anx-license.cert"))
+        let library = (try? startSecrets?.nodeLibrary ?? NodeSecretStore.value(account: NodeLibrary.keychainAccount))
+            .flatMap { try? NodeLibrary.fromKeychainValue($0) }
+        events.record("anx licenses \(written) of \(fieldsByOrigin.count) origins")
+        return OutboundLicenses(fieldsByOrigin: fieldsByOrigin, nodes: library?.nodes ?? [])
     }
 
     /// Creates the runtime. When it refuses the subscription's rules, the selected node runs alone.

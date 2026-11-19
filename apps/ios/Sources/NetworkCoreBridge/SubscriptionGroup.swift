@@ -332,7 +332,7 @@ public struct SubscriptionGroups: Codable, Equatable {
         guard let active else {
             return nil
         }
-        var library = active.library
+        var library = active.library.markingLicenseOrigins()
         guard let routing = library.routing else {
             return library
         }
@@ -346,7 +346,7 @@ public struct SubscriptionGroups: Codable, Equatable {
             guard let group = self.group(id: link.groupID) else {
                 continue
             }
-            let members = Self.linkedNodes(of: group.library.nodes, prefix: link.prefix)
+            let members = Self.linkedNodes(of: group.library.markingLicenseOrigins().nodes, prefix: link.prefix)
             nodes += members
             extraGroups.append(NativeImportReport.Routing.Group(
                 id: link.policyID,

@@ -248,3 +248,18 @@ public enum SubscriptionLink {
         URL(string: url)?.host ?? url
     }
 }
+
+extension NodeLibrary {
+    /// The library with each ANX node marked with the origin of `subscriptionURL`, so its outbound gets that origin's
+    /// ANX license and no other (anx spec §2.4.1). Whatever was there is replaced; pasted text marks none.
+    public func markingLicenseOrigins() -> NodeLibrary {
+        let origin = AnxLicense.origin(ofSubscription: subscriptionURL)
+        var copy = self
+        copy.nodes = nodes.map { node in
+            var node = node
+            node.licenseOrigin = node.protocol == "anx" ? origin : nil
+            return node
+        }
+        return copy
+    }
+}
