@@ -332,12 +332,12 @@ mod tests {
     /// One of the removed preset list modes, as the old client saved it.
     const OLD_ROUTING_MODE: &str = "gfw_list"; // neutral-terms: allow (value saved by the old client)
 
-    fn state() -> String {
+    fn old_state() -> String {
         STATE_TEMPLATE.replace("OLD_ROUTING_MODE", OLD_ROUTING_MODE)
     }
 
     fn old_client(old: &Path) {
-        write(old, STATE_FILE, &state());
+        write(old, STATE_FILE, &old_state());
         write(old, "embedded/source.txt", LINK);
         write(
             old,
@@ -445,7 +445,10 @@ mod tests {
         assert!(!new.join("redirects.json").exists());
 
         // Everything the old client had is still where it was.
-        assert_eq!(fs::read_to_string(old.join(STATE_FILE)).unwrap(), state());
+        assert_eq!(
+            fs::read_to_string(old.join(STATE_FILE)).unwrap(),
+            old_state()
+        );
         assert_eq!(
             fs::read_to_string(old.join("embedded").join("source.txt")).unwrap(),
             LINK
