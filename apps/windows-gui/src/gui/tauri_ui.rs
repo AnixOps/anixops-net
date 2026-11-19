@@ -23,7 +23,7 @@ use desktop_dns::DnsPreset;
 use desktop_mitm::mappings;
 use engine_embedded::config::{RuntimeConfig, CONFIG_SCHEMA_VERSION};
 use engine_embedded::delay::measure_delay;
-use engine_embedded::nodes::{outbound_for_node, routing_envelope, single_node_envelope};
+use engine_embedded::nodes::{outbound_for_node, routing_envelope_with_sets, single_node_envelope};
 use node_edits::{NodeEdits, NodeForm};
 use on_demand::{
     Action as OnDemandAction, Current as CurrentNetwork, Network, Settings as OnDemandSettings,
@@ -661,6 +661,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             set_direct_egress,
             my_rules,
             save_my_rules,
+            routing_warnings,
             custom_dns,
             save_custom_dns,
             configure_script_runtime,
@@ -3163,9 +3164,13 @@ fn import_embedded_subscription(
     // Subscription rules and policy groups drive the route when every node is
     // supported and the engine accepts the result; otherwise one node runs
     // alone.
-    let routed = import_subscription_routing(payload, &parsed)
+    // The subscription's own rule sets go with its rules: without them the engine refuses every rule naming one.
+    let imported = import_subscription_routing(payload, &parsed);
+    let routed = imported
         .spec
-        .and_then(|spec| routing_envelope(EMBEDDED_PROFILE_ID, &nodes, &spec).ok())
+        .and_then(|spec| {
+            routing_envelope_with_sets(EMBEDDED_PROFILE_ID, &nodes, &spec, &imported.rule_sets).ok()
+        })
         // The engine caps the routed node and rule counts.
         .filter(|envelope| RuntimeConfig::from_json(envelope.as_bytes()).is_ok());
     // A single-node profile lists every supported node so it can be switched
@@ -3803,6 +3808,22 @@ async fn my_rules() -> Result<MyRules, String> {
         let text = desktop_dns::rules::load(&my_rules_path());
         let count = desktop_dns::rules::parse(&text).map_or(0, |lines| lines.len());
         Ok(MyRules { text, count })
+    })
+    .await
+}
+
+/// What importing the running subscription's rules left out (unsupported rule types, Surge's `RULE-SET,SYSTEM`,
+/// ...), one line each, for the rules page; empty without a saved subscription text.
+#[tauri::command]
+async fn routing_warnings() -> Result<Vec<String>, String> {
+    run_blocking(|| {
+        let Ok(content) = fs::read_to_string(profile_source_text_path()) else {
+            return Ok(Vec::new());
+        };
+        Ok(match client_core::backend::engine::parse_nodes(&content) {
+            Ok(nodes) => client_core::backend::engine::routing_warnings(&content, &nodes),
+            Err(_) => Vec::new(),
+        })
     })
     .await
 }

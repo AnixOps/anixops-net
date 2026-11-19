@@ -75,7 +75,8 @@ struct RulesView: View {
 
             LocalRulesSection(tunnel: tunnel, hasSubscriptionRules: true)
 
-            RuleSetsSection(tunnel: tunnel, rules: routing.rules, defined: routing.ruleSets)
+            RuleSetsSection(tunnel: tunnel, rules: routing.rules, defined: routing.ruleSets,
+                            warnings: library.routingWarnings)
 
             DnsSection(tunnel: tunnel)
 

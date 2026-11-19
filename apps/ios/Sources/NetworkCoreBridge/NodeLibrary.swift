@@ -18,6 +18,9 @@ public struct NodeLibrary: Codable, Equatable {
     public var followsRules: Bool
     /// The member picked in each `select` group, by group id.
     public var groupSelections: [String: String]
+    /// What importing the subscription's rules left out (`NativeImportReport.routingWarnings`), shown on the rules
+    /// page so a skipped rule never fails silently.
+    public var routingWarnings: [String]
 
     enum CodingKeys: String, CodingKey {
         case subscriptionURL
@@ -27,6 +30,7 @@ public struct NodeLibrary: Codable, Equatable {
         case routing
         case followsRules
         case groupSelections
+        case routingWarnings
     }
 
     public init(
@@ -36,7 +40,8 @@ public struct NodeLibrary: Codable, Equatable {
         updatedAt: Date,
         routing: NativeImportReport.Routing? = nil,
         followsRules: Bool = false,
-        groupSelections: [String: String] = [:]
+        groupSelections: [String: String] = [:],
+        routingWarnings: [String] = []
     ) {
         self.subscriptionURL = subscriptionURL
         self.nodes = nodes
@@ -45,6 +50,7 @@ public struct NodeLibrary: Codable, Equatable {
         self.routing = routing
         self.followsRules = followsRules
         self.groupSelections = groupSelections
+        self.routingWarnings = routingWarnings
     }
 
     /// A library from a fresh report. The previous selection survives a refresh when that node is still listed;
@@ -58,7 +64,8 @@ public struct NodeLibrary: Codable, Equatable {
             selectedID: selected?.id,
             updatedAt: date,
             routing: report.routing,
-            followsRules: report.routing != nil
+            followsRules: report.routing != nil,
+            routingWarnings: report.routingWarnings ?? []
         )
     }
 
@@ -72,7 +79,8 @@ public struct NodeLibrary: Codable, Equatable {
             updatedAt: try container.decode(Date.self, forKey: .updatedAt),
             routing: try container.decodeIfPresent(NativeImportReport.Routing.self, forKey: .routing),
             followsRules: try container.decodeIfPresent(Bool.self, forKey: .followsRules) ?? false,
-            groupSelections: try container.decodeIfPresent([String: String].self, forKey: .groupSelections) ?? [:]
+            groupSelections: try container.decodeIfPresent([String: String].self, forKey: .groupSelections) ?? [:],
+            routingWarnings: try container.decodeIfPresent([String].self, forKey: .routingWarnings) ?? []
         )
     }
 

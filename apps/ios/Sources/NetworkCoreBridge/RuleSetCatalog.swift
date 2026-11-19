@@ -10,6 +10,11 @@ public enum RuleSetCatalog {
         "geoip-cn": .init(url: "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/ip-lists/china.txt"),
     ]
 
+    /// Sets the engine has built in, so a rule naming one runs without the subscription defining it: Surge's `LAN`
+    /// (local names and the private, shared, loopback and link-local networks). A set the subscription defines
+    /// under the same name is used instead.
+    public static let builtIn: Set<String> = ["LAN"]
+
     /// The rule-set names `rules` refer to, in order of first use: `RULE-SET,<name>`, `GEOSITE,<category>` as
     /// `geosite-<category>` and `GEOIP,<cc>` as `geoip-<cc>`, also inside `AND`, `OR` and `NOT` rules.
     public static func referencedNames(in rules: [String]) -> [String] {
@@ -68,7 +73,7 @@ public enum RuleSetCatalog {
             default:
                 return nil
             }
-            return sets?[name] == nil ? name : nil
+            return sets?[name] == nil && !builtIn.contains(name) ? name : nil
         }
     }
 

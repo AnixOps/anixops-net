@@ -410,6 +410,8 @@ export interface RuleSetStatus {
   /** Unix milliseconds of the last successful download. */
   updated_at_ms?: number | null;
   last_error?: string | null;
+  /** Lines of the last download the set could not hold, by rule type (`IP-ASN`, `SCRIPT`, `INVALID`, `OTHER`). */
+  skipped?: Record<string, number>;
 }
 
 /** One node's result in a batch delay test. */
@@ -754,6 +756,7 @@ export const desktop = {
   myRules: () => invoke<{ text: string; count: number }>("my_rules"),
   /** Checks every line, saves, and gives a running engine the new rules. */
   saveMyRules: (text: string) => invoke<OperationResult>("save_my_rules", { text }),
+  routingWarnings: () => invoke<string[]>("routing_warnings"),
   enableHttpsMitm: () => invoke<OperationResult>("enable_https_mitm"),
   disableHttpsMitm: () => invoke<OperationResult>("disable_https_mitm"),
   mitmRootStatus: () => invoke<MitmRootStatus>("mitm_root_status"),

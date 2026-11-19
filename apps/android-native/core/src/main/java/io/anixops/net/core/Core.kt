@@ -180,6 +180,9 @@ class Core(
     suspend fun saveMyRules(text: String): OperationResult =
         call("save_my_rules", OperationResult.serializer(), args("text" to JsonPrimitive(text)))
 
+    /** What importing the subscription's rules left out, one line each; empty without a subscription. */
+    suspend fun routingWarnings(): List<String> = call("routing_warnings", ListSerializer(String.serializer()))
+
     suspend fun nativeGroups(): List<NativeGroup> =
         call("list_native_groups", ListSerializer(NativeGroup.serializer()))
 

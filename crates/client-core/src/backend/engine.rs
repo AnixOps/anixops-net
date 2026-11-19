@@ -10,13 +10,13 @@ use std::time::Duration;
 use config_core::routing_import::import_subscription_routing;
 use config_core::CoreSubscriptionService;
 use control_domain::{
-    NodeDescriptor, Protocol, RawSubscription, SubscriptionService, NODE_METADATA_PATH,
-    NODE_PATH_TRUNK,
+    DiagnosticSeverity, NodeDescriptor, Protocol, RawSubscription, SubscriptionService,
+    NODE_METADATA_PATH, NODE_PATH_TRUNK,
 };
 use engine_embedded::config::RuntimeConfig;
 use engine_embedded::delay::measure_delay;
 use engine_embedded::local_proxy::LocalProxy;
-use engine_embedded::nodes::{outbound_for_node, routing_envelope, single_node_envelope};
+use engine_embedded::nodes::{outbound_for_node, routing_envelope_with_sets, single_node_envelope};
 use inbound_mixed::MixedSettings;
 
 #[cfg(any(target_os = "android", target_os = "linux", windows))]
@@ -185,11 +185,34 @@ pub fn subscription_routing(
     parsed: &[NodeDescriptor],
     nodes: &[NodeDescriptor],
 ) -> Option<String> {
-    let spec = import_subscription_routing(content, parsed).spec?;
+    let imported = import_subscription_routing(content, parsed);
+    let spec = imported.spec?;
     sync_anx_license();
-    routing_envelope(PROFILE_ID, nodes, &spec)
+    // The subscription's own rule sets go with its rules: without them the engine refuses every rule naming one.
+    routing_envelope_with_sets(PROFILE_ID, nodes, &spec, &imported.rule_sets)
         .ok()
         .filter(|envelope| RuntimeConfig::from_json(envelope.as_bytes()).is_ok())
+}
+
+/// Most [`routing_warnings`] lines; one more says how many were left out.
+const MAX_ROUTING_WARNINGS: usize = 32;
+
+/// What importing `content`'s rules leaves out (rules of unsupported types counted by type, Surge's built-in
+/// `RULE-SET,SYSTEM`, targets that were not imported, ...), one English line each, as the kernel words them, so
+/// the rules page can show it instead of the rules silently matching less. Never a rule-set URL.
+pub fn routing_warnings(content: &str, parsed: &[NodeDescriptor]) -> Vec<String> {
+    let mut warnings = import_subscription_routing(content, parsed)
+        .diagnostics
+        .into_iter()
+        .filter(|diagnostic| diagnostic.severity == DiagnosticSeverity::Warning)
+        .map(|diagnostic| diagnostic.message)
+        .collect::<Vec<_>>();
+    if warnings.len() > MAX_ROUTING_WARNINGS {
+        let more = warnings.len() - MAX_ROUTING_WARNINGS;
+        warnings.truncate(MAX_ROUTING_WARNINGS);
+        warnings.push(format!("{more} more were left out"));
+    }
+    warnings
 }
 
 /// A saved source other than the selected one, with the nodes the engine can run.

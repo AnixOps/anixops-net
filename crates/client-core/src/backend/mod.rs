@@ -963,6 +963,21 @@ impl Backend {
         })
     }
 
+    /// What importing the selected subscription's rules left out ([`engine::routing_warnings`]), for the rules
+    /// page; empty without a subscription or when its text cannot be read.
+    pub fn routing_warnings(&self) -> Vec<String> {
+        let Some(source) = self.state.selected_source() else {
+            return Vec::new();
+        };
+        let Ok(content) = self.store.read_source(&source.id) else {
+            return Vec::new();
+        };
+        match engine::parse_nodes(&content) {
+            Ok(nodes) => engine::routing_warnings(&content, &nodes),
+            Err(_) => Vec::new(),
+        }
+    }
+
     /// The destination rewrites, as the window lists them.
     pub fn traffic_redirects(&self) -> Vec<Redirect> {
         desktop_dns::redirects::views(&desktop_dns::redirects::current())

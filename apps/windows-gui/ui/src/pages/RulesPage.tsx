@@ -1,6 +1,7 @@
-import { Check, Layers, ListChecks, RefreshCw } from "lucide-react";
+import { Check, Layers, ListChecks, RefreshCw, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { desktop, NativeGroupSummary, RuleSetStatus, RuntimeSnapshot } from "../bridge";
+import { skippedLines } from "../rule-sets";
 import { availableRoutingModes, groupMemberLabel } from "../labels";
 import { liveEngine, usePolling } from "../live";
 import { Card, Row, Run } from "../ui";
@@ -38,6 +39,7 @@ export function RulesPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot |
       <MyRules busy={busy} run={run} />
       <PolicyGroups busy={busy} run={run} />
       <RuleSets snapshot={snapshot} busy={busy} run={run} />
+      <ImportWarnings snapshot={snapshot} />
       <DnsCards snapshot={snapshot} busy={busy} run={run} />
     </div>
   );
@@ -112,11 +114,35 @@ function RuleSets({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; b
   );
 }
 
+/** What importing the subscription's rules left out, so a rule that does not run is never silent. */
+function ImportWarnings({ snapshot }: { snapshot: RuntimeSnapshot | null }) {
+  const [warnings, setWarnings] = useState<string[]>([]);
+  // Asked again when the subscription is switched or refreshed.
+  const profile = `${snapshot?.subscription ?? ""}|${snapshot?.subscriptionLastUpdated ?? ""}`;
+
+  useEffect(() => {
+    void desktop.routingWarnings().then((lines) => setWarnings(Array.isArray(lines) ? lines : [])).catch(() => setWarnings([]));
+  }, [profile]);
+
+  if (warnings.length === 0) return null;
+  return (
+    <Card
+      title={t("导入时跳过的规则")}
+      description={t("订阅里的这些规则客户端不支持，没有生效。")}
+      actions={<span className="count">{t("{count} 条", { count: warnings.length })}</span>}
+    >
+      {warnings.map((warning, index) => <Row key={index} icon={TriangleAlert} color="orange" label={warning} />)}
+    </Card>
+  );
+}
+
 function ruleSetDetail(set: RuleSetStatus): string {
+  const skipped = skippedLines(set);
   return [
     set.source === "remote" ? t("远程") : t("内置"),
     t("{count} 条", { count: set.entries }),
     set.updated_at_ms ? t("更新于 {time}", { time: new Date(set.updated_at_ms).toLocaleString() }) : set.source === "remote" ? t("尚未下载") : null,
     set.last_error ? t("上次下载失败：{error}", { error: set.last_error }) : null,
+    skipped.count > 0 ? t("列表里有 {count} 条规则不支持，已跳过：{types}", { count: skipped.count, types: skipped.summary }) : null,
   ].filter(Boolean).join(" · ");
 }
