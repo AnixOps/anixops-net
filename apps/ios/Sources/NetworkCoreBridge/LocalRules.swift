@@ -137,7 +137,7 @@ public struct LocalRules: Codable, Equatable {
         self.devices = devices
     }
 
-    /// Values saved by earlier versions may still carry a `preset` (绕过大陆 and the like); it is ignored, since the
+    /// Values saved by earlier versions may still carry a `preset` (one of the removed preset list modes); it is ignored, since the
     /// app no longer ships preset lists, and unmatched traffic goes through the proxy.
     enum CodingKeys: String, CodingKey {
         case bypassLAN = "bypass_lan"

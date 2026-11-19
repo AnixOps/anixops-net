@@ -49,17 +49,17 @@ final class SubscriptionGroupTests: XCTestCase {
         let headers = [
             "subscription-userinfo": "upload=1; download=2; total=3",
             "profile-update-interval": "12",
-            "content-disposition": "attachment; filename*=UTF-8''%E6%9C%BA%E5%9C%BA.yaml",
+            "content-disposition": "attachment; filename*=UTF-8''%E6%9C%8D%E5%8A%A1%E5%95%86.yaml",
         ]
         let info = SubscriptionResponseInfo(header: { headers[$0] })
         XCTAssertEqual(info.userInfo?.total, 3)
         XCTAssertEqual(info.updateIntervalHours, 12)
-        XCTAssertEqual(info.title, "机场")
+        XCTAssertEqual(info.title, "服务商")
 
         let titled = SubscriptionResponseInfo(header: { name in
-            ["profile-title": "base64:5py65Zy6Qg==", "content-disposition": "attachment; filename=\"x.txt\""][name]
+            ["profile-title": "base64:5pyN5Yqh5ZWGQg==", "content-disposition": "attachment; filename=\"x.txt\""][name]
         })
-        XCTAssertEqual(titled.title, "机场B")
+        XCTAssertEqual(titled.title, "服务商B")
         XCTAssertEqual(SubscriptionResponseInfo(header: { $0 == "content-disposition" ? "attachment; filename=\"Sub.txt\"" : nil }).title, "Sub")
         XCTAssertNil(SubscriptionResponseInfo(header: { $0 == "profile-update-interval" ? "0" : nil }).updateIntervalHours)
         XCTAssertEqual(SubscriptionResponseInfo(header: { _ in nil }), SubscriptionResponseInfo())

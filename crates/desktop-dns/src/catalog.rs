@@ -1,6 +1,6 @@
 //! The public lists behind the mainland China `GEOSITE` and `GEOIP` categories, so a subscription's or the user's
 //! `GEOSITE,cn` and `GEOIP,CN` rules match without a rule set of their own, as on iOS and macOS (`RuleSetCatalog`).
-//! Only these two: no GFW or other list is built in (docs/no-presets.md). The engine downloads them itself, directly,
+//! Only these two: no other list is built in (docs/no-presets.md). The engine downloads them itself, directly,
 //! once a day, and only when a rule names them; a set the profile defines under the same name is used instead.
 
 use serde_json::{json, Map, Value};

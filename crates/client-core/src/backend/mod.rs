@@ -2373,9 +2373,9 @@ rules:
 
         // Rule and direct modes only: public builds ship no preset list modes (docs/no-presets.md).
         assert_eq!(backend.snapshot().routing_mode, "rule");
-        assert_eq!(RoutingMode::parse("bypass_china"), None);
-        assert_eq!(RoutingMode::parse("gfw_list"), None);
-        assert_eq!(RoutingMode::parse("return_china"), None);
+        assert_eq!(RoutingMode::parse("bypass_china"), None); // neutral-terms: allow (value saved by an earlier version)
+        assert_eq!(RoutingMode::parse("gfw_list"), None); // neutral-terms: allow (value saved by an earlier version)
+        assert_eq!(RoutingMode::parse("return_china"), None); // neutral-terms: allow (value saved by an earlier version)
         backend.set_routing_mode(RoutingMode::Direct).unwrap();
         assert_eq!(backend.snapshot().routing_mode, "direct");
         let direct: serde_json::Value = serde_json::from_str(&backend.envelope().unwrap()).unwrap();

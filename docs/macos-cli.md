@@ -45,7 +45,7 @@ status / nodes 10 秒，连接、切换 45 秒，导入 90 秒，测速 180 秒�
 
 ```bash
 anixops status -q && echo 已连接
-anixops select "香港 01" --group 机场 || echo "失败: $?"
+anixops select "香港 01" --group 服务商 || echo "失败: $?"
 anixops test --json | jq '.groups[].nodes[] | {name, latencyMs}'
 ```
 

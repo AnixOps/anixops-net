@@ -33,7 +33,7 @@ struct RulesView: View {
                         BrandEmptyState(
                             systemImage: "arrow.triangle.branch",
                             title: "规则与分流",
-                            message: "导入订阅或节点后，可以在这里选择规则、全局或直连模式。规则模式按内置预设（如绕过大陆）和你自己的规则分流；带规则和策略组的订阅（Clash、Surge、Loon 配置）按订阅规则分流。"
+                            message: "导入订阅或节点后，可以在这里选择规则、全局或直连模式。规则模式按你自己的规则分流；带规则和策略组的订阅（Clash、Surge、Loon 配置）按订阅规则分流。"
                         )
                         .padding(.top, 80)
                     }

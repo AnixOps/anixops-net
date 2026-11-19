@@ -1368,7 +1368,7 @@ jobs:
           | 其他 Linux | \`anixops-net-${VERSION}-linux-x64.tar.gz\` | 解压后运行 \`bin/anixops-net\` |
           | 安卓 | \`${ANDROID_APK}\` | ${android_note} |
 
-          这是开源版，只含公开协议。需要 ANX 协议的机场用户请在面板里下载 ANX 版（iOS 只有 ANX 版，通过 TestFlight 分发）。
+          这是开源版，只含公开协议。需要 ANX 协议的用户请在服务商面板里下载 ANX 版（iOS 只有 ANX 版，通过 TestFlight 分发）。
           所有平台的最新版下载链接汇总在 [下载页](https://anixops.github.io/anixops-net/)。
 
           - Linux 版需要 WebKitGTK 4.1。

@@ -4978,7 +4978,7 @@ mod tests {
         assert_eq!(routing_mode_name(DesktopRoutingMode::Rule), "rule");
         assert_eq!(parse_routing_mode("direct"), Ok(DesktopRoutingMode::Direct));
         // No preset list modes in public builds (docs/no-presets.md).
-        for preset in ["bypass_china", "gfw_list", "return_china"] {
+        for preset in ["bypass_china", "gfw_list", "return_china"] { // neutral-terms: allow (value saved by an earlier version)
             assert!(parse_routing_mode(preset).is_err(), "{preset}");
         }
     }

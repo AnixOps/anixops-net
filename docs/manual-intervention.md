@@ -77,7 +77,7 @@ ANX 私有协议中重新提供。
 CI 只能编译和跑单元测试，以下需在 TestFlight 真机上确认：
 
 - 旧版本升级后，原来的订阅变成第一个订阅组且仍是当前节点。
-- 导入两个订阅链接后，代理页出现两个订阅组，各自显示节点数、更新时间；机场返回 `subscription-userinfo` 时显示已用/总流量和到期日。
+- 导入两个订阅链接后，代理页出现两个订阅组，各自显示节点数、更新时间；服务商返回 `subscription-userinfo` 时显示已用/总流量和到期日。
 - 订阅组菜单的“立即更新”、“自动更新”间隔、重命名、删除可用；下拉刷新更新全部订阅。
 - 点另一个订阅组的节点会切到该组并重连。
 - 带规则的订阅按规则分流时，“规则”页的选择组里出现“订阅·名称”成员，选它后流量走另一个订阅组的节点。
@@ -208,7 +208,7 @@ Play 版是开源版（用户 2026-11-15 决定），包名 `io.anixops.net.andr
 
 ## 开源版下载页（GitHub Pages）
 
-2026-11-14 用户决定客户端分两版发布：开源版（不含 ANX）放本仓库 GitHub Release，ANX 版只在机场面板里下载。
+2026-11-14 用户决定客户端分两版发布：开源版（不含 ANX）放本仓库 GitHub Release，ANX 版只在服务商面板里下载。
 开源版的固定下载页由 `download-page.yml` 生成并部署到 GitHub Pages：`https://anixops.github.io/anixops-net/`，
 另有固定直链 `/windows/`、`/windows-portable/`、`/linux-deb/`、`/linux/`、`/android/`（跳转到最新版文件）和
 `latest.json`。`release.yml` 发布 Release 后会自动触发它。
@@ -398,7 +398,7 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 - [ ] 安卓快捷设置磁贴：添加磁贴，点按连接 / 断开，状态与 App 内一致。
 - [ ] 安卓“始终开启的 VPN”：系统设置里选 AnixOps Net 并开启，重启手机后自动连接；在 App 内断开时系统不会立刻拉起。
 - [ ] 安卓 `anixops://` 链接与扫码导入：浏览器点链接能拉起 App 并导入订阅；扫码导入节点和订阅。
-- [ ] 从 beta.6 升级的桌面：原来选“绕过大陆 / GFW / 回国”的变成规则模式；原来选 DNS 国内外分流的变成等价的自定义 DNS；
+- [ ] 从 beta.6 升级的桌面：原来选旧版预设分流模式的变成规则模式；原来选 DNS 国内外分流的变成等价的自定义 DNS；
   Windows 旧服务被卸载。
 
 2026-11-16：beta.7 的第一次 tag 发布在 “Publish GitHub Release” 失败。配好 `ANDROID_KEY_ALIAS`（`anixops`）后，GitHub 把含有

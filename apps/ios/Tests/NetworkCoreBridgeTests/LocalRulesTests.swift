@@ -32,7 +32,7 @@ final class LocalRulesTests: XCTestCase {
         XCTAssertTrue(routing.groups.isEmpty)
         XCTAssertEqual(Set(routing.outbounds.keys), ["a", "b"])
         // A fresh install: the private networks direct (the switch the user can turn off), then the node. No
-        // country, GFW or ad list and no rule set at all.
+        // preset list and no rule set at all.
         XCTAssertEqual(routing.rules.first, "DOMAIN-SUFFIX,local,DIRECT")
         XCTAssertEqual(routing.rules.last, "FINAL,b")
         XCTAssertTrue(routing.rules.dropLast().allSatisfy { $0.hasSuffix(",DIRECT") || $0.hasSuffix(",DIRECT,no-resolve") })
@@ -45,7 +45,7 @@ final class LocalRulesTests: XCTestCase {
     }
 
     func testValuesSavedWithAnOldPresetLoadWithoutIt() throws {
-        let old = Data(#"{"preset":"bypassChina","bypass_lan":false,"rules":[],"subscriptions":[{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","name":"Ads","url":"https://lists.example/ads.list","policy":"REJECT","enabled":true,"catalogID":"bm7-advertising"}]}"#.utf8)
+        let old = Data(#"{"preset":"bypassChina","bypass_lan":false,"rules":[],"subscriptions":[{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","name":"Ads","url":"https://lists.example/ads.list","policy":"REJECT","enabled":true,"catalogID":"bm7-advertising"}]}"#.utf8) // neutral-terms: allow (value saved by an earlier version)
         let rules = LocalRules.fromProfileValue(old)
         XCTAssertFalse(rules.bypassLAN)
         // The list the user added stays: it is their own configuration.

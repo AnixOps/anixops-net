@@ -52,7 +52,7 @@ const SAME_DIRS: [&str; 2] = ["mitm", "anx-license"];
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 struct LegacyState {
-    /// The old client's 绕过大陆, GFW 列表 and 回国 modes (and its default, 绕过大陆) become rule mode:
+    /// The old client's preset list modes (including its default) become rule mode:
     /// public builds ship no preset list modes (docs/no-presets.md). Its downloaded lists are not carried.
     routing_mode: RoutingMode,
     dns_preset: DnsPreset,
@@ -247,8 +247,8 @@ mod tests {
 
     /// A `desktop-state.json` as the last Windows Tauri release writes it, with two subscriptions, the
     /// first in use.
-    const STATE: &str = r#"{
-        "routing_mode": "gfw_list",
+    const STATE_TEMPLATE: &str = r#"{
+        "routing_mode": "OLD_ROUTING_MODE",
         "dns_preset": "split",
         "block_quic": true,
         "direct_egress": false,
@@ -329,8 +329,15 @@ mod tests {
         fs::write(path, content).unwrap();
     }
 
+    /// One of the removed preset list modes, as the old client saved it.
+    const OLD_ROUTING_MODE: &str = "gfw_list"; // neutral-terms: allow (value saved by the old client)
+
+    fn state() -> String {
+        STATE_TEMPLATE.replace("OLD_ROUTING_MODE", OLD_ROUTING_MODE)
+    }
+
     fn old_client(old: &Path) {
-        write(old, STATE_FILE, STATE);
+        write(old, STATE_FILE, &state());
         write(old, "embedded/source.txt", LINK);
         write(
             old,
@@ -344,7 +351,7 @@ mod tests {
         write(old, "mitm/plugins/library.json", "[]");
         write(
             old,
-            "routing-rules/gfw-domains.json",
+            "routing-rules/gfw-domains.json", // neutral-terms: allow (file name of the old client)
             r#"{"version":1,"rules":[{"domain_suffix":["example.net","example.org"]}]}"#,
         );
         write(
@@ -363,7 +370,7 @@ mod tests {
         assert!(migrated.nodes_cached);
 
         let state = store.load();
-        // GFW 列表 is a preset list mode, which public builds no longer have.
+        // The old mode is a preset list mode, which public builds no longer have.
         assert_eq!(state.routing_mode, RoutingMode::Rule);
         assert_eq!(state.dns_preset, DnsPreset::Split);
         assert!(state.block_quic);
@@ -438,7 +445,7 @@ mod tests {
         assert!(!new.join("redirects.json").exists());
 
         // Everything the old client had is still where it was.
-        assert_eq!(fs::read_to_string(old.join(STATE_FILE)).unwrap(), STATE);
+        assert_eq!(fs::read_to_string(old.join(STATE_FILE)).unwrap(), state());
         assert_eq!(
             fs::read_to_string(old.join("embedded").join("source.txt")).unwrap(),
             LINK
@@ -508,7 +515,7 @@ mod tests {
         let migrated = migrate(&old, &store).unwrap().unwrap();
         assert_eq!(migrated.sources, 1);
         let state = store.load();
-        // The old client's default (绕过大陆) is a preset list mode; rule mode takes its place.
+        // The old client's default is a preset list mode; rule mode takes its place.
         assert_eq!(state.routing_mode, RoutingMode::Rule);
         let source = state.selected_source().unwrap();
         assert_eq!(source.location, "https://example.com/only");

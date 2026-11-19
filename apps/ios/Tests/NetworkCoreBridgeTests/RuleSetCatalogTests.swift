@@ -8,11 +8,11 @@ final class RuleSetCatalogTests: XCTestCase {
             "GEOIP,CN,DIRECT,no-resolve",
             "GEOSITE,cn,DIRECT",
             "RULE-SET,ads,REJECT",
-            "AND,((GEOSITE,GFW),(DST-PORT,443)),Proxy",
+            "AND,((GEOSITE,google),(DST-PORT,443)),Proxy",
             "DOMAIN-SUFFIX,google.com,Proxy",
             "FINAL,Proxy",
         ]
-        XCTAssertEqual(RuleSetCatalog.referencedNames(in: rules), ["geoip-cn", "geosite-cn", "ads", "geosite-gfw"])
+        XCTAssertEqual(RuleSetCatalog.referencedNames(in: rules), ["geoip-cn", "geosite-cn", "ads", "geosite-google"])
     }
 
     func testFillsKnownCategoriesAndKeepsTheSubscriptionsOwn() throws {

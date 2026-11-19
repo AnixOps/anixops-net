@@ -16,8 +16,8 @@ use desktop_dns::DnsPreset;
 
 pub const DEFAULT_LISTEN_PORT: u16 = 7890;
 
-/// How traffic is split. Public builds ship no preset list modes (绕过大陆, GFW 列表, 回国;
-/// docs/no-presets.md): a state saved with one of them loads as [`RoutingMode::Rule`].
+/// How traffic is split. Public builds ship no preset list modes
+/// (docs/no-presets.md): a state saved with one of them loads as [`RoutingMode::Rule`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", from = "String")]
 pub enum RoutingMode {
@@ -402,9 +402,9 @@ mod tests {
         source.record_response(subscription_meta::ResponseMeta {
             user_info: subscription_meta::UserInfo::parse("upload=1; download=2; total=10"),
             update_interval_hours: Some(6),
-            title: Some("Airport".to_string()),
+            title: Some("Example".to_string()),
         });
-        assert_eq!(source.name.as_deref(), Some("Airport"));
+        assert_eq!(source.name.as_deref(), Some("Example"));
         assert_eq!(source.user_info.and_then(|info| info.used()), Some(3));
         assert_eq!(source.effective_interval_hours(), 6);
         assert!(!source.update_due(1000 + 6 * 3600 - 1));
