@@ -405,6 +405,23 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 secret 值的 job output（安卓 artifact 名和 APK 名都含 `anixops`）丢弃，发布步骤拿不到安卓包。修复后 release.yml 由版本号直接推出这两个名字。
 tag 当时指向的 d225b10 还是旧 workflow，需要把 tag 移到包含修复的 commit 再推（Release 没有发出，移动 tag 不影响用户）。
 
+## v0.3.0-beta.9 发布前后的人工事项
+
+发布说明在 `docs/release-notes/v0.3.0-beta.9.md`，安卓 versionCode 3004（beta.8 是 3003）。tag 由 Actions 的 “Release tag”（`release-tag.yml`）打，流程同 beta.8。
+
+- [ ] anx 仓库的 Cargo.lock 内核与本仓库 `Cargo.toml` 固定的内核（4870006）一致后，再触发 anx 的 ANX 构建和 `publish-client.yml`；
+  这些 run 进 Environment `apple-anx` / `anx-release`，需要维护者在 Actions 页面批准。
+- [ ] 原生 Windows / Linux 窗口的连接列表（#212）还没有随安装包发布：桌面安装包仍是 Tauri 版。
+
+发布后真机验收（CI 只有单元测试、模拟器冒烟测试和截图对比）：
+
+- [ ] ANX 版：两个都开启设备授权的面板，各自的 ANX 节点都能连接；从 beta.8 升级后最近添加的面板不需要重新授权。
+- [ ] macOS 全新安装后不自动检查更新；手动检查正常。
+- [ ] 规则测试与命中次数在五个平台各试一次；按 URL 添加一份 `geoip-<国家>` 后对应规则生效。
+- [ ] iOS `CELLULAR-RADIO` 在蜂窝网络下命中；macOS 网关模式下 `DEVICE-NAME` 按设备名命中。
+- [ ] 解密域名：通配符、排除、停用在 iOS / macOS / Windows / 安卓各验一次；证书固定的 App 出现在“解密失败”并可一键排除。
+- [ ] iOS / macOS 抓包：未解密连接列表显示，断开隧道后抓包停止且会话已保存。
+
 ## v0.3.0-beta.8 发布前后的人工事项
 
 发布说明在 `docs/release-notes/v0.3.0-beta.8.md`，安卓 versionCode 3003（beta.7 是 3002）。
