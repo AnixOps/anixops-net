@@ -368,7 +368,8 @@ struct MacRulesPage: View {
                         }
                         Divider()
                         NavigationLink {
-                            MacRuleSetsPage(tunnel: tunnel, rules: routing.rules, defined: routing.ruleSets)
+                            MacRuleSetsPage(tunnel: tunnel, rules: routing.rules, defined: routing.ruleSets,
+                                            warnings: library.routingWarnings)
                         } label: {
                             LabeledContent("规则集", value: "\(RuleSetCatalog.referencedNames(in: routing.rules).count)")
                         }
@@ -509,11 +510,12 @@ private struct MacRuleSetsPage: View {
     var tunnel: TunnelController
     let rules: [String]
     let defined: [String: EmbeddedRuntimeConfig.RuleSet]?
+    let warnings: [String]
     @Environment(\.brand) private var brand
 
     var body: some View {
         List {
-            RuleSetsSection(tunnel: tunnel, rules: rules, defined: defined)
+            RuleSetsSection(tunnel: tunnel, rules: rules, defined: defined, warnings: warnings)
         }
         .scrollContentBackground(.hidden)
         .background(brand.bg)

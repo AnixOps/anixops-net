@@ -317,6 +317,27 @@ class CoreTest {
     }
 
     @Test
+    fun ruleSetsCarryTheLinesTheyCouldNotHold() = runTest {
+        val transport = Recording(
+            """{"ok":{"rule_sets":[{"name":"telegram","source":"remote","entries":40,"skipped":{"SCRIPT":1,"IP-ASN":12,"GEOIP":1}}]}}""",
+        )
+        val set = Core(transport, StandardTestDispatcher(testScheduler)).ruleSets().single()
+        assertEquals(mapOf("SCRIPT" to 1, "IP-ASN" to 12, "GEOIP" to 1), set.skipped)
+        assertEquals(14, set.skippedCount)
+        assertEquals("IP-ASN ×12, GEOIP ×1, SCRIPT ×1", set.skippedSummary)
+    }
+
+    @Test
+    fun routingWarningsListWhatTheImportLeftOut() = runTest {
+        val transport = Recording(
+            """{"ok":["4 IP-ASN rules were not imported","RULE-SET,SYSTEM is not available"]}""",
+        )
+        val warnings = Core(transport, StandardTestDispatcher(testScheduler)).routingWarnings()
+        assertEquals("routing_warnings", transport.calls.single().first)
+        assertEquals(listOf("4 IP-ASN rules were not imported", "RULE-SET,SYSTEM is not available"), warnings)
+    }
+
+    @Test
     fun ruleSetsAreEmptyWhileTheEngineIsOff() = runTest {
         val core = Core(Recording("""{"error":"the engine is not running"}"""), StandardTestDispatcher(testScheduler))
         assertTrue(core.ruleSets().isEmpty())

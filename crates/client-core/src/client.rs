@@ -1077,6 +1077,7 @@ fn handler(name: &str) -> Option<Handler> {
             json(client.backend().notification_settings(update, &language)?)
         },
         "traffic_redirects" => |client, _| json(client.backend().traffic_redirects()),
+        "routing_warnings" => |client, _| json(client.backend().routing_warnings()),
         "add_traffic_redirect" => |client, args| {
             let RedirectDraft { draft, replacing } = parse(args)?;
             json(

@@ -48,6 +48,26 @@ final class RuleSetCatalogTests: XCTestCase {
         XCTAssertEqual(answer.ruleSets.first?.entries, 8000)
         XCTAssertEqual(answer.ruleSets.first?.updatedAt, Date(timeIntervalSince1970: 1_700_000_000))
         XCTAssertEqual(String(decoding: RuntimeControl.updateRuleSets.request, as: UTF8.self), #"{"cmd":"update_rule_sets"}"#)
+        XCTAssertEqual(answer.ruleSets.first?.skipped, [:])
+        XCTAssertEqual(answer.ruleSets.first?.skippedCount, 0)
+    }
+
+    func testDecodesTheLinesASetSkipped() throws {
+        let answer = try XCTUnwrap(RuntimeControl.decode(RuntimeControl.RuleSets.self, from: Data(
+            #"{"rule_sets":[{"name":"telegram","source":"remote","entries":40,"skipped":{"SCRIPT":1,"IP-ASN":12,"GEOIP":1}}]}"#.utf8
+        )))
+        let status = try XCTUnwrap(answer.ruleSets.first)
+        XCTAssertEqual(status.skippedCount, 14)
+        XCTAssertEqual(status.skippedSummary, "IP-ASN ×12, GEOIP ×1, SCRIPT ×1")
+    }
+
+    func testTheBuiltInLanSetIsNeverMissing() {
+        let rules = ["RULE-SET,LAN,DIRECT,no-resolve", "AND,((RULE-SET,LAN),(DST-PORT,445)),REJECT", "FINAL,Proxy"]
+        XCTAssertEqual(RuleSetCatalog.referencedNames(in: rules), ["LAN"])
+        XCTAssertEqual(RuleSetCatalog.missingSets(in: rules[0], sets: nil), [])
+        XCTAssertEqual(RuleSetCatalog.runnableRules(rules, sets: nil), rules)
+        // The catalog adds no list for it: the engine has it.
+        XCTAssertNil(RuleSetCatalog.ruleSets(for: rules, defined: nil))
     }
 
     func testLeavesOutRulesNamingMissingSets() {

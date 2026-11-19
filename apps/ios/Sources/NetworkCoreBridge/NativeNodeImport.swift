@@ -98,6 +98,17 @@ public struct NativeImportReport: Decodable, Equatable {
     public let nodes: [Node]
     public let unsupported: [Unsupported]
     public let routing: Routing?
+    /// What importing the subscription's rules left out (rules of unsupported types counted by type, Surge's built-in
+    /// `RULE-SET,SYSTEM`, ...), one English line each from the kernel, so the rules page can say so. Nil when nothing
+    /// was left out or the kernel predates the field.
+    public var routingWarnings: [String]? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case nodes
+        case unsupported
+        case routing
+        case routingWarnings = "routing_warnings"
+    }
 
     public static func decoded(from data: Data) throws -> NativeImportReport {
         try JSONDecoder().decode(NativeImportReport.self, from: data)

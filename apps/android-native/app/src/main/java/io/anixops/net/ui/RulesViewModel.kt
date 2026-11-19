@@ -21,12 +21,13 @@ import kotlinx.coroutines.launch
 
 /**
  * What the rules page reads beyond the snapshot: the user's own rules, the profile's policy groups, the running
- * engine's rule sets and the custom DNS text with the Fake-IP switch. Null until read.
+ * engine's rule sets, what importing the subscription's rules left out and the custom DNS text with the Fake-IP switch. Null until read.
  */
 data class RulesState(
     val myRules: MyRules? = null,
     val groups: List<NativeGroup> = emptyList(),
     val ruleSets: List<RuleSetStatus> = emptyList(),
+    val routingWarnings: List<String> = emptyList(),
     val dns: DnsText? = null,
     val busy: Boolean = false,
 )
@@ -74,7 +75,10 @@ class RulesViewModel(private val core: Core) : ViewModel() {
     private suspend fun readTexts() {
         val rules = guard { core.myRules() }
         val dns = guard { core.customDns() }
-        _state.update { it.copy(myRules = rules ?: it.myRules, dns = dns ?: it.dns) }
+        val warnings = guard { core.routingWarnings() }
+        _state.update {
+            it.copy(myRules = rules ?: it.myRules, dns = dns ?: it.dns, routingWarnings = warnings ?: it.routingWarnings)
+        }
     }
 
     /** Quiet: a poll that fails keeps what the page shows rather than repeating the refusal every few seconds. */

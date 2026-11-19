@@ -93,6 +93,7 @@ fun RulesScreen(
         state.myRules?.let { MyRulesSection(it, enabled, actions.saveMyRules) }
         GroupsSection(state.groups, enabled, actions.selectGroupOutbound)
         if (state.ruleSets.isNotEmpty()) RuleSetsSection(state.ruleSets, enabled, actions.updateRuleSets)
+        if (state.routingWarnings.isNotEmpty()) RoutingWarningsSection(state.routingWarnings)
         DnsSection(snapshot, state.dns, enabled, actions)
         val dns = state.dns
         if (snapshot?.dnsPreset == "custom" && dns != null) CustomDnsSection(dns, enabled, actions.saveDns)
@@ -267,10 +268,39 @@ private fun RuleSetsSection(sets: List<RuleSetStatus>, enabled: Boolean, onUpdat
                 ) {
                     Text(set.name, style = MaterialTheme.typography.bodyLarge)
                     Text(ruleSetDetail(set), style = MaterialTheme.typography.bodySmall, color = LocalBrandPalette.current.text2)
+                    if (set.skippedCount > 0) {
+                        Text(
+                            pluralStringResource(R.plurals.rule_set_skipped, set.skippedCount, set.skippedCount, set.skippedSummary),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LocalBrandPalette.current.warning,
+                        )
+                    }
                 }
             }
         }
         Note(stringResource(R.string.rules_sets_note))
+    }
+}
+
+/** What importing the subscription's rules left out, so a rule that does not run is never silent. */
+@Composable
+private fun RoutingWarningsSection(warnings: List<String>) {
+    Column {
+        Section(stringResource(R.string.rules_import_warnings)) {
+            warnings.forEachIndexed { index, warning ->
+                if (index > 0) RowDivider()
+                Text(
+                    warning,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = RowMinHeight)
+                        .padding(horizontal = BrandSpacing.md, vertical = BrandSpacing.xs),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LocalBrandPalette.current.warning,
+                )
+            }
+        }
+        Note(stringResource(R.string.rules_import_warnings_note))
     }
 }
 

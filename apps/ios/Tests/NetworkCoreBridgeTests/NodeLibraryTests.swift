@@ -29,6 +29,25 @@ final class NodeLibraryTests: XCTestCase {
         ).report)
     }
 
+    func testRulesTheImportLeftOutAreKept() throws {
+        XCTAssertEqual(NodeLibrary(report: try decoded(), subscriptionURL: nil, keeping: nil).routingWarnings, [])
+        let withWarnings = report.replacingOccurrences(
+            of: #""unsupported":[]}"#,
+            with: #""unsupported":[],"routing_warnings":["unsupported rule types were skipped: IP-ASN x2"]}"#
+        )
+        let warned = try NativeImportReport.decoded(from: Data(withWarnings.utf8))
+        XCTAssertEqual(warned.routingWarnings, ["unsupported rule types were skipped: IP-ASN x2"])
+        let library = NodeLibrary(report: warned, subscriptionURL: nil, keeping: nil)
+        XCTAssertEqual(library.routingWarnings, ["unsupported rule types were skipped: IP-ASN x2"])
+        let saved = try JSONDecoder().decode(NodeLibrary.self, from: JSONEncoder().encode(library))
+        XCTAssertEqual(saved.routingWarnings, library.routingWarnings)
+        // A library saved before the field existed has none.
+        var old = try JSONSerialization.jsonObject(with: JSONEncoder().encode(library)) as? [String: Any] ?? [:]
+        old.removeValue(forKey: "routingWarnings")
+        let decodedOld = try JSONDecoder().decode(NodeLibrary.self, from: JSONSerialization.data(withJSONObject: old))
+        XCTAssertEqual(decodedOld.routingWarnings, [])
+    }
+
     func testRefreshKeepsTheSelectedNodeWhenItIsStillListed() throws {
         let report = try decoded()
         XCTAssertEqual(NodeLibrary(report: report, subscriptionURL: "https://s.example/x", keeping: "b").selectedID, "b")
