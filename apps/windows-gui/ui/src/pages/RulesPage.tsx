@@ -9,8 +9,11 @@ import { Select } from "../controls";
 import { t } from "../i18n";
 import { DnsCards } from "./DnsCards";
 import { MyRules } from "./MyRules";
+import { DataLists, RuleHits, RuleTester } from "./RuleTools";
 
 export function RulesPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
+  const [sets, reloadSets] = usePolling(desktop.ruleSets, liveEngine(snapshot));
+  const missing = sets && Array.isArray(sets.missing) ? sets.missing : [];
   return (
     <div className="page-stack">
       <Card
@@ -38,7 +41,10 @@ export function RulesPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot |
       </Card>
       <MyRules busy={busy} run={run} />
       <PolicyGroups busy={busy} run={run} />
-      <RuleSets snapshot={snapshot} busy={busy} run={run} />
+      <RuleTester snapshot={snapshot} busy={busy} />
+      <RuleHits snapshot={snapshot} busy={busy} run={run} />
+      <DataLists missing={missing} busy={busy} run={run} />
+      <RuleSets answer={sets} reload={reloadSets} busy={busy} run={run} />
       <ImportWarnings snapshot={snapshot} />
       <DnsCards snapshot={snapshot} busy={busy} run={run} />
     </div>
@@ -93,8 +99,12 @@ function PolicyGroups({ busy, run }: { busy: string | null; run: Run }) {
 }
 
 /** The running engine's rule sets: size, source and the last download of remote ones. */
-function RuleSets({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
-  const [answer, reload] = usePolling(desktop.ruleSets, liveEngine(snapshot));
+function RuleSets({ answer, reload, busy, run }: {
+  answer: { rule_sets: RuleSetStatus[] } | null;
+  reload: () => void;
+  busy: string | null;
+  run: Run;
+}) {
   const sets = answer?.rule_sets ?? [];
   if (sets.length === 0) return null;
   const remote = sets.some((set) => set.source === "remote");

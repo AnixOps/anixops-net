@@ -41,6 +41,7 @@ import io.anixops.net.core.MyRules
 import io.anixops.net.core.NativeGroup
 import io.anixops.net.core.RuleSetStatus
 import io.anixops.net.core.RuntimeSnapshot
+import io.anixops.net.core.hasProcessRules
 import io.anixops.net.ui.theme.BrandSpacing
 import io.anixops.net.ui.theme.LocalBrandPalette
 
@@ -53,6 +54,10 @@ data class RulesActions(
     val setDnsPreset: (String) -> Unit = {},
     val saveDns: (DnsText) -> Unit = {},
     val setBlockQuic: (Boolean) -> Unit = {},
+    val saveDataSource: (name: String, url: String) -> Unit = { _, _ -> },
+    val removeDataSource: (String) -> Unit = {},
+    val clearRuleHits: () -> Unit = {},
+    val testRoute: (host: String, port: Int, network: String, address: String, process: String) -> Unit = { _, _, _, _, _ -> },
 )
 
 /** A choice of a one-of list: its value, name and the sentence under the name. */
@@ -92,6 +97,12 @@ fun RulesScreen(
         RoutingSection(snapshot?.routingMode, enabled, actions)
         state.myRules?.let { MyRulesSection(it, enabled, actions.saveMyRules) }
         GroupsSection(state.groups, enabled, actions.selectGroupOutbound)
+        // The engine answers rule hits only while it runs; the test needs it too.
+        state.hits?.let {
+            RuleTestSection(state.routeTest, enabled, actions.testRoute)
+            RuleHitsSection(it, enabled, actions.clearRuleHits)
+        }
+        DataListsSection(state.missingData, state.dataSources, enabled, actions.saveDataSource, actions.removeDataSource)
         if (state.ruleSets.isNotEmpty()) RuleSetsSection(state.ruleSets, enabled, actions.updateRuleSets)
         if (state.routingWarnings.isNotEmpty()) RoutingWarningsSection(state.routingWarnings)
         DnsSection(snapshot, state.dns, enabled, actions)
@@ -158,6 +169,7 @@ private fun MyRulesSection(saved: MyRules, enabled: Boolean, onSave: (String) ->
             Editor(draft, { draft = it }, title, RulesPlaceholder, Modifier.padding(BrandSpacing.md))
             SaveRow(changed, enabled, onRevert = { draft = saved.text }, onSave = { onSave(draft) })
         }
+        if (hasProcessRules(saved.text)) ProcessRulesWarning()
         Note(stringResource(R.string.rules_mine_note))
     }
 }

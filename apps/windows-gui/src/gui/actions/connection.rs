@@ -111,13 +111,17 @@ impl DesktopCore {
 /// Kernel control commands the client may send: reading traffic, connections
 /// and rule sets, closing connections, refreshing remote rule sets and packet
 /// capture. Mode and group changes go through the saved profile instead.
-const ACTIVITY_COMMANDS: [&str; 16] = [
+const ACTIVITY_COMMANDS: [&str; 19] = [
     "traffic",
     "connections",
     "close_connection",
     "close_all",
     "rule_sets",
     "update_rule_sets",
+    // The rule tester and per-rule hit counts on the rules page.
+    "rule_hits",
+    "clear_rule_hits",
+    "test_route",
     "capture",
     "set_capture",
     "clear_capture",

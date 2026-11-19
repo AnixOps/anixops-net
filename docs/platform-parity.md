@@ -48,6 +48,7 @@
 | 扫码导入 | ✅ | — | — | — | ✅ | Android：订阅页“扫码”用相机读订阅或分享链接二维码，填进链接框后点“导入”（CameraX + ZXing，T5） |
 | 分流模式（规则 / 全局 / 直连；不带预设分流模式，见 [no-presets.md](no-presets.md)） | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 我的规则（规则文本编辑、连接中原地换规则） | ✅ | ✅ | ◐ | ◐ | ◐ | 内核 `reload_rules`（T2）。桌面与 Android 用 `RULE-SET,https://…,策略` 导入规则集（经 PROXY 每天下载），GEOSITE,cn / GEOIP,CN 用内置公开列表，其他 GEOSITE 分类要订阅自带同名规则集；Windows TUN 模式下次连接生效 |
+| 规则测试、规则命中次数、GeoIP / ASN 数据（按 URL 添加，缺数据逐条显示） | ✅ | ✅ | ✅ | ✅ | ✅ | 内核 `test_route`、`rule_hits`、`rule_sets.missing`。PROCESS-NAME 只在 Windows 和 Linux 的 TUN 生效，iOS、macOS、Android 在规则页提示不生效 |
 | 规则集查看、更新远程规则集 | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | DNS 预设 | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 自定义 DNS 服务器、分域 DNS、Hosts | ✅ | ✅ | ✅ | ✅ | ✅ | T3：桌面与 Android 用文本编辑（`名称 = 地址`、`DOMAIN-SUFFIX,cn,服务器`、`域名 = 地址`），iOS / macOS 是表单 |

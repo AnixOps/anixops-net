@@ -7271,22 +7271,6 @@
         }
       }
     },
-    "订阅没有提供这个规则集，相关规则不会命中": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The subscription doesn't provide this rule set, so its rules won't match"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "訂閱沒有提供這個規則集，相關規則不會命中"
-          }
-        }
-      }
-    },
     "筛选规则": {
       "localizations": {
         "en": {
@@ -13203,6 +13187,502 @@
           "stringUnit": {
             "state": "translated",
             "value": "清單裡有 %lld 條規則不支援，已略過：%@"
+          }
+        }
+      }
+    },
+    "缺少 %@ 的数据": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No data for %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "缺少 %@ 的資料"
+          }
+        }
+      }
+    },
+    "这条规则现在不会匹配任何连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This rule matches no connection until a list is added."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這條規則現在不會比對到任何連線。"
+          }
+        }
+      }
+    },
+    "添加列表": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add List"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新增清單"
+          }
+        }
+      }
+    },
+    "国家代码或 AS 号": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Country code or AS number"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "國家代碼或 AS 號"
+          }
+        }
+      }
+    },
+    "列表地址": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "List URL"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清單網址"
+          }
+        }
+      }
+    },
+    "写两个字母的国家代码（如 US）或 AS 号（如 AS13335）。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a two-letter country code (such as US) or an AS number (such as AS13335)."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "填兩個字母的國家代碼（如 US）或 AS 號（如 AS13335）。"
+          }
+        }
+      }
+    },
+    "GeoIP 与 ASN 数据": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GeoIP and ASN Data"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GeoIP 與 ASN 資料"
+          }
+        }
+      }
+    },
+    "客户端只内置中国大陆的 GeoIP 列表。GEOIP 的其他国家和 IP-ASN 规则需要你按 URL 添加开源列表（每行一个网段，或 IP-CIDR 规则），经代理每天下载一次，并替换同名的内置或订阅列表。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app builds in only the mainland China GeoIP list. GEOIP rules for other countries and IP-ASN rules need an open-source list you add by URL (one network per line, or IP-CIDR rules). It is downloaded through the proxy once a day and replaces a built-in or subscription list of the same name."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App 只內建中國大陸的 GeoIP 清單。GEOIP 的其他國家和 IP-ASN 規則需要你按網址新增開源清單（每行一個網段，或 IP-CIDR 規則），經代理每天下載一次，並取代同名的內建或訂閱清單。"
+          }
+        }
+      }
+    },
+    "最多 16 个数据列表。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "At most 16 data lists."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最多 16 個資料清單。"
+          }
+        }
+      }
+    },
+    "列表必须是 https:// 地址。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The list must be an https:// URL."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清單必須是 https:// 網址。"
+          }
+        }
+      }
+    },
+    "域名或 IP": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Domain or IP"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "網域或 IP"
+          }
+        }
+      }
+    },
+    "域名解析到的 IP（可选）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "IP the domain resolves to (optional)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "網域解析到的 IP（選填）"
+          }
+        }
+      }
+    },
+    "测试": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "測試"
+          }
+        }
+      }
+    },
+    "内核没有回答，请确认已连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The engine did not answer. Make sure you are connected."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "核心沒有回應，請確認已連線。"
+          }
+        }
+      }
+    },
+    "匹配的规则": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Matching Rule"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "比對到的規則"
+          }
+        }
+      }
+    },
+    "这条规则要看目标 IP。填上域名解析到的 IP 再测；解析失败时连接会被拒绝。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This rule needs the destination IP. Enter the IP the domain resolves to and test again; if the lookup fails, the connection is rejected."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這條規則要看目標 IP。填上網域解析到的 IP 再測；解析失敗時連線會被拒絕。"
+          }
+        }
+      }
+    },
+    "当前是全局模式，实际连接不按规则分流。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Global mode is on, so connections do not follow the rules."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前是全域模式，實際連線不按規則分流。"
+          }
+        }
+      }
+    },
+    "当前是直连模式，实际连接不按规则分流。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Direct mode is on, so connections do not follow the rules."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前是直連模式，實際連線不按規則分流。"
+          }
+        }
+      }
+    },
+    "规则测试": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rule Test"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "規則測試"
+          }
+        }
+      }
+    },
+    "查看当前规则会把这样的连接交给哪条规则、走哪个出口。不会真的发起连接，也不计入命中次数。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shows which rule the current rules give such a connection to and where it goes. No connection is opened and nothing is counted as a hit."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查看目前的規則會把這樣的連線交給哪條規則、走哪個出口。不會真的發起連線，也不計入命中次數。"
+          }
+        }
+      }
+    },
+    "还没有连接经过规则。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No connection has gone through the rules yet."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "還沒有連線經過規則。"
+          }
+        }
+      }
+    },
+    "另有 %lld 条规则还没有命中。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld more rules have no hits yet."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "另有 %lld 條規則還沒有命中。"
+          }
+        }
+      }
+    },
+    "清零": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清零"
+          }
+        }
+      }
+    },
+    "规则命中": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rule Hits"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "規則命中"
+          }
+        }
+      }
+    },
+    "规则加载以来每条规则决定了多少个连接。修改规则后重新计数。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How many connections each rule decided since the rules were loaded. Counting restarts when the rules change."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "規則載入以來每條規則決定了多少個連線。修改規則後重新計數。"
+          }
+        }
+      }
+    },
+    "订阅里有 PROCESS-NAME 规则。iOS 和 macOS 的隧道分不出连接来自哪个 App，这些规则不会生效。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The subscription has PROCESS-NAME rules. The tunnel on iOS and macOS cannot tell which app opened a connection, so these rules have no effect."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "訂閱裡有 PROCESS-NAME 規則。iOS 和 macOS 的通道分不出連線來自哪個 App，這些規則不會生效。"
+          }
+        }
+      }
+    },
+    "规则测试、命中与 GeoIP 数据": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rule Test, Hits and GeoIP Data"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "規則測試、命中與 GeoIP 資料"
+          }
+        }
+      }
+    },
+    "规则工具": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rule Tools"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "規則工具"
+          }
+        }
+      }
+    },
+    "没有这份数据，相关规则不会命中。可以在“GeoIP 与 ASN 数据”里按 URL 添加列表。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No data for this list, so its rules match nothing. Add a list by URL under “GeoIP and ASN Data”."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有這份資料，相關規則不會命中。可以在「GeoIP 與 ASN 資料」裡按網址新增清單。"
+          }
+        }
+      }
+    },
+    "两位国家或地区代码，例如 CN。CN 以外的国家需要在下面的 GeoIP 与 ASN 数据里添加列表。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A two-letter country or region code, such as CN. Countries other than CN need a list under GeoIP and ASN Data below."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "兩位國家或地區代碼，例如 CN。CN 以外的國家需要在下方的 GeoIP 與 ASN 資料裡新增清單。"
+          }
+        }
+      }
+    },
+    "AS 号，例如 AS13335。需要在下面的 GeoIP 与 ASN 数据里添加这个 AS 的列表。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An AS number, such as AS13335. Needs a list for this AS under GeoIP and ASN Data below."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AS 號，例如 AS13335。需要在下方的 GeoIP 與 ASN 資料裡新增這個 AS 的清單。"
           }
         }
       }

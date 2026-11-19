@@ -309,6 +309,7 @@ impl Backend {
         let mut state = store.load();
         desktop_dns::custom::use_file(store.dir().join("dns-settings.json"));
         desktop_dns::redirects::use_file(store.dir().join("redirects.json"));
+        desktop_dns::data_sources::use_file(store.dir().join("data-sources.json"));
         // The removed 国内外分流 DNS choice becomes the user's own settings (docs/no-presets.md). Until that
         // works it is applied as "自定义", never as a preset.
         if let Ok(adopted) = desktop_dns::adopt_legacy_split(state.dns_preset) {
@@ -976,6 +977,46 @@ impl Backend {
             Ok(nodes) => engine::routing_warnings(&content, &nodes),
             Err(_) => Vec::new(),
         }
+    }
+
+    /// The data lists the user added for `GEOIP` and `IP-ASN` rules, by name.
+    pub fn data_sources(&self) -> Vec<desktop_dns::data_sources::DataSource> {
+        desktop_dns::data_sources::current()
+    }
+
+    /// Adds the data list `name` (`geoip-<cc>` or `asn-<number>`) at `url`, or points it at `url`.
+    pub fn save_data_source(&mut self, name: &str, url: &str) -> Result<OperationResult, String> {
+        let next =
+            desktop_dns::data_sources::setting(&desktop_dns::data_sources::current(), name, url)?;
+        self.replace_data_sources(&next)
+    }
+
+    /// Removes the data list `name`.
+    pub fn remove_data_source(&mut self, name: &str) -> Result<OperationResult, String> {
+        let next = desktop_dns::data_sources::removing(&desktop_dns::data_sources::current(), name);
+        self.replace_data_sources(&next)
+    }
+
+    /// Saves `next` once the engine accepts it, as for the redirects; a running engine restarts with it and
+    /// downloads the new lists.
+    fn replace_data_sources(
+        &mut self,
+        next: &[desktop_dns::data_sources::DataSource],
+    ) -> Result<OperationResult, String> {
+        let restarted = desktop_dns::data_sources::replace(next, || {
+            if self.envelope_with_rules(&[]).is_ok() {
+                let envelope = self.envelope()?;
+                RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
+                    format!("the engine rejected the data lists: {}", error.message)
+                })?;
+            }
+            self.restart_if_running()
+        })?;
+        done(if restarted {
+            "Data lists saved; the engine is downloading them"
+        } else {
+            "Data lists saved; they download on the next connection"
+        })
     }
 
     /// The destination rewrites, as the window lists them.

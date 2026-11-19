@@ -143,7 +143,13 @@
         if (rows.length === 0) return { capture: null };
         return { capture: { id: request.id, network: "tcp", host: rows[0].host, destination: "203.0.113.20:443", started_at_ms: rows[0].started_at_ms, ended_at_ms: null, decrypted: true, upload: { seen: 4000, captured: 4000, truncated: false }, download: { seen: 90000, captured: 90000, truncated: false }, chunks: [], http: rows.map(exchange) } };
       }
-      case "rule_sets": return { rule_sets: [{ name: "geosite-cn", source: "remote", entries: 71234, updated_at_ms: start - 3600e3 }, { name: "gfwlist", source: "remote", entries: 6012, updated_at_ms: start - 86400e3, skipped: { "IP-ASN": 3 } }] };
+      case "rule_sets": return { rule_sets: [{ name: "geosite-cn", source: "remote", entries: 71234, updated_at_ms: start - 3600e3 }, { name: "gfwlist", source: "remote", entries: 6012, updated_at_ms: start - 86400e3, skipped: { SCRIPT: 3 } }], missing: ["asn-13335"] };
+      case "rule_hits": case "clear_rule_hits": return { generation: 1, rules: [
+        { rule: "DOMAIN-SUFFIX,example.com", target: "节点选择", hits: 412, last_hit_at_ms: start - 2e3 },
+        { rule: "GEOIP,CN", target: "DIRECT", hits: 1288, last_hit_at_ms: start - 1e3 },
+        { rule: "IP-ASN,13335", target: "节点选择", hits: 0 },
+      ], final: { rule: "FINAL", target: "节点选择", hits: 96, last_hit_at_ms: start - 4e3 } };
+      case "test_route": return { mode: "rule", test: { rule_index: 0, rule: "DOMAIN-SUFFIX,example.com", chain: ["节点选择"], outbound: "香港 01" } };
       case "mitm_hosts": case "clear_mitm_hosts": return { enabled: true, hosts: [
         { host: "auth.example.com", decrypted: 0, failed: 4, last_failure: "client_rejected_certificate", last_failure_at_ms: start - 30e3, failures: { client_rejected_certificate: 4 } },
         { host: "api.example.com", decrypted: 128, failed: 0, last_decrypted_at_ms: start - 5e3 },
@@ -198,7 +204,8 @@
       { id: "p2", name: "YouTube 去广告", url: "https://example.com/yt.plugin", enabled: true, level: "partial", hostnames: ["*.googlevideo.com"], scriptCount: 1 },
     ],
     custom_dns: () => ({ servers: "", rules: "", hosts: "", fake_ip: false }),
-    routing_warnings: () => ["2 rules of type IP-ASN were not imported: the client does not support them yet"],
+    routing_warnings: () => ["2 rules of type SCRIPT were not imported: the client does not support them yet"],
+    data_sources: () => [{ name: "geoip-us", url: "https://lists.example.org/geoip/us.txt" }],
     my_rules: () => ({ text: "DOMAIN-SUFFIX,example.com,PROXY\nDOMAIN-KEYWORD,ads,REJECT\n", count: 2 }),
     phone_qr_code: () => "",
   };

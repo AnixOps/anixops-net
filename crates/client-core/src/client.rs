@@ -1078,6 +1078,15 @@ fn handler(name: &str) -> Option<Handler> {
         },
         "traffic_redirects" => |client, _| json(client.backend().traffic_redirects()),
         "routing_warnings" => |client, _| json(client.backend().routing_warnings()),
+        "data_sources" => |client, _| json(client.backend().data_sources()),
+        "save_data_source" => |client, args| {
+            let DataSource { name, url } = parse(args)?;
+            json(client.backend().save_data_source(&name, &url)?)
+        },
+        "remove_data_source" => |client, args| {
+            let DataSourceName { name } = parse(args)?;
+            json(client.backend().remove_data_source(&name)?)
+        },
         "add_traffic_redirect" => |client, args| {
             let RedirectDraft { draft, replacing } = parse(args)?;
             json(
@@ -1450,6 +1459,17 @@ struct RedirectDraft {
     draft: desktop_dns::redirects::Draft,
     #[serde(default)]
     replacing: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct DataSource {
+    name: String,
+    url: String,
+}
+
+#[derive(Deserialize)]
+struct DataSourceName {
+    name: String,
 }
 
 #[derive(Deserialize)]

@@ -16,7 +16,8 @@ public enum RuleSetCatalog {
     public static let builtIn: Set<String> = ["LAN"]
 
     /// The rule-set names `rules` refer to, in order of first use: `RULE-SET,<name>`, `GEOSITE,<category>` as
-    /// `geosite-<category>` and `GEOIP,<cc>` as `geoip-<cc>`, also inside `AND`, `OR` and `NOT` rules.
+    /// `geosite-<category>`, `GEOIP,<cc>` as `geoip-<cc>` and `IP-ASN,<n>` as `asn-<n>`, also inside `AND`, `OR` and
+    /// `NOT` rules.
     public static func referencedNames(in rules: [String]) -> [String] {
         var names: [String] = []
         for rule in rules {
@@ -29,6 +30,9 @@ public enum RuleSetCatalog {
                     name = "geosite-" + value.lowercased()
                 case "GEOIP":
                     name = "geoip-" + value.lowercased()
+                case "IP-ASN":
+                    let number = value.uppercased().hasPrefix("AS") ? String(value.dropFirst(2)) : value
+                    name = "asn-" + number
                 default:
                     continue
                 }
@@ -75,6 +79,12 @@ public enum RuleSetCatalog {
             }
             return sets?[name] == nil && !builtIn.contains(name) ? name : nil
         }
+    }
+
+    /// Whether `rules` hold a `PROCESS-NAME` rule, which matches nothing on iOS and macOS: the tunnel cannot tell
+    /// which app opened a connection there (only Windows and Linux can).
+    public static func hasProcessRules(_ rules: [String]) -> Bool {
+        rules.contains { rule in conditions(in: rule).contains { $0.0 == "PROCESS-NAME" } }
     }
 
     /// Every `KIND,value` pair of a rule line, including the conditions of a logical rule such as

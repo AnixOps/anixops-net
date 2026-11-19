@@ -15,7 +15,7 @@ use std::path::Path;
 
 use serde_json::{json, Map, Value};
 
-use crate::catalog;
+use crate::{catalog, data_sources};
 
 /// The most lines kept, as on iOS and macOS.
 pub const MAX_RULES: usize = 1000;
@@ -28,7 +28,7 @@ pub const MAX_TEXT_BYTES: usize = 256 * 1024;
 pub const MAX_RULE_SETS: usize = 20;
 
 /// The rule types a line can use.
-pub const KINDS: [&str; 17] = [
+pub const KINDS: [&str; 18] = [
     "DOMAIN-SUFFIX",
     "DOMAIN",
     "DOMAIN-KEYWORD",
@@ -46,6 +46,7 @@ pub const KINDS: [&str; 17] = [
     "RULE-SET",
     "GEOSITE",
     "GEOIP",
+    "IP-ASN",
 ];
 
 /// Where a line sends traffic. `PROXY` is replaced when the envelope is made. `REJECT-DROP` answers nothing,
@@ -79,6 +80,7 @@ impl LineError {
             "too_many" => "is past the limit of 1000 rules",
             "url" => "must name an https:// rule list",
             "too_many_sets" => "is past the limit of 20 rule lists",
+            "asn" => "must name an AS number from 1 to 4294967295",
             _ => "is not a rule",
         };
         format!("line {} {reason}", self.line + 1)
@@ -152,6 +154,17 @@ pub fn parse(text: &str) -> Result<Vec<String>, LineError> {
             }
             "GEOSITE" => value = value.to_ascii_lowercase(),
             "GEOIP" => value = value.to_ascii_uppercase(),
+            // `AS13335` and `13335` name the same network; the engine's data list is `asn-13335`.
+            "IP-ASN" => {
+                let number = match value.get(..2) {
+                    Some(prefix) if prefix.eq_ignore_ascii_case("AS") => &value[2..],
+                    _ => value.as_str(),
+                };
+                if crate::data_sources::normalized_name(&format!("asn-{number}")).is_none() {
+                    return Err(error("asn"));
+                }
+                value = number.to_string();
+            }
             "SRC-IP-CIDR" => kind = "SRC-IP".to_string(),
             _ => {}
         }
@@ -170,7 +183,8 @@ pub fn parse(text: &str) -> Result<Vec<String>, LineError> {
 
 /// `envelope` with `lines` (from [`parse`]) in front of its rules. A single-node envelope becomes a routing one so
 /// the lines have somewhere to go. Each imported list becomes a rule set `local-<n>` the engine downloads through
-/// `PROXY`, and the built-in category lists are added for the rules that name them. A `GEOSITE` line whose category
+/// `PROXY`, the user's data lists ([`data_sources`]) are added over any set of their name, and the built-in category
+/// lists are added for the rules that name them. A `GEOSITE` line whose category
 /// has no list is left out, since the engine refuses the whole profile for it (a missing `GEOIP` list only never
 /// matches). No lines leave a single-node envelope as it is.
 pub fn apply(envelope: &str, lines: &[String]) -> Result<String, String> {
@@ -237,6 +251,7 @@ pub fn apply(envelope: &str, lines: &[String]) -> Result<String, String> {
         .and_then(Value::as_array)
         .ok_or("the envelope's routing has no rules")?;
     rules.extend(existing.iter().cloned());
+    data_sources::insert(&data_sources::current(), &mut sets, proxy.as_deref());
     catalog::fill(&rules, &mut sets);
     let user = lines.len();
     let mut index = 0;
@@ -274,9 +289,11 @@ fn with_category_lists(envelope: &str) -> Result<String, String> {
         None | Some(Value::Null) => Map::new(),
         Some(_) => return Ok(envelope.to_string()),
     };
-    let before = sets.len();
+    let before = sets.clone();
+    let proxy = proxy_target(routing);
+    data_sources::insert(&data_sources::current(), &mut sets, proxy.as_deref());
     catalog::fill(&rules, &mut sets);
-    if sets.len() == before {
+    if sets == before {
         return Ok(envelope.to_string());
     }
     routing.insert("rule_sets".to_string(), Value::Object(sets));
@@ -565,6 +582,22 @@ mod tests {
         let lines = parse("GEOSITE,google,PROXY").unwrap();
         let value: Value = serde_json::from_str(&apply(own, &lines).unwrap()).unwrap();
         assert_eq!(value["routing"]["rules"][0], "GEOSITE,google,proxy");
+    }
+
+    #[test]
+    fn as_numbers_are_checked_and_written_bare() {
+        assert_eq!(
+            parse("ip-asn,AS13335,PROXY\nIP-ASN,15169,DIRECT,no-resolve").unwrap(),
+            vec!["IP-ASN,13335,PROXY", "IP-ASN,15169,DIRECT,no-resolve"]
+        );
+        for bad in [
+            "IP-ASN,AS,PROXY",
+            "IP-ASN,0,PROXY",
+            "IP-ASN,4294967296,PROXY",
+            "IP-ASN,cloudflare,PROXY",
+        ] {
+            assert_eq!(parse(bad).unwrap_err().code, "asn", "{bad}");
+        }
     }
 
     #[test]
