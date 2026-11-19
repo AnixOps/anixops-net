@@ -1417,6 +1417,25 @@ impl Backend {
         self.engine.control(request)
     }
 
+    /// The running engine's per-domain decryption results (`mitm_hosts`), cleared first with `clear`;
+    /// `{"enabled": false, "hosts": []}` while there is no engine or it answers no such command.
+    pub fn mitm_hosts(&self, clear: bool) -> serde_json::Value {
+        let empty = serde_json::json!({ "enabled": false, "hosts": [] });
+        if !self.engine.is_running() {
+            return empty;
+        }
+        if clear {
+            let _ = self
+                .engine
+                .control(&serde_json::json!({ "cmd": "clear_mitm_hosts" }));
+        }
+        self.engine
+            .control(&serde_json::json!({ "cmd": "mitm_hosts" }))
+            .ok()
+            .filter(|answer| answer.get("hosts").is_some_and(serde_json::Value::is_array))
+            .unwrap_or(empty)
+    }
+
     /// The running engine's answer to `{"cmd":"connections"}`; `null` while there is no engine to ask.
     pub fn connections(&self) -> serde_json::Value {
         if !self.engine.is_running() {

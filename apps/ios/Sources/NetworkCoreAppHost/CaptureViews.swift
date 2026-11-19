@@ -130,7 +130,9 @@ struct CaptureDetailView: View {
 
     /// The connection's domain while the decrypted-domain list does not cover it; nil for an address or a covered one.
     private var undecryptedHost: String? {
-        guard let host = connection.host.flatMap(DebugMappings.normalizeHost), !tunnel.debugMappings.decrypts(host) else {
+        guard let host = connection.host.flatMap(DebugMappings.normalizeHost), !tunnel.debugMappings.decrypts(host),
+              !tunnel.debugMappings.excludes(host)
+        else {
             return nil
         }
         return host
@@ -139,6 +141,9 @@ struct CaptureDetailView: View {
     private var encryptedNote: LocalizedStringKey {
         guard let host = connection.host.flatMap(DebugMappings.normalizeHost) else {
             return "这是加密的 TLS 数据。目标是 IP 地址，没有域名可以解密。"
+        }
+        if tunnel.debugMappings.excludes(host) {
+            return "这是加密的 TLS 数据。这个域名在解密列表里被排除，不会解密。"
         }
         if tunnel.debugMappings.decrypts(host) {
             return "这是加密的 TLS 数据。这个域名已在解密列表里，新的连接会被解密；请确认已信任 HTTPS 解密证书。"
@@ -506,6 +511,8 @@ struct CaptureHostGroupRows: View {
     var tunnel: TunnelController
     let groups: [CaptureHostGroup]
     let domains: DecryptionDomains
+    /// The engine's decryption results by domain (`mitm_hosts`); empty from an engine before it.
+    var results: [String: RuntimeControl.MitmHosts.Host] = [:]
     let decrypt: (String) -> Void
     @Environment(\.brand) private var brand
 
@@ -532,7 +539,7 @@ struct CaptureHostGroupRows: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                if group.isDomain, !domains.covers(group.name) {
+                if group.isDomain, !domains.covers(group.name), !domains.excludes(group.name) {
                     Button("解密") {
                         decrypt(group.name)
                     }
@@ -554,6 +561,12 @@ struct CaptureHostGroupRows: View {
         if !group.isDomain {
             return "只有 IP 地址，没有域名可以解密"
         }
+        if let result = results[group.name], result.failing {
+            return DecryptHostsView.reason(result.failure)
+        }
+        if domains.excludes(group.name) {
+            return "已排除，不解密"
+        }
         if domains.covers(group.name) {
             // Listed, yet nothing decrypted: the connections began before the domain was added, the app pins its
             // certificate, the traffic is not HTTPS on port 443, or capture memory pushed the requests out.
@@ -568,6 +581,7 @@ struct CaptureHostGroupsView: View {
     var tunnel: TunnelController
     let groups: [CaptureHostGroup]
     let domains: DecryptionDomains
+    var results: [String: RuntimeControl.MitmHosts.Host] = [:]
     let decrypt: (String) -> Void
     @Environment(\.brand) private var brand
 
@@ -580,7 +594,7 @@ struct CaptureHostGroupsView: View {
                         .foregroundStyle(brand.text2)
                         .listRowBackground(brand.surface)
                 }
-                CaptureHostGroupRows(tunnel: tunnel, groups: groups, domains: domains, decrypt: decrypt)
+                CaptureHostGroupRows(tunnel: tunnel, groups: groups, domains: domains, results: results, decrypt: decrypt)
             } footer: {
                 Text("这些连接没有解密，只抓到了加密的 TLS 数据，点进去可以看原始字节。点“解密”把域名加入解密列表，隧道会重新连接，之后的新连接会被解密并列在请求里。")
             }

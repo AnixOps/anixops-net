@@ -164,7 +164,11 @@ pub fn invoke(command: &str, args: &Value) -> Option<Result<Value, String>> {
             args.get("now").and_then(Value::as_i64).unwrap_or(0),
             args.get("offset").and_then(Value::as_i64).unwrap_or(0),
         ),
-        "decrypt_hosts" => decrypt::decrypt_hosts(text(args, "host"), rows(args, "hosts")),
+        "decrypt_hosts" => decrypt::decrypt_hosts(
+            text(args, "host"),
+            rows(args, "hosts"),
+            rows(args, "excluded"),
+        ),
         "decrypt_setup" => decrypt::decrypt_setup(args),
         _ => return Some(Err(format!("unknown command {command}"))),
     };

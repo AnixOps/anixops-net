@@ -154,9 +154,12 @@ public struct MitmPlugin: Codable, Equatable, Identifiable {
                     for marker in ["%APPEND%", "%INSERT%"] where host.uppercased().hasPrefix(marker) {
                         host = String(host.dropFirst(marker.count)).trimmingCharacters(in: .whitespaces)
                     }
-                    if !host.isEmpty, !host.hasPrefix("-"), !host.hasPrefix("!"),
-                       !summary.hostnames.contains(host.lowercased())
-                    {
+                    if let first = host.first, first == "-" || first == "!" {
+                        let excluded = host.dropFirst().trimmingCharacters(in: .whitespaces).lowercased()
+                        if !excluded.isEmpty, !summary.excludedHostnames.contains(excluded) {
+                            summary.excludedHostnames.append(excluded)
+                        }
+                    } else if !host.isEmpty, !summary.hostnames.contains(host.lowercased()) {
                         summary.hostnames.append(host.lowercased())
                     }
                 }
@@ -179,6 +182,8 @@ public struct MitmPluginSummary: Equatable {
     public var name: String?
     /// Hosts the plugin decrypts, lower-cased, without exclusions.
     public var hostnames: [String] = []
+    /// Hosts the plugin never decrypts (`-host` items), lower-cased, without the `-`.
+    public var excludedHostnames: [String] = []
     /// URL, header and body rewrites and Map Local lines.
     public var rewriteLines = 0
     /// `[Script]` lines. A script runs only after the user allows it (`MitmScriptLibrary`).

@@ -7,7 +7,9 @@ import androidx.lifecycle.viewModelScope
 import io.anixops.net.core.Core
 import io.anixops.net.core.CoreException
 import io.anixops.net.core.DebugMapping
+import io.anixops.net.core.DecryptDomain
 import io.anixops.net.core.HeaderField
+import io.anixops.net.core.MitmHostOutcome
 import io.anixops.net.core.MitmPlugin
 import io.anixops.net.core.MitmPluginDetails
 import io.anixops.net.core.OperationResult
@@ -33,7 +35,12 @@ data class RedirectEditor(val id: String?, val draft: RedirectDraft)
  */
 data class ExtensionsState(
     val plugins: List<MitmPlugin> = emptyList(),
+    /** The decryption list's patterns that are on and not exclusions. */
     val hosts: List<String> = emptyList(),
+    /** The whole decryption list: domains and wildcard patterns, exclusions, paused lines. */
+    val domains: List<DecryptDomain> = emptyList(),
+    /** The engine's per-domain decryption results while it runs (`mitm_hosts`), for the failure marks. */
+    val outcomes: List<MitmHostOutcome> = emptyList(),
     val mappings: List<DebugMapping> = emptyList(),
     val redirects: List<TrafficRedirect> = emptyList(),
     val loaded: Boolean = false,
@@ -73,9 +80,24 @@ class ExtensionsViewModel(private val core: Core, private val preferences: Share
 
     fun disableDecryption() = perform { core.disableHttpsMitm() }
 
-    fun addHost(host: String) = perform { core.addDecryptHost(host.trim()) }
+    fun addHost(host: String, exclude: Boolean = false) = perform { core.addDecryptHost(host.trim(), exclude) }
+
+    fun editHost(pattern: String, host: String, exclude: Boolean) =
+        perform { core.editDecryptHost(pattern, host.trim(), exclude) }
+
+    fun setHostEnabled(pattern: String, enabled: Boolean) = perform { core.setDecryptHostEnabled(pattern, enabled) }
 
     fun removeHost(host: String) = perform { core.removeDecryptHost(host) }
+
+    /** Forgets the engine's decryption results, so only new failures are marked. */
+    fun clearOutcomes() = viewModelScope.launch {
+        val outcomes = try {
+            core.mitmHosts(clear = true).hosts
+        } catch (error: CoreException) {
+            emptyList()
+        }
+        _state.update { it.copy(outcomes = outcomes) }
+    }
 
     fun importPlugin(url: String) = perform { core.importMitmPlugin(url.trim()) }
 
@@ -128,11 +150,25 @@ class ExtensionsViewModel(private val core: Core, private val preferences: Share
     private suspend fun refresh() {
         try {
             val plugins = core.mitmPlugins()
-            val hosts = core.decryptHosts()
+            val domains = core.decryptDomains()
+            val hosts = domains.filter { it.enabled && !it.exclude }.map { it.pattern }
             val mappings = core.debugMappings()
             val redirects = core.trafficRedirects()
+            val outcomes = try {
+                core.mitmHosts().hosts
+            } catch (error: CoreException) {
+                emptyList()
+            }
             _state.update {
-                it.copy(plugins = plugins, hosts = hosts, mappings = mappings, redirects = redirects, loaded = true)
+                it.copy(
+                    plugins = plugins,
+                    hosts = hosts,
+                    domains = domains,
+                    outcomes = outcomes,
+                    mappings = mappings,
+                    redirects = redirects,
+                    loaded = true,
+                )
             }
         } catch (error: CoreException) {
             _state.update { it.copy(loaded = true) }

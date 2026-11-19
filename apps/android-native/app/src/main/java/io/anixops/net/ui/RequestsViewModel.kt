@@ -490,7 +490,14 @@ class RequestsViewModel(private val core: Core) : ViewModel() {
         }
         val host = capture?.host
         val decrypt = if (capture != null && host != null && CaptureBytes.looksLikeTls(capture)) {
-            quiet { core.decryptHost(host, core.decryptHosts()) }
+            quiet {
+                val domains = core.decryptDomains().filter { it.enabled }
+                core.decryptHost(
+                    host,
+                    domains.filterNot { it.exclude }.map { it.pattern },
+                    domains.filter { it.exclude }.map { it.pattern },
+                )
+            }
         } else {
             null
         }

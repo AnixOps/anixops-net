@@ -12615,6 +12615,534 @@
         }
       }
     },
+    "%lld 个域名，%lld 个排除": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld domains, %2$lld excluded"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld 個網域，%2$lld 個排除"
+          }
+        }
+      }
+    },
+    "* 匹配任意字符（包括点），? 匹配一个字符；*.example.com 匹配所有子域名，不含 example.com 本身。排除的域名永不解密，优先于这里、插件和映射里的所有解密规则；也可以直接写 -example.com。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "* matches any characters (dots included) and ? one character; *.example.com matches every subdomain but not example.com itself. Excluded domains are never decrypted and win over every decryption rule here, in plugins and in mappings; you can also type -example.com."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "* 符合任意字元（包括點），? 符合一個字元；*.example.com 符合所有子網域，不含 example.com 本身。排除的網域永不解密，優先於這裡、外掛和對應裡的所有解密規則；也可以直接寫 -example.com。"
+          }
+        }
+      }
+    },
+    "排除": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exclude"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "排除"
+          }
+        }
+      }
+    },
+    "排除 %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exclude %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "排除 %@"
+          }
+        }
+      }
+    },
+    "已排除": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Excluded"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已排除"
+          }
+        }
+      }
+    },
+    "清除这些记录": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear These Records"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清除這些記錄"
+          }
+        }
+      }
+    },
+    "解密失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decryption Failed"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解密失敗"
+          }
+        }
+      }
+    },
+    "根据本机这次连接以来的解密结果自动标出，只记录域名、次数和原因，断开后清空。App 拒绝证书多半是证书固定：它只信任自己的证书，无法解密。排除后它的连接原样转发，App 会照常联网。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marked automatically from this device's decryption results since it connected. Only domains, counts and reasons are kept, and they are cleared on disconnect. An app that refuses the certificate usually pins its certificate: it trusts only its own, so it cannot be decrypted. Once excluded, its connections pass through untouched and the app works normally."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "根據本機這次連線以來的解密結果自動標出，只記錄網域、次數和原因，中斷後清空。App 拒絕憑證多半是憑證固定：它只信任自己的憑證，無法解密。排除後它的連線原樣轉送，App 會照常連網。"
+          }
+        }
+      }
+    },
+    "停用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停用"
+          }
+        }
+      }
+    },
+    "启用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn On"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "啟用"
+          }
+        }
+      }
+    },
+    "改为解密": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decrypt Instead"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "改為解密"
+          }
+        }
+      }
+    },
+    "改为排除": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exclude Instead"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "改為排除"
+          }
+        }
+      }
+    },
+    "来自插件和映射": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From Plugins and Mappings"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "來自外掛和對應"
+          }
+        }
+      }
+    },
+    "在插件和映射里修改。这里的排除同样作用于它们。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change these in plugins and mappings. Exclusions here apply to them too."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在外掛和對應裡修改。這裡的排除同樣作用於它們。"
+          }
+        }
+      }
+    },
+    "哪些 HTTPS 能解密": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Which HTTPS Can Be Decrypted"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "哪些 HTTPS 能解密"
+          }
+        }
+      }
+    },
+    "域名在列表里（或插件、映射里）、没有被排除，并且已经信任 HTTPS 解密证书。加入后新建的连接才会解密，之前的连接要等 App 重新连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A domain in this list (or in a plugin or mapping) that is not excluded, once the HTTPS decryption certificate is trusted. Only connections made after it is added are decrypted; earlier ones wait until the app reconnects."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "網域在列表裡（或外掛、對應裡）、沒有被排除，並且已經信任 HTTPS 解密憑證。加入後新建的連線才會解密，之前的連線要等 App 重新連線。"
+          }
+        }
+      }
+    },
+    "只解密 443 端口的 HTTPS。列表里域名的 HTTP/3（QUIC）连接会被拒绝，让 App 改用可以解密的 HTTPS。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only HTTPS on port 443 is decrypted. HTTP/3 (QUIC) connections to listed domains are refused so the app falls back to HTTPS, which can be decrypted."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只解密 443 連接埠的 HTTPS。列表裡網域的 HTTP/3（QUIC）連線會被拒絕，讓 App 改用可以解密的 HTTPS。"
+          }
+        }
+      }
+    },
+    "不能解密：固定了证书的 App（常见于银行、支付和系统服务），以及只有 IP 地址、没有域名的连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not decryptable: apps that pin their certificate (common for banking, payments and system services), and connections with only an IP address and no domain."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不能解密：固定了憑證的 App（常見於銀行、支付和系統服務），以及只有 IP 位址、沒有網域的連線。"
+          }
+        }
+      }
+    },
+    "已停用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paused"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已停用"
+          }
+        }
+      }
+    },
+    "已解密 %lld 个连接，%lld 个域名失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld connections decrypted, %2$lld domains failed"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已解密 %1$lld 個連線，%2$lld 個網域失敗"
+          }
+        }
+      }
+    },
+    "已解密 %lld 个连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld connections decrypted"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已解密 %lld 個連線"
+          }
+        }
+      }
+    },
+    "App 拒绝了证书：可能固定了证书，或没有信任根证书": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app refused the certificate: it may pin its certificate, or the root is not trusted"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App 拒絕了憑證：可能固定了憑證，或沒有信任根憑證"
+          }
+        }
+      }
+    },
+    "App 在握手时断开：常见于证书固定": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app closed the connection during the handshake, which is common with certificate pinning"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App 在交握時中斷：常見於憑證固定"
+          }
+        }
+      }
+    },
+    "与 App 的 TLS 握手失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The TLS handshake with the app failed"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "與 App 的 TLS 交握失敗"
+          }
+        }
+      }
+    },
+    "App 没有在限定时间内完成握手": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app did not finish the handshake in time"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App 沒有在限定時間內完成交握"
+          }
+        }
+      }
+    },
+    "源站 TLS 握手失败，例如它的证书与域名不符": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The origin's TLS handshake failed, for example its certificate does not match the domain"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "源站 TLS 交握失敗，例如它的憑證與網域不符"
+          }
+        }
+      }
+    },
+    "连不上源站，或源站没有及时响应": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The origin could not be reached, or did not answer in time"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連不上源站，或源站沒有及時回應"
+          }
+        }
+      }
+    },
+    "失败 %lld 次 · 解密 %lld 次": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld failed · %2$lld decrypted"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "失敗 %1$lld 次 · 解密 %2$lld 次"
+          }
+        }
+      }
+    },
+    "* 匹配任意字符（包括点），? 匹配一个字符。排除的域名永不解密。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "* matches any characters (dots included) and ? one character. Excluded domains are never decrypted."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "* 符合任意字元（包括點），? 符合一個字元。排除的網域永不解密。"
+          }
+        }
+      }
+    },
+    "编辑域名": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit Domain"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "編輯網域"
+          }
+        }
+      }
+    },
+    "列表里已有这个域名": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This domain is already in the list"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "列表裡已有這個網域"
+          }
+        }
+      }
+    },
+    "已排除，不解密": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Excluded, not decrypted"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已排除，不解密"
+          }
+        }
+      }
+    },
+    "这是加密的 TLS 数据。这个域名在解密列表里被排除，不会解密。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is encrypted TLS data. The domain is excluded in the decryption list, so it is not decrypted."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這是加密的 TLS 資料。這個網域在解密列表裡被排除，不會解密。"
+          }
+        }
+      }
+    },
     "导入时跳过的规则": {
       "localizations": {
         "en": {

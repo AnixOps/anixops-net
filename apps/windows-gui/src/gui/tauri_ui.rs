@@ -620,7 +620,10 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             save_debug_mapping,
             remove_debug_mapping,
             list_decrypt_hosts,
+            list_decrypt_domains,
             add_decrypt_host,
+            edit_decrypt_host,
+            set_decrypt_host_enabled,
             remove_decrypt_host,
             test_node_delay,
             test_node_delays,
@@ -4122,17 +4125,59 @@ async fn remove_debug_mapping(
 
 #[tauri::command]
 async fn list_decrypt_hosts() -> Result<Vec<String>, String> {
-    run_blocking(|| mappings::load(&mitm_plugins::directory()).map(|stored| stored.hosts)).await
+    run_blocking(|| mappings::load(&mitm_plugins::directory()).map(|stored| stored.decrypted()))
+        .await
 }
 
+/// The whole decryption list: `{pattern, exclude, enabled}` per line.
+#[tauri::command]
+async fn list_decrypt_domains() -> Result<Vec<mappings::Domain>, String> {
+    run_blocking(|| mappings::load(&mitm_plugins::directory()).map(|stored| stored.domains)).await
+}
+
+/// Adds a line to the decryption list; `exclude` (or a leading `-`) makes it an exclusion.
 #[tauri::command]
 async fn add_decrypt_host(
     host: String,
+    exclude: Option<bool>,
     state: State<'_, DesktopAppState>,
 ) -> Result<OperationResult, String> {
     let state = state.inner().clone();
     run_blocking(move || {
-        mappings::add_host(&mitm_plugins::directory(), &host)?;
+        mappings::add_host(&mitm_plugins::directory(), &host, exclude.unwrap_or(false))?;
+        Ok(OperationResult {
+            message: apply_mitm_plugins(&state),
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn edit_decrypt_host(
+    pattern: String,
+    host: String,
+    exclude: bool,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        mappings::edit_host(&mitm_plugins::directory(), &pattern, &host, exclude)?;
+        Ok(OperationResult {
+            message: apply_mitm_plugins(&state),
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn set_decrypt_host_enabled(
+    pattern: String,
+    enabled: bool,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        mappings::set_host_enabled(&mitm_plugins::directory(), &pattern, enabled)?;
         Ok(OperationResult {
             message: apply_mitm_plugins(&state),
         })

@@ -983,24 +983,61 @@ fn handler(name: &str) -> Option<Handler> {
                 Ok("Mapping removed".to_string())
             })?)
         },
+        // The patterns decrypted (the list's lines that are on, not exclusions), for the request list.
         "list_decrypt_hosts" => |client, _| {
             let directory = client.backend().plugins_dir();
-            json(mappings::load(&directory)?.hosts)
+            json(mappings::load(&directory)?.decrypted())
+        },
+        // The whole decryption list: `{pattern, exclude, enabled}` per line, in the order added.
+        "list_decrypt_domains" => |client, _| {
+            let directory = client.backend().plugins_dir();
+            json(mappings::load(&directory)?.domains)
         },
         "add_decrypt_host" => |client, args| {
-            let Host { host } = parse(args)?;
+            let Host { host, exclude } = parse(args)?;
             json(client.change_plugins(move |directory| {
-                mappings::add_host(directory, &host)?;
-                Ok(format!("Decrypting {host}"))
+                mappings::add_host(directory, &host, exclude)?;
+                let name = host.trim().trim_start_matches(['-', '!']);
+                Ok(if exclude || name.len() < host.trim().len() {
+                    format!("Excluding {name}")
+                } else {
+                    format!("Decrypting {name}")
+                })
+            })?)
+        },
+        "edit_decrypt_host" => |client, args| {
+            let EditHost {
+                pattern,
+                host,
+                exclude,
+            } = parse(args)?;
+            json(client.change_plugins(move |directory| {
+                mappings::edit_host(directory, &pattern, &host, exclude)?;
+                Ok(format!("Saved {host}"))
+            })?)
+        },
+        "set_decrypt_host_enabled" => |client, args| {
+            let HostEnabled { pattern, enabled } = parse(args)?;
+            json(client.change_plugins(move |directory| {
+                mappings::set_host_enabled(directory, &pattern, enabled)?;
+                Ok(if enabled {
+                    format!("Turned on {pattern}")
+                } else {
+                    format!("Paused {pattern}")
+                })
             })?)
         },
         "remove_decrypt_host" => |client, args| {
-            let Host { host } = parse(args)?;
+            let Host { host, .. } = parse(args)?;
             json(client.change_plugins(move |directory| {
                 mappings::remove_host(directory, &host)?;
-                Ok(format!("No longer decrypting {host}"))
+                Ok(format!("Removed {host}"))
             })?)
         },
+        // What decryption did per domain since the engine started (`mitm_hosts`): decrypted and failed
+        // connections and why; `enabled: false` with no hosts while nothing runs.
+        "mitm_hosts" => |client, _| Ok(client.backend().mitm_hosts(false)),
+        "clear_mitm_hosts" => |client, _| Ok(client.backend().mitm_hosts(true)),
         "test_node_delay" => |client, args| {
             let NodeDelayArgs { node_id, url } = parse(args)?;
             let (nodes, id, name) = client
@@ -1352,6 +1389,23 @@ struct Id {
 #[derive(Deserialize)]
 struct Host {
     host: String,
+    /// Add it as an exclusion; a leading `-` in `host` says the same.
+    #[serde(default)]
+    exclude: bool,
+}
+
+#[derive(Deserialize)]
+struct EditHost {
+    pattern: String,
+    host: String,
+    #[serde(default)]
+    exclude: bool,
+}
+
+#[derive(Deserialize)]
+struct HostEnabled {
+    pattern: String,
+    enabled: bool,
 }
 
 #[derive(Deserialize)]

@@ -220,14 +220,38 @@ class Core(
 
     suspend fun disableHttpsMitm(): OperationResult = call("disable_https_mitm", OperationResult.serializer())
 
-    /** The domains decryption was turned on for one by one. */
+    /** The decryption list's patterns that are on and not exclusions. */
     suspend fun decryptHosts(): List<String> = call("list_decrypt_hosts", ListSerializer(String.serializer()))
 
-    suspend fun addDecryptHost(host: String): OperationResult =
-        call("add_decrypt_host", OperationResult.serializer(), args("host" to JsonPrimitive(host)))
+    /** The whole decryption list, one line per pattern, in the order added. */
+    suspend fun decryptDomains(): List<DecryptDomain> =
+        call("list_decrypt_domains", ListSerializer(DecryptDomain.serializer()))
+
+    /** Adds a line; [exclude] (or a leading `-`) makes it an exclusion, which wins over every include. */
+    suspend fun addDecryptHost(host: String, exclude: Boolean = false): OperationResult = call(
+        "add_decrypt_host",
+        OperationResult.serializer(),
+        args("host" to JsonPrimitive(host), "exclude" to JsonPrimitive(exclude)),
+    )
+
+    suspend fun editDecryptHost(pattern: String, host: String, exclude: Boolean): OperationResult = call(
+        "edit_decrypt_host",
+        OperationResult.serializer(),
+        args("pattern" to JsonPrimitive(pattern), "host" to JsonPrimitive(host), "exclude" to JsonPrimitive(exclude)),
+    )
+
+    suspend fun setDecryptHostEnabled(pattern: String, enabled: Boolean): OperationResult = call(
+        "set_decrypt_host_enabled",
+        OperationResult.serializer(),
+        args("pattern" to JsonPrimitive(pattern), "enabled" to JsonPrimitive(enabled)),
+    )
 
     suspend fun removeDecryptHost(host: String): OperationResult =
         call("remove_decrypt_host", OperationResult.serializer(), args("host" to JsonPrimitive(host)))
+
+    /** What decryption did per domain since the engine started; [clear] forgets it first. */
+    suspend fun mitmHosts(clear: Boolean = false): MitmHosts =
+        call(if (clear) "clear_mitm_hosts" else "mitm_hosts", MitmHosts.serializer())
 
     suspend fun mitmPlugins(): List<MitmPlugin> = call("list_mitm_plugins", ListSerializer(MitmPlugin.serializer()))
 
@@ -535,11 +559,19 @@ class Core(
         },
     )
 
-    /** [host] (a domain, maybe with a port) against the decrypt list [hosts]. */
-    suspend fun decryptHost(host: String, hosts: List<String>): DecryptHost = call(
+    /** [host] (a domain, maybe with a port) against the decrypt list's patterns [hosts] and its [excluded] ones. */
+    suspend fun decryptHost(host: String, hosts: List<String>, excluded: List<String> = emptyList()): DecryptHost = call(
         "view.decrypt_hosts",
         DecryptHost.serializer(),
-        args("host" to JsonPrimitive(host), "hosts" to JsonArray(hosts.map(::JsonPrimitive))),
+        if (excluded.isEmpty()) {
+            args("host" to JsonPrimitive(host), "hosts" to JsonArray(hosts.map(::JsonPrimitive)))
+        } else {
+            args(
+                "host" to JsonPrimitive(host),
+                "hosts" to JsonArray(hosts.map(::JsonPrimitive)),
+                "excluded" to JsonArray(excluded.map(::JsonPrimitive)),
+            )
+        },
     )
 
     /** Saves everything capture holds (`har` or `pcapng`) to Downloads and says where. */
