@@ -109,6 +109,8 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         public var global: String?
         /// The lists `RULE-SET,<name>` rules name; `geosite-<category>` and `geoip-<cc>` back `GEOSITE` and `GEOIP`.
         public var ruleSets: [String: RuleSet]?
+        /// Device names by address, for `DEVICE-NAME` rules.
+        public var devices: [String: String]?
 
         enum CodingKeys: String, CodingKey {
             case outbounds
@@ -116,6 +118,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
             case groups
             case global
             case ruleSets = "rule_sets"
+            case devices
         }
 
         public init(
@@ -123,13 +126,15 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
             rules: [String],
             groups: [NativeImportReport.Routing.Group],
             global: String? = nil,
-            ruleSets: [String: RuleSet]? = nil
+            ruleSets: [String: RuleSet]? = nil,
+            devices: [String: String]? = nil
         ) {
             self.outbounds = outbounds
             self.rules = rules
             self.groups = groups
             self.global = global
             self.ruleSets = ruleSets
+            self.devices = devices
         }
     }
 

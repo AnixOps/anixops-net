@@ -119,17 +119,22 @@ public struct LocalRules: Codable, Equatable {
     /// The `GEOIP` and `IP-ASN` data lists the user added by URL, by name. They replace a built-in list and the
     /// subscription's own set of the same name, as on Windows, Linux and Android (`data-sources.json`).
     public var dataSources: [DataSource]
+    /// Names for the devices that use the Mac as their gateway, by the address their connections come from, for
+    /// `DEVICE-NAME` rules (the engine's `routing.devices`), as on Windows and Linux (`devices.json`).
+    public var devices: [String: String]
 
     public init(
         bypassLAN: Bool = true,
         rules: [Rule] = [],
         subscriptions: [Subscription] = [],
-        dataSources: [DataSource] = []
+        dataSources: [DataSource] = [],
+        devices: [String: String] = [:]
     ) {
         self.bypassLAN = bypassLAN
         self.rules = rules
         self.subscriptions = subscriptions
         self.dataSources = dataSources
+        self.devices = devices
     }
 
     /// Values saved by earlier versions may still carry a `preset` (绕过大陆 and the like); it is ignored, since the
@@ -139,6 +144,7 @@ public struct LocalRules: Codable, Equatable {
         case rules
         case subscriptions
         case dataSources = "data_sources"
+        case devices
     }
 
     public init(from decoder: Decoder) throws {
@@ -147,7 +153,8 @@ public struct LocalRules: Codable, Equatable {
             bypassLAN: try container.decodeIfPresent(Bool.self, forKey: .bypassLAN) ?? true,
             rules: try container.decodeIfPresent([Rule].self, forKey: .rules) ?? [],
             subscriptions: try container.decodeIfPresent([Subscription].self, forKey: .subscriptions) ?? [],
-            dataSources: (try? container.decodeIfPresent([DataSource].self, forKey: .dataSources)) ?? []
+            dataSources: (try? container.decodeIfPresent([DataSource].self, forKey: .dataSources)) ?? [],
+            devices: (try? container.decodeIfPresent([String: String].self, forKey: .devices)) ?? [:]
         )
     }
 
@@ -155,10 +162,20 @@ public struct LocalRules: Codable, Equatable {
 
     /// The rule types a local rule can use. `GEOSITE` is limited to the catalog's lists (`RuleSetCatalog.known`)
     /// because the engine refuses a category it has no list for; `RULE-SET` takes an `https` list URL.
-    public static let kinds = [
-        "DOMAIN-SUFFIX", "DOMAIN", "DOMAIN-KEYWORD", "DOMAIN-WILDCARD", "IP-CIDR", "IP-CIDR6", "GEOIP", "IP-ASN",
-        "GEOSITE", "DST-PORT", "PROTOCOL", "USER-AGENT", "RULE-SET",
-    ]
+    /// `DEVICE-NAME` only on the Mac, where the tunnel can be the gateway of other devices; `CELLULAR-RADIO` only on
+    /// the iPhone and iPad, which report the radio technology.
+    public static let kinds: [String] = {
+        var kinds = [
+            "DOMAIN-SUFFIX", "DOMAIN", "DOMAIN-KEYWORD", "DOMAIN-WILDCARD", "IP-CIDR", "IP-CIDR6", "GEOIP", "IP-ASN",
+            "GEOSITE", "DST-PORT", "SRC-PORT", "PROTOCOL", "HOSTNAME-TYPE", "SUBNET",
+        ]
+        #if os(macOS)
+        kinds.append("DEVICE-NAME")
+        #else
+        kinds.append("CELLULAR-RADIO")
+        #endif
+        return kinds + ["USER-AGENT", "RULE-SET"]
+    }()
 
     static let lanLines = [
         "DOMAIN-SUFFIX,local,DIRECT",
@@ -331,7 +348,7 @@ public struct LocalRules: Codable, Equatable {
                 throw invalid
             }
             return category
-        case "DST-PORT":
+        case "DST-PORT", "SRC-PORT":
             let pieces = value.split(separator: "-", omittingEmptySubsequences: false)
             let bounds = pieces.compactMap { UInt16($0) }
             guard let low = bounds.first, let high = bounds.last, bounds.count == pieces.count,
@@ -342,7 +359,29 @@ public struct LocalRules: Codable, Equatable {
             return value
         case "PROTOCOL":
             let name = value.uppercased()
-            guard ["TCP", "UDP", "QUIC", "HTTP", "HTTPS"].contains(name) else {
+            guard ["TCP", "UDP", "QUIC", "HTTP", "HTTPS", "STUN", "DOH", "DOQ"].contains(name) else {
+                throw invalid
+            }
+            return name
+        case "HOSTNAME-TYPE":
+            let name = value.uppercased()
+            guard ["IPV4", "IPV6", "DOMAIN", "SIMPLE"].contains(name) else {
+                throw invalid
+            }
+            return name
+        case "SUBNET":
+            return try subnet(value, invalid: invalid)
+        case "CELLULAR-RADIO":
+            let radio = value.uppercased()
+            guard !radio.isEmpty, radio.count <= 24, radio.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) else {
+                throw invalid
+            }
+            return radio
+        case "DEVICE-NAME":
+            let name = value.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            guard !name.isEmpty, name.count <= 64, !name.contains(","),
+                  !name.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) })
+            else {
                 throw invalid
             }
             return name
@@ -359,6 +398,53 @@ public struct LocalRules: Codable, Equatable {
             return value
         default:
             throw Failure.unsupportedKind(kind)
+        }
+    }
+
+    /// A `SUBNET` value: `SSID:<name>`, `BSSID:<mac>`, `ROUTER:<ip>`, `TYPE:WIFI|WIRED|CELLULAR` or a network the
+    /// device's address is in. The prefix is upper-cased; a Wi-Fi name keeps its case.
+    static func subnet(_ value: String, invalid: Failure) throws -> String {
+        if isNetwork(value) {
+            return value.lowercased()
+        }
+        guard let colon = value.firstIndex(of: ":") else {
+            throw invalid
+        }
+        let prefix = value[..<colon].trimmingCharacters(in: .whitespaces).uppercased()
+        let rest = String(value[value.index(after: colon)...])
+        switch prefix {
+        case "SSID":
+            guard !rest.isEmpty, rest.utf8.count <= 32 else {
+                throw invalid
+            }
+            return "SSID:" + rest
+        case "BSSID":
+            let mac = rest.trimmingCharacters(in: .whitespaces).lowercased().replacingOccurrences(of: "-", with: ":")
+            let parts = mac.split(separator: ":", omittingEmptySubsequences: false)
+            guard parts.count == 6, parts.allSatisfy({ $0.count == 2 && $0.allSatisfy(\.isHexDigit) }) else {
+                throw invalid
+            }
+            return "BSSID:" + mac
+        case "ROUTER":
+            let address = rest.trimmingCharacters(in: .whitespaces)
+            guard !address.contains("/"), isNetwork(address + (address.contains(":") ? "/128" : "/32")) else {
+                throw invalid
+            }
+            return "ROUTER:" + address.lowercased()
+        case "TYPE":
+            let type = rest.trimmingCharacters(in: .whitespaces).uppercased()
+            guard ["WIFI", "WIRED", "CELLULAR"].contains(type) else {
+                throw invalid
+            }
+            return "TYPE:" + type
+        case "SUBNET":
+            let network = rest.trimmingCharacters(in: .whitespaces)
+            guard isNetwork(network) else {
+                throw invalid
+            }
+            return "SUBNET:" + network.lowercased()
+        default:
+            throw invalid
         }
     }
 
@@ -483,6 +569,54 @@ public struct LocalRules: Codable, Equatable {
         var copy = self
         copy.dataSources.removeAll { $0.name == name }
         return copy
+    }
+
+    /// The most device names kept; the engine takes 256.
+    public static let maxDevices = 256
+
+    /// The device at `address` called `name`, replacing its earlier name. The address is written as the engine
+    /// compares it (an IPv4-mapped address as IPv4); the name is 1 to 64 characters without a comma.
+    public func saving(device address: String, name: String) throws -> LocalRules {
+        guard let address = Self.deviceAddress(address) else {
+            throw Failure.invalidValue(address)
+        }
+        let name = try Self.value(name, kind: "DEVICE-NAME")
+        var copy = self
+        copy.devices[address] = nil
+        guard copy.devices.count < Self.maxDevices else {
+            throw Failure.tooMany
+        }
+        copy.devices[address] = name
+        return copy
+    }
+
+    public func removing(device address: String) -> LocalRules {
+        var copy = self
+        copy.devices[Self.deviceAddress(address) ?? address] = nil
+        return copy
+    }
+
+    /// `text` as an IP address the engine compares sources with, or nil.
+    static func deviceAddress(_ text: String) -> String? {
+        let address = text.trimmingCharacters(in: CharacterSet(charactersIn: " []"))
+        var v4 = in_addr()
+        if inet_pton(AF_INET, address, &v4) == 1 {
+            return address
+        }
+        var v6 = in6_addr()
+        guard inet_pton(AF_INET6, address, &v6) == 1 else {
+            return nil
+        }
+        let lower = address.lowercased()
+        // `::ffff:192.168.1.30` is the IPv4 device seen through a dual-stack socket.
+        if lower.hasPrefix("::ffff:"), inet_pton(AF_INET, String(lower.dropFirst(7)), &v4) == 1 {
+            return String(lower.dropFirst(7))
+        }
+        var buffer = [CChar](repeating: 0, count: Int(INET6_ADDRSTRLEN))
+        guard inet_ntop(AF_INET6, &v6, &buffer, socklen_t(buffer.count)) != nil else {
+            return nil
+        }
+        return String(cString: buffer)
     }
 
     /// The list with `incoming` appended, leaving out rules already in it and anything past `maxRules`.

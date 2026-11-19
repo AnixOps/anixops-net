@@ -91,6 +91,8 @@ final class RuleSetCatalogTests: XCTestCase {
         XCTAssertEqual(RuleSetCatalog.referencedNames(in: ["IP-ASN,AS13335,Proxy", "GEOIP,US,DIRECT"]), ["asn-13335", "geoip-us"])
         XCTAssertTrue(RuleSetCatalog.hasProcessRules(["AND,((PROCESS-NAME,curl),(DST-PORT,443)),DIRECT"]))
         XCTAssertFalse(RuleSetCatalog.hasProcessRules(["DOMAIN,process-name.test,DIRECT"]))
+        XCTAssertTrue(RuleSetCatalog.hasRules(of: "DEVICE-NAME", in: ["OR,((DEVICE-NAME,TV),(DST-PORT,22)),DIRECT"]))
+        XCTAssertFalse(RuleSetCatalog.hasRules(of: "CELLULAR-RADIO", in: ["DOMAIN,cellular-radio.test,DIRECT"]))
     }
 
     func testRuleHitsAndRouteTestsDecode() throws {

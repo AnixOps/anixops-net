@@ -362,6 +362,8 @@ class CoreTest {
         assertEquals("asn-4294967295", dataName("4294967295"))
         assertTrue(hasProcessRules("DOMAIN,a.test,PROXY\n process-name,curl,DIRECT"))
         assertFalse(hasProcessRules("DOMAIN,process-name.test,PROXY"))
+        assertTrue(hasRuleKind("DOMAIN,a.test,PROXY\ndevice-name, TV ,DIRECT", "DEVICE-NAME"))
+        assertFalse(hasRuleKind("DEVICE-NAMES,TV,DIRECT", "DEVICE-NAME"))
     }
 
     @Test

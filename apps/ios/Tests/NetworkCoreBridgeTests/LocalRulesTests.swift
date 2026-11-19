@@ -262,4 +262,45 @@ final class LocalRulesTests: XCTestCase {
             XCTAssertNotNil(sets[line.split(separator: ",")[1].description], line)
         }
     }
+
+    func testSourceHostAndNetworkRulesAreChecked() throws {
+        let cases: [(String, String)] = [
+            ("SRC-PORT,5000-5100,DIRECT", "SRC-PORT,5000-5100,DIRECT"),
+            ("hostname-type,simple,DIRECT", "HOSTNAME-TYPE,SIMPLE,DIRECT"),
+            ("SUBNET,ssid:My Home,DIRECT", "SUBNET,SSID:My Home,DIRECT"),
+            ("SUBNET,type:cellular,PROXY", "SUBNET,TYPE:CELLULAR,PROXY"),
+            ("SUBNET,BSSID:AA-BB-CC-DD-EE-0F,DIRECT", "SUBNET,BSSID:aa:bb:cc:dd:ee:0f,DIRECT"),
+            ("SUBNET,ROUTER:192.168.1.1,DIRECT", "SUBNET,ROUTER:192.168.1.1,DIRECT"),
+            ("SUBNET,10.0.0.0/8,DIRECT", "SUBNET,10.0.0.0/8,DIRECT"),
+            ("PROTOCOL,stun,REJECT", "PROTOCOL,STUN,REJECT"),
+            ("PROTOCOL,DOH,PROXY", "PROTOCOL,DOH,PROXY"),
+        ]
+        for (line, text) in cases {
+            XCTAssertEqual(try LocalRules.rule(from: line).text, text, line)
+        }
+        for line in [
+            "SRC-PORT,0-70000,DIRECT", "HOSTNAME-TYPE,FQDN,DIRECT", "SUBNET,SSID:,DIRECT", "SUBNET,ROUTER:10.0.0.0/8,DIRECT",
+            "SUBNET,TYPE:5G,DIRECT", "SUBNET,nowhere,DIRECT", "PROTOCOL,DOH3,DIRECT",
+        ] {
+            XCTAssertThrowsError(try LocalRules.rule(from: line), line)
+        }
+        // no-resolve only stays on rules that look at the destination address.
+        XCTAssertFalse(try LocalRules.rule(from: "SUBNET,TYPE:WIFI,DIRECT,no-resolve").noResolve)
+    }
+
+    func testDeviceNamesAreKeptByCanonicalAddress() throws {
+        var rules = try LocalRules().saving(device: "::ffff:192.168.1.30", name: " Apple TV ")
+        XCTAssertEqual(rules.devices, ["192.168.1.30": "Apple TV"])
+        rules = try rules.saving(device: "192.168.1.30", name: "Living Room")
+        rules = try rules.saving(device: "[FD00::5]", name: "NAS")
+        XCTAssertEqual(rules.devices, ["192.168.1.30": "Living Room", "fd00::5": "NAS"])
+        XCTAssertThrowsError(try rules.saving(device: "tv.local", name: "TV"))
+        XCTAssertThrowsError(try rules.saving(device: "192.168.1.9", name: "a,b"))
+        XCTAssertEqual(rules.removing(device: "fd00::5").devices.count, 1)
+
+        let decoded = try JSONDecoder().decode(LocalRules.self, from: JSONEncoder().encode(rules))
+        XCTAssertEqual(decoded.devices, rules.devices)
+        // Values saved before device names existed decode without them.
+        XCTAssertEqual(try JSONDecoder().decode(LocalRules.self, from: Data(#"{"rules":[]}"#.utf8)).devices, [:])
+    }
 }

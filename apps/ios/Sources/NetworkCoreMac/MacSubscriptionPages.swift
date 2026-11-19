@@ -382,6 +382,11 @@ struct MacRulesPage: View {
                                 .font(.caption)
                                 .foregroundStyle(brand.warning)
                         }
+                        if RuleSetCatalog.hasRules(of: "CELLULAR-RADIO", in: routing.rules) {
+                            Text("订阅里有 CELLULAR-RADIO 规则。Mac 读不到蜂窝网络制式，这些规则不会生效。")
+                                .font(.caption)
+                                .foregroundStyle(brand.warning)
+                        }
                     }
                     myRulesCard(hasSubscriptionRules: true)
                 }
@@ -541,7 +546,7 @@ private struct MacRuleSetsPage: View {
     }
 }
 
-/// The rule test and hit counts while connected, then the GEOIP / IP-ASN data lists.
+/// The rule test and hit counts while connected, then the GEOIP / IP-ASN data lists and the device names.
 private struct MacRuleToolsPage: View {
     var tunnel: TunnelController
     @Environment(\.brand) private var brand
@@ -553,6 +558,7 @@ private struct MacRuleToolsPage: View {
             }
             RuleHitsSection(tunnel: tunnel)
             DataListsSection(tunnel: tunnel)
+            DeviceNamesSection(tunnel: tunnel)
         }
         .scrollContentBackground(.hidden)
         .background(brand.bg)

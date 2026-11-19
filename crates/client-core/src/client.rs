@@ -1087,6 +1087,15 @@ fn handler(name: &str) -> Option<Handler> {
             let DataSourceName { name } = parse(args)?;
             json(client.backend().remove_data_source(&name)?)
         },
+        "devices" => |client, _| json(client.backend().devices()),
+        "save_device" => |client, args| {
+            let Device { address, name } = parse(args)?;
+            json(client.backend().save_device(&address, &name)?)
+        },
+        "remove_device" => |client, args| {
+            let DeviceAddress { address } = parse(args)?;
+            json(client.backend().remove_device(&address)?)
+        },
         "add_traffic_redirect" => |client, args| {
             let RedirectDraft { draft, replacing } = parse(args)?;
             json(
@@ -1470,6 +1479,17 @@ struct DataSource {
 #[derive(Deserialize)]
 struct DataSourceName {
     name: String,
+}
+
+#[derive(Deserialize)]
+struct Device {
+    address: String,
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct DeviceAddress {
+    address: String,
 }
 
 #[derive(Deserialize)]

@@ -9,7 +9,7 @@ import { Select } from "../controls";
 import { t } from "../i18n";
 import { DnsCards } from "./DnsCards";
 import { MyRules } from "./MyRules";
-import { DataLists, RuleHits, RuleTester } from "./RuleTools";
+import { DataLists, DeviceNames, RuleHits, RuleTester } from "./RuleTools";
 
 export function RulesPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
   const [sets, reloadSets] = usePolling(desktop.ruleSets, liveEngine(snapshot));
@@ -44,6 +44,7 @@ export function RulesPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot |
       <RuleTester snapshot={snapshot} busy={busy} />
       <RuleHits snapshot={snapshot} busy={busy} run={run} />
       <DataLists missing={missing} busy={busy} run={run} />
+      <DeviceNames busy={busy} run={run} />
       <RuleSets answer={sets} reload={reloadSets} busy={busy} run={run} />
       <ImportWarnings snapshot={snapshot} />
       <DnsCards snapshot={snapshot} busy={busy} run={run} />

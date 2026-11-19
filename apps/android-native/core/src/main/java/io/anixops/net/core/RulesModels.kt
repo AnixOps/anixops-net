@@ -125,8 +125,14 @@ fun dataName(text: String): String? {
 }
 
 /** Whether [text] (the user's own rules) has a PROCESS-NAME line, which the Android VPN cannot match. */
-fun hasProcessRules(text: String): Boolean =
-    text.lineSequence().any { it.trim().startsWith("PROCESS-NAME", ignoreCase = true) }
+fun hasProcessRules(text: String): Boolean = hasRuleKind(text, "PROCESS-NAME")
+
+/**
+ * Whether a line of `text` is a `kind` rule. `DEVICE-NAME` and `CELLULAR-RADIO` rules match nothing on Android: the
+ * app names no LAN devices and does not read the cellular radio technology.
+ */
+fun hasRuleKind(text: String, kind: String): Boolean =
+    text.lineSequence().any { line -> line.trim().substringBefore(',').trim().equals(kind, ignoreCase = true) }
 
 @Serializable
 internal data class ScheduledAnswer(val scheduled: Int = 0)

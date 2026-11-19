@@ -206,6 +206,7 @@
     custom_dns: () => ({ servers: "", rules: "", hosts: "", fake_ip: false }),
     routing_warnings: () => ["2 rules of type SCRIPT were not imported: the client does not support them yet"],
     data_sources: () => [{ name: "geoip-us", url: "https://lists.example.org/geoip/us.txt" }],
+    devices: () => [{ address: "192.168.1.30", name: "Apple TV" }],
     my_rules: () => ({ text: "DOMAIN-SUFFIX,example.com,PROXY\nDOMAIN-KEYWORD,ads,REJECT\n", count: 2 }),
     phone_qr_code: () => "",
   };

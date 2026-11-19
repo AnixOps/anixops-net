@@ -1,6 +1,6 @@
-import { Database, FlaskConical, Gauge, Route, TriangleAlert, X } from "lucide-react";
+import { Database, FlaskConical, Gauge, Route, Smartphone, TriangleAlert, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { DataSource, desktop, RouteTest, RuntimeSnapshot } from "../bridge";
+import { DataSource, desktop, DeviceName, RouteTest, RuntimeSnapshot } from "../bridge";
 import { busiestRules, dataName, dataRule } from "../rule-sets";
 import { liveEngine, usePolling } from "../live";
 import { Card, Field, IconButton, Row, Run, Segmented } from "../ui";
@@ -72,6 +72,63 @@ export function DataLists({ missing, busy, run }: { missing: string[]; busy: str
             className="secondary compact"
             disabled={Boolean(busy) || !target || !url.trim().startsWith("https://")}
             onClick={() => target && save(target, url)}
+          >{t("添加")}</button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * Names for the devices that share this computer's connection (LAN sharing, or the tunnel as their gateway), by the
+ * address their connections come from, for `DEVICE-NAME` rules.
+ */
+export function DeviceNames({ busy, run }: { busy: string | null; run: Run }) {
+  const [devices, setDevices] = useState<DeviceName[]>([]);
+  const [address, setAddress] = useState("");
+  const [name, setName] = useState("");
+
+  const reload = () => void desktop.devices().then((list) => setDevices(Array.isArray(list) ? list : [])).catch(() => setDevices([]));
+  useEffect(reload, []);
+
+  const save = () => void run("device name", async () => {
+    const result = await desktop.saveDevice(address.trim(), name.trim());
+    reload();
+    setAddress("");
+    setName("");
+    return result;
+  });
+
+  return (
+    <Card
+      title={t("设备名")}
+      description={t("给通过局域网共享上网的设备起名字，DEVICE-NAME 规则按名字匹配（不区分大小写）。设备按连接来源的 IP 认出，最好在路由器里给它固定地址。")}
+    >
+      {devices.map((device) => (
+        <Row key={device.address} icon={Smartphone} color="indigo" label={device.name} hint={device.address}>
+          <IconButton
+            label={t("移除 {name}", { name: device.name })}
+            disabled={Boolean(busy)}
+            onClick={() => void run("device name", async () => {
+              const result = await desktop.removeDevice(device.address);
+              reload();
+              return result;
+            })}
+          ><X size={14} /></IconButton>
+        </Row>
+      ))}
+      <div className="data-list-form">
+        <Field label={t("设备 IP")}>
+          <input value={address} spellCheck={false} placeholder="192.168.1.30" onChange={(event) => setAddress(event.target.value)} />
+        </Field>
+        <Field label={t("名字")}>
+          <input value={name} spellCheck={false} placeholder="Apple TV" onChange={(event) => setName(event.target.value)} />
+        </Field>
+        <div className="button-row">
+          <button
+            className="secondary compact"
+            disabled={Boolean(busy) || !address.trim() || !name.trim() || name.includes(",")}
+            onClick={save}
           >{t("添加")}</button>
         </div>
       </div>

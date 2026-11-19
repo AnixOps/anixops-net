@@ -42,6 +42,7 @@ import io.anixops.net.core.NativeGroup
 import io.anixops.net.core.RuleSetStatus
 import io.anixops.net.core.RuntimeSnapshot
 import io.anixops.net.core.hasProcessRules
+import io.anixops.net.core.hasRuleKind
 import io.anixops.net.ui.theme.BrandSpacing
 import io.anixops.net.ui.theme.LocalBrandPalette
 
@@ -170,6 +171,8 @@ private fun MyRulesSection(saved: MyRules, enabled: Boolean, onSave: (String) ->
             SaveRow(changed, enabled, onRevert = { draft = saved.text }, onSave = { onSave(draft) })
         }
         if (hasProcessRules(saved.text)) ProcessRulesWarning()
+        if (hasRuleKind(saved.text, "DEVICE-NAME")) RuleWarning(stringResource(R.string.rules_device_not_effective))
+        if (hasRuleKind(saved.text, "CELLULAR-RADIO")) RuleWarning(stringResource(R.string.rules_radio_not_effective))
         Note(stringResource(R.string.rules_mine_note))
     }
 }

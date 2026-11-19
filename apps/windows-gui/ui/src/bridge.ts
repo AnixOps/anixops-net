@@ -420,6 +420,12 @@ export interface DataSource {
   url: string;
 }
 
+/** A name given to a local network device for `DEVICE-NAME` rules, by the address its connections come from. */
+export interface DeviceName {
+  address: string;
+  name: string;
+}
+
 /** One rule and how often it decided a connection since the rules were loaded. */
 export interface RuleHit {
   rule: string;
@@ -807,6 +813,11 @@ export const desktop = {
   /** Points `name` (`geoip-us`, `asn-13335`) at an https:// list; a running engine restarts. */
   saveDataSource: (name: string, url: string) => invoke<OperationResult>("save_data_source", { name, url }),
   removeDataSource: (name: string) => invoke<OperationResult>("remove_data_source", { name }),
+  /** The names `DEVICE-NAME` rules use, by device address. */
+  devices: () => invoke<DeviceName[]>("devices"),
+  /** Names the device at `address`; a running engine restarts. */
+  saveDevice: (address: string, name: string) => invoke<OperationResult>("save_device", { address, name }),
+  removeDevice: (address: string) => invoke<OperationResult>("remove_device", { address }),
   enableHttpsMitm: () => invoke<OperationResult>("enable_https_mitm"),
   disableHttpsMitm: () => invoke<OperationResult>("disable_https_mitm"),
   mitmRootStatus: () => invoke<MitmRootStatus>("mitm_root_status"),

@@ -159,7 +159,8 @@ public struct NodeLibrary: Codable, Equatable {
                 rules: RuleSetCatalog.runnableRules(local.lines, sets: ruleSets),
                 groups: [],
                 global: selected.id,
-                ruleSets: ruleSets
+                ruleSets: ruleSets,
+                devices: localRules.devices.isEmpty ? nil : localRules.devices
             )
         }
         let groups = routing.groups.map { group -> NativeImportReport.Routing.Group in
@@ -189,7 +190,8 @@ public struct NodeLibrary: Codable, Equatable {
             rules: RuleSetCatalog.runnableRules(lines, sets: ruleSets),
             groups: groups,
             global: selected?.id,
-            ruleSets: ruleSets
+            ruleSets: ruleSets,
+            devices: localRules.flatMap { $0.devices.isEmpty ? nil : $0.devices }
         )
     }
 

@@ -82,6 +82,19 @@ final class NetworkRecoveryTests: XCTestCase {
         XCTAssertEqual(request(.setNetwork(nil)), #"{"cmd":"set_network"}"#)
     }
 
+    func testTheCellularRadioIsReportedOnlyOnCellular() {
+        XCTAssertEqual(
+            request(.setNetwork(NetworkFacts(kind: "cellular", router: nil, addresses: [], radio: "NR"))),
+            #"{"cmd":"set_network","radio":"NR","type":"cellular"}"#
+        )
+        XCTAssertNil(NetworkFacts(kind: "wifi", router: nil, addresses: [], radio: "NR").radio)
+        XCTAssertEqual(NetworkFacts.radio(telephony: "CTRadioAccessTechnologyNRNSA"), "NRNSA")
+        XCTAssertEqual(NetworkFacts.radio(telephony: "CTRadioAccessTechnologyLTE"), "LTE")
+        XCTAssertEqual(NetworkFacts.radio(telephony: "CTRadioAccessTechnologyeHRPD"), "EHRPD")
+        XCTAssertNil(NetworkFacts.radio(telephony: nil))
+        XCTAssertNil(NetworkFacts.radio(telephony: "LTE"))
+    }
+
     func testTheNetworkKeepsAtMostSixteenAddresses() {
         let many = (1...20).map { "10.0.0.\($0)" }
         XCTAssertEqual(NetworkFacts(kind: nil, router: nil, addresses: many).addresses.count, 16)

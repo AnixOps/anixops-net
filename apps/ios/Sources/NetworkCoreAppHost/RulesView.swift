@@ -82,6 +82,11 @@ struct RulesView: View {
             if RuleSetCatalog.hasProcessRules(routing.rules) {
                 ProcessRulesNote()
             }
+            #if os(iOS)
+            if RuleSetCatalog.hasRules(of: "DEVICE-NAME", in: routing.rules) {
+                RuleNote(text: String(localized: "订阅里有 DEVICE-NAME 规则。iPhone 和 iPad 不给局域网设备起名，这些规则不会生效。"))
+            }
+            #endif
 
             ruleTools
 
