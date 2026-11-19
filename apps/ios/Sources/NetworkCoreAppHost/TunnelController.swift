@@ -144,8 +144,9 @@ final class TunnelController {
         switch Result(catching: { try NodeSecretStore.value(account: SubscriptionGroups.keychainAccount) }) {
         case let .success(.some(value)):
             if let saved = try? SubscriptionGroups.fromKeychainValue(value) {
-                subscriptions = saved
-                library = saved.activeLibrary()
+                // Saved again so the tunnel's library has what this version adds to it (the ANX license origin of
+                // each node, anx spec §2.4.1) without waiting for a subscription update.
+                store(saved)
             }
         case .failure:
             // The Keychain is not readable now (for example before the first unlock); keep what is shown.
@@ -902,7 +903,7 @@ final class TunnelController {
             guard let ca = header(AnxLicense.headerCA), !ca.trimmingCharacters(in: .whitespaces).isEmpty else {
                 return false
             }
-            license = AnxLicense.generate()
+            license = AnxLicense()
         }
         return license?.record(url: url, header: header) ?? false
     }

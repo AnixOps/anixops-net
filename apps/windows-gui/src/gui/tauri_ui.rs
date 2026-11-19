@@ -3163,7 +3163,12 @@ fn import_embedded_subscription(
         return Err("Profile did not contain a supported proxy node".to_string());
     }
     // The subscription's rules and groups name the nodes as served; the engine runs them with the user's edits.
-    let parsed = catalog.nodes;
+    // Its ANX nodes get the license of the origin it was fetched from, and nothing for a file.
+    let mut parsed = catalog.nodes;
+    client_core::backend::engine::mark_license_origin(
+        &mut parsed,
+        source_url.as_deref().unwrap_or_default(),
+    );
     let nodes = NodeEdits::load(&node_edits_path()).applied(&parsed);
     // Subscription rules and policy groups drive the route when every node is
     // supported and the engine accepts the result; otherwise one node runs
@@ -3424,23 +3429,14 @@ fn anx_license_store() -> anx_license::LicenseStore {
     anx_license::LicenseStore::new(windows_managed_data_directory().join("anx-license"))
 }
 
-/// Hands this device's key and license file to the ANX outbounds built from now on, once a
-/// subscription offers ANX licensing (`anx_license`); until then ANX outbounds stay as before.
+/// Hands each subscription origin's device key and license file to the ANX outbounds of that
+/// origin's nodes built from now on (`anx_license`, anx spec §2.4.1); an origin that does not
+/// offer ANX licensing gives its nodes nothing, and no node carries another origin's key.
 fn sync_anx_license() {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_secs());
-    let store = anx_license_store();
-    let license = if store.state(now) == anx_license::LicenseState::NotOffered {
-        None
-    } else {
-        store.device().ok().map(|device| node_import::AnxLicense {
-            device_key: device.private_key_hex(),
-            device_alg: device.alg().to_string(),
-            license_cert_path: store.license_path().to_string_lossy().into_owned(),
-        })
-    };
-    node_import::set_anx_license(license);
+    node_import::set_anx_license(None);
+    node_import::set_anx_licenses(client_core::backend::engine::anx_licenses(Some(
+        &anx_license_store(),
+    )));
 }
 
 fn download_subscription(

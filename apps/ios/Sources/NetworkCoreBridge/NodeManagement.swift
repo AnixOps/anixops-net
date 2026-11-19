@@ -15,7 +15,8 @@ extension NativeImportReport.Node {
             server: server,
             port: port,
             outbound: outbound,
-            path: path
+            path: path,
+            licenseOrigin: licenseOrigin
         )
     }
 

@@ -638,16 +638,22 @@ public enum TunnelProfileKeys {
 
 extension EmbeddedRuntimeConfig {
     // Here rather than in AnxLicense.swift: `outbound` and `routing` are only settable in this file.
-    /// The same config with `fields` set on every ANX outbound: the selected node and the subscription's nodes.
-    public func withAnxLicense(_ fields: [String: JSONValue]) -> EmbeddedRuntimeConfig {
+    /// The same config with each ANX outbound given the license fields of its node's origin (anx spec §2.4.1): the
+    /// subscription's nodes by outbound id, the selected node by its server and port. An outbound without an origin,
+    /// or whose origin has no license, is left as it is.
+    public func withAnxLicense(_ licenses: OutboundLicenses) -> EmbeddedRuntimeConfig {
         var copy = self
-        if case var .native(native) = outbound, native.type == "anx" {
+        if case var .native(native) = outbound, native.type == "anx",
+           let fields = licenses.fields(server: native.server, port: native.port)
+        {
             native.settings.merge(fields) { _, new in new }
             copy.outbound = .native(native)
         }
         if var routing = copy.routing {
             for (id, settings) in routing.outbounds where settings["type"] == .string("anx") {
-                routing.outbounds[id] = settings.merging(fields) { _, new in new }
+                if let fields = licenses.fields(outbound: id) {
+                    routing.outbounds[id] = settings.merging(fields) { _, new in new }
+                }
             }
             copy.routing = routing
         }

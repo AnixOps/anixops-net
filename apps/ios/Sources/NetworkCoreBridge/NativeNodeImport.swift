@@ -18,6 +18,10 @@ public struct NativeImportReport: Decodable, Equatable {
         /// many users share (the panel's `#anixops:path=trunk` mark). Such a node is the default pick (anx
         /// FUTURE-IMPROVEMENTS F-51). Nil for every other node and for libraries saved before the mark existed.
         public var path: String? = nil
+        /// The subscription origin (`scheme://host:port`) whose ANX license this node's outbound carries (anx spec
+        /// §2.4.1), set by the app from where it fetched the subscription (`NodeLibrary.markingLicenseOrigins`), never
+        /// from the subscription itself. Nil for pasted text and for libraries saved before 2026-11-19.
+        public var licenseOrigin: String? = nil
 
         /// Whether the node is a domestic ingress on a shared trunk.
         public var isTrunk: Bool {
@@ -127,7 +131,7 @@ extension NativeImportReport.Node {
             outbound["via"] = .string(rename(via))
         }
         return NativeImportReport.Node(id: rename(id), name: name, protocol: self.protocol, server: server, port: port,
-                                       outbound: outbound, path: path)
+                                       outbound: outbound, path: path, licenseOrigin: licenseOrigin)
     }
 
     /// The node ready to run on its own (one-node mode, delay tests): a `via` that names another node becomes
@@ -136,7 +140,8 @@ extension NativeImportReport.Node {
     /// letting it connect directly.
     public func standalone(among nodes: [NativeImportReport.Node]) -> NativeImportReport.Node {
         NativeImportReport.Node(id: id, name: name, protocol: self.protocol, server: server, port: port,
-                                outbound: Self.inlined(outbound, among: nodes, seen: [id]), path: path)
+                                outbound: Self.inlined(outbound, among: nodes, seen: [id]), path: path,
+                                licenseOrigin: licenseOrigin)
     }
 
     private static func inlined(

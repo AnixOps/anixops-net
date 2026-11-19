@@ -365,11 +365,12 @@ impl Backend {
             .filter(|source| !source.selected)
             .filter_map(|source| {
                 let content = self.store.read_source(&source.id).ok()?;
-                let nodes: Vec<NodeDescriptor> = engine::parse_nodes(&content)
+                let mut nodes: Vec<NodeDescriptor> = engine::parse_nodes(&content)
                     .ok()?
                     .into_iter()
                     .filter(engine::is_supported)
                     .collect();
+                engine::mark_license_origin(&mut nodes, &source.location);
                 Some(OtherSource {
                     id: source.id.clone(),
                     name: subscription_meta::display_name(source.name.as_deref(), &source.location),
@@ -387,7 +388,8 @@ impl Backend {
             .map_err(|error| error.to_string())
             .and_then(|content| engine::parse_nodes(&content).map(|nodes| (content, nodes)))
         {
-            Ok((content, nodes)) => {
+            Ok((content, mut nodes)) => {
+                engine::mark_license_origin(&mut nodes, &source.location);
                 let edited = NodeEdits::load(&self.node_edits_path(&source.id)).applied(&nodes);
                 self.routed_profile = engine::subscription_routing(&content, &nodes, &edited)
                     .map(|profile| engine::link_sources(&profile, &self.others));
