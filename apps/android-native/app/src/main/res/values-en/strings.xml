@@ -125,7 +125,7 @@
     <string name="routing_direct_hint">All traffic goes direct, never through a node</string>
     <string name="routing_rule_hint">Follows the subscription\'s rules and your own rules; everything else goes through the proxy</string>
     <string name="rules_mine">My rules</string>
-    <string name="rules_mine_note">One rule per line, matched top to bottom before the routing mode\'s and the subscription\'s rules. The policy is PROXY (the current node or the subscription\'s first policy group), DIRECT or REJECT (REJECT-DROP answers nothing, REJECT-TINYGIF answers web requests with a transparent image, REJECT-NO-DROP never turns silent when an app retries often). Supports DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD, DOMAIN-WILDCARD, IP-CIDR, IP-CIDR6, DST-PORT, SRC-IP, IN-PORT, PROCESS-NAME, USER-AGENT, URL-REGEX, PROTOCOL, GEOIP, IP-ASN and GEOSITE; lines starting with # are comments. To import a rule set, write RULE-SET,https://list URL,policy; it is downloaded through PROXY once a day. GEOSITE,cn and GEOIP,CN use built-in public lists (gaoyifan/china-operator-ip, Loyalsoldier/v2ray-rules-dat); for GEOIP of other countries and IP-ASN, add a data list by URL below.</string>
+    <string name="rules_mine_note">One rule per line, matched top to bottom before the routing mode\'s and the subscription\'s rules. The policy is PROXY (the current node or the subscription\'s first policy group), DIRECT or REJECT (REJECT-DROP answers nothing, REJECT-TINYGIF answers web requests with a transparent image, REJECT-NO-DROP never turns silent when an app retries often). Supports DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD, DOMAIN-WILDCARD, IP-CIDR, IP-CIDR6, DST-PORT, SRC-IP, IN-PORT, SRC-PORT, PROCESS-NAME, USER-AGENT, URL-REGEX, PROTOCOL, GEOIP, IP-ASN, GEOSITE, HOSTNAME-TYPE, SUBNET, DEVICE-NAME and CELLULAR-RADIO; lines starting with # are comments. To import a rule set, write RULE-SET,https://list URL,policy; it is downloaded through PROXY once a day. GEOSITE,cn and GEOIP,CN use built-in public lists (gaoyifan/china-operator-ip, Loyalsoldier/v2ray-rules-dat); for GEOIP of other countries and IP-ASN, add a data list by URL below.</string>
     <string name="action_revert">Revert</string>
     <string name="rules_groups">Policy groups</string>
     <string name="rules_groups_note">Set the default outbound for manual policy groups.</string>
@@ -618,4 +618,6 @@
     <string name="rules_hits_unused">Rules with no hits yet: %1$d</string>
     <string name="rules_hits_note">How many connections each rule decided since the rules were loaded. Counting restarts when the rules change.</string>
     <string name="rules_process_not_effective">The Android VPN cannot tell which app opened a connection, so PROCESS-NAME rules have no effect here.</string>
+    <string name="rules_device_not_effective">DEVICE-NAME rules have no effect on Android: the Android app does not name LAN devices.</string>
+    <string name="rules_radio_not_effective">CELLULAR-RADIO rules have no effect on Android: the Android app cannot read the cellular radio technology.</string>
 </resources>

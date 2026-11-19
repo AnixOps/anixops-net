@@ -3,11 +3,12 @@
 //! with a TLS name, so the engine never has to resolve a resolver's own name.
 //! [`rules`] puts the user's own rule lines in front of the envelope's rules;
 //! [`custom`] holds the user's own servers, hosts and the Fake-IP switch;
-//! [`redirects`] the destination rewrites (the engine's `redirects`).
+//! [`redirects`] the destination rewrites (the engine's `redirects`); [`devices`] the names `DEVICE-NAME` rules use.
 
 pub mod catalog;
 pub mod custom;
 pub mod data_sources;
+pub mod devices;
 pub mod redirects;
 pub mod rules;
 pub mod system;

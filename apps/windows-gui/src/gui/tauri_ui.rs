@@ -497,6 +497,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
     desktop_dns::custom::use_file(dns_settings_path());
     desktop_dns::redirects::use_file(windows_managed_data_directory().join("redirects.json"));
     desktop_dns::data_sources::use_file(windows_managed_data_directory().join("data-sources.json"));
+    desktop_dns::devices::use_file(windows_managed_data_directory().join("devices.json"));
     // The removed 国内外分流 DNS choice becomes the user's own settings (docs/no-presets.md). Until that
     // works it is applied as "自定义", never as a preset.
     if let Ok(adopted) = desktop_dns::adopt_legacy_split(desktop.dns_preset) {
@@ -641,6 +642,9 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             data_sources,
             save_data_source,
             remove_data_source,
+            devices,
+            save_device,
+            remove_device,
             take_app_links,
             node_form,
             edit_node,
@@ -2270,6 +2274,8 @@ fn routed_final_chain(profile: &Value) -> (Vec<String>, Option<String>) {
         .and_then(|rules| rules.last())
         .and_then(Value::as_str)
         .and_then(|rule| rule.strip_prefix("FINAL,"))
+        // `FINAL,<target>,dns-failed` keeps its option after the target.
+        .and_then(|rest| rest.split(',').next())
         .map(|target| target.trim().to_string());
     let mut chain = Vec::new();
     while let Some(id) = target.clone() {
@@ -3368,12 +3374,13 @@ fn embedded_envelope_with_rules(
     let envelope = desktop_dns::redirects::apply(&envelope)?;
     let fake_ip = desktop_dns::custom::current().is_ok_and(|settings| settings.fake_ip);
     let redirects = envelope.contains("\"redirects\"");
-    let data_sources = !desktop_dns::data_sources::current().is_empty();
+    let data_sources = !desktop_dns::data_sources::current().is_empty()
+        || !desktop_dns::devices::current().is_empty();
     if dns != DnsPreset::System || fake_ip || !rules.is_empty() || redirects || data_sources {
         RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
             if redirects || data_sources {
                 format!(
-                    "the engine rejected the settings, redirects or data lists: {}",
+                    "the engine rejected the settings, redirects, data lists or device names: {}",
                     error.message
                 )
             } else if rules.is_empty() {
@@ -3747,6 +3754,62 @@ fn replace_data_sources(
     let message = match reconnect_running_direct_core(state) {
         Ok(()) => "Data lists saved. The engine downloads them through the proxy.".to_string(),
         Err(error) => format!("Data lists saved. Reconnect to apply them: {error}"),
+    };
+    Ok(OperationResult { message })
+}
+
+/// The names given to local network devices for `DEVICE-NAME` rules, by address.
+#[tauri::command]
+async fn devices() -> Result<Vec<desktop_dns::devices::Device>, String> {
+    run_blocking(|| Ok(desktop_dns::devices::current())).await
+}
+
+/// Calls the device at `address` `name`, replacing its earlier name.
+#[tauri::command]
+async fn save_device(
+    address: String,
+    name: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let next =
+            desktop_dns::devices::setting(&desktop_dns::devices::current(), &address, &name)?;
+        replace_devices(&next, &state)
+    })
+    .await
+}
+
+/// Forgets the name of the device at `address`; its `DEVICE-NAME` rules then match it no more.
+#[tauri::command]
+async fn remove_device(
+    address: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let next = desktop_dns::devices::removing(&desktop_dns::devices::current(), &address);
+        replace_devices(&next, &state)
+    })
+    .await
+}
+
+/// Saves `next` once the imported profile's envelope takes it, then reconnects a running core, as for data lists.
+fn replace_devices(
+    next: &[desktop_dns::devices::Device],
+    state: &DesktopAppState,
+) -> Result<OperationResult, String> {
+    let desktop = state
+        .desktop
+        .lock()
+        .map_err(|_| "desktop state lock failed")?
+        .clone();
+    desktop_dns::devices::replace(next, || {
+        rewrite_embedded_envelope(&desktop, desktop.dns_preset)
+    })?;
+    let message = match reconnect_running_direct_core(state) {
+        Ok(()) => "Device names saved.".to_string(),
+        Err(error) => format!("Device names saved. Reconnect to apply them: {error}"),
     };
     Ok(OperationResult { message })
 }

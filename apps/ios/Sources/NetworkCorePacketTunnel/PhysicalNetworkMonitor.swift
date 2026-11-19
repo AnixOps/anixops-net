@@ -3,12 +3,19 @@
 import Foundation
 import Network
 import NetworkCoreBridge
+#if os(iOS)
+import CoreTelephony
+#endif
 
 /// Watches the physical network under the tunnel (tunnel interfaces are type `other` and left out) and reports each
 /// change as a `NetworkPathKey`, nil while there is no usable network. Runs on iOS and macOS.
 final class PhysicalNetworkMonitor {
     private let queue = DispatchQueue(label: "networkcore.packet-tunnel.physical-network")
     private var monitor: NWPathMonitor?
+    #if os(iOS)
+    private let telephony = CTTelephonyNetworkInfo()
+    private var radioObserver: NSObjectProtocol?
+    #endif
 
     /// Calls `changed` on the monitor's queue with the first path and every change after it, and what the engine's
     /// `subnet` groups match on it (nil while there is no usable network).
@@ -16,15 +23,49 @@ final class PhysicalNetworkMonitor {
         stop()
         let monitor = NWPathMonitor(prohibitedInterfaceTypes: [.other, .loopback])
         self.monitor = monitor
-        monitor.pathUpdateHandler = { path in
-            changed(Self.key(path), Self.facts(path))
+        monitor.pathUpdateHandler = { [weak self] path in
+            changed(Self.key(path), Self.facts(path, radio: self?.radio()))
         }
         monitor.start(queue: queue)
+        #if os(iOS)
+        // LTE to NR and back changes no path: report the network again for CELLULAR-RADIO rules.
+        radioObserver = NotificationCenter.default.addObserver(
+            forName: .CTServiceRadioAccessTechnologyDidChange, object: nil, queue: nil
+        ) { [weak self] _ in
+            guard let self else {
+                return
+            }
+            self.queue.async {
+                guard let path = self.monitor?.currentPath else {
+                    return
+                }
+                changed(Self.key(path), Self.facts(path, radio: self.radio()))
+            }
+        }
+        #endif
     }
 
     func stop() {
         monitor?.cancel()
         monitor = nil
+        #if os(iOS)
+        if let radioObserver {
+            NotificationCenter.default.removeObserver(radioObserver)
+        }
+        radioObserver = nil
+        #endif
+    }
+
+    /// The radio technology of the cellular data service, for `CELLULAR-RADIO` rules; nil off iOS.
+    private func radio() -> String? {
+        #if os(iOS)
+        let service = telephony.dataServiceIdentifier
+        let technologies = telephony.serviceCurrentRadioAccessTechnology
+        let current = service.flatMap { technologies?[$0] } ?? technologies?.values.first
+        return NetworkFacts.radio(telephony: current)
+        #else
+        return nil
+        #endif
     }
 
     private static func key(_ path: Network.NWPath) -> NetworkPathKey? {
@@ -34,7 +75,7 @@ final class PhysicalNetworkMonitor {
         return NetworkPathKey(interface: interface.name, gateways: path.gateways.map { "\($0)" })
     }
 
-    private static func facts(_ path: Network.NWPath) -> NetworkFacts? {
+    private static func facts(_ path: Network.NWPath, radio: String?) -> NetworkFacts? {
         guard path.status == .satisfied, let interface = path.availableInterfaces.first else {
             return nil
         }
@@ -51,7 +92,7 @@ final class PhysicalNetworkMonitor {
         }
         let gateways = path.gateways.compactMap(host)
         let router = gateways.first { !$0.contains(":") } ?? gateways.first
-        return NetworkFacts(kind: kind, router: router, addresses: addresses(of: interface.name))
+        return NetworkFacts(kind: kind, router: router, addresses: addresses(of: interface.name), radio: radio)
     }
 
     /// The address of a gateway endpoint, without an IPv6 zone.

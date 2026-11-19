@@ -630,8 +630,18 @@ private struct LocalRuleSheet: View {
             return "cn"
         case "DST-PORT":
             return "443"
+        case "SRC-PORT":
+            return "5000-5100"
         case "PROTOCOL":
             return "UDP"
+        case "HOSTNAME-TYPE":
+            return "SIMPLE"
+        case "SUBNET":
+            return "SSID:Home"
+        case "CELLULAR-RADIO":
+            return "NR"
+        case "DEVICE-NAME":
+            return "Apple TV"
         case "USER-AGENT":
             return "Instagram*"
         case "RULE-SET":
@@ -653,8 +663,18 @@ private struct LocalRuleSheet: View {
             return String(localized: "AS 号，例如 AS13335。需要在下面的 GeoIP 与 ASN 数据里添加这个 AS 的列表。")
         case "DST-PORT":
             return String(localized: "一个端口或 起-止 范围，例如 6000-6100。")
+        case "SRC-PORT":
+            return String(localized: "发起连接的源端口，一个端口或 起-止 范围。")
         case "PROTOCOL":
-            return String(localized: "TCP、UDP、QUIC、HTTP 或 HTTPS。")
+            return String(localized: "TCP、UDP、QUIC、HTTP、HTTPS、STUN，或 DOH、DOQ（只匹配经代理发出的加密 DNS 查询）。")
+        case "HOSTNAME-TYPE":
+            return String(localized: "IPV4、IPV6、DOMAIN（带点的域名）或 SIMPLE（不带点的主机名）。")
+        case "SUBNET":
+            return String(localized: "当前网络：SSID:名称、BSSID:地址、ROUTER:网关 IP、TYPE:WIFI / WIRED / CELLULAR，或本机地址所在的网段。")
+        case "CELLULAR-RADIO":
+            return String(localized: "蜂窝网络制式，例如 LTE、NR（5G）。只在使用蜂窝网络时匹配。")
+        case "DEVICE-NAME":
+            return String(localized: "Mac 作为网关时，按在“设备名”里给局域网设备起的名字匹配。")
         case "RULE-SET":
             return String(localized: "Surge / Loon 格式的规则列表 https 地址，经代理每天下载一次。")
         default:

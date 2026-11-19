@@ -23,11 +23,28 @@ public struct NetworkFacts: Equatable, Sendable {
     public let kind: String?
     public let router: String?
     public let addresses: [String]
+    /// The cellular radio technology (`LTE`, `NR`, ...) for `CELLULAR-RADIO` rules; only on cellular.
+    public let radio: String?
 
-    public init(kind: String?, router: String?, addresses: [String]) {
+    public init(kind: String?, router: String?, addresses: [String], radio: String? = nil) {
         self.kind = kind
         self.router = router
         self.addresses = Array(addresses.prefix(Self.maxAddresses))
+        self.radio = kind == "cellular" ? radio : nil
+    }
+
+    /// The engine's name for a Core Telephony radio technology (`CTRadioAccessTechnologyNRNSA` is `NRNSA`), as Surge's
+    /// `CELLULAR-RADIO` writes it, upper case; nil for anything else.
+    public static func radio(telephony: String?) -> String? {
+        let prefix = "CTRadioAccessTechnology"
+        guard let telephony, telephony.hasPrefix(prefix) else {
+            return nil
+        }
+        let name = telephony.dropFirst(prefix.count).uppercased()
+        guard !name.isEmpty, name.count <= 24, name.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) else {
+            return nil
+        }
+        return name
     }
 
     /// The `set_network` fields; absent ones stay unknown.
@@ -41,6 +58,9 @@ public struct NetworkFacts: Equatable, Sendable {
         }
         if !addresses.isEmpty {
             object["addresses"] = addresses
+        }
+        if let radio {
+            object["radio"] = radio
         }
         return object
     }

@@ -84,7 +84,12 @@ public enum RuleSetCatalog {
     /// Whether `rules` hold a `PROCESS-NAME` rule, which matches nothing on iOS and macOS: the tunnel cannot tell
     /// which app opened a connection there (only Windows and Linux can).
     public static func hasProcessRules(_ rules: [String]) -> Bool {
-        rules.contains { rule in conditions(in: rule).contains { $0.0 == "PROCESS-NAME" } }
+        hasRules(of: "PROCESS-NAME", in: rules)
+    }
+
+    /// Whether a rule, or a condition of a logical rule, is of `kind` (upper case), such as `DEVICE-NAME`.
+    public static func hasRules(of kind: String, in rules: [String]) -> Bool {
+        rules.contains { rule in conditions(in: rule).contains { $0.0.uppercased() == kind } }
     }
 
     /// Every `KIND,value` pair of a rule line, including the conditions of a logical rule such as

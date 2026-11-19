@@ -202,8 +202,14 @@ private fun HitRow(rule: RuleHit) {
 /** PROCESS-NAME rules match nothing through the Android VPN, which cannot tell which app opened a connection. */
 @Composable
 internal fun ProcessRulesWarning() {
+    RuleWarning(stringResource(R.string.rules_process_not_effective))
+}
+
+/** A note under "我的规则" about rules that match nothing on Android. */
+@Composable
+internal fun RuleWarning(text: String) {
     Text(
-        stringResource(R.string.rules_process_not_effective),
+        text,
         style = MaterialTheme.typography.bodySmall,
         color = LocalBrandPalette.current.warning,
         modifier = Modifier.padding(horizontal = BrandSpacing.md, vertical = BrandSpacing.xs),

@@ -310,6 +310,7 @@ impl Backend {
         desktop_dns::custom::use_file(store.dir().join("dns-settings.json"));
         desktop_dns::redirects::use_file(store.dir().join("redirects.json"));
         desktop_dns::data_sources::use_file(store.dir().join("data-sources.json"));
+        desktop_dns::devices::use_file(store.dir().join("devices.json"));
         // The removed 国内外分流 DNS choice becomes the user's own settings (docs/no-presets.md). Until that
         // works it is applied as "自定义", never as a preset.
         if let Ok(adopted) = desktop_dns::adopt_legacy_split(state.dns_preset) {
@@ -1018,6 +1019,44 @@ impl Backend {
             "Data lists saved; the engine is downloading them"
         } else {
             "Data lists saved; they download on the next connection"
+        })
+    }
+
+    /// The names given to local network devices for `DEVICE-NAME` rules, by address.
+    pub fn devices(&self) -> Vec<desktop_dns::devices::Device> {
+        desktop_dns::devices::current()
+    }
+
+    /// Calls the device at `address` `name`, replacing its earlier name.
+    pub fn save_device(&mut self, address: &str, name: &str) -> Result<OperationResult, String> {
+        let next = desktop_dns::devices::setting(&desktop_dns::devices::current(), address, name)?;
+        self.replace_devices(&next)
+    }
+
+    /// Forgets the name of the device at `address`.
+    pub fn remove_device(&mut self, address: &str) -> Result<OperationResult, String> {
+        let next = desktop_dns::devices::removing(&desktop_dns::devices::current(), address);
+        self.replace_devices(&next)
+    }
+
+    /// Saves `next` once the engine accepts it, as for the data lists; a running engine restarts with it.
+    fn replace_devices(
+        &mut self,
+        next: &[desktop_dns::devices::Device],
+    ) -> Result<OperationResult, String> {
+        let restarted = desktop_dns::devices::replace(next, || {
+            if self.envelope_with_rules(&[]).is_ok() {
+                let envelope = self.envelope()?;
+                RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
+                    format!("the engine rejected the device names: {}", error.message)
+                })?;
+            }
+            self.restart_if_running()
+        })?;
+        done(if restarted {
+            "Device names saved; the engine restarted with them"
+        } else {
+            "Device names saved; they apply on the next connection"
         })
     }
 

@@ -15,7 +15,7 @@ use std::path::Path;
 
 use serde_json::{json, Map, Value};
 
-use crate::{catalog, data_sources};
+use crate::{catalog, data_sources, devices};
 
 /// The most lines kept, as on iOS and macOS.
 pub const MAX_RULES: usize = 1000;
@@ -28,7 +28,7 @@ pub const MAX_TEXT_BYTES: usize = 256 * 1024;
 pub const MAX_RULE_SETS: usize = 20;
 
 /// The rule types a line can use.
-pub const KINDS: [&str; 18] = [
+pub const KINDS: [&str; 23] = [
     "DOMAIN-SUFFIX",
     "DOMAIN",
     "DOMAIN-KEYWORD",
@@ -40,6 +40,11 @@ pub const KINDS: [&str; 18] = [
     "SRC-IP",
     "SRC-IP-CIDR",
     "IN-PORT",
+    "SRC-PORT",
+    "HOSTNAME-TYPE",
+    "SUBNET",
+    "DEVICE-NAME",
+    "CELLULAR-RADIO",
     "USER-AGENT",
     "URL-REGEX",
     "PROTOCOL",
@@ -172,8 +177,13 @@ pub fn parse(text: &str) -> Result<Vec<String>, LineError> {
             return Err(error("option"));
         }
         let mut engine = format!("{kind},{value},{policy}");
-        // A source address or listener port never needs a lookup; the engine refuses the option on IN-PORT.
-        if no_resolve && !matches!(kind.as_str(), "SRC-IP" | "IN-PORT") {
+        // Only rules on the destination address look a name up; the engine refuses the option on the others.
+        if no_resolve
+            && matches!(
+                kind.as_str(),
+                "IP-CIDR" | "IP-CIDR6" | "GEOIP" | "IP-ASN" | "RULE-SET"
+            )
+        {
             engine.push_str(",no-resolve");
         }
         lines.push(engine);
@@ -269,6 +279,7 @@ pub fn apply(envelope: &str, lines: &[String]) -> Result<String, String> {
     if had_sets || !sets.is_empty() {
         routing.insert("rule_sets".to_string(), Value::Object(sets));
     }
+    devices::insert(&devices::current(), routing);
     Ok(value.to_string())
 }
 
@@ -293,10 +304,14 @@ fn with_category_lists(envelope: &str) -> Result<String, String> {
     let proxy = proxy_target(routing);
     data_sources::insert(&data_sources::current(), &mut sets, proxy.as_deref());
     catalog::fill(&rules, &mut sets);
-    if sets == before {
+    let named = devices::current();
+    if sets == before && named.is_empty() {
         return Ok(envelope.to_string());
     }
-    routing.insert("rule_sets".to_string(), Value::Object(sets));
+    if sets != before {
+        routing.insert("rule_sets".to_string(), Value::Object(sets));
+    }
+    devices::insert(&named, routing);
     Ok(value.to_string())
 }
 
@@ -321,6 +336,8 @@ fn proxy_target(routing: &serde_json::Map<String, Value>) -> Option<String> {
         .and_then(|rules| rules.last())
         .and_then(Value::as_str)
         .and_then(|rule| rule.strip_prefix("FINAL,"))
+        // `FINAL,<target>,dns-failed` keeps its option after the target.
+        .and_then(|rest| rest.split(',').next())
         .map(str::trim)
         .filter(|target| outbounds.contains_key(*target))
         .filter(|target| {
@@ -430,6 +447,36 @@ mod tests {
     }
 
     #[test]
+    fn source_host_and_network_rules_are_kept_and_no_resolve_only_on_address_rules() {
+        let text = "SRC-PORT,5000-5100,PROXY\nhostname-type,SIMPLE,DIRECT\nSUBNET,SSID:Home,DIRECT\nDEVICE-NAME,Living Room TV,PROXY\nCELLULAR-RADIO,NR,PROXY\nPROTOCOL,STUN,REJECT\nDOMAIN-SUFFIX,a.test,PROXY,no-resolve\n";
+        assert_eq!(
+            parse(text).unwrap(),
+            vec![
+                "SRC-PORT,5000-5100,PROXY",
+                "HOSTNAME-TYPE,SIMPLE,DIRECT",
+                "SUBNET,SSID:Home,DIRECT",
+                "DEVICE-NAME,Living Room TV,PROXY",
+                "CELLULAR-RADIO,NR,PROXY",
+                "PROTOCOL,STUN,REJECT",
+                // The engine refuses no-resolve on a domain rule, so it is dropped rather than failing the profile.
+                "DOMAIN-SUFFIX,a.test,PROXY",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_node_final_with_dns_failed_is_still_the_proxy() {
+        let envelope =
+            r#"{"routing":{"outbounds":{"n1":{"type":"vless"}},"rules":["FINAL,n1,dns-failed"]}}"#;
+        let lines = parse("DOMAIN,a.test,PROXY").unwrap();
+        let value: Value = serde_json::from_str(&apply(envelope, &lines).unwrap()).unwrap();
+        assert_eq!(
+            value["routing"]["rules"],
+            json!(["DOMAIN,a.test,n1", "FINAL,n1,dns-failed"])
+        );
+    }
+
+    #[test]
     fn refuses_bad_lines_with_their_number() {
         assert_eq!(
             parse("DOMAIN,a.test,PROXY\nSCRIPT,corp,DIRECT").unwrap_err(),
@@ -488,12 +535,12 @@ mod tests {
     #[test]
     fn subscription_rules_follow_and_proxy_is_the_first_group() {
         let envelope = r#"{"routing":{"outbounds":{"n1":{"type":"vless"}},"groups":[{"id":"Proxy","type":"select","members":["n1"]}],"rules":["DOMAIN,x.test,DIRECT","FINAL,Proxy"]}}"#;
-        let lines = parse("DOMAIN-SUFFIX,a.test,PROXY,no-resolve").unwrap();
+        let lines = parse("IP-CIDR,10.0.0.0/8,PROXY,no-resolve").unwrap();
         let value: Value = serde_json::from_str(&apply(envelope, &lines).unwrap()).unwrap();
         assert_eq!(
             value["routing"]["rules"],
             json!([
-                "DOMAIN-SUFFIX,a.test,Proxy,no-resolve",
+                "IP-CIDR,10.0.0.0/8,Proxy,no-resolve",
                 "DOMAIN,x.test,DIRECT",
                 "FINAL,Proxy"
             ])

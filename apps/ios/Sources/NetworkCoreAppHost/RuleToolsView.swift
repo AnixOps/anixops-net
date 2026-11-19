@@ -127,6 +127,75 @@ struct DataListsSection: View {
     }
 }
 
+/// Names for the devices that use the Mac as their gateway, by the address their connections come from, for
+/// `DEVICE-NAME` rules. Saving reconnects a running tunnel.
+struct DeviceNamesSection: View {
+    var tunnel: TunnelController
+    @Environment(\.brand) private var brand
+    @State private var address = ""
+    @State private var name = ""
+    @State private var failure: String?
+
+    private var devices: [(address: String, name: String)] {
+        tunnel.localRules.devices.map { (address: $0.key, name: $0.value) }.sorted { $0.address < $1.address }
+    }
+
+    var body: some View {
+        Section {
+            ForEach(devices, id: \.address) { device in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: device.name)
+                        .foregroundStyle(brand.text)
+                    Text(verbatim: device.address)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(brand.text2)
+                }
+                .padding(.vertical, 2)
+                .listRowBackground(brand.surface)
+                .contextMenu {
+                    Button("删除", role: .destructive) {
+                        tunnel.updateLocalRules(tunnel.localRules.removing(device: device.address))
+                    }
+                }
+            }
+            TextField("设备 IP", text: $address, prompt: Text(verbatim: "192.168.1.30"))
+                .plainTextEntry(url: true)
+                .listRowBackground(brand.surface)
+            TextField("名字", text: $name, prompt: Text(verbatim: "Apple TV"))
+                .plainTextEntry(url: false)
+                .listRowBackground(brand.surface)
+            if let failure {
+                Text(failure)
+                    .font(.caption)
+                    .foregroundStyle(brand.danger)
+                    .listRowBackground(brand.surface)
+            }
+            Button("添加") {
+                add()
+            }
+            .disabled(address.trimmingCharacters(in: .whitespaces).isEmpty || name.trimmingCharacters(in: .whitespaces).isEmpty)
+            .listRowBackground(brand.surface)
+        } header: {
+            Text("设备名")
+        } footer: {
+            Text("给把 Mac 当作网关的设备起名字，DEVICE-NAME 规则按名字匹配（不区分大小写）。设备按连接来源的 IP 认出，最好在路由器里给它固定地址。右键可删除。")
+        }
+    }
+
+    private func add() {
+        do {
+            tunnel.updateLocalRules(try tunnel.localRules.saving(device: address, name: name))
+            address = ""
+            name = ""
+            failure = nil
+        } catch LocalRules.Failure.tooMany {
+            failure = String(localized: "最多 \(LocalRules.maxDevices) 个设备名。")
+        } catch {
+            failure = String(localized: "写设备的 IP 地址和 1 到 64 个字符的名字（不含逗号）。")
+        }
+    }
+}
+
 /// Asks the running engine which rule decides a connection and where it goes, without opening or counting one.
 struct RuleTestSection: View {
     var tunnel: TunnelController
@@ -290,6 +359,21 @@ struct RuleHitsSection: View {
                 .foregroundStyle(brand.text2)
         }
         .listRowBackground(brand.surface)
+    }
+}
+
+/// A warning about subscription rules that match nothing on this device.
+struct RuleNote: View {
+    let text: String
+    @Environment(\.brand) private var brand
+
+    var body: some View {
+        Section {
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(brand.warning)
+                .listRowBackground(brand.surface)
+        }
     }
 }
 
