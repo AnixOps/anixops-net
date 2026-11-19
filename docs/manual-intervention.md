@@ -232,7 +232,7 @@ Play 版是开源版（用户 2026-11-15 决定），包名 `io.anixops.net.andr
 CI 只覆盖编译和会话请求、清理、密钥文件的单测；系统密钥库要在真机上确认：
 
 - [ ] Windows（桌面模式）：连接、开始抓包、在“请求”页保存会话；`%LOCALAPPDATA%\AnixOps Net\capture\` 下有 `session-key.dpapi` 和 `sessions\*.anxcap`；重启客户端后能载入；换一个 Windows 账户复制这两个文件过去打不开。
-- [ ] Linux（GNOME 或 KDE）：保存会话后 `secret-tool lookup application anixops-net purpose capture-session-key` 能查到，`capture/` 下只有 `session-key.secret-service` 标记、没有 `session-key` 文件；锁住钥匙环再列出会话时提示解锁，而不是换新密钥。
+- [ ] Linux（GNOME 或 KDE）：保存会话后 `secret-tool lookup application anixops-net purpose capture-session-key` 能查到，`capture/` 下只有 `session-key.secret-service` 标记、没有 `session-key` 文件；锁住钥匙环再列出会话时提示打开钥匙环，而不是换新密钥。
 - [ ] Linux（没有钥匙环的桌面）：`capture/session-key` 权限是 `0600`，界面说明写的是“密钥保存在只有你能读取的文件里”。
 - [ ] Android：保存、退出 App、重新连接后能载入；清除 App 数据后旧会话随之删除。
 
