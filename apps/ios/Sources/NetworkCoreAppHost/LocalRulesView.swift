@@ -546,7 +546,7 @@ private struct LocalRuleSheet: View {
     @State private var failure: String?
 
     private var isIP: Bool {
-        ["IP-CIDR", "IP-CIDR6", "GEOIP"].contains(kind)
+        ["IP-CIDR", "IP-CIDR6", "GEOIP", "IP-ASN"].contains(kind)
     }
 
     var body: some View {
@@ -624,6 +624,8 @@ private struct LocalRuleSheet: View {
             return "2001:db8::/32"
         case "GEOIP":
             return "CN"
+        case "IP-ASN":
+            return "AS13335"
         case "GEOSITE":
             return "cn"
         case "DST-PORT":
@@ -646,7 +648,9 @@ private struct LocalRuleSheet: View {
         case "GEOSITE":
             return String(localized: "内置 cn 列表；订阅自带同名规则集时用订阅的。")
         case "GEOIP":
-            return String(localized: "两位国家或地区代码，例如 CN。")
+            return String(localized: "两位国家或地区代码，例如 CN。CN 以外的国家需要在下面的 GeoIP 与 ASN 数据里添加列表。")
+        case "IP-ASN":
+            return String(localized: "AS 号，例如 AS13335。需要在下面的 GeoIP 与 ASN 数据里添加这个 AS 的列表。")
         case "DST-PORT":
             return String(localized: "一个端口或 起-止 范围，例如 6000-6100。")
         case "PROTOCOL":

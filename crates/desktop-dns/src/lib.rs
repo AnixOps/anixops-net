@@ -7,6 +7,7 @@
 
 pub mod catalog;
 pub mod custom;
+pub mod data_sources;
 pub mod redirects;
 pub mod rules;
 pub mod system;

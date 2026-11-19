@@ -374,7 +374,14 @@ struct MacRulesPage: View {
                             LabeledContent("规则集", value: "\(RuleSetCatalog.referencedNames(in: routing.rules).count)")
                         }
                         Divider()
+                        ruleToolsLink
+                        Divider()
                         dnsLink
+                        if RuleSetCatalog.hasProcessRules(routing.rules) {
+                            Text("订阅里有 PROCESS-NAME 规则。iOS 和 macOS 的隧道分不出连接来自哪个 App，这些规则不会生效。")
+                                .font(.caption)
+                                .foregroundStyle(brand.warning)
+                        }
                     }
                     myRulesCard(hasSubscriptionRules: true)
                 }
@@ -386,7 +393,9 @@ struct MacRulesPage: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     modeCard(hasRules: false)
-                    MacCard(title: "DNS") {
+                    MacCard(title: "规则与 DNS") {
+                        ruleToolsLink
+                        Divider()
                         dnsLink
                     }
                     myRulesCard(hasSubscriptionRules: false)
@@ -446,6 +455,15 @@ struct MacRulesPage: View {
             Text(ProxyModeText.footer(tunnel.mode))
                 .font(.caption)
                 .foregroundStyle(brand.text2)
+        }
+    }
+
+    /// The rule test, hit counts and the GEOIP / IP-ASN data lists.
+    private var ruleToolsLink: some View {
+        NavigationLink {
+            MacRuleToolsPage(tunnel: tunnel)
+        } label: {
+            LabeledContent("规则测试、命中与 GeoIP 数据", value: "\(tunnel.localRules.dataSources.count)")
         }
     }
 
@@ -520,6 +538,25 @@ private struct MacRuleSetsPage: View {
         .scrollContentBackground(.hidden)
         .background(brand.bg)
         .navigationTitle("规则集")
+    }
+}
+
+/// The rule test and hit counts while connected, then the GEOIP / IP-ASN data lists.
+private struct MacRuleToolsPage: View {
+    var tunnel: TunnelController
+    @Environment(\.brand) private var brand
+
+    var body: some View {
+        List {
+            if tunnel.connection == .connected {
+                RuleTestSection(tunnel: tunnel)
+            }
+            RuleHitsSection(tunnel: tunnel)
+            DataListsSection(tunnel: tunnel)
+        }
+        .scrollContentBackground(.hidden)
+        .background(brand.bg)
+        .navigationTitle("规则工具")
     }
 }
 

@@ -410,8 +410,47 @@ export interface RuleSetStatus {
   /** Unix milliseconds of the last successful download. */
   updated_at_ms?: number | null;
   last_error?: string | null;
-  /** Lines of the last download the set could not hold, by rule type (`IP-ASN`, `SCRIPT`, `INVALID`, `OTHER`). */
+  /** Lines of the last download the set could not hold, by rule type (`SCRIPT`, `INVALID`, `OTHER`). */
   skipped?: Record<string, number>;
+}
+
+/** A GEOIP or IP-ASN data list the user added by URL: `geoip-us` or `asn-13335`. */
+export interface DataSource {
+  name: string;
+  url: string;
+}
+
+/** One rule and how often it decided a connection since the rules were loaded. */
+export interface RuleHit {
+  rule: string;
+  target: string;
+  hits: number;
+  last_hit_at_ms?: number | null;
+}
+
+export interface RuleHitsView {
+  generation: number;
+  rules: RuleHit[];
+  final: RuleHit;
+}
+
+/** Which rule decides a made-up connection and where it goes. */
+export interface RouteTest {
+  /** Index in `RuleHitsView.rules`; null for FINAL. */
+  rule_index?: number | null;
+  rule: string;
+  chain: string[];
+  outbound: string;
+  /** The rule needs the destination's IP address, which the test was not given. */
+  needs_address?: boolean;
+}
+
+export interface RouteQuestion {
+  host: string;
+  port?: number;
+  network?: "tcp" | "udp";
+  address?: string;
+  process?: string;
 }
 
 /** One node's result in a batch delay test. */
@@ -630,7 +669,13 @@ export const desktop = {
   traffic: () => invoke<TrafficSnapshot>("runtime_control", { request: { cmd: "traffic" } }),
   connections: () => invoke<ConnectionsSnapshot>("runtime_control", { request: { cmd: "connections" } }),
   closeConnection: (id: number) => invoke<{ closed: boolean }>("runtime_control", { request: { cmd: "close_connection", id } }),
-  ruleSets: () => invoke<{ rule_sets: RuleSetStatus[] }>("runtime_control", { request: { cmd: "rule_sets" } }),
+  /** `missing` names the `geoip-<cc>` and `asn-<number>` lists that GEOIP and IP-ASN rules use and nobody provides. */
+  ruleSets: () => invoke<{ rule_sets: RuleSetStatus[]; missing?: string[] }>("runtime_control", { request: { cmd: "rule_sets" } }),
+  ruleHits: () => invoke<RuleHitsView>("runtime_control", { request: { cmd: "rule_hits" } }),
+  clearRuleHits: () => invoke<RuleHitsView>("runtime_control", { request: { cmd: "clear_rule_hits" } }),
+  /** Which rule would decide such a connection, without opening or counting one. */
+  testRoute: (question: RouteQuestion) =>
+    invoke<{ mode: "rule" | "global" | "direct"; test: RouteTest }>("runtime_control", { request: { cmd: "test_route", ...question } }),
   /** Downloads the remote rule sets again in the background; answers how many were scheduled. */
   updateRuleSets: () => invoke<{ scheduled: number }>("runtime_control", { request: { cmd: "update_rule_sets" } }),
   closeAllConnections: () => invoke<{ closed: number }>("runtime_control", { request: { cmd: "close_all" } }),
@@ -757,6 +802,11 @@ export const desktop = {
   /** Checks every line, saves, and gives a running engine the new rules. */
   saveMyRules: (text: string) => invoke<OperationResult>("save_my_rules", { text }),
   routingWarnings: () => invoke<string[]>("routing_warnings"),
+  /** The GEOIP and IP-ASN data lists added by URL. */
+  dataSources: () => invoke<DataSource[]>("data_sources"),
+  /** Points `name` (`geoip-us`, `asn-13335`) at an https:// list; a running engine restarts. */
+  saveDataSource: (name: string, url: string) => invoke<OperationResult>("save_data_source", { name, url }),
+  removeDataSource: (name: string) => invoke<OperationResult>("remove_data_source", { name }),
   enableHttpsMitm: () => invoke<OperationResult>("enable_https_mitm"),
   disableHttpsMitm: () => invoke<OperationResult>("disable_https_mitm"),
   mitmRootStatus: () => invoke<MitmRootStatus>("mitm_root_status"),

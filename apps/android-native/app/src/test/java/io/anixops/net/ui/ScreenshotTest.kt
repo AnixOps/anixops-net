@@ -10,6 +10,7 @@ import io.anixops.net.core.CaptureMessage
 import io.anixops.net.core.CaptureSession
 import io.anixops.net.core.CaptureStatus
 import io.anixops.net.core.ConnectionSnapshot
+import io.anixops.net.core.DataSource
 import io.anixops.net.core.DebugMapping
 import io.anixops.net.core.DecryptDomain
 import io.anixops.net.core.DecryptHost
@@ -37,6 +38,8 @@ import io.anixops.net.core.ProxiesView
 import io.anixops.net.core.RedirectDraft
 import io.anixops.net.core.ReplayResponse
 import io.anixops.net.core.RequestRow
+import io.anixops.net.core.RuleHit
+import io.anixops.net.core.RuleHitsView
 import io.anixops.net.core.RuleSetStatus
 import io.anixops.net.core.RuntimeSnapshot
 import io.anixops.net.core.StatusFact
@@ -632,6 +635,17 @@ class ScreenshotTest {
                 RuleSetStatus("china", "remote", entries = 8_412, updatedAtMs = 1_763_198_400_000),
                 RuleSetStatus("ads", "remote", entries = 0, lastError = "HTTP 404"),
                 RuleSetStatus("lan", "inline", entries = 12),
+            ),
+            missingData = listOf("asn-13335"),
+            dataSources = listOf(DataSource("geoip-us", "https://lists.example.org/geoip/us.txt")),
+            hits = RuleHitsView(
+                generation = 1,
+                rules = listOf(
+                    RuleHit("DOMAIN-SUFFIX,corp.example.com", "DIRECT", hits = 412),
+                    RuleHit("DOMAIN-KEYWORD,ads", "REJECT", hits = 37),
+                    RuleHit("IP-CIDR,10.0.0.0/8", "DIRECT"),
+                ),
+                finalRule = RuleHit("FINAL", "Proxy", hits = 96),
             ),
             dns = DnsText(
                 servers = "cloudflare = https://1.1.1.1/dns-query, server-name=cloudflare-dns.com",

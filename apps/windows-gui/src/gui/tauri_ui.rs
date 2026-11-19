@@ -496,6 +496,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
     capture_sessions::purge_expired();
     desktop_dns::custom::use_file(dns_settings_path());
     desktop_dns::redirects::use_file(windows_managed_data_directory().join("redirects.json"));
+    desktop_dns::data_sources::use_file(windows_managed_data_directory().join("data-sources.json"));
     // The removed 国内外分流 DNS choice becomes the user's own settings (docs/no-presets.md). Until that
     // works it is applied as "自定义", never as a preset.
     if let Ok(adopted) = desktop_dns::adopt_legacy_split(desktop.dns_preset) {
@@ -637,6 +638,9 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             traffic_redirects,
             add_traffic_redirect,
             save_traffic_redirects,
+            data_sources,
+            save_data_source,
+            remove_data_source,
             take_app_links,
             node_form,
             edit_node,
@@ -3364,11 +3368,12 @@ fn embedded_envelope_with_rules(
     let envelope = desktop_dns::redirects::apply(&envelope)?;
     let fake_ip = desktop_dns::custom::current().is_ok_and(|settings| settings.fake_ip);
     let redirects = envelope.contains("\"redirects\"");
-    if dns != DnsPreset::System || fake_ip || !rules.is_empty() || redirects {
+    let data_sources = !desktop_dns::data_sources::current().is_empty();
+    if dns != DnsPreset::System || fake_ip || !rules.is_empty() || redirects || data_sources {
         RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
-            if redirects {
+            if redirects || data_sources {
                 format!(
-                    "the engine rejected the settings or redirects: {}",
+                    "the engine rejected the settings, redirects or data lists: {}",
                     error.message
                 )
             } else if rules.is_empty() {
@@ -3685,6 +3690,63 @@ fn replace_redirects(
             "Redirects saved. They apply to the running connection, or the next one.".to_string()
         }
         Err(error) => format!("Redirects saved. Reconnect to apply them: {error}"),
+    };
+    Ok(OperationResult { message })
+}
+
+/// The GEOIP and IP-ASN data lists the user added by URL, by name.
+#[tauri::command]
+async fn data_sources() -> Result<Vec<desktop_dns::data_sources::DataSource>, String> {
+    run_blocking(|| Ok(desktop_dns::data_sources::current())).await
+}
+
+/// Points the data `name` (`geoip-us`, `asn-13335`) at the list `url`, replacing a list of that name.
+#[tauri::command]
+async fn save_data_source(
+    name: String,
+    url: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let next =
+            desktop_dns::data_sources::setting(&desktop_dns::data_sources::current(), &name, &url)?;
+        replace_data_sources(&next, &state)
+    })
+    .await
+}
+
+/// Removes the data list `name`; its rules then match nothing until a list is added again.
+#[tauri::command]
+async fn remove_data_source(
+    name: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let next =
+            desktop_dns::data_sources::removing(&desktop_dns::data_sources::current(), &name);
+        replace_data_sources(&next, &state)
+    })
+    .await
+}
+
+/// Saves `next` once the imported profile's envelope takes it, then reconnects a running core, as for redirects.
+fn replace_data_sources(
+    next: &[desktop_dns::data_sources::DataSource],
+    state: &DesktopAppState,
+) -> Result<OperationResult, String> {
+    let desktop = state
+        .desktop
+        .lock()
+        .map_err(|_| "desktop state lock failed")?
+        .clone();
+    desktop_dns::data_sources::replace(next, || {
+        rewrite_embedded_envelope(&desktop, desktop.dns_preset)
+    })?;
+    let message = match reconnect_running_direct_core(state) {
+        Ok(()) => "Data lists saved. The engine downloads them through the proxy.".to_string(),
+        Err(error) => format!("Data lists saved. Reconnect to apply them: {error}"),
     };
     Ok(OperationResult { message })
 }

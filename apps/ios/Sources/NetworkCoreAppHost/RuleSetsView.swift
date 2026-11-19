@@ -77,7 +77,9 @@ struct RuleSetsSection: View {
 
     private func row(_ name: String) -> some View {
         let loaded = status[name]
-        let source = defined?[name] ?? RuleSetCatalog.known[name]
+        // The user's data lists replace the subscription's and the built-in set of their name.
+        let added = tunnel.localRules.dataSources.first { $0.name == name }.map { EmbeddedRuntimeConfig.RuleSet(url: $0.url) }
+        let source = added ?? defined?[name] ?? RuleSetCatalog.known[name]
         let builtIn = source == nil && RuleSetCatalog.builtIn.contains(name)
         return VStack(alignment: .leading, spacing: 3) {
             HStack {
@@ -96,7 +98,7 @@ struct RuleSetsSection: View {
                         .foregroundStyle(brand.text2)
                 } else if source == nil {
                     // The engine refuses RULE-SET and GEOSITE rules without their set, so the app leaves them out.
-                    Text(name.hasPrefix("geoip-") ? "订阅没有提供这个规则集，相关规则不会命中" : "订阅没有提供这个规则集，已跳过相关规则")
+                    Text(name.hasPrefix("geoip-") || name.hasPrefix("asn-") ? "没有这份数据，相关规则不会命中。可以在“GeoIP 与 ASN 数据”里按 URL 添加列表。" : "订阅没有提供这个规则集，已跳过相关规则")
                         .foregroundStyle(brand.warning)
                 } else if let error = loaded?.lastError {
                     Text("上次下载失败：\(error)")

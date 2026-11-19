@@ -175,6 +175,10 @@ public struct NodeLibrary: Codable, Equatable {
         for (name, set) in local.ruleSets where defined[name] == nil {
             defined[name] = set
         }
+        // The user's GEOIP / IP-ASN data lists replace the subscription's own set of their name.
+        for source in localRules?.dataSources ?? [] {
+            defined[source.name] = .init(url: source.url, via: proxy)
+        }
         let lines = local.lines + routing.rules
         let own = Set((routing.ruleSets ?? [:]).keys)
         let ruleSets = RuleSetCatalog.ruleSets(for: lines, defined: defined.isEmpty ? nil : defined).flatMap { sets in

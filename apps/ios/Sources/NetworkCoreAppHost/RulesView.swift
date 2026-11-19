@@ -22,6 +22,7 @@ struct RulesView: View {
                         modeSection(hasRules: tunnel.library != nil)
                         if tunnel.library != nil {
                             LocalRulesSection(tunnel: tunnel, hasSubscriptionRules: false)
+                            ruleTools
                         }
                         DnsSection(tunnel: tunnel)
                         RedirectSection(tunnel: tunnel)
@@ -78,11 +79,27 @@ struct RulesView: View {
             RuleSetsSection(tunnel: tunnel, rules: routing.rules, defined: routing.ruleSets,
                             warnings: library.routingWarnings)
 
+            if RuleSetCatalog.hasProcessRules(routing.rules) {
+                ProcessRulesNote()
+            }
+
+            ruleTools
+
             DnsSection(tunnel: tunnel)
 
             RedirectSection(tunnel: tunnel)
         }
         .scrollContentBackground(.hidden)
+    }
+
+    /// The rule test and hit counts while connected, then the GEOIP / IP-ASN data lists.
+    @ViewBuilder
+    private var ruleTools: some View {
+        if tunnel.connection == .connected {
+            RuleTestSection(tunnel: tunnel)
+        }
+        RuleHitsSection(tunnel: tunnel)
+        DataListsSection(tunnel: tunnel)
     }
 
     private func modeSection(hasRules: Bool) -> some View {

@@ -19,6 +19,13 @@ public enum RuntimeControl {
     case ruleSets
     /// Downloads every remote rule set now.
     case updateRuleSets
+    /// How often each rule decided a connection since the rules were loaded (`RuleHits`).
+    case ruleHits
+    /// Sets those counts to zero; answers `RuleHits`.
+    case clearRuleHits
+    /// Which rule decides a connection to `host` and where it goes, without opening or counting one
+    /// (`RouteTestAnswer`). `address` is the IP the domain resolves to, for rules that need it.
+    case testRoute(host: String, port: UInt16, udp: Bool, address: String?)
     /// Plugin scripts that run outside HTTP flows (`cron`, `network-changed`, `generic`).
     case scripts
     /// What scripts posted since the last call; each notification comes once.
@@ -116,6 +123,18 @@ public enum RuntimeControl {
             object = ["cmd": "rule_sets"]
         case .updateRuleSets:
             object = ["cmd": "update_rule_sets"]
+        case .ruleHits:
+            object = ["cmd": "rule_hits"]
+        case .clearRuleHits:
+            object = ["cmd": "clear_rule_hits"]
+        case let .testRoute(host, port, udp, address):
+            var request: [String: Any] = [
+                "cmd": "test_route", "host": host, "port": Int(port), "network": udp ? "udp" : "tcp",
+            ]
+            if let address = address?.trimmingCharacters(in: .whitespaces), !address.isEmpty {
+                request["address"] = address
+            }
+            object = request
         case .scripts:
             object = ["cmd": "scripts"]
         case .scriptNotifications:
@@ -542,10 +561,106 @@ public enum RuntimeControl {
         }
 
         public let ruleSets: [Status]
+        /// The `geoip-<cc>` and `asn-<number>` lists the running `GEOIP` and `IP-ASN` rules use that nobody
+        /// provides: those rules match nothing until the user adds a list. Empty when the kernel predates the field.
+        public let missing: [String]
 
         enum CodingKeys: String, CodingKey {
             case ruleSets = "rule_sets"
+            case missing
         }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            ruleSets = try container.decode([Status].self, forKey: .ruleSets)
+            missing = try container.decodeIfPresent([String].self, forKey: .missing) ?? []
+        }
+    }
+
+    /// The `rule_hits` and `clear_rule_hits` answer: every rule in order, then `FINAL`.
+    public struct RuleHits: Decodable, Equatable {
+        public struct Hit: Decodable, Equatable {
+            public let rule: String
+            public let target: String
+            public let hits: UInt64
+            public let lastHitAtMs: UInt64?
+
+            enum CodingKeys: String, CodingKey {
+                case rule
+                case target
+                case hits
+                case lastHitAtMs = "last_hit_at_ms"
+            }
+        }
+
+        public let generation: UInt64
+        public let rules: [Hit]
+        public let finalRule: Hit
+
+        enum CodingKeys: String, CodingKey {
+            case generation
+            case rules
+            case finalRule = "final"
+        }
+
+        /// The rules that decided at least one connection, most first, at most `limit`, with their positions.
+        public func busiest(limit: Int = 50) -> [(index: Int, hit: Hit)] {
+            Array(
+                rules.enumerated()
+                    .filter { $0.element.hits > 0 }
+                    .sorted { $0.element.hits > $1.element.hits }
+                    .prefix(limit)
+                    .map { (index: $0.offset, hit: $0.element) }
+            )
+        }
+
+        /// How many rules decided nothing yet.
+        public var unused: Int {
+            rules.filter { $0.hits == 0 }.count
+        }
+    }
+
+    /// The `test_route` answer.
+    public struct RouteTestAnswer: Decodable, Equatable {
+        public struct Test: Decodable, Equatable {
+            /// Position in `RuleHits.rules`; nil for `FINAL`.
+            public let ruleIndex: Int?
+            public let rule: String
+            public let chain: [String]
+            public let outbound: String
+            /// The rule needs the destination's IP address, which the test was not given; a failed lookup rejects.
+            public let needsAddress: Bool
+
+            /// The groups and the outbound, each once: `Proxy → n1`.
+            public var path: String {
+                var seen: [String] = []
+                for step in chain + [outbound] where !seen.contains(step) {
+                    seen.append(step)
+                }
+                return seen.joined(separator: " → ")
+            }
+
+            enum CodingKeys: String, CodingKey {
+                case ruleIndex = "rule_index"
+                case rule
+                case chain
+                case outbound
+                case needsAddress = "needs_address"
+            }
+
+            public init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                ruleIndex = try container.decodeIfPresent(Int.self, forKey: .ruleIndex)
+                rule = try container.decode(String.self, forKey: .rule)
+                chain = try container.decodeIfPresent([String].self, forKey: .chain) ?? []
+                outbound = try container.decode(String.self, forKey: .outbound)
+                needsAddress = try container.decodeIfPresent(Bool.self, forKey: .needsAddress) ?? false
+            }
+        }
+
+        /// `rule`, `global` or `direct`; outside `rule` the rules do not decide connections.
+        public let mode: String
+        public let test: Test
     }
 
     /// The `scripts` answer.

@@ -158,6 +158,8 @@ fun AnixApp(
                 is RulesEvent.Message -> event.text
                 is RulesEvent.RuleSetsStarted ->
                     context.resources.getQuantityString(R.plurals.rules_sets_started, event.count, event.count)
+                RulesEvent.HitsCleared -> context.getString(R.string.rules_hits_cleared)
+                RulesEvent.Tested -> ""
             }
             if (text.isNotBlank()) snackbar.showSnackbar(text)
         }
@@ -321,6 +323,10 @@ fun AnixApp(
             setDnsPreset = app::setDnsPreset,
             saveDns = rules::saveDns,
             setBlockQuic = app::setBlockQuic,
+            saveDataSource = rules::saveDataSource,
+            removeDataSource = rules::removeDataSource,
+            clearRuleHits = rules::clearRuleHits,
+            testRoute = rules::testRoute,
         ),
         settingsState = settingsState,
         settings = settingsActions,

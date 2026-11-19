@@ -6,6 +6,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -341,6 +342,65 @@ class CoreTest {
     fun ruleSetsAreEmptyWhileTheEngineIsOff() = runTest {
         val core = Core(Recording("""{"error":"the engine is not running"}"""), StandardTestDispatcher(testScheduler))
         assertTrue(core.ruleSets().isEmpty())
+    }
+
+    @Test
+    fun ruleSetsNameTheDataTheRulesLack() = runTest {
+        val transport = Recording("""{"ok":{"rule_sets":[],"missing":["asn-13335","geoip-us"]}}""")
+        val view = Core(transport, StandardTestDispatcher(testScheduler)).ruleSetsView()
+        assertEquals(listOf("asn-13335", "geoip-us"), view.missing)
+        assertEquals(listOf("IP-ASN,13335", "GEOIP,US"), view.missing.map(::dataRule))
+    }
+
+    @Test
+    fun dataListNamesComeFromWhatTheUserTyped() {
+        for (text in listOf("us", "US", "GEOIP,US", "geoip-us", " GeoIP, us ")) assertEquals("geoip-us", dataName(text))
+        for (text in listOf("13335", "AS13335", "IP-ASN,13335", "ip-asn,AS13335", "asn-13335")) {
+            assertEquals("asn-13335", dataName(text))
+        }
+        for (text in listOf("", "usa", "geoip-1a", "0", "AS013", "4294967296", "geosite-cn")) assertNull(text, dataName(text))
+        assertEquals("asn-4294967295", dataName("4294967295"))
+        assertTrue(hasProcessRules("DOMAIN,a.test,PROXY\n process-name,curl,DIRECT"))
+        assertFalse(hasProcessRules("DOMAIN,process-name.test,PROXY"))
+    }
+
+    @Test
+    fun dataSourcesKeepTheSharedFieldNames() = runTest {
+        val transport = Recording("""{"ok":{"message":"saved"}}""")
+        val core = Core(transport, StandardTestDispatcher(testScheduler))
+        core.saveDataSource("geoip-us", "https://lists.test/us.txt")
+        core.removeDataSource("geoip-us")
+        assertEquals(
+            listOf(
+                "save_data_source" to """{"name":"geoip-us","url":"https://lists.test/us.txt"}""",
+                "remove_data_source" to """{"name":"geoip-us"}""",
+            ),
+            transport.calls,
+        )
+    }
+
+    @Test
+    fun ruleHitsAndRouteTestsGoThroughRuntimeControl() = runTest {
+        val hits = Recording(
+            """{"ok":{"generation":2,"rules":[{"rule":"DOMAIN,a.test","target":"Proxy","hits":0},""" +
+                """{"rule":"GEOIP,CN","target":"DIRECT","hits":7,"last_hit_at_ms":5}],"final":{"rule":"FINAL","target":"Proxy","hits":3}}}""",
+        )
+        val view = Core(hits, StandardTestDispatcher(testScheduler)).ruleHits()!!
+        assertEquals(listOf("runtime_control" to """{"request":{"cmd":"rule_hits"}}"""), hits.calls)
+        assertEquals(listOf("GEOIP,CN"), view.busiest().map { it.rule })
+        assertEquals(1, view.unused)
+        assertEquals(3L, view.finalRule.hits)
+
+        val test = Recording(
+            """{"ok":{"mode":"rule","test":{"rule_index":1,"rule":"GEOIP,CN","chain":["Proxy"],"outbound":"n1","needs_address":true}}}""",
+        )
+        val answer = Core(test, StandardTestDispatcher(testScheduler)).testRoute("a.test", 443, "tcp", " ", null)
+        assertEquals(
+            listOf("runtime_control" to """{"request":{"cmd":"test_route","host":"a.test","port":443,"network":"tcp"}}"""),
+            test.calls,
+        )
+        assertTrue(answer.test.needsAddress)
+        assertEquals("Proxy → n1", answer.test.path)
     }
 
     @Test

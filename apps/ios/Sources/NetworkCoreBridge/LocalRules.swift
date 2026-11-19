@@ -116,15 +116,20 @@ public struct LocalRules: Codable, Equatable {
     public var rules: [Rule]
     /// Downloaded rule lists, matched after `rules` and in this order.
     public var subscriptions: [Subscription]
+    /// The `GEOIP` and `IP-ASN` data lists the user added by URL, by name. They replace a built-in list and the
+    /// subscription's own set of the same name, as on Windows, Linux and Android (`data-sources.json`).
+    public var dataSources: [DataSource]
 
     public init(
         bypassLAN: Bool = true,
         rules: [Rule] = [],
-        subscriptions: [Subscription] = []
+        subscriptions: [Subscription] = [],
+        dataSources: [DataSource] = []
     ) {
         self.bypassLAN = bypassLAN
         self.rules = rules
         self.subscriptions = subscriptions
+        self.dataSources = dataSources
     }
 
     /// Values saved by earlier versions may still carry a `preset` (绕过大陆 and the like); it is ignored, since the
@@ -133,6 +138,7 @@ public struct LocalRules: Codable, Equatable {
         case bypassLAN = "bypass_lan"
         case rules
         case subscriptions
+        case dataSources = "data_sources"
     }
 
     public init(from decoder: Decoder) throws {
@@ -140,7 +146,8 @@ public struct LocalRules: Codable, Equatable {
         self.init(
             bypassLAN: try container.decodeIfPresent(Bool.self, forKey: .bypassLAN) ?? true,
             rules: try container.decodeIfPresent([Rule].self, forKey: .rules) ?? [],
-            subscriptions: try container.decodeIfPresent([Subscription].self, forKey: .subscriptions) ?? []
+            subscriptions: try container.decodeIfPresent([Subscription].self, forKey: .subscriptions) ?? [],
+            dataSources: (try? container.decodeIfPresent([DataSource].self, forKey: .dataSources)) ?? []
         )
     }
 
@@ -149,8 +156,8 @@ public struct LocalRules: Codable, Equatable {
     /// The rule types a local rule can use. `GEOSITE` is limited to the catalog's lists (`RuleSetCatalog.known`)
     /// because the engine refuses a category it has no list for; `RULE-SET` takes an `https` list URL.
     public static let kinds = [
-        "DOMAIN-SUFFIX", "DOMAIN", "DOMAIN-KEYWORD", "DOMAIN-WILDCARD", "IP-CIDR", "IP-CIDR6", "GEOIP", "GEOSITE",
-        "DST-PORT", "PROTOCOL", "USER-AGENT", "RULE-SET",
+        "DOMAIN-SUFFIX", "DOMAIN", "DOMAIN-KEYWORD", "DOMAIN-WILDCARD", "IP-CIDR", "IP-CIDR6", "GEOIP", "IP-ASN",
+        "GEOSITE", "DST-PORT", "PROTOCOL", "USER-AGENT", "RULE-SET",
     ]
 
     static let lanLines = [
@@ -201,6 +208,9 @@ public struct LocalRules: Codable, Equatable {
             sets[name] = .init(url: subscription.url, via: proxy)
             lines.append("RULE-SET,\(name),\(target)")
         }
+        for source in dataSources {
+            sets[source.name] = .init(url: source.url, via: proxy)
+        }
         return (lines, sets)
     }
 
@@ -250,7 +260,7 @@ public struct LocalRules: Codable, Equatable {
         }
         let noResolve = rest.contains { $0.lowercased() == "no-resolve" }
         let value = try Self.value(parts[1], kind: kind)
-        let isIP = ["IP-CIDR", "IP-CIDR6", "GEOIP"].contains(kind)
+        let isIP = ["IP-CIDR", "IP-CIDR6", "GEOIP", "IP-ASN"].contains(kind)
         return Rule(kind: kind, value: value, policy: policy, noResolve: noResolve && isIP)
     }
 
@@ -308,6 +318,13 @@ public struct LocalRules: Codable, Equatable {
                 throw invalid
             }
             return code
+        case "IP-ASN":
+            // `AS13335` and `13335` name the same network; the engine's data list is `asn-13335`.
+            let number = value.uppercased().hasPrefix("AS") ? String(value.dropFirst(2)) : value
+            guard DataSource.normalizedName("asn-" + number) != nil else {
+                throw invalid
+            }
+            return number
         case "GEOSITE":
             let category = value.lowercased()
             guard RuleSetCatalog.known["geosite-" + category] != nil else {
@@ -442,6 +459,32 @@ public struct LocalRules: Codable, Equatable {
         return copy
     }
 
+    /// The most data lists kept; they share the engine's 32 rule sets with the user's lists and the subscription's.
+    public static let maxDataSources = 16
+
+    /// `name` (`geoip-us`, `asn-13335`, or what the user typed: `US`, `GEOIP,US`, `AS13335`) pointing at the
+    /// `https` list `url`, replacing the list of that name.
+    public func saving(dataSource name: String, url: String) throws -> LocalRules {
+        guard let name = DataSource.name(from: name) else {
+            throw Failure.invalidValue(name)
+        }
+        let url = try Self.value(url, kind: "RULE-SET")
+        var copy = self
+        copy.dataSources.removeAll { $0.name == name }
+        guard copy.dataSources.count < Self.maxDataSources else {
+            throw Failure.tooMany
+        }
+        copy.dataSources.append(DataSource(name: name, url: url))
+        copy.dataSources.sort { $0.name < $1.name }
+        return copy
+    }
+
+    public func removing(dataSource name: String) -> LocalRules {
+        var copy = self
+        copy.dataSources.removeAll { $0.name == name }
+        return copy
+    }
+
     /// The list with `incoming` appended, leaving out rules already in it and anything past `maxRules`.
     public func merging(_ incoming: [Rule]) -> (rules: LocalRules, added: Int) {
         var copy = self
@@ -485,5 +528,80 @@ public struct LocalRules: Codable, Equatable {
     /// The saved rules; profiles saved before local rules existed get none.
     public static func fromProfileValue(_ value: Data?) -> LocalRules {
         value.flatMap { try? JSONDecoder().decode(LocalRules.self, from: $0) } ?? LocalRules()
+    }
+}
+
+extension LocalRules {
+    /// One `GEOIP` or `IP-ASN` data list: the rule-set name its rules use (`geoip-us`, `asn-13335`) and the `https`
+    /// list the engine downloads through the proxy once a day (one network per line, or `IP-CIDR` lines).
+    public struct DataSource: Codable, Equatable, Identifiable {
+        public var name: String
+        public var url: String
+
+        public init(name: String, url: String) {
+            self.name = name
+            self.url = url
+        }
+
+        public var id: String {
+            name
+        }
+
+        /// The rule this list serves, as the user writes it: `GEOIP,US` or `IP-ASN,13335`.
+        public var rule: String {
+            Self.rule(for: name)
+        }
+
+        public static func rule(for name: String) -> String {
+            if name.hasPrefix("geoip-") {
+                return "GEOIP," + name.dropFirst(6).uppercased()
+            }
+            if name.hasPrefix("asn-") {
+                return "IP-ASN," + name.dropFirst(4)
+            }
+            return name
+        }
+
+        /// `name` as stored when it names data a rule can use: `geoip-<two letters>` or `asn-<1…4294967295>`.
+        public static func normalizedName(_ name: String) -> String? {
+            let name = name.trimmingCharacters(in: .whitespaces).lowercased()
+            if name.hasPrefix("geoip-") {
+                let code = name.dropFirst(6)
+                return code.count == 2 && code.allSatisfy({ $0.isASCII && $0.isLetter }) ? name : nil
+            }
+            guard name.hasPrefix("asn-") else {
+                return nil
+            }
+            let number = name.dropFirst(4)
+            guard !number.isEmpty, !number.hasPrefix("0"), number.allSatisfy({ $0.isASCII && $0.isNumber }),
+                  let value = UInt32(number), value > 0
+            else {
+                return nil
+            }
+            return name
+        }
+
+        /// The list name for what the user typed: `US`, `GEOIP,US` or `geoip-us`; `13335`, `AS13335`,
+        /// `IP-ASN,13335` or `asn-13335`.
+        public static func name(from text: String) -> String? {
+            var value = text.trimmingCharacters(in: .whitespaces).lowercased()
+            for prefix in ["geoip,", "geoip-"] where value.hasPrefix(prefix) {
+                value = "geoip-" + value.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces)
+            }
+            if value.hasPrefix("ip-asn,") {
+                value = "asn-" + value.dropFirst(7).trimmingCharacters(in: .whitespaces)
+            }
+            if value.hasPrefix("asn-as") {
+                value = "asn-" + value.dropFirst(6)
+            } else if value.hasPrefix("as"), value.dropFirst(2).first?.isNumber == true {
+                value = "asn-" + value.dropFirst(2)
+            }
+            if value.count == 2, value.allSatisfy({ $0.isASCII && $0.isLetter }) {
+                value = "geoip-" + value
+            } else if let first = value.first, first.isNumber {
+                value = "asn-" + value
+            }
+            return normalizedName(value)
+        }
     }
 }

@@ -728,6 +728,9 @@ dl.headers.dense dt { font-weight: 500; }
 .rule-editor { display: grid; gap: 8px; padding: 10px 14px 12px; }
 .rule-editor textarea { min-height: 160px; }
 .rule-editor .button-row { justify-content: flex-end; }
+.data-list-form { display: grid; gap: 8px; padding: 10px 14px 12px; }
+.data-list-form .button-row { justify-content: flex-end; }
+.data-list-form .muted { margin: 0; }
 .editor-label { display: grid; gap: 2px; margin-top: 4px; font-weight: 500; }
 .editor-label small { color: var(--text3); font-size: 12px; font-weight: 400; }
 @media (max-width: 560px) { .phone-qr { flex-direction: column; align-items: flex-start; } }

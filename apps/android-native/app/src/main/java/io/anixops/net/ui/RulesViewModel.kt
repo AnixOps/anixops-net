@@ -4,10 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.anixops.net.core.Core
 import io.anixops.net.core.CoreException
+import io.anixops.net.core.DataSource
 import io.anixops.net.core.DnsText
 import io.anixops.net.core.MyRules
 import io.anixops.net.core.NativeGroup
 import io.anixops.net.core.OperationResult
+import io.anixops.net.core.RouteTestAnswer
+import io.anixops.net.core.RuleHitsView
 import io.anixops.net.core.RuleSetStatus
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -21,12 +24,18 @@ import kotlinx.coroutines.launch
 
 /**
  * What the rules page reads beyond the snapshot: the user's own rules, the profile's policy groups, the running
- * engine's rule sets, what importing the subscription's rules left out and the custom DNS text with the Fake-IP switch. Null until read.
+ * engine's rule sets with the GEOIP / IP-ASN data its rules lack, the data lists added by URL, how often each rule
+ * decided a connection, the last rule test, what importing the subscription's rules left out and the custom DNS text
+ * with the Fake-IP switch. Null until read.
  */
 data class RulesState(
     val myRules: MyRules? = null,
     val groups: List<NativeGroup> = emptyList(),
     val ruleSets: List<RuleSetStatus> = emptyList(),
+    val missingData: List<String> = emptyList(),
+    val dataSources: List<DataSource> = emptyList(),
+    val hits: RuleHitsView? = null,
+    val routeTest: RouteTestAnswer? = null,
     val routingWarnings: List<String> = emptyList(),
     val dns: DnsText? = null,
     val busy: Boolean = false,
@@ -37,6 +46,11 @@ sealed interface RulesEvent {
     data class Message(val text: String) : RulesEvent
 
     data class RuleSetsStarted(val count: Int) : RulesEvent
+
+    data object HitsCleared : RulesEvent
+
+    /** A rule test answered; the page shows it, nothing for the snackbar. */
+    data object Tested : RulesEvent
 }
 
 class RulesViewModel(private val core: Core) : ViewModel() {
@@ -70,14 +84,36 @@ class RulesViewModel(private val core: Core) : ViewModel() {
 
     fun saveDns(text: DnsText) = perform { message(core.saveCustomDns(text)) }
 
+    fun saveDataSource(name: String, url: String) = perform { message(core.saveDataSource(name, url.trim())) }
+
+    fun removeDataSource(name: String) = perform { message(core.removeDataSource(name)) }
+
+    fun clearRuleHits() = perform {
+        core.clearRuleHits()
+        RulesEvent.HitsCleared
+    }
+
+    /** Asks the running engine which rule decides such a connection; a refusal goes to the snackbar. */
+    fun testRoute(host: String, port: Int, network: String, address: String, process: String) = perform {
+        val answer = core.testRoute(host.trim(), port, network, address, process)
+        _state.update { it.copy(routeTest = answer) }
+        RulesEvent.Tested
+    }
+
     private fun message(result: OperationResult) = RulesEvent.Message(result.message)
 
     private suspend fun readTexts() {
         val rules = guard { core.myRules() }
         val dns = guard { core.customDns() }
         val warnings = guard { core.routingWarnings() }
+        val sources = guard { core.dataSources() }
         _state.update {
-            it.copy(myRules = rules ?: it.myRules, dns = dns ?: it.dns, routingWarnings = warnings ?: it.routingWarnings)
+            it.copy(
+                myRules = rules ?: it.myRules,
+                dns = dns ?: it.dns,
+                routingWarnings = warnings ?: it.routingWarnings,
+                dataSources = sources ?: it.dataSources,
+            )
         }
     }
 
@@ -85,8 +121,9 @@ class RulesViewModel(private val core: Core) : ViewModel() {
     private suspend fun refresh() {
         try {
             val groups = core.nativeGroups()
-            val ruleSets = core.ruleSets()
-            _state.update { it.copy(groups = groups, ruleSets = ruleSets) }
+            val sets = core.ruleSetsView()
+            val hits = core.ruleHits()
+            _state.update { it.copy(groups = groups, ruleSets = sets.ruleSets, missingData = sets.missing, hits = hits) }
         } catch (error: CoreException) {
             return
         }

@@ -108,6 +108,46 @@ final class LocalRulesTests: XCTestCase {
         XCTAssertEqual(library.routingForModes()?.rules, ["DOMAIN-SUFFIX,google.com,Proxy", "FINAL,Proxy"])
     }
 
+    func testDataListsReplaceTheSubscriptionsSetAndDownloadThroughTheProxy() throws {
+        let report = try NativeImportReport.decoded(from: Data(routedReport.utf8))
+        let library = NodeLibrary(report: report, subscriptionURL: nil, keeping: nil)
+        var rules = try LocalRules().saving(LocalRules.rule(from: "IP-ASN,AS13335,PROXY,no-resolve"))
+        rules = try rules.saving(dataSource: "AS13335", url: "https://lists.example/13335.txt")
+        rules = try rules.saving(dataSource: "geoip,us", url: "https://lists.example/us.txt")
+        XCTAssertEqual(rules.dataSources.map(\.name), ["asn-13335", "geoip-us"])
+        let routing = try XCTUnwrap(library.routingForModes(localRules: rules))
+        XCTAssertEqual(routing.rules.first, "IP-ASN,13335,Proxy,no-resolve")
+        XCTAssertEqual(routing.ruleSets?["asn-13335"]?.url, "https://lists.example/13335.txt")
+        XCTAssertEqual(routing.ruleSets?["asn-13335"]?.via, "Proxy")
+        XCTAssertEqual(routing.ruleSets?["geoip-us"]?.url, "https://lists.example/us.txt")
+
+        let replaced = try rules.saving(dataSource: "geoip-us", url: "https://lists.example/us-2.txt")
+        XCTAssertEqual(replaced.dataSources.count, 2)
+        XCTAssertEqual(replaced.removing(dataSource: "geoip-us").dataSources.map(\.name), ["asn-13335"])
+        XCTAssertThrowsError(try rules.saving(dataSource: "geoip-us", url: "http://lists.example/us.txt"))
+        XCTAssertThrowsError(try rules.saving(dataSource: "usa", url: "https://lists.example/us.txt"))
+
+        // Saved and read back; values from before data lists load with none.
+        let decoded = try JSONDecoder().decode(LocalRules.self, from: rules.profileValue())
+        XCTAssertEqual(decoded.dataSources, rules.dataSources)
+        XCTAssertEqual(LocalRules.fromProfileValue(Data(#"{"rules":[]}"#.utf8)).dataSources, [])
+    }
+
+    func testDataListNamesComeFromWhatTheUserTyped() {
+        for text in ["us", "US", "GEOIP,US", "geoip-us", " GeoIP, us "] {
+            XCTAssertEqual(LocalRules.DataSource.name(from: text), "geoip-us", text)
+        }
+        for text in ["13335", "AS13335", "IP-ASN,13335", "ip-asn,AS13335", "asn-13335"] {
+            XCTAssertEqual(LocalRules.DataSource.name(from: text), "asn-13335", text)
+        }
+        for text in ["", "usa", "geoip-1a", "0", "AS013", "4294967296", "geosite-cn"] {
+            XCTAssertNil(LocalRules.DataSource.name(from: text), text)
+        }
+        XCTAssertEqual(LocalRules.DataSource.rule(for: "asn-13335"), "IP-ASN,13335")
+        XCTAssertEqual(LocalRules.DataSource.rule(for: "geoip-us"), "GEOIP,US")
+        XCTAssertThrowsError(try LocalRules.rule(from: "IP-ASN,AS0,PROXY"))
+    }
+
     func testLinesTheEngineWouldRefuseAreNotKept() {
         let bad = [
             "DOMAIN-SUFFIX,,DIRECT",

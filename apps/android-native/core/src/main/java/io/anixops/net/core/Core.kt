@@ -193,8 +193,50 @@ class Core(
     )
 
     /** The running engine's rule sets; empty while it does not run. */
-    suspend fun ruleSets(): List<RuleSetStatus> =
-        orNull { decode(RuleSetsAnswer.serializer(), control("rule_sets"), "rule_sets").ruleSets }.orEmpty()
+    suspend fun ruleSets(): List<RuleSetStatus> = ruleSetsView().ruleSets
+
+    /** The running engine's rule sets and the GEOIP / IP-ASN data its rules lack; empty while it does not run. */
+    suspend fun ruleSetsView(): RuleSetsView =
+        orNull { decode(RuleSetsView.serializer(), control("rule_sets"), "rule_sets") } ?: RuleSetsView()
+
+    /** How often each rule decided a connection since the rules were loaded; null while the engine does not run. */
+    suspend fun ruleHits(): RuleHitsView? = orNull { decode(RuleHitsView.serializer(), control("rule_hits"), "rule_hits") }
+
+    suspend fun clearRuleHits(): RuleHitsView =
+        decode(RuleHitsView.serializer(), control("clear_rule_hits"), "clear_rule_hits")
+
+    /**
+     * Which rule would decide a connection to [host] and where it goes, without opening or counting one. [address]
+     * is the IP the domain resolves to, for rules that need it.
+     */
+    suspend fun testRoute(host: String, port: Int, network: String, address: String?, process: String?): RouteTestAnswer =
+        decode(
+            RouteTestAnswer.serializer(),
+            controlRequest(
+                buildJsonObject {
+                    put("cmd", "test_route")
+                    put("host", host)
+                    put("port", port)
+                    put("network", network)
+                    address?.takeIf { it.isNotBlank() }?.let { put("address", it.trim()) }
+                    process?.takeIf { it.isNotBlank() }?.let { put("process", it.trim()) }
+                },
+            ),
+            "test_route",
+        )
+
+    /** The GEOIP and IP-ASN data lists added by URL. */
+    suspend fun dataSources(): List<DataSource> = call("data_sources", ListSerializer(DataSource.serializer()))
+
+    /** Points [name] (`geoip-us`, `asn-13335`) at an https:// list; a running engine restarts. */
+    suspend fun saveDataSource(name: String, url: String): OperationResult = call(
+        "save_data_source",
+        OperationResult.serializer(),
+        args("name" to JsonPrimitive(name), "url" to JsonPrimitive(url)),
+    )
+
+    suspend fun removeDataSource(name: String): OperationResult =
+        call("remove_data_source", OperationResult.serializer(), args("name" to JsonPrimitive(name)))
 
     /** Starts downloading the remote rule sets again; answers how many. */
     suspend fun updateRuleSets(): Int = decode(ScheduledAnswer.serializer(), control("update_rule_sets"), "update_rule_sets").scheduled
