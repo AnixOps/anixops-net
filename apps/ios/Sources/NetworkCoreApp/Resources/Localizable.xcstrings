@@ -13910,6 +13910,454 @@
           }
         }
       }
+    },
+    "HTTP 状态异常": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unexpected HTTP status"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTP 狀態異常"
+          }
+        }
+      }
+    },
+    "TLS 握手失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TLS handshake failed"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TLS 握手失敗"
+          }
+        }
+      }
+    },
+    "下载量": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloaded"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載量"
+          }
+        }
+      }
+    },
+    "不是 HTTP 应答": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not an HTTP answer"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不是 HTTP 應答"
+          }
+        }
+      }
+    },
+    "丢包": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loss"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "丟包"
+          }
+        }
+      }
+    },
+    "体检没有完成": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The checkup did not finish"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "體檢沒有完成"
+          }
+        }
+      }
+    },
+    "再测一次": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run again"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再測一次"
+          }
+        }
+      }
+    },
+    "后续握手": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Later handshakes"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "後續握手"
+          }
+        }
+      }
+    },
+    "失败原因": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reason"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "失敗原因"
+          }
+        }
+      }
+    },
+    "峰值速度": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Peak speed"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "峰值速度"
+          }
+        }
+      }
+    },
+    "平均速度": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Average speed"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "平均速度"
+          }
+        }
+      }
+    },
+    "延迟": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Latency"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "延遲"
+          }
+        }
+      }
+    },
+    "延迟增加": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Added latency"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "延遲增加"
+          }
+        }
+      }
+    },
+    "开始体检": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start checkup"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開始體檢"
+          }
+        }
+      }
+    },
+    "抖动": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jitter"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "抖動"
+          }
+        }
+      }
+    },
+    "握手延迟": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Handshake"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "握手延遲"
+          }
+        }
+      }
+    },
+    "正在体检…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在體檢…"
+          }
+        }
+      }
+    },
+    "测下载速度": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test download speed"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "測下載速度"
+          }
+        }
+      }
+    },
+    "空闲延迟": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Idle latency"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "空閒延遲"
+          }
+        }
+      }
+    },
+    "经该节点访问 1.1.1.1 和 www.gstatic.com 各 5 次，测握手、请求延迟、抖动和丢包。只在你点开始时运行，不经过隧道。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reaches 1.1.1.1 and www.gstatic.com through this node 5 times each to measure handshake, request latency, jitter and loss. Runs only when you start it, outside the tunnel."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "經該節點訪問 1.1.1.1 和 www.gstatic.com 各 5 次，測握手、請求延遲、抖動和丟包。只在你點開始時運行，不經過隧道。"
+          }
+        }
+      }
+    },
+    "经该节点访问 1.1.1.1 和 www.gstatic.com 测延迟，并从 speed.cloudflare.com 下载约 8 秒测速度（最多 200 MB，会消耗节点流量）。只在你点开始时运行，不经过隧道。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Measures latency to 1.1.1.1 and www.gstatic.com through this node, then downloads from speed.cloudflare.com for about 8 seconds (at most 200 MB, counted against the node's traffic). Runs only when you start it, outside the tunnel."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "經該節點訪問 1.1.1.1 和 www.gstatic.com 測延遲，並從 speed.cloudflare.com 下載約 8 秒測速度（最多 200 MB，會消耗節點流量）。只在你點開始時運行，不經過隧道。"
+          }
+        }
+      }
+    },
+    "节点体检": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Node checkup"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "節點體檢"
+          }
+        }
+      }
+    },
+    "节点体检…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Node Checkup…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "節點體檢…"
+          }
+        }
+      }
+    },
+    "请求延迟": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Request latency"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請求延遲"
+          }
+        }
+      }
+    },
+    "负载下延迟": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loaded latency"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "負載下延遲"
+          }
+        }
+      }
+    },
+    "达到 200 MB 上限，提前结束。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stopped early at the 200 MB limit."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "達到 200 MB 上限，提前結束。"
+          }
+        }
+      }
+    },
+    "这种节点不支持体检": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This kind of node can't be checked"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這種節點不支持體檢"
+          }
+        }
+      }
+    },
+    "首次握手": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "First handshake"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "首次握手"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

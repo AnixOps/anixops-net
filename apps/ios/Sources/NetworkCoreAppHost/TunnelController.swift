@@ -751,6 +751,24 @@ final class TunnelController {
         }
     }
 
+    /// 节点体检 of one node of a group through its own protocol (`NodeCheckupFFI`); runs only when the user starts it.
+    func checkup(
+        _ nodeID: String,
+        inGroup groupID: String,
+        throughput: Bool
+    ) async -> Result<NodeCheckupReport, NodeCheckupFailure> {
+        guard let group = subscriptions.groups.first(where: { $0.id == groupID }),
+              let node = group.library.nodes.first(where: { $0.id == nodeID })
+        else {
+            return .failure(.failed)
+        }
+        return await NodeCheckupFFI.runOffPool(
+            node.standalone(among: group.library.nodes),
+            profileID: Self.profileID,
+            throughput: throughput
+        )
+    }
+
     /// Downloads a subscription into the group `groupID`, or a new group when nil. `activate` makes the group the
     /// tunnel's; a refresh of the active group saves the profile only when its node or rules switch changed.
     private func updateSubscription(_ url: URL, groupID: String?, activate: Bool) async -> Bool {

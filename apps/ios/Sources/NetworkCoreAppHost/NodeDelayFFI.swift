@@ -61,7 +61,8 @@ enum NodeDelayFFI {
         }
     }
 
-    private static func envelope(for node: NativeImportReport.Node, profileID: String) -> Data? {
+    /// The engine envelope of one node, as delay tests and checkups send it.
+    static func envelope(for node: NativeImportReport.Node, profileID: String) -> Data? {
         try? JSONEncoder().encode(
             Envelope(schemaVersion: EmbeddedRuntimeConfig.schemaVersion, profileID: profileID, outbound: node.outbound)
         )
