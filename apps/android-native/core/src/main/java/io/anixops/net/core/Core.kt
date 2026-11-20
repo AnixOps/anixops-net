@@ -121,6 +121,23 @@ class Core(
 
     suspend fun selectFastestNode(): OperationResult = call("select_fastest_node", OperationResult.serializer())
 
+    /**
+     * Node checkup (节点体检) of one node: latency rounds and, with [throughput], a download capped at
+     * [CHECKUP_MAX_BYTES]. Answers when it is over, which takes seconds. Only the user starts it.
+     */
+    suspend fun nodeCheckup(nodeId: String, throughput: Boolean): NodeCheckup = call(
+        "node_checkup",
+        NodeCheckup.serializer(),
+        buildJsonObject {
+            put("nodeId", nodeId)
+            if (throughput) {
+                putJsonObject("options") {
+                    putJsonObject("throughput") { put("max_bytes", CHECKUP_MAX_BYTES) }
+                }
+            }
+        },
+    )
+
     suspend fun shareLink(nodeId: String): String =
         call("node_share_link", String.serializer(), args("nodeId" to JsonPrimitive(nodeId)))
 
@@ -712,6 +729,9 @@ class Core(
     companion object {
         /** The delay test target every client uses. */
         const val DELAY_URL = "https://www.gstatic.com/generate_204"
+
+        /** A checkup's download stops at this many bytes, so it spends little of a metered node. */
+        const val CHECKUP_MAX_BYTES = 200_000_000L
 
         /** Most rows one read of the request list asks for, as on the desktop client. */
         const val REQUEST_PAGE = 2000

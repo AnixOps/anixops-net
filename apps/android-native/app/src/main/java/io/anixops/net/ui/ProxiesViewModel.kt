@@ -5,10 +5,12 @@ import androidx.lifecycle.viewModelScope
 import io.anixops.net.core.Core
 import io.anixops.net.core.CoreException
 import io.anixops.net.core.NodeDelay
+import io.anixops.net.core.NodeCheckup
 import io.anixops.net.core.NodeForm
 import io.anixops.net.core.OperationResult
 import io.anixops.net.core.ProxiesPage
 import io.anixops.net.core.SubscriptionRow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -29,6 +31,17 @@ data class ProxiesState(
     val loaded: Boolean = false,
     /** A link an `anixops://import` link brought, for the import form; null once the form took it. */
     val pendingImport: String? = null,
+    /** The node checkup whose dialog is open; null when none is. */
+    val checkup: CheckupState? = null,
+)
+
+/** The checkup of one node: whether it runs, what it found and why it did not work. */
+data class CheckupState(
+    val nodeId: String,
+    val label: String,
+    val running: Boolean = false,
+    val result: NodeCheckup? = null,
+    val problem: String? = null,
 )
 
 /** A message for the snackbar, or a share link to put on the clipboard. */
@@ -46,6 +59,8 @@ class ProxiesViewModel(private val core: Core) : ViewModel() {
     val events: Flow<ProxiesEvent> = _events.receiveAsFlow()
 
     private var delays: Map<String, NodeDelay> = emptyMap()
+
+    private var checking: Job? = null
 
     /** Reads the page every [POLL_MILLIS] until cancelled (subscriptions update in the background). */
     suspend fun poll() {
@@ -88,6 +103,41 @@ class ProxiesViewModel(private val core: Core) : ViewModel() {
             _events.send(ProxiesEvent.ShareLink(label, core.shareLink(nodeId)))
         } catch (error: CoreException) {
             _events.send(ProxiesEvent.Message(error.message.orEmpty()))
+        }
+    }
+
+    /** Opens the checkup dialog of a node; nothing runs until [runCheckup]. */
+    fun openCheckup(nodeId: String, label: String) {
+        closeCheckup()
+        _state.update { it.copy(checkup = CheckupState(nodeId, label)) }
+    }
+
+    /** Closes the checkup dialog; the answer of a checkup still running is dropped. */
+    fun closeCheckup() {
+        checking?.cancel()
+        checking = null
+        _state.update { it.copy(checkup = null) }
+    }
+
+    /** Runs the checkup of the open dialog's node; [throughput] adds the download. */
+    fun runCheckup(throughput: Boolean) {
+        val open = _state.value.checkup ?: return
+        if (open.running) return
+        _state.update { it.copy(checkup = open.copy(running = true, problem = null)) }
+        checking = viewModelScope.launch {
+            val (result, problem) = try {
+                core.nodeCheckup(open.nodeId, throughput) to null
+            } catch (error: CoreException) {
+                null to error.message.orEmpty()
+            }
+            _state.update { state ->
+                val now = state.checkup
+                if (now?.nodeId != open.nodeId) {
+                    state
+                } else {
+                    state.copy(checkup = now.copy(running = false, result = result, problem = problem))
+                }
+            }
         }
     }
 

@@ -607,4 +607,34 @@
     <string name="rules_process_not_effective">Android 的 VPN 分不出连接来自哪个 App，PROCESS-NAME 规则在这里不生效。</string>
     <string name="rules_device_not_effective">DEVICE-NAME 规则在 Android 上不生效：Android 客户端不给局域网设备起名。</string>
     <string name="rules_radio_not_effective">CELLULAR-RADIO 规则在 Android 上不生效：Android 客户端读不到蜂窝网络制式。</string>
+    <!-- 节点体检: the same wording as the desktop windows (crates/client-strings/catalogue.json). -->
+    <string name="proxies_checkup">节点体检</string>
+    <string name="checkup_again">再测一次</string>
+    <string name="checkup_capped">达到 200 MB 上限，提前结束。</string>
+    <string name="checkup_failure_connect_failed">连接失败</string>
+    <string name="checkup_failure_http_status">HTTP 状态异常</string>
+    <string name="checkup_failure_not_http">不是 HTTP 应答</string>
+    <string name="checkup_failure_timeout">超时</string>
+    <string name="checkup_failure_tls_failed">TLS 握手失败</string>
+    <string name="checkup_note">经该节点访问 1.1.1.1 和 www.gstatic.com 各 5 次，测握手、请求延迟、抖动和丢包。只在你点开始时运行。</string>
+    <string name="checkup_note_throughput">另外从 speed.cloudflare.com 下载约 8 秒测速度，最多 200 MB，会消耗节点流量。</string>
+    <string name="checkup_row_bloat">延迟增加</string>
+    <string name="checkup_row_bytes">下载量</string>
+    <string name="checkup_row_cold_handshake">首次握手</string>
+    <string name="checkup_row_failure">失败原因</string>
+    <string name="checkup_row_handshake">握手延迟</string>
+    <string name="checkup_row_idle">空闲延迟</string>
+    <string name="checkup_row_jitter">抖动</string>
+    <string name="checkup_row_loaded">负载下延迟</string>
+    <string name="checkup_row_loaded_loss">负载下丢包</string>
+    <string name="checkup_row_loss">丢包</string>
+    <string name="checkup_row_mbps">平均速度</string>
+    <string name="checkup_row_peak_mbps">峰值速度</string>
+    <string name="checkup_row_request">请求延迟</string>
+    <string name="checkup_row_warm_handshake">后续握手</string>
+    <string name="checkup_running">正在体检…</string>
+    <string name="checkup_section_download">下载</string>
+    <string name="checkup_section_latency">延迟</string>
+    <string name="checkup_start">开始体检</string>
+    <string name="checkup_throughput">测下载速度</string>
 </resources>

@@ -3,6 +3,7 @@ package io.anixops.net.core
 import java.io.File
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import org.junit.Assert.assertEquals
@@ -92,6 +93,33 @@ class CoreTest {
         val transport = Recording("""{"ok":{"message":"imported"}}""")
         Core(transport, StandardTestDispatcher(testScheduler)).importMitmPluginText("#!name = x", "x.plugin")
         assertEquals("import_mitm_plugin_text" to """{"text":"#!name = x","source":"x.plugin"}""", transport.calls.single())
+    }
+
+    @Test
+    fun aCheckupAsksForTheDownloadOnlyWhenWantedAndReadsItsRows() = runTest {
+        val transport = Recording(
+            """{"ok":{"name":"Tokyo","report":{"latency":{}},"sections":[{"id":"latency","capped":false,"rows":[""" +
+                """{"id":"handshake","kind":"ms","value":42.4,"warn":false},""" +
+                """{"id":"loss","kind":"pct","value":20.0,"warn":true},""" +
+                """{"id":"failure","kind":"failure","value":"timeout","warn":true},""" +
+                """{"id":"request","kind":"ms","value":null,"warn":false}]}]}}""",
+        )
+        val core = Core(transport, StandardTestDispatcher(testScheduler))
+        val checkup = core.nodeCheckup("n1", throughput = false)
+        core.nodeCheckup("n1", throughput = true)
+        assertEquals(
+            listOf(
+                "node_checkup" to """{"nodeId":"n1"}""",
+                "node_checkup" to """{"nodeId":"n1","options":{"throughput":{"max_bytes":200000000}}}""",
+            ),
+            transport.calls,
+        )
+        assertEquals("Tokyo", checkup.name)
+        val rows = checkup.sections.single().rows
+        assertEquals(listOf("handshake", "loss", "failure", "request"), rows.map { it.id })
+        assertTrue(rows[1].warn)
+        assertEquals(JsonPrimitive("timeout"), rows[2].value)
+        assertEquals(JsonNull, rows[3].value ?: JsonNull)
     }
 
     @Test
