@@ -143,7 +143,7 @@
         if (rows.length === 0) return { capture: null };
         return { capture: { id: request.id, network: "tcp", host: rows[0].host, destination: "203.0.113.20:443", started_at_ms: rows[0].started_at_ms, ended_at_ms: null, decrypted: true, upload: { seen: 4000, captured: 4000, truncated: false }, download: { seen: 90000, captured: 90000, truncated: false }, chunks: [], http: rows.map(exchange) } };
       }
-      case "rule_sets": return { rule_sets: [{ name: "geosite-cn", source: "remote", entries: 71234, updated_at_ms: start - 3600e3 }, { name: "gfwlist", source: "remote", entries: 6012, updated_at_ms: start - 86400e3, skipped: { SCRIPT: 3 } }], missing: ["asn-13335"] };
+      case "rule_sets": return { rule_sets: [{ name: "geosite-cn", source: "remote", entries: 71234, updated_at_ms: start - 3600e3 }, { name: "geosite-google", source: "remote", entries: 6012, updated_at_ms: start - 86400e3, skipped: { SCRIPT: 3 } }], missing: ["asn-13335"] };
       case "rule_hits": case "clear_rule_hits": return { generation: 1, rules: [
         { rule: "DOMAIN-SUFFIX,example.com", target: "节点选择", hits: 412, last_hit_at_ms: start - 2e3 },
         { rule: "GEOIP,CN", target: "DIRECT", hits: 1288, last_hit_at_ms: start - 1e3 },

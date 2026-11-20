@@ -237,20 +237,20 @@ mod tests {
             "subscription-userinfo" => Some("upload=1; download=2; total=3".into()),
             "profile-update-interval" => Some("12".into()),
             "content-disposition" => {
-                Some("attachment; filename*=UTF-8''%E6%9C%BA%E5%9C%BA.yaml".into())
+                Some("attachment; filename*=UTF-8''%E6%9C%8D%E5%8A%A1%E5%95%86.yaml".into())
             }
             _ => None,
         });
         assert_eq!(meta.user_info.and_then(|info| info.total), Some(3));
         assert_eq!(meta.update_interval_hours, Some(12));
-        assert_eq!(meta.title.as_deref(), Some("机场"));
+        assert_eq!(meta.title.as_deref(), Some("服务商"));
 
         let titled = ResponseMeta::from_headers(|name| match name {
-            "profile-title" => Some("base64:5py65Zy6Qg==".into()),
+            "profile-title" => Some("base64:5pyN5Yqh5ZWGQg==".into()),
             "content-disposition" => Some("attachment; filename=\"x.txt\"".into()),
             _ => None,
         });
-        assert_eq!(titled.title.as_deref(), Some("机场B"));
+        assert_eq!(titled.title.as_deref(), Some("服务商B"));
         let plain = ResponseMeta::from_headers(|name| {
             (name == "content-disposition").then(|| "attachment; filename=\"Sub.txt\"".to_string())
         });

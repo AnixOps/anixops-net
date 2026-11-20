@@ -14,7 +14,7 @@
 
 - 每 App VPN 的「哪些 App 走这个代理」（`NEAppRule` / app-to-VPN 映射）来自配置描述文件里的 VPN 载荷，按 Apple 的设计由
   MDM 下发；iOS 上明确要求设备被管理，开发期只能用 `NETestAppMapping` 测试，仍要一份带 `VPNUUID` 的描述文件。
-- 我们的用户是机场用户的个人设备，没有 MDM。让用户手装描述文件既不是正常发布路径，也给不了「在 App 里勾选 App」的体验。
+- 我们的用户用的是个人设备，没有 MDM。让用户手装描述文件既不是正常发布路径，也给不了「在 App 里勾选 App」的体验。
 - 结论：不做。按 App 分流在 macOS 上改用下面的透明代理实现。
 
 ## 2. macOS 按 App 分流：可行，走 NETransparentProxyProvider

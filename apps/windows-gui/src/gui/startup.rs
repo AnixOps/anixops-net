@@ -9,7 +9,7 @@ use std::path::PathBuf;
 const DESKTOP_STATE_FILE: &str = "desktop-state.json";
 
 /// How traffic is split. Public builds ship no preset list modes (docs/no-presets.md): a state saved by an
-/// earlier version with 绕过大陆, GFW 列表 or 回国 loads as [`DesktopRoutingMode::Rule`].
+/// earlier version with one of the removed preset list modes loads as [`DesktopRoutingMode::Rule`].
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", from = "String")]
 pub enum DesktopRoutingMode {
@@ -221,7 +221,8 @@ mod tests {
 
     #[test]
     fn preset_list_modes_saved_by_earlier_versions_load_as_rule_mode() {
-        for mode in ["bypass_china", "gfw_list", "return_china", "rule"] {
+        let saved = ["bypass_china", "gfw_list", "return_china", "rule"]; // neutral-terms: allow (values saved by earlier versions)
+        for mode in saved {
             let state: DesktopState = serde_json::from_str(&format!(
                 r#"{{"routing_mode":"{mode}","bilibili_web_ad_block_enabled":true}}"#
             ))

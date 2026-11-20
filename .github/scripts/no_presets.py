@@ -23,7 +23,7 @@ import sys
 from pathlib import PurePosixPath
 
 # Public list URLs that back the GEOSITE,cn and GEOIP,CN categories. They are used only when a rule the user imported
-# or wrote names that category (decided 2026-11-15: not a preset), never on their own. No GFW list (user, 2026-11-15).
+# or wrote names that category (decided 2026-11-15: not a preset), never on their own. No other list (user, 2026-11-15).
 ALLOWED_LIST_URL_FILES = {
     "apps/ios/Sources/NetworkCoreBridge/RuleSetCatalog.swift",
     "crates/desktop-dns/src/catalog.rs",
@@ -35,12 +35,12 @@ LIST_URL = re.compile(r"raw\.githubusercontent\.com/[A-Za-z0-9_.-]+/")
 BANNED = [
     (re.compile(r"\bOpenRuleSets\b"), "the recommended rule-list catalog"),
     (re.compile(r"blackmatrix7|ios_rule_script|Loyalsoldier/surge-rules"), "a recommended rule-list source"),
-    (re.compile(r"\b(BypassChina|GfwList|ReturnChina)\b|refresh_routing_rules|refreshRoutingRules"),
+    (re.compile(r"\b(BypassChina|GfwList|ReturnChina)\b|refresh_routing_rules|refreshRoutingRules"),  # neutral-terms: allow (removed names it guards against)
      "a preset routing mode"),
     (re.compile(r"builtin_(ad_block|bilibili)|BUILTIN_(AD_BLOCK|BILIBILI)|bilibiliWebAdBlock|native_mitm_policy_source"),
      "a built-in MITM ad-block plugin"),
     (re.compile(r"DnsSettings\.split\b|dns_split|value: \"split\""), "the DNS split preset"),
-    (re.compile(r"geosite-gfw|release/gfw\.txt"), "a built-in GFW list (only the cn lists are kept)"),
+    (re.compile(r"geosite-gfw|release/gfw\.txt"), "a built-in list other than the cn lists"),  # neutral-terms: allow (removed names it guards against)
 ]
 
 PACKAGED_DIRS = [

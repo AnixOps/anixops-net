@@ -22,7 +22,7 @@ App Review manual confirmation marker、TestFlight upload job、App Store upload
 - 固定未来 `PrivacyInfo.xcprivacy` 文件位置、owner、主 App/Extension 分工和 source ownership。
 - 定义 `NSPrivacyCollectedDataTypes`、`NSPrivacyCollectedDataType`、`NSPrivacyCollectedDataTypeLinked`、
   `NSPrivacyCollectedDataTypeTracking` 和 `NSPrivacyCollectedDataTypePurposes` 的数据来源规则。
-- 定义 `NSPrivacyAccessedAPITypes`、`NSPrivacyAccessedAPITypeReasons` 和 Required Reason API 审查入口。
+- 定义 `NSPrivacyAccessedAPITypes`、`NSPrivacyAccessedAPITypeReasons` 和 Required Reason API 核查入口。
 - 约束 `NSPrivacyTracking`、`NSPrivacyTrackingDomains`、Data Used to Track You、Data Linked to You 和
   Data Not Linked to You 的默认策略。
 - 定义 App Privacy answer source、third-party SDK privacy manifest、SDK signature 和 GitHub Actions `macos-26`

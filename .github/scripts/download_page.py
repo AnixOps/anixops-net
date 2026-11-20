@@ -128,10 +128,10 @@ def page(release, found, sums, repo):
 {''.join(cards)}
 </div>
 
-<h2>ANX 版（机场用户）</h2>
+<h2>ANX 版（服务商提供）</h2>
 <div class="grid">
 <div class="card"><div class="p">Windows / Linux / macOS / 安卓</div>
-<div class="n">包含 ANX 私有协议，只在机场面板里提供。登录面板后在「下载客户端」页面下载。</div></div>
+<div class="n">包含 ANX 私有协议，只在服务商面板里提供。登录面板后在「下载客户端」页面下载。</div></div>
 <div class="card"><div class="p">iOS / iPadOS</div>
 <div class="n">只有 ANX 版，通过 TestFlight 分发。请在面板里获取 TestFlight 邀请。</div></div>
 </div>

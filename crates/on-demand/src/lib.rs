@@ -265,7 +265,7 @@ mod tests {
             Action::Ignore
         );
         assert_eq!(
-            settings.action(&Network::Wifi(Some("Airport".into()))),
+            settings.action(&Network::Wifi(Some("Library".into()))),
             Action::Connect
         );
         assert_eq!(settings.action(&Network::Wifi(None)), Action::Connect);

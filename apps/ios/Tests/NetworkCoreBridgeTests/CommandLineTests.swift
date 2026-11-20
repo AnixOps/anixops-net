@@ -14,12 +14,12 @@ final class CommandLineTests: XCTestCase {
         XCTAssertEqual(try parse(["mode"]).action, .request(ControlRequest(command: .mode)))
         XCTAssertEqual(try parse(["mode", "Rule"]).action, .request(ControlRequest(command: .mode, mode: .rule)))
         XCTAssertEqual(
-            try parse(["nodes", "--group", "机场"]).action,
-            .request(ControlRequest(command: .nodes, group: "机场"))
+            try parse(["nodes", "--group", "服务商"]).action,
+            .request(ControlRequest(command: .nodes, group: "服务商"))
         )
         XCTAssertEqual(
-            try parse(["select", "香港 01", "-g", "机场"]).action,
-            .request(ControlRequest(command: .select, group: "机场", node: "香港 01"))
+            try parse(["select", "香港 01", "-g", "服务商"]).action,
+            .request(ControlRequest(command: .select, group: "服务商", node: "香港 01"))
         )
         XCTAssertEqual(try parse(["test"]).action, .request(ControlRequest(command: .test)))
         XCTAssertEqual(try parse(["version"]).action, .version)
@@ -104,7 +104,7 @@ final class CommandLineTests: XCTestCase {
         let status = ControlStatus(
             connection: "connected",
             node: "香港 01",
-            group: "机场",
+            group: "服务商",
             mode: .rule,
             connectedSince: nil,
             appVersion: "0.3.4"
@@ -114,12 +114,12 @@ final class CommandLineTests: XCTestCase {
         XCTAssertTrue(text.contains("节点: 香港 01"))
         XCTAssertTrue(text.contains("模式: 规则 (rule)"))
 
-        let groups = [ControlGroup(id: "g1", name: "机场", active: true, nodes: [
+        let groups = [ControlGroup(id: "g1", name: "服务商", active: true, nodes: [
             ControlNode(id: "a", name: "香港 01", protocol: "trojan", selected: true, latencyMs: 48),
             ControlNode(id: "b", name: "日本 02", protocol: "vless", selected: false, latency: "timeout"),
         ])]
         let list = CommandLineOutput.render(ControlResponse(groups: groups), for: .test)
-        XCTAssertEqual(list, "[机场] 当前使用\n  * 香港 01  trojan  48 ms\n    日本 02  vless  超时")
+        XCTAssertEqual(list, "[服务商] 当前使用\n  * 香港 01  trojan  48 ms\n    日本 02  vless  超时")
 
         XCTAssertEqual(
             CommandLineOutput.render(.failure(.notFound, "没有叫 x 的节点"), for: .select),

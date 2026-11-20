@@ -51,6 +51,11 @@ jobs:
       - name: No preset scripts or routing rules
         run: python3 .github/scripts/no_presets.py
 
+      # Neutral terminology (AnixOps-design guidelines/terminology.md): none of the replaced terms in any
+      # tracked file. The script and word list are byte-identical copies of the AnixOps-design baseline.
+      - name: Neutral terminology
+        run: python3 .github/scripts/neutral_terms.py
+
       # Every address the client sources name is described in docs/network-behavior.md: a new update server,
       # statistics endpoint or lookup service fails here until it is documented.
       - name: Outbound addresses are documented

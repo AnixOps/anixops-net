@@ -93,7 +93,7 @@ App Store Connect 的 App Privacy disclosure 必须与代码、Privacy Manifest�
 - diagnostics：GitHub Actions artifact、App Review attachment 和 support bundle 只能包含 safe diagnostic code、
   redacted state 和非 secret summary。
 
-不能确定是否采集时必须按更保守的方式披露或阻止发布；不得为了通过审核而用不完整 disclosure 替代真实数据流审查。
+不能确定是否采集时必须按更保守的方式披露或阻止发布；不得为了通过审核而用不完整 disclosure 替代真实数据流核查。
 
 ## Privacy Policy Contract
 

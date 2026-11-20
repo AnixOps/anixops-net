@@ -1,7 +1,7 @@
 import Foundation
 
 /// The public lists behind the mainland China `GEOSITE` and `GEOIP` categories, so a subscription's or the user's
-/// `GEOSITE,cn` and `GEOIP,CN` rules match without a rule set of their own. Only these two: no GFW or other list is
+/// `GEOSITE,cn` and `GEOIP,CN` rules match without a rule set of their own. Only these two: no other list is
 /// built in (docs/no-presets.md). The engine downloads them itself, directly, once a day, and only when a rule names
 /// them; a set the subscription defines under the same name is used instead.
 public enum RuleSetCatalog {

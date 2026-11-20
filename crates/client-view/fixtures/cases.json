@@ -57,11 +57,11 @@
  {
   "command": "view.parse_app_link",
   "args": {
-   "link": "anixops://mode?MODE=gfw_list"
+   "link": "anixops://mode?MODE=smart"
   },
   "answer": {
    "error": "unknown_mode",
-   "detail": "gfw_list"
+   "detail": "smart"
   }
  },
  {

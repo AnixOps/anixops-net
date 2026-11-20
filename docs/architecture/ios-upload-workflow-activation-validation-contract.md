@@ -163,7 +163,7 @@ separate manual approval explicitly enables submission.
 - 启用前不要求：Beta App Review、App Review Notes、demo account、review attachment、VPN compliance 材料和 App Review submission。进行外部测试或上架前，这些必须补齐。
 - 隐私政策 URL 与 App Privacy 问卷：以 App Store Connect 对内部测试构建的实际要求为准。在确认不要求之前，视为必需。
 - Bundle ID 与 Team ID：只能存放在 GitHub Variables 或 environment secret 中。仓库文件、合同与 manual log 都不记录具体值。
-- App Store Connect API key：个人账号的 Individual API Key 不能使用 Provisioning endpoints。上传 job 使用手动描述文件，不依赖自动签名。如果以后需要 Provisioning endpoints，必须改用团队 key 并重新审查本节。
+- App Store Connect API key：个人账号的 Individual API Key 不能使用 Provisioning endpoints。上传 job 使用手动描述文件，不依赖自动签名。如果以后需要 Provisioning endpoints，必须改用团队 key 并重新评审本节。
 - 启用仍需独立提交：真实 upload job 和 `ios-upload-workflow-status` 从 `pending` 切换为 `enabled`，都必须在各自的独立提交中完成。
 
 ## Internal TestFlight Workflow

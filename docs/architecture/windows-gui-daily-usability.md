@@ -84,7 +84,7 @@ its current-user snapshot.
 | Node list / filter | Active | Imported nodes from `embedded/nodes.json`, filtered locally in the React view. |
 | Switch node | Active | Rewrites the envelope for the chosen node (or the main policy group's choice in a routed profile) and restarts a connected engine. |
 | Test delay / fastest node | Active | In-process URL requests through each node's own outbound (5-second timeout, 16 at a time); the opt-in 30-minute monitor picks the fastest node. |
-| Routing mode | Active | Bypass China, GFW list, return to China, direct, or the subscription's own rules; public rule lists are cached locally. |
+| Routing mode | Active | Rule (the subscription's own rules and the user's rules) or direct; public builds ship no preset list modes ([no-presets.md](../no-presets.md)). |
 | Policy groups | Active | Lists the subscription's select/url-test/fallback groups; select groups can be switched. url-test and fallback groups run background health checks in the engine. |
 | DNS | Informational | The embedded engine resolves domains that IP rules need with the system resolver; connections through a node have the node server resolve the domain. |
 | Import profile / Update saved URL | Active | Explicit input fetch followed by the embedded import path. Fetch or parse failure leaves the current managed config untouched. |
