@@ -6,7 +6,7 @@
     Style="{StaticResource DefaultContentDialogStyle}">
 
     <!-- One node: its name, server and port, which can be changed for a node of the subscription in use, the
-         button that removes it, and its share link with a QR code. The removal is asked about in this same
+         button that removes it, the node checkup, and its share link with a QR code. The removal is asked about in this same
          dialog, in place of the node (Windows shows one dialog at a time). What stands here is decided in
          AnixOps.Net.Presentation.Node; this draws it. -->
     <Grid Width="440">
@@ -82,6 +82,50 @@
                         Click="OnSave"
                         Style="{StaticResource AccentButtonStyle}" />
                 </StackPanel>
+
+                <!-- The node checkup: started here only, its results under the button. -->
+                <TextBlock
+                    x:Name="CheckupHeading"
+                    Margin="0,8,0,0"
+                    AutomationProperties.HeadingLevel="Level2"
+                    Style="{StaticResource BodyStrongTextBlockStyle}" />
+                <CheckBox
+                    x:Name="ThroughputBox"
+                    AutomationProperties.AutomationId="Node.Checkup.Throughput"
+                    Click="OnThroughput" />
+                <TextBlock
+                    x:Name="CheckupNote"
+                    AutomationProperties.AutomationId="Node.Checkup.Note"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button
+                        x:Name="CheckupButton"
+                        MinWidth="96"
+                        AutomationProperties.AutomationId="Node.Checkup"
+                        Click="OnCheckup" />
+                    <ProgressRing
+                        x:Name="CheckupRing"
+                        Width="20"
+                        Height="20"
+                        IsActive="False"
+                        Visibility="Collapsed" />
+                </StackPanel>
+                <TextBlock
+                    x:Name="CheckupProblem"
+                    AutomationProperties.AutomationId="Node.Checkup.Problem"
+                    AutomationProperties.LiveSetting="Polite"
+                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                    IsTextSelectionEnabled="True"
+                    Style="{StaticResource BodyTextBlockStyle}"
+                    TextWrapping="Wrap"
+                    Visibility="Collapsed" />
+                <StackPanel
+                    x:Name="CheckupResults"
+                    AutomationProperties.AutomationId="Node.Checkup.Results"
+                    AutomationProperties.LiveSetting="Polite"
+                    Spacing="4" />
 
                 <TextBlock
                     x:Name="ShareHeading"

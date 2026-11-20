@@ -620,4 +620,34 @@
     <string name="rules_process_not_effective">The Android VPN cannot tell which app opened a connection, so PROCESS-NAME rules have no effect here.</string>
     <string name="rules_device_not_effective">DEVICE-NAME rules have no effect on Android: the Android app does not name LAN devices.</string>
     <string name="rules_radio_not_effective">CELLULAR-RADIO rules have no effect on Android: the Android app cannot read the cellular radio technology.</string>
+    <!-- 节点体检: the same wording as the desktop windows (crates/client-strings/catalogue.json). -->
+    <string name="proxies_checkup">Node checkup</string>
+    <string name="checkup_again">Run again</string>
+    <string name="checkup_capped">Stopped early at the 200 MB limit.</string>
+    <string name="checkup_failure_connect_failed">Connection failed</string>
+    <string name="checkup_failure_http_status">Unexpected HTTP status</string>
+    <string name="checkup_failure_not_http">Not an HTTP answer</string>
+    <string name="checkup_failure_timeout">Timed out</string>
+    <string name="checkup_failure_tls_failed">TLS handshake failed</string>
+    <string name="checkup_note">Reaches 1.1.1.1 and www.gstatic.com through this node 5 times each to measure handshake, request latency, jitter and loss. Runs only when you start it.</string>
+    <string name="checkup_note_throughput">Also downloads from speed.cloudflare.com for about 8 seconds, at most 200 MB, counted against the node\'s traffic.</string>
+    <string name="checkup_row_bloat">Added latency</string>
+    <string name="checkup_row_bytes">Downloaded</string>
+    <string name="checkup_row_cold_handshake">First handshake</string>
+    <string name="checkup_row_failure">Reason</string>
+    <string name="checkup_row_handshake">Handshake</string>
+    <string name="checkup_row_idle">Idle latency</string>
+    <string name="checkup_row_jitter">Jitter</string>
+    <string name="checkup_row_loaded">Loaded latency</string>
+    <string name="checkup_row_loaded_loss">Loaded loss</string>
+    <string name="checkup_row_loss">Loss</string>
+    <string name="checkup_row_mbps">Average speed</string>
+    <string name="checkup_row_peak_mbps">Peak speed</string>
+    <string name="checkup_row_request">Request latency</string>
+    <string name="checkup_row_warm_handshake">Later handshakes</string>
+    <string name="checkup_running">Checking…</string>
+    <string name="checkup_section_download">Download</string>
+    <string name="checkup_section_latency">Latency</string>
+    <string name="checkup_start">Start checkup</string>
+    <string name="checkup_throughput">Test download speed</string>
 </resources>

@@ -11,8 +11,8 @@ using Windows.ApplicationModel.DataTransfer;
 namespace AnixOps.Net.App.Pages;
 
 /// <summary>
-/// One node over the proxies page: its name, server and port, the button that removes it, and its share
-/// link with a QR code. What it says is decided in <see cref="Node"/>; this draws it and hands what the user
+/// One node over the proxies page: its name, server and port, the button that removes it, the node checkup,
+/// and its share link with a QR code. What it says is decided in <see cref="Node"/>; this draws it and hands what the user
 /// asks for to the page.
 /// </summary>
 public sealed partial class NodeDialog : ContentDialog
@@ -23,6 +23,15 @@ public sealed partial class NodeDialog : ContentDialog
     private readonly Strings strings;
     private readonly Action<NodeDraft> save;
     private readonly Action remove;
+    private readonly Action<bool> checkup;
+
+    // The checkup as last drawn: whether it runs, whether it ran before, and what it showed; the page draws
+    // every second and the results are only built again when they changed.
+    private bool checking;
+    private bool checkedOnce;
+    private bool checkupDrawn;
+    private IReadOnlyList<CheckupSection>? drawnSections;
+    private string? drawnProblem;
 
     // What the dialog shows now; null before the first draw.
     private NodeShown? shown;
@@ -33,11 +42,13 @@ public sealed partial class NodeDialog : ContentDialog
 
     /// <param name="save">Called with what the user typed when it is to be saved.</param>
     /// <param name="remove">Called when the user said that the node is to be removed.</param>
-    public NodeDialog(Strings strings, Action<NodeDraft> save, Action remove)
+    /// <param name="checkup">Called when the user starts a checkup; true adds the download.</param>
+    public NodeDialog(Strings strings, Action<NodeDraft> save, Action remove, Action<bool> checkup)
     {
         this.strings = strings;
         this.save = save;
         this.remove = remove;
+        this.checkup = checkup;
         InitializeComponent();
         CloseButtonText = strings["action.close"];
         DefaultButton = ContentDialogButton.None;
@@ -53,6 +64,83 @@ public sealed partial class NodeDialog : ContentDialog
         QuestionNote.Text = strings["node.edit.note"];
         ConfirmButton.Content = strings["subscriptions.remove"];
         CancelButton.Content = strings["action.cancel"];
+        CheckupHeading.Text = strings["node.checkup"];
+        ThroughputBox.Content = strings["checkup.throughput"];
+        AutomationProperties.SetName(CheckupRing, strings["checkup.running"]);
+        ShowCheckup(running: false, sections: null, problem: null);
+    }
+
+    /// <summary>
+    /// Draws the checkup: whether it runs, what it found (null before it ran) and why it did not work.
+    /// </summary>
+    public void ShowCheckup(bool running, IReadOnlyList<CheckupSection>? sections, string? problem)
+    {
+        if (checkupDrawn && running == checking && ReferenceEquals(sections, drawnSections) && problem == drawnProblem)
+        {
+            return;
+        }
+        checkupDrawn = true;
+        drawnSections = sections;
+        drawnProblem = problem;
+        checking = running;
+        checkedOnce |= sections is not null || problem is not null;
+        CheckupNote.Text = Checkup.Note(strings, ThroughputBox.IsChecked == true);
+        ThroughputBox.IsEnabled = !running;
+        CheckupButton.IsEnabled = !running;
+        CheckupButton.Content = strings[running ? "checkup.running" : checkedOnce ? "checkup.again" : "checkup.start"];
+        CheckupRing.IsActive = running;
+        CheckupRing.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
+        Write(CheckupProblem, problem);
+        CheckupResults.Children.Clear();
+        foreach (var section in sections ?? Array.Empty<CheckupSection>())
+        {
+            CheckupResults.Children.Add(new TextBlock
+            {
+                Text = section.Heading,
+                Margin = new Thickness(0, 4, 0, 0),
+                Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
+            });
+            foreach (var line in section.Lines)
+            {
+                var row = new Grid { ColumnSpacing = 12 };
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                var label = new TextBlock { Text = line.Label, TextWrapping = TextWrapping.Wrap };
+                // Marked values take the colour of a problem; the others that of a note.
+                var value = new TextBlock
+                {
+                    Text = line.Value,
+                    IsTextSelectionEnabled = true,
+                    Foreground = line.Warn ? CheckupProblem.Foreground : NoteText.Foreground,
+                };
+                Grid.SetColumn(value, 1);
+                AutomationProperties.SetName(value, $"{line.Label} {line.Value}");
+                row.Children.Add(label);
+                row.Children.Add(value);
+                CheckupResults.Children.Add(row);
+            }
+            if (section.Note is { } note)
+            {
+                CheckupResults.Children.Add(new TextBlock
+                {
+                    Text = note,
+                    Foreground = NoteText.Foreground,
+                    Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+                    TextWrapping = TextWrapping.Wrap,
+                });
+            }
+        }
+    }
+
+    private void OnThroughput(object sender, RoutedEventArgs e) =>
+        CheckupNote.Text = Checkup.Note(strings, ThroughputBox.IsChecked == true);
+
+    private void OnCheckup(object sender, RoutedEventArgs e)
+    {
+        if (!checking)
+        {
+            checkup(ThroughputBox.IsChecked == true);
+        }
     }
 
     private void Label(TextBox box, string wording)

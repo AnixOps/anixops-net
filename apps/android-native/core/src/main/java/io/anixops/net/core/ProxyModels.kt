@@ -2,6 +2,7 @@ package io.anixops.net.core
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 /** One node as `list_nodes` lists it (`bridge.ts` `NodeSummary`). */
 @Serializable
@@ -159,4 +160,25 @@ data class NodeRow(
 data class Delay(
     val ms: Long? = null,
     val tone: String,
+)
+
+/**
+ * A node checkup (`node_checkup`) as the core words it: its rows, their order and which are marked come from
+ * `client-view` (`crates/client-view/src/checkup.rs`); the window words each row from its id and writes its value
+ * by [CheckupRow.kind].
+ */
+@Serializable
+data class NodeCheckup(val name: String = "", val sections: List<CheckupSection> = emptyList())
+
+/** `latency`, then `download` when the download ran; [capped] says the download stopped at its limit. */
+@Serializable
+data class CheckupSection(val id: String, val rows: List<CheckupRow> = emptyList(), val capped: Boolean = false)
+
+/** One measure: [kind] is `ms`, `pct`, `mbps`, `bytes` or `failure`; a null [value] had no successful sample. */
+@Serializable
+data class CheckupRow(
+    val id: String,
+    val kind: String = "",
+    val value: JsonElement? = null,
+    val warn: Boolean = false,
 )

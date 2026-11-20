@@ -42,6 +42,10 @@ public sealed partial class ProxiesPage : Page
     // A node that does not answer takes seconds, and a subscription can have thousands.
     private static readonly TimeSpan TestPatience = TimeSpan.FromMinutes(30);
 
+    // A checkup runs latency rounds and, when asked, a download of several seconds; the core answers when
+    // it is over.
+    private static readonly TimeSpan CheckupPatience = TimeSpan.FromMinutes(2);
+
     private static readonly JsonElement NoArgs = JsonSerializer.SerializeToElement(new Dictionary<string, string>());
 
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -71,6 +75,13 @@ public sealed partial class ProxiesPage : Page
     private bool nodeBusy;
     private string? nodeProblem;
     private NodeDialog? nodeDialog;
+
+    // The checkup of the node whose details are open: whether it runs, what it found and why it did not
+    // work. Checkups are numbered so that the answer for a dialog that has closed since is dropped.
+    private int checkups;
+    private bool checkupRunning;
+    private IReadOnlyList<CheckupSection>? checkupSections;
+    private string? checkupProblem;
     private bool opening;
     private string query = "";
     private ProxiesBusy busy;
@@ -170,6 +181,7 @@ public sealed partial class ProxiesPage : Page
         node = null;
         nodeBusy = false;
         nodeProblem = null;
+        ForgetCheckup();
         busy = default;
         failure = null;
         trouble = null;
@@ -445,7 +457,8 @@ public sealed partial class ProxiesPage : Page
         nodeBusy = false;
         nodeProblem = null;
         failure = null;
-        var opened = new NodeDialog(strings, SaveNode, RemoveNode) { XamlRoot = XamlRoot, RequestedTheme = ActualTheme };
+        ForgetCheckup();
+        var opened = new NodeDialog(strings, SaveNode, RemoveNode, CheckNode) { XamlRoot = XamlRoot, RequestedTheme = ActualTheme };
         nodeDialog = opened;
         Draw();
         try
@@ -457,6 +470,7 @@ public sealed partial class ProxiesPage : Page
             nodeDialog = null;
             node = null;
             nodeProblem = null;
+            ForgetCheckup();
             if (active)
             {
                 NodeList.Focus(FocusState.Programmatic);
@@ -511,6 +525,50 @@ public sealed partial class ProxiesPage : Page
             nodeProblem = problem;
             node = now ?? node;
         }
+        if (active)
+        {
+            Draw();
+        }
+    }
+
+    /// <summary>Drops the checkup of a dialog that closed: its answer, when it comes, is not drawn.</summary>
+    private void ForgetCheckup()
+    {
+        checkups++;
+        checkupRunning = false;
+        checkupSections = null;
+        checkupProblem = null;
+    }
+
+    /// <summary>Runs a checkup of the node whose details are open; <paramref name="throughput"/> adds the download.</summary>
+    private async void CheckNode(bool throughput)
+    {
+        if (core is null || strings is null || !active || !Connected || checkupRunning || node is not { } details)
+        {
+            return;
+        }
+        var mine = ++checkups;
+        checkupRunning = true;
+        checkupProblem = null;
+        Draw();
+
+        IReadOnlyList<CheckupSection>? sections = null;
+        string? problem = null;
+        try
+        {
+            sections = Checkup.Show(strings, await core.AskAsync(Checkup.Command, Checkup.Args(details.Id, throughput), CheckupPatience));
+        }
+        catch (Exception error) when (error is RefusedException or IOException or TimeoutException or OperationCanceledException or ObjectDisposedException)
+        {
+            problem = error.Message;
+        }
+        if (mine != checkups)
+        {
+            return;
+        }
+        checkupRunning = false;
+        checkupSections = sections;
+        checkupProblem = problem;
         if (active)
         {
             Draw();
@@ -721,6 +779,7 @@ public sealed partial class ProxiesPage : Page
             else
             {
                 nodeDialog.Show(Node.Show(strings, node, nodeBusy, nodeProblem));
+                nodeDialog.ShowCheckup(checkupRunning, checkupSections, checkupProblem);
             }
         }
         if (dialog is not null)

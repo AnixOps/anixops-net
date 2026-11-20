@@ -17,6 +17,7 @@
 
 pub mod app_link;
 pub mod capture;
+pub mod checkup;
 pub mod connections;
 pub mod decrypt;
 pub mod groups;
@@ -170,6 +171,7 @@ pub fn invoke(command: &str, args: &Value) -> Option<Result<Value, String>> {
             rows(args, "excluded"),
         ),
         "decrypt_setup" => decrypt::decrypt_setup(args),
+        "checkup" => checkup::checkup(args.get("answer").unwrap_or(&Value::Null)),
         _ => return Some(Err(format!("unknown command {command}"))),
     };
     Some(Ok(answer))
@@ -223,6 +225,7 @@ mod tests {
             "traffic_stats",
             "decrypt_hosts",
             "decrypt_setup",
+            "checkup",
         ] {
             let command = format!("{PREFIX}{name}");
             assert!(

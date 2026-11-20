@@ -139,6 +139,8 @@ pub struct Shown {
     /// The share link and its QR code.
     pub link: Option<String>,
     pub qr: Option<Vec<String>>,
+    /// The node checkup; the window fills it in (see [`crate::checkup`]).
+    pub checkup: crate::checkup::Shown,
 }
 
 /// The dialog for what is known now. `busy` says that the core is saving or removing the node; `problem`
@@ -170,6 +172,7 @@ pub fn shown(language: Language, details: &Details, busy: bool, problem: Option<
         },
         link: details.link.clone(),
         qr: details.qr.clone(),
+        checkup: crate::checkup::Shown::default(),
     }
 }
 

@@ -64,6 +64,9 @@ data class ProxiesActions(
     val renameSubscription: (id: String, name: String) -> Unit = { _, _ -> },
     val setInterval: (id: String, hours: Int) -> Unit = { _, _ -> },
     val removeSubscription: (String) -> Unit = {},
+    val openCheckup: (id: String, label: String) -> Unit = { _, _ -> },
+    val runCheckup: (throughput: Boolean) -> Unit = {},
+    val closeCheckup: () -> Unit = {},
 )
 
 /** A dialog the page has open. */
@@ -154,6 +157,7 @@ fun ProxiesScreen(
                             enabled = !state.busy,
                             onSelect = { actions.select(node.id) },
                             onShare = { actions.share(node.id, node.label) },
+                            onCheckup = { actions.openCheckup(node.id, node.label) },
                             onEdit = {
                                 scope.launch {
                                     actions.loadForm(node.id)?.let { dialog = ProxiesDialog.Edit(node, it) }
@@ -167,6 +171,9 @@ fun ProxiesScreen(
         }
     }
     ProxiesDialogs(dialog, actions, onChange = { dialog = it })
+    state.checkup?.let { checkup ->
+        CheckupDialog(checkup, onRun = actions.runCheckup, onDismiss = actions.closeCheckup)
+    }
 }
 
 /** A subscription's name; pasted links are named in the app's language rather than the core's. */
@@ -330,6 +337,7 @@ private fun NodeLine(
     enabled: Boolean,
     onSelect: () -> Unit,
     onShare: () -> Unit,
+    onCheckup: () -> Unit,
     onEdit: () -> Unit,
     onRemove: () -> Unit,
 ) {
@@ -360,6 +368,7 @@ private fun NodeLine(
         }
         if (node.selected) Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.proxies_in_use), tint = palette.primary)
         OverflowMenu(stringResource(R.string.proxies_more, node.label), enabled) { close ->
+            MenuItem(R.string.proxies_checkup, close, onCheckup)
             MenuItem(R.string.proxies_share, close, onShare)
             if (editable) {
                 MenuItem(R.string.proxies_edit, close, onEdit)

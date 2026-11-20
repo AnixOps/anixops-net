@@ -313,6 +313,9 @@ fun AnixApp(
             renameSubscription = proxies::renameSubscription,
             setInterval = proxies::setInterval,
             removeSubscription = proxies::removeSubscription,
+            openCheckup = proxies::openCheckup,
+            runCheckup = proxies::runCheckup,
+            closeCheckup = proxies::closeCheckup,
         ),
         rulesState = rulesState,
         rules = RulesActions(

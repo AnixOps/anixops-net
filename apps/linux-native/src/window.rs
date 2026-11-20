@@ -20,6 +20,7 @@ use gtk::{gdk, gio, glib};
 use relm4::{ComponentParts, ComponentSender, RelmApp, SimpleComponent};
 use serde_json::json;
 
+use crate::checkup;
 use crate::connection_list;
 use crate::connections;
 use crate::groups::{self, Choice, Group};
@@ -51,6 +52,9 @@ const ASK_PATIENCE: Duration = Duration::from_secs(10);
 const PRESS_PATIENCE: Duration = Duration::from_secs(120);
 /// How long the core gets to test a list of nodes: a node that does not answer takes seconds, and a
 /// subscription can have thousands.
+/// A checkup runs latency rounds and, when asked, a download of several seconds; the daemon answers when
+/// it is over.
+const CHECKUP_PATIENCE: Duration = Duration::from_secs(120);
 const TEST_PATIENCE: Duration = Duration::from_secs(1800);
 
 /// Set when the window was asked for a screenshot and could not make it.
@@ -129,6 +133,10 @@ struct Shell {
     /// Whether the daemon is saving or removing that node, and why the last time it could not.
     node_busy: bool,
     node_problem: Option<String>,
+    /// The checkup of that node, and the number of the last one asked for: the answer for a dialog that
+    /// has closed since is dropped.
+    checkup: checkup::Shown,
+    checkups: u32,
     /// Set until the details of the list's first node were asked for, when the window was started to
     /// show them.
     first_node: bool,
@@ -186,6 +194,8 @@ enum Show {
     Saved(u32, String, Result<Option<String>, String>, Option<Details>),
     /// The daemon removed the node with this id, or could not.
     Removed(u32, String, Result<(), String>),
+    /// What a checkup found, by its number, or why it did not work.
+    Checked(u32, Result<Vec<checkup::Section>, String>),
     /// The user asked for something in the list of open connections.
     Connections(connection_list::Wish),
     /// The daemon's open connections for a search; the number as in `Done`.
@@ -435,6 +445,40 @@ impl Shell {
         });
     }
 
+    /// Drops the checkup of a dialog that closed: its answer, when it comes, is not drawn.
+    fn forget_checkup(&mut self) {
+        self.checkups = self.checkups.wrapping_add(1);
+        self.checkup = checkup::Shown::default();
+    }
+
+    /// Has the daemon run a checkup of the node that is shown, on another thread; `throughput` adds the
+    /// download.
+    fn check_node(&mut self, throughput: bool, sender: &ComponentSender<Self>) {
+        let Some(id) = self.node.as_ref().map(|node| node.id.clone()) else {
+            return;
+        };
+        if self.checkup.running {
+            return;
+        }
+        self.checkups = self.checkups.wrapping_add(1);
+        self.checkup.running = true;
+        self.checkup.problem = None;
+        let link = Arc::clone(&self.link);
+        let input = sender.input_sender().clone();
+        let number = self.checkups;
+        let language = self.language;
+        thread::spawn(move || {
+            let answer = link
+                .ask(
+                    checkup::COMMAND,
+                    checkup::args(&id, throughput),
+                    CHECKUP_PATIENCE,
+                )
+                .map(|answer| checkup::read(language, &answer));
+            let _ = input.send(Show::Checked(number, answer));
+        });
+    }
+
     /// Has the daemon remove the node that is shown, on another thread.
     fn remove_node(&mut self, sender: &ComponentSender<Self>) {
         let Some(id) = self.node.as_ref().map(|node| node.id.clone()) else {
@@ -638,6 +682,8 @@ impl SimpleComponent for Shell {
             node: None,
             node_busy: false,
             node_problem: None,
+            checkup: checkup::Shown::default(),
+            checkups: 0,
             first_node: launch.node,
             watching: false,
             connection_query: String::new(),
@@ -848,6 +894,7 @@ impl SimpleComponent for Shell {
                 self.node = None;
                 self.node_busy = false;
                 self.node_problem = None;
+                self.forget_checkup();
                 self.connections = None;
                 self.closing.clear();
                 self.closing_all = false;
@@ -971,11 +1018,29 @@ impl SimpleComponent for Shell {
                 self.node = None;
                 self.node_busy = false;
                 self.node_problem = None;
+                self.forget_checkup();
             }
             // One thing at a time is asked of a node.
             Show::Ask(Asked::Node(_)) if !self.core_answers() || self.node_busy => {}
             Show::Ask(Asked::Node(Wish::Save(draft))) => self.save_node(draft, &sender),
             Show::Ask(Asked::Node(Wish::Remove)) => self.remove_node(&sender),
+            Show::Ask(Asked::Node(Wish::Checkup(throughput))) => {
+                self.check_node(throughput, &sender)
+            }
+            Show::Checked(number, _) if number != self.checkups => {}
+            Show::Checked(_, answer) => {
+                self.checkup.running = false;
+                match answer {
+                    Ok(sections) => {
+                        self.checkup.sections = Some(sections);
+                        self.checkup.problem = None;
+                    }
+                    Err(problem) => {
+                        self.checkup.sections = None;
+                        self.checkup.problem = Some(problem);
+                    }
+                }
+            }
             Show::Ask(asked) => {
                 let shown = self.proxies_shown();
                 let action = match asked {
@@ -1104,12 +1169,14 @@ impl SimpleComponent for Shell {
             .as_ref()
             .map(|groups| groups::shown(self.language, groups, &self.choosing));
         let node = self.node.as_ref().map(|details| {
-            node::shown(
+            let mut shown = node::shown(
                 self.language,
                 details,
                 self.node_busy,
                 self.node_problem.as_deref(),
-            )
+            );
+            shown.checkup = self.checkup.clone();
+            shown
         });
         widgets.proxies.show(
             &self.proxies_shown(),
