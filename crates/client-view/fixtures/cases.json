@@ -4858,5 +4858,209 @@
    "total": 0,
    "connections": []
   }
+ },
+ {
+  "command": "view.checkup",
+  "args": {
+   "answer": {
+    "name": "Tokyo",
+    "report": {
+     "latency": {
+      "samples": 5,
+      "handshake_ms": 42.4,
+      "cold_handshake_ms": 80.2,
+      "warm_handshake_ms": 41.6,
+      "handshake_loss_pct": 0.0,
+      "request_ms": 120.4,
+      "request_jitter_ms": 3.5,
+      "request_loss_pct": 20.0,
+      "failure": "timeout"
+     },
+     "throughput": {
+      "connections": 4,
+      "idle_ms": 118.4,
+      "mbps": 94.5,
+      "peak_mbps": 120.3,
+      "bytes": 94500000,
+      "seconds": 8.0,
+      "per_second_mbps": [
+       90.5,
+       120.3
+      ],
+      "loaded_ms": 260.4,
+      "loaded_p90_ms": 300.4,
+      "bloat_ms": 142.0,
+      "loaded_loss_pct": 0.0,
+      "capped": false
+     }
+    }
+   }
+  },
+  "answer": {
+   "name": "Tokyo",
+   "sections": [
+    {
+     "id": "latency",
+     "rows": [
+      {
+       "id": "handshake",
+       "kind": "ms",
+       "value": 42.4,
+       "warn": false
+      },
+      {
+       "id": "cold_handshake",
+       "kind": "ms",
+       "value": 80.2,
+       "warn": false
+      },
+      {
+       "id": "warm_handshake",
+       "kind": "ms",
+       "value": 41.6,
+       "warn": false
+      },
+      {
+       "id": "request",
+       "kind": "ms",
+       "value": 120.4,
+       "warn": false
+      },
+      {
+       "id": "jitter",
+       "kind": "ms",
+       "value": 3.5,
+       "warn": false
+      },
+      {
+       "id": "loss",
+       "kind": "pct",
+       "value": 20.0,
+       "warn": true
+      },
+      {
+       "id": "failure",
+       "kind": "failure",
+       "value": "timeout",
+       "warn": true
+      }
+     ],
+     "capped": false
+    },
+    {
+     "id": "download",
+     "rows": [
+      {
+       "id": "mbps",
+       "kind": "mbps",
+       "value": 94.5,
+       "warn": false
+      },
+      {
+       "id": "peak_mbps",
+       "kind": "mbps",
+       "value": 120.3,
+       "warn": false
+      },
+      {
+       "id": "bytes",
+       "kind": "bytes",
+       "value": 94500000,
+       "warn": false
+      },
+      {
+       "id": "idle",
+       "kind": "ms",
+       "value": 118.4,
+       "warn": false
+      },
+      {
+       "id": "loaded",
+       "kind": "ms",
+       "value": 260.4,
+       "warn": false
+      },
+      {
+       "id": "bloat",
+       "kind": "ms",
+       "value": 142.0,
+       "warn": true
+      },
+      {
+       "id": "loaded_loss",
+       "kind": "pct",
+       "value": 0.0,
+       "warn": false
+      }
+     ],
+     "capped": false
+    }
+   ]
+  }
+ },
+ {
+  "command": "view.checkup",
+  "args": {
+   "answer": {
+    "latency": {
+     "samples": 1,
+     "handshake_ms": null,
+     "cold_handshake_ms": null,
+     "warm_handshake_ms": null,
+     "handshake_loss_pct": 100.0,
+     "request_ms": null,
+     "request_jitter_ms": null,
+     "request_loss_pct": 100.0,
+     "failure": "connect_failed"
+    }
+   }
+  },
+  "answer": {
+   "name": "",
+   "sections": [
+    {
+     "id": "latency",
+     "rows": [
+      {
+       "id": "handshake",
+       "kind": "ms",
+       "value": null,
+       "warn": false
+      },
+      {
+       "id": "cold_handshake",
+       "kind": "ms",
+       "value": null,
+       "warn": false
+      },
+      {
+       "id": "request",
+       "kind": "ms",
+       "value": null,
+       "warn": false
+      },
+      {
+       "id": "jitter",
+       "kind": "ms",
+       "value": null,
+       "warn": false
+      },
+      {
+       "id": "loss",
+       "kind": "pct",
+       "value": 100.0,
+       "warn": true
+      },
+      {
+       "id": "failure",
+       "kind": "failure",
+       "value": "connect_failed",
+       "warn": true
+      }
+     ],
+     "capped": false
+    }
+   ]
+  }
  }
 ]

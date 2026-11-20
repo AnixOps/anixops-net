@@ -1,5 +1,5 @@
 //! One node's dialog: its name, server and port, which can be changed for a node of the subscription in
-//! use, the button that removes it, and its share link with a QR code. What it says is decided in
+//! use, the button that removes it, the node checkup, and its share link with a QR code. What it says is decided in
 //! [`crate::node`]; this only draws it.
 
 use std::cell::{Cell, RefCell};
@@ -8,6 +8,7 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::{gdk, glib};
 
+use crate::checkup;
 use crate::node::{self, Draft, Shown};
 use crate::Language;
 
@@ -27,6 +28,8 @@ pub enum Wish {
     Save(Draft),
     /// Remove the node.
     Remove,
+    /// Run a checkup of the node; `true` adds the download.
+    Checkup(bool),
     /// The dialog was closed.
     Closed,
 }
@@ -42,6 +45,12 @@ struct Open {
     save: gtk::Button,
     remove: gtk::Button,
     keep: gtk::Label,
+    throughput: adw::SwitchRow,
+    checkup_note: gtk::Label,
+    checkup_start: gtk::Button,
+    checkup_spinner: gtk::Spinner,
+    checkup_problem: gtk::Label,
+    checkup_results: gtk::Box,
     share: adw::PreferencesGroup,
     qr: gtk::Picture,
     link: gtk::Label,
@@ -157,7 +166,63 @@ impl NodeDialog {
             }
         }
         open.qr.set_visible(shown.qr.is_some());
+        if first || before.checkup != shown.checkup {
+            self.draw_checkup(open, &shown.checkup);
+        }
         *open.shown.borrow_mut() = shown.clone();
+    }
+
+    /// Writes the checkup: whether it runs, what it found and why it did not work.
+    fn draw_checkup(&self, open: &Open, shown: &checkup::Shown) {
+        let text = |id: &str| client_strings::text(self.language, id);
+        let ran = shown.sections.is_some() || shown.problem.is_some();
+        open.throughput.set_sensitive(!shown.running);
+        open.checkup_start.set_sensitive(!shown.running);
+        open.checkup_start.set_label(text(if shown.running {
+            "checkup.running"
+        } else if ran {
+            "checkup.again"
+        } else {
+            "checkup.start"
+        }));
+        open.checkup_spinner.set_visible(shown.running);
+        open.checkup_spinner.set_spinning(shown.running);
+        open.checkup_problem
+            .set_label(shown.problem.as_deref().unwrap_or_default());
+        open.checkup_problem.set_visible(shown.problem.is_some());
+        while let Some(child) = open.checkup_results.first_child() {
+            open.checkup_results.remove(&child);
+        }
+        for section in shown.sections.iter().flatten() {
+            let heading = gtk::Label::new(Some(&section.heading));
+            heading.set_xalign(0.0);
+            heading.add_css_class("heading");
+            heading.set_margin_top(6);
+            open.checkup_results.append(&heading);
+            for line in &section.lines {
+                let row = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+                let label = gtk::Label::new(Some(&line.label));
+                label.set_xalign(0.0);
+                label.set_hexpand(true);
+                label.set_wrap(true);
+                let value = gtk::Label::new(Some(&line.value));
+                value.set_xalign(1.0);
+                value.set_selectable(true);
+                value.add_css_class("numeric");
+                value.add_css_class(if line.warn { "error" } else { "dim-label" });
+                row.append(&label);
+                row.append(&value);
+                open.checkup_results.append(&row);
+            }
+            if let Some(note) = &section.note {
+                let label = gtk::Label::new(Some(note));
+                label.set_xalign(0.0);
+                label.set_wrap(true);
+                label.add_css_class("caption");
+                label.add_css_class("dim-label");
+                open.checkup_results.append(&label);
+            }
+        }
     }
 
     /// Makes the dialog's widgets.
@@ -267,6 +332,57 @@ impl NodeDialog {
             }
         });
 
+        let throughput = adw::SwitchRow::new();
+        throughput.set_widget_name("checkup-throughput");
+        throughput.set_title(text("checkup.throughput"));
+        let checkup_note = gtk::Label::new(Some(&checkup::note(language, false)));
+        checkup_note.set_xalign(0.0);
+        checkup_note.set_wrap(true);
+        checkup_note.add_css_class("caption");
+        checkup_note.add_css_class("dim-label");
+        throughput.connect_active_notify({
+            let checkup_note = checkup_note.clone();
+            move |row| checkup_note.set_label(&checkup::note(language, row.is_active()))
+        });
+        let checkup_start = gtk::Button::with_label(text("checkup.start"));
+        checkup_start.set_widget_name("checkup");
+        checkup_start.connect_clicked({
+            let shown = Rc::clone(&shown);
+            let wished = Rc::clone(&self.wished);
+            let throughput = throughput.clone();
+            move |_| {
+                if !shown.borrow().checkup.running {
+                    wished(Wish::Checkup(throughput.is_active()));
+                }
+            }
+        });
+        let checkup_spinner = gtk::Spinner::new();
+        checkup_spinner.set_visible(false);
+        checkup_spinner
+            .update_property(&[gtk::accessible::Property::Label(text("checkup.running"))]);
+        let starting = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        starting.set_halign(gtk::Align::End);
+        starting.append(&checkup_spinner);
+        starting.append(&checkup_start);
+        let checkup_problem = gtk::Label::new(None);
+        checkup_problem.set_widget_name("checkup-problem");
+        checkup_problem.set_xalign(0.0);
+        checkup_problem.set_wrap(true);
+        checkup_problem.set_selectable(true);
+        checkup_problem.add_css_class("error");
+        checkup_problem.set_visible(false);
+        let checkup_results = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        checkup_results.set_widget_name("checkup-results");
+        let checking = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        checking.append(&checkup_note);
+        checking.append(&starting);
+        checking.append(&checkup_problem);
+        checking.append(&checkup_results);
+        let checks = adw::PreferencesGroup::new();
+        checks.set_title(text("node.checkup"));
+        checks.add(&throughput);
+        checks.add(&checking);
+
         let qr = gtk::Picture::new();
         qr.set_widget_name("qr");
         qr.set_size_request(QR_SIDE, QR_SIDE);
@@ -306,6 +422,7 @@ impl NodeDialog {
         let page = adw::PreferencesPage::new();
         page.add(&protocol);
         page.add(&acting);
+        page.add(&checks);
         page.add(&share);
         let view = adw::ToolbarView::new();
         view.add_top_bar(&adw::HeaderBar::new());
@@ -337,6 +454,12 @@ impl NodeDialog {
             save,
             remove,
             keep,
+            throughput,
+            checkup_note,
+            checkup_start,
+            checkup_spinner,
+            checkup_problem,
+            checkup_results,
             share,
             qr,
             link,

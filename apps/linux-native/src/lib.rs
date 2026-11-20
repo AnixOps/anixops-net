@@ -2,10 +2,11 @@
 //!
 //! What the window shows and how it is started lives here without GTK, so it is tested on every system:
 //! the pages ([`sections`]), the launch options ([`launch`]) and what the overview and proxies pages show
-//! ([`overview`], [`connections`], [`proxies`], [`subscriptions`], [`groups`], [`node`]). The wording comes from the catalogue all native windows share (`client-strings`). The
+//! ([`overview`], [`connections`], [`proxies`], [`subscriptions`], [`groups`], [`node`], [`checkup`]). The wording comes from the catalogue all native windows share (`client-strings`). The
 //! window itself ([`window`], [`overview_page`], [`proxies_page`]) needs GTK 4 and libadwaita and is only built with the `gui`
 //! feature, on Linux.
 
+pub mod checkup;
 pub mod connections;
 pub mod groups;
 pub mod launch;

@@ -1051,7 +1051,8 @@ fn handler(name: &str) -> Option<Handler> {
             })
         },
         // Node checkup (节点体检): latency rounds and an optional download through one node. The
-        // options are the kernel's `CheckupOptions`; unknown fields are rejected.
+        // options are the kernel's `CheckupOptions`; unknown fields are rejected. The answer carries the
+        // report and the rows every window shows (`client_view::checkup`).
         "node_checkup" => |client, args| {
             let NodeCheckupArgs { node_id, options } = parse(args)?;
             let (nodes, id, name) = client
@@ -1059,7 +1060,10 @@ fn handler(name: &str) -> Option<Handler> {
                 .delay_target(&node_id)
                 .ok_or("the node is not in any subscription")?;
             let report = engine::node_checkup(&nodes, &id, &options)?;
-            json(NodeCheckup { name, report })
+            let mut answer = json(NodeCheckup { name, report })?;
+            let mut shown = client_view::checkup::checkup(&answer);
+            answer["sections"] = shown["sections"].take();
+            Ok(answer)
         },
         "test_node_delays" => |client, args| {
             let NodeDelaysArgs { node_ids, url } = parse(args)?;
