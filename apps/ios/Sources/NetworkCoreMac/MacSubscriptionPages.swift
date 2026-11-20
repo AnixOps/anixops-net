@@ -17,6 +17,7 @@ struct MacProxiesPage: View {
     @State private var query = ""
     @AppStorage("proxies.sort") private var sort = NodeSort.original
     @State private var editing: MacEditingNode?
+    @State private var checking: MacEditingNode?
     @State private var notice: String?
 
     var body: some View {
@@ -90,6 +91,14 @@ struct MacProxiesPage: View {
         .sheet(item: $editing) { item in
             NodeEditSheet(node: item.node) { edited in
                 await tunnel.updateNode(edited, inGroup: item.groupID)
+            }
+            .formSheetFrame()
+            .environment(\.brand, brand)
+            .tint(brand.primary)
+        }
+        .sheet(item: $checking) { item in
+            NodeCheckupSheet(node: item.node) { throughput in
+                await tunnel.checkup(item.node.id, inGroup: item.groupID, throughput: throughput)
             }
             .formSheetFrame()
             .environment(\.brand, brand)
@@ -257,6 +266,9 @@ struct MacProxiesPage: View {
     private func nodeMenu(_ node: NativeImportReport.Node, in group: SubscriptionGroup) -> some View {
         Button("编辑…") {
             editing = MacEditingNode(groupID: group.id, node: node)
+        }
+        Button("节点体检…") {
+            checking = MacEditingNode(groupID: group.id, node: node)
         }
         Button("复制分享链接") {
             do {

@@ -18,6 +18,7 @@ struct ProxiesView: View {
     @State private var query = ""
     @AppStorage("proxies.sort") private var sort = NodeSort.original
     @State private var editing: EditingNode?
+    @State private var checking: EditingNode?
     @State private var sharing: SharedNode?
     @State private var shareFailure: String?
 
@@ -102,6 +103,13 @@ struct ProxiesView: View {
             .sheet(item: $editing) { item in
                 NodeEditSheet(node: item.node) { edited in
                     await tunnel.updateNode(edited, inGroup: item.groupID)
+                }
+                .environment(\.brand, brand)
+                .tint(brand.primary)
+            }
+            .sheet(item: $checking) { item in
+                NodeCheckupSheet(node: item.node) { throughput in
+                    await tunnel.checkup(item.node.id, inGroup: item.groupID, throughput: throughput)
                 }
                 .environment(\.brand, brand)
                 .tint(brand.primary)
@@ -269,6 +277,11 @@ struct ProxiesView: View {
             editing = EditingNode(groupID: group.id, node: node)
         } label: {
             Label("编辑", systemImage: "pencil")
+        }
+        Button {
+            checking = EditingNode(groupID: group.id, node: node)
+        } label: {
+            Label("节点体检", systemImage: "stethoscope")
         }
         Button {
             share(node)

@@ -777,9 +777,10 @@ jobs:
           symbols "${products}/NetworkCoreApp.app/PlugIns/NetworkCorePacketTunnel.appex" NetworkCorePacketTunnel "${RUNNER_TEMP}/appex-symbols.txt"
           symbols "${products}/NetworkCoreApp.app" NetworkCoreApp "${RUNNER_TEMP}/app-symbols.txt"
           grep -q '_networkcore_ios_runtime_init$' "${RUNNER_TEMP}/appex-symbols.txt"
-          # The app links the runtime library for subscription import and the HTTP delay test.
+          # The app links the runtime library for subscription import, the HTTP delay test and the node checkup.
           grep -q '_networkcore_import_nodes$' "${RUNNER_TEMP}/app-symbols.txt"
           grep -q '_networkcore_ios_measure_delay$' "${RUNNER_TEMP}/app-symbols.txt"
+          grep -q '_networkcore_ios_checkup$' "${RUNNER_TEMP}/app-symbols.txt"
 
       - name: Build the macOS app without signing
         shell: bash
@@ -825,9 +826,10 @@ jobs:
           symbols "${appex}/Contents/MacOS" "${tunnel_id}" "${RUNNER_TEMP}/mac-appex-symbols.txt"
           symbols "${app}/Contents/MacOS" "AnixOps Net" "${RUNNER_TEMP}/mac-app-symbols.txt"
           grep -q '_networkcore_ios_runtime_init$' "${RUNNER_TEMP}/mac-appex-symbols.txt"
-          # The app links the runtime library for subscription import and the HTTP delay test.
+          # The app links the runtime library for subscription import, the HTTP delay test and the node checkup.
           grep -q '_networkcore_import_nodes$' "${RUNNER_TEMP}/mac-app-symbols.txt"
           grep -q '_networkcore_ios_measure_delay$' "${RUNNER_TEMP}/mac-app-symbols.txt"
+          grep -q '_networkcore_ios_checkup$' "${RUNNER_TEMP}/mac-app-symbols.txt"
           lipo -archs "${appex}/Contents/MacOS/${tunnel_id}" | tee "${RUNNER_TEMP}/mac-archs.txt"
           grep -q arm64 "${RUNNER_TEMP}/mac-archs.txt"
 

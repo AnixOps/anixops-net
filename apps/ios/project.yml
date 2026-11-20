@@ -206,6 +206,8 @@ targets:
       - path: Sources/NetworkCoreAppHost/DiagnosticEventsView.swift
       - path: Sources/NetworkCoreAppHost/NativeNodeImporterFFI.swift
       - path: Sources/NetworkCoreAppHost/NodeDelayFFI.swift
+      - path: Sources/NetworkCoreAppHost/NodeCheckupFFI.swift
+      - path: Sources/NetworkCoreAppHost/NodeCheckupSheet.swift
       - path: Sources/NetworkCoreAppHost/NodeEditSheet.swift
       - path: Sources/NetworkCoreAppHost/OnDemandSettingsView.swift
       - path: Sources/NetworkCoreAppHost/SubscriptionGroupViews.swift
