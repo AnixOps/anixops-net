@@ -18,6 +18,7 @@ use app_notifications::{Notice, Settings as NotificationSettings};
 use client_health::Health;
 use desktop_mitm::mappings;
 use desktop_mitm::plugins;
+use engine_embedded::checkup::{CheckupOptions, CheckupReport};
 use on_demand::{Action as OnDemandAction, Settings as OnDemandSettings};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -1049,6 +1050,17 @@ fn handler(name: &str) -> Option<Handler> {
                 message: format!("{name}: {}", format_delay(delay)),
             })
         },
+        // Node checkup (节点体检): latency rounds and an optional download through one node. The
+        // options are the kernel's `CheckupOptions`; unknown fields are rejected.
+        "node_checkup" => |client, args| {
+            let NodeCheckupArgs { node_id, options } = parse(args)?;
+            let (nodes, id, name) = client
+                .backend()
+                .delay_target(&node_id)
+                .ok_or("the node is not in any subscription")?;
+            let report = engine::node_checkup(&nodes, &id, &options)?;
+            json(NodeCheckup { name, report })
+        },
         "test_node_delays" => |client, args| {
             let NodeDelaysArgs { node_ids, url } = parse(args)?;
             let nodes = client.backend().delay_nodes(&node_ids);
@@ -1431,6 +1443,20 @@ struct HostEnabled {
 struct NodeDelayArgs {
     node_id: String,
     url: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct NodeCheckupArgs {
+    node_id: String,
+    #[serde(default)]
+    options: CheckupOptions,
+}
+
+#[derive(Serialize)]
+struct NodeCheckup {
+    name: String,
+    report: CheckupReport,
 }
 
 #[derive(Deserialize)]
@@ -1957,6 +1983,18 @@ mod tests {
         );
         assert!(client
             .invoke("switch_node", serde_json::json!({}))
+            .unwrap_err()
+            .starts_with("invalid arguments"));
+        // Node checkup: unknown nodes and unknown options are refused before anything is sent.
+        assert_eq!(
+            client.invoke("node_checkup", serde_json::json!({ "nodeId": "gone" })),
+            Err("the node is not in any subscription".to_string())
+        );
+        assert!(client
+            .invoke(
+                "node_checkup",
+                serde_json::json!({ "nodeId": "gone", "options": { "rounds": 3 } })
+            )
             .unwrap_err()
             .starts_with("invalid arguments"));
         assert!(!client.receive_app_links(vec!["https://example.com".to_string()]));
