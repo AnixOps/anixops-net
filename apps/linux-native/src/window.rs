@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use adw::prelude::*;
 use client_session::session::LocalSession;
@@ -44,6 +44,11 @@ const DEFAULT_SIZE: (i32, i32) = (1080, 720);
 const NARROW: f64 = 640.0;
 /// How long the window is left to settle (first layout, icons, fonts) before it is drawn into a file.
 const SETTLE: Duration = Duration::from_millis(800);
+/// How long a screenshot waits, after `SETTLE`, for the window to be given a size. A cold first start
+/// on a busy machine can map the window later than `SETTLE`.
+const SIZE_PATIENCE: Duration = Duration::from_secs(15);
+/// How often a screenshot looks again whether the window has a size.
+const SIZE_POLL: Duration = Duration::from_millis(100);
 /// How often the overview is asked for again, in seconds.
 const REFRESH_SECONDS: u32 = 1;
 /// How long the core gets to say how things are. It only reads its own state for this.
@@ -853,16 +858,7 @@ impl SimpleComponent for Shell {
             split.set_show_content(true);
             let window = window.clone();
             glib::timeout_add_local_once(SETTLE, move || {
-                if let Err(problem) = draw(&window, &file) {
-                    eprintln!(
-                        "anixops-net-preview: no screenshot at {}: {problem}",
-                        file.display()
-                    );
-                    FAILED.store(true, Ordering::SeqCst);
-                }
-                // Not `close`: with a dialog over the window, that closes the dialog and leaves the
-                // window open.
-                window.destroy();
+                shoot(window, file, Instant::now() + SIZE_PATIENCE);
             });
         }
 
@@ -1230,6 +1226,35 @@ fn brand(style: &adw::StyleManager) {
     apply(style);
     style.connect_dark_notify(apply.clone());
     style.connect_high_contrast_notify(apply);
+}
+
+/// Draws the window into `file` and then destroys it. A window that has no size yet is waited for, up
+/// to `deadline`, and then given `SETTLE` again so the page it shows has laid out before it is drawn.
+fn shoot(window: adw::ApplicationWindow, file: PathBuf, deadline: Instant) {
+    if !has_size(&window) && Instant::now() < deadline {
+        glib::timeout_add_local_once(SIZE_POLL, move || {
+            if has_size(&window) {
+                glib::timeout_add_local_once(SETTLE, move || shoot(window, file, deadline));
+            } else {
+                shoot(window, file, deadline);
+            }
+        });
+        return;
+    }
+    if let Err(problem) = draw(&window, &file) {
+        eprintln!(
+            "anixops-net-preview: no screenshot at {}: {problem}",
+            file.display()
+        );
+        FAILED.store(true, Ordering::SeqCst);
+    }
+    // Not `close`: with a dialog over the window, that closes the dialog and leaves the window
+    // open.
+    window.destroy();
+}
+
+fn has_size(window: &adw::ApplicationWindow) -> bool {
+    window.width() > 0 && window.height() > 0
 }
 
 /// Draws the window as it is now into a PNG file, with the window's own renderer.

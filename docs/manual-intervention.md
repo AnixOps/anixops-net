@@ -405,6 +405,20 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 secret 值的 job output（安卓 artifact 名和 APK 名都含 `anixops`）丢弃，发布步骤拿不到安卓包。修复后 release.yml 由版本号直接推出这两个名字。
 tag 当时指向的 d225b10 还是旧 workflow，需要把 tag 移到包含修复的 commit 再推（Release 没有发出，移动 tag 不影响用户）。
 
+## v0.3.0-beta.10 发布前后的人工事项
+
+发布说明在 `docs/release-notes/v0.3.0-beta.10.md`，安卓 versionCode 3005（beta.9 是 3004）。tag 由 Actions 的 “Release tag”（`release-tag.yml`）打，流程同 beta.9。
+
+- [ ] anx 仓库的 Cargo.lock 内核与本仓库 `Cargo.toml` 固定的内核一致后，再触发 anx 的 ANX 构建和 `publish-client.yml`；
+  这些 run 进 Environment `apple-anx` / `anx-release`，需要维护者在 Actions 页面批准。
+- [ ] Linux 的 ANX 构建只能在带 WebKitGTK 的自托管 runner（标签 `9700x`）上跑，发布时需要它在线。
+
+发布后真机验收（CI 只有单元测试、模拟器冒烟测试和截图对比，节点体检没有接真实节点）：
+
+- [ ] 节点体检在五个平台各对一个真实节点跑一次：只测延迟、勾选测下载速度各一次，结果合理，下载不超过 200 MB。
+- [ ] iOS / macOS 未连接隧道时节点体检也能完成；连接时不影响正在用的连接。
+- [ ] 节点不通时显示失败和丢包，不卡住界面。
+
 ## v0.3.0-beta.9 发布前后的人工事项
 
 发布说明在 `docs/release-notes/v0.3.0-beta.9.md`，安卓 versionCode 3004（beta.8 是 3003）。tag 由 Actions 的 “Release tag”（`release-tag.yml`）打，流程同 beta.8。
