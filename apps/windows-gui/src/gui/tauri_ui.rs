@@ -4901,7 +4901,7 @@ fn snapshot(
         }),
         subscription_last_updated: desktop.profile_last_successful_update.clone(),
         subscription_last_attempt: desktop.profile_last_attempt.clone(),
-        subscription_next_attempt: profile_next_attempt(&desktop),
+        subscription_next_attempt: profile_next_attempt(desktop),
         subscription_refresh_result: desktop.profile_refresh_result.clone(),
         subscription_added_node_count: desktop.profile_added_node_count,
         subscription_removed_node_count: desktop.profile_removed_node_count,
