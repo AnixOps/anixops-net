@@ -79,9 +79,30 @@ pub struct DesktopSubscriptionSource {
     pub update_interval_hours: Option<u32>,
     #[serde(default)]
     pub suggested_interval_hours: Option<u32>,
+    /// The last successful update and the last attempt, Unix seconds. The automatic update, the time the
+    /// interface shows and the time after a restart are all worked out from these
+    /// (`subscription_meta::UpdateSchedule`); a source saved before they were kept updates once at the next
+    /// check.
+    #[serde(default)]
+    pub last_success_unix: Option<u64>,
+    #[serde(default)]
+    pub last_attempt_unix: Option<u64>,
+    /// Failed updates since the last successful one.
+    #[serde(default)]
+    pub failures: u32,
 }
 
 impl DesktopSubscriptionSource {
+    /// The times its automatic updates follow.
+    pub fn schedule(&self) -> subscription_meta::UpdateSchedule {
+        subscription_meta::UpdateSchedule {
+            last_success: self.last_success_unix,
+            last_attempt: self.last_attempt_unix,
+            failures: self.failures,
+            interval_hours: self.effective_interval_hours(),
+        }
+    }
+
     pub fn effective_interval_hours(&self) -> u32 {
         self.update_interval_hours
             .or(self.suggested_interval_hours)

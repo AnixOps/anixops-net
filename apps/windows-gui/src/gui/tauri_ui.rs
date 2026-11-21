@@ -64,7 +64,6 @@ use traffic_stats::{Counter as TrafficCounter, TrafficStats};
 
 const APP_LOG_SCOPE: &str = "tauri-gui";
 const MITM_CA_SUBJECT: &str = "AnixOps NetworkCore Windows HTTPS MITM CA";
-const SUBSCRIPTION_REFRESH_INTERVAL: Duration = Duration::from_secs(60 * 60);
 const NODE_SELECTION_INTERVAL: Duration = Duration::from_secs(30 * 60);
 const DEFAULT_NODE_SELECTION_URL: &str = "https://www.gstatic.com/generate_204";
 const EMBEDDED_PROFILE_ID: &str = "windows-tauri-profile";
@@ -99,6 +98,8 @@ struct TrafficRecorder {
     stats: TrafficStats,
     counter: TrafficCounter,
     saved_at: Instant,
+    /// Traffic counted since the statistics were last written; kept until a write succeeds.
+    unsaved: bool,
 }
 
 impl TrafficRecorder {
@@ -107,12 +108,27 @@ impl TrafficRecorder {
             stats: TrafficStats::load(&traffic_stats_path()),
             counter: TrafficCounter::default(),
             saved_at: Instant::now(),
+            unsaved: false,
         }
     }
 
+    /// Takes in one connection list; traffic counted earlier is written once the minute is up even when this
+    /// list added nothing, so a connection that went quiet is not left in memory only.
+    fn ingest(&mut self, list: &Value, now: u64) {
+        if self.counter.ingest(list, &mut self.stats, now) {
+            self.unsaved = true;
+        }
+        if self.unsaved && self.saved_at.elapsed() >= Duration::from_secs(60) {
+            self.save();
+        }
+    }
+
+    /// Only a successful write clears the unsaved mark and starts the next minute; a failed one is tried again.
     fn save(&mut self) {
-        self.saved_at = Instant::now();
-        let _ = self.stats.save(&traffic_stats_path());
+        if self.stats.save(&traffic_stats_path()).is_ok() {
+            self.unsaved = false;
+            self.saved_at = Instant::now();
+        }
     }
 }
 
@@ -295,14 +311,7 @@ fn start_traffic_stats(app: AppHandle, state: DesktopAppState) {
             recorder.counter.reset();
             continue;
         };
-        let recorder = &mut *recorder;
-        if recorder
-            .counter
-            .ingest(&list, &mut recorder.stats, unix_now())
-            && recorder.saved_at.elapsed() >= Duration::from_secs(60)
-        {
-            recorder.save();
-        }
+        recorder.ingest(&list, unix_now());
     });
 }
 
@@ -978,52 +987,53 @@ fn start_core_recovery_monitor(app: AppHandle, state: DesktopAppState) {
     });
 }
 
+/// Updates the subscription in use when its schedule says so (`subscription_next_update`), the same schedule the
+/// interface shows, read from the saved state so it holds across restarts. A failure is retried after a growing
+/// wait and notified once until the subscription updates again.
 fn start_subscription_refresh_monitor(app: AppHandle, state: DesktopAppState) {
-    std::thread::spawn(move || {
-        let mut last_refresh = Instant::now();
-        loop {
-            std::thread::sleep(Duration::from_secs(30));
-            // The subscription in use updates at its own interval (0 = by hand only).
-            let due = match state.desktop.lock() {
-                Ok(desktop) if desktop.auto_subscription_refresh => {
-                    desktop.profile_source_url.clone().map(|location| {
-                        let hours = desktop
-                            .subscription_sources
-                            .iter()
-                            .find(|source| source.location == location)
-                            .map_or(
-                                subscription_meta::DEFAULT_UPDATE_INTERVAL_HOURS,
-                                DesktopSubscriptionSource::effective_interval_hours,
-                            );
-                        (location, hours)
-                    })
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_secs(30));
+        let due = match state.desktop.lock() {
+            Ok(desktop) => desktop.profile_source_url.clone().filter(|location| {
+                match desktop
+                    .subscription_sources
+                    .iter()
+                    .find(|source| source.location == *location)
+                {
+                    Some(source) => subscription_next_update(&desktop, source)
+                        .is_some_and(|at| unix_now() >= at),
+                    // Not in the catalog yet: the first check brings it in.
+                    None => desktop.auto_subscription_refresh,
                 }
-                _ => None,
-            };
-            let Some((location, hours)) = due else {
-                continue;
-            };
-            if hours == 0 || last_refresh.elapsed() < Duration::from_secs(u64::from(hours) * 3600) {
-                continue;
+            }),
+            Err(_) => None,
+        };
+        let Some(location) = due else {
+            continue;
+        };
+        let name = subscription_name(&state, &location);
+        match import_subscription_blocking(
+            state.clone(),
+            location.clone(),
+            "Automatic subscription update completed.",
+        ) {
+            Ok(_) => {
+                let _ =
+                    append_managed_log(APP_LOG_SCOPE, "automatic subscription update completed");
             }
-            last_refresh = Instant::now();
-            let name = subscription_name(&state, &location);
-            match import_subscription_blocking(
-                state.clone(),
-                location,
-                "Automatic subscription update completed.",
-            ) {
-                Ok(_) => {
-                    let _ = append_managed_log(
-                        APP_LOG_SCOPE,
-                        "automatic subscription update completed",
-                    );
-                }
-                Err(error) => {
-                    let _ = append_managed_log(
-                        APP_LOG_SCOPE,
-                        &format!("automatic subscription update skipped or failed: {error}"),
-                    );
+            Err(error) => {
+                let _ = append_managed_log(
+                    APP_LOG_SCOPE,
+                    &format!("automatic subscription update skipped or failed: {error}"),
+                );
+                let first_failure = state.desktop.lock().is_ok_and(|desktop| {
+                    desktop
+                        .subscription_sources
+                        .iter()
+                        .find(|source| source.location == location)
+                        .is_some_and(|source| subscription_meta::notify_failure(source.failures))
+                });
+                if first_failure {
                     if let Some(notice) =
                         notification_settings_now(&state).subscription_failed(&name, &error)
                     {
@@ -1033,6 +1043,34 @@ fn start_subscription_refresh_monitor(app: AppHandle, state: DesktopAppState) {
             }
         }
     });
+}
+
+/// When `source` updates on its own next, Unix seconds: only the subscription in use updates automatically, and
+/// only while automatic updates are on. The interface shows this time and the monitor acts on it.
+fn subscription_next_update(
+    desktop: &DesktopState,
+    source: &DesktopSubscriptionSource,
+) -> Option<u64> {
+    let in_use = desktop.profile_source_url.as_deref() == Some(source.location.as_str());
+    if !desktop.auto_subscription_refresh || !in_use {
+        return None;
+    }
+    source.schedule().next_update()
+}
+
+/// [`subscription_next_update`] as the interface reads it.
+fn next_attempt_text(at: Option<u64>) -> Option<String> {
+    at.map(|seconds| format!("unix-epoch-seconds:{seconds}"))
+}
+
+/// The next automatic update of the subscription in use, as the interface reads it.
+fn profile_next_attempt(desktop: &DesktopState) -> Option<String> {
+    let location = desktop.profile_source_url.as_deref()?;
+    let source = desktop
+        .subscription_sources
+        .iter()
+        .find(|source| source.location == location)?;
+    next_attempt_text(subscription_next_update(desktop, source))
 }
 
 fn start_fastest_node_monitor(state: DesktopAppState) {
@@ -1461,7 +1499,7 @@ fn list_subscriptions(
                     .is_some_and(|path| path.display().to_string() == source.location),
             last_successful_update: source.last_successful_update.clone(),
             last_attempt: source.last_attempt.clone(),
-            next_attempt: source.next_attempt.clone(),
+            next_attempt: next_attempt_text(subscription_next_update(&desktop, source)),
             result: source.result.clone(),
             added_node_count: source.added_node_count,
             removed_node_count: source.removed_node_count,
@@ -1961,11 +1999,13 @@ fn change_node_edits(
     change: impl FnOnce(&mut NodeEdits),
 ) -> Result<(), String> {
     let _refresh_guard = acquire_subscription_refresh(state)?;
+    // Everything here is local, so it runs on the state itself under the lock: a copy written back afterwards
+    // would undo what another command saved meanwhile (third-party review F07).
     let mut desktop = state
         .desktop
         .lock()
-        .map_err(|_| "desktop state lock failed")?
-        .clone();
+        .map_err(|_| "desktop state lock failed")?;
+    let original = desktop.clone();
     let form = node_form_of(&desktop, node_id)?;
     let path = node_edits_path();
     let before = NodeEdits::load(&path);
@@ -1979,19 +2019,12 @@ fn change_node_edits(
     edits.save(&path).map_err(|error| error.to_string())?;
     if let Err(error) = reapply_node_edits(&mut desktop) {
         let _ = before.save(&path);
-        let mut restored = state
-            .desktop
-            .lock()
-            .map_err(|_| "desktop state lock failed")?
-            .clone();
-        let _ = reapply_node_edits(&mut restored);
+        *desktop = original;
+        let _ = reapply_node_edits(&mut desktop);
         return Err(error);
     }
     save_desktop_state(&desktop)?;
-    *state
-        .desktop
-        .lock()
-        .map_err(|_| "desktop state lock failed")? = desktop;
+    drop(desktop);
     if node_operations_runtime_running(state)? {
         restart_service_blocking(state.clone())?;
     }
@@ -2010,6 +2043,7 @@ fn reapply_node_edits(desktop: &mut DesktopState) -> Result<(), String> {
         desktop.profile_source_url.clone(),
         desktop,
         false,
+        &NodeEdits::load(&node_edits_path()),
     )?;
     let location = desktop.profile_source_url.clone().or_else(|| {
         desktop
@@ -2629,17 +2663,7 @@ fn save_preferences_blocking(
     desktop.auto_connect = preferences.auto_connect;
     desktop.auto_recover_core = preferences.auto_recover_core;
     desktop.auto_subscription_refresh = preferences.auto_subscription_refresh;
-    let next_refresh_attempt = scheduled_refresh_timestamp(preferences.auto_subscription_refresh);
-    desktop.profile_next_attempt = next_refresh_attempt.clone();
-    if let Some(location) = desktop.profile_source_url.clone() {
-        if let Some(source) = desktop
-            .subscription_sources
-            .iter_mut()
-            .find(|source| source.location == location)
-        {
-            source.next_attempt = next_refresh_attempt;
-        }
-    }
+    desktop.profile_next_attempt = profile_next_attempt(&desktop);
     desktop.auto_select_fastest_node = preferences.auto_select_fastest_node;
     desktop.dark_theme = preferences.dark_theme;
     save_desktop_state(&desktop)?;
@@ -2802,18 +2826,32 @@ fn import_subscription_blocking(
     message: &'static str,
 ) -> Result<OperationResult, String> {
     let _refresh_guard = acquire_subscription_refresh(&state)?;
+    // Only the download runs without the lock. The attempt and the result are written into the state as it is
+    // then, never a copy taken before the download, so settings another command saved meanwhile stay
+    // (third-party review F07).
+    {
+        let mut desktop = state
+            .desktop
+            .lock()
+            .map_err(|_| "desktop state lock failed")?;
+        record_subscription_attempt(&mut desktop, &location, super::current_local_timestamp());
+        save_desktop_state(&desktop)?;
+    }
+    let fetched = read_subscription(&location);
     let mut desktop = state
         .desktop
         .lock()
-        .map_err(|_| "desktop state lock failed")?
-        .clone();
-    let result = record_subscription_import(&location, &mut desktop);
-    let mut persisted = state
-        .desktop
-        .lock()
         .map_err(|_| "desktop state lock failed")?;
-    *persisted = desktop;
-    result?;
+    // Removed while it was downloading: it stays removed, and nothing of it is written again.
+    let id = subscription_source_id(&location);
+    if !desktop
+        .subscription_sources
+        .iter()
+        .any(|source| source.id == id)
+    {
+        return Err("The subscription was removed while it was updating.".to_string());
+    }
+    record_subscription_import(&location, fetched, &mut desktop)?;
     Ok(OperationResult {
         message: message.to_string(),
     })
@@ -2881,19 +2919,20 @@ fn check_profile_runtime_blocking(state: DesktopAppState) -> Result<OperationRes
     })
 }
 
-fn record_subscription_import(location: &str, desktop: &mut DesktopState) -> Result<(), String> {
-    let attempt = super::current_local_timestamp();
-    record_subscription_attempt(desktop, location, attempt.clone());
-    save_desktop_state(desktop)?;
+/// Applies a finished download (`fetched`) to the state and saves it; the attempt is recorded already.
+fn record_subscription_import(
+    location: &str,
+    fetched: Result<SubscriptionRead, String>,
+    desktop: &mut DesktopState,
+) -> Result<(), String> {
     let previous_nodes = desktop.profile_node_catalog.clone();
-    match import_subscription_at(location, desktop) {
+    match fetched.and_then(|read| import_subscription_at(location, read, desktop)) {
         Ok(meta) => {
             let timestamp = super::current_local_timestamp();
             let (added_node_count, removed_node_count, changed_node_count) =
                 subscription_node_change_counts(&previous_nodes, &desktop.profile_node_catalog);
             desktop.profile_last_successful_update = Some(timestamp.clone());
-            desktop.profile_next_attempt =
-                scheduled_refresh_timestamp(desktop.auto_subscription_refresh);
+            record_subscription_outcome(desktop, location, true);
             desktop.profile_refresh_result = "success".to_string();
             desktop.profile_added_node_count = added_node_count;
             desktop.profile_removed_node_count = removed_node_count;
@@ -2913,8 +2952,7 @@ fn record_subscription_import(location: &str, desktop: &mut DesktopState) -> Res
         }
         Err(error) => {
             let error_code = redacted_subscription_error_code(&error);
-            desktop.profile_next_attempt =
-                scheduled_refresh_timestamp(desktop.auto_subscription_refresh);
+            record_subscription_outcome(desktop, location, false);
             desktop.profile_refresh_result = "failed".to_string();
             desktop.profile_added_node_count = 0;
             desktop.profile_removed_node_count = 0;
@@ -2980,6 +3018,7 @@ fn record_subscription_attempt(desktop: &mut DesktopState, location: &str, attem
         .find(|source| source.id == id);
     if let Some(source) = source {
         source.last_attempt = Some(attempt);
+        source.last_attempt_unix = Some(unix_now());
         source.result = "running".to_string();
         source.error_code = None;
     } else {
@@ -2991,6 +3030,9 @@ fn record_subscription_attempt(desktop: &mut DesktopState, location: &str, attem
                 last_attempt: Some(attempt),
                 last_successful_update: None,
                 next_attempt: None,
+                last_success_unix: None,
+                last_attempt_unix: Some(unix_now()),
+                failures: 0,
                 result: "running".to_string(),
                 added_node_count: 0,
                 removed_node_count: 0,
@@ -3051,18 +3093,35 @@ fn record_subscription_result(
             node_count: None,
             update_interval_hours: None,
             suggested_interval_hours: None,
+            last_success_unix: None,
+            last_attempt_unix: Some(unix_now()),
+            failures: 0,
         });
 }
 
-fn scheduled_refresh_timestamp(enabled: bool) -> Option<String> {
-    enabled.then(|| {
-        let seconds = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs()
-            .saturating_add(SUBSCRIPTION_REFRESH_INTERVAL.as_secs());
-        format!("unix-epoch-seconds:{seconds}")
-    })
+/// Records how an update of the subscription at `location` ended, in the times its schedule is worked out from,
+/// and the next automatic update that follows (`subscription_next_update`).
+fn record_subscription_outcome(desktop: &mut DesktopState, location: &str, succeeded: bool) {
+    let id = subscription_source_id(location);
+    let now = unix_now();
+    if let Some(source) = desktop
+        .subscription_sources
+        .iter_mut()
+        .find(|source| source.id == id)
+    {
+        source.last_attempt_unix = Some(now);
+        if succeeded {
+            source.last_success_unix = Some(now);
+            source.failures = 0;
+        } else {
+            source.failures = source.failures.saturating_add(1);
+        }
+    }
+    desktop.profile_next_attempt = desktop
+        .subscription_sources
+        .iter()
+        .find(|source| source.id == id)
+        .and_then(|source| next_attempt_text(subscription_next_update(desktop, source)));
 }
 
 fn redacted_subscription_error_code(error: &str) -> String {
@@ -3129,16 +3188,30 @@ fn subscription_source_id(location: &str) -> String {
 
 fn import_subscription_at(
     location: &str,
+    read: SubscriptionRead,
     desktop: &mut DesktopState,
 ) -> Result<subscription_meta::ResponseMeta, String> {
     let previous = read_embedded_profile().ok();
-    let (payload, source_path, source_url, meta) = read_subscription(location)?;
-    // An update brings back what the provider serves (`node_edits`); the content is kept so edits can be
-    // applied to it later without fetching it again.
-    let _ = fs::remove_file(node_edits_path());
+    let (payload, source_path, source_url, meta) = read;
+    // An update brings back what the provider serves (`node_edits`). The new content is parsed and imported first,
+    // without the old edits; only then is it kept (so edits can be applied to it later without fetching it again)
+    // and the old edits dropped. A refresh that fails leaves the old content and its edits together
+    // (third-party review F09).
+    import_embedded_subscription(
+        &payload,
+        source_path,
+        source_url,
+        desktop,
+        true,
+        &NodeEdits::default(),
+    )?;
     write_managed_text_atomic(&profile_source_text_path(), &payload)
         .map_err(|error| error.to_string())?;
-    import_embedded_subscription(&payload, source_path, source_url, desktop, true)?;
+    match fs::remove_file(node_edits_path()) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(format!("The old node edits could not be dropped: {error}")),
+    }
     // Listing and linking work without this subscription's cache, so a failed write only leaves it out.
     let _ = cache_imported_nodes(location, desktop);
     relink_active_profile(desktop, previous.as_ref())?;
@@ -3153,6 +3226,7 @@ fn import_embedded_subscription(
     source_url: Option<String>,
     desktop: &mut DesktopState,
     fresh: bool,
+    edits: &NodeEdits,
 ) -> Result<(), String> {
     sync_anx_license();
     let service = CoreSubscriptionService::new();
@@ -3175,7 +3249,7 @@ fn import_embedded_subscription(
         &mut parsed,
         source_url.as_deref().unwrap_or_default(),
     );
-    let nodes = NodeEdits::load(&node_edits_path()).applied(&parsed);
+    let nodes = edits.applied(&parsed);
     // Subscription rules and policy groups drive the route when every node is
     // supported and the engine accepts the result; otherwise one node runs
     // alone.
@@ -4827,7 +4901,7 @@ fn snapshot(
         }),
         subscription_last_updated: desktop.profile_last_successful_update.clone(),
         subscription_last_attempt: desktop.profile_last_attempt.clone(),
-        subscription_next_attempt: desktop.profile_next_attempt.clone(),
+        subscription_next_attempt: profile_next_attempt(&desktop),
         subscription_refresh_result: desktop.profile_refresh_result.clone(),
         subscription_added_node_count: desktop.profile_added_node_count,
         subscription_removed_node_count: desktop.profile_removed_node_count,
@@ -5050,10 +5124,43 @@ mod tests {
     }
 
     #[test]
-    fn next_attempt_only_exists_for_enabled_schedule() {
-        assert!(scheduled_refresh_timestamp(false).is_none());
-        assert!(scheduled_refresh_timestamp(true)
-            .as_deref()
-            .is_some_and(|value| value.starts_with("unix-epoch-seconds:")));
+    fn the_shown_next_update_is_the_one_the_monitor_acts_on() {
+        let location = "https://sub.example/link";
+        let mut desktop = DesktopState {
+            auto_subscription_refresh: true,
+            profile_source_url: Some(location.to_string()),
+            ..DesktopState::default()
+        };
+        record_subscription_attempt(&mut desktop, location, "now".to_string());
+        record_subscription_outcome(&mut desktop, location, true);
+        let source = desktop.subscription_sources[0].clone();
+        let success = source.last_success_unix.unwrap();
+        // A 24-hour interval: the next update is a day after the success, not an hour.
+        let at = subscription_next_update(&desktop, &source).unwrap();
+        assert_eq!(at, success + 24 * 3600);
+        assert_eq!(
+            profile_next_attempt(&desktop),
+            Some(format!("unix-epoch-seconds:{at}"))
+        );
+        assert_eq!(desktop.profile_next_attempt, profile_next_attempt(&desktop));
+
+        // A failure waits for the retry time, and only the first one in a row is notified.
+        record_subscription_outcome(&mut desktop, location, false);
+        let source = desktop.subscription_sources[0].clone();
+        assert_eq!(source.failures, 1);
+        assert!(subscription_meta::notify_failure(source.failures));
+        assert_eq!(
+            subscription_next_update(&desktop, &source),
+            Some(success + 24 * 3600)
+        );
+
+        // By hand only: nothing is shown and the monitor does nothing.
+        desktop.subscription_sources[0].update_interval_hours = Some(0);
+        let source = desktop.subscription_sources[0].clone();
+        assert_eq!(subscription_next_update(&desktop, &source), None);
+        // Automatic updates off: the same.
+        desktop.subscription_sources[0].update_interval_hours = None;
+        desktop.auto_subscription_refresh = false;
+        assert_eq!(profile_next_attempt(&desktop), None);
     }
 }
