@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CaptureRequest } from "./bridge";
+import type { CaptureRequest, CaptureRequestsAnswer } from "./bridge";
 import { combineFilter, MAX_REQUESTS, mergeRequests, nextRev, nextSince, requestKey, splitOr } from "./capture-filter";
 
 function request(seq: number, done = true): CaptureRequest {
@@ -77,6 +77,26 @@ describe("capture filter", () => {
     expect(rows.map(requestKey)).toEqual(["9:1"]);
     // A request under way has no seq, so the seq cursor ignores it.
     expect(nextSince(rows, 1)).toBe(1);
+  });
+
+  it("keeps the newest copy of a row whatever order the answers arrive in", () => {
+    const copy = (rev: number, patch: Partial<CaptureRequest> = {}): CaptureRequest => ({
+      ...request(0, false),
+      seq: 0,
+      connection_id: 9,
+      index: 0,
+      started_at_ms: 100,
+      rev,
+      state: "in_progress",
+      ...patch,
+    });
+    const done: CaptureRequestsAnswer = { requests: [copy(4, { seq: 1, state: "done", status: 200 })], last_seq: 1, last_rev: 4 };
+    const underWay: CaptureRequestsAnswer = { requests: [copy(3)], last_seq: 0, last_rev: 3 };
+    const inOrder = mergeRequests(mergeRequests([], underWay), done);
+    const late = mergeRequests(mergeRequests([], done), underWay);
+    expect(late).toEqual(inOrder);
+    expect(late[0].state).toBe("done");
+    expect(late[0].rev).toBe(4);
   });
 
   it("moves the rev cursor to the newest change, or the last row of a full page", () => {

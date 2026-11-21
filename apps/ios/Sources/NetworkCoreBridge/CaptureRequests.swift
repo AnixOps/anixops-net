@@ -373,7 +373,11 @@ public struct CaptureRequestLog: Equatable, Sendable {
         if let lastRev = answer.lastRev {
             for row in answer.requests {
                 if let position = positions[row.id] {
-                    rows[position] = row
+                    // An older copy that arrives after a newer one is ignored: a row never goes back to an earlier
+                    // state.
+                    if row.rev >= rows[position].rev {
+                        rows[position] = row
+                    }
                 } else {
                     positions[row.id] = rows.count
                     rows.append(row)

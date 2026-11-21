@@ -85,6 +85,11 @@ fn text<'a>(request: &'a Value, name: &str) -> &'a str {
         .unwrap_or_default()
 }
 
+/// The engine's change number of a copy of a request; `None` from kernels without `since_rev`.
+fn rev(request: &Value) -> Option<u64> {
+    request.get("rev").and_then(Value::as_u64)
+}
+
 fn seq(request: &Value) -> u64 {
     request.get("seq").and_then(Value::as_u64).unwrap_or(0)
 }
@@ -156,7 +161,17 @@ pub fn merge(rows: &[Value], answer: &Value) -> Vec<Value> {
     let mut by_key: BTreeMap<(i64, i64), &Value> = rows.iter().map(|row| (key(row), row)).collect();
     if let Some(requests) = answer.get("requests").and_then(Value::as_array) {
         for request in requests {
-            by_key.insert(key(request), request);
+            // An older copy that arrives after a newer one is ignored, so a row never goes back to an earlier state.
+            let newer =
+                by_key
+                    .get(&key(request))
+                    .is_none_or(|shown| match (rev(shown), rev(request)) {
+                        (Some(shown), Some(next)) => next >= shown,
+                        _ => true,
+                    });
+            if newer {
+                by_key.insert(key(request), request);
+            }
         }
     }
     let dropped = answer
@@ -329,6 +344,26 @@ mod tests {
             &serde_json::json!({ "requests": [done], "dropped_before_seq": 1 }),
         );
         assert_eq!(next, vec![done]);
+    }
+
+    #[test]
+    fn an_older_copy_arriving_late_does_not_take_a_row_back() {
+        let under_way = serde_json::json!({
+            "seq": 0, "connection_id": 2, "index": 0, "started_at_ms": 5, "state": "in_progress", "rev": 3,
+        });
+        let done = serde_json::json!({
+            "seq": 1, "connection_id": 2, "index": 0, "started_at_ms": 5, "state": "done", "rev": 4,
+        });
+        let in_order = merge(
+            &merge(&[], &serde_json::json!({ "requests": [under_way.clone()] })),
+            &serde_json::json!({ "requests": [done.clone()] }),
+        );
+        let late = merge(
+            &merge(&[], &serde_json::json!({ "requests": [done.clone()] })),
+            &serde_json::json!({ "requests": [under_way] }),
+        );
+        assert_eq!(late, in_order);
+        assert_eq!(late, vec![done]);
     }
 
     #[test]

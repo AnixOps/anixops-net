@@ -161,6 +161,20 @@ final class CaptureRequestsTests: XCTestCase {
         XCTAssertTrue(log.rows.isEmpty)
     }
 
+    func testOlderCopyArrivingLateDoesNotTakeARowBack() throws {
+        let underWay = try liveAnswer([liveRow(0, rev: 3)], lastSeq: 0, lastRev: 3)
+        let done = try liveAnswer([liveRow(0, rev: 4, seq: 1, status: 200)], lastSeq: 1, lastRev: 4)
+        var inOrder = CaptureRequestLog()
+        inOrder.apply(underWay)
+        inOrder.apply(done)
+        var late = CaptureRequestLog()
+        late.apply(done)
+        late.apply(underWay)
+        XCTAssertEqual(late.rows, inOrder.rows)
+        XCTAssertFalse(try XCTUnwrap(late.rows.first).inProgress)
+        XCTAssertEqual(late.rows.first?.rev, 4)
+    }
+
     func testDecodesMessagesAndKeepsThemInStep() throws {
         let json = """
         {"exchange":{"seq":0,"started_at_ms":1700000000000,"ended_at_ms":null,"method":"GET","url":"wss://ws.test/",

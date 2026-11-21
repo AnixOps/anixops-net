@@ -42,10 +42,15 @@ export function useRequestFeed(capturing: boolean, filter: string, paused: boole
   useEffect(() => {
     if (!capturing || !visible || paused) return;
     let cancelled = false;
+    // One read at a time: a read that starts while another waits could answer after it with older copies of the
+    // same rows. `mergeRequests` also keeps the newest copy, so neither alone decides the order.
+    let reading = false;
     // Typing waits for a pause before the first read.
     const delay = window.setTimeout(() => void poll(), 300);
     const timer = window.setInterval(() => void poll(), 1000);
     async function poll() {
+      if (reading) return;
+      reading = true;
       try {
         const since = nextSince(state.current.rows, state.current.lastSeq);
         const answer = await desktop.captureRequests(since, state.current.lastRev ?? 0, filter);
@@ -66,6 +71,8 @@ export function useRequestFeed(capturing: boolean, filter: string, paused: boole
         if (cancelled) return;
         const text = String(failure);
         setError(text.includes("invalid_filter") ? t("筛选表达式有误") : text);
+      } finally {
+        reading = false;
       }
     }
     return () => {
