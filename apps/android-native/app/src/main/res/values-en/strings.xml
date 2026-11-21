@@ -275,6 +275,7 @@
     <string name="traffic_none">No traffic in this period</string>
     <string name="traffic_after_connect">Counting starts once connected</string>
     <string name="traffic_other_hosts">Other hosts</string>
+    <string name="traffic_no_host_name">No host name</string>
     <plurals name="logs_copied">
         <item quantity="one">Copied %d log line</item>
         <item quantity="other">Copied %d log lines</item>

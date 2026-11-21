@@ -196,6 +196,8 @@ struct TrafficStatsView: View {
         switch name {
         case TrafficStats.otherHosts:
             return String(localized: "其他主机")
+        case TrafficStats.noHostName:
+            return String(localized: "无主机名")
         case "DIRECT":
             return String(localized: "直连")
         case "REJECT":
