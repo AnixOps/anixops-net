@@ -9,19 +9,58 @@ import Security
 public enum NodeSecretStore {
     public struct Failure: Error, Equatable {
         public let status: OSStatus
+
+        public init(status: OSStatus) {
+            self.status = status
+        }
     }
 
     static let service = "networkcore.node-key"
 
     /// Account of the key behind the tunnel profile's `passwordReference`. The extension falls back to it when the
-    /// reference no longer resolves.
+    /// reference no longer resolves. Profiles that carry `TunnelProfileKeys.nodeKeyVersion` read
+    /// `versionedAccount(_:)` instead; this account then only follows the last profile saved.
     public static let tunnelProfileAccount = "default"
+
+    /// The account of the node key saved with one tunnel profile. Each save writes a new one, so the profile in the
+    /// system settings keeps its own key until the next profile is saved, whatever happens in between.
+    public static func versionedAccount(_ version: String) -> String {
+        "\(tunnelProfileAccount)@\(version)"
+    }
+
+    /// Removes the versioned node keys of every profile but `version`'s, once that profile is saved.
+    public static func removeNodeKeys(keeping version: String) {
+        let kept = versionedAccount(version)
+        for account in (try? accounts()) ?? [] where account.hasPrefix(tunnelProfileAccount + "@") && account != kept {
+            try? delete(account: account)
+        }
+    }
+
+    /// Every account this store holds a value for.
+    static func accounts() throws -> [String] {
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+        ]
+        query.merge(platformAttributes) { _, new in new }
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound {
+            return []
+        }
+        guard status == errSecSuccess, let items = result as? [[String: Any]] else {
+            throw Failure(status: status == errSecSuccess ? errSecDecode : status)
+        }
+        return items.compactMap { $0[kSecAttrAccount as String] as? String }
+    }
 
     /// Saves the key for `account` and returns its persistent reference, for `NEVPNProtocol.passwordReference`.
     ///
     /// An existing item is updated in place, so its persistent reference stays the same. Its value changes, though, and
-    /// a tunnel profile saved earlier reads that value: a caller that saves a profile after the key must put the old
-    /// key back when that save fails (`TunnelController.save`), or the old profile pairs with the new key.
+    /// anything that reads this account gets the new value: a tunnel profile keeps its own key by naming a
+    /// `versionedAccount(_:)` that nothing else writes.
     public static func save(_ password: String, account: String) throws -> Data {
         var identity: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,

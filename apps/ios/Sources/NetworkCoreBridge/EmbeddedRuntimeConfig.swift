@@ -598,6 +598,10 @@ public enum TunnelProfileKeys {
     public static let tunnelInterface = "networkcore.tunnel-interface"
     /// Display name of the imported node. Not secret.
     public static let nodeName = "networkcore.node-name"
+    /// The version of the node key this profile was saved with (`NodeSecretStore.versionedAccount`). The extension
+    /// reads that key and no other, so the profile never runs with the key of a profile saved after it. Profiles
+    /// saved before it existed read the fixed account.
+    public static let nodeKeyVersion = "networkcore.node-key-version"
     /// `true` when the tunnel follows the subscription's rules and groups: the extension then adds the `routing`
     /// section from the node library in the Keychain (`NodeLibrary.keychainAccount`). Absent means the selected node
     /// carries all traffic.
