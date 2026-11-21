@@ -19,8 +19,9 @@ public enum NodeSecretStore {
 
     /// Saves the key for `account` and returns its persistent reference, for `NEVPNProtocol.passwordReference`.
     ///
-    /// An existing item is updated in place, so its persistent reference stays the same: a tunnel profile saved
-    /// earlier keeps working even when saving the new profile fails afterwards.
+    /// An existing item is updated in place, so its persistent reference stays the same. Its value changes, though, and
+    /// a tunnel profile saved earlier reads that value: a caller that saves a profile after the key must put the old
+    /// key back when that save fails (`TunnelController.save`), or the old profile pairs with the new key.
     public static func save(_ password: String, account: String) throws -> Data {
         var identity: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,

@@ -810,6 +810,11 @@ final class TunnelController {
             message = Self.describe(.native(.unavailable))
             return false
         }
+        // A group deleted while it downloaded stays deleted: the result is dropped instead of coming back as a new
+        // group (third-party review F08).
+        if let groupID, subscriptions.group(id: groupID) == nil {
+            return false
+        }
         var groups = subscriptions
         let previous = groups.activeLibrary()
         let previousActiveID = groups.activeID
@@ -840,8 +845,12 @@ final class TunnelController {
                 }
             }
         }
-        // Other groups may have changed while this one downloaded.
+        // Other groups may have changed while this one downloaded or its profile was saved; one deleted meanwhile
+        // stays deleted.
         var latest = subscriptions
+        if let groupID, latest.group(id: groupID) == nil {
+            return false
+        }
         latest.upsert(group)
         latest.activeID = groups.activeID
         store(latest)
@@ -984,11 +993,22 @@ final class TunnelController {
             message = String(localized: "无法生成隧道配置")
             return false
         }
+        // The key lives under one fixed account that the extension reads first, so writing the new key changes what
+        // the saved profile pairs with. Until the new profile is saved the old key is kept, and any failure below puts
+        // it back: a failed save leaves the old profile with its own key (third-party review F05).
+        let previousKey: String?
         do {
+            previousKey = try NodeSecretStore.value(account: profileID)
             keyReference = try NodeSecretStore.save(profile.config.secret.keychainValue(), account: profileID)
         } catch {
             message = String(localized: "无法把节点密钥保存到钥匙串")
             return false
+        }
+        var committed = false
+        defer {
+            if !committed {
+                Self.restoreNodeKey(previousKey, account: profileID)
+            }
         }
 
         let tunnelProtocol = NETunnelProviderProtocol()
@@ -1049,6 +1069,7 @@ final class TunnelController {
         onDemand.apply(to: target, active: target.isOnDemandEnabled)
         do {
             manager = try await persist(target)
+            committed = true
             // Keep the hint to allow the extension: the profile is saved, but connecting still needs it.
             message = systemExtensionPending ? Self.systemExtensionApprovalText : nil
         } catch {
@@ -1058,6 +1079,16 @@ final class TunnelController {
         }
         refresh()
         return true
+    }
+
+    /// Puts back the node key a failed profile save replaced, or removes the one it added, so the profile still in
+    /// the system settings finds its own key.
+    private static func restoreNodeKey(_ previous: String?, account: String) {
+        if let previous {
+            _ = try? NodeSecretStore.save(previous, account: account)
+        } else {
+            try? NodeSecretStore.delete(account: account)
+        }
     }
 
     /// Saves `target` and reloads it so its connection object reflects the saved profile. When the save fails, for
