@@ -83,19 +83,20 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-dejavu-core >/dev/null
           python3 - "${RUNNER_TEMP}/demo" <<'EOF'
-          import os, subprocess, sys
+          import os, subprocess, sys, textwrap
           d = sys.argv[1]
           rows = [line.rstrip("\n").split("\t", 1) for line in open(os.path.join(d, "captions.tsv")) if line.strip()]
           font = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-          filters = []
+          # screenrecord writes frames only when the screen changes; a fixed frame rate lets each caption change on time.
+          filters = ["fps=30"]
           for i, (start, text) in enumerate(rows):
               end = rows[i + 1][0] if i + 1 < len(rows) else "100000"
               path = os.path.join(d, f"caption-{i}.txt")
               with open(path, "w") as f:
-                  f.write(text)
+                  f.write("\n".join(textwrap.wrap(text, 30)))
               filters.append(
-                  f"drawtext=fontfile={font}:textfile={path}:fontsize=38:fontcolor=white:box=1:boxcolor=black@0.72"
-                  f":boxborderw=22:x=(w-text_w)/2:y=h*0.12:enable='between(t,{start},{end})'"
+                  f"drawtext=fontfile={font}:textfile={path}:fontsize=46:line_spacing=14:fontcolor=white:box=1:boxcolor=black@0.72"
+                  f":boxborderw=26:x=(w-text_w)/2:y=h*0.30:enable='between(t,{start},{end})'"
               )
           subprocess.run(
               ["ffmpeg", "-y", "-loglevel", "error", "-i", os.path.join(d, "raw.mp4"), "-vf", ",".join(filters),

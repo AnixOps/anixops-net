@@ -206,6 +206,7 @@ Play 版是开源版（用户 2026-11-15 决定），包名 `io.anixops.net.andr
 - [ ] VPN 服务和前台服务声明要附 90 秒内的演示视频：手动运行 `play-demo-video.yml`（Actions → Play demo video → Run
   workflow），它在模拟器上跑真实的调试版 APK 并加上英文字幕；下载 artifact 里的 `anixops-net-play-demo.mp4`，由维护者
   上传到 YouTube（不公开列出）或云盘，再把链接填进两项声明。
+  字幕时间取自脚本的计时，和录像可能差两三秒；上传前看一遍，必要时用 artifact 里的 `raw.mp4` 和 `captions.tsv` 调整后重新生成。
 - [ ] 以后自动上传到内部测试轨道：服务账号 `play-publisher` 只有测试轨道权限，正式版由维护者在 Play Console 推广。
 
 
