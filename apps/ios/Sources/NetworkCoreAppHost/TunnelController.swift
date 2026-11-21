@@ -997,9 +997,10 @@ final class TunnelController {
         // (`TunnelProfileKeys.nodeKeyVersion`). The profile in the system settings keeps reading its own key whatever
         // happens before the new profile is saved: a failure, or the app being stopped in between
         // (third-party review F05). Older versions are removed only once the new profile is saved.
-        let keyValue = profile.config.secret.keychainValue()
+        let keyValue: String
         let keyVersion = UUID().uuidString
         do {
+            keyValue = try profile.config.secret.keychainValue()
             keyReference = try NodeSecretStore.save(keyValue, account: NodeSecretStore.versionedAccount(keyVersion))
         } catch {
             message = String(localized: "无法把节点密钥保存到钥匙串")
