@@ -82,12 +82,25 @@ export function compareArrival(a: CaptureRequest, b: CaptureRequest): number {
 }
 
 /**
+ * Whether `next` may replace `shown`, a copy of the same request: not when both carry the engine's change number and
+ * `next` is older. An answer that arrives late never takes a row back to an earlier state.
+ */
+export function newerCopy(shown: CaptureRequest | undefined, next: CaptureRequest): boolean {
+  if (!shown || shown.rev == null || next.rev == null) return true;
+  return next.rev >= shown.rev;
+}
+
+/**
  * The list after one answer: newer copies of a request replace older ones (a request under way is updated in place
- * as its response arrives), ended requests the engine dropped leave, oldest first.
+ * as its response arrives, and an older copy arriving late is ignored), ended requests the engine dropped leave,
+ * oldest first.
  */
 export function mergeRequests(rows: CaptureRequest[], answer: CaptureRequestsAnswer): CaptureRequest[] {
   const byKey = new Map(rows.map((row) => [requestKey(row), row]));
-  for (const request of answer.requests ?? []) byKey.set(requestKey(request), request);
+  for (const request of answer.requests ?? []) {
+    const key = requestKey(request);
+    if (newerCopy(byKey.get(key), request)) byKey.set(key, request);
+  }
   const dropped = answer.dropped_before_seq ?? 0;
   // A request still under way has no seq yet; if its connection went, it is simply not updated again.
   const merged = [...byKey.values()].filter((row) => row.seq === 0 || row.seq > dropped).sort(compareArrival);

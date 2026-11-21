@@ -156,16 +156,59 @@ pub fn display_name(name: Option<&str>, location: &str) -> String {
         .to_string()
 }
 
-/// Whether an automatic update is due: `interval_hours` 0 means by hand only, and a subscription never
-/// updated successfully is due at once.
-pub fn is_due(last_success_secs: Option<u64>, interval_hours: u32, now_secs: u64) -> bool {
-    if interval_hours == 0 {
-        return false;
+/// The first retry after a failed automatic update waits this long; each further failure in a row doubles the
+/// wait, which never grows past the subscription's own interval.
+pub const RETRY_AFTER_FAILURE_SECS: u64 = 15 * 60;
+
+/// What the schedule of one subscription's automatic updates is made of. The desktop clients keep these per
+/// subscription, so the time they show, the time the updater acts on and the time after a restart are one.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct UpdateSchedule {
+    /// The last successful update, Unix seconds; `None` when there was none.
+    pub last_success: Option<u64>,
+    /// The last attempt, successful or not, Unix seconds.
+    pub last_attempt: Option<u64>,
+    /// Failed attempts since the last success.
+    pub failures: u32,
+    /// Hours between updates; 0 means by hand only.
+    pub interval_hours: u32,
+}
+
+impl UpdateSchedule {
+    /// When the next automatic update may run, Unix seconds: `interval_hours` after the last success (at once when
+    /// there was none), and after a failure not before the last attempt plus the retry wait
+    /// ([`RETRY_AFTER_FAILURE_SECS`], doubled for each further failure, at most the interval). `None` when updates
+    /// are by hand only.
+    pub fn next_update(&self) -> Option<u64> {
+        if self.interval_hours == 0 {
+            return None;
+        }
+        let interval = u64::from(self.interval_hours) * 3600;
+        let regular = self
+            .last_success
+            .map_or(0, |last| last.saturating_add(interval));
+        match (self.failures, self.last_attempt) {
+            (0, _) | (_, None) => Some(regular),
+            (failures, Some(attempt)) => {
+                let doublings = (failures - 1).min(20);
+                let wait = RETRY_AFTER_FAILURE_SECS
+                    .saturating_mul(1 << doublings)
+                    .min(interval);
+                Some(regular.max(attempt.saturating_add(wait)))
+            }
+        }
     }
-    match last_success_secs {
-        Some(last) => now_secs >= last.saturating_add(u64::from(interval_hours) * 3600),
-        None => true,
+
+    /// Whether an automatic update is due at `now` (Unix seconds).
+    pub fn is_due(&self, now: u64) -> bool {
+        self.next_update().is_some_and(|at| now >= at)
     }
+}
+
+/// Whether a failed automatic update is worth a notice: only the first failure of a run of failures (`failures`
+/// counts this one), so a subscription that keeps failing is reported once until it works again.
+pub fn notify_failure(failures: u32) -> bool {
+    failures == 1
 }
 
 fn percent_decode(value: &str) -> Option<String> {
@@ -280,9 +323,70 @@ mod tests {
 
     #[test]
     fn due_follows_the_interval() {
-        assert!(!is_due(Some(1000), 0, u64::MAX));
-        assert!(is_due(None, 24, 0));
-        assert!(!is_due(Some(1000), 1, 1000 + 3599));
-        assert!(is_due(Some(1000), 1, 1000 + 3600));
+        let schedule = |last_success, interval_hours| UpdateSchedule {
+            last_success,
+            last_attempt: last_success,
+            failures: 0,
+            interval_hours,
+        };
+        assert!(!schedule(Some(1000), 0).is_due(u64::MAX));
+        assert_eq!(schedule(Some(1000), 0).next_update(), None);
+        assert!(schedule(None, 24).is_due(0));
+        assert!(!schedule(Some(1000), 1).is_due(1000 + 3599));
+        assert!(schedule(Some(1000), 1).is_due(1000 + 3600));
+    }
+
+    #[test]
+    fn failed_updates_back_off_instead_of_running_every_check() {
+        // Due since long ago, then the attempt at 100_000 failed: the next one waits the retry time, not the
+        // updater's next one-minute check.
+        let mut schedule = UpdateSchedule {
+            last_success: Some(1000),
+            last_attempt: Some(100_000),
+            failures: 1,
+            interval_hours: 24,
+        };
+        assert!(!schedule.is_due(100_000 + 60));
+        assert_eq!(
+            schedule.next_update(),
+            Some(100_000 + RETRY_AFTER_FAILURE_SECS)
+        );
+        // Each failure in a row doubles the wait.
+        schedule.failures = 3;
+        assert_eq!(
+            schedule.next_update(),
+            Some(100_000 + 4 * RETRY_AFTER_FAILURE_SECS)
+        );
+        // The wait never exceeds the interval, however many failures.
+        schedule.failures = 40;
+        assert_eq!(schedule.next_update(), Some(100_000 + 24 * 3600));
+        schedule.interval_hours = 1;
+        assert_eq!(schedule.next_update(), Some(100_000 + 3600));
+        // A failure never brings the regular time forward.
+        let early = UpdateSchedule {
+            last_success: Some(100_000),
+            last_attempt: Some(100_010),
+            failures: 1,
+            interval_hours: 24,
+        };
+        assert_eq!(early.next_update(), Some(100_000 + 24 * 3600));
+        // A subscription never updated and failing waits too.
+        let never = UpdateSchedule {
+            last_success: None,
+            last_attempt: Some(500),
+            failures: 2,
+            interval_hours: 24,
+        };
+        assert_eq!(
+            never.next_update(),
+            Some(500 + 2 * RETRY_AFTER_FAILURE_SECS)
+        );
+    }
+
+    #[test]
+    fn only_the_first_failure_in_a_row_is_notified() {
+        assert!(notify_failure(1));
+        assert!(!notify_failure(2));
+        assert!(!notify_failure(0));
     }
 }

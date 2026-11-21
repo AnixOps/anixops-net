@@ -10,11 +10,19 @@ import Security
 /// It re-reads platform facts and the runtime handshake on every start and fails closed when either is
 /// unavailable. It never starts another process and never logs the tunnel profile.
 final class PacketTunnelProvider: NEPacketTunnelProvider {
-    /// The node key for this profile. The app saves it under one fixed account and updates it in place, so that
-    /// item is read first. The persistent reference is only a fallback: builds that deleted and re-added the item
-    /// on every save left references that point at nothing, or at another item once the Keychain reused its row.
-    private func nodeKey(for reference: Data) throws -> String {
-        if let value = startSecrets?.nodeKey {
+    /// The node key for this profile. A profile saved with a key version reads that version's key and no other: a
+    /// key saved for a later profile that never made it into the system settings must not pair with this one. A
+    /// profile from before key versions reads the fixed account the app updated in place, then the persistent
+    /// reference: builds that deleted and re-added the item on every save left references that point at nothing,
+    /// or at another item once the Keychain reused its row.
+    private func nodeKey(for reference: Data, version: String?) throws -> String {
+        if let value = startSecrets?.nodeKey(forVersion: version) {
+            return value
+        }
+        if let version {
+            guard let value = try NodeSecretStore.value(account: NodeSecretStore.versionedAccount(version)) else {
+                throw NodeSecretStore.Failure(status: errSecItemNotFound)
+            }
             return value
         }
         if let value = try NodeSecretStore.value(account: NodeSecretStore.tunnelProfileAccount) {
@@ -125,7 +133,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         var config: EmbeddedRuntimeConfig
         let interface: TunnelInterface
         do {
-            let secret = NodeSecret.fromKeychainValue(try nodeKey(for: keyReference))
+            let version = tunnelProtocol.providerConfiguration?[TunnelProfileKeys.nodeKeyVersion] as? String
+            let secret = NodeSecret.fromKeychainValue(try nodeKey(for: keyReference, version: version))
             config = try EmbeddedRuntimeConfig.decoded(from: template).withSecret(secret)
             interface = try (tunnelProtocol.providerConfiguration?[TunnelProfileKeys.tunnelInterface] as? Data)
                 .map(TunnelInterface.decoded(from:)) ?? .proxy

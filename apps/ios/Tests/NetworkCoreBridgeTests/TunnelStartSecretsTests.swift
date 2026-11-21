@@ -11,6 +11,19 @@ final class TunnelStartSecretsTests: XCTestCase {
         XCTAssertFalse(secrets.isEmpty)
     }
 
+    func testNodeKeyPairsOnlyWithItsOwnProfileVersion() {
+        // Third-party review F05: a key handed over for one profile never runs another profile's template.
+        let versioned = TunnelStartSecrets(nodeKey: "key-b", nodeKeyVersion: "B")
+        XCTAssertEqual(versioned.nodeKey(forVersion: "B"), "key-b")
+        XCTAssertNil(versioned.nodeKey(forVersion: "A"))
+        XCTAssertNil(versioned.nodeKey(forVersion: nil))
+        let legacy = TunnelStartSecrets(nodeKey: "key")
+        XCTAssertEqual(legacy.nodeKey(forVersion: nil), "key")
+        XCTAssertNil(legacy.nodeKey(forVersion: "A"))
+        XCTAssertEqual(TunnelStartSecrets(options: versioned.options), versioned)
+        XCTAssertEqual(NodeSecretStore.versionedAccount("A"), "default@A")
+    }
+
     func testNoOptionsMeansNothingHandedOver() {
         XCTAssertNil(TunnelStartSecrets(options: nil))
         XCTAssertNil(TunnelStartSecrets(options: ["other": NSString(string: "x")]))

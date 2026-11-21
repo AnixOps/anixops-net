@@ -411,6 +411,13 @@ private const val GAP_SHARE = 0.25f
 private fun Shares(rows: List<TrafficShare>) {
     rows.forEachIndexed { index, row ->
         if (index > 0) RowDivider()
-        InfoRow(if (row.name == "*") stringResource(R.string.traffic_other_hosts) else row.name, formatBytes(row.bytes))
+        InfoRow(
+            when (row.name) {
+                "*" -> stringResource(R.string.traffic_other_hosts)
+                "#" -> stringResource(R.string.traffic_no_host_name)
+                else -> row.name
+            },
+            formatBytes(row.bytes),
+        )
     }
 }

@@ -567,6 +567,7 @@ export const english: Record<string, string> = {
   "上传 {up} · 下载 {down}": "Upload {up} · Download {down}",
   "今天": "Today",
   "其他主机": "Other hosts",
+  "无主机名": "No host name",
   "分组": "Group By",
   "已清空流量统计": "Traffic statistics cleared",
   "按主机": "By Host",

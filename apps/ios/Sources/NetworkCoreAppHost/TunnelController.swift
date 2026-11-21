@@ -810,6 +810,11 @@ final class TunnelController {
             message = Self.describe(.native(.unavailable))
             return false
         }
+        // A group deleted while it downloaded stays deleted: the result is dropped instead of coming back as a new
+        // group (third-party review F08).
+        if let groupID, subscriptions.group(id: groupID) == nil {
+            return false
+        }
         var groups = subscriptions
         let previous = groups.activeLibrary()
         let previousActiveID = groups.activeID
@@ -840,8 +845,12 @@ final class TunnelController {
                 }
             }
         }
-        // Other groups may have changed while this one downloaded.
+        // Other groups may have changed while this one downloaded or its profile was saved; one deleted meanwhile
+        // stays deleted.
         var latest = subscriptions
+        if let groupID, latest.group(id: groupID) == nil {
+            return false
+        }
         latest.upsert(group)
         latest.activeID = groups.activeID
         store(latest)
@@ -984,8 +993,15 @@ final class TunnelController {
             message = String(localized: "无法生成隧道配置")
             return false
         }
+        // Each save writes the key under a version of its own and the profile names that version
+        // (`TunnelProfileKeys.nodeKeyVersion`). The profile in the system settings keeps reading its own key whatever
+        // happens before the new profile is saved: a failure, or the app being stopped in between
+        // (third-party review F05). Older versions are removed only once the new profile is saved.
+        let keyValue: String
+        let keyVersion = UUID().uuidString
         do {
-            keyReference = try NodeSecretStore.save(profile.config.secret.keychainValue(), account: profileID)
+            keyValue = try profile.config.secret.keychainValue()
+            keyReference = try NodeSecretStore.save(keyValue, account: NodeSecretStore.versionedAccount(keyVersion))
         } catch {
             message = String(localized: "无法把节点密钥保存到钥匙串")
             return false
@@ -999,6 +1015,7 @@ final class TunnelController {
             TunnelProfileKeys.runtimeConfig: config,
             TunnelProfileKeys.tunnelInterface: interface,
             TunnelProfileKeys.nodeName: profile.displayName,
+            TunnelProfileKeys.nodeKeyVersion: keyVersion,
         ]
         if routed {
             providerConfiguration[TunnelProfileKeys.routing] = true
@@ -1049,6 +1066,10 @@ final class TunnelController {
         onDemand.apply(to: target, active: target.isOnDemandEnabled)
         do {
             manager = try await persist(target)
+            // The fixed account follows the saved profile for readers from before key versions; keys no saved profile
+            // names any more go.
+            _ = try? NodeSecretStore.save(keyValue, account: profileID)
+            NodeSecretStore.removeNodeKeys(keeping: keyVersion)
             // Keep the hint to allow the extension: the profile is saved, but connecting still needs it.
             message = systemExtensionPending ? Self.systemExtensionApprovalText : nil
         } catch {
@@ -1059,6 +1080,7 @@ final class TunnelController {
         refresh()
         return true
     }
+
 
     /// Saves `target` and reloads it so its connection object reflects the saved profile. When the save fails, for
     /// example because the object went stale after a widget, the Control Center switch or Settings changed the
@@ -1499,7 +1521,7 @@ final class TunnelController {
 
     private func startTunnel(_ manager: NETunnelProviderManager) {
         do {
-            try manager.connection.startVPNTunnel(options: Self.startOptions())
+            try manager.connection.startVPNTunnel(options: Self.startOptions(for: manager))
             message = nil
         } catch {
             message = String(localized: "无法启动隧道")
@@ -1521,9 +1543,11 @@ final class TunnelController {
     /// On macOS the tunnel may be a System Extension, which runs as root and cannot read the user's Keychain, so
     /// the app hands over the node key, node library and MITM root at start (`TunnelStartSecrets`). iOS shares the
     /// Keychain with the extension and passes nothing.
-    private static func startOptions() -> [String: NSObject]? {
+    private static func startOptions(for manager: NETunnelProviderManager) -> [String: NSObject]? {
         #if os(macOS)
-        return TunnelStartSecrets.fromKeychain().options
+        let version = (manager.protocolConfiguration as? NETunnelProviderProtocol)?
+            .providerConfiguration?[TunnelProfileKeys.nodeKeyVersion] as? String
+        return TunnelStartSecrets.fromKeychain(nodeKeyVersion: version).options
         #else
         return nil
         #endif
@@ -1816,7 +1840,7 @@ final class TunnelController {
         if restartAfterStop, connection == .disconnected {
             // The node switch stopped the tunnel on purpose: no error to show, just start it on the new node.
             restartAfterStop = false
-            try? manager?.connection.startVPNTunnel(options: Self.startOptions())
+            try? manager?.connection.startVPNTunnel(options: manager.flatMap(Self.startOptions(for:)))
         } else if connection == .disconnected, previous != .disconnected, previous != .invalid {
             showLastDisconnectError()
         }

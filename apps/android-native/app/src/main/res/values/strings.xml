@@ -276,6 +276,7 @@
     <string name="traffic_none">这段时间没有流量</string>
     <string name="traffic_after_connect">连接后开始统计</string>
     <string name="traffic_other_hosts">其他主机</string>
+    <string name="traffic_no_host_name">无主机名</string>
     <plurals name="logs_copied">
         <item quantity="other">已拷贝 %d 行日志</item>
     </plurals>

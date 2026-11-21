@@ -266,6 +266,7 @@
     <string name="traffic_none">這段時間沒有流量</string>
     <string name="traffic_after_connect">連線後開始統計</string>
     <string name="traffic_other_hosts">其他主機</string>
+    <string name="traffic_no_host_name">無主機名稱</string>
     <plurals name="logs_copied">
         <item quantity="other">已拷貝 %d 行日誌</item>
     </plurals>

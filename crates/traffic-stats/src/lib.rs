@@ -1,6 +1,7 @@
 //! Traffic statistics of the desktop and Android clients, as on iOS (`TrafficStats.swift`): the last seven days in
 //! hourly buckets, by host and by policy, counted from the engine's connection list (`{"cmd":"connections"}`)
-//! polled every few seconds. Only host names and byte counts are kept, never addresses or paths.
+//! polled every few seconds. Only host names and byte counts are kept, never addresses or paths: a connection the
+//! engine saw no host name for counts under [`NO_HOST_NAME`], not under its address (third-party review F13).
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -15,6 +16,8 @@ pub const KEPT_HOURS: u64 = 7 * 24;
 /// Hosts kept per hour; the rest add up under [`OTHER_HOSTS`].
 pub const HOSTS_PER_HOUR: usize = 64;
 pub const OTHER_HOSTS: &str = "*";
+/// Where connections without a host name add up; no host name contains `#`.
+pub const NO_HOST_NAME: &str = "#";
 const HOUR: u64 = 3600;
 
 /// One hour of traffic.
@@ -166,23 +169,13 @@ fn delta(now: u64, before: Option<u64>) -> u64 {
     }
 }
 
-/// The host name, else the destination address without its port.
+/// The host name, else [`NO_HOST_NAME`]: the statistics are kept on disk for seven days and hold no addresses.
 fn host_name(connection: &Value) -> String {
-    if let Some(host) = connection["host"].as_str().filter(|host| !host.is_empty()) {
-        return host.to_string();
-    }
-    let destination = connection["destination"].as_str().unwrap_or_default();
-    if let Some(rest) = destination.strip_prefix('[') {
-        if let Some(end) = rest.find(']') {
-            return rest[..end].to_string();
-        }
-    }
-    match destination.rsplit_once(':') {
-        Some((address, port)) if !address.contains(':') && port.parse::<u16>().is_ok() => {
-            address.to_string()
-        }
-        _ => destination.to_string(),
-    }
+    connection["host"]
+        .as_str()
+        .filter(|host| !host.is_empty())
+        .unwrap_or(NO_HOST_NAME)
+        .to_string()
 }
 
 /// The first policy of the chain, else the outbound.
@@ -222,7 +215,12 @@ mod tests {
         assert_eq!(hour.start, NOW - NOW % 3600);
         assert_eq!((hour.upload, hour.download), (20, 100));
         assert_eq!(hour.hosts["a.example"], 115);
-        assert_eq!(hour.hosts["2001:db8::1"], 5);
+        // No host name: counted, but not under its address.
+        assert_eq!(hour.hosts[NO_HOST_NAME], 5);
+        assert!(!hour.hosts.contains_key("2001:db8::1"));
+        assert!(!serde_json::to_string(&stats)
+            .unwrap()
+            .contains("2001:db8::1"));
         assert_eq!(hour.policies["Proxy"], 115);
         assert_eq!(hour.policies["direct"], 5);
 
@@ -246,10 +244,21 @@ mod tests {
     }
 
     #[test]
-    fn host_names_fall_back_to_the_address() {
-        assert_eq!(host_name(&json!({"destination": "1.2.3.4:80"})), "1.2.3.4");
-        assert_eq!(host_name(&json!({"destination": "[::1]:80"})), "::1");
-        assert_eq!(host_name(&json!({"host": "", "destination": "x"})), "x");
+    fn connections_without_a_host_name_keep_no_address() {
+        // Saved statistics never hold an address (third-party review F13).
+        assert_eq!(
+            host_name(&json!({"destination": "1.2.3.4:80"})),
+            NO_HOST_NAME
+        );
+        assert_eq!(host_name(&json!({"destination": "[::1]:80"})), NO_HOST_NAME);
+        assert_eq!(
+            host_name(&json!({"host": "", "destination": "x"})),
+            NO_HOST_NAME
+        );
+        assert_eq!(
+            host_name(&json!({"host": "example.com", "destination": "1.2.3.4:443"})),
+            "example.com"
+        );
     }
 
     #[test]

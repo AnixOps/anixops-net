@@ -369,7 +369,7 @@ mod tests {
         assert_eq!(migrated.sources, 2);
         assert!(migrated.nodes_cached);
 
-        let state = store.load();
+        let state = store.load().unwrap();
         // The old mode is a preset list mode, which public builds no longer have.
         assert_eq!(state.routing_mode, RoutingMode::Rule);
         assert_eq!(state.dns_preset, DnsPreset::Split);
@@ -410,7 +410,7 @@ mod tests {
         let (old, store) = dirs("files");
         old_client(&old);
         migrate(&old, &store).unwrap().unwrap();
-        let state = store.load();
+        let state = store.load().unwrap();
         let id = state.selected_source().unwrap().id.clone();
         let new = store.dir();
 
@@ -463,11 +463,11 @@ mod tests {
         assert!(migrate(&old, &store).unwrap().is_some());
 
         // The user changes something in the new client; the old folder is still there at the next start.
-        let mut state = store.load();
+        let mut state = store.load().unwrap();
         state.block_quic = false;
         store.save(&state).unwrap();
         assert_eq!(migrate(&old, &store).unwrap(), None);
-        assert!(!store.load().block_quic);
+        assert!(!store.load().unwrap().block_quic);
     }
 
     #[test]
@@ -517,7 +517,7 @@ mod tests {
         write(&old, "embedded/source.txt", LINK);
         let migrated = migrate(&old, &store).unwrap().unwrap();
         assert_eq!(migrated.sources, 1);
-        let state = store.load();
+        let state = store.load().unwrap();
         // The old client's default is a preset list mode; rule mode takes its place.
         assert_eq!(state.routing_mode, RoutingMode::Rule);
         let source = state.selected_source().unwrap();
@@ -544,7 +544,7 @@ mod tests {
         let migrated = migrate(&old, &store).unwrap().unwrap();
         assert_eq!(migrated.sources, 0);
         assert!(!migrated.nodes_cached);
-        let state = store.load();
+        let state = store.load().unwrap();
         assert_eq!(state.routing_mode, RoutingMode::Direct);
         assert!(state.direct_egress);
         assert_eq!(state.selected_node, None);

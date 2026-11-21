@@ -59,7 +59,7 @@ export function TrafficStatsCard({ live, busy, run }: { live: boolean; busy: str
       ) : (
         <div className="rows">
           {rows.map((row) => (
-            <Row key={row.name} label={<span className="truncate">{row.name === "*" ? t("其他主机") : row.name}</span>} value={formatBytes(row.bytes)} />
+            <Row key={row.name} label={<span className="truncate">{row.name === "*" ? t("其他主机") : row.name === "#" ? t("无主机名") : row.name}</span>} value={formatBytes(row.bytes)} />
           ))}
         </div>
       )}

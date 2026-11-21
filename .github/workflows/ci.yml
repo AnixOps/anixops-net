@@ -61,10 +61,13 @@ jobs:
       - name: Outbound addresses are documented
         run: python3 .github/scripts/outbound_hosts.py
 
+      - name: Path classification maps every input to the jobs that read it
+        run: bash .github/scripts/classify-changes.test.sh
+
       # Pull requests run only the platforms their paths touch. Manual runs, every push to main that changes
-      # anything besides documentation, and any change to the workspace, lockfile, workflows or scripts run
-      # everything. A push to main that only changes documentation (root *.md other than TERMS.md, docs/) runs
-      # nothing: no build reads those files. Its CI summary then has skipped jobs, which release.yml does not
+      # anything besides documentation, and any change to the workspace, lockfile, workflows, scripts, Rust tool
+      # configuration or a path classify-changes.sh does not name run everything. A push to main that only changes
+      # documentation (root *.md other than TERMS.md, docs/) runs nothing: no build reads those files. Its CI summary then has skipped jobs, which release.yml does not
       # accept, so such a commit is released only after a manual (full) run.
       - name: Classify changed paths
         id: changes
@@ -109,47 +112,9 @@ jobs:
           elif [[ "${EVENT_NAME}" != pull_request ]]; then
             all
           else
-            while IFS= read -r path; do
-              case "${path}" in
-                Cargo.toml | Cargo.lock | .github/*) all ;;
-                # AnixOps Design, vendored: every client's colours are generated from it.
-                apps/windows-gui/ui/src/design/*)
-                  ui=true; windows=true; linux=true; android_native=true; apple=true; windows_native=true
-                  linux_native=true ;;
-                apps/windows-gui/ui/*) ui=true; windows=true; linux=true ;;
-                # The native client's installer; the native job builds it and installs, upgrades and removes it.
-                installer/windows-native/*) windows_native=true ;;
-                apps/windows-gui/* | installer/*) rust=true; windows=true ;;
-                apps/linux-gui/*) rust=true; linux=true ;;
-                # The Linux daemon; the workspace job builds and tests it, and the native window is run against it.
-                apps/linux-daemon/*) rust=true; linux_native=true ;;
-                # The Windows service; the Windows job builds and tests it, and the native app is tested against it.
-                apps/windows-service/*) rust=true; windows=true; windows_native=true ;;
-                # The list of pages: the native Linux window's tests check that it has the same ones.
-                apps/windows-native/src/AnixOps.Net.Presentation/Section.cs) rust=true; windows_native=true ;;
-                # The native Windows app (C#); its tests read the message samples under crates/client-ipc.
-                apps/windows-native/*) windows_native=true ;;
-                # The native Linux window (GTK 4 and libadwaita); the workspace job tests its pages and options.
-                apps/linux-native/*) rust=true; linux_native=true ;;
-                # The native Android app (Compose over crates/client-core through JNI); its colours come from the
-                # client tokens.
-                apps/android-native/*) rust=true; android_native=true ;;
-                apps/ios/Design/*) apple=true; android_native=true; windows_native=true; linux_native=true ;;
-                crates/client-ipc/fixtures/* | crates/client-service/fixtures/*)
-                  rust=true; windows=true; linux=true; android_native=true; windows_native=true ;;
-                # The native Windows app is tested against the real service, which is built from these; the
-                # native Linux window takes its wording from crates/client-strings.
-                crates/*)
-                  rust=true; windows=true; linux=true; android_native=true; windows_native=true
-                  linux_native=true ;;
-                apps/ios/*) apple=true ;;
-                # The desktop UI and the native Android app bundle TERMS.md (first-start consent; the Android
-                # screenshots show it) and the Apple tests check its version. The Windows and Linux desktop jobs
-                # only package the interface the ui job builds and tests, so the text needs nothing from them.
-                TERMS.md) ui=true; apple=true; android_native=true ;;
-                *) ;;
-              esac
-            done < <(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")
+            # Fails closed: a path the script does not name runs every job.
+            classified="$(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" | bash .github/scripts/classify-changes.sh)"
+            eval "${classified}"
           fi
           {
             echo "rust=${rust}"

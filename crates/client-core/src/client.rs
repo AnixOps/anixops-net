@@ -545,7 +545,7 @@ impl Client {
         let (content, meta) = fetch(location)?;
         let mut backend = self.backend();
         let result = backend.import(&label, &content)?;
-        backend.record_response(None, meta);
+        backend.record_response(None, meta)?;
         Ok(result)
     }
 
@@ -556,11 +556,11 @@ impl Client {
             Err(error) => (Err(error), None),
         };
         let mut backend = self.backend();
-        let result = backend.finish_refresh(id, content);
-        if let (Ok(_), Some(meta)) = (&result, meta) {
-            backend.record_response(Some(id), meta);
+        let result = backend.finish_refresh(id, content)?;
+        if let Some(meta) = meta {
+            backend.record_response(Some(id), meta)?;
         }
-        result
+        Ok(result)
     }
 
     /// Changes the plugin library outside the lock, then applies it to a running engine.
@@ -781,8 +781,8 @@ impl Client {
         });
     }
 
-    /// Updates every subscription whose interval has passed, checking once a minute; a failed update is
-    /// notified.
+    /// Updates every subscription whose interval has passed, checking once a minute; a failed update is tried
+    /// again after a wait that grows with each failure, and notified once until it works again.
     fn start_subscription_updates(self: &Arc<Self>) {
         let client = self.clone();
         thread::spawn(move || loop {
@@ -796,7 +796,10 @@ impl Client {
                     Err(error) => (Err(error), None),
                 };
                 match (backend.finish_refresh(&id, content), meta) {
-                    (Ok(_), Some(meta)) => backend.record_response(Some(&id), meta),
+                    // A failure to save is the last error already, which the window shows.
+                    (Ok(_), Some(meta)) => {
+                        let _ = backend.record_response(Some(&id), meta);
+                    }
                     (Err(error), _) => {
                         if let Some(notice) = backend.subscription_failed_notice(&id, &error) {
                             drop(backend);

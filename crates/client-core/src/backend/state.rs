@@ -153,6 +153,10 @@ pub struct SavedSource {
     pub update_interval_hours: Option<u32>,
     #[serde(default)]
     pub suggested_interval_hours: Option<u32>,
+    /// Failed updates since the last successful one; automatic updates wait longer after each
+    /// (`subscription_meta::UpdateSchedule`).
+    #[serde(default)]
+    pub failures: u32,
 }
 
 impl SavedSource {
@@ -166,10 +170,20 @@ impl SavedSource {
             .unwrap_or(subscription_meta::DEFAULT_UPDATE_INTERVAL_HOURS)
     }
 
-    /// Whether an automatic update is due at `now` (Unix seconds).
+    /// The times its automatic updates follow.
+    pub fn schedule(&self) -> subscription_meta::UpdateSchedule {
+        subscription_meta::UpdateSchedule {
+            last_success: self.last_success,
+            last_attempt: self.last_attempt,
+            failures: self.failures,
+            interval_hours: self.effective_interval_hours(),
+        }
+    }
+
+    /// Whether an automatic update is due at `now` (Unix seconds); after a failure it waits for the retry time
+    /// rather than coming up again at the updater's next check.
     pub fn update_due(&self, now: u64) -> bool {
-        self.refreshable()
-            && subscription_meta::is_due(self.last_success, self.effective_interval_hours(), now)
+        self.refreshable() && self.schedule().is_due(now)
     }
 
     /// Keeps what the server said: its title names the source until the user renames it, and traffic
@@ -192,6 +206,13 @@ impl SavedState {
         self.sources.iter().find(|source| source.selected)
     }
 
+    /// Makes sure new sources are numbered above `highest`, the largest number a file of an earlier source still
+    /// carries (`Store::highest_source_number`): a new source never takes over another one's cached content or
+    /// node edits, even when the index that knew them was lost.
+    pub fn reserve_source_numbers(&mut self, highest: u32) {
+        self.next_source = self.next_source.max(highest.saturating_add(1));
+    }
+
     /// Adds a source and selects it. Returns its id.
     pub fn add_source(&mut self, location: &str, now: u64) -> String {
         let id = format!("s{}", self.next_source.max(1));
@@ -211,6 +232,7 @@ impl SavedState {
             node_count: None,
             update_interval_hours: None,
             suggested_interval_hours: None,
+            failures: 0,
         });
         id
     }
@@ -232,6 +254,7 @@ impl SavedState {
             node_count: None,
             update_interval_hours: None,
             suggested_interval_hours: None,
+            failures: 0,
         });
         let last = self.sources.len() - 1;
         &mut self.sources[last]
@@ -287,11 +310,63 @@ impl Store {
         &self.dir
     }
 
-    pub fn load(&self) -> SavedState {
-        fs::read(self.dir.join("state.json"))
-            .ok()
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-            .unwrap_or_default()
+    /// The saved state, or the default when nothing was saved yet. A state file that cannot be read or understood
+    /// is an error, never the default: starting empty over it would hand its subscriptions' ids out again and
+    /// replace it at the next save.
+    pub fn load(&self) -> Result<SavedState, String> {
+        let bytes = match fs::read(self.state_path()) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                return Ok(SavedState::default())
+            }
+            Err(error) => return Err(format!("the settings file could not be read: {error}")),
+        };
+        serde_json::from_slice(&bytes)
+            .map_err(|error| format!("the settings file is not valid: {error}"))
+    }
+
+    /// Moves a state file [`Store::load`] refused out of the way, under a name of its own next to it, so the client
+    /// can start empty without overwriting it. Returns where it went.
+    pub fn set_aside_state(&self, now: u64) -> io::Result<PathBuf> {
+        let mut kept = self.dir.join(format!("state.unreadable-{now}.json"));
+        let mut attempt = 1;
+        while kept.exists() {
+            kept = self
+                .dir
+                .join(format!("state.unreadable-{now}-{attempt}.json"));
+            attempt += 1;
+        }
+        fs::rename(self.state_path(), &kept)?;
+        Ok(kept)
+    }
+
+    /// The largest `N` of the cached contents (`sources/sN.txt`) and node edits (`node-edits/sN.json`) on disk; 0
+    /// when there are none.
+    pub fn highest_source_number(&self) -> u32 {
+        let numbers = |folder: &str, extension: &str| -> Vec<u32> {
+            let Ok(entries) = fs::read_dir(self.dir.join(folder)) else {
+                return Vec::new();
+            };
+            entries
+                .filter_map(Result::ok)
+                .filter_map(|entry| {
+                    let name = entry.file_name().into_string().ok()?;
+                    name.strip_suffix(extension)?
+                        .strip_prefix('s')?
+                        .parse::<u32>()
+                        .ok()
+                })
+                .collect()
+        };
+        numbers("sources", ".txt")
+            .into_iter()
+            .chain(numbers("node-edits", ".json"))
+            .max()
+            .unwrap_or(0)
+    }
+
+    fn state_path(&self) -> PathBuf {
+        self.dir.join("state.json")
     }
 
     pub fn save(&self, state: &SavedState) -> io::Result<()> {
@@ -434,14 +509,14 @@ mod tests {
     fn state_round_trips_and_defaults_missing_fields() {
         let dir = temp_dir("roundtrip");
         let store = Store::new(dir.clone());
-        assert_eq!(store.load(), SavedState::default());
+        assert_eq!(store.load().unwrap(), SavedState::default());
 
         let mut state = SavedState::default();
         state.add_source("https://example.com/sub", 10);
         state.selected_node = Some("node-1".to_string());
         store.save(&state).unwrap();
         store.write_source("s1", "ss://secret").unwrap();
-        assert_eq!(store.load(), state);
+        assert_eq!(store.load().unwrap(), state);
         assert_eq!(store.read_source("s1").unwrap(), "ss://secret");
 
         #[cfg(unix)]
@@ -455,9 +530,42 @@ mod tests {
         }
 
         fs::write(dir.join("state.json"), br#"{"listen_port": 1080}"#).unwrap();
-        let partial = store.load();
+        let partial = store.load().unwrap();
         assert_eq!(partial.listen_port, 1080);
         assert!(partial.preferences.system_proxy);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn an_unreadable_state_is_an_error_and_its_ids_are_not_handed_out_again() {
+        let dir = temp_dir("unreadable");
+        let store = Store::new(dir.clone());
+        let mut state = SavedState::default();
+        let first = state.add_source("https://example.com/a", 10);
+        store.save(&state).unwrap();
+        store.write_source(&first, "ss://old").unwrap();
+        fs::create_dir_all(dir.join("node-edits")).unwrap();
+        fs::write(dir.join("node-edits/s4.json"), b"{}").unwrap();
+
+        fs::write(dir.join("state.json"), b"{ not json").unwrap();
+        assert!(store.load().is_err(), "a broken index is not a first start");
+
+        let kept = store.set_aside_state(99).unwrap();
+        assert_eq!(fs::read(&kept).unwrap(), b"{ not json");
+        assert!(!dir.join("state.json").exists());
+        assert_eq!(store.load().unwrap(), SavedState::default());
+
+        // Starting empty, the next import skips every number a file still carries.
+        assert_eq!(store.highest_source_number(), 4);
+        let mut fresh = SavedState::default();
+        fresh.reserve_source_numbers(store.highest_source_number());
+        let id = fresh.add_source("https://example.com/b", 20);
+        assert_eq!(id, "s5");
+        assert_eq!(store.read_source(&first).unwrap(), "ss://old");
+        // A second unreadable file the same second gets a name of its own.
+        fs::write(dir.join("state.json"), b"[]").unwrap();
+        let again = store.set_aside_state(99).unwrap();
+        assert_ne!(again, kept);
         let _ = fs::remove_dir_all(dir);
     }
 }

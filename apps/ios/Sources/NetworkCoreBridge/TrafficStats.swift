@@ -2,7 +2,8 @@ import Foundation
 
 /// Traffic over the last seven days in hourly buckets, by host and by policy, for the statistics page. The tunnel
 /// extension builds it from the engine's connection list and keeps it in its own container; the app reads it with
-/// `TunnelAppMessage.trafficStats`. It holds host names and byte counts only, never addresses or paths.
+/// `TunnelAppMessage.trafficStats`. It holds host names and byte counts only, never addresses or paths: a connection
+/// without a host name counts under `noHostName`, not under its address.
 public struct TrafficStats: Codable, Equatable, Sendable {
     public struct Hour: Codable, Equatable, Sendable {
         /// The start of the hour.
@@ -40,6 +41,8 @@ public struct TrafficStats: Codable, Equatable, Sendable {
     /// Hosts kept per hour; the rest add up under `otherHosts`.
     public static let hostsPerHour = 64
     public static let otherHosts = "*"
+    /// Where connections without a host name add up; no host name contains `#`.
+    public static let noHostName = "#"
 
     /// Oldest first.
     public private(set) var hours: [Hour] = []
@@ -159,7 +162,7 @@ public struct TrafficStatsCounter: Sendable {
             let upload = Self.delta(connection.upload, since: before?.upload)
             let download = Self.delta(connection.download, since: before?.download)
             stats.add(
-                host: connection.hostName,
+                host: connection.host.flatMap { $0.isEmpty ? nil : $0 } ?? TrafficStats.noHostName,
                 policy: connection.chain.first ?? connection.outbound,
                 upload: upload,
                 download: download,

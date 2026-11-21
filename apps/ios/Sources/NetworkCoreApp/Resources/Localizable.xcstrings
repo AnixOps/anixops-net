@@ -1447,6 +1447,22 @@
         }
       }
     },
+    "无主机名": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No host name"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無主機名稱"
+          }
+        }
+      }
+    },
     "内存占用": {
       "localizations": {
         "en": {
