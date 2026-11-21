@@ -244,10 +244,21 @@ mod tests {
     }
 
     #[test]
-    fn host_names_fall_back_to_the_address() {
-        assert_eq!(host_name(&json!({"destination": "1.2.3.4:80"})), "1.2.3.4");
-        assert_eq!(host_name(&json!({"destination": "[::1]:80"})), "::1");
-        assert_eq!(host_name(&json!({"host": "", "destination": "x"})), "x");
+    fn connections_without_a_host_name_keep_no_address() {
+        // Saved statistics never hold an address (third-party review F13).
+        assert_eq!(
+            host_name(&json!({"destination": "1.2.3.4:80"})),
+            NO_HOST_NAME
+        );
+        assert_eq!(host_name(&json!({"destination": "[::1]:80"})), NO_HOST_NAME);
+        assert_eq!(
+            host_name(&json!({"host": "", "destination": "x"})),
+            NO_HOST_NAME
+        );
+        assert_eq!(
+            host_name(&json!({"host": "example.com", "destination": "1.2.3.4:443"})),
+            "example.com"
+        );
     }
 
     #[test]
