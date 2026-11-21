@@ -9,11 +9,10 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.VpnService
 import android.os.Build
+import android.os.ParcelFileDescriptor
 import io.anixops.net.AnixApplication
 import io.anixops.net.R
 import io.anixops.net.core.ConnectionState
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.launch
 
 /**
@@ -43,20 +42,10 @@ class AnxVpnService : VpnService() {
         private const val NOTIFICATION_ID = 1
         private const val START_TIMEOUT_SECONDS = 30L
 
-        private var pending: Pending? = null
+        private var pending: TunnelHandoff<TunnelRequest>? = null
 
         @Volatile
         private var running: AnxVpnService? = null
-
-        private class Pending(val request: TunnelRequest) {
-            val done = CountDownLatch(1)
-
-            @Volatile
-            var fd: Int? = null
-
-            @Volatile
-            var error: String? = null
-        }
 
         /**
          * Starts the service and waits until the interface is up; answers its descriptor, which the caller owns.
@@ -67,20 +56,17 @@ class AnxVpnService : VpnService() {
             if (VpnService.prepare(context) != null) {
                 throw IllegalStateException("The VPN is not allowed yet: allow it when the app asks")
             }
-            val wait = Pending(request)
+            val wait = TunnelHandoff(request)
             synchronized(this) {
-                pending?.let { replaced ->
-                    replaced.error = "Another VPN start replaced this one"
-                    replaced.done.countDown()
-                }
+                pending?.fail("Another VPN start replaced this one")
                 pending = wait
             }
             context.startService(Intent(context, AnxVpnService::class.java).setAction(ACTION_START))
-            if (!wait.done.await(START_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+            try {
+                return wait.await(START_TIMEOUT_SECONDS)
+            } finally {
                 synchronized(this) { if (pending === wait) pending = null }
-                throw IllegalStateException("The VPN did not start in time")
             }
-            return wait.fd ?: throw IllegalStateException(wait.error ?: "The VPN could not start")
         }
 
         fun close() {
@@ -88,7 +74,7 @@ class AnxVpnService : VpnService() {
         }
 
         @Synchronized
-        private fun take(): Pending? = pending.also { pending = null }
+        private fun take(): TunnelHandoff<TunnelRequest>? = pending.also { pending = null }
     }
 
     override fun onCreate() {
@@ -111,17 +97,35 @@ class AnxVpnService : VpnService() {
         }
         if (intent?.action == ACTION_START) {
             val wait = take() ?: return START_NOT_STICKY
-            try {
-                wait.fd = establish(wait.request)
-                showConnected(wait.request.session)
-                ConnectTile.refresh(this)
+            // The service owns the descriptor until the caller has it: a start that fails after the interface is up,
+            // or whose caller stopped waiting, closes it here.
+            val fd = try {
+                establish(wait.request)
             } catch (error: Exception) {
-                wait.error = error.message ?: error.toString()
-            } finally {
-                wait.done.countDown()
+                wait.fail(error.message ?: error.toString())
+                return START_NOT_STICKY
+            }
+            try {
+                showConnected(wait.request.session)
+            } catch (error: Exception) {
+                closeDescriptor(fd)
+                wait.fail(error.message ?: error.toString())
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            if (wait.deliver(fd)) {
+                ConnectTile.refresh(this)
+            } else {
+                closeDescriptor(fd)
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
             }
         }
         return START_NOT_STICKY
+    }
+
+    private fun closeDescriptor(fd: Int) {
+        runCatching { ParcelFileDescriptor.adoptFd(fd).close() }
     }
 
     private fun establish(request: TunnelRequest): Int {
