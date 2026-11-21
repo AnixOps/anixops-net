@@ -1,0 +1,104 @@
+# AnixOps Net Privacy Policy / 隐私政策
+
+Effective date / 生效日期：2026-11-21
+
+[English](#english) · [中文](#中文)
+
+## English
+
+This policy covers the AnixOps Net client on Android, iOS, macOS, Windows and Linux, including the Google Play,
+App Store and TestFlight builds, published by AnixOps Studio ("we"). The client is open source; the full list of
+connections it makes is in [docs/network-behavior.md](docs/network-behavior.md), and that document is checked against
+the source code in CI.
+
+### What we collect
+
+**Nothing.** We do not run any server that the client reports to. The client contains no analytics, telemetry,
+advertising, crash-reporting or remote-configuration SDK, and it never sends us your device identifiers, advertising
+ID, location, contacts, installed-app list, browsing history or network traffic.
+
+### Data that stays on your device
+
+The client stores the following only on your device, in app-private storage. It is not uploaded to us and is not
+included in system or cloud backups:
+
+- Subscriptions, nodes, rules, plugins and scripts that you add, and your settings.
+- Connection logs, traffic statistics and, when you turn it on, packet captures. You decide whether to export them.
+- Crash reports, with addresses, domains and keys removed. You decide whether to export and send them.
+- A device key per subscription server, used only as described below.
+
+Uninstalling the app deletes this data.
+
+### Connections the client makes
+
+- **Subscription updates** go only to the subscription address you enter. They carry the app version in the
+  User-Agent. A subscription server that declares support for licensed protocols also receives a public key that is
+  unique to that server, so two servers cannot link the same device.
+- **Traffic you route through the VPN** goes to the servers in your own configuration. We do not provide servers,
+  and we cannot see this traffic. The operator of each server you choose handles your data under its own policy.
+- **Latency and exit-address checks** run when you tap them or right after you connect, and send empty requests that
+  carry no identifiers (details in docs/network-behavior.md).
+
+### Android permissions
+
+- **VPN service** (`BIND_VPN_SERVICE`): routes device traffic through the client according to your rules, only after
+  you start the connection and accept the system prompt. Traffic is processed on the device; none of it is sent to us.
+- **Camera**: scanning a subscription or node QR code, asked for when you tap Scan. Images are not stored.
+- **Location**: reading the current Wi-Fi name for Wi-Fi rules, asked for only when you turn those rules on. The
+  location itself is not read, stored or sent.
+- **Notifications and foreground service**: the "connected" notification that keeps the VPN running.
+
+### Children
+
+The client is not directed at children under 13 and is intended for adults.
+
+### Changes and contact
+
+Changes to this policy are published in this file, with the history in the public repository. Questions:
+**contact@anixops.com**.
+
+## 中文
+
+本政策适用于 AnixOps Studio（下称“我们”）发布的 AnixOps Net 客户端（Android、iOS、macOS、Windows、Linux），
+包括 Google Play、App Store 与 TestFlight 版本。客户端开源，它会发出的全部连接写在
+[docs/network-behavior.md](docs/network-behavior.md)，CI 会按源码核对这份文档。
+
+### 我们收集什么
+
+**不收集任何数据。** 我们没有接收客户端上报的服务器。客户端不含任何统计、遥测、广告、崩溃上报或远程配置 SDK，
+不会向我们发送设备标识、广告标识、位置、通讯录、已安装应用列表、浏览记录或网络流量。
+
+### 只保存在你设备上的数据
+
+以下内容只保存在本机的应用私有存储里，不上传给我们，也不进入系统或云备份：
+
+- 你添加的订阅、节点、规则、插件、脚本，以及各项设置。
+- 连接日志、流量统计，以及你开启后才有的抓包记录，是否导出由你决定。
+- 崩溃报告（已去掉地址、域名、密钥），是否导出发送由你决定。
+- 每个订阅服务器各一把设备密钥，用途见下文。
+
+卸载应用即删除以上数据。
+
+### 客户端会发出的连接
+
+- **订阅更新**只发往你填写的订阅地址，User-Agent 里带应用版本。声明支持授权协议的订阅服务器还会收到一把只属于
+  该服务器的公钥，两个服务器无法据此认出同一台设备。
+- **经 VPN 转发的流量**发往你自己配置的服务器。我们不提供服务器，也看不到这些流量；你选用的服务器由其运营方按
+  其自己的政策处理你的数据。
+- **延迟和出口地址检测**在你点按或刚连接后进行，发出的是不带任何标识的空请求（详见 docs/network-behavior.md）。
+
+### Android 权限
+
+- **VPN 服务**（`BIND_VPN_SERVICE`）：在你开始连接并同意系统提示后，按你的规则转发本机流量。流量在设备上处理，
+  不发送给我们。
+- **相机**：扫描订阅或节点二维码，点“扫码”时才申请，不保存图像。
+- **位置**：Wi-Fi 规则需要读取当前 Wi-Fi 名称，只在你打开 Wi-Fi 规则时申请；不读取、不保存、不发送位置本身。
+- **通知与前台服务**：显示“已连接”通知，保持 VPN 运行。
+
+### 儿童
+
+客户端不面向 13 岁以下儿童，适用对象为成年人。
+
+### 变更与联系
+
+本政策的修改发布在本文件中，历史记录见公开仓库。如有问题请联系 **contact@anixops.com**。
