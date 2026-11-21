@@ -291,10 +291,18 @@ pub struct Backend {
     session: Arc<dyn UserSession>,
     last_error: Option<String>,
     configuration_error: Option<String>,
+    /// Why the settings file must not be written this run: it could be neither read nor moved aside, and writing
+    /// would replace it with the empty state the client started with.
+    state_blocked: Option<String>,
+    /// A backup of the desktop's proxy settings a previous run left and could not put back yet: no user session
+    /// was there to ask when the client opened. The first session that arrives puts them back.
+    proxy_restore_pending: bool,
     /// Seven days of traffic by hour, host and policy (`traffic_stats`).
     traffic: TrafficStats,
     traffic_counter: TrafficCounter,
     traffic_saved_at: u64,
+    /// Traffic counted since the statistics were last written; kept until a write succeeds.
+    traffic_unsaved: bool,
     /// The notification switches (`notification_settings`).
     notifications: NotificationSettings,
     disconnect_watch: DisconnectWatch,
@@ -306,7 +314,28 @@ pub struct Backend {
 impl Backend {
     /// Loads the saved state and first puts back proxy settings a previous run left changed.
     pub fn open(store: Store, session: Box<dyn UserSession>) -> Self {
-        let mut state = store.load();
+        let (mut state, state_problem, state_blocked) = match store.load() {
+            Ok(state) => (state, None, None),
+            // The broken file is kept under another name; the client starts empty beside it.
+            Err(error) => match store.set_aside_state(now()) {
+                Ok(kept) => (
+                    SavedState::default(),
+                    Some(format!(
+                        "{error}; it was kept as {} and the client started without it",
+                        kept.display()
+                    )),
+                    None,
+                ),
+                Err(move_error) => {
+                    let problem = format!(
+                        "{error}, and it could not be moved aside ({move_error}); settings are not saved until it is fixed"
+                    );
+                    (SavedState::default(), Some(problem.clone()), Some(problem))
+                }
+            },
+        };
+        // The cached contents and node edits on disk name the numbers in use, whatever the index says.
+        state.reserve_source_numbers(store.highest_source_number());
         desktop_dns::custom::use_file(store.dir().join("dns-settings.json"));
         desktop_dns::redirects::use_file(store.dir().join("redirects.json"));
         desktop_dns::data_sources::use_file(store.dir().join("data-sources.json"));
@@ -329,9 +358,12 @@ impl Backend {
             session: Arc::from(session),
             last_error: None,
             configuration_error: None,
+            state_blocked,
+            proxy_restore_pending: false,
             traffic: TrafficStats::default(),
             traffic_counter: TrafficCounter::default(),
             traffic_saved_at: now(),
+            traffic_unsaved: false,
             notifications: NotificationSettings::default(),
             disconnect_watch: DisconnectWatch::default(),
             on_demand: OnDemandSettings::default(),
@@ -340,7 +372,14 @@ impl Backend {
         backend.traffic = TrafficStats::load(&backend.traffic_path());
         backend.notifications = NotificationSettings::load(&backend.notifications_path());
         backend.on_demand = OnDemandSettings::load(&backend.on_demand_path());
-        backend.restore_proxy();
+        if let Some(problem) = state_problem {
+            backend.log(LogLevel::Error, &problem);
+            backend.last_error = Some(problem);
+        }
+        // Without a user session yet (a service at boot) this cannot work; the first session that arrives does it.
+        if backend.restore_proxy().is_err() && backend.state.proxy_backup.is_some() {
+            backend.proxy_restore_pending = true;
+        }
         backend.reload_nodes();
         backend
     }
@@ -349,10 +388,21 @@ impl Backend {
         self.state.preferences.auto_connect
     }
 
-    fn save(&mut self) {
-        if let Err(error) = self.store.save(&self.state) {
-            self.last_error = Some(format!("settings could not be saved: {error}"));
-        }
+    /// Writes the state. A failure reaches the caller as well as the last error: no command answers success over a
+    /// change that is not on disk.
+    fn save(&mut self) -> Result<(), String> {
+        let written = match &self.state_blocked {
+            Some(problem) => Err(problem.clone()),
+            None => self
+                .store
+                .save(&self.state)
+                .map_err(|error| error.to_string()),
+        };
+        written.map_err(|error| {
+            let error = format!("settings could not be saved: {error}");
+            self.last_error = Some(error.clone());
+            error
+        })
     }
 
     fn reload_nodes(&mut self) {
@@ -616,7 +666,7 @@ impl Backend {
             self.ensure_mitm_root()?;
         }
         self.state.preferences.https_decryption = enabled;
-        self.save();
+        self.save()?;
         let restarted = self.restart_if_running()?;
         done(match (enabled, restarted) {
             (true, true) => "HTTPS decryption is on",
@@ -854,7 +904,7 @@ impl Backend {
         self.state
             .group_choices
             .insert(group.to_string(), member.to_string());
-        self.save();
+        self.save()?;
         let label = self.node_name(member).unwrap_or_else(|| member.to_string());
         if self.restart_if_running()? {
             done(format!(
@@ -873,7 +923,7 @@ impl Backend {
             self.state.routing_mode = previous;
             return Err(error);
         }
-        self.save();
+        self.save()?;
         done(format!("Routing mode set to {}", mode.as_str()))
     }
 
@@ -885,7 +935,7 @@ impl Backend {
             self.state.dns_preset = previous;
             return Err(error);
         }
-        self.save();
+        self.save()?;
         done(format!("DNS set to {}", preset.as_str()))
     }
 
@@ -941,7 +991,7 @@ impl Backend {
             return Err("Disconnect before switching TUN mode".to_string());
         }
         self.state.tun_mode = on;
-        self.save();
+        self.save()?;
         done(if !on {
             "TUN mode is off; the next connection uses the system proxy"
         } else if cfg!(windows) {
@@ -959,7 +1009,7 @@ impl Backend {
             self.state.block_quic = previous;
             return Err(error);
         }
-        self.save();
+        self.save()?;
         done(if on {
             "QUIC is blocked"
         } else {
@@ -1114,7 +1164,7 @@ impl Backend {
             self.state.direct_egress = previous;
             return Err(error);
         }
-        self.save();
+        self.save()?;
         done(if on {
             "Traffic leaves directly"
         } else {
@@ -1195,7 +1245,11 @@ impl Backend {
     }
 
     /// Records what the server's headers said about source `id` (the selected one when `None`).
-    pub fn record_response(&mut self, id: Option<&str>, meta: subscription_meta::ResponseMeta) {
+    pub fn record_response(
+        &mut self,
+        id: Option<&str>,
+        meta: subscription_meta::ResponseMeta,
+    ) -> Result<(), String> {
         let id = id
             .map(str::to_string)
             .or_else(|| self.state.selected_source().map(|source| source.id.clone()));
@@ -1206,14 +1260,15 @@ impl Backend {
             .find(|source| Some(&source.id) == id.as_ref())
         {
             source.record_response(meta);
-            self.save();
+            self.save()?;
         }
+        Ok(())
     }
 
     pub fn rename_subscription(&mut self, id: &str, name: &str) -> Result<OperationResult, String> {
         let name = subscription_meta::clean_name(name).ok_or("enter a name")?;
         self.source_mut(id)?.name = Some(name);
-        self.save();
+        self.save()?;
         // Linked policy groups are named after their subscriptions.
         self.reload_nodes();
         done("Subscription renamed")
@@ -1226,7 +1281,7 @@ impl Backend {
     ) -> Result<OperationResult, String> {
         let hours = hours.min(subscription_meta::MAX_UPDATE_INTERVAL_HOURS);
         self.source_mut(id)?.update_interval_hours = Some(hours);
-        self.save();
+        self.save()?;
         if hours == 0 {
             done("Automatic updates are off for this subscription")
         } else {
@@ -1367,7 +1422,18 @@ impl Backend {
     }
 
     /// The notice for a failed automatic update of source `id`.
+    /// The notice for a failed automatic update of source `id`: only the first failure since its last success,
+    /// so a subscription that keeps failing is reported once rather than at every retry.
     pub fn subscription_failed_notice(&self, id: &str, error: &str) -> Option<Notice> {
+        let failures = self
+            .state
+            .sources
+            .iter()
+            .find(|source| source.id == id)?
+            .failures;
+        if !subscription_meta::notify_failure(failures) {
+            return None;
+        }
         self.notifications
             .subscription_failed(&self.source_name(id), error)
     }
@@ -1401,6 +1467,8 @@ impl Backend {
     }
 
     fn start(&mut self) -> Result<OperationResult, String> {
+        // What an earlier run left changed goes back first, so its backup is not mistaken for this connection's.
+        self.settle_pending_restore();
         let (label, address) = self.launch()?;
         // Through the TUN device every application is carried already; the system proxy stays as it is.
         if self.engine.address().is_none() {
@@ -1410,23 +1478,53 @@ impl Backend {
             && self.state.proxy_backup.is_none()
             && self.session.proxy_settings().is_some()
         {
-            match self.session.apply_proxy(address.port()) {
-                Ok(backup) => {
-                    self.state.proxy_backup = Some(backup);
-                    self.save();
-                }
-                Err(error) => {
-                    self.engine.stop();
-                    return Err(format!("the system proxy could not be set: {error}"));
-                }
+            if let Err(error) = self.take_over_proxy(address.port()) {
+                self.engine.stop();
+                return Err(error);
             }
         }
         done(format!("Connected through {label} on {address}"))
     }
 
+    /// Points the desktop's proxy at `port` and keeps the backup on disk. A backup that cannot be saved undoes the
+    /// change: a proxy setting whose way back is lost when the process ends is never left in place.
+    fn take_over_proxy(&mut self, port: u16) -> Result<(), String> {
+        let backup = self
+            .session
+            .apply_proxy(port)
+            .map_err(|error| format!("the system proxy could not be set: {error}"))?;
+        self.state.proxy_backup = Some(backup.clone());
+        if let Err(error) = self.save() {
+            self.state.proxy_backup = None;
+            return Err(match self.session.restore_proxy(&backup) {
+                Ok(()) => format!("the system proxy was not changed: {error}"),
+                Err(restore) => {
+                    // Kept in memory so "restore network settings" can still try while this run lasts.
+                    self.state.proxy_backup = Some(backup);
+                    format!(
+                        "the system proxy is set but its backup could not be saved ({error}), and undoing it failed: {restore}"
+                    )
+                }
+            });
+        }
+        Ok(())
+    }
+
+    /// Puts back what an earlier run left changed when this run could not reach the user's session at start.
+    fn settle_pending_restore(&mut self) {
+        if self.proxy_restore_pending
+            && self.session.proxy_settings().is_some()
+            && self.restore_proxy().is_ok()
+        {
+            self.proxy_restore_pending = false;
+        }
+    }
+
     /// Sets the system proxy now when the engine already runs and the user's session could not be reached
     /// when it started: a service that connects at boot has no window to ask until the user signs in.
+    /// Also puts back proxy settings an earlier run left changed, when no session was there to do it at start.
     pub fn session_arrived(&mut self) {
+        self.settle_pending_restore();
         let Some(address) = self.engine.address() else {
             return;
         };
@@ -1436,16 +1534,9 @@ impl Backend {
         {
             return;
         }
-        match self.session.apply_proxy(address.port()) {
-            Ok(backup) => {
-                self.state.proxy_backup = Some(backup);
-                self.save();
-            }
-            Err(error) => {
-                let error = format!("the system proxy could not be set: {error}");
-                self.log(LogLevel::Error, &error);
-                self.last_error = Some(error);
-            }
+        if let Err(error) = self.take_over_proxy(address.port()) {
+            self.log(LogLevel::Error, &error);
+            self.last_error = Some(error);
         }
     }
 
@@ -1460,35 +1551,40 @@ impl Backend {
         self.disconnect_watch.disconnected();
         self.last_error = None;
         self.log(LogLevel::Info, "Disconnected");
-        self.restore_proxy();
+        // A failure stays the last error, which the window shows; the engine is stopped either way.
+        let _ = self.restore_proxy();
         done("Disconnected")
     }
 
-    fn restore_proxy(&mut self) {
-        if let Some(backup) = self.state.proxy_backup.clone() {
-            match self.session.restore_proxy(&backup) {
-                Ok(()) => {
-                    self.state.proxy_backup = None;
-                    self.save();
-                }
-                Err(error) => {
-                    let error = format!("the system proxy could not be restored: {error}");
-                    self.log(LogLevel::Error, &error);
-                    self.last_error = Some(error);
-                }
-            }
+    /// Puts the desktop's proxy settings back from the backup and forgets it once that is on disk. A failure is
+    /// logged, kept as the last error and returned.
+    fn restore_proxy(&mut self) -> Result<(), String> {
+        let Some(backup) = self.state.proxy_backup.clone() else {
+            return Ok(());
+        };
+        let restored = self
+            .session
+            .restore_proxy(&backup)
+            .map_err(|error| format!("the system proxy could not be restored: {error}"))
+            .and_then(|()| {
+                self.state.proxy_backup = None;
+                // The settings are back; a backup still on disk is only applied once more, which changes nothing.
+                self.save()
+            });
+        if let Err(error) = &restored {
+            self.log(LogLevel::Error, error);
+            self.last_error = Some(error.clone());
         }
+        restored
     }
 
     pub fn restore_network_settings(&mut self) -> Result<OperationResult, String> {
         if self.state.proxy_backup.is_none() {
             return done("The system proxy settings are not changed by this app");
         }
-        self.restore_proxy();
-        match &self.last_error {
-            Some(error) if self.state.proxy_backup.is_some() => Err(error.clone()),
-            _ => done("System proxy settings restored"),
-        }
+        self.restore_proxy()?;
+        self.proxy_restore_pending = false;
+        done("System proxy settings restored")
     }
 
     /// Live traffic and connections from the running engine.
@@ -1546,16 +1642,23 @@ impl Backend {
             return;
         };
         let now = now();
-        if self.traffic_counter.ingest(&list, &mut self.traffic, now)
-            && now >= self.traffic_saved_at + 60
-        {
+        if self.traffic_counter.ingest(&list, &mut self.traffic, now) {
+            self.traffic_unsaved = true;
+        }
+        // Traffic counted earlier is written even when this round added nothing: a connection that went quiet
+        // before the minute was up is not left in memory only.
+        if self.traffic_unsaved && now >= self.traffic_saved_at + 60 {
             self.save_traffic();
         }
     }
 
+    /// Writes the statistics. Only a successful write clears the unsaved mark and starts the next minute; a failed
+    /// one is tried again at the next count.
     fn save_traffic(&mut self) {
-        self.traffic_saved_at = now();
-        let _ = self.traffic.save(&self.traffic_path());
+        if self.traffic.save(&self.traffic_path()).is_ok() {
+            self.traffic_unsaved = false;
+            self.traffic_saved_at = now();
+        }
     }
 
     /// The traffic statistics, emptied first with `clear`.
@@ -1592,7 +1695,7 @@ impl Backend {
     pub fn shutdown(&mut self) {
         self.save_traffic();
         self.engine.stop();
-        self.restore_proxy();
+        let _ = self.restore_proxy();
     }
 
     pub fn switch_node(&mut self, node_id: &str) -> Result<OperationResult, String> {
@@ -1612,7 +1715,7 @@ impl Backend {
             return self.select_group_member(&group, &node.id);
         }
         self.state.selected_node = Some(node.id.clone());
-        self.save();
+        self.save()?;
         self.restart_if_running()?;
         done(format!("Switched to {}", node.name))
     }
@@ -1637,7 +1740,7 @@ impl Backend {
                     choices.push((main, group_id));
                 }
                 self.state.group_choices.extend(choices);
-                self.save();
+                self.save()?;
                 self.restart_if_running()?;
                 return done(format!("Switched to {name}"));
             }
@@ -1645,8 +1748,9 @@ impl Backend {
         self.state.select_source(&source_id);
         self.state.selected_node = None;
         self.state.group_choices.clear();
-        self.save();
+        let saved = self.save();
         self.reload_nodes();
+        saved?;
         // A routed subscription whose main group cannot pick the node still runs, on its own choices.
         self.switch_node(&node_id).or_else(|_| {
             self.restart_if_running()?;
@@ -1755,7 +1859,7 @@ impl Backend {
         self.change_node_edits(|edits| edits.remove(id))?;
         if self.state.selected_node.as_deref() == Some(id) {
             self.state.selected_node = None;
-            self.save();
+            self.save()?;
         }
         if self.restart_if_running()? {
             return done("Node removed; the engine restarted without it");
@@ -1827,8 +1931,9 @@ impl Backend {
                 // Every link is there already. The pasted links become the subscription in use, as after
                 // any import.
                 self.state.select_source(&id);
-                self.save();
+                let saved = self.save();
                 self.reload_nodes();
+                saved?;
                 return done("These links were imported before");
             };
             let count = engine::parse_nodes(&joined)?.len();
@@ -1842,6 +1947,7 @@ impl Backend {
                 source.last_success = Some(time);
                 source.last_attempt = Some(time);
                 source.last_error = None;
+                source.failures = 0;
             }
         } else {
             let id = self.state.add_source(location, now());
@@ -1855,8 +1961,9 @@ impl Backend {
         }
         self.state.selected_node = None;
         self.state.group_choices.clear();
-        self.save();
+        let saved = self.save();
         self.reload_nodes();
+        saved?;
         let message = format!("Imported {supported} of {} nodes", nodes.len());
         self.log(LogLevel::Info, &message);
         done(message)
@@ -1878,22 +1985,33 @@ impl Backend {
             .map(|source| (source.id.clone(), source.location.clone()))
     }
 
-    /// Records a refresh of source `id`: the new content, or why it failed.
+    /// Records a refresh of source `id`: the new content, or why it failed. A source removed while it was being
+    /// downloaded stays removed: nothing of it is written again and the refresh is not reported as an update.
+    /// The new content is on disk before the node edits made to the old one are dropped, so a failed refresh
+    /// leaves the old content and its edits together.
     pub fn finish_refresh(
         &mut self,
         id: &str,
         fetched: Result<String, String>,
     ) -> Result<OperationResult, String> {
+        if !self.state.sources.iter().any(|source| source.id == id) {
+            return Err("the subscription was removed while it was updating".to_string());
+        }
         let time = now();
         let parsed =
             fetched.and_then(|content| engine::parse_nodes(&content).map(|nodes| (content, nodes)));
         let result = match parsed {
-            // An update brings back what the provider serves (`node_edits`).
+            // An update brings back what the provider serves (`node_edits`), once its content is saved.
             Ok((content, nodes)) => self
-                .remove_node_edits(id)
-                .and_then(|()| self.store.write_source(id, &content))
-                .map(|()| nodes.len())
-                .map_err(|error| format!("the subscription could not be saved: {error}")),
+                .store
+                .write_source(id, &content)
+                .map_err(|error| format!("the subscription could not be saved: {error}"))
+                .and_then(|()| {
+                    self.remove_node_edits(id).map_err(|error| {
+                        format!("the subscription was saved but its node edits could not be dropped: {error}")
+                    })
+                })
+                .map(|()| nodes.len()),
             Err(error) => Err(error),
         };
         if let Some(source) = self.state.sources.iter_mut().find(|source| source.id == id) {
@@ -1903,8 +2021,12 @@ impl Backend {
                     source.last_success = Some(time);
                     source.last_error = None;
                     source.node_count = Some(*count);
+                    source.failures = 0;
                 }
-                Err(error) => source.last_error = Some(error.clone()),
+                Err(error) => {
+                    source.last_error = Some(error.clone());
+                    source.failures = source.failures.saturating_add(1);
+                }
             }
         }
         let name = self.source_name(id);
@@ -1918,8 +2040,9 @@ impl Backend {
                 &format!("subscription {name} update failed: {error}"),
             ),
         }
-        self.save();
+        let saved = self.save();
         self.reload_nodes();
+        saved?;
         result.map(|count| OperationResult {
             message: format!("Subscription updated: {count} nodes"),
         })
@@ -1931,8 +2054,9 @@ impl Backend {
         }
         self.state.selected_node = None;
         self.state.group_choices.clear();
-        self.save();
+        let saved = self.save();
         self.reload_nodes();
+        saved?;
         done("Subscription selected; reconnect to use it")
     }
 
@@ -1949,8 +2073,9 @@ impl Backend {
         }
         self.store.remove_source(id);
         let _ = self.remove_node_edits(id);
-        self.save();
+        let saved = self.save();
         self.reload_nodes();
+        saved?;
         done("Subscription removed")
     }
 
@@ -1963,7 +2088,7 @@ impl Backend {
                 .set_start_after_login(input.start_after_login)?;
         }
         self.state.preferences.auto_connect = input.auto_connect;
-        self.save();
+        self.save()?;
         done("Settings saved")
     }
 
@@ -2653,6 +2778,258 @@ rules:
         };
         assert!(backend.on_demand_settings(Some(refused)).is_err());
         assert_eq!(backend.on_demand_settings(None).unwrap(), saved);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    const SUBSCRIPTION: &str = "https://sub.example/link";
+
+    #[test]
+    fn a_refresh_of_a_removed_subscription_writes_nothing_back() {
+        let (mut backend, dir) = backend("refresh-removed");
+        backend.import(SUBSCRIPTION, LINK).unwrap();
+        let id = backend.subscriptions()[0].id.clone();
+        // The download was under way when the subscription was removed.
+        backend.remove_subscription(&id).unwrap();
+        assert!(backend.finish_refresh(&id, Ok(LINK.to_string())).is_err());
+        assert!(backend.subscriptions().is_empty());
+        assert!(
+            backend.store.read_source(&id).is_err(),
+            "no cache is left behind"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_failed_refresh_keeps_the_old_content_and_its_node_edits() {
+        let (mut backend, dir) = backend("refresh-keeps-edits");
+        backend.import(SUBSCRIPTION, LINK).unwrap();
+        let id = backend.subscriptions()[0].id.clone();
+        let node = backend.nodes()[0].id.clone();
+        backend
+            .edit_node(&node, "Mine", "82.47.34.99", "11111")
+            .unwrap();
+        let edits = backend.node_edits_path(&id);
+        let edited = std::fs::read(&edits).unwrap();
+
+        // Content that does not parse.
+        assert!(backend
+            .finish_refresh(&id, Ok("not a subscription".to_string()))
+            .is_err());
+        assert_eq!(std::fs::read(&edits).unwrap(), edited);
+
+        // Content that parses but cannot be written: a folder stands where the cache goes.
+        let cache = backend
+            .store
+            .dir()
+            .join("sources")
+            .join(format!("{id}.txt"));
+        std::fs::remove_file(&cache).unwrap();
+        std::fs::create_dir_all(cache.join("blocked")).unwrap();
+        assert!(backend.finish_refresh(&id, Ok(LINK.to_string())).is_err());
+        assert_eq!(std::fs::read(&edits).unwrap(), edited);
+
+        // Once the new content is saved, the edits of the old one go.
+        std::fs::remove_dir_all(&cache).unwrap();
+        backend.finish_refresh(&id, Ok(LINK.to_string())).unwrap();
+        assert_eq!(NodeEdits::load(&edits), NodeEdits::default());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn failed_automatic_updates_wait_and_are_notified_once() {
+        let (mut backend, dir) = backend("update-backoff");
+        backend.import(SUBSCRIPTION, LINK).unwrap();
+        let id = backend.subscriptions()[0].id.clone();
+        backend.set_subscription_interval(&id, 1).unwrap();
+        // Long overdue.
+        backend.state.sources[0].last_success = Some(1000);
+        assert_eq!(backend.due_sources().len(), 1);
+
+        let _ = backend.finish_refresh(&id, Err("timed out".to_string()));
+        assert_eq!(backend.state.sources[0].failures, 1);
+        assert!(
+            backend.due_sources().is_empty(),
+            "the next one-minute check does not download again"
+        );
+        assert!(backend
+            .subscription_failed_notice(&id, "timed out")
+            .is_some());
+
+        let _ = backend.finish_refresh(&id, Err("timed out".to_string()));
+        assert_eq!(backend.state.sources[0].failures, 2);
+        assert!(backend
+            .subscription_failed_notice(&id, "timed out")
+            .is_none());
+
+        backend.finish_refresh(&id, Ok(LINK.to_string())).unwrap();
+        assert_eq!(backend.state.sources[0].failures, 0);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_save_that_fails_reaches_the_command() {
+        let (mut backend, dir) = backend("save-fails");
+        backend.import(SUBSCRIPTION, LINK).unwrap();
+        let id = backend.subscriptions()[0].id.clone();
+        backend.state_blocked = Some("blocked for the test".to_string());
+        assert!(backend.rename_subscription(&id, "Other").is_err());
+        assert!(backend.set_subscription_interval(&id, 6).is_err());
+        assert!(backend.set_tun_mode(true).is_err());
+        assert!(backend.last_error.is_some());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn an_unreadable_settings_file_is_kept_and_its_numbers_skipped() {
+        let dir = std::env::temp_dir().join(format!(
+            "anixops-net-backend-unreadable-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let config = dir.join("config");
+        let store = Store::new(config.clone());
+        store.write_source("s1", "ss://old").unwrap();
+        std::fs::write(config.join("state.json"), b"{ broken").unwrap();
+        let mut backend = Backend::open(
+            store,
+            Box::new(LocalSession::new(
+                None,
+                None,
+                PathBuf::from("/usr/bin/anixops-net"),
+            )),
+        );
+        assert!(backend.last_error.as_deref().unwrap().contains("not valid"));
+        let kept: Vec<_> = std::fs::read_dir(&config)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("state.unreadable-")
+            })
+            .collect();
+        assert_eq!(kept.len(), 1);
+        assert_eq!(std::fs::read(kept[0].path()).unwrap(), b"{ broken");
+
+        backend.import(SUBSCRIPTION, LINK).unwrap();
+        assert_eq!(backend.subscriptions()[0].id, "s2");
+        assert_eq!(backend.store.read_source("s1").unwrap(), "ss://old");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn traffic_counted_before_a_quiet_minute_is_still_saved() {
+        let (mut backend, dir) = backend("traffic-dirty");
+        backend.traffic_unsaved = true;
+        backend.traffic_saved_at = 0;
+        // Nothing runs, so this round adds nothing; the earlier traffic is written all the same.
+        backend.save_traffic();
+        assert!(!backend.traffic_unsaved);
+        assert!(backend.traffic_path().exists());
+
+        // A write that fails keeps the mark and the old time, so the next round tries again.
+        let path = backend.traffic_path();
+        std::fs::remove_file(&path).unwrap();
+        std::fs::create_dir_all(path.join("blocked")).unwrap();
+        backend.traffic_unsaved = true;
+        let before = backend.traffic_saved_at;
+        backend.save_traffic();
+        assert!(backend.traffic_unsaved);
+        assert_eq!(backend.traffic_saved_at, before);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A user session whose window can come and go, recording what it was asked to put back.
+    #[cfg(target_os = "linux")]
+    struct WindowSession {
+        window: std::sync::Arc<std::sync::atomic::AtomicBool>,
+        restored: std::sync::Arc<std::sync::Mutex<Vec<system_proxy::ProxyBackup>>>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl UserSession for WindowSession {
+        fn proxy_settings(&self) -> Option<&'static str> {
+            self.window
+                .load(std::sync::atomic::Ordering::SeqCst)
+                .then_some("GNOME")
+        }
+        fn apply_proxy(&self, _port: u16) -> Result<system_proxy::ProxyBackup, String> {
+            Ok(old_backup())
+        }
+        fn restore_proxy(&self, backup: &system_proxy::ProxyBackup) -> Result<(), String> {
+            if !self.window.load(std::sync::atomic::Ordering::SeqCst) {
+                return Err("no window".to_string());
+            }
+            self.restored.lock().unwrap().push(backup.clone());
+            Ok(())
+        }
+        fn starts_after_login(&self) -> bool {
+            false
+        }
+        fn set_start_after_login(&self, _enabled: bool) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn old_backup() -> system_proxy::ProxyBackup {
+        system_proxy::ProxyBackup {
+            desktop: system_proxy::Desktop::Gnome,
+            previous_mode: "manual".to_string(),
+            previous_keys: Vec::new(),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_backup_left_by_an_earlier_run_is_put_back_when_the_first_window_arrives() {
+        let dir = std::env::temp_dir().join(format!(
+            "anixops-net-backend-pending-restore-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = Store::new(dir.join("config"));
+        let mut state = SavedState::default();
+        state.proxy_backup = Some(old_backup());
+        store.save(&state).unwrap();
+        let window = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let restored = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        // A service at boot: no window yet, so the backup cannot go back when the client opens.
+        let mut backend = Backend::open(
+            store.clone(),
+            Box::new(WindowSession {
+                window: window.clone(),
+                restored: restored.clone(),
+            }),
+        );
+        assert!(backend.proxy_restore_pending);
+        assert!(restored.lock().unwrap().is_empty());
+
+        // The engine is not running (auto-connect off); the window's arrival alone puts the settings back.
+        window.store(true, std::sync::atomic::Ordering::SeqCst);
+        backend.session_arrived();
+        assert_eq!(*restored.lock().unwrap(), vec![old_backup()]);
+        assert!(!backend.proxy_restore_pending);
+        assert_eq!(store.load().unwrap().proxy_backup, None);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_proxy_whose_backup_cannot_be_saved_is_undone() {
+        let (mut backend, dir) = backend("proxy-unsaved");
+        let window = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let restored = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        backend.session = Arc::new(WindowSession {
+            window,
+            restored: restored.clone(),
+        });
+        backend.state_blocked = Some("blocked for the test".to_string());
+        let error = backend.take_over_proxy(7890).unwrap_err();
+        assert!(error.contains("was not changed"), "{error}");
+        assert_eq!(*restored.lock().unwrap(), vec![old_backup()]);
+        assert_eq!(backend.state.proxy_backup, None);
         let _ = std::fs::remove_dir_all(dir);
     }
 }
