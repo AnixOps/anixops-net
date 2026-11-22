@@ -133,6 +133,8 @@ export const RequestFilterBar = forwardRef<HTMLInputElement, {
 
 /** Height of one table row in pixels; the table draws only the rows in view. */
 const ROW = 28;
+/** Height of the sticky header row (styles.css `.request-head`), which covers the top of the scrolled rows. */
+const HEAD = 28;
 /** Rows drawn above and below the visible ones, so fast scrolling does not show blanks. */
 const OVERSCAN = 12;
 
@@ -179,13 +181,14 @@ export function RequestTable({ rows, selected, onSelect, onOpen, sort, onSort }:
 
   const index = selected == null ? -1 : sorted.findIndex((row) => requestKey(row) === selected);
 
-  // Keeps the selected row in view when the keyboard moves it.
+  // Keeps the selected row in view when the keyboard moves it. The table scrolls as a whole under its sticky
+  // header, so a row is in view between the header's foot and the table's bottom edge.
   const reveal = (at: number) => {
     const element = body.current;
     if (!element) return;
     const top = at * ROW;
     if (top < element.scrollTop) element.scrollTop = top;
-    else if (top + ROW > element.scrollTop + element.clientHeight) element.scrollTop = top + ROW - element.clientHeight;
+    else if (HEAD + top + ROW > element.scrollTop + element.clientHeight) element.scrollTop = HEAD + top + ROW - element.clientHeight;
   };
 
   const onKey = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -232,8 +235,12 @@ export function RequestTable({ rows, selected, onSelect, onOpen, sort, onSort }:
   const header = columns();
 
   return (
+    // The grid is also the scrolling box (the header sticks to its top): the element that takes focus and the
+    // keyboard is the one that scrolls, so the list can be scrolled from the keyboard as well as moved through.
     <div
       className="request-table"
+      ref={body}
+      onScroll={(event) => setView({ top: event.currentTarget.scrollTop, height: event.currentTarget.clientHeight })}
       role="grid"
       aria-label={t("请求列表")}
       aria-rowcount={sorted.length + 1}
@@ -260,7 +267,7 @@ export function RequestTable({ rows, selected, onSelect, onOpen, sort, onSort }:
           );
         })}
       </div>
-      <div className="request-body" ref={body} onScroll={(event) => setView({ top: event.currentTarget.scrollTop, height: event.currentTarget.clientHeight })}>
+      <div className="request-body">
         <div style={{ height: sorted.length * ROW, position: "relative" }}>
           {sorted.slice(first, last).map((request, offset) => {
             const key = requestKey(request);

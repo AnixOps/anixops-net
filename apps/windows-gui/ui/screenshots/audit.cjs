@@ -123,7 +123,17 @@ async function audit(page, screenshotPath) {
     // A list or menu inside a pop-up is measured as the pop-up.
     .filter((el) => !el.parentElement?.closest('.popover, [role="dialog"], [role="alertdialog"]'))
     .map((el) => {
-      const rect = el.getBoundingClientRect();
+      // A dialog's role often sits on an inner element inside the visible sheet (react-aria's Modal > Dialog): measure
+      // the outermost box under the backdrop, the one that draws the surface, not the inner element on that surface.
+      let surface = el;
+      if (/dialog/.test(el.getAttribute("role") || "")) {
+        for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
+          const box = node.getBoundingClientRect();
+          if (box.width === 0 || box.height === 0 || (box.width >= window.innerWidth - 1 && box.height >= window.innerHeight - 1)) break;
+          surface = node;
+        }
+      }
+      const rect = surface.getBoundingClientRect();
       return { name: `${el.getAttribute("role") || el.className}`, x: rect.x, y: rect.y, width: rect.width, height: rect.height };
     })
     .filter((box) => box.width > 40 && box.height > 24), OVERLAYS);

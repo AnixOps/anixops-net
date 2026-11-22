@@ -13,7 +13,7 @@ enum Brand {
     static let amber = Color(hex: 0xF59E0B)
     static let line = Color(hex: 0xF5F5F7)
     static let lineMuted = Color(hex: 0xA1A1A6)
-    static let onSlateAccent = Color(hex: 0x818CF8)
+    static let onSlateAccent = Color(hex: 0x8994F8)
     static let lineFaint = Color(hex: 0x8E8E93)
     static let lineFill = Color(hex: 0x787880, opacity: 0.16)
     static let lineFill2 = Color(hex: 0x787880, opacity: 0.24)
@@ -43,21 +43,21 @@ extension BrandPalette {
         border: Color(hex: 0x3C3C43, opacity: 0.12),
         borderStrong: Color(hex: 0x3C3C43, opacity: 0.29),
         soft: Color(hex: 0x4F5BE8, opacity: 0.1),
-        primary: Color(hex: 0x4F5BE8),
+        primary: Color(hex: 0x4753E8),
         primaryFill: Color(hex: 0x4F5BE8),
         onPrimary: Color(hex: 0xFFFFFF),
         text: Color(hex: 0x1D1D1F),
-        text2: Color(hex: 0x6E6E73),
+        text2: Color(hex: 0x656569),
         text3: Color(hex: 0x86868B),
-        success: Color(hex: 0x1A7F37),
+        success: Color(hex: 0x1A7537),
         successSoft: Color(hex: 0x1A7F37, opacity: 0.1),
-        info: Color(hex: 0x4F5BE8),
-        warning: Color(hex: 0xB25000),
+        info: Color(hex: 0x4753E8),
+        warning: Color(hex: 0xA24F00),
         warningSoft: Color(hex: 0xB25000, opacity: 0.1),
-        danger: Color(hex: 0xD70015),
+        danger: Color(hex: 0xCF0015),
         dangerFill: Color(hex: 0xD70015),
         dangerSoft: Color(hex: 0xD70015, opacity: 0.08),
-        amberText: Color(hex: 0xB25000),
+        amberText: Color(hex: 0xA24F00),
         chart1: Color(hex: 0x4F5BE8),
         chart2: Color(hex: 0x0891B2),
         chart3: Color(hex: 0x8B5CF6),
@@ -74,7 +74,7 @@ extension BrandPalette {
         border: Color(hex: 0x545458, opacity: 0.48),
         borderStrong: Color(hex: 0x545458, opacity: 0.8),
         soft: Color(hex: 0x818CF8, opacity: 0.18),
-        primary: Color(hex: 0x818CF8),
+        primary: Color(hex: 0x8994F8),
         primaryFill: Color(hex: 0x5B63E6),
         onPrimary: Color(hex: 0xFFFFFF),
         text: Color(hex: 0xF5F5F7),
@@ -82,10 +82,10 @@ extension BrandPalette {
         text3: Color(hex: 0x8E8E93),
         success: Color(hex: 0x30D158),
         successSoft: Color(hex: 0x30D158, opacity: 0.16),
-        info: Color(hex: 0x818CF8),
+        info: Color(hex: 0x8994F8),
         warning: Color(hex: 0xFF9F0A),
         warningSoft: Color(hex: 0xFF9F0A, opacity: 0.16),
-        danger: Color(hex: 0xFF453A),
+        danger: Color(hex: 0xFF6D62),
         dangerFill: Color(hex: 0xE0242F),
         dangerSoft: Color(hex: 0xFF453A, opacity: 0.16),
         amberText: Color(hex: 0xFF9F0A),

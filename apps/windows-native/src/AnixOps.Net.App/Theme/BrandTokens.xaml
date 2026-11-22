@@ -19,36 +19,36 @@
             <SolidColorBrush x:Key="BrandBorderStrongBrush" Color="#4A3C3C43" />
             <Color x:Key="BrandSoftColor">#1A4F5BE8</Color>
             <SolidColorBrush x:Key="BrandSoftBrush" Color="#1A4F5BE8" />
-            <Color x:Key="BrandPrimaryColor">#FF4F5BE8</Color>
-            <SolidColorBrush x:Key="BrandPrimaryBrush" Color="#FF4F5BE8" />
+            <Color x:Key="BrandPrimaryColor">#FF4753E8</Color>
+            <SolidColorBrush x:Key="BrandPrimaryBrush" Color="#FF4753E8" />
             <Color x:Key="BrandPrimaryFillColor">#FF4F5BE8</Color>
             <SolidColorBrush x:Key="BrandPrimaryFillBrush" Color="#FF4F5BE8" />
             <Color x:Key="BrandOnPrimaryColor">#FFFFFFFF</Color>
             <SolidColorBrush x:Key="BrandOnPrimaryBrush" Color="#FFFFFFFF" />
             <Color x:Key="BrandTextColor">#FF1D1D1F</Color>
             <SolidColorBrush x:Key="BrandTextBrush" Color="#FF1D1D1F" />
-            <Color x:Key="BrandText2Color">#FF6E6E73</Color>
-            <SolidColorBrush x:Key="BrandText2Brush" Color="#FF6E6E73" />
+            <Color x:Key="BrandText2Color">#FF656569</Color>
+            <SolidColorBrush x:Key="BrandText2Brush" Color="#FF656569" />
             <Color x:Key="BrandText3Color">#FF86868B</Color>
             <SolidColorBrush x:Key="BrandText3Brush" Color="#FF86868B" />
-            <Color x:Key="BrandSuccessColor">#FF1A7F37</Color>
-            <SolidColorBrush x:Key="BrandSuccessBrush" Color="#FF1A7F37" />
+            <Color x:Key="BrandSuccessColor">#FF1A7537</Color>
+            <SolidColorBrush x:Key="BrandSuccessBrush" Color="#FF1A7537" />
             <Color x:Key="BrandSuccessSoftColor">#1A1A7F37</Color>
             <SolidColorBrush x:Key="BrandSuccessSoftBrush" Color="#1A1A7F37" />
-            <Color x:Key="BrandInfoColor">#FF4F5BE8</Color>
-            <SolidColorBrush x:Key="BrandInfoBrush" Color="#FF4F5BE8" />
-            <Color x:Key="BrandWarningColor">#FFB25000</Color>
-            <SolidColorBrush x:Key="BrandWarningBrush" Color="#FFB25000" />
+            <Color x:Key="BrandInfoColor">#FF4753E8</Color>
+            <SolidColorBrush x:Key="BrandInfoBrush" Color="#FF4753E8" />
+            <Color x:Key="BrandWarningColor">#FFA24F00</Color>
+            <SolidColorBrush x:Key="BrandWarningBrush" Color="#FFA24F00" />
             <Color x:Key="BrandWarningSoftColor">#1AB25000</Color>
             <SolidColorBrush x:Key="BrandWarningSoftBrush" Color="#1AB25000" />
-            <Color x:Key="BrandDangerColor">#FFD70015</Color>
-            <SolidColorBrush x:Key="BrandDangerBrush" Color="#FFD70015" />
+            <Color x:Key="BrandDangerColor">#FFCF0015</Color>
+            <SolidColorBrush x:Key="BrandDangerBrush" Color="#FFCF0015" />
             <Color x:Key="BrandDangerFillColor">#FFD70015</Color>
             <SolidColorBrush x:Key="BrandDangerFillBrush" Color="#FFD70015" />
             <Color x:Key="BrandDangerSoftColor">#14D70015</Color>
             <SolidColorBrush x:Key="BrandDangerSoftBrush" Color="#14D70015" />
-            <Color x:Key="BrandAmberTextColor">#FFB25000</Color>
-            <SolidColorBrush x:Key="BrandAmberTextBrush" Color="#FFB25000" />
+            <Color x:Key="BrandAmberTextColor">#FFA24F00</Color>
+            <SolidColorBrush x:Key="BrandAmberTextBrush" Color="#FFA24F00" />
             <Color x:Key="BrandChart1Color">#FF4F5BE8</Color>
             <SolidColorBrush x:Key="BrandChart1Brush" Color="#FF4F5BE8" />
             <Color x:Key="BrandChart2Color">#FF0891B2</Color>
@@ -77,8 +77,8 @@
             <SolidColorBrush x:Key="BrandBorderStrongBrush" Color="#CC545458" />
             <Color x:Key="BrandSoftColor">#2E818CF8</Color>
             <SolidColorBrush x:Key="BrandSoftBrush" Color="#2E818CF8" />
-            <Color x:Key="BrandPrimaryColor">#FF818CF8</Color>
-            <SolidColorBrush x:Key="BrandPrimaryBrush" Color="#FF818CF8" />
+            <Color x:Key="BrandPrimaryColor">#FF8994F8</Color>
+            <SolidColorBrush x:Key="BrandPrimaryBrush" Color="#FF8994F8" />
             <Color x:Key="BrandPrimaryFillColor">#FF5B63E6</Color>
             <SolidColorBrush x:Key="BrandPrimaryFillBrush" Color="#FF5B63E6" />
             <Color x:Key="BrandOnPrimaryColor">#FFFFFFFF</Color>
@@ -93,14 +93,14 @@
             <SolidColorBrush x:Key="BrandSuccessBrush" Color="#FF30D158" />
             <Color x:Key="BrandSuccessSoftColor">#2930D158</Color>
             <SolidColorBrush x:Key="BrandSuccessSoftBrush" Color="#2930D158" />
-            <Color x:Key="BrandInfoColor">#FF818CF8</Color>
-            <SolidColorBrush x:Key="BrandInfoBrush" Color="#FF818CF8" />
+            <Color x:Key="BrandInfoColor">#FF8994F8</Color>
+            <SolidColorBrush x:Key="BrandInfoBrush" Color="#FF8994F8" />
             <Color x:Key="BrandWarningColor">#FFFF9F0A</Color>
             <SolidColorBrush x:Key="BrandWarningBrush" Color="#FFFF9F0A" />
             <Color x:Key="BrandWarningSoftColor">#29FF9F0A</Color>
             <SolidColorBrush x:Key="BrandWarningSoftBrush" Color="#29FF9F0A" />
-            <Color x:Key="BrandDangerColor">#FFFF453A</Color>
-            <SolidColorBrush x:Key="BrandDangerBrush" Color="#FFFF453A" />
+            <Color x:Key="BrandDangerColor">#FFFF6D62</Color>
+            <SolidColorBrush x:Key="BrandDangerBrush" Color="#FFFF6D62" />
             <Color x:Key="BrandDangerFillColor">#FFE0242F</Color>
             <SolidColorBrush x:Key="BrandDangerFillBrush" Color="#FFE0242F" />
             <Color x:Key="BrandDangerSoftColor">#29FF453A</Color>
@@ -141,8 +141,8 @@
     <SolidColorBrush x:Key="BrandMarkLineBrush" Color="#FFF5F5F7" />
     <Color x:Key="BrandMarkLineMutedColor">#FFA1A1A6</Color>
     <SolidColorBrush x:Key="BrandMarkLineMutedBrush" Color="#FFA1A1A6" />
-    <Color x:Key="BrandMarkOnSlateAccentColor">#FF818CF8</Color>
-    <SolidColorBrush x:Key="BrandMarkOnSlateAccentBrush" Color="#FF818CF8" />
+    <Color x:Key="BrandMarkOnSlateAccentColor">#FF8994F8</Color>
+    <SolidColorBrush x:Key="BrandMarkOnSlateAccentBrush" Color="#FF8994F8" />
     <Color x:Key="BrandMarkLineFaintColor">#FF8E8E93</Color>
     <SolidColorBrush x:Key="BrandMarkLineFaintBrush" Color="#FF8E8E93" />
     <Color x:Key="BrandMarkLineFillColor">#29787880</Color>

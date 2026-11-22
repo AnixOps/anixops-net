@@ -30,7 +30,8 @@ const row = (page, index) => page.locator('[role="row"][id^="request-"]').nth(in
 const tab = (page, name) => page.getByRole("tab", { name, exact: true });
 const radio = (page, name) => page.getByRole("radio", { name });
 const toggle = (page, name) => page.getByRole("switch", { name }).or(page.getByRole("checkbox", { name })).first();
-const open = async (page, locator) => { await locator.first().click(); };
+/** Opens a pop-up (menu or list) and waits until it is on screen. */
+const open = async (page, locator, popup) => { await locator.first().click(); await page.locator(popup).first().waitFor({ state: "visible" }); };
 
 /** name, mode, theme, sidebar item, window size, and what to do on the page before the picture. */
 const shots = [
@@ -76,10 +77,10 @@ const shots = [
   { name: "terms-viewer-dark", mode: "proxy", theme: "dark", nav: "设置", size: LAPTOP, steps: async (page) => { await page.getByRole("button", { name: "查看", exact: true }).click(); } },
   { name: "decryption-consent-light", mode: "proxy", theme: "light", nav: "扩展", size: LAPTOP, storage: { "anixops.https-decryption-consent": null }, steps: async (page) => { await toggle(page, "解密 HTTPS 流量").click(); } },
   { name: "decryption-consent-dark", mode: "proxy", theme: "dark", nav: "扩展", size: LAPTOP, storage: { "anixops.https-decryption-consent": null }, steps: async (page) => { await toggle(page, "解密 HTTPS 流量").click(); } },
-  { name: "menu-proxies-light", mode: "proxy", theme: "light", nav: "代理", size: LAPTOP, steps: async (page) => { await open(page, page.locator('button[aria-haspopup="menu"]')); } },
-  { name: "menu-proxies-dark", mode: "proxy", theme: "dark", nav: "代理", size: LAPTOP, steps: async (page) => { await open(page, page.locator('button[aria-haspopup="menu"]')); } },
-  { name: "select-settings-light", mode: "proxy", theme: "light", nav: "设置", size: LAPTOP, steps: async (page) => { await open(page, page.locator(".select-trigger")); } },
-  { name: "select-settings-dark", mode: "proxy", theme: "dark", nav: "设置", size: LAPTOP, steps: async (page) => { await open(page, page.locator(".select-trigger")); } },
+  { name: "debug-menu-capture-light", mode: "debug", theme: "light", nav: "请求", size: LAPTOP, steps: async (page) => { await open(page, page.getByRole("button", { name: "更多抓包操作" }), '[role="menu"]'); } },
+  { name: "debug-menu-capture-dark", mode: "debug", theme: "dark", nav: "请求", size: LAPTOP, steps: async (page) => { await open(page, page.getByRole("button", { name: "更多抓包操作" }), '[role="menu"]'); } },
+  { name: "select-rules-light", mode: "proxy", theme: "light", nav: "规则", size: LAPTOP, steps: async (page) => { await open(page, page.locator(".select-trigger"), '[role="listbox"]'); } },
+  { name: "select-rules-dark", mode: "proxy", theme: "dark", nav: "规则", size: LAPTOP, steps: async (page) => { await open(page, page.locator(".select-trigger"), '[role="listbox"]'); } },
 ];
 
 const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon" };
