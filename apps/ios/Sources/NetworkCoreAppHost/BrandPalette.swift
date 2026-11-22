@@ -144,6 +144,7 @@ struct BrandPalette: Sendable {
             chart2: chart2,
             chart3: chart3,
             chart4: chart4,
+            shadow: shadow,
             heroStart: heroStart,
             heroEnd: heroEnd
         )
