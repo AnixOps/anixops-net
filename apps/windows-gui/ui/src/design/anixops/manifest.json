@@ -1,8 +1,8 @@
 {
   "name": "AnixOps Design",
   "repository": "https://github.com/AnixOps/anixops-design",
-  "version": "1.1.0",
-  "ref": "aa9638301b520d315d330d0856fb840bc4ef81e2",
+  "version": "1.2.0",
+  "ref": "05bc41b4b85eef6ac8f1ffa53a315bcce6560535",
   "files": [
     {
       "path": "LICENSE",
@@ -45,6 +45,48 @@
       "source": "brand/assets/mark.svg",
       "bytes": 1870,
       "sha256": "4046befb4b02a0b9f452849a90dc91cd34a4bb8544d28aa2cd924489e8b4bbb8"
+    },
+    {
+      "path": "brand/products/net/app-icon-1024.png",
+      "source": "brand/assets/products/net/app-icon-1024.png",
+      "bytes": 32513,
+      "sha256": "af75bba7c633709d1150df17d433077cedb74a1dcebc9a80da76f30b5372af36"
+    },
+    {
+      "path": "brand/products/net/app-icon.svg",
+      "source": "brand/assets/products/net/app-icon.svg",
+      "bytes": 885,
+      "sha256": "c513f494259676016d1510874634f8cade64d90290d4950dcea103d66402943b"
+    },
+    {
+      "path": "brand/products/net/icon-256.png",
+      "source": "brand/assets/products/net/icon-256.png",
+      "bytes": 6834,
+      "sha256": "723e68765f20739b5d6d0904eadc0a2cf1aedfd54259a1ff9f0388638c4b0573"
+    },
+    {
+      "path": "brand/products/net/icon-512.png",
+      "source": "brand/assets/products/net/icon-512.png",
+      "bytes": 16331,
+      "sha256": "cd871861d2220ee2d4df2f49047eb20cb647d2f1ea5d8c343c0399499c5e64ec"
+    },
+    {
+      "path": "brand/products/net/icon.icns",
+      "source": "brand/assets/products/net/icon.icns",
+      "bytes": 98770,
+      "sha256": "a516d4b6d53cfd008de291e4a7be777c44f27310c55189811f0e36cb07615e63"
+    },
+    {
+      "path": "brand/products/net/icon.ico",
+      "source": "brand/assets/products/net/icon.ico",
+      "bytes": 12011,
+      "sha256": "8d5a20263987e3bbb12346e45ba979b3a826bf1a68eaf49a86dc260b2fc10a9f"
+    },
+    {
+      "path": "brand/products/net/icon.svg",
+      "source": "brand/assets/products/net/icon.svg",
+      "bytes": 894,
+      "sha256": "a1773d04f523043cbc7cecc3b9b9a4e707964da7cad352a424659b2115523f9d"
     },
     {
       "path": "brand/tauri/128x128.png",
@@ -103,14 +145,14 @@
     {
       "path": "tokens.css",
       "source": "tokens/css/tokens.css",
-      "bytes": 6571,
-      "sha256": "6150794a5bbceaa1318fdba5d89372de5767c8ba2546d4d2b8da58925576f458"
+      "bytes": 7013,
+      "sha256": "786e31a4dd4eab918f95ee1ae2f8b77efa57fd1e7acd13ec88334436732605ab"
     },
     {
       "path": "tokens.json",
       "source": "tokens/tokens.json",
-      "bytes": 11822,
-      "sha256": "68da9c2a4d14c5d765f9173a981d49e52e4a0bcfa575a43127798eba053717fd"
+      "bytes": 12551,
+      "sha256": "282ce9df209d43515a47f632e60b4e8710499671555da461d3697a2a97a9fe14"
     }
   ]
 }

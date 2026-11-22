@@ -81,7 +81,8 @@ signing, archive/export or upload validation must run only in GitHub Actions on 
 
 ## App icon
 
-`Design/AppIcon.svg` is the source of the app icon. The asset catalog uses one
+`Design/AppIcon.svg` is the source of the app icon, copied from AnixOps Design
+`brand/assets/products/net/app-icon.svg` (the AnixOps Net product icon, brand.md 2.6). The asset catalog uses one
 1024×1024 sRGB PNG without an alpha channel
 (`Sources/NetworkCoreApp/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png`);
 iOS applies the corner mask. Re-export the PNG at 1024×1024 and drop the alpha
