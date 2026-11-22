@@ -67,8 +67,13 @@ jobs:
           fi
           gradle_file=apps/android-native/app/build.gradle.kts
           code="$(sed -n 's/^ *versionCode = \([0-9]*\).*/\1/p' "${gradle_file}")"
-          version="$(sed -n 's/^ *versionName = "\(.*\)".*/\1/p' "${gradle_file}")"
-          test -n "${code}" && test -n "${version}"
+          # versionName = findProperty("anixops.versionName") as String? ?: "0.3.0": take the last quoted string,
+          # the default a build without the property gets.
+          version="$(sed -n 's/^ *versionName = .*"\([^"]*\)".*/\1/p' "${gradle_file}")"
+          if [ -z "${code}" ] || [ -z "${version}" ]; then
+            echo "::error::Could not read versionCode ('${code}') or versionName ('${version}') from ${gradle_file}"
+            exit 1
+          fi
           name="anixops-net-${version}-${code}-play.aab"
           mkdir -p dist/play
           cp "${AAB}" "dist/play/${name}"
