@@ -178,7 +178,15 @@ AnixOps Design 里也没有，就先在 anixops-design 提 PR。`ui_lint.py --se
 
 各平台截图的同一个 job 里，在已经打开的界面上跑无障碍检查，不另起构建：桌面端用 axe（对比度、文字溢出截断、弹层与背景分层），
 macOS / iOS 用 XCUITest 的 `performAccessibilityAudit`（对比度、文字被截断、动态字体），Android、Windows、Linux 原生端接各自的无障碍检查。
-每一页浅色、深色都查。（逐个平台接入中，接入后在这里列出入口。）
+每一页浅色、深色都查。
+
+| 平台 | 入口 | 查什么 |
+|---|---|---|
+| 桌面端（Windows、Linux 共用的界面） | `UI screenshots` 工作流的 “Draw and check the screenshots”：`screenshots/render.cjs` 每画一张就调 `screenshots/audit.cjs` | axe（WCAG 2.2 A/AA，serious、critical 为 0，含对比度）；文字被截断而没有省略号、文字出了窗口；对话框、菜单、弹出列表、提示、Toast 和下面的窗口分不开（截图上测：表面与外侧 ΔL* ≥ 4，或边缘 ΔL* ≥ 6）。结果和每个弹层的测量值在产物的 `after/audit.json` |
+| macOS、iOS、Android、Windows 原生、Linux 原生 | 接入中 | |
+
+截图清单要覆盖：每一页的浅色和深色、英文（更长的词会暴露截断）、窄窗口、每种弹层（对话框、菜单、弹出列表）的浅色和深色。
+新页面、新对话框加进清单时，检查自动跟上。
 
 ### 第三层：每日评审
 
