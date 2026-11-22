@@ -76,7 +76,7 @@ struct NodeLatencyText: View {
         case .unsupported:
             Text("不支持")
                 .font(.footnote)
-                .foregroundStyle(brand.text3)
+                .foregroundStyle(brand.text2)
         }
     }
 }
@@ -102,7 +102,7 @@ struct SubscriptionGroupSummary: View {
                 Spacer(minLength: 0)
                 if group.isUpdatable {
                     Text(UpdateInterval.label(group.updateIntervalHours))
-                        .foregroundStyle(brand.text3)
+                        .foregroundStyle(brand.text2)
                 }
             }
             .font(.footnote)
@@ -179,7 +179,7 @@ private struct UsageBar: View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(brand.border.opacity(0.6))
+                    .fill(brand.raised)
                 Capsule()
                     .fill(color)
                     .frame(width: proxy.size.width * min(max(fraction, 0), 1))

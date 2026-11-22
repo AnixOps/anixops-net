@@ -111,7 +111,7 @@ struct CaptureSessionsView: View {
             if let expires = session.expiresAt {
                 Text("\(expires.formatted(date: .abbreviated, time: .shortened)) 自动删除")
                     .font(.caption2)
-                    .foregroundStyle(brand.text3)
+                    .foregroundStyle(brand.text2)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

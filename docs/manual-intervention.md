@@ -430,6 +430,23 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 secret 值的 job output（安卓 artifact 名和 APK 名都含 `anixops`）丢弃，发布步骤拿不到安卓包。修复后 release.yml 由版本号直接推出这两个名字。
 tag 当时指向的 d225b10 还是旧 workflow，需要把 tag 移到包含修复的 commit 再推（Release 没有发出，移动 tag 不影响用户）。
 
+## v0.3.0-beta.11 发布前后的人工事项
+
+发布说明在 `docs/release-notes/v0.3.0-beta.11.md`，安卓 versionCode 3007（beta.10 是 3005；3006 已于 2026-11-22 上传到 Google Play 测试轨道的草稿）。
+tag 由 Actions 的 “Release tag”（`release-tag.yml`）打，流程同 beta.10。内核仍是 networkcore cce9d63，anx 的 Cargo.lock 已一致。
+本版不触发 macOS TestFlight（Mac App Store）上传，macOS 仍发 Developer ID 版。
+
+- [ ] anx 的 ANX 构建和 `publish-client.yml` 进 Environment `apple-anx` / `anx-release`，需要维护者在 Actions 页面批准。
+- [ ] Linux 的 ANX 构建只能在带 WebKitGTK 的自托管 runner（标签 `9700x`）上跑，发布时需要它在线。
+
+发布后真机验收（CI 只有单元测试、模拟器冒烟测试和截图对比）：
+
+- [ ] 新 App 图标在五个平台的桌面 / 启动器、任务栏 / Dock、设置里都显示正确；从 beta.10 覆盖安装后图标更新。
+- [ ] Linux：开启系统代理再断开，GNOME / KDE 的代理设置恢复为接管前的值（含原本手动设过的项）。
+- [ ] Windows：刷新订阅时正在编辑的节点不丢；刷新失败后编辑内容仍在。
+- [ ] iOS / macOS 深色模式：导入、编辑弹出页与窗口有层次区分；禁用按钮为中性灰。
+- [ ] 安卓：连接时快速断网 / 恢复数次，VPN 状态正确，不残留连接。
+
 ## v0.3.0-beta.10 发布前后的人工事项
 
 发布说明在 `docs/release-notes/v0.3.0-beta.10.md`，安卓 versionCode 3005（beta.9 是 3004）。tag 由 Actions 的 “Release tag”（`release-tag.yml`）打，流程同 beta.9。

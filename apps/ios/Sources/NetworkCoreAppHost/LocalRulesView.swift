@@ -65,27 +65,33 @@ enum LocalRulesText {
 }
 
 /// Where a rule or rule set sends traffic, as a small label: always a word, coloured only to tell the three apart.
+/// A stopped rule's chip is neutral: label-3 on fill-1, like any disabled element (AnixOps Design H10).
 struct PolicyChip: View {
     let policy: LocalRules.Policy
+    var enabled = true
     @Environment(\.brand) private var brand
 
     var body: some View {
+        let colors = self.colors
         Text(LocalRulesText.policy(policy))
             .font(.caption.weight(.semibold))
-            .foregroundStyle(color)
+            .foregroundStyle(colors.text)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .background(color.opacity(0.12), in: Capsule())
+            .background(colors.fill, in: Capsule())
     }
 
-    private var color: Color {
+    private var colors: (text: Color, fill: Color) {
+        guard enabled else {
+            return (brand.text3, brand.raised)
+        }
         switch policy {
         case .proxy:
-            return brand.primary
+            return (brand.primary, brand.soft)
         case .direct:
-            return brand.text2
+            return (brand.text2, brand.raised)
         case .reject, .rejectNoDrop, .rejectDrop, .rejectTinyGif:
-            return brand.danger
+            return (brand.danger, brand.dangerSoft)
         }
     }
 }
@@ -271,17 +277,16 @@ struct LocalRulesView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: rule.value)
                     .font(.callout.monospaced())
-                    .foregroundStyle(brand.text)
+                    .foregroundStyle(rule.enabled ? brand.text : brand.text3)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Text(verbatim: rule.noResolve ? "\(rule.kind) · no-resolve" : rule.kind)
                     .font(.caption)
-                    .foregroundStyle(brand.text2)
+                    .foregroundStyle(rule.enabled ? brand.text2 : brand.text3)
             }
             Spacer(minLength: 8)
-            PolicyChip(policy: rule.policy)
+            PolicyChip(policy: rule.policy, enabled: rule.enabled)
         }
-        .opacity(rule.enabled ? 1 : 0.45)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityValue(rule.enabled ? "" : String(localized: "已停用"))
@@ -366,12 +371,12 @@ struct LocalRulesView: View {
         return HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: subscription.name)
-                    .foregroundStyle(brand.text)
+                    .foregroundStyle(subscription.enabled ? brand.text : brand.text3)
                     .lineLimit(1)
                 Group {
                     if !subscription.enabled {
                         Text("已停用")
-                            .foregroundStyle(brand.text3)
+                            .foregroundStyle(brand.text2)
                     } else if let error = loaded?.lastError {
                         Label("下载失败：\(error)", systemImage: "exclamationmark.triangle")
                             .foregroundStyle(brand.danger)
@@ -380,16 +385,15 @@ struct LocalRulesView: View {
                             .foregroundStyle(brand.text2)
                     } else {
                         Text(verbatim: SubscriptionLink.displayHost(subscription.url))
-                            .foregroundStyle(brand.text3)
+                            .foregroundStyle(brand.text2)
                     }
                 }
                 .font(.caption)
                 .lineLimit(1)
             }
             Spacer(minLength: 8)
-            PolicyChip(policy: subscription.policy)
+            PolicyChip(policy: subscription.policy, enabled: subscription.enabled)
         }
-        .opacity(subscription.enabled ? 1 : 0.45)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }

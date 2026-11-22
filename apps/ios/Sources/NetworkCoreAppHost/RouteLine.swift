@@ -114,12 +114,12 @@ struct RouteLineMark: View {
         TimelineView(.animation(paused: !phase.isBusy || reduceMotion)) { context in
             ZStack {
                 RouteLineShape()
-                    .stroke(Brand.line.opacity(0.16), style: stroke(dashed: false))
+                    .stroke(Brand.lineRule, style: stroke(dashed: false))
                 RouteLineShape()
                     .trim(from: 0, to: progress(at: context.date))
                     .stroke(lineStyle, style: stroke(dashed: phase == .off || phase == .unconfigured))
                 dot(at: CGPoint(x: 0.30, y: 0.72), color: Brand.sky)
-                dot(at: CGPoint(x: 0.70, y: 0.28), color: phase == .on ? Brand.amber : Brand.amber.opacity(0.45))
+                dot(at: CGPoint(x: 0.70, y: 0.28), color: phase == .on ? Brand.amber : Brand.lineFaint)
                     .scaleEffect(pop ? 1.45 : 1)
             }
             .frame(width: size, height: size)
@@ -145,7 +145,7 @@ struct RouteLineMark: View {
         case .connecting, .reasserting, .disconnecting:
             return AnyShapeStyle(Brand.sky)
         case .off, .unconfigured:
-            return AnyShapeStyle(Brand.line.opacity(0.45))
+            return AnyShapeStyle(Brand.lineFaint)
         }
     }
 

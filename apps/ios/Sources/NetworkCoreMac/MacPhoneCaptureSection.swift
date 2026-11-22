@@ -66,7 +66,7 @@ struct MacPhoneCaptureSection: View {
                                     .resizable()
                                     .frame(width: 160, height: 160)
                                     .padding(6)
-                                    .background(Color.white, in: RoundedRectangle(cornerRadius: 10))
+                                    .background(Brand.qrPaper, in: RoundedRectangle(cornerRadius: 10))
                                     .accessibilityLabel("设置页二维码")
                             }
                             VStack(alignment: .leading, spacing: 6) {

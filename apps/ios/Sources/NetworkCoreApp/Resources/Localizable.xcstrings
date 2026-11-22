@@ -919,18 +919,18 @@
         }
       }
     },
-    "下拉更新全部订阅。延迟为经该节点请求 http://www.gstatic.com/generate_204 的 HTTP 真连接时间，5 秒无响应显示超时。连接中切换节点会自动重连。": {
+    "下拉更新全部订阅。延迟为经该节点请求 `http://www.gstatic.com/generate_204` 的 HTTP 真连接时间，5 秒无响应显示超时。连接中切换节点会自动重连。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pull down to update every subscription. Delay is the time of a real HTTP request to http://www.gstatic.com/generate_204 through the node; no answer in 5 seconds shows Timeout. Switching nodes while connected reconnects automatically."
+            "value": "Pull down to update every subscription. Delay is the time of a real HTTP request to `http://www.gstatic.com/generate_204` through the node; no answer in 5 seconds shows Timeout. Switching nodes while connected reconnects automatically."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "下拉更新全部訂閱。延遲為經該節點請求 http://www.gstatic.com/generate_204 的 HTTP 真連線時間，5 秒無回應顯示逾時。連線中切換節點會自動重連。"
+            "value": "下拉更新全部訂閱。延遲為經該節點請求 `http://www.gstatic.com/generate_204` 的 HTTP 真連線時間，5 秒無回應顯示逾時。連線中切換節點會自動重連。"
           }
         }
       }
@@ -2615,18 +2615,18 @@
         }
       }
     },
-    "延迟为经该节点请求 http://www.gstatic.com/generate_204 的 HTTP 真连接时间，5 秒无响应显示超时。连接中切换节点会自动重连。": {
+    "延迟为经该节点请求 `http://www.gstatic.com/generate_204` 的 HTTP 真连接时间，5 秒无响应显示超时。连接中切换节点会自动重连。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Delay is the time for a real HTTP request to http://www.gstatic.com/generate_204 through the node; no answer in 5 seconds shows Timeout. Switching nodes while connected reconnects automatically."
+            "value": "Delay is the time for a real HTTP request to `http://www.gstatic.com/generate_204` through the node; no answer in 5 seconds shows Timeout. Switching nodes while connected reconnects automatically."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "延遲為經該節點請求 http://www.gstatic.com/generate_204 的 HTTP 真連線時間，5 秒無回應顯示逾時。連線中切換節點會自動重連。"
+            "value": "延遲為經該節點請求 `http://www.gstatic.com/generate_204` 的 HTTP 真連線時間，5 秒無回應顯示逾時。連線中切換節點會自動重連。"
           }
         }
       }

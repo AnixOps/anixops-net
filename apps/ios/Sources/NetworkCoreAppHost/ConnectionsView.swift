@@ -32,7 +32,7 @@ struct TrafficCard: View {
                         Spacer(minLength: 0)
                         Image(systemName: "chevron.right")
                             .font(.footnote.weight(.semibold))
-                            .foregroundStyle(brand.text3)
+                            .foregroundStyle(brand.text2)
                     }
                     if let traffic {
                         Text("本次已用 ↑\(TrafficFormat.bytes(traffic.uploadTotal)) ↓\(TrafficFormat.bytes(traffic.downloadTotal)) · \(traffic.active) 个连接")
@@ -403,7 +403,7 @@ private struct RequestColors {
         case .direct:
             return (brand.text2, brand.raised)
         case .reject:
-            return (brand.danger, brand.danger.opacity(0.12))
+            return (brand.danger, brand.dangerSoft)
         }
     }
 }
@@ -414,14 +414,14 @@ private struct MonogramBadge: View {
     @Environment(\.brand) private var brand
 
     var body: some View {
-        // AnixOps Design chart colors on their own soft fill, so the letters stay distinct but on-palette.
+        // AnixOps Design chart colors on the neutral fill, so the letters stay distinct but on-palette.
         let palette = [brand.chart1, brand.chart2, brand.chart3, brand.chart4, brand.amberText]
         let color = palette[HostMonogram.colorIndex(for: host, count: palette.count)]
         Text(HostMonogram.letter(for: host))
             .font(.subheadline.weight(.bold))
             .foregroundStyle(color)
             .frame(width: 32, height: 32)
-            .background(color.opacity(0.14), in: Circle())
+            .background(brand.raised, in: Circle())
             .accessibilityHidden(true)
     }
 }
@@ -468,7 +468,7 @@ private struct ConnectionRow: View {
                 }
                 Text(connection.rule)
                     .font(.caption2)
-                    .foregroundStyle(brand.text3)
+                    .foregroundStyle(brand.text2)
                     .lineLimit(1)
             }
             Spacer(minLength: 4)
@@ -478,7 +478,7 @@ private struct ConnectionRow: View {
                     .foregroundStyle(brand.text)
                 Text(Self.duration(connection.duration()))
                     .font(.caption2.monospacedDigit())
-                    .foregroundStyle(brand.text3)
+                    .foregroundStyle(brand.text2)
             }
         }
         .padding(.vertical, 8)

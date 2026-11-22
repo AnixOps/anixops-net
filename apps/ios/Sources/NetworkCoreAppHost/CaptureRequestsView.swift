@@ -619,7 +619,7 @@ struct CaptureRequestRow: View {
                     }
                     Text(CaptureClock.time(row.startedAt))
                         .font(.caption2.monospacedDigit())
-                        .foregroundStyle(brand.text3)
+                        .foregroundStyle(brand.text2)
                 }
             }
             Spacer(minLength: 4)
@@ -630,7 +630,7 @@ struct CaptureRequestRow: View {
                 if let duration = row.duration {
                     Text("\(Int((duration * 1000).rounded())) ms")
                         .font(.caption2.monospacedDigit())
-                        .foregroundStyle(brand.text3)
+                        .foregroundStyle(brand.text2)
                 }
             }
         }
@@ -640,7 +640,7 @@ struct CaptureRequestRow: View {
 
     private var statusColor: Color {
         guard let status = row.status else {
-            return row.inProgress ? brand.text3 : brand.danger
+            return row.inProgress ? brand.text2 : brand.danger
         }
         if status >= 400 {
             return brand.danger
@@ -765,7 +765,7 @@ struct CaptureRequestTable: View {
     private func statusColor(_ row: PacketCapture.RequestRow) -> Color {
         guard let status = row.status else {
             if row.note == "answered_locally" || row.inProgress || (row.endedAt == nil && row.note == nil) {
-                return brand.text3
+                return brand.text2
             }
             return brand.danger
         }

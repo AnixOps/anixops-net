@@ -123,9 +123,9 @@ private struct MacHeroCard: View {
                 Button(action: tap) {
                     RouteLineMark(phase: phase, size: 44)
                         .frame(width: 68, height: 68)
-                        .background(Brand.line.opacity(0.06), in: Circle())
+                        .background(Brand.lineFill, in: Circle())
                         .overlay(
-                            Circle().strokeBorder(phase == .on ? Brand.sky.opacity(0.7) : Brand.line.opacity(0.25), lineWidth: 1.5)
+                            Circle().strokeBorder(phase == .on ? Brand.sky : Brand.lineRuleStrong, lineWidth: 1.5)
                         )
                         .contentShape(Circle())
                 }
@@ -169,12 +169,12 @@ private struct MacHeroCard: View {
                             .lineLimit(1)
                         Image(systemName: "chevron.up.chevron.down")
                             .font(.caption2.weight(.semibold))
-                            .opacity(0.6)
+                            .foregroundStyle(Brand.lineMuted)
                     }
                     .font(.callout.weight(.medium))
                     .padding(.horizontal, 12)
                     .frame(height: 30)
-                    .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(Brand.lineFill2, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
@@ -211,7 +211,7 @@ private struct MacHeroCard: View {
         .background(brand.heroGradient, in: RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                .strokeBorder(Brand.lineEdge, lineWidth: 1)
         )
     }
 
@@ -487,7 +487,7 @@ struct MacActivityPage: View {
             }
             .padding(16)
             .background(brand.surface, in: RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous).strokeBorder(brand.border.opacity(0.6)))
+            .overlay(RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous).strokeBorder(brand.border))
             .padding(.horizontal, 20)
             .padding(.top, 16)
             ConnectionsView(tunnel: tunnel)
@@ -894,7 +894,7 @@ struct MacCard<Content: View>: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(brand.surface, in: RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous).strokeBorder(brand.border.opacity(0.6)))
+        .overlay(RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous).strokeBorder(brand.border))
     }
 }
 
@@ -923,7 +923,7 @@ struct MacNotice: View {
         }
         .padding(14)
         .background(brand.surface, in: RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous).strokeBorder(brand.warning.opacity(0.4)))
+        .overlay(RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous).strokeBorder(brand.warning))
     }
 }
 
@@ -936,7 +936,7 @@ private struct MacPressableStyle: ButtonStyle {
     }
 }
 
-/// The hero's action pill on slate: solid near-white with slate text, or a translucent white pill.
+/// The hero's action pill on slate: solid near-white with slate text, or a translucent pill (dark fill-2).
 private struct MacHeroButtonStyle: ButtonStyle {
     let filled: Bool
 
@@ -945,7 +945,7 @@ private struct MacHeroButtonStyle: ButtonStyle {
             .padding(.horizontal, 6)
             .frame(minHeight: 32)
             .foregroundStyle(filled ? Brand.slate : Brand.line)
-            .background(filled ? Brand.line : Color.white.opacity(0.14), in: Capsule())
+            .background(filled ? Brand.line : Brand.lineFill2, in: Capsule())
             .contentShape(Capsule())
             .opacity(configuration.isPressed ? 0.82 : 1)
     }

@@ -134,7 +134,7 @@ struct MappingsView: View {
                         .truncationMode(.middle)
                     Text(verbatim: Self.result(entry))
                         .font(.caption.monospaced())
-                        .foregroundStyle(brand.text3)
+                        .foregroundStyle(brand.text2)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -533,13 +533,13 @@ struct DecryptHostsView: View {
                             .foregroundStyle(host.looksPinned ? brand.warning : brand.text2)
                         Text(Self.counts(host))
                             .font(.caption.monospacedDigit())
-                            .foregroundStyle(brand.text3)
+                            .foregroundStyle(brand.text2)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     if effective.excludes(host.host) {
                         Text("已排除")
                             .font(.caption)
-                            .foregroundStyle(brand.text3)
+                            .foregroundStyle(brand.text2)
                     } else {
                         Button("排除") {
                             add(host.host, exclude: true)

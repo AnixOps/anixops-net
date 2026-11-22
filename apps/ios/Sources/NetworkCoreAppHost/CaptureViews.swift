@@ -322,7 +322,7 @@ private struct ExchangeRow: View {
                 Spacer(minLength: 4)
                 Text(TrafficFormat.bytes(exchange.response.body.size))
                     .font(.caption2.monospacedDigit())
-                    .foregroundStyle(brand.text3)
+                    .foregroundStyle(brand.text2)
             }
             Text(exchange.url)
                 .font(.footnote)
@@ -351,7 +351,7 @@ private struct ChunkRow: View {
                     .lineLimit(2)
                 Text("\(TrafficFormat.bytes(UInt64(chunk.data.count))) · \(chunk.at.formatted(date: .omitted, time: .standard))")
                     .font(.caption2.monospacedDigit())
-                    .foregroundStyle(brand.text3)
+                    .foregroundStyle(brand.text2)
             }
         }
     }
@@ -535,7 +535,7 @@ struct CaptureHostGroupRows: View {
                             .foregroundStyle(brand.text2)
                         Text(status(group))
                             .font(.caption)
-                            .foregroundStyle(brand.text3)
+                            .foregroundStyle(brand.text2)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }

@@ -82,7 +82,8 @@ struct MacCommandPalette: View {
     var body: some View {
         let rows = results
         ZStack(alignment: .top) {
-            Color.black.opacity(0.18)
+            // Like Spotlight, the window behind stays as it is: the panel's material, edge and shadow set it apart.
+            Color.clear
                 .ignoresSafeArea()
                 .contentShape(Rectangle())
                 .onTapGesture {
@@ -143,7 +144,7 @@ struct MacCommandPalette: View {
             .frame(width: 560)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(brand.border, lineWidth: 1))
-            .shadow(color: .black.opacity(0.25), radius: 24, y: 10)
+            .shadow(color: brand.shadow, radius: 32, y: 24)
             .padding(.top, 72)
             .accessibilityAddTraits(.isModal)
         }
@@ -181,13 +182,13 @@ struct MacCommandPalette: View {
                     Text(verbatim: detail)
                         .font(.callout)
                         .lineLimit(1)
-                        .foregroundStyle(selected ? brand.onPrimary.opacity(0.8) : Color.secondary)
+                        .foregroundStyle(selected ? brand.onPrimary : Color.secondary)
                 }
                 Spacer(minLength: 8)
                 if let shortcut = item.shortcut {
                     Text(verbatim: shortcut)
                         .font(.callout.monospaced())
-                        .foregroundStyle(selected ? brand.onPrimary.opacity(0.8) : Color.secondary)
+                        .foregroundStyle(selected ? brand.onPrimary : Color.secondary)
                 }
             }
             .padding(.horizontal, 10)
