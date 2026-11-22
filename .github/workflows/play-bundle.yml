@@ -2,11 +2,26 @@ name: Google Play bundle
 
 # Builds the Android App Bundle (AAB) for Google Play from the chosen ref and signs it with the Play upload key
 # (PLAY_UPLOAD_KEYSTORE_* in the google-play environment, which needs the maintainer's approval). Google re-signs
-# it with the app signing key it holds (Play App Signing). The AAB is left as a workflow artifact for a manual
-# upload in Play Console; uploading it to a Play track automatically is a later step (docs/manual-intervention.md, Google Play).
+# it with the app signing key it holds (Play App Signing). The AAB is kept as a workflow artifact and, unless the track
+# is "none", uploaded to that Play testing track as a draft release that is NOT sent for review: the maintainer sends
+# it for review in Play Console (Publishing overview). The service account (PLAY_SERVICE_ACCOUNT_JSON) only has rights
+# on testing tracks (docs/manual-intervention.md, Google Play).
 
 on:
   workflow_dispatch:
+    inputs:
+      track:
+        description: Play testing track to upload a draft release to (alpha = Closed testing - Alpha)
+        type: choice
+        default: alpha
+        options:
+          - alpha
+          - internal
+          - none
+      notes:
+        description: Release notes (en-US) shown to testers
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -79,12 +94,14 @@ jobs:
           cp "${AAB}" "dist/play/${name}"
           (cd dist/play && sha256sum -- "${name}" > "${name}.sha256")
           echo "artifact_name=anixops-net-play-${code}-${GITHUB_SHA::7}" >> "${GITHUB_OUTPUT}"
+          echo "file=dist/play/${name}" >> "${GITHUB_OUTPUT}"
+          echo "release_name=${code} (${version})" >> "${GITHUB_OUTPUT}"
           {
             echo "### Google Play bundle"
             echo
             echo "- File: \`${name}\` (versionName ${version}, versionCode ${code})"
             echo "- Commit: \`${GITHUB_SHA}\`"
-            echo "- Signed with the upload key; upload it in Play Console → Test and release."
+            echo "- Signed with the upload key."
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload the AAB
@@ -94,3 +111,22 @@ jobs:
           path: dist/play/*
           if-no-files-found: error
           retention-days: 7
+
+      - name: Upload a draft release to Google Play
+        if: ${{ inputs.track != 'none' }}
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          TRACK: ${{ inputs.track }}
+          NOTES: ${{ inputs.notes }}
+          AAB_FILE: ${{ steps.stage.outputs.file }}
+          RELEASE_NAME: ${{ steps.stage.outputs.release_name }}
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --disable-pip-version-check "google-auth==2.38.0" "requests==2.32.3"
+          printf '%s' "${NOTES}" > "${RUNNER_TEMP}/play-notes.txt"
+          python3 .github/scripts/play-upload.py io.anixops.net.android "${TRACK}" "${AAB_FILE}" "${RELEASE_NAME}" \
+            "${RUNNER_TEMP}/play-notes.txt"
+          {
+            echo "- Uploaded to the \`${TRACK}\` track as a draft release, not sent for review."
+            echo "  Send it for review in Play Console → Publishing overview."
+          } >> "${GITHUB_STEP_SUMMARY}"
