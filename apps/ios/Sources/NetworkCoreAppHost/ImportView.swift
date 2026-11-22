@@ -148,7 +148,7 @@ struct ImportView: View {
                 Button {
                     pickingFile = true
                 } label: {
-                    Label("从文件导入 WireGuard 配置", systemImage: "doc")
+                    Label("从文件导入", systemImage: "doc")
                         .font(.body.weight(.medium))
                 }
 
