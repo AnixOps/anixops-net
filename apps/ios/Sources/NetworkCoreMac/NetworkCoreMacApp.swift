@@ -9,7 +9,10 @@ import SwiftUI
 struct NetworkCoreMacApp: App {
     @State private var tunnel = TunnelController()
     @StateObject private var state = MacAppState()
+    #if !ANIXOPS_APP_STORE
+    /// In-app updates of the Developer ID build; the Mac App Store updates its own build.
     @State private var updater = AppUpdater()
+    #endif
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
 
     init() {
@@ -21,7 +24,9 @@ struct NetworkCoreMacApp: App {
         // One main window: a VPN client has a single connection, so a second one would only repeat it.
         Window("AnixOps Net", id: MacAppState.mainWindowID) {
             MacRootView(tunnel: tunnel, state: state)
+                #if !ANIXOPS_APP_STORE
                 .environment(updater)
+                #endif
                 .preferredColorScheme(appearance.colorScheme)
                 // The System Extension cannot post notifications; the app posts what scripts posted.
                 .task {
@@ -54,15 +59,20 @@ struct NetworkCoreMacApp: App {
                     }
                     #endif
                     await tunnel.load()
-                    // The `anixops` command-line tool talks to this app (MacControlService).
+                    // The `anixops` command-line tool talks to this app (MacControlService). The Mac App Store build
+                    // ships without the tool, so nothing would ever connect.
+                    #if !ANIXOPS_APP_STORE
                     state.startControl(tunnel)
+                    #endif
                     // The loopback Prometheus endpoint, when turned on in Settings (MacMetricsService).
                     state.startMetrics(tunnel)
                     // Subscription groups update on their own while the app runs; a Mac app stays open for long.
                     while !Task.isCancelled {
                         await tunnel.refreshDueSubscriptions()
+                        #if !ANIXOPS_APP_STORE
                         // Once a day at most, and only in a build with an update feed (AppUpdater).
                         await updater.checkIfDue()
+                        #endif
                         try? await Task.sleep(for: .seconds(15 * 60))
                     }
                 }

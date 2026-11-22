@@ -23,6 +23,82 @@ settings:
     MARKETING_VERSION: "0.3.0"
     CURRENT_PROJECT_VERSION: "1"
 
+targetTemplates:
+  # The macOS app's sources and Info.plist, shared by the Developer ID build (NetworkCoreMac) and the Mac App Store
+  # build (NetworkCoreMacAppStore). Each target sets its own settings and dependencies.
+  NetworkCoreMacApp:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/NetworkCoreMac
+      - path: Sources/NetworkCoreApp
+        excludes:
+          - "Resources/**"
+      - path: Sources/NetworkCoreApp/Resources/Localizable.xcstrings
+      - path: Sources/NetworkCoreApp/Resources/PrivacyInfo.xcprivacy
+      - path: Sources/NetworkCoreAppHost/AppModeViews.swift
+      - path: Sources/NetworkCoreAppHost/BrandPalette.swift
+      - path: Sources/NetworkCoreAppHost/BrandTokens.swift
+      - path: Sources/NetworkCoreAppHost/ClientHealthMonitor.swift
+      - path: Sources/NetworkCoreAppHost/ClientReporter.swift
+      - path: Sources/NetworkCoreAppHost/CaptureRequestsView.swift
+      - path: Sources/NetworkCoreAppHost/CaptureSessionsView.swift
+      - path: Sources/NetworkCoreAppHost/CaptureBodyDecoder.swift
+      - path: Sources/NetworkCoreAppHost/CaptureStreamViews.swift
+      - path: Sources/NetworkCoreAppHost/CaptureViews.swift
+      - path: Sources/NetworkCoreAppHost/ConnectionsView.swift
+      - path: Sources/NetworkCoreAppHost/DashboardCards.swift
+      - path: Sources/NetworkCoreAppHost/DashboardModel.swift
+      - path: Sources/NetworkCoreAppHost/DnsSettingsView.swift
+      - path: Sources/NetworkCoreAppHost/ExchangeInspector.swift
+      - path: Sources/NetworkCoreAppHost/ImportView.swift
+      - path: Sources/NetworkCoreAppHost/MappingsViews.swift
+      - path: Sources/NetworkCoreAppHost/MitmPluginInspector.swift
+      - path: Sources/NetworkCoreAppHost/MitmTrustPresentation.swift
+      - path: Sources/NetworkCoreAppHost/PluginsView.swift
+      - path: Sources/NetworkCoreAppHost/ProxyModeText.swift
+      - path: Sources/NetworkCoreAppHost/ReplayView.swift
+      - path: Sources/NetworkCoreAppHost/RouteLine.swift
+      - path: Sources/NetworkCoreAppHost/TermsConsentView.swift
+      - path: Sources/NetworkCoreAppHost/RuleSetsView.swift
+      - path: Sources/NetworkCoreAppHost/RuleTextEditor.swift
+      - path: Sources/NetworkCoreAppHost/RuleToolsView.swift
+      - path: Sources/NetworkCoreAppHost/TunnelController.swift
+      - path: Sources/NetworkCoreAppHost/URLCommandHandler.swift
+      - path: Sources/NetworkCoreAppHost/AppNotifications.swift
+      - path: Sources/NetworkCoreAppHost/BlockQuicSection.swift
+      - path: Sources/NetworkCoreAppHost/TakeoverSection.swift
+      - path: Sources/NetworkCoreAppHost/DiagnosticEventsView.swift
+      - path: Sources/NetworkCoreAppHost/NativeNodeImporterFFI.swift
+      - path: Sources/NetworkCoreAppHost/NodeDelayFFI.swift
+      - path: Sources/NetworkCoreAppHost/NodeCheckupFFI.swift
+      - path: Sources/NetworkCoreAppHost/NodeCheckupSheet.swift
+      - path: Sources/NetworkCoreAppHost/NodeEditSheet.swift
+      - path: Sources/NetworkCoreAppHost/OnDemandSettingsView.swift
+      - path: Sources/NetworkCoreAppHost/SubscriptionGroupViews.swift
+      - path: Sources/NetworkCoreAppHost/TrafficStatsView.swift
+    info:
+      path: Generated/${target_name}-Info.plist
+      properties:
+        CFBundleDisplayName: AnixOps Net
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.utilities
+        # anixops:// links, the same six actions as on iOS (NetworkCoreBridge/AppURLCommand.swift).
+        CFBundleURLTypes:
+          - CFBundleURLName: net.anixops.net
+            CFBundleURLSchemes:
+              - anixops
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        ITSAppUsesNonExemptEncryption: false
+        # In-app updates (Sources/NetworkCoreMac/AppUpdater.swift, docs/macos-updates.md): the HTTPS feed URL and the
+        # base64 Ed25519 public keys, comma separated. Empty in every build but the release build, which turns
+        # updates off.
+        AnixOpsUpdateFeedURL: $(ANIXOPS_UPDATE_FEED_URL)
+        AnixOpsUpdatePublicKeys: $(ANIXOPS_UPDATE_PUBLIC_KEYS)
+        # The app group whose container holds the command-line socket (MacControlService, docs/macos-cli.md).
+        AnixOpsAppGroup: $(TeamIdentifierPrefix)net.anixops.networkcore
+
 targets:
   NetworkCoreApp:
     type: application
@@ -158,81 +234,13 @@ targets:
         product: NetworkCoreIOS
 
   # The macOS app: the same tunnel controller, import flow and brand views as iOS, with a sidebar window and a
-  # menu bar item. Distributed outside the Mac App Store with a Developer ID signature and notarization, so the
-  # Network Extension ships as a System Extension (Contents/Library/SystemExtensions) that the app activates
-  # (SystemExtensionActivation) and the user allows in System Settings.
+  # menu bar item. This is the Developer ID build, distributed outside the Mac App Store with a Developer ID
+  # signature and notarization, so the Network Extension ships as a System Extension (Contents/Library/SystemExtensions)
+  # that the app activates (SystemExtensionActivation) and the user allows in System Settings. NetworkCoreMacAppStore
+  # below is the same app for the Mac App Store and TestFlight (docs/macos-app-store.md).
   NetworkCoreMac:
-    type: application
-    platform: macOS
-    sources:
-      - path: Sources/NetworkCoreMac
-      - path: Sources/NetworkCoreApp
-        excludes:
-          - "Resources/**"
-      - path: Sources/NetworkCoreApp/Resources/Localizable.xcstrings
-      - path: Sources/NetworkCoreApp/Resources/PrivacyInfo.xcprivacy
-      - path: Sources/NetworkCoreAppHost/AppModeViews.swift
-      - path: Sources/NetworkCoreAppHost/BrandPalette.swift
-      - path: Sources/NetworkCoreAppHost/BrandTokens.swift
-      - path: Sources/NetworkCoreAppHost/ClientHealthMonitor.swift
-      - path: Sources/NetworkCoreAppHost/ClientReporter.swift
-      - path: Sources/NetworkCoreAppHost/CaptureRequestsView.swift
-      - path: Sources/NetworkCoreAppHost/CaptureSessionsView.swift
-      - path: Sources/NetworkCoreAppHost/CaptureBodyDecoder.swift
-      - path: Sources/NetworkCoreAppHost/CaptureStreamViews.swift
-      - path: Sources/NetworkCoreAppHost/CaptureViews.swift
-      - path: Sources/NetworkCoreAppHost/ConnectionsView.swift
-      - path: Sources/NetworkCoreAppHost/DashboardCards.swift
-      - path: Sources/NetworkCoreAppHost/DashboardModel.swift
-      - path: Sources/NetworkCoreAppHost/DnsSettingsView.swift
-      - path: Sources/NetworkCoreAppHost/ExchangeInspector.swift
-      - path: Sources/NetworkCoreAppHost/ImportView.swift
-      - path: Sources/NetworkCoreAppHost/MappingsViews.swift
-      - path: Sources/NetworkCoreAppHost/MitmPluginInspector.swift
-      - path: Sources/NetworkCoreAppHost/MitmTrustPresentation.swift
-      - path: Sources/NetworkCoreAppHost/PluginsView.swift
-      - path: Sources/NetworkCoreAppHost/ProxyModeText.swift
-      - path: Sources/NetworkCoreAppHost/ReplayView.swift
-      - path: Sources/NetworkCoreAppHost/RouteLine.swift
-      - path: Sources/NetworkCoreAppHost/TermsConsentView.swift
-      - path: Sources/NetworkCoreAppHost/RuleSetsView.swift
-      - path: Sources/NetworkCoreAppHost/RuleTextEditor.swift
-      - path: Sources/NetworkCoreAppHost/RuleToolsView.swift
-      - path: Sources/NetworkCoreAppHost/TunnelController.swift
-      - path: Sources/NetworkCoreAppHost/URLCommandHandler.swift
-      - path: Sources/NetworkCoreAppHost/AppNotifications.swift
-      - path: Sources/NetworkCoreAppHost/BlockQuicSection.swift
-      - path: Sources/NetworkCoreAppHost/TakeoverSection.swift
-      - path: Sources/NetworkCoreAppHost/DiagnosticEventsView.swift
-      - path: Sources/NetworkCoreAppHost/NativeNodeImporterFFI.swift
-      - path: Sources/NetworkCoreAppHost/NodeDelayFFI.swift
-      - path: Sources/NetworkCoreAppHost/NodeCheckupFFI.swift
-      - path: Sources/NetworkCoreAppHost/NodeCheckupSheet.swift
-      - path: Sources/NetworkCoreAppHost/NodeEditSheet.swift
-      - path: Sources/NetworkCoreAppHost/OnDemandSettingsView.swift
-      - path: Sources/NetworkCoreAppHost/SubscriptionGroupViews.swift
-      - path: Sources/NetworkCoreAppHost/TrafficStatsView.swift
-    info:
-      path: Generated/NetworkCoreMac-Info.plist
-      properties:
-        CFBundleDisplayName: AnixOps Net
-        CFBundleShortVersionString: $(MARKETING_VERSION)
-        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        LSApplicationCategoryType: public.app-category.utilities
-        # anixops:// links, the same six actions as on iOS (NetworkCoreBridge/AppURLCommand.swift).
-        CFBundleURLTypes:
-          - CFBundleURLName: net.anixops.net
-            CFBundleURLSchemes:
-              - anixops
-        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
-        ITSAppUsesNonExemptEncryption: false
-        # In-app updates (Sources/NetworkCoreMac/AppUpdater.swift, docs/macos-updates.md): the HTTPS feed URL and the
-        # base64 Ed25519 public keys, comma separated. Empty in every build but the release build, which turns
-        # updates off.
-        AnixOpsUpdateFeedURL: $(ANIXOPS_UPDATE_FEED_URL)
-        AnixOpsUpdatePublicKeys: $(ANIXOPS_UPDATE_PUBLIC_KEYS)
-        # The app group whose container holds the command-line socket (MacControlService, docs/macos-cli.md).
-        AnixOpsAppGroup: $(TeamIdentifierPrefix)net.anixops.networkcore
+    templates:
+      - NetworkCoreMacApp
     settings:
       base:
         ANIXOPS_UPDATE_FEED_URL: ""
@@ -313,6 +321,70 @@ targets:
         embed: false
       - sdk: Security.framework
 
+  # The Mac App Store build of the macOS app, which TestFlight takes (docs/macos-app-store.md). The same sources as
+  # NetworkCoreMac, with what the Mac App Store does not allow left out: the tunnel is an app extension in
+  # Contents/PlugIns (the store does not take System Extensions), there is no in-app updater (the store updates the
+  # app) and no `anixops` command-line tool (every executable must be sandboxed, and a sandboxed tool started from
+  # Terminal cannot reach the app's group container). ANIXOPS_APP_STORE hides those parts in the code.
+  NetworkCoreMacAppStore:
+    templates:
+      - NetworkCoreMacApp
+    settings:
+      base:
+        ANIXOPS_UPDATE_FEED_URL: ""
+        ANIXOPS_UPDATE_PUBLIC_KEYS: ""
+        PRODUCT_NAME: AnixOps Net
+        PRODUCT_MODULE_NAME: NetworkCoreMac
+        # The tunnel's bundle ID (com.example.networkcore.macos.appstore.packettunnel) starts with this one. The
+        # upload uses the iOS app's bundle ID, so one App Store Connect record carries iOS and macOS.
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.networkcore.macos.appstore
+        CODE_SIGN_ENTITLEMENTS: Entitlements/NetworkCoreMacAppStore.entitlements
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) ANIXOPS_APP_STORE
+        ENABLE_HARDENED_RUNTIME: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        COMBINE_HIDPI_IMAGES: YES
+    dependencies:
+      - package: NetworkCoreIOS
+        product: NetworkCoreIOS
+      - target: NetworkCoreMacAppStoreTunnel
+        embed: true
+      - framework: Generated/NetworkCoreRuntime.xcframework
+        embed: false
+
+  # The packet tunnel of the Mac App Store build: the iOS provider sources as an app extension, which macOS runs as
+  # the user inside the app's sandbox. It shares the Keychain access group with the app, and the app still hands
+  # over the start secrets as for the System Extension (TunnelStartSecrets), so both builds start the same way.
+  NetworkCoreMacAppStoreTunnel:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: Sources/NetworkCorePacketTunnel
+      # The connection-stopped notification is localized like the app.
+      - path: Sources/NetworkCoreApp/Resources/Localizable.xcstrings
+    info:
+      path: Generated/NetworkCoreMacAppStoreTunnel-Info.plist
+      properties:
+        CFBundleDisplayName: AnixOps Net Tunnel
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        ITSAppUsesNonExemptEncryption: false
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.networkcore.macos.appstore.packettunnel
+        PRODUCT_MODULE_NAME: NetworkCoreMacTunnel
+        CODE_SIGN_ENTITLEMENTS: Entitlements/NetworkCoreMacAppStoreTunnel.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+    dependencies:
+      - package: NetworkCoreIOS
+        product: NetworkCoreIOS
+      - framework: Generated/NetworkCoreRuntime.xcframework
+        embed: false
+      - sdk: Security.framework
+
   # `anixops`, the command-line tool of the macOS app (Sources/NetworkCoreCLI, docs/macos-cli.md). It talks to the
   # running app over a socket in the app group container, so it needs only the app group, no Network Extension
   # entitlement and no provisioning profile; it is not sandboxed.
@@ -365,3 +437,10 @@ schemes:
     test:
       targets:
         - NetworkCoreMacUITests
+
+  # Built unsigned by CI; signed for the Mac App Store and uploaded to TestFlight by the private build.
+  NetworkCoreMacAppStore:
+    build:
+      targets:
+        NetworkCoreMacAppStore: all
+        NetworkCoreMacAppStoreTunnel: all

@@ -664,9 +664,12 @@ struct MacSettingsPage: View {
                     }
                 }
             }
+            // The Mac App Store updates the app, and its build has no command-line tool (docs/macos-app-store.md).
+            #if !ANIXOPS_APP_STORE
             MacUpdateSection()
 
             MacCommandLineSection()
+            #endif
 
             if let metrics = state.metrics {
                 MacMetricsSection(metrics: metrics)
@@ -710,6 +713,7 @@ struct MacSettingsPage: View {
     }
 }
 
+#if !ANIXOPS_APP_STORE
 /// Settings > Command Line: how to put the bundled `anixops` tool on the PATH (docs/macos-cli.md). The app is
 /// sandboxed and cannot write /usr/local/bin itself, so it shows the command to copy.
 private struct MacCommandLineSection: View {
@@ -739,6 +743,8 @@ private struct MacCommandLineSection: View {
         }
     }
 }
+
+#endif
 
 /// Settings > Prometheus metrics: the loopback endpoint (MacMetricsService), as on Windows and Linux.
 private struct MacMetricsSection: View {
@@ -771,6 +777,7 @@ private struct MacMetricsSection: View {
     }
 }
 
+#if !ANIXOPS_APP_STORE
 /// Settings > Software Update: check, download, verify and install a signed update (AppUpdater). Only the action
 /// that applies to the current step is shown.
 private struct MacUpdateSection: View {
@@ -868,6 +875,7 @@ private struct MacUpdateSection: View {
         }
     }
 }
+#endif
 
 /// A titled surface card in the current palette.
 struct MacCard<Content: View>: View {
