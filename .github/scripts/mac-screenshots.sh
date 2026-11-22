@@ -62,11 +62,8 @@ shoot() {
     if [ "${section}" = terms ]; then
         accepted="none"
     fi
-    # The text caret stays lit instead of blinking: the import sheet focuses its editor, and a capture that caught
-    # the caret in its off phase differed from main by the caret alone.
     open -n "${app}" --args -AnixOpsDemo YES -AnixOpsMode "${mode}" -AnixOpsSection "${section}" -appearance "${appearance}" \
-        -AnixOpsPalette "${show_palette}" -AnixOpsImport "${show_import}" -AppleLanguages "(${language})" -terms-accepted-version "${accepted}" \
-        -NSTextInsertionPointBlinkPeriodOn 100000000 -NSTextInsertionPointBlinkPeriodOff 0
+        -AnixOpsPalette "${show_palette}" -AnixOpsImport "${show_import}" -AppleLanguages "(${language})" -terms-accepted-version "${accepted}"
     local id=""
     for _ in 1 2 3 4 5 6 7 8 9 10; do
         sleep 2
