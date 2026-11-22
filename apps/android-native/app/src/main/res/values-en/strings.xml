@@ -488,7 +488,7 @@
     <string name="body_image_preview">Image preview</string>
     <string name="body_image_too_large">The image is too large to draw here (%1$d × %2$d). Share it to view it in another app.</string>
     <string name="body_image_unreadable">This image cannot be drawn. Its bytes are below in hex.</string>
-    <string name="proto_message">Message %1$d · %2$d bytes</string>
+    <string name="proto_message">Message %1$d · %2$d B</string>
     <string name="proto_compressed">This message is compressed. Share the body and decompress it with another tool.</string>
     <string name="proto_trailers">Trailers</string>
     <string name="proto_undecoded">This message is not Protobuf. See Hex.</string>
