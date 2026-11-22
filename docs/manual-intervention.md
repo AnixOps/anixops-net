@@ -125,6 +125,25 @@ macOS 客户端改为官网分发（Developer ID 签名 + 公证），隧道从 
 - [ ] 睡眠唤醒、从系统设置的 VPN 开关直接连接（不经 App）也能连上。
 - [ ] 安装新版本后再连接，系统扩展被替换为新版本（`systemextensionsctl list` 版本号更新）。
 
+## macOS TestFlight（Mac App Store 版）
+
+TestFlight 只收 Mac App Store 构建：隧道是 App 扩展，没有应用内更新和命令行工具（`docs/macos-app-store.md`）。CI 只做
+不签名构建和包结构检查；签名、上传在私有 anx 仓库的「macOS TestFlight with ANX」workflow。需要维护者做的：
+
+- [ ] App Store Connect 里给 AnixOps Net 加 macOS 平台（与 iOS 同一个 bundle ID）。
+- [ ] 新建 Mac Installer Distribution 证书、两个 Mac App Store Connect 描述文件（App、隧道），按 `docs/macos-app-store.md`
+  「Apple 账号侧」存进 anx 的 Environment `apple-anx`（`MACOS_APPSTORE_*` 四个 secret）。
+- [ ] 同意后触发 `upload=yes`（上传 TestFlight 属于发布，需要明确同意）。
+
+真机验收（macOS 14+，从 TestFlight 安装）：
+
+- [ ] 第一次连接只弹「添加 VPN 配置」，不要求在系统设置里允许系统扩展；允许后连接成功。
+- [ ] 订阅规则、HTTPS 解密（根证书已信任）、脚本插件照常生效；睡眠唤醒、从系统设置的 VPN 开关直接连接也能连上。
+- [ ] 设置页没有「软件更新」和「命令行」；`ls "/Applications/AnixOps Net.app/Contents/MacOS"` 只有主程序。
+- [ ] 网关模式：诊断事件是 “may not turn it on”，设置页给出手动开启转发的命令，按命令开启后状态变成“已开启”。
+- [ ] 有 `PROCESS-NAME` 规则时记录进程名能否识别（App 扩展以用户身份在沙盒里运行，可能读不到其他进程）。
+- [ ] 断开后 `ifconfig` 里没有残留的 utun 默认路由；退出 App 不影响已连接的隧道（与 iOS 相同）。
+
 ## macOS 应用内更新
 
 应用内更新的代码、发布工具和 CI 篡改检查已经就绪（`docs/macos-updates.md`），但对外更新通道默认关闭：没有 feed URL

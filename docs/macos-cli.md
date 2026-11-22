@@ -1,6 +1,6 @@
 # macOS 命令行工具 anixops
 
-`anixops` 随 App 一起发布，在 `AnixOps Net.app/Contents/MacOS/anixops`。放进 PATH（设置 › 命令行 里有可复制的命令）：
+`anixops` 随 App 一起发布，在 `AnixOps Net.app/Contents/MacOS/anixops`。只有 Developer ID 版（官网、面板下载）带它；TestFlight / Mac App Store 版不带（`docs/macos-app-store.md`）。放进 PATH（设置 › 命令行 里有可复制的命令）：
 
 ```bash
 sudo mkdir -p /usr/local/bin

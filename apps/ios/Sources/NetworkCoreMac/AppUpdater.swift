@@ -1,3 +1,5 @@
+// The Mac App Store build updates through the store and leaves this out (docs/macos-app-store.md).
+#if !ANIXOPS_APP_STORE
 import AppKit
 import Foundation
 import NetworkCoreBridge
@@ -234,3 +236,4 @@ final class AppUpdater {
         }
     }
 }
+#endif
