@@ -297,10 +297,12 @@ struct BrandButtonStyle: ButtonStyle {
             .font(compact ? BrandFont.callout.weight(.semibold) : BrandFont.headline)
             .padding(.horizontal, compact ? BrandSpacing.sm : BrandSpacing.md)
             .frame(minHeight: compact ? 36 : 44)
-            .foregroundStyle(foreground)
-            .background(background, in: Capsule())
+            .foregroundStyle(isEnabled ? foreground : brand.text3)
+            .background(isEnabled ? background : brand.raised, in: Capsule())
             .contentShape(Capsule())
-            .opacity(isEnabled ? (configuration.isPressed ? 0.82 : 1) : 0.4)
+            // A disabled button turns neutral (AnixOps Design: `label-3` for disabled text) instead of fading the
+            // accent: a faded fill reads as a broken colour, worst on a dark background.
+            .opacity(isEnabled && configuration.isPressed ? 0.82 : 1)
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
             .animation(.easeOut(duration: BrandMotion.micro), value: configuration.isPressed)
     }
@@ -343,14 +345,13 @@ struct BrandIconWell: View {
     @Environment(\.brand) private var brand
     let systemImage: String
     var size: CGFloat = 32
-    var tint: Color?
 
     var body: some View {
         Image(systemName: systemImage)
             .font(.system(size: size * 0.47, weight: .semibold))
-            .foregroundStyle(tint ?? brand.primary)
+            .foregroundStyle(brand.primary)
             .frame(width: size, height: size)
-            .background((tint ?? brand.primary).opacity(0.12), in: RoundedRectangle(cornerRadius: size * 0.3, style: .continuous))
+            .background(brand.soft, in: RoundedRectangle(cornerRadius: size * 0.3, style: .continuous))
             .accessibilityHidden(true)
     }
 }

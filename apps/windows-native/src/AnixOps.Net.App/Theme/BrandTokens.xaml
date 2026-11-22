@@ -57,6 +57,8 @@
             <SolidColorBrush x:Key="BrandChart3Brush" Color="#FF8B5CF6" />
             <Color x:Key="BrandChart4Color">#FFDB2777</Color>
             <SolidColorBrush x:Key="BrandChart4Brush" Color="#FFDB2777" />
+            <Color x:Key="BrandShadowColor">#0F000000</Color>
+            <SolidColorBrush x:Key="BrandShadowBrush" Color="#0F000000" />
             <Color x:Key="BrandHeroStartColor">#FF0F172A</Color>
             <SolidColorBrush x:Key="BrandHeroStartBrush" Color="#FF0F172A" />
             <Color x:Key="BrandHeroEndColor">#FF1E293B</Color>
@@ -113,6 +115,8 @@
             <SolidColorBrush x:Key="BrandChart3Brush" Color="#FFA78BFA" />
             <Color x:Key="BrandChart4Color">#FFF472B6</Color>
             <SolidColorBrush x:Key="BrandChart4Brush" Color="#FFF472B6" />
+            <Color x:Key="BrandShadowColor">#66000000</Color>
+            <SolidColorBrush x:Key="BrandShadowBrush" Color="#66000000" />
             <Color x:Key="BrandHeroStartColor">#FF0F172A</Color>
             <SolidColorBrush x:Key="BrandHeroStartBrush" Color="#FF0F172A" />
             <Color x:Key="BrandHeroEndColor">#FF1E293B</Color>
@@ -139,6 +143,44 @@
     <SolidColorBrush x:Key="BrandMarkLineMutedBrush" Color="#FFA1A1A6" />
     <Color x:Key="BrandMarkOnSlateAccentColor">#FF818CF8</Color>
     <SolidColorBrush x:Key="BrandMarkOnSlateAccentBrush" Color="#FF818CF8" />
+    <Color x:Key="BrandMarkLineFaintColor">#FF8E8E93</Color>
+    <SolidColorBrush x:Key="BrandMarkLineFaintBrush" Color="#FF8E8E93" />
+    <Color x:Key="BrandMarkLineFillColor">#29787880</Color>
+    <SolidColorBrush x:Key="BrandMarkLineFillBrush" Color="#29787880" />
+    <Color x:Key="BrandMarkLineFill2Color">#3D787880</Color>
+    <SolidColorBrush x:Key="BrandMarkLineFill2Brush" Color="#3D787880" />
+    <Color x:Key="BrandMarkLineRuleColor">#7A545458</Color>
+    <SolidColorBrush x:Key="BrandMarkLineRuleBrush" Color="#7A545458" />
+    <Color x:Key="BrandMarkLineRuleStrongColor">#CC545458</Color>
+    <SolidColorBrush x:Key="BrandMarkLineRuleStrongBrush" Color="#CC545458" />
+    <Color x:Key="BrandMarkLineEdgeColor">#0FFFFFFF</Color>
+    <SolidColorBrush x:Key="BrandMarkLineEdgeBrush" Color="#0FFFFFFF" />
+    <Color x:Key="BrandMarkMediaColor">#FF000000</Color>
+    <SolidColorBrush x:Key="BrandMarkMediaBrush" Color="#FF000000" />
+    <Color x:Key="BrandMarkMediaScrimColor">#AD000000</Color>
+    <SolidColorBrush x:Key="BrandMarkMediaScrimBrush" Color="#AD000000" />
+    <Color x:Key="BrandMarkQrPaperColor">#FFFFFFFF</Color>
+    <SolidColorBrush x:Key="BrandMarkQrPaperBrush" Color="#FFFFFFFF" />
+    <Color x:Key="BrandMarkOnTileColor">#FFFFFFFF</Color>
+    <SolidColorBrush x:Key="BrandMarkOnTileBrush" Color="#FFFFFFFF" />
+    <Color x:Key="BrandMarkTileIndigoColor">#FF4F5BE8</Color>
+    <SolidColorBrush x:Key="BrandMarkTileIndigoBrush" Color="#FF4F5BE8" />
+    <Color x:Key="BrandMarkTileSkyColor">#FF0891B2</Color>
+    <SolidColorBrush x:Key="BrandMarkTileSkyBrush" Color="#FF0891B2" />
+    <Color x:Key="BrandMarkTilePurpleColor">#FF8B5CF6</Color>
+    <SolidColorBrush x:Key="BrandMarkTilePurpleBrush" Color="#FF8B5CF6" />
+    <Color x:Key="BrandMarkTilePinkColor">#FFDB2777</Color>
+    <SolidColorBrush x:Key="BrandMarkTilePinkBrush" Color="#FFDB2777" />
+    <Color x:Key="BrandMarkTileOrangeColor">#FFEA580C</Color>
+    <SolidColorBrush x:Key="BrandMarkTileOrangeBrush" Color="#FFEA580C" />
+    <Color x:Key="BrandMarkTileGreenColor">#FF16A34A</Color>
+    <SolidColorBrush x:Key="BrandMarkTileGreenBrush" Color="#FF16A34A" />
+    <Color x:Key="BrandMarkTileGrayColor">#FF8E8E93</Color>
+    <SolidColorBrush x:Key="BrandMarkTileGrayBrush" Color="#FF8E8E93" />
+    <Color x:Key="BrandMarkTileTealColor">#FF0D9488</Color>
+    <SolidColorBrush x:Key="BrandMarkTileTealBrush" Color="#FF0D9488" />
+    <Color x:Key="BrandMarkTileRedColor">#FFD70015</Color>
+    <SolidColorBrush x:Key="BrandMarkTileRedBrush" Color="#FFD70015" />
 
     <!-- Corner radii (AnixOps Design radius steps). -->
     <CornerRadius x:Key="BrandControlRadius">10</CornerRadius>

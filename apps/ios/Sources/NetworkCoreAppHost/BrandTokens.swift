@@ -14,6 +14,25 @@ enum Brand {
     static let line = Color(hex: 0xF5F5F7)
     static let lineMuted = Color(hex: 0xA1A1A6)
     static let onSlateAccent = Color(hex: 0x818CF8)
+    static let lineFaint = Color(hex: 0x8E8E93)
+    static let lineFill = Color(hex: 0x787880, opacity: 0.16)
+    static let lineFill2 = Color(hex: 0x787880, opacity: 0.24)
+    static let lineRule = Color(hex: 0x545458, opacity: 0.48)
+    static let lineRuleStrong = Color(hex: 0x545458, opacity: 0.8)
+    static let lineEdge = Color(hex: 0xFFFFFF, opacity: 0.06)
+    static let media = Color(hex: 0x000000)
+    static let mediaScrim = Color(hex: 0x000000, opacity: 0.68)
+    static let qrPaper = Color(hex: 0xFFFFFF)
+    static let onTile = Color(hex: 0xFFFFFF)
+    static let tileIndigo = Color(hex: 0x4F5BE8)
+    static let tileSky = Color(hex: 0x0891B2)
+    static let tilePurple = Color(hex: 0x8B5CF6)
+    static let tilePink = Color(hex: 0xDB2777)
+    static let tileOrange = Color(hex: 0xEA580C)
+    static let tileGreen = Color(hex: 0x16A34A)
+    static let tileGray = Color(hex: 0x8E8E93)
+    static let tileTeal = Color(hex: 0x0D9488)
+    static let tileRed = Color(hex: 0xD70015)
 }
 
 extension BrandPalette {
@@ -43,6 +62,7 @@ extension BrandPalette {
         chart2: Color(hex: 0x0891B2),
         chart3: Color(hex: 0x8B5CF6),
         chart4: Color(hex: 0xDB2777),
+        shadow: Color(hex: 0x000000, opacity: 0.06),
         heroStart: Color(hex: 0x0F172A),
         heroEnd: Color(hex: 0x1E293B)
     )
@@ -73,6 +93,7 @@ extension BrandPalette {
         chart2: Color(hex: 0x22D3EE),
         chart3: Color(hex: 0xA78BFA),
         chart4: Color(hex: 0xF472B6),
+        shadow: Color(hex: 0x000000, opacity: 0.4),
         heroStart: Color(hex: 0x0F172A),
         heroEnd: Color(hex: 0x1E293B)
     )

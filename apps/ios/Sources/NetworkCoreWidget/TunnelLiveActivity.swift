@@ -71,7 +71,7 @@ private struct LockScreenActivityView: View {
                 }
                 NodeLine(state: state)
                     .font(.subheadline)
-                    .foregroundStyle(Brand.line.opacity(0.8))
+                    .foregroundStyle(Brand.lineMuted)
             }
             Spacer(minLength: 0)
             DisconnectButton()
@@ -92,7 +92,7 @@ private struct NodeLine: View {
                     .font(.caption2.weight(.bold))
                     .padding(.horizontal, 5)
                     .padding(.vertical, 1)
-                    .background(Brand.line.opacity(0.15), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .background(Brand.lineFill2, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                 Text(name)
                     .lineLimit(1)
             } else {

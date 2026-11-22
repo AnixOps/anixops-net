@@ -153,7 +153,7 @@ private struct MacSidebarLabel: View {
     }
 }
 
-/// A white SF Symbol on a small rounded colored square.
+/// A white SF Symbol (`Brand.onTile`) on a small rounded colored square (`MacTileColor`).
 struct MacTile: View {
     let systemImage: String
     let color: Color
@@ -162,7 +162,7 @@ struct MacTile: View {
     var body: some View {
         Image(systemName: systemImage)
             .font(.system(size: size * 0.55, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(Brand.onTile)
             .frame(width: size, height: size)
             .background(color.gradient, in: RoundedRectangle(cornerRadius: size * 0.26, style: .continuous))
             .accessibilityHidden(true)
@@ -234,6 +234,7 @@ struct MacConnectSwitch: View {
     /// The sidebar's switch is `connect-switch`, on every page in both modes (docs/ui-ux.md, 入口不变量); the
     /// overview's larger copy has its own identifier, so the UI tests can tell them apart.
     var identifier = "connect-switch"
+    @Environment(\.brand) private var brand
 
     var body: some View {
         Toggle(isOn: Binding(
@@ -249,7 +250,8 @@ struct MacConnectSwitch: View {
         .toggleStyle(.switch)
         .labelsHidden()
         .controlSize(controlSize)
-        .tint(.green)
+        // Connected is a status, so the switch takes the theme's success colour.
+        .tint(brand.success)
         .disabled(tunnel.phase == .unconfigured || tunnel.phase == .disconnecting)
         .help("连接或断开（⇧⌘C）")
         .accessibilityIdentifier(identifier)

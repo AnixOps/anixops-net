@@ -179,7 +179,7 @@ private struct UsageBar: View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(brand.border.opacity(0.6))
+                    .fill(brand.raised)
                 Capsule()
                     .fill(color)
                     .frame(width: proxy.size.width * min(max(fraction, 0), 1))

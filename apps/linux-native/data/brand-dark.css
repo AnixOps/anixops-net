@@ -34,6 +34,7 @@
 @define-color brand_chart_2 #22D3EE;
 @define-color brand_chart_3 #A78BFA;
 @define-color brand_chart_4 #F472B6;
+@define-color brand_shadow rgba(0, 0, 0, 0.4);
 @define-color brand_hero_start #0F172A;
 @define-color brand_hero_end #1E293B;
 

@@ -147,6 +147,45 @@ macOS 的快捷键只有一张表：`apps/ios/Sources/NetworkCoreBridge/AppShort
 | macOS | `apps/ios/UITests/NetworkCoreMac/MacEntryInvariantTests.swift`（XCUITest，CI 用演示数据运行）：两个模式的每一页检查侧栏底部有且只有一个连接开关（概览上的大开关另有标识 `home-connect-switch`），注入的失败提示在每一页都能看到 |
 | iOS | `apps/ios/UITests/NetworkCoreApp/EntryInvariantTests.swift`（XCUITest，CI 的 iOS 模拟器上用演示数据运行）：每个模式的每个标签检查连接开关（`connect-switch`）和失败提示（`app-notice`） |
 
+## 自动检查
+
+UI/UX 问题不靠人截图指出。下面三层按顺序拦截，前两层是 CI 门槛，第三层每天自动跑。查出的现有问题直接修，不加豁免、不加白名单；规范确实不适用时先改 anixops-design 的规范，再改检查。
+
+### 第一层：代码检查（`ui_lint.py`，所有平台）
+
+CI 的 “UI lint” 步骤运行 `.github/scripts/ui_lint.py`（几秒钟，在路径分类 job 里和其他静态检查并行）。界面代码里的颜色只能来自
+生成的令牌文件（`design_tokens.py` 从 `apps/ios/Design/tokens.json` 生成，AnixOps Design 已对每一对令牌算过对比度），所以：
+
+| 规则 | 拦什么 | 改成什么 |
+|---|---|---|
+| U1 颜色字面量 | `#fff`、`rgb()`、`Color(red:)`、`Color.orange`、`.white`、`Color(0xFF…)`、XAML `"#AARRGGBB"` | 对应的令牌：`brand.*` / `Brand.*`、CSS 变量、`BrandTokens.kt`、`BrandTokens.xaml`、GTK `brand-*.css` |
+| U2 派生颜色 | 给颜色 `.opacity()`、`color-mix()`、`.copy(alpha =)` | 浅色底用 `soft` / `successSoft` / `warningSoft` / `dangerSoft`，中性底用 `raised`（fill-1）或 `fill-2/3`，次级文字用 `text2` / `text3`，线用 `border` |
+| U3 淡化禁用 | 禁用态把控件整体调淡（`opacity`） | 禁用文字 `text3`（label-3），底色 `raised`（fill-1）；规范 actions.md H10 |
+
+常用对照：
+
+- 深色模式里浮在卡片上的东西（按钮、菜单、提示、对话框、Toast）要比所在的面高一级：桌面端用 `--control`（半透明 fill，叠在什么上面就比它亮一级）
+  和 `--overlay-surface`（bg-elevated 加一层 fill-1，再加 `--highlight` 一像素亮边）；Apple 端用 `.brandSheet()`。
+- 板岩色主卡、小组件、实时活动永远是深色：文字 `Brand.line` / `lineMuted` / `lineFaint`，底 `lineFill` / `lineFill2`，线 `lineRule` / `lineRuleStrong`，
+  外边 `lineEdge`，都是深色主题的令牌。
+- 侧栏和设置行的彩色图标块用 `tile*`（浅色图表色，白色图形在两种主题下都不低于 3:1），图形颜色 `onTile`。
+- 相机画面上的文字用 `Brand.line`，背后衬 `mediaScrim`；二维码底色 `qrPaper`（两种主题都是白）。
+
+需要的颜色令牌里没有时，在 `apps/ios/Design/tokens.json` 里引用 AnixOps Design 已有的令牌加一个名字，再运行 `design_tokens.py` 生成；
+AnixOps Design 里也没有，就先在 anixops-design 提 PR。`ui_lint.py --self-test` 是检查本身的测试，改规则时一起改。
+
+### 第二层：运行检查（截图任务里，各平台并行）
+
+各平台截图的同一个 job 里，在已经打开的界面上跑无障碍检查，不另起构建：桌面端用 axe（对比度、文字溢出截断、弹层与背景分层），
+macOS / iOS 用 XCUITest 的 `performAccessibilityAudit`（对比度、文字被截断、动态字体），Android、Windows、Linux 原生端接各自的无障碍检查。
+每一页浅色、深色都查。（逐个平台接入中，接入后在这里列出入口。）
+
+### 第三层：每日审查
+
+每天定时由 Claude 读 main 上最新的截图矩阵，按 anixops-design 的规范和本页自查清单逐页审查机器查不出的问题
+（文案和功能是否相符、信息层级、按钮层级、空状态），能确定的直接开分支修、开 PR，CI 全绿后合并；需要产品判断的汇总给维护者。
+审查发现的同类问题如果能写成规则，就补进第一层或第二层，让它以后在 PR 上就被拦住。
+
 ## 截图对比
 
 界面细节靠截图对比把关，不靠人记得去看。

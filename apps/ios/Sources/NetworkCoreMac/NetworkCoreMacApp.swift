@@ -231,17 +231,18 @@ enum MacSection: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
-/// Glyph tile colors shared with the desktop client (apps/windows-gui/ui/src/styles.css `--tile-*`).
+/// Glyph tile colors shared with the desktop client (apps/windows-gui/ui/src/styles.css `--tile-*`). They are the
+/// generated `Brand.tile*` tokens: light chart colours, so the white glyph stays at least 3:1 in both themes.
 enum MacTileColor {
-    static let indigo = Color(red: 0x5B / 255, green: 0x63 / 255, blue: 0xE6 / 255)
-    static let sky = Color(red: 0x0E / 255, green: 0xA5 / 255, blue: 0xE9 / 255)
-    static let green = Color(red: 0x22 / 255, green: 0xA3 / 255, blue: 0x5A / 255)
-    static let orange = Color(red: 0xF0 / 255, green: 0x8A / 255, blue: 0x24 / 255)
-    static let purple = Color(red: 0x8B / 255, green: 0x5C / 255, blue: 0xF6 / 255)
-    static let pink = Color(red: 0xE0 / 255, green: 0x45 / 255, blue: 0x7B / 255)
-    static let teal = Color(red: 0x0D / 255, green: 0x94 / 255, blue: 0x88 / 255)
-    static let gray = Color(red: 0x8E / 255, green: 0x8E / 255, blue: 0x93 / 255)
-    static let red = Color(red: 0xE5 / 255, green: 0x48 / 255, blue: 0x4D / 255)
+    static let indigo = Brand.tileIndigo
+    static let sky = Brand.tileSky
+    static let green = Brand.tileGreen
+    static let orange = Brand.tileOrange
+    static let purple = Brand.tilePurple
+    static let pink = Brand.tilePink
+    static let teal = Brand.tileTeal
+    static let gray = Brand.tileGray
+    static let red = Brand.tileRed
 }
 
 extension TunnelController {

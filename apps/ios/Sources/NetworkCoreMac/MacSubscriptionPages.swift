@@ -191,7 +191,7 @@ struct MacProxiesPage: View {
                                 .font(.caption2.weight(.semibold))
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(brand.primary.opacity(0.18), in: Capsule())
+                                .background(brand.soft, in: Capsule())
                         }
                     }
                     .contentShape(Rectangle())
@@ -247,7 +247,7 @@ struct MacProxiesPage: View {
         .background(brand.surface, in: RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous)
-                .strokeBorder(isActive ? brand.primary.opacity(0.6) : brand.border.opacity(0.6))
+                .strokeBorder(isActive ? brand.primary : brand.border)
         )
     }
 
@@ -633,7 +633,7 @@ private struct MacNodeRow: View {
         .padding(.horizontal, Self.inset)
         .frame(height: 28)
         .background(
-            selected ? brand.primary.opacity(0.10) : (hovering ? brand.text.opacity(0.05) : Color.clear),
+            selected ? brand.soft : (hovering ? brand.raised : Color.clear),
             in: RoundedRectangle(cornerRadius: 5)
         )
         .contentShape(Rectangle())

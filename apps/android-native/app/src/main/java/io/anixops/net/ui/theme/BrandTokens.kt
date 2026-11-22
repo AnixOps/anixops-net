@@ -20,6 +20,25 @@ object Brand {
     val line = Color(0xFFF5F5F7)
     val lineMuted = Color(0xFFA1A1A6)
     val onSlateAccent = Color(0xFF818CF8)
+    val lineFaint = Color(0xFF8E8E93)
+    val lineFill = Color(0x29787880)
+    val lineFill2 = Color(0x3D787880)
+    val lineRule = Color(0x7A545458)
+    val lineRuleStrong = Color(0xCC545458)
+    val lineEdge = Color(0x0FFFFFFF)
+    val media = Color(0xFF000000)
+    val mediaScrim = Color(0xAD000000)
+    val qrPaper = Color(0xFFFFFFFF)
+    val onTile = Color(0xFFFFFFFF)
+    val tileIndigo = Color(0xFF4F5BE8)
+    val tileSky = Color(0xFF0891B2)
+    val tilePurple = Color(0xFF8B5CF6)
+    val tilePink = Color(0xFFDB2777)
+    val tileOrange = Color(0xFFEA580C)
+    val tileGreen = Color(0xFF16A34A)
+    val tileGray = Color(0xFF8E8E93)
+    val tileTeal = Color(0xFF0D9488)
+    val tileRed = Color(0xFFD70015)
 }
 
 /** The per-theme colours ([BrandPalette.Light], [BrandPalette.Dark]). */
@@ -49,6 +68,7 @@ data class BrandPalette(
     val chart2: Color,
     val chart3: Color,
     val chart4: Color,
+    val shadow: Color,
     val heroStart: Color,
     val heroEnd: Color,
 ) {
@@ -79,6 +99,7 @@ data class BrandPalette(
             chart2 = Color(0xFF0891B2),
             chart3 = Color(0xFF8B5CF6),
             chart4 = Color(0xFFDB2777),
+            shadow = Color(0x0F000000),
             heroStart = Color(0xFF0F172A),
             heroEnd = Color(0xFF1E293B),
         )
@@ -108,6 +129,7 @@ data class BrandPalette(
             chart2 = Color(0xFF22D3EE),
             chart3 = Color(0xFFA78BFA),
             chart4 = Color(0xFFF472B6),
+            shadow = Color(0x66000000),
             heroStart = Color(0xFF0F172A),
             heroEnd = Color(0xFF1E293B),
         )

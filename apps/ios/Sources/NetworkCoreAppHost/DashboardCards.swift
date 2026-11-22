@@ -260,7 +260,7 @@ private struct Sparkline: View {
                         path.addLine(to: CGPoint(x: download[download.count - 1].x, y: size.height))
                         path.closeSubpath()
                     }
-                    .fill(brand.primary.opacity(0.14))
+                    .fill(brand.soft)
                     line(download).stroke(brand.primary, style: StrokeStyle(lineWidth: 2, lineJoin: .round))
                     line(upload).stroke(brand.amberText, style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
                 }

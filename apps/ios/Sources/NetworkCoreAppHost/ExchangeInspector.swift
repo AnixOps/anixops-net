@@ -776,7 +776,7 @@ private struct JsonTree: View {
         .padding(.leading, 12 + CGFloat(row.depth) * 14)
         .padding(.trailing, 12)
         .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
-        .background(selected == row.id ? brand.primary.opacity(0.14) : Color.clear)
+        .background(selected == row.id ? brand.soft : Color.clear)
         .contentShape(Rectangle())
         .onTapGesture {
             focused = true
@@ -947,6 +947,6 @@ private struct TimelinePane: View {
         .lineLimit(1)
         .padding(.vertical, 4)
         .padding(.horizontal, 6)
-        .background(current ? brand.primary.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .background(current ? brand.soft : Color.clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }

@@ -244,7 +244,7 @@ struct ProxiesView: View {
                                 .font(.caption2.weight(.semibold))
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(brand.primary.opacity(0.18), in: Capsule())
+                                .background(brand.soft, in: Capsule())
                         }
                     }
                 }

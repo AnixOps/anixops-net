@@ -51,7 +51,7 @@ struct QRScannerSheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.black.ignoresSafeArea()
+                Brand.media.ignoresSafeArea()
                 switch access {
                 case .authorized:
                     QRCameraView { text in
@@ -59,12 +59,12 @@ struct QRScannerSheet: View {
                     }
                     .ignoresSafeArea()
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.85), lineWidth: 3)
+                        .strokeBorder(Brand.line, lineWidth: 3)
                         .frame(width: 240, height: 240)
                         .accessibilityHidden(true)
                 case .notDetermined:
                     ProgressView()
-                        .tint(.white)
+                        .tint(Brand.line)
                 default:
                     VStack(spacing: 12) {
                         Image(systemName: "camera.fill")
@@ -79,7 +79,7 @@ struct QRScannerSheet: View {
                                 .font(.body.weight(.semibold))
                         }
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Brand.line)
                     .padding(32)
                 }
                 VStack {
@@ -87,10 +87,10 @@ struct QRScannerSheet: View {
                     if let error {
                         Text(error)
                             .font(.subheadline)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Brand.line)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
-                            .background(.black.opacity(0.6), in: Capsule())
+                            .background(Brand.mediaScrim, in: Capsule())
                     }
                     PhotosPicker(selection: $photo, matching: .images) {
                         Label("从相册识别", systemImage: "photo")
@@ -264,7 +264,7 @@ struct QRShareSheet: View {
                             .resizable()
                             .scaledToFit()
                             .padding(16)
-                            .background(Color.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                            .background(Brand.qrPaper, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                             .frame(maxWidth: 300)
                             .accessibilityLabel("二维码")
                     } else {

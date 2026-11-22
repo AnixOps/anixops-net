@@ -56,6 +56,13 @@ jobs:
       - name: Neutral terminology
         run: python3 .github/scripts/neutral_terms.py
 
+      # Interface colours come only from the generated design tokens: no colour literals, no faded copies of a
+      # token, no disabled state drawn by fading (docs/ui-ux.md, 自动检查). The self-test checks the rules first.
+      - name: UI lint
+        run: |
+          python3 .github/scripts/ui_lint.py --self-test
+          python3 .github/scripts/ui_lint.py
+
       # Every address the client sources name is described in docs/network-behavior.md: a new update server,
       # statistics endpoint or lookup service fails here until it is documented.
       - name: Outbound addresses are documented

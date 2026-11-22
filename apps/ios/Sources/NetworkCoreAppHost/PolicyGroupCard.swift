@@ -30,7 +30,7 @@ struct PolicyGroupCard: View {
             HStack(spacing: 8) {
                 Text(verbatim: group.id)
                     .font(.body.weight(.semibold))
-                    .foregroundStyle(brand.text)
+                    .foregroundStyle(isEnabled ? brand.text : brand.text3)
                     .lineLimit(1)
                 Text(group.typeTitle)
                     .font(.caption2.weight(.bold))
@@ -52,7 +52,7 @@ struct PolicyGroupCard: View {
                 if let current, let value = latency(of: current) {
                     Text("\(value) ms")
                         .font(.footnote.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(brand.color(for: LatencyGrade(milliseconds: value)))
+                        .foregroundStyle(isEnabled ? brand.color(for: LatencyGrade(milliseconds: value)) : brand.text3)
                 }
                 if !group.isSelectable {
                     Text("内核自动选择")
@@ -72,7 +72,7 @@ struct PolicyGroupCard: View {
                 .foregroundStyle(brand.text3)
         }
         .padding(.vertical, 6)
-        .opacity(isEnabled ? 1 : 0.6)
+        // While disabled the title and the delay turn label-3 (AnixOps Design H10); the menu dims itself.
         .accessibilityElement(children: .contain)
     }
 
