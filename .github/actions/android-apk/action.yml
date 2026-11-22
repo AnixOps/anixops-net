@@ -61,7 +61,7 @@ outputs:
     description: Absolute path of the AAB (bundle true only)
     value: ${{ steps.sign-aab.outputs.aab }}
   aab-kind:
-    description: upload (signed with the Play upload key) or unsigned (bundle true only)
+    description: play-signed (signed with the Play upload key) or unsigned (bundle true only)
     value: ${{ steps.sign-aab.outputs.kind }}
 
 runs:
@@ -195,7 +195,7 @@ runs:
         else
           keystore="${RUNNER_TEMP}/play-upload.jks"
           echo "${KEYSTORE_BASE64}" | base64 --decode > "${keystore}"
-          out="${RUNNER_TEMP}/aab/anixops-net-android-upload.aab"
+          out="${RUNNER_TEMP}/aab/anixops-net-android-play-signed.aab"
           cp "${unsigned}" "${out}"
           jarsigner -sigalg SHA256withRSA -digestalg SHA-256 -keystore "${keystore}" \
             -storepass:env KEYSTORE_PASSWORD -keypass:env KEY_PASSWORD "${out}" "${KEY_ALIAS}"
@@ -203,7 +203,9 @@ runs:
           grep -q "jar verified" "${RUNNER_TEMP}/aab-verify.txt"
           keytool -printcert -jarfile "${out}"
           rm -f "${keystore}"
-          kind=upload
+          # GitHub drops a step output that contains a secret's value, and the upload key alias may be a plain
+          # word such as "upload"; so neither the path nor the kind uses that word.
+          kind=play-signed
         fi
         ls -l "${out}"
         echo "aab=${out}" >> "$GITHUB_OUTPUT"
