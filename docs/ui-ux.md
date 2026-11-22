@@ -176,14 +176,16 @@ AnixOps Design 里也没有，就先在 anixops-design 提 PR。`ui_lint.py --se
 
 ### 第二层：运行检查（截图任务里，各平台并行）
 
-各平台截图的同一个 job 里，在已经打开的界面上跑无障碍检查，不另起构建：桌面端用 axe（对比度、文字溢出截断、弹层与背景分层），
+用各平台已经构建好的 App 跑无障碍检查，不另起构建，并且和截图分在并行的 job 里，不拉长 CI：桌面端用 axe（对比度、文字溢出截断、弹层与背景分层），
 macOS / iOS 用 XCUITest 的 `performAccessibilityAudit`（对比度、文字被截断、动态字体），Android、Windows、Linux 原生端接各自的无障碍检查。
 每一页浅色、深色都查。
 
 | 平台 | 入口 | 查什么 |
 |---|---|---|
 | 桌面端（Windows、Linux 共用的界面） | `UI screenshots` 工作流的 “Draw and check the screenshots”：`screenshots/render.cjs` 每画一张就调 `screenshots/audit.cjs` | axe（WCAG 2.2 A/AA，serious、critical 为 0，含对比度）；文字被截断而没有省略号、文字出了窗口；对话框、菜单、弹出列表、提示、Toast 和下面的窗口分不开（截图上测：表面与外侧 ΔL* ≥ 4，或边缘 ΔL* ≥ 6）。结果和每个弹层的测量值在产物的 `after/audit.json` |
-| macOS、iOS、Android、Windows 原生、Linux 原生 | 接入中 | |
+| macOS | “macOS screenshots, UI tests and accessibility audit” job：`apps/ios/UITests/NetworkCoreMac/MacAccessibilityAuditTests.swift` | Xcode 的 `performAccessibilityAudit(for: .all)`：对比度、元素检测、点击区域、元素说明、父子关系、操作。两种模式的每一页 × 浅色、深色 × 中文、英文；所有问题先收集，一次列全再失败 |
+| iOS | “iOS UI tests (audit-light / audit-dark)” 两个并行 job：`apps/ios/UITests/NetworkCoreApp/AccessibilityAuditTests.swift` | 同上，另外还有文字被截断（textClipped）和动态字体（dynamicType） |
+| Android、Windows 原生、Linux 原生 | 接入中 | |
 
 截图清单要覆盖：每一页的浅色和深色、英文（更长的词会暴露截断）、窄窗口、每种弹层（对话框、菜单、弹出列表）的浅色和深色。
 新页面、新对话框加进清单时，检查自动跟上。
@@ -207,12 +209,12 @@ macOS / iOS 用 XCUITest 的 `performAccessibilityAudit`（对比度、文字被
 
   名字用逗号或空格隔开，`*` 代表任意一段字符。新增和删除的截图同样要列出。确认了却没有变化的名字会在报告里提示。
 - 新页面或新状态要在 `render.cjs` 的清单里加一张截图；后端多了页面要用的命令，在 `mock.js` 里补上它的演示数据。
-- **macOS**：CI 的 “iOS and macOS Xcode build” 用演示数据打开调试版 App 逐页截图（`.github/scripts/mac-screenshots.sh`）。main 上每次改到 Apple 端的提交都会把截图存成 `mac-screenshots-<sha>`（保留 30 天）；PR 上拿自己的截图和基线提交往前最近的一份 main 截图逐张比对（`screenshot-compare.sh`），规则和桌面端一样，截图名前面加 `mac-`：
+- **macOS**：CI 的 “macOS screenshots, UI tests and accessibility audit” 用 “iOS and macOS Xcode build” 构建好的调试版 App、演示数据逐页截图（`.github/scripts/mac-screenshots.sh`）。main 上每次改到 Apple 端的提交都会把截图存成 `mac-screenshots-<sha>`（保留 30 天）；PR 上拿自己的截图和基线提交往前最近的一份 main 截图逐张比对（`screenshot-compare.sh`），规则和桌面端一样，截图名前面加 `mac-`：
 
   ```
   界面变化：mac-proxies-*, mac-palette-light
   ```
 
   前后图和差异图在产物 `mac-screenshot-report-<sha>` 里。改完描述后重跑这个 job 即可，它会重新读描述。演示数据的时钟是固定的（请求时间、在线时长、到期日），同一份代码截多少次像素都一样。找不到 main 的截图（过期，或这台机器截不了图）时只给警告，不让 PR 失败。新页面或新状态在 `mac-screenshots.sh` 里加一行 `shoot`。
-- **iOS**：同一个 job 里用 `.github/scripts/ios-screenshots.sh` 新建一台 iPhone 模拟器，装上模拟器版 App，用演示数据逐个标签页截图；状态栏固定为 9:41、满电。产物是 `ios-screenshots-<sha>`，比对方式和 macOS 完全一样，截图名前面加 `ios-`（例如 `ios-proxies-light`），报告在 `ios-screenshot-report-<sha>`。runner 换了新机型时所有截图尺寸都会变，报告里是“尺寸变了”，确认一次即可。
+- **iOS**：“iOS screenshots” job（和 macOS 的并行）用 `.github/scripts/ios-screenshots.sh` 新建一台 iPhone 模拟器，装上模拟器版 App，用演示数据逐个标签页截图；状态栏固定为 9:41、满电。产物是 `ios-screenshots-<sha>`，比对方式和 macOS 完全一样，截图名前面加 `ios-`（例如 `ios-proxies-light`），报告在 `ios-screenshot-report-<sha>`。runner 换了新机型时所有截图尺寸都会变，报告里是“尺寸变了”，确认一次即可。
 - 比对工具（`.github/scripts/screenshot-diff/diff.cjs`）只认两个目录的 PNG，不管截图怎么来的。macOS、iOS 模拟器和真实 Windows / Linux 窗口在不同缩放下的截图，都按“同样的方法拍两遍，再交给它比”接入。

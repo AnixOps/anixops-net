@@ -1,12 +1,25 @@
 #!/usr/bin/env bash
 # Runs the iPhone app's UI tests (apps/ios/UITests: the entry checks of docs/ui-ux.md, 入口不变量) in a simulator
 # made for this run, against the demo data, unsigned like the screenshots.
-# Usage: ios-ui-tests.sh <path to NetworkCoreApp.app> <derived data path> <result bundle path>
+# Usage: ios-ui-tests.sh <path to NetworkCoreApp.app> <products directory> <result bundle path> [test ...]
+#   The products directory is the one `xcodebuild build-for-testing` filled (it holds the .xctestrun file); the tests
+#   run from it without building. Each [test] is an -only-testing filter, e.g.
+#   NetworkCoreAppUITests/AccessibilityAuditTests/testDarkTheme, so CI can run parts side by side.
 set -euo pipefail
 
 app="$1"
-derived="$2"
+products="$2"
 result="$3"
+shift 3
+only=()
+for test in "$@"; do
+    only+=("-only-testing:${test}")
+done
+xctestrun="$(find "${products}" -maxdepth 1 -name 'NetworkCoreApp_iphonesimulator*.xctestrun' | head -n 1)"
+if [ -z "${xctestrun}" ]; then
+    echo "::error::no NetworkCoreApp .xctestrun in ${products}; build-for-testing first"
+    exit 1
+fi
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 terms="$(grep -o '基准版本 [0-9.]*' "${root}/TERMS.md" | awk '{print $2}')"
 if [ -z "${terms}" ]; then
@@ -40,11 +53,8 @@ xcrun simctl install "${device}" "${app}"
 bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${app}/Info.plist")"
 
 # xcodebuild hands TEST_RUNNER_-prefixed variables to the test process without the prefix.
-TEST_RUNNER_ANIXOPS_TERMS="${terms}" TEST_RUNNER_ANIXOPS_BUNDLE="${bundle}" xcodebuild \
-    -project "${root}/apps/ios/NetworkCore.xcodeproj" \
-    -scheme NetworkCoreApp \
+TEST_RUNNER_ANIXOPS_TERMS="${terms}" TEST_RUNNER_ANIXOPS_BUNDLE="${bundle}" xcodebuild test-without-building \
+    -xctestrun "${xctestrun}" \
     -destination "id=${device}" \
-    -derivedDataPath "${derived}" \
     -resultBundlePath "${result}" \
-    CODE_SIGNING_ALLOWED=NO \
-    test
+    ${only[@]+"${only[@]}"}
