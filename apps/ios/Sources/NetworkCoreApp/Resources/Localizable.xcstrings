@@ -14358,6 +14358,134 @@
           }
         }
       }
+    },
+    "消息 %lld · %lld 字节": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message %lld · %lld bytes"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "訊息 %lld · %lld 位元組"
+          }
+        }
+      }
+    },
+    "这条消息是压缩的，导出正文后用其他工具解开。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This message is compressed. Export the body and decompress it with another tool."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這條訊息是壓縮的，匯出正文後用其他工具解開。"
+          }
+        }
+      }
+    },
+    "尾部": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trailers"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尾部"
+          }
+        }
+      }
+    },
+    "这条消息不是 Protobuf，见十六进制。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This message is not Protobuf. See Hex."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這條訊息不是 Protobuf，見十六進位。"
+          }
+        }
+      }
+    },
+    "…（只解析了开头部分）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "… (only the start was decoded)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "…（只解析了開頭部分）"
+          }
+        }
+      }
+    },
+    "导出正文": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export Body"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯出正文"
+          }
+        }
+      }
+    },
+    "用其他应用打开": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in Another App"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用其他應用程式開啟"
+          }
+        }
+      }
+    },
+    "图片太大（%lld × %lld），不在这里画出；可以导出后用其他应用查看。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The image is too large to draw here (%lld × %lld). Export it to view it in another app."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "圖片太大（%lld × %lld），不在這裡畫出；可以匯出後用其他應用程式檢視。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

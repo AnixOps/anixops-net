@@ -6,8 +6,17 @@ public enum CaptureBody {
         case json(JsonNode)
         case image
         case form([Pair])
+        /// Protobuf decoded without a schema. `labelled`: the Content-Type says Protobuf or gRPC, so it opens decoded;
+        /// otherwise the bytes only read as a message, which random bytes can too, so it opens as hex.
+        case protobuf(Proto, labelled: Bool)
         case text
         case binary
+    }
+
+    /// A body decoded as Protobuf: one message, or gRPC's framed messages.
+    public enum Proto: Equatable, Sendable {
+        case message(CaptureBinary.ProtoMessage)
+        case grpc(CaptureBinary.GrpcBody)
     }
 
     /// One way of looking at a body. `hex` is always offered, so nothing is ever hidden behind a nicer view.
@@ -16,6 +25,7 @@ public enum CaptureBody {
         case pretty
         case preview
         case table
+        case protobuf
         case raw
         case hex
 
@@ -47,15 +57,29 @@ public enum CaptureBody {
         return media.hasPrefix("image/") && media != "image/svg+xml"
     }
 
-    /// What a body is. `text` is the body as text (already decompressed), nil when it is not text.
-    public static func kind(contentType: String?, text: String?) -> Kind {
+    /// What a body is. `text` is the body as text (already decompressed), nil when it is not text; `data` is its
+    /// bytes, and `cut` whether capture kept only their start. A picture or Protobuf sent with a generic type is
+    /// recognised by its bytes.
+    public static func kind(contentType: String?, text: String?, data: Data? = nil, cut: Bool = false) -> Kind {
+        let media = mediaType(contentType)
         if isImage(contentType) {
             return .image
         }
+        if let data, CaptureBinary.isGrpcType(media), let body = CaptureBinary.grpcFrames(data) {
+            return .protobuf(.grpc(body), labelled: true)
+        }
+        if let data, CaptureBinary.isProtobufType(media), let message = CaptureBinary.decodeProtobuf(data, cut: cut) {
+            return .protobuf(.message(message), labelled: true)
+        }
         guard let text else {
+            if let data, !media.hasPrefix("text/"), CaptureBinary.sniffImage(data) != nil {
+                return .image
+            }
+            if let data, let message = CaptureBinary.looksLikeProtobuf(data) {
+                return .protobuf(.message(message), labelled: false)
+            }
             return .binary
         }
-        let media = mediaType(contentType)
         if media == "application/x-www-form-urlencoded" {
             let pairs = formPairs(text)
             return pairs.isEmpty ? .text : .form(pairs)
@@ -80,6 +104,8 @@ public enum CaptureBody {
             return [.preview, .hex]
         case .form:
             return [.table, .raw, .hex]
+        case let .protobuf(_, labelled):
+            return labelled ? [.protobuf, .hex] : [.hex, .protobuf]
         case .text:
             return [.raw, .hex]
         case .binary:

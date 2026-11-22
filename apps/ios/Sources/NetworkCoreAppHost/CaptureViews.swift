@@ -65,6 +65,46 @@ struct CaptureExportFile: Transferable {
     }
 }
 
+/// A body as the inspector shows it (decoded), as a file for the share sheet ("导出正文") and, on the Mac, for
+/// opening with the app the system uses for its type. The name gets the extension of the body's type.
+struct CaptureBodyFile: Transferable {
+    let data: Data
+    let contentType: String?
+    /// Without the extension.
+    let name: String
+
+    var fileName: String {
+        "\(name).\(CaptureBinary.fileType(contentType).fileExtension)"
+    }
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: .data) { file in
+            SentTransferredFile(try file.write())
+        }
+    }
+
+    /// Writes the body to a folder of its own in the temporary directory, so its name is kept as it is.
+    func write() throws -> URL {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("capture-bodies", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let url = folder.appendingPathComponent(fileName)
+        try data.write(to: url, options: .atomic)
+        return url
+    }
+
+    #if os(macOS)
+    /// Opens the body with its app; only types that run no code where they open (`CaptureBinary.fileType`).
+    func open() {
+        guard CaptureBinary.fileType(contentType).opens, let url = try? write() else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+    #endif
+}
+
 /// The "抓包" items of the request list's "more" menu: start or stop, export everything, clear.
 struct CaptureMenuItems: View {
     var tunnel: TunnelController

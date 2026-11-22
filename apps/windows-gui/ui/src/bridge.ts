@@ -724,6 +724,12 @@ export const desktop = {
   /** Undoes a body's Content-Encoding with the kernel (gzip, deflate, br, zstd); rejects when it cannot. */
   decodeBody: (dataBase64: string, contentEncoding: string, complete: boolean) =>
     invoke<{ data_base64: string; truncated: boolean }>("decode_body", { request: { dataBase64, contentEncoding, complete } }),
+  /** Saves a body as the inspector shows it (decoded) to Downloads as `name` plus its type's extension; answers where. */
+  saveBody: (dataBase64: string, contentType: string, name: string) =>
+    invoke<{ location: string }>("save_body", { file: { dataBase64, contentType, name } }),
+  /** Opens a body with the system's app for its type; the backend refuses types that run code (see `opensElsewhere`). */
+  openBody: (dataBase64: string, contentType: string, name: string) =>
+    invoke<{ location: string }>("open_body", { file: { dataBase64, contentType, name } }),
   /** Sends a request through the engine (its local proxy, or the replay proxy on Android) without following redirects. */
   replayRequest: (request: ReplayRequest) => invoke<ReplayResponse>("replay_request", { request }),
   debugMappings: () => invoke<DebugMapping[]>("list_debug_mappings"),
