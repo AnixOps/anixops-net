@@ -198,16 +198,18 @@ Play 版是开源版（用户 2026-11-15 决定），包名 `io.anixops.net.andr
 
 - [x] Environment `google-play`（需维护者审批）里配了 `PLAY_SERVICE_ACCOUNT_JSON`、`PLAY_UPLOAD_KEYSTORE_BASE64`、
   `PLAY_UPLOAD_KEYSTORE_PASSWORD`、`PLAY_UPLOAD_KEY_ALIAS`、`PLAY_UPLOAD_KEY_PASSWORD`。
-- [ ] 手动运行 `play-bundle.yml`（Actions → Google Play bundle → Run workflow），审批后下载 artifact
-  `anixops-net-play-<versionCode>-<sha>` 里的 AAB，在 Play Console 上传。`google-play` 只允许 `v*` tag 时，从 main 运行要先在
-  Environment 的 Deployment branches 里临时加上 `main`。
+- [ ] 手动运行 `play-bundle.yml`（Actions → Google Play bundle → Run workflow），选轨道（默认 `alpha` 封闭测试，`none`
+  只打包不上传）并可填英文更新说明。审批后它用上传密钥签好 AAB，以**草稿**放进所选轨道并以“不送审”提交；送审由维护者在
+  Play Console → 发布概览里点。AAB 也保留在 artifact `anixops-net-play-<versionCode>-<sha>` 里。`google-play` 只允许 `v*`
+  tag 时，从 main 运行要先在 Environment 的 Deployment branches 里临时加上 `main`。
 - [ ] 每次上传的 versionCode 必须比上一次大（`apps/android-native/app/build.gradle.kts`）。
 - [ ] Play Console 里的应用签名、商店信息、隐私政策、数据安全、内容分级、VPN 和前台服务声明只能人工填写。
 - [ ] VPN 服务和前台服务声明要附 90 秒内的演示视频：手动运行 `play-demo-video.yml`（Actions → Play demo video → Run
   workflow），它在模拟器上跑真实的调试版 APK 并加上英文字幕；下载 artifact 里的 `anixops-net-play-demo.mp4`，由维护者
   上传到 YouTube（不公开列出）或云盘，再把链接填进两项声明。
   字幕时间取自脚本的计时，和录像可能差两三秒；上传前看一遍，必要时用 artifact 里的 `raw.mp4` 和 `captions.tsv` 调整后重新生成。
-- [ ] 以后自动上传到内部测试轨道：服务账号 `play-publisher` 只有测试轨道权限，正式版由维护者在 Play Console 推广。
+- [ ] 服务账号 `play-publisher` 要在 Play Console → 用户和权限里受邀，只给测试轨道的发布权限；上传报 401/403 时先查这一项。
+  正式版由维护者在 Play Console 推广。
 
 
 ## 开源版下载页（GitHub Pages）
