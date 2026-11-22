@@ -137,6 +137,17 @@ runs:
         gradle-version: "8.14.3"
         cache-read-only: ${{ inputs.save-cache != 'true' }}
 
+    # Robolectric fetches its android-all jars from Maven Central while the unit tests run, outside Gradle's cache.
+    # A failed fetch fails every Robolectric test (main fa989cd: 66 of 91, IOException in MavenArtifactFetcher), so
+    # keep them in their own cache keyed on the Robolectric version and compileSdk.
+    - name: Cache Robolectric android-all jars
+      if: inputs.checks != ''
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2/repository/org/robolectric
+        key: robolectric-${{ runner.os }}-${{ hashFiles('apps/android-native/gradle/libs.versions.toml', 'apps/android-native/app/build.gradle.kts') }}
+        restore-keys: robolectric-${{ runner.os }}-
+
     - name: Build the APK
       shell: bash
       env:
