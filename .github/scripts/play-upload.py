@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Uploads a signed AAB to a Google Play testing track as a draft release (play-bundle.yml).
 
-The release is left as a draft and the edit is committed with changesNotSentForReview=true, so nothing reaches
-Google review or testers until the maintainer sends the changes for review in Play Console (Publishing overview).
+The release is left as a draft, so nothing reaches Google review or testers until the maintainer rolls it out in
+Play Console. The edit is committed with changesNotSentForReview=true; apps without managed publishing reject that
+flag, and then the edit is committed without it (a draft release is still not sent anywhere).
 
 Usage: play-upload.py PACKAGE TRACK AAB RELEASE_NAME [NOTES_FILE]
 The service account key (JSON) is read from the PLAY_SERVICE_ACCOUNT_JSON environment variable.
@@ -73,6 +74,10 @@ def main():
         fail(f"Could not put the release on the {track} track", r)
 
     r = session.post(f"{base}:commit", params={"changesNotSentForReview": "true"})
+    if r.status_code == 400 and "changesNotSentForReview must not be set" in r.text:
+        # Apps without managed publishing reject the flag. The release is a draft, so committing without the flag
+        # still puts nothing in front of testers or review until it is rolled out in Play Console.
+        r = session.post(f"{base}:commit")
     if r.status_code != 200:
         fail("Committing the edit failed", r)
     print(f"Draft release {release_name} (versionCode {version_code}) is on the {track} track, not sent for review")
