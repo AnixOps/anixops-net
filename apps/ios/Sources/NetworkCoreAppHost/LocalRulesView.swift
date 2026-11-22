@@ -190,12 +190,14 @@ struct LocalRulesView: View {
                 commit(next)
             }
             .formSheetFrame()
+            .brandSheet()
         }
         .sheet(item: $editingSet) { edit in
             RuleSetSubscriptionSheet(edit: edit, rules: rules) { next in
                 commit(next)
             }
             .formSheetFrame()
+            .brandSheet()
         }
         .sheet(isPresented: $importing) {
             LocalRulesImportSheet { text in
@@ -205,6 +207,7 @@ struct LocalRulesView: View {
                 notice = String(localized: "添加了 \(merged.added) 条规则，跳过 \(parsed.skipped + parsed.rules.count - merged.added) 条（不支持、重复或超出上限）。")
             }
             .formSheetFrame()
+            .brandSheet()
         }
         .confirmationDialog("清空你添加的全部规则？", isPresented: $confirmingClear, titleVisibility: .visible) {
             Button("清空", role: .destructive) {

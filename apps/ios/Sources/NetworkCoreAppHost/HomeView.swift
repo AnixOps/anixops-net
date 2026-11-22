@@ -73,11 +73,13 @@ struct HomeView: View {
             .brandBars(brand)
             .sheet(isPresented: $editing) {
                 DashboardEditSheet(layoutStorage: $layoutStorage)
+                    .brandSheet()
             }
             .sheet(isPresented: $picking) {
                 NodePickerSheet(tunnel: tunnel) {
                     tab = nodesTab
                 }
+                .brandSheet()
             }
             .task(id: tunnel.connection) {
                 await dashboard.poll(tunnel)

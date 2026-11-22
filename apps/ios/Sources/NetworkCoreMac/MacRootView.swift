@@ -56,6 +56,7 @@ struct MacRootView: View {
                 }
                 .sheet(isPresented: $state.showsShortcuts) {
                     MacShortcutList(mode: tunnel.appMode)
+                        .brandSheet()
                 }
             }
         }
@@ -75,7 +76,7 @@ struct MacRootView: View {
         }
         .sheet(isPresented: $state.importing) {
             ImportView(tunnel: tunnel)
-                .frame(width: 480, height: 580)
+                .brandSheet()
                 .environment(\.brand, brand)
                 .tint(brand.primary)
         }

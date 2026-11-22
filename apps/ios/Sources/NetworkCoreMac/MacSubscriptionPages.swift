@@ -93,6 +93,7 @@ struct MacProxiesPage: View {
                 await tunnel.updateNode(edited, inGroup: item.groupID)
             }
             .formSheetFrame()
+            .brandSheet()
             .environment(\.brand, brand)
             .tint(brand.primary)
         }
@@ -101,6 +102,7 @@ struct MacProxiesPage: View {
                 await tunnel.checkup(item.node.id, inGroup: item.groupID, throughput: throughput)
             }
             .formSheetFrame()
+            .brandSheet()
             .environment(\.brand, brand)
             .tint(brand.primary)
         }

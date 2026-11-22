@@ -89,6 +89,7 @@ struct MappingsView: View {
                 commit(next)
             }
             .formSheetFrame()
+            .brandSheet()
             .environment(\.brand, brand)
             .tint(brand.primary)
         }
@@ -472,6 +473,7 @@ struct DecryptHostsView: View {
                 commit(try mappings.editingHost(domain.pattern, to: text, exclude: exclude))
             }
             .formSheetFrame()
+            .brandSheet()
             .environment(\.brand, brand)
             .tint(brand.primary)
         }

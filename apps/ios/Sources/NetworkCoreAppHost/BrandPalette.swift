@@ -108,6 +108,47 @@ struct BrandPalette: Sendable {
         LinearGradient(colors: [heroStart, heroEnd], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
+    /// The palette inside a sheet or dialog. AnixOps Design puts sheets on `bg-elevated` (colour rule 6, layout
+    /// "Elevation"): in dark mode the pure-black page background would melt a sheet into the window behind it, so
+    /// the sheet's background becomes the card colour (`bg-elevated`) and its cards and fields are drawn in
+    /// `fill-1` (`raised`), which over `bg-elevated` gives the next step up, as Apple's elevated grouped colours do.
+    /// Both are design tokens; no colour is made up here. Light mode already separates a sheet from the page; it
+    /// keeps the page palette.
+    func elevated(in scheme: ColorScheme) -> BrandPalette {
+        guard scheme == .dark else {
+            return self
+        }
+        return BrandPalette(
+            bg: surface,
+            surface: raised,
+            raised: raised,
+            border: border,
+            borderStrong: borderStrong,
+            soft: soft,
+            primary: primary,
+            primaryFill: primaryFill,
+            onPrimary: onPrimary,
+            text: text,
+            text2: text2,
+            text3: text3,
+            success: success,
+            successSoft: successSoft,
+            info: info,
+            warning: warning,
+            warningSoft: warningSoft,
+            danger: danger,
+            dangerFill: dangerFill,
+            dangerSoft: dangerSoft,
+            amberText: amberText,
+            chart1: chart1,
+            chart2: chart2,
+            chart3: chart3,
+            chart4: chart4,
+            heroStart: heroStart,
+            heroEnd: heroEnd
+        )
+    }
+
     /// The AnixOps Design brand gradient (#0EA5E9 → #6366F1 at 135°). Brand moments only: the mark, hero numbers
     /// and the route line on the slate hero; never controls or text that must be read.
     static var brandGradient: LinearGradient {
@@ -149,6 +190,12 @@ extension View {
         #endif
     }
 
+    /// Gives a sheet's content the elevated palette (`BrandPalette.elevated(in:)`), so a sheet stands apart from the
+    /// window under it in dark mode. Apply it to the content of every `.sheet` and `.fullScreenCover`.
+    func brandSheet() -> some View {
+        modifier(BrandSheetModifier())
+    }
+
     /// A form sheet's size on macOS, where a sheet otherwise shrinks to its content; iOS sizes sheets itself.
     @ViewBuilder
     func formSheetFrame() -> some View {
@@ -170,6 +217,18 @@ extension View {
         #else
         autocorrectionDisabled()
         #endif
+    }
+}
+
+private struct BrandSheetModifier: ViewModifier {
+    @Environment(\.brand) private var brand
+    @Environment(\.colorScheme) private var scheme
+
+    func body(content: Content) -> some View {
+        let palette = brand.elevated(in: scheme)
+        content
+            .environment(\.brand, palette)
+            .tint(palette.primary)
     }
 }
 
