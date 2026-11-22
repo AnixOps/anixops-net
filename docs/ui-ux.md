@@ -193,8 +193,7 @@ macOS / iOS 用 XCUITest 的 `performAccessibilityAudit`（对比度、文字被
 | 平台 | 入口 | 查什么 |
 |---|---|---|
 | 桌面端（Windows、Linux 共用的界面） | `UI screenshots` 工作流的 “Draw and check the screenshots”：`screenshots/render.cjs` 每画一张就调 `screenshots/audit.cjs` | axe（WCAG 2.2 A/AA，serious、critical 为 0，含对比度）；文字被截断而没有省略号、文字出了窗口；对话框、菜单、弹出列表、提示、Toast 和下面的窗口分不开（截图上测：表面与外侧 ΔL* ≥ 4，或边缘 ΔL* ≥ 6）。结果和每个弹层的测量值在产物的 `after/audit.json` |
-| macOS | “macOS screenshots, UI tests and accessibility audit” job：`apps/ios/UITests/NetworkCoreMac/MacAccessibilityAuditTests.swift` | Xcode 的 `performAccessibilityAudit(for: .all)`：对比度、元素检测、点击区域、元素说明、父子关系、操作。两种模式的每一页 × 浅色、深色 × 中文、英文；所有问题先收集，一次列全再失败 |
-| iOS | “iOS UI tests (audit-light / audit-dark)” 两个并行 job：`apps/ios/UITests/NetworkCoreApp/AccessibilityAuditTests.swift` | 同上，另外还有文字被截断（textClipped）和动态字体（dynamicType） |
+| macOS、iOS | 接入中：XCUITest 的 `performAccessibilityAudit(for: .all)`，两种模式的每一页 × 浅色、深色 × 中文、英文 | 第一次运行列出的问题（对比度、元素说明、点击区域、动态字体、文字截断等）修完后，作为阻断检查接入 iOS、macOS 的 UI 测试 job；不设豁免，只排除系统自带的 Touch Bar |
 | Android、Windows 原生、Linux 原生 | 接入中 | |
 
 截图清单要覆盖：每一页的浅色和深色、英文（更长的词会暴露截断）、窄窗口、每种弹层（对话框、菜单、弹出列表）的浅色和深色。

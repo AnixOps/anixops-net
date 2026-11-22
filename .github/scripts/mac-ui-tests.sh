@@ -39,7 +39,7 @@ TEST_RUNNER_ANIXOPS_TERMS="${terms}" TEST_RUNNER_ANIXOPS_APP="${app}" xcodebuild
     -resultBundlePath "${result}" \
     ${only[@]+"${only[@]}"} || status=$?
 
-# The audit attaches a picture of every page and of every element it reports (MacAccessibilityAuditTests); they
+# Pictures the tests attach (the accessibility audit attaches every page and every element it reports); they
 # are exported as plain files with a manifest.json naming each one, next to the result bundle, for the upload.
 if [ -d "${result}" ]; then
     xcrun xcresulttool export attachments --path "${result}" --output-path "${result%.xcresult}-attachments" \
