@@ -1095,22 +1095,6 @@
         }
       }
     },
-    "从文件导入 WireGuard 配置": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Import WireGuard Config from File"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "從檔案匯入 WireGuard 設定"
-          }
-        }
-      }
-    },
     "从相册识别": {
       "localizations": {
         "en": {

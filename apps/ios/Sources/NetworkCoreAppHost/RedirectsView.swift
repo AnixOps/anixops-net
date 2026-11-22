@@ -74,6 +74,7 @@ struct RedirectsView: View {
                 commit(next)
             }
             .formSheetFrame()
+            .brandSheet()
         }
         .alert("无法保存", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
             Button("好", role: .cancel) {}

@@ -194,6 +194,7 @@ struct RootView: View {
         .environment(\.brand, brand)
         .sheet(isPresented: $importing) {
             ImportView(tunnel: tunnel)
+                .brandSheet()
                 .environment(\.brand, brand)
                 .tint(brand.primary)
         }

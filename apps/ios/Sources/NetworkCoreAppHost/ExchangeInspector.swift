@@ -127,6 +127,7 @@ struct HttpExchangeView: View {
                 }
             }
             .formSheetFrame()
+            .brandSheet()
             .environment(\.brand, brand)
             .tint(brand.primary)
         }

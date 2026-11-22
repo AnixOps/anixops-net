@@ -80,18 +80,21 @@ struct DnsSettingsView: View {
                 try save(server, replacing: edit.original?.name)
             }
             .formSheetFrame()
+            .brandSheet()
         }
         .sheet(isPresented: $addingRule) {
             DnsRuleSheet(servers: dns.servers.map(\.name)) { text, server in
                 commit { try dns.addingRule(text, server: server) }
             }
             .formSheetFrame()
+            .brandSheet()
         }
         .sheet(isPresented: $addingHost) {
             DnsHostSheet { name, addresses in
                 commit { try dns.settingHost(name, addresses: addresses) }
             }
             .formSheetFrame()
+            .brandSheet()
         }
         .confirmationDialog("清除所有 DNS 设置？", isPresented: $confirmingReset, titleVisibility: .visible) {
             Button("恢复默认", role: .destructive) {

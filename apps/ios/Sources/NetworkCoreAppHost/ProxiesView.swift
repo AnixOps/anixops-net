@@ -92,6 +92,7 @@ struct ProxiesView: View {
             }
             .sheet(item: $sharing) { item in
                 QRShareSheet(title: item.title, link: item.link)
+                    .brandSheet()
                     .environment(\.brand, brand)
                     .tint(brand.primary)
             }
@@ -104,6 +105,7 @@ struct ProxiesView: View {
                 NodeEditSheet(node: item.node) { edited in
                     await tunnel.updateNode(edited, inGroup: item.groupID)
                 }
+                .brandSheet()
                 .environment(\.brand, brand)
                 .tint(brand.primary)
             }
@@ -111,6 +113,7 @@ struct ProxiesView: View {
                 NodeCheckupSheet(node: item.node) { throughput in
                     await tunnel.checkup(item.node.id, inGroup: item.groupID, throughput: throughput)
                 }
+                .brandSheet()
                 .environment(\.brand, brand)
                 .tint(brand.primary)
             }
