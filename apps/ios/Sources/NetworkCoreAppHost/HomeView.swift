@@ -212,9 +212,9 @@ private struct ConnectCard: View {
                 Button(action: tap) {
                     RouteLineMark(phase: phase, size: 60)
                         .frame(width: 92, height: 92)
-                        .background(Brand.line.opacity(0.06), in: Circle())
+                        .background(Brand.lineFill, in: Circle())
                         .overlay(
-                            Circle().strokeBorder(phase == .on ? Brand.sky.opacity(0.7) : Brand.line.opacity(0.25), lineWidth: 1.5)
+                            Circle().strokeBorder(phase == .on ? Brand.sky : Brand.lineRuleStrong, lineWidth: 1.5)
                         )
                         .contentShape(Circle())
                 }
@@ -236,7 +236,7 @@ private struct ConnectCard: View {
                         // Debug mode without a node: nothing to pick here, the exit is in Settings.
                         Text("出口 · 直连")
                             .font(.footnote)
-                            .foregroundStyle(Brand.line.opacity(0.85))
+                            .foregroundStyle(Brand.line)
                             .frame(minHeight: 28)
                     } else if let name = tunnel.nodeName {
                         Button {
@@ -247,7 +247,7 @@ private struct ConnectCard: View {
                                     .font(.caption2.weight(.bold))
                                     .padding(.horizontal, 5)
                                     .padding(.vertical, 2)
-                                    .background(Brand.line.opacity(0.14), in: RoundedRectangle(cornerRadius: BrandRadius.badge, style: .continuous))
+                                    .background(Brand.lineFill2, in: RoundedRectangle(cornerRadius: BrandRadius.badge, style: .continuous))
                                 Text(name)
                                     .lineLimit(1)
                                 Image(systemName: "chevron.right")
@@ -255,7 +255,7 @@ private struct ConnectCard: View {
                                     .accessibilityHidden(true)
                             }
                             .font(.footnote)
-                            .foregroundStyle(Brand.line.opacity(0.85))
+                            .foregroundStyle(Brand.line)
                             .frame(minHeight: 28)
                         }
                         .buttonStyle(.plain)
@@ -277,9 +277,9 @@ private struct ConnectCard: View {
         .frame(maxWidth: .infinity)
         .background(brand.heroGradient, in: RoundedRectangle(cornerRadius: BrandRadius.hero, style: .continuous))
         .overlay(
-            // AnixOps Design's 8 % white hairline keeps the slate tile's edge on a black background.
+            // AnixOps Design's dark highlight edge keeps the slate tile's edge on a black background.
             RoundedRectangle(cornerRadius: BrandRadius.hero, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                .strokeBorder(Brand.lineEdge, lineWidth: 1)
         )
     }
 
@@ -297,7 +297,7 @@ private struct ConnectCard: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                         .frame(maxWidth: .infinity, minHeight: 34)
-                        .foregroundStyle(selected ? Brand.slate : Brand.line.opacity(0.85))
+                        .foregroundStyle(selected ? Brand.slate : Brand.lineMuted)
                         .background(selected ? Brand.line : Color.clear, in: Capsule())
                         .contentShape(Rectangle())
                 }
@@ -306,7 +306,7 @@ private struct ConnectCard: View {
             }
         }
         .padding(4)
-        .background(Color.white.opacity(0.08), in: Capsule())
+        .background(Brand.lineFill, in: Capsule())
         .accessibilityElement(children: .contain)
         .accessibilityLabel("分流模式")
     }
@@ -426,7 +426,7 @@ private struct NoticeCard: View {
                     Button(action: dismiss) {
                         Image(systemName: "xmark")
                             .font(.footnote.weight(.semibold))
-                            .foregroundStyle(brand.text3)
+                            .foregroundStyle(brand.text2)
                             .frame(width: 28, height: 28)
                             // A 44 pt target without moving the icon.
                             .padding(8)

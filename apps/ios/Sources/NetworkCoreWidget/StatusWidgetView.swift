@@ -49,7 +49,7 @@ struct StatusWidgetView: View {
                 if let name = snapshot.nodeName {
                     Text(name)
                         .font(.caption)
-                        .foregroundStyle(Brand.line.opacity(0.75))
+                        .foregroundStyle(Brand.lineMuted)
                         .lineLimit(1)
                 }
             }
@@ -62,7 +62,7 @@ struct StatusWidgetView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("AnixOps Net")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(Brand.line.opacity(0.75))
+                .foregroundStyle(Brand.lineMuted)
             Text(phase.title)
                 .font(.title3.weight(.semibold))
             if let name = snapshot.nodeName {
@@ -71,16 +71,16 @@ struct StatusWidgetView: View {
                         .font(.caption2.weight(.bold))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Brand.line.opacity(0.15), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                        .background(Brand.lineFill2, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                     Text(name)
                         .font(.subheadline)
                         .lineLimit(1)
                 }
-                .foregroundStyle(Brand.line.opacity(0.85))
+                .foregroundStyle(Brand.lineMuted)
             } else {
                 Text("先在 App 里导入节点")
                     .font(.subheadline)
-                    .foregroundStyle(Brand.line.opacity(0.75))
+                    .foregroundStyle(Brand.lineMuted)
             }
         }
     }
@@ -112,22 +112,22 @@ struct StaticRouteLine: View {
         ZStack {
             if !accessory {
                 Circle()
-                    .fill(Brand.line.opacity(0.06))
+                    .fill(Brand.lineFill)
                 Circle()
-                    .strokeBorder(on ? Brand.sky.opacity(0.7) : Brand.line.opacity(0.25), lineWidth: 1.5)
+                    .strokeBorder(on ? Brand.sky : Brand.lineRuleStrong, lineWidth: 1.5)
             }
             ZStack {
                 RouteLineShape()
-                    .stroke(Brand.line.opacity(accessory ? 0.3 : 0.16), style: stroke(width: line * 0.09, dashed: false))
+                    .stroke(accessory ? Brand.lineFaint : Brand.lineRule, style: stroke(width: line * 0.09, dashed: false))
                 RouteLineShape()
                     .trim(from: 0, to: phase.isBusy ? 0.6 : 1)
-                    .stroke(on ? Brand.line : Brand.line.opacity(0.55), style: stroke(width: line * 0.09, dashed: !on && !phase.isBusy))
+                    .stroke(on ? Brand.line : Brand.lineFaint, style: stroke(width: line * 0.09, dashed: !on && !phase.isBusy))
                 Circle()
                     .fill(Brand.sky)
                     .frame(width: line * 0.15, height: line * 0.15)
                     .position(x: line * 0.30, y: line * 0.72)
                 Circle()
-                    .fill(on ? Brand.amber : Brand.amber.opacity(0.45))
+                    .fill(on ? Brand.amber : Brand.lineFaint)
                     .frame(width: line * 0.15, height: line * 0.15)
                     .position(x: line * 0.70, y: line * 0.28)
                     .widgetAccentable()

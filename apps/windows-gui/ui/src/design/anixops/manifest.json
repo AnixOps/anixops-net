@@ -2,7 +2,7 @@
   "name": "AnixOps Design",
   "repository": "https://github.com/AnixOps/anixops-design",
   "version": "1.2.0",
-  "ref": "05bc41b4b85eef6ac8f1ffa53a315bcce6560535",
+  "ref": "9712b1d7e26254c6aaf449a4eef3cbabfdc22a06",
   "files": [
     {
       "path": "LICENSE",
@@ -146,13 +146,13 @@
       "path": "tokens.css",
       "source": "tokens/css/tokens.css",
       "bytes": 7013,
-      "sha256": "786e31a4dd4eab918f95ee1ae2f8b77efa57fd1e7acd13ec88334436732605ab"
+      "sha256": "5b0b45529d8159a61ccec89bd5e281072be61e314185fb544da65aefaf11e0ce"
     },
     {
       "path": "tokens.json",
       "source": "tokens/tokens.json",
-      "bytes": 12551,
-      "sha256": "282ce9df209d43515a47f632e60b4e8710499671555da461d3697a2a97a9fe14"
+      "bytes": 13115,
+      "sha256": "6c8178b7b10fcfbb7c323292dee132893d4b2edd19e040cd0f25f91284ac800f"
     }
   ]
 }

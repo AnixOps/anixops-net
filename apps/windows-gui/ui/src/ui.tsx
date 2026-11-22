@@ -118,7 +118,7 @@ export function Switch({ label, checked, onChange, disabled = false, size = "reg
     <button
       className={`switch ${size} ${tone} ${checked ? "on" : ""} ${busy ? "busy" : ""}`}
       role="switch"
-      aria-checked={checked}
+      aria-checked={checked ? "true" : "false"}
       aria-label={label}
       title={label}
       disabled={disabled}

@@ -70,7 +70,9 @@ struct BrandPalette: Sendable {
     let onPrimary: Color
     let text: Color
     let text2: Color
-    /// Non-essential text only (placeholders, timestamps), at 14 pt and up.
+    /// Not for text that carries information: light mode's label-3 is under 4.5:1, which Xcode's accessibility
+    /// audit rejects for any text. It draws status dots, rules and the text of disabled rows; timestamps, sizes and
+    /// hints use `text2`.
     let text3: Color
     /// Connected and healthy.
     let success: Color
@@ -87,6 +89,8 @@ struct BrandPalette: Sendable {
     let chart2: Color
     let chart3: Color
     let chart4: Color
+    /// Shadow colour for raised surfaces (design token shadow-color).
+    let shadow: Color
     /// The connect hero's slate backdrop (a brand moment).
     let heroStart: Color
     let heroEnd: Color
@@ -142,6 +146,7 @@ struct BrandPalette: Sendable {
             chart2: chart2,
             chart3: chart3,
             chart4: chart4,
+            shadow: shadow,
             heroStart: heroStart,
             heroEnd: heroEnd
         )
@@ -404,14 +409,13 @@ struct BrandIconWell: View {
     @Environment(\.brand) private var brand
     let systemImage: String
     var size: CGFloat = 32
-    var tint: Color?
 
     var body: some View {
         Image(systemName: systemImage)
             .font(.system(size: size * 0.47, weight: .semibold))
-            .foregroundStyle(tint ?? brand.primary)
+            .foregroundStyle(brand.primary)
             .frame(width: size, height: size)
-            .background((tint ?? brand.primary).opacity(0.12), in: RoundedRectangle(cornerRadius: size * 0.3, style: .continuous))
+            .background(brand.soft, in: RoundedRectangle(cornerRadius: size * 0.3, style: .continuous))
             .accessibilityHidden(true)
     }
 }

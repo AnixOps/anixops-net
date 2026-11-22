@@ -19,7 +19,26 @@ object Brand {
     val amber = Color(0xFFF59E0B)
     val line = Color(0xFFF5F5F7)
     val lineMuted = Color(0xFFA1A1A6)
-    val onSlateAccent = Color(0xFF818CF8)
+    val onSlateAccent = Color(0xFF8994F8)
+    val lineFaint = Color(0xFF8E8E93)
+    val lineFill = Color(0x29787880)
+    val lineFill2 = Color(0x3D787880)
+    val lineRule = Color(0x7A545458)
+    val lineRuleStrong = Color(0xCC545458)
+    val lineEdge = Color(0x0FFFFFFF)
+    val media = Color(0xFF000000)
+    val mediaScrim = Color(0xAD000000)
+    val qrPaper = Color(0xFFFFFFFF)
+    val onTile = Color(0xFFFFFFFF)
+    val tileIndigo = Color(0xFF4F5BE8)
+    val tileSky = Color(0xFF0891B2)
+    val tilePurple = Color(0xFF8B5CF6)
+    val tilePink = Color(0xFFDB2777)
+    val tileOrange = Color(0xFFEA580C)
+    val tileGreen = Color(0xFF16A34A)
+    val tileGray = Color(0xFF8E8E93)
+    val tileTeal = Color(0xFF0D9488)
+    val tileRed = Color(0xFFD70015)
 }
 
 /** The per-theme colours ([BrandPalette.Light], [BrandPalette.Dark]). */
@@ -49,6 +68,7 @@ data class BrandPalette(
     val chart2: Color,
     val chart3: Color,
     val chart4: Color,
+    val shadow: Color,
     val heroStart: Color,
     val heroEnd: Color,
 ) {
@@ -60,25 +80,26 @@ data class BrandPalette(
             border = Color(0x1F3C3C43),
             borderStrong = Color(0x4A3C3C43),
             soft = Color(0x1A4F5BE8),
-            primary = Color(0xFF4F5BE8),
+            primary = Color(0xFF4753E8),
             primaryFill = Color(0xFF4F5BE8),
             onPrimary = Color(0xFFFFFFFF),
             text = Color(0xFF1D1D1F),
-            text2 = Color(0xFF6E6E73),
+            text2 = Color(0xFF656569),
             text3 = Color(0xFF86868B),
-            success = Color(0xFF1A7F37),
+            success = Color(0xFF1A7537),
             successSoft = Color(0x1A1A7F37),
-            info = Color(0xFF4F5BE8),
-            warning = Color(0xFFB25000),
+            info = Color(0xFF4753E8),
+            warning = Color(0xFFA24F00),
             warningSoft = Color(0x1AB25000),
-            danger = Color(0xFFD70015),
+            danger = Color(0xFFCF0015),
             dangerFill = Color(0xFFD70015),
             dangerSoft = Color(0x14D70015),
-            amberText = Color(0xFFB25000),
+            amberText = Color(0xFFA24F00),
             chart1 = Color(0xFF4F5BE8),
             chart2 = Color(0xFF0891B2),
             chart3 = Color(0xFF8B5CF6),
             chart4 = Color(0xFFDB2777),
+            shadow = Color(0x0F000000),
             heroStart = Color(0xFF0F172A),
             heroEnd = Color(0xFF1E293B),
         )
@@ -89,7 +110,7 @@ data class BrandPalette(
             border = Color(0x7A545458),
             borderStrong = Color(0xCC545458),
             soft = Color(0x2E818CF8),
-            primary = Color(0xFF818CF8),
+            primary = Color(0xFF8994F8),
             primaryFill = Color(0xFF5B63E6),
             onPrimary = Color(0xFFFFFFFF),
             text = Color(0xFFF5F5F7),
@@ -97,10 +118,10 @@ data class BrandPalette(
             text3 = Color(0xFF8E8E93),
             success = Color(0xFF30D158),
             successSoft = Color(0x2930D158),
-            info = Color(0xFF818CF8),
+            info = Color(0xFF8994F8),
             warning = Color(0xFFFF9F0A),
             warningSoft = Color(0x29FF9F0A),
-            danger = Color(0xFFFF453A),
+            danger = Color(0xFFFF6D62),
             dangerFill = Color(0xFFE0242F),
             dangerSoft = Color(0x29FF453A),
             amberText = Color(0xFFFF9F0A),
@@ -108,6 +129,7 @@ data class BrandPalette(
             chart2 = Color(0xFF22D3EE),
             chart3 = Color(0xFFA78BFA),
             chart4 = Color(0xFFF472B6),
+            shadow = Color(0x66000000),
             heroStart = Color(0xFF0F172A),
             heroEnd = Color(0xFF1E293B),
         )

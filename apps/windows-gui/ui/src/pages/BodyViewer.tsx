@@ -138,7 +138,7 @@ function BodyFrame({ caption, children }: { caption: string; children: ReactNode
   const [slot, setSlot] = useState<HTMLSpanElement | null>(null);
   return (
     <StatusSlot.Provider value={slot}>
-      <div className="body-content">{children}</div>
+      <div className="body-content" tabIndex={0} role="region" aria-label={t("正文")}>{children}</div>
       <div className="body-status">
         <span className="body-status-lead" ref={setSlot} />
         <span className="body-caption" title={caption}>{caption}</span>
