@@ -54,7 +54,7 @@ bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${app}/Info.pl
 # A fresh simulator finishes its own first-boot work (data migration, the accessibility services) for a while
 # after bootstatus returns, and the first launch of an app pays for its install: launch the app once and let it
 # settle, so the first test does not run into XCTest's launch or audit time limit.
-xcrun simctl launch "${device}" "${bundle}" -AnixOpsDemo YES > /dev/null
+xcrun simctl launch "${device}" "${bundle}" -AnixOpsDemo YES -terms-accepted-version "${terms}" > /dev/null
 sleep 20
 xcrun simctl terminate "${device}" "${bundle}" || true
 

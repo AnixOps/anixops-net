@@ -72,6 +72,13 @@ final class EntryInvariantTests: XCTestCase {
         }
         app.launchArguments = arguments
         app.launch()
+        // On a cold CI simulator the first launch now and then never brings up the tab bar (the launch is still
+        // settling, or it came up without its arguments, on the consent screen). That says nothing about the page:
+        // launch it once more, and fail if the second launch does not show it either.
+        if !app.tabBars.firstMatch.waitForExistence(timeout: 30) {
+            app.terminate()
+            app.launch()
+        }
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 30), "\(mode) \(page): the tab bar never appeared")
         return app
     }

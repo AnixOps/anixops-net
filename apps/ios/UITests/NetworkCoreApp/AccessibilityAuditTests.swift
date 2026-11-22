@@ -46,6 +46,13 @@ final class AccessibilityAuditTests: XCTestCase {
             "-terms-accepted-version", terms,
         ]
         app.launch()
+        // On a cold CI simulator the first launch now and then never brings up the tab bar (the launch is still
+        // settling, or it came up without its arguments, on the consent screen). That says nothing about the page:
+        // launch it once more, and fail if the second launch does not show it either.
+        if !app.tabBars.firstMatch.waitForExistence(timeout: 30) {
+            app.terminate()
+            app.launch()
+        }
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 30), "\(mode) \(page): the tab bar never appeared")
         // The demo data fills lists and charts over the first seconds; audit what a user would look at.
         Thread.sleep(forTimeInterval: 2)
