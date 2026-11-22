@@ -106,10 +106,10 @@ private struct StreamMessageRow: View {
                 Spacer(minLength: 4)
                 Text(TrafficFormat.bytes(message.size))
                     .font(.caption2.monospacedDigit())
-                    .foregroundStyle(brand.text3)
+                    .foregroundStyle(brand.text2)
                 Text(CaptureClock.time(message.at))
                     .font(.caption2.monospacedDigit())
-                    .foregroundStyle(brand.text3)
+                    .foregroundStyle(brand.text2)
             }
             if !message.data.isEmpty {
                 Text(verbatim: String(message.preview.prefix(200)))
@@ -276,7 +276,7 @@ private struct H2FrameRow: View {
             HStack(spacing: 6) {
                 Text(direction)
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(brand.text3)
+                    .foregroundStyle(brand.text2)
                 Text(frame.type)
                     .font(.caption.weight(.bold).monospaced())
                     .foregroundStyle(frame.isNotable ? brand.danger : brand.text)
@@ -291,11 +291,11 @@ private struct H2FrameRow: View {
                 Spacer(minLength: 4)
                 Text(CaptureClock.time(frame.at))
                     .font(.caption2.monospacedDigit())
-                    .foregroundStyle(brand.text3)
+                    .foregroundStyle(brand.text2)
             }
             Text(verbatim: ([String(localized: "\(frame.length) 字节")] + frame.flags).joined(separator: " · "))
                 .font(.caption2.monospaced())
-                .foregroundStyle(brand.text3)
+                .foregroundStyle(brand.text2)
         }
         .accessibilityElement(children: .combine)
     }

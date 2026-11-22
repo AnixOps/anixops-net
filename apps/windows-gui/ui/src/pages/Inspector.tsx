@@ -195,7 +195,7 @@ function MessagePanel({ side, url, message, part, onPart }: {
           <CopyButton label={shown === "query" ? t("拷贝全部参数") : t("拷贝全部头")} text={() => headerLines(pairs)} />
         )}
       </div>
-      <div className="body-content">
+      <div className="body-content" tabIndex={0} role="region" aria-label={t("正文")}>
         {shown === "body"
           ? <p className="muted inspector-note">{side === "request" ? t("这个请求没有正文。") : t("这个响应没有正文。")}</p>
           : <PairTable pairs={pairs} />}

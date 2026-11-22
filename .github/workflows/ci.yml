@@ -56,6 +56,13 @@ jobs:
       - name: Neutral terminology
         run: python3 .github/scripts/neutral_terms.py
 
+      # Interface colours come only from the generated design tokens: no colour literals, no faded copies of a
+      # token, no disabled state drawn by fading (docs/ui-ux.md, 自动检查). The self-test checks the rules first.
+      - name: UI lint
+        run: |
+          python3 .github/scripts/ui_lint.py --self-test
+          python3 .github/scripts/ui_lint.py
+
       # Every address the client sources name is described in docs/network-behavior.md: a new update server,
       # statistics endpoint or lookup service fails here until it is documented.
       - name: Outbound addresses are documented
@@ -640,11 +647,6 @@ jobs:
     name: iOS and macOS Xcode build
     runs-on: macos-26
     timeout-minutes: 60
-    # Reads main's screenshot artifacts and the pull request description for the screenshot comparison.
-    permissions:
-      contents: read
-      actions: read
-      pull-requests: read
     needs: changes
     if: ${{ needs.changes.outputs.apple == 'true' }}
     steps:
@@ -687,6 +689,8 @@ jobs:
           grep -q 'CODE_SIGN_ENTITLEMENTS = Entitlements/NetworkCoreMacTunnel.entitlements;' NetworkCore.xcodeproj/project.pbxproj
           grep -q 'CODE_SIGN_ENTITLEMENTS = Entitlements/NetworkCoreCLI.entitlements;' NetworkCore.xcodeproj/project.pbxproj
 
+      # build-for-testing also builds the UI test bundle and writes the .xctestrun file, so the jobs after this one
+      # run the tests without building anything (test-without-building).
       - name: Build the app without signing
         shell: bash
         run: |
@@ -697,7 +701,7 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath apps/ios/build \
             CODE_SIGNING_ALLOWED=NO \
-            build
+            build-for-testing
 
       - name: Check bundled privacy manifests and the tunnel extension point
         shell: bash
@@ -757,7 +761,7 @@ jobs:
             -destination 'generic/platform=macOS' \
             -derivedDataPath apps/ios/build \
             CODE_SIGNING_ALLOWED=NO \
-            build
+            build-for-testing
 
       - name: Check the macOS app bundle and its tunnel extension
         shell: bash
@@ -830,6 +834,46 @@ jobs:
           expect 69 status --socket "${RUNNER_TEMP}/none.sock"
           expect 69 nodes --socket "${RUNNER_TEMP}/none.sock"
 
+      # The screenshots, UI tests and accessibility audits run in the jobs below, side by side on their own machines,
+      # from these products: the apps, the UI test bundles and their .xctestrun files.
+      - name: Pack the built products
+        shell: bash
+        run: tar -C apps/ios/build/Build -czf "${RUNNER_TEMP}/apple-products.tgz" Products
+
+      - name: Upload the built products
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-products-${{ github.sha }}
+          path: ${{ runner.temp }}/apple-products.tgz
+          retention-days: 1
+
+  apple-mac:
+    name: macOS screenshots, UI tests and accessibility audit
+    runs-on: macos-26
+    timeout-minutes: 45
+    # Reads main's screenshot artifacts and the pull request description for the screenshot comparison.
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    needs: [changes, ios-xcode-build]
+    if: ${{ needs.changes.outputs.apple == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download the built products
+        uses: actions/download-artifact@v4
+        with:
+          name: apple-products-${{ github.sha }}
+          path: ${{ runner.temp }}
+
+      - name: Unpack the built products
+        shell: bash
+        run: |
+          mkdir -p apps/ios/build/Build
+          tar -C apps/ios/build/Build -xzf "${RUNNER_TEMP}/apple-products.tgz"
+
       # The unsigned debug build opens with made-up data (`-AnixOpsDemo YES`), so the pictures need no account,
       # no certificate and no tunnel. A machine without a screen session must not fail the build.
       - name: Take macOS screenshots with demo data
@@ -837,41 +881,20 @@ jobs:
         shell: bash
         run: .github/scripts/mac-screenshots.sh "apps/ios/build/Build/Products/Debug/AnixOps Net.app" "${RUNNER_TEMP}/mac-screenshots"
 
-      # The same for the iPhone app, in a simulator made for this run: demo data, a fixed status bar, one picture
-      # per tab. A machine that cannot boot a simulator must not fail the build. Taken before either comparison, so a
-      # change on macOS that still needs acknowledging does not hide the iPhone pictures.
-      - name: Take iOS screenshots with demo data
-        continue-on-error: true
-        shell: bash
-        run: .github/scripts/ios-screenshots.sh apps/ios/build/Build/Products/Debug-iphonesimulator/NetworkCoreApp.app "${RUNNER_TEMP}/ios-screenshots"
-
-      # The entry checks of docs/ui-ux.md (入口不变量) on the iPhone app: the connection switch where each mode needs
-      # it, exactly once, and a failure on the page the user is on. A failure here fails the build.
-      - name: Run the iOS UI tests
-        shell: bash
-        run: .github/scripts/ios-ui-tests.sh apps/ios/build/Build/Products/Debug-iphonesimulator/NetworkCoreApp.app apps/ios/build "${RUNNER_TEMP}/ios-ui-tests.xcresult"
-
-      - name: Upload the iOS UI test results
-        if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-ui-tests-${{ github.sha }}
-          path: ${{ runner.temp }}/ios-ui-tests.xcresult
-          if-no-files-found: ignore
-          retention-days: 3
-
-      # The same checks on the Mac app: the sidebar's connection switch on every page of both modes, and a failure on
-      # the page the user is on. A failure here fails the build.
+      # The entry checks of docs/ui-ux.md (入口不变量) on the Mac app: the sidebar's connection switch on every page
+      # of both modes, and a failure on the page the user is on. A failure here fails the build.
       - name: Run the macOS UI tests
         shell: bash
-        run: .github/scripts/mac-ui-tests.sh "apps/ios/build/Build/Products/Debug/AnixOps Net.app" apps/ios/build "${RUNNER_TEMP}/mac-ui-tests.xcresult"
+        run: .github/scripts/mac-ui-tests.sh "apps/ios/build/Build/Products/Debug/AnixOps Net.app" apps/ios/build/Build/Products "${RUNNER_TEMP}/mac-ui-tests.xcresult"
 
       - name: Upload the macOS UI test results
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
           name: mac-ui-tests-${{ github.sha }}
-          path: ${{ runner.temp }}/mac-ui-tests.xcresult
+          path: |
+            ${{ runner.temp }}/mac-ui-tests.xcresult
+            ${{ runner.temp }}/mac-ui-tests-attachments
           if-no-files-found: ignore
           retention-days: 3
 
@@ -879,7 +902,7 @@ jobs:
       # acknowledge on a "界面变化：" line fails the job (docs/ui-ux.md). The demo data has a fixed clock, so two
       # runs of the same code give the same pixels.
       - name: Compare the macOS screenshots with main
-        if: ${{ github.event_name == 'pull_request' }}
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -908,6 +931,40 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
 
+  apple-ios-screenshots:
+    name: iOS screenshots
+    runs-on: macos-26
+    timeout-minutes: 30
+    # Reads main's screenshot artifacts and the pull request description for the screenshot comparison.
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    needs: [changes, ios-xcode-build]
+    if: ${{ needs.changes.outputs.apple == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download the built products
+        uses: actions/download-artifact@v4
+        with:
+          name: apple-products-${{ github.sha }}
+          path: ${{ runner.temp }}
+
+      - name: Unpack the built products
+        shell: bash
+        run: |
+          mkdir -p apps/ios/build/Build
+          tar -C apps/ios/build/Build -xzf "${RUNNER_TEMP}/apple-products.tgz"
+
+      # The same for the iPhone app, in a simulator made for this run: demo data, a fixed status bar, one picture
+      # per tab. A machine that cannot boot a simulator must not fail the build.
+      - name: Take iOS screenshots with demo data
+        continue-on-error: true
+        shell: bash
+        run: .github/scripts/ios-screenshots.sh apps/ios/build/Build/Products/Debug-iphonesimulator/NetworkCoreApp.app "${RUNNER_TEMP}/ios-screenshots"
+
       - name: Compare the iOS screenshots with main
         if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         shell: bash
@@ -934,6 +991,51 @@ jobs:
         with:
           name: ios-screenshot-report-${{ github.sha }}
           path: ${{ runner.temp }}/ios-screenshot-compare/report
+          if-no-files-found: ignore
+          retention-days: 3
+
+  apple-ios-tests:
+    name: iOS UI tests (${{ matrix.part }})
+    runs-on: macos-26
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - part: entry
+            tests: NetworkCoreAppUITests/EntryInvariantTests
+    needs: [changes, ios-xcode-build]
+    if: ${{ needs.changes.outputs.apple == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download the built products
+        uses: actions/download-artifact@v4
+        with:
+          name: apple-products-${{ github.sha }}
+          path: ${{ runner.temp }}
+
+      - name: Unpack the built products
+        shell: bash
+        run: |
+          mkdir -p apps/ios/build/Build
+          tar -C apps/ios/build/Build -xzf "${RUNNER_TEMP}/apple-products.tgz"
+
+      # One part of the iPhone app's UI tests per machine: the entry checks of docs/ui-ux.md (入口不变量: the
+      # connection switch where each mode needs it, exactly once, and a failure on the page the user is on).
+      # Xcode's accessibility audit joins as more parts once its first findings are fixed (docs/ui-ux.md, 第二层).
+      # A failure here fails the build.
+      - name: Run the iOS UI tests
+        shell: bash
+        run: .github/scripts/ios-ui-tests.sh apps/ios/build/Build/Products/Debug-iphonesimulator/NetworkCoreApp.app apps/ios/build/Build/Products "${RUNNER_TEMP}/ios-ui-tests.xcresult" ${{ matrix.tests }}
+
+      - name: Upload the iOS UI test results
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ui-tests-${{ matrix.part }}-${{ github.sha }}
+          path: ${{ runner.temp }}/ios-ui-tests.xcresult
           if-no-files-found: ignore
           retention-days: 3
 
@@ -1432,6 +1534,9 @@ jobs:
       - linux-native
       - swift
       - ios-xcode-build
+      - apple-mac
+      - apple-ios-screenshots
+      - apple-ios-tests
     steps:
       - name: Check required jobs
         shell: bash

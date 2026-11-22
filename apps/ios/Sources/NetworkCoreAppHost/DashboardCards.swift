@@ -177,7 +177,7 @@ private struct Disclosure: View {
     var body: some View {
         Image(systemName: "chevron.right")
             .font(.caption.weight(.semibold))
-            .foregroundStyle(brand.text3)
+            .foregroundStyle(brand.text2)
             .accessibilityHidden(true)
     }
 }
@@ -209,7 +209,7 @@ private struct SpeedTile: View {
             Tile(card: .speed) {
                 Text("最近 60 秒")
                     .font(.caption)
-                    .foregroundStyle(brand.text3)
+                    .foregroundStyle(brand.text2)
                 Disclosure()
             } content: {
                 if tunnel.connection == .connected {
@@ -260,7 +260,7 @@ private struct Sparkline: View {
                         path.addLine(to: CGPoint(x: download[download.count - 1].x, y: size.height))
                         path.closeSubpath()
                     }
-                    .fill(brand.primary.opacity(0.14))
+                    .fill(brand.soft)
                     line(download).stroke(brand.primary, style: StrokeStyle(lineWidth: 2, lineJoin: .round))
                     line(upload).stroke(brand.amberText, style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
                 }
@@ -469,7 +469,7 @@ private struct GroupsTile: View {
 enum LatencyColor {
     static func color(_ milliseconds: UInt32?, _ brand: BrandPalette) -> Color {
         guard let milliseconds else {
-            return brand.text3
+            return brand.text2
         }
         if milliseconds < 120 {
             return brand.primary
@@ -623,7 +623,7 @@ private struct ExitAddressTile: View {
                 }
                 Text("只在你点按时查询，按当前模式和规则发出")
                     .font(.caption2)
-                    .foregroundStyle(brand.text3)
+                    .foregroundStyle(brand.text2)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -666,7 +666,7 @@ private struct EventsTile: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             Text(event.date, format: .dateTime.hour().minute())
                                 .font(.caption.monospacedDigit())
-                                .foregroundStyle(brand.text3)
+                                .foregroundStyle(brand.text2)
                         }
                         .padding(.vertical, 8)
                         .overlay(alignment: .top) {

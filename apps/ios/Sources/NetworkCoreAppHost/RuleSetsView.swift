@@ -108,7 +108,7 @@ struct RuleSetsSection: View {
                         .foregroundStyle(brand.text2)
                 } else if let url = source?.url {
                     Text(verbatim: SubscriptionLink.displayHost(url))
-                        .foregroundStyle(brand.text3)
+                        .foregroundStyle(brand.text2)
                 }
                 if let loaded, loaded.skippedCount > 0 {
                     Text("列表里有 \(loaded.skippedCount) 条规则不支持，已跳过：\(loaded.skippedSummary)")
@@ -152,7 +152,7 @@ struct RuleListView: View {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text("\(item.offset + 1)")
                         .font(.caption.monospacedDigit())
-                        .foregroundStyle(brand.text3)
+                        .foregroundStyle(brand.text2)
                         .frame(minWidth: 28, alignment: .trailing)
                     Text(verbatim: item.element)
                         .font(.footnote.monospaced())
