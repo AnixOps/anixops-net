@@ -376,7 +376,7 @@ struct LocalRulesView: View {
                 Group {
                     if !subscription.enabled {
                         Text("已停用")
-                            .foregroundStyle(brand.text3)
+                            .foregroundStyle(brand.text2)
                     } else if let error = loaded?.lastError {
                         Label("下载失败：\(error)", systemImage: "exclamationmark.triangle")
                             .foregroundStyle(brand.danger)
@@ -385,7 +385,7 @@ struct LocalRulesView: View {
                             .foregroundStyle(brand.text2)
                     } else {
                         Text(verbatim: SubscriptionLink.displayHost(subscription.url))
-                            .foregroundStyle(brand.text3)
+                            .foregroundStyle(brand.text2)
                     }
                 }
                 .font(.caption)

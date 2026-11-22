@@ -894,7 +894,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mac-ui-tests-${{ github.sha }}
-          path: ${{ runner.temp }}/mac-ui-tests.xcresult
+          path: |
+            ${{ runner.temp }}/mac-ui-tests.xcresult
+            ${{ runner.temp }}/mac-ui-tests-attachments
           if-no-files-found: ignore
           retention-days: 3
 

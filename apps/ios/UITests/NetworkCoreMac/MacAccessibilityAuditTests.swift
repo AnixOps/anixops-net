@@ -3,7 +3,12 @@ import XCTest
 /// Xcode's accessibility audit on every page of the Mac app, in both themes and both languages (docs/ui-ux.md,
 /// 自动检查, 第二层): contrast on the real, layered colours, elements a screen reader cannot find or name, hit
 /// regions, and the rest of `XCUIAccessibilityAuditType.all`. Every issue of every page is collected first and the
-/// test fails once with the whole list, so one CI run shows everything to fix. No issue is waived.
+/// test fails once with the whole list, so one CI run shows everything to fix. No issue in the app's own windows is
+/// waived. The Touch Bar a text field puts up (emoji and candidate pickers) belongs to the system, not to the app,
+/// so issues on it are counted and named in the log but do not fail the test.
+///
+/// Every page's window and every element with an issue are attached to the result as pictures
+/// (`<place> #<n>`), which CI exports next to the result bundle, so a finding can be seen, not only read.
 ///
 /// Launches like MacEntryInvariantTests: the debug build with demo data, by path (`TEST_RUNNER_ANIXOPS_APP`).
 final class MacAccessibilityAuditTests: XCTestCase {
@@ -26,7 +31,15 @@ final class MacAccessibilityAuditTests: XCTestCase {
             for (mode, page) in Self.pages {
                 let app = try launch(mode: mode, page: page, appearance: appearance, language: language)
                 let place = "\(mode) \(page) \(appearance) \(language)"
-                issues += try AuditIssue.audit(app, on: place)
+                let window = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+                window.name = place
+                window.lifetime = .keepAlways
+                add(window)
+                let found = try AuditIssue.audit(app, on: place, numberedFrom: issues.count + 1)
+                issues += found.issues
+                for attachment in found.pictures {
+                    add(attachment)
+                }
                 app.terminate()
             }
         }
@@ -58,28 +71,77 @@ enum AuditIssue {
     /// own limit ("Audit failed to complete in time", code -56), which happens on a busy CI machine; that is not a
     /// finding about the page, so the audit runs again, up to three times in all. Any other error, and a third
     /// time-out, fails the test.
-    static func audit(_ app: XCUIApplication, on place: String) throws -> [String] {
+    static func audit(_ app: XCUIApplication, on place: String, numberedFrom first: Int) throws
+        -> (issues: [String], pictures: [XCTAttachment]) {
         var attempt = 1
         while true {
-            var found: [String] = []
+            var found: [XCUIAccessibilityAuditIssue] = []
             do {
                 try app.performAccessibilityAudit(for: .all) { issue in
-                    found.append(describe(issue, on: place))
+                    found.append(issue)
                     return true
                 }
-                return found
             } catch let error as NSError where error.domain == "com.apple.xcode.xctest.accessibilityAudit" && error.code == -56 && attempt < 3 {
                 attempt += 1
+                continue
             }
+            let system = touchBarElements(of: app)
+            let window = app.windows.firstMatch.frame
+            var issues: [String] = []
+            var pictures: [XCTAttachment] = []
+            for issue in found {
+                if let element = issue.element, system.contains(key(of: element)) {
+                    print("[\(place)] system Touch Bar, not the app: \(describe(issue, on: place, number: nil))")
+                    continue
+                }
+                let number = first + issues.count
+                issues.append(describe(issue, on: place, number: number))
+                if let element = issue.element, element.exists, window.contains(element.frame), !element.frame.isEmpty {
+                    let picture = XCTAttachment(screenshot: element.screenshot())
+                    picture.name = "\(place) #\(number)"
+                    picture.lifetime = .keepAlways
+                    pictures.append(picture)
+                }
+            }
+            return (issues, pictures)
         }
     }
 
-    static func describe(_ issue: XCUIAccessibilityAuditIssue, on place: String) -> String {
+    /// The elements of the system Touch Bar, by type, label and frame (XCUIElement has no identity to compare).
+    private static func touchBarElements(of app: XCUIApplication) -> Set<String> {
+        var keys = Set<String>()
+        for bar in app.touchBars.allElementsBoundByIndex {
+            keys.insert(key(of: bar))
+            for element in bar.descendants(matching: .any).allElementsBoundByIndex {
+                keys.insert(key(of: element))
+            }
+        }
+        return keys
+    }
+
+    private static func key(of element: XCUIElement) -> String {
+        "\(element.elementType.rawValue)|\(element.identifier)|\(element.label)|\(element.frame)"
+    }
+
+    /// The issue, its element and where it is: the frame in screen points and, for an element without a label, the
+    /// first texts inside it, so a group or a cell can be found in the code.
+    static func describe(_ issue: XCUIAccessibilityAuditIssue, on place: String, number: Int?) -> String {
         let element = issue.element.map { element in
             let label = element.label.isEmpty ? "" : " \"\(element.label.prefix(40))\""
             let identifier = element.identifier.isEmpty ? "" : " #\(element.identifier)"
-            return "\(element.elementType)\(identifier)\(label)"
+            let frame = element.frame
+            let at = " @\(Int(frame.minX)),\(Int(frame.minY)) \(Int(frame.width))x\(Int(frame.height))"
+            var inside = ""
+            if element.label.isEmpty {
+                let query = element.descendants(matching: .staticText)
+                let texts = (0..<min(query.count, 3)).map { String(query.element(boundBy: $0).label.prefix(24)) }
+                if !texts.isEmpty {
+                    inside = " containing \(texts)"
+                }
+            }
+            return "\(element.elementType)\(identifier)\(label)\(at)\(inside)"
         } ?? "(no element)"
-        return "[\(place)] \(issue.compactDescription): \(element) — \(issue.detailedDescription)"
+        let tag = number.map { "#\($0) " } ?? ""
+        return "\(tag)[\(place)] \(issue.compactDescription): \(element) — \(issue.detailedDescription)"
     }
 }

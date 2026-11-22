@@ -32,8 +32,17 @@ pkill -x "AnixOps Net" || true
 
 # The test target has no target application (apps/ios/project.yml): the tests launch the app built for this
 # commit by its path. xcodebuild hands TEST_RUNNER_-prefixed variables to the test process without the prefix.
+status=0
 TEST_RUNNER_ANIXOPS_TERMS="${terms}" TEST_RUNNER_ANIXOPS_APP="${app}" xcodebuild test-without-building \
     -xctestrun "${xctestrun}" \
     -destination 'platform=macOS' \
     -resultBundlePath "${result}" \
-    ${only[@]+"${only[@]}"}
+    ${only[@]+"${only[@]}"} || status=$?
+
+# The audit attaches a picture of every page and of every element it reports (MacAccessibilityAuditTests); they
+# are exported as plain files with a manifest.json naming each one, next to the result bundle, for the upload.
+if [ -d "${result}" ]; then
+    xcrun xcresulttool export attachments --path "${result}" --output-path "${result%.xcresult}-attachments" \
+        || echo "::warning::could not export the test attachments"
+fi
+exit "${status}"

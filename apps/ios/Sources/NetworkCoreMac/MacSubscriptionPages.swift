@@ -152,7 +152,7 @@ struct MacProxiesPage: View {
                     if tunnel.library?.routesByRules == true {
                         Text("正在按订阅规则分流，节点由策略组决定；可以在“规则”页切换策略组或关闭规则。其他订阅组会作为“订阅·名称”策略组出现在规则的选择组里。")
                     }
-                    Text("延迟为经该节点请求 http://www.gstatic.com/generate_204 的 HTTP 真连接时间，5 秒无响应显示超时。连接中切换节点会自动重连。")
+                    Text("延迟为经该节点请求 `http://www.gstatic.com/generate_204` 的 HTTP 真连接时间，5 秒无响应显示超时。连接中切换节点会自动重连。")
                 }
                 .font(.caption)
                 .foregroundStyle(brand.text2)
@@ -665,7 +665,7 @@ private struct MacNodeRow: View {
         case .none:
             Text(verbatim: "—")
                 .font(.callout)
-                .foregroundStyle(brand.text3)
+                .foregroundStyle(brand.text2)
                 .accessibilityLabel("未测试")
         case .measuring:
             ProgressView()
@@ -692,7 +692,7 @@ private struct MacNodeRow: View {
         case .unsupported:
             Text("不支持")
                 .font(.callout)
-                .foregroundStyle(brand.text3)
+                .foregroundStyle(brand.text2)
         }
     }
 }

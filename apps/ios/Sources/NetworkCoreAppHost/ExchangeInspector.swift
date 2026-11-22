@@ -751,7 +751,7 @@ private struct JsonTree: View {
                 if let open = row.open {
                     Image(systemName: open ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(brand.text3)
+                        .foregroundStyle(brand.text2)
                 } else {
                     Color.clear
                 }
@@ -762,12 +762,12 @@ private struct JsonTree: View {
                     .fontWeight(.medium)
                     .foregroundStyle(brand.text)
                 Text(verbatim: ":")
-                    .foregroundStyle(brand.text3)
+                    .foregroundStyle(brand.text2)
             } else if let index = row.index {
                 Text(verbatim: "\(index)")
-                    .foregroundStyle(brand.text3)
+                    .foregroundStyle(brand.text2)
                 Text(verbatim: ":")
-                    .foregroundStyle(brand.text3)
+                    .foregroundStyle(brand.text2)
             }
             value(row.node)
             Spacer(minLength: 0)
@@ -804,10 +804,10 @@ private struct JsonTree: View {
         switch node {
         case let .object(members):
             Text(verbatim: "{\(members.count)}")
-                .foregroundStyle(brand.text3)
+                .foregroundStyle(brand.text2)
         case let .array(items):
             Text(verbatim: "[\(items.count)]")
-                .foregroundStyle(brand.text3)
+                .foregroundStyle(brand.text2)
         case .string:
             // One line of a tree is no place for a 60 KiB string; copying gives all of it.
             Text(verbatim: String((JsonDocument.scalarText(node) ?? "").prefix(400)))

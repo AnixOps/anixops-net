@@ -70,7 +70,9 @@ struct BrandPalette: Sendable {
     let onPrimary: Color
     let text: Color
     let text2: Color
-    /// Non-essential text only (placeholders, timestamps), at 14 pt and up.
+    /// Not for text that carries information: light mode's label-3 is under 4.5:1, which Xcode's accessibility
+    /// audit rejects for any text. It draws status dots, rules and the text of disabled rows; timestamps, sizes and
+    /// hints use `text2`.
     let text3: Color
     /// Connected and healthy.
     let success: Color

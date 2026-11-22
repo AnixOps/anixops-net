@@ -160,7 +160,7 @@ struct ImportView: View {
                         if text.isEmpty {
                             Text("节点链接 · 订阅内容 · WireGuard 配置")
                                 .font(.footnote.monospaced())
-                                .foregroundStyle(brand.text3)
+                                .foregroundStyle(brand.text2)
                                 .padding(.horizontal, 13)
                                 .padding(.vertical, 16)
                                 .accessibilityHidden(true)

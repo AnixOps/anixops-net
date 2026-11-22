@@ -32,7 +32,7 @@ struct TrafficCard: View {
                         Spacer(minLength: 0)
                         Image(systemName: "chevron.right")
                             .font(.footnote.weight(.semibold))
-                            .foregroundStyle(brand.text3)
+                            .foregroundStyle(brand.text2)
                     }
                     if let traffic {
                         Text("本次已用 ↑\(TrafficFormat.bytes(traffic.uploadTotal)) ↓\(TrafficFormat.bytes(traffic.downloadTotal)) · \(traffic.active) 个连接")
@@ -468,7 +468,7 @@ private struct ConnectionRow: View {
                 }
                 Text(connection.rule)
                     .font(.caption2)
-                    .foregroundStyle(brand.text3)
+                    .foregroundStyle(brand.text2)
                     .lineLimit(1)
             }
             Spacer(minLength: 4)
@@ -478,7 +478,7 @@ private struct ConnectionRow: View {
                     .foregroundStyle(brand.text)
                 Text(Self.duration(connection.duration()))
                     .font(.caption2.monospacedDigit())
-                    .foregroundStyle(brand.text3)
+                    .foregroundStyle(brand.text2)
             }
         }
         .padding(.vertical, 8)

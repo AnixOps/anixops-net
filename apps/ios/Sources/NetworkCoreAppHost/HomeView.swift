@@ -426,7 +426,7 @@ private struct NoticeCard: View {
                     Button(action: dismiss) {
                         Image(systemName: "xmark")
                             .font(.footnote.weight(.semibold))
-                            .foregroundStyle(brand.text3)
+                            .foregroundStyle(brand.text2)
                             .frame(width: 28, height: 28)
                             // A 44 pt target without moving the icon.
                             .padding(8)

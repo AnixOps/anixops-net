@@ -65,7 +65,7 @@ struct RuleTextEditorView: View {
                     .foregroundStyle(brand.text2)
                 Text("一行一条，写法同 Surge / Loon：类型,值,策略[,no-resolve]。策略写 DIRECT、REJECT，其他名字都当作代理。以 # 开头的整条规则表示停用，其余注释保存时不保留。连接中保存会直接在隧道里换上新规则，已有连接不断开；新增规则列表 URL 时会重新连接。")
                     .font(.caption)
-                    .foregroundStyle(brand.text3)
+                    .foregroundStyle(brand.text2)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -87,7 +87,7 @@ struct RuleTextEditorView: View {
                                 Spacer(minLength: 0)
                                 Image(systemName: "arrow.turn.down.right")
                                     .font(.caption)
-                                    .foregroundStyle(brand.text3)
+                                    .foregroundStyle(brand.text2)
                             }
                             .contentShape(Rectangle())
                         }
@@ -159,7 +159,7 @@ struct RuleTextColors {
         value = brand.text
         policy = brand.amberText
         option = brand.text2
-        comment = brand.text3
+        comment = brand.text2
         error = brand.danger
     }
 

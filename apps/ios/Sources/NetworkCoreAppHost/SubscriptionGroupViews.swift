@@ -76,7 +76,7 @@ struct NodeLatencyText: View {
         case .unsupported:
             Text("不支持")
                 .font(.footnote)
-                .foregroundStyle(brand.text3)
+                .foregroundStyle(brand.text2)
         }
     }
 }
@@ -102,7 +102,7 @@ struct SubscriptionGroupSummary: View {
                 Spacer(minLength: 0)
                 if group.isUpdatable {
                     Text(UpdateInterval.label(group.updateIntervalHours))
-                        .foregroundStyle(brand.text3)
+                        .foregroundStyle(brand.text2)
                 }
             }
             .font(.footnote)
