@@ -20,6 +20,17 @@ struct ImportView: View {
     @State private var pickingFile = false
     @State private var scanning = false
 
+    /// CI screenshots open this sheet with `-AnixOpsImport YES` (mac-screenshots.sh). macOS makes the empty editor
+    /// first responder, and its caret fades in and out, so the picture differed from run to run (mac-import-*:
+    /// 26 px). There the editor is left out of focus, as the command palette's search field is.
+    private static var shownForScreenshot: Bool {
+        #if DEBUG && os(macOS)
+        UserDefaults.standard.bool(forKey: "AnixOpsImport")
+        #else
+        false
+        #endif
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -174,6 +185,7 @@ struct ImportView: View {
                             .scrollContentBackground(.hidden)
                             .padding(8)
                             .accessibilityLabel("节点链接或配置")
+                            .disabled(Self.shownForScreenshot)
                     }
                     .frame(height: 140)
                     .background(brand.surface, in: RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous))
