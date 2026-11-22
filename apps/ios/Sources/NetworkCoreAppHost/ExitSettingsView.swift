@@ -38,6 +38,7 @@ struct ExitSettingsView: View {
         .inlineNavigationTitle()
         .sheet(isPresented: $importing) {
             ImportView(tunnel: tunnel)
+                .brandSheet()
                 .environment(\.brand, brand)
                 .tint(brand.primary)
         }

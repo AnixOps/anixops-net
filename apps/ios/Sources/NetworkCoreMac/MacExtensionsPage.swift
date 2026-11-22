@@ -37,6 +37,7 @@ struct MacExtensionsPage: View {
                 plugins.refreshTrust()
                 return refused
             }
+            .brandSheet()
         }
         .task {
             certificate.load()
