@@ -23,7 +23,7 @@ android {
         // Android takes this as an upgrade. Raise it with each release: release.yml refuses a tag whose versionCode
         // is not above the previous release's, and Google Play refuses a code it has already seen (3001 went to
         // internal testing on 2026-11-16).
-        versionCode = 3005
+        versionCode = 3006
         // release.yml passes the tag without its "v" (-Panixops.versionName=0.3.0-beta.7); local and CI builds
         // show the plain version.
         versionName = findProperty("anixops.versionName") as String? ?: "0.3.0"
