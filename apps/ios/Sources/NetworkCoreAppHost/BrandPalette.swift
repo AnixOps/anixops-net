@@ -87,6 +87,8 @@ struct BrandPalette: Sendable {
     let chart2: Color
     let chart3: Color
     let chart4: Color
+    /// Shadow colour for raised surfaces (design token shadow-color).
+    let shadow: Color
     /// The connect hero's slate backdrop (a brand moment).
     let heroStart: Color
     let heroEnd: Color
