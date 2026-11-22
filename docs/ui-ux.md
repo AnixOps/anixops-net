@@ -180,11 +180,11 @@ AnixOps Design 里也没有，就先在 anixops-design 提 PR。`ui_lint.py --se
 macOS / iOS 用 XCUITest 的 `performAccessibilityAudit`（对比度、文字被截断、动态字体），Android、Windows、Linux 原生端接各自的无障碍检查。
 每一页浅色、深色都查。（逐个平台接入中，接入后在这里列出入口。）
 
-### 第三层：每日审查
+### 第三层：每日评审
 
-每天定时由 Claude 读 main 上最新的截图矩阵，按 anixops-design 的规范和本页自查清单逐页审查机器查不出的问题
+每天定时由 Claude 读 main 上最新的截图矩阵，按 anixops-design 的规范和本页自查清单逐页评审机器查不出的问题
 （文案和功能是否相符、信息层级、按钮层级、空状态），能确定的直接开分支修、开 PR，CI 全绿后合并；需要产品判断的汇总给维护者。
-审查发现的同类问题如果能写成规则，就补进第一层或第二层，让它以后在 PR 上就被拦住。
+评审发现的同类问题如果能写成规则，就补进第一层或第二层，让它以后在 PR 上就被拦住。
 
 ## 截图对比
 
