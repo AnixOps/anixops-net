@@ -26,10 +26,7 @@ final class AccessibilityAuditTests: XCTestCase {
             for (mode, page) in Self.pages {
                 let app = try launch(mode: mode, page: page, appearance: appearance, language: language)
                 let place = "\(mode) \(page) \(appearance) \(language)"
-                try app.performAccessibilityAudit(for: .all) { issue in
-                    issues.append(AuditIssue.describe(issue, on: place))
-                    return true
-                }
+                issues += try AuditIssue.audit(app, on: place)
                 app.terminate()
             }
         }
@@ -57,6 +54,26 @@ final class AccessibilityAuditTests: XCTestCase {
 }
 
 enum AuditIssue {
+    /// Runs the audit and returns every issue it found. XCTest gives up on an audit that takes longer than its
+    /// own limit ("Audit failed to complete in time", code -56), which happens on a CI simulator that is still busy;
+    /// that is not a finding about the page, so the audit runs again, up to three times in all. Any other error,
+    /// and a third time-out, fails the test.
+    static func audit(_ app: XCUIApplication, on place: String) throws -> [String] {
+        var attempt = 1
+        while true {
+            var found: [String] = []
+            do {
+                try app.performAccessibilityAudit(for: .all) { issue in
+                    found.append(describe(issue, on: place))
+                    return true
+                }
+                return found
+            } catch let error as NSError where error.domain == "com.apple.xcode.xctest.accessibilityAudit" && error.code == -56 && attempt < 3 {
+                attempt += 1
+            }
+        }
+    }
+
     static func describe(_ issue: XCUIAccessibilityAuditIssue, on place: String) -> String {
         let element = issue.element.map { element in
             let label = element.label.isEmpty ? "" : " \"\(element.label.prefix(40))\""

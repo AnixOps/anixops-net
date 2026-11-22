@@ -51,6 +51,12 @@ xcrun simctl bootstatus "${device}" -b
 # here and the tests launch it by bundle identifier.
 xcrun simctl install "${device}" "${app}"
 bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${app}/Info.plist")"
+# A fresh simulator finishes its own first-boot work (data migration, the accessibility services) for a while
+# after bootstatus returns, and the first launch of an app pays for its install: launch the app once and let it
+# settle, so the first test does not run into XCTest's launch or audit time limit.
+xcrun simctl launch "${device}" "${bundle}" -AnixOpsDemo YES > /dev/null
+sleep 20
+xcrun simctl terminate "${device}" "${bundle}" || true
 
 # xcodebuild hands TEST_RUNNER_-prefixed variables to the test process without the prefix.
 TEST_RUNNER_ANIXOPS_TERMS="${terms}" TEST_RUNNER_ANIXOPS_BUNDLE="${bundle}" xcodebuild test-without-building \
