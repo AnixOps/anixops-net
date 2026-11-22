@@ -76,6 +76,16 @@
 8. 新加的操作是否能只用键盘完成，并且出现在菜单或命令面板里？（K1、K10）
 9. 有没有给实时数据（新行、变化的数字）加动画？（M8）
 
+## 深色模式的层级（Apple 端）
+
+anixops-design 的颜色规则 6 和 layout.md「Elevation」：深色页面是纯黑 `#000`，弹层（sheet、对话框）落在 `bg-elevated` `#1C1C1E` 上，层与层靠亮度区分，不靠更重的阴影。
+
+- 每个 `.sheet` 的内容都要加 `.brandSheet()`（`BrandPalette.swift`）：深色下把 `brand.bg` 换成 `#1C1C1E`、`brand.surface`（卡片、输入框）抬到 `#2C2C2E`；浅色不变。不加的话弹层和纯黑窗口融成一片。系统自己的弹层（分享面板）和全屏覆盖（首次启动、扫码）不加。
+- `.brandSheet()` 要写在 `.environment(\.brand, brand)` 之前（离视图更近），否则会被外层的页面配色盖回去。
+- 禁用的品牌按钮变成中性：`brand.raised` 底、`brand.text3` 字（label-3 用于禁用文字），不是把强调色调淡。
+- macOS 的表单 sheet 高度跟内容走，不要写死高度留下空白。
+- 新的弹层在 `mac-screenshots.sh` 里加浅色、深色各一张截图（例如 `import-light`、`import-dark`）。
+
 ## 动效、键盘、信息密度
 
 三份规范同样只在 anixops-design 修改，条文带编号：

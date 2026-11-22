@@ -48,6 +48,7 @@ struct TakeoverSection: View {
                     await tunnel.setProxyExceptions(exceptions)
                 }
             }
+            .brandSheet()
         }
     }
 

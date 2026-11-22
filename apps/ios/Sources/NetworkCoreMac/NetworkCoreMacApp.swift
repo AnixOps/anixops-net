@@ -134,6 +134,8 @@ final class MacAppState: ObservableObject {
         }
         // … and the command palette over it: `-AnixOpsPalette YES`.
         showsPalette = UserDefaults.standard.bool(forKey: "AnixOpsPalette")
+        // … or the import sheet: `-AnixOpsImport YES`.
+        importing = UserDefaults.standard.bool(forKey: "AnixOpsImport")
         #endif
     }
 }

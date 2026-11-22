@@ -71,6 +71,12 @@ struct ImportView: View {
             }
             #endif
         }
+        #if os(macOS)
+        // A macOS sheet takes the size its content asks for: as tall as the current step, so no empty band is left
+        // under the last button.
+        .frame(width: 480)
+        .fixedSize(horizontal: false, vertical: true)
+        #endif
     }
 
     private var title: String {
@@ -356,6 +362,10 @@ private struct DoneStep: View {
             Button("继续导入", action: again)
         }
         .padding(24)
+        #if os(macOS)
+        // The sheet fits its content on macOS (ImportView), where the spacers alone would collapse.
+        .frame(minHeight: 400)
+        #endif
         .sensoryFeedback(.success, trigger: drawn) { _, new in new == 1 }
         .onAppear {
             if reduceMotion {

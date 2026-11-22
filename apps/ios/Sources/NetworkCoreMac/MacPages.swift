@@ -420,6 +420,7 @@ struct MacActivityPage: View {
         .onAppear(perform: refresh)
         .sheet(isPresented: $showsLog) {
             MacDiagnosticLogSheet(tunnel: tunnel)
+                .brandSheet()
         }
     }
 
