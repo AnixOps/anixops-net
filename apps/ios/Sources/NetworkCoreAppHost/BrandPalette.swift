@@ -108,16 +108,17 @@ struct BrandPalette: Sendable {
 
     /// The palette inside a sheet or dialog. AnixOps Design puts sheets on `bg-elevated` (colour rule 6, layout
     /// "Elevation"): in dark mode the pure-black page background would melt a sheet into the window behind it, so
-    /// the sheet's background becomes the card colour `#1C1C1E` and its cards and fields rise to `#2C2C2E`
-    /// (`fill-1` over `bg-elevated`, the same step Apple's elevated grouped colours take). Light mode already
-    /// separates a sheet from the page; it keeps the page palette.
+    /// the sheet's background becomes the card colour (`bg-elevated`) and its cards and fields are drawn in
+    /// `fill-1` (`raised`), which over `bg-elevated` gives the next step up, as Apple's elevated grouped colours do.
+    /// Both are design tokens; no colour is made up here. Light mode already separates a sheet from the page; it
+    /// keeps the page palette.
     func elevated(in scheme: ColorScheme) -> BrandPalette {
         guard scheme == .dark else {
             return self
         }
         return BrandPalette(
             bg: surface,
-            surface: Color(hex: 0x2C2C2E),
+            surface: raised,
             raised: raised,
             border: border,
             borderStrong: borderStrong,
