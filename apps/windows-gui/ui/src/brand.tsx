@@ -1,6 +1,6 @@
-import markUrl from "./design/anixops/brand/mark.svg";
+import markUrl from "./net-icon.svg";
 
-/** The AnixOps mark (slate tile, gradient orbit A) from AnixOps Design; never redrawn here. */
+/** The AnixOps Net product icon (AnixOps Design brand.md 2.6, brand/assets/products/net/icon.svg); never redrawn here. */
 export function BrandMark({ size = 22 }: { size?: number }) {
   return <img src={markUrl} width={size} height={size} alt="" aria-hidden="true" />;
 }
