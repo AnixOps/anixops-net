@@ -877,10 +877,14 @@ jobs:
               exit 1
             fi
           done
-          nm "${appex}/Contents/MacOS/NetworkCoreMacAppStoreTunnel" 2>/dev/null | grep -q '_networkcore_ios_runtime_init$'
-          nm "${app}/Contents/MacOS/AnixOps Net" 2>/dev/null | grep -q '_networkcore_import_nodes$'
+          # Into files first: `grep -q` closing the pipe early would fail the step under pipefail.
+          nm "${appex}/Contents/MacOS/NetworkCoreMacAppStoreTunnel" > "${RUNNER_TEMP}/mas-appex-symbols.txt" 2>/dev/null || true
+          nm "${app}/Contents/MacOS/AnixOps Net" > "${RUNNER_TEMP}/mas-app-symbols.txt" 2>/dev/null || true
+          grep -q '_networkcore_ios_runtime_init$' "${RUNNER_TEMP}/mas-appex-symbols.txt"
+          grep -q '_networkcore_import_nodes$' "${RUNNER_TEMP}/mas-app-symbols.txt"
           # The in-app updater and the command-line settings are compiled out of this build.
-          if strings -a "${app}/Contents/MacOS/AnixOps Net" | grep -q 'sudo ln -sf'; then
+          strings -a "${app}/Contents/MacOS/AnixOps Net" > "${RUNNER_TEMP}/mas-app-strings.txt"
+          if grep -q 'sudo ln -sf' "${RUNNER_TEMP}/mas-app-strings.txt"; then
             echo "::error::the Mac App Store build still shows the command-line tool settings"
             exit 1
           fi
