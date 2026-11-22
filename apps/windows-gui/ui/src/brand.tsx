@@ -1,6 +1,6 @@
-import markUrl from "./net-icon.svg";
+import markUrl from "./design/anixops/brand/products/net/icon.svg";
 
-/** The AnixOps Net product icon (AnixOps Design brand.md 2.6, brand/assets/products/net/icon.svg); never redrawn here. */
+/** The AnixOps Net product icon (AnixOps Design brand.md 2.6); never redrawn here. */
 export function BrandMark({ size = 22 }: { size?: number }) {
   return <img src={markUrl} width={size} height={size} alt="" aria-hidden="true" />;
 }

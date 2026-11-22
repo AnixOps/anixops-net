@@ -181,7 +181,7 @@ struct RouteLineMark: View {
     }
 }
 
-/// The AnixOps mark (slate tile with the gradient orbit A) from AnixOps Design, shipped as the BrandMark image
+/// The AnixOps Net product icon (AnixOps Design brand.md 2.6), shipped as the BrandMark image
 /// that .github/scripts/sync_design.py copies from the vendored set; never redrawn here. `drawn` (0…1) fades and
 /// scales it in on the import success screen.
 struct BrandMark: View {

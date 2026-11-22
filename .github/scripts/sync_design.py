@@ -49,6 +49,14 @@ FILES = {
     "brand/tauri/icon.png": "brand/assets/tauri/icon.png",
     "brand/tauri/icon.ico": "brand/assets/tauri/icon.ico",
     "brand/tauri/icon.icns": "brand/assets/tauri/icon.icns",
+    # The AnixOps Net product icon (brand.md 2.6): the app icon on every platform.
+    "brand/products/net/icon.svg": "brand/assets/products/net/icon.svg",
+    "brand/products/net/icon-256.png": "brand/assets/products/net/icon-256.png",
+    "brand/products/net/icon-512.png": "brand/assets/products/net/icon-512.png",
+    "brand/products/net/icon.ico": "brand/assets/products/net/icon.ico",
+    "brand/products/net/icon.icns": "brand/assets/products/net/icon.icns",
+    "brand/products/net/app-icon.svg": "brand/assets/products/net/app-icon.svg",
+    "brand/products/net/app-icon-1024.png": "brand/assets/products/net/app-icon-1024.png",
 }
 GENERATED = ("VERSION", "NOTICE.md", "manifest.json")
 
@@ -56,14 +64,15 @@ GENERATED = ("VERSION", "NOTICE.md", "manifest.json")
 # windows and the Linux hicolor/256x256 icon). The macOS AppIcon set is resized from the vendored icon.icns by
 # `--icons` and is not byte-checked.
 ICONS = {
-    "apps/ios/Sources/NetworkCoreApp/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png": "brand/app-icon-1024.png",
-    "apps/ios/Design/AppIcon.svg": "brand/app-icon.svg",
-    "apps/windows-gui/icons/networkcore.png": "brand/tauri/128x128@2x.png",
-    "apps/windows-gui/icons/icon.ico": "brand/tauri/icon.ico",
-    "apps/linux-gui/icons/networkcore.png": "brand/tauri/128x128@2x.png",
-    # The in-app mark (BrandMark in SwiftUI): the rounded slate tile with the gradient orbit A.
-    "apps/ios/Sources/NetworkCoreApp/Resources/Assets.xcassets/BrandMark.imageset/BrandMark.png": "brand/tauri/icon.png",
-    "apps/ios/Sources/NetworkCoreMac/Resources/Assets.xcassets/BrandMark.imageset/BrandMark.png": "brand/tauri/icon.png",
+    "apps/ios/Sources/NetworkCoreApp/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png": "brand/products/net/app-icon-1024.png",
+    "apps/ios/Design/AppIcon.svg": "brand/products/net/app-icon.svg",
+    "apps/windows-gui/icons/networkcore.png": "brand/products/net/icon-256.png",
+    "apps/windows-gui/icons/icon.ico": "brand/products/net/icon.ico",
+    "apps/linux-gui/icons/networkcore.png": "brand/products/net/icon-256.png",
+    "apps/android-native/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png": "brand/products/net/icon-256.png",
+    # The in-app mark (BrandMark in SwiftUI): the AnixOps Net product icon.
+    "apps/ios/Sources/NetworkCoreApp/Resources/Assets.xcassets/BrandMark.imageset/BrandMark.png": "brand/products/net/icon-512.png",
+    "apps/ios/Sources/NetworkCoreMac/Resources/Assets.xcassets/BrandMark.imageset/BrandMark.png": "brand/products/net/icon-512.png",
 }
 
 
@@ -151,7 +160,7 @@ def copy_icons() -> None:
         from PIL import Image  # only needed for the macOS set; CI's --check does not import it
     except ImportError:
         fail("Pillow is needed to resize the macOS AppIcon set")
-    source = Image.open(DESIGN_DIR / "brand/tauri/icon.icns")
+    source = Image.open(DESIGN_DIR / "brand/products/net/icon.icns")
     width, _, scale = max(source.info["sizes"], key=lambda entry: entry[0] * entry[2])
     source.size = (width, width)
     source.load(scale=scale)
