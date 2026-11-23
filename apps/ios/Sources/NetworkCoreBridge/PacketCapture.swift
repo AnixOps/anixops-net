@@ -62,7 +62,7 @@ public enum PacketCapture {
     }
 
     /// The first bytes of a body and how long it was.
-    public struct Body: Decodable, Equatable {
+    public struct Body: Decodable, Equatable, Sendable {
         public let size: UInt64
         public let truncated: Bool
         public let data: Data

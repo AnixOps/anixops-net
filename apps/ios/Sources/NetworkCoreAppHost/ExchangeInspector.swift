@@ -458,8 +458,12 @@ private struct BodyPane: View {
     let fileName: String
     @Environment(\.brand) private var brand
     @AppStorage("capture.inspector.body") private var modeName = ""
-    /// The body decompressed and classified; worked out once per body, away from the main thread.
+    /// The body decompressed, classified and cut into what the views show; worked out once per body, away from the
+    /// main thread. Nil while that runs.
     @State private var loaded: Loaded?
+    /// The formatted JSON of the body `loaded.id` names; worked out away from the main thread the first time the
+    /// formatted view or the copy button needs it.
+    @State private var pretty: (id: UUID, text: String, chunks: CodeTextChunks)?
     @State private var collapsed: Set<String> = []
     @State private var selected: String?
     /// JSONPath of the selected tree row, shown under the tree.
@@ -467,6 +471,8 @@ private struct BodyPane: View {
     @State private var copied = false
 
     struct Loaded: @unchecked Sendable {
+        /// Tells one load from the next, so work finished for an earlier body is not shown with this one.
+        let id = UUID()
         let data: Data
         let text: String?
         let kind: CaptureBody.Kind
@@ -478,6 +484,13 @@ private struct BodyPane: View {
         let picture: Picture?
         /// The type the exported file is named for: Content-Type, or the picture's type found from its bytes.
         let fileType: String?
+        /// The JSON containers folded when the tree opens.
+        let collapsed: Set<String>
+        /// `text`, `proto` and the hex dump, cut into pieces for the code views.
+        let textChunks: CodeTextChunks?
+        let protoChunks: CodeTextChunks?
+        let hex: String
+        let hexChunks: CodeTextChunks
     }
 
     enum Picture {
@@ -499,31 +512,52 @@ private struct BodyPane: View {
                 Divider()
                 statusLine(loaded, mode)
             } else {
-                Color.clear
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .task(id: message.body.data) {
-            let encoding = message.header("Content-Encoding")
-            // The kernel undoes gzip, deflate, br and zstd; what it cannot is handed to the system frameworks.
-            let decoded = CaptureBodyDecoder.decode(message.body, contentEncoding: encoding)
-            let data = decoded?.data ?? PacketCapture.decode(message.body.data, contentEncoding: encoding) ?? message.body.data
-            let text = decoded.map { PacketCapture.text($0.data) } ?? PacketCapture.text(message.body.data, contentEncoding: encoding)
-            let contentType = message.header("Content-Type")
-            let partial = decoded?.truncated == true
-            let cut = partial || message.body.truncated
-            let next = await Task.detached(priority: .userInitiated) {
-                Self.classify(data: data, text: text, contentType: contentType, cut: cut, partial: partial)
-            }.value
-            if case let .json(root) = next.kind {
-                collapsed = JsonDocument.initiallyCollapsed(root)
-            }
+            // The previous body goes at once, so its text is never shown under this message's headers.
+            loaded = nil
+            pretty = nil
             selected = nil
             path = nil
+            let body = message.body
+            let encoding = message.header("Content-Encoding")
+            let contentType = message.header("Content-Type")
+            // Decompressing (up to 16 MiB), decoding text, parsing JSON and cutting the text for display all run
+            // here, off the main thread. The detached task is not cancelled with this one, so a result that arrives
+            // after the view moved on to another body is dropped.
+            let next = await Task.detached(priority: .userInitiated) {
+                Self.load(body, contentEncoding: encoding, contentType: contentType)
+            }.value
+            guard !Task.isCancelled else {
+                return
+            }
+            collapsed = next.collapsed
             loaded = next
         }
     }
 
-    /// What the body is and the costly parts of showing it: the Protobuf text and the picture.
+    /// The body decompressed and classified, with the costly parts of showing it: the Protobuf text, the picture,
+    /// the folded tree and the text cut for the code views.
+    private nonisolated static func load(_ body: PacketCapture.Body, contentEncoding encoding: String?, contentType: String?) -> Loaded {
+        // The kernel undoes gzip, deflate, br and zstd; what it cannot is handed to the system frameworks.
+        let decoded = CaptureBodyDecoder.decode(body, contentEncoding: encoding)
+        let data: Data
+        let text: String?
+        if let decoded {
+            data = decoded.data
+            text = PacketCapture.text(decoded.data)
+        } else {
+            data = PacketCapture.decode(body.data, contentEncoding: encoding) ?? body.data
+            text = PacketCapture.text(data)
+        }
+        let partial = decoded?.truncated == true
+        let cut = partial || body.truncated || UInt64(body.data.count) < body.size
+        return classify(data: data, text: text, contentType: contentType, cut: cut, partial: partial)
+    }
+
     private nonisolated static func classify(data: Data, text: String?, contentType: String?, cut: Bool, partial: Bool) -> Loaded {
         let kind = CaptureBody.kind(contentType: contentType, text: text, data: data, cut: cut)
         var proto: String?
@@ -542,7 +576,42 @@ private struct BodyPane: View {
         default:
             break
         }
-        return Loaded(data: data, text: text, kind: kind, cut: partial, proto: proto, picture: picture, fileType: fileType)
+        var collapsed: Set<String> = []
+        if case let .json(root) = kind {
+            collapsed = JsonDocument.initiallyCollapsed(root)
+        }
+        let hex = PacketCapture.hexDump(data)
+        return Loaded(
+            data: data,
+            text: text,
+            kind: kind,
+            cut: partial,
+            proto: proto,
+            picture: picture,
+            fileType: fileType,
+            collapsed: collapsed,
+            textChunks: text.map { CodeTextChunks($0) },
+            protoChunks: proto.map { CodeTextChunks($0) },
+            hex: hex,
+            hexChunks: CodeTextChunks(hex)
+        )
+    }
+
+    /// The formatted JSON of `loaded`, worked out away from the main thread once and kept while the body is shown.
+    @MainActor
+    private func formatted(_ loaded: Loaded, _ root: JsonNode) async -> String? {
+        if let pretty, pretty.id == loaded.id {
+            return pretty.text
+        }
+        let made = await Task.detached(priority: .userInitiated) {
+            let text = JsonDocument.pretty(root)
+            return (text, CodeTextChunks(text))
+        }.value
+        guard !Task.isCancelled, self.loaded?.id == loaded.id else {
+            return nil
+        }
+        pretty = (id: loaded.id, text: made.0, chunks: made.1)
+        return made.0
     }
 
     private nonisolated static var labels: CaptureBinary.Labels {
@@ -592,9 +661,12 @@ private struct BodyPane: View {
             }
             Spacer(minLength: 0)
             Button {
-                Pasteboard.copy(copyText(loaded, mode))
-                copied = true
-                Task {
+                Task { @MainActor in
+                    guard let text = await copyText(loaded, mode) else {
+                        return
+                    }
+                    Pasteboard.copy(text)
+                    copied = true
                     try? await Task.sleep(for: .seconds(1.2))
                     copied = false
                 }
@@ -640,12 +712,13 @@ private struct BodyPane: View {
         .padding(.vertical, 8)
     }
 
-    /// What the copy button copies: the body as the open view shows it.
-    private func copyText(_ loaded: Loaded, _ mode: CaptureBody.Mode) -> String {
+    /// What the copy button copies: the body as the open view shows it. Nil when the body changed meanwhile.
+    @MainActor
+    private func copyText(_ loaded: Loaded, _ mode: CaptureBody.Mode) async -> String? {
         switch mode {
         case .tree, .pretty:
             if case let .json(root) = loaded.kind {
-                return JsonDocument.pretty(root)
+                return await formatted(loaded, root)
             }
             return loaded.text ?? ""
         case .raw, .table:
@@ -653,7 +726,7 @@ private struct BodyPane: View {
         case .protobuf:
             return loaded.proto ?? ""
         case .preview, .hex:
-            return PacketCapture.hexDump(loaded.data)
+            return loaded.hex
         }
     }
 
@@ -662,13 +735,21 @@ private struct BodyPane: View {
         switch mode {
         case .tree:
             if case let .json(root) = loaded.kind {
-                JsonTree(root: root, collapsed: $collapsed, selected: $selected) { row in
+                JsonTree(root: root, rootID: loaded.id, collapsed: $collapsed, selected: $selected) { row in
                     path = row.path
                 }
             }
         case .pretty:
             if case let .json(root) = loaded.kind {
-                CodeText(text: JsonDocument.pretty(root))
+                if let pretty, pretty.id == loaded.id {
+                    CodeText(chunks: pretty.chunks)
+                } else {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .task(id: loaded.id) {
+                            _ = await formatted(loaded, root)
+                        }
+                }
             }
         case .preview:
             switch loaded.picture {
@@ -682,21 +763,21 @@ private struct BodyPane: View {
                         .frame(maxWidth: .infinity)
                 }
             case let .tooLarge(width, height):
-                CodeText(text: PacketCapture.hexDump(loaded.data), note: "图片太大（\(width) × \(height)），不在这里画出；可以导出后用其他应用查看。")
+                CodeText(chunks: loaded.hexChunks, note: "图片太大（\(width) × \(height)），不在这里画出；可以导出后用其他应用查看。")
             case .unreadable, nil:
                 // A picture cut at 64 KiB, or a format the system does not draw.
-                CodeText(text: PacketCapture.hexDump(loaded.data), note: "这张图片画不出来，下面是它的十六进制。")
+                CodeText(chunks: loaded.hexChunks, note: "这张图片画不出来，下面是它的十六进制。")
             }
         case .table:
             if case let .form(pairs) = loaded.kind {
                 PairList(pairs: pairs)
             }
         case .protobuf:
-            CodeText(text: loaded.proto ?? "")
+            CodeText(chunks: loaded.protoChunks ?? CodeTextChunks(""))
         case .raw:
-            CodeText(text: loaded.text ?? "")
+            CodeText(chunks: loaded.textChunks ?? CodeTextChunks(""))
         case .hex:
-            CodeText(text: PacketCapture.hexDump(loaded.data))
+            CodeText(chunks: loaded.hexChunks)
         }
     }
 
@@ -757,26 +838,34 @@ private struct BodyPane: View {
     }
 }
 
-/// Monospaced, selectable text that scrolls. Very long text is cut so the view stays responsive.
+/// Monospaced, selectable text that scrolls. The text comes cut into pieces (`CodeTextChunks`, made off the main
+/// thread) that a lazy stack lays out as they scroll into view; very long text is cut so the view stays responsive.
 private struct CodeText: View {
-    let text: String
+    let chunks: CodeTextChunks
     var note: LocalizedStringKey?
     @Environment(\.brand) private var brand
 
     var body: some View {
-        let shown = text.count > 200_000 ? String(text.prefix(200_000)) + "\n…" : text
         ScrollView {
-            VStack(alignment: .leading, spacing: 8) {
+            LazyVStack(alignment: .leading, spacing: 0) {
                 if let note {
                     Text(note)
                         .font(.footnote)
                         .foregroundStyle(brand.text2)
+                        .padding(.bottom, 8)
                 }
-                Text(shown)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(brand.text)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                ForEach(chunks.chunks.indices, id: \.self) { index in
+                    Text(verbatim: chunks.chunks[index])
+                        .font(.caption.monospaced())
+                        .foregroundStyle(brand.text)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if chunks.cut {
+                    Text(verbatim: "…")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(brand.text2)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -788,14 +877,24 @@ private struct CodeText: View {
 /// folds or goes to the parent, right unfolds, Return or Space toggles, and Command-C copies the selected value.
 private struct JsonTree: View {
     let root: JsonNode
+    /// Names the body `root` came from; the visible lines are worked out again when it or `collapsed` changes.
+    let rootID: UUID
     @Binding var collapsed: Set<String>
     @Binding var selected: String?
     let onSelect: (JsonRow) -> Void
     @Environment(\.brand) private var brand
     @FocusState private var focused: Bool
+    /// The visible lines, kept between redraws: selecting a line redraws the tree but folds nothing, so walking the
+    /// whole document again for each arrow key is not needed.
+    @State private var rows: [JsonRow] = []
+    @State private var rowsKey: RowsKey?
+
+    private struct RowsKey: Equatable {
+        let rootID: UUID
+        let collapsed: Set<String>
+    }
 
     var body: some View {
-        let rows = JsonDocument.rows(root, collapsed: collapsed)
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
@@ -837,6 +936,19 @@ private struct JsonTree: View {
             #endif
         }
         .accessibilityLabel("JSON 树")
+        .onAppear(perform: refreshRows)
+        .onChange(of: RowsKey(rootID: rootID, collapsed: collapsed)) {
+            refreshRows()
+        }
+    }
+
+    private func refreshRows() {
+        let key = RowsKey(rootID: rootID, collapsed: collapsed)
+        guard key != rowsKey else {
+            return
+        }
+        rowsKey = key
+        rows = JsonDocument.rows(root, collapsed: collapsed)
     }
 
     private func line(_ row: JsonRow) -> some View {
