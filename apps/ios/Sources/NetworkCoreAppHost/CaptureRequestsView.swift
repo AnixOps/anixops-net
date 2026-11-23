@@ -308,9 +308,11 @@ struct CaptureRequestsView: View {
             notice = (error as? DebugMappingsError)?.message ?? String(localized: "无法保存映射")
             return
         }
-        notice = String(localized: "已把 \(host) 加入解密列表，隧道正在重新连接；之后的新连接会列出请求。")
+        // Said once it is saved: the HTTPS decryption confirmation comes first, and cancelling it saves nothing.
         Task {
-            await tunnel.applyDebugMappings(next)
+            if await tunnel.applyDebugMappings(next) {
+                notice = String(localized: "已把 \(host) 加入解密列表，隧道正在重新连接；之后的新连接会列出请求。")
+            }
         }
     }
 

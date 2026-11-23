@@ -195,6 +195,8 @@ struct RootView: View {
         }
         .tint(brand.primary)
         .environment(\.brand, brand)
+        // Every way of starting HTTPS decryption asks here first (`TunnelController.requireDecryptionConsent()`).
+        .decryptionConsentAlert(tunnel)
         .sheet(isPresented: $importing) {
             ImportView(tunnel: tunnel)
                 .brandSheet()

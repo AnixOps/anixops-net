@@ -62,6 +62,8 @@ struct MacRootView: View {
         }
         .tint(brand.primary)
         .environment(\.brand, brand)
+        // Every way of starting HTTPS decryption asks here first (`TunnelController.requireDecryptionConsent()`).
+        .decryptionConsentAlert(tunnel)
         .onChange(of: tunnel.appMode, initial: true) { _, mode in
             // Each mode opens on its first section: the overview, or the requests in debug mode. Before the mode
             // has been read there is nothing to check against: resetting then would drop a section that only
