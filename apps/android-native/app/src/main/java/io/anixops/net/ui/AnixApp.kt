@@ -254,6 +254,9 @@ fun AnixApp(
     }
     // Asked once, after the first connect the user made: the notifications are about the connection.
     LaunchedEffect(connected) {
+        // Before Android 13 there is nothing to ask; the explicit check also keeps the permission name, which
+        // is new in 13, behind a check lint can see.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return@LaunchedEffect
         val asked = preferences?.getBoolean(NOTIFICATIONS_ASKED, false) ?: true
         val granted = permitted(context, Manifest.permission.POST_NOTIFICATIONS)
         if (connected && Permissions.asksAfterConnect(Build.VERSION.SDK_INT, granted, asked)) {
@@ -444,7 +447,12 @@ private fun rememberSettingsActions(
     // notification settings are the only way.
     val allowNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
         refresh()
-        if (!allowed && !rationale(context, Manifest.permission.POST_NOTIFICATIONS)) openNotificationSettings(context)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            !allowed &&
+            !rationale(context, Manifest.permission.POST_NOTIFICATIONS)
+        ) {
+            openNotificationSettings(context)
+        }
     }
     val background = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { refresh() }
     var disclosing by rememberSaveable { mutableStateOf(false) }
@@ -459,7 +467,9 @@ private fun rememberSettingsActions(
                 TextButton(
                     onClick = {
                         disclosing = false
-                        background.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            background.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                        }
                     },
                 ) { Text(stringResource(R.string.action_continue)) }
             },
@@ -496,8 +506,11 @@ private fun rememberSettingsActions(
             // Asking is apart from the switch: turning one off never asks, turning one on asks when needed.
             val turningOn = settings.notificationOn(kind) == false
             settings.toggleNotification(kind)
-            val granted = permitted(context, Manifest.permission.POST_NOTIFICATIONS)
-            if (Permissions.asksOnSwitch(Build.VERSION.SDK_INT, granted, turningOn)) {
+            val granted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                permitted(context, Manifest.permission.POST_NOTIFICATIONS)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                Permissions.asksOnSwitch(Build.VERSION.SDK_INT, granted, turningOn)
+            ) {
                 notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         },

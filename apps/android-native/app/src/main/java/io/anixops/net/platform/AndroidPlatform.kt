@@ -12,7 +12,6 @@ import android.media.MediaScannerConnection
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.net.Uri
 import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import android.os.Build
@@ -23,6 +22,7 @@ import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import io.anixops.net.R
 import io.anixops.net.core.Envelope
 import io.anixops.net.core.PlatformBridge
@@ -256,7 +256,7 @@ class AndroidPlatform(context: Context) : PlatformBridge {
         val slot = noticeSlot(optionalString(arguments, "kind")) { noticeIds.getAndIncrement() }
         val body = string(arguments, "body")
         val target = noticeLink(optionalString(arguments, "openUrl"))?.let { link ->
-            Intent(Intent.ACTION_VIEW, Uri.parse(link)).addCategory(Intent.CATEGORY_BROWSABLE)
+            Intent(Intent.ACTION_VIEW, link.toUri()).addCategory(Intent.CATEGORY_BROWSABLE)
         } ?: context.packageManager.getLaunchIntentForPackage(context.packageName)
         val open = target?.let {
             PendingIntent.getActivity(

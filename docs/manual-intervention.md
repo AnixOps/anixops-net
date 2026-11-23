@@ -259,6 +259,8 @@ Play 版是开源版（用户 2026-11-15 决定），包名 `io.anixops.net.andr
   tag 时，从 main 运行要先在 Environment 的 Deployment branches 里临时加上 `main`。
 - [ ] 每次上传的 versionCode 必须比上一次大（`apps/android-native/app/build.gradle.kts`）。
 - [ ] Play Console 里的应用签名、商店信息、隐私政策、数据安全、内容分级、VPN 和前台服务声明只能人工填写。
+- [ ] 用户协议（`TERMS.md`）目前只有中文，而 1.0.0 起系统语言不是中文时界面为英文，首次启动仍要同意中文协议。上架 Play 前由维护者
+  决定并提供英文版协议（属于法律文本，产品范围的决定，不由代码自动生成），再在首次启动和设置页按 App 语言显示。
 - [ ] 1.0.0 起申请 `ACCESS_BACKGROUND_LOCATION`：在 Play Console → 应用内容 → 位置权限里声明用途（Wi-Fi 规则在后台读取
   Wi-Fi 名称，App 内先说明再跳系统设置），附演示视频；前台服务声明补充“打开 Wi-Fi 规则时 VPN 断开后保持等待网络”的用途。
   数据安全表单里位置一项仍是“不收集”（名称只在本机比对）。

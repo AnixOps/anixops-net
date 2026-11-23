@@ -120,7 +120,7 @@ JNI 一次调用是微秒级，筛选在 Rust 里做不比 Kotlin 慢。`client-
 ### 7. 文案与语言
 
 英文（默认与回退，`values/`）、简体（`values-zh/`）、繁体（`values-zh-rTW/`）三种语言，系统语言不在其中时显示英文；
-App 内选择的语言同时用于界面、通知和内核返回的提示。文案用单一来源生成各端格式（安卓 `strings.xml`，Windows `.resw`，Linux gettext，
+App 内选择的语言同时用于界面、通知，以及内核保存根证书和诊断报告后返回的提示；其余内核返回的提示（`OperationResult.message`）仍是英文，待内核按语言返回文案后跟随。文案用单一来源生成各端格式（安卓 `strings.xml`，Windows `.resw`，Linux gettext，
 Tauri 的 TS 表），与原生 Windows / Linux 方案共用。现在 TS 表以简体原文为 key，迁移时换成稳定 id。
 安卓侧 Android Lint 的 `MissingTranslation` 设为错误。
 
