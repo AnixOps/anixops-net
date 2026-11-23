@@ -7,12 +7,109 @@ product version at build time.
 The installer:
 
 - installs `networkcore-windows-gui.exe` and `networkcore-windows.exe` under
-  Program Files;
-- preserves `managed-config.json` under ProgramData across upgrades;
+  Program Files, and remembers the folder so that an upgrade installs over it;
+- creates `%ProgramData%\AnixOps\NetworkCore` open only to SYSTEM and
+  Administrators (the GUI closes it again at every start, see below);
 - creates an AnixOps NetworkCore Start Menu shortcut;
-- runs `networkcore-windows-gui.exe --purge` as LocalSystem before a full
-  uninstall so the root certificates and driver the client installed are
-  removed (the outcome goes to `gui.log`; a failure does not block uninstall).
+- on a full uninstall (not on an upgrade) runs, as LocalSystem,
+  `networkcore-windows-gui.exe --cleanup-startup`, which removes every user's
+  sign-in startup task, and `networkcore-windows-gui.exe --purge`, which
+  removes:
+  - the HTTPS decryption roots trusted in the own certificate store
+    (`Cert:\CurrentUser\Root`) of every user signed in at the time: those
+    noted in `trusted-roots.txt` when a user trusted one, and the current root.
+    A user who is not signed in keeps the root and removes it in `certmgr.msc`;
+  - the decryption root's private key (`mitm\root-ca-key.pem`);
+  - the driver installed from the settings page and the root certificates and
+    driver older versions recorded;
+  - the Windows service versions before 0.3.0-beta.7 registered.
+
+  The outcome goes to `logs\gui.log` (`purged: ...`); a failure does not block
+  the uninstall. The rest of the data folder (subscriptions, settings, logs)
+  stays, closed to ordinary users.
+
+### Upgrades
+
+The MSI removes the earlier version only after installing the new one
+(`MajorUpgrade Schedule="afterInstallExecute"`). Files both versions install
+keep their reference, so `managed-config.json`, which the GUI rewrites when a
+subscription is imported or HTTPS decryption is turned on, is kept as it is;
+sign-in startup tasks, trusted decryption roots and the key are kept too. This
+needs two rules for every release:
+
+- no component changes its identity (Id, folder, file name, key path);
+- every versioned file has a higher file version than in the previous release.
+  `release.yml` stamps the MSI version into the GUI executable's file version
+  (`major.minor.patch.msiBuild`) and fails when the built executable does not
+  carry it; the CLI has no version resource and is replaced by content.
+  Bundled third-party DLLs (`WebView2Loader.dll`, `wintun.dll`) keep their
+  own file versions: an upgrade replaces them only when that version rises.
+  A release that ships a different build of one of them under the same file
+  version leaves the old file in place, and the GUI's start-up integrity check
+  then fails; such a DLL needs a new file version (or a new file name and
+  component) before it ships.
+
+The betas' packages did not tell an upgrade from a removal. When a beta is
+upgraded, its uninstall actions run the new version's GUI, which sees two
+registered versions of the package and skips (`--purge skipped: the package is
+being upgraded` in `gui.log`). An upgrade from a beta whose
+`managed-config.json` was already reset, or whose sign-in task was removed, is
+repaired the next time the GUI starts: the imported profile's engine block is
+written back from `embedded\envelope.json` (HTTPS decryption stays off until
+the user turns it on again), and the logon task of a user who chose "start
+after sign-in" is registered again. That choice is kept per user
+(`start_after_login_users` in `desktop-state.json`). The betas kept one
+switch for the whole computer: on a computer with several administrators, the
+first one to start 1.0 takes that switch over as their own choice, and the
+others choose again on the settings page.
+
+CI builds the same source twice with different file versions, installs the
+older MSI (with the betas' uninstall conditions), upgrades to the newer one and
+checks that `managed-config.json`, the sign-in task, a trusted root and the
+key are kept and the GUI was replaced; then it uninstalls and checks that the
+task, the root, the key and the legacy service are gone.
+
+### Data folder access
+
+`%ProgramData%\AnixOps\NetworkCore` holds subscription addresses with their
+tokens, node credentials, device keys and the decryption key. `%ProgramData%`
+lets every user read what is made in it unless told otherwise, so before it
+reads or writes anything the GUI closes the folder (owner Administrators,
+protected access list: SYSTEM and Administrators in full control). The first
+start after an upgrade also resets everything in it, removes links and removes
+what someone other than SYSTEM, Administrators or the user running the GUI
+owns (an ordinary user could have put it there for the elevated GUI to read),
+then writes `.access-closed`; later starts only check the folder. Each entry is
+opened once as itself (never through a link) and checked, reset or removed
+through that handle: symbolic links, junctions and files with more than one
+name (hard links, whose other name may be outside the folder) are removed by
+that name only, and what is removed keeps its owner and access list, so nothing
+outside the folder is changed. Compressed, deduplicated and cloud files are
+reparse points too but hold their own data, so they are kept like any other
+file. The folder must also be where its path says, with no link on the way,
+and every entry is checked to be inside it (by the path its open handle
+resolves to) before it is reset or removed, so a folder swapped for a link
+during the walk stops it instead of redirecting it. `.access-closed` is made
+by its own handle, never through a link, and checked to be in the folder; a
+marker that is a link or has a second name stops the start. The folder above,
+`%ProgramData%\AnixOps`, must be a real folder (not a link or other reparse
+point). If someone other than SYSTEM, Administrators or TrustedInstaller owns
+it, or it lets others delete, rename or change the access of what is in it,
+the GUI takes it over through the same handle (owner Administrators,
+protected access list: SYSTEM and Administrators in full control, Users read
+and traverse only) and does not start when that fails. The installer's
+`PermissionEx` SDDL for the data folder sets no owner, and the installer
+leaves the access of an existing `%ProgramData%\AnixOps` as it is, so a data
+folder or folder above it that a standard user made first (for example on a
+machine that ran a beta) keeps that user as owner after installing; the client
+takes both over on its first start.
+The folder and the one above it are never removed and are opened without
+asking to, so a console whose current folder is one of them, or a backup or
+virus scan reading them, does not stop the GUI from starting; a file the
+client keeps that such a program holds open is still reset. If the folder
+cannot be closed, the GUI shows the error and does not start. Device keys and
+the decryption key are also written closed to everyone but their owner,
+SYSTEM and Administrators.
 
 The client has no Windows service. Versions before 0.3.0-beta.7 registered
 `AnixOpsNetworkCore`: upgrading over such an MSI removes it with the old
@@ -85,9 +182,14 @@ Accepted inputs are `ss://`, `trojan://`, `vless://`, `vmess://`,
 and `proxy-groups`), JSON outbound lists, and Surge, Loon or Quantumult X
 proxy lines. A node the embedded engine cannot run is reported on import.
 
-`Enable HTTPS MITM` creates the client's own root CA, trusts it, and the
-embedded engine decrypts HTTPS itself on the system proxy port (`127.0.0.1:7890`),
-in TUN mode as well. `Disable HTTPS MITM` removes the CA again.
+`Enable HTTPS MITM` uses the client's own root CA (created the first time the
+user asks to trust it) and the embedded engine decrypts HTTPS itself on the
+system proxy port (`127.0.0.1:7890`), in TUN mode as well. The client never adds
+the root to a trust store: the user trusts it by hand in Windows' certificate
+dialog, into their own store, and the client notes its thumbprint so the
+uninstaller can remove it. `Disable HTTPS MITM` keeps the root and its key, so
+turning decryption on again needs no new trust; remove the root in
+`certmgr.msc` when you stop using decryption, or uninstall the client.
 
 The optional fields are:
 
@@ -110,5 +212,5 @@ its path. `networkcore-windows-gui.exe --debug` adds verbose GUI activity
 records only.
 
 The MSI and portable ZIP are built and validated only by GitHub Actions. CI
-also performs a bounded silent MSI install/uninstall smoke test and checks
-that no Windows service is registered. Do not invoke WiX or Windows Installer locally.
+also performs bounded silent MSI install, upgrade and uninstall tests (see
+Upgrades) and checks that no Windows service is registered. Do not invoke WiX or Windows Installer locally.

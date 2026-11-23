@@ -114,6 +114,7 @@ dependencies = [
  "client-service",
  "platform-windows",
  "serde_json",
+ "windows-data",
  "windows-sys 0.61.2",
 ]
 
@@ -150,6 +151,7 @@ name = "anx-license"
 version = "0.3.0"
 dependencies = [
  "ring",
+ "windows-data",
 ]
 
 [[package]]
@@ -1383,6 +1385,7 @@ dependencies = [
  "ring",
  "serde",
  "serde_json",
+ "windows-data",
  "x509-parser",
 ]
 
@@ -3644,6 +3647,7 @@ dependencies = [
  "tauri-plugin-notification",
  "tauri-plugin-single-instance",
  "traffic-stats",
+ "windows-data",
  "windows-sys 0.61.2",
 ]
 
@@ -7088,6 +7092,13 @@ dependencies = [
  "windows-link 0.2.1",
  "windows-result 0.4.1",
  "windows-strings 0.5.1",
+]
+
+[[package]]
+name = "windows-data"
+version = "0.3.0"
+dependencies = [
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

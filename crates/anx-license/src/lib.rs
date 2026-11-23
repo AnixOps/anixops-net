@@ -16,7 +16,8 @@
 //! * `origins`: the subscription origins (`scheme://host[:port]`) that announced a license CA, newest
 //!   first, one per line.
 //! * `o-<16 hex>/` per origin (the first 8 bytes of the origin's SHA-256):
-//!   * `device.key`: the Ed25519 private key, PKCS#8 (v1: a software key; mode 0600 on Unix).
+//!   * `device.key`: the Ed25519 private key, PKCS#8 (v1: a software key; mode 0600 on Unix, and on
+//!     Windows open only to its owner, the system and administrators).
 //!   * `license.cert`: the license in hex, as the header carried it.
 //!   * `status`: the panel's last status word.
 //!
@@ -387,6 +388,13 @@ fn write_private(dir: &Path, name: &str, bytes: &[u8]) -> io::Result<()> {
         }
         use std::io::Write;
         let mut file = options.open(&tmp)?;
+        // Windows has no mode bits: the file is closed to other users before the key is written to it.
+        #[cfg(windows)]
+        if let Err(error) = windows_data::private_file::restrict(&tmp) {
+            drop(file);
+            let _ = fs::remove_file(&tmp);
+            return Err(error);
+        }
         file.write_all(bytes)?;
         file.sync_all()?;
     }
@@ -461,6 +469,15 @@ mod tests {
                 .permissions()
                 .mode();
             assert_eq!(mode & 0o777, 0o600);
+        }
+        #[cfg(windows)]
+        {
+            let key = store.origin_dir("https://a.example").join(DEVICE_FILE);
+            let described = windows_data::data_dir::describe(&key).unwrap();
+            assert!(described.contains("D:P"), "{described}");
+            for open in [";;;WD)", ";;;BU)", ";;;AU)", ";;;IU)"] {
+                assert!(!described.contains(open), "{described}");
+            }
         }
         let _ = fs::remove_dir_all(store.dir());
     }

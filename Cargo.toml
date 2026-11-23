@@ -24,6 +24,7 @@ members = [
     "crates/on-demand",
     "crates/subscription-meta",
     "crates/traffic-stats",
+    "crates/windows-data",
 ]
 resolver = "2"
 

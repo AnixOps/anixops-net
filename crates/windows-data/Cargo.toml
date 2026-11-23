@@ -1,0 +1,17 @@
+[package]
+name = "windows-data"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The Windows clients' machine-wide data: the data folder closed to everyone but the system and administrators, private key files, and the HTTPS decryption roots users trusted."
+
+# Windows only. On other systems the crate builds to nothing, so workspace-wide commands still pass there.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Threading",
+] }

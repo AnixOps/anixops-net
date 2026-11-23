@@ -99,7 +99,7 @@ GUI 清单改为 `requireAdministrator`，登录后启动从 HKCU Run 改为按�
 
 - [ ] 扩展页开启 HTTPS 解密，连接成功；浏览器访问 HTTPS 站点证书颁发者为 NetworkCore 根证书，插件改写生效。
 - [ ] 已连接时开启/关闭 HTTPS 解密，客户端自动重连，系统代理保持在 127.0.0.1:7890。
-- [ ] 关闭 HTTPS 解密后，「受信任的根证书颁发机构」里的 NetworkCore 根证书被移除。
+- [ ] 关闭 HTTPS 解密后，根证书和私钥保留（再次开启不需要重新信任）；根证书只在卸载时，或用户自己在 `certmgr.msc` 里删除时才移除。
 - [ ] 断开连接后 7890/7891 端口都被释放。
 
 ## Windows TUN 模式真机验收
@@ -180,6 +180,28 @@ CI 只能跑规则与重建逻辑的单元测试（`OnDemandSettingsTests`、`Ne
   开发者模式的诊断里没有 `node key is unavailable`。
 - [ ] 从 0.3.0-beta.11 升级：在 beta.11 上因快速切换节点出现 `node key is unavailable` 的设备，升级后打开 App 一次即可
   重新连接（App 启动时为当前节点重新保存配置）；单个粘贴的节点需要重新导入。
+
+## iOS / macOS HTTPS 解密首次确认真机验收
+
+开启 HTTPS 解密的每条路径共用一道首次确认（`TunnelController.requireDecryptionConsent()`，见 `docs/debug-mode.md`
+“首次解密确认”）。CI 只能编译和跑单元测试（`DecryptionConsentTests` 覆盖哪些改动需要确认、未确认时配置里的映射插件），
+对话框在根视图还是编辑表单上弹出、取消后表单的状态、启动时的补问只能真机确认。以下每项在 iPhone、iPad 和 macOS 上各做一遍；
+“未确认”指全新安装，或删除 App 重装后（macOS 上可用 `defaults delete <bundle id> https-decryption-consent-version`）：
+
+- [ ] 未确认时，以下每条路径都弹出同一个“开启 HTTPS 解密前请确认”对话框，且只弹一次：改写 › 解密域名里添加域名；
+  加密连接详情的“解密此域名”；请求页“没有请求的连接”里的“解密”；映射编辑表单里保存一个带主机的 Map Local；
+  请求检查器里保存 Map Local；插件总开关。
+- [ ] 在编辑表单（映射编辑、解密域名编辑、请求检查器）里触发时，对话框显示在表单上方，不会被表单挡住或不出现。
+  点“取消”：表单保持打开、内容不丢，列表和映射都没有保存；点“我确认，开启”：保存并关闭表单。
+- [ ] 确认之后，上面任何一条路径都不再询问；重启 App、断开重连后也不再询问。
+- [ ] 升级安装：旧版本保存过解密域名或带主机的映射、从未确认过，升级后启动 App 只问一次。确认后映射插件写进 VPN 配置，
+  解密生效；取消后映射插件从配置里拿掉、已连接时只重连一次，之后访问这些域名不解密（列表和映射仍保留在页面上）。
+  下次启动会再问一次。
+- [ ] 删除一行、停用一行、只添加排除行（`-example.com`）、删除或停用映射，在未确认时都不询问。
+- [ ] iPad 多窗口、macOS 多窗口：两个窗口都打开时触发一次，记录对话框出现在几个窗口里；在任一窗口回答后其余对话框消失，
+  等待中的操作都按同一回答处理，不会再弹第二次。
+- [ ] 冷启动同时带 `anixops://import` 链接（导入页弹出）或首次引导页时，记录启动补问是否出现；如果对话框没出现，
+  随后的插件总开关、添加域名是否也不再弹框（已知风险：根视图已有弹出内容时对话框可能无法显示）。
 
 ## macOS 命令行工具
 
@@ -272,8 +294,28 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 - [ ] 在 beta.6 上选「Windows 服务」运行方式并连接，然后用 MSI 升级：升级后 `sc query AnixOpsNetworkCore` 报不存在，
   客户端以窗口进程连接，系统代理和 HTTPS 解密正常。
 - [ ] 便携版：旧便携版注册过服务的机器上启动新版，`gui.log` 有删除旧服务的记录，服务不存在，之前由服务设置的系统代理已恢复。
-- [ ] MSI 卸载后根证书（NetworkCore 根证书和 HTTPS 解密根证书）和驱动都被删除；`%ProgramData%\AnixOps\NetworkCore\logs\gui.log`
-  有 `purged` 记录。卸载过程中不弹窗。
+- [ ] MSI 卸载后：卸载时已登录用户自己「受信任的根证书颁发机构」（当前用户）里信任过的 HTTPS 解密根证书被删除，
+  `mitm\root-ca-key.pem` 私钥被删除，设置页安装过的驱动被卸载；`%ProgramData%\AnixOps\NetworkCore\logs\gui.log`
+  有 `purged:` 记录。卸载过程中不弹窗。未登录的用户仍保留根证书，需要自己在 `certmgr.msc` 里删除。
+- [ ] 从 beta.11 用 MSI 升级到 1.0：升级后分组列表和节点仍在、可以直接连接（`gui.log` 有 `--purge skipped`，
+  若托管配置已被旧版重置则有 `managed configuration repaired`）；开过「登录后启动」的用户重新登录后客户端自动启动；
+  信任过的解密根证书仍受信任；HTTPS 解密如之前开着，升级后需要在扩展页重新开启。
+- [ ] 1.0 首次启动后，`icacls C:\ProgramData\AnixOps\NetworkCore` 和其中的 `desktop-state.json`、`embedded\`、
+  `anx-license\` 只有 SYSTEM 和 Administrators；用另一个标准用户执行 `type C:\ProgramData\AnixOps\NetworkCore\desktop-state.json`
+  报拒绝访问。
+- [ ] 数据目录收回不碰目录外的文件：在 beta 上用标准用户在 `C:\ProgramData\AnixOps\NetworkCore\embedded\` 里建一个指向
+  目录外文件（如 `C:\Windows\win.ini`）的硬链接 `mklink /H x.json C:\Windows\win.ini`（Windows 拒绝建立时记下即可，说明这条路径本就不通），再升级到 1.0 并启动：`gui.log` 的
+  `data folder closed` 记录里 `removed` 含该链接，`icacls C:\Windows\win.ini` 与升级前一致。CI 的单元测试覆盖同样情形
+  （`crates/windows-data` 的硬链接测试），真机只复核实际权限。
+- [ ] 标准用户抢先建的上级目录被接管：在干净机器上用标准用户执行 `mkdir C:\ProgramData\AnixOps`，再安装并启动 1.0：
+  `icacls C:\ProgramData\AnixOps` 的属主为 Administrators，只有 SYSTEM、Administrators 完全控制和 Users 读取/执行，
+  客户端正常启动。CI 的单元测试覆盖同样情形（`crates/windows-data` 中上级目录属主的测试），真机只复核实际权限。
+- [ ] 数据目录被其他程序占用时仍能启动：开一个命令提示符 `cd /d C:\ProgramData\AnixOps\NetworkCore`（再开一个停在
+  `C:\ProgramData\AnixOps`），保持窗口打开，分别在首次升级到 1.0 和之后的普通启动时打开客户端：都能正常启动，
+  `icacls` 结果同上。CI 的单元测试覆盖同样情形（`crates/windows-data` 中占用目录和文件的测试）。
+- [ ] 数据目录无法收回时的启动失败提示目前只有英文（`apps/windows-gui/src/main.rs` 的 `secure_data_directory`）：这时数据目录
+  不可用，界面语言设置读不到，提示在界面目录加载前弹出。1.0 接受这一例外；后续把这条提示放进 `crates/client-strings`，
+  按系统界面语言选择简体中文、繁体中文或英文。
 
 ## 节点编辑与分享真机验收（T4 / T5）
 
@@ -494,3 +536,18 @@ tag 由 Actions 的 “Release tag”（`release-tag.yml`）打，流程同 beta
 - [ ] 策略组：拔掉自动测速组当前节点的网络，下一条连接换到其他节点；切换 Wi-Fi 后测速结果清空重测。
 - [ ] REJECT-TINYGIF 对明文 HTTP 回 1x1 GIF；同一主机 30 秒内被拒超过 10 次后改为静默丢弃。
 - [ ] iOS ANX 版：开启设备授权的订阅里 ANX 节点能连接（不再出现 code 6）。
+
+## 连接质量报告（iOS、macOS，默认关闭）
+
+iOS、macOS 的“向订阅服务商报告连接质量”改为设置开关、默认关闭（docs/network-behavior.md “连接质量报告”，PRIVACY.md
+已同步）。以下无法由 CI 完成：
+
+- [ ] 法务确认这项可选上报是否需要在 App Store Connect 的 App Privacy 里申报（建议：诊断数据 / 其他诊断数据，与身份
+  关联，不用于跟踪，用途为 App 功能）；确认后同步两份 `PrivacyInfo.xcprivacy` 和
+  `apps/ios/Privacy/PrivacyManifestDataInventory.md`，并更新上方 `app-privacy-determination` 的确认日期。公开版和 ANX 版
+  共用同一个 bundle ID，答案对两者都适用。
+- [ ] 真机抓包确认：新装或从旧版本升级后默认不发出 `/report` 请求；打开开关并停在概览约一小时后发出一次，内容与
+  network-behavior.md 一致；关闭后不再发送。同时确认连接时这条请求实际走的路径（是否进入隧道），与 network-behavior.md
+  “走哪条路”一致，不一致时改文档。
+- [ ] 通知面板（anix-control）一侧：上报现在只在用户打开开关后才有，大多数客户端不再上报；macOS 客户端的 `platform`
+  从原来误报的 `ios` 改为 `macos`，面板的字段校验需要接受 `macos`。

@@ -8,7 +8,12 @@ update server, statistics endpoint or lookup service therefore fails CI until it
 
 It is a tripwire, not a proof: an address put together at run time, or one that comes from the user's own
 subscription, rules or plugins, is not in the sources. Those are data the user brought (docs/network-behavior.md
-"用户自己的配置").
+"用户自己的配置"), except when the client sends something of its own to an address it derives from them, such as the
+connection-quality report to `<subscription link>/report`. Such an address is listed in RUNTIME below, and the code
+that builds it carries a `network-behavior: <section>` marker naming the section that describes it; a marker that is
+not listed, a listed source without its marker, or a section the document lacks fails the check.
+
+`--self-test` checks the marker rules on samples first.
 
 Not checked, because no app reads them at run time: tests (and the `#[cfg(test)]` part of a Rust file),
 documentation, examples/, build manifests and lockfiles, licences, and the vendored AnixOps Design.
@@ -48,6 +53,15 @@ ALLOWED = {
     # Links the user opens in the browser (terms, project pages); the app itself never requests them.
     "github.com": "只在用户点开时打开的链接",
 }
+
+# Addresses the client derives at run time from the user's data and sends something of its own to.
+# Source file -> the section of docs/network-behavior.md that covers it; the source carries the matching marker.
+RUNTIME = {
+    # The opt-in connection-quality report, POSTed to the subscription link's path plus /report.
+    "apps/ios/Sources/NetworkCoreBridge/ClientReport.swift": "连接质量报告",
+}
+
+MARKER = re.compile(r"network-behavior:\s*(\S[^*]*?)\s*(?:\*/)?$")
 
 # Names that are identifiers, not places the app connects to: XML namespaces, DTDs and schemas.
 NOT_NETWORK = {
@@ -107,6 +121,58 @@ def ignorable(host: str) -> bool:
     return address.is_private or address.is_loopback or address.is_link_local or documentation
 
 
+def markers(text: str) -> list[tuple[int, str]]:
+    """The `network-behavior: <section>` markers in a source, with their line numbers."""
+    found = []
+    for number, line in enumerate(text.splitlines(), 1):
+        match = MARKER.search(line)
+        if match:
+            found.append((number, match.group(1)))
+    return found
+
+
+def runtime_problems(doc: str, runtime: dict[str, str], sources: dict[str, str]) -> list[str]:
+    """Checks RUNTIME against the markers in the packaged `sources` (path -> text) and the document."""
+    problems = []
+    for path, section in runtime.items():
+        if section not in doc:
+            problems.append(f"{DOC} has no section '{section}' for the address built in {path}")
+        if path not in sources:
+            problems.append(f"{path} (RUNTIME) is not a packaged source")
+        elif section not in (found for _, found in markers(sources[path])):
+            problems.append(f"{path} has no 'network-behavior: {section}' marker")
+    for path, text in sources.items():
+        for number, section in markers(text):
+            # A listed marker's section is checked against the document above.
+            if runtime.get(path) != section:
+                problems.append(f"{path}:{number}: marker '{section}' is not listed in RUNTIME")
+    return problems
+
+
+def self_test() -> int:
+    doc = "## 连接质量报告\n"
+    runtime = {"a.swift": "连接质量报告"}
+    cases = [
+        ("listed and documented", {"a.swift": "/// network-behavior: 连接质量报告\nlet x = 1"}, runtime, doc, 0),
+        ("marker missing", {"a.swift": "let x = 1"}, runtime, doc, 1),
+        ("source missing", {}, runtime, doc, 1),
+        ("section missing", {"a.swift": "// network-behavior: 连接质量报告"}, runtime, "## 别的\n", 1),
+        ("unlisted marker", {"a.swift": "// network-behavior: 连接质量报告", "b.rs": "// network-behavior: 新地址"},
+         runtime, doc, 1),
+        ("block comment", {"a.swift": "/* network-behavior: 连接质量报告 */"}, runtime, doc, 0),
+    ]
+    failed = 0
+    for name, sources, listed, text, expected in cases:
+        got = runtime_problems(text, listed, sources)
+        if len(got) != expected:
+            failed += 1
+            print(f"self-test '{name}': expected {expected} problem(s), got {got}")
+    if failed:
+        return 1
+    print(f"self-test: {len(cases)} cases pass")
+    return 0
+
+
 def main() -> int:
     try:
         doc = open(DOC, encoding="utf-8").read()
@@ -114,6 +180,7 @@ def main() -> int:
         print(f"{DOC} is missing")
         return 1
     problems: list[str] = []
+    packaged: dict[str, str] = {}
     for host, section in ALLOWED.items():
         if section not in doc:
             problems.append(f"{DOC} has no section '{section}' for {host}")
@@ -128,6 +195,7 @@ def main() -> int:
             text = open(path, encoding="utf-8").read()
         except (UnicodeDecodeError, IsADirectoryError, FileNotFoundError):
             continue
+        packaged[path] = text
         for number, line in enumerate(text.splitlines(), 1):
             # Rust unit tests sit at the end of the file, after #[cfg(test)].
             if path.endswith(".rs") and line.strip() == "#[cfg(test)]":
@@ -137,9 +205,10 @@ def main() -> int:
                 if ignorable(host) or host in ALLOWED:
                     continue
                 problems.append(f"{path}:{number}: {host}: {line.strip()[:160]}")
+    problems.extend(runtime_problems(doc, RUNTIME, packaged))
     if problems:
         print(f"Addresses the client sources name must be described in {DOC} and listed in")
-        print(".github/scripts/outbound_hosts.py (ALLOWED):")
+        print(".github/scripts/outbound_hosts.py (ALLOWED, or RUNTIME for addresses built at run time):")
         for problem in problems:
             print(f"  {problem}")
         return 1
@@ -148,4 +217,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(self_test() if "--self-test" in sys.argv[1:] else main())

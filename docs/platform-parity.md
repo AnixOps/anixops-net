@@ -31,7 +31,7 @@
 | 单条重放、编辑后重放 | ✅ | ✅ | ◐ | ✅ | ✅ | Android 经内核重放代理（#128） |
 | Map Local / Map Remote | ✅ | ✅ | ✅ | ✅ | ✅ | 需开启 HTTPS 解密 |
 | HTTP/2 MITM | ✅ | ✅ | ✅ | ✅ | ✅ | 内核 #233，各平台共用 |
-| HTTPS 解密开关 + 首次开启确认条款 | ✅ | ✅ | ✅ | ✅ | ✅ | #117 |
+| HTTPS 解密开关 + 首次开启确认条款 | ✅ | ✅ | ✅ | ✅ | ✅ | #117；Apple 端解密域名、“解密此域名”和映射也先确认（docs/debug-mode.md） |
 | 根证书由用户手动信任、关闭解密保留证书 | ✅ | ✅ | ✅ | ✅ | ✅ | 桌面 #123；Android 本来就在系统设置里手动安装 |
 | 手机连电脑抓包（局域网共享 + 证书页） | — | ✅ | ✅ | ✅ | — | 手机本身不需要 |
 | 导入自有根证书（团队 CA） | ⛔ | ✅ | ✅ | ✅ | ⛔ | macOS 在扩展页“使用自己的根证书…”粘贴 PEM（A2），密钥须为 P-256；iOS / Android 见系统限制 |
@@ -98,7 +98,9 @@
 
 Windows 只有一种运行方式：内核在客户端窗口进程里运行，关窗口即断开。服务模式（`networkcore-windows-service`）已删除：
 MSI 升级时旧服务随旧版本一起卸载；便携版注册过的服务由客户端下次启动时删除，并恢复它改过的系统代理。卸载时的清理
-（根证书、驱动）改由 `networkcore-windows-gui.exe --purge` 完成。
+（卸载时已登录用户信任过的 HTTPS 解密根证书、它的私钥、设置页安装的驱动）改由 `networkcore-windows-gui.exe --purge` 完成，
+升级时不执行；升级保留托管配置、登录后启动任务和信任过的根证书（`installer/windows/README.md`）。数据目录
+`%ProgramData%\AnixOps\NetworkCore` 只有 SYSTEM 和 Administrators 可以访问。
 
 ## 系统限制
 

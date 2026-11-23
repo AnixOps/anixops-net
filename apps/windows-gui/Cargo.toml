@@ -34,6 +34,7 @@ app-notifications = { path = "../../crates/app-notifications" }
 traffic-stats = { path = "../../crates/traffic-stats" }
 
 [target.'cfg(windows)'.dependencies]
+windows-data = { path = "../../crates/windows-data" }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-deep-link = "~2.4"
 tauri-plugin-notification = "~2.3"
@@ -41,10 +42,12 @@ tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 windows-sys = { version = "0.61.2", features = [
     "Win32_Foundation",
+    "Win32_System_ApplicationInstallationAndServicing",
     "Win32_Graphics_Gdi",
     "Win32_System_DataExchange",
     "Win32_System_LibraryLoader",
     "Win32_System_Memory",
+    "Win32_System_Registry",
     "Win32_Security",
     "Win32_System_SystemInformation",
     "Win32_System_Threading",

@@ -93,6 +93,17 @@ final class TunnelController {
     /// The saved profile is the node-less one debug mode uses (`TunnelProfile.direct`).
     private(set) var runsDirectProfile = false
 
+    /// Set while an action waits for the HTTPS decryption confirmation (`requireDecryptionConsent()`). The root view
+    /// shows the alert, or the editor sheet in front of it (`decryptionConsentAlert(_:inSheet:)`).
+    private(set) var asksDecryptionConsent = false
+    /// The editor sheets that can show the confirmation, in the order they appeared. The last one shows it while
+    /// any is open, so the alert never tries to present behind a sheet; with none, the root view shows it.
+    private(set) var decryptionConsentSheets: [UUID] = []
+    /// The actions waiting for the answer; all of them get the same one.
+    @ObservationIgnored private var decryptionConsentWaiters: [CheckedContinuation<Bool, Never>] = []
+    /// Set once this launch has asked about decryption saved before it was confirmed (`confirmSavedDecryption()`).
+    @ObservationIgnored private var askedSavedDecryption = false
+
     /// The link an `anixops://import` asked for, until the import sheet takes it (`takePendingImportLink()`).
     @ObservationIgnored var pendingImportLink: String?
 
@@ -173,6 +184,10 @@ final class TunnelController {
     func load() async {
         await profileWrites.run {
             await loadNow()
+        }
+        // Not awaited: the answer can take as long as the person likes, and nothing else has to wait for it.
+        Task {
+            await confirmSavedDecryption()
         }
     }
 
@@ -1362,8 +1377,9 @@ final class TunnelController {
         scripts: [String: String] = [:],
         resources: [String: Data] = [:]
     ) async -> Bool {
-        // The Map Local / Map Remote entries ride along as one more plugin (`DebugMappings.pluginText`).
-        let plugins = texts + [debugMappings.pluginText].compactMap { $0 }
+        // The Map Local / Map Remote entries ride along as one more plugin (`DebugMappings.pluginText`), once
+        // decryption has been confirmed when that plugin decrypts anything (`DecryptionConsent.profilePlugin`).
+        let plugins = texts + [Self.mappingsPlugin(debugMappings)].compactMap { $0 }
         let next = MitmProfileBundle(plugins: plugins, scripts: scripts, resources: resources)
         return await profileWrites.run { () async -> Bool in
             let outcome: ConfigurationWrite.Outcome<NETunnelProviderManager>
@@ -1412,16 +1428,118 @@ final class TunnelController {
                 resources: resources.data(for: library.activeDataReferences.map(\.path))
             )
         }
-        if let text = mappings.pluginText {
+        if let text = mappingsPlugin(mappings) {
             bundle.plugins.append(text)
         }
         return bundle
     }
 
+    /// The debug mappings' plugin as the profile may carry it: one that decrypts a domain only after the HTTPS
+    /// decryption confirmation (`DecryptionConsent.profilePlugin`).
+    private static func mappingsPlugin(_ mappings: DebugMappings) -> String? {
+        DecryptionConsent.profilePlugin(
+            for: mappings,
+            accepted: UserDefaults.standard.string(forKey: DecryptionConsent.storageKey)
+        )
+    }
+
+    // MARK: - HTTPS decryption confirmation
+
+    /// Whether the HTTPS decryption terms were confirmed on this installation (`DecryptionConsent`).
+    var decryptionConfirmed: Bool {
+        !DecryptionConsent.needsConsent(accepted: UserDefaults.standard.string(forKey: DecryptionConsent.storageKey))
+    }
+
+    /// True at once when the HTTPS decryption terms were confirmed before; otherwise shows the confirmation (TERMS.md
+    /// section 4) and returns the person's answer. Every way of starting decryption asks here first: the plugins'
+    /// master switch, and the debug mappings through `allowsDecryption(of:)`.
+    func requireDecryptionConsent() async -> Bool {
+        if decryptionConfirmed {
+            return true
+        }
+        return await withCheckedContinuation { continuation in
+            decryptionConsentWaiters.append(continuation)
+            asksDecryptionConsent = true
+        }
+    }
+
+    /// The person's answer to the confirmation. Confirming stores the terms version in force and lets every waiting
+    /// action go ahead; cancelling stops them all. Only the first answer counts.
+    func answerDecryptionConsent(_ confirmed: Bool) {
+        guard asksDecryptionConsent else {
+            return
+        }
+        if confirmed {
+            UserDefaults.standard.set(TermsConsent.version, forKey: DecryptionConsent.storageKey)
+        }
+        asksDecryptionConsent = false
+        let waiters = decryptionConsentWaiters
+        decryptionConsentWaiters = []
+        for waiter in waiters {
+            waiter.resume(returning: confirmed)
+        }
+    }
+
+    /// Whether `next` may replace the saved debug mappings: asks for the confirmation when it decrypts a domain they
+    /// do not and it was never given (`DecryptionConsent.isRequired`). An editor sheet calls it before it closes, so
+    /// the alert shows over the sheet; `applyDebugMappings` calls it for every other change.
+    func allowsDecryption(of next: DebugMappings) async -> Bool {
+        guard DecryptionConsent.isRequired(
+            from: debugMappings,
+            to: next,
+            accepted: UserDefaults.standard.string(forKey: DecryptionConsent.storageKey)
+        ) else {
+            return true
+        }
+        return await requireDecryptionConsent()
+    }
+
+    /// An editor sheet that can show the confirmation appeared (`decryptionConsentAlert(_:inSheet:)`).
+    func addDecryptionConsentSheet(_ id: UUID) {
+        if !decryptionConsentSheets.contains(id) {
+            decryptionConsentSheets.append(id)
+        }
+    }
+
+    /// That sheet went away.
+    func removeDecryptionConsentSheet(_ id: UUID) {
+        decryptionConsentSheets.removeAll { $0 == id }
+    }
+
+    /// Mappings saved by a build that did not ask (or before the confirmation was added) can name domains to
+    /// decrypt while it was never given. Asks once per launch; confirming puts their plugin in the profile, and
+    /// cancelling takes it out of a profile that still carries it, so nothing is decrypted without the confirmation.
+    private func confirmSavedDecryption() async {
+        guard !askedSavedDecryption, !decryptionConfirmed, !debugMappings.decryptedPatterns.isEmpty else {
+            return
+        }
+        askedSavedDecryption = true
+        // The user agreement comes first; until it is accepted the profile just drops the plugin.
+        let termsAccepted = !TermsConsent.needsConsent(
+            accepted: UserDefaults.standard.string(forKey: TermsConsent.storageKey)
+        )
+        if termsAccepted, await requireDecryptionConsent() {
+            await applyDebugMappings(debugMappings)
+            return
+        }
+        await reapplyMitmBundle()
+    }
+
+    /// Writes the plugins saved on the device and the mappings' plugin into the profile again.
+    private func reapplyMitmBundle() async {
+        // `applyMitmPlugins` adds the mappings' plugin itself.
+        let imported = Self.savedMitmBundle(mappings: DebugMappings())
+        await applyMitmPlugins(imported.plugins, scripts: imported.scripts, resources: imported.resources)
+    }
+
     /// Saves the Map Local / Map Remote entries and puts their plugin in the saved profile; a running tunnel
-    /// reconnects to use them. Returns whether they were saved.
+    /// reconnects to use them. A change that decrypts a new domain first needs the HTTPS decryption confirmation
+    /// (`allowsDecryption(of:)`); without it nothing is saved. Returns whether they were saved.
     @discardableResult
     func applyDebugMappings(_ next: DebugMappings) async -> Bool {
+        guard await allowsDecryption(of: next) else {
+            return false
+        }
         do {
             try next.save(to: DebugMappings.defaultURL)
         } catch {
@@ -1429,9 +1547,7 @@ final class TunnelController {
             return false
         }
         debugMappings = next
-        // `applyMitmPlugins` adds the mappings' plugin itself.
-        let imported = Self.savedMitmBundle(mappings: DebugMappings())
-        await applyMitmPlugins(imported.plugins, scripts: imported.scripts, resources: imported.resources)
+        await reapplyMitmBundle()
         return true
     }
 
@@ -1931,8 +2047,9 @@ final class TunnelController {
     @ObservationIgnored private var reporter: ClientReporter?
 
     /// Reads the engine's per-node dial health: tells the user once when a node stopped because its server kept
-    /// rejecting this client (expired subscription or wrong device time), and hands the counts to the panel
-    /// reporter. `network` is `wifi`, `cellular`, `ethernet` or `unknown`.
+    /// rejecting this client (expired subscription or wrong device time), and, only when the user turned the panel
+    /// report on in Settings, hands the counts to the panel reporter. `network` is `wifi`, `cellular`, `ethernet`
+    /// or `other`.
     func checkOutboundHealth(network: String) async {
         guard let health = RuntimeControl.decode(OutboundHealth.self, from: await control(.outboundHealth)) else {
             return
@@ -1953,9 +2070,25 @@ final class TunnelController {
                 actions: actions
             )
         }
-        let reporter = self.reporter ?? ClientReporter()
+        let store = ClientReportStore()
+        guard store.isEnabled else {
+            self.reporter?.retire()
+            self.reporter = nil
+            store.forgetIfDisabled()
+            return
+        }
+        let reporter = self.reporter ?? ClientReporter(store: store)
         self.reporter = reporter
         reporter.offer(health, groups: subscriptions, network: network)
+    }
+
+    /// The panel report setting (off by default). Turning it on starts from the counts at the next look, so the
+    /// time it was off is never reported; turning it off deletes the saved baseline. The stopped-node notice above
+    /// stays either way: it is shown on this device only.
+    func setPanelReport(enabled: Bool) {
+        reporter?.retire()
+        reporter = nil
+        ClientReportStore().setEnabled(enabled)
     }
 
     /// Lets a stopped node dial again after the user fixed the time or the subscription.
