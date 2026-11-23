@@ -439,7 +439,9 @@ Linux 窗口接上守护进程（PR 5b）：
   都在连接后经引擎的本机代理向测试自己起的本机服务器保持两条连接（一条按地址、一条按 `localhost`），核对对话框
   列出的和核心列出的一致、搜索只留下 `localhost` 那条、搜不到时的那句话、关掉一条后那条连接在测试这一端确实断了
   而另一条没断、"关闭全部"后另一条也断了且列表为空；并截图（Linux 用 `--show connections`）。
-- 还没有的：流量曲线、出口地址、订阅用量；核心的错误原因目前是英文原文。
+- 还没有的：流量曲线、出口地址、订阅用量；核心的结果和拒绝原因还没有按代码换成目录里的文案：结果带 `code`、`params`，
+  拒绝原因带代码时是 `<code>: <English>`（`crates/client-core/src/refusal.rs`），原生窗口目前原样显示，要在
+  `client-strings` 的目录里给这些代码加 id（Tauri 窗口的文字在 `operation-text.ts`、`error-text.ts`，Android 在 `CodeTexts`）。
 
 代理页（PR 6c Linux，PR 6d Windows）：
 

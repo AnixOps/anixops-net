@@ -700,9 +700,11 @@ final class TunnelController {
             notice = shown.flatMap { $0.origin.applies(whileConnected: isConnected) ? $0 : nil }
         }
         if !failed.isEmpty, AppNotifications.settings.subscriptions {
+            // The locale's list format ("A and B", "A、B", "A 和 B"), not a Chinese separator in every language.
+            let names = failed.formatted(.list(type: .and))
             AppNotifications.post(
                 title: String(localized: "订阅更新失败"),
-                body: String(localized: "\(failed.joined(separator: "、")) 没有更新成功，仍在使用上次的节点。"),
+                body: String(localized: "\(names) 没有更新成功，仍在使用上次的节点。"),
                 thread: "subscriptions",
                 id: "subscriptions-failed"
             )
@@ -3097,7 +3099,8 @@ final class TunnelController {
             case .tooLarge:
                 return String(localized: "订阅内容过大")
             case let .noSupportedNode(protocols, _):
-                let names = Array(Set(protocols)).sorted().joined(separator: "、")
+                // The locale's own list punctuation ("a、b" in Chinese, "a, b" in English).
+                let names = Array(Set(protocols)).sorted().formatted(.list(type: .and))
                 return names.isEmpty
                     ? String(localized: "没有可用的节点")
                     : String(localized: "没有可用的节点（暂不支持：\(names)）")

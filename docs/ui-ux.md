@@ -62,6 +62,35 @@
 - 执行前要确认，确认文字写出对象（“确认删除 Example”），确认按钮重复动词，不写“确定”。
 - 改动系统的操作（驱动、服务、根证书、系统代理）在卡片说明里写清会改什么。
 
+## 界面语言
+
+- 所有客户端支持简体中文、繁体中文和英文，跟随系统语言。系统语言不是这三种时一律显示英文，不显示中文源文案：
+  - 简体中文：`zh`、`zh-CN`、`zh-SG`、`zh-Hans-*`；繁体中文：`zh-TW`、`zh-HK`、`zh-MO`、`zh-Hant-*`（写明了书写体系时以它为准）。
+  - iOS / macOS：文案源语言仍是简体中文（`Localizable.xcstrings` 的 `sourceLanguage`），但每个带界面文字的 bundle 的
+    `CFBundleDevelopmentRegion` 是 `en`（`apps/ios/project.yml`），系统找不到匹配语言时回退到英文；Info.plist 里的权限说明
+    以英文为准，中文在 `InfoPlist.xcstrings`。
+  - Android：英文在默认的 `values/`，简体中文在 `values-zh/`，繁体中文在 `values-zh-rTW/`（`LanguageTest`）。
+  - 桌面（Windows、Linux）：`resolveLanguage`（`apps/windows-gui/ui/src/i18n.ts`）；原生预览：`client-strings` 的
+    `preferred()` 与 `Strings.Preferred`。
+  新平台或新的语言判断照此实现，并加一条“日语系统显示英文”的测试。
+- 后端（Windows 桌面后端、`client-core`、内核）的结果和拒绝原因不直接显示英文原文：
+  - 结果（`OperationResult`）带稳定的 `code`、`params`、`follow`，各端按代码用自己的文案表显示（桌面 `operation-text.ts`，
+    Android `CoreTexts`），`message` 只是英文后备和日志。
+  - 拒绝原因仍是一个字符串；带代码的写成 `<code>: <English>`（`crates/client-core/src/refusal.rs`，客户端自己的代码是
+    `error.<name>`，内核的 `DomainError` 本来就是这个形式，例如 `subscription.core.clash_yaml_unsupported: …`）。认识的代码显示
+    本端文案；不认识的只显示“什么失败了”（“连接失败”“操作没有完成”），英文原文放在“详情”里（桌面提示条的折叠详情，
+    行内显示时放在括号里），日志和诊断报告保留英文。新增拒绝原因时给它代码，并在各端文案表里补三种语言（测试会检查）。
+  - 客户端作为状态保存的拒绝原因（快照的 `lastError`、`configurationError`、`subscriptionError`，订阅的 `lastUpdateError`，以及
+    `view.overview`、`view.subscriptions` 原样转交的 `error`）同样按代码显示，不能原样上屏：桌面用 `errorLine`，订阅卡片和行用
+    `subscriptionFailureLine`（Windows 有 `errorCode` 时按它，Linux 只有拒绝原因时按其中的 `subscription.core.*` 代码），Android 由
+    `Core.overview`、`Core.subscriptions` 经 `CoreTexts.refusalText` 换成 App 语言的文案，连接条和订阅行显示的已是本端文案。
+  - 规则导入时跳过的内容按内核代码显示类别（跳过了规则、策略组、成员、忽略的选项），内核的英文句子作为明细。
+- 一词多义要分开写。“连接”“代理”在英文里各对应几个词：单独的“连接”只用作连接列表（Connections），单独的“代理”只用作页面名（Proxies）。
+  动作“连接”、连接开关、模式名“代理”、规则策略“代理”各用自己的文案：桌面端写成带含义的键（`"连接|verb"`、`"连接|noun"`、
+  `"代理|mode"`，竖线后的含义只用于查表，中文界面显示竖线前的部分，见 `apps/windows-gui/ui/src/i18n.ts`），Apple 端用
+  `action.connect`、`mode.proxy`、`policy.proxy`，Android 用各自独立的资源名。`i18n.test.ts` 检查单独的“连接”“代理”只出现在允许的位置。
+- 开关的无障碍名称写它控制的对象（“连接”），不随状态改成“断开”；开和关只由开关状态（`aria-checked`）表达。
+
 ## 提交前自查
 
 界面改动的 PR 描述里逐条回答：
@@ -183,6 +212,26 @@ CI 的 “UI lint” 步骤运行 `.github/scripts/ui_lint.py`（几秒钟，在
 
 需要的颜色令牌里没有时，在 `apps/ios/Design/tokens.json` 里引用 AnixOps Design 已有的令牌加一个名字，再运行 `design_tokens.py` 生成；
 AnixOps Design 里也没有，就先在 anixops-design 提 PR。`ui_lint.py --self-test` 是检查本身的测试，改规则时一起改。
+
+### 第一层：iOS / macOS 文案本地化（`apple_strings.py`）
+
+iOS、macOS 的界面文字用简体中文写在 Swift 里，由 SwiftUI / Foundation 到 `apps/ios/Sources/NetworkCoreApp/Resources/Localizable.xcstrings`
+（App、Mac App、隧道扩展、小组件共用一份）查英文和繁体中文。工程由 XcodeGen 生成、目录手工维护，构建时不会自动抽取键，所以缺键或
+没经过查找的文字会直接以简体中文显示给英文和繁体用户。CI 的 “Apple interface strings are localized” 步骤运行
+`.github/scripts/apple_strings.py`，对 `apps/ios/Sources` 下每一个含中文的字符串字面量：
+
+| 规则 | 拦什么 | 改成什么 |
+|---|---|---|
+| S1 缺键 | 目录里没有这条（插值按任意格式符匹配） | 在目录里加这条，en 和 zh-Hant 都写好；插值用编译器生成的格式符：Int `%lld`、UInt64 `%llu`、UInt32 `%u`、Int32 `%d`、String `%@`，语序变化时译文用 `%1$@` 这类位置参数 |
+| S2 未翻译 | 目录里任何一条（用到没用到都算）缺 en / zh-Hant、状态不是 translated，或译文的格式符和键不一致 | 补译文 |
+| S3 没查表 | 文字以 String 交给界面：参数声明为 String 的辅助函数、返回 String 的属性、String 状态、`Text(verbatim:)`、`joined(separator: "、")`；写在另一个字面量插值里的字面量（`"原因：\(x ?? "无记录")"`、`"\(a.joined(separator: "、")) 失败"`），插值按原样插入，不查表 | 参数和属性改成 `LocalizedStringKey` / `LocalizedStringResource` / `String.LocalizationValue`，或在赋值处写 `String(localized:)`；插值里的文字写 `String(localized:)`；列表先用 `.formatted(.list(type:))` 生成、放进局部常量再插值 |
+| S4 看不出 | 检查跟不到的位置（闭包结果、没写类型的常量） | 写成查表可见的形式：`String(localized:)`、`LocalizedStringKey` 参数或属性 |
+
+插值里的字面量同样要过 S1、S3；外层字面量是 `DATA` 或只写进日志时，里面的也跳过。
+不是界面文字的中文（演示数据里的节点名、写进生成的插件文件里的文字、和中文 `TERMS.md` 匹配的正则）列在脚本的 `DATA` 里，
+每条写明原因；命令行工具 `anixops` 的终端输出（`docs/macos-cli.md`）和 Siri / 快捷指令短语（属于单独的 AppShortcuts 表）不在检查范围内。
+`apple_strings.py --self-test` 是检查本身的测试；`apps/ios/Tests/NetworkCoreBridgeTests/LocalizationCatalogueTests.swift`
+另外确认目录每条都有 en、zh-Hant，以及经 String 显示的校验提示都有译文。
 
 ### 第二层：运行检查（截图任务里，各平台并行）
 

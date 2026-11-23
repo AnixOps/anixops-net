@@ -285,7 +285,8 @@ struct ConnectionsView: View {
         case .all:
             return String(localized: "全部")
         case .proxy:
-            return String(localized: "代理")
+            // Requests that went through the proxy policy, named as the rule policy is.
+            return String(localized: "policy.proxy")
         case .direct:
             return String(localized: "直连")
         case .reject:

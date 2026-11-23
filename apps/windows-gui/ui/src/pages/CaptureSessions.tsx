@@ -4,6 +4,7 @@ import { CaptureSession, CaptureStatus, desktop, SessionProtection } from "../br
 import { formatBytes } from "../subscription-format";
 import { Card, EmptyState, MoreMenu, Row, Run } from "../ui";
 import { t } from "../i18n";
+import { errorLine } from "../error-text";
 
 /** How the key of saved sessions is kept, for the card's note. */
 export function protectionText(protection: SessionProtection | null, days: number): string {
@@ -65,7 +66,7 @@ export function CaptureSessions({ capture, live = true, run, onLoaded }: {
         setDays(answer.retention_days);
         setFailure(null);
       })
-      .catch((error: unknown) => setFailure(String(error)));
+      .catch((error: unknown) => setFailure(errorLine(error)));
   }, []);
   useEffect(load, [load]);
 

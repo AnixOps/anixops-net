@@ -103,7 +103,10 @@ struct ProxyExceptionsEditor: View {
                 }
                 .listRowBackground(brand.surface)
                 if !rejected.isEmpty {
-                    Text(String(localized: "第 \(rejected.map(String.init).joined(separator: "、")) 行不是域名、通配符或网段，保存时会去掉。"))
+                    // The locale's list format, not a Chinese separator in every language.
+                    let numbers: [String] = rejected.map { String($0) }
+                    let lines = numbers.formatted(.list(type: .and))
+                    Text(String(localized: "第 \(lines) 行不是域名、通配符或网段，保存时会去掉。"))
                         .foregroundStyle(brand.danger)
                         .listRowBackground(brand.surface)
                 }

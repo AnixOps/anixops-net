@@ -1,1 +1,1 @@
-{ "ok": { "message": "Connected through tokyo-01" } }
+{ "ok": { "message": "Connected through tokyo-01", "code": "connect.connected_via", "params": { "node": "tokyo-01" } } }

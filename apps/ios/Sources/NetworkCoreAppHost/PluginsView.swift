@@ -205,7 +205,7 @@ private struct ScriptRow: View {
 
     private var detail: String {
         if let allowed {
-            return String(localized: "已允许 · \(allowed.sha256.prefix(12)) · \(allowed.allowedAt.formatted(date: .abbreviated, time: .omitted))")
+            return String(localized: "已允许 · \(String(allowed.sha256.prefix(12))) · \(allowed.allowedAt.formatted(date: .abbreviated, time: .omitted))")
         }
         if reference.url == nil {
             return String(localized: "不会运行：脚本地址不是 https")

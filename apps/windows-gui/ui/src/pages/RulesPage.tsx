@@ -7,6 +7,7 @@ import { liveEngine, usePolling } from "../live";
 import { Card, Row, Run } from "../ui";
 import { Select } from "../controls";
 import { t } from "../i18n";
+import { routingWarningText } from "../error-text";
 import { DnsCards } from "./DnsCards";
 import { MyRules } from "./MyRules";
 import { DataLists, DeviceNames, RuleHits, RuleTester } from "./RuleTools";
@@ -142,7 +143,11 @@ function ImportWarnings({ snapshot }: { snapshot: RuntimeSnapshot | null }) {
       description={t("订阅里的这些规则客户端不支持，没有生效。")}
       actions={<span className="count">{t("{count} 条", { count: warnings.length })}</span>}
     >
-      {warnings.map((warning, index) => <Row key={index} icon={TriangleAlert} color="orange" label={warning} />)}
+      {warnings.map((warning, index) => {
+        // The kind of line in the window's language; the kernel's English line says which rule or group.
+        const { text, detail } = routingWarningText(warning);
+        return <Row key={index} icon={TriangleAlert} color="orange" label={text} hint={detail} />;
+      })}
     </Card>
   );
 }

@@ -30,5 +30,9 @@ describe("subscription format", () => {
     expect(subscriptionErrorText("windows.subscription.http_status_403")).toBe("订阅服务器拒绝了请求（HTTP 403），订阅可能已过期或链接已失效 (windows.subscription.http_status_403)");
     expect(subscriptionErrorText("windows.subscription.http_status_502")).toBe("订阅服务器返回了错误（HTTP 502） (windows.subscription.http_status_502)");
     expect(subscriptionErrorText("windows.subscription.something_new")).toBe("更新订阅失败 (windows.subscription.something_new)");
+    // The kernel's parse refusals, kept as their code (tauri_ui.rs `redacted_subscription_error_code`).
+    expect(subscriptionErrorText("subscription.core.clash_yaml_unsupported")).toBe("订阅里有本应用不支持的节点类型或写法 (subscription.core.clash_yaml_unsupported)");
+    expect(subscriptionErrorText("subscription.core.vmess_link_invalid")).toBe("订阅里有写法不正确的节点 (subscription.core.vmess_link_invalid)");
+    expect(subscriptionErrorText("subscription.core.parse_failed")).toBe("无法识别订阅内容的格式 (subscription.core.parse_failed)");
   });
 });

@@ -46,7 +46,18 @@ const errorReasons: Record<string, string> = {
   fetch_failed: "下载订阅失败",
   invalid_payload: "订阅内容里没有可用的节点",
   runtime_active: "先断开连接再使用这份订阅",
+  // The kernel's own parse refusals (`subscription.core.<kind>`, config-core).
+  parse_failed: "无法识别订阅内容的格式",
+  inline_payload_empty: "订阅内容是空的",
+  location_empty: "订阅链接是空的",
 };
+
+/** The kernel's other parse refusals, by how their kind ends. */
+function kernelReason(kind: string): string | undefined {
+  if (kind.endsWith("_unsupported")) return "订阅里有本应用不支持的节点类型或写法";
+  if (kind.endsWith("_invalid")) return "订阅里有写法不正确的节点";
+  return undefined;
+}
 
 /**
  * What a failed update's code means, with the code after it for a report. The app keeps only the code because the
@@ -59,6 +70,6 @@ export function subscriptionErrorText(code: string | null | undefined): string |
   let reason: string;
   if (status && ["401", "403", "404", "410"].includes(status)) reason = t("订阅服务器拒绝了请求（HTTP {status}），订阅可能已过期或链接已失效", { status });
   else if (status) reason = t("订阅服务器返回了错误（HTTP {status}）", { status });
-  else reason = t(errorReasons[kind] ?? "更新订阅失败");
+  else reason = t(errorReasons[kind] ?? kernelReason(kind) ?? "更新订阅失败");
   return `${reason} (${code})`;
 }

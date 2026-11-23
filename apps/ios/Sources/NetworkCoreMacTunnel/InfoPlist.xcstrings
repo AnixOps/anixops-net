@@ -1,0 +1,28 @@
+{
+  "sourceLanguage": "zh-Hans",
+  "strings": {
+    "NSSystemExtensionUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AnixOps Net uses this network extension to set up its VPN tunnel."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AnixOps Net 用这个网络扩展建立 VPN 隧道。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AnixOps Net 用這個網路延伸功能建立 VPN 通道。"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

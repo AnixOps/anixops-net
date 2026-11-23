@@ -138,6 +138,14 @@ export const operationTexts: Record<string, string> = {
   "plugins.disabled": "插件已停用",
   "plugins.removed": "插件已删除",
   "mitm.root_untrusted": "根证书还没有信任：在“扩展”里选择“信任根证书”",
+  "root.trusted_browsers_system": "已在 {count} 个浏览器证书库和系统证书库中信任根证书",
+  "root.trusted_browsers": "已在 {count} 个浏览器证书库中信任根证书",
+  "root.trusted_system": "已在系统证书库中信任根证书",
+  "root.trusted_nowhere": "没有找到可以信任根证书的证书库",
+  "root.removed_browsers_system": "已从 {count} 个浏览器证书库和系统证书库中移除根证书",
+  "root.removed_browsers": "已从 {count} 个浏览器证书库中移除根证书",
+  "root.removed_system": "已从系统证书库中移除根证书",
+  "root.removed_nowhere": "没有证书库信任过根证书，无需移除",
 };
 
 /** How a result's `follow` text joins its own text, as two sentences. */

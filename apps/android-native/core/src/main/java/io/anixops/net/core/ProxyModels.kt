@@ -38,7 +38,7 @@ data class SubscriptionRow(
     val nodes: Int? = null,
     /** When it was last downloaded, in the core's words. */
     val updated: String? = null,
-    /** Why the last update did not work. */
+    /** Why the last update did not work, in the app's words ([Core.subscriptions]). */
     val error: String? = null,
     /** Bytes used, up and down together; null when the server did not say. */
     val used: Long? = null,
@@ -111,6 +111,7 @@ data class Overview(
     val egress: String,
     val node: NodeSummary? = null,
     val canConnect: Boolean = false,
+    /** Why the client is not connected, in the app's words ([Core.overview]); the client's refusal as it kept it. */
     val error: String? = null,
     val traffic: Traffic? = null,
 )

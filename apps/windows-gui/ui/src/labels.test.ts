@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { setLanguage } from "./i18n";
 import { availableRoutingModes, connectionTitle, connectPhase, factLabel, failureReason, groupMemberLabel, protocolAbbreviation, routingLabel, sidebarDetail } from "./labels";
 
 describe("connectPhase", () => {
@@ -28,8 +29,18 @@ describe("failureReason", () => {
   });
 
   it("prefers the configuration error, then the last error", () => {
-    expect(failureReason({ configurationError: "bad config", lastError: "boom" }, "failed", "proxy")).toBe("bad config");
-    expect(failureReason({ lastError: "boom" }, "failed", "debug")).toBe("boom");
+    expect(failureReason({ configurationError: "bad config", lastError: "boom" }, "failed", "proxy")).toBe("连接失败（bad config）");
+    expect(failureReason({ lastError: "boom" }, "failed", "debug")).toBe("连接失败（boom）");
+  });
+
+  it("words a coded reason in the window's language, never the backend's English alone", () => {
+    // In place a failure reads "文案（原文）" (docs/ui-ux.md): the window's words first, the backend's English after.
+    expect(failureReason({ lastError: "error.vpn_off: the VPN is not on; connect again" }, "failed", "proxy")).toBe(
+      "VPN 没有打开，请重新连接（the VPN is not on; connect again）",
+    );
+    setLanguage("en");
+    expect(failureReason({ lastError: "boom" }, "failed", "proxy")).toBe("Connection failed (boom)");
+    setLanguage("zh");
   });
 
   it("points to a page the mode has when the backend gave no reason", () => {

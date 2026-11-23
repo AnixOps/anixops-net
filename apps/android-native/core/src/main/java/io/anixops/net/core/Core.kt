@@ -22,11 +22,13 @@ import kotlinx.serialization.json.putJsonObject
  * Typed commands over the client. Every call runs on [dispatcher] (commands may block for long: downloads,
  * delay tests, the VPN consent) and throws [CoreException] when the client refuses. Names and arguments are the
  * shared interface's (`apps/windows-gui/ui/src/bridge.ts`); page logic is the client's `view.*` commands
- * (crates/client-view), so every client shows the same thing.
+ * (crates/client-view), so every client shows the same thing. Results and refusals come back in the app's language
+ * ([texts]): a screen shows [OperationResult.message] and [CoreException.message] as they are.
  */
 class Core(
     private val transport: CoreTransport,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val texts: CoreTexts = CoreTexts.English,
 ) {
     suspend fun snapshot(): RuntimeSnapshot = call("runtime_snapshot", RuntimeSnapshot.serializer())
 
@@ -51,7 +53,7 @@ class Core(
                 put("nodes", nodes)
                 put("traffic", traffic)
             },
-        )
+        ).let { it.copy(error = it.error?.let { raw -> texts.refusalText(raw) }) }
         val connections = if (connected) {
             orNull { decode(ConnectionsSnapshot.serializer(), control("connections")) }
         } else {
@@ -164,8 +166,9 @@ class Core(
     suspend fun subscriptions(): List<SubscriptionRow> {
         val intervals = call("list_subscriptions", ListSerializer(SubscriptionInterval.serializer()))
             .associate { it.id to it.updateIntervalHours }
+        // A row's error is the client's refusal as it kept it (`<code>: <English>`): shown in the app's words.
         return call("subscriptions", SubscriptionsView.serializer()).subscriptions
-            .map { it.copy(intervalHours = intervals[it.id] ?: 0) }
+            .map { it.copy(intervalHours = intervals[it.id] ?: 0, error = it.error?.let { raw -> texts.refusalText(raw) }) }
     }
 
     suspend fun importSubscription(location: String): OperationResult =
@@ -510,7 +513,7 @@ class Core(
             return RequestPage(RequestFeed(), emptyList())
         }
         val merged = raw("view.merge_requests", args("rows" to feed.rows, "answer" to answer)) as? JsonArray
-            ?: throw CoreException("Unexpected answer to view.merge_requests")
+            ?: throw CoreException(texts.unreadable(), detail = "Unexpected answer to view.merge_requests")
         val lastSeq = ((answer as? JsonObject)?.get("last_seq") as? JsonPrimitive)?.content?.toLongOrNull() ?: 0
         val nextRev = raw(
             "view.next_rev",
@@ -717,12 +720,25 @@ class Core(
     ): T {
         val element = raw(command, args)
         // Off the caller's thread too: a long answer (thousands of nodes) is not decoded on the main thread.
-        return withContext(dispatcher) { decode(answer, element, command) }
+        return withContext(dispatcher) { worded(decode(answer, element, command)) }
     }
 
     /** The answer to [command] as JSON, for passing on to a `view.*` command unchanged. */
     suspend fun raw(command: String, args: JsonObject = Envelope.empty): JsonElement = withContext(dispatcher) {
-        Envelope.read(transport.invoke(command, args.toString()))
+        try {
+            Envelope.read(transport.invoke(command, args.toString()))
+        } catch (error: CoreException) {
+            // The refusal in the app's words; the client's English stays in `detail`.
+            throw texts.refusal(error)
+        }
+    }
+
+    /** A result in the app's words, by its code. */
+    @Suppress("UNCHECKED_CAST")
+    private fun <T> worded(value: T): T = when (value) {
+        is OperationResult -> texts.word(value) as T
+        is SavedFileResult -> texts.word(value) as T
+        else -> value
     }
 
     private suspend fun control(cmd: String): JsonElement = controlRequest(buildJsonObject { put("cmd", cmd) })
@@ -733,7 +749,8 @@ class Core(
     private fun <T> decode(answer: KSerializer<T>, element: JsonElement, command: String = "the client"): T = try {
         Envelope.json.decodeFromJsonElement(answer, element)
     } catch (error: IllegalArgumentException) {
-        throw CoreException("Unexpected answer to $command: ${error.message}")
+        // What the app cannot read is said in its language; the command and the reason stay in `detail`.
+        throw CoreException(texts.unreadable(), detail = "Unexpected answer to $command: ${error.message}")
     }
 
     private inline fun <T> orNull(read: () -> T): T? = try {

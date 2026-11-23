@@ -35,6 +35,7 @@ use crate::backend::trust;
 use crate::backend::{
     autostart, format_delay, Backend, DnsPreset, OperationResult, PreferencesInput, PASTED_LOCATION,
 };
+use crate::refusal;
 
 /// The network a [`Platform`] reports.
 pub use on_demand::Network;
@@ -50,6 +51,9 @@ const UNAVAILABLE: &str = if cfg!(target_os = "android") {
 } else {
     "Not available on Linux yet"
 };
+/// A subscription from a file or pasted links has no link to update from.
+const NOT_UPDATABLE: &str = "error.not_updatable";
+
 const NO_DOWNLOADS: &str = "this platform has no shared Downloads folder";
 
 /// Commands the Windows client has and this backend does not; the interface hides their controls.
@@ -569,8 +573,9 @@ impl Client {
 
     fn select_fastest_node(&self) -> Result<OperationResult, String> {
         let nodes = self.backend().node_list();
-        let (id, delay) = engine::fastest_node(&nodes, DELAY_URL)
-            .ok_or_else(|| "no node answered the delay test".to_string())?;
+        let (id, delay) = engine::fastest_node(&nodes, DELAY_URL).ok_or_else(|| {
+            refusal::coded("error.no_delay_answer", "no node answered the delay test")
+        })?;
         let switched = self.backend().switch_node(&id)?;
         // Switching to a node of another subscription whose policy groups choose names that subscription.
         let node = switched
@@ -629,7 +634,10 @@ impl Client {
     fn import_subscription(&self, location: &str) -> Result<OperationResult, String> {
         let location = location.trim();
         if location.is_empty() {
-            return Err("enter a subscription link, share links or a file path".to_string());
+            return Err(refusal::coded(
+                "error.import_input_required",
+                "enter a subscription link, share links or a file path",
+            ));
         }
         let label = if location.contains("://") && !location.starts_with("http") {
             PASTED_LOCATION.to_string()
@@ -789,7 +797,7 @@ impl Client {
             .map_err(|error| format!("the root certificate could not be read: {error}"))?;
         if session.trusts_root(&pem).is_none() {
             let trusted = trust::install(&root.certificate_path);
-            return Ok(OperationResult::plain(trusted.summary("trusted")));
+            return Ok(trust_result(&trusted, false));
         }
         let thumbprint = desktop_mitm::thumbprint(&pem)?;
         // Noted before the user answers: a root that was noted and then refused costs nothing, one that
@@ -850,7 +858,7 @@ impl Client {
                     "Root certificate removed for this user",
                 ))
             }
-            None => Ok(OperationResult::plain(trust::remove().summary("removed"))),
+            None => Ok(trust_result(&trust::remove(), true)),
         }
     }
 
@@ -1257,7 +1265,7 @@ fn handler(name: &str) -> Option<Handler> {
             let (nodes, id, name) = client
                 .backend()
                 .delay_target(&node_id)
-                .ok_or("the node is not in any subscription")?;
+                .ok_or_else(crate::backend::node_missing)?;
             let delay = engine::node_delay(&nodes, &id, &url)?;
             json(
                 OperationResult::coded("delay.node", format!("{name}: {}", format_delay(delay)))
@@ -1273,7 +1281,7 @@ fn handler(name: &str) -> Option<Handler> {
             let (nodes, id, name) = client
                 .backend()
                 .delay_target(&node_id)
-                .ok_or("the node is not in any subscription")?;
+                .ok_or_else(crate::backend::node_missing)?;
             let report = engine::node_checkup(&nodes, &id, &options)?;
             let mut answer = json(NodeCheckup { name, report })?;
             let mut shown = client_view::checkup::checkup(&answer);
@@ -1414,18 +1422,22 @@ fn handler(name: &str) -> Option<Handler> {
             json(client.import_subscription_text(&name, &content)?)
         },
         "update_subscription" => |client, _| {
-            let (id, location) = client
-                .backend()
-                .refreshable_location()
-                .ok_or("the current subscription is not a link that can be updated")?;
+            let (id, location) = client.backend().refreshable_location().ok_or_else(|| {
+                refusal::coded(
+                    NOT_UPDATABLE,
+                    "the current subscription is not a link that can be updated",
+                )
+            })?;
             json(client.refresh_source(&id, &location)?)
         },
         "update_subscription_source" => |client, args| {
             let Id { id } = parse(args)?;
-            let location = client
-                .backend()
-                .source_location(&id)
-                .ok_or("this subscription is not a link that can be updated")?;
+            let location = client.backend().source_location(&id).ok_or_else(|| {
+                refusal::coded(
+                    NOT_UPDATABLE,
+                    "this subscription is not a link that can be updated",
+                )
+            })?;
             json(client.refresh_source(&id, &location)?)
         },
         "select_subscription" => |client, args| {
@@ -1599,6 +1611,28 @@ fn json<T: Serialize>(value: T) -> Result<Value, String> {
 
 fn parse<T: DeserializeOwned>(args: Value) -> Result<T, String> {
     serde_json::from_value(args).map_err(|error| format!("invalid arguments: {error}"))
+}
+
+/// What trusting or removing the root reached, coded by the stores (`count` browser stores, the system store) so
+/// the window words it. A note (a store that could not be changed) is in English only, so with one the whole
+/// sentence stays the backend's.
+#[cfg(not(target_os = "android"))]
+fn trust_result(outcome: &trust::Outcome, removed: bool) -> OperationResult {
+    let message = outcome.summary(if removed { "removed" } else { "trusted" });
+    if !outcome.notes.is_empty() {
+        return OperationResult::plain(message);
+    }
+    let code = match (removed, outcome.browsers > 0, outcome.system) {
+        (false, true, true) => "root.trusted_browsers_system",
+        (false, true, false) => "root.trusted_browsers",
+        (false, false, true) => "root.trusted_system",
+        (false, false, false) => "root.trusted_nowhere",
+        (true, true, true) => "root.removed_browsers_system",
+        (true, true, false) => "root.removed_browsers",
+        (true, false, true) => "root.removed_system",
+        (true, false, false) => "root.removed_nowhere",
+    };
+    OperationResult::coded(code, message).with("count", outcome.browsers)
 }
 
 /// What importing a plugin did, coded: its name and how many scripts it brought.
@@ -2378,7 +2412,7 @@ mod tests {
         // Node checkup: unknown nodes and unknown options are refused before anything is sent.
         assert_eq!(
             client.invoke("node_checkup", serde_json::json!({ "nodeId": "gone" })),
-            Err("the node is not in any subscription".to_string())
+            Err("error.node_missing: the node is not in any subscription".to_string())
         );
         assert!(client
             .invoke(
@@ -2488,6 +2522,28 @@ mod tests {
             .contains("larger than"));
         client.shutdown();
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[cfg(not(target_os = "android"))]
+    #[test]
+    fn trusting_the_root_is_coded_unless_a_store_left_a_note() {
+        let both = trust::Outcome {
+            browsers: 2,
+            system: true,
+            notes: Vec::new(),
+        };
+        let result = trust_result(&both, false);
+        assert_eq!(result.code, Some("root.trusted_browsers_system"));
+        assert_eq!(result.params.get("count").map(String::as_str), Some("2"));
+        assert_eq!(
+            trust_result(&trust::Outcome::default(), true).code,
+            Some("root.removed_nowhere")
+        );
+        let noted = trust::Outcome {
+            notes: vec!["certutil is not installed".to_string()],
+            ..both
+        };
+        assert_eq!(trust_result(&noted, false).code, None);
     }
 
     #[test]

@@ -5,6 +5,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -54,6 +55,139 @@ class CoreTest {
     fun operationAnswersDecode() = runTest {
         val core = Core(Recording(fixture("connect_ok.json")), StandardTestDispatcher(testScheduler))
         assertEquals("Connected through tokyo-01", core.connect().message)
+    }
+
+    /** Words for a few codes, as the app's resources give them (finding ux-i18n-a11y-02). */
+    private object Chinese : CoreTexts {
+        private val words = mapOf(
+            "connect.connected_via" to "已通过 {node} 连接",
+            "decrypt.decrypting" to "将解密 {host}",
+            "plugins.applied_next" to "下次连接时生效",
+            "error.name_required" to "请输入名称",
+            "error.vpn_off" to "VPN 没有打开，请重新连接",
+            "subscription.core.clash_yaml_unsupported" to "订阅里有本应用不支持的节点类型或写法",
+        )
+
+        override fun text(code: String, params: Map<String, String>): String? =
+            words[code]?.let { CoreTexts.fill(it, params) }
+
+        override fun join(first: String, then: String): String = "$first。$then"
+
+        override fun failed(detail: String): String = "操作没有完成：$detail"
+
+        override fun unreadable(): String = "客户端返回了无法识别的结果"
+    }
+
+    @Test
+    fun resultsAreWordedByTheirCode() = runTest {
+        val core = Core(Recording(fixture("connect_ok.json")), StandardTestDispatcher(testScheduler), Chinese)
+        val result = core.connect()
+        assertEquals("已通过 tokyo-01 连接", result.message)
+        assertEquals("connect.connected_via", result.code)
+        // What was changed, then what that did to the connection.
+        val followed = Core(
+            Recording("""{"ok":{"message":"Decrypting a.example","code":"decrypt.decrypting","params":{"host":"a.example"},"follow":"plugins.applied_next"}}"""),
+            StandardTestDispatcher(testScheduler),
+            Chinese,
+        ).connect()
+        assertEquals("将解密 a.example。下次连接时生效", followed.message)
+        // A code the app does not know keeps the client's words.
+        val unknown = Core(
+            Recording("""{"ok":{"message":"Something new","code":"future.thing"}}"""),
+            StandardTestDispatcher(testScheduler),
+            Chinese,
+        ).connect()
+        assertEquals("Something new", unknown.message)
+    }
+
+    @Test
+    fun refusalsAreWordedAndKeepTheEnglishAsDetail() = runTest {
+        val coded = runCatching {
+            Core(Recording(fixture("rename_subscription_error.json")), StandardTestDispatcher(testScheduler), Chinese).connect()
+        }.exceptionOrNull() as CoreException
+        assertEquals("请输入名称", coded.message)
+        assertEquals("error.name_required", coded.code)
+        assertEquals("error.name_required: enter a name", coded.detail)
+        // No code: what did not finish, never the client's English alone.
+        val plain = runCatching {
+            Core(Recording(fixture("connect_error.json")), StandardTestDispatcher(testScheduler), Chinese).connect()
+        }.exceptionOrNull() as CoreException
+        assertEquals("操作没有完成：the current subscription has no nodes", plain.message)
+        assertNull(plain.code)
+        // Without words of its own the app shows the English, without the code.
+        val english = runCatching {
+            Core(Recording(fixture("rename_subscription_error.json")), StandardTestDispatcher(testScheduler)).connect()
+        }.exceptionOrNull() as CoreException
+        assertEquals("enter a name", english.message)
+    }
+
+    /** Refusals the client keeps as state and a `view.*` command passes on are worded too (finding feature-gap-07). */
+    @Test
+    fun keptRefusalsAreShownInTheAppsWords() = runTest {
+        fun transport(overviewError: String, subscriptionError: String) = object : CoreTransport {
+            override fun invoke(command: String, args: String): String = when (command) {
+                "runtime_snapshot" -> fixture("runtime_snapshot.json")
+                "list_nodes" -> """{"ok":[]}"""
+                "runtime_control" -> """{"error":"the engine is not running"}"""
+                "view.overview" -> buildJsonObject {
+                    put("ok", buildJsonObject {
+                        put("state", JsonPrimitive("failed"))
+                        put("egress", JsonPrimitive("node"))
+                        put("canConnect", JsonPrimitive(true))
+                        put("error", JsonPrimitive(overviewError))
+                    })
+                }.toString()
+                "list_subscriptions" -> """{"ok":[{"id":"s1","location":"https://example.com/sub","name":"One"}]}"""
+                "subscriptions" -> buildJsonObject {
+                    put("ok", buildJsonObject {
+                        put("subscriptions", buildJsonArray {
+                            add(buildJsonObject {
+                                put("id", JsonPrimitive("s1"))
+                                put("name", JsonPrimitive("One"))
+                                put("error", JsonPrimitive(subscriptionError))
+                            })
+                        })
+                    })
+                }.toString()
+                else -> error("unexpected $command")
+            }
+        }
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val known = Core(
+            transport(
+                "error.vpn_off: the VPN is not on; connect again",
+                "subscription.core.clash_yaml_unsupported: clash proxy type must be ss",
+            ),
+            dispatcher,
+            Chinese,
+        )
+        assertEquals("VPN 没有打开，请重新连接", known.overview().overview.error)
+        assertEquals("订阅里有本应用不支持的节点类型或写法", known.subscriptions().single().error)
+        // A code the app has no words for: what did not finish, with the English but never the code.
+        val unknown = Core(
+            transport(
+                "error.future_thing: something new went wrong",
+                "subscription.core.x_unsupported: x proxy type must be ss",
+            ),
+            dispatcher,
+            Chinese,
+        )
+        val overviewError = unknown.overview().overview.error.orEmpty()
+        val rowError = unknown.subscriptions().single().error.orEmpty()
+        assertEquals("操作没有完成：something new went wrong", overviewError)
+        assertEquals("操作没有完成：x proxy type must be ss", rowError)
+        for (shown in listOf(overviewError, rowError)) {
+            assertFalse(shown, shown.contains("error.") || shown.contains("subscription.core."))
+        }
+    }
+
+    @Test
+    fun anUnreadableAnswerIsSaidInTheAppsLanguage() = runTest {
+        val error = runCatching {
+            Core(Recording("""{"ok":{"no":"message"}}"""), StandardTestDispatcher(testScheduler), Chinese).connect()
+        }.exceptionOrNull() as CoreException
+        assertEquals("客户端返回了无法识别的结果", error.message)
+        assertTrue(error.detail.orEmpty().startsWith("Unexpected answer to connect"))
     }
 
     @Test

@@ -62,6 +62,16 @@ pub use desktop_dns::DnsPreset;
 use self::engine::{Engine, OtherSource};
 use self::session::UserSession;
 use self::state::{RoutingMode, SavedSource, SavedState, Store};
+use crate::refusal;
+
+/// The refusal codes several commands share (`refusal`).
+const SUBSCRIPTION_MISSING: &str = "error.subscription_missing";
+const NO_SUPPORTED_NODES: &str = "error.no_supported_nodes";
+
+/// The node a command names is in no saved subscription.
+pub(crate) fn node_missing() -> String {
+    refusal::coded("error.node_missing", "the node is not in any subscription")
+}
 
 /// The source label for share links pasted into the import field.
 /// Lines the log viewer shows.
@@ -604,8 +614,12 @@ impl Backend {
                 let envelope = desktop_dns::apply(&envelope, self.state.dns_preset)?;
                 let envelope = desktop_dns::apply_block_quic(&envelope, self.state.block_quic)?;
                 let envelope = desktop_dns::redirects::apply(&envelope)?;
-                RuntimeConfig::from_json(envelope.as_bytes())
-                    .map_err(|error| format!("the engine rejected the rules: {}", error.message))?;
+                RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
+                    refusal::coded(
+                        "error.rules_rejected",
+                        format!("the engine rejected the rules: {}", error.message),
+                    )
+                })?;
                 Some(envelope)
             }
             Err(_) => None,
@@ -1090,9 +1104,12 @@ impl Backend {
         group: &str,
         member: &str,
     ) -> Result<OperationResult, String> {
-        let mut profile = self
-            .routed()
-            .ok_or("the current subscription has no policy groups")?;
+        let mut profile = self.routed().ok_or_else(|| {
+            refusal::coded(
+                "error.no_policy_groups",
+                "the current subscription has no policy groups",
+            )
+        })?;
         profile::set_group_default(&mut profile, group, member)?;
         self.state
             .group_choices
@@ -1208,7 +1225,10 @@ impl Backend {
     /// connecting.
     pub fn set_tun_mode(&mut self, on: bool) -> Result<OperationResult, String> {
         if self.engine.is_running() {
-            return Err("Disconnect before switching TUN mode".to_string());
+            return Err(refusal::coded(
+                "error.disconnect_first",
+                "Disconnect before switching TUN mode",
+            ));
         }
         self.state.tun_mode = on;
         self.save()?;
@@ -1442,10 +1462,12 @@ impl Backend {
                 };
             return desktop_mitm::replay::Target::from_replay_proxy(&answer, root);
         }
-        let proxy = self
-            .engine
-            .address()
-            .ok_or("connect first: replayed requests go through the running engine")?;
+        let proxy = self.engine.address().ok_or_else(|| {
+            refusal::coded(
+                "error.connect_first_replay",
+                "connect first: replayed requests go through the running engine",
+            )
+        })?;
         Ok(desktop_mitm::replay::Target {
             proxy,
             credentials: None,
@@ -1510,7 +1532,8 @@ impl Backend {
     }
 
     pub fn rename_subscription(&mut self, id: &str, name: &str) -> Result<OperationResult, String> {
-        let name = subscription_meta::clean_name(name).ok_or("enter a name")?;
+        let name = subscription_meta::clean_name(name)
+            .ok_or_else(|| refusal::coded("error.name_required", "enter a name"))?;
         self.source_mut(id)?.name = Some(name);
         self.save()?;
         // Linked policy groups are named after their subscriptions.
@@ -1545,7 +1568,7 @@ impl Backend {
             .sources
             .iter_mut()
             .find(|source| source.id == id)
-            .ok_or_else(|| "the subscription was not found".to_string())
+            .ok_or_else(|| refusal::coded(SUBSCRIPTION_MISSING, "the subscription was not found"))
     }
 
     /// Source `id`'s URL when it can be fetched again.
@@ -2028,9 +2051,7 @@ impl Backend {
     /// Switches to a node of another source: through its linked policy group when the selected source's rules
     /// include it, else by selecting that source and its node.
     fn switch_to_other_source(&mut self, id: &str) -> Result<OperationResult, String> {
-        let (other, node) = self
-            .other_node(id)
-            .ok_or("the node is not in any subscription")?;
+        let (other, node) = self.other_node(id).ok_or_else(node_missing)?;
         let (source_id, node_id, name, group_id) = (
             other.id.clone(),
             node.id.clone(),
@@ -2090,7 +2111,7 @@ impl Backend {
             .iter()
             .find(|node| node.id == id)
             .or_else(|| self.other_node(id).map(|(_, node)| node))
-            .ok_or("the node is not in any subscription")?;
+            .ok_or_else(node_missing)?;
         engine::share_link(node)
     }
 
@@ -2099,7 +2120,7 @@ impl Backend {
         let own = self.nodes.iter().find(|node| node.id == id);
         let node = own
             .or_else(|| self.other_node(id).map(|(_, node)| node))
-            .ok_or("the node is not in any subscription")?;
+            .ok_or_else(node_missing)?;
         let keep = match own {
             None => Some("other"),
             Some(_) => match self.node_form(id)?.keep_reason {
@@ -2142,8 +2163,12 @@ impl Backend {
             .routed_profile
             .as_deref()
             .and_then(|profile| serde_json::from_str::<Value>(profile).ok());
-        node_edits::form(&self.nodes, profile.as_ref(), id)
-            .ok_or_else(|| "only nodes of the selected subscription can be edited".to_string())
+        node_edits::form(&self.nodes, profile.as_ref(), id).ok_or_else(|| {
+            refusal::coded(
+                "error.node_not_editable",
+                "only nodes of the selected subscription can be edited",
+            )
+        })
     }
 
     /// Gives a node of the selected source a new name, server and port until the subscription is updated.
@@ -2190,7 +2215,7 @@ impl Backend {
         let source = self
             .state
             .selected_source()
-            .ok_or("no subscription is selected")?
+            .ok_or_else(|| refusal::coded("error.no_subscription", "no subscription is selected"))?
             .id
             .clone();
         let path = self.node_edits_path(&source);
@@ -2239,7 +2264,10 @@ impl Backend {
             .filter(|node| engine::is_supported(node))
             .count();
         if supported == 0 {
-            return Err("none of the nodes can run on the embedded engine yet".to_string());
+            return Err(refusal::coded(
+                NO_SUPPORTED_NODES,
+                "none of the nodes can run on the embedded engine yet",
+            ));
         }
         // Share links pasted again join the ones pasted before: one "pasted links", not one per paste.
         let earlier = (location == PASTED_LOCATION)
@@ -2316,7 +2344,10 @@ impl Backend {
         fetched: Result<String, String>,
     ) -> Result<OperationResult, String> {
         if !self.state.sources.iter().any(|source| source.id == id) {
-            return Err("the subscription was removed while it was updating".to_string());
+            return Err(refusal::coded(
+                "error.subscription_removed",
+                "the subscription was removed while it was updating",
+            ));
         }
         let time = now();
         let parsed =
@@ -2375,7 +2406,10 @@ impl Backend {
 
     pub fn select_subscription(&mut self, id: &str) -> Result<OperationResult, String> {
         if !self.state.select_source(id) {
-            return Err("the subscription was not found".to_string());
+            return Err(refusal::coded(
+                SUBSCRIPTION_MISSING,
+                "the subscription was not found",
+            ));
         }
         self.state.selected_node = None;
         self.state.group_choices.clear();
@@ -2394,7 +2428,10 @@ impl Backend {
             .selected_source()
             .is_some_and(|source| source.id == id);
         if !self.state.remove_source(id) {
-            return Err("the subscription was not found".to_string());
+            return Err(refusal::coded(
+                SUBSCRIPTION_MISSING,
+                "the subscription was not found",
+            ));
         }
         if was_selected {
             self.state.group_choices.clear();
@@ -2430,7 +2467,10 @@ impl Backend {
             .filter(|node| engine::is_supported(node))
             .count();
         if supported == 0 {
-            return Err("no node the embedded engine can run".to_string());
+            return Err(refusal::coded(
+                NO_SUPPORTED_NODES,
+                "no node the embedded engine can run",
+            ));
         }
         Ok(OperationResult::coded(
             "validate.supported",
@@ -2925,6 +2965,29 @@ rules:
   - DOMAIN-SUFFIX,example.org,DIRECT
   - MATCH,Proxy
 "#;
+
+    /// Each line of what the import left out carries the kernel's code, so a window names its kind in its own
+    /// language (finding feature-gap-07).
+    #[test]
+    fn routing_warnings_carry_the_kernel_code() {
+        let content = CLASH.replace(
+            "rules:\n",
+            "  - name: Chain\n    type: relay\n    proxies:\n      - HK\n      - JP\nrules:\n",
+        );
+        let nodes = engine::parse_nodes(&content).unwrap();
+        let warnings = engine::routing_warnings(&content, &nodes);
+        assert!(!warnings.is_empty());
+        for line in &warnings {
+            let (code, english) = refusal::split(line).expect("a coded line");
+            assert!(code.starts_with("config.core.routing_import."), "{line}");
+            assert!(!english.is_empty());
+        }
+        assert!(
+            warnings.iter().any(|line| line
+                .starts_with("config.core.routing_import.group_skipped: policy group Chain")),
+            "{warnings:?}"
+        );
+    }
 
     #[test]
     fn subscription_rules_route_and_policy_groups_switch() {
