@@ -278,6 +278,10 @@ jobs:
             echo "- commit: ${GITHUB_SHA}"
             echo "- scope: internal-testflight-only"
             echo "- release-asset: blocked"
+            echo "- export compliance: the app declares non-exempt encryption (ITSAppUsesNonExemptEncryption true). Until the"
+            echo "  App Store Connect encryption declaration is approved and its code is in the build, the build shows"
+            echo "  Missing Compliance: answer the questions on the build in App Store Connect before testers can install it"
+            echo "  (docs/manual-intervention.md, 出口合规)."
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Remove signing material

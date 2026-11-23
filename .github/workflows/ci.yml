@@ -90,6 +90,22 @@ jobs:
           python3 -I .github/scripts/version.py --self-test
           python3 -I .github/scripts/version.py check
 
+      # Export compliance: the app and its tunnel ship their own encryption (TLS, AEAD ciphers, WireGuard in the
+      # bundled runtime), so every target that declares ITSAppUsesNonExemptEncryption must declare true, and
+      # docs/manual-intervention.md must not keep the old "HTTPS only, exempt" answer (出口合规).
+      - name: Export compliance declaration matches the app
+        run: |
+          set -euo pipefail
+          if grep -nE '^\s*ITSAppUsesNonExemptEncryption:\s*(false|NO|no)\s*$' apps/ios/project.yml; then
+            echo "::error::apps/ios/project.yml declares exempt encryption; the bundled runtime implements its own encryption."
+            exit 1
+          fi
+          test "$(grep -cE '^\s*ITSAppUsesNonExemptEncryption:\s*true\s*$' apps/ios/project.yml)" -ge 4
+          if grep -n '^ios-export-compliance-answer=standard-https-only-exempt' docs/manual-intervention.md; then
+            echo "::error::docs/manual-intervention.md still records the exempt export compliance answer."
+            exit 1
+          fi
+
       # Every action is pinned to a commit SHA, and the Android release key and the Play keys appear only in jobs that
       # declare their protected environment (the release key only in release.yml's sign-android). The self-tests
       # check the rules first; android-signing-gate.test.sh covers the release APK signing gate.

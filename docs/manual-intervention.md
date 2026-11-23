@@ -41,7 +41,7 @@ ios-upload-external-testflight=blocked
 ios-upload-beta-app-review=blocked-not-required-for-internal
 ios-upload-bundle-id-storage=github-variables-only
 ios-upload-api-key-status=team-key-added-to-environment
-ios-export-compliance-answer=standard-https-only-exempt-2026-10-13
+ios-export-compliance-answer=pending-reanswer-standard-algorithms-non-exempt
 ios-upload-internal-confirmation-status=confirmed
 ios-upload-internal-confirmation-items=app-record,export-compliance,internal-testing-group,app-privacy-determination,privacy-policy-determination,environment-secrets-and-variables
 ios-upload-internal-workflow=.github/workflows/ios-testflight.yml
@@ -850,3 +850,30 @@ CI 只跑单元测试和管理员账号下的端到端测试，以下需要人�
 
 - [ ] Settings → Actions → General → Actions permissions：勾选 “Require actions to be pinned to a full-length commit SHA”。
 - [ ] Settings → Code security → Dependabot：确认 Dependabot version updates 已启用，升级 PR 照常经过完整 CI。
+
+### 出口合规（App Store Connect 加密问卷，release-readiness-09）
+
+2026-10-13 的答案 `standard-https-only-exempt` 只适用于当时「只调用系统 HTTPS」的内部 TestFlight 构建。现在 App 与隧道扩展（iOS 和
+macOS）都链接 `NetworkCoreRuntime.xcframework`，其中自带 TLS（rustls + ring）、Shadowsocks AEAD（AES-GCM、ChaCha20-Poly1305）、
+WireGuard、QUIC 类传输等加密实现，用来保护用户流量的机密性，不属于 Category 5 Part 2 的豁免情形。因此 `apps/ios/project.yml`
+的四个目标（`NetworkCoreApp`、`NetworkCorePacketTunnel`、`NetworkCoreMac`、`NetworkCoreMacTunnel`）已改为
+`ITSAppUsesNonExemptEncryption: true`（Widget 不链接运行时，不声明）。CI 检查这些值不再是 false，且本文件不再保留旧答案。
+以下只能由维护者（必要时与法务）完成：
+
+- [ ] App Store Connect → App → 通用 → App 加密文稿（App Encryption Documentation）→ 新建，按实际二进制回答：
+  1. 使用加密：是；
+  2. 是否符合美国 EAR 第 5 类第 2 部分的豁免：否（加密用于保护用户流量，不是仅用于认证、版权保护等豁免用途）；
+  3. 是否实现专有或非标准算法：否（开源版只用公开标准算法）；
+  4. 是否在 Apple 系统加密之外或之上实现标准算法：是。
+  美国 EAR 侧通常按大众市场（5A992 / 5D992，§740.17(b)(1)）处理。2021 年 BIS 规则之后，大多数大众市场终端产品已不再需要年度
+  自分类报告，是否仍需提交请法务确认后再写入本文件，不要照抄旧做法。
+- [ ] 法国区：在法国上架需要先向 ANSSI 完成加密产品申报，再把申报文件上传到上面的加密文稿；Apple 审核通过后给出合规码。
+  不在法国上架就在「价格与销售范围」里排除法国，并把这个决定记在这里。
+- [ ] 拿到合规码后，在 `project.yml` 的 `NetworkCoreApp` 和 `NetworkCorePacketTunnel`（及 macOS 两个目标）加
+  `ITSEncryptionExportComplianceCode`，或在 workflow 里从 Variables 注入。没有合规码之前，每个 TestFlight 构建都会显示
+  「缺少出口合规信息」，需要在该构建页面回答一次后内部测试者才能安装（`ios-testflight.yml` 的 summary 也会提示）。
+  不要用删除 `ITSAppUsesNonExemptEncryption` 来绕过，删掉的效果相同，只是不显眼。
+- [ ] 完成后把第 44 行的标记改成实际答案与日期，例如 `ios-export-compliance-answer=standard-algorithms-non-exempt-YYYY-MM-DD`，
+  并按 `docs/architecture/ios-app-review-manual-confirmation-source-contract.md` 记录 `ios-app-review-export-compliance`。
+- [ ] ANX 版（anx 仓库 `release-ios.yml` 复用本仓库的 `project.yml`）含未公开的专有协议，属于「专有或非标准算法」，
+  需要单独回答问卷（通常需要 CCATS 和法国申报），并在该 workflow 里显式写 ANX 版自己的 ITS 键和合规码，不能继承开源版的答案。
