@@ -699,9 +699,13 @@ final class TunnelController {
 
     /// The system's background app refresh. It can launch the app without a window, where `RootView`'s `.task`
     /// never runs, so the saved profile and the groups are read here first; without them nothing would be due and
-    /// the next background run would not be asked for.
+    /// the next background run would not be asked for. It uses `RootView`'s condition: a run before the first unlock
+    /// leaves `loaded` true with the groups unread (`subscriptionsRead`), and a later run in the same, only
+    /// suspended process (the scheduled `.retry`) loads again. It calls `load()` rather than `reloadProfile()`, so
+    /// the files `loadNow()` reads (local rules, DNS, redirects, debug mappings) and `appMode`, which were also read
+    /// while protected data was unavailable, are read again too.
     func refreshInBackground() async {
-        if !loaded {
+        if !loaded || !subscriptionsRead {
             await load()
         }
         await refreshDueSubscriptions(trigger: .background)
