@@ -64,6 +64,18 @@
             </intent-filter>
         </activity>
 
+        <!-- Hands a captured body to the app the user picks (share, open with); nothing else is exposed
+             (res/xml/file_paths.xml), and only for the one read the intent grants. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- Only the system may bind it (BIND_VPN_SERVICE); the app starts it when the client opens the tunnel, and
              the system starts it when the user sets the app as the always-on VPN. -->
         <service

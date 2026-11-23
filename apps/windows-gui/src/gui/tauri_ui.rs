@@ -635,6 +635,8 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             runtime_control,
             export_capture,
             decode_body,
+            save_body,
+            open_body,
             capture_session,
             replay_request,
             list_debug_mappings,
@@ -1455,6 +1457,34 @@ async fn export_capture(
 #[tauri::command]
 async fn decode_body(request: desktop_mitm::capture::DecodeRequest) -> Result<Value, String> {
     run_blocking(move || desktop_mitm::capture::decode_body(&request)).await
+}
+
+/// Saves a body as the inspector shows it (decoded) to the Downloads folder without replacing an older file, and
+/// answers where it went.
+#[tauri::command]
+async fn save_body(file: desktop_mitm::capture::BodyFile) -> Result<SavedFile, String> {
+    run_blocking(move || {
+        let dir = desktop_mitm::capture::downloads_dir()
+            .ok_or("the Downloads folder could not be found")?;
+        let path = desktop_mitm::capture::save_body(&file, &dir)?;
+        Ok(SavedFile {
+            location: path.display().to_string(),
+        })
+    })
+    .await
+}
+
+/// Opens a body with the app Windows uses for its type (`desktop_mitm::capture::open_body`: only types that run
+/// no code where they open).
+#[tauri::command]
+async fn open_body(file: desktop_mitm::capture::BodyFile) -> Result<SavedFile, String> {
+    run_blocking(move || {
+        let path = desktop_mitm::capture::open_body(&file)?;
+        Ok(SavedFile {
+            location: path.display().to_string(),
+        })
+    })
+    .await
 }
 
 /// Saved capture sessions: list, save what capture holds, load one for viewing, delete

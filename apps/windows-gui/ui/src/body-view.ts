@@ -1,11 +1,15 @@
+import { decodeProtobuf, grpcFrames, GrpcFrame, isGrpcType, isProtobufType, looksLikeProtobuf, ProtoMessage, sniffImage } from "./binary-view";
 import { JsonNode, parseJson } from "./json-view";
 
 // What a captured body is and the ways the inspector can show it. Kept apart from the components so the choices are
 // tested without a window.
 
-export type BodyKind = "json" | "image" | "form" | "text" | "binary";
-/** tree: folding JSON tree. pretty: indented and coloured. table: name/value pairs. raw: the text as received. */
-export type BodyMode = "tree" | "pretty" | "preview" | "table" | "raw" | "hex";
+export type BodyKind = "json" | "image" | "form" | "protobuf" | "text" | "binary";
+/**
+ * tree: folding JSON tree. pretty: indented and coloured. table: name/value pairs. protobuf: fields decoded without
+ * a schema. raw: the text as received.
+ */
+export type BodyMode = "tree" | "pretty" | "preview" | "table" | "protobuf" | "raw" | "hex";
 
 /** "Application/JSON; charset=utf-8" → "application/json". */
 export function mediaType(contentType: string | null | undefined): string {
@@ -22,21 +26,58 @@ export function imageType(contentType: string | null | undefined): string | null
   return imageTypes.has(media) ? media : null;
 }
 
+/**
+ * Types another app may be asked to open (`desktop.openBody`), the same list as `body_type` in
+ * crates/desktop-mitm/src/capture.rs. Types that run code where they open (HTML, SVG, scripts, XML, CSV) and
+ * unknown bytes are only saved.
+ */
+const openable = new Set([
+  "image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp", "image/avif", "image/bmp", "image/x-icon", "image/vnd.microsoft.icon",
+  "application/pdf", "text/plain", "video/mp4", "video/webm", "audio/mpeg", "audio/mp4", "audio/ogg", "audio/wav", "audio/x-wav", "application/json",
+]);
+
+export function opensElsewhere(contentType: string | null | undefined): boolean {
+  const media = mediaType(contentType);
+  return openable.has(media) || media.endsWith("+json");
+}
+
 export interface BodyShape {
   kind: BodyKind;
   /** The parsed document when `kind` is "json". */
   json?: JsonNode;
+  /** The picture's type when `kind` is "image": from Content-Type, or from the first bytes when the type is generic. */
+  image?: string;
+  /** The decoded message when `kind` is "protobuf", or when a "binary" body also reads as one. */
+  proto?: ProtoMessage;
+  /** The frames of a gRPC body (`kind` "protobuf"), each decoded on its own. */
+  grpc?: { frames: GrpcFrame[]; cut: boolean };
 }
 
 /**
- * What the body is, from its Content-Type and its text (`null` when the bytes are not text). JSON is recognised by
- * its type or, when a server labels it text/plain or not at all, by parsing; a cut JSON body does not parse and is
- * shown as text.
+ * What the body is, from its Content-Type, its text (`null` when the bytes are not text) and its bytes. JSON is
+ * recognised by its type or, when a server labels it text/plain or not at all, by parsing; a cut JSON body does not
+ * parse and is shown as text. A picture or Protobuf sent with a generic type is recognised by its bytes; Protobuf
+ * then opens as hex with the decoded view one click away, since random bytes can read as a message too. `cut` is
+ * whether capture kept only the start of the body.
  */
-export function bodyShape(contentType: string | null | undefined, text: string | null): BodyShape {
-  if (imageType(contentType)) return { kind: "image" };
-  if (text === null) return { kind: "binary" };
+export function bodyShape(contentType: string | null | undefined, text: string | null, bytes?: Uint8Array, cut = false): BodyShape {
   const media = mediaType(contentType);
+  const labelled = imageType(contentType);
+  if (labelled) return { kind: "image", image: labelled };
+  if (bytes && isGrpcType(media)) {
+    const grpc = grpcFrames(bytes);
+    if (grpc) return { kind: "protobuf", grpc };
+  }
+  if (bytes && isProtobufType(media)) {
+    const proto = decodeProtobuf(bytes, cut);
+    if (proto) return { kind: "protobuf", proto };
+  }
+  if (text === null) {
+    const sniffed = bytes ? sniffImage(bytes) : null;
+    if (sniffed && !media.startsWith("text/")) return { kind: "image", image: sniffed };
+    const proto = bytes ? looksLikeProtobuf(bytes) : null;
+    return proto ? { kind: "binary", proto } : { kind: "binary" };
+  }
   if (media === "application/x-www-form-urlencoded") return { kind: "form" };
   const start = text.trimStart()[0];
   const maybeJson = media.endsWith("/json") || media.endsWith("+json") || ((start === "{" || start === "[") && !/(html|xml|javascript|css)/.test(media));
@@ -47,20 +88,21 @@ export function bodyShape(contentType: string | null | undefined, text: string |
   return { kind: "text" };
 }
 
-/** The ways to show a body of this kind, the default first. */
-export function bodyModes(kind: BodyKind): BodyMode[] {
+/** The ways to show a body of this kind, the default first. `proto`: a binary body also reads as Protobuf. */
+export function bodyModes(kind: BodyKind, proto = false): BodyMode[] {
   switch (kind) {
     case "json": return ["tree", "pretty", "raw", "hex"];
     case "image": return ["preview", "hex"];
     case "form": return ["table", "raw", "hex"];
+    case "protobuf": return ["protobuf", "hex"];
     case "text": return ["raw", "hex"];
-    case "binary": return ["hex"];
+    case "binary": return proto ? ["hex", "protobuf"] : ["hex"];
   }
 }
 
 /** The mode to show: the one the user chose last for this kind when it still applies, else the kind's default. */
-export function chosenMode(kind: BodyKind, preferred: BodyMode | undefined): BodyMode {
-  const modes = bodyModes(kind);
+export function chosenMode(kind: BodyKind, preferred: BodyMode | undefined, proto = false): BodyMode {
+  const modes = bodyModes(kind, proto);
   return preferred && modes.includes(preferred) ? preferred : modes[0];
 }
 

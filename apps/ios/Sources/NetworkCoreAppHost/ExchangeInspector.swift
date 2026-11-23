@@ -1,3 +1,4 @@
+import ImageIO
 import NetworkCoreBridge
 import SwiftUI
 #if canImport(UIKit)
@@ -397,7 +398,7 @@ private struct MessagePane: View {
                 PairList(pairs: query)
             case .body:
                 if message.body.size > 0 {
-                    BodyPane(message: message)
+                    BodyPane(message: message, fileName: isRequest ? "request-body" : "response-body")
                 } else {
                     Text(isRequest ? "这个请求没有正文。" : "这个响应没有正文。")
                         .font(.subheadline)
@@ -447,12 +448,16 @@ private struct PairList: View {
 }
 
 /// A body, shown by what it is. The view chosen (tree, formatted, raw, hex) is remembered and used again wherever
-/// the next body offers it.
+/// the next body offers it. Protobuf and gRPC are decoded without a schema; pictures are drawn from a thumbnail, so a
+/// huge one cannot use up memory. The "more" menu exports the body as shown, and on the Mac opens the types that run
+/// no code with their app.
 private struct BodyPane: View {
     let message: PacketCapture.Exchange.Message
+    /// The exported file's name without its extension.
+    let fileName: String
     @Environment(\.brand) private var brand
     @AppStorage("capture.inspector.body") private var modeName = ""
-    /// The body decompressed and classified; worked out once per body, off the first frame.
+    /// The body decompressed and classified; worked out once per body, away from the main thread.
     @State private var loaded: Loaded?
     @State private var collapsed: Set<String> = []
     @State private var selected: String?
@@ -460,12 +465,26 @@ private struct BodyPane: View {
     @State private var path: String?
     @State private var copied = false
 
-    struct Loaded {
+    struct Loaded: @unchecked Sendable {
         let data: Data
         let text: String?
         let kind: CaptureBody.Kind
         /// Only the start could be decompressed.
         let cut: Bool
+        /// The decoded Protobuf as text, when the body reads as Protobuf.
+        let proto: String?
+        /// The picture, when the body is one.
+        let picture: Picture?
+        /// The type the exported file is named for: Content-Type, or the picture's type found from its bytes.
+        let fileType: String?
+    }
+
+    enum Picture {
+        case drawn(CGImage)
+        /// Its header claims more pixels than `CaptureBinary.maxImagePixels`.
+        case tooLarge(width: Int, height: Int)
+        /// Cut short, or a format the system does not draw.
+        case unreadable
     }
 
     var body: some View {
@@ -488,14 +507,51 @@ private struct BodyPane: View {
             let decoded = CaptureBodyDecoder.decode(message.body, contentEncoding: encoding)
             let data = decoded?.data ?? PacketCapture.decode(message.body.data, contentEncoding: encoding) ?? message.body.data
             let text = decoded.map { PacketCapture.text($0.data) } ?? PacketCapture.text(message.body.data, contentEncoding: encoding)
-            let kind = CaptureBody.kind(contentType: message.header("Content-Type"), text: text)
-            if case let .json(root) = kind {
+            let contentType = message.header("Content-Type")
+            let partial = decoded?.truncated == true
+            let cut = partial || message.body.truncated
+            let next = await Task.detached(priority: .userInitiated) {
+                Self.classify(data: data, text: text, contentType: contentType, cut: cut, partial: partial)
+            }.value
+            if case let .json(root) = next.kind {
                 collapsed = JsonDocument.initiallyCollapsed(root)
             }
             selected = nil
             path = nil
-            loaded = Loaded(data: data, text: text, kind: kind, cut: decoded?.truncated == true)
+            loaded = next
         }
+    }
+
+    /// What the body is and the costly parts of showing it: the Protobuf text and the picture.
+    private nonisolated static func classify(data: Data, text: String?, contentType: String?, cut: Bool, partial: Bool) -> Loaded {
+        let kind = CaptureBody.kind(contentType: contentType, text: text, data: data, cut: cut)
+        var proto: String?
+        var picture: Picture?
+        var fileType = contentType
+        switch kind {
+        case let .protobuf(.message(message), _):
+            proto = CaptureBinary.protoText(message, more: labels.more)
+        case let .protobuf(.grpc(body), _):
+            proto = CaptureBinary.grpcText(body, labels: labels)
+        case .image:
+            picture = Self.picture(data)
+            if !CaptureBody.isImage(contentType) {
+                fileType = CaptureBinary.sniffImage(data)
+            }
+        default:
+            break
+        }
+        return Loaded(data: data, text: text, kind: kind, cut: partial, proto: proto, picture: picture, fileType: fileType)
+    }
+
+    private nonisolated static var labels: CaptureBinary.Labels {
+        CaptureBinary.Labels(
+            message: { index, size in String(localized: "消息 \(index) · \(size) 字节") },
+            compressed: String(localized: "这条消息是压缩的，导出正文后用其他工具解开。"),
+            trailers: String(localized: "尾部"),
+            undecoded: String(localized: "这条消息不是 Protobuf，见十六进制。"),
+            more: String(localized: "…（只解析了开头部分）")
+        )
     }
 
     private static func title(_ mode: CaptureBody.Mode) -> LocalizedStringKey {
@@ -508,6 +564,8 @@ private struct BodyPane: View {
             return "预览"
         case .table:
             return "表格"
+        case .protobuf:
+            return "Protobuf"
         case .raw:
             return "原文"
         case .hex:
@@ -532,23 +590,6 @@ private struct BodyPane: View {
                 .fixedSize()
             }
             Spacer(minLength: 0)
-            if mode == .tree, case let .json(root) = loaded.kind {
-                Menu {
-                    Button("全部展开") {
-                        collapsed = []
-                    }
-                    Button("全部折叠") {
-                        collapsed = Set(JsonDocument.containerIDs(root))
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .menuStyle(.button)
-                .buttonStyle(.borderless)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .accessibilityLabel("更多")
-            }
             Button {
                 Pasteboard.copy(copyText(loaded, mode))
                 copied = true
@@ -562,6 +603,37 @@ private struct BodyPane: View {
             .buttonStyle(.borderless)
             .accessibilityLabel(copied ? "已拷贝" : "拷贝正文")
             .help(copied ? "已拷贝" : "拷贝正文")
+            Menu {
+                let file = CaptureBodyFile(data: loaded.data, contentType: loaded.fileType, name: fileName)
+                ShareLink(item: file, preview: SharePreview(file.fileName)) {
+                    Label("导出正文", systemImage: "square.and.arrow.up")
+                }
+                #if os(macOS)
+                if CaptureBinary.fileType(loaded.fileType).opens {
+                    Button {
+                        file.open()
+                    } label: {
+                        Label("用其他应用打开", systemImage: "arrow.up.forward.app")
+                    }
+                }
+                #endif
+                if mode == .tree, case let .json(root) = loaded.kind {
+                    Divider()
+                    Button("全部展开") {
+                        collapsed = []
+                    }
+                    Button("全部折叠") {
+                        collapsed = Set(JsonDocument.containerIDs(root))
+                    }
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(.button)
+            .buttonStyle(.borderless)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .accessibilityLabel("更多")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -577,6 +649,8 @@ private struct BodyPane: View {
             return loaded.text ?? ""
         case .raw, .table:
             return loaded.text ?? ""
+        case .protobuf:
+            return loaded.proto ?? ""
         case .preview, .hex:
             return PacketCapture.hexDump(loaded.data)
         }
@@ -596,17 +670,19 @@ private struct BodyPane: View {
                 CodeText(text: JsonDocument.pretty(root))
             }
         case .preview:
-            if let picture = Self.picture(loaded.data) {
+            switch loaded.picture {
+            case let .drawn(image):
                 ScrollView {
-                    picture.image
+                    Image(image, scale: 1, label: Text("图片预览"))
                         .resizable()
                         .scaledToFit()
-                        .frame(maxWidth: picture.size.width, maxHeight: picture.size.height)
+                        .frame(maxWidth: CGFloat(image.width), maxHeight: CGFloat(image.height))
                         .padding(16)
                         .frame(maxWidth: .infinity)
-                        .accessibilityLabel("图片预览")
                 }
-            } else {
+            case let .tooLarge(width, height):
+                CodeText(text: PacketCapture.hexDump(loaded.data), note: "图片太大（\(width) × \(height)），不在这里画出；可以导出后用其他应用查看。")
+            case .unreadable, nil:
                 // A picture cut at 64 KiB, or a format the system does not draw.
                 CodeText(text: PacketCapture.hexDump(loaded.data), note: "这张图片画不出来，下面是它的十六进制。")
             }
@@ -614,6 +690,8 @@ private struct BodyPane: View {
             if case let .form(pairs) = loaded.kind {
                 PairList(pairs: pairs)
             }
+        case .protobuf:
+            CodeText(text: loaded.proto ?? "")
         case .raw:
             CodeText(text: loaded.text ?? "")
         case .hex:
@@ -621,20 +699,29 @@ private struct BodyPane: View {
         }
     }
 
-    private static func picture(_ data: Data) -> (image: Image, size: CGSize)? {
-        #if canImport(UIKit)
-        guard let picture = UIImage(data: data) else {
-            return nil
+    /// The picture from its header and a thumbnail no larger than `CaptureBinary.previewPixels` on its longer side:
+    /// ImageIO reads the size without decoding, and a picture that claims too many pixels is not decoded at all.
+    private nonisolated static func picture(_ data: Data) -> Picture {
+        let options = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(data as CFData, options), CGImageSourceGetCount(source) > 0 else {
+            return .unreadable
         }
-        return (Image(uiImage: picture), picture.size)
-        #elseif canImport(AppKit)
-        guard let picture = NSImage(data: data), picture.size.width > 0, picture.size.height > 0 else {
-            return nil
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, options) as? [CFString: Any]
+        let width = properties?[kCGImagePropertyPixelWidth] as? Int ?? 0
+        let height = properties?[kCGImagePropertyPixelHeight] as? Int ?? 0
+        if width.multipliedReportingOverflow(by: height).overflow || width * height > CaptureBinary.maxImagePixels {
+            return .tooLarge(width: width, height: height)
         }
-        return (Image(nsImage: picture), picture.size)
-        #else
-        return nil
-        #endif
+        let thumbnail: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: CaptureBinary.previewPixels,
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnail as CFDictionary), image.width > 0, image.height > 0 else {
+            return .unreadable
+        }
+        return .drawn(image)
     }
 
     /// The selected value's path (click to copy) and what the body is.

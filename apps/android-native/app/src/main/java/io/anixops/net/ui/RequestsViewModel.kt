@@ -19,6 +19,7 @@ import io.anixops.net.core.RequestFeed
 import io.anixops.net.core.RequestKey
 import io.anixops.net.core.RequestPage
 import io.anixops.net.core.RequestRow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -30,6 +31,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /** The quick filters by id, in the order the chips show; `view.combine_filter` knows their conditions. */
 val QuickFilters = listOf("errors", "json", "images", "h2", "large")
@@ -522,20 +524,25 @@ class RequestsViewModel(private val core: Core) : ViewModel() {
         }
     }
 
-    /** A body to show: its Content-Encoding undone by the core, or as captured when that cannot be done. */
+    /**
+     * A body to show: its Content-Encoding undone by the core, or as captured when that cannot be done. Working out
+     * what it is (Protobuf can take a moment on a large body) runs off the main thread.
+     */
     private suspend fun body(message: CaptureMessage): BodyText {
         val body = message.body
         val type = message.header("content-type")
         val encoding = message.header("content-encoding")?.trim().orEmpty()
-        if (encoding.isEmpty() || encoding.equals("identity", ignoreCase = true) || body.dataBase64.isEmpty()) {
-            return BodyText.of(body.dataBase64, type, body.truncated)
+        val shown = if (encoding.isEmpty() || encoding.equals("identity", ignoreCase = true) || body.dataBase64.isEmpty()) {
+            Triple(body.dataBase64, body.truncated, false)
+        } else {
+            try {
+                val decoded = core.decodeBody(body, encoding)
+                Triple(decoded.dataBase64, body.truncated || decoded.truncated, false)
+            } catch (error: CoreException) {
+                Triple(body.dataBase64, body.truncated, true)
+            }
         }
-        return try {
-            val decoded = core.decodeBody(body, encoding)
-            BodyText.of(decoded.dataBase64, type, body.truncated || decoded.truncated)
-        } catch (error: CoreException) {
-            BodyText.of(body.dataBase64, type, body.truncated, undecoded = true)
-        }
+        return withContext(Dispatchers.Default) { BodyText.of(shown.first, type, shown.second, undecoded = shown.third) }
     }
 
     /** A poll that fails keeps what the page shows rather than repeating the refusal every second. */

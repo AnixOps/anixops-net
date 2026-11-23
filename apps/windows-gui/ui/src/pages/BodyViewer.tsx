@@ -2,7 +2,8 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { createContext, KeyboardEvent, ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CaptureMessage, desktop } from "../bridge";
-import { BodyKind, BodyMode, bodyModes, bodyShape, chosenMode, formPairs, imageType } from "../body-view";
+import { drawable, grpcText, imageDimensions, ProtoLabels, protoText } from "../binary-view";
+import { BodyKind, BodyMode, bodyModes, bodyShape, chosenMode, formPairs, opensElsewhere } from "../body-view";
 import { asText, bodySize, decodedBody, fromBase64, header, hexDump, toBase64 } from "../capture-format";
 import { childCount, containerIds, copyText, initiallyCollapsed, JsonNode, JsonRow, jsonRows, prettyJson, prettyTokens } from "../json-view";
 import { CopyButton, MoreMenu, Segmented } from "../ui";
@@ -17,9 +18,21 @@ function modeLabel(mode: BodyMode): string {
     case "pretty": return t("格式化");
     case "preview": return t("预览");
     case "table": return t("表格");
+    case "protobuf": return "Protobuf";
     case "raw": return t("原文");
     case "hex": return t("十六进制");
   }
+}
+
+/** The words around decoded Protobuf, in the window's language. */
+function protoLabels(): ProtoLabels {
+  return {
+    message: (index, size) => t("消息 {index} · {size} 字节", { index, size }),
+    compressed: t("这条消息是压缩的，保存正文后用其他工具解开。"),
+    trailers: t("尾部"),
+    undecoded: t("这条消息不是 Protobuf，见十六进制。"),
+    more: t("…（只解析了开头部分）"),
+  };
 }
 
 /** Longer text than this is cut on screen; copying still takes all of it. */
@@ -28,10 +41,12 @@ const SHOWN_CHARS = 400_000;
 /**
  * A captured body, shown by what it is: JSON as a folding tree or indented and coloured, an image as a picture, a
  * form as name/value pairs, other text as text, anything else as a hex dump. The user can switch views, and the
- * choice is kept per kind. gzip, deflate, br and zstd are undone first, by the kernel. `lead` goes at the left of the tool line (the
- * inspector puts its headers/body switch there); the viewer fills the height it is given.
+ * choice is kept per kind. gzip, deflate, br and zstd are undone first, by the kernel. Protobuf and gRPC are decoded
+ * without a schema; a picture or Protobuf with a generic type is recognised by its bytes. The "more" menu saves the
+ * body as shown to Downloads, and opens the types that run no code with the system's app. `lead` goes at the left
+ * of the tool line (the inspector puts its headers/body switch there); the viewer fills the height it is given.
  */
-export function BodyViewer({ message, lead }: { message: CaptureMessage; lead?: ReactNode }) {
+export function BodyViewer({ message, lead, side = "response" }: { message: CaptureMessage; lead?: ReactNode; side?: "request" | "response" }) {
   const raw = useMemo(() => fromBase64(message.body.data_base64), [message.body.data_base64]);
   const encoding = header(message, "Content-Encoding");
   const contentType = header(message, "Content-Type");
@@ -46,16 +61,47 @@ export function BodyViewer({ message, lead }: { message: CaptureMessage; lead?: 
   }, [raw, encoding, message.body.truncated]);
 
   const text = useMemo(() => asText(body.bytes), [body.bytes]);
-  const shape = useMemo(() => bodyShape(contentType, text), [contentType, text]);
+  const cut = message.body.truncated || Boolean(body.partial);
+  const shape = useMemo(() => bodyShape(contentType, text, body.bytes, cut), [contentType, text, body.bytes, cut]);
+  const proto = useMemo(() => {
+    if (shape.grpc) return grpcText(shape.grpc, protoLabels());
+    return shape.proto ? protoText(shape.proto, protoLabels()) : null;
+  }, [shape]);
+  // Its header names the picture's size; one too large to draw safely is shown as hex, like a damaged one.
+  const imageSize = useMemo(() => (shape.image ? imageDimensions(body.bytes, shape.image) : null), [shape.image, body.bytes]);
+  const fileType = shape.image ?? contentType ?? "";
+  const [saved, setSaved] = useState<{ text: string; failed: boolean } | null>(null);
   const [picked, setPicked] = useState<BodyMode | undefined>(() => lastMode.get(shape.kind));
   // A picture that does not draw (a cut or damaged file) falls back to the hex dump.
   const [broken, setBroken] = useState(false);
   useEffect(() => {
     setPicked(lastMode.get(shape.kind));
     setBroken(false);
+    setSaved(null);
   }, [shape.kind, body.bytes]);
-  const mode = broken && shape.kind === "image" ? "hex" : chosenMode(shape.kind, picked);
-  const modes = bodyModes(shape.kind);
+  const tooLarge = !drawable(imageSize);
+  const mode = (broken || tooLarge) && shape.kind === "image" ? "hex" : chosenMode(shape.kind, picked, Boolean(shape.proto));
+  const modes = bodyModes(shape.kind, Boolean(shape.proto));
+  const name = side === "request" ? "request-body" : "response-body";
+  const fileAction = (open: boolean) => {
+    setSaved(null);
+    const data = toBase64(body.bytes);
+    const action = open ? desktop.openBody(data, fileType, name) : desktop.saveBody(data, fileType, name);
+    void action.then(
+      (answer) => setSaved(open ? null : { text: t("已保存到 {location}", { location: answer.location }), failed: false }),
+      (error: unknown) => setSaved({ text: open ? t("没能打开：{error}", { error: String(error) }) : t("没能保存：{error}", { error: String(error) }), failed: true }),
+    );
+  };
+  const menu = [
+    { label: t("保存到“下载”"), onSelect: () => fileAction(false) },
+    ...(opensElsewhere(fileType) ? [{ label: t("用其他应用打开"), onSelect: () => fileAction(true) }] : []),
+    ...(mode === "tree"
+      ? [
+        { label: t("全部展开"), onSelect: () => setFold({ all: false, stamp: Date.now() }) },
+        { label: t("全部折叠"), onSelect: () => setFold({ all: true, stamp: Date.now() }) },
+      ]
+      : []),
+  ];
   const [fold, setFold] = useState<{ all: boolean; stamp: number } | null>(null);
   // A new document starts a new tree: fold state and selection belong to the document they were made on.
   const tree = useRef<{ json: JsonNode | undefined; serial: number }>({ json: shape.json, serial: 0 });
@@ -71,6 +117,7 @@ export function BodyViewer({ message, lead }: { message: CaptureMessage; lead?: 
   const copied = () => {
     if (mode === "hex") return hexDump(body.bytes);
     if ((mode === "tree" || mode === "pretty") && shape.json) return prettyJson(shape.json);
+    if (mode === "protobuf" && proto !== null) return proto;
     return text ?? hexDump(body.bytes);
   };
 
@@ -79,9 +126,10 @@ export function BodyViewer({ message, lead }: { message: CaptureMessage; lead?: 
     content = <JsonTree key={[tree.current.serial, fold?.stamp ?? 0].join("-")} root={shape.json} foldAll={fold?.all} />;
   } else if (mode === "pretty" && shape.json) {
     content = <PrettyJson root={shape.json} />;
+  } else if (mode === "protobuf" && proto !== null) {
+    content = <pre className="body-text code selectable">{proto.length > SHOWN_CHARS ? `${proto.slice(0, SHOWN_CHARS)}\n…` : proto}</pre>;
   } else if (mode === "preview") {
-    const type = imageType(contentType) ?? "image/png";
-    const source = `data:${type};base64,${toBase64(body.bytes)}`;
+    const source = `data:${shape.image ?? "image/png"};base64,${toBase64(body.bytes)}`;
     content = (
       <div className="body-image">
         <img src={source} alt={t("图片预览")} onError={() => setBroken(true)} />
@@ -92,6 +140,13 @@ export function BodyViewer({ message, lead }: { message: CaptureMessage; lead?: 
     content = <PairTable pairs={formPairs(text)} />;
   } else if (mode === "raw" && text !== null) {
     content = <pre className="body-text selectable">{text.length > SHOWN_CHARS ? `${text.slice(0, SHOWN_CHARS)}\n…` : text || " "}</pre>;
+  } else if (shape.kind === "image" && tooLarge && imageSize) {
+    content = (
+      <>
+        <p className="muted inspector-note">{t("图片太大（{width} × {height}），不在这里画出；可以保存或用其他应用打开。", { width: imageSize.width, height: imageSize.height })}</p>
+        <pre className="body-text selectable">{hexDump(body.bytes)}</pre>
+      </>
+    );
   } else {
     content = <pre className="body-text selectable">{hexDump(body.bytes)}</pre>;
   }
@@ -115,17 +170,9 @@ export function BodyViewer({ message, lead }: { message: CaptureMessage; lead?: 
           />
         )}
         <CopyButton label={t("拷贝正文")} text={copied} />
-        {mode === "tree" && (
-          <MoreMenu
-            label={t("更多")}
-            items={[
-              { label: t("全部展开"), onSelect: () => setFold({ all: false, stamp: Date.now() }) },
-              { label: t("全部折叠"), onSelect: () => setFold({ all: true, stamp: Date.now() }) },
-            ]}
-          />
-        )}
+        <MoreMenu label={t("更多")} items={menu} />
       </div>
-      <BodyFrame caption={caption}>{content}</BodyFrame>
+      <BodyFrame caption={caption} note={saved}>{content}</BodyFrame>
     </div>
   );
 }
@@ -133,14 +180,15 @@ export function BodyViewer({ message, lead }: { message: CaptureMessage; lead?: 
 /** Where the tree shows the selected value's path: the left of the caption line under the content. */
 const StatusSlot = createContext<HTMLElement | null>(null);
 
-/** The content with the caption line under it. */
-function BodyFrame({ caption, children }: { caption: string; children: ReactNode }) {
+/** The content with the caption line under it; `note` is what saving or opening the body came to. */
+function BodyFrame({ caption, note, children }: { caption: string; note?: { text: string; failed: boolean } | null; children: ReactNode }) {
   const [slot, setSlot] = useState<HTMLSpanElement | null>(null);
   return (
     <StatusSlot.Provider value={slot}>
       <div className="body-content" tabIndex={0} role="region" aria-label={t("正文")}>{children}</div>
       <div className="body-status">
         <span className="body-status-lead" ref={setSlot} />
+        <span className={note?.failed ? "body-note warning-text" : "body-note"} role="status" title={note?.text}>{note?.text}</span>
         <span className="body-caption" title={caption}>{caption}</span>
       </div>
     </StatusSlot.Provider>
