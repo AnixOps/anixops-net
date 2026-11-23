@@ -27,7 +27,7 @@ android {
         // release.yml and play-bundle.yml pass the tag without its "v" (-Panixops.versionName=0.3.0-beta.7); local
         // and CI builds show the plain version. The default is a copy of Cargo.toml's workspace version, kept equal
         // by .github/scripts/version.py (set it with `version.py set X.Y.Z`).
-        versionName = findProperty("anixops.versionName") as String? ?: "0.3.0"
+        versionName = findProperty("anixops.versionName") as String? ?: "1.0.0"
         // arm64 only in the APK; CI's emulator smoke test builds x86_64 instead (-Panixops.abis=x86_64).
         ndk {
             abiFilters += (findProperty("anixops.abis") as String? ?: "arm64-v8a").split(",")
