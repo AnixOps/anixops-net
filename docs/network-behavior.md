@@ -117,6 +117,12 @@ AnixOps Net 各平台客户端（iOS、macOS、Android、Windows、Linux，开�
   （`ANIXOPS_CRASH_REPORT_URL`）的版本才会上传，**目前发布的版本都没有配置**（docs/architecture/client-health.md）。
 - `/metrics` 只监听本机 `127.0.0.1`，默认关闭。
 
+## 手机抓包（局域网共享，macOS、Windows、Linux）
+
+- 只有你打开「手机抓包」时，才在所有 IPv4 网卡的端口（默认 8899）上开一个代理，只接受局域网地址的连接；断开连接时一并关闭。
+- 默认需要代理用户名和密码，由客户端随机生成并保存在系统密钥库里，不发给任何服务器；可以关闭，关闭时同一网络里的任何设备
+  都能使用这个代理（docs/phone-debugging.md「安全边界」）。
+
 ## 只在用户点开时打开的链接
 
 - 用户协议、隐私政策等页面里的 `github.com` 链接，只有你点了才由系统浏览器打开，App 自己不请求。
