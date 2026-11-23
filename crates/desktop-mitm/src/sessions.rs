@@ -5,6 +5,10 @@
 //!
 //! The key never reaches the window: the backends send `set_capture_storage` themselves before every session
 //! command, and refuse it when the window asks.
+//!
+//! With the engine stopped the same commands go to the kernel's capture viewer ([`viewer_control`]): the session
+//! saved at the stop is opened there ([`open_in_viewer`]), so what was captured stays on screen and can be
+//! exported after a disconnect.
 
 use std::fs;
 use std::io::Write;
@@ -394,9 +398,91 @@ pub fn window_may_send(request: &Value) -> bool {
     request.get("cmd").and_then(Value::as_str) != Some(STORAGE_COMMAND)
 }
 
+/// The commands the kernel's capture viewer answers while no engine runs (`engine_embedded::capture_viewer`):
+/// the saved sessions are listed, opened, read, exported and deleted with the tunnel off, and `connections` lists
+/// the connections of the session that is open. Turning capture on and saving need an engine.
+const VIEWER_COMMANDS: &[&str] = &[
+    "capture",
+    "set_capture",
+    "clear_capture",
+    "capture_requests",
+    "capture_connection",
+    "capture_exchange",
+    "capture_h2_frames",
+    "export_capture",
+    STORAGE_COMMAND,
+    "capture_sessions",
+    "load_capture",
+    "delete_capture",
+    "connections",
+];
+
+/// Answers `request` with the kernel's capture viewer, for a backend whose engine is not running; `None` when the
+/// viewer does not take the command (the caller then says the engine is not running, as before).
+pub fn viewer_control(request: &[u8]) -> Option<Result<Vec<u8>, String>> {
+    let command = serde_json::from_slice::<Value>(request).ok()?;
+    let command = command.get("cmd").and_then(Value::as_str)?;
+    if !VIEWER_COMMANDS.contains(&command) {
+        return None;
+    }
+    Some(
+        engine_embedded::capture_viewer::control(request)
+            .map_err(|error| error.message.to_string()),
+    )
+}
+
+/// Opens session `session` in the capture viewer: the engine just stopped and saved it
+/// ([`preserve`]), so the request and connection lists keep showing what was captured instead of going empty.
+pub fn open_in_viewer(dir: &Path, key: &SessionKey, session: &str) -> Result<(), String> {
+    let send = |request: Value| {
+        let request = serde_json::to_vec(&request).map_err(|error| error.to_string())?;
+        engine_embedded::capture_viewer::control(&request)
+            .map(|_| ())
+            .map_err(|error| error.message.to_string())
+    };
+    send(storage_request(dir, key))?;
+    send(
+        SessionAction::Load {
+            session: session.to_string(),
+        }
+        .request()?,
+    )
+}
+
+/// Empties the capture viewer when an engine starts: the lists read the engine again, and the session the viewer
+/// held is not kept in memory beside it.
+pub fn close_viewer() {
+    let _ = engine_embedded::capture_viewer::control(br#"{"cmd":"clear_capture"}"#);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_viewer_opens_a_saved_session_with_no_engine() {
+        let dir = std::env::temp_dir().join(format!("desktop-mitm-viewer-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let key = SessionKey::new(&[7u8; KEY_LEN], Protection::File).unwrap();
+        // Commands that need an engine are left to the caller.
+        assert!(viewer_control(br#"{"cmd":"reload_rules","rules":[]}"#).is_none());
+        assert!(viewer_control(br#"{"cmd":"traffic"}"#).is_none());
+        assert!(viewer_control(b"not json").is_none());
+        // Saving needs an engine: it is left to the caller too.
+        let storage = serde_json::to_vec(&storage_request(&dir, &key)).unwrap();
+        viewer_control(&storage).unwrap().unwrap();
+        assert!(viewer_control(br#"{"cmd":"save_capture"}"#).is_none());
+        let list = viewer_control(br#"{"cmd":"capture_sessions"}"#)
+            .unwrap()
+            .unwrap();
+        let list: Value = serde_json::from_slice(&list).unwrap();
+        assert_eq!(list["sessions"], json!([]), "{list}");
+        // A session that is not there is an error, not a panic.
+        assert!(open_in_viewer(&dir, &key, "1700000000000-a1b2c3d4").is_err());
+        close_viewer();
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn session_ids_name_no_path() {

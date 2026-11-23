@@ -75,6 +75,8 @@ impl DesktopCore {
         let proxy = LocalProxy::start(envelope, listen, MixedSettings::default())
             .map_err(|error| format!("embedded engine could not start: {}", error.message))?;
         self.embedded = Some(proxy);
+        // The lists read the new engine now; a session the viewer held after the last stop is let go.
+        desktop_mitm::sessions::close_viewer();
         Ok(())
     }
 
@@ -86,13 +88,15 @@ impl DesktopCore {
             .map(LocalProxy::local_addr)
     }
 
-    /// Answers one kernel control request while this window runs the engine.
+    /// Answers one kernel control request while this window runs the engine. With no engine running, the capture
+    /// commands go to the kernel's capture viewer (`desktop_mitm::sessions::viewer_control`): saved sessions open,
+    /// and the one saved at the last disconnect stays on screen.
     pub fn control(&self, request: &[u8]) -> Result<Vec<u8>, String> {
-        let proxy = self
-            .embedded
-            .as_ref()
-            .filter(|proxy| proxy.is_running())
-            .ok_or("the embedded engine is not running in this window")?;
+        let Some(proxy) = self.embedded.as_ref().filter(|proxy| proxy.is_running()) else {
+            return desktop_mitm::sessions::viewer_control(request).unwrap_or_else(|| {
+                Err("the embedded engine is not running in this window".to_string())
+            });
+        };
         proxy
             .control_json(request)
             .map_err(|error| error.message.to_string())

@@ -71,7 +71,8 @@ data class RequestsActions(
     val editReplay: ((ReplayDraft) -> ReplayDraft) -> Unit = {},
     val sendReplay: () -> Unit = {},
     val closeReplay: () -> Unit = {},
-    val exportAll: (String) -> Unit = {},
+    /** Exports everything: the format, and whether secrets are masked. */
+    val exportAll: (String, Boolean) -> Unit = { _, _ -> },
     val openSessions: () -> Unit = {},
     val closeSessions: () -> Unit = {},
     val setSessionName: (String) -> Unit = {},
@@ -119,6 +120,10 @@ fun RequestsScreen(state: UiState, requests: RequestsState, actions: RequestsAct
     }
     val capture = requests.capture
     val holding = capture != null && (capture.enabled || capture.connections > 0)
+    // Disconnected, capture is the session saved at the disconnect (or one opened from the saved sessions), held by
+    // the capture viewer: it is listed and exported, but nothing is captured and the connection list is gone.
+    val connected = state.overview?.state == "connected"
+    val saved = holding && !connected
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -134,12 +139,19 @@ fun RequestsScreen(state: UiState, requests: RequestsState, actions: RequestsAct
                         style = MaterialTheme.typography.headlineSmall,
                         modifier = Modifier.weight(1f),
                     )
-                    if (capture != null) RequestsMenu(requests, actions)
+                    if (capture != null) RequestsMenu(requests, saved, actions)
                 }
-                if (capture != null) CaptureSection(capture, requests.busy, actions)
+                if (capture != null && connected) CaptureSection(capture, requests.busy, actions)
+                if (saved) {
+                    Text(
+                        stringResource(R.string.requests_saved_hint),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = LocalBrandPalette.current.text2,
+                    )
+                }
                 if (requests.setup.isNotEmpty()) SetupSection(requests.setup, actions)
                 if (holding) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(BrandSpacing.xs)) {
+                    if (connected) Row(horizontalArrangement = Arrangement.spacedBy(BrandSpacing.xs)) {
                         FilterChip(
                             selected = !requests.showConnections,
                             onClick = { actions.setShowConnections(false) },
@@ -151,11 +163,11 @@ fun RequestsScreen(state: UiState, requests: RequestsState, actions: RequestsAct
                             label = { Text(stringResource(R.string.requests_tab_connections)) },
                         )
                     }
-                    if (!requests.showConnections) FilterBar(requests, actions)
+                    if (!requests.showConnections || !connected) FilterBar(requests, actions)
                 }
             }
         }
-        if (holding && requests.showConnections) {
+        if (holding && connected && requests.showConnections) {
             // Newest first, as the requests.
             val connections = state.connections.asReversed()
             if (connections.isEmpty()) item { Hint(stringResource(R.string.connections_empty)) }
@@ -165,7 +177,7 @@ fun RequestsScreen(state: UiState, requests: RequestsState, actions: RequestsAct
                 }
             }
         }
-        if (holding && !requests.showConnections) {
+        if (holding && (!requests.showConnections || !connected)) {
             if (requests.paused) item { Hint(stringResource(R.string.requests_paused)) }
             if (requests.loaded && requests.rows.isEmpty()) {
                 val filtered = requests.quick.isNotEmpty() || requests.typed.isNotBlank()
@@ -307,7 +319,7 @@ private fun SetupStep(number: Int, @StringRes title: Int, @StringRes hint: Int, 
 }
 
 @Composable
-private fun RequestsMenu(requests: RequestsState, actions: RequestsActions) {
+private fun RequestsMenu(requests: RequestsState, saved: Boolean, actions: RequestsActions) {
     OverflowMenu(stringResource(R.string.requests_more), enabled = !requests.busy) { close ->
         if (requests.paused) {
             MenuItem(R.string.requests_resume, close) { actions.setPaused(false) }
@@ -332,25 +344,25 @@ private fun RequestsMenu(requests: RequestsState, actions: RequestsActions) {
         }
         HorizontalDivider()
         val holding = (requests.capture?.connections ?: 0) > 0
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.requests_export_har)) },
-            enabled = holding,
-            onClick = {
-                close()
-                actions.exportAll("har")
-            },
-        )
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.requests_export_pcapng)) },
-            enabled = holding,
-            onClick = {
-                close()
-                actions.exportAll("pcapng")
-            },
-        )
+        // One zip with the connection list, HAR and pcapng, masked or complete; then the HAR and pcapng alone.
+        listOf(
+            Triple(R.string.requests_export_zip, "zip", true),
+            Triple(R.string.requests_export_zip_full, "zip", false),
+            Triple(R.string.requests_export_har, "har", true),
+            Triple(R.string.requests_export_pcapng, "pcapng", true),
+        ).forEach { (label, format, redact) ->
+            DropdownMenuItem(
+                text = { Text(stringResource(label)) },
+                enabled = holding,
+                onClick = {
+                    close()
+                    actions.exportAll(format, redact)
+                },
+            )
+        }
         MenuItem(R.string.sessions, close, actions.openSessions)
         HorizontalDivider()
-        MenuItem(R.string.requests_clear, close, actions.clear)
+        MenuItem(if (saved) R.string.requests_close_session else R.string.requests_clear, close, actions.clear)
     }
 }
 

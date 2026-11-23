@@ -327,7 +327,7 @@ fun AnixApp(
             editReplay = requests::editReplay,
             sendReplay = requests::sendReplay,
             closeReplay = requests::closeReplay,
-            exportAll = { format -> storage { requests.exportAll(format) } },
+            exportAll = { format, redact -> storage { requests.exportAll(format, redact) } },
             openSessions = requests::openSessions,
             closeSessions = requests::closeSessions,
             setSessionName = requests::setSessionName,

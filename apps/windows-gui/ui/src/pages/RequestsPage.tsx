@@ -1,4 +1,4 @@
-import { FileSearch, PanelBottom, PanelRight, Pause, Play, PlugZap } from "lucide-react";
+import { FileSearch, PanelBottom, PanelRight, Pause, Play, PlugZap, X } from "lucide-react";
 import { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from "react";
 import { CaptureRequest, desktop, RuntimeSnapshot } from "../bridge";
 import { combineFilter, QuickFilter, selectedRequest } from "../capture-filter";
@@ -7,7 +7,7 @@ import { defaultSort, RequestSort } from "../request-table";
 import { defaultShare, Dock, inspectorSize, parseDock, parseShare, shareFor } from "../split-pane";
 import { EmptyState, IconButton, MoreMenu, PageTools, Run, Segmented, Switch } from "../ui";
 import { t } from "../i18n";
-import { captureMenu, ConnectionsView } from "./ActivityPage";
+import { captureMenu, ConnectionsView, exportMenu } from "./ActivityPage";
 import { CaptureSessions } from "./CaptureSessions";
 import { DebugSetupCard } from "./DecryptHosts";
 import { RequestInspector } from "./CaptureViews";
@@ -90,7 +90,9 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
 }) {
   const live = liveEngine(snapshot);
   const [view, setView] = useState<View>("requests");
-  const [capture, reloadCapture] = usePolling(desktop.captureStatus, live);
+  // Read disconnected too: the backend then answers from the capture viewer, which holds the session saved at the
+  // disconnect (or one opened from the saved sessions).
+  const [capture, reloadCapture] = usePolling(desktop.captureStatus, true);
   const [paused, setPaused] = useState(false);
   const [typed, setTyped] = useState("");
   const [quick, setQuick] = useState<QuickFilter[]>([]);
@@ -147,7 +149,9 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
   const filter = combineFilter(quick, typed);
   // A stopped capture or a loaded session still holds requests to list.
   const holding = Boolean(capture?.enabled) || (capture?.connections ?? 0) > 0;
-  const feed = useRequestFeed(live && holding, filter, paused);
+  // Disconnected with a saved session open: the lists show it, and it can be exported.
+  const saved = !live && holding;
+  const feed = useRequestFeed(holding, filter, paused);
   // After an engine restart the same key can name another request: the selection and the open detail go.
   useEffect(() => {
     if (feed.generation > 0) setSelected(null);
@@ -224,6 +228,15 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
       {live && (
         <MoreMenu label={t("更多抓包操作")} items={captureMenu(run, busy, captured, clearCapture)} />
       )}
+      {saved && (
+        <MoreMenu
+          label={t("更多抓包操作")}
+          items={[
+            ...exportMenu(run, busy, captured),
+            { label: t("关闭会话"), icon: X, onSelect: clearCapture },
+          ]}
+        />
+      )}
     </PageTools>
   );
 
@@ -238,13 +251,17 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
     />
   );
 
-  if (!live) {
+  if (!live && view === "sessions") {
+    return <>{tools}<div className="page-stack"><CaptureSessions capture={capture} live={false} run={run} onLoaded={() => setSelected(null)} /></div></>;
+  }
+
+  if (!live && !holding) {
     return (
       <>
         {tools}
         <div className="page-placeholder">
           <div className="setup-stack">
-            <EmptyState icon={PlugZap} title={t("还没有连接")} message={t("用连接开关连接后，经过本机的 HTTP 请求会逐条列在这里。调试模式默认直连，不需要节点。")} />
+            <EmptyState icon={PlugZap} title={t("还没有连接")} message={t("用连接开关连接后，经过本机的 HTTP 请求会逐条列在这里。调试模式默认直连，不需要节点。断开前抓到的内容会自动保存，可以在“已保存”里打开。")} />
             {setupCard(true)}
           </div>
         </div>
@@ -252,8 +269,13 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
     );
   }
 
-  if (view === "connections") return <>{tools}<ConnectionsView snapshot={snapshot} busy={busy} run={run} debug /></>;
-  if (view === "sessions") return <>{tools}<div className="page-stack"><CaptureSessions capture={capture} run={run} onLoaded={() => setSelected(null)} /></div></>;
+  const savedBanner = saved && (
+    <p className="muted saved-capture-note" role="status">
+      {t("隧道已断开，下面是断开前抓到的内容，已加密保存 7 天，可以在“更多”里打包导出。")}
+    </p>
+  );
+  if (view === "connections") return <>{tools}{savedBanner}<ConnectionsView snapshot={snapshot} busy={busy} run={run} debug saved={saved} /></>;
+  if (view === "sessions") return <>{tools}<div className="page-stack"><CaptureSessions capture={capture} live={live} run={run} onLoaded={() => setSelected(null)} /></div></>;
 
   if (capture && !holding) {
     return (
@@ -337,7 +359,8 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
     <>
       {tools}
       {failure && <p className="muted danger-text" role="alert">{failure}</p>}
-      <div className="setup-banner">{setupCard(true, true)}</div>
+      {savedBanner}
+      {live && <div className="setup-banner">{setupCard(true, true)}</div>}
       {wide
         ? (
           <div className={`request-workbench dock-${dock}`} ref={attachWorkbench} style={{ "--inspector-size": `${size}px` } as CSSProperties}>

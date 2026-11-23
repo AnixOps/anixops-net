@@ -2033,7 +2033,9 @@ fn disconnect_blocking(state: DesktopAppState) -> Result<OperationResult, String
             .map_err(|_| "desktop core lock failed")?;
         // Capture lives only as long as the engine: what it holds is kept as a session, as on iOS and macOS.
         let capture = preserve_window_capture(&core, AutoSave::Disconnect, &language);
-        (connection::disconnect_direct(desktop, &mut core), capture)
+        let result = connection::disconnect_direct(desktop, &mut core);
+        view_saved_capture(&capture);
+        (result, capture)
     };
     // `disconnect_direct` stops the engine even when the proxy could not be put back, so the connection is
     // over either way: left marked as this window's, the recovery monitor would take the stop for a lost
@@ -5621,6 +5623,24 @@ fn preserve_window_capture(
         );
     }
     carry
+}
+
+/// After a disconnect: the session [`preserve_window_capture`] just saved opens in the kernel's capture viewer, so
+/// the request list keeps showing what was captured, and it can be exported, while disconnected.
+fn view_saved_capture(carry: &CaptureCarry) {
+    let Some(session) = carry.saved.as_deref() else {
+        return;
+    };
+    let opened = capture_sessions::sessions_dir().and_then(|dir| {
+        let key = capture_sessions::load_key()?;
+        desktop_mitm::sessions::open_in_viewer(&dir, &key, session)
+    });
+    if let Err(error) = opened {
+        let _ = append_managed_log(
+            APP_LOG_SCOPE,
+            &format!("the capture saved at the disconnect could not be opened: {error}"),
+        );
+    }
 }
 
 /// Turns capture on again, with the budget it had, in the engine that started after a restart.

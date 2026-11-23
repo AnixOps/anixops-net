@@ -254,7 +254,7 @@ export interface CaptureConnection {
   h2_frames?: { seen: number; dropped: number };
 }
 
-export type CaptureFormat = "pcapng" | "har" | "curl" | "code" | "postman" | "insomnia";
+export type CaptureFormat = "zip" | "pcapng" | "har" | "curl" | "code" | "postman" | "insomnia";
 
 /** The language of a `code` export. */
 export type CodeLanguage = "python" | "javascript" | "swift" | "kotlin" | "go";
@@ -721,7 +721,10 @@ export const desktop = {
   /** Seals what capture holds into a new session. */
   saveCaptureSession: (name?: string) =>
     invoke<SessionAnswer & { session: CaptureSession }>("capture_session", { action: { action: "save", name } satisfies CaptureSessionAction }),
-  /** Replaces what capture holds with a saved session and turns live capture off. */
+  /**
+   * Replaces what capture holds with a saved session and turns live capture off. Disconnected, the session opens in
+   * the kernel's capture viewer instead, and the request list shows it.
+   */
   loadCaptureSession: (session: string) =>
     invoke<SessionAnswer & CaptureStatus>("capture_session", { action: { action: "load", session } satisfies CaptureSessionAction }),
   deleteCaptureSession: (session: string) =>

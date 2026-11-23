@@ -251,6 +251,13 @@ class CoreTest {
     }
 
     @Test
+    fun aCompleteZipExportSaysNotToMask() = runTest {
+        val transport = Recording("""{"ok":{"location":"Download/capture.zip"}}""")
+        Core(transport, StandardTestDispatcher(testScheduler)).exportCapture("zip", redact = false)
+        assertEquals(listOf("export_capture" to """{"format":"zip","options":{"redact":false}}"""), transport.calls)
+    }
+
+    @Test
     fun sessionCommandsNameTheirAction() = runTest {
         val transport = Recording(
             """{"ok":{"sessions":[{"session":"1700000000000-a1b2c3d4","saved_at_ms":1700000000000,"expires_at_ms":1700604800000,""" +

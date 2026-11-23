@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, BadgeCheck, ChevronRight, CircleDot, ClipboardList, Download, FileCode, ListTree, RefreshCw, Search, Trash2, TriangleAlert, Unplug, X } from "lucide-react";
+import { Archive, ArrowDown, ArrowUp, BadgeCheck, ChevronRight, CircleDot, ClipboardList, Download, FileCode, ListTree, RefreshCw, Search, Trash2, TriangleAlert, Unplug, X } from "lucide-react";
 import { useState } from "react";
 import { ConnectionSnapshot, desktop, RuntimeSnapshot } from "../bridge";
 import { connectionDetail, connectionName, formatRate, matchesConnection } from "../activity-format";
@@ -19,16 +19,23 @@ export function ActivityPage({ snapshot, busy, run }: { snapshot: RuntimeSnapsho
 
 /**
  * The connection list with its drill-down into captured bytes, the session state and the app log. Debug mode shows it
- * as the "Connections" view of the requests page, where capture is switched from the page toolbar instead.
+ * as the "Connections" view of the requests page, where capture is switched from the page toolbar instead. With
+ * `saved`, the tunnel is off and the list is the connections of the saved session the capture viewer holds.
  */
-export function ConnectionsView({ snapshot, busy, run, debug = false }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run; debug?: boolean }) {
+export function ConnectionsView({ snapshot, busy, run, debug = false, saved = false }: {
+  snapshot: RuntimeSnapshot | null;
+  busy: string | null;
+  run: Run;
+  debug?: boolean;
+  saved?: boolean;
+}) {
   const refresh = snapshot?.subscriptionLastAttempt
     ? [refreshResultText(snapshot.subscriptionRefreshResult), snapshot.subscriptionLastAttempt, subscriptionErrorText(snapshot.subscriptionRefreshErrorCode)].filter(Boolean).join(" · ")
     : t("还没有自动更新记录");
 
   const [detail, setDetail] = useState<ConnectionSnapshot | null>(null);
   const live = liveEngine(snapshot);
-  if (detail && live) {
+  if (detail && (live || saved)) {
     return <CaptureDetail connection={detail} busy={busy} run={run} onBack={() => setDetail(null)} />;
   }
 
@@ -43,7 +50,7 @@ export function ConnectionsView({ snapshot, busy, run, debug = false }: { snapsh
       </Row>
     </Card>
   );
-  const connections = <Connections snapshot={snapshot} busy={busy} run={run} captureControls={!debug} onOpen={setDetail} />;
+  const connections = <Connections snapshot={snapshot} busy={busy} run={run} captureControls={!debug} saved={saved} onOpen={setDetail} />;
   const logs = <LogsCard live={live} busy={busy} run={run} />;
 
   return (
@@ -57,18 +64,21 @@ export function ConnectionsView({ snapshot, busy, run, debug = false }: { snapsh
  * Live traffic and the engine's connection list, read once a second while connected. With packet capture on, new
  * connections keep their first bytes and open to show them.
  */
-function Connections({ snapshot, busy, run, onOpen, captureControls }: {
+function Connections({ snapshot, busy, run, onOpen, captureControls, saved }: {
   snapshot: RuntimeSnapshot | null;
   busy: string | null;
   run: Run;
   onOpen: (connection: ConnectionSnapshot) => void;
   /** Proxy mode switches and exports capture here; debug mode does it from the page toolbar. */
   captureControls: boolean;
+  /** The tunnel is off: the connections of the saved session, all closed. */
+  saved: boolean;
 }) {
   const live = liveEngine(snapshot);
-  const [list, reload] = usePolling(desktop.connections, live);
-  const [capture, reloadCapture] = usePolling(desktop.captureStatus, live);
-  const [shown, setShown] = useState<"active" | "closed">("active");
+  const reading = live || saved;
+  const [list, reload] = usePolling(desktop.connections, reading);
+  const [capture, reloadCapture] = usePolling(desktop.captureStatus, reading);
+  const [shown, setShown] = useState<"active" | "closed">(saved ? "closed" : "active");
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(listPage);
   const [failure, setFailure] = useState<string | null>(null);
@@ -79,7 +89,7 @@ function Connections({ snapshot, busy, run, onOpen, captureControls }: {
   };
 
   if (!list) {
-    const message = !live
+    const message = !reading
       ? t("连接后，这里会实时显示每条连接命中的规则和策略。")
       : t("正在读取连接记录");
     return <Card><EmptyState icon={ListTree} title={t("连接")} message={message} /></Card>;
@@ -98,7 +108,7 @@ function Connections({ snapshot, busy, run, onOpen, captureControls }: {
       actions={<>
         <span className="rate"><ArrowUp size={14} />{formatRate(traffic.upload_rate)}</span>
         <span className="rate"><ArrowDown size={14} />{formatRate(traffic.download_rate)}</span>
-        {capture && captureControls && (
+        {capture && captureControls && live && (
           <label className="switch-label">
             <span>{t("抓包")}</span>
             <Switch
@@ -112,14 +122,14 @@ function Connections({ snapshot, busy, run, onOpen, captureControls }: {
           label={t("更多连接操作")}
           items={[
             ...(captureControls ? captureMenu(run, busy, captured, () => close(desktop.clearCapture)) : []),
-            {
+            ...(live ? [{
               label: t("全部断开"),
               icon: Unplug,
               danger: true,
               disabled: list.active.length === 0,
               confirm: t("确认断开 {count} 条连接", { count: list.active.length }),
               onSelect: () => close(desktop.closeAllConnections),
-            },
+            }] : []),
           ]}
         />
       </>}
@@ -147,7 +157,7 @@ function Connections({ snapshot, busy, run, onOpen, captureControls }: {
                 key={connection.id}
                 connection={connection}
                 onOpen={connection.captured ? () => onOpen(connection) : undefined}
-                onClose={shown === "active" ? () => close(() => desktop.closeConnection(connection.id)) : undefined}
+                onClose={shown === "active" && live ? () => close(() => desktop.closeConnection(connection.id)) : undefined}
               />
             ))}
           </ul>
@@ -164,8 +174,7 @@ function Connections({ snapshot, busy, run, onOpen, captureControls }: {
 /** Export everything captured and clear it: the capture entries of a "more" menu, the destructive one last. */
 export function captureMenu(run: Run, busy: string | null, captured: number, clear: () => void): MenuItem[] {
   return [
-    { label: t("导出全部 pcapng"), icon: Download, disabled: Boolean(busy) || captured === 0, onSelect: () => exportCapture(run, "pcapng") },
-    { label: t("导出全部 HAR"), icon: FileCode, disabled: Boolean(busy) || captured === 0, onSelect: () => exportCapture(run, "har") },
+    ...exportMenu(run, busy, captured),
     {
       label: t("清空抓包"),
       icon: Trash2,
@@ -174,6 +183,20 @@ export function captureMenu(run: Run, busy: string | null, captured: number, cle
       confirm: t("确认清空 {count} 个连接的抓包", { count: captured }),
       onSelect: clear,
     },
+  ];
+}
+
+/**
+ * Exports of the whole capture: one zip (connection list, HAR and pcapng) with secrets masked or complete, and the
+ * pcapng and HAR on their own.
+ */
+export function exportMenu(run: Run, busy: string | null, captured: number): MenuItem[] {
+  const none = Boolean(busy) || captured === 0;
+  return [
+    { label: t("打包导出 zip（遮盖密码和 Cookie）"), icon: Archive, disabled: none, onSelect: () => exportCapture(run, "zip") },
+    { label: t("打包导出 zip（完整，不遮盖）"), icon: Archive, disabled: none, onSelect: () => exportCapture(run, "zip", undefined, { redact: false }) },
+    { label: t("导出全部 pcapng"), icon: Download, disabled: Boolean(busy) || captured === 0, onSelect: () => exportCapture(run, "pcapng") },
+    { label: t("导出全部 HAR"), icon: FileCode, disabled: none, onSelect: () => exportCapture(run, "har") },
   ];
 }
 

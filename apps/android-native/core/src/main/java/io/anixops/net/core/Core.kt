@@ -641,9 +641,18 @@ class Core(
         },
     )
 
-    /** Saves everything capture holds (`har` or `pcapng`) to Downloads and says where. */
-    suspend fun exportCapture(format: String): SavedFile =
-        call("export_capture", SavedFile.serializer(), args("format" to JsonPrimitive(format)))
+    /**
+     * Saves everything capture holds (`zip`, `har` or `pcapng`) to Downloads and says where; cookies, tokens and
+     * passwords are masked unless [redact] is false. Disconnected, it is the saved session the capture viewer holds.
+     */
+    suspend fun exportCapture(format: String, redact: Boolean = true): SavedFile = call(
+        "export_capture",
+        SavedFile.serializer(),
+        buildJsonObject {
+            put("format", format)
+            if (!redact) putJsonObject("options") { put("redact", false) }
+        },
+    )
 
     // Saved capture sessions: the engine seals them, the client keeps the key (the Android Keystore here).
 

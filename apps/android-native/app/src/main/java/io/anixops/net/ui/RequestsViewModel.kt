@@ -338,11 +338,11 @@ class RequestsViewModel(private val core: Core) : ViewModel() {
         }
     }
 
-    /** Saves everything capture holds (`har` or `pcapng`) to Downloads and says where. */
-    fun exportAll(format: String) {
+    /** Saves everything capture holds (`zip`, `har` or `pcapng`) to Downloads and says where. */
+    fun exportAll(format: String, redact: Boolean = true) {
         viewModelScope.launch {
             try {
-                _events.send(RequestsEvent.Saved(core.exportCapture(format).location))
+                _events.send(RequestsEvent.Saved(core.exportCapture(format, redact).location))
             } catch (error: CoreException) {
                 _events.send(RequestsEvent.Message(error.message.orEmpty()))
             }
