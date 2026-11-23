@@ -200,6 +200,9 @@ CI 的 “UI lint” 步骤运行 `.github/scripts/ui_lint.py`（几秒钟，在
 | U1 颜色字面量 | `#fff`、`rgb()`、`Color(red:)`、`Color.orange`、`.white`、`Color(0xFF…)`、XAML `"#AARRGGBB"` | 对应的令牌：`brand.*` / `Brand.*`、CSS 变量、`BrandTokens.kt`、`BrandTokens.xaml`、GTK `brand-*.css` |
 | U2 派生颜色 | 给颜色 `.opacity()`、`color-mix()`、`.copy(alpha =)` | 浅色底用 `soft` / `successSoft` / `warningSoft` / `dangerSoft`，中性底用 `raised`（fill-1）或 `fill-2/3`，次级文字用 `text2` / `text3`，线用 `border` |
 | U3 淡化禁用 | 禁用态把控件整体调淡（`opacity`） | 禁用文字 `text3`（label-3），底色 `raised`（fill-1）；规范 actions.md H10 |
+| U4 设置首屏超预算（Apple） | `SettingsView`、`MacSettingsPage` 首屏的 `Form` 超过 8 个分区或 16 行（AnixOps Design N25）；首屏用了脚本组成表 `SETTINGS_COMPOSITES` 里没有的 `*Section` | 把不常用的项移到「高级」或「隐私与诊断」二级页；新的组成分区在表里登记它占几个分区、几行 |
+| U5 用户列表不折叠（Apple） | 表单或列表里对插件、脚本、Wi‑Fi、规则、主机、映射、重定向的 `ForEach` 直接列出全部（N26） | 只列前 5 条（`.prefix(` 或 `shown` / `visible` 这类变量）加「显示全部 N 个 / 收起」，或放到专门的列表页 |
+| U6 总开关混在条目里（Apple） | 和用户列表 `ForEach` 同一个 `Section` 里的 `Toggle`（N27） | 总开关单独一个分区，放在列表上方 |
 
 常用对照：
 
@@ -243,7 +246,8 @@ macOS / iOS 用 XCUITest 的 `performAccessibilityAudit`（对比度、文字被
 |---|---|---|
 | 桌面端（Windows、Linux 共用的界面） | `UI screenshots` 工作流的 “Draw and check the screenshots”：`screenshots/render.cjs` 每画一张就调 `screenshots/audit.cjs` | axe（WCAG 2.2 A/AA，serious、critical 为 0，含对比度）；文字被截断而没有省略号、文字出了窗口；对话框、菜单、弹出列表、提示、Toast 和下面的窗口分不开（截图上测：表面与外侧 ΔL* ≥ 4，或边缘 ΔL* ≥ 6）。结果和每个弹层的测量值在产物的 `after/audit.json` |
 | macOS、iOS | 接入中：XCUITest 的 `performAccessibilityAudit(for: .all)`，两种模式的每一页 × 浅色、深色 × 中文、英文 | 第一次运行列出的问题（对比度、元素说明、点击区域、动态字体、文字截断等）修完后，作为阻断检查接入 iOS、macOS 的 UI 测试 job；不设豁免，只排除系统自带的 Touch Bar |
-| Android、Windows 原生、Linux 原生 | 接入中 | |
+| Android | `android-native` job 的单元测试 `DensityTest`（Robolectric + Compose，393 × 852 dp） | 设置首屏不超过 8 个分区、16 行、两屏高（N25）；插件、解密域名、映射、重定向、Wi‑Fi 规则超过 5 条折叠，「显示全部」能展开（N26，`FoldedList`）；HTTPS 解密开关不在插件列表里（N27） |
+| Windows 原生、Linux 原生 | 接入中 | |
 
 桌面端的密度检查（`audit.cjs` 的 `density`，对应 AnixOps Design 的 N25–N27）直接读页面结构：带 `data-settings-first-screen` 的设置首屏不超过 8 个分组、16 行，
 高度不超过两个参考窗口（2 × 760 px，不是当前截图的视口，因为截图有窄窗口、笔记本等不同尺寸）；带 `data-user-list`（`folded` / `expanded` / `short`）的用户自添加列表，
