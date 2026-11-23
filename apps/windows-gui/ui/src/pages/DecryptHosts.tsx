@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CaptureStatus, DecryptDomain, desktop, MitmHostOutcome, MitmRootStatus, RuntimeSnapshot } from "../bridge";
 import { excludedBy, failureReason, isFailing, matchesPattern, pendingSteps, SetupStep } from "../decrypt-hosts";
 import { liveEngine } from "../live";
-import { Card, IconButton, Row, Run, Segmented, Switch, TileColor } from "../ui";
+import { Card, FoldedRows, IconButton, Row, Run, Segmented, Switch, TileColor } from "../ui";
 import { t } from "../i18n";
 
 /**
@@ -180,8 +180,7 @@ export function DecryptHostsCard({ busy, run }: { busy: string | null; run: Run 
           </div>
         </>
       )}
-      {decrypting.map(row)}
-      {excluding.map(row)}
+      <FoldedRows items={[...decrypting, ...excluding]} render={row} label={(count) => t("显示全部 {count} 个域名", { count })} />
       <p className="muted">{t("只解密 443 端口的 HTTPS；列表里域名的 HTTP/3（QUIC）连接会被拒绝，让 App 改用可以解密的 HTTPS。固定了证书的 App（常见于银行、支付和系统服务）和只有 IP 地址的连接不能解密。")}</p>
     </Card>
   );

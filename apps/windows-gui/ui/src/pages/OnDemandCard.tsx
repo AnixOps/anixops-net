@@ -1,7 +1,7 @@
 import { Cable, Smartphone, Trash2, Wifi, WifiOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { desktop, OnDemandAction, OnDemandSettings } from "../bridge";
-import { Card, IconButton, Row, Run, ToggleRow } from "../ui";
+import { Card, FoldedRows, IconButton, Row, Run, ToggleRow } from "../ui";
 import { Select } from "../controls";
 import { t } from "../i18n";
 
@@ -84,23 +84,29 @@ export function OnDemandCard({ busy, run, android }: { busy: string | null; run:
   const canAdd = ssidFits(draft.trim()) && !settings.wifi.some((rule) => rule.ssid === draft.trim());
 
   return (
-    <Card
-      title={t("Wi-Fi 规则")}
-      description={android
-        ? t("加入网络时自动连接或断开，应用在后台运行时生效。读取 Wi-Fi 名称需要位置权限，打开时会询问一次。手动连接或断开会保持到下次换网络。")
-        : t("加入网络时自动连接或断开，应用运行时生效。Windows 11 需要在系统设置里允许桌面应用访问位置，才能读到 Wi-Fi 名称。手动连接或断开会保持到下次换网络。")}
-    >
-      <ToggleRow icon={Wifi} color="sky" label={t("按网络自动连接")} checked={settings.enabled} disabled={disabled} onChange={toggle} />
+    <>
+      <Card
+        title={t("Wi-Fi 规则")}
+        description={android
+          ? t("加入网络时自动连接或断开，应用在后台运行时生效。读取 Wi-Fi 名称需要位置权限，打开时会询问一次。手动连接或断开会保持到下次换网络。")
+          : t("加入网络时自动连接或断开，应用运行时生效。Windows 11 需要在系统设置里允许桌面应用访问位置，才能读到 Wi-Fi 名称。手动连接或断开会保持到下次换网络。")}
+      >
+        <ToggleRow icon={Wifi} color="sky" label={t("按网络自动连接")} checked={settings.enabled} disabled={disabled} onChange={toggle} />
+      </Card>
       {settings.enabled && (
-        <>
-          {settings.wifi.map((rule) => (
-            <Row key={rule.ssid} icon={Wifi} color="indigo" label={rule.ssid} hint={misread(rule.ssid) ? t("名称读取有误，请删除后用“当前网络”重新添加") : undefined}>
-              <ActionPicker label={rule.ssid} value={rule.action} disabled={disabled} onChange={(action) => setRule(rule.ssid, action)} />
-              <IconButton label={t("删除") + " " + rule.ssid} disabled={disabled} onClick={() => removeRule(rule.ssid)}>
-                <Trash2 size={14} aria-hidden="true" />
-              </IconButton>
-            </Row>
-          ))}
+        <Card>
+          <FoldedRows
+            items={settings.wifi}
+            label={(count) => t("显示全部 {count} 条 Wi-Fi 规则", { count })}
+            render={(rule) => (
+              <Row key={rule.ssid} icon={Wifi} color="indigo" label={rule.ssid} hint={misread(rule.ssid) ? t("名称读取有误，请删除后用“当前网络”重新添加") : undefined}>
+                <ActionPicker label={rule.ssid} value={rule.action} disabled={disabled} onChange={(action) => setRule(rule.ssid, action)} />
+                <IconButton label={t("删除") + " " + rule.ssid} disabled={disabled} onClick={() => removeRule(rule.ssid)}>
+                  <Trash2 size={14} aria-hidden="true" />
+                </IconButton>
+              </Row>
+            )}
+          />
           <Row icon={Wifi} color="gray" label={t("Wi-Fi 名称")}>
             <input
               className="inline-input"
@@ -125,8 +131,8 @@ export function OnDemandCard({ busy, run, android }: { busy: string | null; run:
           <Row icon={Cable} color="gray" label={t("有线和其他网络")}>
             <ActionPicker label={t("有线和其他网络")} value={settings.other} disabled={disabled} onChange={(other) => save({ ...settings, other }, t("已保存 Wi-Fi 规则"))} />
           </Row>
-        </>
+        </Card>
       )}
-    </Card>
+    </>
   );
 }

@@ -1,7 +1,7 @@
 import { ClipboardPaste, Download, Eye, FileUp, KeyRound, LockKeyhole, Puzzle, ShieldCheck, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DebugMapping, desktop, inProcessEngine, MitmPlugin, MitmPluginDetails, MitmRootStatus, OperationResult, RuntimeSnapshot } from "../bridge";
-import { Card, EmptyState, MoreMenu, Row, Run, StatusPill, Switch, ToggleRow } from "../ui";
+import { Card, EmptyState, FoldedRows, MoreMenu, Row, Run, StatusPill, Switch, ToggleRow } from "../ui";
 import { t } from "../i18n";
 import { PhoneCaptureCards } from "./PhoneCaptureCards";
 import { useDecryptionConsent } from "../decryption-consent";
@@ -9,9 +9,6 @@ import { MappingEditor, MappingsCard } from "./DebugTools";
 import { DecryptHostsCard } from "./DecryptHosts";
 import { TrafficRedirectsCard } from "./TrafficRedirects";
 import { decryptsBroadly } from "../plugin-review";
-
-/** How many plugins show before the rest fold behind "显示全部". */
-const collapsedPluginCount = 5;
 
 export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
   const linux = inProcessEngine(snapshot);
@@ -21,8 +18,6 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
   const consent = useDecryptionConsent();
   const [mapping, setMapping] = useState<DebugMapping | null>(null);
   const [pasting, setPasting] = useState(false);
-  // A long plugin list folds to its first few; the choice is for this visit only.
-  const [allPlugins, setAllPlugins] = useState(false);
   const [pastedText, setPastedText] = useState("");
   // `review`: opened before the plugin is turned on, with the button that turns it on.
   const [inspected, setInspected] = useState<{ plugin: MitmPlugin; details: MitmPluginDetails; review: boolean } | null>(null);
@@ -199,8 +194,10 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
         {plugins.length === 0 ? (
           <EmptyState icon={Puzzle} title={t("还没有插件")} message={t("粘贴一个插件的 https 网址并导入，开启 HTTPS 解密后生效。")} />
         ) : (
-          <div className="rows" data-user-list={allPlugins ? "expanded" : plugins.length > collapsedPluginCount ? "folded" : "short"}>
-            {(allPlugins ? plugins : plugins.slice(0, collapsedPluginCount)).map((plugin) => (
+          <FoldedRows
+            items={plugins}
+            label={(count) => t("显示全部 {count} 个插件", { count })}
+            render={(plugin) => (
               <Row
                 key={plugin.id}
                 icon={Puzzle}
@@ -234,15 +231,8 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
                   onChange={() => togglePlugin(plugin)}
                 />
               </Row>
-            ))}
-            {plugins.length > collapsedPluginCount && (
-              <div className="button-row">
-                <button className="link-button more" aria-expanded={allPlugins} onClick={() => setAllPlugins(!allPlugins)}>
-                  {allPlugins ? t("收起") : t("显示全部 {count} 个插件", { count: plugins.length })}
-                </button>
-              </div>
             )}
-          </div>
+          />
         )}
       </Card>
 
