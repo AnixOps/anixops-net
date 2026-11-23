@@ -49,6 +49,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         /// The license fields of each ANX outbound by its node's origin (`OutboundLicenses`), or nil without a
         /// license state.
         let anxLicense: OutboundLicenses?
+        /// The node library (its Keychain value) this start read, or why it could not. New local rules are built on
+        /// this copy, not on the Keychain as it is later: the app saves a new policy group pick there while the
+        /// engine switches it in place, and a background subscription update saves new nodes without a restart;
+        /// building on those would differ from the running config in more than the rule lines and turn every
+        /// later rule edit into a restart.
+        let nodeLibrary: Result<String?, Error>
     }
     private var memoryPressure: DispatchSourceMemoryPressure?
     /// Recent events for the app's developer mode. Same rule as the system log: fixed reasons and codes only.
@@ -188,10 +194,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let proxyExceptions = ProxyExceptions.fromProfileValue(
             tunnelProtocol.providerConfiguration?[TunnelProfileKeys.proxyExceptions] as? Data
         )
+        let nodeLibrary = Result<String?, Error> {
+            try startSecrets?.nodeLibrary ?? NodeSecretStore.value(account: NodeLibrary.keychainAccount)
+        }
         let base = ReloadBase(
-            config: config, mode: mode, dns: dns, redirects: redirects, blockQuic: blockQuic, anxLicense: anxLicenseFields()
+            config: config, mode: mode, dns: dns, redirects: redirects, blockQuic: blockQuic,
+            anxLicense: anxLicenseFields(library: nodeLibrary), nodeLibrary: nodeLibrary
         )
-        config = Self.assemble(base, routing: withSubscriptionRules(base.config, localRules: localRules, dns: dns))
+        config = Self.assemble(
+            base, routing: withSubscriptionRules(base.config, localRules: localRules, dns: dns, library: base.nodeLibrary)
+        )
         events.record("mode \(mode.rawValue)")
         if !redirects.isEmpty {
             events.record("redirects \(redirects.count)")
@@ -559,8 +571,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         guard let session, let base = reloadBase, let running = runningConfig else {
             return answer(.init(reloaded: false, restart: true))
         }
+        // On the node library this start read (`ReloadBase.nodeLibrary`): new nodes or picks saved since are not
+        // what the engine runs, and a pick made since is kept by the engine across the swap.
         let next = Self.assemble(
-            base, routing: withSubscriptionRules(base.config, localRules: LocalRules.fromProfileValue(value), dns: base.dns)
+            base,
+            routing: withSubscriptionRules(
+                base.config, localRules: LocalRules.fromProfileValue(value), dns: base.dns, library: base.nodeLibrary
+            )
         )
         guard let rules = running.reloadableRules(to: next) else {
             events.record("local rules changed beyond the rule lines: restart")
@@ -589,18 +606,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         return reply
     }
 
-    /// Adds the subscription's rules and groups from the node library in the Keychain, with the user's local rules in
-    /// front; a node list without subscription rules gets the local rules, then everything else through the selected node. They are an extra like
-    /// HTTPS decryption: without a readable library the selected node carries all traffic, and the reason goes to
-    /// the diagnostics.
+    /// Adds the subscription's rules and groups from `library` (the node library the start read from the Keychain or
+    /// the start secrets), with the user's local rules in front; a node list without subscription rules gets the
+    /// local rules, then everything else through the selected node. They are an extra like HTTPS decryption: without
+    /// a readable library the selected node carries all traffic, and the reason goes to the diagnostics.
     private func withSubscriptionRules(
         _ config: EmbeddedRuntimeConfig,
         localRules: LocalRules,
-        dns: DnsSettings?
+        dns: DnsSettings?,
+        library: Result<String?, Error>
     ) -> EmbeddedRuntimeConfig {
         droppedRuleSets = []
         do {
-            guard let value = try startSecrets?.nodeLibrary ?? NodeSecretStore.value(account: NodeLibrary.keychainAccount),
+            guard let value = try library.get(),
                   let build = try NodeLibrary.fromKeychainValue(value).routingBuild(
                       localRules: localRules, dnsRuleSets: dns?.ruleSetNames ?? []
                   )
@@ -627,7 +645,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// subscription offered ANX licensing. Each origin's license goes to its own file in the extension's container,
     /// which the outbound reads at each connection. Without a license state there is nothing and the config stays
     /// unchanged; a node without an origin, or whose origin offers no license, gets nothing, never another origin's.
-    private func anxLicenseFields() -> OutboundLicenses? {
+    private func anxLicenseFields(library snapshot: Result<String?, Error>) -> OutboundLicenses? {
         guard let value = startSecrets?.anxLicense ?? (try? NodeSecretStore.value(account: AnxLicense.keychainAccount)),
               let state = try? AnxLicense.fromKeychainValue(value),
               state.offered,
@@ -636,30 +654,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         else {
             return nil
         }
-        var fieldsByOrigin: [String: [String: JSONValue]] = [:]
-        var written = 0
-        for origin in state.origins {
-            guard let entry = state.entries[origin] else {
-                continue
-            }
-            let url = directory.appendingPathComponent(AnxLicense.licenseFileName(origin: origin))
-            do {
-                if let license = entry.license {
-                    try Data(license.utf8).write(to: url, options: .atomic)
-                    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-                    written += 1
-                } else if FileManager.default.fileExists(atPath: url.path) {
-                    try FileManager.default.removeItem(at: url)
-                }
-            } catch {
-                events.record("anx license not written")
-            }
-            fieldsByOrigin[origin] = entry.outboundFields(licensePath: url.path)
+        let licenses = state.writeLicenseFiles(in: directory)
+        if licenses.failures > 0 {
+            events.record("anx license not written")
         }
+        let fieldsByOrigin = licenses.fieldsByOrigin
+        let written = licenses.written
         // The single license file of versions before 2026-11-19.
         try? FileManager.default.removeItem(at: directory.appendingPathComponent("anx-license.cert"))
-        let library = (try? startSecrets?.nodeLibrary ?? NodeSecretStore.value(account: NodeLibrary.keychainAccount))
-            .flatMap { try? NodeLibrary.fromKeychainValue($0) }
+        // The same copy of the library the routing is built from.
+        let library = (try? snapshot.get()).flatMap { try? NodeLibrary.fromKeychainValue($0) }
         events.record("anx licenses \(written) of \(fieldsByOrigin.count) origins")
         return OutboundLicenses(fieldsByOrigin: fieldsByOrigin, nodes: library?.nodes ?? [])
     }

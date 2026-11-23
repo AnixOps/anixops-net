@@ -19,6 +19,8 @@ struct MacProxiesPage: View {
     @State private var editing: MacEditingNode?
     @State private var checking: MacEditingNode?
     @State private var notice: String?
+    /// A node deletion that takes the nodes connecting through it along, until the user confirms.
+    @State private var deletingNode: PendingNodeDeletion?
 
     var body: some View {
         Group {
@@ -87,6 +89,24 @@ struct MacProxiesPage: View {
             }
         } message: {
             Text("会删除这个订阅组的全部节点。正在使用它时，会切换到下一个订阅组。")
+        }
+        .confirmationDialog(
+            "删除节点“\(deletingNode?.node.displayName ?? "")”？",
+            isPresented: Binding(
+                get: { deletingNode != nil },
+                set: { if !$0 { deletingNode = nil } }
+            )
+        ) {
+            Button("一并删除 \((deletingNode?.dependents.count ?? 0) + 1) 个节点", role: .destructive) {
+                if let pending = deletingNode {
+                    Task {
+                        await tunnel.deleteNode(pending.node.id, inGroup: pending.groupID)
+                    }
+                }
+                deletingNode = nil
+            }
+        } message: {
+            Text("“\(deletingNode?.dependentNames ?? "")”经由这个节点连接，删除后无法使用，会一并删除。")
         }
         .sheet(item: $editing) { item in
             NodeEditSheet(node: item.node) { edited in
@@ -284,11 +304,15 @@ struct MacProxiesPage: View {
                 notice = NodeShareFailure.unavailable.message
             }
         }
-        if group.library.canRemove(node.id) {
+        if let dependents = group.library.removal(of: node.id) {
             Divider()
-            Button("删除节点", role: .destructive) {
-                Task {
-                    await tunnel.deleteNode(node.id, inGroup: group.id)
+            Button(dependents.isEmpty ? LocalizedStringKey("删除节点") : LocalizedStringKey("删除节点…"), role: .destructive) {
+                if dependents.isEmpty {
+                    Task {
+                        await tunnel.deleteNode(node.id, inGroup: group.id)
+                    }
+                } else {
+                    deletingNode = PendingNodeDeletion(groupID: group.id, node: node, dependents: dependents)
                 }
             }
         }

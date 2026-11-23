@@ -17,6 +17,17 @@ final class AppModeTests: XCTestCase {
         XCTAssertNil(AppMode.resolve(stored: "something-else", hasNodes: false, onboardingDone: false))
     }
 
+    func testLinkArrivalOnlyPicksTheProxyClientForSomeoneWhoNeverPicked() {
+        // A link that launched the app arrives before the saved mode was read: nil then is not "never picked".
+        XCTAssertNil(AppMode.forLinkArrival(current: nil, loaded: false, isCommand: true))
+        // A saved debug mode stays whatever link arrives.
+        XCTAssertNil(AppMode.forLinkArrival(current: .debug, loaded: true, isCommand: true))
+        XCTAssertNil(AppMode.forLinkArrival(current: .proxy, loaded: true, isCommand: true))
+        // A link the app cannot run does not skip the choice.
+        XCTAssertNil(AppMode.forLinkArrival(current: nil, loaded: true, isCommand: false))
+        XCTAssertEqual(AppMode.forLinkArrival(current: nil, loaded: true, isCommand: true), .proxy)
+    }
+
     func testDirectExitOnlyInDebugMode() {
         XCTAssertTrue(DebugExit.usesDirect(mode: .debug, exit: .direct, hasNodes: true))
         XCTAssertTrue(DebugExit.usesDirect(mode: .debug, exit: .node, hasNodes: false))

@@ -58,6 +58,25 @@ their own gates pass.
   payload reference; remembered across launches, so it never loops). Known limit: a group member picked while the
   tunnel is down keeps neither a new key version nor a new payload, so a system-initiated start runs the previous
   selections until the app connects or hands the copy over again.
+- Subscription updates and the running tunnel: the extension reads the node and the node library only at start, so
+  an import, a manual update or an automatic update that changes what the running tunnel would run (another active
+  group, another node, changed credentials, nodes or rules; `SubscriptionRefresh.changesRunningTunnel`) reconnects
+  it, after the library is stored where the start reads it. An update that only brings a new update time leaves the
+  tunnel alone. The iOS background refresh (`BGAppRefreshTask`, which can launch the app without a window, so it
+  reads the saved data first) never stops the tunnel, as the app may be suspended before it could start it again: it
+  marks the connection, which reconnects the next time the app comes to the front unless it came up again since.
+  Without a saved VPN configuration an automatic update keeps the nodes and the first connect saves the profile.
+  Only `https://` subscription links are accepted: App Transport Security refuses plain HTTP downloads, so an
+  `http://` link is refused at the preview with that reason (other clients accept it).
+- Local rule edits on a running tunnel: the extension builds the new rules on the node library its start read
+  (`ReloadBase.nodeLibrary`), so a policy group pick made in place or a background update saved since does not turn
+  the in-place swap into a restart.
+- Live Activity: its disconnect button runs `StopTunnelActivityIntent`, a `LiveActivityIntent` that the system runs in
+  the app's process; it stops the tunnel and ends the activity at once. A stop the suspended app does not see
+  (Settings, Control Center, a crash) ends the activity at the next background refresh or when the app opens.
+- macOS: the command-line service, the metrics endpoint, the relay of script notifications and the automatic
+  subscription updates and update checks run for the life of the app (`MacAppState.startApp`, `AppLifetimeTasks`),
+  not of the main window, so they go on in the menu bar after the window is closed. Quitting removes the CLI socket.
 - UI: the app follows AnixOps Design (github.com/AnixOps/anixops-design), the brand and token system shared by every
   AnixOps product (five tabs: 首页, 代理, 规则, 扩展, 设置). The design repository is vendored unmodified into
   `apps/windows-gui/ui/src/design/anixops/` by `python3 .github/scripts/sync_design.py --source <clone> --ref <tag>`
@@ -219,7 +238,13 @@ the running extension as `TunnelAppMessage.notificationSettings`, without a rest
 On iOS the extension posts script and disconnect notifications itself. The macOS tunnel is a System Extension
 running as root, which cannot post, so the macOS app reads script notifications from the engine every 15 seconds
 while connected and posts the disconnect notice from the stop error. Tapping a script notification opens its
-`open-url` (http, https or `anixops://` only).
+`open-url` when it is an http or https link, as on the other clients (`NotificationPermission.openableURL`); an
+`anixops://` link is dropped, since it would run its command (disconnect, direct mode, another node) on the tap.
+
+The system drops every notification until the user allows them. The app asks once, the first time the tunnel is
+connected while the app is in front (after the system's prompt to add the VPN configuration, never at launch or in
+the demo), and when a switch is turned on. While permission was never asked Settings › 通知 offers a button that asks;
+when it was refused, a button that opens the system settings and a footer saying the switches do nothing until then.
 
 ## Extension log levels and modules
 

@@ -28,6 +28,9 @@ final class TunnelController {
     private(set) var coordinator: AppCoordinator
     private(set) var nodeName: String?
     private(set) var connection: NEVPNStatus = .invalid
+    /// The VPN configuration as the disconnected status line explains it (`TunnelProfileState`). Stored, since
+    /// `manager` is not observed.
+    private(set) var profileState = TunnelProfileState.missing
     /// Set once `load()` has read the saved profile and node library, so first-run screens do not flash for a
     /// user who already has nodes.
     private(set) var loaded = false
@@ -56,6 +59,12 @@ final class TunnelController {
     private(set) var latencies: [String: NodeLatency] = [:]
     /// Groups being downloaded now.
     private(set) var updatingGroups: Set<String> = []
+    /// Set once `subscriptions` holds what the Keychain has (`load()` read it). Before that, or when the Keychain
+    /// could not be read (before the first unlock), an empty list says nothing about the groups, and the background
+    /// refresh is not withdrawn for it (`scheduleBackgroundRefresh`).
+    @ObservationIgnored private var subscriptionsRead = false
+    /// Whether the last `importLink` reconnected a running tunnel on what it imported, for the import sheet.
+    @ObservationIgnored private(set) var importReconnected = false
     /// The saved tunnel's mode: by rules, everything through the selected node, or everything direct.
     private(set) var mode = ProxyMode.global
     /// DNS servers, hosts and per-domain servers, from `dns-settings.json`; the saved profile carries a copy.
@@ -239,6 +248,7 @@ final class TunnelController {
                 // Saved again so the tunnel's library has what this version adds to it (the ANX license origin of
                 // each node, anx spec §2.4.1) without waiting for a subscription update.
                 store(saved)
+                subscriptionsRead = true
             }
         case .failure:
             // The Keychain is not readable now (for example before the first unlock); keep what is shown.
@@ -249,6 +259,7 @@ final class TunnelController {
                 .flatMap { $0 }
                 .flatMap { try? NodeLibrary.fromKeychainValue($0) }
             store(SubscriptionGroups.migrating(previous, name: String(localized: "导入的节点")))
+            subscriptionsRead = true
         }
         // Shortcuts or Control Center may have switched the mode while the app was not running.
         followSavedMode()
@@ -414,6 +425,31 @@ final class TunnelController {
         return String(localized: "出口 · 直连")
     }
 
+    /// What the status line says while disconnected and the tunnel cannot start as saved: a sentence on what the
+    /// connect does (`TunnelProfileState.offHint`), never the platform's developer diagnostic. Nil when the
+    /// configuration is ready.
+    var offHint: String? {
+        guard case .blocked = coordinator.decision else {
+            return nil
+        }
+        switch profileState.offHint {
+        case .firstConnect?:
+            #if os(macOS)
+            return String(localized: "打开开关连接，首次需要允许添加 VPN 配置")
+            #else
+            return String(localized: "轻点连接，首次需要允许添加 VPN 配置")
+            #endif
+        case .reenable?:
+            #if os(macOS)
+            return String(localized: "已被其他 VPN 停用，打开开关重新启用")
+            #else
+            return String(localized: "已被其他 VPN 停用，轻点重新启用")
+            #endif
+        case nil:
+            return String(localized: "无法启动隧道")
+        }
+    }
+
     /// The connect switch can start a tunnel: there is a node, or debug mode goes direct.
     var canConnect: Bool {
         !hasNoNodes || usesDirectExit
@@ -422,7 +458,9 @@ final class TunnelController {
     /// Switches between the proxy client and the debugging tool. The saved profile follows: debug mode with the
     /// direct exit runs the direct profile, the proxy client the selected node. A running tunnel reconnects.
     func setAppMode(_ next: AppMode) async {
-        guard next != appMode else {
+        // Before `load()` a nil `appMode` only means the saved choice has not been read yet: writing one now would
+        // replace it (a link that launched the app).
+        guard loaded, next != appMode else {
             return
         }
         // A single pasted node lives only in the saved profile, so debug mode goes through it rather than
@@ -482,6 +520,9 @@ final class TunnelController {
     /// Parses pasted text for the import preview without saving anything. A subscription link is downloaded only
     /// when it is imported.
     func preview(_ link: String) -> Result<ImportPreview, ImportFailure> {
+        if SubscriptionLink.isPlainHTTP(link) {
+            return .failure(ImportFailure(message: Self.plainHTTPSubscriptionText))
+        }
         if let url = SubscriptionLink.url(from: link) {
             let host = url.host ?? url.absoluteString
             return .success(ImportPreview(
@@ -518,12 +559,20 @@ final class TunnelController {
     /// group becomes active. Returns whether it was saved; on failure `message` says why.
     @discardableResult
     func importLink(_ link: String) async -> Bool {
+        importReconnected = false
+        // ATS refuses plain HTTP downloads, so such a link would always fail as "the link may have expired".
+        if SubscriptionLink.isPlainHTTP(link) {
+            message = Self.plainHTTPSubscriptionText
+            return false
+        }
         // Importing in debug mode means going through what was imported.
         if appMode == .debug {
             setDebugExitValue(.node)
         }
         if let url = SubscriptionLink.url(from: link) {
-            return await updateSubscription(url, groupID: subscriptions.group(url: url.absoluteString)?.id, activate: true)
+            return await updateSubscription(
+                url, groupID: subscriptions.group(url: url.absoluteString)?.id, activate: true, trigger: .user
+            )
         }
         let imported: TunnelImport
         do {
@@ -557,6 +606,10 @@ final class TunnelController {
                 return false
             }
             store(groups)
+            // The extension reads the node and its library only at start: a running tunnel reconnects on what was
+            // imported, after `store` put the library where the start reads it, so the home screen, the widget and
+            // the Live Activity name the node the traffic really goes through.
+            applyToRunningTunnel(.user)
             return true
         }
     }
@@ -564,11 +617,11 @@ final class TunnelController {
     /// Downloads one subscription group again. The selected node, the rules switch and the group picks carry
     /// over where they still apply.
     @discardableResult
-    func refreshSubscription(_ groupID: String) async -> Bool {
+    func refreshSubscription(_ groupID: String, trigger: SubscriptionUpdateTrigger = .user) async -> Bool {
         guard let group = subscriptions.group(id: groupID), let link = group.url, let url = URL(string: link) else {
             return false
         }
-        return await updateSubscription(url, groupID: groupID, activate: false)
+        return await updateSubscription(url, groupID: groupID, activate: false, trigger: trigger)
     }
 
     /// Downloads every group that has a link, one after another.
@@ -579,16 +632,30 @@ final class TunnelController {
     }
 
     /// Automatic update: downloads the groups whose interval has passed. Failures only mark the group, so a
-    /// background run never leaves a message on screen.
-    func refreshDueSubscriptions(at date: Date = Date()) async {
-        let shown = message
+    /// background run never leaves a message on screen. `trigger` is `.automatic` while the app runs and
+    /// `.background` in the system's background refresh (`refreshInBackground()`).
+    func refreshDueSubscriptions(at date: Date = Date(), trigger: SubscriptionUpdateTrigger = .automatic) async {
+        // A group already downloading (the user pulled to refresh, or a background run that is still going) is not
+        // started twice, which would count as a failure.
+        let due = subscriptions.due(at: date).filter { !updatingGroups.contains($0.id) }
         var failed: [String] = []
-        for group in subscriptions.due(at: date) {
-            if !(await refreshSubscription(group.id)) {
-                failed.append(group.name)
+        if !due.isEmpty {
+            // The whole notice, with its detail and buttons: `message` would keep only the text. Nothing is touched
+            // when no group is due, which is every time the app comes back to the front in between.
+            let shown = notice
+            for group in due {
+                let updated = await refreshSubscription(group.id, trigger: trigger)
+                if Task.isCancelled {
+                    // The system ended the background time: not a failure of the subscription.
+                    break
+                }
+                if !updated {
+                    failed.append(group.name)
+                }
             }
+            // A stop notice that the tunnel has left behind meanwhile does not come back.
+            notice = shown.flatMap { $0.origin.applies(whileConnected: isConnected) ? $0 : nil }
         }
-        message = shown
         if !failed.isEmpty, AppNotifications.settings.subscriptions {
             AppNotifications.post(
                 title: String(localized: "订阅更新失败"),
@@ -598,6 +665,54 @@ final class TunnelController {
             )
         }
         scheduleBackgroundRefresh()
+    }
+
+    /// The system's background app refresh. It can launch the app without a window, where `RootView`'s `.task`
+    /// never runs, so the saved profile and the groups are read here first; without them nothing would be due and
+    /// the next background run would not be asked for.
+    func refreshInBackground() async {
+        if !loaded {
+            await load()
+        }
+        await refreshDueSubscriptions(trigger: .background)
+    }
+
+    /// A background update saved new nodes or rules while the tunnel kept running the old ones
+    /// (`SubscriptionUpdateTrigger.background`): reconnects it now that the app is in front, unless the tunnel has
+    /// come up again since, which already runs the saved profile (`SubscriptionRefresh.pendingReconnectApplies`).
+    func reconnectIfPending() {
+        let defaults = UserDefaults.standard
+        guard let stamp = defaults.object(forKey: SubscriptionRefresh.pendingReconnectKey) as? Double else {
+            return
+        }
+        defaults.removeObject(forKey: SubscriptionRefresh.pendingReconnectKey)
+        if SubscriptionRefresh.pendingReconnectApplies(
+            marked: Date(timeIntervalSince1970: stamp), connectedSince: connectedSince
+        ) {
+            restart()
+        }
+    }
+
+    /// After a write changed what the running tunnel would run (nodes, rules, the active group): the extension reads
+    /// them only at start, so a running tunnel reconnects. A background run does not stop the tunnel, as the app may
+    /// be suspended before it could start it again; it marks the connection for `reconnectIfPending()` instead.
+    private func applyToRunningTunnel(_ trigger: SubscriptionUpdateTrigger) {
+        guard isConnected else {
+            return
+        }
+        switch trigger {
+        case .user, .automatic:
+            if trigger == .user {
+                importReconnected = true
+            }
+            restart()
+        case .background:
+            if let connectedSince {
+                UserDefaults.standard.set(
+                    connectedSince.timeIntervalSince1970, forKey: SubscriptionRefresh.pendingReconnectKey
+                )
+            }
+        }
     }
 
     func renameSubscription(_ groupID: String, to name: String) {
@@ -663,14 +778,17 @@ final class TunnelController {
         }
     }
 
-    /// Deletes a node that no other node connects through and the group's rules do not name (`NodeLibrary.canRemove`).
+    /// Deletes a node the group's rules do not name, with the nodes that connect through it (`via`), which the user
+    /// confirmed first (`NodeLibrary.removal(of:)`, `PendingNodeDeletion`).
     func deleteNode(_ nodeID: String, inGroup groupID: String) async {
         await writing {
-            guard var group = subscriptions.group(id: groupID), group.library.canRemove(nodeID) else {
+            guard var group = subscriptions.group(id: groupID), let dependents = group.library.removal(of: nodeID) else {
                 return
             }
-            group.library = group.library.removing(nodeID)
-            latencies.removeValue(forKey: Self.latencyKey(group: groupID, node: nodeID))
+            group.library = group.library.removingWithDependents(nodeID)
+            for id in [nodeID] + dependents.map(\.id) {
+                latencies.removeValue(forKey: Self.latencyKey(group: groupID, node: id))
+            }
             _ = await changeGroup(group)
         }
     }
@@ -985,9 +1103,15 @@ final class TunnelController {
 
     /// HTTP delay test of every node of every group through its own protocol, a few at a time (`NodeDelayFFI`).
     func testLatency() async {
-        let nodes = subscriptions.groups.flatMap { group in
-            group.library.nodes.map { node in
-                (Self.latencyKey(group: group.id, node: node.id), node.standalone(among: group.library.nodes))
+        // Read once for the whole test: ANX nodes that need a license fail without it.
+        let licenses = Self.delayTestLicenses()
+        let nodes = subscriptions.groups.flatMap { group -> [(String, NativeImportReport.Node)] in
+            let origin = AnxLicense.origin(ofSubscription: group.library.subscriptionURL)
+            return group.library.nodes.map { node in
+                (
+                    Self.latencyKey(group: group.id, node: node.id),
+                    node.standalone(among: group.library.nodes).licensed(by: licenses, origin: origin)
+                )
             }
         }
         guard !nodes.isEmpty else {
@@ -1030,15 +1154,42 @@ final class TunnelController {
             return .failure(.failed)
         }
         return await NodeCheckupFFI.runOffPool(
-            node.standalone(among: group.library.nodes),
+            node.standalone(among: group.library.nodes).licensed(
+                by: Self.delayTestLicenses(),
+                origin: AnxLicense.origin(ofSubscription: group.library.subscriptionURL)
+            ),
             profileID: Self.profileID,
             throughput: throughput
         )
     }
 
+    /// The ANX license fields for the app's own delay tests and checkups, which run outside the tunnel and so do not
+    /// get the fields the tunnel adds at start: each subscription origin's license written to the app's own
+    /// Application Support (the app cannot read the tunnel's container), with the device key from the Keychain. Nil
+    /// before any subscription offered ANX licensing. The fields go only into the request sent at once
+    /// (`NativeImportReport.Node.licensed`), never into the saved nodes.
+    private static func delayTestLicenses() -> OutboundLicenses? {
+        guard let value = try? NodeSecretStore.value(account: AnxLicense.keychainAccount),
+              let state = try? AnxLicense.fromKeychainValue(value),
+              state.offered,
+              let support = try? FileManager.default
+                  .url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        else {
+            return nil
+        }
+        let directory = support.appendingPathComponent("anx-licenses", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return OutboundLicenses(fieldsByOrigin: state.writeLicenseFiles(in: directory).fieldsByOrigin)
+    }
+
     /// Downloads a subscription into the group `groupID`, or a new group when nil. `activate` makes the group the
     /// tunnel's; a refresh of the active group saves the profile only when its node or rules switch changed.
-    private func updateSubscription(_ url: URL, groupID: String?, activate: Bool) async -> Bool {
+    private func updateSubscription(
+        _ url: URL,
+        groupID: String?,
+        activate: Bool,
+        trigger: SubscriptionUpdateTrigger
+    ) async -> Bool {
         if let groupID {
             guard !updatingGroups.contains(groupID) else {
                 return false
@@ -1059,12 +1210,20 @@ final class TunnelController {
             // The download may have saved a new ANX license.
             handOverStartSecrets()
         } catch {
+            if Task.isCancelled || (error as? URLError)?.code == .cancelled {
+                // The background time ran out, or the download was cancelled: the subscription did not fail.
+                return false
+            }
             await markFailure(groupID)
-            notice = AppNotice(
-                text: String(localized: "订阅下载失败：链接可能已失效，或当前网络连不上订阅服务器。现有节点仍可使用。"),
-                detail: error.localizedDescription,
-                actions: groupID.map { [.refreshSubscription($0)] } ?? []
-            )
+            if trigger == .user {
+                notice = AppNotice(
+                    text: Self.isPlainHTTPRefused(error)
+                        ? Self.plainHTTPSubscriptionText
+                        : String(localized: "订阅下载失败：链接可能已失效，或当前网络连不上订阅服务器。现有节点仍可使用。"),
+                    detail: error.localizedDescription,
+                    actions: groupID.map { [.refreshSubscription($0)] } ?? []
+                )
+            }
             return false
         }
         let report: NativeImportReport
@@ -1072,15 +1231,19 @@ final class TunnelController {
             report = try NativeImportReport.decoded(from: NativeNodeImporterFFI.importNodes(text))
         } catch let failure as NativeImportFailure {
             await markFailure(groupID)
-            message = Self.describe(.native(failure))
+            if trigger == .user {
+                message = Self.describe(.native(failure))
+            }
             return false
         } catch {
             await markFailure(groupID)
-            message = Self.describe(.native(.unavailable))
+            if trigger == .user {
+                message = Self.describe(.native(.unavailable))
+            }
             return false
         }
         return await writing { () async -> Bool in
-            await merge(report, response: response, url: url, groupID: groupID, activate: activate)
+            await merge(report, response: response, url: url, groupID: groupID, activate: activate, trigger: trigger)
         }
     }
 
@@ -1091,7 +1254,8 @@ final class TunnelController {
         response: SubscriptionResponseInfo,
         url: URL,
         groupID: String?,
-        activate: Bool
+        activate: Bool,
+        trigger: SubscriptionUpdateTrigger
     ) async -> Bool {
         // A group deleted while it downloaded stays deleted: the result is dropped instead of coming back as a new
         // group (third-party review F08).
@@ -1105,10 +1269,12 @@ final class TunnelController {
             ?? SubscriptionGroup(report: report, url: url.absoluteString, response: response)
         guard group.library.selected != nil else {
             failed(groupID)
-            message = Self.describe(.native(.noSupportedNode(
-                protocols: report.unsupported.map(\.protocol),
-                reasons: []
-            )))
+            if trigger == .user {
+                message = Self.describe(.native(.noSupportedNode(
+                    protocols: report.unsupported.map(\.protocol),
+                    reasons: []
+                )))
+            }
             return false
         }
         groups.upsert(group)
@@ -1122,7 +1288,9 @@ final class TunnelController {
             let unchanged = previousActiveID == group.id
                 && previous?.selected == next?.selected
                 && previous?.routesByRules == next?.routesByRules
-            if !unchanged {
+            // Without a saved profile an automatic update only keeps the nodes: the connect saves the profile
+            // (`connectNow`), and no update in the background asks to add a VPN configuration.
+            if !unchanged, manager != nil || trigger == .user {
                 guard await saveActiveProfile(groups) else {
                     return false
                 }
@@ -1138,6 +1306,16 @@ final class TunnelController {
         latest.activeID = groups.activeID
         store(latest)
         latencies = latencies.filter { !$0.key.hasPrefix(Self.latencyKey(group: group.id, node: "")) }
+        // The running tunnel took its node and library at start; one that would now run something else (another
+        // node, changed nodes or rules, a new active group) reconnects, after `store` saved what the start reads.
+        if SubscriptionRefresh.changesRunningTunnel(
+            previous: previous,
+            next: latest.activeLibrary(),
+            previousActiveID: previousActiveID,
+            nextActiveID: latest.activeID
+        ) {
+            applyToRunningTunnel(trigger)
+        }
         return true
     }
 
@@ -1247,12 +1425,19 @@ final class TunnelController {
     /// (`NetworkCoreAppMain`). Nothing to schedule when every group updates by hand.
     func scheduleBackgroundRefresh() {
         #if os(iOS)
-        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.backgroundRefreshID)
-        guard let next = subscriptions.nextUpdate else {
+        let begin: Date
+        switch SubscriptionRefresh.backgroundPlan(
+            groupsRead: subscriptionsRead, nextUpdate: subscriptions.nextUpdate, now: Date()
+        ) {
+        case .cancel:
+            BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.backgroundRefreshID)
             return
+        case let .retry(date), let .submit(date):
+            begin = date
         }
+        // A new request replaces the one already submitted under the same identifier.
         let request = BGAppRefreshTaskRequest(identifier: Self.backgroundRefreshID)
-        request.earliestBeginDate = max(next, Date().addingTimeInterval(15 * 60))
+        request.earliestBeginDate = begin
         try? BGTaskScheduler.shared.submit(request)
         #endif
     }
@@ -1813,6 +1998,16 @@ final class TunnelController {
             }
             return true
         }
+    }
+
+    /// Connects unless the tunnel is up, coming up or still stopping: what "Retry" and `anixops://connect` ask for.
+    /// Never a disconnect, unlike `toggle()`: a stop card's Retry tapped after On Demand reconnected leaves the
+    /// tunnel up.
+    func connect() {
+        guard !isConnected, connection != .disconnecting else {
+            return
+        }
+        toggle()
     }
 
     /// Connects, or disconnects while the tunnel is up, as the switch shows it now. The connect or disconnect runs in
@@ -2462,9 +2657,16 @@ final class TunnelController {
     private func refresh() {
         let saved = manager?.isEnabled == true && manager?.protocolConfiguration != nil
         coordinator.apply(Self.platformStatus(saved: saved))
+        profileState = TunnelProfileState.of(
+            hasConfiguration: manager?.protocolConfiguration != nil, isEnabled: manager?.isEnabled == true
+        )
         let previous = connection
         connection = manager?.connection.status ?? .invalid
         connectedSince = connection == .connected ? manager?.connection.connectedDate : nil
+        if isConnected, let notice, !notice.origin.applies(whileConnected: true) {
+            // The tunnel is back (On Demand, the widget, Control Center): the stop card and its Retry are out of date.
+            self.notice = nil
+        }
         if connection == .connected || connection == .reasserting {
             if previous != .connected, previous != .reasserting {
                 // Whatever the start was handed, the copy it keeps follows the profile saved now.
@@ -2475,6 +2677,11 @@ final class TunnelController {
         }
         if connection == .connected, previous != .connected {
             lastConnections = nil
+            // The first connection is when notifications start to matter (an unexpected stop, a failed update):
+            // ask for permission now, once, if it was never asked (`AppNotifications.requestIfUndetermined`).
+            Task {
+                await AppNotifications.requestIfUndetermined()
+            }
             if resumeCapture {
                 resumeCapture = false
                 Task {
@@ -2575,12 +2782,20 @@ final class TunnelController {
             }
             #endif
             Task { @MainActor in
-                self?.notice = AppNotice(
+                guard let self else {
+                    return
+                }
+                self.lastDisconnectError = text
+                // The answer can arrive after On Demand already brought the tunnel back: no stop card then.
+                guard NoticeOrigin.tunnelStopped.applies(whileConnected: self.isConnected) else {
+                    return
+                }
+                self.notice = AppNotice(
                     text: String(localized: "连接已断开：节点没有响应、被干扰，或网络刚切换。可以重试，或换一个节点。"),
                     detail: text,
-                    actions: [.retry, .chooseNode]
+                    actions: [.retry, .chooseNode],
+                    origin: .tunnelStopped
                 )
-                self?.lastDisconnectError = text
             }
         }
     }
@@ -2605,10 +2820,14 @@ final class TunnelController {
                 id: "connection-stopped"
             )
         }
+        guard NoticeOrigin.tunnelStopped.applies(whileConnected: isConnected) else {
+            return
+        }
         notice = AppNotice(
             text: String(localized: "网络扩展保存的配置副本已过期，自动重连没有成功。请重新连接。"),
             detail: text,
-            actions: [.retry]
+            actions: [.retry],
+            origin: .tunnelStopped
         )
     }
     #endif
@@ -2677,6 +2896,17 @@ final class TunnelController {
         #else
         return nil
         #endif
+    }
+
+    /// Shown for an `http://` subscription link: iOS and macOS refuse plain HTTP downloads (App Transport Security).
+    static let plainHTTPSubscriptionText = String(
+        localized: "只支持 HTTPS 订阅链接：系统不允许 App 用不加密的 http:// 下载订阅。请向服务商索取 https:// 链接。"
+    )
+
+    /// A download App Transport Security refused because it was not HTTPS (a group saved by an older version with an
+    /// `http://` link).
+    private static func isPlainHTTPRefused(_ error: Error) -> Bool {
+        (error as? URLError)?.code == .appTransportSecurityRequiresSecureConnection
     }
 
     private static func describe(_ error: TunnelNodeImportError) -> String {
@@ -2776,6 +3006,20 @@ struct ImportFailure: Error, Equatable {
     let message: String
 }
 
+/// Who started a subscription update, which decides what it may show and do to a running tunnel.
+enum SubscriptionUpdateTrigger: Equatable {
+    /// The user: an import, "Update now", pull to refresh, a notice's button, the command line. A failure shows a
+    /// notice; a running tunnel reconnects when what it runs changed.
+    case user
+    /// The automatic update while the app runs (in front on iOS, any time on macOS). A failure only marks the group;
+    /// a running tunnel reconnects when what it runs changed.
+    case automatic
+    /// The automatic update in the system's background refresh on iOS. A failure only marks the group; the app may be
+    /// suspended right after, so a running tunnel is not stopped here but reconnects when the app is next in front
+    /// (`TunnelController.reconnectIfPending()`).
+    case background
+}
+
 /// A notice on the home screen: one plain sentence on what happened and what it means, the raw error behind it
 /// for the curious (shown folded), and the actions that fix it.
 struct AppNotice: Equatable {
@@ -2795,6 +3039,8 @@ struct AppNotice: Equatable {
     var text: String
     var detail: String?
     var actions: [Action] = []
+    /// What made it, so a status change can drop it once it no longer applies (`NoticeOrigin`).
+    var origin: NoticeOrigin = .other
 }
 
 #if DEBUG

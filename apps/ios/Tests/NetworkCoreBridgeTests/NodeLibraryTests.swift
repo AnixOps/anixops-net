@@ -155,6 +155,11 @@ final class NodeLibraryTests: XCTestCase {
     func testSubscriptionLinksAreSingleHttpUrls() {
         XCTAssertEqual(SubscriptionLink.url(from: "  https://sub.example/api?token=x \n")?.host, "sub.example")
         XCTAssertNotNil(SubscriptionLink.url(from: "http://sub.example/a"))
+        // Recognized, so the import can refuse it with the reason (ATS) rather than as an unknown node link.
+        XCTAssertTrue(SubscriptionLink.isPlainHTTP("http://sub.example/a"))
+        XCTAssertTrue(SubscriptionLink.isPlainHTTP(" HTTP://sub.example/a?token=t \n"))
+        XCTAssertFalse(SubscriptionLink.isPlainHTTP("https://sub.example/a"))
+        XCTAssertFalse(SubscriptionLink.isPlainHTTP("ss://abc@host:1#name"))
         XCTAssertNil(SubscriptionLink.url(from: "trojan://p@a.example:443"))
         XCTAssertNil(SubscriptionLink.url(from: "https://a.example/x\nhttps://b.example/y"))
         XCTAssertNil(SubscriptionLink.url(from: "https://"))

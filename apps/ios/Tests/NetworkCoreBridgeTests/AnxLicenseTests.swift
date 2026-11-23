@@ -170,4 +170,73 @@ final class AnxLicenseTests: XCTestCase {
         XCTAssertNil(licensed.routing?.outbounds["p"]?["device_key"])
         XCTAssertNil(licensed.routing?.outbounds["s"]?["device_key"])
     }
+
+    /// The app's own delay tests and checkups run a node outside the tunnel: its ANX outbounds, the inlined `via`
+    /// chain included, need the same license fields the tunnel gives them, of the node's own subscription only.
+    func testDelayTestNodesCarryTheirOriginsLicense() {
+        let fields: [String: JSONValue] = ["device_key": .string("aa"), "license_cert_path": .string("/data/a.cert")]
+        let licenses = OutboundLicenses(fieldsByOrigin: [origin: fields])
+        let upstream = NativeImportReport.Node(
+            id: "u", name: "U", protocol: "anx", server: "203.0.113.1", port: 443,
+            outbound: ["type": .string("anx"), "server": .string("203.0.113.1")]
+        )
+        let landing = NativeImportReport.Node(
+            id: "l", name: "L", protocol: "trojan", server: "203.0.113.2", port: 443,
+            outbound: ["type": .string("trojan"), "password": .string("p"), "via": .string("u")]
+        )
+        let anx = NativeImportReport.Node(
+            id: "a", name: "A", protocol: "anx", server: "203.0.113.3", port: 443, outbound: ["type": .string("anx")]
+        )
+        let nodes = [upstream, landing, anx]
+
+        let direct = anx.standalone(among: nodes).licensed(by: licenses, origin: origin)
+        XCTAssertEqual(direct.outbound["device_key"], .string("aa"))
+        XCTAssertEqual(direct.outbound["license_cert_path"], .string("/data/a.cert"))
+        // The saved node stays as it was: the key never reaches a share link.
+        XCTAssertNil(anx.outbound["device_key"])
+
+        let chained = landing.standalone(among: nodes).licensed(by: licenses, origin: origin)
+        XCTAssertNil(chained.outbound["device_key"], "a trojan outbound takes no ANX fields")
+        guard case let .object(via) = chained.outbound["via"] else {
+            return XCTFail("the via chain is not inlined")
+        }
+        XCTAssertEqual(via["device_key"], .string("aa"))
+
+        // Pasted nodes (no origin), an origin with no fields, and no license state at all get nothing.
+        XCTAssertEqual(anx.licensed(by: licenses, origin: nil), anx)
+        XCTAssertEqual(anx.licensed(by: licenses, origin: "https://other.example:443"), anx)
+        XCTAssertEqual(anx.licensed(by: nil, origin: origin), anx)
+    }
+
+    func testLicenseFilesAreWrittenForTheOwnerOnly() throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("anx-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let other = "https://other.example:443"
+        var license = AnxLicense(
+            origins: [origin, other],
+            entries: [
+                origin: AnxLicense.Entry(deviceKey: seed, license: "abcd", status: "ok"),
+                other: AnxLicense.Entry(deviceKey: seed, license: nil, status: "not_entitled"),
+            ]
+        )
+        let stale = directory.appendingPathComponent(AnxLicense.licenseFileName(origin: other))
+        XCTAssertTrue(FileManager.default.createFile(atPath: stale.path, contents: Data("old".utf8)))
+
+        let written = license.writeLicenseFiles(in: directory)
+        XCTAssertEqual(written.written, 1)
+        XCTAssertEqual(written.failures, 0)
+        let file = directory.appendingPathComponent(AnxLicense.licenseFileName(origin: origin))
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), "abcd")
+        let permissions = try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? NSNumber
+        XCTAssertEqual(permissions?.intValue, 0o600)
+        // A license that went away takes its file with it; the origin still gets its key, to report "not licensed".
+        XCTAssertFalse(FileManager.default.fileExists(atPath: stale.path))
+        XCTAssertEqual(written.fieldsByOrigin[other]?["license_cert_path"], .string(stale.path))
+        XCTAssertEqual(written.fieldsByOrigin[origin]?["license_cert_path"], .string(file.path))
+        XCTAssertNotNil(written.fieldsByOrigin[origin]?["device_key"])
+
+        license.origins = []
+        XCTAssertTrue(license.writeLicenseFiles(in: directory).fieldsByOrigin.isEmpty)
+    }
 }

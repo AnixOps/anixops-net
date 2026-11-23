@@ -272,3 +272,72 @@ public struct OutboundLicenses: Equatable {
         originByEndpoint[Self.endpoint(server, port)].flatMap { fieldsByOrigin[$0] }
     }
 }
+
+extension AnxLicense {
+    /// What `writeLicenseFiles(in:)` did.
+    public struct WrittenLicenses: Equatable {
+        /// `device_key`, `device_alg` and `license_cert_path` by origin (`OutboundLicenses.fieldsByOrigin`).
+        public var fieldsByOrigin: [String: [String: JSONValue]]
+        /// License files written.
+        public var written: Int
+        /// Files that could not be written or removed.
+        public var failures: Int
+    }
+
+    /// Writes each origin's license to its own file in `directory` (`licenseFileName(origin:)`, owner read and write
+    /// only) and removes the file of an origin that has no license now, then returns the outbound fields by origin.
+    /// An origin without a license still gets the device key and the path, so its outbound reports "not licensed"
+    /// instead of trying to enroll. The tunnel extension and the app (for its own delay tests and checkups, which
+    /// run outside the tunnel) each write their own copy: neither can read the other's container.
+    public func writeLicenseFiles(in directory: URL) -> WrittenLicenses {
+        var result = WrittenLicenses(fieldsByOrigin: [:], written: 0, failures: 0)
+        for origin in origins {
+            guard let entry = entries[origin] else {
+                continue
+            }
+            let url = directory.appendingPathComponent(Self.licenseFileName(origin: origin))
+            do {
+                if let license = entry.license {
+                    try Data(license.utf8).write(to: url, options: .atomic)
+                    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+                    result.written += 1
+                } else if FileManager.default.fileExists(atPath: url.path) {
+                    try FileManager.default.removeItem(at: url)
+                }
+            } catch {
+                result.failures += 1
+            }
+            result.fieldsByOrigin[origin] = entry.outboundFields(licensePath: url.path)
+        }
+        return result
+    }
+}
+
+extension NativeImportReport.Node {
+    /// The node with the ANX license fields of `origin` (the subscription it came from, `AnxLicense.origin(ofSubscription:)`)
+    /// on every ANX outbound in it, the `via` chain `standalone(among:)` inlined included: the tunnel gives its ANX
+    /// outbounds the same fields at start, and a delay test or checkup of a node that needs a license fails without
+    /// them. Never another origin's fields (anx spec §2.4.1), and nothing for pasted nodes (no origin). Only for the
+    /// request the app sends at once: the fields hold the device key, so the result is never stored, shared or
+    /// exported (a share link is made from the node as saved).
+    public func licensed(by licenses: OutboundLicenses?, origin: String?) -> NativeImportReport.Node {
+        guard let origin, let fields = licenses?.fieldsByOrigin[origin] else {
+            return self
+        }
+        return NativeImportReport.Node(
+            id: id, name: name, protocol: self.protocol, server: server, port: port,
+            outbound: Self.licensing(outbound, with: fields), path: path, licenseOrigin: licenseOrigin
+        )
+    }
+
+    private static func licensing(_ outbound: [String: JSONValue], with fields: [String: JSONValue]) -> [String: JSONValue] {
+        var outbound = outbound
+        if outbound["type"] == .string("anx") {
+            outbound.merge(fields) { _, new in new }
+        }
+        if case let .object(via) = outbound["via"] {
+            outbound["via"] = .object(licensing(via, with: fields))
+        }
+        return outbound
+    }
+}

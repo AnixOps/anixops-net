@@ -21,6 +21,8 @@ struct ProxiesView: View {
     @State private var checking: EditingNode?
     @State private var sharing: SharedNode?
     @State private var shareFailure: String?
+    /// A node deletion that takes the nodes connecting through it along, until the user confirms.
+    @State private var deletingNode: PendingNodeDeletion?
 
     var body: some View {
         NavigationContainer(embedded: embedded) {
@@ -135,6 +137,25 @@ struct ProxiesView: View {
                 }
             } message: {
                 Text("会删除这个订阅组的全部节点。正在使用它时，会切换到下一个订阅组。")
+            }
+            .confirmationDialog(
+                "删除节点“\(deletingNode?.node.displayName ?? "")”？",
+                isPresented: Binding(
+                    get: { deletingNode != nil },
+                    set: { if !$0 { deletingNode = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("一并删除 \((deletingNode?.dependents.count ?? 0) + 1) 个节点", role: .destructive) {
+                    if let pending = deletingNode {
+                        Task {
+                            await tunnel.deleteNode(pending.node.id, inGroup: pending.groupID)
+                        }
+                    }
+                    deletingNode = nil
+                }
+            } message: {
+                Text("“\(deletingNode?.dependentNames ?? "")”经由这个节点连接，删除后无法使用，会一并删除。")
             }
         }
     }
@@ -291,10 +312,14 @@ struct ProxiesView: View {
         } label: {
             Label("分享节点", systemImage: "qrcode")
         }
-        if group.library.canRemove(node.id) {
+        if let dependents = group.library.removal(of: node.id) {
             Button(role: .destructive) {
-                Task {
-                    await tunnel.deleteNode(node.id, inGroup: group.id)
+                if dependents.isEmpty {
+                    Task {
+                        await tunnel.deleteNode(node.id, inGroup: group.id)
+                    }
+                } else {
+                    deletingNode = PendingNodeDeletion(groupID: group.id, node: node, dependents: dependents)
                 }
             } label: {
                 Label("删除节点", systemImage: "trash")

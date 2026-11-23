@@ -105,7 +105,8 @@ struct HomeView: View {
         switch action {
         case .retry:
             tunnel.clearMessage()
-            tunnel.toggle()
+            // Only ever connects: the tunnel may be back already (On Demand), and a toggle would then disconnect it.
+            tunnel.connect()
         case .chooseNode:
             picking = true
         case let .refreshSubscription(groupID):
@@ -323,8 +324,8 @@ private struct ConnectCard: View {
                 Text(" ")
             }
         case .off:
-            if case let .blocked(reason, _) = tunnel.coordinator.decision {
-                Text(reason)
+            if let hint = tunnel.offHint {
+                Text(hint)
             } else {
                 Text("轻点连接")
             }

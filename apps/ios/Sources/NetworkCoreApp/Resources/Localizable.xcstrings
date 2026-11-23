@@ -14822,6 +14822,246 @@
           }
         }
       }
+    },
+    "启用的插件合计超过 8 MB，请先停用一些插件": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enabled plugins exceed 8 MB in total. Turn some off first."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "啟用的外掛合計超過 8 MB，請先停用一些外掛"
+          }
+        }
+      }
+    },
+    "只支持 HTTPS 订阅链接：系统不允许 App 用不加密的 http:// 下载订阅。请向服务商索取 https:// 链接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only HTTPS subscription links are supported: the system does not let apps download a subscription over unencrypted http://. Ask your provider for an https:// link."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只支援 HTTPS 訂閱連結：系統不允許 App 用未加密的 http:// 下載訂閱。請向服務商索取 https:// 連結。"
+          }
+        }
+      }
+    },
+    "打开开关连接，首次需要允许添加 VPN 配置": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn on the switch to connect; the first time, allow adding the VPN configuration"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打開開關連線，首次需要允許加入 VPN 設定"
+          }
+        }
+      }
+    },
+    "轻点连接，首次需要允许添加 VPN 配置": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap to connect; the first time, allow adding the VPN configuration"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "輕點連線，首次需要允許加入 VPN 設定"
+          }
+        }
+      }
+    },
+    "已被其他 VPN 停用，打开开关重新启用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turned off by another VPN; turn on the switch to enable it again"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已被其他 VPN 停用，打開開關重新啟用"
+          }
+        }
+      }
+    },
+    "已被其他 VPN 停用，轻点重新启用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turned off by another VPN; tap to enable it again"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已被其他 VPN 停用，輕點重新啟用"
+          }
+        }
+      }
+    },
+    "断开 AnixOps Net": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disconnect AnixOps Net"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中斷 AnixOps Net 連線"
+          }
+        }
+      }
+    },
+    "允许 AnixOps Net 发送通知": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow AnixOps Net to Send Notifications"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允許 AnixOps Net 傳送通知"
+          }
+        }
+      }
+    },
+    "在系统设置中开启通知": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn On Notifications in Settings"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在系統設定中開啟通知"
+          }
+        }
+      }
+    },
+    "系统设置里关闭了 AnixOps Net 的通知，上面的开关目前不会发出任何通知。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifications for AnixOps Net are turned off in the system settings, so the switches above send nothing for now."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系統設定裡關閉了 AnixOps Net 的通知，上面的開關目前不會發出任何通知。"
+          }
+        }
+      }
+    },
+    "删除节点“%@”？": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete node “%@”?"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刪除節點“%@”？"
+          }
+        }
+      }
+    },
+    "一并删除 %lld 个节点": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete %lld Nodes"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一併刪除 %lld 個節點"
+          }
+        }
+      }
+    },
+    "“%@”经由这个节点连接，删除后无法使用，会一并删除。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” connects through this node and would stop working without it, so it is deleted too."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@”經由這個節點連線，刪除後無法使用，會一併刪除。"
+          }
+        }
+      }
+    },
+    "删除节点…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Node…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刪除節點…"
+          }
+        }
+      }
+    },
+    "“%@”已设为当前节点，正在重新连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” is now the current node. Reconnecting…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@”已設為目前節點，正在重新連線。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

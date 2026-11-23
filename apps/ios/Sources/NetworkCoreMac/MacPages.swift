@@ -227,8 +227,8 @@ private struct MacHeroCard: View {
                 Text("安全隧道已建立")
             }
         case .off:
-            if case let .blocked(reason, _) = tunnel.coordinator.decision {
-                Text(reason)
+            if let hint = tunnel.offHint {
+                Text(hint)
             } else {
                 Text("打开开关连接，或按 ⇧⌘C")
             }

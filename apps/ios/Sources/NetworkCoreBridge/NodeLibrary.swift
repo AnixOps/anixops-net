@@ -335,8 +335,15 @@ public struct NodeLibrary: Codable, Equatable {
     }
 }
 
-/// Recognizes a pasted subscription link: one http(s) URL and nothing else.
+/// Recognizes a pasted subscription link: one http(s) URL and nothing else. An `http://` link is recognized so the
+/// import can say why it cannot use it (`isPlainHTTP`) instead of trying it as a node link.
 public enum SubscriptionLink {
+    /// Whether `text` is a subscription link without TLS. The Apple apps refuse those before downloading: App
+    /// Transport Security blocks plain HTTP loads, so the download would always fail and look like a dead link.
+    public static func isPlainHTTP(_ text: String) -> Bool {
+        url(from: text)?.scheme?.lowercased() == "http"
+    }
+
     public static func url(from text: String) -> URL? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.contains(where: \.isWhitespace),

@@ -117,8 +117,9 @@ final class ScriptEventRelay: @unchecked Sendable {
             content.subtitle = notification.subtitle
             content.body = notification.content
             content.threadIdentifier = "plugin-scripts"
-            if let openURL = notification.openURL {
-                content.userInfo = ["open-url": openURL]
+            // Web links only (`NotificationPermission.openableURL`); the app checks again when it is tapped.
+            if let openURL = NotificationPermission.openableURL(notification.openURL) {
+                content.userInfo = ["open-url": openURL.absoluteString]
             }
             center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
         }
