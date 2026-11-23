@@ -294,6 +294,8 @@ struct CaptureRequestsView: View {
             return "HTTPS 解密没有生效：隧道启动时找不到根证书。请在 改写 › HTTPS 解密证书 生成并信任，再重新连接。"
         case .rootUnavailable:
             return "HTTPS 解密没有生效：隧道读不到钥匙串里的根证书。请重新连接；仍不行就在 改写 › HTTPS 解密证书 重新生成。"
+        case .tooLarge:
+            return "HTTPS 解密没有生效：已启用的插件和调试映射合计超出了隧道配置的上限，隧道没有交给内核。请停用一些插件或减少映射正文，再重新连接。"
         case .refused, .setupFailed, nil:
             return "HTTPS 解密没有生效：内核没有接受解密设置。请检查已启用的插件，开发者诊断的扩展事件里有原因。"
         }

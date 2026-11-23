@@ -2301,6 +2301,29 @@ final class TunnelController {
         return HttpsDecryptionState.decoded(from: answer)
     }
 
+    /// Whether the running tunnel routes by the rules, as its extension set it up; nil while it is not running or
+    /// from an extension older than the question.
+    func routingState() async -> RoutingState? {
+        #if DEBUG
+        if Self.isDemo {
+            return nil
+        }
+        #endif
+        guard let session = manager?.connection as? NETunnelProviderSession, connection == .connected else {
+            return nil
+        }
+        let answer: Data? = await withCheckedContinuation { continuation in
+            do {
+                try session.sendProviderMessage(TunnelAppMessage.routing.encoded) { data in
+                    continuation.resume(returning: data)
+                }
+            } catch {
+                continuation.resume(returning: nil)
+            }
+        }
+        return RoutingState.decoded(from: answer)
+    }
+
     /// Keeps `list` as the last connection list read from the running engine.
     func remember(_ list: RuntimeControl.Connections) {
         guard connection == .connected, list != lastConnections else {

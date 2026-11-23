@@ -135,7 +135,8 @@ System Settings) follows the saved profile. Firefox keeps its own certificate li
 The same tab imports Loon plugins from a file, the clipboard or an `https` address the user types (D4: remote
 import only on the user's request; downloads are capped and a redirect to plain HTTP is refused).
 `MitmPluginLibrary` keeps them in the app's Application Support folder with a master "HTTPS 解密" switch, which
-turns on only once the root is trusted. The enabled plugin texts (up to 8 MiB each and 8 MiB together) go into the tunnel profile under
+turns on only once the root is trusted. The enabled plugin texts (up to 8 MiB each and 8 MiB together, the debug
+mappings' generated plugin included; see "Engine budgets") go into the tunnel profile under
 `TunnelProfileKeys.mitmPlugins`, zlib-compressed like the scripts (`ProfileCompression`); the extension adds the root from the Keychain and passes both to the runtime as
 the config's `mitm` section, where `mitm_policy::loon_plugin` translates and merges them (see
 `crates/engine-embedded/README.md`). The root key never enters the profile. If the root is missing or the runtime
@@ -150,6 +151,25 @@ the same address needs a new agreement, and a swipe revokes it. The allowed sour
 digest and passes them as `script_assets`, with `$persistentStore` in its Application Support folder; scripts run in
 QuickJS inside the tunnel without `$httpClient`. If the runtime refuses the scripts, the tunnel keeps decryption
 without them.
+
+## Engine budgets
+
+The kernel the app is built with takes at most 64 KiB of JSON config per start (`MAX_CONFIG_LEN` of
+`networkcore_ios_runtime_init`), 8 MiB of decryption plugin text in total (`MAX_POLICY_BYTES`), 64 routed outbounds
+and 32 rule sets. `EngineBudget` mirrors the first two and the extension measures each config before handing it over,
+leaving out the most expendable extra with a reason instead of letting the engine refuse it: allowed scripts, then
+HTTPS decryption (`HttpsDecryptionState.Reason.tooLarge`, shown on the requests page), then the subscription's and the
+user's rules, when the tunnel runs the selected node alone (`RoutingState`, `TunnelAppMessage.routing`, shown on the
+rules page). The config the engine actually runs is the one a later local-rules change is compared with, so a tunnel
+that fell back restarts instead of swapping rule lines into an engine without rules. A config still over the budget
+without any extra (very large DNS rules or redirects) fails to start with the size in its reason.
+
+A node list without subscription rules routes with only the selected node and the nodes it connects through
+(`via`), however long the list. The routing section's rule sets, the DNS rules' included, are cut to 32 in a fixed
+order (the user's rule lists, the user's GEOIP / IP-ASN data lists, lists only the DNS rules use, the catalog's lists,
+then the subscription's own), and the rules page names what was left out. The app checks the 8 MiB decryption budget
+when a plugin is added or enabled and when debug mappings grow (the mappings' plugin, with its Base64 bodies, at most
+4 MiB); turning things off or removing them is always allowed.
 
 ## URL scheme
 

@@ -356,8 +356,22 @@ struct MacProxiesPage: View {
 struct MacRulesPage: View {
     var tunnel: TunnelController
     @Environment(\.brand) private var brand
+    /// Whether the running tunnel took the rules (`RoutingState`); nil while disconnected.
+    @State private var routingState: RoutingState?
 
     var body: some View {
+        content
+            .task(id: tunnel.connection) {
+                while !Task.isCancelled, tunnel.connection == .connected {
+                    routingState = await tunnel.routingState()
+                    try? await Task.sleep(for: .seconds(5))
+                }
+                routingState = nil
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         if let library = tunnel.library, let routing = library.routing {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
@@ -474,6 +488,12 @@ struct MacRulesPage: View {
             Text(ProxyModeText.footer(tunnel.mode))
                 .font(.caption)
                 .foregroundStyle(brand.text2)
+            // Why the running tunnel does not route by every rule (`RoutingState.notice`).
+            if tunnel.connection == .connected, let text = routingState?.notice {
+                Text(text)
+                    .font(.caption)
+                    .foregroundStyle(brand.warning)
+            }
         }
     }
 

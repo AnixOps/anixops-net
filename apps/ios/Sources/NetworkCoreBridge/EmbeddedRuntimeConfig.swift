@@ -322,13 +322,15 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
     }
 
     /// The same config resolving with `dns`. Rule sets its rules name that the routing section lacks come from
-    /// the catalog when it knows them; a name nothing defines simply never matches.
+    /// the catalog when it knows them, as long as the section stays within `NodeLibrary.maxRuleSets` (a routing
+    /// section built with the DNS rules' sets, `NodeLibrary.routingBuild(localRules:dnsRuleSets:)`, already has
+    /// those that fit); a name nothing defines simply never matches.
     public func withDns(_ dns: DnsSettings?) -> EmbeddedRuntimeConfig {
         var copy = self
         copy.dns = dns.flatMap { $0.isEmpty ? nil : $0 }
         if let dns = copy.dns, var routing = copy.routing {
             var sets = routing.ruleSets ?? [:]
-            for name in dns.ruleSetNames where sets[name] == nil {
+            for name in dns.ruleSetNames where sets[name] == nil && sets.count < NodeLibrary.maxRuleSets {
                 sets[name] = RuleSetCatalog.known[name]
             }
             routing.ruleSets = sets.isEmpty ? nil : sets

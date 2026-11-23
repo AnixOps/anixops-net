@@ -14631,6 +14631,70 @@
         }
       }
     },
+    "规则没有生效：节点、规则和已启用的插件合计超出了隧道配置的上限，隧道只用选中的节点。请减少规则或规则集、停用一些插件后重新连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rules are not in effect: the nodes, rules and enabled plugins together exceed the tunnel's configuration limit, so the tunnel uses only the selected node. Remove some rules or rule sets, or turn off some plugins, then reconnect."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "規則沒有生效：節點、規則和已啟用的外掛合計超出了隧道設定的上限，隧道只用選中的節點。請減少規則或規則集、停用一些外掛後重新連線。"
+          }
+        }
+      }
+    },
+    "规则没有生效：内核没有接受分流设置，隧道只用选中的节点。开发者诊断的扩展事件里有原因。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rules are not in effect: the engine did not accept the routing settings, so the tunnel uses only the selected node. The extension events in developer diagnostics give the reason."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "規則沒有生效：核心沒有接受分流設定，隧道只用選中的節點。開發者診斷的擴充事件裡有原因。"
+          }
+        }
+      }
+    },
+    "规则集超过 %lld 个，以下规则集和用到它们的规则没有生效：%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More than %lld rule sets: these rule sets, and the rules that use them, are not in effect: %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "規則集超過 %lld 個，以下規則集和用到它們的規則沒有生效：%@"
+          }
+        }
+      }
+    },
+    "HTTPS 解密没有生效：已启用的插件和调试映射合计超出了隧道配置的上限，隧道没有交给内核。请停用一些插件或减少映射正文，再重新连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTPS decryption is not active: the enabled plugins and debug mappings together exceed the tunnel's configuration limit, so the tunnel did not pass them to the engine. Turn off some plugins or shorten mapping bodies, then reconnect."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTPS 解密沒有生效：已啟用的外掛和除錯對應合計超出了隧道設定的上限，隧道沒有交給核心。請停用一些外掛或減少對應內文，再重新連線。"
+          }
+        }
+      }
+    },
     "有 %lld 条重定向内核无法使用，不会生效。请编辑或删除标出的条目。": {
       "localizations": {
         "en": {

@@ -27,11 +27,15 @@ public enum TunnelAppMessage: Equatable {
     /// what it started with. Answered with `ok` (`TunnelStartSecrets.handOverAccepted(_:)`); an older extension
     /// answers the runtime status instead.
     case startSecrets(Data)
+    /// Whether the running tunnel routes by the subscription's and the user's rules (`RoutingState`), answered as
+    /// JSON. An older extension answers the runtime status instead, which does not decode as one.
+    case routing
 
     private static let diagnosticsPayload = Data("diagnostics".utf8)
     private static let trafficStatsPayload = Data("traffic-stats".utf8)
     private static let clearTrafficStatsPayload = Data("traffic-stats-clear".utf8)
     private static let httpsDecryptionPayload = Data("https-decryption".utf8)
+    private static let routingPayload = Data("routing-state".utf8)
     private static let controlPrefix = Data("control:".utf8)
     private static let notificationsPrefix = Data("notifications:".utf8)
     private static let reloadLocalRulesPrefix = Data("local-rules:".utf8)
@@ -57,6 +61,8 @@ public enum TunnelAppMessage: Equatable {
             return Self.httpsDecryptionPayload
         case let .startSecrets(value):
             return Self.startSecretsPrefix + value
+        case .routing:
+            return Self.routingPayload
         }
     }
 
@@ -72,6 +78,9 @@ public enum TunnelAppMessage: Equatable {
         }
         if data == httpsDecryptionPayload {
             return .httpsDecryption
+        }
+        if data == routingPayload {
+            return .routing
         }
         if data.starts(with: notificationsPrefix) {
             return .notificationSettings(Data(data.dropFirst(notificationsPrefix.count)))
@@ -110,17 +119,36 @@ public struct HttpsDecryptionState: Codable, Equatable {
         /// The engine refused the plugins.
         case refused
         case setupFailed = "setup_failed"
+        /// The plugins, the debug mappings' included, are over what the engine takes (`EngineBudget`): the tunnel
+        /// did not hand them over.
+        case tooLarge = "too_large"
     }
 
     public var status: Status
     public var reason: Reason?
     /// Plugins handed to the engine, the debug list's own included.
     public var plugins: Int
+    /// With `tooLarge`, the bytes measured against `EngineBudget`.
+    public var bytes: Int?
 
-    public init(status: Status, reason: Reason? = nil, plugins: Int = 0) {
+    enum CodingKeys: String, CodingKey {
+        case status, reason, plugins, bytes
+    }
+
+    public init(status: Status, reason: Reason? = nil, plugins: Int = 0, bytes: Int? = nil) {
         self.status = status
         self.reason = reason
         self.plugins = plugins
+        self.bytes = bytes
+    }
+
+    /// A reason this app does not know (from a newer extension) reads as none, rather than losing the whole state.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        status = try container.decode(Status.self, forKey: .status)
+        reason = (try? container.decodeIfPresent(String.self, forKey: .reason)).flatMap { Reason(rawValue: $0) }
+        plugins = try container.decodeIfPresent(Int.self, forKey: .plugins) ?? 0
+        bytes = try? container.decodeIfPresent(Int.self, forKey: .bytes)
     }
 
     public func encoded() -> Data? {
@@ -129,6 +157,79 @@ public struct HttpsDecryptionState: Codable, Equatable {
 
     public static func decoded(from data: Data?) -> HttpsDecryptionState? {
         data.flatMap { try? JSONDecoder().decode(HttpsDecryptionState.self, from: $0) }
+    }
+}
+
+/// Whether the running tunnel routes by the subscription's and the user's rules, as the extension set it up at start
+/// (`makeSession`). When the engine cannot take the routing section the tunnel runs the selected node alone, and the
+/// app says so instead of showing a rule mode that is not in force.
+public struct RoutingState: Codable, Equatable {
+    public enum Status: String, Codable {
+        /// The engine routes by the rules.
+        case on
+        /// There were rules, but the tunnel runs the selected node alone (`reason`).
+        case off
+        /// No rules to route by: no node list.
+        case unused
+    }
+
+    /// Why routing is off. Fixed codes, never profile content.
+    public enum Reason: String, Codable {
+        /// The config with the routing section is over the engine's `EngineBudget.maxConfigBytes`.
+        case tooLarge = "too_large"
+        /// The engine refused the routing section.
+        case refused
+    }
+
+    public var status: Status
+    public var reason: Reason?
+    /// With `tooLarge`, the bytes of the config the engine could not take.
+    public var bytes: Int?
+    /// Rule sets left out to stay within the engine's `NodeLibrary.maxRuleSets`; the rules naming them do not apply.
+    public var droppedRuleSets: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case status, reason, bytes
+        case droppedRuleSets = "dropped_rule_sets"
+    }
+
+    public init(status: Status, reason: Reason? = nil, bytes: Int? = nil, droppedRuleSets: [String] = []) {
+        self.status = status
+        self.reason = reason
+        self.bytes = bytes
+        self.droppedRuleSets = droppedRuleSets
+    }
+
+    /// Unknown reasons (from a newer extension) read as none.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        status = try container.decode(Status.self, forKey: .status)
+        reason = (try? container.decodeIfPresent(String.self, forKey: .reason)).flatMap { Reason(rawValue: $0) }
+        bytes = try? container.decodeIfPresent(Int.self, forKey: .bytes)
+        droppedRuleSets = (try? container.decodeIfPresent([String].self, forKey: .droppedRuleSets)) ?? []
+    }
+
+    /// What the rules page says about it, nil when the rules are fully in force.
+    public var notice: String? {
+        switch (status, reason) {
+        case (.off, .tooLarge):
+            return String(localized: "规则没有生效：节点、规则和已启用的插件合计超出了隧道配置的上限，隧道只用选中的节点。请减少规则或规则集、停用一些插件后重新连接。")
+        case (.off, _):
+            return String(localized: "规则没有生效：内核没有接受分流设置，隧道只用选中的节点。开发者诊断的扩展事件里有原因。")
+        case (.on, _) where !droppedRuleSets.isEmpty:
+            let names = droppedRuleSets.joined(separator: ", ")
+            return String(localized: "规则集超过 \(NodeLibrary.maxRuleSets) 个，以下规则集和用到它们的规则没有生效：\(names)")
+        default:
+            return nil
+        }
+    }
+
+    public func encoded() -> Data? {
+        try? JSONEncoder().encode(self)
+    }
+
+    public static func decoded(from data: Data?) -> RoutingState? {
+        data.flatMap { try? JSONDecoder().decode(RoutingState.self, from: $0) }
     }
 }
 

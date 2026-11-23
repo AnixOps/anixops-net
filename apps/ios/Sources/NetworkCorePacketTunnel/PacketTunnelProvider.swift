@@ -55,6 +55,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private let events = TunnelDiagnosticLog()
     /// Whether the running engine decrypts HTTPS, set by `makeRuntimeSession` (`TunnelAppMessage.httpsDecryption`).
     private var httpsDecryption = HttpsDecryptionState(status: .unused)
+    /// Whether the running engine routes by the rules, set by `makeSession` (`TunnelAppMessage.routing`).
+    private var routingState = RoutingState(status: .unused)
+    /// The rule sets the last routing section built left out (`NodeLibrary.RoutingBuild.droppedRuleSets`).
+    private var droppedRuleSets: [String] = []
     /// Hourly traffic by host and policy for the app's statistics page.
     private let trafficStats = TrafficStatsRecorder()
     /// Network changes in, script notifications out.
@@ -156,9 +160,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         // The subscription's rules and groups go in whatever the mode, so the app can switch modes without a restart.
         let mode = ProxyMode.saved(in: tunnelProtocol.providerConfiguration)
         let dns = DnsSettings.fromProfileValue(tunnelProtocol.providerConfiguration?[TunnelProfileKeys.dns] as? Data)
-        let redirects = TrafficRedirects.lines(
+        // Lines an earlier version saved without checking them all are skipped (`TrafficRedirects.validLines`): the
+        // engine would refuse the whole config for one of them.
+        let savedRedirects = TrafficRedirects.lines(
             fromProfileValue: tunnelProtocol.providerConfiguration?[TunnelProfileKeys.redirects] as? Data
         )
+        let redirects = TrafficRedirects.validLines(savedRedirects)
+        if redirects.count < savedRedirects.count {
+            events.record("redirects: \(savedRedirects.count - redirects.count) skipped (invalid)")
+        }
         let localRules = LocalRules.fromProfileValue(
             tunnelProtocol.providerConfiguration?[TunnelProfileKeys.localRules] as? Data
         )
@@ -174,7 +184,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let base = ReloadBase(
             config: config, mode: mode, dns: dns, redirects: redirects, blockQuic: blockQuic, anxLicense: anxLicenseFields()
         )
-        config = Self.assemble(base, routing: withSubscriptionRules(base.config, localRules: localRules))
+        config = Self.assemble(base, routing: withSubscriptionRules(base.config, localRules: localRules, dns: dns))
         events.record("mode \(mode.rawValue)")
         if !redirects.isEmpty {
             events.record("redirects \(redirects.count)")
@@ -203,13 +213,22 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             let mitm = MitmProfileBundle.fromProfile(
                 tunnelProtocol.providerConfiguration, chunks: startSecrets?.mitmBundleChunks
             )
-            session = try makeSession(
+            // The config the engine actually runs: without the rules when it could not take them, so a later
+            // local-rules change restarts rather than swapping lines into an engine that has no rules.
+            let started = try makeSession(
                 config,
                 mitmPlugins: mitm.plugins,
                 mitmScripts: mitm.scripts,
                 mitmResources: mitm.resources
             )
+            session = started.0
+            config = started.1
             events.record("runtime initialized")
+        } catch let tooLarge as EngineBudget.TooLarge {
+            completionHandler(PacketTunnelFailure(
+                reason: "tunnel config is too large for the engine (\(tooLarge.bytes) of \(tooLarge.limit) bytes); remove DNS rules or redirects"
+            ))
+            return
         } catch let failure as EmbeddedRuntimeSession.Failure {
             completionHandler(PacketTunnelFailure(reason: "embedded runtime rejected the tunnel profile (code \(failure.code))"))
             return
@@ -465,6 +484,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             completionHandler?(trafficStats.clear())
         case .httpsDecryption:
             completionHandler?(session == nil ? nil : httpsDecryption.encoded())
+        case .routing:
+            completionHandler?(session == nil ? nil : routingState.encoded())
         case let .notificationSettings(data):
             applyNotificationSettings(NotificationSettings.fromProfileValue(data))
             completionHandler?(Data("ok".utf8))
@@ -531,13 +552,22 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         guard let session, let base = reloadBase, let running = runningConfig else {
             return answer(.init(reloaded: false, restart: true))
         }
-        let next = Self.assemble(base, routing: withSubscriptionRules(base.config, localRules: LocalRules.fromProfileValue(value)))
+        let next = Self.assemble(
+            base, routing: withSubscriptionRules(base.config, localRules: LocalRules.fromProfileValue(value), dns: base.dns)
+        )
         guard let rules = running.reloadableRules(to: next) else {
             events.record("local rules changed beyond the rule lines: restart")
             return answer(.init(reloaded: false, restart: true))
         }
+        // The same size check as at start: a swap is refused by nothing, so a config the engine could not have
+        // started with restarts instead, and the start says what it left out.
+        if (try? EngineBudget.encoded(next.withoutMitm())) == nil {
+            events.record("local rules over the config budget: restart")
+            return answer(.init(reloaded: false, restart: true))
+        }
         if rules == running.routing?.rules {
             runningConfig = next
+            routingState.droppedRuleSets = droppedRuleSets
             return answer(.init(reloaded: true, rules: rules.count))
         }
         let reply = session.control(RuntimeControl.reloadRules(rules, dryRun: false).request)
@@ -547,6 +577,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             return answer(.init(reloaded: false, error: RuntimeControl.decode(RuntimeControl.ReloadAnswer.self, from: reply)?.error, restart: true))
         }
         runningConfig = next
+        routingState.droppedRuleSets = droppedRuleSets
         events.record("rules reloaded in place, \(rules.count) rules, generation \(done.generation ?? 0)")
         return reply
     }
@@ -555,15 +586,27 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// front; a node list without subscription rules gets the local rules, then everything else through the selected node. They are an extra like
     /// HTTPS decryption: without a readable library the selected node carries all traffic, and the reason goes to
     /// the diagnostics.
-    private func withSubscriptionRules(_ config: EmbeddedRuntimeConfig, localRules: LocalRules) -> EmbeddedRuntimeConfig {
+    private func withSubscriptionRules(
+        _ config: EmbeddedRuntimeConfig,
+        localRules: LocalRules,
+        dns: DnsSettings?
+    ) -> EmbeddedRuntimeConfig {
+        droppedRuleSets = []
         do {
             guard let value = try startSecrets?.nodeLibrary ?? NodeSecretStore.value(account: NodeLibrary.keychainAccount),
-                  let routing = try NodeLibrary.fromKeychainValue(value).routingForModes(localRules: localRules)
+                  let build = try NodeLibrary.fromKeychainValue(value).routingBuild(
+                      localRules: localRules, dnsRuleSets: dns?.ruleSetNames ?? []
+                  )
             else {
                 events.record("subscription rules off: no node list")
                 return config
             }
+            let routing = build.routing
+            droppedRuleSets = build.droppedRuleSets
             events.record("subscription rules on, \(routing.outbounds.count) nodes, \(routing.rules.count) rules, \(routing.groups.count) groups")
+            if !build.droppedRuleSets.isEmpty {
+                events.record("rule sets over the engine's \(NodeLibrary.maxRuleSets): \(build.droppedRuleSets.count) left out")
+            }
             return config.withRouting(routing)
         } catch let failure as NodeSecretStore.Failure {
             events.record("subscription rules off: node list unavailable (keychain status \(failure.status))")
@@ -614,38 +657,48 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         return OutboundLicenses(fieldsByOrigin: fieldsByOrigin, nodes: library?.nodes ?? [])
     }
 
-    /// Creates the runtime. When it refuses the subscription's rules, or there are none, the selected node runs alone
-    /// (`EmbeddedRuntimeConfig.selectedNodeAlone()`).
+    /// Creates the runtime and returns it with the config it runs. When the config with the subscription's rules is
+    /// over the engine's size budget (`EngineBudget`) or the engine refuses it, or there are none, the selected node
+    /// runs alone (`EmbeddedRuntimeConfig.selectedNodeAlone()`); `routingState` says which, for the app.
     private func makeSession(
         _ config: EmbeddedRuntimeConfig,
         mitmPlugins: [String],
         mitmScripts: [String: String],
         mitmResources: [String: Data]
-    ) throws -> EmbeddedRuntimeSession {
+    ) throws -> (EmbeddedRuntimeSession, EmbeddedRuntimeConfig) {
         let resourceAssets = Self.resourceAssets(mitmResources)
         guard config.routing != nil else {
-            return try makeRuntimeSession(
-                config.selectedNodeAlone(),
-                mitmPlugins: mitmPlugins,
-                mitmScripts: mitmScripts,
-                resourceAssets: resourceAssets
+            routingState = RoutingState(status: .unused)
+            let alone = config.selectedNodeAlone()
+            let session = try makeRuntimeSession(
+                alone, mitmPlugins: mitmPlugins, mitmScripts: mitmScripts, resourceAssets: resourceAssets
             )
+            return (session, alone)
         }
         do {
-            return try makeRuntimeSession(
+            // Measured without decryption first: the rules go before the plugins, which `makeRuntimeSession`
+            // leaves out when only they do not fit.
+            _ = try EngineBudget.encoded(config.withoutMitm())
+            let session = try makeRuntimeSession(
                 config, mitmPlugins: mitmPlugins, mitmScripts: mitmScripts, resourceAssets: resourceAssets
             )
+            routingState = RoutingState(status: .on, droppedRuleSets: droppedRuleSets)
+            return (session, config)
+        } catch let tooLarge as EngineBudget.TooLarge {
+            events.record("subscription rules off: config too large (\(tooLarge.bytes) of \(tooLarge.limit) bytes)")
+            routingState = RoutingState(status: .off, reason: .tooLarge, bytes: tooLarge.bytes)
         } catch let failure as EmbeddedRuntimeSession.Failure {
             events.record("subscription rules off: runtime refused them (code \(failure.code))")
+            routingState = RoutingState(status: .off, reason: .refused)
         } catch {
             events.record("subscription rules off: runtime refused them")
+            routingState = RoutingState(status: .off, reason: .refused)
         }
-        return try makeRuntimeSession(
-            config.selectedNodeAlone(),
-            mitmPlugins: mitmPlugins,
-            mitmScripts: mitmScripts,
-            resourceAssets: resourceAssets
+        let alone = config.selectedNodeAlone()
+        let session = try makeRuntimeSession(
+            alone, mitmPlugins: mitmPlugins, mitmScripts: mitmScripts, resourceAssets: resourceAssets
         )
+        return (session, alone)
     }
 
     /// Creates the runtime, decrypting HTTPS for the enabled plugins when the device root is in the Keychain and
@@ -660,17 +713,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     ) throws -> EmbeddedRuntimeSession {
         if !mitmPlugins.isEmpty {
             do {
+                // Over the engine's plugin budget it would refuse the whole decryption section.
+                try EngineBudget.checkDecryption(mitmPlugins)
                 if let authority = try mitmAuthority() {
                     if !mitmScripts.isEmpty {
                         do {
                             let session = try EmbeddedRuntimeSession(
-                                config: config.withMitm(
+                                config: EngineBudget.encoded(config.withMitm(
                                     plugins: mitmPlugins,
                                     authority: authority,
                                     scriptAssets: try Self.scriptAssets(mitmScripts),
                                     resourceAssets: resourceAssets,
                                     scriptStorePath: try Self.scriptStoreURL().path
-                                ).encoded(),
+                                )),
                                 packetFlow: packetFlow
                             )
                             events.record("https decryption on, \(mitmPlugins.count) plugins, \(mitmScripts.count) scripts")
@@ -678,14 +733,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                             return session
                         } catch let failure as EmbeddedRuntimeSession.Failure {
                             events.record("scripts off: runtime refused them (code \(failure.code))")
+                        } catch let tooLarge as EngineBudget.TooLarge {
+                            events.record("scripts off: config too large (\(tooLarge.bytes) of \(tooLarge.limit) bytes)")
                         } catch {
                             events.record("scripts off: could not write them")
                         }
                     }
                     let session = try EmbeddedRuntimeSession(
-                        config: config.withMitm(
+                        config: EngineBudget.encoded(config.withMitm(
                             plugins: mitmPlugins, authority: authority, resourceAssets: resourceAssets
-                        ).encoded(),
+                        )),
                         packetFlow: packetFlow
                     )
                     events.record("https decryption on, \(mitmPlugins.count) plugins")
@@ -697,6 +754,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             } catch let failure as MitmCertificateStore.Failure {
                 events.record("https decryption off: root certificate unavailable (keychain status \(failure.status))")
                 httpsDecryption = HttpsDecryptionState(status: .off, reason: .rootUnavailable, plugins: mitmPlugins.count)
+            } catch let tooLarge as EngineBudget.TooLarge {
+                events.record("https decryption off: plugins too large (\(tooLarge.bytes) of \(tooLarge.limit) bytes)")
+                httpsDecryption = HttpsDecryptionState(
+                    status: .off, reason: .tooLarge, plugins: mitmPlugins.count, bytes: tooLarge.bytes
+                )
             } catch let failure as EmbeddedRuntimeSession.Failure {
                 events.record("https decryption off: runtime refused the plugins (code \(failure.code))")
                 httpsDecryption = HttpsDecryptionState(status: .off, reason: .refused, plugins: mitmPlugins.count)
@@ -707,7 +769,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         } else {
             httpsDecryption = HttpsDecryptionState(status: .unused)
         }
-        return try EmbeddedRuntimeSession(config: config.withoutMitm().encoded(), packetFlow: packetFlow)
+        return try EmbeddedRuntimeSession(config: EngineBudget.encoded(config.withoutMitm()), packetFlow: packetFlow)
     }
 
     /// The MITM root: the one the macOS app handed over, else the shared Keychain's.
