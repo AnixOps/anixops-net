@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp, Search } from "lucide-react";
 import { forwardRef, type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CaptureRequest, desktop, REQUEST_PAGE } from "../bridge";
-import { combineFilter, mergeRequests, nextRev, nextSince, QuickFilter, quickFilters, requestKey } from "../capture-filter";
+import { combineFilter, engineRestarted, mergeRequests, nextRev, nextSince, QuickFilter, quickFilters, requestKey } from "../capture-filter";
 import { durationMs, noteText, streamKind, timeOfDay } from "../capture-format";
 import { compareRequests, requestPath, RequestSort, statusTone } from "../request-table";
 import { usePageVisible } from "../live";
@@ -20,6 +20,8 @@ export interface RequestFeed {
   /** Oldest first, by when they started; a request shows up while it is still under way. */
   rows: CaptureRequest[];
   error: string | null;
+  /** Counts the times the list started over because the engine restarted; a selection from before means nothing now. */
+  generation: number;
 }
 
 /**
@@ -29,6 +31,7 @@ export interface RequestFeed {
 export function useRequestFeed(capturing: boolean, filter: string, paused: boolean): RequestFeed {
   const [rows, setRows] = useState<CaptureRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [generation, setGeneration] = useState(0);
   const visible = usePageVisible();
   // The poll reads the latest list without restarting its timer.
   const state = useRef<{ rows: CaptureRequest[]; lastSeq: number; lastRev: number | null }>({ rows: [], lastSeq: 0, lastRev: null });
@@ -60,6 +63,14 @@ export function useRequestFeed(capturing: boolean, filter: string, paused: boole
           return;
         }
         setError(null);
+        if (engineRestarted(state.current, answer)) {
+          // A new engine (a changed setting, a reconnect): its counters start again, so the list does too. The
+          // next read takes everything it holds.
+          state.current = { rows: [], lastSeq: 0, lastRev: null };
+          setRows([]);
+          setGeneration((count) => count + 1);
+          return;
+        }
         const next = mergeRequests(state.current.rows, answer);
         state.current = {
           rows: next,
@@ -82,7 +93,7 @@ export function useRequestFeed(capturing: boolean, filter: string, paused: boole
     };
   }, [capturing, visible, paused, filter]);
 
-  return { rows, error };
+  return { rows, error, generation };
 }
 
 /** The filter field and the quick filters above the table; both make one engine expression (`combineFilter`). */

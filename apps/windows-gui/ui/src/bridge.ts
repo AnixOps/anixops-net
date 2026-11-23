@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { setCaptureRequest } from "./capture-filter";
 
 export type Tone = "success" | "warning" | "danger" | "neutral";
 
@@ -691,7 +692,8 @@ export const desktop = {
   updateRuleSets: () => invoke<{ scheduled: number }>("runtime_control", { request: { cmd: "update_rule_sets" } }),
   closeAllConnections: () => invoke<{ closed: number }>("runtime_control", { request: { cmd: "close_all" } }),
   captureStatus: () => invoke<CaptureStatus>("runtime_control", { request: { cmd: "capture" } }),
-  setCapture: (enabled: boolean) => invoke<CaptureStatus>("runtime_control", { request: { cmd: "set_capture", enabled } }),
+  /** Always with the desktop budget (`setCaptureRequest`), so the engine never keeps its small mobile default. */
+  setCapture: (enabled: boolean) => invoke<CaptureStatus>("runtime_control", { request: setCaptureRequest(enabled) }),
   clearCapture: () => invoke<CaptureStatus>("runtime_control", { request: { cmd: "clear_capture" } }),
   /** Null once newer connections pushed it out of the budget or capture was cleared. */
   captureConnection: (id: number) =>

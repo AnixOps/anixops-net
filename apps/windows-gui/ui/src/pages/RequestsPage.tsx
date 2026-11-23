@@ -148,6 +148,10 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
   // A stopped capture or a loaded session still holds requests to list.
   const holding = Boolean(capture?.enabled) || (capture?.connections ?? 0) > 0;
   const feed = useRequestFeed(live && holding, filter, paused);
+  // After an engine restart the same key can name another request: the selection and the open detail go.
+  useEffect(() => {
+    if (feed.generation > 0) setSelected(null);
+  }, [feed.generation]);
   const request = feed.rows.find((row) => requestKey(row) === selected) ?? null;
   const captured = capture?.connections ?? 0;
 

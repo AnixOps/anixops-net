@@ -1,6 +1,28 @@
 import type { CaptureRequest, CaptureRequestsAnswer } from "./bridge";
 import { t } from "./i18n";
 
+/**
+ * The capture budget this window asks for whenever it turns capture on: the engine's largest (16 MiB). The engine's
+ * own default (2 MiB) is sized for the iOS Network Extension's memory limit; on a desktop, ordinary connections would
+ * push decrypted requests out of it within seconds. A larger value is clamped by the engine.
+ */
+export const DESKTOP_CAPTURE_BUDGET = 16 * 1024 * 1024;
+
+/** The `set_capture` request, always with the budget: the engine only changes the budget when one is given. */
+export function setCaptureRequest(enabled: boolean, maxTotalBytes: number = DESKTOP_CAPTURE_BUDGET) {
+  return { cmd: "set_capture", enabled, max_total_bytes: maxTotalBytes };
+}
+
+/**
+ * Whether the engine behind the list is a new one: a changed setting, a node switch or a reconnect restarts it, and
+ * its counters start again from 1, below what the list has read. The list then starts over, or the old cursor would
+ * hide every new request and old rows would share keys with new ones.
+ */
+export function engineRestarted(cursor: { lastSeq: number; lastRev: number | null }, answer: CaptureRequestsAnswer): boolean {
+  if (answer.last_rev != null && cursor.lastRev != null) return answer.last_rev < cursor.lastRev;
+  return answer.last_seq != null && answer.last_seq < cursor.lastSeq;
+}
+
 /** Most requests the list keeps; older ones fall off the top. */
 export const MAX_REQUESTS = 2000;
 

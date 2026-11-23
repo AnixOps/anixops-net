@@ -503,6 +503,12 @@ class Core(
         (answer as? JsonObject)?.get("error")?.let { error ->
             return RequestPage(feed, requestRows(feed.rows, by, descending), decode(FilterError.serializer(), error))
         }
+        val answerSeq = ((answer as? JsonObject)?.get("last_seq") as? JsonPrimitive)?.content?.toLongOrNull()
+        val answerRev = ((answer as? JsonObject)?.get("last_rev") as? JsonPrimitive)?.content?.toLongOrNull()
+        if (engineRestarted(feed, answerSeq, answerRev)) {
+            // A new engine: the next read starts from nothing and takes everything it holds.
+            return RequestPage(RequestFeed(), emptyList())
+        }
         val merged = raw("view.merge_requests", args("rows" to feed.rows, "answer" to answer)) as? JsonArray
             ?: throw CoreException("Unexpected answer to view.merge_requests")
         val lastSeq = ((answer as? JsonObject)?.get("last_seq") as? JsonPrimitive)?.content?.toLongOrNull() ?: 0

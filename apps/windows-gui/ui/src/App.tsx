@@ -115,6 +115,9 @@ export function App() {
       await refresh();
     } catch (error) {
       showError(error);
+      // A failed change can still have moved things (a setting put back, the connection restored or down):
+      // the switches and the connection state show where it ended up at once, not at the next poll.
+      await refresh().catch(() => undefined);
     } finally {
       setBusy(null);
     }

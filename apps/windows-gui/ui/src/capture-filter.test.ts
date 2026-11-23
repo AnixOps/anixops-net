@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { CaptureRequest, CaptureRequestsAnswer } from "./bridge";
-import { combineFilter, MAX_REQUESTS, mergeRequests, nextRev, nextSince, requestKey, splitOr } from "./capture-filter";
+import {
+  combineFilter,
+  DESKTOP_CAPTURE_BUDGET,
+  engineRestarted,
+  MAX_REQUESTS,
+  mergeRequests,
+  nextRev,
+  nextSince,
+  requestKey,
+  setCaptureRequest,
+  splitOr,
+} from "./capture-filter";
 
 function request(seq: number, done = true): CaptureRequest {
   return {
@@ -108,3 +119,28 @@ describe("capture filter", () => {
   });
 });
 
+
+describe("setCaptureRequest", () => {
+  it("always asks for the desktop budget, not the engine's mobile default", () => {
+    expect(DESKTOP_CAPTURE_BUDGET).toBe(16 * 1024 * 1024);
+    expect(setCaptureRequest(true)).toEqual({ cmd: "set_capture", enabled: true, max_total_bytes: 16 * 1024 * 1024 });
+    expect(setCaptureRequest(false)).toEqual({ cmd: "set_capture", enabled: false, max_total_bytes: 16 * 1024 * 1024 });
+    expect(setCaptureRequest(true, 4096)).toMatchObject({ max_total_bytes: 4096 });
+  });
+});
+
+describe("engineRestarted", () => {
+  it("notices counters that went back, which only a new engine does", () => {
+    expect(engineRestarted({ lastSeq: 40, lastRev: 120 }, { requests: [], last_seq: 2, last_rev: 3 })).toBe(true);
+    expect(engineRestarted({ lastSeq: 40, lastRev: 120 }, { requests: [], last_seq: 40, last_rev: 120 })).toBe(false);
+    expect(engineRestarted({ lastSeq: 40, lastRev: 120 }, { requests: [], last_seq: 41, last_rev: 125 })).toBe(false);
+    // Nothing read yet: nothing to compare.
+    expect(engineRestarted({ lastSeq: 0, lastRev: null }, { requests: [], last_seq: 0, last_rev: 0 })).toBe(false);
+  });
+
+  it("falls back to seq for a kernel without rev", () => {
+    expect(engineRestarted({ lastSeq: 40, lastRev: null }, { requests: [], last_seq: 3 })).toBe(true);
+    expect(engineRestarted({ lastSeq: 40, lastRev: null }, { requests: [], last_seq: 40 })).toBe(false);
+    expect(engineRestarted({ lastSeq: 40, lastRev: null }, { requests: [] })).toBe(false);
+  });
+});
