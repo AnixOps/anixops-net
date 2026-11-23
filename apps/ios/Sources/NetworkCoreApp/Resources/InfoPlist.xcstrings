@@ -1,0 +1,28 @@
+{
+  "sourceLanguage": "zh-Hans",
+  "strings": {
+    "NSCameraUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The camera scans node and subscription QR codes. Nothing is recorded or uploaded."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "扫描节点或订阅二维码时使用相机，画面不会保存或上传。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "掃描節點或訂閱 QR 碼時使用相機，畫面不會儲存或上傳。"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

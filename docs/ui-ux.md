@@ -64,6 +64,15 @@
 
 ## 界面语言
 
+- 所有客户端支持简体中文、繁体中文和英文，跟随系统语言。系统语言不是这三种时一律显示英文，不显示中文源文案：
+  - 简体中文：`zh`、`zh-CN`、`zh-SG`、`zh-Hans-*`；繁体中文：`zh-TW`、`zh-HK`、`zh-MO`、`zh-Hant-*`（写明了书写体系时以它为准）。
+  - iOS / macOS：文案源语言仍是简体中文（`Localizable.xcstrings` 的 `sourceLanguage`），但每个带界面文字的 bundle 的
+    `CFBundleDevelopmentRegion` 是 `en`（`apps/ios/project.yml`），系统找不到匹配语言时回退到英文；Info.plist 里的权限说明
+    以英文为准，中文在 `InfoPlist.xcstrings`。
+  - Android：英文在默认的 `values/`，简体中文在 `values-zh/`，繁体中文在 `values-zh-rTW/`（`LanguageTest`）。
+  - 桌面（Windows、Linux）：`resolveLanguage`（`apps/windows-gui/ui/src/i18n.ts`）；原生预览：`client-strings` 的
+    `preferred()` 与 `Strings.Preferred`。
+  新平台或新的语言判断照此实现，并加一条“日语系统显示英文”的测试。
 - 一词多义要分开写。“连接”“代理”在英文里各对应几个词：单独的“连接”只用作连接列表（Connections），单独的“代理”只用作页面名（Proxies）。
   动作“连接”、连接开关、模式名“代理”、规则策略“代理”各用自己的文案：桌面端写成带含义的键（`"连接|verb"`、`"连接|noun"`、
   `"代理|mode"`，竖线后的含义只用于查表，中文界面显示竖线前的部分，见 `apps/windows-gui/ui/src/i18n.ts`），Apple 端用

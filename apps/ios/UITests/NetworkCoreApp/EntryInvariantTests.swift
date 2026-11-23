@@ -50,7 +50,16 @@ final class EntryInvariantTests: XCTestCase {
         }
     }
 
-    private func launch(mode: String, page: String, notice: String? = nil) throws -> XCUIApplication {
+    /// A language the app is not translated into reads English, as on every client (docs/ui-ux.md, 界面语言), not
+    /// the Chinese the catalog is written in (finding ux-i18n-a11y-06).
+    func testAnUntranslatedLanguageReadsEnglish() throws {
+        let app = try launch(mode: "proxy", page: "home", language: "(ja)")
+        XCTAssertTrue(app.tabBars.buttons["Rules"].waitForExistence(timeout: 10), "ja: the Rules tab is not in English")
+        XCTAssertFalse(app.tabBars.buttons["规则"].exists, "ja: the tab bar fell back to Chinese")
+        app.terminate()
+    }
+
+    private func launch(mode: String, page: String, notice: String? = nil, language: String = "(zh-Hans)") throws -> XCUIApplication {
         let terms = try XCTUnwrap(
             ProcessInfo.processInfo.environment["ANIXOPS_TERMS"],
             "set TEST_RUNNER_ANIXOPS_TERMS to the user agreement's version"
@@ -64,7 +73,7 @@ final class EntryInvariantTests: XCTestCase {
             "-AnixOpsDemo", "YES",
             "-AnixOpsMode", mode,
             "-AnixOpsSection", page,
-            "-AppleLanguages", "(zh-Hans)",
+            "-AppleLanguages", language,
             "-terms-accepted-version", terms,
         ]
         if let notice {
