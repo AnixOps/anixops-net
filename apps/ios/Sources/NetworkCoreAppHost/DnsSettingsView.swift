@@ -83,15 +83,17 @@ struct DnsSettingsView: View {
             .brandSheet()
         }
         .sheet(isPresented: $addingRule) {
+            // The sheet checks the rule itself and stays open with the reason when it is refused, so what was typed is
+            // not lost.
             DnsRuleSheet(servers: dns.servers.map(\.name)) { text, server in
-                commit { try dns.addingRule(text, server: server) }
+                commit(try dns.addingRule(text, server: server))
             }
             .formSheetFrame()
             .brandSheet()
         }
         .sheet(isPresented: $addingHost) {
             DnsHostSheet { name, addresses in
-                commit { try dns.settingHost(name, addresses: addresses) }
+                commit(try dns.settingHost(name, addresses: addresses))
             }
             .formSheetFrame()
             .brandSheet()
@@ -439,11 +441,13 @@ private struct DnsServerSheet: View {
 
 private struct DnsRuleSheet: View {
     let servers: [String]
-    let add: (String, String) -> Void
+    /// Adds the rule, or throws why it was refused; the sheet closes only when it was added.
+    let add: (String, String) throws -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.brand) private var brand
     @State private var text = ""
     @State private var server = ""
+    @State private var failure: String?
 
     var body: some View {
         NavigationStack {
@@ -468,6 +472,11 @@ private struct DnsRuleSheet: View {
                     }
                 }
                 .listRowBackground(brand.surface)
+                if let failure {
+                    Text(failure)
+                        .foregroundStyle(brand.danger)
+                        .listRowBackground(brand.surface)
+                }
             }
             .scrollContentBackground(.hidden)
             .background(brand.bg.ignoresSafeArea())
@@ -481,8 +490,14 @@ private struct DnsRuleSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("添加") {
-                        add(text, server)
-                        dismiss()
+                        do {
+                            try add(text, server)
+                            dismiss()
+                        } catch let error as DnsSettingsError {
+                            failure = error.message
+                        } catch {
+                            failure = String(localized: "无法保存 DNS 设置")
+                        }
                     }
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || server.isEmpty)
                 }
@@ -490,16 +505,24 @@ private struct DnsRuleSheet: View {
             .onAppear {
                 server = servers.first ?? ""
             }
+            .onChange(of: text) {
+                failure = nil
+            }
+            .onChange(of: server) {
+                failure = nil
+            }
         }
     }
 }
 
 private struct DnsHostSheet: View {
-    let add: (String, String) -> Void
+    /// Sets the host, or throws why it was refused; the sheet closes only when it was set.
+    let add: (String, String) throws -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.brand) private var brand
     @State private var name = ""
     @State private var addresses = ""
+    @State private var failure: String?
 
     var body: some View {
         NavigationStack {
@@ -513,6 +536,11 @@ private struct DnsHostSheet: View {
                     Text("多个地址用逗号或空格分隔，最多 8 个。")
                 }
                 .listRowBackground(brand.surface)
+                if let failure {
+                    Text(failure)
+                        .foregroundStyle(brand.danger)
+                        .listRowBackground(brand.surface)
+                }
             }
             .scrollContentBackground(.hidden)
             .background(brand.bg.ignoresSafeArea())
@@ -526,11 +554,23 @@ private struct DnsHostSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("添加") {
-                        add(name, addresses)
-                        dismiss()
+                        do {
+                            try add(name, addresses)
+                            dismiss()
+                        } catch let error as DnsSettingsError {
+                            failure = error.message
+                        } catch {
+                            failure = String(localized: "无法保存 DNS 设置")
+                        }
                     }
                     .disabled(name.isEmpty || addresses.isEmpty)
                 }
+            }
+            .onChange(of: name) {
+                failure = nil
+            }
+            .onChange(of: addresses) {
+                failure = nil
             }
         }
     }

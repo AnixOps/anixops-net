@@ -32,6 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonArray
 
 /** The quick filters by id, in the order the chips show; `view.combine_filter` knows their conditions. */
 val QuickFilters = listOf("errors", "json", "images", "h2", "large")
@@ -158,6 +159,18 @@ class RequestsViewModel(private val core: Core) : ViewModel() {
 
     /** The filter [feed] was read through. */
     private var filter = ""
+
+    /** The engine's filter for the quick filters and the typed text it was worked out for (`view.combine_filter`). */
+    private var combined: Pair<Pair<List<String>, String>, String>? = null
+
+    /**
+     * What the list showed last: the rows of the feed they were listed from (the same array, by reference), in which
+     * order. While the feed and the order stay, the rows are shown again as they are instead of being ordered across
+     * JNI once more: every second while paused, and on every read the engine has nothing new for.
+     */
+    private class Listing(val rows: JsonArray, val order: String, val descending: Boolean, val shown: List<RequestRow>)
+
+    private var listed: Listing? = null
 
     private val reading = Mutex()
 
@@ -449,18 +462,26 @@ class RequestsViewModel(private val core: Core) : ViewModel() {
             _state.update { it.copy(loaded = true) }
             return
         }
-        val wanted = quiet { core.combineFilter(QuickFilters.filter { it in asked.quick }, asked.typed) } ?: return
+        val quick = QuickFilters.filter { it in asked.quick }
+        val wanted = combined?.takeIf { it.first == quick to asked.typed }?.second
+            ?: quiet { core.combineFilter(quick, asked.typed) }?.also { combined = (quick to asked.typed) to it }
+            ?: return
         if (wanted != filter) {
             filter = wanted
             feed = RequestFeed()
         }
-        // Paused, the list keeps what it has; a new order still applies to it.
+        val unchanged = listed
+            ?.takeIf { it.rows === feed.rows && it.order == asked.order && it.descending == asked.descending }
+            ?.shown
+        // Paused, the list keeps what it has; a new order still applies to it, once.
         val page = if (asked.paused) {
-            quiet { RequestPage(feed, core.requestRows(feed.rows, asked.order, asked.descending), _state.value.error) }
+            unchanged?.let { RequestPage(feed, it, _state.value.error) }
+                ?: quiet { RequestPage(feed, core.requestRows(feed.rows, asked.order, asked.descending), _state.value.error) }
         } else {
-            quiet { core.requests(feed, filter, asked.order, asked.descending) }
+            quiet { core.requests(feed, filter, asked.order, asked.descending, shown = unchanged) }
         } ?: return
         feed = page.feed
+        listed = Listing(page.feed.rows, asked.order, asked.descending, page.shown)
         _state.update {
             if (it.order != asked.order || it.descending != asked.descending) {
                 it

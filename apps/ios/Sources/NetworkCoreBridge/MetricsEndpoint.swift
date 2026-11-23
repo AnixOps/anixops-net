@@ -2,8 +2,9 @@ import Foundation
 
 /// The local Prometheus endpoint of the macOS app, the same as the desktop clients' (`crates/client-health`
 /// metrics.rs): `GET /metrics` on 127.0.0.1 answers the engine's metrics (the `metrics` control command, while
-/// connected) followed by the client's own gauges. Any other path is 404, any other method 405. This type holds the
-/// HTTP and text parts; the app owns the listener.
+/// connected) followed by the client's own gauges. Any other path is 404, any other method 405. A request whose
+/// `Host` is not `127.0.0.1:<port>`, `localhost:<port>` or `[::1]:<port>` is 403, so a web page that rebinds its own
+/// name to 127.0.0.1 cannot read the metrics. This type holds the HTTP and text parts; the app owns the listener.
 public enum MetricsEndpoint {
     /// The desktop clients' default port.
     public static let defaultPort: UInt16 = 9477
@@ -16,6 +17,7 @@ public enum MetricsEndpoint {
         case notFound
         case methodNotAllowed
         case badRequest
+        case forbidden
     }
 
     /// Whether `head` holds the whole request head (up to the blank line).
@@ -23,8 +25,8 @@ public enum MetricsEndpoint {
         head.range(of: Data("\r\n\r\n".utf8)) != nil
     }
 
-    /// The answer to a request head.
-    public static func route(_ head: Data) -> Route {
+    /// The answer to a request head that reached the endpoint on `port`.
+    public static func route(_ head: Data, port: UInt16 = defaultPort) -> Route {
         guard let text = String(data: head, encoding: .utf8),
               let line = text.components(separatedBy: "\r\n").first
         else {
@@ -34,11 +36,32 @@ public enum MetricsEndpoint {
         guard parts.count == 3, parts[2].hasPrefix("HTTP/1.") else {
             return .badRequest
         }
+        guard let host = host(in: text), allowedHosts(port: port).contains(host.lowercased()) else {
+            return .forbidden
+        }
         let path = parts[1].split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
         guard path == "/metrics" else {
             return .notFound
         }
         return parts[0] == "GET" ? .metrics : .methodNotAllowed
+    }
+
+    /// The value of the request's `Host` header.
+    private static func host(in head: String) -> String? {
+        for line in head.components(separatedBy: "\r\n").dropFirst() {
+            guard let colon = line.firstIndex(of: ":") else {
+                continue
+            }
+            if line[..<colon].trimmingCharacters(in: .whitespaces).lowercased() == "host" {
+                return line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return nil
+    }
+
+    /// The names the endpoint answers to: its loopback addresses with its port.
+    private static func allowedHosts(port: UInt16) -> Set<String> {
+        ["127.0.0.1:\(port)", "localhost:\(port)", "[::1]:\(port)"]
     }
 
     /// A complete HTTP/1.1 response that closes the connection.
@@ -53,6 +76,8 @@ public enum MetricsEndpoint {
             (status, type, text) = ("405 Method Not Allowed", "text/plain; charset=utf-8", "method not allowed\n")
         case .badRequest:
             (status, type, text) = ("400 Bad Request", "text/plain; charset=utf-8", "bad request\n")
+        case .forbidden:
+            (status, type, text) = ("403 Forbidden", "text/plain; charset=utf-8", "forbidden\n")
         }
         let payload = Data(text.utf8)
         var head = "HTTP/1.1 \(status)\r\nContent-Type: \(type)\r\nContent-Length: \(payload.count)\r\nConnection: close\r\n"

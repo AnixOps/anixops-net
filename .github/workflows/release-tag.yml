@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release version, for example v0.3.0-beta.8
+        description: Release version, for example v1.0.0-rc.1 (the source version must already be 1.0.0)
         required: true
         type: string
       commit:
@@ -36,7 +36,7 @@ jobs:
       actions: write
     steps:
       - name: Checkout main
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           fetch-depth: 0
@@ -51,6 +51,7 @@ jobs:
           COMMIT: ${{ inputs.commit }}
           REPO: ${{ github.repository }}
           RUN_REF_NAME: ${{ github.ref_name }}
+          ANDROID_RELEASE_CERT: ${{ vars.ANDROID_RELEASE_CERT_SHA256 }}
         run: |
           set -euo pipefail
           if [ "${RUN_REF_NAME}" != "main" ]; then
@@ -78,6 +79,17 @@ jobs:
           fi
           if git ls-remote --exit-code --tags origin "refs/tags/${VERSION}" >/dev/null; then
             echo "::error::Tag ${VERSION} already exists."
+            exit 1
+          fi
+
+          # The tagged commit's own files (not main's working tree): its source version and every copy must be the
+          # tag's version, as release.yml checks on the tag.
+          python3 -I .github/scripts/version.py check --tag "${VERSION}" --rev "${target}"
+
+          # The pinned Android release certificate (release.yml, Android release certificate is pinned).
+          normalized_cert="$(printf '%s' "${ANDROID_RELEASE_CERT}" | tr -d ': ' | tr 'A-F' 'a-f')"
+          if [[ ! "${normalized_cert}" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Repository variable ANDROID_RELEASE_CERT_SHA256 must hold the SHA-256 of the Android app signing certificate."
             exit 1
           fi
 

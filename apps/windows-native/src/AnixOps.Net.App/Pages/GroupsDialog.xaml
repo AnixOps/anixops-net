@@ -121,13 +121,15 @@
                     Style="{StaticResource BodyStrongTextBlockStyle}"
                     TextTrimming="CharacterEllipsis" />
             </Grid>
+            <!-- Arrow keys only move focus: a member is chosen by a click, Space or Enter, never by browsing. -->
             <ListView
                 x:Name="MemberList"
                 Grid.Row="1"
                 MaxHeight="380"
                 AutomationProperties.AutomationId="Groups.Members"
                 SelectionChanged="OnMemberChosen"
-                SelectionMode="Single" />
+                SelectionMode="Single"
+                SingleSelectionFollowsFocus="False" />
         </Grid>
     </Grid>
 </ContentDialog>

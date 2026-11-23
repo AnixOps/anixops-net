@@ -1,0 +1,19 @@
+# Every action is pinned to a full commit SHA with its release tag in a comment (.github/scripts/workflow_policy.py
+# fails CI otherwise). Dependabot proposes the updates as pull requests, which go through the full CI matrix like
+# any workflow change. The composite actions under .github/actions are listed too: Dependabot does not look
+# inside them otherwise.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directories:
+      - "/"
+      - "/.github/actions/android-apk"
+      - "/.github/actions/sign-apk"
+      - "/.github/actions/third-party-notices"
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 5

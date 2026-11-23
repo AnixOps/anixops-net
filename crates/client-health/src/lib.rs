@@ -40,6 +40,8 @@ pub struct Health {
     integrity: Arc<Mutex<Option<Integrity>>>,
     server: Mutex<Option<MetricsServer>>,
     server_error: Mutex<Option<String>>,
+    /// What the endpoint asks the engine, kept so turning the endpoint on later can start it.
+    engine: Mutex<Option<EngineProbe>>,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -74,6 +76,7 @@ impl Health {
             integrity,
             server: Mutex::new(None),
             server_error: Mutex::new(None),
+            engine: Mutex::new(None),
         })
     }
 
@@ -98,12 +101,26 @@ impl Health {
         }
     }
 
-    /// Starts the loopback endpoint at the configured address, unless it is turned off. A port that is taken
-    /// is reported in [`Health::status`], not as an error: the client runs without the endpoint.
+    /// Starts the loopback endpoint at the configured address, unless it is turned off (the default). A port
+    /// that is taken is reported in [`Health::status`], not as an error: the client runs without the endpoint.
     pub fn serve_metrics(self: &Arc<Self>, engine: EngineProbe) {
-        let Some(address) = lock(&self.settings).metrics_listen else {
+        *lock(&self.engine) = Some(engine);
+        self.start_metrics();
+    }
+
+    fn start_metrics(self: &Arc<Self>) {
+        let Some(address) = lock(&self.settings).metrics_address() else {
             return;
         };
+        let Some(engine) = lock(&self.engine).clone() else {
+            return;
+        };
+        // Held while starting, so two starts at once cannot both bind.
+        let mut server = lock(&self.server);
+        if server.is_some() {
+            return;
+        }
+        *lock(&self.server_error) = None;
         let health = Arc::downgrade(self);
         let render = Arc::new(move || {
             let (text, connected) = engine();
@@ -113,9 +130,30 @@ impl Health {
             }
         });
         match MetricsServer::start(address, render) {
-            Ok(server) => *lock(&self.server) = Some(server),
+            Ok(started) => *server = Some(started),
             Err(error) => *lock(&self.server_error) = Some(format!("{address}: {error}")),
         }
+    }
+
+    /// Turns the metrics endpoint on or off, saves the choice and starts or stops it now.
+    pub fn set_metrics(self: &Arc<Self>, enabled: bool) -> std::io::Result<()> {
+        {
+            let mut settings = lock(&self.settings);
+            if enabled && settings.metrics_listen.is_none() {
+                settings.metrics_listen = Some(crate::settings::DEFAULT_METRICS_LISTEN);
+            }
+            settings.metrics_enabled = enabled;
+            settings.save(&self.dir)?;
+        }
+        if enabled {
+            self.start_metrics();
+        } else {
+            // Taken out first: dropping the server waits for its thread, which must not wait on this lock.
+            let server = lock(&self.server).take();
+            drop(server);
+            *lock(&self.server_error) = None;
+        }
+        Ok(())
     }
 
     /// Turns crash reports on or off and saves the choice; off deletes kept reports.
@@ -134,6 +172,7 @@ impl Health {
             "crashReports": self.crash.enabled(),
             "crashReportsKept": self.crash.pending().len(),
             "crashUploadConfigured": crash::UPLOAD_URL.is_some_and(|url| !url.is_empty()),
+            "metricsEnabled": lock(&self.settings).metrics_enabled,
             "metricsAddress": lock(&self.server).as_ref().map(|server| format!("http://{}/metrics", server.address())),
             "metricsError": lock(&self.server_error).clone(),
             "integrity": integrity.as_ref().map_or("checking", Integrity::state),
@@ -163,5 +202,38 @@ impl Health {
             out.push_str(&reports);
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_endpoint_starts_only_when_turned_on_and_stops_when_turned_off() {
+        let dir = std::env::temp_dir().join(format!("client-health-toggle-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // An earlier version's file: an address, no switch.
+        std::fs::write(
+            HealthSettings::path(&dir),
+            r#"{"crash_reports": true, "metrics_listen": "127.0.0.1:0"}"#,
+        )
+        .unwrap();
+        let health = Health::start(&dir, "linux", "0.0.0", dir.join("missing-exe"));
+        health.serve_metrics(Arc::new(|| (None, false)));
+        assert!(health.status()["metricsAddress"].is_null());
+        assert_eq!(health.status()["metricsEnabled"], false);
+
+        health.set_metrics(true).unwrap();
+        assert!(health.status()["metricsAddress"]
+            .as_str()
+            .is_some_and(|address| address.starts_with("http://127.0.0.1:")));
+        assert!(HealthSettings::load(&dir).metrics_enabled);
+
+        health.set_metrics(false).unwrap();
+        assert!(health.status()["metricsAddress"].is_null());
+        assert!(!HealthSettings::load(&dir).metrics_enabled);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

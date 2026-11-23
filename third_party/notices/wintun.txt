@@ -1,0 +1,5 @@
+Wintun (wintun.dll, Windows only, shipped unmodified beside the client)
+https://www.wintun.net
+
+Wintun is distributed under the Prebuilt Binaries License of WireGuard LLC. Its full text is shipped beside
+wintun.dll as wintun-LICENSE.txt, in the MSI installation folder and in the portable ZIP.

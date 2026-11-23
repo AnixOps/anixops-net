@@ -46,10 +46,10 @@ expect apps/android-native/app/build.gradle.kts "rust android_native"
 expect apps/windows-link/src/lib.rs "rust windows"
 expect apps/windows-native/src/App.cs windows_native
 expect TERMS.md "ui apple android_native"
+expect PRIVACY.md "ui apple android_native"
 # Documentation only.
 expect docs/ui-ux.md none
 expect README.md none
-expect PRIVACY.md none
 expect LICENSE none
 
 # Several paths select the union.

@@ -7,5 +7,6 @@ repository.workspace = true
 description = "The system notifications of the desktop and Android clients, as on iOS: what scripts post, an unexpected disconnect and a failed subscription update, each with its own switch."
 
 [dependencies]
+app-log = { path = "../app-log" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

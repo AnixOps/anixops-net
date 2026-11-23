@@ -7,13 +7,24 @@ final class MetricsEndpointTests: XCTestCase {
     }
 
     func testRoutesLikeTheDesktopEndpoint() {
-        XCTAssertEqual(MetricsEndpoint.route(head("GET /metrics HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")), .metrics)
-        XCTAssertEqual(MetricsEndpoint.route(head("GET /metrics?x=1 HTTP/1.0\r\n\r\n")), .metrics)
-        XCTAssertEqual(MetricsEndpoint.route(head("GET / HTTP/1.1\r\n\r\n")), .notFound)
-        XCTAssertEqual(MetricsEndpoint.route(head("POST /metrics HTTP/1.1\r\n\r\n")), .methodNotAllowed)
+        XCTAssertEqual(MetricsEndpoint.route(head("GET /metrics HTTP/1.1\r\nHost: 127.0.0.1:9477\r\n\r\n")), .metrics)
+        XCTAssertEqual(MetricsEndpoint.route(head("GET /metrics?x=1 HTTP/1.0\r\nhost: localhost:9477\r\n\r\n")), .metrics)
+        XCTAssertEqual(MetricsEndpoint.route(head("GET / HTTP/1.1\r\nHost: [::1]:9477\r\n\r\n")), .notFound)
+        XCTAssertEqual(MetricsEndpoint.route(head("POST /metrics HTTP/1.1\r\nHost: 127.0.0.1:9477\r\n\r\n")), .methodNotAllowed)
         XCTAssertEqual(MetricsEndpoint.route(head("hello\r\n\r\n")), .badRequest)
         XCTAssertTrue(MetricsEndpoint.isComplete(head("GET /metrics HTTP/1.1\r\n\r\n")))
         XCTAssertFalse(MetricsEndpoint.isComplete(head("GET /metrics HTTP/1.1\r\n")))
+    }
+
+    func testRefusesOtherHosts() throws {
+        // A web page that rebinds its own name to 127.0.0.1, another port, no port, or no Host at all.
+        for host in ["rebound.example:9477", "127.0.0.1:9478", "127.0.0.1"] {
+            XCTAssertEqual(MetricsEndpoint.route(head("GET /metrics HTTP/1.1\r\nHost: \(host)\r\n\r\n")), .forbidden, host)
+        }
+        XCTAssertEqual(MetricsEndpoint.route(head("GET /metrics HTTP/1.1\r\n\r\n")), .forbidden)
+        XCTAssertEqual(MetricsEndpoint.route(head("GET /metrics HTTP/1.1\r\nHost: 127.0.0.1:1234\r\n\r\n"), port: 1234), .metrics)
+        let refused = try XCTUnwrap(String(data: MetricsEndpoint.response(.forbidden, body: ""), encoding: .utf8))
+        XCTAssertTrue(refused.hasPrefix("HTTP/1.1 403 "))
     }
 
     func testResponseCarriesLengthAndType() throws {

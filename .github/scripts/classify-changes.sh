@@ -53,9 +53,10 @@ while IFS= read -r path; do
       linux_native=true ;;
     apps/ios/*) apple=true ;;
     # The desktop UI and the native Android app bundle TERMS.md (first-start consent; the Android
-    # screenshots show it) and the Apple tests check its version. The Windows and Linux desktop jobs
-    # only package the interface the ui job builds and tests, so the text needs nothing from them.
-    TERMS.md) ui=true; apple=true; android_native=true ;;
+    # screenshots show it) and PRIVACY.md (Settings › About), and the Apple tests check both. The Windows
+    # and Linux desktop jobs only package the interface the ui job builds and tests, so the text needs
+    # nothing from them.
+    TERMS.md | PRIVACY.md) ui=true; apple=true; android_native=true ;;
     # Documentation and repository metadata no job reads. A README.md inside a crate or app is not here: the
     # build can read it (rustdoc include_str!).
     docs/* | LICENSE | .gitignore) ;;

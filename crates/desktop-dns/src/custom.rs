@@ -14,6 +14,8 @@
 //!   first server does. The servers marked `fallback` (up to 4) are asked when those give no answer.
 //! - Per-domain servers, first match wins: `DOMAIN-SUFFIX,cn,alidns`, `DOMAIN,…`, `DOMAIN-KEYWORD,…` or
 //!   `RULE-SET,<name>,alidns` (only while the envelope defines that rule set, such as one of the subscription's).
+//!   Rule set names are case-sensitive and written as the rules page shows them (`ChinaMax`, `Global.Media`);
+//!   a name differing from one set only in case still finds it.
 //! - Hosts: `name = address[, address…]`, `*.name` for its subdomains.
 
 use std::collections::BTreeMap;
@@ -160,15 +162,15 @@ impl DnsSettings {
             let rules: Vec<Value> = self
                 .rules
                 .iter()
-                .filter(|rule| {
-                    rule.rule_set.as_ref().is_none_or(|name| {
-                        envelope
-                            .pointer("/routing/rule_sets")
-                            .and_then(|sets| sets.get(name))
-                            .is_some()
-                    })
+                .filter_map(|rule| match &rule.rule_set {
+                    None => Some(rule.to_json()),
+                    Some(name) => {
+                        let found = rule_set_key(envelope, name)?;
+                        let mut json = rule.to_json();
+                        json["rule_set"] = json!(found);
+                        Some(json)
+                    }
                 })
-                .map(Rule::to_json)
                 .collect();
             if !rules.is_empty() {
                 section.insert("rules".to_string(), Value::Array(rules));
@@ -197,6 +199,33 @@ impl DnsSettings {
         }
         (!section.is_empty()).then_some(Value::Object(section))
     }
+}
+
+impl DnsSettings {
+    /// The `RULE-SET` names the rules use that `envelope` does not define, in the order written: those rules are left
+    /// out of the section, which a window says when the settings are saved.
+    pub fn missing_rule_sets(&self, envelope: &Value) -> Vec<String> {
+        let mut missing: Vec<String> = Vec::new();
+        for name in self.rules.iter().filter_map(|rule| rule.rule_set.as_ref()) {
+            if rule_set_key(envelope, name).is_none() && !missing.contains(name) {
+                missing.push(name.clone());
+            }
+        }
+        missing
+    }
+}
+
+/// The key under `routing.rule_sets` that `name` refers to. Names are case-sensitive, as on the rules page and in
+/// the engine, so the exact key wins. A name that matches one key only when case is ignored (text written before
+/// names kept their case, when they were lowered) refers to that key; one matching several refers to none.
+fn rule_set_key<'a>(envelope: &'a Value, name: &str) -> Option<&'a str> {
+    let sets = envelope.pointer("/routing/rule_sets")?.as_object()?;
+    if let Some((key, _)) = sets.get_key_value(name) {
+        return Some(key.as_str());
+    }
+    let mut matches = sets.keys().filter(|key| key.eq_ignore_ascii_case(name));
+    let key = matches.next()?;
+    matches.next().is_none().then_some(key.as_str())
 }
 
 /// The engine's `fake_ip` section when the switch is on: IPv4 and IPv6 fake answers.
@@ -341,18 +370,20 @@ fn parse_rules(text: &str, servers: &[Server]) -> Result<Vec<Rule>, String> {
         if !servers.iter().any(|known| known.name == server) {
             return Err(error("names a server that is not in the server list"));
         }
-        let value = value.to_ascii_lowercase();
         let kind = kind.to_ascii_uppercase();
         if kind == "RULE-SET" {
-            if !is_server_name(&value) {
+            // Rule set names keep their case: the subscription's sets are named as the provider wrote them
+            // (`ChinaMax`, `Global.Media`).
+            if !is_rule_set_name(value) {
                 return Err(error("needs a rule set name"));
             }
             rules.push(Rule {
-                rule_set: Some(value),
+                rule_set: Some(value.to_string()),
                 server: server.to_string(),
                 ..Rule::default()
             });
         } else {
+            let value = value.to_ascii_lowercase();
             let valid =
                 match kind.as_str() {
                     "DOMAIN" | "DOMAIN-SUFFIX" => is_domain(&value),
@@ -430,6 +461,15 @@ fn is_server_name(name: &str) -> bool {
         && name
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// A rule set id as the engine accepts it (`engine_embedded::config::is_identifier`): 1 to 128 of `A-Z a-z 0-9 . _ -`.
+fn is_rule_set_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 128
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
 }
 
 fn is_server_url(url: &str) -> bool {
@@ -572,6 +612,65 @@ mod tests {
             json!(["192.168.1.2", "fd00::2"])
         );
         assert!(section.get("fake_ip").is_none());
+    }
+
+    #[test]
+    fn rule_set_names_keep_their_case_and_may_have_dots() {
+        let settings = text(
+            "alidns = 223.5.5.5",
+            "RULE-SET,ChinaMax,alidns\nRULE-SET,Global.Media,alidns\nrule-set,apple,alidns\nRULE-SET,Gone,alidns",
+            "",
+        )
+        .parse()
+        .unwrap();
+        let envelope = json!({ "routing": { "rule_sets": {
+            "ChinaMax": {}, "Global.Media": {}, "Apple": {}
+        } } });
+        let section = settings.section(&envelope).unwrap();
+        let rules = section["rules"].as_array().unwrap();
+        assert_eq!(rules.len(), 3);
+        assert_eq!(rules[0]["rule_set"], "ChinaMax");
+        assert_eq!(rules[1]["rule_set"], "Global.Media");
+        // A name lowered by an earlier version finds the one set it differs from in case only.
+        assert_eq!(rules[2]["rule_set"], "Apple");
+        assert_eq!(settings.missing_rule_sets(&envelope), ["Gone"]);
+        // The exact name wins; a lowered name matching two sets matches none.
+        let both =
+            json!({ "routing": { "rule_sets": { "Apple": {}, "APPLE": {}, "ChinaMax": {} } } });
+        let rules = settings.section(&both).unwrap()["rules"].clone();
+        assert!(rules
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|rule| rule["rule_set"] != "Apple" && rule["rule_set"] != "APPLE"));
+        let exact = json!({ "routing": { "rule_sets": { "apple": {}, "Apple": {} } } });
+        let rules = settings.section(&exact).unwrap()["rules"].clone();
+        assert_eq!(rules[0]["rule_set"], "apple");
+        // Long names as the engine allows them; other characters are still refused.
+        let long = "a".repeat(128);
+        assert!(
+            text("alidns = 223.5.5.5", &format!("RULE-SET,{long},alidns"), "")
+                .parse()
+                .is_ok()
+        );
+        assert!(text(
+            "alidns = 223.5.5.5",
+            &format!("RULE-SET,{long}a,alidns"),
+            ""
+        )
+        .parse()
+        .is_err());
+        assert!(text("alidns = 223.5.5.5", "RULE-SET,a/b,alidns", "")
+            .parse()
+            .is_err());
+        // Domains are still lowered.
+        let domains = text("alidns = 223.5.5.5", "DOMAIN-SUFFIX,Example.CN,alidns", "")
+            .parse()
+            .unwrap();
+        assert_eq!(
+            domains.section(&json!({})).unwrap()["rules"][0]["domain_suffix"],
+            json!(["example.cn"])
+        );
     }
 
     #[test]

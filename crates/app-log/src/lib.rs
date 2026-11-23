@@ -118,30 +118,69 @@ pub fn parse(module: &str, line: &str) -> Option<Entry> {
     })
 }
 
-/// Drops the query of every URL in `text`: subscription links carry their token there.
+/// Shortens every URL in `text` before it is written or shown. Subscription links carry their token in the query
+/// or the path (`/link/<token>`), and share links carry the node's password or UUID before the `@`, so a web
+/// address keeps only its scheme and host (`https://sub.example.com/…`) and any other link only its scheme
+/// (`vless://…`).
 pub fn redact(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
-    while let Some(scheme) = rest.find("://") {
-        let end = rest[scheme..]
-            .find(|c: char| c.is_whitespace() || matches!(c, ')' | '"' | '\'' | '>'))
-            .map_or(rest.len(), |end| scheme + end);
-        let start = rest[..scheme]
-            .rfind(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')))
+    while let Some(separator) = rest.find("://") {
+        let end = rest[separator..]
+            .find(ends_url)
+            .map_or(rest.len(), |end| separator + end);
+        // Scheme characters are ASCII and every byte of a multi-byte character is not, so the byte after the last
+        // non-scheme byte is always a character boundary.
+        let start = rest.as_bytes()[..separator]
+            .iter()
+            .rposition(|&byte| {
+                !(byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'-' | b'.'))
+            })
             .map_or(0, |index| index + 1);
         out.push_str(&rest[..start]);
-        let url = &rest[start..end];
-        match url.find('?') {
-            Some(query) => {
-                out.push_str(&url[..query]);
-                out.push_str("?…");
+        let scheme = &rest[start..separator];
+        let after = &rest[separator + 3..end];
+        out.push_str(scheme);
+        out.push_str("://");
+        if scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https") {
+            let authority = &after[..after.find(['/', '?', '#']).unwrap_or(after.len())];
+            // Credentials sit before the last `@` of the authority.
+            let host = authority
+                .rsplit_once('@')
+                .map_or(authority, |(_, host)| host);
+            out.push_str(host);
+            if authority.len() < after.len() {
+                out.push_str("/…");
             }
-            None => out.push_str(url),
+        } else if !after.is_empty() {
+            out.push('…');
         }
         rest = &rest[end..];
     }
     out.push_str(rest);
     out
+}
+
+/// Where a URL inside a log line ends: white space, a closing bracket or quote, or CJK punctuation that a title or a
+/// translated message puts right after a link.
+fn ends_url(c: char) -> bool {
+    c.is_whitespace()
+        || matches!(
+            c,
+            ')' | '"'
+                | '\''
+                | '>'
+                | '）'
+                | '」'
+                | '』'
+                | '】'
+                | '》'
+                | '，'
+                | '。'
+                | '、'
+                | '；'
+                | '：'
+        )
 }
 
 fn guess(message: &str) -> Level {
@@ -229,14 +268,50 @@ mod tests {
     }
 
     #[test]
-    fn drops_url_queries() {
+    fn keeps_only_the_scheme_and_host_of_links() {
         assert_eq!(
             redact("error sending request for url (https://a.example/sub?token=x&b=1): timed out"),
-            "error sending request for url (https://a.example/sub?…): timed out"
+            "error sending request for url (https://a.example/…): timed out"
         );
         assert_eq!(redact("why? no links here"), "why? no links here");
-        assert_eq!(redact("what? see http://a/b?c"), "what? see http://a/b?…");
-        assert_eq!(redact("vless://id@h:1?type=ws#n"), "vless://id@h:1?…");
+        assert_eq!(redact("what? see http://a/b?c"), "what? see http://a/…");
+        assert_eq!(redact("vless://id@h:1?type=ws#n"), "vless://…");
+        // Tokens in the path, credentials before the host and fragments are dropped too.
+        assert_eq!(
+            redact("fetch https://sub.example.com/link/AbCd1234EfGh?sub=3 failed"),
+            "fetch https://sub.example.com/… failed"
+        );
+        assert_eq!(redact("https://h/sub/TOKEN"), "https://h/…");
+        assert_eq!(
+            redact("https://user:pass@h.example:8443"),
+            "https://h.example:8443"
+        );
+        assert_eq!(redact("https://h#secret"), "https://h/…");
+        assert_eq!(redact("http://[::1]:9477/metrics"), "http://[::1]:9477/…");
+        assert_eq!(redact("https://h.example"), "https://h.example");
+        assert_eq!(
+            redact("trojan://password@h:443#name and ss://YWVzOnB3@h:1"),
+            "trojan://… and ss://…"
+        );
+        assert!(!redact("vmess://eyJpZCI6InV1aWQifQ==").contains("eyJ"));
+    }
+
+    #[test]
+    fn links_right_after_multi_byte_characters_do_not_panic() {
+        assert_eq!(redact("官网：https://a/b?c"), "官网：https://a/…");
+        assert_eq!(redact("服务商https://a?t=1"), "服务商https://a/…");
+        assert_eq!(redact("（https://a/b?x）后"), "（https://a/…）后");
+        assert_eq!(
+            redact("subscription XX加速｜官网：https://xx.com updated: 3 nodes"),
+            "subscription XX加速｜官网：https://xx.com updated: 3 nodes"
+        );
+        for prefix in ["é", "é ", "加", "：", "（", "🔗", "\u{10FFFF}"] {
+            let text = format!("{prefix}https://a/b?token=x");
+            assert_eq!(redact(&text), format!("{prefix}https://a/…"));
+        }
+        // A line the Windows client wrote unredacted still reads back.
+        let entry = parse("gui", "[unix_ms=1] 官网：https://a/sub?token=x").unwrap();
+        assert_eq!(entry.message, "官网：https://a/…");
     }
 
     #[test]

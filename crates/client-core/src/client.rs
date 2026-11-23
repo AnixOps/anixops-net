@@ -631,6 +631,18 @@ impl Client {
         })
     }
 
+    /// Turns the local Prometheus endpoint on or off (off by default).
+    fn set_metrics(&self, enabled: bool) -> Result<OperationResult, String> {
+        self.health
+            .set_metrics(enabled)
+            .map_err(|error| format!("the setting could not be saved: {error}"))?;
+        Ok(if enabled {
+            OperationResult::coded("metrics.on", "Prometheus metrics on")
+        } else {
+            OperationResult::coded("metrics.off", "Prometheus metrics off")
+        })
+    }
+
     fn import_subscription(&self, location: &str) -> Result<OperationResult, String> {
         let location = location.trim();
         if location.is_empty() {
@@ -695,6 +707,16 @@ impl Client {
             note: applied.note,
             ..changed
         })
+    }
+
+    /// What importing `plugin` did. A new plugin is saved off and changes nothing the engine runs; one that
+    /// replaced a plugin which was on is applied like any other change.
+    fn plugin_imported(&self, plugin: &plugins::PluginSummary) -> Result<OperationResult, String> {
+        let result = plugin_imported(plugin);
+        if plugin.enabled || plugin.replaced_one_on {
+            return self.change_plugins(move |_| Ok(result));
+        }
+        Ok(result)
     }
 
     /// Generates the root on first use and restarts a running engine with decryption on. The root is not
@@ -1412,6 +1434,10 @@ fn handler(name: &str) -> Option<Handler> {
             let Enabled { enabled } = parse(args)?;
             json(client.set_crash_reports(enabled)?)
         },
+        "set_metrics" => |client, args| {
+            let Enabled { enabled } = parse(args)?;
+            json(client.set_metrics(enabled)?)
+        },
         "import_subscription" => |client, args| {
             let Location { location } = parse(args)?;
             json(client.import_subscription(&location)?)
@@ -1509,17 +1535,15 @@ fn handler(name: &str) -> Option<Handler> {
         },
         "import_mitm_plugin" => |client, args| {
             let Url { url } = parse(args)?;
-            json(client.change_plugins(move |directory| {
-                let plugin = plugins::import(directory, &url, plugins::download)?;
-                Ok(plugin_imported(&plugin))
-            })?)
+            let directory = client.backend().plugins_dir();
+            let plugin = plugins::import(&directory, &url, plugins::download)?;
+            json(client.plugin_imported(&plugin)?)
         },
         "import_mitm_plugin_text" => |client, args| {
             let PluginText { text, source } = parse(args)?;
-            json(client.change_plugins(move |directory| {
-                let plugin = plugins::import_text(directory, &source, &text, plugins::download)?;
-                Ok(plugin_imported(&plugin))
-            })?)
+            let directory = client.backend().plugins_dir();
+            let plugin = plugins::import_text(&directory, &source, &text, plugins::download)?;
+            json(client.plugin_imported(&plugin)?)
         },
         "mitm_plugin_details" => |client, args| {
             let Id { id } = parse(args)?;
@@ -1635,17 +1659,31 @@ fn trust_result(outcome: &trust::Outcome, removed: bool) -> OperationResult {
     OperationResult::coded(code, message).with("count", outcome.browsers)
 }
 
-/// What importing a plugin did, coded: its name and how many scripts it brought.
+/// What importing a plugin did, coded: its name, how many scripts it brought, and its id, by which the window opens
+/// the plugin for the user to look at before turning it on. A plugin is saved off unless it is one the user had on
+/// and nothing in it changed (`plugins::import`).
 fn plugin_imported(plugin: &plugins::PluginSummary) -> OperationResult {
-    OperationResult::coded(
-        "plugins.imported",
-        format!(
-            "Plugin imported: {} ({} scripts)",
-            plugin.name, plugin.script_count
-        ),
-    )
-    .with("name", &plugin.name)
-    .with("scripts", plugin.script_count)
+    let result = if plugin.enabled {
+        OperationResult::coded(
+            "plugins.imported",
+            format!(
+                "Plugin imported: {} ({} scripts)",
+                plugin.name, plugin.script_count
+            ),
+        )
+    } else {
+        OperationResult::coded(
+            "plugins.imported_off",
+            format!(
+                "Plugin imported: {} ({} scripts); it is off until you look at what it does and turn it on",
+                plugin.name, plugin.script_count
+            ),
+        )
+    };
+    result
+        .with("name", &plugin.name)
+        .with("scripts", plugin.script_count)
+        .with("id", &plugin.id)
 }
 
 /// The search of a command that takes one; no arguments at all is the empty search.
@@ -2119,8 +2157,12 @@ fn file_label(name: &str) -> String {
 /// before anything on disk is touched, so a window cannot learn whether a file exists either.
 fn fetch(location: &str, read_files: bool) -> Result<(String, ResponseMeta), String> {
     if location.starts_with("https://") || location.starts_with("http://") {
-        return http_get_with_meta(location)
-            .map_err(|error| format!("the subscription could not be downloaded: {error}"));
+        return http_get_with_meta(location).map_err(|error| {
+            format!(
+                "the subscription could not be downloaded: {}",
+                download_failure(&error)
+            )
+        });
     }
     if location.contains("://") {
         return Ok((location.to_string(), ResponseMeta::default()));
@@ -2129,6 +2171,23 @@ fn fetch(location: &str, read_files: bool) -> Result<(String, ResponseMeta), Str
         return Err(NO_PATHS_IN_SERVICE.to_string());
     }
     read_subscription_file(location).map(|content| (content, ResponseMeta::default()))
+}
+
+/// Why a download failed, without the address: reqwest's own text names the full URL, and a subscription URL
+/// carries its token, while this text reaches the window, the notification, the saved state and the log. Same
+/// reasons as the Windows client's `describe_download_error`.
+fn download_failure(error: &reqwest::Error) -> String {
+    if error.is_timeout() {
+        "the download timed out".to_string()
+    } else if let Some(status) = error.status() {
+        format!("the server answered HTTP status {}", status.as_u16())
+    } else if error.is_connect() {
+        "the server could not be reached".to_string()
+    } else if error.is_body() || error.is_decode() {
+        "the answer could not be read".to_string()
+    } else {
+        "the download failed".to_string()
+    }
 }
 
 /// A local subscription file, in the user's own process (the Tauri app, Android): only a regular file, at most

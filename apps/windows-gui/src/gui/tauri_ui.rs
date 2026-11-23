@@ -143,7 +143,7 @@ fn on_demand_settings_path() -> PathBuf {
     windows_managed_data_directory().join("on-demand.json")
 }
 
-/// The network under the connection: the Wi-Fi name from `netsh`, otherwise Ethernet or another interface,
+/// The network under the connection: the Wi-Fi name from the WLAN service, otherwise Ethernet or another interface,
 /// or offline when no route leaves the computer.
 fn current_network_now(path: Option<&String>) -> Network {
     match on_demand::windows_wifi() {
@@ -504,6 +504,9 @@ struct OperationResult {
     code: Option<&'static str>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     params: BTreeMap<&'static str, String>,
+    /// A second code the window words after `code`, with no parameters (as client-core's `OperationResult`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    follow: Option<&'static str>,
     /// Written in the window's language already (a note on capture or on a reconnect); shown after the coded text.
     #[serde(skip_serializing_if = "Option::is_none")]
     note: Option<String>,
@@ -516,6 +519,7 @@ impl OperationResult {
             message: message.into(),
             code: Some(code),
             params: BTreeMap::new(),
+            follow: None,
             note: None,
         }
     }
@@ -523,6 +527,13 @@ impl OperationResult {
     /// Fills `{name}` of the coded text.
     fn with(mut self, name: &'static str, value: impl ToString) -> Self {
         self.params.insert(name, value.to_string());
+        self
+    }
+
+    /// Has the window word `code` after this result's own code; `message` is its English, added to this one's.
+    fn followed_by(mut self, code: &'static str, message: &str) -> Self {
+        self.message = reconnect::joined([self.message.as_str(), message]);
+        self.follow = Some(code);
         self
     }
 
@@ -752,6 +763,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             create_diagnostics,
             health_status,
             set_crash_reports,
+            set_metrics,
             import_subscription,
             update_subscription,
             select_subscription,
@@ -3455,6 +3467,27 @@ fn set_crash_reports_blocking(health: &Health, enabled: bool) -> Result<Operatio
     })
 }
 
+/// Turns the local Prometheus endpoint on or off (off by default).
+#[tauri::command]
+async fn set_metrics(
+    health: State<'_, HealthState>,
+    enabled: bool,
+) -> Result<OperationResult, String> {
+    // Stopping the endpoint waits for its thread: off the window's main thread.
+    let health = health.0.clone();
+    run_blocking(move || {
+        health
+            .set_metrics(enabled)
+            .map_err(|error| format!("The setting could not be saved: {error}"))?;
+        Ok(if enabled {
+            OperationResult::coded("metrics.on", "Prometheus metrics on.")
+        } else {
+            OperationResult::coded("metrics.off", "Prometheus metrics off.")
+        })
+    })
+    .await
+}
+
 fn create_diagnostics_blocking(health: &str) -> Result<OperationResult, String> {
     let path = write_diagnostic_report_at(&windows_managed_config_path(), health)?;
     Ok(OperationResult::coded(
@@ -4853,17 +4886,53 @@ fn save_custom_dns_blocking(
         }
         Ok(())
     })?;
-    Ok(if in_use {
-        OperationResult::coded(
+    let (code, message) = if in_use {
+        (
             "dns.settings_saved",
             "DNS settings saved. Connect to apply them.",
         )
     } else {
-        OperationResult::coded(
+        (
             "dns.settings_saved_custom",
             "DNS settings saved. Choose Custom to use them.",
         )
-    })
+    };
+    let missing = missing_dns_rule_sets(&desktop, &settings);
+    if missing.is_empty() {
+        return Ok(OperationResult::coded(code, message));
+    }
+    let names = missing.join(", ");
+    Ok(OperationResult::coded(
+        "dns.rule_sets_missing",
+        format!("The current profile has no rule set named {names}; the lines that use them are left out."),
+    )
+    .with("names", names)
+    .followed_by(code, message))
+}
+
+/// The `RULE-SET` names of the DNS settings the rule-mode profile does not define: their lines are left out of the
+/// engine's DNS, which saving says. None in direct mode or debug mode, where no rule set is meant to be.
+fn missing_dns_rule_sets(
+    desktop: &DesktopState,
+    settings: &desktop_dns::custom::DnsSettings,
+) -> Vec<String> {
+    if desktop.direct_egress || desktop.routing_mode != DesktopRoutingMode::Rule {
+        return Vec::new();
+    }
+    fs::read_to_string(embedded_profile_path())
+        .ok()
+        .and_then(|profile| {
+            embedded_envelope_for_mode(
+                &profile,
+                desktop.routing_mode,
+                desktop.dns_preset,
+                desktop.block_quic,
+            )
+            .ok()
+        })
+        .and_then(|envelope| serde_json::from_str::<Value>(&envelope).ok())
+        .map(|envelope| settings.missing_rule_sets(&envelope))
+        .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -5184,7 +5253,7 @@ async fn import_mitm_plugin_text(
             &text,
             mitm_plugins::download,
         )?;
-        apply_mitm_plugins(&state, Some((plugin.name.as_str(), plugin.script_count)))
+        plugin_imported(&state, &plugin)
     })
     .await
 }
@@ -5203,7 +5272,7 @@ async fn import_mitm_plugin(
     run_blocking(move || {
         let plugin =
             mitm_plugins::import(&mitm_plugins::directory(), &url, mitm_plugins::download)?;
-        apply_mitm_plugins(&state, Some((plugin.name.as_str(), plugin.script_count)))
+        plugin_imported(&state, &plugin)
     })
     .await
 }
@@ -5333,6 +5402,34 @@ async fn remove_decrypt_host(
         apply_mitm_plugins(&state, None)
     })
     .await
+}
+
+/// What importing `plugin` did. A plugin is saved off unless it is one the user had on and nothing in it changed
+/// (`mitm_plugins::import`); the window then opens it by `id` for the user to look at before turning it on. Applied
+/// either way: an import can turn off a plugin that was on.
+fn plugin_imported(
+    state: &DesktopAppState,
+    plugin: &PluginSummary,
+) -> Result<OperationResult, String> {
+    if plugin.enabled {
+        return apply_mitm_plugins(state, Some((plugin.name.as_str(), plugin.script_count)))
+            .map(|result| result.with("id", &plugin.id));
+    }
+    let off = OperationResult::coded(
+        "plugins.imported_off",
+        format!(
+            "Plugin imported: {} ({} scripts); it is off until you look at what it does and turn it on.",
+            plugin.name, plugin.script_count
+        ),
+    )
+    .with("name", &plugin.name)
+    .with("scripts", plugin.script_count)
+    .with("id", &plugin.id);
+    // A new plugin saved off changes nothing the engine runs.
+    if !plugin.replaced_one_on || !managed_https_decryption_enabled() {
+        return Ok(off);
+    }
+    reconnect_running_direct_core(state, None)?.result(off)
 }
 
 /// Restarts a running desktop core so a change to the plugin library (plugins, mappings, the decryption list)

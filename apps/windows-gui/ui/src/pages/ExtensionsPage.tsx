@@ -1,6 +1,6 @@
 import { ClipboardPaste, Download, Eye, FileUp, KeyRound, LockKeyhole, Puzzle, ShieldCheck, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DebugMapping, desktop, inProcessEngine, MitmPlugin, MitmPluginDetails, MitmRootStatus, RuntimeSnapshot } from "../bridge";
+import { DebugMapping, desktop, inProcessEngine, MitmPlugin, MitmPluginDetails, MitmRootStatus, OperationResult, RuntimeSnapshot } from "../bridge";
 import { Card, EmptyState, MoreMenu, Row, Run, StatusPill, Switch, ToggleRow } from "../ui";
 import { t } from "../i18n";
 import { PhoneCaptureCards } from "./PhoneCaptureCards";
@@ -8,6 +8,7 @@ import { useDecryptionConsent } from "../decryption-consent";
 import { MappingEditor, MappingsCard } from "./DebugTools";
 import { DecryptHostsCard } from "./DecryptHosts";
 import { TrafficRedirectsCard } from "./TrafficRedirects";
+import { decryptsBroadly } from "../plugin-review";
 
 export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
   const linux = inProcessEngine(snapshot);
@@ -18,7 +19,8 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
   const [mapping, setMapping] = useState<DebugMapping | null>(null);
   const [pasting, setPasting] = useState(false);
   const [pastedText, setPastedText] = useState("");
-  const [inspected, setInspected] = useState<{ plugin: MitmPlugin; details: MitmPluginDetails } | null>(null);
+  // `review`: opened before the plugin is turned on, with the button that turns it on.
+  const [inspected, setInspected] = useState<{ plugin: MitmPlugin; details: MitmPluginDetails; review: boolean } | null>(null);
   const filePicker = useRef<HTMLInputElement>(null);
 
   const loadPlugins = useCallback(() => {
@@ -41,28 +43,55 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
   const decrypting = Boolean(snapshot?.httpsDecryptionEnabled);
   const locked = Boolean(busy) || !snapshot;
   const change = (operation: string, task: () => Promise<{ message: string }>) => void run(operation, task).then(() => { loadPlugins(); loadRoot(); });
+  const inspect = (plugin: MitmPlugin, review = false) => void desktop.mitmPluginDetails(plugin.id).then(
+    (details) => setInspected({ plugin, details, review }),
+    (error: unknown) => run("plugin", () => Promise.reject(error)),
+  );
+  /**
+   * Imports a plugin, which the backend saves off, then shows what it holds with the button that turns it on: nothing
+   * in it runs before the user has seen its domains, rules and scripts.
+   */
+  const importThenReview = (task: () => Promise<OperationResult>, done: () => void) => {
+    let imported: OperationResult | null = null;
+    void run("plugin", async () => {
+      imported = await task();
+      return imported;
+    }).then(async () => {
+      const result = imported as OperationResult | null;
+      if (!result) {
+        // A failed import can still have turned a plugin off (its new scripts were being written), so show the list as saved.
+        loadPlugins();
+        return;
+      }
+      done();
+      const list = await desktop.mitmPlugins().catch(() => [] as MitmPlugin[]);
+      setPlugins(list);
+      const plugin = list.find((candidate) => candidate.id === result.params?.id);
+      if (plugin && !plugin.enabled) inspect(plugin, true);
+    });
+  };
   const importPlugin = () => {
     const url = pluginUrl.trim();
     if (!url) return;
-    void run("plugin", () => desktop.importMitmPlugin(url)).then(() => {
-      setPluginUrl("");
-      loadPlugins();
-    });
+    importThenReview(() => desktop.importMitmPlugin(url), () => setPluginUrl(""));
   };
 
-  const importText = (text: string, source: string) => void run("plugin", () => desktop.importMitmPluginText(text, source)).then(() => {
+  const importText = (text: string, source: string) => importThenReview(() => desktop.importMitmPluginText(text, source), () => {
     setPasting(false);
     setPastedText("");
-    loadPlugins();
   });
   const importFile = (file: File | undefined) => {
     if (!file) return;
     void file.text().then((text) => importText(text, file.name), (error: unknown) => run("plugin", () => Promise.reject(error)));
   };
-  const inspect = (plugin: MitmPlugin) => void desktop.mitmPluginDetails(plugin.id).then(
-    (details) => setInspected({ plugin, details }),
-    (error: unknown) => run("plugin", () => Promise.reject(error)),
-  );
+  // Turning a plugin on goes through its contents first; turning it off is immediate.
+  const togglePlugin = (plugin: MitmPlugin) => plugin.enabled
+    ? change("plugin", () => desktop.setMitmPluginEnabled(plugin.id, false))
+    : inspect(plugin, true);
+  const enableReviewed = (plugin: MitmPlugin) => {
+    setInspected(null);
+    change("plugin", () => desktop.setMitmPluginEnabled(plugin.id, true));
+  };
 
   if (mapping) {
     return <MappingEditor initial={mapping} busy={busy} run={run} onDone={() => setMapping(null)} />;
@@ -112,7 +141,7 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
 
       <Card
         title={t("插件")}
-        description={t("支持 Loon、Surge 和 Quantumult X 的插件。导入时会一并下载插件里的脚本，导入即表示允许这些脚本运行。")}
+        description={t("支持 Loon、Surge 和 Quantumult X 的插件。导入后先关着：查看它解密的域名、改写规则和脚本，确认后再打开，脚本才会运行。")}
         actions={<>
           {plugins.length > 0 && <span className="count">{t("{count} 个插件", { count: plugins.length })}</span>}
           <MoreMenu
@@ -197,7 +226,7 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
                   label={plugin.name}
                   checked={plugin.enabled}
                   disabled={Boolean(busy)}
-                  onChange={() => change("plugin", () => desktop.setMitmPluginEnabled(plugin.id, !plugin.enabled))}
+                  onChange={() => togglePlugin(plugin)}
                 />
               </Row>
             ))}
@@ -205,7 +234,16 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
         )}
       </Card>
 
-      {inspected && <PluginInspector plugin={inspected.plugin} details={inspected.details} close={() => setInspected(null)} />}
+      {inspected && (
+        <PluginInspector
+          plugin={inspected.plugin}
+          details={inspected.details}
+          review={inspected.review}
+          busy={Boolean(busy)}
+          enable={() => enableReviewed(inspected.plugin)}
+          close={() => setInspected(null)}
+        />
+      )}
 
       <MappingsCard busy={busy} run={run} onEdit={setMapping} />
 
@@ -235,8 +273,18 @@ function pluginDetail(plugin: MitmPlugin): string {
   return [hosts + (more ? " " + more : ""), scripts].join(" · ");
 }
 
-/** What one plugin holds: the domains it decrypts, its scripts and files, and how much of it the engine runs. */
-function PluginInspector({ plugin, details, close }: { plugin: MitmPlugin; details: MitmPluginDetails; close: () => void }) {
+/**
+ * What one plugin holds: the domains it decrypts, its scripts and files, and how much of it the engine runs. In
+ * `review` it is shown before the plugin is turned on, says what turning it on allows and has the button that does.
+ */
+function PluginInspector({ plugin, details, review, busy, enable, close }: {
+  plugin: MitmPlugin;
+  details: MitmPluginDetails;
+  review: boolean;
+  busy: boolean;
+  enable: () => void;
+  close: () => void;
+}) {
   const lines = [
     t("{count} 行支持", { count: details.supportedLines }),
     details.partialLines > 0 ? t("{count} 行部分支持", { count: details.partialLines }) : null,
@@ -244,13 +292,27 @@ function PluginInspector({ plugin, details, close }: { plugin: MitmPlugin; detai
     details.deferredLines > 0 ? t("{count} 行暂不处理", { count: details.deferredLines }) : null,
   ].filter(Boolean).join(" · ");
   return (
-    <Card title={plugin.name} description={plugin.url || t("本地导入")} actions={<button className="link-button" onClick={close}>{t("收起")}</button>}>
+    <Card title={plugin.name} description={plugin.url || t("本地导入")} actions={<button className="link-button" onClick={close}>{review ? t("暂不打开") : t("收起")}</button>}>
+      {review && (
+        <p className="card-note" role="note">
+          {t("打开后，这个插件会解密下面的域名、按规则改写请求和响应，并运行下面的脚本。脚本可以查看和改写解密后的流量，也可以自行联网。只打开你信任的来源。")}
+        </p>
+      )}
+      {review && decryptsBroadly(plugin.hostnames) && (
+        <p className="card-note danger" role="alert">{t("这个插件要解密所有网站（通配 *），包括银行、邮箱等敏感网站的流量。")}</p>
+      )}
       <Row label={t("规则行")} value={lines} />
       <Row label={t("解密域名")} hint={plugin.hostnames.join(", ") || t("没有解密域名")} />
       {details.excludedHostnames.length > 0 && <Row label={t("排除的域名")} hint={details.excludedHostnames.join(", ")} />}
       <Row label={t("脚本")} hint={details.scripts.length > 0 ? <span className="url-list">{details.scripts.map((url) => <span key={url}>{url}</span>)}</span> : t("无脚本")} />
       {details.resources.length > 0 && <Row label={t("数据文件")} hint={<span className="url-list">{details.resources.map((url) => <span key={url}>{url}</span>)}</span>} />}
       {details.report && <pre className="plugin-report">{details.report}</pre>}
+      {review && (
+        <div className="button-row">
+          <button className="secondary" disabled={busy} onClick={close}>{t("暂不打开")}</button>
+          <button className="primary" disabled={busy} onClick={enable}>{t("打开插件")}</button>
+        </div>
+      )}
     </Card>
   );
 }

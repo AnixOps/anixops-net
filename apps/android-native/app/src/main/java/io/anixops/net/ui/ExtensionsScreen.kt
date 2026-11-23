@@ -69,6 +69,8 @@ data class ExtensionsActions(
     val setPluginEnabled: (id: String, enabled: Boolean) -> Unit = { _, _ -> },
     val removePlugin: (String) -> Unit = {},
     val inspect: (MitmPlugin) -> Unit = {},
+    /** Turns on the plugin the user has looked at in the review. */
+    val enableReviewed: (id: String) -> Unit = {},
     val closeInspector: () -> Unit = {},
     /** Opens the mapping editor; null starts a new mapping. */
     val editMapping: (DebugMapping?) -> Unit = {},
@@ -230,7 +232,16 @@ fun ExtensionsScreen(
             onDismiss = actions.closeRedirectEditor,
         )
     }
-    state.inspected?.let { (plugin, details) -> PluginInspector(plugin, details, actions.closeInspector) }
+    state.inspected?.let { (plugin, details) ->
+        PluginInspector(
+            plugin,
+            details,
+            reviewing = state.reviewing,
+            busy = state.busy,
+            onEnable = { actions.enableReviewed(plugin.id) },
+            onClose = actions.closeInspector,
+        )
+    }
 }
 
 /** Only the plugin dialogs' kind survives a configuration change; a removal question is asked again. */
@@ -675,9 +686,20 @@ private fun pluginDetail(plugin: MitmPlugin): String {
 
 private const val PLUGIN_HOSTS_SHOWN = 3
 
-/** What one plugin holds: the domains it decrypts, its scripts and files, and how much of it the engine runs. */
+/**
+ * What one plugin holds: the domains it decrypts, its scripts and files, and how much of it the engine runs. While
+ * [reviewing] (after an import, or when its switch is turned on) it also says what turning it on allows, warns when
+ * it decrypts every site, and offers to turn it on; nothing in the plugin runs before that (feature-gap-05).
+ */
 @Composable
-private fun PluginInspector(plugin: MitmPlugin, details: MitmPluginDetails, onClose: () -> Unit) {
+private fun PluginInspector(
+    plugin: MitmPlugin,
+    details: MitmPluginDetails,
+    reviewing: Boolean,
+    busy: Boolean,
+    onEnable: () -> Unit,
+    onClose: () -> Unit,
+) {
     val lines = buildList {
         add(pluralStringResource(R.plurals.plugin_lines_supported, details.supportedLines, details.supportedLines))
         if (details.partialLines > 0) {
@@ -698,6 +720,16 @@ private fun PluginInspector(plugin: MitmPlugin, details: MitmPluginDetails, onCl
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(BrandSpacing.sm),
             ) {
+                if (reviewing) {
+                    Text(stringResource(R.string.plugin_review_warning), style = MaterialTheme.typography.bodyMedium)
+                    if (decryptsBroadly(plugin.hostnames)) {
+                        Text(
+                            stringResource(R.string.plugin_review_broad),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = LocalBrandPalette.current.danger,
+                        )
+                    }
+                }
                 Text(
                     plugin.url.ifEmpty { stringResource(R.string.plugin_local) },
                     style = MaterialTheme.typography.bodySmall,
@@ -723,7 +755,18 @@ private fun PluginInspector(plugin: MitmPlugin, details: MitmPluginDetails, onCl
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.action_close)) } },
+        confirmButton = {
+            if (reviewing) {
+                TextButton(onClick = onEnable, enabled = !busy) { Text(stringResource(R.string.plugin_review_enable)) }
+            } else {
+                TextButton(onClick = onClose) { Text(stringResource(R.string.action_close)) }
+            }
+        },
+        dismissButton = if (reviewing) {
+            { TextButton(onClick = onClose) { Text(stringResource(R.string.plugin_review_later)) } }
+        } else {
+            null
+        },
     )
 }
 

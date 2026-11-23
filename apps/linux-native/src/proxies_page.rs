@@ -3,7 +3,8 @@
 //!
 //! The list is a `GtkListView`: only the rows near the viewport exist as widgets, so a subscription with
 //! thousands of nodes costs no more than one with ten. The row that is selected is the node in use;
-//! selecting another row asks the core to use that node.
+//! selecting another row (a click, Space or Enter) asks the core to use that node. The arrow keys only move the
+//! focus (`crate::list_keys`).
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -349,10 +350,27 @@ impl ProxiesPage {
         list.add_css_class("rich-list");
         list.update_property(&[gtk::accessible::Property::Label(text("proxies.list"))]);
         let syncing = Rc::new(Cell::new(false));
+        let browsing = Rc::new(Cell::new(false));
+        crate::list_keys::mark_browsing(&list, &browsing);
+        crate::list_keys::enter_chooses(&list, &selection);
         selection.connect_selection_changed({
             let syncing = Rc::clone(&syncing);
             move |selection, _, _| {
                 if syncing.get() {
+                    return;
+                }
+                if browsing.get() {
+                    // The arrow keys only move the focus: the selection stays on the node in use.
+                    let in_use = (0..selection.n_items())
+                        .find(|&place| {
+                            row_of(selection.item(place)).is_some_and(|row| row.selected)
+                        })
+                        .unwrap_or(gtk::INVALID_LIST_POSITION);
+                    if selection.selected() != in_use {
+                        syncing.set(true);
+                        selection.set_selected(in_use);
+                        syncing.set(false);
+                    }
                     return;
                 }
                 if let Some(row) = row_of(selection.selected_item()) {

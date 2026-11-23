@@ -57,7 +57,9 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        ITSAppUsesNonExemptEncryption: false
+        # Non-exempt: the bundled runtime implements its own standard encryption (TLS, AEAD ciphers, WireGuard) for
+        # the tunnel, beyond Apple's system encryption (docs/manual-intervention.md, 出口合规).
+        ITSAppUsesNonExemptEncryption: true
         # The connection's Live Activity on the Lock Screen and in the Dynamic Island (LiveActivityController).
         NSSupportsLiveActivities: true
         # Subscription groups update in the background (TunnelController.scheduleBackgroundRefresh).
@@ -115,7 +117,9 @@ targets:
         CFBundleDevelopmentRegion: en
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        ITSAppUsesNonExemptEncryption: false
+        # Non-exempt: the bundled runtime implements its own standard encryption (TLS, AEAD ciphers, WireGuard) for
+        # the tunnel, beyond Apple's system encryption (docs/manual-intervention.md, 出口合规).
+        ITSAppUsesNonExemptEncryption: true
         NSExtension:
           NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
@@ -234,7 +238,9 @@ targets:
             CFBundleURLSchemes:
               - anixops
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
-        ITSAppUsesNonExemptEncryption: false
+        # Non-exempt: the bundled runtime implements its own standard encryption (TLS, AEAD ciphers, WireGuard) for
+        # the tunnel, beyond Apple's system encryption (docs/manual-intervention.md, 出口合规).
+        ITSAppUsesNonExemptEncryption: true
         # In-app updates (Sources/NetworkCoreMac/AppUpdater.swift, docs/macos-updates.md): the HTTPS feed URL and the
         # base64 Ed25519 public keys, comma separated. Empty in every build but the release build, which turns
         # updates off.
@@ -300,7 +306,9 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
-        ITSAppUsesNonExemptEncryption: false
+        # Non-exempt: the bundled runtime implements its own standard encryption (TLS, AEAD ciphers, WireGuard) for
+        # the tunnel, beyond Apple's system encryption (docs/manual-intervention.md, 出口合规).
+        ITSAppUsesNonExemptEncryption: true
         # XcodeGen does not add the package type for system extensions; macOS only loads a SYSX bundle.
         CFBundlePackageType: SYSX
         # English is the fallback; Sources/NetworkCoreMacTunnel/InfoPlist.xcstrings has the Chinese.
