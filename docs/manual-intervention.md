@@ -747,6 +747,13 @@ iOS、macOS 的“向订阅服务商报告连接质量”改为设置开关、�
   连接后该 VPN 条目的代理指向本机端口；正常断开、结束进程后重新打开窗口、注销取消这三种情况都恢复为原值，WinHTTP
   （`netsh winhttp show proxy`）始终不变。卸载程序替其他账户恢复时仍只恢复局域网设置；该账户 VPN 条目上的本机端口代理需要手动关掉（后续改进：卸载时读取该账户的 Connections 注册表值一并恢复）。
 
+## 内核 cb7f768：1.0.0 评审第 6 批内核修复（1.0.0）
+
+客户端固定的内核从 6892161 升到 cb7f768（networkcore_anixops #270：DNS 缓存、脚本内存上限、包隧道 TCP 等内核修复，
+MITM 子模块到 d6edc0c）。没有新增依赖，`Cargo.lock` 只换了内核提交，`cargo metadata --locked` 通过；anx 的 Cargo.lock 已同步（anx #293）。
+
+- [ ] 触发 anx 的 ANX 构建和 `publish-client.yml` 时用这个内核（anx main 已是 cb7f768）。
+
 ## iOS / macOS 英文界面截图检查（1.0.0）
 
 CI 的截图任务目前只画中文界面，英文比中文长，是否被截断要人工看（以后可加 `-AppleLanguages (en)` 的截图运行）：

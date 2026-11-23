@@ -633,6 +633,9 @@ jobs:
           Remove-Item -Force $previousWxsPath
 
       - name: Install, upgrade and uninstall Windows managed client MSI
+        # Usually under a minute; every msiexec call is bounded at 120 seconds. A hang (seen once on #276) then fails
+        # here, with the last phase marker below in the log, instead of holding the job until its own timeout.
+        timeout-minutes: 10
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -703,6 +706,7 @@ jobs:
             $null -ne (Get-ScheduledTask -TaskPath "\AnixOps\" -TaskName $startupTaskName -ErrorAction SilentlyContinue)
           }
 
+          Write-Output "== Phase: install the previous version and upgrade"
           # --- Upgrade: the previous package (with the uninstall conditions of the betas), then this one.
           Invoke-MsiTransaction `
             -Arguments @("/i", "`"$previousMsiPath`"", "/qn", "/norestart", "/l*v", "`"$previousInstallLog`"") `
@@ -824,6 +828,7 @@ jobs:
           }
           Assert-InstalledIntegrity
 
+          Write-Output "== Phase: check the installed client"
           # --- The installed client.
           # The client has no Windows service any more.
           if ($null -ne (Get-Service -Name "AnixOpsNetworkCore" -ErrorAction SilentlyContinue)) {
@@ -860,6 +865,7 @@ jobs:
             throw "Windows GUI cleanup entrypoint exited with code $($guiProcess.ExitCode)."
           }
 
+          Write-Output "== Phase: uninstall"
           # --- Removal. The uninstaller, running as LocalSystem, must remove the sign-in task, the
           # service an earlier version registered (portable copies did it by hand), the decryption
           # root from the signed-in user's own store and its key, and try the recorded driver.
