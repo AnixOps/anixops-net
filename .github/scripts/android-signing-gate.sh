@@ -36,10 +36,16 @@ if [ -z "${apksigner}" ]; then
   apksigner="$(ls -d "${ANDROID_HOME}"/build-tools/* | sort -V | tail -n 1)/apksigner"
 fi
 certs="$("${apksigner}" verify --print-certs "${apk}")"
-digests="$(printf '%s\n' "${certs}" | sed -n 's/^Signer #[0-9][0-9]* certificate SHA-256 digest: *\([0-9A-Fa-f:]*\).*$/\1/p' | tr -d ':' | tr 'A-F' 'a-f')"
+# apksigner names signers "Signer #1 certificate ..." (older build-tools) or per scheme "V3.0 Signer: certificate ..."
+# (build-tools 37). Every signer line counts; the same certificate listed under several schemes is one signer, two
+# different certificates (another signer, a rotated key, a source stamp) fail below.
+digests="$(printf '%s\n' "${certs}" \
+  | sed -n -E 's/^[A-Za-z0-9. ]*Signer[^:]*:? *certificate SHA-256 digest: *([0-9A-Fa-f:]+).*$/\1/p' \
+  | tr -d ':' | tr 'A-F' 'a-f' | sort -u)"
 count="$(printf '%s\n' "${digests}" | grep -c . || true)"
 if [ "${count}" != "1" ]; then
-  echo "::error::Expected exactly one APK signer, found ${count}."
+  echo "::error::Expected exactly one APK signing certificate, found ${count}. apksigner verify --print-certs said:"
+  printf '%s\n' "${certs}"
   exit 1
 fi
 if [ "${digests}" != "${expected}" ]; then
