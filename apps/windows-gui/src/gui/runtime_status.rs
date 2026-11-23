@@ -1,7 +1,7 @@
+use super::managed_config;
 use super::ui_state::{connection_state, ConnectionState, RuntimeFacts};
 use platform_windows::managed::{
-    read_managed_config, read_managed_state, windows_managed_config_path,
-    windows_managed_state_path,
+    read_managed_state, windows_managed_config_path, windows_managed_state_path,
 };
 use platform_windows::system_integration::{
     read_current_user_system_proxy, NativeWindowsSystemIntegration, WindowsServiceState,
@@ -106,7 +106,7 @@ pub fn read_runtime_status_at<I>(
 where
     I: WindowsSystemIntegration,
 {
-    let config = read_managed_config(config_path);
+    let config = managed_config::read(config_path);
     let configuration_error = config.as_ref().err().map(ToString::to_string);
     let embedded_listener = config
         .as_ref()

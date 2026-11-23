@@ -417,17 +417,10 @@ impl Client {
     ) -> Result<Value, String> {
         let request = action.request()?;
         let capture_dir = self.backend().capture_dir();
-        let cached = lock(&self.session_key).clone();
-        let key = match cached {
-            Some(key) => key,
-            None => {
-                let key = self.load_session_key(&capture_dir)?;
-                *lock(&self.session_key) = Some(key.clone());
-                key
-            }
-        };
+        let key = self.session_key(&capture_dir)?;
         let storage = desktop_mitm::sessions::storage_request(&capture_dir.join("sessions"), &key);
         let protection = key.protection;
+        // Not `runtime_control`: these are not window commands, and its list refuses them.
         let answer = {
             let backend = self.backend();
             // Both are the backend's own requests: the window's command list leaves them out on purpose.
@@ -435,6 +428,39 @@ impl Client {
             backend.engine_request(&request)?
         };
         Ok(desktop_mitm::sessions::with_protection(answer, protection))
+    }
+
+    /// The capture session key, read from the platform's key store once per run. Never called with the backend
+    /// locked: the key store can be slow or ask the user.
+    fn session_key(
+        &self,
+        capture_dir: &Path,
+    ) -> Result<desktop_mitm::sessions::SessionKey, String> {
+        if let Some(key) = lock(&self.session_key).clone() {
+            return Ok(key);
+        }
+        let key = self.load_session_key(capture_dir)?;
+        *lock(&self.session_key) = Some(key.clone());
+        Ok(key)
+    }
+
+    /// A window command for the engine. Turning capture on first hands the backend the session key, read here
+    /// outside the backend's lock, so a restart or a disconnect can save what capture holds as a session.
+    fn runtime_control(&self, request: &Value) -> Result<Value, String> {
+        let turns_capture_on = request.get("cmd").and_then(Value::as_str) == Some("set_capture")
+            && request.get("enabled").and_then(Value::as_bool) == Some(true);
+        if turns_capture_on {
+            let capture_dir = self.backend().capture_dir();
+            match self.session_key(&capture_dir) {
+                Ok(key) => self.backend().remember_capture_key(key),
+                // Capture still turns on; it is only not saved when the engine stops.
+                Err(error) => self.backend().log(
+                    app_log::Level::Warn,
+                    &format!("the capture session key could not be read: {error}"),
+                ),
+            }
+        }
+        self.backend().runtime_control(request)
     }
 
     /// Android: the Keystore keeps the key, through the platform.
@@ -1087,7 +1113,7 @@ fn handler(name: &str) -> Option<Handler> {
                     "runtime control command \"set_capture_storage\" is not available".to_string(),
                 );
             }
-            client.backend().runtime_control(&request)
+            client.runtime_control(&request)
         },
         "export_capture" => |client, args| {
             let ExportCapture {

@@ -28,6 +28,7 @@
 | HTTP 请求列表、快捷筛选、表达式搜索 | ✅ | ✅ | ◐ | ✅ | ✅ | Apple #126 |
 | 单条请求导出 cURL / 代码 / Postman / Insomnia，默认脱敏 | ✅ | ✅ | ◐ | ✅ | ✅ | Apple #137（A1） |
 | 抓包会话加密保存、7 天清理、载入回看 | ✅ | ✅ | ✅ | ✅ | ✅ | Tauri 见 `debug-mode.md`；Apple #137（A1） |
+| 断开或重连时自动保存抓包、重连后恢复抓包 | ✅ | ✅ | ✅ | ✅ | ✅ | 内核没有解密策略热替换，改解密域名、映射、插件会重启引擎；Tauri / Android 见 `debug-mode.md`“抓包跟引擎同生命周期” |
 | 单条重放、编辑后重放 | ✅ | ✅ | ◐ | ✅ | ✅ | Android 经内核重放代理（#128） |
 | Map Local / Map Remote | ✅ | ✅ | ✅ | ✅ | ✅ | 桌面和 Android 需开启 HTTPS 解密；Apple 端不受插件总开关影响，首次新增要解密的主机时先确认条款（docs/debug-mode.md） |
 | HTTP/2 MITM | ✅ | ✅ | ✅ | ✅ | ✅ | 内核 #233，各平台共用 |

@@ -1,8 +1,10 @@
 use super::actions::connection;
 use super::capture_sessions;
 use super::linked_sources::{self, CachedNode, OtherSource};
+use super::managed_config;
 use super::mitm_plugins::{self, PluginSummary};
 use super::owned_proxy;
+use super::reconnect;
 use super::root_trust;
 use super::runtime_status::{read_runtime_status, WindowsRuntimeStatus};
 use super::startup::{
@@ -23,6 +25,7 @@ use config_core::CoreSubscriptionService;
 use control_domain::{NodeDescriptor, SubscriptionService, SubscriptionSource};
 use desktop_dns::DnsPreset;
 use desktop_mitm::mappings;
+use desktop_mitm::sessions::{AutoSave, CaptureCarry};
 use engine_embedded::config::{RuntimeConfig, CONFIG_SCHEMA_VERSION};
 use engine_embedded::delay::measure_delay;
 use engine_embedded::nodes::{outbound_for_node, routing_envelope_with_sets, single_node_envelope};
@@ -34,10 +37,9 @@ use on_demand::{
 };
 use platform_windows::managed::{
     read_managed_state, windows_managed_config_path, windows_managed_data_directory,
-    windows_managed_log_directory, windows_managed_state_path, write_managed_config,
-    write_managed_state, write_managed_text_atomic, WindowsManagedConfig,
-    WindowsManagedEmbeddedConfig, WindowsManagedNativeMitmConfig, WindowsProxySettings,
-    WindowsSystemProxyOwner,
+    windows_managed_log_directory, windows_managed_state_path, write_managed_state,
+    write_managed_text_atomic, WindowsManagedConfig, WindowsManagedEmbeddedConfig,
+    WindowsManagedNativeMitmConfig, WindowsProxySettings, WindowsSystemProxyOwner,
 };
 use platform_windows::mitm_security::{
     protect_windows_managed_mitm_private_key, remove_windows_managed_mitm_private_key,
@@ -1899,24 +1901,31 @@ async fn disconnect(state: State<'_, DesktopAppState>) -> Result<OperationResult
 }
 
 fn disconnect_blocking(state: DesktopAppState) -> Result<OperationResult, String> {
+    let language = notification_settings_now(&state).language;
     let desktop = state
         .desktop
         .lock()
         .map_err(|_| "desktop state lock failed")?
         .clone();
-    let result = connection::disconnect_direct(
-        desktop,
-        &mut *state
+    let (result, capture) = {
+        let mut core = state
             .direct_core
             .lock()
-            .map_err(|_| "desktop core lock failed")?,
-    );
+            .map_err(|_| "desktop core lock failed")?;
+        // Capture lives only as long as the engine: what it holds is kept as a session, as on iOS and macOS.
+        let capture = preserve_window_capture(&core, AutoSave::Disconnect, &language);
+        (connection::disconnect_direct(desktop, &mut core), capture)
+    };
     // `disconnect_direct` stops the engine even when the proxy could not be put back, so the connection is
     // over either way: left marked as this window's, the recovery monitor would take the stop for a lost
     // connection and reconnect against the user's wish. A failed restore keeps the snapshot and the owner
     // record, for "Restore network settings" and the next start.
     mark_gui_connection_stopped(&state);
     let message = result?;
+    let note = capture
+        .note(AutoSave::Disconnect, &language)
+        .unwrap_or_default();
+    let message = reconnect::joined([message.as_str(), note.as_str()]);
     let mut persisted = state
         .desktop
         .lock()
@@ -1937,6 +1946,7 @@ fn stop_desktop_core_for_exit(state: DesktopAppState) {
     if let Ok(mut recorder) = state.traffic.lock() {
         recorder.save();
     }
+    let language = notification_settings_now(&state).language;
     let desktop = match state.desktop.lock() {
         Ok(desktop) => desktop.clone(),
         Err(_) => return,
@@ -1945,7 +1955,11 @@ fn stop_desktop_core_for_exit(state: DesktopAppState) {
         .direct_core
         .lock()
         .map_err(|_| "desktop core lock failed".to_string())
-        .and_then(|mut core| connection::disconnect_direct(desktop, &mut core));
+        .and_then(|mut core| {
+            // Quitting keeps what capture holds as a session, as disconnecting does.
+            let _ = preserve_window_capture(&core, AutoSave::Disconnect, &language);
+            connection::disconnect_direct(desktop, &mut core)
+        });
     // The engine is stopped whatever happened to the proxy: keep the recovery monitor from restarting it while
     // the process exits.
     mark_gui_connection_stopped(&state);
@@ -1975,19 +1989,25 @@ async fn restart_service(state: State<'_, DesktopAppState>) -> Result<OperationR
 }
 
 fn restart_service_blocking(state: DesktopAppState) -> Result<OperationResult, String> {
+    let language = notification_settings_now(&state).language;
     let desktop = state
         .desktop
         .lock()
         .map_err(|_| "desktop state lock failed")?
         .clone();
-    let _ = connection::disconnect_direct(
-        desktop.clone(),
-        &mut *state
+    let connected = {
+        let mut core = state
             .direct_core
             .lock()
-            .map_err(|_| "desktop core lock failed")?,
-    );
-    let connected = connect_window_core(&state, desktop)?;
+            .map_err(|_| "desktop core lock failed")?;
+        // A restart (a node switch, a group choice) keeps capture: saved first, on again in the new engine.
+        let capture = preserve_window_capture(&core, AutoSave::Reconnect, &language);
+        let _ = connection::disconnect_direct(desktop.clone(), &mut core);
+        let connected =
+            connection::connect_direct(windows_managed_config_path(), desktop, &mut core)?;
+        resume_window_capture(&core, &capture);
+        connected
+    };
     let mut persisted = state
         .desktop
         .lock()
@@ -3021,7 +3041,7 @@ fn repair_managed_config(desktop: &DesktopState) {
         return;
     }
     set_embedded_listener(&mut managed, envelope_path, false);
-    let outcome = match write_managed_config(&windows_managed_config_path(), &managed) {
+    let outcome = match managed_config::write(&windows_managed_config_path(), &managed) {
         Ok(()) => "managed configuration repaired: the imported profile runs again".to_string(),
         Err(error) => format!("managed configuration repair failed: {error}"),
     };
@@ -3736,7 +3756,7 @@ fn import_embedded_subscription(
         .as_ref()
         .is_some_and(|native_mitm| native_mitm.enabled);
     set_embedded_listener(&mut managed, envelope_path, mitm);
-    write_managed_config(&windows_managed_config_path(), &managed)
+    managed_config::write(&windows_managed_config_path(), &managed)
         .map_err(|error| format!("Managed configuration update failed: {error}"))?;
     desktop.profile_source_path = source_path;
     desktop.profile_source_url = source_url;
@@ -4169,16 +4189,17 @@ fn replace_redirects(
         .lock()
         .map_err(|_| "desktop state lock failed")?
         .clone();
+    let previous = desktop_dns::redirects::current();
     desktop_dns::redirects::replace(next, || {
         rewrite_embedded_envelope(&desktop, desktop.dns_preset)
     })?;
-    let message = match reconnect_running_direct_core(state) {
-        Ok(()) => {
-            "Redirects saved. They apply to the running connection, or the next one.".to_string()
-        }
-        Err(error) => format!("Redirects saved. Reconnect to apply them: {error}"),
-    };
-    Ok(OperationResult { message })
+    let rollback = Rollback::files(desktop.clone(), move || {
+        desktop_dns::redirects::replace(&previous, || {
+            rewrite_embedded_envelope(&desktop, desktop.dns_preset)
+        })
+    });
+    reconnect_running_direct_core(state, Some(rollback))?
+        .result("Redirects saved. They apply to the running connection, or the next one.")
 }
 
 /// The GEOIP and IP-ASN data lists the user added by URL, by name.
@@ -4228,14 +4249,17 @@ fn replace_data_sources(
         .lock()
         .map_err(|_| "desktop state lock failed")?
         .clone();
+    let previous = desktop_dns::data_sources::current();
     desktop_dns::data_sources::replace(next, || {
         rewrite_embedded_envelope(&desktop, desktop.dns_preset)
     })?;
-    let message = match reconnect_running_direct_core(state) {
-        Ok(()) => "Data lists saved. The engine downloads them through the proxy.".to_string(),
-        Err(error) => format!("Data lists saved. Reconnect to apply them: {error}"),
-    };
-    Ok(OperationResult { message })
+    let rollback = Rollback::files(desktop.clone(), move || {
+        desktop_dns::data_sources::replace(&previous, || {
+            rewrite_embedded_envelope(&desktop, desktop.dns_preset)
+        })
+    });
+    reconnect_running_direct_core(state, Some(rollback))?
+        .result("Data lists saved. The engine downloads them through the proxy.")
 }
 
 /// The names given to local network devices for `DEVICE-NAME` rules, by address.
@@ -4284,14 +4308,16 @@ fn replace_devices(
         .lock()
         .map_err(|_| "desktop state lock failed")?
         .clone();
+    let previous = desktop_dns::devices::current();
     desktop_dns::devices::replace(next, || {
         rewrite_embedded_envelope(&desktop, desktop.dns_preset)
     })?;
-    let message = match reconnect_running_direct_core(state) {
-        Ok(()) => "Device names saved.".to_string(),
-        Err(error) => format!("Device names saved. Reconnect to apply them: {error}"),
-    };
-    Ok(OperationResult { message })
+    let rollback = Rollback::files(desktop.clone(), move || {
+        desktop_dns::devices::replace(&previous, || {
+            rewrite_embedded_envelope(&desktop, desktop.dns_preset)
+        })
+    });
+    reconnect_running_direct_core(state, Some(rollback))?.result("Device names saved.")
 }
 
 /// The "自定义" DNS text and the Fake-IP switch as saved.
@@ -4375,7 +4401,7 @@ fn set_direct_egress_blocking(
     enabled: bool,
     state: DesktopAppState,
 ) -> Result<OperationResult, String> {
-    {
+    let previous = {
         let mut desktop = state
             .desktop
             .lock()
@@ -4385,15 +4411,19 @@ fn set_direct_egress_blocking(
                 message: "Egress unchanged.".to_string(),
             });
         }
+        let previous = desktop.clone();
         desktop.direct_egress = enabled;
         save_desktop_state(&desktop)?;
-    }
-    let message = match reconnect_running_direct_core(&state) {
-        Ok(()) if enabled => "Traffic leaves directly.".to_string(),
-        Ok(()) => "Traffic leaves through the selected node.".to_string(),
-        Err(error) => format!("Egress saved. Reconnect to apply it: {error}"),
+        previous
     };
-    Ok(OperationResult { message })
+    let rollback = Rollback::state(previous, |now, before| {
+        now.direct_egress = before.direct_egress;
+    });
+    reconnect_running_direct_core(&state, Some(rollback))?.result(if enabled {
+        "Traffic leaves directly."
+    } else {
+        "Traffic leaves through the selected node."
+    })
 }
 
 #[derive(Debug, Serialize)]
@@ -4485,6 +4515,12 @@ fn save_my_rules_blocking(text: &str, state: DesktopAppState) -> Result<Operatio
                 .map_err(|error| format!("the engine rejected the rules: {}", error.message))?;
         }
     }
+    let previous_text = desktop_dns::rules::load(&my_rules_path());
+    let previous_envelope = envelope.as_ref().and_then(|(path, _)| {
+        fs::read_to_string(path)
+            .ok()
+            .map(|text| (path.clone(), text))
+    });
     desktop_dns::rules::save(&my_rules_path(), text)?;
     if let Some((path, routed)) = envelope.as_ref() {
         write_managed_text_atomic(path, routed).map_err(|error| error.to_string())?;
@@ -4520,17 +4556,28 @@ fn save_my_rules_blocking(text: &str, state: DesktopAppState) -> Result<Operatio
                     .is_some_and(|answer| answer.get("reloaded") == Some(&Value::Bool(true)))
             })
     };
-    let message = if reloaded {
-        format!("{count} rules saved and applied; open connections stay.")
-    } else {
-        match reconnect_running_direct_core(&state) {
-            Ok(()) => format!(
-                "{count} rules saved. They apply to the running connection, or the next one."
-            ),
-            Err(error) => format!("{count} rules saved. Reconnect to apply them: {error}"),
+    if reloaded {
+        return Ok(OperationResult {
+            message: format!("{count} rules saved and applied; open connections stay."),
+        });
+    }
+    let previous = state
+        .desktop
+        .lock()
+        .map_err(|_| "desktop state lock failed")?
+        .clone();
+    let rollback = Rollback::files(previous, move || {
+        desktop_dns::rules::save(&my_rules_path(), &previous_text)?;
+        match previous_envelope {
+            Some((path, text)) => {
+                write_managed_text_atomic(&path, &text).map_err(|error| error.to_string())
+            }
+            None => Ok(()),
         }
-    };
-    Ok(OperationResult { message })
+    });
+    reconnect_running_direct_core(&state, Some(rollback))?.result(&format!(
+        "{count} rules saved. They apply to the running connection, or the next one."
+    ))
 }
 
 /// Saves QUIC blocking into the envelope and the desktop state. A core this
@@ -4540,15 +4587,20 @@ fn set_block_quic_blocking(
     enabled: bool,
     state: DesktopAppState,
 ) -> Result<OperationResult, String> {
-    {
+    let (previous, previous_envelope) = {
         let mut desktop = state
             .desktop
             .lock()
             .map_err(|_| "desktop state lock failed")?;
+        let previous = desktop.clone();
+        let mut previous_envelope = None;
         if let Some(embedded) = active_embedded_config()? {
             let profile = fs::read_to_string(embedded_profile_path()).map_err(|error| {
                 format!("Import the profile again before changing QUIC blocking: {error}")
             })?;
+            previous_envelope = fs::read_to_string(&embedded.envelope_path)
+                .ok()
+                .map(|text| (embedded.envelope_path.clone(), text));
             let envelope = embedded_envelope_for_mode(
                 &profile,
                 desktop.routing_mode,
@@ -4560,14 +4612,18 @@ fn set_block_quic_blocking(
         }
         desktop.block_quic = enabled;
         save_desktop_state(&desktop)?;
-    }
-    let message = match reconnect_running_direct_core(&state) {
-        Ok(()) => {
-            "QUIC setting saved. It applies to the running connection, or the next one.".to_string()
-        }
-        Err(error) => format!("QUIC setting saved. Reconnect to apply it: {error}"),
+        (previous, previous_envelope)
     };
-    Ok(OperationResult { message })
+    let mut rollback = Rollback::state(previous, |now, before| {
+        now.block_quic = before.block_quic;
+    });
+    if let Some((path, text)) = previous_envelope {
+        rollback.files = Some(Box::new(move || {
+            write_managed_text_atomic(&path, &text).map_err(|error| error.to_string())
+        }));
+    }
+    reconnect_running_direct_core(&state, Some(rollback))?
+        .result("QUIC setting saved. It applies to the running connection, or the next one.")
 }
 
 fn ensure_routing_configuration_stopped(state: &DesktopAppState) -> Result<(), String> {
@@ -4622,13 +4678,13 @@ async fn import_mitm_plugin_text(
             &text,
             mitm_plugins::download,
         )?;
-        let applied = apply_mitm_plugins(&state);
-        Ok(OperationResult {
-            message: format!(
-                "Plugin imported: {} ({} scripts). {applied}",
+        apply_mitm_plugins(
+            &state,
+            &format!(
+                "Plugin imported: {} ({} scripts).",
                 plugin.name, plugin.script_count
             ),
-        })
+        )
     })
     .await
 }
@@ -4647,13 +4703,13 @@ async fn import_mitm_plugin(
     run_blocking(move || {
         let plugin =
             mitm_plugins::import(&mitm_plugins::directory(), &url, mitm_plugins::download)?;
-        let applied = apply_mitm_plugins(&state);
-        Ok(OperationResult {
-            message: format!(
-                "Plugin imported: {} ({} scripts). {applied}",
+        apply_mitm_plugins(
+            &state,
+            &format!(
+                "Plugin imported: {} ({} scripts).",
                 plugin.name, plugin.script_count
             ),
-        })
+        )
     })
     .await
 }
@@ -4667,9 +4723,7 @@ async fn set_mitm_plugin_enabled(
     let state = state.inner().clone();
     run_blocking(move || {
         mitm_plugins::set_enabled(&mitm_plugins::directory(), &id, enabled)?;
-        Ok(OperationResult {
-            message: apply_mitm_plugins(&state),
-        })
+        apply_mitm_plugins(&state, "")
     })
     .await
 }
@@ -4682,9 +4736,7 @@ async fn remove_mitm_plugin(
     let state = state.inner().clone();
     run_blocking(move || {
         mitm_plugins::remove(&mitm_plugins::directory(), &id)?;
-        Ok(OperationResult {
-            message: apply_mitm_plugins(&state),
-        })
+        apply_mitm_plugins(&state, "")
     })
     .await
 }
@@ -4702,9 +4754,7 @@ async fn save_debug_mapping(
     let state = state.inner().clone();
     run_blocking(move || {
         mappings::save(&mitm_plugins::directory(), entry)?;
-        Ok(OperationResult {
-            message: apply_mitm_plugins(&state),
-        })
+        apply_mitm_plugins(&state, "")
     })
     .await
 }
@@ -4717,9 +4767,7 @@ async fn remove_debug_mapping(
     let state = state.inner().clone();
     run_blocking(move || {
         mappings::remove(&mitm_plugins::directory(), &id)?;
-        Ok(OperationResult {
-            message: apply_mitm_plugins(&state),
-        })
+        apply_mitm_plugins(&state, "")
     })
     .await
 }
@@ -4746,9 +4794,7 @@ async fn add_decrypt_host(
     let state = state.inner().clone();
     run_blocking(move || {
         mappings::add_host(&mitm_plugins::directory(), &host, exclude.unwrap_or(false))?;
-        Ok(OperationResult {
-            message: apply_mitm_plugins(&state),
-        })
+        apply_mitm_plugins(&state, "")
     })
     .await
 }
@@ -4763,9 +4809,7 @@ async fn edit_decrypt_host(
     let state = state.inner().clone();
     run_blocking(move || {
         mappings::edit_host(&mitm_plugins::directory(), &pattern, &host, exclude)?;
-        Ok(OperationResult {
-            message: apply_mitm_plugins(&state),
-        })
+        apply_mitm_plugins(&state, "")
     })
     .await
 }
@@ -4779,9 +4823,7 @@ async fn set_decrypt_host_enabled(
     let state = state.inner().clone();
     run_blocking(move || {
         mappings::set_host_enabled(&mitm_plugins::directory(), &pattern, enabled)?;
-        Ok(OperationResult {
-            message: apply_mitm_plugins(&state),
-        })
+        apply_mitm_plugins(&state, "")
     })
     .await
 }
@@ -4794,23 +4836,29 @@ async fn remove_decrypt_host(
     let state = state.inner().clone();
     run_blocking(move || {
         mappings::remove_host(&mitm_plugins::directory(), &host)?;
-        Ok(OperationResult {
-            message: apply_mitm_plugins(&state),
-        })
+        apply_mitm_plugins(&state, "")
     })
     .await
 }
 
-/// Restarts a running desktop core so a plugin change takes effect, and
-/// says what the user still has to do when it cannot.
-fn apply_mitm_plugins(state: &DesktopAppState) -> String {
+/// Restarts a running desktop core so a change to the plugin library (plugins, mappings, the decryption list)
+/// takes effect, after `done` (what the change was). The pinned kernel has no command that swaps the decryption
+/// policy of a running engine (only `reload_rules` for rules), so the engine restarts; what capture holds is
+/// saved as a session first and capture carries on in the new engine. The library change itself is not undone
+/// when the engine does not start again: the answer says the connection is down.
+fn apply_mitm_plugins(state: &DesktopAppState, done: &str) -> Result<OperationResult, String> {
     if !managed_https_decryption_enabled() {
-        return "Turn on HTTPS decryption for plugins to take effect.".to_string();
+        return Ok(OperationResult {
+            message: reconnect::joined([
+                done,
+                "Turn on HTTPS decryption for plugins to take effect.",
+            ]),
+        });
     }
-    match reconnect_running_direct_core(state) {
-        Ok(()) => "Plugins are applied to the running connection.".to_string(),
-        Err(error) => format!("Reconnect to apply plugins: {error}"),
-    }
+    reconnect_running_direct_core(state, None)?.result(&reconnect::joined([
+        done,
+        "Plugins are applied to the running connection, or the next one.",
+    ]))
 }
 
 #[tauri::command]
@@ -4840,7 +4888,7 @@ fn clear_script_runtime_blocking() -> Result<OperationResult, String> {
         .as_mut()
         .ok_or_else(|| "HTTPS MITM is not configured.".to_string())?;
     native_mitm.script_runtime = None;
-    write_managed_config(&windows_managed_config_path(), &managed)
+    managed_config::write(&windows_managed_config_path(), &managed)
         .map_err(|error| error.to_string())?;
     Ok(OperationResult {
         message: "Managed script runtime cleared.".to_string(),
@@ -4874,6 +4922,7 @@ fn enable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult,
         ));
     }
     let mut managed = managed_config_or_default()?;
+    let previous = managed.clone();
     // The engine decrypts itself on the system proxy port (`connection::desktop_listener`).
     managed.native_mitm = Some(WindowsManagedNativeMitmConfig {
         enabled: true,
@@ -4887,15 +4936,30 @@ fn enable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult,
         script_runtime: None,
     });
     set_embedded_listener(&mut managed, embedded.envelope_path, true);
-    write_managed_config(&windows_managed_config_path(), &managed)
+    managed_config::write(&windows_managed_config_path(), &managed)
         .map_err(|error| format!("Managed configuration update failed: {error}"))?;
-    reconnect_running_direct_core(&state)?;
-    Ok(OperationResult {
-        message: format!(
+    reconnect_running_direct_core(&state, Some(managed_rollback(&state, previous)?))?.result(
+        &format!(
             "HTTPS MITM enabled with CA material at {}.",
             certificate_path.display()
         ),
-    })
+    )
+}
+
+/// Puts `previous`, the managed configuration before a change, back when the changed one does not start.
+fn managed_rollback(
+    state: &DesktopAppState,
+    previous: WindowsManagedConfig,
+) -> Result<Rollback, String> {
+    let desktop = state
+        .desktop
+        .lock()
+        .map_err(|_| "desktop state lock failed")?
+        .clone();
+    Ok(Rollback::files(desktop, move || {
+        managed_config::write(&windows_managed_config_path(), &previous)
+            .map_err(|error| error.to_string())
+    }))
 }
 
 #[tauri::command]
@@ -4930,57 +4994,309 @@ fn set_tun_mode_blocking(enabled: bool, state: DesktopAppState) -> Result<Operat
             .desktop
             .lock()
             .map_err(|_| "desktop state lock failed")?;
-        let previous = desktop.tun_mode_enabled;
+        let previous = desktop.clone();
         desktop.tun_mode_enabled = enabled;
         save_desktop_state(&desktop)?;
         previous
     };
-    if let Err(error) = reconnect_running_direct_core(&state) {
-        if let Ok(mut desktop) = state.desktop.lock() {
-            desktop.tun_mode_enabled = previous;
-            let _ = save_desktop_state(&desktop);
-        }
-        let _ = reconnect_running_direct_core(&state);
-        return Err(error);
-    }
-    Ok(OperationResult {
-        message: if enabled {
-            "TUN mode is on.".to_string()
-        } else {
-            "TUN mode is off.".to_string()
-        },
+    // A running core reconnects as one step: when the adapter cannot be made (security software, a driver
+    // problem), the switch goes back and the connection runs on as it was (`reconnect`).
+    let rollback = Rollback::state(previous, |now, before| {
+        now.tun_mode_enabled = before.tun_mode_enabled;
+    });
+    reconnect_running_direct_core(&state, Some(rollback))?.result(if enabled {
+        "TUN mode is on."
+    } else {
+        "TUN mode is off."
     })
 }
 
-/// Desktop mode runs HTTPS decryption inside this process, so a running
-/// desktop core picks up an enabled or disabled MITM only by reconnecting.
-fn reconnect_running_direct_core(state: &DesktopAppState) -> Result<(), String> {
+/// Puts back the files a changed setting rewrote (`Rollback::files`).
+type RestoreFiles = Box<dyn FnOnce() -> Result<(), String> + Send>;
+
+/// What to put back when a changed setting does not start (`reconnect::Steps::restore`).
+struct Rollback {
+    /// The desktop state before the change; the engine starts on it again.
+    desktop: DesktopState,
+    /// Puts back the files the change rewrote (the managed configuration, the envelope, a saved list). Runs
+    /// while the engine's lock is held, so it must never lock `state.desktop` (`runtime_snapshot_blocking`
+    /// takes that lock first and the engine's second).
+    files: Option<RestoreFiles>,
+    /// Copies the setting the change made back from the earlier state into the window's state, once the
+    /// engine's lock is released.
+    revert: fn(&mut DesktopState, &DesktopState),
+}
+
+impl Rollback {
+    /// The change was to the desktop state alone (`revert` names the field); no file to put back.
+    fn state(desktop: DesktopState, revert: fn(&mut DesktopState, &DesktopState)) -> Self {
+        Self {
+            desktop,
+            files: None,
+            revert,
+        }
+    }
+
+    /// The change was to files alone; the desktop state stays as it is.
+    fn files(
+        desktop: DesktopState,
+        files: impl FnOnce() -> Result<(), String> + Send + 'static,
+    ) -> Self {
+        Self {
+            desktop,
+            files: Some(Box::new(files)),
+            revert: |_, _| {},
+        }
+    }
+}
+
+/// The window's engine as [`reconnect::Steps`].
+struct WindowSteps<'a> {
+    core: &'a mut connection::DesktopCore,
+    /// The desktop state with the change.
+    desktop: DesktopState,
+    /// The desktop state and files before it, when the change can be undone.
+    previous: Option<DesktopState>,
+    restore_files: Option<RestoreFiles>,
+    language: String,
+    /// Why stopping could not put the system proxy back, when it could not.
+    stop_error: Option<String>,
+}
+
+impl reconnect::Steps for WindowSteps<'_> {
+    type Connected = connection::ConnectedProxy;
+
+    fn running(&mut self) -> Result<bool, String> {
+        self.core.is_running()
+    }
+
+    fn stop(&mut self) -> CaptureCarry {
+        let carry = preserve_window_capture(&*self.core, AutoSave::Reconnect, &self.language);
+        // The engine stops either way; a proxy that could not be put back stays the window's
+        // (`owned_proxy`), so the next start reuses its snapshot and a disconnect keeps it for a later restore.
+        self.stop_error =
+            connection::disconnect_direct(self.desktop.clone(), &mut *self.core).err();
+        carry
+    }
+
+    fn start_new(&mut self) -> Result<connection::ConnectedProxy, String> {
+        connection::connect_direct(
+            windows_managed_config_path(),
+            self.desktop.clone(),
+            &mut *self.core,
+        )
+    }
+
+    fn restore(&mut self) -> Option<Result<(), String>> {
+        self.previous.as_ref()?;
+        Some(match self.restore_files.take() {
+            Some(files) => files(),
+            None => Ok(()),
+        })
+    }
+
+    fn start_previous(&mut self) -> Result<connection::ConnectedProxy, String> {
+        // The earlier state is what `connect_direct` saves as the window's state, never the failed one.
+        let previous = self
+            .previous
+            .clone()
+            .ok_or("there is no earlier setting to go back to")?;
+        connection::connect_direct(windows_managed_config_path(), previous, &mut *self.core)
+    }
+
+    fn resume_capture(&mut self, carry: &CaptureCarry) {
+        resume_window_capture(&*self.core, carry);
+    }
+}
+
+/// Saves what live capture holds as a session before the window's engine stops
+/// (`desktop_mitm::sessions::preserve`); the session is named in the window's language.
+fn preserve_window_capture(
+    core: &connection::DesktopCore,
+    reason: AutoSave,
+    language: &str,
+) -> CaptureCarry {
+    let dir = capture_sessions::sessions_dir();
+    let carry = desktop_mitm::sessions::preserve(
+        |request: &Value| {
+            let request = serde_json::to_vec(request).map_err(|error| error.to_string())?;
+            let answer = core.control(&request)?;
+            serde_json::from_slice(&answer).map_err(|error| error.to_string())
+        },
+        dir.as_deref().unwrap_or(Path::new("")),
+        || {
+            dir.as_ref().map_err(Clone::clone)?;
+            capture_sessions::load_key()
+        },
+        reason.name(language),
+    );
+    if let Some(error) = carry.save_error.as_deref() {
+        let _ = append_managed_log(
+            APP_LOG_SCOPE,
+            &format!("capture could not be saved before the engine stopped: {error}"),
+        );
+    }
+    carry
+}
+
+/// Turns capture on again, with the budget it had, in the engine that started after a restart.
+fn resume_window_capture(core: &connection::DesktopCore, carry: &CaptureCarry) {
+    let Some(request) = carry.resume_request() else {
+        return;
+    };
+    let resumed = serde_json::to_vec(&request)
+        .map_err(|error| error.to_string())
+        .and_then(|request| core.control(&request));
+    if let Err(error) = resumed {
+        let _ = append_managed_log(
+            APP_LOG_SCOPE,
+            &format!("capture could not be turned on again after a restart: {error}"),
+        );
+    }
+}
+
+/// How a changed setting reached the window's engine, for the caller's message.
+struct Reconnected {
+    outcome: reconnect::Outcome<()>,
+    capture: CaptureCarry,
+    language: String,
+}
+
+impl Reconnected {
+    /// `applied` (what the change did) with the note on capture when the change runs or waits for the next
+    /// connection; otherwise an error that says where the connection ended up.
+    fn result(self, applied: &str) -> Result<OperationResult, String> {
+        let language = reconnect::Language::from_id(&self.language);
+        let capture = self
+            .capture
+            .note(AutoSave::Reconnect, &self.language)
+            .unwrap_or_default();
+        match reconnect::outcome_text(&self.outcome, reconnect::not_applied(language), language) {
+            None => Ok(OperationResult {
+                message: reconnect::joined([applied, capture.as_str()]),
+            }),
+            Some(failed) => Err(reconnect::joined([failed.as_str(), capture.as_str()])),
+        }
+    }
+}
+
+/// Reconnects a running desktop core so a changed setting takes effect (desktop mode runs the engine, HTTPS
+/// decryption included, inside this process). One transaction under the engine's lock
+/// ([`reconnect::reconnect`]): capture is saved and carried over, and when the new setting does not start,
+/// `rollback` puts the earlier one back and the engine runs on it again. The window's state is updated after the
+/// lock is released: the proxy it now owns, the reverted setting, or a disconnected state.
+fn reconnect_running_direct_core(
+    state: &DesktopAppState,
+    rollback: Option<Rollback>,
+) -> Result<Reconnected, String> {
+    let language = notification_settings_now(state).language;
     let desktop = state
         .desktop
         .lock()
         .map_err(|_| "desktop state lock failed")?
         .clone();
-    let mut core = state
-        .direct_core
-        .lock()
-        .map_err(|_| "desktop core lock failed")?;
-    if !core.is_running()? {
-        return Ok(());
+    let (previous, restore_files, revert) = match rollback {
+        Some(rollback) => (
+            Some(rollback.desktop),
+            rollback.files,
+            Some(rollback.revert),
+        ),
+        None => (None, None, None),
+    };
+    let (report, stop_error) = {
+        let mut core = state
+            .direct_core
+            .lock()
+            .map_err(|_| "desktop core lock failed")?;
+        let mut steps = WindowSteps {
+            core: &mut *core,
+            desktop,
+            previous: previous.clone(),
+            restore_files,
+            language: language.clone(),
+            stop_error: None,
+        };
+        let report = reconnect::reconnect(&mut steps)?;
+        (report, steps.stop_error)
+    };
+    if let Some(error) = stop_error.as_deref() {
+        let _ = append_managed_log(
+            APP_LOG_SCOPE,
+            &format!("settings reconnect: the system proxy could not be put back: {error}"),
+        );
     }
-    let _ = connection::disconnect_direct(desktop.clone(), &mut core);
-    let connected = connection::connect_direct(windows_managed_config_path(), desktop, &mut core)?;
-    drop(core);
     let mut persisted = state
         .desktop
         .lock()
         .map_err(|_| "desktop state lock failed")?;
-    persisted.proxy_snapshot = Some(connected.snapshot);
-    persisted.applied_proxy = Some(connected.applied_proxy);
-    save_desktop_state(&persisted)
+    let reverted = |persisted: &mut DesktopState| {
+        if let (Some(revert), Some(previous)) = (revert, previous.as_ref()) {
+            revert(persisted, previous);
+        }
+    };
+    let outcome = match report.outcome {
+        reconnect::Outcome::NotRunning => reconnect::Outcome::NotRunning,
+        reconnect::Outcome::Applied(connected) => {
+            persisted.proxy_snapshot = Some(connected.snapshot);
+            persisted.applied_proxy = Some(connected.applied_proxy);
+            save_desktop_state(&persisted)?;
+            drop(persisted);
+            // Running again, as the window's own connection, like after connecting.
+            mark_gui_started_connection(state);
+            reconnect::Outcome::Applied(())
+        }
+        reconnect::Outcome::Restored { error, connected } => {
+            reverted(&mut *persisted);
+            persisted.proxy_snapshot = Some(connected.snapshot);
+            persisted.applied_proxy = Some(connected.applied_proxy);
+            save_desktop_state(&persisted)?;
+            drop(persisted);
+            mark_gui_started_connection(state);
+            reconnect::Outcome::Restored {
+                error,
+                connected: (),
+            }
+        }
+        reconnect::Outcome::Disconnected {
+            error,
+            restore_error,
+            restored,
+        } => {
+            if restored {
+                reverted(&mut *persisted);
+            }
+            // As after a disconnect: the proxy went back when the engine stopped and the window owns none,
+            // unless it could not be put back, when the snapshot stays for "Restore network settings".
+            if stop_error.is_none() {
+                persisted.proxy_snapshot = None;
+                persisted.applied_proxy = None;
+            }
+            let saved = save_desktop_state(&persisted);
+            drop(persisted);
+            // The user is told here; the recovery monitor does not report it as an unexpected stop.
+            mark_gui_connection_stopped(state);
+            saved?;
+            reconnect::Outcome::Disconnected {
+                error,
+                restore_error,
+                restored,
+            }
+        }
+    };
+    let _ = append_managed_log(
+        APP_LOG_SCOPE,
+        &format!("settings reconnect: {}", reconnect::log_label(&outcome)),
+    );
+    Ok(Reconnected {
+        outcome,
+        capture: report.capture,
+        language,
+    })
 }
 
 fn disable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult, String> {
     let mut managed = managed_config_or_default()?;
+    let previous = managed.clone();
     managed
         .native_mitm
         .take()
@@ -4991,8 +5307,12 @@ fn disable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult
     } else {
         managed.system_proxy = None;
     }
-    write_managed_config(&windows_managed_config_path(), &managed)
+    managed_config::write(&windows_managed_config_path(), &managed)
         .map_err(|error| error.to_string())?;
+    let result = reconnect_running_direct_core(&state, Some(managed_rollback(&state, previous)?))?
+        .result("HTTPS MITM disabled; the embedded engine is the system proxy again.")?;
+    // Only once decryption is off for good: removing the service-era root cannot be undone, so it waits until
+    // the engine runs without decryption (or none runs).
     let certificate_cleanup_error =
         if let Ok(mut runtime_state) = read_managed_state(&windows_managed_state_path()) {
             if let Some(thumbprint) = runtime_state.native_mitm_certificate_sha1.take() {
@@ -5010,13 +5330,10 @@ fn disable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult
         };
     // The root and its key stay, so turning decryption on again needs no new manual trust. The user
     // removes the root from Windows' certificate store when they stop using decryption.
-    reconnect_running_direct_core(&state)?;
     if let Some(error) = certificate_cleanup_error {
         return Err(error);
     }
-    Ok(OperationResult {
-        message: "HTTPS MITM disabled; the embedded engine is the system proxy again.".to_string(),
-    })
+    Ok(result)
 }
 
 /// The root and its key, generated on first use, with the key's ACL locked down.
@@ -5422,6 +5739,46 @@ mod tests {
         );
         // HTTPS decryption is left for the user to turn on.
         assert!(repaired.native_mitm.is_none());
+    }
+
+    /// What `enable_https_mitm_blocking` and a later profile import write: the window owns the proxy and
+    /// decryption is on. The kernel's own check refuses that combination, so turning decryption on always
+    /// failed with "enabled native HTTPS MITM requires service-owned system proxy lifecycle".
+    #[test]
+    fn turning_https_decryption_on_writes_a_valid_configuration() {
+        let mut managed = default_managed_config();
+        managed.native_mitm = Some(WindowsManagedNativeMitmConfig {
+            enabled: true,
+            listen_host: "127.0.0.1".to_string(),
+            listen_port: EMBEDDED_LISTEN_PORT,
+            upstream_socks_host: "127.0.0.1".to_string(),
+            upstream_socks_port: EMBEDDED_MITM_UPSTREAM_PORT,
+            ca_certificate_path: PathBuf::from(
+                r"C:\ProgramData\AnixOps\NetworkCore\mitm\root-ca.pem",
+            ),
+            ca_private_key_path: PathBuf::from(
+                r"C:\ProgramData\AnixOps\NetworkCore\mitm\root-ca-key.pem",
+            ),
+            log_path: PathBuf::from(r"C:\ProgramData\AnixOps\NetworkCore\logs\native-mitm.log"),
+            script_runtime: None,
+        });
+        // A service-era file keeps decryption on and the service as owner; importing makes the window the owner.
+        managed.system_proxy_owner = WindowsSystemProxyOwner::Service;
+        set_embedded_listener(
+            &mut managed,
+            PathBuf::from(r"C:\ProgramData\AnixOps\NetworkCore\embedded\envelope.json"),
+            true,
+        );
+        assert_eq!(managed.system_proxy_owner, WindowsSystemProxyOwner::Desktop);
+        assert!(
+            managed.validate().is_err(),
+            "the kernel check the client works around"
+        );
+        managed_config::validate(&managed).expect("desktop-owned decryption is valid");
+        assert_eq!(
+            managed.embedded.as_ref().unwrap().listen_port,
+            EMBEDDED_MITM_UPSTREAM_PORT
+        );
     }
 
     #[test]

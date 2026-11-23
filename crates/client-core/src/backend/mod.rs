@@ -309,6 +309,12 @@ pub struct Backend {
     /// The Wi-Fi rules (`on_demand_settings`); the platform samples the network (Android only).
     on_demand: OnDemandSettings,
     on_demand_watch: OnDemandWatch,
+    /// The key that seals saved capture sessions, handed over by the client when capture is turned on
+    /// ([`Backend::remember_capture_key`]), so a restart or a disconnect can save what capture holds without
+    /// asking the platform's key store while the backend is locked.
+    capture_key: Option<desktop_mitm::sessions::SessionKey>,
+    /// What the last restart said about capture (saved as a session, or why not), for the change's answer.
+    capture_note: Option<String>,
 }
 
 impl Backend {
@@ -370,6 +376,8 @@ impl Backend {
             disconnect_watch: DisconnectWatch::default(),
             on_demand: OnDemandSettings::default(),
             on_demand_watch: OnDemandWatch::default(),
+            capture_key: None,
+            capture_note: None,
         };
         backend.traffic = TrafficStats::load(&backend.traffic_path());
         backend.notifications = NotificationSettings::load(&backend.notifications_path());
@@ -680,23 +688,91 @@ impl Backend {
         self.state.preferences.https_decryption = enabled;
         self.save()?;
         let restarted = self.restart_if_running()?;
-        done(match (enabled, restarted) {
+        let message = match (enabled, restarted) {
             (true, true) => "HTTPS decryption is on",
             (true, false) => "HTTPS decryption is on; it starts with the next connection",
             (false, _) => "HTTPS decryption is off",
-        })
+        };
+        done(self.with_capture_note(message))
     }
 
-    /// Restarts a running engine after the plugin library changed, when it decrypts.
-    pub fn plugins_changed(&mut self) -> Result<&'static str, String> {
+    /// Restarts a running engine after the plugin library changed (plugins, mappings, the decryption list), when
+    /// it decrypts. The pinned kernel cannot swap the decryption policy of a running engine, so it restarts;
+    /// what capture holds is saved as a session first and capture carries on ([`Backend::restart_if_running`]).
+    pub fn plugins_changed(&mut self) -> Result<String, String> {
         if !self.state.preferences.https_decryption {
-            return Ok("turn on HTTPS decryption for it to take effect");
+            return Ok("turn on HTTPS decryption for it to take effect".to_string());
         }
-        Ok(if self.restart_if_running()? {
+        let message = if self.restart_if_running()? {
             "applied to the running connection"
         } else {
             "it applies with the next connection"
-        })
+        };
+        Ok(self.with_capture_note(message))
+    }
+
+    /// `message` with what the last restart said about capture, which is then forgotten.
+    fn with_capture_note(&mut self, message: &str) -> String {
+        match self.capture_note.take() {
+            Some(note) => format!("{message}. {note}"),
+            None => message.to_string(),
+        }
+    }
+
+    /// Keeps the capture session key for saving capture before the engine stops; the client hands it over when
+    /// capture is turned on.
+    pub fn remember_capture_key(&mut self, key: desktop_mitm::sessions::SessionKey) {
+        self.capture_key = Some(key);
+    }
+
+    /// Saves what live capture holds before the engine stops (`desktop_mitm::sessions::preserve`), named in the
+    /// window's language, and says what the next engine needs to carry on. Never fails: without the key (capture
+    /// was turned on by an older window, or the key store refused it) capture still carries on, unsaved.
+    fn preserve_capture(
+        &mut self,
+        reason: desktop_mitm::sessions::AutoSave,
+    ) -> desktop_mitm::sessions::CaptureCarry {
+        self.capture_note = None;
+        if !self.engine.is_running() {
+            return desktop_mitm::sessions::CaptureCarry::default();
+        }
+        let dir = self.capture_dir().join("sessions");
+        let key = self.capture_key.clone();
+        let language = self.notifications.language.clone();
+        let engine = &self.engine;
+        let carry = desktop_mitm::sessions::preserve(
+            // The backend's own requests (storage and key, capture status, save): past the window's list.
+            |request: &Value| engine.request(request),
+            &dir,
+            || key.ok_or_else(|| "the capture session key is not available".to_string()),
+            reason.name(&language),
+        );
+        if let Some(session) = carry.saved.as_deref() {
+            self.log(
+                LogLevel::Info,
+                &format!("capture saved as session {session} before the engine stopped"),
+            );
+        }
+        if let Some(error) = carry.save_error.as_deref() {
+            self.log(
+                LogLevel::Warn,
+                &format!("capture could not be saved before the engine stopped: {error}"),
+            );
+        }
+        self.capture_note = carry.note(reason, &language);
+        carry
+    }
+
+    /// Turns capture on again, with its budget, in the engine that started after a restart.
+    fn resume_capture(&self, carry: &desktop_mitm::sessions::CaptureCarry) {
+        if let Some(request) = carry.resume_request() {
+            if let Err(error) = self.engine.control(&request) {
+                self.log(
+                    LogLevel::Warn,
+                    &format!("capture could not be turned on again after a restart: {error}"),
+                );
+            }
+        }
     }
 
     pub fn store(&self) -> Store {
@@ -727,11 +803,15 @@ impl Backend {
     }
 
     /// Restarts a running engine so a changed choice takes effect. Returns whether it was running.
+    /// Capture only lives as long as the engine: what it holds is saved as a session first, and it is turned on
+    /// again, with the same budget, in the new engine.
     fn restart_if_running(&mut self) -> Result<bool, String> {
         if !self.engine.is_running() {
             return Ok(false);
         }
+        let capture = self.preserve_capture(desktop_mitm::sessions::AutoSave::Reconnect);
         self.launch()?;
+        self.resume_capture(&capture);
         Ok(true)
     }
 
@@ -1575,17 +1655,21 @@ impl Backend {
     /// Stops the engine without touching the saved state or the last error; on Android this also lets go of
     /// the VPN's TUN descriptor.
     pub fn stop_engine(&mut self) {
+        // Android's VPN went away (revoked, or another VPN took over): what capture holds is kept as a session.
+        let _ = self.preserve_capture(desktop_mitm::sessions::AutoSave::Disconnect);
         self.engine.stop();
     }
 
     pub fn disconnect(&mut self) -> Result<OperationResult, String> {
+        // Capture lives only as long as the engine: what it holds is kept as a session, as on iOS and macOS.
+        let _ = self.preserve_capture(desktop_mitm::sessions::AutoSave::Disconnect);
         self.engine.stop();
         self.disconnect_watch.disconnected();
         self.last_error = None;
         self.log(LogLevel::Info, "Disconnected");
         // A failure stays the last error, which the window shows; the engine is stopped either way.
         let _ = self.restore_proxy();
-        done("Disconnected")
+        done(self.with_capture_note("Disconnected"))
     }
 
     /// Puts the desktop's proxy settings back from the backup and forgets it once that is on disk. A failure is
@@ -1736,6 +1820,7 @@ impl Backend {
     /// Stops the engine and puts the proxy settings back; called when the window closes.
     pub fn shutdown(&mut self) {
         self.save_traffic();
+        let _ = self.preserve_capture(desktop_mitm::sessions::AutoSave::Disconnect);
         self.engine.stop();
         let _ = self.restore_proxy();
     }
@@ -2516,6 +2601,57 @@ mod tests {
         backend.set_https_decryption(false).unwrap();
         assert!(!backend.envelope().unwrap().contains("\"mitm\""));
         assert!(backend.mitm_root().exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A changed setting restarts the engine, and a new engine starts with capture off and the small default
+    /// budget. Capture carries over: it is on again in the new engine with the budget it had.
+    #[test]
+    fn a_restart_keeps_capture_on_with_its_budget() {
+        use desktop_mitm::sessions::{
+            storage_request, Protection, SessionKey, DESKTOP_CAPTURE_BUDGET,
+        };
+        use serde_json::json;
+
+        let (mut backend, dir) = backend("capture-restart");
+        backend.set_direct_egress(true).unwrap();
+        // Any free port: tests run side by side.
+        backend.state.listen_port = 0;
+        backend
+            .connect()
+            .expect("the engine starts on the node-less profile");
+        let status = backend
+            .runtime_control(&json!({
+                "cmd": "set_capture", "enabled": true, "max_total_bytes": DESKTOP_CAPTURE_BUDGET
+            }))
+            .unwrap();
+        assert_eq!(status["enabled"], true);
+        assert_eq!(status["max_total_bytes"], DESKTOP_CAPTURE_BUDGET);
+        backend.remember_capture_key(SessionKey::new(&[9u8; 32], Protection::File).unwrap());
+
+        backend.set_https_decryption(true).unwrap();
+        let status = backend
+            .runtime_control(&json!({ "cmd": "capture" }))
+            .unwrap();
+        assert_eq!(
+            status["enabled"], true,
+            "capture is on again after the restart"
+        );
+        assert_eq!(status["max_total_bytes"], DESKTOP_CAPTURE_BUDGET);
+        assert_eq!(status["connections"], 0, "a new engine holds nothing yet");
+
+        // Session commands go through the backend's own path; the window's list refuses them.
+        let key = SessionKey::new(&[9u8; 32], Protection::File).unwrap();
+        let storage = storage_request(&backend.capture_dir().join("sessions"), &key);
+        assert!(backend.runtime_control(&storage).is_err());
+        backend.engine_request(&storage).unwrap();
+        let sessions = backend
+            .engine_request(&json!({ "cmd": "capture_sessions" }))
+            .unwrap();
+        assert!(sessions["sessions"].is_array(), "{sessions}");
+
+        backend.disconnect().unwrap();
+        assert!(!backend.engine.is_running());
         let _ = std::fs::remove_dir_all(dir);
     }
 
