@@ -53,6 +53,11 @@ function Assert-Installed {
   if ($registered.StartMode -ne "Auto") { throw "The service starts '$($registered.StartMode)', not with Windows." }
   if ($registered.StartName -ne "LocalSystem") { throw "The service runs as $($registered.StartName)." }
   if ($registered.PathName.Trim('"') -ne $service) { throw "The service runs $($registered.PathName)." }
+  # Restarted when it fails, also when it stops itself with an error code rather than crashing.
+  $failure = (& sc.exe qfailure $serviceName) -join "`n"
+  if ($failure -notmatch "RESTART") { throw "The service is not restarted when it fails: $failure" }
+  $failureFlag = (& sc.exe qfailureflag $serviceName) -join "`n"
+  if ($failureFlag -notmatch "FAILURE_ACTIONS_ON_NONCRASH_FAILURES\s*:\s*TRUE") { throw "The service is not restarted after a non-crash failure: $failureFlag" }
   foreach ($file in @($window, $service, $shortcut, (Join-Path $installDir "wintun.dll"), (Join-Path $installDir "wintun-LICENSE.txt"))) {
     if (-not (Test-Path $file -PathType Leaf)) { throw "$file is not there." }
   }

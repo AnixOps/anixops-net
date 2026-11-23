@@ -30,8 +30,8 @@ use windows_sys::Win32::Storage::FileSystem::{
     OPEN_EXISTING, PIPE_ACCESS_DUPLEX, SECURITY_IDENTIFICATION, SECURITY_SQOS_PRESENT,
 };
 use windows_sys::Win32::System::Pipes::{
-    ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS,
-    PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
+    ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, PIPE_READMODE_BYTE,
+    PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
 };
 use windows_sys::Win32::System::Threading::{CreateEventW, GetCurrentProcess, OpenProcessToken};
 use windows_sys::Win32::System::IO::{GetOverlappedResult, OVERLAPPED};
@@ -257,20 +257,40 @@ impl Listener {
     pub fn accept(&self) -> io::Result<Stream> {
         let mut waiting = self.waiting.lock().unwrap_or_else(PoisonError::into_inner);
         let ready = event()?;
-        let pipe = waiting.0;
-        let connected = overlapped(pipe, &ready, |state| {
-            // SAFETY: `pipe` is an instance of this listener's pipe and `state` lives until the operation
-            // has finished, which `overlapped` waits for.
-            unsafe { ConnectNamedPipe(pipe, state) }
-        });
-        match connected {
-            // A window that connected between two calls is reported as already there.
-            Ok(_) | Err(ERROR_PIPE_CONNECTED) => {}
-            Err(code) => return Err(os_error(code)),
+        loop {
+            let pipe = waiting.0;
+            let connected = overlapped(pipe, &ready, |state| {
+                // SAFETY: `pipe` is an instance of this listener's pipe and `state` lives until the
+                // operation has finished, which `overlapped` waits for.
+                unsafe { ConnectNamedPipe(pipe, state) }
+            });
+            match connected {
+                // A window that connected between two calls is reported as already there.
+                Ok(_) | Err(ERROR_PIPE_CONNECTED) => break,
+                // A window connected and closed again before it was accepted (a probe, or anyone opening
+                // and closing the pipe in a loop): the instance is closing. It is made ready again and the
+                // next window waited for; this is not a failure of the listener.
+                Err(ERROR_NO_DATA) => self.recycle(&mut waiting)?,
+                Err(code) => return Err(os_error(code)),
+            }
         }
         let next = instance(&self.name, &self.security, false)?;
         let connected = std::mem::replace(&mut *waiting, next);
         Stream::new(Arc::new(connected))
+    }
+
+    /// Makes the instance a window left closing listen again. When it cannot be, a new instance takes its
+    /// place, made before the old one is closed: without an instance the name would be free for a moment,
+    /// and later instances do not have the "first instance" flag that would notice someone taking it.
+    fn recycle(&self, waiting: &mut Owned) -> io::Result<()> {
+        // SAFETY: `waiting` is an open instance of this listener's pipe, not in use by any operation.
+        if unsafe { DisconnectNamedPipe(waiting.0) } != 0 {
+            return Ok(());
+        }
+        let fresh = instance(&self.name, &self.security, false)?;
+        // The old instance is closed when it is dropped here.
+        drop(std::mem::replace(waiting, fresh));
+        Ok(())
     }
 }
 
