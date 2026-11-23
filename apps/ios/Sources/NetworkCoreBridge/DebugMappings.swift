@@ -273,6 +273,18 @@ public struct DebugMappings: Codable, Equatable, Sendable {
         entries.filter { $0.enabled && (try? $0.validate()) != nil }
     }
 
+    /// The patterns the generated plugin decrypts: the hosts of the entries that are on, then the list's lines that
+    /// are on, without repeats and without the exclusions. Empty when the plugin decrypts nothing, for example when
+    /// only exclusions are on (`DecryptionConsent`).
+    public var decryptedPatterns: [String] {
+        let excluded = excludedHosts
+        var items: [String] = []
+        for host in active.compactMap(\.host) + hosts where !items.contains(host) && !excluded.contains(host) {
+            items.append(host)
+        }
+        return items
+    }
+
     /// The generated plugin, or nil when no entry is on and no list line is on.
     public var pluginText: String? {
         let active = active
@@ -293,10 +305,7 @@ public struct DebugMappings: Codable, Equatable, Sendable {
             lines.append("[Map Local]")
             lines.append(contentsOf: local.map(\.line))
         }
-        var items: [String] = []
-        for host in active.compactMap(\.host) + hosts where !items.contains(host) && !excluded.contains(host) {
-            items.append(host)
-        }
+        var items = decryptedPatterns
         items += excluded.map { "-" + $0 }
         if !items.isEmpty {
             lines.append("")

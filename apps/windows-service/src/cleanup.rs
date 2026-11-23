@@ -12,8 +12,12 @@
 //! The service has stopped by then and, while stopping, has had the open window put the user's proxy
 //! settings back; only after that are the windows ended.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
+
+use windows_data::trusted_roots::{
+    remove_from_users, signed_in_users, system_program, thumbprints, LIST_FILE,
+};
 
 /// The window's program, as the installer names it.
 pub const WINDOW_PROGRAM: &str = "AnixOpsNet.exe";
@@ -23,9 +27,6 @@ pub const LOGIN_VALUE: &str = "AnixOpsNet";
 
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 
-/// Where Windows keeps a user's own trusted roots, one key per certificate, named by its thumbprint.
-const USER_ROOTS_KEY: &str = r"Software\Microsoft\SystemCertificates\Root\Certificates";
-
 /// What the installer asks for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Cleanup {
@@ -33,30 +34,6 @@ pub enum Cleanup {
     CloseWindows,
     /// End the open windows and remove what the client left in the users' settings.
     Purge,
-}
-
-fn system_program(name: &str) -> PathBuf {
-    std::env::var_os("SystemRoot")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(r"C:\Windows"))
-        .join("System32")
-        .join(name)
-}
-
-/// The settings of the users signed in at the machine, out of `reg query HKU`'s lines: one key per user,
-/// without the system's own accounts and the keys that only hold file associations.
-pub fn user_hives(listing: &str) -> Vec<String> {
-    listing
-        .lines()
-        .map(str::trim)
-        .filter(|line| {
-            let name = line.rsplit('\\').next().unwrap_or_default();
-            // Accounts of people (local and domain) and of Entra ID; S-1-5-18 and its like are the system's.
-            (name.starts_with("S-1-5-21-") || name.starts_with("S-1-12-1-"))
-                && !name.ends_with("_Classes")
-        })
-        .map(str::to_string)
-        .collect()
 }
 
 /// Whether `reg query`'s output for the login value starts a window installed in `folder`. An entry for
@@ -71,16 +48,6 @@ pub fn starts_window_in(output: &str, folder: &Path) -> bool {
             folder.trim_end_matches('\\'),
             WINDOW_PROGRAM.to_lowercase()
         ))
-}
-
-/// The thumbprints in the core's list of roots that users trusted (`client_core::backend::trusted_roots_path`):
-/// only lines that are a thumbprint, since each becomes part of a registry key's name.
-pub fn thumbprints(list: &str) -> Vec<String> {
-    list.lines()
-        .map(str::trim)
-        .filter(|line| line.len() == 40 && line.chars().all(|digit| digit.is_ascii_hexdigit()))
-        .map(str::to_ascii_uppercase)
-        .collect()
 }
 
 fn close_windows(problems: &mut Vec<String>) {
@@ -98,58 +65,15 @@ fn close_windows(problems: &mut Vec<String>) {
     }
 }
 
-/// The settings of the users signed in now, as `reg` names them.
-fn signed_in_users(problems: &mut Vec<String>) -> Vec<String> {
-    match Command::new(system_program("reg.exe"))
-        .args(["query", "HKU"])
-        .output()
-    {
-        Ok(output) if output.status.success() => {
-            user_hives(&String::from_utf8_lossy(&output.stdout))
-        }
-        Ok(output) => {
-            problems.push(format!(
-                "the users' settings could not be listed: {}",
-                String::from_utf8_lossy(&output.stderr).trim()
-            ));
-            Vec::new()
-        }
-        Err(error) => {
-            problems.push(format!("reg could not be run: {error}"));
-            Vec::new()
-        }
-    }
-}
-
-/// Takes the HTTPS decryption roots that users trusted out of the signed-in users' own certificate stores.
-/// Deleting needs no confirmation from the user, unlike adding. A user who is not signed in keeps the
-/// root; its key stays in the client's data folder, which is closed to ordinary users.
+/// Takes the HTTPS decryption roots that users trusted out of the signed-in users' own certificate stores
+/// (`windows_data::trusted_roots`). A user who is not signed in keeps the root; its key stays in the
+/// client's data folder, which is closed to ordinary users.
 fn remove_trusted_roots(users: &[String], data: &Path, problems: &mut Vec<String>) {
-    let Ok(list) = std::fs::read_to_string(data.join("trusted-roots.txt")) else {
+    let Ok(list) = std::fs::read_to_string(data.join(LIST_FILE)) else {
         // Nobody trusted a root.
         return;
     };
-    let reg = system_program("reg.exe");
-    for thumbprint in thumbprints(&list) {
-        for hive in users {
-            let key = format!(r"{hive}\{USER_ROOTS_KEY}\{thumbprint}");
-            // A user who never trusted it is the usual case and not a problem.
-            let Ok(found) = Command::new(&reg).args(["query", &key]).output() else {
-                continue;
-            };
-            if !found.status.success() {
-                continue;
-            }
-            match Command::new(&reg).args(["delete", &key, "/f"]).output() {
-                Ok(output) if output.status.success() => {}
-                Ok(output) => problems.push(format!(
-                    "the root certificate under {hive} could not be removed: {}",
-                    String::from_utf8_lossy(&output.stderr).trim()
-                )),
-                Err(error) => problems.push(format!("reg could not be run: {error}")),
-            }
-        }
-    }
+    remove_from_users(users, &thumbprints(&list), problems);
 }
 
 fn remove_login_entries(users: &[String], folder: &Path, problems: &mut Vec<String>) {
@@ -273,37 +197,6 @@ pub fn run(cleanup: Cleanup, data: &Path) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn only_the_settings_of_signed_in_people_are_touched() {
-        let listing =
-            "\r\nHKEY_USERS\\.DEFAULT\r\nHKEY_USERS\\S-1-5-19\r\nHKEY_USERS\\S-1-5-20\r\n\
-            HKEY_USERS\\S-1-5-21-1004336348-1177238915-682003330-1001\r\n\
-            HKEY_USERS\\S-1-5-21-1004336348-1177238915-682003330-1001_Classes\r\n\
-            HKEY_USERS\\S-1-12-1-123456789-1234567890-123456789-1234567890\r\n\
-            HKEY_USERS\\S-1-5-18\r\n";
-        assert_eq!(
-            user_hives(listing),
-            [
-                r"HKEY_USERS\S-1-5-21-1004336348-1177238915-682003330-1001",
-                r"HKEY_USERS\S-1-12-1-123456789-1234567890-123456789-1234567890",
-            ]
-        );
-        assert!(user_hives("").is_empty());
-    }
-
-    #[test]
-    fn only_thumbprints_become_registry_key_names() {
-        let list = "0123456789ABCDEF0123456789abcdef01234567\r\n\r\n..\\..\\Run\nABC\n             FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF \n0123456789ABCDEF0123456789ABCDEF0123456G\n";
-        assert_eq!(
-            thumbprints(list),
-            [
-                "0123456789ABCDEF0123456789ABCDEF01234567",
-                "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
-            ]
-        );
-        assert!(thumbprints("").is_empty());
-    }
 
     #[test]
     fn only_this_installations_login_entry_is_removed() {

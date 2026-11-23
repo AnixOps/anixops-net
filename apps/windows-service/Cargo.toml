@@ -12,6 +12,7 @@ client-core = { path = "../../crates/client-core" }
 client-ipc = { path = "../../crates/client-ipc" }
 client-service = { path = "../../crates/client-service" }
 platform-windows = { workspace = true }
+windows-data = { path = "../../crates/windows-data" }
 windows-sys = { version = "0.61.2", features = [
     "Win32_Foundation",
     "Win32_Security",

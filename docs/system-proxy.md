@@ -25,7 +25,7 @@ iOS 不提供“仅系统代理”：VPN 不带路由时，不遵守代理设置
 ## 实现
 
 - 内核：`networkcore_anixops` 的 `engine-embedded::system_proxy`，控制命令 `start_system_proxy`（首选端口 8890，被占用时自动换空闲端口并在回答里报告）、`system_proxy`、`stop_system_proxy`。监听只绑 `127.0.0.1`、不要凭据（能连上它的程序本来也能把同一条连接送进 VPN）。
-- 隧道（`PacketTunnelProvider`）：建好内核会话后、应用接口设置前先开监听，拿到端口写进 `NEProxySettings`（HTTP 和 HTTPS 都指向它，`matchDomains = [""]` 对所有域名生效，`excludeSimpleHostnames = true`），再启动隧道。内核拒绝（整机 WireGuard 隧道没有分发器）时不设代理；macOS 的“仅系统代理”此时退回 VPN 接管，诊断事件会记一条。
+- 隧道（`PacketTunnelProvider`）：建好内核会话后、应用接口设置前先开监听，拿到端口写进 `NEProxySettings`（HTTP 和 HTTPS 都指向它，`matchDomains = [""]` 对所有域名生效，`excludeSimpleHostnames = true`），再启动隧道。内核拒绝（粘贴的 WireGuard 配置作整机隧道时没有分发器）时不设代理；macOS 的“仅系统代理”此时退回 VPN 接管，诊断事件会记一条。
 - 配置：App 的 UserDefaults 保存选择（`networkcore.takeover`、`networkcore.proxy-exceptions`），隧道配置里带一份（`TunnelProfileKeys.takeover`、`TunnelProfileKeys.proxyExceptions`）。
 
 ## 跳过代理的地址
@@ -58,7 +58,8 @@ fe80::/10
 
 - IPv4 转发（`net.inet.ip.forwarding`）：隧道连接后尝试打开、断开时关掉自己打开的；系统扩展在沙盒里，系统不允许时，
   设置页显示状态和命令 `sudo sysctl -w net.inet.ip.forwarding=1`（可复制，重启 Mac 后失效）。
-- 只支持 IPv4。单个 WireGuard 节点的整机隧道把包原样封给对端，对端不会回送局域网设备的地址，不支持。
+- 只支持 IPv4。粘贴的 WireGuard 配置（`wg-quick`）作整机隧道时把包原样封给对端，对端不会回送局域网设备的地址，不支持；
+  订阅或 `wireguard://` 链接导入的 WireGuard 节点在内核的用户态协议栈里运行，不受这一限制。
 - 设置页会列出本机的私有 IPv4 地址（`en*` 优先）作为设备要填的路由器地址。
 
 ## 已知限制

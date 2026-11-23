@@ -35,14 +35,6 @@ struct PluginsSection: View {
                 set: { enabled in Task { await model.setMasterEnabled(enabled, tunnel: tunnel) } }
             ))
             .listRowBackground(brand.surface)
-            .alert("开启 HTTPS 解密前请确认", isPresented: $model.asksDecryptionConsent) {
-                Button("取消", role: .cancel) {}
-                Button("我确认，开启") {
-                    Task { await model.confirmDecryption(tunnel: tunnel) }
-                }
-            } message: {
-                Text("只解密你自己设备上的流量，或你有权调试的应用、设备和网络的流量；不抓取、不解密别人的流量。解密后的内容可能含有密码和个人信息，只保存在本机，导出或分享前请先脱敏。详见用户协议第 4 节。")
-            }
 
             ForEach(model.library.plugins) { plugin in
                 PluginRow(plugin: plugin) { enabled in
@@ -256,8 +248,6 @@ final class PluginsModel: ObservableObject {
     @Published private(set) var trustState = MitmTrustState.notGenerated
     @Published private(set) var note: String?
     @Published private(set) var isDownloading = false
-    /// Shows the one-time confirmation before HTTPS decryption is turned on for the first time.
-    @Published var asksDecryptionConsent = false
 
     func load() {
         do {
@@ -307,8 +297,8 @@ final class PluginsModel: ObservableObject {
     }
 
     func setMasterEnabled(_ enabled: Bool, tunnel: TunnelController) async {
-        if enabled, DecryptionConsent.needsConsent(accepted: UserDefaults.standard.string(forKey: DecryptionConsent.storageKey)) {
-            asksDecryptionConsent = true
+        // The first time, the HTTPS decryption terms are confirmed first (the root view's alert).
+        if enabled, !(await tunnel.requireDecryptionConsent()) {
             return
         }
         if enabled {
@@ -324,13 +314,6 @@ final class PluginsModel: ObservableObject {
         if enabled {
             await fetchMissingResources(tunnel: tunnel)
         }
-    }
-
-    /// The person confirmed the HTTPS decryption terms: remember it and turn decryption on.
-    func confirmDecryption(tunnel: TunnelController) async {
-        UserDefaults.standard.set(TermsConsent.version, forKey: DecryptionConsent.storageKey)
-        asksDecryptionConsent = false
-        await setMasterEnabled(true, tunnel: tunnel)
     }
 
     func setEnabled(_ enabled: Bool, for id: UUID, tunnel: TunnelController) async {
@@ -532,5 +515,66 @@ final class PluginsModel: ObservableObject {
         default:
             return String(localized: "导入失败")
         }
+    }
+}
+
+/// The confirmation asked the first time HTTPS decryption starts (`DecryptionConsent`, TERMS.md section 4), for every
+/// way of starting it (`TunnelController.requireDecryptionConsent()`). The root view carries it (`RootView`,
+/// `MacRootView`); an editor sheet carries it too (`inSheet`), because an alert cannot show behind a sheet.
+private struct DecryptionConsentAlert: ViewModifier {
+    var tunnel: TunnelController
+    var inSheet: Bool
+    @State private var id = UUID()
+
+    private var presented: Bool {
+        guard tunnel.asksDecryptionConsent else {
+            return false
+        }
+        return inSheet ? tunnel.decryptionConsentSheets.last == id : tunnel.decryptionConsentSheets.isEmpty
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear {
+                if inSheet {
+                    tunnel.addDecryptionConsentSheet(id)
+                }
+            }
+            .onDisappear {
+                if inSheet {
+                    tunnel.removeDecryptionConsentSheet(id)
+                }
+            }
+            .alert(
+                "开启 HTTPS 解密前请确认",
+                isPresented: Binding(
+                    get: { presented },
+                    set: { shown in
+                        // The buttons answer. Any other way the alert goes away counts as cancelling; it runs after
+                        // the button's own answer, which then wins (`answerDecryptionConsent` takes only the first).
+                        if !shown {
+                            Task { @MainActor in
+                                tunnel.answerDecryptionConsent(false)
+                            }
+                        }
+                    }
+                )
+            ) {
+                Button("取消", role: .cancel) {
+                    tunnel.answerDecryptionConsent(false)
+                }
+                Button("我确认，开启") {
+                    tunnel.answerDecryptionConsent(true)
+                }
+            } message: {
+                Text("只解密你自己设备上的流量，或你有权调试的应用、设备和网络的流量；不抓取、不解密别人的流量。解密后的内容可能含有密码和个人信息，只保存在本机，导出或分享前请先脱敏。详见用户协议第 4 节。")
+            }
+    }
+}
+
+extension View {
+    /// Shows the HTTPS decryption confirmation when an action asks for it (`DecryptionConsentAlert`).
+    func decryptionConsentAlert(_ tunnel: TunnelController, inSheet: Bool = false) -> some View {
+        modifier(DecryptionConsentAlert(tunnel: tunnel, inSheet: inSheet))
     }
 }

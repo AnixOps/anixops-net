@@ -189,8 +189,9 @@ extension TunnelProfile {
 
     /// The profile that runs one imported node; a node with a `via` must be `standalone(among:)` first.
     public init(node: NativeImportReport.Node, profileID: String) throws {
-        // Shadowsocks and VLESS + REALITY land in their own cases, so their secrets are split as for pasted links;
-        // everything else becomes a native outbound.
+        // A Shadowsocks or VLESS + REALITY node with just the fields of its own case lands in it, so its secrets are
+        // split as for pasted links; everything else becomes a native outbound, kept whole, including such a node with
+        // a `via`, a transport or multiplexing and every WireGuard node (`EmbeddedRuntimeConfig.Outbound`).
         let outbound = try JSONDecoder().decode(
             EmbeddedRuntimeConfig.Outbound.self,
             from: JSONEncoder().encode(node.outbound)

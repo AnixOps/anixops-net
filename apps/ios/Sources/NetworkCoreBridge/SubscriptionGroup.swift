@@ -278,6 +278,23 @@ public struct SubscriptionGroups: Codable, Equatable {
         groups.filter { $0.isDue(at: date) }
     }
 
+    /// The groups with the active group's rules switch following `mode`, the mode the saved tunnel profile runs in;
+    /// nil when nothing changes. The app's mode switch sets both together; Shortcuts and Control Center change only
+    /// the profile, and the next profile the app saves (another node, a refresh) would otherwise put the old mode
+    /// back. The direct mode leaves the switch as it is, and so does a group without subscription rules or a single
+    /// pasted node (no active group).
+    public func followingSavedMode(_ mode: ProxyMode) -> SubscriptionGroups? {
+        guard mode != .direct, var group = active, group.library.routing != nil,
+              group.library.followsRules != (mode == .rule)
+        else {
+            return nil
+        }
+        group.library.followsRules = mode == .rule
+        var next = self
+        next.upsert(group)
+        return next
+    }
+
     /// The earliest automatic update of any group, for scheduling a background refresh.
     public var nextUpdate: Date? {
         groups.compactMap(\.nextUpdate).min()

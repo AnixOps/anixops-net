@@ -38,6 +38,12 @@ public enum TermsConsent {
 
 /// The extra confirmation the first time someone turns HTTPS decryption on (TERMS.md section 4: capture and decrypt
 /// only traffic you are entitled to see). Asked once per installation, on iOS and macOS alike.
+///
+/// Every way of starting decryption goes through it: the plugins' master switch, and every change of the debug
+/// mappings that decrypts a domain the saved mappings did not (a line added to the decryption list, a paused line
+/// turned on, an exclusion turned into a decrypted line, a Map Local / Map Remote entry saved or turned on, "解密此域名").
+/// The app asks before it saves such a change (`isRequired(from:to:accepted:)`), and as a fallback the tunnel profile
+/// never carries a mappings plugin that decrypts until it has been confirmed (`profilePlugin(for:accepted:)`).
 public enum DecryptionConsent {
     /// The `UserDefaults` key that holds the terms version in force when it was confirmed.
     public static let storageKey = "https-decryption-consent-version"
@@ -45,5 +51,28 @@ public enum DecryptionConsent {
     /// True until someone has confirmed once.
     public static func needsConsent(accepted: String?) -> Bool {
         accepted?.isEmpty ?? true
+    }
+
+    /// Whether saving `next` over `current` has to wait for the confirmation: it was never given, and `next` decrypts
+    /// a pattern `current` does not. Removing, pausing or excluding a line, turning a mapping off and adding only
+    /// exclusions decrypt nothing new and go ahead.
+    public static func isRequired(from current: DebugMappings, to next: DebugMappings, accepted: String?) -> Bool {
+        guard needsConsent(accepted: accepted) else {
+            return false
+        }
+        return !Set(next.decryptedPatterns).subtracting(current.decryptedPatterns).isEmpty
+    }
+
+    /// The debug mappings' plugin as the tunnel profile may carry it: `mappings.pluginText`, except that a plugin
+    /// that decrypts any domain is left out until the confirmation was given. A plugin that only excludes domains
+    /// decrypts nothing and stays.
+    public static func profilePlugin(for mappings: DebugMappings, accepted: String?) -> String? {
+        guard let text = mappings.pluginText else {
+            return nil
+        }
+        if needsConsent(accepted: accepted), !mappings.decryptedPatterns.isEmpty {
+            return nil
+        }
+        return text
     }
 }

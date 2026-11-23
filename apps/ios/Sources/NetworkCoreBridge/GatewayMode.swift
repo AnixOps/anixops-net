@@ -9,10 +9,10 @@ import Foundation
 /// DNS to `dnsServer` (inside the tunnel's subnet) is answered by the engine; every UDP query to port 53 is.
 ///
 /// It needs a mode that routes traffic through the tunnel (`TrafficTakeover.routesTraffic`) and the userspace
-/// stack: a single WireGuard node seals packets straight to its peer, which would not route the device's
-/// addresses back. The app keeps the choice in its own defaults and carries a copy in the tunnel profile
-/// (`TunnelProfileKeys.gateway`). The tunnel turns IPv4 forwarding on when the system lets it and back off when it
-/// stops; otherwise the user runs `forwardingCommand` once.
+/// stack: a pasted WireGuard config, the whole-device tunnel, seals packets straight to its peer, which would not
+/// route the device's addresses back. The app keeps the choice in its own defaults and carries a copy in the tunnel
+/// profile (`TunnelProfileKeys.gateway`). The tunnel turns IPv4 forwarding on when the system lets it and back off
+/// when it stops; otherwise the user runs `forwardingCommand` once.
 public enum GatewayMode {
     public static let storageKey = "networkcore.gateway"
     /// The tunnel's DNS address (`TunnelInterface.proxy`), what the device enters as its DNS server.

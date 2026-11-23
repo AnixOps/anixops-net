@@ -8,3 +8,6 @@ description = "This device's ANX license: the device key, the subscription heade
 
 [dependencies]
 ring = "0.17"
+
+[target.'cfg(windows)'.dependencies]
+windows-data = { path = "../windows-data" }

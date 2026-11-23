@@ -14359,6 +14359,38 @@
         }
       }
     },
+    "向订阅服务商报告连接质量": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report connection quality to subscription provider"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向訂閱服務商回報連線品質"
+          }
+        }
+      }
+    },
+    "开启后，App 打开且已连接时，约每小时把 ANX 节点的连接计数发给提供这些节点的订阅服务商：发往订阅链接去掉参数和扩展名后加 /report 的地址，链接里的令牌随之发出，服务商能据此对应到你的账号。内容为 App 版本、平台、网络类型（Wi-Fi、蜂窝、有线）、统计时长，以及每个节点的名称、服务器地址和端口、协议、成功和各类失败次数、是否因被拒而暂停、时间偏差；不含你访问的网址。默认关闭，关闭时删除保存的计数。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When on, while the app is open and connected, about once an hour the app sends the connection counts of ANX nodes to the subscription provider that supplied them: to the subscription link without its query and extension, plus /report. The token in the link goes with it, so the provider can match the report to your account. It contains the app version, platform, network type (Wi-Fi, cellular, wired), the period covered, and for each node its name, server address and port, protocol, success and failure counts, whether it was paused after rejections, and clock offset; never the sites you visit. Off by default; turning it off deletes the saved counts."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開啟後，App 開啟且已連線時，約每小時把 ANX 節點的連線計數傳給提供這些節點的訂閱服務商：傳往訂閱連結去掉參數和副檔名後加 /report 的位址，連結裡的權杖隨之送出，服務商能據此對應到你的帳號。內容為 App 版本、平台、網路類型（Wi-Fi、行動網路、有線）、統計時長，以及每個節點的名稱、伺服器位址和連接埠、協定、成功和各類失敗次數、是否因被拒而暫停、時間偏差；不含你造訪的網址。預設關閉，關閉時刪除儲存的計數。"
+          }
+        }
+      }
+    },
     "消息 %lld · %lld 字节": {
       "localizations": {
         "en": {

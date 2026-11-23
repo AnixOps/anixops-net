@@ -28,6 +28,8 @@ final class ClientHealthMonitor: NSObject, MXMetricManagerSubscriber, @unchecked
             return
         }
         started = true
+        // The panel report became an opt-in setting; drop what an earlier version kept while it reported unasked.
+        ClientReportStore().forgetIfDisabled()
         MXMetricManager.shared.add(self)
         NSSetUncaughtExceptionHandler { exception in
             ClientHealthMonitor.shared.crashReports.write(CrashReportStore.exceptionReport(

@@ -123,14 +123,20 @@ struct HttpExchangeView: View {
         .sheet(item: $mapping) { draft in
             MappingEditor(draft: draft) { entry in
                 let next = try tunnel.debugMappings.saving(entry)
+                // Asked while the sheet is still open, so the confirmation shows over it.
+                guard await tunnel.allowsDecryption(of: next) else {
+                    return false
+                }
                 Task {
                     await tunnel.applyDebugMappings(next)
                 }
+                return true
             }
             .formSheetFrame()
             .brandSheet()
             .environment(\.brand, brand)
             .tint(brand.primary)
+            .decryptionConsentAlert(tunnel, inSheet: true)
         }
     }
 

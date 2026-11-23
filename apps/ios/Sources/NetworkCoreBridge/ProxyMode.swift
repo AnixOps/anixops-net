@@ -18,4 +18,19 @@ public enum ProxyMode: String, Codable, CaseIterable, Identifiable, Sendable {
         }
         return providerConfiguration?[TunnelProfileKeys.routing] as? Bool == true ? .rule : .global
     }
+
+    /// The mode a newly saved tunnel profile (another node, a refreshed subscription) starts in. `current` is the
+    /// mode saved now, read from the system settings right before the save, so a mode Shortcuts or Control Center
+    /// picked carries over. The direct mode and the node-less profile run direct; a profile that follows the
+    /// subscription's rules runs by them; a node list without subscription rules keeps the rule mode of its local
+    /// rules (`localRuleList`); anything else runs global.
+    public static func forNewProfile(current: ProxyMode, routed: Bool, direct: Bool, localRuleList: Bool) -> ProxyMode {
+        if current == .direct || direct {
+            return .direct
+        }
+        if routed || (current == .rule && localRuleList) {
+            return .rule
+        }
+        return .global
+    }
 }

@@ -1,55 +1,39 @@
 import Foundation
 import NetworkCoreBridge
 
-/// Sends the engine's per-node dial counts to the panel about once an hour (`ClientReport`), straight from
-/// the app rather than through the tunnel, so a node that is blocked still gets reported. Counts only, never
-/// destinations; only ANX nodes from our own panel. Runs while the app polls the dashboard.
+/// Sends the engine's per-node dial counts to the panel of the subscription about once an hour (`ClientReport`),
+/// only after the user turned "report connection quality" on in Settings (`ClientReportStore`, off by default).
+/// Counts only, never destinations; only ANX nodes. Runs while the app polls the dashboard. A reporter belongs to
+/// one setting: the controller retires it when the user changes the setting and makes a new one.
 @MainActor
 final class ClientReporter {
-    private static let snapshotKey = "client-report-snapshot"
-    private static let lastReportKey = "client-report-last"
-
     private let session: URLSession
-    private let defaults: UserDefaults
-    /// Counts per engine node at the last report.
-    private var snapshot: [String: OutboundHealth.Counts]
-    private var lastReport: Date?
-    private var nextReport: Date
+    private let planner: ClientReportPlanner
     private var sending = false
+    private var retired = false
 
-    init(session: URLSession = .shared, defaults: UserDefaults = .standard) {
+    init(session: URLSession = .shared, store: ClientReportStore = ClientReportStore()) {
         self.session = session
-        self.defaults = defaults
-        snapshot = defaults.data(forKey: Self.snapshotKey)
-            .flatMap { try? JSONDecoder().decode([String: OutboundHealth.Counts].self, from: $0) } ?? [:]
-        let last = defaults.object(forKey: Self.lastReportKey) as? Date
-        lastReport = last
-        nextReport = (last ?? Date()).addingTimeInterval(Self.randomInterval())
+        planner = ClientReportPlanner(store: store)
     }
 
-    private static func randomInterval() -> TimeInterval {
-        TimeInterval.random(in: ClientReport.interval)
+    /// Stops this reporter: a report in flight no longer moves the saved baseline.
+    func retire() {
+        retired = true
     }
 
     /// Reports when due. `network` is `wifi`, `cellular`, `ethernet` or `other`.
     func offer(_ health: OutboundHealth, groups: SubscriptionGroups, network: String, now: Date = Date()) {
-        guard !sending, now >= nextReport, !health.outbounds.isEmpty else {
+        guard !sending, !retired else {
             return
         }
-        let window = lastReport.map { now.timeIntervalSince($0) } ?? ClientReport.interval.lowerBound
-        let bodies = ClientReport.bodies(
+        guard case let .send(bodies, counts) = planner.next(
             health: health,
             groups: groups,
-            previous: snapshot,
-            window: window,
+            network: network,
             client: Self.client,
-            platform: "ios",
-            network: network
-        )
-        let current = Dictionary(uniqueKeysWithValues: health.outbounds.map { ($0.node, $0.health.counts) })
-        guard !bodies.isEmpty else {
-            // Nothing new: move the baseline and look again next round.
-            remember(current, at: now)
+            now: now
+        ) else {
             return
         }
         sending = true
@@ -68,23 +52,15 @@ final class ClientReporter {
                 }
             }
             sending = false
+            guard !retired else {
+                return
+            }
             if delivered {
-                remember(current, at: now)
+                planner.delivered(counts, at: now)
             } else {
-                // Offline or the panel unreachable: keep the counts and try again after the panel's minimum.
-                nextReport = now.addingTimeInterval(ClientReport.minimumInterval)
+                planner.failed(at: now)
             }
         }
-    }
-
-    private func remember(_ counts: [String: OutboundHealth.Counts], at date: Date) {
-        snapshot = counts
-        lastReport = date
-        nextReport = date.addingTimeInterval(Self.randomInterval())
-        if let data = try? JSONEncoder().encode(counts) {
-            defaults.set(data, forKey: Self.snapshotKey)
-        }
-        defaults.set(date, forKey: Self.lastReportKey)
     }
 
     private static var client: String {

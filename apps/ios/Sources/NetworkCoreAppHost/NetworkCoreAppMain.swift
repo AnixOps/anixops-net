@@ -35,6 +35,9 @@ struct NetworkCoreAppMain: App {
             switch phase {
             case .active:
                 Task {
+                    // Settings, the widget, Control Center, the Live Activity or Shortcuts may have changed the VPN
+                    // configuration while the app was in the background.
+                    await tunnel.reloadProfile()
                     await tunnel.refreshDueSubscriptions()
                 }
             case .background:
@@ -192,6 +195,8 @@ struct RootView: View {
         }
         .tint(brand.primary)
         .environment(\.brand, brand)
+        // Every way of starting HTTPS decryption asks here first (`TunnelController.requireDecryptionConsent()`).
+        .decryptionConsentAlert(tunnel)
         .sheet(isPresented: $importing) {
             ImportView(tunnel: tunnel)
                 .brandSheet()

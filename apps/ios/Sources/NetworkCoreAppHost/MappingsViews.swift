@@ -86,12 +86,18 @@ struct MappingsView: View {
         .sheet(item: $editing) { draft in
             MappingEditor(draft: draft) { entry in
                 let next = try mappings.saving(entry)
+                // Asked while the sheet is still open, so the confirmation shows over it.
+                guard await tunnel.allowsDecryption(of: next) else {
+                    return false
+                }
                 commit(next)
+                return true
             }
             .formSheetFrame()
             .brandSheet()
             .environment(\.brand, brand)
             .tint(brand.primary)
+            .decryptionConsentAlert(tunnel, inSheet: true)
         }
         .confirmationDialog(
             "删除映射“\(deleting.map(Self.title) ?? "")”？",
@@ -207,7 +213,8 @@ struct MappingDraft: Identifiable {
 /// address.
 struct MappingEditor: View {
     let draft: MappingDraft
-    let save: (DebugMappings.Entry) throws -> Void
+    /// Saves the entry; false keeps the sheet open (the HTTPS decryption confirmation was cancelled).
+    let save: @MainActor (DebugMappings.Entry) async throws -> Bool
     @Environment(\.dismiss) private var dismiss
     @Environment(\.brand) private var brand
     @State private var entry: DebugMappings.Entry
@@ -216,8 +223,9 @@ struct MappingEditor: View {
     /// The body is not UTF-8 text: it is kept as captured and not shown for editing.
     @State private var binaryBody: Bool
     @State private var failure: String?
+    @State private var saving = false
 
-    init(draft: MappingDraft, save: @escaping (DebugMappings.Entry) throws -> Void) {
+    init(draft: MappingDraft, save: @escaping @MainActor (DebugMappings.Entry) async throws -> Bool) {
         self.draft = draft
         self.save = save
         _entry = State(initialValue: draft.entry)
@@ -293,6 +301,7 @@ struct MappingEditor: View {
                     Button("保存") {
                         commit()
                     }
+                    .disabled(saving)
                 }
             }
         }
@@ -370,13 +379,20 @@ struct MappingEditor: View {
                 next.body = Data(bodyText.utf8)
             }
         }
-        do {
-            try save(next)
-            dismiss()
-        } catch let error as DebugMappingsError {
-            failure = error.message
-        } catch {
-            failure = String(localized: "无法保存映射")
+        saving = true
+        Task { @MainActor in
+            defer {
+                saving = false
+            }
+            do {
+                if try await save(next) {
+                    dismiss()
+                }
+            } catch let error as DebugMappingsError {
+                failure = error.message
+            } catch {
+                failure = String(localized: "无法保存映射")
+            }
         }
     }
 }
@@ -470,12 +486,19 @@ struct DecryptHostsView: View {
         .inlineNavigationTitle()
         .sheet(item: $editing) { domain in
             DecryptHostEditor(domain: domain) { text, exclude in
-                commit(try mappings.editingHost(domain.pattern, to: text, exclude: exclude))
+                let next = try mappings.editingHost(domain.pattern, to: text, exclude: exclude)
+                // Asked while the sheet is still open, so the confirmation shows over it.
+                guard await tunnel.allowsDecryption(of: next) else {
+                    return false
+                }
+                commit(next)
+                return true
             }
             .formSheetFrame()
             .brandSheet()
             .environment(\.brand, brand)
             .tint(brand.primary)
+            .decryptionConsentAlert(tunnel, inSheet: true)
         }
         .task(id: tunnel.connection) {
             plugins = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)) ?? MitmPluginLibrary()
@@ -686,27 +709,45 @@ struct DecryptHostsView: View {
 
     // MARK: - Actions
 
+    /// The field keeps what was typed until the line is saved: a cancelled HTTPS decryption confirmation keeps it.
     private func addTyped() {
-        if add(typed, exclude: excludeTyped) {
+        let text = typed
+        guard let next = adding(text, exclude: excludeTyped) else {
+            return
+        }
+        guard next != mappings else {
             typed = ""
+            return
+        }
+        Task {
+            if await tunnel.applyDebugMappings(next), typed == text {
+                typed = ""
+            }
         }
     }
 
-    @discardableResult
-    private func add(_ text: String, exclude: Bool) -> Bool {
+    private func add(_ text: String, exclude: Bool) {
+        if let next = adding(text, exclude: exclude) {
+            commit(next)
+        }
+    }
+
+    /// The list with `text` added, or nil with `failure` saying why it cannot be.
+    private func adding(_ text: String, exclude: Bool) -> DebugMappings? {
         do {
             let next = try mappings.addingHost(text, exclude: exclude)
             failure = nil
-            commit(next)
-            return true
+            return next
         } catch let error as DebugMappingsError {
             failure = error.message
         } catch {
             failure = String(localized: "无法保存映射")
         }
-        return false
+        return nil
     }
 
+    /// Saves the list; a change that decrypts a new domain asks for the HTTPS decryption confirmation first
+    /// (`TunnelController.applyDebugMappings`), and cancelling leaves the list as it was.
     private func commit(_ next: DebugMappings) {
         guard next != mappings else {
             return
@@ -768,14 +809,16 @@ struct DecryptHostsView: View {
 /// Edits one line of the decryption list: the pattern and whether it decrypts or excludes.
 struct DecryptHostEditor: View {
     let domain: DebugMappings.Domain
-    let save: (String, Bool) throws -> Void
+    /// Saves the line; false keeps the sheet open (the HTTPS decryption confirmation was cancelled).
+    let save: @MainActor (String, Bool) async throws -> Bool
     @Environment(\.dismiss) private var dismiss
     @Environment(\.brand) private var brand
     @State private var text: String
     @State private var exclude: Bool
     @State private var failure: String?
+    @State private var saving = false
 
-    init(domain: DebugMappings.Domain, save: @escaping (String, Bool) throws -> Void) {
+    init(domain: DebugMappings.Domain, save: @escaping @MainActor (String, Bool) async throws -> Bool) {
         self.domain = domain
         self.save = save
         _text = State(initialValue: domain.pattern)
@@ -822,19 +865,30 @@ struct DecryptHostEditor: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存", action: commit)
+                        .disabled(saving)
                 }
             }
         }
     }
 
     private func commit() {
-        do {
-            try save(text, exclude)
-            dismiss()
-        } catch let error as DebugMappingsError {
-            failure = error.message
-        } catch {
-            failure = String(localized: "无法保存映射")
+        guard !saving else {
+            return
+        }
+        saving = true
+        Task { @MainActor in
+            defer {
+                saving = false
+            }
+            do {
+                if try await save(text, exclude) {
+                    dismiss()
+                }
+            } catch let error as DebugMappingsError {
+                failure = error.message
+            } catch {
+                failure = String(localized: "无法保存映射")
+            }
         }
     }
 }
