@@ -447,6 +447,7 @@ mod tests {
 
     #[test]
     fn the_rule_set_cache_goes_into_routing_only() {
+        // Only an absolute path is needed: the folder is written into the envelope, never created here.
         let dir = std::env::temp_dir().join(RULE_SET_CACHE_DIR);
         let routed = r#"{"mode":"direct","routing":{"outbounds":{"proxy":{"type":"trojan"}},"rules":["FINAL,DIRECT"]}}"#;
         let value: Value =

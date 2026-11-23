@@ -2727,9 +2727,6 @@ fn embedded_block_lost(
     imported && profile_files_present && !running
 }
 
-/// Puts the engine block back into managed-config.json when an upgrade lost
-/// it (see [`embedded_block_lost`]). HTTPS decryption is not turned back on:
-/// nothing else records that it was on, and it is the user's to turn on.
 /// Builds the saved envelope again for this version, before anything connects. The envelope on disk is only
 /// rewritten when the user changes something, so without this an upgrade would keep running what the earlier
 /// version wrote:
@@ -2739,7 +2736,9 @@ fn embedded_block_lost(
 /// - Otherwise the envelope is written again from the imported profile, so the routing mode is the engine's
 ///   current one (the direct mode now starts the engine in its own direct mode, DNS included).
 ///
-/// A failure leaves the files as they were and only goes to the log.
+/// A failure goes to the log. The import writes its files one by one, so a failure part way can leave some of
+/// them new: the desktop state is kept as the import left it and saved, never put back over newer files, and
+/// the import revision is removed so the next start builds the profile again.
 fn refresh_imported_profile(desktop: &mut DesktopState) {
     if !matches!(active_embedded_config(), Ok(Some(_))) || !embedded_profile_path().is_file() {
         return;
@@ -2747,11 +2746,14 @@ fn refresh_imported_profile(desktop: &mut DesktopState) {
     let current = fs::read_to_string(profile_import_revision_path())
         .is_ok_and(|revision| revision.trim() == linked_sources::IMPORT_REVISION);
     let outcome = if !current && profile_source_text_path().is_file() {
-        let before = desktop.clone();
-        match reapply_node_edits(desktop).and_then(|()| save_desktop_state(desktop)) {
+        // The import changes the desktop state only together with the files, so what it left is saved either
+        // way.
+        let built = reapply_node_edits(desktop);
+        let saved = save_desktop_state(desktop);
+        match built.and(saved) {
             Ok(()) => "imported profile built again with certificate pins".to_string(),
             Err(error) => {
-                *desktop = before;
+                let _ = fs::remove_file(profile_import_revision_path());
                 format!("imported profile could not be built again: {error}")
             }
         }
@@ -2764,6 +2766,9 @@ fn refresh_imported_profile(desktop: &mut DesktopState) {
     let _ = append_managed_log(APP_LOG_SCOPE, &outcome);
 }
 
+/// Puts the engine block back into managed-config.json when an upgrade lost
+/// it (see [`embedded_block_lost`]). HTTPS decryption is not turned back on:
+/// nothing else records that it was on, and it is the user's to turn on.
 fn repair_managed_config(desktop: &DesktopState) {
     let envelope_path = embedded_directory().join("envelope.json");
     let present = envelope_path.is_file() && embedded_profile_path().is_file();
