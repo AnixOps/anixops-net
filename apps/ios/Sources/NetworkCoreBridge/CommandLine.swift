@@ -4,6 +4,23 @@ import Foundation
 // Argument parsing, exit codes and text output of the `anixops` command-line tool (docs/macos-cli.md). The tool's
 // main.swift only does I/O; everything here is covered by unit tests.
 
+/// Where the tool is installed.
+public enum CommandLineTool {
+    /// The app around `Contents/MacOS/<tool>`, from the tool's own executable path with symlinks resolved, so a link
+    /// in PATH (`/usr/local/bin/anixops`, docs/macos-cli.md) finds it. Nil when the tool is not inside an app. Not
+    /// from `argv[0]`: run through PATH that is the bare name, which says nothing about where the file is.
+    public static func enclosingApp(ofExecutable executable: URL) -> URL? {
+        let resolved = executable.resolvingSymlinksInPath()
+        let macOS = resolved.deletingLastPathComponent()
+        let contents = macOS.deletingLastPathComponent()
+        let app = contents.deletingLastPathComponent()
+        guard macOS.lastPathComponent == "MacOS", contents.lastPathComponent == "Contents", app.pathExtension == "app" else {
+            return nil
+        }
+        return app
+    }
+}
+
 /// Exit codes, following sysexits(3) where one fits.
 public enum CommandLineExit: Int32, Equatable, Sendable {
     case ok = 0

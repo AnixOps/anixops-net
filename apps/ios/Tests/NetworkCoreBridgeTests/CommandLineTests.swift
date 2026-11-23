@@ -196,6 +196,61 @@ final class CommandLineTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: server.path))
     }
 
+    func testStoppedServerRemovesItsSocketAtOnce() throws {
+        // Before `stop()` returns: the app calls it when it quits, and a cancel handler may never run then.
+        let server = ControlServer(path: socketPath()) { _ in ControlResponse() }
+        try server.start()
+        XCTAssertTrue(ControlClient.isListening(at: server.path))
+        server.stop()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: server.path))
+    }
+
+    /// A socket file left by an app that quit or crashed is not an app that listens: the tool keeps waiting for the
+    /// app it opened instead of sending at once and reporting that nothing runs.
+    func testLeftoverSocketFileIsNotARunningApp() {
+        let path = socketPath()
+        XCTAssertTrue(FileManager.default.createFile(atPath: path, contents: Data()))
+        XCTAssertFalse(ControlClient.isListening(at: path))
+        XCTAssertFalse(ControlClient.waitUntilListening(at: path, timeout: 0.3, interval: 0.05))
+        XCTAssertFalse(ControlClient.isListening(at: socketPath()))
+    }
+
+    func testWaitsForAnAppThatStartsListeningLater() throws {
+        let path = socketPath()
+        XCTAssertTrue(FileManager.default.createFile(atPath: path, contents: Data()))
+        let server = ControlServer(path: path) { _ in ControlResponse() }
+        defer { server.stop() }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+            try? server.start()
+        }
+        XCTAssertTrue(ControlClient.waitUntilListening(at: path, timeout: 10, interval: 0.05))
+        // The probe sent nothing: the app still answers a real request afterwards.
+        XCTAssertTrue(try ControlClient.send(ControlRequest(command: .status), to: path, timeout: 5).ok)
+    }
+
+    /// The tool finds its app from its own path, also through the symlink in PATH that docs/macos-cli.md installs.
+    func testEnclosingAppThroughASymlink() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("anx-\(UUID().uuidString.prefix(8))")
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: root)
+        }
+        let app = root.appendingPathComponent("AnixOps Net.app")
+        let macOS = app.appendingPathComponent("Contents/MacOS")
+        try FileManager.default.createDirectory(at: macOS, withIntermediateDirectories: true)
+        let tool = macOS.appendingPathComponent("anixops")
+        XCTAssertTrue(FileManager.default.createFile(atPath: tool.path, contents: Data()))
+        let bin = root.appendingPathComponent("bin")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        let link = bin.appendingPathComponent("anixops")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: tool)
+
+        let expected = app.resolvingSymlinksInPath().path
+        XCTAssertEqual(CommandLineTool.enclosingApp(ofExecutable: tool)?.path, expected)
+        XCTAssertEqual(CommandLineTool.enclosingApp(ofExecutable: link)?.path, expected)
+        // A copy outside an app has none.
+        XCTAssertNil(CommandLineTool.enclosingApp(ofExecutable: bin.appendingPathComponent("other")))
+    }
+
     func testSocketPathLivesInTheGroupContainer() {
         XCTAssertEqual(
             ControlProtocol.socketPath(appGroup: "ABCDE12345.net.anixops.networkcore", home: "/Users/me"),

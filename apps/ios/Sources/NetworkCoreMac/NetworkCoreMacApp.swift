@@ -23,10 +23,6 @@ struct NetworkCoreMacApp: App {
             MacRootView(tunnel: tunnel, state: state)
                 .environment(updater)
                 .preferredColorScheme(appearance.colorScheme)
-                // The System Extension cannot post notifications; the app posts what scripts posted.
-                .task {
-                    await tunnel.relayScriptNotifications()
-                }
                 .onAppear {
                     state.dashboard.startNetworkMonitor()
                 }
@@ -53,18 +49,8 @@ struct NetworkCoreMacApp: App {
                         return
                     }
                     #endif
-                    await tunnel.load()
-                    // The `anixops` command-line tool talks to this app (MacControlService).
-                    state.startControl(tunnel)
-                    // The loopback Prometheus endpoint, when turned on in Settings (MacMetricsService).
-                    state.startMetrics(tunnel)
-                    // Subscription groups update on their own while the app runs; a Mac app stays open for long.
-                    while !Task.isCancelled {
-                        await tunnel.refreshDueSubscriptions()
-                        // Once a day at most, and only in a build with an update feed (AppUpdater).
-                        await updater.checkIfDue()
-                        try? await Task.sleep(for: .seconds(15 * 60))
-                    }
+                    // Runs for the life of the app, not of this window (`MacAppState.startApp`).
+                    state.startApp(tunnel, updater: updater)
                 }
         }
         // Wide enough for the request table beside its inspector without squeezing the table's columns.
@@ -88,6 +74,11 @@ struct NetworkCoreMacApp: App {
         } label: {
             Image(systemName: tunnel.connection == .connected ? "network.badge.shield.half.filled" : "network")
                 .accessibilityLabel("AnixOps Net")
+                // The menu bar item is there even when no window is (a launch at login that restores none): the
+                // app's own work starts from here too. Started once, whichever comes first.
+                .task {
+                    state.startApp(tunnel, updater: updater)
+                }
         }
     }
 }
@@ -108,6 +99,47 @@ final class MacAppState: ObservableObject {
 
     /// Serves the command-line tool for the life of the app, also while the window is closed.
     private var control: MacControlService?
+    /// The app's own work (`startApp`), which outlives the main window.
+    private let lifetime = AppLifetimeTasks()
+    private var terminationObserver: NSObjectProtocol?
+
+    /// Reads the saved configuration, then starts what runs for the life of the app rather than of the main window:
+    /// the command-line service, the metrics endpoint, the relay of script notifications (the System Extension
+    /// cannot post them) and the automatic subscription updates and update checks. SwiftUI cancels a window's
+    /// `.task` when the window closes, and the app stays in the menu bar after that, so none of it runs there. Called
+    /// from the main window and the menu bar item; it starts once. The screenshots' demo starts none of it.
+    func startApp(_ tunnel: TunnelController, updater: AppUpdater) {
+        #if DEBUG
+        if TunnelController.isDemo {
+            return
+        }
+        #endif
+        lifetime.start("launch") { [weak self] in
+            if !tunnel.loaded {
+                await tunnel.load()
+            }
+            guard let self else {
+                return
+            }
+            // The `anixops` command-line tool talks to this app (MacControlService).
+            self.startControl(tunnel)
+            // The loopback Prometheus endpoint, when turned on in Settings (MacMetricsService).
+            self.startMetrics(tunnel)
+            // One relay only: the engine's queue is emptied by each read.
+            self.lifetime.start("script-notifications") {
+                await tunnel.relayScriptNotifications()
+            }
+            // Subscription groups update on their own while the app runs; a Mac app stays open for long.
+            self.lifetime.start("subscriptions-and-updates") {
+                while !Task.isCancelled {
+                    await tunnel.refreshDueSubscriptions()
+                    // Once a day at most, and only in a build with an update feed (AppUpdater).
+                    await updater.checkIfDue()
+                    try? await Task.sleep(for: .seconds(15 * 60))
+                }
+            }
+        }
+    }
 
     func startControl(_ tunnel: TunnelController) {
         if control == nil {
@@ -127,6 +159,17 @@ final class MacAppState: ObservableObject {
     }
 
     init() {
+        // The command-line socket goes with the app, so a stale file does not answer for it (`MacControlService.stop`).
+        terminationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.lifetime.cancelAll()
+                self?.control?.stop()
+            }
+        }
         #if DEBUG
         // CI screenshots open a given page: `-AnixOpsSection proxies`.
         if let name = UserDefaults.standard.string(forKey: "AnixOpsSection"), let section = MacSection(rawValue: name) {
