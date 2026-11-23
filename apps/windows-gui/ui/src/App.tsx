@@ -6,7 +6,7 @@ import { formatRate } from "./activity-format";
 import { AppLink, AppLinkError, findLinkMember, findLinkNode, nextAppLink } from "./app-link";
 import { desktop, NodeDelay, NodeSummary, RuntimeSnapshot } from "./bridge";
 import { Wordmark } from "./brand";
-import { connectionTitle, connectPhase, failureReason, routingLabel, sidebarDetail } from "./labels";
+import { connectionSwitchLabel, connectionTitle, connectPhase, failureReason, routingLabel, sidebarDetail } from "./labels";
 import { ActivityPage } from "./pages/ActivityPage";
 import { RequestsPage } from "./pages/RequestsPage";
 import { ExtensionsPage } from "./pages/ExtensionsPage";
@@ -356,7 +356,7 @@ export function App() {
               {sideDetail.text && <small className={`truncate ${sideDetail.danger ? "danger-text" : ""}`}>{sideDetail.text}</small>}
             </button>
             <Switch
-              label={phase === "on" ? t("断开") : t("连接")}
+              label={connectionSwitchLabel()}
               tone="go"
               checked={phase === "on" || phase === "connecting"}
               busy={moving}

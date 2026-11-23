@@ -211,7 +211,7 @@ function useDecryptedDomainCount(hosts: string[]): number {
 }
 
 const steps: Record<SetupStep, { icon: LucideIcon; color: TileColor; label: string; hint: string }> = {
-  connect: { icon: Plug, color: "green", label: "连接", hint: "用连接开关连接。调试模式默认直连，不需要节点。" },
+  connect: { icon: Plug, color: "green", label: "连接|verb", hint: "用连接开关连接。调试模式默认直连，不需要节点。" },
   certificate: { icon: ShieldCheck, color: "orange", label: "信任根证书", hint: "根证书在本机生成，要你按系统提示手动信任一次。" },
   decryption: { icon: LockKeyhole, color: "pink", label: "开启 HTTPS 解密", hint: "开启后只解密你列出的域名。" },
   domains: { icon: Globe, color: "sky", label: "添加要解密的域名", hint: "在“改写”里添加，或在加密连接的详情里点“解密此域名”。" },

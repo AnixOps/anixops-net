@@ -41,6 +41,15 @@ const connectionTitles: Record<string, string> = {
   "Configuration error": "配置有误",
 };
 
+/**
+ * The name of the connection switch (sidebar and overview). It names the thing switched, the same in either state:
+ * a screen reader says the state from `aria-checked`, so a name that flipped to "Disconnect" would be read as
+ * "Disconnect, switch, on" (finding ux-i18n-a11y-04).
+ */
+export function connectionSwitchLabel(): string {
+  return t("连接|noun");
+}
+
 export function connectionTitle(connection: string | undefined, phase: ConnectPhase): string {
   return t((connection && connectionTitles[connection]) || phaseTitles[phase]);
 }

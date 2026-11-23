@@ -105,7 +105,8 @@ struct OnDemandSections: View {
     static func label(_ action: OnDemandSettings.Action) -> String {
         switch action {
         case .connect:
-            return String(localized: "连接")
+            // "连接" alone is the noun "Connection" in the catalog; the action has its own key.
+            return String(localized: "action.connect")
         case .disconnect:
             return String(localized: "断开")
         case .ignore:

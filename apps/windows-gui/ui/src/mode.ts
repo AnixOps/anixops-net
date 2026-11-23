@@ -10,7 +10,7 @@ export type AppMode = "proxy" | "debug";
 // match the Apple clients (docs/debug-mode.md).
 export const modes: Array<{ value: AppMode; label: string; hint: string }> = [
   { value: "debug", label: "调试网络", hint: "抓包、HTTPS 解密、改写和重放，给开发和测试用" },
-  { value: "proxy", label: "代理", hint: "订阅、节点和分流规则，日常上网用" },
+  { value: "proxy", label: "代理|mode", hint: "订阅、节点和分流规则，日常上网用" },
 ];
 
 /** Where debug mode's traffic leaves (G2): straight out, or through the nodes and rules of proxy mode. */
