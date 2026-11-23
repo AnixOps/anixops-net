@@ -719,3 +719,25 @@ iOS / macOS 的隧道扩展把整份 JSON 配置一次交给内核 `networkcore_
   规则的订阅，规则页不再提示“规则没有生效”，开发者诊断的扩展事件里没有 `config too large`。
 - [ ] 改内核前的 1.0.0 真机确认：启用一个 100 KB 的插件，插件页和映射页显示 64 KB 提示；连接后请求页显示
   “HTTPS 解密没有生效：……超出了隧道配置的上限”，VPN 正常连接、其余规则生效。
+## 引擎 IPC 与核心服务加固（1.0.0，client-core-ipc-01/02/03/04/05/07/13）
+
+CI 只跑单元测试和管理员账号下的端到端测试，以下需要人工或真机：
+
+- [ ] 已保存的抓包会话与解密域名（安卓、Linux Tauri）：抓包页“保存会话”后能在“已保存的会话”里列出、打开、删除；
+  开着解密访问几个网站后，解密域名页列出这些域名（失败的带原因），“清除”后列表变空。运行中保存“我的规则”提示
+  “applied; open connections stay”，正在进行的下载不中断。
+- [ ] 安卓 ANX 设备授权：在要求设备授权的面板上刷新订阅后 ANX 节点能连接，面板能看到这台设备；授权目录在 App 数据
+  目录下的 `anx-license`（宿主机上的契约测试有 HOME，测不出这一点）。原生 Windows 服务沿用从旧版搬来的设备密钥，
+  面板里不多出一台设备。
+- [ ] 原生 Windows / Linux 窗口从文件导入订阅：在导入框里填一个本地订阅文件的路径，窗口以当前用户读文件，导入后订阅
+  名是文件名；填另一个用户才能读的文件、文件夹或超过 16 MiB 的文件时，窗口说明原因，核心不读任何路径。
+- [ ] Windows 命名管道（标准用户真机，原生版发布后）：标准用户的窗口照常连上服务（访问表 `0x12019b` 不含建实例权限，
+  CI 的管理员账号测不到这一点）；另一个标准用户运行一个对 `\\.\pipe\AnixOpsNet.Core` 调 `CreateNamedPipeW` 的小程序，
+  服务运行时得到拒绝访问；停掉服务后它抢先建出同名管道，窗口显示“不是 AnixOps Net 核心服务的管道”且不连上。
+- [ ] Windows 服务失败重启：`sc qfailure AnixOpsNetCore` 显示三次 RESTART，`sc qfailureflag AnixOpsNetCore` 为 TRUE；
+  用 PowerShell 循环打开、关闭 `\\.\pipe\AnixOpsNet.Core` 一分钟，服务一直在运行，窗口仍能连接。
+- [ ] Linux 守护进程（deb / rpm 带上 `anixops-netd` 之后）：`cat /proc/$(pidof anixops-netd)/limits` 的 Max open files
+  软上限为 524288；经代理开上千条并发连接（BT、压测工具）后守护进程不退出；用没有登录会话的账号开几百条不说话的连接，
+  超过 16 条的被立即关闭，5 秒后其余的也被关闭，正常用户的窗口不受影响。
+- [ ] Linux 根证书更换：先信任生成的根证书，再在扩展页导入团队 CA：导入的提示说明这台电脑还没信任它，扩展页显示未信任；
+  点“信任根证书”后显示已信任，`certutil -d sql:$HOME/.pki/nssdb -L -n "AnixOps Net HTTPS Decryption Root" -a` 只列出一张证书。
