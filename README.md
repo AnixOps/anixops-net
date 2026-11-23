@@ -4,7 +4,7 @@
 抓包、HTTPS 解密、改写和重放放在前面，按规则分流的代理是它的底座。
 
 [下载](https://anixops.github.io/anixops-net/) · [全部版本](https://github.com/AnixOps/anixops-net/releases) ·
-[全平台功能对照](docs/platform-parity.md) · [客户端会发出哪些连接](docs/network-behavior.md)
+[架构总览](docs/architecture.md) · [全平台功能对照](docs/platform-parity.md) · [客户端会发出哪些连接](docs/network-behavior.md)
 
 <table>
   <tr>
@@ -103,7 +103,7 @@ AnixOps Net 把这两件事放进同一个 App：
 
 ## 开发
 
-本仓库只放客户端；网络内核（协议栈、嵌入式引擎、MITM、脚本运行时、CLI 和服务端节点内核）在
+本仓库只放客户端（客户端、内核、MITM 策略库与 ANX 的关系见[架构总览](docs/architecture.md)）；网络内核（协议栈、嵌入式引擎、MITM、脚本运行时、CLI 和服务端节点内核）在
 [AnixOps/networkcore_anixops](https://github.com/AnixOps/networkcore_anixops)，通过 Cargo git 依赖固定在根目录
 `Cargo.toml` 的 `[workspace.dependencies]` 里（同一个 `rev`）。
 
