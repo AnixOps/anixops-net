@@ -10,15 +10,28 @@ import AppKit
 /// listed under the editor, and a tap on a listed problem puts the cursor on that line. Saving is refused while a
 /// line is wrong. A running tunnel takes the saved rules in place when only rule lines changed, so open
 /// connections keep going; a new rule-list URL still reconnects it.
+///
+/// Unsaved changes are not lost: with changes, the back button asks to save or discard them (and the swipe back is
+/// off), and the text is kept for the scene, so leaving another way (the Mac sidebar, the app being closed) offers it
+/// again next time while the saved rules are unchanged. The lines are checked a moment after typing stops, away from
+/// the main thread, and a keystroke recolors only the lines it changed.
 struct RuleTextEditorView: View {
     var tunnel: TunnelController
     @Environment(\.brand) private var brand
+    @Environment(\.dismiss) private var dismiss
     @State private var text = ""
     @State private var original = ""
     @State private var issues: [RuleText.Issue] = []
+    /// Bumped each time `issues` is set, so the text view colors the whole text again.
+    @State private var checkRevision = 0
     @State private var jump: NSRange?
     @State private var loaded = false
     @State private var saved: Date?
+    @State private var restored = false
+    @State private var confirmingLeave = false
+    /// The unsaved text and the saved rules' text it was written over.
+    @SceneStorage("rules.textEditor.draft") private var draft = ""
+    @SceneStorage("rules.textEditor.draftBase") private var draftBase = ""
 
     private var changed: Bool {
         text != original
@@ -26,16 +39,34 @@ struct RuleTextEditorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HighlightedRuleText(text: $text, issues: issues, jump: $jump, palette: RuleTextColors(brand: brand))
-                .frame(minHeight: 220)
-                .background(brand.surface)
+            HighlightedRuleText(
+                text: $text,
+                issues: issues,
+                revision: checkRevision,
+                jump: $jump,
+                palette: RuleTextColors(brand: brand)
+            )
+            .frame(minHeight: 220)
+            .background(brand.surface)
             Divider()
             issueList
         }
         .background(brand.bg.ignoresSafeArea())
         .navigationTitle("编辑规则文本")
         .inlineNavigationTitle()
+        // With unsaved changes the system back button (and on iOS the swipe back with it) gives way to one that asks.
+        .navigationBarBackButtonHidden(changed)
         .toolbar {
+            if changed {
+                ToolbarItem(placement: .navigation) {
+                    Button {
+                        confirmingLeave = true
+                    } label: {
+                        Label("返回", systemImage: "chevron.backward")
+                            .labelStyle(.titleAndIcon)
+                    }
+                }
+            }
             ToolbarItem(placement: .confirmationAction) {
                 Button("保存") {
                     save()
@@ -43,17 +74,82 @@ struct RuleTextEditorView: View {
                 .disabled(!changed || !issues.isEmpty)
             }
         }
+        .confirmationDialog("保存对规则的修改？", isPresented: $confirmingLeave, titleVisibility: .visible) {
+            if issues.isEmpty {
+                Button("保存") {
+                    save()
+                    if !changed {
+                        dismiss()
+                    }
+                }
+            }
+            Button("放弃修改", role: .destructive) {
+                discard()
+                dismiss()
+            }
+            Button("继续编辑", role: .cancel) {}
+        } message: {
+            if issues.isEmpty {
+                Text("离开后，未保存的修改会丢失。")
+            } else {
+                Text("还有错误没有改好，现在不能保存。离开后，未保存的修改会丢失。")
+            }
+        }
         .onAppear {
             guard !loaded else {
                 return
             }
             loaded = true
-            text = RuleText.text(of: tunnel.localRules)
-            original = text
+            let current = RuleText.text(of: tunnel.localRules)
+            original = current
+            if let kept = RuleText.restorableDraft(draft, base: draftBase, current: current) {
+                text = kept
+                restored = true
+            } else {
+                text = current
+                keepDraft()
+            }
         }
-        .onChange(of: text) { _, next in
-            issues = RuleText.issues(in: next)
+        .task(id: text) {
+            // Checked once typing pauses, off the main thread; saving checks again, so a stale result cannot let a
+            // bad line through.
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled else {
+                return
+            }
+            let current = text
+            let found = await Task.detached(priority: .userInitiated) {
+                RuleText.issues(in: current)
+            }.value
+            guard !Task.isCancelled, current == text else {
+                return
+            }
+            setIssues(found)
+            keepDraft()
         }
+    }
+
+    private func setIssues(_ next: [RuleText.Issue]) {
+        issues = next
+        checkRevision &+= 1
+    }
+
+    /// Keeps the unsaved text for the scene, or forgets it when there is none.
+    private func keepDraft() {
+        if changed {
+            draft = text
+            draftBase = original
+        } else {
+            draft = ""
+            draftBase = ""
+        }
+    }
+
+    private func discard() {
+        text = original
+        restored = false
+        draft = ""
+        draftBase = ""
     }
 
     @ViewBuilder
@@ -104,6 +200,9 @@ struct RuleTextEditorView: View {
     }
 
     private var statusTitle: String {
+        if restored, changed {
+            return String(localized: "已恢复上次未保存的修改")
+        }
         if let saved, tunnel.lastRulesReload.map({ $0 >= saved }) == true {
             return String(localized: "已保存，隧道已热重载规则")
         }
@@ -120,10 +219,12 @@ struct RuleTextEditorView: View {
             tunnel.updateLocalRules(next)
             text = RuleText.text(of: next)
             original = text
+            restored = false
+            keepDraft()
         } catch let rejected as RuleText.Rejected {
-            issues = rejected.issues
+            setIssues(rejected.issues)
         } catch {
-            issues = RuleText.issues(in: text)
+            setIssues(RuleText.issues(in: text))
         }
     }
 
@@ -225,6 +326,42 @@ struct RuleTextColors {
         }
         storage.endEditing()
     }
+
+    /// Colors only `lines` of `storage` (whole lines, as `RuleText.changedLines` gives them) after a keystroke. Their
+    /// issue marks go until the next check marks them again; the other lines keep theirs, which move with the text.
+    func paint(_ storage: NSTextStorage, lines: NSRange) {
+        let range = NSIntersectionRange(lines, NSRange(location: 0, length: storage.length))
+        guard range.length > 0 else {
+            return
+        }
+        storage.beginEditing()
+        storage.setAttributes([.font: Self.font, .foregroundColor: PlatformColor(self.text)], range: range)
+        for token in RuleText.tokens(in: storage.string, lines: range) where NSMaxRange(token.range) <= NSMaxRange(range) {
+            storage.addAttribute(.foregroundColor, value: color(token.kind), range: token.range)
+            if token.kind == .kind {
+                storage.addAttribute(.font, value: Self.boldFont, range: token.range)
+            }
+        }
+        storage.endEditing()
+    }
+
+    /// Colors `storage`: all of it when `revision` is newer than the coordinator last painted (new issues, or text
+    /// set from outside), else only the lines changed since the last paint.
+    func update(_ storage: NSTextStorage, issues: [RuleText.Issue], revision: Int, painted: inout PaintState) {
+        let current = storage.string
+        if painted.revision != revision || painted.text == nil {
+            paint(storage, issues: issues)
+        } else if let previous = painted.text, let lines = RuleText.changedLines(from: previous, to: current) {
+            paint(storage, lines: lines)
+        }
+        painted = PaintState(revision: revision, text: current)
+    }
+
+    /// What a text view was last colored for.
+    struct PaintState {
+        var revision: Int?
+        var text: String?
+    }
 }
 
 #if canImport(UIKit)
@@ -233,6 +370,8 @@ struct RuleTextColors {
 struct HighlightedRuleText: UIViewRepresentable {
     @Binding var text: String
     let issues: [RuleText.Issue]
+    /// Bumped when `issues` were worked out again; the whole text is colored then.
+    let revision: Int
     @Binding var jump: NSRange?
     let palette: RuleTextColors
 
@@ -260,8 +399,10 @@ struct HighlightedRuleText: UIViewRepresentable {
         context.coordinator.text = $text
         if view.text != text {
             view.text = text
+            // Set from outside: the old attributes are gone, so everything is colored again.
+            context.coordinator.painted = RuleTextColors.PaintState()
         }
-        palette.paint(view.textStorage, issues: issues)
+        palette.update(view.textStorage, issues: issues, revision: revision, painted: &context.coordinator.painted)
         view.typingAttributes = [.font: RuleTextColors.font, .foregroundColor: UIColor(palette.text)]
         if let range = jump, NSMaxRange(range) <= (view.text as NSString).length {
             DispatchQueue.main.async {
@@ -275,6 +416,7 @@ struct HighlightedRuleText: UIViewRepresentable {
 
     final class Coordinator: NSObject, UITextViewDelegate {
         var text: Binding<String>
+        var painted = RuleTextColors.PaintState()
 
         init(text: Binding<String>) {
             self.text = text
@@ -291,6 +433,8 @@ struct HighlightedRuleText: UIViewRepresentable {
 struct HighlightedRuleText: NSViewRepresentable {
     @Binding var text: String
     let issues: [RuleText.Issue]
+    /// Bumped when `issues` were worked out again; the whole text is colored then.
+    let revision: Int
     @Binding var jump: NSRange?
     let palette: RuleTextColors
 
@@ -324,8 +468,10 @@ struct HighlightedRuleText: NSViewRepresentable {
         }
         if view.string != text {
             view.string = text
+            // Set from outside: the old attributes are gone, so everything is colored again.
+            context.coordinator.painted = RuleTextColors.PaintState()
         }
-        palette.paint(storage, issues: issues)
+        palette.update(storage, issues: issues, revision: revision, painted: &context.coordinator.painted)
         view.typingAttributes = [.font: RuleTextColors.font, .foregroundColor: NSColor(palette.text)]
         if let range = jump, NSMaxRange(range) <= (view.string as NSString).length {
             DispatchQueue.main.async {
@@ -340,6 +486,7 @@ struct HighlightedRuleText: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var text: Binding<String>
+        var painted = RuleTextColors.PaintState()
 
         init(text: Binding<String>) {
             self.text = text

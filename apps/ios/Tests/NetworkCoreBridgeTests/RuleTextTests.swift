@@ -57,6 +57,36 @@ final class RuleTextTests: XCTestCase {
         XCTAssertEqual(tokens.filter { $0.kind == .separator }.count, 3)
     }
 
+    /// A keystroke recolors only the lines it changed: the changed range covers whole lines of the new text, and the
+    /// tokens of those lines sit where the whole-text tokens put them.
+    func testChangedLinesAndTheirTokens() throws {
+        let old = "DOMAIN,a.example,DIRECT\nDOMAIN-SUFFIX,b.example,Proxy\nIP-CIDR,10.0.0.0/8,DIRECT"
+        XCTAssertNil(RuleText.changedLines(from: old, to: old))
+
+        let typed = old.replacingOccurrences(of: "b.example", with: "bb.example")
+        let lines = try XCTUnwrap(RuleText.changedLines(from: old, to: typed))
+        XCTAssertEqual(substring(typed, lines), "DOMAIN-SUFFIX,bb.example,Proxy\n")
+        let whole = RuleText.tokens(in: typed).filter { NSLocationInRange($0.location, lines) }
+        XCTAssertEqual(RuleText.tokens(in: typed, lines: lines), whole)
+        XCTAssertEqual(RuleText.tokens(in: typed, lines: lines).filter { $0.kind == .value }.map { substring(typed, $0.range) }, ["bb.example"])
+
+        // A paste over two lines covers both; deleting a line break covers the merged line.
+        let pasted = old.replacingOccurrences(of: "DIRECT\nDOMAIN-SUFFIX", with: "REJECT\nDOMAIN-KEYWORD")
+        XCTAssertEqual(substring(pasted, try XCTUnwrap(RuleText.changedLines(from: old, to: pasted))), "DOMAIN,a.example,REJECT\nDOMAIN-KEYWORD,b.example,Proxy\n")
+        let merged = old.replacingOccurrences(of: "Proxy\n", with: "Proxy")
+        XCTAssertEqual(substring(merged, try XCTUnwrap(RuleText.changedLines(from: old, to: merged))), "DOMAIN-SUFFIX,b.example,ProxyIP-CIDR,10.0.0.0/8,DIRECT")
+        // Ranges past the end are clamped.
+        XCTAssertEqual(RuleText.tokens(in: "DOMAIN,a.example", lines: NSRange(location: 0, length: 999)).count, 3)
+    }
+
+    /// A draft kept by the editor comes back only over the rules it was written against.
+    func testDraftIsRestoredOnlyOverUnchangedRules() {
+        XCTAssertEqual(RuleText.restorableDraft("DOMAIN,b.example,DIRECT", base: "DOMAIN,a.example,DIRECT", current: "DOMAIN,a.example,DIRECT"), "DOMAIN,b.example,DIRECT")
+        XCTAssertNil(RuleText.restorableDraft("DOMAIN,b.example,DIRECT", base: "DOMAIN,a.example,DIRECT", current: "DOMAIN,c.example,DIRECT"))
+        XCTAssertNil(RuleText.restorableDraft("", base: "", current: "DOMAIN,a.example,DIRECT"))
+        XCTAssertNil(RuleText.restorableDraft("DOMAIN,a.example,DIRECT", base: "x", current: "DOMAIN,a.example,DIRECT"))
+    }
+
     func testTooManyRulesAreMarked() {
         let text = (0...LocalRules.maxRules).map { "DOMAIN,host\($0).example,DIRECT" }.joined(separator: "\n")
         let issues = RuleText.issues(in: text)
