@@ -4,4 +4,4 @@
 
 #[cfg(feature = "gui")]
 pub mod app;
-pub use client_core::{backend, client};
+pub use client_core::{backend, client, instance};
