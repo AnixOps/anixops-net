@@ -2119,8 +2119,12 @@ fn file_label(name: &str) -> String {
 /// before anything on disk is touched, so a window cannot learn whether a file exists either.
 fn fetch(location: &str, read_files: bool) -> Result<(String, ResponseMeta), String> {
     if location.starts_with("https://") || location.starts_with("http://") {
-        return http_get_with_meta(location)
-            .map_err(|error| format!("the subscription could not be downloaded: {error}"));
+        return http_get_with_meta(location).map_err(|error| {
+            format!(
+                "the subscription could not be downloaded: {}",
+                download_failure(&error)
+            )
+        });
     }
     if location.contains("://") {
         return Ok((location.to_string(), ResponseMeta::default()));
@@ -2129,6 +2133,23 @@ fn fetch(location: &str, read_files: bool) -> Result<(String, ResponseMeta), Str
         return Err(NO_PATHS_IN_SERVICE.to_string());
     }
     read_subscription_file(location).map(|content| (content, ResponseMeta::default()))
+}
+
+/// Why a download failed, without the address: reqwest's own text names the full URL, and a subscription URL
+/// carries its token, while this text reaches the window, the notification, the saved state and the log. Same
+/// reasons as the Windows client's `describe_download_error`.
+fn download_failure(error: &reqwest::Error) -> String {
+    if error.is_timeout() {
+        "the download timed out".to_string()
+    } else if let Some(status) = error.status() {
+        format!("the server answered HTTP status {}", status.as_u16())
+    } else if error.is_connect() {
+        "the server could not be reached".to_string()
+    } else if error.is_body() || error.is_decode() {
+        "the answer could not be read".to_string()
+    } else {
+        "the download failed".to_string()
+    }
 }
 
 /// A local subscription file, in the user's own process (the Tauri app, Android): only a regular file, at most

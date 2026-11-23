@@ -259,7 +259,7 @@
     <string name="action_clear">Clear</string>
     <string name="action_back">Back</string>
     <string name="logs">Logs</string>
-    <string name="logs_note">The app\'s own record: connects, disconnects, subscription updates and why things failed, with URL queries left out. The engine keeps no separate log.</string>
+    <string name="logs_note">The app\'s own record: connects, disconnects, subscription updates and why things failed, with links shortened to their host. The engine keeps no separate log.</string>
     <string name="logs_more">More log actions</string>
     <string name="logs_refresh">Refresh logs</string>
     <string name="logs_copy">Copy filtered logs</string>

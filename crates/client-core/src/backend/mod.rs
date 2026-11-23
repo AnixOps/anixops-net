@@ -406,6 +406,13 @@ impl Backend {
                 }
             },
         };
+        // Earlier versions saved the download error as reqwest wrote it, with the subscription's full URL and so its
+        // token; it is shortened the way the log shortens links.
+        for source in &mut state.sources {
+            if let Some(error) = source.last_error.as_mut() {
+                *error = app_log::redact(error);
+            }
+        }
         // The cached contents and node edits on disk name the numbers in use, whatever the index says.
         state.reserve_source_numbers(store.highest_source_number());
         desktop_dns::custom::use_file(store.dir().join("dns-settings.json"));
@@ -2358,11 +2365,14 @@ impl Backend {
                     source.failures = 0;
                 }
                 Err(error) => {
-                    source.last_error = Some(error.clone());
+                    source.last_error = Some(app_log::redact(error));
                     source.failures = source.failures.saturating_add(1);
                 }
             }
         }
+        // The state is saved before the line is logged, so a log that fails cannot lose the update.
+        let saved = self.save();
+        self.reload_nodes();
         let name = self.source_name(id);
         match &result {
             Ok(count) => self.log(
@@ -2374,8 +2384,6 @@ impl Backend {
                 &format!("subscription {name} update failed: {error}"),
             ),
         }
-        let saved = self.save();
-        self.reload_nodes();
         saved?;
         result.map(|count| {
             OperationResult::coded(
@@ -3239,6 +3247,43 @@ rules:
         assert_eq!(logs[1].level, LogLevel::Error);
         assert!(!logs[1].message.contains("token"));
         assert!(backend.logs(true).unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_token_in_the_path_stays_out_of_the_log_the_state_and_the_notice() {
+        let (mut backend, dir) = backend("logs-path-token");
+        backend
+            .import("https://a.example/link/SECRET?sub=3", LINK)
+            .unwrap();
+        let id = backend.state.sources[0].id.clone();
+        let error =
+            "error sending request for url (https://a.example/link/SECRET?sub=3)".to_string();
+        let _ = backend.finish_refresh(&id, Err(error.clone()));
+        let logs = backend.logs(false).unwrap();
+        assert!(logs.iter().all(|entry| !entry.message.contains("SECRET")));
+        let summary = &backend.subscriptions()[0];
+        assert!(!summary
+            .last_update_error
+            .as_deref()
+            .unwrap()
+            .contains("SECRET"));
+        let notice = backend.subscription_failed_notice(&id, &error).unwrap();
+        assert!(!notice.body.contains("SECRET"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_name_with_a_link_after_chinese_text_updates_and_logs() {
+        let (mut backend, dir) = backend("logs-multibyte");
+        backend.import("https://a.example/sub", LINK).unwrap();
+        let id = backend.state.sources[0].id.clone();
+        backend.state.sources[0].name = Some("XX加速｜官网：https://xx.com".to_string());
+        assert!(backend.finish_refresh(&id, Ok(LINK.to_string())).is_ok());
+        let logs = backend.logs(false).unwrap();
+        assert!(logs
+            .iter()
+            .any(|entry| entry.message.contains("官网：https://xx.com updated")));
         let _ = std::fs::remove_dir_all(dir);
     }
 

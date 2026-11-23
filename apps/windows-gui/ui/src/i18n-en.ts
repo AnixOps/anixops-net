@@ -599,7 +599,7 @@ export const english: Record<string, string> = {
   "已清空日志": "Logs cleared",
   "已拷贝 {count} 行日志": "Copied {count} log lines",
   "日志": "Logs",
-  "应用自己的运行记录：连接、断开、订阅更新和出错原因，网址不含查询参数。内核不单独记日志。": "The app's own record: connects, disconnects, subscription updates and why things failed, with URL queries left out. The engine keeps no separate log.",
+  "应用自己的运行记录：连接、断开、订阅更新和出错原因，网址只保留域名。内核不单独记日志。": "The app's own record: connects, disconnects, subscription updates and why things failed, with links shortened to their host. The engine keeps no separate log.",
   "刷新日志": "Refresh Logs",
   "更多日志操作": "More Log Actions",
   "拷贝筛选出的日志": "Copy Filtered Logs",

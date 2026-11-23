@@ -38,7 +38,7 @@ export function LogsCard({ live, busy, run }: { live: boolean; busy: string | nu
   return (
     <Card
       title={t("日志")}
-      description={t("应用自己的运行记录：连接、断开、订阅更新和出错原因，网址不含查询参数。内核不单独记日志。")}
+      description={t("应用自己的运行记录：连接、断开、订阅更新和出错原因，网址只保留域名。内核不单独记日志。")}
       actions={<>
         <IconButton label={t("刷新日志")} onClick={load}><RefreshCw size={14} /></IconButton>
         <MoreMenu

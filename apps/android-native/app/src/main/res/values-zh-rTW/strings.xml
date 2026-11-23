@@ -237,7 +237,7 @@
     <string name="action_clear">清空</string>
     <string name="action_back">返回</string>
     <string name="logs">日誌</string>
-    <string name="logs_note">應用自己的執行記錄：連線、中斷、訂閱更新和出錯原因，網址不含查詢參數。核心不單獨記日誌。</string>
+    <string name="logs_note">應用自己的執行記錄：連線、中斷、訂閱更新和出錯原因，網址只保留網域。核心不單獨記日誌。</string>
     <string name="logs_more">更多日誌操作</string>
     <string name="logs_refresh">重新整理日誌</string>
     <string name="logs_copy">拷貝篩選出的日誌</string>
