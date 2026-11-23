@@ -3,7 +3,7 @@ import { desktop } from "../bridge";
 import { Card, Run } from "../ui";
 import { t } from "../i18n";
 
-/** The example shown in the empty editor; Surge and Loon write rules the same way. */
+/** The example shown in the empty editor, in common rule syntax. */
 const PLACEHOLDER = "DOMAIN-SUFFIX,example.com,PROXY\nDOMAIN-KEYWORD,ads,REJECT\nIP-CIDR,10.0.0.0/8,DIRECT,no-resolve\nPROCESS-NAME,curl,DIRECT";
 
 /**

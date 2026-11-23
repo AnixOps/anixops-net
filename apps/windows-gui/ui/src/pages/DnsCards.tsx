@@ -10,7 +10,7 @@ const dnsChoices: Array<{ value: DnsPreset; label: string; hint: string }> = [
   { value: "custom", label: "自定义 DNS", hint: "用下面填写的服务器、分域规则和 Hosts。" },
 ];
 
-/** Examples shown in the empty editors; the formats follow Surge's [DNS] and [Host] lines. */
+/** Examples shown in the empty editors; the formats follow the common [DNS] and [Host] line syntax. */
 const SERVERS_PLACEHOLDER = "cloudflare = https://1.1.1.1/dns-query, server-name=cloudflare-dns.com\nalidns = quic://223.5.5.5, server-name=dns.alidns.com, direct, default\nlocal = system, fallback";
 const RULES_PLACEHOLDER = "DOMAIN-SUFFIX,example.cn,alidns\nDOMAIN-KEYWORD,intranet,alidns";
 const HOSTS_PLACEHOLDER = "router.lan = 192.168.1.1\n*.home.lan = 192.168.1.20, fd00::20";

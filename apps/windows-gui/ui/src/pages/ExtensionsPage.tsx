@@ -141,7 +141,7 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
 
       <Card
         title={t("插件")}
-        description={t("支持 Loon、Surge 和 Quantumult X 的插件。导入后先关着：查看它解密的域名、改写规则和脚本，确认后再打开，脚本才会运行。")}
+        description={t("兼容常见插件格式。导入后先关着：查看它解密的域名、改写规则和脚本，确认后再打开，脚本才会运行。")}
         actions={<>
           {plugins.length > 0 && <span className="count">{t("{count} 个插件", { count: plugins.length })}</span>}
           <MoreMenu

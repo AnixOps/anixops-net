@@ -159,7 +159,7 @@ struct RuleTextEditorView: View {
                 Label(statusTitle, systemImage: "checkmark.circle")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(brand.text2)
-                Text("一行一条，写法同 Surge / Loon：类型,值,策略[,no-resolve]。策略写 DIRECT、REJECT，其他名字都当作代理。以 # 开头的整条规则表示停用，其余注释保存时不保留。连接中保存会直接在隧道里换上新规则，已有连接不断开；新增规则列表 URL 时会重新连接。")
+                Text("一行一条，兼容常见规则语法：类型,值,策略[,no-resolve]。策略写 DIRECT、REJECT，其他名字都当作代理。以 # 开头的整条规则表示停用，其余注释保存时不保留。连接中保存会直接在隧道里换上新规则，已有连接不断开；新增规则列表 URL 时会重新连接。")
                     .font(.caption)
                     .foregroundStyle(brand.text2)
                     .fixedSize(horizontal: false, vertical: true)

@@ -293,7 +293,7 @@ struct CaptureDetailView: View {
                         }
                     }
                 } footer: {
-                    Text("pcapng 可用 Wireshark 打开，HAR 可导入浏览器开发者工具、Charles 或 Proxyman。导出内容可能包含账号、Cookie 等敏感信息，请只发给信任的人。")
+                    Text("pcapng 可用 Wireshark 打开，HAR 可导入浏览器开发者工具或其他抓包工具。导出内容可能包含账号、Cookie 等敏感信息，请只发给信任的人。")
                 }
                 .listRowBackground(brand.surface)
             } else {

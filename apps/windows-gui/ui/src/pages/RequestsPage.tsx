@@ -78,7 +78,7 @@ function useInspectorLayout() {
 }
 
 /**
- * Debug mode's home page (debug-mode.md): the requests as a table beside an inspector, after Proxyman. The page
+ * Debug mode's home page (debug-mode.md): the requests as a table beside an inspector. The page
  * toolbar holds what applies to the whole capture (the view, capture on or off, pause, export and clear); the
  * connections and the saved sessions are the page's other two views.
  */
@@ -171,7 +171,7 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
     change(desktop.clearCapture);
   }, [change]);
 
-  // Ctrl+F finds the filter field and Ctrl+R replays the selected request, as in Proxyman.
+  // Ctrl+F finds the filter field and Ctrl+R replays the selected request.
   useEffect(() => {
     if (view !== "requests") return;
     const onKey = (event: KeyboardEvent) => {

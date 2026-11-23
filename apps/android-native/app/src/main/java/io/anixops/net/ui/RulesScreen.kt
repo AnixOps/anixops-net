@@ -72,7 +72,7 @@ private val DnsChoices = listOf(
     Choice("custom", R.string.dns_custom, R.string.dns_custom_hint),
 )
 
-/** Examples shown in the empty editors; Surge and Loon write these lines the same way (DnsCards.tsx, MyRules.tsx). */
+/** Examples shown in the empty editors; in common rule syntax (DnsCards.tsx, MyRules.tsx). */
 private const val RulesPlaceholder =
     "DOMAIN-SUFFIX,example.com,PROXY\nDOMAIN-KEYWORD,ads,REJECT\nIP-CIDR,10.0.0.0/8,DIRECT,no-resolve"
 private const val ServersPlaceholder =

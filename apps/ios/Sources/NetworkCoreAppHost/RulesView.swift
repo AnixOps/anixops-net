@@ -2,7 +2,7 @@ import NetworkCoreBridge
 import SwiftUI
 
 /// Rules: the proxy mode (rules, global or direct), the subscription's policy groups, the local rules and the DNS
-/// settings. Only subscriptions that carry rules and groups (Clash, Surge or Loon profiles) have groups to show here;
+/// settings. Only subscriptions that carry rules and groups have groups to show here;
 /// any other node list routes by the user's own rules and sends the rest through the selected node.
 struct RulesView: View {
     var tunnel: TunnelController
@@ -36,7 +36,7 @@ struct RulesView: View {
                         BrandEmptyState(
                             systemImage: "arrow.triangle.branch",
                             title: "规则与分流",
-                            message: "导入订阅或节点后，可以在这里选择规则、全局或直连模式。规则模式按你自己的规则分流；带规则和策略组的订阅（Clash、Surge、Loon 配置）按订阅规则分流。"
+                            message: "导入订阅或节点后，可以在这里选择规则、全局或直连模式。规则模式按你自己的规则分流；带规则和策略组的订阅按订阅规则分流。"
                         )
                         .padding(.top, 80)
                     }
