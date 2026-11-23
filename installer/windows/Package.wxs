@@ -92,6 +92,19 @@
                 KeyPath="yes" />
           </Component>
 
+          <!--
+            The anixops:// handler (apps/windows-link). It has no administrator manifest, so a link opened while
+            the client runs reaches it without an administrator prompt; the client registers it for each user
+            when it starts.
+          -->
+          <Component Id="LinkHandlerComponent" Guid="*">
+            <File
+                Id="LinkHandlerExe"
+                Source="$(LinkExe)"
+                Name="anixops-net-link.exe"
+                KeyPath="yes" />
+          </Component>
+
           <Component Id="CliComponent" Guid="*">
             <File
                 Id="CliExe"
@@ -134,6 +147,7 @@
       <ComponentRef Id="WebView2LoaderComponent" />
       <ComponentRef Id="WintunComponent" />
       <ComponentRef Id="CliComponent" />
+      <ComponentRef Id="LinkHandlerComponent" />
       <ComponentRef Id="IntegrityListComponent" />
       <ComponentRef Id="ManagedConfigurationComponent" />
       <ComponentRef Id="ManagedDataFolderComponent" />

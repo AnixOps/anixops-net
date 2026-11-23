@@ -1,0 +1,32 @@
+[package]
+name = "anixops-net-link"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The anixops:// handler on Windows: hands a link to the running client without asking for administrator rights, and starts the client (one administrator prompt) only when none runs."
+
+# The handler and its protocol are plain Rust, tested on every system; what talks to Windows sits behind
+# `cfg(windows)` (`os`). The program has no manifest of its own, so it runs with the rights of whoever opens the
+# link (asInvoker), unlike the client, whose manifest requires administrator rights.
+[dependencies]
+client-strings = { path = "../../crates/client-strings" }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Globalization",
+    "Win32_Graphics_Gdi",
+    "Win32_System_DataExchange",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Registry",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "anixops-net-link"
+path = "src/main.rs"

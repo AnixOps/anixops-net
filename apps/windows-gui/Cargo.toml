@@ -34,6 +34,8 @@ app-notifications = { path = "../../crates/app-notifications" }
 traffic-stats = { path = "../../crates/traffic-stats" }
 
 [target.'cfg(windows)'.dependencies]
+# The anixops:// handler's protocol and the window that receives its links (`gui::tauri_ui::start_app_links`).
+anixops-net-link = { path = "../windows-link" }
 windows-data = { path = "../../crates/windows-data" }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-deep-link = "~2.4"

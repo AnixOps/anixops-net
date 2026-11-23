@@ -41,6 +41,13 @@ fn main() {
         }
         return;
     }
+    // A second start (another click on the shortcut, or the client started for a link while it already runs)
+    // hands its link, or a request to show the window, to the running client and leaves before it opens anything:
+    // the running client owns the data folder, the system proxy and the connection. The single instance plugin
+    // still catches a second start that comes before the running client's link receiver is up.
+    if anixops_net_link::os::hand_over(&anixops_net_link::request_from_args(std::env::args_os())) {
+        return;
+    }
     // Before anything reads or writes the data folder: it holds subscriptions,
     // node credentials and keys, and must be closed to the other users of the
     // computer. If it cannot be, the client does not start (and does not log,

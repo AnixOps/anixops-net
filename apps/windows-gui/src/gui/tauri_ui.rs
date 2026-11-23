@@ -871,16 +871,21 @@ fn take_app_links(links: State<'_, AppLinks>) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Registers `anixops://` for this user, takes a link the app was started with, and receives later ones (a second
-/// start hands its link over through the single instance plugin).
+/// The URL scheme the client registers.
+const APP_LINK_SCHEME: &str = "anixops";
+
+/// Registers `anixops://` for this user, takes a link the app was started with or that the handler kept, and
+/// receives later ones: from the handler and from a second start of the client over the link receiver
+/// (`anixops_net_link::os::listen`), and through the single instance plugin when a second start comes before
+/// the receiver is up.
 fn start_app_links(app: &AppHandle) {
-    let deep_link = app.deep_link();
-    if let Err(error) = deep_link.register_all() {
+    if let Err(error) = register_app_links(app) {
         let _ = append_managed_log(
             APP_LOG_SCOPE,
             &format!("anixops:// registration failed: {error}"),
         );
     }
+    let deep_link = app.deep_link();
     if let Ok(Some(urls)) = deep_link.get_current() {
         receive_app_links(app, urls.iter().map(ToString::to_string).collect());
     }
@@ -891,6 +896,89 @@ fn start_app_links(app: &AppHandle) {
             event.urls().iter().map(ToString::to_string).collect(),
         );
     });
+    let handle = app.clone();
+    let listening = anixops_net_link::os::listen(move |request| match request {
+        anixops_net_link::Request::Show => show_main_window(&handle),
+        anixops_net_link::Request::Open(link) => receive_app_links(&handle, vec![link]),
+    });
+    if let Err(error) = listening {
+        let _ = append_managed_log(
+            APP_LOG_SCOPE,
+            &format!("anixops:// link receiver failed: error {error}"),
+        );
+    }
+    // Links the handler kept because the client could not be started for them (the prompt was declined).
+    let kept = anixops_net_link::os::take_kept_links();
+    if !kept.is_empty() {
+        receive_app_links(app, kept);
+    }
+}
+
+/// Registers `anixops://` for this user (`HKCU\Software\Classes\anixops`). The command is the handler next to
+/// the client (`anixops-net-link.exe`), which runs without administrator rights: it hands each link to the
+/// running client, so a link needs no administrator prompt, and starts the client only when none runs. Written
+/// at every start, so an installation whose links still started the client itself moves to the handler with its
+/// first start. A build without the handler beside it (a development build) registers the client itself.
+fn register_app_links(app: &AppHandle) -> Result<(), String> {
+    let client = std::env::current_exe().map_err(|error| error.to_string())?;
+    let handler = client.with_file_name(anixops_net_link::LINK_EXECUTABLE);
+    if !handler.is_file() {
+        return app
+            .deep_link()
+            .register_all()
+            .map_err(|error| error.to_string());
+    }
+    let key = format!("Software\\Classes\\{APP_LINK_SCHEME}");
+    let values = [
+        (
+            key.clone(),
+            "",
+            format!("URL:{} protocol", app.config().identifier),
+        ),
+        (key.clone(), "URL Protocol", String::new()),
+        (
+            format!("{key}\\DefaultIcon"),
+            "",
+            format!("{},0", client.display()),
+        ),
+        (
+            format!("{key}\\shell\\open\\command"),
+            "",
+            anixops_net_link::handler_command(&handler),
+        ),
+    ];
+    for (key, name, value) in values {
+        set_user_string(&key, name, &value)?;
+    }
+    Ok(())
+}
+
+/// Writes a string value under `HKEY_CURRENT_USER`, making the key when it is missing; `name` "" is the key's
+/// default value.
+fn set_user_string(key: &str, name: &str, value: &str) -> Result<(), String> {
+    use windows_sys::Win32::System::Registry::{RegSetKeyValueW, HKEY_CURRENT_USER, REG_SZ};
+
+    let wide = |text: &str| -> Vec<u16> { text.encode_utf16().chain(Some(0)).collect() };
+    let key_wide = wide(key);
+    let name_wide = wide(name);
+    let value_wide = wide(value);
+    // SAFETY: `key_wide`, `name_wide` and `value_wide` are NUL-terminated, and the length given is
+    // `value_wide`'s, in bytes, with its NUL.
+    let result = unsafe {
+        RegSetKeyValueW(
+            HKEY_CURRENT_USER,
+            key_wide.as_ptr(),
+            name_wide.as_ptr(),
+            REG_SZ,
+            value_wide.as_ptr().cast(),
+            (value_wide.len() * 2) as u32,
+        )
+    };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(format!("{key}\\{name}: error {result}"))
+    }
 }
 
 fn show_main_window<R: Runtime, M: Manager<R>>(app: &M) {

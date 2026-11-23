@@ -85,7 +85,7 @@
 | 网络变化后重建连接 | ✅ | ✅ | ✅ | ✅ | ◐ | Android 共用 `network_watch`，Wi-Fi / 移动网络切换待真机确认 |
 | 按 Wi-Fi 自动连接 / 断开（On Demand） | ✅ | ✅ | ✅ | ⛔ | ✅ | 设置页“Wi-Fi 规则”：指定 Wi-Fi、其他 Wi-Fi、蜂窝（Android）、有线和其他网络各选连接 / 断开 / 保持不变；Windows、Android 由 App 运行时每 10–12 秒取样、换网络时执行一次（T12） |
 | 开机 / 登录后启动、自动连接 | ✅ | ✅ | ✅ | ✅ | ◐ | Android 在系统设置里把本 App 设为“始终开启的 VPN”后，开机由系统启动并自动连接；App 自己不能开机连接，见系统限制 |
-| `anixops://` 链接 | ✅ | ✅ | ✅ | ✅ | ✅ | 与 iOS 相同的动作：connect / disconnect / toggle、`mode?set=`、`select?node=&group=` 或 `policy=`、`import?url=`（只填进导入框，用户点“导入”才保存）。桌面没有 `global` 模式；公开版不带预设分流模式（[no-presets.md](no-presets.md)），旧版预设模式名一律拒绝。Windows 写当前用户的 `HKCU\Software\Classes\anixops`，Linux 写 `~/.local/share/applications` 里的 handler 并调 `xdg-mime`，都在启动时注册；第二次启动把链接交给已运行的窗口（Linux 因此改为单实例）。Android 在 manifest 里声明 scheme，由共用的 `view.parse_app_link` 解析（T13） |
+| `anixops://` 链接 | ✅ | ✅ | ✅ | ✅ | ✅ | 与 iOS 相同的动作：connect / disconnect / toggle、`mode?set=`、`select?node=&group=` 或 `policy=`、`import?url=`（只填进导入框，用户点“导入”才保存）。桌面没有 `global` 模式；公开版不带预设分流模式（[no-presets.md](no-presets.md)），旧版预设模式名一律拒绝。Windows 写当前用户的 `HKCU\Software\Classes\anixops`，命令是不需要管理员权限的 `anixops-net-link.exe`：客户端在运行时经窗口消息把链接交给它，不弹 UAC；没运行时才以管理员身份启动客户端（一次 UAC），拒绝 UAC 时链接保留一小时、下次启动客户端时处理（`installer/windows/README.md`）。Linux 写 `~/.local/share/applications` 里的 handler 并调 `xdg-mime`，都在启动时注册；第二次启动先把链接交给已运行的窗口再退出，不打开数据目录、不碰系统代理（Linux 因此改为单实例，并以数据目录里的 `instance.lock` 兜底）。冷启动收到的链接排队，等节点和状态读完、模式选定后再执行。Android 在 manifest 里声明 scheme，由共用的 `view.parse_app_link` 解析（T13） |
 | 崩溃报告（本机、脱敏） | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 本机 Prometheus 指标 | ⛔ | ✅ | ✅ | ✅ | ✅ | macOS 在设置页打开，`127.0.0.1:9477/metrics`，默认关闭（A3）；iOS 见系统限制 |
 | 用户协议同意、协议入口 | ✅ | ✅ | ✅ | ✅ | ✅ | |

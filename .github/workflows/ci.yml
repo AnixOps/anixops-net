@@ -441,6 +441,8 @@ jobs:
           mkdir -p dist/windows-ci/previous
           cp target/x86_64-pc-windows-gnu/debug/networkcore-windows-gui.exe dist/windows-ci/previous/
           TAURI_CONFIG='{"version":"0.3.0+2"}' cargo build --locked -p networkcore-windows-gui
+          # The anixops:// handler the MSI installs beside the GUI.
+          cargo build --locked -p anixops-net-link
 
       # The MSI also ships the kernel's Windows CLI, built from the pinned kernel checkout with its own lockfile.
       - name: Build the kernel Windows CLI
@@ -487,6 +489,19 @@ jobs:
           if ((Get-Item $currentGui).VersionInfo.FilePrivatePart -le (Get-Item $previousGui).VersionInfo.FilePrivatePart) {
             throw "The GUI built for the upgrade test does not have a higher file version than the previous one."
           }
+          # The GUI asks for administrator rights; the anixops:// handler must not, or every link would show an
+          # administrator prompt again (the manifest is embedded as plain XML text).
+          $linkExe = "$releaseDir\anixops-net-link.exe"
+          $guiText = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($currentGui))
+          $linkText = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($linkExe))
+          if (-not $guiText.Contains("requireAdministrator")) {
+            throw "The GUI no longer embeds its requireAdministrator manifest."
+          }
+          foreach ($level in @("requireAdministrator", "highestAvailable")) {
+            if ($linkText.Contains($level)) {
+              throw "anixops-net-link.exe asks for $level; it must run with the rights of whoever opens the link."
+            }
+          }
 
           # The previous package has the uninstall conditions of the packages before 1.0 (no
           # UPGRADINGPRODUCTCODE test), so the upgrade test also covers upgrading a beta: its actions then
@@ -507,6 +522,7 @@ jobs:
             $integrityPath = Join-Path $env:RUNNER_TEMP "integrity-$($package.Name)\integrity.sha256"
             & .github/scripts/write-integrity.ps1 -Output $integrityPath -Entry @(
               "networkcore-windows-gui.exe=$($package.Gui)",
+              "anixops-net-link.exe=$linkExe",
               "networkcore-windows.exe=$releaseDir\networkcore-windows.exe",
               "WebView2Loader.dll=$webView2LoaderPath",
               "wintun.dll=$wintunPath"
@@ -518,6 +534,7 @@ jobs:
               -d "ProductVersion=$($package.Version)" `
               -d "CliExe=$releaseDir\networkcore-windows.exe" `
               -d "GuiExe=$($package.Gui)" `
+              -d "LinkExe=$linkExe" `
               -d "WebView2LoaderDll=$webView2LoaderPath" `
               -d "WintunDll=$wintunPath" `
               -d "DefaultConfig=$defaultConfig" `

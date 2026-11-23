@@ -6,8 +6,9 @@ product version at build time.
 
 The installer:
 
-- installs `networkcore-windows-gui.exe` and `networkcore-windows.exe` under
-  Program Files, and remembers the folder so that an upgrade installs over it;
+- installs `networkcore-windows-gui.exe`, `networkcore-windows.exe` and the
+  `anixops://` handler `anixops-net-link.exe` under Program Files, and
+  remembers the folder so that an upgrade installs over it;
 - creates `%ProgramData%\AnixOps\NetworkCore` open only to SYSTEM and
   Administrators (the GUI closes it again at every start, see below);
 - creates an AnixOps NetworkCore Start Menu shortcut;
@@ -128,6 +129,31 @@ starts, putting back the proxy it served.
 Each Windows tag release also includes a portable ZIP and its SHA-256 and
 manifest files. Extract the ZIP, keep its files together, and run
 `networkcore-windows-gui.exe`. Extraction does not register anything.
+
+## `anixops://` links
+
+The GUI registers `anixops://` for the signed-in user
+(`HKCU\Software\Classes\anixops`) each time it starts. The command is
+`anixops-net-link.exe "%1"`, not the GUI: the GUI's manifest requires
+administrator rights, so starting it for every link meant an administrator
+prompt for every link. The handler runs with the user's own rights and:
+
+- hands the link to the running GUI over a window message (`WM_COPYDATA` to a
+  message-only window that accepts it from processes with fewer rights), so a
+  link opened while the client runs needs no prompt;
+- otherwise starts the GUI with the link (one administrator prompt);
+- when that prompt is declined or the start fails, keeps the link in
+  `%LOCALAPPDATA%\AnixOps Net\pending-links.txt` and says so; the GUI takes
+  links kept within the last hour when it next starts.
+
+A second start of the GUI itself (the Start Menu shortcut while it runs) hands
+its link, or a request to show the window, to the running GUI the same way
+before it opens the data folder. The first start after an upgrade from a
+version that registered the GUI itself moves the registration to the handler.
+A build without `anixops-net-link.exe` beside the GUI (a development build)
+registers the GUI itself. The registration is per user and stays after an
+uninstall, pointing at the removed handler; the MSI runs as LocalSystem and
+cannot reach every user's `HKCU`.
 
 ## First run and configuration
 
