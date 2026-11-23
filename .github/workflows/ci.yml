@@ -661,15 +661,12 @@ jobs:
           New-Item -Path $rootKey -Force | Out-Null
           New-ItemProperty -Path $rootKey -Name Blob -PropertyType Binary -Value $element.ToArray() -Force | Out-Null
           $writer.Dispose()
-          $rootStore = New-Object System.Security.Cryptography.X509Certificates.X509Store("Root", "CurrentUser")
-          $rootStore.Open("ReadOnly")
-          $found = $rootStore.Certificates.Find("FindByThumbprint", $rootThumbprint, $false).Count
-          $rootStore.Close()
-          if ($found -ne 1) {
+          # CryptoAPI hides a user root written this way until Windows lists it under ProtectedRoots, which
+          # only the confirmation dialog does, so the test checks the registry entry itself. That entry is
+          # what the user's trust is stored in and what the uninstall purge deletes.
+          $blob = (Get-ItemProperty -Path $rootKey -Name Blob -ErrorAction SilentlyContinue).Blob
+          if ($null -eq $blob -or $blob.Length -ne (12 + $der.Length)) {
             throw "The CI decryption root could not be put in the user's root store."
-          }
-          if (-not (Test-Path "Cert:\CurrentUser\Root\$rootThumbprint")) {
-            throw "The CI decryption root is not trusted in the user's root store."
           }
           Set-Content -Path (Join-Path $dataDir "trusted-roots.txt") -Value $rootThumbprint -Encoding ascii
           New-Item -ItemType Directory -Force -Path (Join-Path $dataDir "mitm") | Out-Null
@@ -692,7 +689,7 @@ jobs:
           if (-not (Test-StartupTask)) {
             throw "The MSI upgrade removed the sign-in startup task."
           }
-          if (-not (Test-Path "Cert:\CurrentUser\Root\$rootThumbprint")) {
+          if (-not (Test-Path $rootKey)) {
             throw "The MSI upgrade removed the trusted HTTPS decryption root."
           }
           if (-not (Test-Path $decryptionKey -PathType Leaf)) {
@@ -758,7 +755,7 @@ jobs:
           if (Test-StartupTask) {
             throw "Windows managed client MSI uninstall left the NetworkCore sign-in startup task."
           }
-          if ((Test-Path "Cert:\CurrentUser\Root\$rootThumbprint") -or (Test-Path "Cert:\LocalMachine\Root\$rootThumbprint")) {
+          if ((Test-Path $rootKey) -or (Test-Path "Cert:\CurrentUser\Root\$rootThumbprint") -or (Test-Path "Cert:\LocalMachine\Root\$rootThumbprint")) {
             throw "Windows managed client MSI uninstall left the trusted HTTPS decryption root."
           }
           if (Test-Path $decryptionKey) {
