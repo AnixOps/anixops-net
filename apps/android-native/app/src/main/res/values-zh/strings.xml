@@ -326,7 +326,7 @@
     <string name="plugin_file_unreadable">读不了这个文件</string>
     <string name="plugins_empty">还没有插件</string>
     <string name="plugins_empty_body">导入一个插件的 https 网址，开启 HTTPS 解密后生效。</string>
-    <string name="plugins_note">支持 Loon、Surge 和 Quantumult X 的插件。导入后先关着：查看它解密的域名、改写规则和脚本，确认后再打开，脚本才会运行。</string>
+    <string name="plugins_note">兼容常见插件格式。导入后先关着：查看它解密的域名、改写规则和脚本，确认后再打开，脚本才会运行。</string>
     <string name="plugin_partial">部分支持</string>
     <string name="plugin_unsupported">不支持</string>
     <string name="plugin_view">查看内容</string>
@@ -585,7 +585,7 @@
     <string name="connection_export">导出这个连接</string>
     <string name="connection_export_pcapng">导出 pcapng</string>
     <string name="connection_export_har">导出 HAR</string>
-    <string name="connection_export_note">保存到“下载”文件夹。pcapng 可用 Wireshark 打开，HAR 可导入浏览器开发者工具、Charles 或 Proxyman。导出内容可能包含账号、Cookie 等敏感信息，请只发给信任的人。</string>
+    <string name="connection_export_note">保存到“下载”文件夹。pcapng 可用 Wireshark 打开，HAR 可导入浏览器开发者工具或其他抓包工具。导出内容可能包含账号、Cookie 等敏感信息，请只发给信任的人。</string>
     <string name="bytes_text">显示为文本</string>
     <string name="bytes_hex">显示为十六进制</string>
     <string name="link_refused">无法打开链接：%1$s</string>

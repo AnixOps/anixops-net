@@ -107,7 +107,7 @@ pub fn import(
     let text = fetch(url, MAX_PLUGIN_LEN)?;
     let description: Value = inspect_plugin_json(&text)
         .and_then(|json| serde_json::from_slice(&json).ok())
-        .ok_or("This address does not hold a Loon, Surge or Quantumult X plugin.")?;
+        .ok_or("This address does not hold a plugin in a supported format.")?;
     let id = format!("{:016x}", hash(url));
     save(directory, id, url, text, &description, fetch)
 }
@@ -130,14 +130,14 @@ pub fn import_text(
     }
     let description: Value = inspect_plugin_json(&text)
         .and_then(|json| serde_json::from_slice(&json).ok())
-        .ok_or("This text is not a Loon, Surge or Quantumult X plugin.")?;
+        .ok_or("This text is not a plugin in a supported format.")?;
     // Any text parses; a plugin has at least one line the engine runs or a domain to decrypt.
     let lines = |kind: &str| description["lines"][kind].as_u64().unwrap_or_default();
     let decrypts = description["hostnames"]
         .as_array()
         .is_some_and(|hosts| !hosts.is_empty());
     if lines("supported") + lines("partial") == 0 && !decrypts {
-        return Err("This text is not a Loon, Surge or Quantumult X plugin.".to_string());
+        return Err("This text is not a plugin in a supported format.".to_string());
     }
     let key = description["name"]
         .as_str()

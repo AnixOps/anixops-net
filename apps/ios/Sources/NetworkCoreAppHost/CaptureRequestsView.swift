@@ -7,7 +7,7 @@ import SwiftUI
 /// toolbar's "连接" button.
 ///
 /// On the Mac and in a regular-width iPad window the requests are a sortable table beside an inspector that shows
-/// the selected one (after Proxyman); on an iPhone they are a list that opens each request on its own page.
+/// the selected one; on an iPhone they are a list that opens each request on its own page.
 struct CaptureRequestsView: View {
     var tunnel: TunnelController
     @Environment(\.brand) private var brand

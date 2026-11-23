@@ -327,7 +327,7 @@ struct CaptureDetailView: View {
                 Section {
                     CaptureExportItems(tunnel: tunnel, connection: connection.id, hasRequests: !capture.http.isEmpty)
                 } footer: {
-                    Text("zip 里有连接清单、HAR 和 pcapng；pcapng 可用 Wireshark 打开，HAR 可导入浏览器开发者工具、Charles 或 Proxyman。“完整”不遮盖账号、Cookie 等敏感信息，请只发给信任的人。")
+                    Text("zip 里有连接清单、HAR 和 pcapng；pcapng 可用 Wireshark 打开，HAR 可导入浏览器开发者工具或其他抓包工具。“完整”不遮盖账号、Cookie 等敏感信息，请只发给信任的人。")
                 }
                 .listRowBackground(brand.surface)
             } else {

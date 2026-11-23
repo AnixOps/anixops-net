@@ -1,7 +1,7 @@
 import NetworkCoreBridge
 import SwiftUI
 
-/// Proxies: every subscription group (Loon / Shadowrocket style) with its nodes, traffic, expiry and update
+/// Proxies: every subscription group with its nodes, traffic, expiry and update
 /// settings, or the single saved node; delay tests and switching across groups.
 struct ProxiesView: View {
     var tunnel: TunnelController

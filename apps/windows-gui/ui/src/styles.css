@@ -2,7 +2,7 @@
    themes; its Inter files are not loaded, see --font-sans below); design/tokens.css maps this stylesheet's names onto it and is generated from
    apps/ios/Design/tokens.json by .github/scripts/design_tokens.py. Never edit either by hand.
 
-   Two layouts share one look. The overview and the proxies page are dashboards in the manner of Surge: panels in
+   Two layouts share one look. The overview and the proxies page are dashboards: panels in
    a grid that use the whole window. Rules, extensions, activity and settings follow macOS System Settings: one
    centred column of grouped lists, titles above each group and explanations below it. */
 @import "./design/anixops/tokens.css";
@@ -549,7 +549,7 @@ dl.headers dd { margin: 0; font-family: var(--font-mono); font-size: 12px; overf
 .replay-line { display: flex; gap: 8px; }
 .replay-line .method-input { flex: 0 0 96px; font-family: var(--font-mono); }
 .replay-line input:not(.method-input) { flex: 1; min-width: 0; font-family: var(--font-mono); }
-/* Debug mode's requests (RequestsPage): a table beside an inspector, after Proxyman. The page fills the window under
+/* Debug mode's requests (RequestsPage): a table beside an inspector. The page fills the window under
    the title bar; the table and the inspector scroll on their own. */
 .workspace.split { display: flex; flex-direction: column; overflow: hidden; }
 .topbar.split { width: 100%; max-width: none; padding-inline: 24px; }

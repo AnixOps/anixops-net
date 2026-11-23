@@ -346,7 +346,7 @@
     <string name="plugin_file_unreadable">This file could not be read</string>
     <string name="plugins_empty">No plugins yet</string>
     <string name="plugins_empty_body">Import a plugin by its https address. It takes effect once HTTPS decryption is on.</string>
-    <string name="plugins_note">Works with Loon, Surge and Quantumult X plugins. An imported plugin stays off: look at the domains it decrypts, its rewrite rules and its scripts, and turn it on once you agree; only then do its scripts run.</string>
+    <string name="plugins_note">Works with common plugin formats. An imported plugin stays off: look at the domains it decrypts, its rewrite rules and its scripts, and turn it on once you agree; only then do its scripts run.</string>
     <string name="plugin_partial">Partly supported</string>
     <string name="plugin_unsupported">Not supported</string>
     <string name="plugin_view">View contents</string>
@@ -617,7 +617,7 @@
     <string name="connection_export">Export This Connection</string>
     <string name="connection_export_pcapng">Export pcapng</string>
     <string name="connection_export_har">Export HAR</string>
-    <string name="connection_export_note">Saved to the Downloads folder. pcapng opens in Wireshark; HAR imports into browser developer tools, Charles or Proxyman. Exports can hold account details and cookies, so share them only with people you trust.</string>
+    <string name="connection_export_note">Saved to the Downloads folder. pcapng opens in Wireshark; HAR imports into browser developer tools or other capture tools. Exports can hold account details and cookies, so share them only with people you trust.</string>
     <string name="bytes_text">Show as Text</string>
     <string name="bytes_hex">Show as Hex</string>
     <string name="link_refused">Cannot open the link: %1$s</string>
