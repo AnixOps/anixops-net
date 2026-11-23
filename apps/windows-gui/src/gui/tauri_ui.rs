@@ -504,6 +504,9 @@ struct OperationResult {
     code: Option<&'static str>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     params: BTreeMap<&'static str, String>,
+    /// A second code the window words after `code`, with no parameters (as client-core's `OperationResult`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    follow: Option<&'static str>,
     /// Written in the window's language already (a note on capture or on a reconnect); shown after the coded text.
     #[serde(skip_serializing_if = "Option::is_none")]
     note: Option<String>,
@@ -516,6 +519,7 @@ impl OperationResult {
             message: message.into(),
             code: Some(code),
             params: BTreeMap::new(),
+            follow: None,
             note: None,
         }
     }
@@ -523,6 +527,13 @@ impl OperationResult {
     /// Fills `{name}` of the coded text.
     fn with(mut self, name: &'static str, value: impl ToString) -> Self {
         self.params.insert(name, value.to_string());
+        self
+    }
+
+    /// Has the window word `code` after this result's own code; `message` is its English, added to this one's.
+    fn followed_by(mut self, code: &'static str, message: &str) -> Self {
+        self.message = reconnect::joined([self.message.as_str(), message]);
+        self.follow = Some(code);
         self
     }
 
@@ -4851,17 +4862,53 @@ fn save_custom_dns_blocking(
         }
         Ok(())
     })?;
-    Ok(if in_use {
-        OperationResult::coded(
+    let (code, message) = if in_use {
+        (
             "dns.settings_saved",
             "DNS settings saved. Connect to apply them.",
         )
     } else {
-        OperationResult::coded(
+        (
             "dns.settings_saved_custom",
             "DNS settings saved. Choose Custom to use them.",
         )
-    })
+    };
+    let missing = missing_dns_rule_sets(&desktop, &settings);
+    if missing.is_empty() {
+        return Ok(OperationResult::coded(code, message));
+    }
+    let names = missing.join(", ");
+    Ok(OperationResult::coded(
+        "dns.rule_sets_missing",
+        format!("The current profile has no rule set named {names}; the lines that use them are left out."),
+    )
+    .with("names", names)
+    .followed_by(code, message))
+}
+
+/// The `RULE-SET` names of the DNS settings the rule-mode profile does not define: their lines are left out of the
+/// engine's DNS, which saving says. None in direct mode or debug mode, where no rule set is meant to be.
+fn missing_dns_rule_sets(
+    desktop: &DesktopState,
+    settings: &desktop_dns::custom::DnsSettings,
+) -> Vec<String> {
+    if desktop.direct_egress || desktop.routing_mode != DesktopRoutingMode::Rule {
+        return Vec::new();
+    }
+    fs::read_to_string(embedded_profile_path())
+        .ok()
+        .and_then(|profile| {
+            embedded_envelope_for_mode(
+                &profile,
+                desktop.routing_mode,
+                desktop.dns_preset,
+                desktop.block_quic,
+            )
+            .ok()
+        })
+        .and_then(|envelope| serde_json::from_str::<Value>(&envelope).ok())
+        .map(|envelope| settings.missing_rule_sets(&envelope))
+        .unwrap_or_default()
 }
 
 #[tauri::command]

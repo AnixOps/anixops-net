@@ -695,6 +695,7 @@
     <string name="code_dns_set_custom">DNS 已改为自定义</string>
     <string name="code_dns_set_encrypted">DNS 已改为加密 DNS</string>
     <string name="code_dns_set_system">DNS 已改为系统 DNS</string>
+    <string name="code_dns_rule_sets_missing">当前配置里没有规则集 {names}，用到它们的行暂不生效</string>
     <string name="code_dns_settings_saved_custom">DNS 设置已保存，选择“自定义”后使用</string>
     <string name="code_dns_settings_saved_next">DNS 设置已保存</string>
     <string name="code_dns_settings_saved_restarted">DNS 设置已保存，内核已用它们重启</string>

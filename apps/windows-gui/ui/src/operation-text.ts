@@ -65,6 +65,7 @@ export const operationTexts: Record<string, string> = {
   "dns.choice_saved": "DNS 选择已保存，连接后生效",
   "dns.settings_saved": "DNS 设置已保存，连接后生效",
   "dns.settings_saved_custom": "DNS 设置已保存，选择“自定义”后使用",
+  "dns.rule_sets_missing": "当前配置里没有规则集 {names}，用到它们的行暂不生效",
   "redirects.saved": "重定向已保存，对当前连接或下次连接生效",
   "data_lists.saved": "数据列表已保存，内核会经代理下载",
   "devices.saved": "设备名称已保存",

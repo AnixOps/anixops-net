@@ -55,6 +55,7 @@ class CodeTexts(private val context: Context) : CoreTexts {
             "dns.set_custom" to R.string.code_dns_set_custom,
             "dns.set_encrypted" to R.string.code_dns_set_encrypted,
             "dns.set_system" to R.string.code_dns_set_system,
+            "dns.rule_sets_missing" to R.string.code_dns_rule_sets_missing,
             "dns.settings_saved_custom" to R.string.code_dns_settings_saved_custom,
             "dns.settings_saved_next" to R.string.code_dns_settings_saved_next,
             "dns.settings_saved_restarted" to R.string.code_dns_settings_saved_restarted,

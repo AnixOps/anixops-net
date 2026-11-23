@@ -942,6 +942,7 @@ export const english: Record<string, string> = {
   "DNS 已改为加密 DNS": "DNS set to Encrypted DNS.",
   "DNS 已改为系统 DNS": "DNS set to System DNS.",
   "DNS 设置已保存": "DNS settings saved.",
+  "当前配置里没有规则集 {names}，用到它们的行暂不生效": "The current profile has no rule set named {names}; the lines that use them are left out.",
   "DNS 设置已保存，内核已用它们重启": "DNS settings saved; the core restarted with them.",
   "已选择最快的节点：{node}（{delay}）": "Fastest node selected: {node} ({delay}).",
   "策略组 {group} 已改用 {member}，已重新连接": "Policy group {group} now uses {member}; reconnected.",

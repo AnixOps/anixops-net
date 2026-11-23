@@ -940,6 +940,7 @@ export const traditional: Record<string, string> = {
   "DNS 已改为加密 DNS": "DNS 已改為加密 DNS",
   "DNS 已改为系统 DNS": "DNS 已改為系統 DNS",
   "DNS 设置已保存": "DNS 設定已儲存",
+  "当前配置里没有规则集 {names}，用到它们的行暂不生效": "目前設定裡沒有規則集 {names}，用到它們的行暫不生效",
   "DNS 设置已保存，内核已用它们重启": "DNS 設定已儲存，核心已用它們重新啟動",
   "已选择最快的节点：{node}（{delay}）": "已選擇最快的節點：{node}（{delay}）",
   "策略组 {group} 已改用 {member}，已重新连接": "策略組 {group} 已改用 {member}，已重新連線",

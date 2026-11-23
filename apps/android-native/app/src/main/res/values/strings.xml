@@ -727,6 +727,7 @@
     <string name="code_dns_set_custom">DNS set to Custom.</string>
     <string name="code_dns_set_encrypted">DNS set to Encrypted DNS.</string>
     <string name="code_dns_set_system">DNS set to System DNS.</string>
+    <string name="code_dns_rule_sets_missing">The current profile has no rule set named {names}; the lines that use them are left out.</string>
     <string name="code_dns_settings_saved_custom">DNS settings saved; choose Custom to use them.</string>
     <string name="code_dns_settings_saved_next">DNS settings saved.</string>
     <string name="code_dns_settings_saved_restarted">DNS settings saved; the core restarted with them.</string>

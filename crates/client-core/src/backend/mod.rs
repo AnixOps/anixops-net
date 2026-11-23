@@ -334,6 +334,16 @@ fn done(code: &'static str, message: impl Into<String>) -> Result<OperationResul
     Ok(OperationResult::coded(code, message))
 }
 
+/// What saving the DNS settings says first when some of their `RULE-SET` lines name a rule set the profile lacks.
+fn dns_rule_sets_missing(names: &[String]) -> OperationResult {
+    let names = names.join(", ");
+    OperationResult::coded(
+        "dns.rule_sets_missing",
+        format!("The current profile has no rule set named {names}; the lines that use them are left out."),
+    )
+    .with("names", names)
+}
+
 /// The preferences the interface saves; fields Linux does not use are ignored.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1192,20 +1202,37 @@ impl Backend {
             }
             Ok(())
         })?;
-        if in_use && self.restart_if_running()? {
-            return done(
+        let missing = self.missing_dns_rule_sets(&settings);
+        let (code, message) = if in_use && self.restart_if_running()? {
+            (
                 "dns.settings_saved_restarted",
                 "DNS settings saved; the engine restarted with them",
-            );
-        }
-        if in_use {
-            done("dns.settings_saved_next", "DNS settings saved")
+            )
+        } else if in_use {
+            ("dns.settings_saved_next", "DNS settings saved")
         } else {
-            done(
+            (
                 "dns.settings_saved_custom",
                 "DNS settings saved; choose Custom to use them",
             )
+        };
+        if missing.is_empty() {
+            return done(code, message);
         }
+        Ok(dns_rule_sets_missing(&missing).followed_by(code, message))
+    }
+
+    /// The `RULE-SET` names of the DNS settings the rule-mode profile does not define: their lines are left out of
+    /// the engine's DNS, which saving says. None in direct mode or debug mode, where no rule set is meant to be.
+    fn missing_dns_rule_sets(&self, settings: &desktop_dns::custom::DnsSettings) -> Vec<String> {
+        if self.state.direct_egress || self.state.routing_mode != RoutingMode::Rule {
+            return Vec::new();
+        }
+        self.envelope_with_rules(&desktop_dns::rules::load_lines(&self.my_rules_path()))
+            .ok()
+            .and_then(|envelope| serde_json::from_str::<Value>(&envelope).ok())
+            .map(|envelope| settings.missing_rule_sets(&envelope))
+            .unwrap_or_default()
     }
 
     /// Whether a connect opens the TUN device first (desktop TUN mode).
