@@ -500,7 +500,7 @@ fn apply_proxy_after_direct_readiness(
         }
     };
     let snapshot = if reused {
-        planned
+        planned.clone()
     } else {
         owned_proxy::sanitized(applied_snapshot, proxy)
     };
