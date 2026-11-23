@@ -109,7 +109,7 @@ fn rights_mask(rights: &str) -> Option<u32> {
     if !rights.is_empty() && rights.bytes().all(|byte| byte.is_ascii_digit()) {
         return rights.parse().ok();
     }
-    if rights.len() % 2 != 0 || !rights.is_ascii() {
+    if !rights.len().is_multiple_of(2) || !rights.is_ascii() {
         return None;
     }
     let mut mask = 0_u32;
