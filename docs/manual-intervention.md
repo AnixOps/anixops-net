@@ -158,6 +158,9 @@ CI 只能跑规则与重建逻辑的单元测试（`OnDemandSettingsTests`、`Ne
 
 - [ ] S3 崩溃自愈（iOS、macOS）：连接后强杀扩展（iOS 用 Xcode Debug › Attach 后 kill，或 `kill -9` macOS 的
   `com.example.networkcore.macos.packettunnel` 进程），记录到重新显示“已连接”的时间，目标 ≤ 5 s；手动断开后不应自己连上。
+- [ ] S3 崩溃自愈（Android）：连接后 `adb shell am crash io.anixops.net`（或在开发者选项里结束进程），系统重启 VPN 服务后
+  重新连接；手动断开后再结束进程不应自己连上；10 分钟内连续崩溃 3 次后停止重启并出现“不再自动重新连接”通知。
+- [ ] Android “始终开启的 VPN”：在系统设置里打开后，连接失败（例如删掉全部节点）时出现“VPN 未能连接”通知，而不是静默失败。
 - [ ] S4 唤醒/切网（iOS）：Wi-Fi ↔ 蜂窝、两个 Wi-Fi 之间各切 20 次，每次切换后网页和 Hysteria2/TUIC 节点都能在几秒内恢复；
   开发者模式的事件里每次有一条 `network change: reset … sessions, closed … connections`，扩展内存（诊断里的
   footprint）20 次后不持续增长。锁屏超过 1 分钟再解锁，应有 `wake: … closed …`。
@@ -256,6 +259,9 @@ Play 版是开源版（用户 2026-11-15 决定），包名 `io.anixops.net.andr
   tag 时，从 main 运行要先在 Environment 的 Deployment branches 里临时加上 `main`。
 - [ ] 每次上传的 versionCode 必须比上一次大（`apps/android-native/app/build.gradle.kts`）。
 - [ ] Play Console 里的应用签名、商店信息、隐私政策、数据安全、内容分级、VPN 和前台服务声明只能人工填写。
+- [ ] 1.0.0 起申请 `ACCESS_BACKGROUND_LOCATION`：在 Play Console → 应用内容 → 位置权限里声明用途（Wi-Fi 规则在后台读取
+  Wi-Fi 名称，App 内先说明再跳系统设置），附演示视频；前台服务声明补充“打开 Wi-Fi 规则时 VPN 断开后保持等待网络”的用途。
+  数据安全表单里位置一项仍是“不收集”（名称只在本机比对）。
 - [ ] VPN 服务和前台服务声明要附 90 秒内的演示视频：手动运行 `play-demo-video.yml`（Actions → Play demo video → Run
   workflow），它在模拟器上跑真实的调试版 APK 并加上英文字幕；下载 artifact 里的 `anixops-net-play-demo.mp4`，由维护者
   上传到 YouTube（不公开列出）或云盘，再把链接填进两项声明。
@@ -358,10 +364,16 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 
 - [ ] 连接后概览页显示出口地址和位置，与浏览器打开 `https://www.cloudflare.com/cdn-cgi/trace` 看到的一致。
 - [ ] 活动页“生成诊断报告”后提示保存到 `Download/anixops-net-diagnostics-<时间>.log`，文件管理器里能打开，是纯文本，末尾有应用日志。
+- [ ] Android 8 / 9：首次生成诊断报告或打开 HTTPS 解密时询问存储权限，允许后文件出现在「下载」；拒绝后提示需要存储权限，不报成功。
+  再次打开解密（同一根证书）不产生 `(1)` 副本；换一张根证书时文件名带新指纹前 8 位。
 
 ## 系统通知真机验收（T11）
 
-- [ ] Windows（MSI 安装后从开始菜单打开）、Linux（GNOME / KDE）、Android 13+（首次连接时允许通知）：设置页“通知”三个开关默认打开。
+- [ ] Windows（MSI 安装后从开始菜单打开）、Linux（GNOME / KDE）、Android 13+：设置页“通知”三个开关默认打开。
+- [ ] Android 13+：首次连接成功后系统询问通知权限（之前不问）；拒绝后设置页“通知”出现“系统未允许本应用发送通知”一行和“打开设置”按钮，
+  在通知关闭时打开任一通知开关会再次询问或跳到系统设置。
+- [ ] Android：点击“连接已断开”“订阅更新失败”通知打开 App；点击带链接的脚本通知打开浏览器（只接受 http / https）；
+  长文字可展开；连续两次断开只留一条“连接已断开”；切换 App 语言后通知渠道名和通知文字都跟着变。
 - [ ] 装一个会调用 `$notification.post` 的插件脚本，命中后系统通知中心出现脚本标题和内容。
 - [ ] 连接后结束内核或在 Android 系统设置里断开 VPN，几秒内出现“连接已断开”；Windows 打开“内核意外退出时自动恢复一次”时文字是“正在重新连接”。
 - [ ] 把订阅地址改成打不开的地址并等到自动更新，出现“订阅更新失败”。关掉对应开关后不再出现；切换界面语言后通知文字跟着变。
@@ -376,6 +388,11 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 
 - [ ] Windows：设置页打开“Wi-Fi 规则”，点“当前网络”填入 Wi-Fi 名称（Windows 11 先在“隐私和安全性 > 位置”允许桌面应用），设为“断开”；连上后切到这个 Wi-Fi，十几秒内断开，换到别的 Wi-Fi 或有线后按规则连接。
 - [ ] Android：打开规则时系统询问位置权限；允许后“当前网络”能填入 Wi-Fi 名称。Wi-Fi 和移动网络来回切换时按规则连接 / 断开（App 在后台也生效），拒绝权限时“其他 Wi-Fi”规则仍生效。
+- [ ] Android 10+ 后台：只给“使用时允许”位置时，设置页“Wi-Fi 规则”出现后台位置提示；点“允许”先看到说明对话框，再跳到
+  系统设置选“始终允许”。之后锁屏超过 1 分钟（或 `adb shell am make-uid-idle io.anixops.net`），在后台切到指定 Wi-Fi，
+  规则仍按名称执行；不给“始终允许”时后台切到指定 Wi-Fi 不应被当成“其他 Wi-Fi”。关掉系统定位时设置页出现“位置信息已关闭”提示。
+- [ ] Android 后台重连：规则让 VPN 断开后通知栏保留“Wi-Fi 规则：等待下一个网络”通知；App 在后台（锁屏或划掉最近任务）切到“连接”规则的网络，
+  能重新连上。国产系统（MIUI、ColorOS 等）的后台冻结 / 省电策略下也确认一次，如被冻结在说明里写明需要关闭省电限制。
 - [ ] 手动连接或断开后，在同一个网络里不会被规则改回，换网络后才按规则执行。
 
 ## 按网络选择策略组（subnet 组）真机验收
