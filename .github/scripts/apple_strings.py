@@ -349,7 +349,8 @@ def index_file(code: str) -> Index:
     for m in re.finditer(r"\bfunc\s+(\w+)\s*(?:<[^>(]*>)?\s*\(", code):
         close = matching(code, m.end() - 1)
         index.funcs.setdefault(m.group(1), []).append(parse_params(code[m.end():close]))
-    for m in re.finditer(r"\binit[?!]?\s*(?:<[^>(]*>)?\s*\(", code):
+    # Declarations only: `self.init(...)` / `Type.init(...)` are calls, whose labels are not types.
+    for m in re.finditer(r"(?<![.\w])init[?!]?\s*(?:<[^>(]*>)?\s*\(", code):
         close = matching(code, m.end() - 1)
         index.inits.setdefault(owner_at(code, m.start()), []).append(parse_params(code[m.end():close]))
     for m in re.finditer(r"\bstruct\s+(\w+)[^{;]*\{", code):
@@ -659,6 +660,16 @@ def self_test() -> int:
         let title: LocalizedStringKey
         var body: some View { Text(title) }
     }
+    struct Empty<A: View>: View {
+        let title: LocalizedStringKey
+        @ViewBuilder var actions: A
+        var body: some View { Text(title) }
+    }
+    extension Empty where A == EmptyView {
+        init(title: LocalizedStringKey) {
+            self.init(title: title) { EmptyView() }
+        }
+    }
     """
     cases = [
         ('Text("继续")', []),
@@ -669,6 +680,7 @@ def self_test() -> int:
         ('step(1, "生成根证书", done: true)', ["S3"]),
         ('item("继续", value)', []),
         ('Card(title: "继续")', []),
+        ('Empty(title: "继续")', []),
         ('Text(flag ? "继续" : "没有的键")', ["S1"]),
         ('var title: LocalizedStringKey {\n switch self {\n case .a:\n return "继续"\n }\n}', []),
         ('var title: String {\n switch self {\n case .a:\n return "继续"\n }\n}', ["S3"]),
