@@ -4,10 +4,19 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -19,14 +28,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -87,8 +98,63 @@ private sealed interface ProxiesDialog {
 }
 
 /**
+ * Keeps an open dialog across a rotation and while another page shows: its kind and the ids it is about, looked up
+ * again in [subscriptions] when restored (a subscription since removed closes it). An import keeps its link, which
+ * may have come from an `anixops://import` link; an edit keeps the form, whose fields keep what was typed.
+ */
+private fun proxiesDialogSaver(subscriptions: () -> List<SubscriptionRow>) = Saver<ProxiesDialog?, ArrayList<String>>(
+    save = { dialog ->
+        when (dialog) {
+            null -> null
+            is ProxiesDialog.Import -> arrayListOf("import", dialog.scanned)
+            ProxiesDialog.Scan -> arrayListOf("scan")
+            is ProxiesDialog.Rename -> arrayListOf("rename", dialog.subscription.id)
+            is ProxiesDialog.Interval -> arrayListOf("interval", dialog.subscription.id)
+            is ProxiesDialog.RemoveSubscription -> arrayListOf("removeSubscription", dialog.subscription.id)
+            is ProxiesDialog.Edit -> arrayListOf(
+                "edit",
+                dialog.node.id,
+                dialog.node.label,
+                dialog.form.name,
+                dialog.form.server,
+                dialog.form.port.toString(),
+                dialog.form.keepReason.orEmpty(),
+            )
+            is ProxiesDialog.RemoveNode -> arrayListOf("removeNode", dialog.node.id, dialog.node.label)
+        }
+    },
+    restore = { saved -> restoreProxiesDialog(saved, subscriptions()) },
+)
+
+/** The dialog [saved] by [proxiesDialogSaver]; null when what it was about is gone. */
+internal fun restoreProxiesDialogKind(saved: List<String>, subscriptions: List<SubscriptionRow>): String? =
+    restoreProxiesDialog(saved, subscriptions)?.let { it::class.simpleName }
+
+private fun restoreProxiesDialog(saved: List<String>, subscriptions: List<SubscriptionRow>): ProxiesDialog? {
+    val subscription = { subscriptions.firstOrNull { it.id == saved.getOrNull(1) } }
+    return when (saved.firstOrNull()) {
+        "import" -> ProxiesDialog.Import(saved.getOrNull(1).orEmpty())
+        "scan" -> ProxiesDialog.Scan
+        "rename" -> subscription()?.let { ProxiesDialog.Rename(it) }
+        "interval" -> subscription()?.let { ProxiesDialog.Interval(it) }
+        "removeSubscription" -> subscription()?.let { ProxiesDialog.RemoveSubscription(it) }
+        "edit" -> if (saved.size >= 7) {
+            ProxiesDialog.Edit(
+                NodeRow(id = saved[1], label = saved[2], protocol = ""),
+                NodeForm(saved[3], saved[4], saved[5].toIntOrNull() ?: 0, saved[6].ifEmpty { null }),
+            )
+        } else {
+            null
+        }
+        "removeNode" -> if (saved.size >= 3) ProxiesDialog.RemoveNode(NodeRow(saved[1], saved[2], "")) else null
+        else -> null
+    }
+}
+
+/**
  * 代理: subscriptions, then every node by subscription, with search, delay tests and node management. Debug mode's
- * 出口 shows the same page under its own [title], with its exit choice in [header].
+ * 出口 shows the same page under its own [title], with its exit choice in [header]. The nodes are a lazy list, so a
+ * subscription with thousands of them composes only the rows on screen, each kept by its node.
  */
 @Composable
 fun ProxiesScreen(
@@ -98,7 +164,10 @@ fun ProxiesScreen(
     title: String = stringResource(R.string.nav_proxies),
     header: @Composable ColumnScope.() -> Unit = {},
 ) {
-    var dialog by remember { mutableStateOf<ProxiesDialog?>(null) }
+    val subscriptions by rememberUpdatedState(state.subscriptions)
+    var dialog by rememberSaveable(stateSaver = proxiesDialogSaver { subscriptions }) {
+        mutableStateOf<ProxiesDialog?>(null)
+    }
     val scope = rememberCoroutineScope()
     state.pendingImport?.let { link ->
         LaunchedEffect(link) {
@@ -106,65 +175,102 @@ fun ProxiesScreen(
             actions.takeImport()
         }
     }
-    Page(title, modifier) {
-        header()
-        SubscriptionsSection(
-            state.subscriptions,
-            enabled = !state.busy,
-            actions = actions,
-            onImport = { dialog = ProxiesDialog.Import() },
-            onRename = { dialog = ProxiesDialog.Rename(it) },
-            onInterval = { dialog = ProxiesDialog.Interval(it) },
-            onRemove = { dialog = ProxiesDialog.RemoveSubscription(it) },
-        )
-        val view = state.page.view
-        if (state.loaded && view.total == 0) {
-            EmptyNodes()
-        } else {
-            OutlinedTextField(
-                value = state.query,
-                onValueChange = actions.search,
-                singleLine = true,
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                placeholder = { Text(stringResource(R.string.proxies_search)) },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(BrandSpacing.xs)) {
-                OutlinedButton(onClick = actions.testAll, enabled = !state.testing && view.shown > 0) {
-                    Text(stringResource(if (state.testing) R.string.proxies_testing else R.string.proxies_test_all))
-                }
-                OutlinedButton(onClick = actions.selectFastest, enabled = !state.busy && view.total > 0) {
-                    Text(stringResource(R.string.proxies_fastest))
-                }
-            }
-            if (state.loaded && view.shown == 0) {
-                Text(
-                    stringResource(R.string.proxies_no_match),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = LocalBrandPalette.current.text2,
+    val view = state.page.view
+    val empty = state.loaded && view.total == 0
+    val palette = LocalBrandPalette.current
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        contentPadding = PaddingValues(vertical = BrandSpacing.lg),
+    ) {
+        item(key = "top", contentType = "top") {
+            Column(Modifier.content(), verticalArrangement = Arrangement.spacedBy(BrandSpacing.lg)) {
+                Text(title, style = MaterialTheme.typography.headlineSmall)
+                header()
+                SubscriptionsSection(
+                    state.subscriptions,
+                    enabled = !state.busy,
+                    actions = actions,
+                    onImport = { dialog = ProxiesDialog.Import() },
+                    onRename = { dialog = ProxiesDialog.Rename(it) },
+                    onInterval = { dialog = ProxiesDialog.Interval(it) },
+                    onRemove = { dialog = ProxiesDialog.RemoveSubscription(it) },
                 )
-            }
-            view.sections.forEach { section ->
-                Section(
-                    sectionTitle(section) + " · " +
-                        pluralStringResource(R.plurals.proxies_node_count, section.nodes.size, section.nodes.size),
-                ) {
-                    section.nodes.forEachIndexed { index, node ->
-                        if (index > 0) RowDivider()
-                        NodeLine(
-                            node,
-                            editable = node.id in state.page.editable,
-                            enabled = !state.busy,
-                            onSelect = { actions.select(node.id) },
-                            onShare = { actions.share(node.id, node.label) },
-                            onCheckup = { actions.openCheckup(node.id, node.label) },
-                            onEdit = {
-                                scope.launch {
-                                    actions.loadForm(node.id)?.let { dialog = ProxiesDialog.Edit(node, it) }
-                                }
-                            },
-                            onRemove = { dialog = ProxiesDialog.RemoveNode(node) },
+                if (empty) {
+                    EmptyNodes()
+                } else {
+                    OutlinedTextField(
+                        value = state.query,
+                        onValueChange = actions.search,
+                        singleLine = true,
+                        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                        placeholder = { Text(stringResource(R.string.proxies_search)) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(BrandSpacing.xs)) {
+                        OutlinedButton(onClick = actions.testAll, enabled = !state.testing && view.shown > 0) {
+                            Text(stringResource(if (state.testing) R.string.proxies_testing else R.string.proxies_test_all))
+                        }
+                        OutlinedButton(onClick = actions.selectFastest, enabled = !state.busy && view.total > 0) {
+                            Text(stringResource(R.string.proxies_fastest))
+                        }
+                    }
+                    if (state.loaded && view.shown == 0) {
+                        Text(
+                            stringResource(R.string.proxies_no_match),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = palette.text2,
                         )
+                    }
+                }
+            }
+        }
+        if (!empty) {
+            view.sections.forEachIndexed { number, section ->
+                // Sections and their nodes are keyed by subscription, so the same node id in two subscriptions stays
+                // apart; the position keeps two sections without a subscription apart too.
+                val group = "$number:${section.source.orEmpty()}:${section.pasted}"
+                item(key = "section/$group", contentType = "heading") {
+                    Text(
+                        sectionTitle(section) + " · " +
+                            pluralStringResource(R.plurals.proxies_node_count, section.nodes.size, section.nodes.size),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = palette.text2,
+                        modifier = Modifier
+                            .content()
+                            .padding(start = BrandSpacing.md, top = BrandSpacing.lg, bottom = BrandSpacing.xs),
+                    )
+                }
+                itemsIndexed(
+                    section.nodes,
+                    key = { _, node -> "node/$group/${node.id}" },
+                    contentType = { _, _ -> "node" },
+                ) { index, node ->
+                    Surface(
+                        shape = lineShape(first = index == 0, last = index == section.nodes.lastIndex),
+                        color = palette.surface,
+                        contentColor = palette.text,
+                        modifier = Modifier.content(),
+                    ) {
+                        Column {
+                            if (index > 0) RowDivider()
+                            NodeLine(
+                                node,
+                                editable = node.id in state.page.editable,
+                                enabled = !state.busy,
+                                onSelect = { actions.select(node.id) },
+                                onShare = { actions.share(node.id, node.label) },
+                                onCheckup = { actions.openCheckup(node.id, node.label) },
+                                onEdit = {
+                                    scope.launch {
+                                        actions.loadForm(node.id)?.let { dialog = ProxiesDialog.Edit(node, it) }
+                                    }
+                                },
+                                onRemove = { dialog = ProxiesDialog.RemoveNode(node) },
+                            )
+                        }
                     }
                 }
             }

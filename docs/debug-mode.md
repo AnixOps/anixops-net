@@ -88,7 +88,7 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含调试模式的 `deb
 - **请求详情 / 检查器**（`ExchangeInspector.swift`，三个平台同一个视图）：顶行是方法、状态和网址，下面四个标签：概览（基本信息、重放、导出、映射）、请求、响应、时间线，选中的标签会记住。请求和响应各自在“头 / 查询 / 正文”之间切换。正文按内容显示：JSON 是可折叠的树（点一行选中并折叠；接键盘时方向键移动和折叠，Return 或空格折叠，Mac 上 ⌘C 拷贝选中的值；下方显示 JSONPath，点一下拷贝）或格式化文本，图片直接预览，表单是名值对，其余是原文，任何内容都能切到十六进制。JSON 用自己的解析器（`JsonDocument.swift`），数字按服务器发来的原样显示，64 位 id 不会经过浮点数取整，键的顺序和重复的键也保留。时间线把同一连接上的请求画在一条时间轴上；内核只记录每个请求的开始和结束，没有 DNS、建连、TLS 的分段。
 - Mac 的检查器在窗口里不设导航标题（否则窗口标题会从“请求”变成“GET 200”）；有检查器时快捷筛选放在表格这一栏、请求计数的上方。
 
-- 数据来自内核 `capture_requests`（networkcore d1a8cc1 起），每秒按 `since_rev` 增量读取（networkcore d9ff54f 起）：请求头读到就出现一行“进行中”，响应到来、结束时在原位更新；行按首次出现排序，以连接 id 加序号标识。`dropped_before_seq` 以内已结束的行随内核一起删掉；本地最多保留 5000 行（`NetworkCoreBridge/CaptureRequests.swift`）。旧内核没有 `last_rev` 时退回按 `since_seq` 只列已结束的请求。
+- 数据来自内核 `capture_requests`（networkcore d1a8cc1 起），每秒按 `since_rev` 增量读取（networkcore d9ff54f 起）：请求头读到就出现一行“进行中”，响应到来、结束时在原位更新；行按首次出现排序，以连接 id 加序号标识。`dropped_before_seq` 以内已结束的行随内核一起删掉；本地最多保留 5000 行（`NetworkCoreBridge/CaptureRequests.swift`）。桌面窗口（Windows、Linux）不再把 `dropped_before_seq` 当作全局截断线：内核按连接从早到晚淘汰，而 seq 按请求结束的先后分配，一条长连接（HTTP/2、keep-alive、WebSocket）先被淘汰时它可能带着最新的 seq，其他仍保留的请求 seq 更小。它变大时，窗口按 `since_rev` 从 0 分页读一遍内核仍保留的全部行（至多每 5 秒一次），只删掉内核不再列出的行，包括被淘汰连接上“进行中”的行（`capture-filter.ts` 的 `readAllKept` / `keepOnly`）。旧内核没有 `last_rev` 时退回按 `since_seq` 只列已结束的请求。
 - 行上的标签：`SSE n` / `WS n`（事件流或 WebSocket 及已收到的消息数）、“改写未生效”（改写规则因为流式响应或正文超过 1 MiB 没有执行）、“进行中”。
 - 请求详情：进行中的请求每秒重读（`capture_exchange`）；“事件” / “WebSocket 消息”逐条列出方向、事件名或帧类型、大小和内容开头，点开看全文，进行中时每秒追加（`since_message`）。WebSocket 只读，消息原样转发；permessage-deflate 由内核解压，解不开的标出来。每个请求保留最近 512 条、每条前 4 KiB，更早的显示为“未保留”。
 - HTTP/2 连接有“HTTP/2 帧”：App ↔ AnixOps 与 AnixOps ↔ 服务器两段的帧头（类型、流、标志、长度、错误码、窗口增量），可按链路筛选，或只看 RST_STREAM、GOAWAY 和错误（`capture_h2_frames`）。
@@ -98,8 +98,13 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含调试模式的 `deb
 - 只列 MITM 解密后的请求和明文 HTTP 请求；抓包未开启时空白页给出“开始抓包”。
 - 没有解密出请求的抓包连接不会藏起来（Apple，`CaptureCoverage`）：列表为空时按域名或地址分组列在下面（连接数、流量、TCP/UDP），点进去看原始字节，未在解密列表里的域名旁有“解密”，点后加入调试解密列表并重连；列表有请求时，状态行给出“另有 N 个连接没有解密出请求”的入口。已在解密列表却没有请求的域名会说明可能原因（加入前建立的连接、证书绑定、非 443 端口）。只在没有筛选条件时统计。
 - App 侧的检查清单只看本机（根证书已信任、有解密域名）；隧道扩展另外报告引擎是否真的开了解密（`TunnelAppMessage.httpsDecryption`：`on` / `off` + 原因 / `unused`），`off` 时请求页标红说明原因。
+- 更换根证书（Apple，iOS 和 macOS）：生成或导入新根证书后（`TunnelController.rootCertificateChanged()`），VPN 配置记下新根的 SHA-256 指纹（`networkcore.mitm-root-fingerprint`，公开值），已连接且在解密的隧道自动重连改用新根；macOS 还先把新值交给运行中的系统扩展保存并等它应答（`TunnelAppMessage.startSecrets`），这样抢先由 On Demand 发起的启动也用新根。
+  - macOS 由系统发起、不带 App 值的启动（On Demand、系统设置的 VPN 开关、重启后）用的是上次 App 交给扩展的副本；配置在解密而副本里的根证书指纹与 VPN 配置记下的不一致时（断开期间换了根），和解密包摘要不一致一样，启动以 `start secrets are older than the profile` 失败，App 在运行或下次回到前台时带新值重连一次（同一配置、同一根只重连一次），不会用旧根签发。旧配置没有指纹时照旧使用副本。
+  - 隧道 `on` 时同时报告正在使用的根证书指纹；与钥匙串里的不一致时（换根后还没重连），请求页标红提示重新连接。
+  - macOS 换根后撤销这台 Mac 对旧根的信任：先删用户域信任设置（`SecTrustSettingsRemoveTrustSettings`，要登录密码），再删登录钥匙串里的证书，最后用旧根签一张探测证书核对系统已不再信任（`MitmRootRevocation`）。取消授权或删不掉时保留钥匙串条目并说明到“钥匙串访问”手动删除；信任设置在系统级（管理员域、“系统”钥匙串）时 App 无权更改，同样提示手动删除。iOS 上旧描述文件只能由用户在设置里删除，证书页写明。
 - 抓包跟隧道同生命周期：
   - 用户或系统断开隧道，抓包随之停止；扩展在 `stopTunnel` 里先把仍在进行且有内容的抓包加密保存成会话（名称“断开时自动保存”），请求页清掉“抓包中”状态并提示到“已保存的会话”查看。正在查看的已保存会话（`load_capture` 会关掉抓包）不会再存一次。
+  - 断开提示按实际情况说（`CaptureStopNotice`）：App 在连接时问一次 `capture_sessions`，有应答说明扩展的会话存储可用，断开后提示“已加密保存”；没有应答时提示“这台设备上无法保存会话，断开前抓到的内容没有保存”（红字）；还没来得及问就断开时，提示“会尝试加密保存，连接后查看是否保存成功”。
   - App 自己发起的重连（换节点、点“解密此域名”、改插件或映射）开始前抓包是开着的，重连后 App 自动重新开启抓包。
 
 ## 导出单条请求与加密会话（计划 F1 / F5 / E11）
@@ -107,7 +112,10 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含调试模式的 `deb
 - 请求详情的“导出这条请求”：cURL、代码（Python requests / JavaScript fetch / Swift URLSession / Kotlin OkHttp / Go net/http）、Postman、Insomnia、HAR，经内核 `export_capture` 的 `id` + `exchange` 生成。
 - “遮盖 Cookie、令牌和密码”默认打开（内核 `redact`）；整份 pcapng / HAR 导出也按内核默认脱敏。
 - 请求列表“更多”里可以“保存当前抓包”和查看“已保存的会话”。
-  - 隧道扩展在引擎启动后自己调用 `set_capture_storage`：目录是扩展自己的 Application Support/AnixOps-Captures，密钥是钥匙串里仅本机可用的 32 字节随机数（`CaptureSessionStorage`），不经过 App。
+  - 隧道扩展在引擎启动后自己调用 `set_capture_storage`：目录是扩展自己的 Application Support/AnixOps-Captures，密钥是仅本机可用的 32 字节随机数（`CaptureSessionStorage`），不经过 App。
+    - iOS：密钥在钥匙串里（`AfterFirstUnlockThisDeviceOnly`）。
+    - macOS：Developer ID 版的隧道是以 root 运行的 System Extension，不在用户登录上下文里，用不了数据保护钥匙串（Apple TN3137），所以密钥是扩展容器里的文件 Application Support/`capture-session.key`（不在会话目录里），权限 0600，只有 root 能读，与 `start-secrets.json` 同一保护级别（`CaptureSessionKeyFile`）。新密钥先写进私有临时文件，再用 `link` 放到位，已有文件永不覆盖；文件读不出来或长度不是 32 字节时报错，不换新密钥，免得已保存的会话全部打不开（与 Tauri 端规则相同）。之前能读到的钥匙串密钥（只有非系统扩展的构建才可能有）在第一次创建文件时沿用。
+    - 设置失败时扩展事件里记固定原因（钥匙串状态码、密钥文件不可读 / 长度不对 / 写不进去的 errno），不记密钥。macOS 的“已保存的会话”页在这种情况下写“隧道扩展读不到会话密钥”。
   - 会话用 ChaCha20-Poly1305 加密，保留 7 天。打开会话会替换当前抓包并停止实时抓包，之后照常筛选、查看和导出。
 
 ## Tauri 客户端（Windows / Linux / Android）
@@ -118,7 +126,7 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含调试模式的 `deb
 - **侧栏**：调试网络下是“请求 · 改写”，下方是“出口 · 设置”，打开就在请求页，没有概览。“改写”就是扩展页（插件、Map Local / Remote、解密证书）；订阅、节点和分流规则（含 DNS）都在“出口”里。Android 窄屏下侧栏变成底栏。
 - **直连出口**：后端命令 `set_direct_egress` 让引擎使用不含节点的 `{"outbound":{"type":"direct"}}` 配置。Linux、Android 和 Windows 都支持。
 - **请求页**（`pages/RequestsPage.tsx`，仿 Proxyman）：左边是请求表格，右边常驻检查器（选中即看请求和响应，可重放、映射、导出）。窗口窄于 1100 px 时两者轮流显示，Android 上点一行打开详情。
-- **进行中的请求与流**：请求表按 `since_rev` 增量读取（`capture-filter.ts` 的 `mergeRequests` / `nextRev`），请求头读到就出现，响应到来时原位更新；行以 `连接 id:序号`（`requestKey`）标识。类型列附 `SSE n` / `WS n` 和“改写未生效”。检查器在进行中时每两秒重读；有事件或 WebSocket 消息时多一个“事件” / “WebSocket”标签（`capture_exchange` + `since_message`，进行中每秒追加，只读）；HTTP/2 连接多一个“HTTP/2 帧”标签（`capture_h2_frames`，可按链路、只看 RST_STREAM / GOAWAY / 错误筛选）。概览里写明改写未生效的原因。
+- **进行中的请求与流**：请求表按 `since_rev` 增量读取（`capture-filter.ts` 的 `mergeRequests` / `nextRev`），请求头读到就出现，响应到来时原位更新；行以 `连接 id:序号`（`requestKey`）标识。类型列附 `SSE n` / `WS n` 和“改写未生效”。检查器在进行中时每两秒重读；选中的请求暂时不在列表中（换了筛选条件正在重读、超出列表上限或被内核淘汰）时，检查器保留选中时的内容并注明“已不在列表中”，打开的重放和映射编辑器不会被关掉，只有选另一条请求、清空抓包或载入会话才换掉它；流结束后，检查器最后一次读到的事件 / 消息（如 SSE 的 `[DONE]`、WebSocket 的 Close）和总数也会并入列表；有事件或 WebSocket 消息时多一个“事件” / “WebSocket”标签（`capture_exchange` + `since_message`，进行中每秒追加，只读）；HTTP/2 连接多一个“HTTP/2 帧”标签（`capture_h2_frames`，可按链路、只看 RST_STREAM / GOAWAY / 错误筛选）。概览里写明改写未生效的原因。
 - **正文解压**：后端命令 `decode_body`（`desktop_mitm::capture::decode_body`，调内核 `capture::decode::decode_body`）解 gzip、deflate、br、zstd，可叠加，最多 16 MiB，只抓到开头的正文也解出能解的部分；内核解不开时退回 WebView 的 DecompressionStream（只限完整的 gzip / deflate）。
 - **检查器**（`pages/Inspector.tsx`、`pages/BodyViewer.tsx`）：顶行是方法、状态和网址，下面四个标签：概览、请求、响应、时间线。请求和响应各自在“头 / 查询 / 正文”之间切换，选择会记住。正文按内容显示：JSON 是可折叠的树（方向键移动和折叠，Ctrl+C 拷贝选中的值，下方显示并可拷贝 JSONPath）或带颜色的格式化文本，图片直接预览，表单是名值对，其余是原文，任何内容都能切到十六进制。JSON 用自己的解析器（`json-view.ts`），数字按服务器发来的原样显示，不会像 `JSON.parse` 那样把 64 位 id 取整。时间线把同一连接上的请求画在一条时间轴上；内核目前只记录每个请求的开始和结束，没有 DNS、建连、TLS 的分段。
 - **停靠与分栏**：检查器可以停靠在表格右侧或下方（检查器“更多”菜单），中间的分隔条可以拖动、用方向键调整、双击恢复默认，位置和比例记在本机（`split-pane.ts`）。右侧停靠需要窗口宽 1100 px 以上，下方停靠需要宽 720 px、高 600 px 以上，否则表格和检查器轮流显示。
@@ -138,4 +146,11 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含调试模式的 `deb
     已有的密钥读不出来（例如钥匙环没解锁）时报错，不会换新密钥，免得已保存的会话全部打不开。
   - 7 天后删除：内核在设置存储、保存和列出时清理；客户端启动时也按文件名里的时间清理一次，不连接也会过期。
   - 载入会替换当前抓到的内容并停止实时抓包；当前有内容时“载入”要再点一次确认。会话要在连接时才能列出和载入（内核在运行时才应答）。
+- **抓包跟引擎同生命周期，重启和断开不丢**（`desktop_mitm::sessions::preserve`）：
+  - 内核目前只有 `reload_rules` 能在运行中替换规则，没有替换解密域名、映射和插件的命令，所以改这些（含“解密此域名”、“映射到本地/远程”）、开关 HTTPS 解密或 TUN、改 DNS 重定向、换节点都会重启引擎。
+  - 重启前，如果实时抓包开着且有内容，后端先把它加密保存成会话“重连前自动保存”；用户断开、退出程序（Android 上 VPN 被系统收回）时保存成“断开时自动保存”，名称跟随界面语言。正在查看的已保存会话（`load_capture` 会关掉抓包）不会再存一次。保存失败只记日志并在提示里说明，不会挡住重启或断开。
+  - 重启后自动重新开启抓包，并带上原来的容量上限；操作提示写明“当前抓包已保存为……”。
+  - 新引擎的 `seq` / `rev` 和连接 id 从 1 重新计数：请求表发现内核返回的计数比已读到的小（`engineRestarted`），就清空列表从头读，并取消原来的选中，免得旧行挡住新请求或同 id 指向别的请求。Android 的 `Core.requests` 做同样的判断。
+  - Linux 和 Android 由 `client-core` 在重启（`restart_if_running`）、断开和退出时做同样的保存与恢复。会话密钥在用户开启抓包时由客户端读出后交给后端，重启时不会在持有后端锁的情况下去问钥匙环或 Keystore；没拿到密钥时抓包照常恢复，只是不保存。
+- **桌面抓包容量**：内核默认只留 2 MiB（按 iOS 网络扩展的内存上限定的），桌面窗口每次开启抓包都带上 `max_total_bytes` = 16 MiB（内核允许的最大值，`DESKTOP_CAPTURE_BUDGET`），否则普通连接几秒就会把解密的请求挤出去。Android 仍用内核默认值。
 - **Map Local / Map Remote**（`desktop_mitm::mappings`）：存放在插件目录的 `debug-mappings.json`，格式与 Apple 端相同。`plugins::apply` 把生成的“AnixOps 调试映射”接在导入的插件后面。映射要开启 HTTPS 解密才生效，保存后正在运行的引擎会重新加载。

@@ -204,6 +204,26 @@ export function appendMessages(kept: StreamMessage[], incoming: StreamMessage[],
   return { messages, missed };
 }
 
+/** A stream message list as the messages panel holds it: the kept messages, how many were missed, how many went by. */
+export interface MessageList {
+  messages: StreamMessage[];
+  missed: number;
+  seen: number;
+}
+
+/**
+ * `list` with the messages of a newer read of the exchange (`batch`, the engine's `messages`: the kept ones from some
+ * index on and how many went by). The same object when the read brings nothing new, so a caller can skip a redraw.
+ * Used both for the panel's own reads while the stream runs and for each copy of the exchange the inspector reads, so
+ * the last messages before the stream ended (an SSE `[DONE]`, a WebSocket Close) are shown too.
+ */
+export function mergeMessageList(list: MessageList, batch: { kept?: StreamMessage[]; seen?: number } | null | undefined): MessageList {
+  const next = appendMessages(list.messages, batch?.kept ?? []);
+  const seen = Math.max(list.seen, batch?.seen ?? 0);
+  if (next.messages.length === list.messages.length && next.missed === 0 && seen === list.seen) return list;
+  return { messages: next.messages, missed: list.missed + next.missed, seen };
+}
+
 /** The error, increment or count of a frame in a few words. */
 export function frameDetail(frame: H2Frame): string | null {
   if (frame.error) return frame.error;

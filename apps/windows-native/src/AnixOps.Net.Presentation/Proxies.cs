@@ -65,6 +65,82 @@ public sealed record ProxyAction(ProxyActionKind Kind, string Value)
 }
 
 /// <summary>
+/// A subscription file to import, read by the window as the signed-in user. The core runs as LocalSystem and
+/// opens no path a window names, so the window reads the file and sends its content
+/// (<c>import_subscription_text</c>), the same as the Linux window (apps/linux-native/src/proxies.rs).
+/// </summary>
+public static class SubscriptionFile
+{
+    /// <summary>The largest file read, as the core allows.</summary>
+    public const long MaxBytes = 16 * 1024 * 1024;
+
+    /// <summary>The core's command for a file's content.</summary>
+    public const string Command = "import_subscription_text";
+
+    /// <summary>Whether an import location is a file path: neither a link nor share links, which all carry "://".</summary>
+    public static bool IsPath(string location)
+    {
+        var trimmed = location.Trim();
+        return trimmed.Length > 0 && !trimmed.Contains("://", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The command's arguments for the file at <paramref name="location"/>: its name and content. Only a regular
+    /// file of at most <see cref="MaxBytes"/> is read; why it could not be is an <see cref="IOException"/>
+    /// worded in <paramref name="strings"/>.
+    /// </summary>
+    public static JsonElement Args(string location, Strings strings)
+    {
+        var path = location.Trim();
+        string? problem = null;
+        var content = "";
+        try
+        {
+            var info = new FileInfo(path);
+            if (Directory.Exists(path) || (info.Exists && (info.Attributes & (FileAttributes.Directory | FileAttributes.Device)) != 0))
+            {
+                problem = strings.Format("proxies.import.not_file", path);
+            }
+            else
+            {
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var memory = new MemoryStream();
+                var chunk = new byte[81920];
+                int count;
+                // At most one chunk past the limit is read, whatever the file says its length is.
+                while (memory.Length <= MaxBytes && (count = stream.Read(chunk, 0, chunk.Length)) > 0)
+                {
+                    memory.Write(chunk, 0, count);
+                }
+                if (memory.Length > MaxBytes)
+                {
+                    problem = strings.Format("proxies.import.too_large", path);
+                }
+                else
+                {
+                    content = new System.Text.UTF8Encoding(false, true)
+                        .GetString(memory.GetBuffer(), 0, (int)memory.Length)
+                        .TrimStart('\uFEFF');
+                }
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or System.Security.SecurityException or System.Text.DecoderFallbackException)
+        {
+            problem = strings.Format("proxies.import.unreadable", path, error.Message);
+        }
+        if (problem is not null)
+        {
+            throw new IOException(problem);
+        }
+        return JsonSerializer.SerializeToElement(new Dictionary<string, string>
+        {
+            ["name"] = Path.GetFileName(path),
+            ["content"] = content,
+        });
+    }
+}
+
+/// <summary>
 /// What the core has not finished yet. The three do not wait for each other: a node can be chosen while a
 /// long list is still being tested.
 /// </summary>

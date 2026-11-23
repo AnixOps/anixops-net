@@ -220,4 +220,38 @@ public sealed class ProxiesTests
         Assert.Equal("""{"nodeId":"a"}""", use.Args().GetRawText());
         Assert.Equal("""{"query":""}""", Proxies.Args("").GetRawText());
     }
+
+    [Fact]
+    public void AFileIsReadByTheWindowAndItsContentSent()
+    {
+        // The core service opens no path a window names: the window reads the file as the user.
+        var dir = Directory.CreateTempSubdirectory("anixops-net-import-");
+        try
+        {
+            var file = Path.Combine(dir.FullName, "nodes.txt");
+            File.WriteAllText(file, "ss://x");
+            Assert.True(SubscriptionFile.IsPath(file));
+            Assert.False(SubscriptionFile.IsPath("https://panel.test/s"));
+            Assert.False(SubscriptionFile.IsPath("ss://x"));
+            Assert.False(SubscriptionFile.IsPath("  "));
+            Assert.Equal("import_subscription_text", SubscriptionFile.Command);
+            Assert.Equal("""{"name":"nodes.txt","content":"ss://x"}""", SubscriptionFile.Args($" {file} ", English).GetRawText());
+
+            // A folder, a missing file and one past the limit say why, in the window's language.
+            var folder = Assert.Throws<IOException>(() => SubscriptionFile.Args(dir.FullName, English));
+            Assert.Equal($"{dir.FullName} is not a file.", folder.Message);
+            var missing = Path.Combine(dir.FullName, "missing.txt");
+            Assert.StartsWith($"{missing} could not be read:", Assert.Throws<IOException>(() => SubscriptionFile.Args(missing, English)).Message);
+            var big = Path.Combine(dir.FullName, "big.txt");
+            using (var stream = File.Create(big))
+            {
+                stream.SetLength(SubscriptionFile.MaxBytes + 1);
+            }
+            Assert.Contains("larger than 16 MiB", Assert.Throws<IOException>(() => SubscriptionFile.Args(big, English)).Message);
+        }
+        finally
+        {
+            dir.Delete(true);
+        }
+    }
 }

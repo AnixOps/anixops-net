@@ -5,6 +5,7 @@ members = [
     "apps/linux-gui",
     "apps/linux-native",
     "apps/windows-gui",
+    "apps/windows-link",
     "apps/windows-service",
     "crates/app-log",
     "crates/app-notifications",

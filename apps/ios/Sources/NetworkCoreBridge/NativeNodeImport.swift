@@ -43,16 +43,34 @@ public struct NativeImportReport: Decodable, Equatable {
     /// by `Group.id`, or `DIRECT` and `REJECT`.
     public struct Routing: Codable, Equatable {
         public struct Group: Codable, Equatable, Identifiable {
+            /// One condition of a `subnet` group: when the network under the tunnel matches `when` (`SUBNET:`,
+            /// `ROUTER:`, `TYPE:` and the like), the group uses `target`. The engine takes exactly these two keys.
+            public struct NetworkRule: Codable, Equatable {
+                public let when: String
+                public let target: String
+
+                public init(when: String, target: String) {
+                    self.when = when
+                    self.target = target
+                }
+            }
+
             public let id: String
-            /// `select`, `url-test`, `fallback`, `load-balance` (one healthy member per destination host) or
-            /// `round-robin` (healthy members in turn).
+            /// `select`, `url-test`, `fallback`, `load-balance` (one healthy member per destination host),
+            /// `round-robin` (healthy members in turn) or `subnet` (by the network under the tunnel, no members).
             public let type: String
-            public let members: [String]
-            /// The member a `select` group starts on.
+            public var members: [String]
+            /// The member a `select` group starts on; what a `subnet` group uses when no network rule matches.
             public var `default`: String?
             public let url: String?
             public let intervalSecs: UInt32?
             public let toleranceMs: UInt16?
+            /// A health-checked group waits for its first measurement before picking a member. Nil (left out) is
+            /// off, as the importer writes it only when set.
+            public var evaluateBeforeUse: Bool? = nil
+            /// A `subnet` group's conditions, in order. Nil (left out) for every other group and for libraries
+            /// saved before 1.0, whose subnet groups lost them until the subscription is imported again.
+            public var networkRules: [NetworkRule]? = nil
 
             enum CodingKeys: String, CodingKey {
                 case id
@@ -62,10 +80,38 @@ public struct NativeImportReport: Decodable, Equatable {
                 case url
                 case intervalSecs = "interval_secs"
                 case toleranceMs = "tolerance_ms"
+                case evaluateBeforeUse = "evaluate_before_use"
+                case networkRules = "network_rules"
             }
 
             public var isSelectable: Bool {
                 type == "select"
+            }
+
+            /// Whether the group picks by the network under the tunnel (`subnet`, the importer's name for Surge's
+            /// `subnet` and `ssid` groups).
+            public var picksByNetwork: Bool {
+                type == "subnet" || type == "ssid"
+            }
+
+            /// What the group can use, for showing it: its members, or for a group that picks by network (which has
+            /// none) its default and then each network rule's target, without repeats. Never written to the engine,
+            /// which refuses members on a `subnet` group.
+            public var displayMembers: [String] {
+                guard picksByNetwork else {
+                    return members
+                }
+                var seen: [String] = []
+                for name in [self.default].compactMap({ $0 }) + (networkRules ?? []).map(\.target)
+                where !seen.contains(name) {
+                    seen.append(name)
+                }
+                return seen
+            }
+
+            /// Every node, group or policy the group names: members, default and network rule targets.
+            public var referencedNames: Set<String> {
+                Set(members + [self.default].compactMap { $0 } + (networkRules ?? []).map(\.target))
             }
 
             /// How the engine picks the member of a group that is not `select`.
@@ -77,6 +123,8 @@ public struct NativeImportReport: Decodable, Equatable {
                     return String(localized: "负载均衡")
                 case "round-robin":
                     return String(localized: "轮询")
+                case "subnet", "ssid":
+                    return String(localized: "按网络选择")
                 default:
                     return String(localized: "自动选择")
                 }

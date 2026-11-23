@@ -62,6 +62,17 @@ data class RequestFeed(
     val lastRev: Long? = null,
 )
 
+/**
+ * Whether the engine behind [feed] is a new one: a changed setting or a reconnect restarts it, and its counters
+ * ([lastSeq], [lastRev] of an answer) start again below what the list has read. The list then starts over, or the old
+ * cursor would hide every new request and old rows would share keys with new ones.
+ */
+fun engineRestarted(feed: RequestFeed, lastSeq: Long?, lastRev: Long?): Boolean {
+    val readRev = feed.lastRev
+    if (lastRev != null && readRev != null) return lastRev < readRev
+    return lastSeq != null && lastSeq < feed.lastSeq
+}
+
 /** One read of the list: what was read, the rows to show in order, and why the engine refused the filter. */
 data class RequestPage(
     val feed: RequestFeed,

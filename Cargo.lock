@@ -93,6 +93,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "anixops-net-link"
+version = "0.3.0"
+dependencies = [
+ "client-strings",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "anixops-net-native"
 version = "0.3.0"
 dependencies = [
@@ -3620,6 +3628,7 @@ dependencies = [
 name = "networkcore-windows-gui"
 version = "0.3.0"
 dependencies = [
+ "anixops-net-link",
  "anx-license",
  "app-log",
  "app-notifications",

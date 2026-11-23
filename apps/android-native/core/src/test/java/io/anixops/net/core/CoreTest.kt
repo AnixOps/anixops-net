@@ -184,6 +184,26 @@ class CoreTest {
     }
 
     @Test
+    fun aNewEngineStartsTheListOver() = runTest {
+        // Read up to rev 120 from the engine before a restart; the new one has counted to 3.
+        val transport = RequestsTransport("""{"ok":{"requests":[],"last_seq":2,"last_rev":3}}""")
+        val feed = RequestFeed(lastSeq = 40, lastRev = 120)
+        val page = Core(transport, StandardTestDispatcher(testScheduler)).requests(feed, "", "seq", true)
+        assertEquals(RequestFeed(), page.feed)
+        assertTrue(page.shown.isEmpty())
+        assertTrue(transport.calls.none { it.first == "view.merge_requests" })
+    }
+
+    @Test
+    fun engineRestartsAreToldByCountersGoingBack() {
+        assertTrue(engineRestarted(RequestFeed(lastSeq = 40, lastRev = 120), 2, 3))
+        assertFalse(engineRestarted(RequestFeed(lastSeq = 40, lastRev = 120), 40, 120))
+        assertFalse(engineRestarted(RequestFeed(), 0, 0))
+        assertTrue(engineRestarted(RequestFeed(lastSeq = 40), 3, null))
+        assertFalse(engineRestarted(RequestFeed(lastSeq = 40), null, null))
+    }
+
+    @Test
     fun aRefusedFilterKeepsWhatWasRead() = runTest {
         val transport = RequestsTransport("""{"ok":{"error":{"code":"invalid_filter","at":7}}}""")
         val feed = RequestFeed(lastSeq = 9, lastRev = 4)

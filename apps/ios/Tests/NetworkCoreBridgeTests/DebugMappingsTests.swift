@@ -225,4 +225,63 @@ final class DebugMappingsTests: XCTestCase {
         try Data(#"{"entries":[]}"#.utf8).write(to: url)
         XCTAssertEqual(try DebugMappings.load(from: url).hosts, [])
     }
+
+    private func bigLocal(_ index: Int) -> DebugMappings.Entry {
+        DebugMappings.Entry(
+            kind: .local,
+            pattern: "https://api.example.com/\(index)",
+            body: Data(repeating: UInt8(ascii: "a"), count: DebugMappings.maxBodyBytes)
+        )
+    }
+
+    /// The generated plugin carries each Map Local body in Base64 (4/3 of its size), so eleven full bodies fit the
+    /// mappings' 4 MiB and the twelfth is refused, while editing to something smaller, turning off and deleting
+    /// always work.
+    func testTheGeneratedPluginStaysWithinItsBudget() throws {
+        var mappings = DebugMappings()
+        for index in 0..<11 {
+            mappings = try mappings.saving(bigLocal(index))
+        }
+        XCTAssertLessThanOrEqual(mappings.pluginBytes, DebugMappings.maxPluginBytes)
+        XCTAssertThrowsError(try mappings.saving(bigLocal(11))) { error in
+            XCTAssertEqual(error as? DebugMappingsError, .totalTooLarge)
+        }
+        XCTAssertEqual(mappings.entries.count, 11)
+
+        // Over the budget, as an earlier version could save it: shrinking, pausing and deleting still pass.
+        var over = mappings
+        over.entries.append(bigLocal(11))
+        over.entries.append(bigLocal(12))
+        XCTAssertGreaterThan(over.pluginBytes, DebugMappings.maxPluginBytes)
+        var smaller = over.entries[0]
+        smaller.body = Data("{}".utf8)
+        XCTAssertNoThrow(try over.saving(smaller))
+        var paused = over
+        paused.entries[1].enabled = false
+        XCTAssertNoThrow(try paused.checkBudget(replacing: over, importedBytes: 0))
+        var deleted = over
+        deleted.entries.removeLast()
+        XCTAssertNoThrow(try deleted.checkBudget(replacing: over, importedBytes: 0))
+        // Turning a paused entry back on makes the plugin larger again.
+        XCTAssertThrowsError(try over.checkBudget(replacing: paused, importedBytes: 0)) { error in
+            XCTAssertEqual(error as? DebugMappingsError, .totalTooLarge)
+        }
+    }
+
+    /// With the enabled plugins, the mappings' plugin must fit the engine's 8 MiB decryption budget: one more mapping
+    /// or one more decrypted domain is refused when the plugins already take nearly all of it.
+    func testMappingsShareTheDecryptionBudgetWithThePlugins() throws {
+        let mappings = try DebugMappings().saving(bigLocal(0))
+        let nearlyFull = EngineBudget.maxDecryptionBytes - mappings.pluginBytes
+        XCTAssertNoThrow(try mappings.checkBudget(replacing: DebugMappings(), importedBytes: nearlyFull))
+        let more = try mappings.saving(bigLocal(1))
+        XCTAssertThrowsError(try more.checkBudget(replacing: mappings, importedBytes: nearlyFull)) { error in
+            XCTAssertEqual(error as? DebugMappingsError, .decryptionBudgetFull)
+        }
+        let host = try mappings.addingHost("cdn.example.net")
+        XCTAssertThrowsError(try host.checkBudget(replacing: mappings, importedBytes: nearlyFull)) { error in
+            XCTAssertEqual(error as? DebugMappingsError, .decryptionBudgetFull)
+        }
+        XCTAssertEqual(EngineBudget.decryptionBytes([mappings.pluginText ?? ""]), mappings.pluginBytes)
+    }
 }

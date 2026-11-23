@@ -25,15 +25,20 @@ struct MacExtensionsPage: View {
         .scrollContentBackground(.hidden)
         .confirmationDialog("重新生成根证书？", isPresented: $confirmingRegenerate, titleVisibility: .visible) {
             Button("重新生成", role: .destructive) {
-                certificate.generate()
+                if certificate.generate() {
+                    rootChanged()
+                }
                 plugins.refreshTrust()
             }
         } message: {
-            Text("旧证书立即失效，需要重新加入钥匙串并信任。")
+            Text("已连接的隧道会自动重新连接并改用新证书。系统会要求输入登录密码，撤销这台 Mac 对旧证书的信任；新证书需要重新加入钥匙串并信任。其他装过旧证书的设备要分别删除它。")
         }
         .sheet(isPresented: $importingRoot) {
             MacImportRootSheet { certificatePEM, privateKeyPEM in
                 let refused = certificate.importRoot(certificatePEM: certificatePEM, privateKeyPEM: privateKeyPEM)
+                if refused == nil {
+                    rootChanged()
+                }
                 plugins.refreshTrust()
                 return refused
             }
@@ -45,6 +50,16 @@ struct MacExtensionsPage: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Coming back from Keychain Access is when trust usually changes.
             certificate.refresh()
+            plugins.refreshTrust()
+        }
+    }
+
+    /// A new root was saved: the tunnel moves to it first (`TunnelController.rootCertificateChanged`), so it never
+    /// keeps issuing from a root that is no longer trusted, then this Mac stops trusting the root it replaced.
+    private func rootChanged() {
+        Task {
+            await tunnel.rootCertificateChanged()
+            certificate.revokeReplacedRoots()
             plugins.refreshTrust()
         }
     }
@@ -72,7 +87,9 @@ struct MacExtensionsPage: View {
                 Spacer(minLength: 8)
                 if certificate.authority == nil {
                     Button("生成根证书") {
-                        certificate.generate()
+                        if certificate.generate() {
+                            rootChanged()
+                        }
                         plugins.refreshTrust()
                     }
                 } else if certificate.state != .trusted {
@@ -128,19 +145,22 @@ struct MacExtensionsPage: View {
         } header: {
             Text("HTTPS 解密证书")
         } footer: {
-            Text("证书和私钥只保存在本机钥匙串。换成自己的根证书后需要重新连接，已安装旧证书的设备要改装新证书。如果“信任证书”没有成功：在“钥匙串访问”中双击这张证书，展开“信任”，把“使用此证书时”设为“始终信任”。Firefox 使用自己的证书列表，需要另外导入。")
+            Text("证书和私钥只保存在本机钥匙串。重新生成或换成自己的根证书后，已连接的隧道会自动重新连接，这台 Mac 撤销对旧证书的信任；已安装旧证书的其他设备要改装新证书。如果“信任证书”没有成功：在“钥匙串访问”中双击这张证书，展开“信任”，把“使用此证书时”设为“始终信任”。Firefox 使用自己的证书列表，需要另外导入。")
         }
     }
 }
 
-/// The root certificate on a Mac: generated into the shared keychain group (where the tunnel extension issues
-/// leaves from it), then added to the login keychain with user trust settings so Safari and Chrome accept it.
+/// The root certificate on a Mac: generated into the shared keychain group (the app hands it to the tunnel
+/// extension at start), then added to the login keychain with user trust settings so Safari and Chrome accept it.
 @MainActor
 final class MacCertificateModel: ObservableObject {
     @Published private(set) var authority: MitmCertificateAuthority?
     @Published private(set) var state = MitmTrustState.notGenerated
     @Published private(set) var failureReason: String?
     @Published private(set) var error: String?
+    /// Roots a new one replaced, until `revokeReplacedRoots()` takes this Mac's trust in them back (after the
+    /// tunnel moved to the new root).
+    private var replacedRoots: [MitmCertificateAuthority] = []
 
     func load() {
         do {
@@ -152,7 +172,9 @@ final class MacCertificateModel: ObservableObject {
         refresh()
     }
 
-    func generate() {
+    /// Makes and saves a new root; returns whether it did. The one it replaced waits in `replacedRoots`.
+    @discardableResult
+    func generate() -> Bool {
         let previous = authority
         do {
             let created = try MitmCertificateAuthority.generate()
@@ -161,11 +183,14 @@ final class MacCertificateModel: ObservableObject {
             error = nil
         } catch {
             self.error = String(localized: "生成证书失败（\(Self.describe(error))）")
+            refresh()
+            return false
         }
-        if let previous, previous.certificateDER != authority?.certificateDER {
-            Self.removeFromLoginKeychain(previous)
+        if let previous {
+            replacedRoots.append(previous)
         }
         refresh()
+        return true
     }
 
     /// Replaces the root with the user's own CA (`MitmCertificateAuthority.importing`). Returns the reason it was
@@ -187,11 +212,52 @@ final class MacCertificateModel: ObservableObject {
         }
         authority = imported
         self.error = nil
-        if let previous, previous.certificateDER != imported.certificateDER {
-            Self.removeFromLoginKeychain(previous)
+        if let previous {
+            replacedRoots.append(previous)
         }
         refresh()
         return nil
+    }
+
+    /// Takes this Mac's trust in every replaced root back, trust setting first and then the login keychain item
+    /// (`MitmRootRevocation`): deleting only the item would leave the old root trusted. macOS asks for the login
+    /// password; when the trust stays, the page says where to remove it by hand.
+    func revokeReplacedRoots() {
+        let roots = replacedRoots
+        replacedRoots = []
+        var problems: [String] = []
+        for root in roots {
+            let store = MitmRootRevocation.SystemTrustStore { _ in root.evaluateTrust().state == .trusted }
+            guard let outcome = MitmRootRevocation.revoke(
+                previous: root.certificateDER, current: authority?.certificateDER, store: store
+            ) else {
+                continue
+            }
+            if let problem = Self.describe(outcome, name: root.commonName) {
+                problems.append(problem)
+            }
+        }
+        if !problems.isEmpty {
+            error = problems.joined(separator: "\n")
+        }
+        refresh()
+    }
+
+    private static func describe(_ outcome: MitmRootRevocation.Outcome, name: String) -> String? {
+        switch outcome {
+        case .revoked:
+            return nil
+        case .cancelled:
+            return String(localized: "已取消。旧证书“\(name)”仍受这台 Mac 信任：在“钥匙串访问”中找到它，删除它或把信任改回“使用系统默认”。")
+        case let .failed(status):
+            let code = "OSStatus \(status)"
+            return String(localized: "无法撤销对旧证书“\(name)”的信任（\(code)）。请在“钥匙串访问”中删除这张证书。")
+        case .stillTrusted:
+            return String(localized: "旧证书“\(name)”仍受这台 Mac 信任，信任设置不在当前用户名下，App 无权更改。请在“钥匙串访问”的“系统”钥匙串中删除它。")
+        case let .itemKept(status):
+            let code = "OSStatus \(status)"
+            return String(localized: "已撤销对旧证书“\(name)”的信任，但没能把它从钥匙串删除（\(code)），可以在“钥匙串访问”中手动删除。")
+        }
     }
 
     func refresh() {
@@ -239,14 +305,6 @@ final class MacCertificateModel: ObservableObject {
         }
     }
 
-    /// The old root stays in the login keychain after a regeneration; nothing issues leaves from it any more.
-    private static func removeFromLoginKeychain(_ authority: MitmCertificateAuthority) {
-        guard let certificate = SecCertificateCreateWithData(nil, authority.certificateDER as CFData) else {
-            return
-        }
-        _ = SecItemDelete(query(certificate) as CFDictionary)
-    }
-
     /// The certificate in the login keychain, where trust evaluation finds the anchor (not the data protection
     /// keychain that holds the private key).
     private static func query(_ certificate: SecCertificate) -> [String: Any] {
@@ -291,7 +349,7 @@ private struct MacImportRootSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("使用自己的根证书")
                 .font(.headline)
-            Text("粘贴 PEM 格式的 CA 证书和它的私钥。私钥需要是 P-256（prime256v1）密钥，只保存在本机钥匙串。替换后旧证书立即失效。")
+            Text("粘贴 PEM 格式的 CA 证书和它的私钥。私钥需要是 P-256（prime256v1）密钥，只保存在本机钥匙串。替换后已连接的隧道会自动重新连接，这台 Mac 撤销对旧证书的信任（需要登录密码）。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
                     requests = viewModel { RequestsViewModel(app.core) },
                     version = BuildConfig.VERSION_NAME,
                     links = links.receiveAsFlow(),
+                    preferences = preferences,
                 )
             }
         }

@@ -72,10 +72,28 @@ impl<B: Bridge> Platform for BridgePlatform<B> {
         let _ = self.request("closeTunnel", json!({}));
     }
 
+    fn close_tunnel_for_rules(&self) {
+        let _ = self.request("closeTunnel", json!({"waitForNetwork": true}));
+    }
+
     fn save_to_downloads(&self, name: &str, contents: &str) -> Result<String, String> {
         let answer = self.request(
             "saveToDownloads",
             json!({"name": name, "contents": contents, "base64": false, "mimeType": mime_type(name)}),
+        )?;
+        Self::string_field(&answer, "location", "saveToDownloads")
+    }
+
+    fn replace_in_downloads(&self, name: &str, contents: &str) -> Result<String, String> {
+        let answer = self.request(
+            "saveToDownloads",
+            json!({
+                "name": name,
+                "contents": contents,
+                "base64": false,
+                "mimeType": mime_type(name),
+                "replace": true,
+            }),
         )?;
         Self::string_field(&answer, "location", "saveToDownloads")
     }
@@ -105,13 +123,24 @@ impl<B: Bridge> Platform for BridgePlatform<B> {
             .get("ssid")
             .and_then(Value::as_str)
             .map(str::to_string);
+        // The app may read the name, but the system hides it for now (the app is in the background, or
+        // location is off): not the same as a Wi-Fi without a known name.
+        let withheld = answer.get("ssidWithheld").and_then(Value::as_bool) == Some(true);
+        if kind == "wifi" && withheld && ssid.as_deref().unwrap_or_default().is_empty() {
+            return Some(Network::WifiWithheld);
+        }
         Some(Network::from_kind(kind, ssid))
     }
 
     fn post_notice(&self, notice: &Notice) {
         let _ = self.request(
             "postNotice",
-            json!({"title": notice.title, "body": notice.body, "openUrl": notice.open_url}),
+            json!({
+                "kind": notice.kind.id(),
+                "title": notice.title,
+                "body": notice.body,
+                "openUrl": notice.open_url,
+            }),
         );
     }
 }
@@ -157,6 +186,7 @@ pub fn init(data_dir: PathBuf, platform: Arc<dyn Platform>) {
             Config {
                 dir: data_dir,
                 executable,
+                shared_service: false,
             },
             platform,
         );
@@ -393,6 +423,10 @@ mod tests {
             platform.save_base64_to_downloads("c.har", "application/json", "e30="),
             Ok("Download/a.crt".to_string())
         );
+        assert_eq!(
+            platform.replace_in_downloads("b.crt", "PEM"),
+            Ok("Download/a.crt".to_string())
+        );
         assert_eq!(platform.capture_session_key(), Ok("AAAA".to_string()));
         assert_eq!(
             platform.current_network(false),
@@ -401,8 +435,53 @@ mod tests {
         let calls = fake.calls.lock().unwrap();
         assert_eq!(calls[0].1["mimeType"], json!("application/x-x509-ca-cert"));
         assert_eq!(calls[0].1["base64"], json!(false));
+        assert_eq!(calls[0].1.get("replace"), None);
         assert_eq!(calls[1].1["mimeType"], json!("application/json"));
         assert_eq!(calls[1].1["base64"], json!(true));
+        assert_eq!(calls[2].1["replace"], json!(true));
+        assert_eq!(calls[2].1["mimeType"], json!("application/x-x509-ca-cert"));
+    }
+
+    #[test]
+    fn a_withheld_wifi_name_is_not_an_unnamed_wifi() {
+        let (_, withheld) = platform(vec![(
+            "currentNetwork",
+            r#"{"ok":{"kind":"wifi","ssidWithheld":true}}"#,
+        )]);
+        assert_eq!(withheld.current_network(false), Some(Network::WifiWithheld));
+        let (_, unnamed) = platform(vec![("currentNetwork", r#"{"ok":{"kind":"wifi"}}"#)]);
+        assert_eq!(unnamed.current_network(false), Some(Network::Wifi(None)));
+        let (_, named) = platform(vec![(
+            "currentNetwork",
+            r#"{"ok":{"kind":"wifi","ssid":"Home","ssidWithheld":false}}"#,
+        )]);
+        assert_eq!(
+            named.current_network(false),
+            Some(Network::Wifi(Some("Home".to_string())))
+        );
+    }
+
+    #[test]
+    fn closing_for_the_rules_keeps_waiting_and_notices_carry_their_kind() {
+        let (fake, platform) = platform(vec![
+            ("closeTunnel", r#"{"ok":{}}"#),
+            ("postNotice", r#"{"ok":{}}"#),
+        ]);
+        platform.close_tunnel();
+        platform.close_tunnel_for_rules();
+        let notice = app_notifications::Settings::default()
+            .disconnected(false)
+            .unwrap();
+        platform.post_notice(&notice);
+        let calls = fake.calls.lock().unwrap();
+        assert_eq!(calls[0], ("closeTunnel".to_string(), json!({})));
+        assert_eq!(
+            calls[1],
+            ("closeTunnel".to_string(), json!({"waitForNetwork": true}))
+        );
+        assert_eq!(calls[2].0, "postNotice");
+        assert_eq!(calls[2].1["kind"], json!("connection"));
+        assert_eq!(calls[2].1["openUrl"], Value::Null);
     }
 
     #[test]

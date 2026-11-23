@@ -64,7 +64,7 @@ Tauri（过渡期）        ── 同进程调用                             P
    `crates/client-core`，把系统代理、证书信任、开机启动提成 `Platform` 方法，并给 Windows 写一个实现（Wintun、
    系统代理、证书库、开机启动、Wi-Fi 取样）。`tauri_ui.rs` 缩成薄包装。Tauri 版行为不变，两套后端变一套。
 2. **`crates/client-ipc`。** 把 `Client::invoke` 和事件流通过本机通道传输：长度前缀的 JSON 帧，请求带编号，事件单向
-   推送。Windows 命名管道按安装用户的 SID 设 ACL；Linux 用 `SO_PEERCRED` 核对对端用户，特权动作再过 polkit。
+   推送。Windows 命名管道的访问表只让本机登录用户连接、不能另建实例，界面连上后核对管道属于系统或管理员；Linux 用 `SO_PEERCRED` 核对对端用户，特权动作再过 polkit。
    线上格式（第一版，协议号 1）：每条消息一帧，4 字节大端长度加 UTF-8 JSON，单帧上限 64 MiB。消息有四种 `type`：
    `hello`（双方各先发一条，协议号不同或对端角色不对就断开）、`request`（带 `id`、`command`、`args`）、`response`
    （同 `id`，带 `ok` 或 `error`）、`event`（`name`、`payload`，不需要应答）。两边都可以发请求：界面请求核心执行
@@ -78,7 +78,13 @@ Tauri（过渡期）        ── 同进程调用                             P
    通道本身在 `client_ipc::transport`：Linux 是 Unix 套接字 `/run/anixops-net/core.sock`，核心从内核读对端的用户
    编号（`SO_PEERCRED`），哪个用户可以控制核心在守护进程里决定；Windows 是命名管道 `\\.\pipe\AnixOpsNet.Core`，
    访问表只放行系统、管理员和在本机登录的用户，拒绝来自网络的调用方，第一个实例带"首个实例"标志，名字被别的程序占了
-   核心会启动失败而不是悄悄共用。界面连接时只让核心知道自己是谁，不允许核心以界面用户的身份做事。管道的所有句柄都按
+   核心会启动失败而不是悄悄共用。本机登录用户只有读写（`0x12019b`，即 `FILE_GENERIC_READ | FILE_GENERIC_WRITE` 去掉
+   `FILE_CREATE_PIPE_INSTANCE`），不能给核心的管道另建实例去接走别人的窗口；建实例只有系统、管理员和管道的所有者
+   （以普通用户在控制台运行的核心自己）可以。界面（Rust 的 `transport::connect` 和 C# 的 `Channel.ConnectAsync`）
+   连上后、打招呼之前读管道的所有者：只接受系统（`SY`）或管理员（`BA`），普通用户建不出这样的管道，所以服务停止时被
+   别的用户抢注的同名管道会被拒绝，窗口不会听它的 `session.apply_proxy`、`session.trust_root`；测试用的非默认管道名
+   另外接受窗口自己的用户。抢注仍会让服务起不来，但不会把窗口交给别人。界面连接时只让核心知道自己是谁，不允许核心以
+   界面用户的身份做事。管道的所有句柄都按
    重叠 I/O 打开，否则一个线程在读的时候别的线程写不进去。
    核心和界面怎么接上通道在 `crates/client-service`：服务一侧的 `Windows` 记着当前连着的界面，把界面的命令交给
    `Client::invoke`，同时就是核心的 `UserSession`——系统代理和登录启动项的读写都转成 `session.*` 请求发给界面
@@ -100,6 +106,11 @@ Tauri（过渡期）        ── 同进程调用                             P
    在本机有登录会话的用户（登录管理器在 `/run/systemd/users/` 或 `/run/user/` 下有这个用户的记录）；其他账号连上后
    每个命令都得到一句说明原因的拒绝。这条线和 Windows 命名管道的"本机登录用户"一致，不区分坐在屏幕前和远程登录，
    需要区分的动作以后走 polkit。收到 SIGTERM 时先停内核、让界面把系统代理还原，再删套接字。
+   套接字对所有本机用户开放，所以守护进程给连接设了上限（`Limits`）：root 以外每个用户同时最多 16 条、总共 128 条，
+   超出的连接在起线程之前就关掉；5 秒内不打招呼的连接被关掉；不允许控制的用户的连接 30 秒没有请求也被关掉。启动时
+   把打开文件数的软上限提到硬上限（单元里另设 `LimitNOFILE=524288`），因为引擎每条代理连接占两个描述符；`accept`
+   遇到描述符暂时用完（`EMFILE`、`ENFILE`）、连接中途放弃之类的错误时退避（50 ms 起，最多 1 秒）后继续，只有监听
+   套接字本身坏了才退出。
    守护进程还没做的：TUN 模式现在仍走 `pkexec` 助手，守护进程里要改成直接打开设备；Linux Tauri 版放在用户目录下的
    数据搬到 `/var/lib/anixops-net`；deb / rpm 里装单元文件并启用。
    Windows 服务是 `apps/windows-service`（程序 `anixops-net-service.exe`，服务名 `AnixOpsNetCore`，以 LocalSystem 运行）：
@@ -108,8 +119,11 @@ Tauri（过渡期）        ── 同进程调用                             P
    已经存在而所有者不是系统或管理员时服务拒绝启动，防止普通用户抢先放一个自己的目录。目录关好之后才搬旧版数据
    （`legacy_windows::migrate`，搬不动不阻止启动）。服务管理器要求停止或关机时先停内核、让界面还原系统代理再报告
    已停止。`--console` 参数可以不经服务管理器在前台运行，排查用。
-   服务还没做的：注册服务和失败后自动重启的设置由 MSI 完成；机器级的 WinHTTP 代理；Wintun 驱动；系统代理备份按用户
-   分开存。
+   等窗口时单次失败不会让服务停下：窗口连上又在被接受之前关掉（`ConnectNamedPipe` 报 `ERROR_NO_DATA`）时，同一个
+   实例断开后继续等下一个窗口；建实例、起线程之类的失败退避（50 ms 起，最多 1 秒）后重试，连续失败 64 次才停，并以
+   非零的退出码报告给服务管理器。MSI 给服务配了失败后重启（5 秒、30 秒、60 秒，一天后重新计数），并打开“非崩溃的
+   失败也执行”，所以服务自己带错误码停下时也会被拉起。
+   服务还没做的：机器级的 WinHTTP 代理；Wintun 驱动；系统代理备份按用户分开存。
 3. **契约有类型。** 每个命令的请求和应答样例放在 `client-core/tests/fixtures/*.json`。C# 和 Kotlin 的数据类型必须
    无损解析同一批样例；命令改字段时 Rust、Kotlin、C# 三边测试一起失败。GTK 界面直接用 Rust 类型。
 4. **`crates/client-view`。** 现在 TypeScript 里有行为的纯逻辑（抓包筛选表达式、请求表排序、节点筛选、`anixops://`
@@ -188,6 +202,7 @@ Windows 的登录启动项还没有接：内核仓库现有的函数建的是提
 | 内核、TUN、路由、本机代理监听 | 做 | — |
 | 订阅、节点、规则、设置的存储 | 做。Windows 在 `%ProgramData%\AnixOps Net`，Linux 在 `/var/lib/anixops-net`，界面不直接读写 | — |
 | 抓包会话和它的密钥、MITM 根证书私钥 | 做，界面进程读不到 | — |
+| 从文件导入订阅 | 只收内容（`import_subscription_text`），不打开界面给的任何路径：核心以 SYSTEM / root 运行，替用户读文件会读到用户自己读不到的文件，UNC 路径还会让机器账户去做网络认证 | 以当前用户身份读文件（只收普通文件，上限 16 MiB），把文件名和内容发给核心 |
 | 系统代理 | 告知端口，核对归属 | 写入和恢复当前用户的代理设置（Windows 的 WinINet 设置，Linux 的 gsettings / kwriteconfig）。恢复前核对当前值仍是客户端写入的 |
 | 根证书信任 | 导出证书文件 | 打开系统的证书对话框由用户手动信任（Windows）；写 NSS 数据库（Linux）；读“是否已信任” |
 | 当前网络和 Wi-Fi 名称 | 按规则决定连接或断开 | 取样并上报（读 Wi-Fi 名称的位置权限属于用户会话） |

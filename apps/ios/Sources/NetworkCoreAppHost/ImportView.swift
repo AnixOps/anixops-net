@@ -17,6 +17,8 @@ struct ImportView: View {
     @State private var text = ""
     @State private var error: String?
     @State private var saving = false
+    /// The import reconnected the running tunnel on what it imported (`TunnelController.importReconnected`).
+    @State private var reconnecting = false
     @State private var pickingFile = false
     @State private var scanning = false
 
@@ -43,7 +45,7 @@ struct ImportView: View {
                 case let .preview(preview):
                     previewStep(preview)
                 case let .done(name):
-                    DoneStep(name: name, note: tunnel.message) {
+                    DoneStep(name: name, note: tunnel.message, reconnecting: reconnecting) {
                         dismiss()
                     } again: {
                         text = ""
@@ -305,6 +307,7 @@ struct ImportView: View {
             saving = false
             if saved {
                 error = nil
+                reconnecting = tunnel.importReconnected
                 text = ""
                 withAnimation(.easeInOut(duration: 0.22)) {
                     step = .done(preview.name)
@@ -346,6 +349,8 @@ private struct DoneStep: View {
     let name: String
     /// What the user still has to do before connecting, such as allowing the macOS network extension.
     let note: String?
+    /// The tunnel was connected and reconnects on the imported node: nothing left to connect.
+    let reconnecting: Bool
     let connect: () -> Void
     let again: () -> Void
     @State private var drawn: CGFloat = 0
@@ -357,10 +362,16 @@ private struct DoneStep: View {
             Text("导入完成")
                 .font(.title2.weight(.bold))
                 .foregroundStyle(brand.text)
-            Text("“\(name)”已设为当前节点。")
-                .font(.subheadline)
-                .foregroundStyle(brand.text2)
-                .multilineTextAlignment(.center)
+            Group {
+                if reconnecting {
+                    Text("“\(name)”已设为当前节点，正在重新连接。")
+                } else {
+                    Text("“\(name)”已设为当前节点。")
+                }
+            }
+            .font(.subheadline)
+            .foregroundStyle(brand.text2)
+            .multilineTextAlignment(.center)
             if let note {
                 Label(note, systemImage: "info.circle")
                     .font(.subheadline)
@@ -369,7 +380,7 @@ private struct DoneStep: View {
             }
             Spacer()
             Button(action: connect) {
-                Text("去连接")
+                Text(reconnecting ? LocalizedStringKey("完成") : LocalizedStringKey("去连接"))
                     .font(.body.weight(.semibold))
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)

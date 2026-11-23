@@ -733,17 +733,29 @@ jobs:
             --target $env:TARGET
           if ($LASTEXITCODE -ne 0) { throw "Windows GUI build failed." }
           Remove-Item Env:TAURI_CONFIG
+          # The anixops:// handler, installed beside the GUI (apps/windows-link).
+          cargo build --locked --release `
+            --package anixops-net-link `
+            --target $env:TARGET
+          if ($LASTEXITCODE -ne 0) { throw "anixops:// handler build failed." }
 
           $releaseDir = "target\$env:TARGET\release"
           $cliPath = Join-Path $releaseDir "networkcore-windows.exe"
           $guiPath = Join-Path $releaseDir "networkcore-windows-gui.exe"
-          foreach ($binaryPath in @($cliPath, $guiPath)) {
+          $linkPath = Join-Path $releaseDir "anixops-net-link.exe"
+          foreach ($binaryPath in @($cliPath, $guiPath, $linkPath)) {
             if (-not (Test-Path -Path $binaryPath -PathType Leaf)) {
               throw "Windows release binary not found: $binaryPath"
             }
           }
           $cliPath = (Resolve-Path $cliPath).Path
           $guiPath = (Resolve-Path $guiPath).Path
+          $linkPath = (Resolve-Path $linkPath).Path
+          # The handler must run with the rights of whoever opens the link, unlike the GUI.
+          $linkText = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($linkPath))
+          foreach ($level in @("requireAdministrator", "highestAvailable")) {
+            if ($linkText.Contains($level)) { throw "anixops-net-link.exe asks for $level." }
+          }
           $guiInfo = (Get-Item $guiPath).VersionInfo
           $builtFileVersion = "$($guiInfo.FileMajorPart).$($guiInfo.FileMinorPart).$($guiInfo.FileBuildPart).$($guiInfo.FilePrivatePart)"
           if ($builtFileVersion -ne $guiFileVersion) {
@@ -798,6 +810,7 @@ jobs:
           $integrityPath = Join-Path $distDir "integrity\integrity.sha256"
           & .github/scripts/write-integrity.ps1 -Output $integrityPath -Entry @(
             "networkcore-windows-gui.exe=$guiPath",
+            "anixops-net-link.exe=$linkPath",
             "networkcore-windows.exe=$cliPath",
             "WebView2Loader.dll=$webView2LoaderPath",
             "wintun.dll=$wintunPath"
@@ -808,6 +821,7 @@ jobs:
             -d "ProductVersion=$productVersion" `
             -d "CliExe=$cliPath" `
             -d "GuiExe=$guiPath" `
+            -d "LinkExe=$linkPath" `
             -d "WebView2LoaderDll=$webView2LoaderPath" `
             -d "WintunDll=$wintunPath" `
             -d "DefaultConfig=$defaultConfigPath" `
@@ -821,6 +835,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $portableStageDir | Out-Null
           Copy-Item -Path $cliPath -Destination (Join-Path $portableStageDir "networkcore-windows.exe")
           Copy-Item -Path $guiPath -Destination (Join-Path $portableStageDir "networkcore-windows-gui.exe")
+          Copy-Item -Path $linkPath -Destination (Join-Path $portableStageDir "anixops-net-link.exe")
           Copy-Item -Path $webView2LoaderPath -Destination (Join-Path $portableStageDir "WebView2Loader.dll")
           Copy-Item -Path $wintunPath -Destination (Join-Path $portableStageDir "wintun.dll")
           Copy-Item -Path (Join-Path (Split-Path $wintunPath) "wintun-LICENSE.txt") -Destination (Join-Path $portableStageDir "wintun-LICENSE.txt")
@@ -871,6 +886,7 @@ jobs:
             }
             included_files = @(
               [ordered]@{ path = "networkcore-windows-gui.exe"; kind = "binary"; required = $true; source = "apps/windows-gui" },
+              [ordered]@{ path = "anixops-net-link.exe"; kind = "binary"; required = $true; source = "apps/windows-link" },
               [ordered]@{ path = "WebView2Loader.dll"; kind = "runtime"; required = $true; source = "webview2-com-sys@0.38.2/x64" },
               [ordered]@{ path = "wintun.dll"; kind = "runtime"; required = $true; source = "wintun.net/builds/wintun-0.14.1.zip:bin/amd64" },
               [ordered]@{ path = "networkcore-windows.exe"; kind = "binary"; required = $true; source = "AnixOps/networkcore_anixops:apps/windows-cli" },
@@ -945,6 +961,7 @@ jobs:
             }
             included_files = @(
               [ordered]@{ path = "$portableStem/networkcore-windows-gui.exe"; kind = "binary"; required = $true; source = "apps/windows-gui" },
+              [ordered]@{ path = "$portableStem/anixops-net-link.exe"; kind = "binary"; required = $true; source = "apps/windows-link" },
               [ordered]@{ path = "$portableStem/WebView2Loader.dll"; kind = "runtime"; required = $true; source = "webview2-com-sys@0.38.2/x64" },
               [ordered]@{ path = "$portableStem/wintun.dll"; kind = "runtime"; required = $true; source = "wintun.net/builds/wintun-0.14.1.zip:bin/amd64" },
               [ordered]@{ path = "$portableStem/wintun-LICENSE.txt"; kind = "documentation"; required = $true; source = "wintun.net/builds/wintun-0.14.1.zip:LICENSE.txt" },

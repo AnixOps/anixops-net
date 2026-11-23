@@ -27,6 +27,8 @@ while IFS= read -r path; do
     # The native client's installer; the native job builds it and installs, upgrades and removes it.
     installer/windows-native/*) windows_native=true ;;
     apps/windows-gui/* | installer/*) rust=true; windows=true ;;
+    # The anixops:// handler the Windows client registers; the Windows job builds, tests and packages it.
+    apps/windows-link/*) rust=true; windows=true ;;
     apps/linux-gui/*) rust=true; linux=true ;;
     # The Linux daemon; the workspace job builds and tests it, and the native window is run against it.
     apps/linux-daemon/*) rust=true; linux_native=true ;;

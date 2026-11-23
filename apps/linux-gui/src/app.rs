@@ -7,7 +7,7 @@
 //! That app was replaced by the native one (`apps/android-native`, over `crates/client-core` directly), so no
 //! build passes a host any more; removing it is a separate change to this window.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 
 use app_notifications::Notice;
@@ -20,6 +20,7 @@ use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_notification::NotificationExt;
 
 use crate::client::{self, Client, Platform};
+use crate::instance::{self, Claim, InstanceLock};
 
 /// The network a [`TunnelHost`] reports.
 pub use crate::client::{Network, TunnelInterface};
@@ -28,6 +29,7 @@ pub use crate::client::{Network, TunnelInterface};
 pub use client_health::startup::mark_process_start;
 
 const NO_WINDOW: &str = "the window is not running yet";
+const NOT_OPEN: &str = "the client is still starting";
 
 /// Where the window runs: the data directory, the program autostart starts, extra plugins, and the system VPN
 /// when the platform carries traffic through one.
@@ -214,6 +216,37 @@ fn start_app_links(app: &AppHandle, client: &Arc<Client>) {
     });
 }
 
+/// Owns the data folder for as long as the window runs (`crate::instance`).
+struct FolderOwner(#[allow(dead_code)] InstanceLock);
+
+/// Takes the data folder before anything in it is opened. Answers false when another live window owns it: the
+/// single instance handoff did not reach that window (no session bus), so this process leaves without touching
+/// its proxy settings, its connection or its files.
+fn own_data_folder(app: &mut tauri::App<Wry>, dir: &Path) -> bool {
+    match instance::claim(dir) {
+        Ok(Claim::Owner(lock)) => {
+            app.manage(FolderOwner(lock));
+            true
+        }
+        Ok(Claim::Running) => {
+            eprintln!(
+                "anixops-net: another window already runs for {}; this start leaves it alone",
+                dir.display()
+            );
+            false
+        }
+        // A folder that cannot be locked (a file system without locks) still opens: the session bus handoff
+        // above is what keeps the window single there.
+        Err(error) => {
+            eprintln!(
+                "anixops-net: the data folder {} could not be locked: {error}",
+                dir.display()
+            );
+            true
+        }
+    }
+}
+
 pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
     let Host {
         dir,
@@ -225,10 +258,16 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
         app: OnceLock::new(),
         tunnel,
     });
-    let client = Client::open(client::Config { dir, executable }, platform.clone());
+    // The client is opened in `setup`, never before `build`: the single instance plugin decides during `build`
+    // whether this is a second start (an `anixops://` link, another click on the launcher), and a second start
+    // hands its arguments to the running window and exits there. Opening the client earlier would put back the
+    // running window's proxy settings, start a second automatic connection and serve a second metrics endpoint
+    // before that exit.
+    let opened: Arc<OnceLock<Arc<Client>>> = Arc::new(OnceLock::new());
 
     let mut builder = tauri::Builder::default();
-    // One window per user: a second start (an `anixops://` link) hands over to the running one.
+    // One window per user: a second start (an `anixops://` link) hands over to the running one. Registered first,
+    // so its check runs before every other plugin's setup.
     #[cfg(target_os = "linux")]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -247,8 +286,21 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
     }
     let app = builder
         .setup({
-            let client = client.clone();
+            let opened = opened.clone();
             move |app| {
+                if !own_data_folder(app, &dir) {
+                    app.handle().cleanup_before_exit();
+                    std::process::exit(0);
+                }
+                let client = Client::open(
+                    client::Config {
+                        dir,
+                        executable,
+                        shared_service: false,
+                    },
+                    platform.clone(),
+                );
+                let _ = opened.set(client.clone());
                 let _ = platform.app.set(app.handle().clone());
                 start_app_links(app.handle(), &client);
                 client.start_background();
@@ -267,15 +319,25 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
             }
         })
         .invoke_handler({
-            let client = client.clone();
-            move |invoke| dispatch(&client, invoke)
+            let opened = opened.clone();
+            move |invoke| match opened.get() {
+                Some(client) => dispatch(client, invoke),
+                // `setup` opens the client before the event loop delivers the page's first command; this only
+                // answers a command that would somehow come earlier.
+                None => {
+                    invoke.resolver.reject(NOT_OPEN);
+                    true
+                }
+            }
         })
         .build(context)
         .map_err(|error| error.to_string())?;
     app.run(move |_, event| {
         // Put the desktop's proxy settings back when the window closes; a crash leaves them for the next start.
         if let RunEvent::Exit = event {
-            client.shutdown();
+            if let Some(client) = opened.get() {
+                client.shutdown();
+            }
         }
     });
     Ok(())

@@ -123,8 +123,13 @@ extension PacketCapture {
 }
 
 /// Where the tunnel keeps saved capture sessions and the key that seals them (plan F1/E11). The extension sets this
-/// up itself after the engine starts (`setCaptureStorage`), so the key never crosses to the app or leaves the
-/// Keychain except into the engine, and sessions live in the extension's own container.
+/// up itself after the engine starts (`setCaptureStorage`), so the key never crosses to the app and leaves its store
+/// only into the engine, and sessions live in the extension's own container.
+///
+/// The key's store depends on the platform. iOS keeps it in the Keychain on this device only. A macOS Developer ID
+/// build runs the tunnel as a System Extension: a root process outside any user login context, which cannot use
+/// the data protection keychain (TN3137), so there the key is a file next to the sessions folder, readable by root
+/// only (`CaptureSessionKeyFile`), like the start secrets the app hands over (`TunnelStartSecrets`).
 public enum CaptureSessionStorage {
     public static let retentionDays = 7
     static let service = "networkcore.capture-session-key"
@@ -132,15 +137,66 @@ public enum CaptureSessionStorage {
 
     /// The folder for session files in the calling process's Application Support.
     public static func directory() throws -> URL {
-        let folder = try FileManager.default
-            .url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-            .appendingPathComponent("AnixOps-Captures", isDirectory: true)
+        let folder = try applicationSupport().appendingPathComponent("AnixOps-Captures", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         return folder
     }
 
-    /// The 32-byte session key, made once and kept in the Keychain on this device only.
+    /// The macOS key file in the calling process's Application Support, beside the sessions folder (the engine only
+    /// reads `.anxcap` files from that folder).
+    public static func keyFileURL() throws -> URL {
+        try applicationSupport().appendingPathComponent(CaptureSessionKeyFile.fileName)
+    }
+
+    private static func applicationSupport() throws -> URL {
+        try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+    }
+
+    /// The 32-byte session key, made once on this device: in the Keychain on iOS, in a root-only file on macOS.
     public static func key() throws -> Data {
+        #if os(macOS)
+        return try CaptureSessionKeyFile.loadOrCreate(at: keyFileURL()) {
+            // A key an earlier build managed to keep in the Keychain (only possible outside a System Extension)
+            // still opens the sessions it sealed; otherwise a new one.
+            try keychainKeyIfPresent() ?? randomKey()
+        }
+        #else
+        return try keychainKey()
+        #endif
+    }
+
+    static func randomKey() throws -> Data {
+        var bytes = [UInt8](repeating: 0, count: CaptureSessionKeyFile.length)
+        let random = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        guard random == errSecSuccess else {
+            throw NodeSecretStore.Failure(status: random)
+        }
+        return Data(bytes)
+    }
+
+    #if os(macOS)
+    /// The Keychain item, when this process can read one; nil on any failure (a System Extension gets
+    /// `errSecNotAvailable` for the data protection keychain).
+    private static func keychainKeyIfPresent() -> Data? {
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+        ]
+        query.merge(NodeSecretStore.platformAttributes) { _, new in new }
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data, data.count == CaptureSessionKeyFile.length
+        else {
+            return nil
+        }
+        return data
+    }
+    #endif
+
+    /// The key in the Keychain on this device only, made on first use.
+    private static func keychainKey() throws -> Data {
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -156,12 +212,7 @@ public enum CaptureSessionStorage {
         guard status == errSecItemNotFound || status == errSecSuccess else {
             throw NodeSecretStore.Failure(status: status)
         }
-        var bytes = [UInt8](repeating: 0, count: 32)
-        let random = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
-        guard random == errSecSuccess else {
-            throw NodeSecretStore.Failure(status: random)
-        }
-        let key = Data(bytes)
+        let key = try randomKey()
         var attributes: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -187,5 +238,115 @@ public enum CaptureSessionStorage {
     /// The `set_capture_storage` request for this process's folder and key.
     public static func setupRequest() throws -> RuntimeControl {
         .setCaptureStorage(dir: try directory().path, keyBase64: try key().base64EncodedString(), retentionDays: retentionDays)
+    }
+}
+
+/// The capture session key as a file of exactly 32 bytes with mode 0600, for the macOS System Extension
+/// (`CaptureSessionStorage.key()`).
+///
+/// A file that is there is never replaced: one that cannot be read or holds anything but one key is an error, since
+/// a new key would make every saved session unreadable (the same rule as the desktop client, docs/debug-mode.md). A
+/// new key is written to a private temporary file first and linked into place only when no file exists, so a crash
+/// never leaves a partial key and two starts racing end up with the same one. The key is never logged.
+public enum CaptureSessionKeyFile {
+    public static let fileName = "capture-session.key"
+    public static let length = 32
+
+    public enum Failure: Error, Equatable {
+        /// The file exists but could not be read.
+        case unreadable
+        /// The file (or a new key) is not 32 bytes long; it holds this many.
+        case malformed(Int)
+        /// A new key could not be written; the POSIX error.
+        case notWritten(Int32)
+    }
+
+    /// The key in the file at `url`; when there is no file, `makeKey()` is written there and returned.
+    public static func loadOrCreate(at url: URL, makeKey: () throws -> Data) throws -> Data {
+        if let existing = try read(url) {
+            return existing
+        }
+        let key = try makeKey()
+        guard key.count == length else {
+            throw Failure.malformed(key.count)
+        }
+        let folder = url.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let temporary = folder.appendingPathComponent(".\(fileName).\(UUID().uuidString)")
+        try writeNew(key, to: temporary)
+        defer {
+            unlink(temporary.path)
+        }
+        // link(2) fails rather than replace an existing file.
+        guard link(temporary.path, url.path) == 0 else {
+            let code = errno
+            if code == EEXIST, let existing = try read(url) {
+                // Another start made it first: use that one.
+                return existing
+            }
+            throw Failure.notWritten(code)
+        }
+        return key
+    }
+
+    /// The key in the file, or nil when there is no file.
+    static func read(_ url: URL) throws -> Data? {
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            return nil
+        } catch {
+            throw Failure.unreadable
+        }
+        guard data.count == length else {
+            throw Failure.malformed(data.count)
+        }
+        return data
+    }
+
+    /// Creates `url` with mode 0600 (it must not exist) and writes `data` to disk.
+    private static func writeNew(_ data: Data, to url: URL) throws {
+        let descriptor = open(url.path, O_WRONLY | O_CREAT | O_EXCL, 0o600)
+        guard descriptor >= 0 else {
+            throw Failure.notWritten(errno)
+        }
+        let written = data.withUnsafeBytes { buffer in
+            write(descriptor, buffer.baseAddress, buffer.count)
+        }
+        let code = errno
+        let synced = fsync(descriptor) == 0
+        close(descriptor)
+        guard written == data.count, synced else {
+            unlink(url.path)
+            throw Failure.notWritten(written < 0 ? code : EIO)
+        }
+    }
+}
+
+/// What the request list says about the capture a disconnect ended. The extension seals it into a saved session on
+/// stop (`saveCaptureOnStop`), which needs the session storage it set up at start; the app learns whether that
+/// worked while still connected (`capture_sessions` answers only with storage set up).
+public enum CaptureStopNotice: Equatable, Sendable {
+    /// Saving sessions worked while connected: the extension sealed what was caught.
+    case saved
+    /// The tunnel could not save sessions: what was caught is gone with it.
+    case notSaved
+    /// The tunnel went down before the app knew.
+    case unknown
+
+    /// The notice after the tunnel went down; nil when the disconnect ended no capture with anything in it.
+    public static func afterStop(captured: Bool, storageAvailable: Bool?) -> CaptureStopNotice? {
+        guard captured else {
+            return nil
+        }
+        switch storageAvailable {
+        case true?:
+            return .saved
+        case false?:
+            return .notSaved
+        case nil:
+            return .unknown
+        }
     }
 }

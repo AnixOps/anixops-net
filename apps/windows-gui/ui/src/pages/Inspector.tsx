@@ -1,9 +1,8 @@
 import { ArrowDown, ArrowUp, ChevronLeft, FileSearch } from "lucide-react";
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { CaptureExchange, CaptureMessage, CaptureRequest, desktop, H2Frame, StreamMessage } from "../bridge";
+import { CaptureExchange, CaptureMessage, CaptureRequest, desktop, H2Frame } from "../bridge";
 import { queryPairs, waterfall } from "../body-view";
 import {
-  appendMessages,
   bodySize,
   durationMs,
   frameDetail,
@@ -12,6 +11,8 @@ import {
   headerLines,
   messageText,
   messageTitle,
+  mergeMessageList,
+  MessageList,
   notableFrame,
   noteText,
   skippedText,
@@ -245,12 +246,18 @@ function Timeline({ exchange, siblings }: { exchange: CaptureExchange; siblings:
  * way. They are shown as they went by: decryption only looks at them.
  */
 function MessagesPanel({ exchange, place }: { exchange: CaptureExchange; place: ExchangePlace }) {
-  const [list, setList] = useState<{ messages: StreamMessage[]; missed: number; seen: number }>(() => {
-    const first = appendMessages([], exchange.messages?.kept ?? []);
-    return { ...first, seen: exchange.messages?.seen ?? 0 };
-  });
+  const [list, setList] = useState<MessageList>(() => mergeMessageList({ messages: [], missed: 0, seen: 0 }, exchange.messages));
   const latest = useRef(list);
   latest.current = list;
+  // Each newer copy of the exchange from the inspector carries the kept messages too. The panel's own reads stop
+  // when the stream ends, so the messages that came after the last one (an SSE `[DONE]`, a WebSocket Close) and the
+  // final count arrive this way.
+  useEffect(() => {
+    const updated = mergeMessageList(latest.current, exchange.messages);
+    if (updated === latest.current) return;
+    latest.current = updated;
+    setList(updated);
+  }, [exchange.messages]);
   const [open, setOpen] = useState<number | null>(null);
   const visible = usePageVisible();
   const running = exchange.state === "in_progress";
@@ -266,9 +273,8 @@ function MessagesPanel({ exchange, place }: { exchange: CaptureExchange; place: 
       void desktop.captureExchange(connectionId, index, since).then((answer) => {
         const item = answer.exchange;
         if (cancelled || !item || item.started_at_ms !== startedAt) return;
-        const before = latest.current;
-        const next = appendMessages(before.messages, item.messages?.kept ?? []);
-        const updated = { messages: next.messages, missed: before.missed + next.missed, seen: Math.max(before.seen, item.messages?.seen ?? 0) };
+        const updated = mergeMessageList(latest.current, item.messages);
+        if (updated === latest.current) return;
         latest.current = updated;
         setList(updated);
       }).catch(() => undefined);

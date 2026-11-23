@@ -30,7 +30,12 @@ function Invoke-Msi {
   }
   # 3010 would mean something is only gone after a restart, which is a leftover until then.
   if ($process.ExitCode -ne 0) {
-    if (Test-Path $log) { Get-Content $log -Tail 200 }
+    if (Test-Path $log) {
+      # The action that failed and what it logged just before, then the end of the log.
+      Select-String -Path $log -Pattern "Return value 3", "Error 1[0-9]{3}\.", "error code" -Context 25, 2 |
+        Select-Object -First 5 | Out-String -Width 400 | Write-Host
+      Get-Content $log -Tail 200
+    }
     throw "$Operation ended with exit code $($process.ExitCode)."
   }
   Write-Host "${Operation}: ok"
@@ -53,6 +58,11 @@ function Assert-Installed {
   if ($registered.StartMode -ne "Auto") { throw "The service starts '$($registered.StartMode)', not with Windows." }
   if ($registered.StartName -ne "LocalSystem") { throw "The service runs as $($registered.StartName)." }
   if ($registered.PathName.Trim('"') -ne $service) { throw "The service runs $($registered.PathName)." }
+  # Restarted when it fails, also when it stops itself with an error code rather than crashing.
+  $failure = (& sc.exe qfailure $serviceName) -join "`n"
+  if ($failure -notmatch "RESTART") { throw "The service is not restarted when it fails: $failure" }
+  $failureFlag = (& sc.exe qfailureflag $serviceName) -join "`n"
+  if ($failureFlag -notmatch "FAILURE_ACTIONS_ON_NONCRASH_FAILURES\s*:\s*TRUE") { throw "The service is not restarted after a non-crash failure: $failureFlag" }
   foreach ($file in @($window, $service, $shortcut, (Join-Path $installDir "wintun.dll"), (Join-Path $installDir "wintun-LICENSE.txt"))) {
     if (-not (Test-Path $file -PathType Leaf)) { throw "$file is not there." }
   }

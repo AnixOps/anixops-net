@@ -26,7 +26,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -73,6 +73,8 @@ data class ExtensionsActions(
     /** Opens the mapping editor; null starts a new mapping. */
     val editMapping: (DebugMapping?) -> Unit = {},
     val closeMappingEditor: () -> Unit = {},
+    /** The open mapping editor's unsaved fields, kept by the view model. */
+    val mappingDraft: () -> MappingDraft? = { null },
     val saveMapping: (DebugMapping) -> Unit = {},
     val setMappingEnabled: (DebugMapping, Boolean) -> Unit = { _, _ -> },
     val removeMapping: (String) -> Unit = {},
@@ -113,7 +115,14 @@ fun ExtensionsScreen(
 ) {
     state.editingMapping?.let { mapping ->
         BackTo(actions.closeMappingEditor)
-        MappingEditorScreen(mapping, state.busy, onSave = actions.saveMapping, onBack = actions.closeMappingEditor, modifier = modifier)
+        MappingEditorScreen(
+            mapping,
+            state.busy,
+            onSave = actions.saveMapping,
+            onBack = actions.closeMappingEditor,
+            modifier = modifier,
+            editorDraft = actions.mappingDraft(),
+        )
         return
     }
     var dialog by rememberSaveable(stateSaver = ExtensionsDialogSaver) { mutableStateOf<ExtensionsDialog?>(null) }
@@ -293,7 +302,14 @@ private fun DecryptionSection(
 private fun HostsSection(state: ExtensionsState, enabled: Boolean, actions: ExtensionsActions) {
     var typed by rememberSaveable { mutableStateOf("") }
     var exclude by rememberSaveable { mutableStateOf(false) }
-    var editing by remember { mutableStateOf<DecryptDomain?>(null) }
+    // The open edit dialog survives a rotation and another page: its pattern is kept and looked up again.
+    val domains by rememberUpdatedState(state.domains)
+    var editing by rememberSaveable(
+        stateSaver = Saver<DecryptDomain?, String>(
+            save = { it?.pattern },
+            restore = { pattern -> domains.firstOrNull { it.pattern == pattern } },
+        ),
+    ) { mutableStateOf<DecryptDomain?>(null) }
     val add = {
         actions.addHost(typed, exclude)
         typed = ""

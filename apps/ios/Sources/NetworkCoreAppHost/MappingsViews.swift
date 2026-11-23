@@ -36,6 +36,9 @@ struct MappingsView: View {
     @Environment(\.brand) private var brand
     @State private var editing: MappingDraft?
     @State private var deleting: DebugMappings.Entry?
+    /// Whether the enabled plugins and these mappings are over the engine config this version takes
+    /// (`TunnelController.decryptionExceedsConfig(with:)`), measured when the mappings change.
+    @State private var exceedsConfig = false
 
     private var mappings: DebugMappings {
         tunnel.debugMappings
@@ -76,16 +79,28 @@ struct MappingsView: View {
                     .listRowBackground(brand.surface)
                 }
             } footer: {
-                Text("从上到下第一条匹配的生效。需要先在 扩展 › HTTPS 解密证书 中安装并信任根证书，HTTPS 请求才能被映射。Map Remote 用 307 重定向发往新地址，方法和请求体保持不变。")
+                VStack(alignment: .leading, spacing: 4) {
+                    // Within the 8 MB decryption budget but over the engine config this version takes.
+                    if exceedsConfig {
+                        Text(TunnelController.decryptionExceedsConfigWarning)
+                            .foregroundStyle(brand.warning)
+                    }
+                    Text("从上到下第一条匹配的生效。需要先在 扩展 › HTTPS 解密证书 中安装并信任根证书，HTTPS 请求才能被映射。Map Remote 用 307 重定向发往新地址，方法和请求体保持不变。")
+                }
             }
         }
         .scrollContentBackground(.hidden)
         .background(brand.bg.ignoresSafeArea())
+        .task(id: mappings) {
+            let library = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)) ?? MitmPluginLibrary()
+            exceedsConfig = tunnel.decryptionExceedsConfig(with: library)
+        }
         .navigationTitle("映射")
         .inlineNavigationTitle()
         .sheet(item: $editing) { draft in
             MappingEditor(draft: draft) { entry in
                 let next = try mappings.saving(entry)
+                try tunnel.checkDebugMappingsBudget(next)
                 // Asked while the sheet is still open, so the confirmation shows over it.
                 guard await tunnel.allowsDecryption(of: next) else {
                     return false

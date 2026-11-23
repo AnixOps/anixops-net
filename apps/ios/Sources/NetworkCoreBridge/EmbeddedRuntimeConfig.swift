@@ -322,13 +322,15 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
     }
 
     /// The same config resolving with `dns`. Rule sets its rules name that the routing section lacks come from
-    /// the catalog when it knows them; a name nothing defines simply never matches.
+    /// the catalog when it knows them, as long as the section stays within `NodeLibrary.maxRuleSets` (a routing
+    /// section built with the DNS rules' sets, `NodeLibrary.routingBuild(localRules:dnsRuleSets:)`, already has
+    /// those that fit); a name nothing defines simply never matches.
     public func withDns(_ dns: DnsSettings?) -> EmbeddedRuntimeConfig {
         var copy = self
         copy.dns = dns.flatMap { $0.isEmpty ? nil : $0 }
         if let dns = copy.dns, var routing = copy.routing {
             var sets = routing.ruleSets ?? [:]
-            for name in dns.ruleSetNames where sets[name] == nil {
+            for name in dns.ruleSetNames where sets[name] == nil && sets.count < NodeLibrary.maxRuleSets {
                 sets[name] = RuleSetCatalog.known[name]
             }
             routing.ruleSets = sets.isEmpty ? nil : sets
@@ -781,6 +783,13 @@ public enum TunnelProfileKeys {
     public static let proxyExceptions = "networkcore.proxy-exceptions"
     /// `true` when the Mac acts as the gateway of other devices on the local network (`GatewayMode`). Absent is off.
     public static let gateway = "networkcore.gateway"
+    /// The SHA-256 fingerprint (`MitmCertificateAuthority.sha256Fingerprint`) of the MITM root in the Keychain when
+    /// the profile was last saved; the app writes it again whenever the root is generated or replaced. Public, never
+    /// key material. A macOS extension started without the app's values compares it with the copy it kept and
+    /// fails as on a stale copy rather than issue certificates from an older root
+    /// (`TunnelStartSecrets.mitmRootFailureReason`). Absent (no root, or a profile saved before it existed) checks
+    /// nothing.
+    public static let mitmRootFingerprint = "networkcore.mitm-root-fingerprint"
 }
 
 extension EmbeddedRuntimeConfig {

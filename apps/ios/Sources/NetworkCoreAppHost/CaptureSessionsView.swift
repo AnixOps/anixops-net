@@ -1,8 +1,9 @@
 import NetworkCoreBridge
 import SwiftUI
 
-/// Saved capture sessions (plan F1/E11): what was captured, sealed with a key that stays in this device's Keychain,
-/// kept for seven days. Opening one replaces what the request list shows and stops live capture.
+/// Saved capture sessions (plan F1/E11): what was captured, sealed with a key that never leaves this device (the
+/// Keychain on iOS, a file only the root System Extension reads on macOS: `CaptureSessionStorage.key()`), kept for
+/// seven days. Opening one replaces what the request list shows and stops live capture.
 struct CaptureSessionsView: View {
     var tunnel: TunnelController
     /// Called after a session was opened, so the request list starts over.
@@ -55,7 +56,7 @@ struct CaptureSessionsView: View {
                         .foregroundStyle(brand.danger)
                 }
             } footer: {
-                Text("会话用只保存在本机钥匙串里的密钥加密，保留 7 天后自动删除。打开会话会替换当前的抓包内容并停止抓包，之后可以照常查看、筛选和导出。")
+                Text(footerText)
             }
         }
         .scrollContentBackground(.hidden)
@@ -134,12 +135,24 @@ struct CaptureSessionsView: View {
         return ([requests, connections].compactMap { $0 } + [TrafficFormat.bytes(session.size)]).joined(separator: " · ")
     }
 
+    private var footerText: LocalizedStringKey {
+        #if os(macOS)
+        return "会话用只保存在这台 Mac 上的密钥加密，只有系统级的隧道扩展能读取，保留 7 天后自动删除。打开会话会替换当前的抓包内容并停止抓包，之后可以照常查看、筛选和导出。"
+        #else
+        return "会话用只保存在本机钥匙串里的密钥加密，保留 7 天后自动删除。打开会话会替换当前的抓包内容并停止抓包，之后可以照常查看、筛选和导出。"
+        #endif
+    }
+
     private var emptyText: LocalizedStringKey {
         if tunnel.connection != .connected {
             return "连接后可以查看和打开已保存的会话。"
         }
         if unavailable {
+            #if os(macOS)
+            return "这台 Mac 上无法保存会话（隧道扩展读不到会话密钥，开发者诊断的扩展事件里有原因）。"
+            #else
             return "这台设备上无法保存会话（钥匙串不可用）。"
+            #endif
         }
         return loaded ? "还没有保存的会话。在请求列表右上角“更多”中保存当前抓包。" : "正在读取…"
     }

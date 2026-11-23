@@ -17,6 +17,10 @@ public struct DebugMappings: Codable, Equatable, Sendable {
     public static let maxHosts = 500
     /// Largest local response body: the engine inlines `[Map Local]` data up to this size.
     public static let maxBodyBytes = 256 * 1024
+    /// Largest generated plugin (`pluginText`), in UTF-8 bytes: the Map Local bodies count Base64-encoded, as the
+    /// plugin carries them. Half the engine's decryption budget (`EngineBudget.maxDecryptionBytes`), which the
+    /// imported plugins share.
+    public static let maxPluginBytes = 4 * 1024 * 1024
     /// The generated plugin's name, as the engine's plugin report shows it.
     public static let pluginName = "AnixOps 调试映射"
 
@@ -315,6 +319,28 @@ public struct DebugMappings: Codable, Equatable, Sendable {
         return lines.joined(separator: "\n") + "\n"
     }
 
+    /// What the generated plugin counts against the decryption budget: its UTF-8 bytes, 0 without one.
+    public var pluginBytes: Int {
+        pluginText?.utf8.count ?? 0
+    }
+
+    /// Throws when these mappings, replacing `previous`, make the generated plugin larger and over
+    /// `maxPluginBytes` (`totalTooLarge`), or over the engine's decryption budget together with `importedBytes`, the
+    /// enabled imported plugins (`decryptionBudgetFull`). A change that does not make it larger always passes, so
+    /// mappings saved over a budget by an earlier version can still be turned off, shortened or deleted.
+    public func checkBudget(replacing previous: DebugMappings, importedBytes: Int) throws {
+        let bytes = pluginBytes
+        guard bytes > previous.pluginBytes else {
+            return
+        }
+        guard bytes <= Self.maxPluginBytes else {
+            throw DebugMappingsError.totalTooLarge
+        }
+        guard importedBytes + bytes <= EngineBudget.maxDecryptionBytes else {
+            throw DebugMappingsError.decryptionBudgetFull
+        }
+    }
+
     /// With one more line in the decryption list: a domain, a wildcard pattern, or an exclusion (`exclude`, or
     /// typed with a leading `-`). A pattern already listed is turned on and takes the new kind.
     public func addingHost(_ text: String, exclude: Bool = false) throws -> DebugMappings {
@@ -323,12 +349,14 @@ public struct DebugMappings: Codable, Equatable, Sendable {
         if let index = copy.domains.firstIndex(where: { $0.pattern == pattern }) {
             copy.domains[index].exclude = excluding
             copy.domains[index].enabled = true
+            try copy.checkBudget(replacing: self, importedBytes: 0)
             return copy
         }
         guard domains.count < Self.maxHosts else {
             throw DebugMappingsError.tooMany
         }
         copy.domains.append(Domain(pattern: pattern, exclude: excluding))
+        try copy.checkBudget(replacing: self, importedBytes: 0)
         return copy
     }
 
@@ -343,6 +371,7 @@ public struct DebugMappings: Codable, Equatable, Sendable {
         }
         var copy = self
         copy.domains[index] = Domain(pattern: next, exclude: excluding)
+        try copy.checkBudget(replacing: self, importedBytes: 0)
         return copy
     }
 
@@ -459,6 +488,7 @@ public struct DebugMappings: Codable, Equatable, Sendable {
             }
             copy.entries.append(entry)
         }
+        try copy.checkBudget(replacing: self, importedBytes: 0)
         return copy
     }
 
@@ -614,6 +644,10 @@ public enum DebugMappingsError: Error, Equatable {
     case invalidHost
     case duplicateHost
     case tooMany
+    /// The generated plugin would be over `DebugMappings.maxPluginBytes`.
+    case totalTooLarge
+    /// With the enabled plugins, over the engine's decryption budget (`EngineBudget.maxDecryptionBytes`).
+    case decryptionBudgetFull
 
     public var message: String {
         switch self {
@@ -637,6 +671,10 @@ public enum DebugMappingsError: Error, Equatable {
             return String(localized: "列表里已有这个域名")
         case .tooMany:
             return String(localized: "已达到数量上限")
+        case .totalTooLarge:
+            return String(localized: "映射合计超过 4 MB（响应体按 Base64 计算，约为原大小的 4/3）。请删除或缩小一些 Map Local 响应体。")
+        case .decryptionBudgetFull:
+            return String(localized: "映射和已启用的插件合计超过 8 MB。请减少映射响应体或停用一些插件。")
         }
     }
 }

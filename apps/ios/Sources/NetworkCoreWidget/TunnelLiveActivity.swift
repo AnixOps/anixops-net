@@ -3,7 +3,7 @@ import SwiftUI
 import WidgetKit
 
 /// Lock Screen banner and Dynamic Island while the tunnel is up: phase, node, time connected, and a disconnect
-/// button that runs the same intent as the widget.
+/// button that stops the tunnel and ends the activity (`StopTunnelActivityIntent`).
 struct TunnelLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: TunnelActivityAttributes.self) { context in
@@ -118,7 +118,8 @@ private struct ElapsedText: View {
 
 private struct DisconnectButton: View {
     var body: some View {
-        Button(intent: ToggleTunnelIntent(on: false)) {
+        // Runs in the app's process, which stops the tunnel and ends this activity too (`StopTunnelActivityIntent`).
+        Button(intent: StopTunnelActivityIntent()) {
             Label("断开", systemImage: "stop.fill")
                 .font(.subheadline.weight(.semibold))
                 .padding(.horizontal, 12)

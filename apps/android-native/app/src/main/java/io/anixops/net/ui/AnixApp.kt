@@ -5,8 +5,11 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.net.Uri
 import android.net.VpnService
 import android.os.Build
@@ -19,6 +22,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.List
@@ -28,11 +32,13 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -43,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,14 +57,20 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
+import androidx.core.location.LocationManagerCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import io.anixops.net.R
+import io.anixops.net.clientLanguage
+import io.anixops.net.platform.AnxVpnService
 import java.io.IOException
-import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -100,6 +113,8 @@ fun AnixApp(
     version: String,
     /** `anixops://` links the activity received, followed once the user agreement is accepted. */
     links: Flow<String> = emptyFlow(),
+    /** Where the app remembers that it asked for the notification permission once. */
+    preferences: SharedPreferences? = null,
 ) {
     val state by app.state.collectAsStateWithLifecycle()
     val mode by app.mode.collectAsStateWithLifecycle()
@@ -169,12 +184,21 @@ fun AnixApp(
             val text = when (event) {
                 is SettingsEvent.Message -> event.text
                 is SettingsEvent.Resource -> context.getString(event.id)
+                is SettingsEvent.Saved -> context.getString(R.string.diagnostics_saved, event.location)
             }
             if (text.isNotBlank()) snackbar.showSnackbar(text)
         }
     }
     LaunchedEffect(extensions) {
-        extensions.messages.collect { if (it.isNotBlank()) snackbar.showSnackbar(it) }
+        extensions.messages.collect { message ->
+            val text = when (message) {
+                is ExtensionsMessage.Text -> message.text
+                is ExtensionsMessage.RootSaved -> context.getString(R.string.decryption_root_saved, message.location) +
+                    (message.fingerprint?.let { "\n" + context.getString(R.string.decryption_root_fingerprint, it) } ?: "")
+                is ExtensionsMessage.RootNotSaved -> context.getString(R.string.decryption_root_not_saved, message.error)
+            }
+            if (text.isNotBlank()) snackbar.showSnackbar(text)
+        }
     }
     LaunchedEffect(activity) {
         activity.events.collect { event ->
@@ -220,8 +244,30 @@ fun AnixApp(
         return
     }
     val language = clientLanguage(LocalConfiguration.current.locales[0])
-    val settingsActions = rememberSettingsActions(settings, app) { readingTerms = true }
-    val extensionsActions = rememberExtensionsActions(extensions, snackbar)
+    // The client's notifications follow the app's language from the start, not only once 设置 was opened.
+    LaunchedEffect(language) { settings.applyLanguage(language) }
+    // With the Wi-Fi rules on, the VPN service waits for the network in the foreground, so the rules can connect
+    // from the background (after a restart of the phone, until the app was opened, the rules wait for it).
+    LaunchedEffect(settings) { if (settings.rulesEnabled()) AnxVpnService.standby(context) }
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        settings.setSystemAccess(systemAccess(context))
+    }
+    // Asked once, after the first connect the user made: the notifications are about the connection.
+    LaunchedEffect(connected) {
+        // Before Android 13 there is nothing to ask; the explicit check also keeps the permission name, which
+        // is new in 13, behind a check lint can see.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return@LaunchedEffect
+        val asked = preferences?.getBoolean(NOTIFICATIONS_ASKED, false) ?: true
+        val granted = permitted(context, Manifest.permission.POST_NOTIFICATIONS)
+        if (connected && Permissions.asksAfterConnect(Build.VERSION.SDK_INT, granted, asked)) {
+            preferences?.edit { putBoolean(NOTIFICATIONS_ASKED, true) }
+            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { settings.setSystemAccess(systemAccess(context)) }
+    val storage = rememberStorageGate()
+    val settingsActions = rememberSettingsActions(settings, app, storage) { readingTerms = true }
+    val extensionsActions = rememberExtensionsActions(extensions, snackbar, storage)
     val denied = stringResource(R.string.home_vpn_denied)
     val consent = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) app.connect() else app.showNotice(denied)
@@ -276,12 +322,12 @@ fun AnixApp(
             close = requests::close,
             setExportFormat = requests::setExportFormat,
             setRedact = requests::setRedact,
-            export = requests::export,
+            export = { storage { requests.export() } },
             openReplay = requests::openReplay,
             editReplay = requests::editReplay,
             sendReplay = requests::sendReplay,
             closeReplay = requests::closeReplay,
-            exportAll = requests::exportAll,
+            exportAll = { format -> storage { requests.exportAll(format) } },
             openSessions = requests::openSessions,
             closeSessions = requests::closeSessions,
             setSessionName = requests::setSessionName,
@@ -294,7 +340,7 @@ fun AnixApp(
             openExchange = requests::openExchange,
             openConnectionOf = requests::openConnectionOf,
             decryptConnectionHost = requests::decryptConnectionHost,
-            exportConnection = requests::exportConnection,
+            exportConnection = { format -> storage { requests.exportConnection(format) } },
         ),
         proxiesState = proxiesState,
         proxies = ProxiesActions(
@@ -377,22 +423,64 @@ fun AnixApp(
 
 /**
  * The settings actions with the permissions they need: the location permission for the Wi-Fi name (asked when the
- * rules are turned on, and before reading the current network), and on Android 13+ the notification permission
- * when a notification switch is touched.
+ * rules are turned on, and before reading the current network), location "all the time" after an explanation, the
+ * notification permission on Android 13+ when a notification switch is turned on, and the storage permission on
+ * Android 8 and 9 before the diagnostics report is saved to Downloads.
  */
 @Composable
-private fun rememberSettingsActions(settings: SettingsViewModel, app: AppViewModel, openTerms: () -> Unit): SettingsActions {
+private fun rememberSettingsActions(
+    settings: SettingsViewModel,
+    app: AppViewModel,
+    storage: (() -> Unit) -> Unit,
+    openTerms: () -> Unit,
+): SettingsActions {
     val context = LocalContext.current
+    val refresh = { settings.setSystemAccess(systemAccess(context)) }
     var afterLocation by remember { mutableStateOf<(() -> Unit)?>(null) }
     val location = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        refresh()
         afterLocation?.invoke()
         afterLocation = null
     }
-    val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
-    fun granted(permission: String) =
-        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+    val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { refresh() }
+    // From the button under the switches: once Android no longer shows its question (refused twice), the app's
+    // notification settings are the only way.
+    val allowNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
+        refresh()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            !allowed &&
+            !rationale(context, Manifest.permission.POST_NOTIFICATIONS)
+        ) {
+            openNotificationSettings(context)
+        }
+    }
+    val background = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { refresh() }
+    var disclosing by rememberSaveable { mutableStateOf(false) }
+    if (disclosing) {
+        // Google Play's prominent disclosure: what is read, what for, and that it stays on the phone, before the
+        // system's question. Only reachable on Android 10+ (Permissions.offersBackgroundLocation); the single version
+        // check sits directly around the API 29 call below.
+        AlertDialog(
+            onDismissRequest = { disclosing = false },
+            title = { Text(stringResource(R.string.background_location_title)) },
+            text = { Text(stringResource(R.string.background_location_disclosure)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        disclosing = false
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            background.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                        }
+                    },
+                ) { Text(stringResource(R.string.action_continue)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { disclosing = false }) { Text(stringResource(R.string.action_not_now)) }
+            },
+        )
+    }
     fun withLocation(then: (() -> Unit)?) {
-        if (granted(Manifest.permission.ACCESS_FINE_LOCATION)) {
+        if (permitted(context, Manifest.permission.ACCESS_FINE_LOCATION)) {
             then?.invoke()
         } else {
             afterLocation = then
@@ -416,13 +504,39 @@ private fun rememberSettingsActions(settings: SettingsViewModel, app: AppViewMod
         setMode = app::setMode,
         openLanguageSettings = languageSettings,
         toggleNotification = { kind ->
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !granted(Manifest.permission.POST_NOTIFICATIONS)) {
-                notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
+            // Asking is apart from the switch: turning one off never asks, turning one on asks when needed.
+            val turningOn = settings.notificationOn(kind) == false
             settings.toggleNotification(kind)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val granted = permitted(context, Manifest.permission.POST_NOTIFICATIONS)
+                if (Permissions.asksOnSwitch(Build.VERSION.SDK_INT, granted, turningOn)) {
+                    notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
         },
+        allowNotifications = {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                !permitted(context, Manifest.permission.POST_NOTIFICATIONS)
+            ) {
+                allowNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                // Before Android 13, or with the permission granted but the app's notifications turned off.
+                openNotificationSettings(context)
+            }
+        },
+        allowPreciseLocation = { withLocation(null) },
+        openLocationSettings = {
+            try {
+                context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+            } catch (error: ActivityNotFoundException) {
+                context.startActivity(Intent(Settings.ACTION_SETTINGS))
+            }
+        },
+        allowBackgroundLocation = { disclosing = true },
         setOnDemandEnabled = { enabled ->
             settings.setOnDemandEnabled(enabled)
+            // Waiting for the network in the foreground lets the rules connect from the background.
+            if (enabled) AnxVpnService.standby(context) else AnxVpnService.leaveStandby(context)
             // The rules for cellular and other networks work without it; only the Wi-Fi name needs it.
             if (enabled) withLocation(null)
         },
@@ -436,24 +550,85 @@ private fun rememberSettingsActions(settings: SettingsViewModel, app: AppViewMod
         validateConfiguration = settings::validateConfiguration,
         restartCore = settings::restartCore,
         setCrashReports = settings::setCrashReports,
-        createDiagnostics = settings::createDiagnostics,
+        createDiagnostics = { storage(settings::createDiagnostics) },
         openTerms = openTerms,
     )
 }
 
-/** The client's code for the language of notification texts (`i18n.ts` `Language`). */
-private fun clientLanguage(locale: Locale): String = when {
-    locale.language != "zh" -> "en"
-    locale.script == "Hant" || locale.country in setOf("TW", "HK", "MO") -> "zh-Hant"
-    else -> "zh"
+/**
+ * Runs an action that saves to Downloads, first asking for the storage permission on Android 8 and 9, which write to
+ * the public folder directly; later versions save through the system without it. Refused, the action is not run
+ * and the snackbar says why.
+ */
+@Composable
+private fun rememberStorageGate(): (() -> Unit) -> Unit {
+    val context = LocalContext.current
+    var after by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var refused by rememberSaveable { mutableStateOf(false) }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
+        if (allowed) after?.invoke() else refused = true
+        after = null
+    }
+    if (refused) {
+        AlertDialog(
+            onDismissRequest = { refused = false },
+            text = { Text(stringResource(R.string.downloads_permission_needed)) },
+            confirmButton = { TextButton(onClick = { refused = false }) { Text(stringResource(R.string.action_done)) } },
+        )
+    }
+    return { action ->
+        // The permission ends at Android 9 (maxSdkVersion 28 in the manifest).
+        val permission = Manifest.permission.WRITE_EXTERNAL_STORAGE
+        if (Permissions.needsStorage(Build.VERSION.SDK_INT, permitted(context, permission))) {
+            after = action
+            ask.launch(permission)
+        } else {
+            action()
+        }
+    }
 }
+
+private fun permitted(context: Context, permission: String): Boolean =
+    ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+
+/** Whether Android would still show its question for [permission] (false once refused for good). */
+private fun rationale(context: Context, permission: String): Boolean =
+    (context as? Activity)?.let { ActivityCompat.shouldShowRequestPermissionRationale(it, permission) } ?: false
+
+private fun openNotificationSettings(context: Context) {
+    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+    try {
+        context.startActivity(intent)
+    } catch (error: ActivityNotFoundException) {
+        context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
+    }
+}
+
+/** What the system allows the app now, for the settings page. */
+private fun systemAccess(context: Context): SystemAccess {
+    val location = context.getSystemService(LocationManager::class.java)
+    return SystemAccess(
+        notifications = NotificationManagerCompat.from(context).areNotificationsEnabled(),
+        preciseLocation = permitted(context, Manifest.permission.ACCESS_FINE_LOCATION),
+        locationOn = location == null || LocationManagerCompat.isLocationEnabled(location),
+        backgroundLocation = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+            permitted(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION),
+    )
+}
+
+/** The preference that the app asked for the notification permission after the first connect. */
+private const val NOTIFICATIONS_ASKED = "notifications.asked"
 
 /**
  * The extensions page's actions: the system's security settings for installing the root certificate, and the
  * file picker whose file is imported as a plugin under its own name.
  */
 @Composable
-private fun rememberExtensionsActions(extensions: ExtensionsViewModel, snackbar: SnackbarHostState): ExtensionsActions {
+private fun rememberExtensionsActions(
+    extensions: ExtensionsViewModel,
+    snackbar: SnackbarHostState,
+    storage: (() -> Unit) -> Unit,
+): ExtensionsActions {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val unreadable = stringResource(R.string.plugin_file_unreadable)
@@ -476,7 +651,8 @@ private fun rememberExtensionsActions(extensions: ExtensionsViewModel, snackbar:
         }
     }
     return ExtensionsActions(
-        enableDecryption = extensions::enableDecryption,
+        // The root certificate goes to Downloads, which needs the storage permission on Android 8 and 9.
+        enableDecryption = { storage(extensions::enableDecryption) },
         disableDecryption = extensions::disableDecryption,
         confirmDecryption = extensions::confirmDecryption,
         openSecuritySettings = {
@@ -501,6 +677,7 @@ private fun rememberExtensionsActions(extensions: ExtensionsViewModel, snackbar:
         closeInspector = extensions::closeInspector,
         editMapping = extensions::editMapping,
         closeMappingEditor = extensions::closeMappingEditor,
+        mappingDraft = { extensions.mappingDraft },
         saveMapping = extensions::saveMapping,
         setMappingEnabled = extensions::setMappingEnabled,
         removeMapping = extensions::removeMapping,
@@ -573,8 +750,12 @@ fun AnixScaffold(
     LaunchedEffect(problem) {
         if (problem != null && mode == AppMode.Proxy && !onHome) snackbar.showSnackbar(problem)
     }
+    // Each page keeps what was typed and not saved yet (我的规则, DNS, a mapping…) while another page shows.
+    val pages = rememberSaveableStateHolder()
     NavigationSuiteScaffold(
-        modifier = modifier,
+        // Edge to edge, the window no longer shrinks for the keyboard: the whole scaffold (page, bars, snackbar)
+        // stays above it, so a focused field scrolls into view and the navigation bar inset is not counted twice.
+        modifier = modifier.imePadding(),
         containerColor = MaterialTheme.colorScheme.background,
         navigationSuiteItems = {
             destinations.forEach { destination ->
@@ -589,74 +770,77 @@ fun AnixScaffold(
     ) {
         Column {
             Box(Modifier.weight(1f)) {
-                when (selected) {
-                    Destination.Home -> HomeScreen(state, home)
-                    Destination.Proxies -> {
-                        LaunchedEffect(Unit) { pollProxies() }
-                        ProxiesScreen(proxiesState, proxies)
-                    }
-                    Destination.Rules -> {
-                        LaunchedEffect(Unit) { pollRules() }
-                        RulesScreen(state.snapshot, state.busy, rulesState, rules)
-                    }
-                    Destination.Settings -> when (settingsPage) {
-                        SettingsPage.Logs -> {
-                            BackTo(closePage)
-                            LaunchedEffect(Unit) { pollLogs() }
-                            LogsScreen(logsState, activity.copy(back = closePage))
+                val page = pageKey(selected, settingsPage, egressRules)
+                pages.SaveableStateProvider(page) {
+                    when (selected) {
+                        Destination.Home -> HomeScreen(state, home)
+                        Destination.Proxies -> {
+                            LaunchedEffect(Unit) { pollProxies() }
+                            ProxiesScreen(proxiesState, proxies)
                         }
-                        SettingsPage.Traffic -> {
-                            BackTo(closePage)
-                            LaunchedEffect(Unit) { pollTraffic() }
-                            TrafficScreen(trafficState, activity.copy(back = closePage))
+                        Destination.Rules -> {
+                            LaunchedEffect(Unit) { pollRules() }
+                            RulesScreen(state.snapshot, state.busy, rulesState, rules)
                         }
-                        null -> {
-                            LaunchedEffect(Unit) { pollSettings() }
-                            SettingsScreen(
-                                mode,
-                                version,
-                                termsVersion,
-                                state.snapshot,
-                                settingsState,
-                                settings.copy(
-                                    setMode = onModeChange,
-                                    openLogs = { settingsPage = SettingsPage.Logs },
-                                    openTraffic = { settingsPage = SettingsPage.Traffic },
-                                ),
+                        Destination.Settings -> when (settingsPage) {
+                            SettingsPage.Logs -> {
+                                BackTo(closePage)
+                                LaunchedEffect(Unit) { pollLogs() }
+                                LogsScreen(logsState, activity.copy(back = closePage))
+                            }
+                            SettingsPage.Traffic -> {
+                                BackTo(closePage)
+                                LaunchedEffect(Unit) { pollTraffic() }
+                                TrafficScreen(trafficState, activity.copy(back = closePage))
+                            }
+                            null -> {
+                                LaunchedEffect(Unit) { pollSettings() }
+                                SettingsScreen(
+                                    mode,
+                                    version,
+                                    termsVersion,
+                                    state.snapshot,
+                                    settingsState,
+                                    settings.copy(
+                                        setMode = onModeChange,
+                                        openLogs = { settingsPage = SettingsPage.Logs },
+                                        openTraffic = { settingsPage = SettingsPage.Traffic },
+                                    ),
+                                )
+                            }
+                        }
+                        Destination.Egress -> if (egressRules) {
+                            BackTo(closeRules)
+                            LaunchedEffect(Unit) { pollRules() }
+                            RulesScreen(state.snapshot, state.busy, rulesState, rules, onBack = closeRules)
+                        } else {
+                            LaunchedEffect(Unit) { pollProxies() }
+                            EgressScreen(
+                                debugExit,
+                                state.nodeCount,
+                                proxiesState,
+                                proxies,
+                                egress.copy(openRules = { egressRules = true }),
                             )
                         }
-                    }
-                    Destination.Egress -> if (egressRules) {
-                        BackTo(closeRules)
-                        LaunchedEffect(Unit) { pollRules() }
-                        RulesScreen(state.snapshot, state.busy, rulesState, rules, onBack = closeRules)
-                    } else {
-                        LaunchedEffect(Unit) { pollProxies() }
-                        EgressScreen(
-                            debugExit,
-                            state.nodeCount,
-                            proxiesState,
-                            proxies,
-                            egress.copy(openRules = { egressRules = true }),
-                        )
-                    }
-                    Destination.Extensions, Destination.Rewrite -> {
-                        LaunchedEffect(Unit) { pollExtensions() }
-                        ExtensionsScreen(stringResource(selected.label), state.snapshot, extensionsState, extensions)
-                    }
-                    Destination.Requests -> {
-                        LaunchedEffect(Unit) { pollRequests() }
-                        when {
-                            requestsState.sessions != null -> BackTo(requests.closeSessions)
-                            requestsState.replay != null -> BackTo(requests.closeReplay)
-                            requestsState.opened != null -> BackTo(requests.close)
-                            requestsState.connection != null -> BackTo(requests.closeConnection)
+                        Destination.Extensions, Destination.Rewrite -> {
+                            LaunchedEffect(Unit) { pollExtensions() }
+                            ExtensionsScreen(stringResource(selected.label), state.snapshot, extensionsState, extensions)
                         }
-                        RequestsScreen(
-                            state,
-                            requestsState,
-                            requests.copy(openRewrite = { selected = Destination.Rewrite }),
-                        )
+                        Destination.Requests -> {
+                            LaunchedEffect(Unit) { pollRequests() }
+                            when {
+                                requestsState.sessions != null -> BackTo(requests.closeSessions)
+                                requestsState.replay != null -> BackTo(requests.closeReplay)
+                                requestsState.opened != null -> BackTo(requests.close)
+                                requestsState.connection != null -> BackTo(requests.closeConnection)
+                            }
+                            RequestsScreen(
+                                state,
+                                requestsState,
+                                requests.copy(openRewrite = { selected = Destination.Rewrite }),
+                            )
+                        }
                     }
                 }
                 SnackbarHost(snackbar, modifier = Modifier.align(Alignment.BottomCenter))
@@ -667,7 +851,16 @@ fun AnixScaffold(
     }
 }
 
-/** The system back gesture closes a page opened from another; screenshots have no dispatcher to hook into. */
+/**
+ * The key a page's unsaved state is kept under: the destination, and the page opened from it (日志, 流量, 规则 in
+ * debug mode), so that going back to the page finds what was typed there.
+ */
+internal fun pageKey(selected: Destination, settingsPage: SettingsPage?, egressRules: Boolean): String = when {
+    selected == Destination.Settings && settingsPage != null -> "${selected.name}/${settingsPage.name}"
+    selected == Destination.Egress && egressRules -> "${selected.name}/rules"
+    else -> selected.name
+}
+
 /** Why a link was refused, by the shared view's id. */
 @StringRes
 private fun linkReason(reason: String): Int = when (reason) {
@@ -680,6 +873,7 @@ private fun linkReason(reason: String): Int = when (reason) {
     else -> R.string.link_unknown_action
 }
 
+/** The system back gesture closes a page opened from another; screenshots have no dispatcher to hook into. */
 @Composable
 internal fun BackTo(close: () -> Unit) {
     if (LocalOnBackPressedDispatcherOwner.current != null) BackHandler(onBack = close)

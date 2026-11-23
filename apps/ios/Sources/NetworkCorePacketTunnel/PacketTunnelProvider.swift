@@ -49,12 +49,22 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         /// The license fields of each ANX outbound by its node's origin (`OutboundLicenses`), or nil without a
         /// license state.
         let anxLicense: OutboundLicenses?
+        /// The node library (its Keychain value) this start read, or why it could not. New local rules are built on
+        /// this copy, not on the Keychain as it is later: the app saves a new policy group pick there while the
+        /// engine switches it in place, and a background subscription update saves new nodes without a restart;
+        /// building on those would differ from the running config in more than the rule lines and turn every
+        /// later rule edit into a restart.
+        let nodeLibrary: Result<String?, Error>
     }
     private var memoryPressure: DispatchSourceMemoryPressure?
     /// Recent events for the app's developer mode. Same rule as the system log: fixed reasons and codes only.
     private let events = TunnelDiagnosticLog()
     /// Whether the running engine decrypts HTTPS, set by `makeRuntimeSession` (`TunnelAppMessage.httpsDecryption`).
     private var httpsDecryption = HttpsDecryptionState(status: .unused)
+    /// Whether the running engine routes by the rules, set by `makeSession` (`TunnelAppMessage.routing`).
+    private var routingState = RoutingState(status: .unused)
+    /// The rule sets the last routing section built left out (`NodeLibrary.RoutingBuild.droppedRuleSets`).
+    private var droppedRuleSets: [String] = []
     /// Hourly traffic by host and policy for the app's statistics page.
     private let trafficStats = TrafficStatsRecorder()
     /// Network changes in, script notifications out.
@@ -92,6 +102,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         events.record("startTunnel")
         watchMemoryPressure()
         startSecrets = Self.resolveStartSecrets(options: options, events: events)
+        // macOS: the copy kept from an earlier start, when the app passed nothing this time (On Demand, login,
+        // System Settings); nil when it passed fresh values, and always nil on iOS, which keeps no copy.
+        let keptCopy = TunnelStartSecrets(options: options) == nil ? startSecrets : nil
         let completionHandler: (Error?) -> Void = { [events] error in
             if let error = error {
                 Self.log.error("startTunnel failed: \(error.localizedDescription, privacy: .public)")
@@ -139,7 +152,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             interface = try (tunnelProtocol.providerConfiguration?[TunnelProfileKeys.tunnelInterface] as? Data)
                 .map(TunnelInterface.decoded(from:)) ?? .proxy
         } catch let failure as NodeSecretStore.Failure {
-            completionHandler(PacketTunnelFailure(reason: "node key is unavailable (keychain status \(failure.status))"))
+            // On macOS a copy handed over for an older profile says so, so the app knows to start the tunnel once
+            // with options rather than report a Keychain problem.
+            let version = tunnelProtocol.providerConfiguration?[TunnelProfileKeys.nodeKeyVersion] as? String
+            completionHandler(PacketTunnelFailure(reason: TunnelStartSecrets.nodeKeyFailureReason(
+                status: failure.status, handedOver: startSecrets, version: version
+            )))
             return
         } catch {
             completionHandler(PacketTunnelFailure(reason: "tunnel profile is malformed"))
@@ -147,10 +165,23 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
         // The subscription's rules and groups go in whatever the mode, so the app can switch modes without a restart.
         let mode = ProxyMode.saved(in: tunnelProtocol.providerConfiguration)
-        let dns = DnsSettings.fromProfileValue(tunnelProtocol.providerConfiguration?[TunnelProfileKeys.dns] as? Data)
-        let redirects = TrafficRedirects.lines(
+        // Rules an earlier version saved over the engine's domain limit are left out (`withinDomainLimit()`): the
+        // engine would refuse the whole config.
+        let dnsLimit = DnsSettings.fromProfileValue(tunnelProtocol.providerConfiguration?[TunnelProfileKeys.dns] as? Data)?
+            .withinDomainLimit()
+        let dns = dnsLimit?.settings
+        if let dropped = dnsLimit?.droppedRules, dropped > 0 {
+            events.record("dns: \(dropped) rules skipped (over \(DnsSettings.maxRuleDomains) domains)")
+        }
+        // Lines an earlier version saved without checking them all are skipped (`TrafficRedirects.validLines`): the
+        // engine would refuse the whole config for one of them.
+        let savedRedirects = TrafficRedirects.lines(
             fromProfileValue: tunnelProtocol.providerConfiguration?[TunnelProfileKeys.redirects] as? Data
         )
+        let redirects = TrafficRedirects.validLines(savedRedirects)
+        if redirects.count < savedRedirects.count {
+            events.record("redirects: \(savedRedirects.count - redirects.count) skipped (invalid)")
+        }
         let localRules = LocalRules.fromProfileValue(
             tunnelProtocol.providerConfiguration?[TunnelProfileKeys.localRules] as? Data
         )
@@ -163,10 +194,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let proxyExceptions = ProxyExceptions.fromProfileValue(
             tunnelProtocol.providerConfiguration?[TunnelProfileKeys.proxyExceptions] as? Data
         )
+        let nodeLibrary = Result<String?, Error> {
+            try startSecrets?.nodeLibrary ?? NodeSecretStore.value(account: NodeLibrary.keychainAccount)
+        }
         let base = ReloadBase(
-            config: config, mode: mode, dns: dns, redirects: redirects, blockQuic: blockQuic, anxLicense: anxLicenseFields()
+            config: config, mode: mode, dns: dns, redirects: redirects, blockQuic: blockQuic,
+            anxLicense: anxLicenseFields(library: nodeLibrary), nodeLibrary: nodeLibrary
         )
-        config = Self.assemble(base, routing: withSubscriptionRules(base.config, localRules: localRules))
+        config = Self.assemble(
+            base, routing: withSubscriptionRules(base.config, localRules: localRules, dns: dns, library: base.nodeLibrary)
+        )
         events.record("mode \(mode.rawValue)")
         if !redirects.isEmpty {
             events.record("redirects \(redirects.count)")
@@ -179,18 +216,51 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
         events.record("profile loaded, mtu \(interface.mtu), \(interface.addresses.count) addresses, \(interface.includedRoutes.count) routes, \(interface.dnsServers.count) dns servers")
 
+        // A kept copy without the profile's HTTPS decryption payload would start with decryption silently off; fail
+        // with the stale-copy reason instead, so the app starts the tunnel once more with options.
+        if let reason = TunnelStartSecrets.mitmBundleFailureReason(
+            profileValue: tunnelProtocol.providerConfiguration?[TunnelProfileKeys.mitmBundle] as? Data,
+            keptCopy: keptCopy
+        ) {
+            events.record("https decryption payload missing from the kept start secrets")
+            completionHandler(PacketTunnelFailure(reason: reason))
+            return
+        }
+        // The same for a kept copy with an older MITM root than the profile names: the root was generated or
+        // replaced while the tunnel was not running, and certificates from the old one must not be issued.
+        let decrypts = MitmProfileBundle.referencesPayload(tunnelProtocol.providerConfiguration)
+            || tunnelProtocol.providerConfiguration?[TunnelProfileKeys.mitmPlugins] != nil
+        if let reason = TunnelStartSecrets.mitmRootFailureReason(
+            profileFingerprint: tunnelProtocol.providerConfiguration?[TunnelProfileKeys.mitmRootFingerprint] as? String,
+            decrypts: decrypts,
+            keptCopy: keptCopy
+        ) {
+            events.record("root certificate in the kept start secrets is older than the profile")
+            completionHandler(PacketTunnelFailure(reason: reason))
+            return
+        }
+
         let session: EmbeddedRuntimeSession
         do {
             let mitm = MitmProfileBundle.fromProfile(
                 tunnelProtocol.providerConfiguration, chunks: startSecrets?.mitmBundleChunks
             )
-            session = try makeSession(
+            // The config the engine actually runs: without the rules when it could not take them, so a later
+            // local-rules change restarts rather than swapping lines into an engine that has no rules.
+            let started = try makeSession(
                 config,
                 mitmPlugins: mitm.plugins,
                 mitmScripts: mitm.scripts,
                 mitmResources: mitm.resources
             )
+            session = started.0
+            config = started.1
             events.record("runtime initialized")
+        } catch let tooLarge as EngineBudget.TooLarge {
+            completionHandler(PacketTunnelFailure(
+                reason: "tunnel config is too large for the engine (\(tooLarge.bytes) of \(tooLarge.limit) bytes); remove DNS rules or redirects"
+            ))
+            return
         } catch let failure as EmbeddedRuntimeSession.Failure {
             completionHandler(PacketTunnelFailure(reason: "embedded runtime rejected the tunnel profile (code \(failure.code))"))
             return
@@ -354,14 +424,25 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
     }
 
-    /// Tells the engine when the network under the tunnel changes (Wi-Fi to cellular, another Wi-Fi), for the
-    /// plugins' `network-changed` scripts. The first path seen is the one the tunnel started on.
-    /// Lets the engine seal saved capture sessions: a folder in this extension's container and a key that stays in
-    /// the Keychain on this device. Without either, saving sessions is simply unavailable.
+    /// Lets the engine seal saved capture sessions: a folder in this extension's container and a key that never
+    /// leaves this device (`CaptureSessionStorage.key()`: the Keychain on iOS, a root-only file on macOS, where the
+    /// System Extension cannot use the data protection keychain). Without either, saving sessions is unavailable and
+    /// the app says so (`CaptureStopNotice`). Only fixed reasons and codes are logged, never the key.
     private func setUpCaptureStorage(_ session: EmbeddedRuntimeSession) {
         do {
             if session.control(try CaptureSessionStorage.setupRequest().request) == nil {
                 events.record("capture storage refused")
+            }
+        } catch let failure as NodeSecretStore.Failure {
+            events.record("capture storage unavailable (keychain status \(failure.status))")
+        } catch let failure as CaptureSessionKeyFile.Failure {
+            switch failure {
+            case .unreadable:
+                events.record("capture storage unavailable: key file unreadable")
+            case let .malformed(length):
+                events.record("capture storage unavailable: key file holds \(length) bytes")
+            case let .notWritten(code):
+                events.record("capture storage unavailable: key file not written (errno \(code))")
             }
         } catch {
             events.record("capture storage unavailable")
@@ -384,6 +465,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         events.record(answer != nil ? "capture saved on stop, \(status.connections) connections" : "capture not saved on stop")
     }
 
+    /// Tells the engine when the network under the tunnel changes (Wi-Fi to cellular, another Wi-Fi), for the
+    /// plugins' `network-changed` scripts. The first path seen is the one the tunnel started on.
     private func watchNetworkPath() {
         pathObservation?.invalidate()
         pathObservation = observe(\.defaultPath, options: [.initial, .new]) { [weak self] provider, _ in
@@ -446,11 +529,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             completionHandler?(trafficStats.clear())
         case .httpsDecryption:
             completionHandler?(session == nil ? nil : httpsDecryption.encoded())
+        case .routing:
+            completionHandler?(session == nil ? nil : routingState.encoded())
         case let .notificationSettings(data):
             applyNotificationSettings(NotificationSettings.fromProfileValue(data))
             completionHandler?(Data("ok".utf8))
         case let .reloadLocalRules(value):
             completionHandler?(reloadLocalRules(value))
+        case let .startSecrets(value):
+            completionHandler?(keepStartSecrets(value))
         case .diagnostics:
             let diagnostics = TunnelDiagnostics(
                 runtimeStatus: session?.statusJSON().flatMap { String(data: $0, encoding: .utf8) },
@@ -510,13 +597,27 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         guard let session, let base = reloadBase, let running = runningConfig else {
             return answer(.init(reloaded: false, restart: true))
         }
-        let next = Self.assemble(base, routing: withSubscriptionRules(base.config, localRules: LocalRules.fromProfileValue(value)))
+        // On the node library this start read (`ReloadBase.nodeLibrary`): new nodes or picks saved since are not
+        // what the engine runs, and a pick made since is kept by the engine across the swap.
+        let next = Self.assemble(
+            base,
+            routing: withSubscriptionRules(
+                base.config, localRules: LocalRules.fromProfileValue(value), dns: base.dns, library: base.nodeLibrary
+            )
+        )
         guard let rules = running.reloadableRules(to: next) else {
             events.record("local rules changed beyond the rule lines: restart")
             return answer(.init(reloaded: false, restart: true))
         }
+        // The same size check as at start: a swap is refused by nothing, so a config the engine could not have
+        // started with restarts instead, and the start says what it left out.
+        if (try? EngineBudget.encoded(next.withoutMitm())) == nil {
+            events.record("local rules over the config budget: restart")
+            return answer(.init(reloaded: false, restart: true))
+        }
         if rules == running.routing?.rules {
             runningConfig = next
+            routingState.droppedRuleSets = droppedRuleSets
             return answer(.init(reloaded: true, rules: rules.count))
         }
         let reply = session.control(RuntimeControl.reloadRules(rules, dryRun: false).request)
@@ -526,23 +627,37 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             return answer(.init(reloaded: false, error: RuntimeControl.decode(RuntimeControl.ReloadAnswer.self, from: reply)?.error, restart: true))
         }
         runningConfig = next
+        routingState.droppedRuleSets = droppedRuleSets
         events.record("rules reloaded in place, \(rules.count) rules, generation \(done.generation ?? 0)")
         return reply
     }
 
-    /// Adds the subscription's rules and groups from the node library in the Keychain, with the user's local rules in
-    /// front; a node list without subscription rules gets the local rules, then everything else through the selected node. They are an extra like
-    /// HTTPS decryption: without a readable library the selected node carries all traffic, and the reason goes to
-    /// the diagnostics.
-    private func withSubscriptionRules(_ config: EmbeddedRuntimeConfig, localRules: LocalRules) -> EmbeddedRuntimeConfig {
+    /// Adds the subscription's rules and groups from `library` (the node library the start read from the Keychain or
+    /// the start secrets), with the user's local rules in front; a node list without subscription rules gets the
+    /// local rules, then everything else through the selected node. They are an extra like HTTPS decryption: without
+    /// a readable library the selected node carries all traffic, and the reason goes to the diagnostics.
+    private func withSubscriptionRules(
+        _ config: EmbeddedRuntimeConfig,
+        localRules: LocalRules,
+        dns: DnsSettings?,
+        library: Result<String?, Error>
+    ) -> EmbeddedRuntimeConfig {
+        droppedRuleSets = []
         do {
-            guard let value = try startSecrets?.nodeLibrary ?? NodeSecretStore.value(account: NodeLibrary.keychainAccount),
-                  let routing = try NodeLibrary.fromKeychainValue(value).routingForModes(localRules: localRules)
+            guard let value = try library.get(),
+                  let build = try NodeLibrary.fromKeychainValue(value).routingBuild(
+                      localRules: localRules, dnsRuleSets: dns?.ruleSetNames ?? []
+                  )
             else {
                 events.record("subscription rules off: no node list")
                 return config
             }
+            let routing = build.routing
+            droppedRuleSets = build.droppedRuleSets
             events.record("subscription rules on, \(routing.outbounds.count) nodes, \(routing.rules.count) rules, \(routing.groups.count) groups")
+            if !build.droppedRuleSets.isEmpty {
+                events.record("rule sets over the engine's \(NodeLibrary.maxRuleSets): \(build.droppedRuleSets.count) left out")
+            }
             return config.withRouting(routing)
         } catch let failure as NodeSecretStore.Failure {
             events.record("subscription rules off: node list unavailable (keychain status \(failure.status))")
@@ -556,7 +671,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// subscription offered ANX licensing. Each origin's license goes to its own file in the extension's container,
     /// which the outbound reads at each connection. Without a license state there is nothing and the config stays
     /// unchanged; a node without an origin, or whose origin offers no license, gets nothing, never another origin's.
-    private func anxLicenseFields() -> OutboundLicenses? {
+    private func anxLicenseFields(library snapshot: Result<String?, Error>) -> OutboundLicenses? {
         guard let value = startSecrets?.anxLicense ?? (try? NodeSecretStore.value(account: AnxLicense.keychainAccount)),
               let state = try? AnxLicense.fromKeychainValue(value),
               state.offered,
@@ -565,66 +680,62 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         else {
             return nil
         }
-        var fieldsByOrigin: [String: [String: JSONValue]] = [:]
-        var written = 0
-        for origin in state.origins {
-            guard let entry = state.entries[origin] else {
-                continue
-            }
-            let url = directory.appendingPathComponent(AnxLicense.licenseFileName(origin: origin))
-            do {
-                if let license = entry.license {
-                    try Data(license.utf8).write(to: url, options: .atomic)
-                    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-                    written += 1
-                } else if FileManager.default.fileExists(atPath: url.path) {
-                    try FileManager.default.removeItem(at: url)
-                }
-            } catch {
-                events.record("anx license not written")
-            }
-            fieldsByOrigin[origin] = entry.outboundFields(licensePath: url.path)
+        let licenses = state.writeLicenseFiles(in: directory)
+        if licenses.failures > 0 {
+            events.record("anx license not written")
         }
+        let fieldsByOrigin = licenses.fieldsByOrigin
+        let written = licenses.written
         // The single license file of versions before 2026-11-19.
         try? FileManager.default.removeItem(at: directory.appendingPathComponent("anx-license.cert"))
-        let library = (try? startSecrets?.nodeLibrary ?? NodeSecretStore.value(account: NodeLibrary.keychainAccount))
-            .flatMap { try? NodeLibrary.fromKeychainValue($0) }
+        // The same copy of the library the routing is built from.
+        let library = (try? snapshot.get()).flatMap { try? NodeLibrary.fromKeychainValue($0) }
         events.record("anx licenses \(written) of \(fieldsByOrigin.count) origins")
         return OutboundLicenses(fieldsByOrigin: fieldsByOrigin, nodes: library?.nodes ?? [])
     }
 
-    /// Creates the runtime. When it refuses the subscription's rules, or there are none, the selected node runs alone
-    /// (`EmbeddedRuntimeConfig.selectedNodeAlone()`).
+    /// Creates the runtime and returns it with the config it runs. When the config with the subscription's rules is
+    /// over the engine's size budget (`EngineBudget`) or the engine refuses it, or there are none, the selected node
+    /// runs alone (`EmbeddedRuntimeConfig.selectedNodeAlone()`); `routingState` says which, for the app.
     private func makeSession(
         _ config: EmbeddedRuntimeConfig,
         mitmPlugins: [String],
         mitmScripts: [String: String],
         mitmResources: [String: Data]
-    ) throws -> EmbeddedRuntimeSession {
+    ) throws -> (EmbeddedRuntimeSession, EmbeddedRuntimeConfig) {
         let resourceAssets = Self.resourceAssets(mitmResources)
         guard config.routing != nil else {
-            return try makeRuntimeSession(
-                config.selectedNodeAlone(),
-                mitmPlugins: mitmPlugins,
-                mitmScripts: mitmScripts,
-                resourceAssets: resourceAssets
+            routingState = RoutingState(status: .unused)
+            let alone = config.selectedNodeAlone()
+            let session = try makeRuntimeSession(
+                alone, mitmPlugins: mitmPlugins, mitmScripts: mitmScripts, resourceAssets: resourceAssets
             )
+            return (session, alone)
         }
         do {
-            return try makeRuntimeSession(
+            // Measured without decryption first: the rules go before the plugins, which `makeRuntimeSession`
+            // leaves out when only they do not fit.
+            _ = try EngineBudget.encoded(config.withoutMitm())
+            let session = try makeRuntimeSession(
                 config, mitmPlugins: mitmPlugins, mitmScripts: mitmScripts, resourceAssets: resourceAssets
             )
+            routingState = RoutingState(status: .on, droppedRuleSets: droppedRuleSets)
+            return (session, config)
+        } catch let tooLarge as EngineBudget.TooLarge {
+            events.record("subscription rules off: config too large (\(tooLarge.bytes) of \(tooLarge.limit) bytes)")
+            routingState = RoutingState(status: .off, reason: .tooLarge, bytes: tooLarge.bytes)
         } catch let failure as EmbeddedRuntimeSession.Failure {
             events.record("subscription rules off: runtime refused them (code \(failure.code))")
+            routingState = RoutingState(status: .off, reason: .refused)
         } catch {
             events.record("subscription rules off: runtime refused them")
+            routingState = RoutingState(status: .off, reason: .refused)
         }
-        return try makeRuntimeSession(
-            config.selectedNodeAlone(),
-            mitmPlugins: mitmPlugins,
-            mitmScripts: mitmScripts,
-            resourceAssets: resourceAssets
+        let alone = config.selectedNodeAlone()
+        let session = try makeRuntimeSession(
+            alone, mitmPlugins: mitmPlugins, mitmScripts: mitmScripts, resourceAssets: resourceAssets
         )
+        return (session, alone)
     }
 
     /// Creates the runtime, decrypting HTTPS for the enabled plugins when the device root is in the Keychain and
@@ -639,36 +750,44 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     ) throws -> EmbeddedRuntimeSession {
         if !mitmPlugins.isEmpty {
             do {
+                // Over the engine's plugin budget it would refuse the whole decryption section.
+                try EngineBudget.checkDecryption(mitmPlugins)
                 if let authority = try mitmAuthority() {
                     if !mitmScripts.isEmpty {
                         do {
                             let session = try EmbeddedRuntimeSession(
-                                config: config.withMitm(
+                                config: EngineBudget.encoded(config.withMitm(
                                     plugins: mitmPlugins,
                                     authority: authority,
                                     scriptAssets: try Self.scriptAssets(mitmScripts),
                                     resourceAssets: resourceAssets,
                                     scriptStorePath: try Self.scriptStoreURL().path
-                                ).encoded(),
+                                )),
                                 packetFlow: packetFlow
                             )
                             events.record("https decryption on, \(mitmPlugins.count) plugins, \(mitmScripts.count) scripts")
-                            httpsDecryption = HttpsDecryptionState(status: .on, plugins: mitmPlugins.count)
+                            httpsDecryption = HttpsDecryptionState(
+                                status: .on, plugins: mitmPlugins.count, rootFingerprint: authority.sha256Fingerprint
+                            )
                             return session
                         } catch let failure as EmbeddedRuntimeSession.Failure {
                             events.record("scripts off: runtime refused them (code \(failure.code))")
+                        } catch let tooLarge as EngineBudget.TooLarge {
+                            events.record("scripts off: config too large (\(tooLarge.bytes) of \(tooLarge.limit) bytes)")
                         } catch {
                             events.record("scripts off: could not write them")
                         }
                     }
                     let session = try EmbeddedRuntimeSession(
-                        config: config.withMitm(
+                        config: EngineBudget.encoded(config.withMitm(
                             plugins: mitmPlugins, authority: authority, resourceAssets: resourceAssets
-                        ).encoded(),
+                        )),
                         packetFlow: packetFlow
                     )
                     events.record("https decryption on, \(mitmPlugins.count) plugins")
-                    httpsDecryption = HttpsDecryptionState(status: .on, plugins: mitmPlugins.count)
+                    httpsDecryption = HttpsDecryptionState(
+                        status: .on, plugins: mitmPlugins.count, rootFingerprint: authority.sha256Fingerprint
+                    )
                     return session
                 }
                 events.record("https decryption off: no root certificate")
@@ -676,6 +795,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             } catch let failure as MitmCertificateStore.Failure {
                 events.record("https decryption off: root certificate unavailable (keychain status \(failure.status))")
                 httpsDecryption = HttpsDecryptionState(status: .off, reason: .rootUnavailable, plugins: mitmPlugins.count)
+            } catch let tooLarge as EngineBudget.TooLarge {
+                events.record("https decryption off: plugins too large (\(tooLarge.bytes) of \(tooLarge.limit) bytes)")
+                httpsDecryption = HttpsDecryptionState(
+                    status: .off, reason: .tooLarge, plugins: mitmPlugins.count, bytes: tooLarge.bytes
+                )
             } catch let failure as EmbeddedRuntimeSession.Failure {
                 events.record("https decryption off: runtime refused the plugins (code \(failure.code))")
                 httpsDecryption = HttpsDecryptionState(status: .off, reason: .refused, plugins: mitmPlugins.count)
@@ -686,7 +810,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         } else {
             httpsDecryption = HttpsDecryptionState(status: .unused)
         }
-        return try EmbeddedRuntimeSession(config: config.withoutMitm().encoded(), packetFlow: packetFlow)
+        return try EmbeddedRuntimeSession(config: EngineBudget.encoded(config.withoutMitm()), packetFlow: packetFlow)
     }
 
     /// The MITM root: the one the macOS app handed over, else the shared Keychain's.
@@ -697,14 +821,43 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         return try MitmCertificateStore.load()
     }
 
-    /// On macOS the tunnel may run as a System Extension, a root process that cannot read the user's Keychain, so
-    /// the app passes the Keychain values in the start options. They are kept in the extension's own container for
-    /// starts without options (on demand, after sleep). iOS shares the Keychain and never passes them.
-    private static func resolveStartSecrets(options: [String: NSObject]?, events: TunnelDiagnosticLog) -> TunnelStartSecrets? {
-        #if os(macOS)
-        let url = try? FileManager.default
+    /// Where the extension keeps the last start secrets, in its own Application Support directory (macOS).
+    private static func startSecretsURL() -> URL? {
+        try? FileManager.default
             .url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             .appendingPathComponent(TunnelStartSecrets.fileName)
+    }
+
+    /// Keeps the start secrets the macOS app handed over after saving the profile again
+    /// (`TunnelAppMessage.startSecrets`), for the next start without options. Only the kept copy changes: the
+    /// running tunnel goes on with what it started with, so its node library still matches its outbound. Answers
+    /// `ok` once the copy is written, else nil. iOS shares the Keychain and keeps no copy.
+    private func keepStartSecrets(_ value: Data) -> Data? {
+        #if os(macOS)
+        guard let secrets = TunnelStartSecrets.decoded(from: value), let url = Self.startSecretsURL() else {
+            events.record("start secrets not kept: unreadable hand-over")
+            return nil
+        }
+        do {
+            try secrets.save(to: url)
+        } catch {
+            events.record("start secrets not kept: could not write them")
+            return nil
+        }
+        events.record("start secrets updated by the app")
+        return TunnelStartSecrets.handOverAnswer
+        #else
+        return nil
+        #endif
+    }
+
+    /// On macOS the tunnel may run as a System Extension, a root process that cannot read the user's Keychain, so
+    /// the app passes the Keychain values in the start options. They are kept in the extension's own container for
+    /// starts without options (on demand, after sleep), and the app replaces that copy whenever it saves the profile
+    /// again while the tunnel runs (`keepStartSecrets`). iOS shares the Keychain and never passes them.
+    private static func resolveStartSecrets(options: [String: NSObject]?, events: TunnelDiagnosticLog) -> TunnelStartSecrets? {
+        #if os(macOS)
+        let url = startSecretsURL()
         if let handed = TunnelStartSecrets(options: options) {
             if let url {
                 do {

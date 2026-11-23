@@ -12,7 +12,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use app_notifications::{Notice, Settings as NotificationSettings};
 use client_health::Health;
@@ -103,11 +103,25 @@ pub trait Platform: Send + Sync + 'static {
     /// Closes the system VPN again.
     fn close_tunnel(&self) {}
 
+    /// Closes the system VPN while the Wi-Fi rules are on, which may have to connect again by themselves on the
+    /// next network: the platform keeps what lets them (Android: the VPN service stays in the foreground,
+    /// waiting for the network, so the process is neither frozen nor stopped). As [`Platform::close_tunnel`]
+    /// by default.
+    fn close_tunnel_for_rules(&self) {
+        self.close_tunnel();
+    }
+
     /// Puts a text file where the user can open it from the system settings (Android: Downloads) and returns
     /// where it went.
     fn save_to_downloads(&self, name: &str, contents: &str) -> Result<String, String> {
         let _ = (name, contents);
         Err(NO_DOWNLOADS.to_string())
+    }
+
+    /// As [`Platform::save_to_downloads`], but a file of the same name the app saved earlier is replaced instead
+    /// of kept next to the new one (the decryption root, saved again each time decryption is turned on).
+    fn replace_in_downloads(&self, name: &str, contents: &str) -> Result<String, String> {
+        self.save_to_downloads(name, contents)
     }
 
     /// Puts a binary file, given as base64, in the same place as [`Platform::save_to_downloads`] and returns
@@ -145,6 +159,10 @@ pub trait Platform: Send + Sync + 'static {
 pub struct Config {
     pub dir: PathBuf,
     pub executable: PathBuf,
+    /// The client runs in a system service or daemon (as SYSTEM or root) that windows of other users drive,
+    /// not in the user's own process. It then opens no path a window names (`import_subscription`): the
+    /// window reads the file as the user and sends its content (`import_subscription_text`).
+    pub shared_service: bool,
 }
 
 /// The backend, its health record and what the commands keep between calls.
@@ -159,6 +177,8 @@ pub struct Client {
     /// What each node's last delay test said (`None`: no answer), by node id. Kept for as long as the core
     /// runs, so that every window shows the same delays and a window that is opened again still has them.
     delays: Mutex<HashMap<String, Option<u64>>>,
+    /// See [`Config::shared_service`].
+    shared_service: bool,
 }
 
 fn lock<T>(value: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -190,7 +210,11 @@ impl Client {
         platform: Arc<dyn Platform>,
         session: Box<dyn UserSession>,
     ) -> Arc<Self> {
-        let Config { dir, executable } = config;
+        let Config {
+            dir,
+            executable,
+            shared_service,
+        } = config;
         let health = Health::start(
             &dir,
             crate::backend::PLATFORM,
@@ -224,6 +248,7 @@ impl Client {
             session_key: Mutex::new(None),
             links: Mutex::new(Vec::new()),
             delays: Mutex::new(HashMap::new()),
+            shared_service,
         });
         if auto_connect && !client.platform.has_system_vpn() {
             let starting = client.clone();
@@ -356,8 +381,16 @@ impl Client {
     /// Stops the engine and closes the system VPN, if the platform has one, or the desktop's TUN mode device.
     fn close_tunnel(&self) {
         if self.platform.has_system_vpn() {
-            self.backend().stop_engine();
-            self.platform.close_tunnel();
+            let rules_on = {
+                let mut backend = self.backend();
+                backend.stop_engine();
+                backend.on_demand_enabled()
+            };
+            if rules_on {
+                self.platform.close_tunnel_for_rules();
+            } else {
+                self.platform.close_tunnel();
+            }
         } else if self.backend().tun_mode() {
             self.backend().stop_engine();
         }
@@ -384,23 +417,50 @@ impl Client {
     ) -> Result<Value, String> {
         let request = action.request()?;
         let capture_dir = self.backend().capture_dir();
-        let cached = lock(&self.session_key).clone();
-        let key = match cached {
-            Some(key) => key,
-            None => {
-                let key = self.load_session_key(&capture_dir)?;
-                *lock(&self.session_key) = Some(key.clone());
-                key
-            }
-        };
+        let key = self.session_key(&capture_dir)?;
         let storage = desktop_mitm::sessions::storage_request(&capture_dir.join("sessions"), &key);
         let protection = key.protection;
+        // Not `runtime_control`: these are not window commands, and its list refuses them.
         let answer = {
             let backend = self.backend();
-            backend.runtime_control(&storage)?;
-            backend.runtime_control(&request)?
+            // Both are the backend's own requests: the window's command list leaves them out on purpose.
+            backend.engine_request(&storage)?;
+            backend.engine_request(&request)?
         };
         Ok(desktop_mitm::sessions::with_protection(answer, protection))
+    }
+
+    /// The capture session key, read from the platform's key store once per run. Never called with the backend
+    /// locked: the key store can be slow or ask the user.
+    fn session_key(
+        &self,
+        capture_dir: &Path,
+    ) -> Result<desktop_mitm::sessions::SessionKey, String> {
+        if let Some(key) = lock(&self.session_key).clone() {
+            return Ok(key);
+        }
+        let key = self.load_session_key(capture_dir)?;
+        *lock(&self.session_key) = Some(key.clone());
+        Ok(key)
+    }
+
+    /// A window command for the engine. Turning capture on first hands the backend the session key, read here
+    /// outside the backend's lock, so a restart or a disconnect can save what capture holds as a session.
+    fn runtime_control(&self, request: &Value) -> Result<Value, String> {
+        let turns_capture_on = request.get("cmd").and_then(Value::as_str) == Some("set_capture")
+            && request.get("enabled").and_then(Value::as_bool) == Some(true);
+        if turns_capture_on {
+            let capture_dir = self.backend().capture_dir();
+            match self.session_key(&capture_dir) {
+                Ok(key) => self.backend().remember_capture_key(key),
+                // Capture still turns on; it is only not saved when the engine stops.
+                Err(error) => self.backend().log(
+                    app_log::Level::Warn,
+                    &format!("the capture session key could not be read: {error}"),
+                ),
+            }
+        }
+        self.backend().runtime_control(request)
     }
 
     /// Android: the Keystore keeps the key, through the platform.
@@ -512,35 +572,57 @@ impl Client {
         let (id, delay) = engine::fastest_node(&nodes, DELAY_URL)
             .ok_or_else(|| "no node answered the delay test".to_string())?;
         let switched = self.backend().switch_node(&id)?;
-        Ok(OperationResult {
-            message: format!("{} ({})", switched.message, format_delay(delay)),
-        })
+        // Switching to a node of another subscription whose policy groups choose names that subscription.
+        let node = switched
+            .params
+            .get("node")
+            .or_else(|| switched.params.get("name"))
+            .cloned()
+            .unwrap_or_default();
+        Ok(OperationResult::coded(
+            "fastest.selected_delay",
+            format!("{} ({})", switched.message, format_delay(delay)),
+        )
+        .with("node", node)
+        .with("delay", format_delay(delay)))
     }
 
-    fn create_diagnostics(&self) -> Result<OperationResult, String> {
+    fn create_diagnostics(&self) -> Result<SavedFileResult, String> {
         let section = self.health.diagnostics();
         // Android: the app's own directory is out of the user's reach, so the report goes to Downloads.
         if self.platform.has_system_vpn() {
             let report = self.backend().diagnostics_report(&section);
             let name = format!("anixops-net-diagnostics-{}.log", unix_seconds());
             let saved = self.platform.save_to_downloads(&name, &report)?;
-            return Ok(OperationResult {
+            return Ok(SavedFileResult {
                 message: format!("Diagnostics report saved to {saved}"),
+                code: Some("diagnostics.saved"),
+                params: [("path", saved.clone())].into_iter().collect(),
+                location: Some(saved),
+                ..SavedFileResult::default()
             });
         }
-        self.backend().diagnostics(&section)
+        self.backend()
+            .diagnostics(&section)
+            .map(|result| SavedFileResult {
+                message: result.message,
+                code: result.code,
+                params: result.params,
+                ..SavedFileResult::default()
+            })
     }
 
     fn set_crash_reports(&self, enabled: bool) -> Result<OperationResult, String> {
         self.health
             .set_crash_reports(enabled)
             .map_err(|error| format!("the setting could not be saved: {error}"))?;
-        Ok(OperationResult {
-            message: if enabled {
-                "Crash reports on".to_string()
-            } else {
-                "Crash reports off; kept reports deleted".to_string()
-            },
+        Ok(if enabled {
+            OperationResult::coded("crash_reports.on", "Crash reports on")
+        } else {
+            OperationResult::coded(
+                "crash_reports.off",
+                "Crash reports off; kept reports deleted",
+            )
         })
     }
 
@@ -554,16 +636,31 @@ impl Client {
         } else {
             location.to_string()
         };
-        let (content, meta) = fetch(location)?;
+        let (content, meta) = fetch(location, !self.shared_service)?;
         let mut backend = self.backend();
         let result = backend.import(&label, &content)?;
         backend.record_response(None, meta)?;
         Ok(result)
     }
 
+    /// Imports a file the window read as the user (`import_subscription_text`): a core in a system service
+    /// never opens a path a window names. `name` is the file's name, kept as the source's label; the source
+    /// cannot be updated, as one imported from a path could not.
+    fn import_subscription_text(
+        &self,
+        name: &str,
+        content: &str,
+    ) -> Result<OperationResult, String> {
+        if content.len() as u64 > MAX_SUBSCRIPTION_FILE_BYTES {
+            return Err(too_large());
+        }
+        self.backend().import(&file_label(name), content)
+    }
+
     /// Downloads source `id` again outside the lock and records the result.
     fn refresh_source(&self, id: &str, location: &str) -> Result<OperationResult, String> {
-        let (content, meta) = match fetch(location) {
+        // Only links are updated: a source from a file or pasted links has no location to read again.
+        let (content, meta) = match fetch(location, false) {
             Ok((content, meta)) => (Ok(content), Some(meta)),
             Err(error) => (Err(error), None),
         };
@@ -575,16 +672,20 @@ impl Client {
         Ok(result)
     }
 
-    /// Changes the plugin library outside the lock, then applies it to a running engine.
+    /// Changes the plugin library outside the lock, then applies it to a running engine. `change` answers what
+    /// was changed, coded; the window words that, then what it did to the connection (`follow`).
     fn change_plugins<F>(&self, change: F) -> Result<OperationResult, String>
     where
-        F: FnOnce(&Path) -> Result<String, String>,
+        F: FnOnce(&Path) -> Result<OperationResult, String>,
     {
         let directory = self.backend().plugins_dir();
-        let message = change(&directory)?;
+        let changed = change(&directory)?;
         let applied = self.backend().plugins_changed()?;
         Ok(OperationResult {
-            message: format!("{message}; {applied}"),
+            message: format!("{}; {}", changed.message, applied.message),
+            follow: applied.code,
+            note: applied.note,
+            ..changed
         })
     }
 
@@ -595,26 +696,35 @@ impl Client {
         let root = self.backend().ensure_mitm_root()?;
         let trusted = self.root_trusted(&root);
         let result = self.backend().set_https_decryption(true)?;
-        let note = if trusted {
-            ""
-        } else {
-            ". The root certificate is not trusted yet: choose Trust root certificate under Extensions"
-        };
-        Ok(OperationResult {
-            message: format!("{}{note}", result.message),
-        })
+        if trusted {
+            return Ok(result);
+        }
+        // The window words what turning it on did (now, or with the next connection), then what is still to do.
+        Ok(result.followed_by(
+            "mitm.root_untrusted",
+            "The root certificate is not trusted yet: choose Trust root certificate under Extensions",
+        ))
     }
 
     /// Android has no trust store an app may change: the root is saved to Downloads, the user installs it in
     /// the system settings, and only apps that trust user certificates (most browsers) accept it.
+    ///
+    /// The file is named after the root's fingerprint, so a new root (after the app's data was cleared) never
+    /// takes the name of an old one left in Downloads, and saving the same root again replaces its file. The
+    /// answer carries where it went (`location`), the fingerprint the user can compare in the system's list of
+    /// certificates, and why it was not saved (`saveError`), for the app to say in its own language.
     #[cfg(target_os = "android")]
-    fn enable_https_mitm(&self) -> Result<OperationResult, String> {
+    fn enable_https_mitm(&self) -> Result<SavedFileResult, String> {
         let root = self.backend().ensure_mitm_root()?;
+        let fingerprint = root.fingerprint().ok();
         let saved = fs::read_to_string(&root.certificate_path)
             .map_err(|error| format!("the root certificate could not be read: {error}"))
-            .and_then(|pem| self.platform.save_to_downloads(ROOT_DOWNLOAD_NAME, &pem));
+            .and_then(|pem| {
+                let name = root_download_name(fingerprint.as_deref().unwrap_or_default());
+                self.platform.replace_in_downloads(&name, &pem)
+            });
         let result = self.backend().set_https_decryption(true)?;
-        let install = match saved {
+        let install = match &saved {
             Ok(location) => format!(
                 "The root certificate is saved as {location}; install it under Settings > Security > \
                  Encryption & credentials > Install a certificate > CA certificate"
@@ -623,11 +733,19 @@ impl Client {
                 format!("The root certificate could not be saved to Downloads: {error}")
             }
         };
-        Ok(OperationResult {
+        let (location, save_error) = match saved {
+            Ok(location) => (Some(location), None),
+            Err(error) => (None, Some(error)),
+        };
+        Ok(SavedFileResult {
             message: format!(
                 "{}. {install}. Apps that ignore user certificates are not decrypted",
                 result.message
             ),
+            location,
+            fingerprint,
+            save_error,
+            ..SavedFileResult::default()
         })
     }
 
@@ -655,7 +773,9 @@ impl Client {
         let Ok(pem) = fs::read_to_string(&root.certificate_path) else {
             return false;
         };
-        session.trusts_root(&pem).unwrap_or_else(trust::is_trusted)
+        session
+            .trusts_root(&pem)
+            .unwrap_or_else(|| trust::is_trusted(&pem))
     }
 
     /// The user's own request to trust the root. Where the session keeps the user's store, the window adds
@@ -669,18 +789,50 @@ impl Client {
             .map_err(|error| format!("the root certificate could not be read: {error}"))?;
         if session.trusts_root(&pem).is_none() {
             let trusted = trust::install(&root.certificate_path);
-            return Ok(OperationResult {
-                message: trusted.summary("trusted"),
-            });
+            return Ok(OperationResult::plain(trusted.summary("trusted")));
         }
         let thumbprint = desktop_mitm::thumbprint(&pem)?;
         // Noted before the user answers: a root that was noted and then refused costs nothing, one that
         // was trusted and not noted would stay behind when the client is removed.
         self.backend().note_trusted_root(&thumbprint);
         session.trust_root(&pem)?;
-        Ok(OperationResult {
-            message: "Root certificate trusted for this user".to_string(),
+        Ok(OperationResult::coded(
+            "root.trusted_user",
+            "Root certificate trusted for this user",
+        ))
+    }
+
+    /// Replaces the root with the user's own CA. Stores that trusted the earlier root do not trust this one:
+    /// where nothing here trusts it yet the answer says to trust it again.
+    fn import_mitm_root(
+        &self,
+        certificate_pem: &str,
+        private_key_pem: &str,
+    ) -> Result<OperationResult, String> {
+        let result = self
+            .backend()
+            .import_mitm_root(certificate_pem, private_key_pem)?;
+        // The window words what was saved, then what is still to do (`mitm.root_untrusted`).
+        Ok(match self.imported_root_note() {
+            Some(note) => result.followed_by("mitm.root_untrusted", note),
+            None => result,
         })
+    }
+
+    #[cfg(not(target_os = "android"))]
+    fn imported_root_note(&self) -> Option<&'static str> {
+        let root = self.backend().mitm_root();
+        if self.root_trusted(&root) {
+            None
+        } else {
+            Some("This computer does not trust it yet: choose Trust root certificate under Extensions")
+        }
+    }
+
+    /// Android: the user installs the root in the system settings, as the answer already says.
+    #[cfg(target_os = "android")]
+    fn imported_root_note(&self) -> Option<&'static str> {
+        None
     }
 
     /// The user's own request to stop trusting the root: the user's own store where the session keeps
@@ -693,13 +845,12 @@ impl Client {
         match pem.filter(|pem| session.trusts_root(pem).is_some()) {
             Some(pem) => {
                 session.untrust_root(&pem)?;
-                Ok(OperationResult {
-                    message: "Root certificate removed for this user".to_string(),
-                })
+                Ok(OperationResult::coded(
+                    "root.removed_user",
+                    "Root certificate removed for this user",
+                ))
             }
-            None => Ok(OperationResult {
-                message: trust::remove().summary("removed"),
-            }),
+            None => Ok(OperationResult::plain(trust::remove().summary("removed"))),
         }
     }
 
@@ -771,24 +922,48 @@ impl Client {
             return;
         }
         let client = self.clone();
-        thread::spawn(move || loop {
-            thread::sleep(Duration::from_secs(10));
-            if !client.backend().on_demand_enabled() {
-                continue;
-            }
-            let Some(network) = client.platform.current_network(false) else {
-                continue;
-            };
-            let action = client.backend().on_demand_action(network);
-            match action {
-                Some(OnDemandAction::Connect) => {
-                    let _ = client.connect_through_tunnel();
+        thread::spawn(move || {
+            // A connect the rules started that failed: when to try again on the same network, and how many
+            // failures in a row. The first failure is notified, the retries are not.
+            let mut retry: Option<(Instant, u32)> = None;
+            loop {
+                thread::sleep(Duration::from_secs(10));
+                if !client.backend().on_demand_enabled() {
+                    retry = None;
+                    continue;
                 }
-                Some(OnDemandAction::Disconnect) => {
-                    let _ = client.backend().disconnect();
-                    client.close_tunnel();
+                let Some(network) = client.platform.current_network(false) else {
+                    continue;
+                };
+                let due = retry.is_some_and(|(at, _)| Instant::now() >= at);
+                if due {
+                    client.backend().retry_on_demand();
                 }
-                _ => {}
+                let action = client.backend().on_demand_action(network);
+                match action {
+                    Some(OnDemandAction::Connect) => match client.connect_through_tunnel() {
+                        Ok(_) => retry = None,
+                        Err(error) => {
+                            let failures = retry.map_or(0, |(_, failures)| failures) + 1;
+                            retry =
+                                Some((Instant::now() + on_demand_retry_after(failures), failures));
+                            let notice = (failures == 1)
+                                .then(|| client.backend().on_demand_failed_notice(&error))
+                                .flatten();
+                            if let Some(notice) = notice {
+                                client.platform.post_notice(&notice);
+                            }
+                        }
+                    },
+                    Some(OnDemandAction::Disconnect) => {
+                        retry = None;
+                        let _ = client.backend().disconnect();
+                        client.close_tunnel();
+                    }
+                    // Connected meanwhile (by hand, or the network now wants no connect): nothing to retry.
+                    _ if due || client.backend().engine_running() => retry = None,
+                    _ => {}
+                }
             }
         });
     }
@@ -801,7 +976,7 @@ impl Client {
             thread::sleep(Duration::from_secs(60));
             let due = client.backend().due_sources();
             for (id, location) in due {
-                let fetched = fetch(&location);
+                let fetched = fetch(&location, false);
                 let mut backend = client.backend();
                 let (content, meta) = match fetched {
                     Ok((content, meta)) => (Ok(content), Some(meta)),
@@ -958,7 +1133,7 @@ fn handler(name: &str) -> Option<Handler> {
                     "runtime control command \"set_capture_storage\" is not available".to_string(),
                 );
             }
-            client.backend().runtime_control(&request)
+            client.runtime_control(&request)
         },
         "export_capture" => |client, args| {
             let ExportCapture {
@@ -1000,14 +1175,18 @@ fn handler(name: &str) -> Option<Handler> {
             let Mapping { entry } = parse(args)?;
             json(client.change_plugins(move |directory| {
                 let saved = mappings::save(directory, entry)?;
-                Ok(format!("Mapping saved: {}", saved.pattern))
+                Ok(OperationResult::coded(
+                    "mapping.saved",
+                    format!("Mapping saved: {}", saved.pattern),
+                )
+                .with("pattern", &saved.pattern))
             })?)
         },
         "remove_debug_mapping" => |client, args| {
             let Id { id } = parse(args)?;
             json(client.change_plugins(move |directory| {
                 mappings::remove(directory, &id)?;
-                Ok("Mapping removed".to_string())
+                Ok(OperationResult::coded("mapping.removed", "Mapping removed"))
             })?)
         },
         // The patterns decrypted (the list's lines that are on, not exclusions), for the request list.
@@ -1025,11 +1204,12 @@ fn handler(name: &str) -> Option<Handler> {
             json(client.change_plugins(move |directory| {
                 mappings::add_host(directory, &host, exclude)?;
                 let name = host.trim().trim_start_matches(['-', '!']);
-                Ok(if exclude || name.len() < host.trim().len() {
-                    format!("Excluding {name}")
+                let result = if exclude || name.len() < host.trim().len() {
+                    OperationResult::coded("decrypt.excluding", format!("Excluding {name}"))
                 } else {
-                    format!("Decrypting {name}")
-                })
+                    OperationResult::coded("decrypt.decrypting", format!("Decrypting {name}"))
+                };
+                Ok(result.with("host", name))
             })?)
         },
         "edit_decrypt_host" => |client, args| {
@@ -1040,25 +1220,32 @@ fn handler(name: &str) -> Option<Handler> {
             } = parse(args)?;
             json(client.change_plugins(move |directory| {
                 mappings::edit_host(directory, &pattern, &host, exclude)?;
-                Ok(format!("Saved {host}"))
+                Ok(
+                    OperationResult::coded("decrypt.saved", format!("Saved {host}"))
+                        .with("host", &host),
+                )
             })?)
         },
         "set_decrypt_host_enabled" => |client, args| {
             let HostEnabled { pattern, enabled } = parse(args)?;
             json(client.change_plugins(move |directory| {
                 mappings::set_host_enabled(directory, &pattern, enabled)?;
-                Ok(if enabled {
-                    format!("Turned on {pattern}")
+                let result = if enabled {
+                    OperationResult::coded("decrypt.on", format!("Turned on {pattern}"))
                 } else {
-                    format!("Paused {pattern}")
-                })
+                    OperationResult::coded("decrypt.paused", format!("Paused {pattern}"))
+                };
+                Ok(result.with("pattern", &pattern))
             })?)
         },
         "remove_decrypt_host" => |client, args| {
             let Host { host, .. } = parse(args)?;
             json(client.change_plugins(move |directory| {
                 mappings::remove_host(directory, &host)?;
-                Ok(format!("Removed {host}"))
+                Ok(
+                    OperationResult::coded("decrypt.removed", format!("Removed {host}"))
+                        .with("host", &host),
+                )
             })?)
         },
         // What decryption did per domain since the engine started (`mitm_hosts`): decrypted and failed
@@ -1072,9 +1259,11 @@ fn handler(name: &str) -> Option<Handler> {
                 .delay_target(&node_id)
                 .ok_or("the node is not in any subscription")?;
             let delay = engine::node_delay(&nodes, &id, &url)?;
-            json(OperationResult {
-                message: format!("{name}: {}", format_delay(delay)),
-            })
+            json(
+                OperationResult::coded("delay.node", format!("{name}: {}", format_delay(delay)))
+                    .with("node", &name)
+                    .with("delay", format_delay(delay)),
+            )
         },
         // Node checkup (节点体检): latency rounds and an optional download through one node. The
         // options are the kernel's `CheckupOptions`; unknown fields are rejected. The answer carries the
@@ -1219,6 +1408,11 @@ fn handler(name: &str) -> Option<Handler> {
             let Location { location } = parse(args)?;
             json(client.import_subscription(&location)?)
         },
+        // A subscription file the window read as the user, for a core that opens no path a window names.
+        "import_subscription_text" => |client, args| {
+            let SubscriptionText { name, content } = parse(args)?;
+            json(client.import_subscription_text(&name, &content)?)
+        },
         "update_subscription" => |client, _| {
             let (id, location) = client
                 .backend()
@@ -1305,14 +1499,14 @@ fn handler(name: &str) -> Option<Handler> {
             let Url { url } = parse(args)?;
             json(client.change_plugins(move |directory| {
                 let plugin = plugins::import(directory, &url, plugins::download)?;
-                Ok(format!("Plugin imported: {}", plugin.name))
+                Ok(plugin_imported(&plugin))
             })?)
         },
         "import_mitm_plugin_text" => |client, args| {
             let PluginText { text, source } = parse(args)?;
             json(client.change_plugins(move |directory| {
                 let plugin = plugins::import_text(directory, &source, &text, plugins::download)?;
-                Ok(format!("Plugin imported: {}", plugin.name))
+                Ok(plugin_imported(&plugin))
             })?)
         },
         "mitm_plugin_details" => |client, args| {
@@ -1325,18 +1519,17 @@ fn handler(name: &str) -> Option<Handler> {
             json(client.change_plugins(move |directory| {
                 plugins::set_enabled(directory, &id, enabled)?;
                 Ok(if enabled {
-                    "Plugin enabled"
+                    OperationResult::coded("plugins.enabled", "Plugin enabled")
                 } else {
-                    "Plugin disabled"
-                }
-                .to_string())
+                    OperationResult::coded("plugins.disabled", "Plugin disabled")
+                })
             })?)
         },
         "remove_mitm_plugin" => |client, args| {
             let Id { id } = parse(args)?;
             json(client.change_plugins(move |directory| {
                 plugins::remove(directory, &id)?;
-                Ok("Plugin removed".to_string())
+                Ok(OperationResult::coded("plugins.removed", "Plugin removed"))
             })?)
         },
         "phone_qr_code" => |_, args| {
@@ -1348,11 +1541,7 @@ fn handler(name: &str) -> Option<Handler> {
                 certificate_pem,
                 private_key_pem,
             } = parse(args)?;
-            json(
-                client
-                    .backend()
-                    .import_mitm_root(&certificate_pem, &private_key_pem)?,
-            )
+            json(client.import_mitm_root(&certificate_pem, &private_key_pem)?)
         },
         "mitm_root_fingerprint" => |client, _| json(client.backend().mitm_root_fingerprint()),
         _ => return None,
@@ -1360,9 +1549,49 @@ fn handler(name: &str) -> Option<Handler> {
     Some(handler)
 }
 
-/// The name the decryption root gets in Downloads.
-#[cfg(target_os = "android")]
-const ROOT_DOWNLOAD_NAME: &str = "AnixOps-Net-HTTPS-root.crt";
+/// How long the Wi-Fi rules wait before trying again a connect that failed `failures` times in a row on the
+/// same network: half a minute, doubling, at most ten minutes.
+fn on_demand_retry_after(failures: u32) -> Duration {
+    let doublings = failures.saturating_sub(1).min(5);
+    Duration::from_secs(30 * (1u64 << doublings)).min(Duration::from_secs(600))
+}
+
+/// The name the decryption root gets in Downloads: the first eight hex digits of its SHA-256 fingerprint
+/// (`AB:CD:…`) keep two roots apart; without a fingerprint the plain name.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn root_download_name(fingerprint: &str) -> String {
+    let digits: String = fingerprint
+        .chars()
+        .filter(char::is_ascii_hexdigit)
+        .take(8)
+        .collect::<String>()
+        .to_ascii_uppercase();
+    if digits.is_empty() {
+        "AnixOps-Net-HTTPS-root.crt".to_string()
+    } else {
+        format!("AnixOps-Net-HTTPS-root-{digits}.crt")
+    }
+}
+
+/// What a command that saves a file answers: the message the other clients show, plus, where a file went to
+/// Downloads (Android), its location, so the app can say it in its own language. The extra fields are left out
+/// when absent, so the answer reads as an [`OperationResult`] everywhere else.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedFileResult {
+    pub message: String,
+    /// The code and its values a window words the result by, as in [`OperationResult`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<&'static str>,
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub params: std::collections::BTreeMap<&'static str, String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fingerprint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub save_error: Option<String>,
+}
 
 fn json<T: Serialize>(value: T) -> Result<Value, String> {
     serde_json::to_value(value).map_err(|error| error.to_string())
@@ -1370,6 +1599,19 @@ fn json<T: Serialize>(value: T) -> Result<Value, String> {
 
 fn parse<T: DeserializeOwned>(args: Value) -> Result<T, String> {
     serde_json::from_value(args).map_err(|error| format!("invalid arguments: {error}"))
+}
+
+/// What importing a plugin did, coded: its name and how many scripts it brought.
+fn plugin_imported(plugin: &plugins::PluginSummary) -> OperationResult {
+    OperationResult::coded(
+        "plugins.imported",
+        format!(
+            "Plugin imported: {} ({} scripts)",
+            plugin.name, plugin.script_count
+        ),
+    )
+    .with("name", &plugin.name)
+    .with("scripts", plugin.script_count)
 }
 
 /// The search of a command that takes one; no arguments at all is the empty search.
@@ -1602,6 +1844,12 @@ struct Location {
 }
 
 #[derive(Deserialize)]
+struct SubscriptionText {
+    name: String,
+    content: String,
+}
+
+#[derive(Deserialize)]
 struct Rename {
     id: String,
     name: String,
@@ -1806,14 +2054,60 @@ fn http_get_once(
     Ok((response.text()?, meta, offered))
 }
 
-/// A URL's body with its headers' meta, a local file, or the pasted share links themselves.
-fn fetch(location: &str) -> Result<(String, ResponseMeta), String> {
+/// The largest subscription file read: far above any real one, and what keeps `/dev/zero` or a huge file from
+/// filling memory.
+const MAX_SUBSCRIPTION_FILE_BYTES: u64 = 16 * 1024 * 1024;
+
+fn too_large() -> String {
+    format!(
+        "the file is larger than {} MiB, which no subscription is",
+        MAX_SUBSCRIPTION_FILE_BYTES / (1024 * 1024)
+    )
+}
+
+/// What a core in a system service answers for a path: it reads no file for a window.
+const NO_PATHS_IN_SERVICE: &str =
+    "the core service does not open files: import the file from the window, which reads it as you";
+
+/// The label of a source imported from a file's content: the file's name without its folder, never one that
+/// reads as a link (which would make the source updatable) or as pasted links.
+fn file_label(name: &str) -> String {
+    let name = name.rsplit(['/', '\\']).next().unwrap_or_default().trim();
+    if name.is_empty() || name.contains("://") || name == PASTED_LOCATION {
+        "subscription file".to_string()
+    } else {
+        name.chars().take(128).collect()
+    }
+}
+
+/// A URL's body with its headers' meta, the pasted share links themselves, or, with `read_files`, a local file.
+/// Without `read_files` (a core in a system service, and the updates, which only fetch links) a path is refused
+/// before anything on disk is touched, so a window cannot learn whether a file exists either.
+fn fetch(location: &str, read_files: bool) -> Result<(String, ResponseMeta), String> {
     if location.starts_with("https://") || location.starts_with("http://") {
         return http_get_with_meta(location)
             .map_err(|error| format!("the subscription could not be downloaded: {error}"));
     }
     if location.contains("://") {
         return Ok((location.to_string(), ResponseMeta::default()));
+    }
+    if !read_files {
+        return Err(NO_PATHS_IN_SERVICE.to_string());
+    }
+    read_subscription_file(location).map(|content| (content, ResponseMeta::default()))
+}
+
+/// A local subscription file, in the user's own process (the Tauri app, Android): only a regular file, at most
+/// [`MAX_SUBSCRIPTION_FILE_BYTES`]. Network and device paths (`\\server\share`, `\\.\`) are not opened on
+/// Windows.
+fn read_subscription_file(location: &str) -> Result<String, String> {
+    use std::io::Read;
+
+    if cfg!(windows) && (location.starts_with("\\\\") || location.starts_with("//")) {
+        return Err(
+            "network and device paths are not opened: copy the file to this computer first"
+                .to_string(),
+        );
     }
     let path = match location.strip_prefix("~/") {
         Some(rest) => std::env::var_os("HOME").map_or_else(
@@ -1822,14 +2116,74 @@ fn fetch(location: &str) -> Result<(String, ResponseMeta), String> {
         ),
         None => PathBuf::from(location),
     };
-    fs::read_to_string(&path)
-        .map(|content| (content, ResponseMeta::default()))
-        .map_err(|error| format!("{} could not be read: {error}", path.display()))
+    let unreadable =
+        |error: std::io::Error| format!("{} could not be read: {error}", path.display());
+    let not_a_file = || format!("{} is not a file", path.display());
+    // Checked before opening: opening a FIFO would wait for a writer.
+    if !fs::metadata(&path).map_err(unreadable)?.is_file() {
+        return Err(not_a_file());
+    }
+    let file = fs::File::open(&path).map_err(unreadable)?;
+    if !file.metadata().map_err(unreadable)?.is_file() {
+        return Err(not_a_file());
+    }
+    let mut content = String::new();
+    file.take(MAX_SUBSCRIPTION_FILE_BYTES + 1)
+        .read_to_string(&mut content)
+        .map_err(unreadable)?;
+    if content.len() as u64 > MAX_SUBSCRIPTION_FILE_BYTES {
+        return Err(too_large());
+    }
+    Ok(content)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_root_file_is_named_after_its_fingerprint() {
+        assert_eq!(
+            root_download_name("ab:cd:01:23:45:67:89:EF:00"),
+            "AnixOps-Net-HTTPS-root-ABCD0123.crt"
+        );
+        // A new root never takes an old root's name.
+        assert_ne!(
+            root_download_name("AB:CD:01:23:45:67:89:EF"),
+            root_download_name("AB:CD:01:24:45:67:89:EF")
+        );
+        assert_eq!(root_download_name(""), "AnixOps-Net-HTTPS-root.crt");
+    }
+
+    #[test]
+    fn saved_file_answers_read_as_operation_results() {
+        let plain = json(SavedFileResult {
+            message: "Saved".to_string(),
+            ..SavedFileResult::default()
+        })
+        .unwrap();
+        assert_eq!(plain, serde_json::json!({"message": "Saved"}));
+        let located = json(SavedFileResult {
+            message: "Saved".to_string(),
+            location: Some("Download/a.log".to_string()),
+            save_error: Some("denied".to_string()),
+            ..SavedFileResult::default()
+        })
+        .unwrap();
+        assert_eq!(
+            located,
+            serde_json::json!({"message": "Saved", "location": "Download/a.log", "saveError": "denied"})
+        );
+    }
+
+    #[test]
+    fn wifi_rule_retries_back_off() {
+        assert_eq!(on_demand_retry_after(1), Duration::from_secs(30));
+        assert_eq!(on_demand_retry_after(2), Duration::from_secs(60));
+        assert_eq!(on_demand_retry_after(5), Duration::from_secs(480));
+        assert_eq!(on_demand_retry_after(6), Duration::from_secs(600));
+        assert_eq!(on_demand_retry_after(u32::MAX), Duration::from_secs(600));
+    }
 
     #[test]
     fn trace_gives_the_exit_address_and_country() {
@@ -1925,6 +2279,7 @@ mod tests {
             Config {
                 dir: dir.clone(),
                 executable: dir.join("anixops-net"),
+                shared_service: false,
             },
             Arc::new(NoPlatform),
         );
@@ -2032,6 +2387,21 @@ mod tests {
             )
             .unwrap_err()
             .starts_with("invalid arguments"));
+        // A change to the decryption list says what was changed, then what that did to the connection.
+        assert_eq!(
+            client
+                .invoke(
+                    "add_decrypt_host",
+                    serde_json::json!({ "host": "-ads.example.com" })
+                )
+                .unwrap(),
+            serde_json::json!({
+                "message": "Excluding ads.example.com; turn on HTTPS decryption for it to take effect",
+                "code": "decrypt.excluding",
+                "params": { "host": "ads.example.com" },
+                "follow": "plugins.need_decryption",
+            })
+        );
         assert!(!client.receive_app_links(vec!["https://example.com".to_string()]));
         assert!(client.receive_app_links(vec!["anixops://connect".to_string()]));
         assert_eq!(
@@ -2043,6 +2413,124 @@ mod tests {
             serde_json::json!([])
         );
         client.shutdown();
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    const LINK: &str = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@82.47.34.99:11111#HK";
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "anixops-net-client-{name}-{}-{}",
+            std::process::id(),
+            unix_seconds()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// A core in a system service reads no path a window names, as SYSTEM or root (client-core-ipc-02): the
+    /// window sends the file's content instead.
+    #[test]
+    fn a_shared_service_opens_no_path_a_window_names() {
+        let dir = scratch("shared");
+        let file = dir.join("nodes.txt");
+        fs::write(&file, LINK).unwrap();
+        let client = Client::open(
+            Config {
+                dir: dir.join("data"),
+                executable: dir.join("anixops-net"),
+                shared_service: true,
+            },
+            Arc::new(NoPlatform),
+        );
+        let import = |location: &str| {
+            client.invoke(
+                "import_subscription",
+                serde_json::json!({ "location": location }),
+            )
+        };
+        // A file that exists and one that does not get the same answer: nothing is learnt about either.
+        let readable = import(&file.display().to_string()).unwrap_err();
+        let missing = import(&dir.join("missing.txt").display().to_string()).unwrap_err();
+        assert_eq!(readable, NO_PATHS_IN_SERVICE);
+        assert_eq!(missing, NO_PATHS_IN_SERVICE);
+        assert_eq!(
+            import("\\\\host\\share\\x.yaml").unwrap_err(),
+            NO_PATHS_IN_SERVICE
+        );
+        assert_eq!(import("~/nodes.txt").unwrap_err(), NO_PATHS_IN_SERVICE);
+        assert!(client.backend().subscriptions().is_empty());
+        // Pasted share links still work.
+        import(LINK).unwrap();
+        assert_eq!(client.backend().subscriptions().len(), 1);
+
+        // The window read the file as the user: its name labels the source, which cannot be updated.
+        client
+            .invoke(
+                "import_subscription_text",
+                serde_json::json!({ "name": "/home/someone/nodes.txt", "content": LINK.replace("#HK", "#JP") }),
+            )
+            .unwrap();
+        let subscriptions = client.backend().subscriptions();
+        let from_file = subscriptions
+            .iter()
+            .find(|subscription| subscription.location == "nodes.txt")
+            .expect("the file's source");
+        assert!(!from_file.refreshable);
+        let oversized = "x".repeat(usize::try_from(MAX_SUBSCRIPTION_FILE_BYTES).unwrap() + 1);
+        assert!(client
+            .invoke(
+                "import_subscription_text",
+                serde_json::json!({ "name": "big.txt", "content": oversized }),
+            )
+            .unwrap_err()
+            .contains("larger than"));
+        client.shutdown();
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_file_label_never_reads_as_a_link() {
+        assert_eq!(file_label("C:\\Users\\a\\nodes.yaml"), "nodes.yaml");
+        assert_eq!(file_label("/home/a/nodes.yaml"), "nodes.yaml");
+        assert_eq!(file_label("https://panel.example/s"), "s");
+        assert_eq!(file_label("https://"), "subscription file");
+        assert_eq!(file_label("  "), "subscription file");
+        assert_eq!(file_label(PASTED_LOCATION), "subscription file");
+    }
+
+    /// In the user's own process a path is still read, but only a regular file and not without limit.
+    #[test]
+    fn only_regular_files_of_a_sane_size_are_read() {
+        let dir = scratch("files");
+        let file = dir.join("nodes.txt");
+        fs::write(&file, LINK).unwrap();
+        let (content, _) = fetch(&file.display().to_string(), true).unwrap();
+        assert_eq!(content, LINK);
+        // The same path is refused when files are not read, before the disk is touched.
+        assert_eq!(
+            fetch(&file.display().to_string(), false).unwrap_err(),
+            NO_PATHS_IN_SERVICE
+        );
+        // A folder is not a file.
+        assert!(fetch(&dir.display().to_string(), true)
+            .unwrap_err()
+            .contains("is not a file"));
+        // A device would never end.
+        #[cfg(unix)]
+        assert!(fetch("/dev/zero", true)
+            .unwrap_err()
+            .contains("is not a file"));
+        // A file past the limit is refused; a sparse one costs no disk.
+        let big = dir.join("big.txt");
+        fs::File::create(&big)
+            .unwrap()
+            .set_len(MAX_SUBSCRIPTION_FILE_BYTES + 1)
+            .unwrap();
+        assert!(fetch(&big.display().to_string(), true)
+            .unwrap_err()
+            .contains("larger than"));
         let _ = fs::remove_dir_all(dir);
     }
 }

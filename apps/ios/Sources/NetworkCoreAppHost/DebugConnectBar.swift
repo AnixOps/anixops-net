@@ -95,8 +95,9 @@ struct DebugConnectBar: View {
                 Text(verbatim: "\(ConnectElapsed.text(from: since, to: context.date)) · \(tunnel.debugExitSummary)")
             }
             .foregroundStyle(brand.text2)
-        } else if phase == .off, case let .blocked(reason, _) = tunnel.coordinator.decision {
-            Text(reason)
+        } else if phase == .off, tunnel.profileState == .disabled, let hint = tunnel.offHint {
+            // Before the first connect there is no configuration yet, which needs no words: the exit shows below.
+            Text(hint)
                 .foregroundStyle(brand.text2)
         } else {
             Text(verbatim: tunnel.debugExitSummary)

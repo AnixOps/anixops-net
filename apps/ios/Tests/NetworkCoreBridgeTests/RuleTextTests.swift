@@ -97,4 +97,34 @@ final class RuleTextTests: XCTestCase {
         XCTAssertNil(running.reloadableRules(to: edited.withMode(.global)), "anything beyond the lines needs a restart")
         XCTAssertNil(base.reloadableRules(to: edited), "no routing to swap")
     }
+
+    /// The extension builds new local rules on the node library its start read. A policy group pick the app saved
+    /// since (the engine switched it in place) changes the groups' defaults in the Keychain copy, and building on that
+    /// copy would differ from the running config in more than the rule lines, turning the rule edit into a restart.
+    func testRuleEditAfterAGroupPickReloadsOnTheStartLibrary() throws {
+        let json = """
+        {"nodes":[
+        {"id":"a","name":"Tokyo","protocol":"trojan","server":"a.example","port":443,
+         "outbound":{"type":"trojan","server":"a.example","port":443,"password":"pa"}},
+        {"id":"b","name":"Osaka","protocol":"trojan","server":"b.example","port":443,
+         "outbound":{"type":"trojan","server":"b.example","port":443,"password":"pb"}}],
+        "unsupported":[],
+        "routing":{"rules":["FINAL,Proxy"],"groups":[{"id":"Proxy","type":"select","members":["a","b"],"default":null}]}}
+        """
+        let report = try NativeImportReport.decoded(from: Data(json.utf8))
+        let atStart = NodeLibrary(report: report, subscriptionURL: nil, keeping: nil)
+        var picked = atStart
+        picked.groupSelections["Proxy"] = atStart.selection(in: try XCTUnwrap(atStart.routing?.groups.first)) == "b" ? "a" : "b"
+        let node = ShadowsocksNode(host: "198.51.100.1", port: 8388, method: "2022-blake3-aes-128-gcm", password: "secret", name: "a")
+        let base = EmbeddedRuntimeConfig(node: node, profileID: "test")
+        let running = base.withRouting(try XCTUnwrap(atStart.routingForModes(localRules: LocalRules())))
+        let rules = try LocalRules().saving(LocalRules.rule(from: "DOMAIN-SUFFIX,example.com,DIRECT"))
+
+        let onStartLibrary = base.withRouting(try XCTUnwrap(atStart.routingForModes(localRules: rules)))
+        let swapped = try XCTUnwrap(running.reloadableRules(to: onStartLibrary), "only the rule lines differ")
+        XCTAssertEqual(swapped.first, "DOMAIN-SUFFIX,example.com,DIRECT")
+        // Built on the Keychain copy saved after the pick, the groups differ: that would restart the tunnel.
+        let onSavedLibrary = base.withRouting(try XCTUnwrap(picked.routingForModes(localRules: rules)))
+        XCTAssertNil(running.reloadableRules(to: onSavedLibrary))
+    }
 }

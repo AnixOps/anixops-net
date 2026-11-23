@@ -59,9 +59,12 @@ the users signed in at the time; your subscriptions, settings and logs stay in t
 - **VPN service** (`BIND_VPN_SERVICE`): routes device traffic through the client according to your rules, only after
   you start the connection and accept the system prompt. Traffic is processed on the device; none of it is sent to us.
 - **Camera**: scanning a subscription or node QR code, asked for when you tap Scan. Images are not stored.
-- **Location**: reading the current Wi-Fi name for Wi-Fi rules, asked for only when you turn those rules on. The
-  location itself is not read, stored or sent.
-- **Notifications and foreground service**: the "connected" notification that keeps the VPN running.
+- **Location**: reading the current Wi-Fi name for Wi-Fi rules, asked for only when you turn those rules on. On
+  Android 10 and later, background location ("Allow all the time") is optional and only asked for after an in-app
+  explanation, so the rules can read the Wi-Fi name while the app is in the background. The location itself is not
+  read, stored or sent.
+- **Notifications and foreground service**: the "connected" notification that keeps the VPN running, and, while Wi-Fi
+  rules are on, a "waiting for network" notification that lets the rules reconnect from the background.
 
 ### Children
 
@@ -116,8 +119,9 @@ Changes to this policy are published in this file, with the history in the publi
 - **VPN 服务**（`BIND_VPN_SERVICE`）：在你开始连接并同意系统提示后，按你的规则转发本机流量。流量在设备上处理，
   不发送给我们。
 - **相机**：扫描订阅或节点二维码，点“扫码”时才申请，不保存图像。
-- **位置**：Wi-Fi 规则需要读取当前 Wi-Fi 名称，只在你打开 Wi-Fi 规则时申请；不读取、不保存、不发送位置本身。
-- **通知与前台服务**：显示“已连接”通知，保持 VPN 运行。
+- **位置**：Wi-Fi 规则需要读取当前 Wi-Fi 名称，只在你打开 Wi-Fi 规则时申请。Android 10 及以上的后台位置（“始终允许”）
+  是可选的，App 内先说明用途再申请，用于在后台读取 Wi-Fi 名称；不读取、不保存、不发送位置本身。
+- **通知与前台服务**：显示“已连接”通知，保持 VPN 运行；打开 Wi-Fi 规则时显示“等待网络”通知，以便规则在后台重新连接。
 
 ### 儿童
 

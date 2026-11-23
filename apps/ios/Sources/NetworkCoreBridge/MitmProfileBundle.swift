@@ -122,6 +122,18 @@ public struct MitmProfileBundle: Codable, Equatable {
         return try? JSONDecoder().decode(MitmProfileBundle.self, from: raw)
     }
 
+    /// Whether a saved profile points at a payload in the Keychain (`TunnelProfileKeys.mitmBundle`), whether or not
+    /// it can be read: `fromProfile` returning nothing for such a profile means the chunks at hand are not the ones
+    /// it was saved with.
+    public static func referencesPayload(_ configuration: [String: Any]?) -> Bool {
+        guard let value = configuration?[TunnelProfileKeys.mitmBundle] as? Data,
+              let reference = try? JSONDecoder().decode(Reference.self, from: value)
+        else {
+            return false
+        }
+        return reference.chunks > 0
+    }
+
     /// The payload of a saved profile: the Keychain bundle, or the plugin keys profiles carried before it existed.
     public static func fromProfile(_ configuration: [String: Any]?, chunks: [String]? = nil) -> MitmProfileBundle {
         if let value = configuration?[TunnelProfileKeys.mitmBundle] as? Data {

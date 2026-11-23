@@ -528,13 +528,16 @@ impl Shell {
         let link = Arc::clone(&self.link);
         let input = sender.input_sender().clone();
         let era = self.era;
+        let language = self.language;
         thread::spawn(move || {
-            let (command, args) = action.ask();
             let patience = match action {
                 Action::Test(_) => TEST_PATIENCE,
                 Action::Import(_) | Action::Switch(_) => PRESS_PATIENCE,
             };
-            let answer = link.ask(command, args, patience).map(|_| ());
+            // A file to import is read here, as the user; the daemon opens no path a window names.
+            let answer = action
+                .request(language)
+                .and_then(|(command, args)| link.ask(command, args, patience).map(|_| ()));
             let _ = input.send(Show::Done(era, action, answer));
         });
     }

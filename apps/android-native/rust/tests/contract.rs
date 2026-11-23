@@ -35,6 +35,7 @@ fn the_snapshot_sample_has_exactly_the_real_fields() {
         Config {
             dir: dir.clone(),
             executable: dir.join("anixops-net"),
+            shared_service: false,
         },
         Arc::new(Desktop),
     );

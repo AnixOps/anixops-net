@@ -11,7 +11,7 @@ fn main() {
     use std::sync::Arc;
     use std::thread;
 
-    use anixops_netd::{Daemon, Options, SignedIn};
+    use anixops_netd::{raise_descriptor_limit, Daemon, Options, SignedIn};
 
     let options = match Options::parse(std::env::args().skip(1)) {
         Ok(options) => options,
@@ -22,6 +22,10 @@ fn main() {
     };
     // Before any thread exists, so every thread inherits the mask and the signals wait for `stop_signal`.
     let signals = block_stop_signals();
+    // Also before any thread exists. The unit raises the limit as well; this covers a daemon started by hand.
+    if let Err(error) = raise_descriptor_limit() {
+        eprintln!("anixops-netd keeps its open file limit: {error}");
+    }
     let daemon = match Daemon::start(&options, Arc::new(SignedIn::default())) {
         Ok(daemon) => daemon,
         Err(error) => {

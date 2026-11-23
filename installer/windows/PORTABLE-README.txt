@@ -19,6 +19,11 @@ AnixOps NetworkCore Windows portable package
 The client has no Windows service. Versions before 0.3.0-beta.7 could register
 one ("AnixOps NetworkCore"); the GUI removes it the next time it starts.
 
+anixops-net-link.exe is the handler for anixops:// links. The GUI registers it
+for the current user when it starts; keep it beside the GUI. It hands each link
+to the running GUI without an administrator prompt, and starts the GUI (one
+prompt) only when it is not running.
+
 The portable ZIP registers nothing during extraction. It is included with
 every Windows tag release alongside the MSI and its own SHA-256 and manifest
 files.

@@ -1,4 +1,5 @@
 import type { NativeGroupSummary, NodeSummary, RuntimeSnapshot } from "./bridge";
+import type { ConnectPhase } from "./labels";
 
 /**
  * What an `anixops://` link asks for, the same actions as on iOS (`AppURLCommand.swift`):
@@ -108,4 +109,42 @@ export function findLinkMember(groups: NativeGroupSummary[], policy: string, mem
   const byLabel = group.outboundLabels?.indexOf(member) ?? -1;
   const outbound = index >= 0 ? group.outbounds[index] : byLabel >= 0 ? group.outbounds[byLabel] : undefined;
   return outbound ? { tag: group.tag, outbound } : undefined;
+}
+
+/** What the window knows and is doing, as far as following a link goes. */
+export interface LinkReadiness {
+  /** The first snapshot and node list have arrived. */
+  loaded: boolean;
+  /** The first-launch mode question is answered, so the window shows its pages (and their notices). */
+  modeChosen: boolean;
+  /** An operation is running. */
+  busy: boolean;
+  phase: ConnectPhase;
+}
+
+/**
+ * Whether a link has to wait before it is followed. A link that arrives at a cold start comes before the nodes and the
+ * connection state: a `select` would not find its node, a `toggle` would be dropped while the state is loading, and an
+ * import would be covered by the first-launch mode question. So every link waits until the state is loaded and the mode
+ * is chosen; links that run an operation wait until the one before has finished, and the connection links also until
+ * the connection has stopped moving. Refused links are told once the window can show the notice.
+ */
+export function linkMustWait(link: AppLink | AppLinkError, state: LinkReadiness): boolean {
+  if (!state.loaded || !state.modeChosen) return true;
+  if ("error" in link || link.action === "import") return false;
+  if (state.busy) return true;
+  const moves = link.action === "connect" || link.action === "disconnect" || link.action === "toggle";
+  return moves && (state.phase === "loading" || state.phase === "connecting" || state.phase === "disconnecting");
+}
+
+/**
+ * Takes the first queued link out of `queue` when it can be followed now, so that it is followed once; one that has to
+ * wait stays first, and the ones behind it keep their order.
+ */
+export function nextAppLink(queue: string[], state: LinkReadiness): AppLink | AppLinkError | undefined {
+  if (queue.length === 0) return undefined;
+  const link = parseAppLink(queue[0]);
+  if (linkMustWait(link, state)) return undefined;
+  queue.shift();
+  return link;
 }

@@ -43,6 +43,7 @@ expect crates/client-core/README.md "${shared_rust}"
 expect apps/ios/Sources/NetworkCoreAppHost/TunnelController.swift apple
 expect apps/windows-gui/ui/src/pages/RequestList.tsx "ui windows linux"
 expect apps/android-native/app/build.gradle.kts "rust android_native"
+expect apps/windows-link/src/lib.rs "rust windows"
 expect apps/windows-native/src/App.cs windows_native
 expect TERMS.md "ui apple android_native"
 # Documentation only.

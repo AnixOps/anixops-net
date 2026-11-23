@@ -11,6 +11,8 @@ struct RulesView: View {
     @Environment(\.brand) private var brand
     /// The running engine's groups by id: what each group uses now and its members' last delay.
     @State private var runtime: [String: RuntimeControl.Groups.Group] = [:]
+    /// Whether the running tunnel took the rules (`RoutingState`); nil while disconnected.
+    @State private var routingState: RoutingState?
 
     var body: some View {
         NavigationContainer(embedded: embedded) {
@@ -20,6 +22,7 @@ struct RulesView: View {
                 } else if tunnel.nodeName != nil {
                     List {
                         modeSection(hasRules: tunnel.library != nil)
+                        routingNote
                         if tunnel.library != nil {
                             LocalRulesSection(tunnel: tunnel, hasSubscriptionRules: false)
                             ruleTools
@@ -48,11 +51,13 @@ struct RulesView: View {
                     try? await Task.sleep(for: .seconds(5))
                 }
                 runtime = [:]
+                routingState = nil
             }
         }
     }
 
     private func loadRuntime() async {
+        routingState = await tunnel.routingState()
         if let answer = RuntimeControl.decode(RuntimeControl.Groups.self, from: await tunnel.control(.groups)) {
             runtime = Dictionary(answer.groups.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         }
@@ -61,6 +66,8 @@ struct RulesView: View {
     private func rules(_ library: NodeLibrary, _ routing: NativeImportReport.Routing) -> some View {
         List {
             modeSection(hasRules: true)
+
+            routingNote
 
             Section {
                 ForEach(routing.groups) { group in
@@ -95,6 +102,15 @@ struct RulesView: View {
             RedirectSection(tunnel: tunnel)
         }
         .scrollContentBackground(.hidden)
+    }
+
+    /// Why the running tunnel does not route by every rule: the rules were too large or refused and it runs the
+    /// selected node alone, or rule sets over the engine's limit were left out.
+    @ViewBuilder
+    private var routingNote: some View {
+        if tunnel.connection == .connected, let text = routingState?.notice {
+            RuleNote(text: text)
+        }
     }
 
     /// The rule test and hit counts while connected, then the GEOIP / IP-ASN data lists.

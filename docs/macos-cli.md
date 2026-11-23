@@ -23,7 +23,10 @@ sudo ln -sf "/Applications/AnixOps Net.app/Contents/MacOS/anixops" /usr/local/bi
 选项：`--json` 输出 JSON（字段见 `ControlResponse`）；`-q` / `--quiet` 不输出；`--timeout <秒>` 改等待时间（默认
 status / nodes 10 秒，连接、切换 45 秒，导入 90 秒，测速 180 秒）。节点名以 `-` 开头时写在 `--` 之后。
 
-除 `status` 外，App 没有运行时工具会先在后台打开它；`status` 只报告「没有运行」，方便脚本判断。
+除 `status` 外，App 没有运行时工具会先在后台打开它；`status` 只报告「没有运行」，方便脚本判断。工具按自身可执行文件的真实路径
+（解析符号链接后）找到外层的 AnixOps Net.app，所以经 `/usr/local/bin/anixops` 链接调用也能打开 App。打开后工具会一直尝试连接
+套接字，直到 App 读完配置、真正开始接受连接（最多 30 秒）再发送命令；App 退出时会删除套接字，崩溃留下的旧套接字文件不会被当成
+App 已在运行。
 
 ## 退出码
 

@@ -23,6 +23,17 @@ public enum AppMode: String, CaseIterable, Identifiable, Sendable {
         }
         return hasNodes || onboardingDone ? .proxy : nil
     }
+
+    /// The mode to switch to when an `anixops://` link arrives: someone who has not picked a mode yet uses the proxy
+    /// client and is not asked (plan A4). Nil leaves the mode alone: while the saved choice has not been read yet
+    /// (`loaded` false, so a nil `current` does not mean "never picked"; a link that launched the app arrives before
+    /// `load()` finished), once a mode is picked, and for a link that is not a command the app runs.
+    public static func forLinkArrival(current: AppMode?, loaded: Bool, isCommand: Bool) -> AppMode? {
+        guard loaded, isCommand, current == nil else {
+            return nil
+        }
+        return .proxy
+    }
 }
 
 /// Where debug mode sends traffic once it has been captured (plan G2): straight to the destination, or through the

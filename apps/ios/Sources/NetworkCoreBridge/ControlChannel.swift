@@ -315,6 +315,42 @@ public enum ControlClient {
         }
         return response
     }
+
+    /// Whether an app accepts connections at `path` now: connects and closes again, sending nothing. A socket file
+    /// left behind by an app that quit or crashed refuses the connection, so a file alone does not count.
+    public static func isListening(at path: String) -> Bool {
+        guard var address = try? ControlWire.address(path) else {
+            return false
+        }
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else {
+            return false
+        }
+        defer { close(fd) }
+        ControlWire.noSigPipe(fd)
+        let connected = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        return connected == 0
+    }
+
+    /// Waits until an app accepts connections at `path` (`isListening`), checking every `interval`, at most
+    /// `timeout`. The tool calls it after opening the app, before sending the request again: the request itself is
+    /// not the probe, since connect or import must not run twice.
+    public static func waitUntilListening(at path: String, timeout: TimeInterval, interval: TimeInterval = 0.25) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            if isListening(at: path) {
+                return true
+            }
+            guard Date() < deadline else {
+                return false
+            }
+            Thread.sleep(forTimeInterval: interval)
+        }
+    }
 }
 
 /// The app's side: accepts connections on the socket and answers each request with `handler`.
@@ -335,7 +371,10 @@ public final class ControlServer: @unchecked Sendable {
     }
 
     deinit {
-        source?.cancel()
+        if let source {
+            unlink(path)
+            source.cancel()
+        }
     }
 
     /// Binds the socket (replacing a stale one from an earlier run), makes it 0600 and starts accepting.
@@ -359,9 +398,16 @@ public final class ControlServer: @unchecked Sendable {
             }
         }
         umask(previous)
-        guard bound == 0, chmod(path, 0o600) == 0, listen(fd, 16) == 0 else {
+        guard bound == 0 else {
             let code = errno
             close(fd)
+            throw ControlTransportError.system(code)
+        }
+        guard chmod(path, 0o600) == 0, listen(fd, 16) == 0 else {
+            // Bound but not listening: the file would only refuse connections, so it goes.
+            let code = errno
+            close(fd)
+            unlink(path)
             throw ControlTransportError.system(code)
         }
         _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
@@ -369,18 +415,23 @@ public final class ControlServer: @unchecked Sendable {
         source.setEventHandler { [weak self] in
             self?.acceptPending(fd)
         }
-        let path = path
+        // The file is removed by `stop()` itself, at once: a cancel handler may not run before the app exits, and
+        // one running after a new `start()` would remove the new socket.
         source.setCancelHandler {
             close(fd)
-            unlink(path)
         }
         self.source = source
         source.resume()
     }
 
+    /// Stops accepting and removes the socket file before returning, so nothing is left to look like a running app.
     public func stop() {
-        source?.cancel()
-        source = nil
+        guard let source else {
+            return
+        }
+        unlink(path)
+        source.cancel()
+        self.source = nil
     }
 
     private func acceptPending(_ listener: Int32) {

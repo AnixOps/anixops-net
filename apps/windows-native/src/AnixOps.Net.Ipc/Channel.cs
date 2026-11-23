@@ -73,6 +73,7 @@ public sealed class Channel : IAsyncDisposable
         try
         {
             await pipe.ConnectAsync(timeout ?? TimeSpan.FromSeconds(5), cancellation).ConfigureAwait(false);
+            VerifyServer(pipe, pipeName);
             return await OpenAsync(pipe, version, handler, cancellation).ConfigureAwait(false);
         }
         catch
@@ -80,6 +81,41 @@ public sealed class Channel : IAsyncDisposable
             await pipe.DisposeAsync().ConfigureAwait(false);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Refuses a pipe the core did not make, before anything is said: the window takes orders from the core
+    /// (<c>session.apply_proxy</c>, <c>session.trust_root</c>). Only the installed service (LocalSystem) or an
+    /// elevated administrator can make a pipe owned by the system or the administrators; a pipe another user
+    /// made while the service was stopped is theirs. For a pipe other than <see cref="DefaultPipeName"/> (a core
+    /// in a console, as the tests run it) a pipe of this window's own user is accepted too. The same check as
+    /// <c>client_ipc::transport::connect</c>.
+    /// </summary>
+    /// <exception cref="UnauthorizedAccessException">The pipe belongs to someone else.</exception>
+    public static void VerifyServer(PipeStream pipe, string pipeName)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+        var owner = pipe.GetAccessControl().GetOwner(typeof(SecurityIdentifier)) as SecurityIdentifier;
+        if (owner is not null && TrustedOwner(owner, pipeName, WindowsIdentity.GetCurrent().User))
+        {
+            return;
+        }
+        throw new UnauthorizedAccessException($"the pipe is not the AnixOps Net core service's: it belongs to {owner?.Value ?? "no one"}");
+    }
+
+    /// <summary>Whether <paramref name="owner"/> may serve <paramref name="pipeName"/> to a window of <paramref name="user"/>.</summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static bool TrustedOwner(SecurityIdentifier owner, string pipeName, SecurityIdentifier? user)
+    {
+        if (owner.IsWellKnown(WellKnownSidType.LocalSystemSid) || owner.IsWellKnown(WellKnownSidType.BuiltinAdministratorsSid))
+        {
+            return true;
+        }
+        var isDefault = string.Equals(pipeName, DefaultPipeName, StringComparison.OrdinalIgnoreCase);
+        return !isDefault && user is not null && owner == user;
     }
 
     /// <summary>

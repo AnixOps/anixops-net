@@ -119,9 +119,60 @@ extension NodeLibrary {
         guard let routing else {
             return true
         }
-        let named = routing.groups.contains { $0.members.contains(id) }
+        return !Self.names(routing, id)
+    }
+
+    /// Whether the subscription's rules or groups name the node.
+    private static func names(_ routing: NativeImportReport.Routing, _ id: String) -> Bool {
+        routing.groups.contains { $0.referencedNames.contains(id) }
             || routing.rules.contains { $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.contains(id) }
-        return !named
+    }
+
+    /// The nodes that connect through `id` (`via`), directly or along a chain, in list order: deleting `id` alone
+    /// would leave their `via` naming nothing.
+    public func dependents(of id: String) -> [NativeImportReport.Node] {
+        var found: Set<String> = []
+        var frontier = [id]
+        while let current = frontier.popLast() {
+            for node in nodes where node.via == current && node.id != id && !found.contains(node.id) {
+                found.insert(node.id)
+                frontier.append(node.id)
+            }
+        }
+        return nodes.filter { found.contains($0.id) }
+    }
+
+    /// What deleting the node takes with it: nil when it cannot be deleted at all, else the nodes that connect
+    /// through it (`dependents(of:)`), which go too once the user confirms. It cannot go when the subscription's
+    /// rules or groups name it or one of those nodes, or when nothing would remain.
+    public func removal(of id: String) -> [NativeImportReport.Node]? {
+        guard node(id: id) != nil else {
+            return nil
+        }
+        let dependents = self.dependents(of: id)
+        let ids = Set([id] + dependents.map(\.id))
+        guard nodes.count > ids.count else {
+            return nil
+        }
+        if let routing, ids.contains(where: { Self.names(routing, $0) }) {
+            return nil
+        }
+        return dependents
+    }
+
+    /// The library without the node and the nodes that connect through it (`removal(of:)`); the selection moves to
+    /// the default node when it was one of them. Unchanged when `removal(of:)` is nil.
+    public func removingWithDependents(_ id: String) -> NodeLibrary {
+        guard let dependents = removal(of: id) else {
+            return self
+        }
+        let ids = Set([id] + dependents.map(\.id))
+        var copy = self
+        copy.nodes.removeAll { ids.contains($0.id) }
+        if let selected = copy.selectedID, ids.contains(selected) {
+            copy.selectedID = NodeLibrary.defaultNode(in: copy.nodes)?.id
+        }
+        return copy
     }
 
     /// The library without the node; the selection moves to the default node when it was the selected one.
@@ -221,5 +272,28 @@ public struct NodeFilter: Equatable {
 
     public func apply(_ nodes: [NativeImportReport.Node]) -> [NativeImportReport.Node] {
         isEmpty ? nodes : nodes.filter(matches)
+    }
+}
+
+/// A node deletion that waits for the user's confirmation, because other nodes connect through the node and go with
+/// it (`NodeLibrary.removal(of:)`).
+public struct PendingNodeDeletion: Identifiable {
+    public let groupID: String
+    public let node: NativeImportReport.Node
+    public let dependents: [NativeImportReport.Node]
+
+    public init(groupID: String, node: NativeImportReport.Node, dependents: [NativeImportReport.Node]) {
+        self.groupID = groupID
+        self.node = node
+        self.dependents = dependents
+    }
+
+    public var id: String {
+        "\(groupID)\u{1F}\(node.id)"
+    }
+
+    /// The dependent nodes' names, for the confirmation.
+    public var dependentNames: String {
+        dependents.map(\.displayName).joined(separator: "、")
     }
 }

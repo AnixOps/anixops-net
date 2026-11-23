@@ -8,7 +8,9 @@ use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::thread;
 
-use windows_sys::Win32::Foundation::{ERROR_CALL_NOT_IMPLEMENTED, NO_ERROR};
+use windows_sys::Win32::Foundation::{
+    ERROR_CALL_NOT_IMPLEMENTED, ERROR_SERVICE_SPECIFIC_ERROR, NO_ERROR,
+};
 use windows_sys::Win32::System::Services::{
     RegisterServiceCtrlHandlerExW, SetServiceStatus, StartServiceCtrlDispatcherW,
     SERVICE_ACCEPT_SHUTDOWN, SERVICE_ACCEPT_STOP, SERVICE_CONTROL_INTERROGATE,
@@ -26,8 +28,9 @@ const WAIT_HINT: u32 = 30_000;
 static OPTIONS: OnceLock<Options> = OnceLock::new();
 /// The handle the service manager gave for reporting state.
 static STATUS: AtomicPtr<c_void> = AtomicPtr::new(null_mut());
-/// Tells the service's main function that a stop was asked for.
-static STOP: OnceLock<Mutex<Sender<()>>> = OnceLock::new();
+/// Tells the service's main function to stop: `None` when the service manager asked, the Windows error code
+/// when the service failed and must stop.
+static STOP: OnceLock<Mutex<Sender<Option<u32>>>> = OnceLock::new();
 
 fn name() -> Vec<u16> {
     SERVICE_NAME
@@ -74,7 +77,10 @@ unsafe extern "system" fn control(
         SERVICE_CONTROL_STOP | SERVICE_CONTROL_SHUTDOWN => {
             report(SERVICE_STOP_PENDING, NO_ERROR);
             if let Some(stop) = STOP.get() {
-                let _ = stop.lock().unwrap_or_else(PoisonError::into_inner).send(());
+                let _ = stop
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .send(None);
             }
             NO_ERROR
         }
@@ -110,17 +116,30 @@ unsafe extern "system" fn service_main(_count: u32, _arguments: *mut *mut u16) {
     {
         let service = Arc::clone(&service);
         thread::spawn(move || {
-            // A pipe that fails leaves nothing to answer on: stop, and let the service manager restart.
-            let _ = service.run();
+            // A pipe that keeps failing leaves nothing to answer on: stop with its error, which is not
+            // NO_ERROR, so the service manager counts a failure and its recovery actions (set by the MSI:
+            // restart, also when the service stopped itself with an error) start the service again.
+            let code = match service.run() {
+                Ok(()) => ERROR_SERVICE_SPECIFIC_ERROR,
+                Err(error) => error
+                    .raw_os_error()
+                    .and_then(|code| u32::try_from(code).ok())
+                    .filter(|code| *code != NO_ERROR)
+                    .unwrap_or(ERROR_SERVICE_SPECIFIC_ERROR),
+            };
             if let Some(stop) = STOP.get() {
-                let _ = stop.lock().unwrap_or_else(PoisonError::into_inner).send(());
+                let _ = stop
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .send(Some(code));
             }
         });
     }
-    let _ = stopped.recv();
+    // A sender gone without a word is a failure too.
+    let failed = stopped.recv().unwrap_or(Some(ERROR_SERVICE_SPECIFIC_ERROR));
     report(SERVICE_STOP_PENDING, NO_ERROR);
     service.shutdown();
-    report(SERVICE_STOPPED, NO_ERROR);
+    report(SERVICE_STOPPED, failed.unwrap_or(NO_ERROR));
 }
 
 /// Hands the process to the service manager and returns when the service has stopped. An error means the

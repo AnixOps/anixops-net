@@ -261,7 +261,17 @@ struct DnsSettingsView: View {
         } header: {
             Text("按域名选择服务器")
         } footer: {
-            Text("从上到下第一条命中的规则生效。RULE-SET 使用规则页的规则集，例如 geosite-cn；只有单个节点、没有订阅规则时它不会命中。")
+            VStack(alignment: .leading, spacing: 4) {
+                Text("从上到下第一条命中的规则生效。RULE-SET 使用规则页的规则集，例如 geosite-cn；只有单个节点、没有订阅规则时它不会命中。")
+                if !dns.rules.isEmpty {
+                    Text("已用 \(dns.ruleDomainCount) / \(DnsSettings.maxRuleDomains) 个域名、后缀和关键词")
+                }
+                // Saved over the limit by an earlier version: the tunnel leaves the last rules out.
+                if dns.ruleDomainCount > DnsSettings.maxRuleDomains {
+                    Text("超出上限，排在后面的规则不会生效。请删除一些规则，较长的列表改用 RULE-SET 或 GEOSITE 规则集。")
+                        .foregroundStyle(brand.warning)
+                }
+            }
         }
     }
 

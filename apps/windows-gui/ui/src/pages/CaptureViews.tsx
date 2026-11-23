@@ -256,10 +256,15 @@ export function BytesView({ bytes, caption }: { bytes: Uint8Array; caption?: str
  * the request's connection from the engine, again every two seconds until the response is complete. Replay and the
  * mapping editor open in its place, with the way back on top.
  */
-export function RequestInspector({ request, busy, run, onBack, replayAsked, onReplayHandled, layoutItems = [] }: {
+export function RequestInspector({ request, missing = false, busy, run, onBack, replayAsked, onReplayHandled, layoutItems = [] }: {
   /** Entries for the "more" menu that belong to the pane rather than the request, such as where it docks. */
   layoutItems?: MenuItem[];
   request: CaptureRequest | null;
+  /**
+   * The request is no longer in the table (a new filter, the table's limit, or the engine dropped it): `request` is
+   * the copy from when it was, and the inspector, an open replay or mapping editor included, stays as it is.
+   */
+  missing?: boolean;
   busy: string | null;
   run: Run;
   /** A narrow window shows the inspector in place of the table; this goes back to it. */
@@ -344,6 +349,8 @@ export function RequestInspector({ request, busy, run, onBack, replayAsked, onRe
     ...layoutItems,
   ];
   return (
+    <>
+    {missing && <p className="muted inspector-note" role="status">{t("这条请求已不在列表中，这里保留选中时的内容。")}</p>}
     <ExchangeInspector
       request={request}
       exchange={exchange}
@@ -358,6 +365,7 @@ export function RequestInspector({ request, busy, run, onBack, replayAsked, onRe
         <MoreMenu label={t("更多")} disabled={Boolean(busy)} items={more} />
       </>}
     />
+    </>
   );
 }
 

@@ -31,7 +31,10 @@ class SystemEntryTest {
     @Test
     fun theSystemStartsTheAlwaysOnVpnButNotTheAppsOwnStart() {
         assertTrue(alwaysOnStart(VpnService.SERVICE_INTERFACE))
-        assertTrue(alwaysOnStart(null))
         assertFalse(alwaysOnStart("io.anixops.net.vpn.START"))
+        assertFalse(alwaysOnStart("io.anixops.net.vpn.WAIT"))
+        // A restart after the process died carries no intent; what it does depends on what the user wanted
+        // (VpnRestartTest), not on the always-on setting.
+        assertFalse(alwaysOnStart(null))
     }
 }

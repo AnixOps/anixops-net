@@ -62,6 +62,14 @@ android {
         }
     }
 
+    bundle {
+        // English is the default language now and Chinese a language split: keep every language in the base, so the
+        // system's per-app language page can switch to one the device itself does not use (a few hundred KB).
+        language {
+            enableSplit = false
+        }
+    }
+
     lint {
         warningsAsErrors = true
         abortOnError = true
@@ -108,6 +116,7 @@ dependencies {
     debugImplementation(libs.compose.ui.test.manifest)
 
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)

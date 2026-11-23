@@ -3,7 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatRate } from "./activity-format";
-import { AppLink, findLinkMember, findLinkNode, parseAppLink } from "./app-link";
+import { AppLink, AppLinkError, findLinkMember, findLinkNode, nextAppLink } from "./app-link";
 import { desktop, NodeDelay, NodeSummary, RuntimeSnapshot } from "./bridge";
 import { Wordmark } from "./brand";
 import { connectionTitle, connectPhase, failureReason, routingLabel, sidebarDetail } from "./labels";
@@ -23,6 +23,8 @@ import { currentLanguage, t, useLanguage } from "./i18n";
 import { TermsConsent, useTermsConsent } from "./terms";
 import { AppMode, initialMode, useDebugExit, useMode, wantsDirectEgress } from "./mode";
 import { ModeChoice } from "./mode-choice";
+import { operationText } from "./operation-text";
+import { busyOperation, connectionOperation, finishOperation, startOperation, toggleAction } from "./operations";
 
 export type Page = "home" | "proxies" | "rules" | "extensions" | "activity" | "settings";
 
@@ -65,7 +67,9 @@ export function App() {
   const [page, setPage] = useState<Page>("home");
   const [snapshot, setSnapshot] = useState<RuntimeSnapshot | null>(null);
   const [nodes, setNodes] = useState<NodeSummary[]>([]);
-  const [busy, setBusy] = useState<string | null>(null);
+  // Every operation under way, so one ending does not clear another's progress (operations.ts).
+  const [operations, setOperations] = useState<string[]>([]);
+  const busy = busyOperation(operations);
   // Delay results stay for the session, so the overview can show the current node's delay.
   const [delays, setDelays] = useState<Record<string, NodeDelay>>({});
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -99,48 +103,79 @@ export function App() {
     setNodes((previous) => keepIfUnchanged(previous, nextNodes));
   }, []);
 
-  // Polls only while the window is showing; coming back from the tray refreshes at once.
+  // Polls only while the window is showing; coming back from the tray refreshes at once. A poll still waiting for
+  // its answer is not joined by another, so slow answers do not pile up.
   useEffect(() => {
     if (!visible) return;
-    void refresh().catch(showError);
-    const timer = window.setInterval(() => void refresh().catch(showError), 2000);
+    let polling = false;
+    const poll = () => {
+      if (polling) return;
+      polling = true;
+      void refresh().catch(showError).finally(() => {
+        polling = false;
+      });
+    };
+    poll();
+    const timer = window.setInterval(poll, 2000);
     return () => window.clearInterval(timer);
   }, [refresh, showError, visible]);
 
   const run = useCallback(async (operation: string, task: () => Promise<{ message: string }>) => {
-    setBusy(operation);
+    setOperations((current) => startOperation(current, operation));
     try {
       const result = await task();
-      show(result.message, "success");
+      // A backend result is worded by its code in the window's language (operation-text.ts).
+      show(operationText(result), "success");
       await refresh();
     } catch (error) {
       showError(error);
+      // A failed change can still have moved things (a setting put back, the connection restored or down):
+      // the switches and the connection state show where it ended up at once, not at the next poll.
+      await refresh().catch(() => undefined);
     } finally {
-      setBusy(null);
+      setOperations((current) => finishOperation(current, operation));
     }
   }, [refresh, show, showError]);
 
-  const phase = connectPhase(snapshot?.connection, busy);
+  const phase = connectPhase(snapshot?.connection, connectionOperation(operations));
+  // Connecting and disconnecting have their own lock, taken before the state updates, so a double press or the
+  // shortcut right after a click starts one operation. Nothing else under way (a delay test of every node, a
+  // subscription update) holds them up.
+  const connectionLock = useRef(false);
+  const changeConnection = useCallback((action: "connect" | "disconnect") => {
+    if (connectionLock.current) {
+      show(t("正在连接或断开，请稍候"), "success");
+      return;
+    }
+    connectionLock.current = true;
+    void run(action, action === "connect" ? desktop.connect : desktop.disconnect).finally(() => {
+      connectionLock.current = false;
+    });
+  }, [run, show]);
   const toggleConnection = useCallback(() => {
-    if (busy || phase === "loading" || phase === "connecting" || phase === "disconnecting") return;
-    if (phase === "on") void run("disconnect", desktop.disconnect);
-    else void run("connect", desktop.connect);
-  }, [busy, phase, run]);
+    const action = toggleAction(phase);
+    if (action === "wait") {
+      // The press is not lost silently: the switch already shows the progress, and this says why nothing new starts.
+      show(phase === "loading" ? t("正在读取连接状态，请稍候") : t("正在连接或断开，请稍候"), "success");
+      return;
+    }
+    changeConnection(action);
+  }, [phase, changeConnection, show]);
 
-  // `anixops://` links: read once at start and whenever the backend says one arrived; the newest handler acts.
+  // `anixops://` links: read once at start and whenever the backend says one arrived, kept in the window's own queue
+  // and followed one at a time once the window is ready for them (`nextAppLink`, below).
   const [pendingImport, setPendingImport] = useState<string | null>(null);
-  const followLink = useCallback((raw: string) => {
-    const link: AppLink | { error: string; detail?: string } = parseAppLink(raw);
+  const followLink = useCallback((link: AppLink | AppLinkError) => {
     if ("error" in link) {
       show(t("无法打开链接：{reason}", { reason: t(link.error) + (link.detail ? ` (${link.detail})` : "") }), "danger");
       return;
     }
     switch (link.action) {
       case "connect":
-        if (phase !== "on") void run("connect", desktop.connect);
+        if (phase !== "on") changeConnection("connect");
         return;
       case "disconnect":
-        void run("disconnect", desktop.disconnect);
+        changeConnection("disconnect");
         return;
       case "toggle":
         toggleConnection();
@@ -166,14 +201,19 @@ export function App() {
         setPage("proxies");
         show(t("核对订阅链接后点“导入”"), "success");
     }
-  }, [nodes, phase, run, show, toggleConnection]);
-  const linkHandler = useRef(followLink);
-  linkHandler.current = followLink;
+  }, [nodes, phase, run, show, toggleConnection, changeConnection]);
+  const linkQueue = useRef<string[]>([]);
+  // Counts arrivals and followed links, so the queue is looked at again after each.
+  const [linkTurn, setLinkTurn] = useState(0);
   useEffect(() => {
     if (needsTerms) return;
     let stopped = false;
     let unlisten: (() => void) | undefined;
-    const drain = () => void desktop.takeAppLinks().then((links) => links.forEach((link) => linkHandler.current(link))).catch(() => undefined);
+    const drain = () => void desktop.takeAppLinks().then((links) => {
+      if (links.length === 0) return;
+      linkQueue.current.push(...links);
+      setLinkTurn((turn) => turn + 1);
+    }).catch(() => undefined);
     drain();
     void listen("app-link", drain).then((off) => {
       if (stopped) off();
@@ -213,6 +253,21 @@ export function App() {
     chooseMode(next);
     setPage(sidebarOf(next).main[0].page);
   };
+
+  // Follows the first queued link once the state is loaded and the mode chosen, and the operation before it has
+  // finished: a link that opened the app at a cold start is not run against an empty node list or a loading state, and
+  // an import is not hidden behind the first-launch question. One link per pass; an operation it starts sets `busy`,
+  // which holds the next one back until it is done.
+  const linksLoaded = snapshot !== null;
+  const modeChosen = resolved !== "wait" && resolved !== "ask";
+  const operating = busy !== null;
+  useEffect(() => {
+    if (needsTerms) return;
+    const link = nextAppLink(linkQueue.current, { loaded: linksLoaded, modeChosen, busy: operating, phase });
+    if (!link) return;
+    followLink(link);
+    setLinkTurn((turn) => turn + 1);
+  }, [needsTerms, linksLoaded, modeChosen, operating, phase, linkTurn, followLink]);
 
   // Debug mode with the direct exit runs the engine with no node; the backend keeps the choice, so it is sent only
   // when it differs, once per wanted value.

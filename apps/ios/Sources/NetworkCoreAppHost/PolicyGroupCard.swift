@@ -18,7 +18,7 @@ struct PolicyGroupCard: View {
     }
 
     private var strip: [LatencyGrade] {
-        LatencyGrade.strip(members: group.members, latencies: runtime?.members ?? [])
+        LatencyGrade.strip(members: group.displayMembers, latencies: runtime?.members ?? [])
     }
 
     private func latency(of member: String) -> UInt32? {
@@ -61,13 +61,14 @@ struct PolicyGroupCard: View {
                 }
             }
 
-            if !group.members.isEmpty {
+            // A group that picks by network has no members; it shows what its network rules can use.
+            if !group.displayMembers.isEmpty {
                 HealthStrip(grades: strip)
             }
 
             Text(runtime == nil
-                ? String(localized: "\(group.members.count) 个成员 · 连接后显示延迟")
-                : String(localized: "\(group.members.count) 个成员 · \(LatencyGrade.reachable(strip)) 个有延迟"))
+                ? String(localized: "\(group.displayMembers.count) 个成员 · 连接后显示延迟")
+                : String(localized: "\(group.displayMembers.count) 个成员 · \(LatencyGrade.reachable(strip)) 个有延迟"))
                 .font(.caption)
                 .foregroundStyle(brand.text2)
         }

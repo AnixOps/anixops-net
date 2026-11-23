@@ -29,6 +29,15 @@ use client_service::Windows;
 /// The service's name in the service manager.
 pub const SERVICE_NAME: &str = "AnixOpsNetCore";
 
+/// Failed waits for a window in a row after which the service gives up (about a minute of failing).
+pub const MAX_ACCEPT_FAILURES: u32 = 64;
+
+/// How long to wait after the `failures`-th failed wait for a window in a row: 50 ms, doubling up to 1 s.
+pub fn accept_backoff(failures: u32) -> std::time::Duration {
+    let millis = 50_u64.saturating_mul(1 << failures.saturating_sub(1).min(5));
+    std::time::Duration::from_millis(millis.min(1000))
+}
+
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const USAGE: &str =
@@ -119,6 +128,8 @@ impl Service {
                 // Only used for the login entry, which belongs to the window, not to the service.
                 executable: std::env::current_exe()
                     .unwrap_or_else(|_| PathBuf::from("anixops-net-service.exe")),
+                // LocalSystem, driven by the windows of every user signed in.
+                shared_service: true,
             },
             windows.platform(),
             windows.session(),
@@ -131,19 +142,39 @@ impl Service {
         }))
     }
 
-    /// Answers windows until the pipe fails. Each window is served on a thread of its own.
+    /// Answers windows until the pipe keeps failing. Each window is served on a thread of its own.
+    ///
+    /// One failed wait for a window (an instance that could not be made, a thread that could not start) is
+    /// waited out and tried again: one window, or anyone opening the pipe, must not stop the core for every
+    /// user. Only [`MAX_ACCEPT_FAILURES`] failures in a row end it, with the last error, which the service
+    /// manager then sees as a failure and restarts the service for.
     pub fn run(self: &Arc<Self>) -> io::Result<()> {
+        let mut failures = 0_u32;
         loop {
-            let stream = self.listener.accept()?;
+            let stream = match self.listener.accept() {
+                Ok(stream) => stream,
+                Err(error) => {
+                    failures += 1;
+                    if failures >= MAX_ACCEPT_FAILURES {
+                        return Err(error);
+                    }
+                    thread::sleep(accept_backoff(failures));
+                    continue;
+                }
+            };
+            failures = 0;
             let service = Arc::clone(self);
-            thread::spawn(move || {
-                // A window that breaks the channel only loses its own connection.
-                let _ = stream.try_clone().and_then(|reader| {
-                    service
-                        .windows
-                        .serve(service.client.clone(), reader, stream, VERSION)
+            // A thread that cannot start drops this window, which connects again; the service goes on.
+            let _ = thread::Builder::new()
+                .name("window".to_string())
+                .spawn(move || {
+                    // A window that breaks the channel only loses its own connection.
+                    let _ = stream.try_clone().and_then(|reader| {
+                        service
+                            .windows
+                            .serve(service.client.clone(), reader, stream, VERSION)
+                    });
                 });
-            });
         }
     }
 
@@ -193,6 +224,15 @@ mod tests {
             parse(&["--purge"]).unwrap().cleanup,
             Some(cleanup::Cleanup::Purge)
         );
+    }
+
+    #[test]
+    fn failed_waits_back_off_up_to_a_second() {
+        assert_eq!(accept_backoff(1).as_millis(), 50);
+        assert_eq!(accept_backoff(2).as_millis(), 100);
+        assert_eq!(accept_backoff(5).as_millis(), 800);
+        assert_eq!(accept_backoff(6).as_millis(), 1000);
+        assert_eq!(accept_backoff(MAX_ACCEPT_FAILURES).as_millis(), 1000);
     }
 
     #[test]

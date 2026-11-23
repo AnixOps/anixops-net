@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CaptureConnection } from "./bridge";
 import {
   appendMessages,
+  mergeMessageList,
   asText,
   decodedBody,
   directionTotals,
@@ -156,6 +157,18 @@ describe("capture format", () => {
     expect(again.messages.map((item) => item.index)).toEqual([2, 3, 4]);
     expect(again.missed).toBe(0);
     expect(appendMessages(again.messages, [message(5)], 2).messages.map((item) => item.index)).toEqual([4, 5]);
+
+    // The panel read up to message 2 while the stream ran; the inspector's copy after it ended keeps 0..4 and says 5
+    // went by. The last two (the SSE [DONE], say) and the count are taken from that copy.
+    const running = mergeMessageList({ messages: [], missed: 0, seen: 0 }, { kept: [message(0), message(1), message(2)], seen: 3 });
+    expect(running.seen).toBe(3);
+    const ended = mergeMessageList(running, { kept: [0, 1, 2, 3, 4].map((index) => message(index)), seen: 5 });
+    expect(ended.messages.map((item) => item.index)).toEqual([0, 1, 2, 3, 4]);
+    expect(ended.seen).toBe(5);
+    expect(ended.missed).toBe(0);
+    // Nothing new: the same object, so the panel does not redraw.
+    expect(mergeMessageList(ended, { kept: [message(3), message(4)], seen: 5 })).toBe(ended);
+    expect(mergeMessageList(ended, undefined)).toBe(ended);
 
     const frame = (patch: Partial<H2Frame>): H2Frame => ({
       index: 0, at_ms: 0, link: "app", dir: "down", type: "DATA", flag_names: [], stream: 1, length: 0, ...patch,

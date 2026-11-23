@@ -5,6 +5,7 @@ import { connectionDetail, connectionName, formatRate, matchesConnection } from 
 import { captureSummary } from "../capture-format";
 import { listPage, liveEngine, usePolling } from "../live";
 import { formatBytes, subscriptionErrorText } from "../subscription-format";
+import { connectionLabelText, refreshResultText } from "../labels";
 import { Card, EmptyState, IconButton, MenuItem, MoreMenu, Row, Run, Segmented, Switch } from "../ui";
 import { t } from "../i18n";
 import { CaptureDetail, exportCapture } from "./CaptureViews";
@@ -22,7 +23,7 @@ export function ActivityPage({ snapshot, busy, run }: { snapshot: RuntimeSnapsho
  */
 export function ConnectionsView({ snapshot, busy, run, debug = false }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run; debug?: boolean }) {
   const refresh = snapshot?.subscriptionLastAttempt
-    ? [snapshot.subscriptionRefreshResult || t("等待中"), snapshot.subscriptionLastAttempt, subscriptionErrorText(snapshot.subscriptionRefreshErrorCode)].filter(Boolean).join(" · ")
+    ? [refreshResultText(snapshot.subscriptionRefreshResult), snapshot.subscriptionLastAttempt, subscriptionErrorText(snapshot.subscriptionRefreshErrorCode)].filter(Boolean).join(" · ")
     : t("还没有自动更新记录");
 
   const [detail, setDetail] = useState<ConnectionSnapshot | null>(null);
@@ -33,7 +34,7 @@ export function ConnectionsView({ snapshot, busy, run, debug = false }: { snapsh
 
   const session = (
     <Card title={t("当前会话")} description={t("只有独立核实过的运行状态才会显示为已连接。")}>
-      <Row icon={CircleDot} color={snapshot?.connection === "Connected" ? "green" : "gray"} label={t("运行状态")} value={snapshot?.connectionLabel ?? t("读取中")} />
+      <Row icon={CircleDot} color={snapshot?.connection === "Connected" ? "green" : "gray"} label={t("运行状态")} value={connectionLabelText(snapshot?.connectionLabel)} />
       <Row icon={TriangleAlert} color={snapshot?.lastError ? "red" : "gray"} label={t("最近错误")} value={snapshot?.lastError ?? t("无")} />
       <Row icon={BadgeCheck} color={snapshot?.configurationError ? "red" : "gray"} label={t("配置校验")} value={snapshot?.configurationError ?? t("通过")} />
       <Row icon={RefreshCw} color={snapshot?.subscriptionError ? "red" : "gray"} label={t("订阅自动更新")} value={snapshot?.subscriptionRefreshErrorCode ? refresh : snapshot?.subscriptionError ?? refresh} />

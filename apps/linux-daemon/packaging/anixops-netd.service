@@ -9,6 +9,8 @@ Type=simple
 ExecStart=/usr/bin/anixops-netd
 Restart=on-failure
 RestartSec=2
+# The engine holds two descriptors for every proxied connection; 1024 runs out with a few hundred.
+LimitNOFILE=524288
 
 # /run/anixops-net holds the socket the windows connect to; /var/lib/anixops-net the client's data.
 RuntimeDirectory=anixops-net

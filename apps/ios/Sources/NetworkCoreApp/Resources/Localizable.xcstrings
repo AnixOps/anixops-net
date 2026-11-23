@@ -1783,22 +1783,6 @@
         }
       }
     },
-    "HTTPS 只解密插件 [MITM] 列出的主机，明文 HTTP 全部交给插件处理，仅支持 HTTP/1.1。使用前需要先连上 VPN。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "HTTPS is decrypted only for hosts listed under a plugin's [MITM]; plain HTTP always goes through plugins. HTTP/1.1 only. Connect the VPN first."
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "HTTPS 只解密外掛 [MITM] 列出的主機，明文 HTTP 全部交給外掛處理，僅支援 HTTP/1.1。使用前需要先連上 VPN。"
-          }
-        }
-      }
-    },
     "可以在“设置”里允许 AnixOps Net 使用相机，或者从相册里的截图识别二维码。": {
       "localizations": {
         "en": {
@@ -1859,22 +1843,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "啟動"
-          }
-        }
-      }
-    },
-    "启用的插件合计超过 8 MB，请先停用一些插件": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Enabled plugins exceed 8 MB in total. Turn some off first."
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "啟用的外掛合計超過 8 MB，請先停用一些外掛"
           }
         }
       }
@@ -3571,6 +3539,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "無法識別的節點連結或訂閱格式"
+          }
+        }
+      }
+    },
+    "还没读到已保存的订阅，请先输入锁屏密码，再重试。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your saved subscriptions haven't been read yet. Enter your passcode, then try again."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "還沒讀到已儲存的訂閱，請先輸入鎖定畫面密碼，再重試。"
           }
         }
       }
@@ -6307,22 +6291,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "重新產生"
-          }
-        }
-      }
-    },
-    "重新生成后旧证书立即失效，需要重新安装并信任。请同时在 设置 > 通用 > VPN与设备管理 删除旧描述文件。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The old certificate stops working immediately and the new one must be installed and trusted again. Also delete the old profile in Settings > General > VPN & Device Management."
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "重新產生後舊憑證立即失效，需要重新安裝並信任。請同時在 設定 > 一般 > VPN與裝置管理 刪除舊描述檔。"
           }
         }
       }
@@ -10519,22 +10487,6 @@
         }
       }
     },
-    "证书和私钥只保存在本机钥匙串。换成自己的根证书后需要重新连接，已安装旧证书的设备要改装新证书。如果“信任证书”没有成功：在“钥匙串访问”中双击这张证书，展开“信任”，把“使用此证书时”设为“始终信任”。Firefox 使用自己的证书列表，需要另外导入。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The certificate and its private key stay in this Mac's keychain. After switching to your own root, reconnect, and install the new certificate on devices that have the old one. If Trust Certificate did not work: double-click the certificate in Keychain Access, expand Trust and set When using this certificate to Always Trust. Firefox keeps its own certificate list and needs a separate import."
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "憑證和私鑰只保存在本機鑰匙圈。換成自己的根憑證後需要重新連線，已安裝舊憑證的裝置要改裝新憑證。如果「信任憑證」沒有成功：在「鑰匙圈存取」中按兩下這張憑證，展開「信任」，把「使用此憑證時」設為「永遠信任」。Firefox 使用自己的憑證列表，需要另外匯入。"
-          }
-        }
-      }
-    },
     "保存证书失败（%@）": {
       "localizations": {
         "en": {
@@ -10611,22 +10563,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "私鑰和憑證不是一對。"
-          }
-        }
-      }
-    },
-    "粘贴 PEM 格式的 CA 证书和它的私钥。私钥需要是 P-256（prime256v1）密钥，只保存在本机钥匙串。替换后旧证书立即失效。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Paste the CA certificate and its private key in PEM format. The key must be a P-256 (prime256v1) key and stays in this Mac's keychain. The old certificate stops working at once."
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "貼上 PEM 格式的 CA 憑證和它的私鑰。私鑰需要是 P-256（prime256v1）金鑰，只保存在本機鑰匙圈。替換後舊憑證立即失效。"
           }
         }
       }
@@ -14547,6 +14483,790 @@
           "stringUnit": {
             "state": "translated",
             "value": "由舊版本匯入：重新匯入後憑證固定才會生效"
+          }
+        }
+      }
+    },
+    "无法把新根证书记录到 VPN 配置": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't record the new root certificate in the VPN configuration"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法把新根憑證記錄到 VPN 設定"
+          }
+        }
+      }
+    },
+    "HTTPS 解密证书已更换，隧道仍在用旧证书签发。请断开再连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The HTTPS decryption certificate changed, but the tunnel still issues certificates from the old one. Disconnect and connect again."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTPS 解密憑證已更換，通道仍在用舊憑證簽發。請斷開再連線。"
+          }
+        }
+      }
+    },
+    "连接已断开，抓包随之停止。这台设备上无法保存会话，断开前抓到的内容没有保存。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disconnected, so capture stopped. Sessions can't be saved on this device, so what it caught was not saved."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線已斷開，抓包隨之停止。這台裝置上無法儲存工作階段，斷開前抓到的內容沒有儲存。"
+          }
+        }
+      }
+    },
+    "连接已断开，抓包随之停止。断开时会尝试加密保存抓到的内容，连接后在 ⋯ › 已保存的会话 查看是否保存成功。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disconnected, so capture stopped. What it caught is saved encrypted if possible; after connecting, check ⋯ › Saved Sessions to see whether it was."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線已斷開，抓包隨之停止。斷開時會嘗試加密儲存抓到的內容，連線後在 ⋯ › 已儲存的工作階段 查看是否儲存成功。"
+          }
+        }
+      }
+    },
+    "会话用只保存在这台 Mac 上的密钥加密，只有系统级的隧道扩展能读取，保留 7 天后自动删除。打开会话会替换当前的抓包内容并停止抓包，之后可以照常查看、筛选和导出。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessions are encrypted with a key kept only on this Mac, readable only by the system tunnel extension, and deleted after 7 days. Opening a session replaces the current capture and stops capturing; you can then view, filter and export it as usual."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作階段用只保存在這台 Mac 上的金鑰加密，只有系統級的通道延伸功能能讀取，保留 7 天後自動刪除。開啟工作階段會取代目前的抓包內容並停止抓包，之後可以照常查看、篩選和匯出。"
+          }
+        }
+      }
+    },
+    "这台 Mac 上无法保存会话（隧道扩展读不到会话密钥，开发者诊断的扩展事件里有原因）。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessions can't be saved on this Mac (the tunnel extension can't read the session key; the extension events in developer diagnostics say why)."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這台 Mac 上無法儲存工作階段（通道延伸功能讀不到工作階段金鑰，開發者診斷的延伸功能事件裡有原因）。"
+          }
+        }
+      }
+    },
+    "已连接的隧道会自动重新连接并改用新证书。系统会要求输入登录密码，撤销这台 Mac 对旧证书的信任；新证书需要重新加入钥匙串并信任。其他装过旧证书的设备要分别删除它。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A connected tunnel reconnects on its own and uses the new certificate. macOS asks for your login password to stop trusting the old certificate on this Mac; the new one must be added to the keychain and trusted again. Remove the old certificate from other devices that have it."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已連線的通道會自動重新連線並改用新憑證。系統會要求輸入登入密碼，撤銷這台 Mac 對舊憑證的信任；新憑證需要重新加入鑰匙圈並信任。其他裝過舊憑證的裝置要分別刪除它。"
+          }
+        }
+      }
+    },
+    "证书和私钥只保存在本机钥匙串。重新生成或换成自己的根证书后，已连接的隧道会自动重新连接，这台 Mac 撤销对旧证书的信任；已安装旧证书的其他设备要改装新证书。如果“信任证书”没有成功：在“钥匙串访问”中双击这张证书，展开“信任”，把“使用此证书时”设为“始终信任”。Firefox 使用自己的证书列表，需要另外导入。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The certificate and its private key stay in this Mac's keychain. After regenerating or switching to your own root, a connected tunnel reconnects on its own and this Mac stops trusting the old certificate; install the new one on other devices that have the old one. If Trust Certificate did not work: double-click the certificate in Keychain Access, expand Trust and set When using this certificate to Always Trust. Firefox keeps its own certificate list and needs a separate import."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "憑證和私鑰只保存在本機鑰匙圈。重新產生或換成自己的根憑證後，已連線的通道會自動重新連線，這台 Mac 撤銷對舊憑證的信任；已安裝舊憑證的其他裝置要改裝新憑證。如果「信任憑證」沒有成功：在「鑰匙圈存取」中按兩下這張憑證，展開「信任」，把「使用此憑證時」設為「永遠信任」。Firefox 使用自己的憑證列表，需要另外匯入。"
+          }
+        }
+      }
+    },
+    "已取消。旧证书“%@”仍受这台 Mac 信任：在“钥匙串访问”中找到它，删除它或把信任改回“使用系统默认”。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelled. This Mac still trusts the old certificate “%@”: find it in Keychain Access and delete it, or set its trust back to Use System Defaults."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已取消。舊憑證「%@」仍受這台 Mac 信任：在「鑰匙圈存取」中找到它，刪除它或把信任改回「使用系統預設值」。"
+          }
+        }
+      }
+    },
+    "无法撤销对旧证书“%@”的信任（%@）。请在“钥匙串访问”中删除这张证书。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't stop trusting the old certificate “%@” (%@). Delete it in Keychain Access."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法撤銷對舊憑證「%@」的信任（%@）。請在「鑰匙圈存取」中刪除這張憑證。"
+          }
+        }
+      }
+    },
+    "旧证书“%@”仍受这台 Mac 信任，信任设置不在当前用户名下，App 无权更改。请在“钥匙串访问”的“系统”钥匙串中删除它。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Mac still trusts the old certificate “%@” through a setting outside your user account that the app can't change. Delete it from the System keychain in Keychain Access."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "舊憑證「%@」仍受這台 Mac 信任，信任設定不在目前使用者名下，App 無權更改。請在「鑰匙圈存取」的「系統」鑰匙圈中刪除它。"
+          }
+        }
+      }
+    },
+    "已撤销对旧证书“%@”的信任，但没能把它从钥匙串删除（%@），可以在“钥匙串访问”中手动删除。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Mac no longer trusts the old certificate “%@”, but it couldn't be removed from the keychain (%@); you can delete it in Keychain Access."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已撤銷對舊憑證「%@」的信任，但沒能把它從鑰匙圈刪除（%@），可以在「鑰匙圈存取」中手動刪除。"
+          }
+        }
+      }
+    },
+    "粘贴 PEM 格式的 CA 证书和它的私钥。私钥需要是 P-256（prime256v1）密钥，只保存在本机钥匙串。替换后已连接的隧道会自动重新连接，这台 Mac 撤销对旧证书的信任（需要登录密码）。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste the CA certificate and its private key in PEM format. The key must be a P-256 (prime256v1) key and stays in this Mac's keychain. After the switch a connected tunnel reconnects on its own and this Mac stops trusting the old certificate (your login password is needed)."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "貼上 PEM 格式的 CA 憑證和它的私鑰。私鑰需要是 P-256（prime256v1）金鑰，只保存在本機鑰匙圈。替換後已連線的通道會自動重新連線，這台 Mac 撤銷對舊憑證的信任（需要登入密碼）。"
+          }
+        }
+      }
+    },
+    "已连接的隧道会自动重新连接并改用新证书。新证书需要重新安装并信任，之后请删除旧描述文件。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A connected tunnel reconnects on its own and uses the new certificate. Install and trust the new one, then delete the old profile."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已連線的通道會自動重新連線並改用新憑證。新憑證需要重新安裝並信任，之後請刪除舊描述檔。"
+          }
+        }
+      }
+    },
+    "重新生成后已连接的隧道会自动重新连接，改用新证书签发；新证书需要重新安装并信任。请同时在 设置 > 通用 > VPN与设备管理 删除旧描述文件，否则旧证书仍受这台设备信任。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "After regenerating, a connected tunnel reconnects on its own and issues certificates from the new root; install and trust the new one. Also delete the old profile in Settings > General > VPN & Device Management, or this device keeps trusting the old certificate."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新產生後已連線的通道會自動重新連線，改用新憑證簽發；新憑證需要重新安裝並信任。請同時在 設定 > 一般 > VPN與裝置管理 刪除舊描述檔，否則舊憑證仍受這台裝置信任。"
+          }
+        }
+      }
+    },
+    "插件只解密自己 [MITM] 列出的主机，解密域名和映射不受这个开关影响、另外生效；明文 HTTP 全部交给插件处理，仅支持 HTTP/1.1。使用前需要先连上 VPN。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugins decrypt only the hosts under their own [MITM]; decrypted domains and mappings work regardless of this switch. Plain HTTP always goes through plugins. HTTP/1.1 only. Connect the VPN first."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "外掛只解密自己 [MITM] 列出的主機，解密網域和對應不受這個開關影響、另外生效；明文 HTTP 全部交給外掛處理，僅支援 HTTP/1.1。使用前需要先連上 VPN。"
+          }
+        }
+      }
+    },
+    "网络扩展保存的配置副本已过期。请打开 App 重新连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The network extension's copy of the configuration is out of date. Open the app and connect again."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "網路擴充功能保存的設定副本已過期。請開啟 App 重新連線。"
+          }
+        }
+      }
+    },
+    "网络扩展保存的配置副本已过期，自动重连没有成功。请重新连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The network extension's copy of the configuration is out of date, and reconnecting automatically did not work. Connect again."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "網路擴充功能保存的設定副本已過期，自動重新連線沒有成功。請重新連線。"
+          }
+        }
+      }
+    },
+    "按网络选择": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "By network"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按網路選擇"
+          }
+        }
+      }
+    },
+    "由旧版本导入：更新后按网络选择的策略组才会生效": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported by an earlier version: update it to apply its by-network groups"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "由舊版本匯入：更新後按網路選擇的策略組才會生效"
+          }
+        }
+      }
+    },
+    "由旧版本导入：重新导入后按网络选择的策略组才会生效": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported by an earlier version: import it again to apply its by-network groups"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "由舊版本匯入：重新匯入後按網路選擇的策略組才會生效"
+          }
+        }
+      }
+    },
+    "规则没有生效：节点、规则和已启用的插件合计超出了隧道配置的上限，隧道只用选中的节点。请减少规则或规则集、停用一些插件后重新连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rules are not in effect: the nodes, rules and enabled plugins together exceed the tunnel's configuration limit, so the tunnel uses only the selected node. Remove some rules or rule sets, or turn off some plugins, then reconnect."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "規則沒有生效：節點、規則和已啟用的外掛合計超出了隧道設定的上限，隧道只用選中的節點。請減少規則或規則集、停用一些外掛後重新連線。"
+          }
+        }
+      }
+    },
+    "规则没有生效：内核没有接受分流设置，隧道只用选中的节点。开发者诊断的扩展事件里有原因。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rules are not in effect: the engine did not accept the routing settings, so the tunnel uses only the selected node. The extension events in developer diagnostics give the reason."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "規則沒有生效：核心沒有接受分流設定，隧道只用選中的節點。開發者診斷的擴充事件裡有原因。"
+          }
+        }
+      }
+    },
+    "规则集超过 %lld 个，以下规则集和用到它们的规则没有生效：%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More than %lld rule sets: these rule sets, and the rules that use them, are not in effect: %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "規則集超過 %lld 個，以下規則集和用到它們的規則沒有生效：%@"
+          }
+        }
+      }
+    },
+    "HTTPS 解密没有生效：已启用的插件和调试映射合计超出了隧道配置的上限，隧道没有交给内核。请停用一些插件或减少映射正文，再重新连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTPS decryption is not active: the enabled plugins and debug mappings together exceed the tunnel's configuration limit, so the tunnel did not pass them to the engine. Turn off some plugins or shorten mapping bodies, then reconnect."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTPS 解密沒有生效：已啟用的外掛和除錯對應合計超出了隧道設定的上限，隧道沒有交給核心。請停用一些外掛或減少對應內文，再重新連線。"
+          }
+        }
+      }
+    },
+    "有 %lld 条重定向内核无法使用，不会生效。请编辑或删除标出的条目。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld redirects can't be used by the engine and are not in effect. Edit or delete the marked entries."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有 %lld 條重新導向核心無法使用，不會生效。請編輯或刪除標出的項目。"
+          }
+        }
+      }
+    },
+    "无效，不会生效": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invalid, not in effect"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無效，不會生效"
+          }
+        }
+      }
+    },
+    "映射合计超过 4 MB（响应体按 Base64 计算，约为原大小的 4/3）。请删除或缩小一些 Map Local 响应体。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mappings exceed 4 MB in total (response bodies count in Base64, about 4/3 of their size). Delete or shrink some Map Local response bodies."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "對應合計超過 4 MB（回應內文按 Base64 計算，約為原大小的 4/3）。請刪除或縮小一些 Map Local 回應內文。"
+          }
+        }
+      }
+    },
+    "已启用的插件和调试映射合计超过 64 KB，超出本版本隧道配置的上限：连接时 HTTPS 解密会被关闭，插件和映射都不会生效。请停用一些插件或减少映射响应体。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enabled plugins and debug mappings exceed 64 KB in total, over this version's tunnel configuration limit: HTTPS decryption will be turned off when you connect, and neither plugins nor mappings will apply. Turn off some plugins or shrink mapping response bodies."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已啟用的外掛和除錯對應合計超過 64 KB，超出本版本隧道設定的上限：連線時 HTTPS 解密會被關閉，外掛和對應都不會生效。請停用一些外掛或減少對應回應內文。"
+          }
+        }
+      }
+    },
+    "映射和已启用的插件合计超过 8 MB。请减少映射响应体或停用一些插件。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mappings and enabled plugins exceed 8 MB in total. Shrink mapping response bodies or turn off some plugins."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "對應和已啟用的外掛合計超過 8 MB。請減少對應回應內文或停用一些外掛。"
+          }
+        }
+      }
+    },
+    "启用的插件和调试映射合计超过 8 MB，请先停用一些插件或减少映射响应体": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enabled plugins and debug mappings exceed 8 MB in total. Turn some plugins off or shrink mapping response bodies first."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "啟用的外掛和除錯對應合計超過 8 MB，請先停用一些外掛或減少對應回應內文"
+          }
+        }
+      }
+    },
+    "DNS 规则合计最多 %lld 个域名、后缀和关键词。较长的列表请改用 RULE-SET 或 GEOSITE 规则集。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DNS rules can list at most %lld domains, suffixes and keywords in total. Use a RULE-SET or GEOSITE rule set for longer lists."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DNS 規則合計最多 %lld 個網域、後綴和關鍵字。較長的列表請改用 RULE-SET 或 GEOSITE 規則集。"
+          }
+        }
+      }
+    },
+    "已用 %lld / %lld 个域名、后缀和关键词": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld of %lld domains, suffixes and keywords used"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已用 %lld / %lld 個網域、後綴和關鍵字"
+          }
+        }
+      }
+    },
+    "超出上限，排在后面的规则不会生效。请删除一些规则，较长的列表改用 RULE-SET 或 GEOSITE 规则集。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Over the limit: the last rules are not in effect. Delete some rules, and use a RULE-SET or GEOSITE rule set for longer lists."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "超出上限，排在後面的規則不會生效。請刪除一些規則，較長的列表改用 RULE-SET 或 GEOSITE 規則集。"
+          }
+        }
+      }
+    },
+    "启用的插件合计超过 8 MB，请先停用一些插件": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enabled plugins exceed 8 MB in total. Turn some off first."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "啟用的外掛合計超過 8 MB，請先停用一些外掛"
+          }
+        }
+      }
+    },
+    "只支持 HTTPS 订阅链接：系统不允许 App 用不加密的 http:// 下载订阅。请向服务商索取 https:// 链接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only HTTPS subscription links are supported: the system does not let apps download a subscription over unencrypted http://. Ask your provider for an https:// link."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只支援 HTTPS 訂閱連結：系統不允許 App 用未加密的 http:// 下載訂閱。請向服務商索取 https:// 連結。"
+          }
+        }
+      }
+    },
+    "打开开关连接，首次需要允许添加 VPN 配置": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn on the switch to connect; the first time, allow adding the VPN configuration"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打開開關連線，首次需要允許加入 VPN 設定"
+          }
+        }
+      }
+    },
+    "轻点连接，首次需要允许添加 VPN 配置": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap to connect; the first time, allow adding the VPN configuration"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "輕點連線，首次需要允許加入 VPN 設定"
+          }
+        }
+      }
+    },
+    "已被其他 VPN 停用，打开开关重新启用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turned off by another VPN; turn on the switch to enable it again"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已被其他 VPN 停用，打開開關重新啟用"
+          }
+        }
+      }
+    },
+    "已被其他 VPN 停用，轻点重新启用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turned off by another VPN; tap to enable it again"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已被其他 VPN 停用，輕點重新啟用"
+          }
+        }
+      }
+    },
+    "断开 AnixOps Net": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disconnect AnixOps Net"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中斷 AnixOps Net 連線"
+          }
+        }
+      }
+    },
+    "允许 AnixOps Net 发送通知": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow AnixOps Net to Send Notifications"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允許 AnixOps Net 傳送通知"
+          }
+        }
+      }
+    },
+    "在系统设置中开启通知": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn On Notifications in Settings"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在系統設定中開啟通知"
+          }
+        }
+      }
+    },
+    "系统设置里关闭了 AnixOps Net 的通知，上面的开关目前不会发出任何通知。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifications for AnixOps Net are turned off in the system settings, so the switches above send nothing for now."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系統設定裡關閉了 AnixOps Net 的通知，上面的開關目前不會發出任何通知。"
+          }
+        }
+      }
+    },
+    "删除节点“%@”？": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete node “%@”?"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刪除節點“%@”？"
+          }
+        }
+      }
+    },
+    "一并删除 %lld 个节点": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete %lld Nodes"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一併刪除 %lld 個節點"
+          }
+        }
+      }
+    },
+    "“%@”经由这个节点连接，删除后无法使用，会一并删除。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” connects through this node and would stop working without it, so it is deleted too."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@”經由這個節點連線，刪除後無法使用，會一併刪除。"
+          }
+        }
+      }
+    },
+    "删除节点…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Node…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刪除節點…"
+          }
+        }
+      }
+    },
+    "“%@”已设为当前节点，正在重新连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” is now the current node. Reconnecting…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@”已設為目前節點，正在重新連線。"
           }
         }
       }

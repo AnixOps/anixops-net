@@ -1,7 +1,7 @@
 import { FileSearch, PanelBottom, PanelRight, Pause, Play, PlugZap } from "lucide-react";
 import { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from "react";
-import { desktop, RuntimeSnapshot } from "../bridge";
-import { combineFilter, QuickFilter, requestKey } from "../capture-filter";
+import { CaptureRequest, desktop, RuntimeSnapshot } from "../bridge";
+import { combineFilter, QuickFilter, selectedRequest } from "../capture-filter";
 import { liveEngine, usePolling } from "../live";
 import { defaultSort, RequestSort } from "../request-table";
 import { defaultShare, Dock, inspectorSize, parseDock, parseShare, shareFor } from "../split-pane";
@@ -148,13 +148,27 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
   // A stopped capture or a loaded session still holds requests to list.
   const holding = Boolean(capture?.enabled) || (capture?.connections ?? 0) > 0;
   const feed = useRequestFeed(live && holding, filter, paused);
-  const request = feed.rows.find((row) => requestKey(row) === selected) ?? null;
+  // After an engine restart the same key can name another request: the selection and the open detail go.
+  useEffect(() => {
+    if (feed.generation > 0) setSelected(null);
+  }, [feed.generation]);
+  // The selected request as last seen in the list: a new filter (read again from the start), the list's own limit or
+  // the engine's budget can take the row out of the list while its inspector has an open replay or mapping editor.
+  // The inspector keeps showing this copy until another request is chosen.
+  const held = useRef<CaptureRequest | null>(null);
+  const { request, missing } = selectedRequest(feed.rows, selected, held.current);
+  held.current = request;
   const captured = capture?.connections ?? 0;
 
   const change = useCallback((task: () => Promise<unknown>) => {
     setFailure(null);
     task().then(reloadCapture).catch((error: unknown) => setFailure(String(error)));
   }, [reloadCapture]);
+  // Clearing the capture removes every request: the selection goes with them.
+  const clearCapture = useCallback(() => {
+    setSelected(null);
+    change(desktop.clearCapture);
+  }, [change]);
 
   // Ctrl+F finds the filter field and Ctrl+R replays the selected request, as in Proxyman.
   useEffect(() => {
@@ -208,7 +222,7 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
         </IconButton>
       )}
       {live && (
-        <MoreMenu label={t("更多抓包操作")} items={captureMenu(run, busy, captured, () => change(desktop.clearCapture))} />
+        <MoreMenu label={t("更多抓包操作")} items={captureMenu(run, busy, captured, clearCapture)} />
       )}
     </PageTools>
   );
@@ -239,7 +253,7 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
   }
 
   if (view === "connections") return <>{tools}<ConnectionsView snapshot={snapshot} busy={busy} run={run} debug /></>;
-  if (view === "sessions") return <>{tools}<div className="page-stack"><CaptureSessions capture={capture} run={run} /></div></>;
+  if (view === "sessions") return <>{tools}<div className="page-stack"><CaptureSessions capture={capture} run={run} onLoaded={() => setSelected(null)} /></div></>;
 
   if (capture && !holding) {
     return (
@@ -288,6 +302,7 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
     <aside className="inspector-pane" aria-label={t("请求详情")}>
       <RequestInspector
         request={request}
+        missing={missing}
         busy={busy}
         run={run}
         onBack={wide ? undefined : () => setOpened(false)}

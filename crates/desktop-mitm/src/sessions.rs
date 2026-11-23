@@ -257,6 +257,138 @@ pub fn with_protection(mut answer: Value, protection: Protection) -> Value {
     answer
 }
 
+/// The capture budget the desktop windows (Windows, Linux) ask for when they turn capture on: the engine's
+/// largest. The engine's own default is sized for the iOS Network Extension's memory limit; a desktop has the
+/// room, and with the small default ordinary traffic pushes decrypted requests out within seconds.
+pub const DESKTOP_CAPTURE_BUDGET: u64 = 16 * 1024 * 1024;
+
+/// Why the client saved what capture held without being asked: the engine is about to stop, and capture only
+/// lives as long as the engine does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AutoSave {
+    /// A changed setting restarts the engine (decryption hosts, mappings, plugins, TUN mode, ...).
+    Reconnect,
+    /// The user disconnects or quits.
+    Disconnect,
+}
+
+impl AutoSave {
+    /// The session's name in the window's language (`zh`, `zh-Hant` or `en`; anything else reads Simplified
+    /// Chinese, as the notifications do). "Saved on disconnect" is the name the iOS and macOS app uses.
+    pub fn name(self, language: &str) -> &'static str {
+        match (self, language) {
+            (Self::Reconnect, "en") => "Saved before reconnecting",
+            (Self::Reconnect, "zh-Hant") => "重新連線前自動儲存",
+            (Self::Reconnect, _) => "重连前自动保存",
+            (Self::Disconnect, "en") => "Saved on disconnect",
+            (Self::Disconnect, "zh-Hant") => "斷開時自動儲存",
+            (Self::Disconnect, _) => "断开时自动保存",
+        }
+    }
+}
+
+/// What capture was doing when the engine stopped, so the next engine can carry on.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CaptureCarry {
+    /// Live capture was on: the next engine turns it on again.
+    pub was_on: bool,
+    /// The budget it ran with, given again so a restart does not fall back to the engine's default.
+    pub max_total_bytes: Option<u64>,
+    /// The id of the session it was saved as, when it held anything.
+    pub saved: Option<String>,
+    /// Why it could not be saved, when saving was needed and failed. Never stops the engine from stopping.
+    pub save_error: Option<String>,
+}
+
+impl CaptureCarry {
+    /// What the user is told about capture across the stop, in the window's language (as [`AutoSave::name`]),
+    /// or `None` when there was nothing to save.
+    pub fn note(&self, reason: AutoSave, language: &str) -> Option<String> {
+        if let Some(error) = self.save_error.as_deref() {
+            return Some(match language {
+                "en" => format!("The capture could not be saved: {error}."),
+                "zh-Hant" => format!("抓包未能儲存：{error}。"),
+                _ => format!("抓包未能保存：{error}。"),
+            });
+        }
+        let name = reason.name(language);
+        self.saved.as_ref().map(|_| match language {
+            "en" => format!("The capture so far was saved as “{name}”."),
+            "zh-Hant" => format!("目前的抓包已儲存為「{name}」。"),
+            _ => format!("当前抓包已保存为“{name}”。"),
+        })
+    }
+
+    /// The `set_capture` request that turns capture on again in the next engine, when it was on.
+    pub fn resume_request(&self) -> Option<Value> {
+        if !self.was_on {
+            return None;
+        }
+        Some(match self.max_total_bytes {
+            Some(budget) => {
+                json!({ "cmd": "set_capture", "enabled": true, "max_total_bytes": budget })
+            }
+            None => json!({ "cmd": "set_capture", "enabled": true }),
+        })
+    }
+}
+
+/// Saves what live capture holds before the engine stops, as the iOS and macOS app does on disconnect: asks the
+/// engine for the capture status and, only while live capture is on and holds connections, names the session
+/// directory with `key` (read only then) and sends `save_capture` with `name`. A session loaded for viewing
+/// turns live capture off, so it is never saved again. Nothing here fails: an engine that does not answer or a
+/// key that cannot be read leaves `saved` empty (with `save_error` when saving was due), and the caller stops
+/// the engine all the same.
+pub fn preserve<C, K>(mut control: C, dir: &Path, key: K, name: &str) -> CaptureCarry
+where
+    C: FnMut(&Value) -> Result<Value, String>,
+    K: FnOnce() -> Result<SessionKey, String>,
+{
+    let Ok(status) = control(&json!({ "cmd": "capture" })) else {
+        return CaptureCarry::default();
+    };
+    let was_on = status.get("enabled").and_then(Value::as_bool) == Some(true);
+    let mut carry = CaptureCarry {
+        was_on,
+        max_total_bytes: status.get("max_total_bytes").and_then(Value::as_u64),
+        saved: None,
+        save_error: None,
+    };
+    let held = status
+        .get("connections")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    if !was_on || held == 0 {
+        return carry;
+    }
+    let saved = key().and_then(|key| {
+        control(&storage_request(dir, &key))?;
+        let request = SessionAction::Save {
+            name: Some(name.to_string()),
+        }
+        .request()?;
+        control(&request)
+    });
+    match saved {
+        Ok(answer) => {
+            carry.saved = answer
+                .pointer("/session/session")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            if carry.saved.is_none() {
+                carry.save_error = Some(
+                    answer
+                        .get("error")
+                        .map(Value::to_string)
+                        .unwrap_or_else(|| "the engine did not save the capture".to_string()),
+                );
+            }
+        }
+        Err(error) => carry.save_error = Some(error),
+    }
+    carry
+}
+
 /// Whether the window may send `request` itself: everything but [`STORAGE_COMMAND`].
 pub fn window_may_send(request: &Value) -> bool {
     request.get("cmd").and_then(Value::as_str) != Some(STORAGE_COMMAND)
@@ -389,5 +521,145 @@ mod tests {
             serde_json::to_value(Protection::SecretService).unwrap(),
             "secret-service"
         );
+    }
+
+    /// A fake engine for [`preserve`]: answers `capture` with `status` and records every request.
+    fn engine(status: Value) -> (Vec<Value>, impl FnMut(&Value) -> Result<Value, String>) {
+        let answer = move |request: &Value| {
+            Ok(match request["cmd"].as_str() {
+                Some("capture") => status.clone(),
+                Some("save_capture") => {
+                    json!({ "session": { "session": "1700000000000-ab", "name": request["name"] } })
+                }
+                _ => json!({}),
+            })
+        };
+        (Vec::new(), answer)
+    }
+
+    fn key() -> Result<SessionKey, String> {
+        SessionKey::new(&[3u8; KEY_LEN], Protection::Dpapi)
+    }
+
+    #[test]
+    fn live_capture_is_saved_before_the_engine_stops_and_resumed_with_its_budget() {
+        let (mut sent, mut answer) = engine(json!({
+            "enabled": true, "max_total_bytes": DESKTOP_CAPTURE_BUDGET, "used_bytes": 900, "connections": 4
+        }));
+        let carry = preserve(
+            |request: &Value| {
+                sent.push(request.clone());
+                answer(request)
+            },
+            Path::new("/tmp/sessions"),
+            key,
+            AutoSave::Reconnect.name("zh"),
+        );
+        let commands: Vec<&str> = sent.iter().filter_map(|r| r["cmd"].as_str()).collect();
+        assert_eq!(commands, ["capture", STORAGE_COMMAND, "save_capture"]);
+        assert_eq!(sent[2]["name"], "重连前自动保存");
+        assert_eq!(carry.saved.as_deref(), Some("1700000000000-ab"));
+        assert_eq!(carry.save_error, None);
+        assert_eq!(
+            carry.resume_request(),
+            Some(
+                json!({ "cmd": "set_capture", "enabled": true, "max_total_bytes": DESKTOP_CAPTURE_BUDGET })
+            )
+        );
+    }
+
+    #[test]
+    fn nothing_is_saved_while_capture_is_off_or_empty() {
+        for status in [
+            json!({ "enabled": false, "max_total_bytes": 2097152, "used_bytes": 900, "connections": 4 }),
+            json!({ "enabled": true, "max_total_bytes": 2097152, "used_bytes": 0, "connections": 0 }),
+        ] {
+            let (mut sent, mut answer) = engine(status.clone());
+            let carry = preserve(
+                |request: &Value| {
+                    sent.push(request.clone());
+                    answer(request)
+                },
+                Path::new("/tmp/sessions"),
+                || -> Result<SessionKey, String> {
+                    panic!("the key is read only when a save is due")
+                },
+                "x",
+            );
+            assert_eq!(sent.len(), 1, "{status}");
+            assert_eq!(carry.saved, None);
+            assert_eq!(carry.save_error, None);
+            assert_eq!(carry.resume_request().is_some(), status["enabled"] == true);
+        }
+    }
+
+    #[test]
+    fn a_failed_save_is_reported_and_never_blocks() {
+        let status = json!({ "enabled": true, "max_total_bytes": 2097152, "used_bytes": 9, "connections": 1 });
+        let carry = preserve(
+            |request: &Value| match request["cmd"].as_str() {
+                Some("capture") => Ok(status.clone()),
+                _ => Err("disk full".to_string()),
+            },
+            Path::new("/tmp/sessions"),
+            key,
+            "x",
+        );
+        assert!(carry.was_on);
+        assert_eq!(carry.save_error.as_deref(), Some("disk full"));
+        let locked = preserve(
+            |_: &Value| Ok(status.clone()),
+            Path::new("/tmp/sessions"),
+            || Err("locked".to_string()),
+            "x",
+        );
+        assert_eq!(locked.save_error.as_deref(), Some("locked"));
+        // No engine to ask: nothing to carry.
+        let gone = preserve(
+            |_: &Value| Err("not running".to_string()),
+            Path::new("/tmp"),
+            key,
+            "x",
+        );
+        assert_eq!(gone, CaptureCarry::default());
+        assert_eq!(gone.resume_request(), None);
+    }
+
+    #[test]
+    fn notes_name_the_saved_session() {
+        let saved = CaptureCarry {
+            was_on: true,
+            max_total_bytes: None,
+            saved: Some("1-ab".to_string()),
+            save_error: None,
+        };
+        assert_eq!(
+            saved.note(AutoSave::Reconnect, "zh").as_deref(),
+            Some("当前抓包已保存为“重连前自动保存”。")
+        );
+        assert_eq!(
+            saved.note(AutoSave::Disconnect, "en").as_deref(),
+            Some("The capture so far was saved as “Saved on disconnect”.")
+        );
+        let failed = CaptureCarry {
+            save_error: Some("locked".to_string()),
+            ..CaptureCarry::default()
+        };
+        assert_eq!(
+            failed.note(AutoSave::Reconnect, "zh-Hant").as_deref(),
+            Some("抓包未能儲存：locked。")
+        );
+        assert!(CaptureCarry::default()
+            .note(AutoSave::Reconnect, "en")
+            .is_none());
+    }
+
+    #[test]
+    fn auto_saved_sessions_are_named_in_the_window_language() {
+        assert_eq!(AutoSave::Disconnect.name("en"), "Saved on disconnect");
+        assert_eq!(AutoSave::Disconnect.name("zh-Hant"), "斷開時自動儲存");
+        assert_eq!(AutoSave::Disconnect.name(""), "断开时自动保存");
+        assert_eq!(AutoSave::Reconnect.name("en"), "Saved before reconnecting");
+        assert_eq!(AutoSave::Reconnect.name("zh-Hant"), "重新連線前自動儲存");
     }
 }

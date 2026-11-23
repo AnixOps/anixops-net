@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use app_notifications::Notice;
+use app_notifications::{Notice, NoticeKind};
 use client_core::backend::session::UserSession;
 use client_core::backend::system_proxy::{Desktop, ProxyBackup};
 use client_ipc::{Connection, Handler, Peer, Role};
@@ -372,6 +372,7 @@ fn notifications_go_to_the_window() {
     let _window = Window::open(near, handler);
     service.wait_for_session();
     platform.post_notice(&Notice {
+        kind: NoticeKind::Connection,
         title: "Disconnected".to_string(),
         body: "The connection was lost".to_string(),
         open_url: None,
@@ -450,6 +451,7 @@ fn a_rust_window_does_what_the_core_asks_in_its_own_session() {
     assert!(service.session.starts_after_login());
 
     platform.post_notice(&Notice {
+        kind: NoticeKind::Connection,
         title: "Disconnected".to_string(),
         body: "The connection was lost".to_string(),
         open_url: None,

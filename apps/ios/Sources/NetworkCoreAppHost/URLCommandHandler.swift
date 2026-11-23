@@ -18,16 +18,22 @@ extension TunnelController {
         }
     }
 
-    private func run(_ command: AppURLCommand) async -> URLCommandOutcome {
-        // A link can launch the app: wait for the saved profile and groups, at most a few seconds.
-        for _ in 0..<50 where !loaded {
+    /// Waits until `load()` has read the saved profile, groups and mode, at most `timeout`; a link can launch the
+    /// app. Returns whether it has.
+    @discardableResult
+    func awaitLoaded(timeout: Duration = .seconds(5)) async -> Bool {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        while !loaded, ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(100))
         }
+        return loaded
+    }
+
+    private func run(_ command: AppURLCommand) async -> URLCommandOutcome {
+        await awaitLoaded()
         switch command {
         case .connect:
-            if !isConnected {
-                toggle()
-            }
+            connect()
         case .disconnect:
             if isConnected {
                 toggle()

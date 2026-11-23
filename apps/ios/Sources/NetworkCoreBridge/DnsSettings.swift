@@ -8,6 +8,9 @@ import Foundation
 public struct DnsSettings: Codable, Equatable {
     public static let maxServers = 16
     public static let maxRules = 64
+    /// The engine refuses the whole config when its DNS rules list more domains, suffixes and keywords than this in
+    /// all (`MAX_DNS_RULE_DOMAINS`); rule sets do not count.
+    public static let maxRuleDomains = 4096
     public static let maxHosts = 1024
     public static let maxHostAddresses = 8
     /// Most servers that race as the default, as the engine takes them.
@@ -120,6 +123,12 @@ public struct DnsSettings: Codable, Equatable {
             parts += (domain ?? []).map { "DOMAIN,\($0)" }
             parts += (domainKeyword ?? []).map { "DOMAIN-KEYWORD,\($0)" }
             return parts.joined(separator: " · ")
+        }
+
+        /// What the rule counts against `DnsSettings.maxRuleDomains`: its domains, suffixes and keywords, as the
+        /// engine's `entry_count`.
+        public var entryCount: Int {
+            (domain ?? []).count + (domainSuffix ?? []).count + (domainKeyword ?? []).count
         }
 
         var matchesSomething: Bool {
@@ -421,9 +430,33 @@ public struct DnsSettings: Codable, Equatable {
         guard rule.matchesSomething else {
             throw DnsSettingsError.invalidRule
         }
+        guard ruleDomainCount + rule.entryCount <= Self.maxRuleDomains else {
+            throw DnsSettingsError.tooManyDomains
+        }
         var copy = self
         copy.rules.append(rule)
         return copy
+    }
+
+    /// The domains, suffixes and keywords of every rule, against `maxRuleDomains`.
+    public var ruleDomainCount: Int {
+        rules.reduce(0) { $0 + $1.entryCount }
+    }
+
+    /// The settings as the engine takes them: rules in order while their domains fit `maxRuleDomains`, the rest
+    /// left out, with how many rules were. Settings an earlier version saved over the limit would otherwise make the
+    /// engine refuse the whole config.
+    public func withinDomainLimit() -> (settings: DnsSettings, droppedRules: Int) {
+        var copy = self
+        var total = 0
+        copy.rules = rules.filter { rule in
+            guard total + rule.entryCount <= Self.maxRuleDomains else {
+                return false
+            }
+            total += rule.entryCount
+            return true
+        }
+        return (copy, rules.count - copy.rules.count)
     }
 
     /// Adds or replaces the host `name` with the addresses in `text`, separated by commas, spaces or lines.
@@ -621,6 +654,8 @@ public enum DnsSettingsError: Error, Equatable {
     case tooMany
     case tooManyDefaults
     case fakeIPRange
+    /// The rules would list more than `DnsSettings.maxRuleDomains` domains, suffixes and keywords.
+    case tooManyDomains
 
     public var message: String {
         switch self {
@@ -644,6 +679,8 @@ public enum DnsSettingsError: Error, Equatable {
             return String(localized: "最多 4 个默认服务器同时查询")
         case .fakeIPRange:
             return String(localized: "Fake-IP 开启时，Hosts 不能使用 198.18.0.0/15 或 fc00::/18 内的地址")
+        case .tooManyDomains:
+            return String(localized: "DNS 规则合计最多 \(DnsSettings.maxRuleDomains) 个域名、后缀和关键词。较长的列表请改用 RULE-SET 或 GEOSITE 规则集。")
         }
     }
 }

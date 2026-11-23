@@ -84,7 +84,76 @@ impl Settings {
             }
             (Language::Simplified, true) => ("连接已断开", "连接意外断开，正在重新连接。"),
         };
-        Some(Notice::new(title, body))
+        Some(Notice::new(NoticeKind::Connection, title, body))
+    }
+
+    /// The notice when the Wi-Fi rules could not connect by themselves (`error` says why). Under the connection
+    /// switch, as the disconnect notice.
+    pub fn on_demand_failed(&self, error: &str) -> Option<Notice> {
+        if !self.connection {
+            return None;
+        }
+        let (title, lead) = match self.language() {
+            Language::English => (
+                "Wi-Fi rules could not connect",
+                "Open AnixOps Net to connect. The system or battery settings may stop the app in the background",
+            ),
+            Language::Traditional => (
+                "Wi-Fi 規則未能連線",
+                "打開 AnixOps Net 連線。系統或省電設定可能會在背景停止本應用",
+            ),
+            Language::Simplified => (
+                "Wi-Fi 规则未能连接",
+                "打开 AnixOps Net 连接。系统或省电设置可能会在后台停止本应用",
+            ),
+        };
+        let error: String = error.chars().take(200).collect();
+        Some(Notice::new(
+            NoticeKind::Connection,
+            title,
+            &format!("{lead} ({error})"),
+        ))
+    }
+
+    /// The notice when the window found, as it started, the system proxy of a session that did not end properly
+    /// (a crash, the process ended, a sign-out or shutdown while connected) and put the user's own settings back.
+    /// Shown whatever the switches: the user's network settings changed.
+    pub fn proxy_restored_after_unclean_exit(&self) -> Notice {
+        let (title, body) = match self.language() {
+            Language::English => (
+                "Network settings restored",
+                "AnixOps Net did not quit properly last time. The system proxy it had set was turned back to your own settings.",
+            ),
+            Language::Traditional => (
+                "網路設定已還原",
+                "AnixOps Net 上次未正常結束，已把它設定的系統代理還原為你原來的設定。",
+            ),
+            Language::Simplified => (
+                "网络设置已恢复",
+                "AnixOps Net 上次未正常退出，已把它设置的系统代理恢复为你原来的设置。",
+            ),
+        };
+        Notice::new(NoticeKind::Connection, title, body)
+    }
+
+    /// The notice when the saved settings could not be read at start-up and were set aside, so that the window
+    /// starts with the defaults. Shown whatever the switches.
+    pub fn desktop_state_set_aside(&self) -> Notice {
+        let (title, body) = match self.language() {
+            Language::English => (
+                "Settings reset",
+                "The saved settings could not be read, so AnixOps Net started with the defaults. The unreadable file was kept in its data folder.",
+            ),
+            Language::Traditional => (
+                "設定已重設",
+                "無法讀取已儲存的設定，AnixOps Net 已以預設設定啟動。無法讀取的檔案已保留在資料資料夾中。",
+            ),
+            Language::Simplified => (
+                "设置已重置",
+                "无法读取已保存的设置，AnixOps Net 已以默认设置启动。无法读取的文件已保留在数据文件夹中。",
+            ),
+        };
+        Notice::new(NoticeKind::Connection, title, body)
     }
 
     /// The notice when updating subscription `name` failed with `error`.
@@ -98,6 +167,7 @@ impl Settings {
             Language::Simplified => format!("“{name}”更新失败"),
         };
         Some(Notice {
+            kind: NoticeKind::Subscription,
             title,
             body: error.chars().take(200).collect(),
             open_url: None,
@@ -138,6 +208,7 @@ impl Settings {
                     lower.starts_with("https://") || lower.starts_with("http://")
                 });
                 Some(Notice {
+                    kind: NoticeKind::Script,
                     title: if title.is_empty() {
                         "AnixOps Net".to_string()
                     } else {
@@ -165,9 +236,33 @@ enum Language {
     English,
 }
 
+/// What a notification is about. A platform may let a newer notice of the connection or subscription kind
+/// replace the older one, as iOS does, while script notices stack.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoticeKind {
+    /// An unexpected disconnect, or the Wi-Fi rules failing to connect.
+    Connection,
+    /// A failed subscription update.
+    Subscription,
+    /// What a plugin script posted.
+    Script,
+}
+
+impl NoticeKind {
+    /// The name the platforms read (`connection`, `subscription`, `script`).
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Connection => "connection",
+            Self::Subscription => "subscription",
+            Self::Script => "script",
+        }
+    }
+}
+
 /// One system notification.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Notice {
+    pub kind: NoticeKind,
     pub title: String,
     pub body: String,
     /// An http(s) link a script attached; opened when the notification is clicked where the platform allows.
@@ -175,8 +270,9 @@ pub struct Notice {
 }
 
 impl Notice {
-    fn new(title: &str, body: &str) -> Self {
+    fn new(kind: NoticeKind, title: &str, body: &str) -> Self {
         Self {
+            kind,
             title: title.to_string(),
             body: body.to_string(),
             open_url: None,
@@ -251,10 +347,49 @@ mod tests {
             .unwrap()
             .body
             .contains("正在重新連線"));
+        assert_eq!(
+            settings.disconnected(false).unwrap().kind,
+            NoticeKind::Connection
+        );
+        let failed = settings.on_demand_failed("timed out").unwrap();
+        assert_eq!(failed.title, "Wi-Fi 規則未能連線");
+        assert!(failed.body.ends_with("(timed out)"));
+        assert_eq!(failed.kind, NoticeKind::Connection);
+        assert_eq!(
+            settings.subscription_failed("HK", "x").unwrap().kind,
+            NoticeKind::Subscription
+        );
         settings.connection = false;
         settings.subscriptions = false;
         assert!(settings.disconnected(false).is_none());
+        assert!(settings.on_demand_failed("x").is_none());
         assert!(settings.subscription_failed("HK", "x").is_none());
+    }
+
+    #[test]
+    fn recovery_notices_follow_the_language_whatever_the_switches() {
+        let mut settings = Settings {
+            scripts: false,
+            connection: false,
+            subscriptions: false,
+            language: String::new(),
+        };
+        assert_eq!(
+            settings.proxy_restored_after_unclean_exit().title,
+            "网络设置已恢复"
+        );
+        assert_eq!(settings.desktop_state_set_aside().title, "设置已重置");
+        settings.language = "zh-Hant".to_string();
+        assert_eq!(
+            settings.proxy_restored_after_unclean_exit().title,
+            "網路設定已還原"
+        );
+        assert_eq!(settings.desktop_state_set_aside().title, "設定已重設");
+        settings.language = "en".to_string();
+        let notice = settings.proxy_restored_after_unclean_exit();
+        assert_eq!(notice.title, "Network settings restored");
+        assert!(notice.open_url.is_none());
+        assert_eq!(settings.desktop_state_set_aside().title, "Settings reset");
     }
 
     #[test]
@@ -269,6 +404,8 @@ mod tests {
         assert_eq!(notices.len(), 2);
         assert_eq!(notices[0].body, "成功\n+1");
         assert_eq!(notices[0].open_url.as_deref(), Some("https://a.example"));
+        assert_eq!(notices[0].kind, NoticeKind::Script);
+        assert_eq!(notices[0].kind.id(), "script");
         assert_eq!(notices[1].title, "AnixOps Net");
         assert_eq!(notices[1].open_url, None);
         settings.scripts = false;

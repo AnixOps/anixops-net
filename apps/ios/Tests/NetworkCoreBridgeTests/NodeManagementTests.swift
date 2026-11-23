@@ -111,6 +111,48 @@ final class NodeManagementTests: XCTestCase {
         XCTAssertTrue(chain.canRemove("loop"))
     }
 
+    /// Deleting a node others connect through asks first and takes them along, so no `via` is left naming nothing.
+    func testRemovalTakesTheNodesThatConnectThroughIt() {
+        var library = NodeLibrary(
+            subscriptionURL: nil,
+            nodes: [node("a", "A", via: "b"), node("b", "B", via: "c"), node("c", "C"), node("solo", "Solo"),
+                    node("loop", "Loop", via: "loop")],
+            selectedID: "a",
+            updatedAt: Date(timeIntervalSince1970: 0)
+        )
+        XCTAssertEqual(library.dependents(of: "c").map(\.id), ["a", "b"])
+        XCTAssertEqual(library.dependents(of: "b").map(\.id), ["a"])
+        XCTAssertEqual(library.removal(of: "c")?.map(\.id), ["a", "b"])
+        XCTAssertEqual(library.removal(of: "solo")?.map(\.id), [])
+        XCTAssertEqual(library.removal(of: "loop")?.map(\.id), [])
+        XCTAssertNil(library.removal(of: "missing"))
+
+        let removed = library.removingWithDependents("c")
+        XCTAssertEqual(removed.nodes.map(\.id), ["solo", "loop"])
+        let remaining = Set(removed.nodes.map(\.id))
+        XCTAssertTrue(removed.nodes.allSatisfy { node in node.via.map { remaining.contains($0) } ?? true })
+        // The selected node went with it: the selection moves to a node that remains.
+        XCTAssertNotNil(removed.selectedID.flatMap(removed.node(id:)))
+
+        // Nothing may go that the rules name, the dependents included.
+        library.routing = try? JSONDecoder().decode(
+            NativeImportReport.Routing.self,
+            from: Data(#"{"rules":["FINAL,G"],"groups":[{"id":"G","type":"select","members":["a","solo"]}]}"#.utf8)
+        )
+        XCTAssertNil(library.removal(of: "c"))
+        XCTAssertEqual(library.removingWithDependents("c"), library)
+
+        // One node always remains.
+        let pair = NodeLibrary(
+            subscriptionURL: nil,
+            nodes: [node("x", "X", via: "y"), node("y", "Y")],
+            selectedID: "x",
+            updatedAt: Date(timeIntervalSince1970: 0)
+        )
+        XCTAssertNil(pair.removal(of: "y"))
+        XCTAssertEqual(pair.removal(of: "x")?.map(\.id), [])
+    }
+
     func testSortByNameAndLatency() {
         let nodes = [node("a", "Tokyo 10"), node("b", "Tokyo 2"), node("c", "Hong Kong")]
         XCTAssertEqual(NodeSort.original.sorted(nodes).map(\.id), ["a", "b", "c"])

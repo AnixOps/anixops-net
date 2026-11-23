@@ -26,8 +26,9 @@ public struct NodeLibrary: Codable, Equatable {
     public var importRevision: Int
 
     /// Revision 1: outbounds carry the subscription's certificate pins (`pinned_certificate_sha256`,
-    /// `pinned_public_key_sha256`).
-    public static let currentImportRevision = 1
+    /// `pinned_public_key_sha256`). Revision 2: policy groups keep the importer's `network_rules` and
+    /// `evaluate_before_use`, which earlier versions dropped when decoding.
+    public static let currentImportRevision = 2
 
     enum CodingKeys: String, CodingKey {
         case subscriptionURL
@@ -98,7 +99,13 @@ public struct NodeLibrary: Codable, Equatable {
 
     /// Whether the nodes were imported by an earlier version that left the subscription's certificate pins out.
     public var predatesCertificatePins: Bool {
-        importRevision < Self.currentImportRevision
+        importRevision < 1
+    }
+
+    /// Whether the subscription's groups that pick by network were imported by an earlier version, which dropped
+    /// their network rules: such a group always uses its default until the subscription is imported again.
+    public var predatesNetworkRules: Bool {
+        importRevision < 2 && (routing?.groups.contains(where: \.picksByNetwork) ?? false)
     }
 
     /// The same subscription after a refresh to `report`: the selected node, the rules switch and the group picks
@@ -134,15 +141,17 @@ public struct NodeLibrary: Codable, Equatable {
         followsRules && routing != nil
     }
 
-    /// The member a group uses: the user's pick, then the subscription's default, then the first member.
+    /// The member a group uses: the user's pick, then the subscription's default, then the first member. A group
+    /// that picks by network starts on its default (`displayMembers`); the running engine says what it uses now.
     public func selection(in group: NativeImportReport.Routing.Group) -> String? {
-        if let picked = groupSelections[group.id], group.members.contains(picked) {
+        let members = group.displayMembers
+        if let picked = groupSelections[group.id], members.contains(picked) {
             return picked
         }
-        if let initial = group.default, group.members.contains(initial) {
+        if let initial = group.default, members.contains(initial) {
             return initial
         }
-        return group.members.first
+        return members.first
     }
 
     /// What to show for a group member: a node's name (or server), otherwise the group or policy name.
@@ -153,33 +162,58 @@ public struct NodeLibrary: Codable, Equatable {
         return node.name.isEmpty ? node.server : node.name
     }
 
-    /// The runtime `routing` section: every node by id, the rules, and the groups with each `select` group starting
-    /// on its current selection. Nil when the tunnel does not follow rules.
+    /// The runtime `routing` section: the nodes by id, the rules, and the groups with each `select` group starting on
+    /// its current selection. Nil when the tunnel does not follow rules.
     public func runtimeRouting() -> EmbeddedRuntimeConfig.Routing? {
         followsRules ? routingForModes() : nil
+    }
+
+    /// A routing section and the rule sets left out of it to stay within the engine's `maxRuleSets`, most
+    /// expendable first, so the app can say which rules do not apply.
+    public struct RoutingBuild: Equatable {
+        public var routing: EmbeddedRuntimeConfig.Routing
+        public var droppedRuleSets: [String]
     }
 
     /// The `routing` section whatever the rules switch says, so the engine can move between the rule, global and
     /// direct modes without a restart: the global mode goes to the selected node. With subscription rules the user's
     /// `localRules` go in front of them; without, `localRules` alone (the user's rules, then `FINAL` to the node) make the rule
-    /// mode, sending `PROXY` to the selected node. Nil without subscription rules and without `localRules`.
-    public func routingForModes(localRules: LocalRules? = nil) -> EmbeddedRuntimeConfig.Routing? {
-        let outbounds = Dictionary(nodes.map { ($0.id, $0.outbound) }) { first, _ in first }
+    /// mode, sending `PROXY` to the selected node. `dnsRuleSets` are the sets the DNS rules name
+    /// (`DnsSettings.ruleSetNames`), counted against the same limit. Nil without subscription rules and without
+    /// `localRules`.
+    public func routingForModes(localRules: LocalRules? = nil, dnsRuleSets: [String] = []) -> EmbeddedRuntimeConfig.Routing? {
+        routingBuild(localRules: localRules, dnsRuleSets: dnsRuleSets)?.routing
+    }
+
+    /// `routingForModes(localRules:dnsRuleSets:)` with the rule sets the limit left out.
+    public func routingBuild(localRules: LocalRules? = nil, dnsRuleSets: [String] = []) -> RoutingBuild? {
+        let dataSources = Set((localRules?.dataSources ?? []).map(\.name))
         guard let routing else {
             guard let localRules, let selected else {
                 return nil
             }
             let local = localRules.engineLines(proxy: selected.id)
-            let ruleSets = Self.capped(local.ruleSets)
-            return EmbeddedRuntimeConfig.Routing(
-                outbounds: outbounds,
-                rules: RuleSetCatalog.runnableRules(local.lines, sets: ruleSets),
-                groups: [],
-                global: selected.id,
-                ruleSets: ruleSets,
-                devices: localRules.devices.isEmpty ? nil : localRules.devices
+            let capped = Self.capped(
+                Self.adding(dnsRuleSets, to: local.ruleSets),
+                dataSources: dataSources,
+                dnsOnly: Self.dnsOnly(dnsRuleSets, lines: local.lines)
+            )
+            // Only the selected node and the nodes it connects through: the rules name no other, the global mode
+            // goes to the selected node and picking another node restarts the tunnel. A list of more than the
+            // engine's 64 routed outbounds would make it refuse the whole section.
+            return RoutingBuild(
+                routing: EmbeddedRuntimeConfig.Routing(
+                    outbounds: chain(from: selected),
+                    rules: RuleSetCatalog.runnableRules(local.lines, sets: capped.sets),
+                    groups: [],
+                    global: selected.id,
+                    ruleSets: capped.sets,
+                    devices: localRules.devices.isEmpty ? nil : localRules.devices
+                ),
+                droppedRuleSets: capped.dropped
             )
         }
+        let outbounds = Dictionary(nodes.map { ($0.id, $0.outbound) }) { first, _ in first }
         let groups = routing.groups.map { group -> NativeImportReport.Routing.Group in
             var group = group
             if group.isSelectable {
@@ -199,38 +233,87 @@ public struct NodeLibrary: Codable, Equatable {
         }
         let lines = local.lines + routing.rules
         let own = Set((routing.ruleSets ?? [:]).keys)
-        let ruleSets = RuleSetCatalog.ruleSets(for: lines, defined: defined.isEmpty ? nil : defined).flatMap { sets in
-            Self.capped(sets, keeping: own)
-        }
-        return EmbeddedRuntimeConfig.Routing(
-            outbounds: outbounds,
-            rules: RuleSetCatalog.runnableRules(lines, sets: ruleSets),
-            groups: groups,
-            global: selected?.id,
-            ruleSets: ruleSets,
-            devices: localRules.flatMap { $0.devices.isEmpty ? nil : $0.devices }
+        let referenced = RuleSetCatalog.ruleSets(for: lines, defined: defined.isEmpty ? nil : defined) ?? [:]
+        let capped = Self.capped(
+            Self.adding(dnsRuleSets, to: referenced),
+            keeping: own,
+            dataSources: dataSources,
+            dnsOnly: Self.dnsOnly(dnsRuleSets, lines: lines)
         )
+        return RoutingBuild(
+            routing: EmbeddedRuntimeConfig.Routing(
+                outbounds: outbounds,
+                rules: RuleSetCatalog.runnableRules(lines, sets: capped.sets),
+                groups: groups,
+                global: selected?.id,
+                ruleSets: capped.sets,
+                devices: localRules.flatMap { $0.devices.isEmpty ? nil : $0.devices }
+            ),
+            droppedRuleSets: capped.dropped
+        )
+    }
+
+    /// `node` and every node it connects through (`via`), by id. A `via` naming a node that is not listed, or a
+    /// loop, ends the chain; the engine then refuses the node rather than connect it directly.
+    func chain(from node: NativeImportReport.Node) -> [String: [String: JSONValue]] {
+        var chain: [String: [String: JSONValue]] = [:]
+        var next: NativeImportReport.Node? = node
+        while let current = next, chain[current.id] == nil {
+            chain[current.id] = current.outbound
+            next = current.via.flatMap { self.node(id: $0) }
+        }
+        return chain
     }
 
     /// The engine refuses more than this many rule sets.
     public static let maxRuleSets = 32
 
-    /// `sets` cut to `maxRuleSets`, dropping the user's own lists (`local-…`, `sub-…`) as needed, never a name in
-    /// `keeping`; the rules naming a dropped set are then left out (`RuleSetCatalog.runnableRules`).
-    static func capped(
-        _ sets: [String: EmbeddedRuntimeConfig.RuleSet],
-        keeping: Set<String> = []
-    ) -> [String: EmbeddedRuntimeConfig.RuleSet]? {
+    /// `sets` with the catalog's list for each name in `dnsRuleSets` it lacks, as the DNS rules use them.
+    static func adding(
+        _ dnsRuleSets: [String],
+        to sets: [String: EmbeddedRuntimeConfig.RuleSet]
+    ) -> [String: EmbeddedRuntimeConfig.RuleSet] {
         var sets = sets
-        if sets.count > maxRuleSets {
-            let local = sets.keys
-                .filter { !keeping.contains($0) && ($0.hasPrefix("local-") || $0.hasPrefix("sub-")) }
-                .sorted()
-            for name in local.reversed() where sets.count > maxRuleSets {
-                sets.removeValue(forKey: name)
+        for name in dnsRuleSets where sets[name] == nil {
+            if let list = RuleSetCatalog.known[name] {
+                sets[name] = list
             }
         }
-        return sets.isEmpty ? nil : sets
+        return sets
+    }
+
+    /// The DNS rules' sets that no rule line names.
+    static func dnsOnly(_ dnsRuleSets: [String], lines: [String]) -> Set<String> {
+        Set(dnsRuleSets).subtracting(RuleSetCatalog.referencedNames(in: lines))
+    }
+
+    /// `sets` cut to `maxRuleSets`, most expendable first: the user's own lists (`local-…`, `sub-…`), the user's
+    /// GEOIP / IP-ASN data lists, the catalog's lists only the DNS rules use, the catalog's other lists, and only
+    /// then the subscription's own sets (`keeping`); within each kind by name, last first, so the same input always
+    /// gives the same result. The rules naming a dropped set are then left out (`RuleSetCatalog.runnableRules`): a
+    /// `GEOIP` or `IP-ASN` rule without its set never matches. Returns the dropped names in the order dropped.
+    static func capped(
+        _ sets: [String: EmbeddedRuntimeConfig.RuleSet],
+        keeping: Set<String> = [],
+        dataSources: Set<String> = [],
+        dnsOnly: Set<String> = []
+    ) -> (sets: [String: EmbeddedRuntimeConfig.RuleSet]?, dropped: [String]) {
+        var sets = sets
+        var dropped: [String] = []
+        if sets.count > maxRuleSets {
+            let names = sets.keys.sorted(by: >)
+            let others = names.filter { !keeping.contains($0) }
+            let userLists = others.filter { $0.hasPrefix("local-") || $0.hasPrefix("sub-") }
+            let data = others.filter { dataSources.contains($0) && !userLists.contains($0) }
+            let dns = others.filter { dnsOnly.contains($0) && !userLists.contains($0) && !data.contains($0) }
+            let catalog = others.filter { !userLists.contains($0) && !data.contains($0) && !dns.contains($0) }
+            let subscription = names.filter { keeping.contains($0) }
+            for name in userLists + data + dns + catalog + subscription where sets.count > maxRuleSets {
+                sets.removeValue(forKey: name)
+                dropped.append(name)
+            }
+        }
+        return (sets.isEmpty ? nil : sets, dropped)
     }
 
     /// QUIC protocols: a TCP connect time to their port says nothing about them.
@@ -252,8 +335,15 @@ public struct NodeLibrary: Codable, Equatable {
     }
 }
 
-/// Recognizes a pasted subscription link: one http(s) URL and nothing else.
+/// Recognizes a pasted subscription link: one http(s) URL and nothing else. An `http://` link is recognized so the
+/// import can say why it cannot use it (`isPlainHTTP`) instead of trying it as a node link.
 public enum SubscriptionLink {
+    /// Whether `text` is a subscription link without TLS. The Apple apps refuse those before downloading: App
+    /// Transport Security blocks plain HTTP loads, so the download would always fail and look like a dead link.
+    public static func isPlainHTTP(_ text: String) -> Bool {
+        url(from: text)?.scheme?.lowercased() == "http"
+    }
+
     public static func url(from text: String) -> URL? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.contains(where: \.isWhitespace),

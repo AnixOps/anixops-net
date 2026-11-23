@@ -30,7 +30,8 @@ final class LocalRulesTests: XCTestCase {
         let routing = try XCTUnwrap(library.routingForModes(localRules: LocalRules()))
         XCTAssertEqual(routing.global, "b")
         XCTAssertTrue(routing.groups.isEmpty)
-        XCTAssertEqual(Set(routing.outbounds.keys), ["a", "b"])
+        // Only the selected node: the rules name no other, and picking another node restarts the tunnel.
+        XCTAssertEqual(Set(routing.outbounds.keys), ["b"])
         // A fresh install: the private networks direct (the switch the user can turn off), then the node. No
         // preset list and no rule set at all.
         XCTAssertEqual(routing.rules.first, "DOMAIN-SUFFIX,local,DIRECT")
@@ -261,6 +262,119 @@ final class LocalRulesTests: XCTestCase {
         for line in routing.rules where line.hasPrefix("RULE-SET,") {
             XCTAssertNotNil(sets[line.split(separator: ",")[1].description], line)
         }
+    }
+
+    /// A node list larger than the engine's 64 routed outbounds still routes by the user's rules: the routing
+    /// section holds only the selected node and the nodes it connects through, and fits the config budget.
+    func testLargeNodeListsRouteWithTheSelectedNodeAndItsChainOnly() throws {
+        var nodes = (0..<150).map { index in
+            #"{"id":"n\#(index)","name":"","protocol":"trojan","server":"n\#(index).example","port":443,"outbound":{"type":"trojan","server":"n\#(index).example","port":443,"password":"p\#(index)"}}"#
+        }
+        // n150 connects through n3, which connects through n7; n151 and n152 name each other.
+        nodes.append(#"{"id":"n150","name":"","protocol":"trojan","server":"x.example","port":443,"outbound":{"type":"trojan","server":"x.example","port":443,"password":"px","via":"n3"}}"#)
+        nodes[3] = #"{"id":"n3","name":"","protocol":"trojan","server":"n3.example","port":443,"outbound":{"type":"trojan","server":"n3.example","port":443,"password":"p3","via":"n7"}}"#
+        nodes.append(#"{"id":"n151","name":"","protocol":"trojan","server":"y.example","port":443,"outbound":{"type":"trojan","server":"y.example","port":443,"password":"py","via":"n152"}}"#)
+        nodes.append(#"{"id":"n152","name":"","protocol":"trojan","server":"z.example","port":443,"outbound":{"type":"trojan","server":"z.example","port":443,"password":"pz","via":"n151"}}"#)
+        let report = try NativeImportReport.decoded(from: Data(#"{"nodes":[\#(nodes.joined(separator: ","))],"unsupported":[]}"#.utf8))
+        var library = NodeLibrary(report: report, subscriptionURL: nil, keeping: nil)
+        let rules = try LocalRules().saving(LocalRules.rule(from: "DOMAIN-SUFFIX,bank.example,DIRECT"))
+
+        library.selectedID = "n42"
+        let routing = try XCTUnwrap(library.routingForModes(localRules: rules))
+        XCTAssertEqual(Array(routing.outbounds.keys), ["n42"])
+        XCTAssertEqual(routing.rules.first, "DOMAIN-SUFFIX,bank.example,DIRECT")
+        XCTAssertEqual(routing.rules.last, "FINAL,n42")
+        let config = EmbeddedRuntimeConfig(
+            outbound: .shadowsocks(server: "198.51.100.1", port: 8388, method: "2022-blake3-aes-128-gcm", password: "secret"),
+            profileID: "test"
+        ).withRouting(routing)
+        XCTAssertNoThrow(try EngineBudget.encoded(config))
+
+        library.selectedID = "n150"
+        let chained = try XCTUnwrap(library.routingForModes(localRules: rules))
+        XCTAssertEqual(Set(chained.outbounds.keys), ["n150", "n3", "n7"])
+        XCTAssertEqual(chained.outbounds["n3"]?["via"], .string("n7"))
+
+        // A loop ends the chain instead of running forever.
+        library.selectedID = "n151"
+        XCTAssertEqual(Set(try XCTUnwrap(library.routingForModes(localRules: rules)).outbounds.keys), ["n151", "n152"])
+    }
+
+    /// The DNS rules' sets count against the engine's 32 with the routing rules' sets: the most expendable go first
+    /// (the user's lists, the user's data lists, sets only the DNS rules use, the catalog's), the subscription's own
+    /// last, the rules naming a dropped set are left out, and the result is the same every time.
+    func testRuleSetsFromEverySourceStayWithinTheEnginesLimit() throws {
+        func routed(ownSets: Int, rules extra: [String]) throws -> NativeImportReport {
+            let sets = (0..<ownSets).map { #""own-\#($0)":{"url":"https://lists.example/\#($0).list"}"# }
+            let lines = (0..<ownSets).map { #""RULE-SET,own-\#($0),Proxy""# } + extra.map { #""\#($0)""# }
+            let json = """
+            {"nodes":[{"id":"a","name":"","protocol":"trojan","server":"a.example","port":443,
+             "outbound":{"type":"trojan","server":"a.example","port":443,"password":"pa"}}],
+            "unsupported":[],
+            "routing":{"rules":[\(lines.joined(separator: ",")),"FINAL,Proxy"],
+            "groups":[{"id":"Proxy","type":"select","members":["a","DIRECT"]}],
+            "rule_sets":{\(sets.joined(separator: ","))}}}
+            """
+            return try NativeImportReport.decoded(from: Data(json.utf8))
+        }
+        func check(_ build: NodeLibrary.RoutingBuild, dns: DnsSettings? = nil) {
+            let config = EmbeddedRuntimeConfig(
+                outbound: .shadowsocks(server: "198.51.100.1", port: 8388, method: "2022-blake3-aes-128-gcm", password: "s"),
+                profileID: "test"
+            ).withRouting(build.routing).withDns(dns)
+            let sets = config.routing?.ruleSets ?? [:]
+            XCTAssertLessThanOrEqual(sets.count, NodeLibrary.maxRuleSets)
+            for line in config.routing?.rules ?? [] {
+                XCTAssertEqual(RuleSetCatalog.missingSets(in: line, sets: sets), [], line)
+            }
+        }
+        let dns = DnsSettings(
+            servers: [DnsSettings.Server(name: "alidns", url: "https://223.5.5.5/dns-query", via: .direct)],
+            rules: [DnsSettings.Rule(ruleSet: "geosite-cn", server: "alidns")]
+        )
+        let dnsSets = dns.ruleSetNames
+        XCTAssertEqual(dnsSets, ["geosite-cn"])
+
+        // 31 own sets and GEOIP,CN make 32; the DNS rules' list is the one left out.
+        let full = NodeLibrary(report: try routed(ownSets: 31, rules: ["GEOIP,CN,DIRECT"]), subscriptionURL: nil, keeping: nil)
+        let first = try XCTUnwrap(full.routingBuild(localRules: LocalRules(), dnsRuleSets: dnsSets))
+        XCTAssertEqual(first.droppedRuleSets, ["geosite-cn"])
+        XCTAssertNotNil(first.routing.ruleSets?["geoip-cn"])
+        check(first, dns: dns)
+        XCTAssertEqual(full.routingBuild(localRules: LocalRules(), dnsRuleSets: dnsSets), first)
+
+        // The user's data lists go before the catalog's list, which goes before the subscription's own sets.
+        var rules = LocalRules()
+        rules = try rules.saving(dataSource: "geoip,us", url: "https://lists.example/us.txt")
+        rules = try rules.saving(dataSource: "AS13335", url: "https://lists.example/13335.txt")
+        rules = try rules.saving(LocalRules.rule(from: "RULE-SET,https://lists.example/mine.list,DIRECT"))
+        let mixed = NodeLibrary(report: try routed(ownSets: 31, rules: ["GEOIP,CN,DIRECT"]), subscriptionURL: nil, keeping: nil)
+        let second = try XCTUnwrap(mixed.routingBuild(localRules: rules, dnsRuleSets: dnsSets))
+        XCTAssertEqual(second.droppedRuleSets, ["local-1", "geoip-us", "asn-13335", "geosite-cn"])
+        XCTAssertEqual(second.routing.ruleSets?.count, NodeLibrary.maxRuleSets)
+        XCTAssertFalse(second.routing.rules.contains("RULE-SET,local-1,DIRECT"))
+        check(second, dns: dns)
+
+        // 32 own sets and GEOIP,CN: the catalog's list goes; a GEOIP rule without its set only never matches.
+        let own = NodeLibrary(report: try routed(ownSets: 32, rules: ["GEOIP,CN,DIRECT"]), subscriptionURL: nil, keeping: nil)
+        let third = try XCTUnwrap(own.routingBuild(localRules: LocalRules(), dnsRuleSets: dnsSets))
+        XCTAssertEqual(third.droppedRuleSets, ["geosite-cn", "geoip-cn"])
+        check(third, dns: dns)
+
+        // Without subscription rules: 20 rule-list subscriptions, 15 rule URLs and the DNS rules' list.
+        let plain = NodeLibrary(report: try NativeImportReport.decoded(from: Data(plainReport.utf8)), subscriptionURL: nil, keeping: nil)
+        var many = LocalRules()
+        for index in 0..<LocalRules.maxSubscriptions {
+            many = try many.saving(LocalRules.Subscription(name: "\(index)", url: "https://a.example/\(index).list", policy: .proxy))
+        }
+        for index in 0..<15 {
+            many = try many.saving(LocalRules.rule(from: "RULE-SET,https://b.example/\(index).list,DIRECT"))
+        }
+        let fourth = try XCTUnwrap(plain.routingBuild(localRules: many, dnsRuleSets: dnsSets))
+        XCTAssertFalse(fourth.droppedRuleSets.isEmpty)
+        XCTAssertTrue(fourth.droppedRuleSets.allSatisfy { $0.hasPrefix("local-") || $0.hasPrefix("sub-") })
+        XCTAssertNotNil(fourth.routing.ruleSets?["geosite-cn"])
+        check(fourth, dns: dns)
     }
 
     func testSourceHostAndNetworkRulesAreChecked() throws {

@@ -70,6 +70,45 @@ before stopping the engine only when the current proxy still exactly matches
 the GUI-owned setting. A later GUI startup or status refresh uses the same rule
 after the engine is no longer valid; it never overwrites a user-changed proxy.
 
+Before applying the proxy the GUI writes an owner record, `owned-proxy.json`
+next to the desktop state (`src/gui/owned_proxy.rs`): the user's SID, the GUI
+process id and creation time, the applied proxy and the WinINet/WinHTTP values
+to put back. Disconnect removes it, and disconnect no longer reads the managed
+configuration: it restores the owned proxy first and stops the engine even when
+the restore fails. The record is used when the GUI does not get to disconnect:
+
+- a hidden top-level window answers `WM_QUERYENDSESSION` / `WM_ENDSESSION`
+  (sign-out, shutdown, Restart Manager) by restoring the proxy, and applies it
+  again when the session end is cancelled and the engine still runs; a console
+  control handler does the same for a closed console (`src/gui/session_end.rs`);
+- the Tauri `RunEvent::Exit` stops the engine and restores the proxy however
+  the event loop ends;
+- the next start, before automatic connection, restores this user's record when
+  its process is gone and the current proxy is still the applied one, clears
+  the ownership so the next connection snapshots the user's own settings, and
+  posts a notification; a snapshot saved by an earlier version in
+  `desktop-state.json` is handled the same way;
+- the MSI `--purge` (LocalSystem) restores the WinHTTP proxy and each signed-in
+  recorded user's WinINet settings under `HKEY_USERS`.
+
+The two halves of the system proxy are judged apart everywhere the GUI puts it
+back (next start, session end, disconnect, "Restore network settings";
+`owned_proxy::put_back`): the user's WinINet settings go back only while they
+are still the applied value, and the machine-wide WinHTTP proxy likewise, on
+its own. A user who turned "Use a proxy server" off in Windows Settings after a
+crash therefore keeps that change, and WinHTTP (used by services and Windows
+Update) still goes back before the record is dropped. A half that cannot be
+read or written keeps the record for the next attempt. Disconnect marks the
+connection as stopped even when the restore failed, since the engine is
+stopped either way, so the recovery monitor does not reconnect.
+
+A snapshot that already holds the applied proxy (taken while an earlier
+connection's proxy was still in place) restores to "no proxy" instead of the
+dead local port. A `desktop-state.json` that cannot be read is set aside as
+`desktop-state.json.broken-<unix seconds>` and the GUI starts with defaults; a
+DNS choice it does not know reads as the default. Saves of the desktop state
+are serialized within the process.
+
 Managed configuration schema 2 makes proxy ownership explicit. Existing schema
 1 data migrates in memory to `Service`, preserving CLI/service behavior. A GUI
 profile import writes `Desktop`, so the user-session GUI is the sole owner of
@@ -82,8 +121,8 @@ its current-user snapshot.
 | Connect / Disconnect | Active | Managed config and envelope preflight, engine start/stop, loopback listener observation, then current-user proxy snapshot/rollback. |
 | Restart service | Active | Desktop-owned daily profile: preflight, GUI-owned proxy restore, stop, and the same verified connection path. Service-owned advanced configuration: existing SCM restart path only. |
 | Node list / filter | Active | Imported nodes from `embedded/nodes.json`, filtered locally in the React view. |
-| Switch node | Active | Rewrites the envelope for the chosen node (or the main policy group's choice in a routed profile) and restarts a connected engine. |
-| Test delay / fastest node | Active | In-process URL requests through each node's own outbound (5-second timeout, 16 at a time); the opt-in 30-minute monitor picks the fastest node. |
+| Switch node | Active | Rewrites the envelope for the chosen node (or the main policy group's choice in a routed profile). A connected routed engine switches in place through its `select` command (open connections stay); a single-node profile reconnects on the new envelope. |
+| Test delay / fastest node | Active | In-process URL requests through each node's own outbound (5-second timeout, 16 at a time); the opt-in 30-minute monitor moves to the fastest node only when the current one failed or is slower by more than max(50 ms, 30 %), and never overrides a url-test or fallback choice on FINAL's route. |
 | Routing mode | Active | Rule (the subscription's own rules and the user's rules) or direct; public builds ship no preset list modes ([no-presets.md](../no-presets.md)). |
 | Policy groups | Active | Lists the subscription's select/url-test/fallback groups; select groups can be switched. url-test and fallback groups run background health checks in the engine. |
 | DNS | Informational | The embedded engine resolves domains that IP rules need with the system resolver; connections through a node have the node server resolve the domain. |
@@ -159,7 +198,11 @@ headless GitHub Actions Windows job and are tracked in
   `~/.config/anixops-net/mitm/` on first use, adds it to the Chrome/Chromium
   and Firefox NSS databases with `certutil` and to the system store through
   `pkexec`, and removes it on disable. Linux has no built-in policy: only the
-  hosts of enabled plugins are decrypted.
+  hosts of enabled plugins are decrypted. Whether the root is trusted is
+  decided by the certificate itself (its thumbprint against `certutil -L -a`
+  and the system anchor file), not by its name: after importing the user's own
+  CA the Extensions page shows it untrusted until the user trusts it again,
+  which also deletes every older root left under the same name.
 - Select the Bilibili web trial while HTTPS MITM is disabled, enable HTTPS MITM,
   and confirm the persisted managed config selects the first-party request-only
   policy. Browse a Bilibili search page over controlled HTTP/1.1 TLS and confirm

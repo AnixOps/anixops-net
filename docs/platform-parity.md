@@ -28,8 +28,9 @@
 | HTTP 请求列表、快捷筛选、表达式搜索 | ✅ | ✅ | ◐ | ✅ | ✅ | Apple #126 |
 | 单条请求导出 cURL / 代码 / Postman / Insomnia，默认脱敏 | ✅ | ✅ | ◐ | ✅ | ✅ | Apple #137（A1） |
 | 抓包会话加密保存、7 天清理、载入回看 | ✅ | ✅ | ✅ | ✅ | ✅ | Tauri 见 `debug-mode.md`；Apple #137（A1） |
+| 断开或重连时自动保存抓包、重连后恢复抓包 | ✅ | ✅ | ✅ | ✅ | ✅ | 内核没有解密策略热替换，改解密域名、映射、插件会重启引擎；Tauri / Android 见 `debug-mode.md`“抓包跟引擎同生命周期” |
 | 单条重放、编辑后重放 | ✅ | ✅ | ◐ | ✅ | ✅ | Android 经内核重放代理（#128） |
-| Map Local / Map Remote | ✅ | ✅ | ✅ | ✅ | ✅ | 需开启 HTTPS 解密 |
+| Map Local / Map Remote | ✅ | ✅ | ✅ | ✅ | ✅ | 桌面和 Android 需开启 HTTPS 解密；Apple 端不受插件总开关影响，首次新增要解密的主机时先确认条款（docs/debug-mode.md） |
 | HTTP/2 MITM | ✅ | ✅ | ✅ | ✅ | ✅ | 内核 #233，各平台共用 |
 | HTTPS 解密开关 + 首次开启确认条款 | ✅ | ✅ | ✅ | ✅ | ✅ | #117；Apple 端解密域名、“解密此域名”和映射也先确认（docs/debug-mode.md） |
 | 根证书由用户手动信任、关闭解密保留证书 | ✅ | ✅ | ✅ | ✅ | ✅ | 桌面 #123；Android 本来就在系统设置里手动安装 |
@@ -81,11 +82,11 @@
 | 流量统计（按天） | ✅ | ✅ | ✅ | ✅ | ✅ | 活动页“流量统计”：今天 / 7 天，按小时（天）、主机、策略；与 iOS 相同每 5 秒从连接列表累计，保留 7 天（`crates/traffic-stats`，T9） |
 | 导出日志 / 诊断报告 | ✅ | ✅ | ✅ | ✅ | ✅ | Android 报告存到「下载」目录；Linux / Android 报告附最近 80 行应用日志（T8） |
 | 扩展日志级别与模块筛选、开发者模式 | ✅ | ✅ | ✅ | ✅ | ✅ | 活动页“日志”：级别（全部 / 警告 / 错误）、模块、文字筛选，拷贝与清空（`crates/app-log`，T10）。桌面和 Android 只有应用自己的日志：内核不单独记日志；Windows 读窗口、应用、HTTPS 解密三份日志，Linux / Android 记连接、断开、订阅更新、网络切换和出错原因，网址去掉查询参数 |
-| 系统通知（脚本通知、意外断开、订阅更新失败） | ✅ | ✅ | ✅ | ✅ | ✅ | 设置页“通知”三个开关，默认全开（`crates/app-notifications`，tauri-plugin-notification，T11）。点击脚本通知不能打开它附带的链接：桌面通知插件不支持点击回调 |
+| 系统通知（脚本通知、意外断开、订阅更新失败） | ✅ | ✅ | ✅ | ✅ | ✅ | 设置页“通知”三个开关，默认全开（`crates/app-notifications`，tauri-plugin-notification，T11）。桌面点击脚本通知不能打开它附带的链接：桌面通知插件不支持点击回调；Android 点击通知打开脚本附带的 http / https 链接，没有链接时打开 App，长文字可展开，“意外断开”“订阅更新失败”各只保留最新一条，脚本通知逐条叠加 |
 | 网络变化后重建连接 | ✅ | ✅ | ✅ | ✅ | ◐ | Android 共用 `network_watch`，Wi-Fi / 移动网络切换待真机确认 |
 | 按 Wi-Fi 自动连接 / 断开（On Demand） | ✅ | ✅ | ✅ | ⛔ | ✅ | 设置页“Wi-Fi 规则”：指定 Wi-Fi、其他 Wi-Fi、蜂窝（Android）、有线和其他网络各选连接 / 断开 / 保持不变；Windows、Android 由 App 运行时每 10–12 秒取样、换网络时执行一次（T12） |
 | 开机 / 登录后启动、自动连接 | ✅ | ✅ | ✅ | ✅ | ◐ | Android 在系统设置里把本 App 设为“始终开启的 VPN”后，开机由系统启动并自动连接；App 自己不能开机连接，见系统限制 |
-| `anixops://` 链接 | ✅ | ✅ | ✅ | ✅ | ✅ | 与 iOS 相同的动作：connect / disconnect / toggle、`mode?set=`、`select?node=&group=` 或 `policy=`、`import?url=`（只填进导入框，用户点“导入”才保存）。桌面没有 `global` 模式；公开版不带预设分流模式（[no-presets.md](no-presets.md)），旧版预设模式名一律拒绝。Windows 写当前用户的 `HKCU\Software\Classes\anixops`，Linux 写 `~/.local/share/applications` 里的 handler 并调 `xdg-mime`，都在启动时注册；第二次启动把链接交给已运行的窗口（Linux 因此改为单实例）。Android 在 manifest 里声明 scheme，由共用的 `view.parse_app_link` 解析（T13） |
+| `anixops://` 链接 | ✅ | ✅ | ✅ | ✅ | ✅ | 与 iOS 相同的动作：connect / disconnect / toggle、`mode?set=`、`select?node=&group=` 或 `policy=`、`import?url=`（只填进导入框，用户点“导入”才保存）。桌面没有 `global` 模式；公开版不带预设分流模式（[no-presets.md](no-presets.md)），旧版预设模式名一律拒绝。Windows 写当前用户的 `HKCU\Software\Classes\anixops`，命令是不需要管理员权限的 `anixops-net-link.exe`：客户端在运行时经窗口消息把链接交给它，不弹 UAC；没运行时才以管理员身份启动客户端（一次 UAC），拒绝 UAC 时链接保留一小时、下次启动客户端时处理（`installer/windows/README.md`）。Linux 写 `~/.local/share/applications` 里的 handler 并调 `xdg-mime`，都在启动时注册；第二次启动先把链接交给已运行的窗口再退出，不打开数据目录、不碰系统代理（Linux 因此改为单实例，并以数据目录里的 `instance.lock` 兜底）。冷启动收到的链接排队，等节点和状态读完、模式选定后再执行。Android 在 manifest 里声明 scheme，由共用的 `view.parse_app_link` 解析（T13） |
 | 崩溃报告（本机、脱敏） | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 本机 Prometheus 指标 | ⛔ | ✅ | ✅ | ✅ | ✅ | macOS 在设置页打开，`127.0.0.1:9477/metrics`，默认关闭（A3）；iOS 见系统限制 |
 | 用户协议同意、协议入口 | ✅ | ✅ | ✅ | ✅ | ✅ | |
@@ -118,7 +119,10 @@ MSI 升级时旧服务随旧版本一起卸载；便携版注册过的服务由�
   网卡避免回环，需要 Linux 5.7 以上。需要系统装有 `pkexec`；AppImage 运行在只有本用户可读的挂载点上，root 进程读不到，
   不支持 TUN 模式。Linux 的 TUN 模式暂不提供 Fake-IP 开关；打开“启动时自动连接”时，启动后也会先弹出一次授权。
 - **Wi-Fi 规则（Windows、Android、Linux）**：iOS / macOS 由系统执行规则，App 不运行也生效；Windows 和 Android 没有对应的系统
-  功能，规则只在 App 运行时（Android 包括后台）生效。读 Wi-Fi 名称都要位置权限：Android 在打开规则时询问一次，Windows 11 要在
+  功能，规则只在 App 运行时（Android 包括后台）生效。Android 打开规则后，VPN 断开时服务留在前台并显示“等待网络”通知，
+  以便在后台按规则重新连接；规则发起的连接失败时按 30 秒起、最长 10 分钟的间隔重试，并发一条通知。读 Wi-Fi 名称都要位置
+  权限：Android 在打开规则时询问精确位置；Android 10 起后台读名称还要“始终允许”位置（设置页说明用途后再跳到系统设置），
+  没有时 App 在后台读不到名称，按名称写的规则这段时间保持不变，而不是当成“其他 Wi-Fi”。Windows 11 要在
   “隐私和安全性 > 位置”里允许桌面应用访问位置，否则只能区分“Wi-Fi / 有线”。Linux 桌面的网络管理器各不相同（NetworkManager、
   systemd-networkd、iwd），自带按连接执行脚本的办法，客户端不做。
 - **iOS 指标端口**：Packet Tunnel 扩展的监听端口对其他 App 不可见，iOS 上用导出日志代替。

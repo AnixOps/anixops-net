@@ -41,6 +41,13 @@ fn main() {
         }
         return;
     }
+    // A second start (another click on the shortcut, or the client started for a link while it already runs)
+    // hands its link, or a request to show the window, to the running client and leaves before it opens anything:
+    // the running client owns the data folder, the system proxy and the connection. The single instance plugin
+    // still catches a second start that comes before the running client's link receiver is up.
+    if anixops_net_link::os::hand_over(&anixops_net_link::request_from_args(std::env::args_os())) {
+        return;
+    }
     // Before anything reads or writes the data folder: it holds subscriptions,
     // node credentials and keys, and must be closed to the other users of the
     // computer. If it cannot be, the client does not start (and does not log,
@@ -62,9 +69,13 @@ mod gui {
     mod backdrop;
     mod capture_sessions;
     mod linked_sources;
+    mod managed_config;
     mod mitm_plugins;
+    mod owned_proxy;
+    mod reconnect;
     mod root_trust;
     mod runtime_status;
+    mod session_end;
     mod startup;
     mod tauri_ui;
     mod tun_mode;
@@ -73,7 +84,7 @@ mod gui {
     use self::startup::{DesktopProfileNode, DesktopState};
     use control_domain::{NodeDescriptor, NODE_METADATA_PATH, NODE_PATH_TRUNK};
     use platform_windows::managed::{
-        append_managed_log, read_managed_config, read_managed_state, windows_managed_config_path,
+        append_managed_log, read_managed_state, windows_managed_config_path,
         windows_managed_data_directory, windows_managed_log_directory, windows_managed_state_path,
         write_managed_state, write_managed_text_atomic, WindowsManagedConfig, WindowsManagedState,
         WindowsSystemProxyOwner, WINDOWS_MANAGED_CONFIG_SCHEMA_VERSION,
@@ -430,7 +441,11 @@ mod gui {
     /// registered; the root certificates and drivers recorded as installed
     /// machine-wide; the HTTPS decryption roots out of the own certificate
     /// stores of the users signed in now (a user who is not signed in keeps
-    /// it); and the decryption root's private key. The rest of the data folder
+    /// it); and the decryption root's private key. It also puts back the
+    /// system proxy the window set and did not put back itself
+    /// (`owned_proxy::restore_for_removal`): the machine's WinHTTP proxy, and
+    /// the WinINet settings of each recorded user who is signed in, when they
+    /// still are the ones the window applied. The rest of the data folder
     /// stays, closed to ordinary users.
     pub fn purge_managed_network_state() -> Result<(), String> {
         let integration = NativeWindowsSystemIntegration::new();
@@ -441,6 +456,18 @@ mod gui {
         }
         let mut managed = read_managed_state(&state_path).ok();
         let mut desktop = startup::load_desktop_state().ok();
+        // The system proxy the window set and could not put back (it was killed, or is connected now and goes
+        // with the program): the WinHTTP proxy, and the settings of each recorded user who is signed in.
+        let proxy = owned_proxy::restore_for_removal_now(desktop.as_ref(), &mut errors);
+        if proxy.desktop_restored {
+            if let Some(state) = desktop.as_mut() {
+                state.proxy_snapshot = None;
+                state.applied_proxy = None;
+                if let Err(error) = startup::save_desktop_state(state) {
+                    errors.push(format!("desktop state: {error}"));
+                }
+            }
+        }
         let records = purge_records(managed.as_ref(), desktop.as_ref());
         for thumbprint in &records.machine_roots {
             if let Err(error) = integration.remove_root_certificate(thumbprint) {
@@ -488,9 +515,12 @@ mod gui {
         let _ = append_managed_log(
             "gui",
             &format!(
-                "purged: machine_roots={} drivers={} user_roots={removed_roots} errors={errors:?}",
+                "purged: machine_roots={} drivers={} user_roots={removed_roots} \
+                 proxy_users={} winhttp_proxy={} errors={errors:?}",
                 records.machine_roots.len(),
-                records.drivers.len()
+                records.drivers.len(),
+                proxy.users_restored,
+                proxy.winhttp_restored
             ),
         );
         if errors.is_empty() {
@@ -503,7 +533,7 @@ mod gui {
     pub(super) fn load_validated_managed_configuration(
         path: &Path,
     ) -> Result<WindowsManagedConfig, String> {
-        read_managed_config(path).map_err(|error| error.to_string())
+        managed_config::read(path).map_err(|error| error.to_string())
     }
 
     /// `health` is the client health section (integrity, cold start, redacted crash reports), appended as it is.
@@ -522,7 +552,7 @@ mod gui {
             )),
         }
 
-        let config = match read_managed_config(config_path) {
+        let config = match managed_config::read(config_path) {
             Ok(config) => {
                 report.push_str(&format!(
                     "managed_config_schema_version={} embedded_enabled={} native_mitm_enabled={}\n",
@@ -742,7 +772,7 @@ mod gui {
     fn managed_config_or_default() -> Result<WindowsManagedConfig, String> {
         let path = windows_managed_config_path();
         if path.exists() {
-            return read_managed_config(&path).map_err(|error| error.to_string());
+            return managed_config::read(&path).map_err(|error| error.to_string());
         }
         Ok(WindowsManagedConfig {
             schema_version: WINDOWS_MANAGED_CONFIG_SCHEMA_VERSION,

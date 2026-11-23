@@ -82,6 +82,28 @@ CI 只能编译和跑单元测试，以下需在 TestFlight 真机上确认：
 - 点另一个订阅组的节点会切到该组并重连。
 - 带规则的订阅按规则分流时，“规则”页的选择组里出现“订阅·名称”成员，选它后流量走另一个订阅组的节点。
 - 后台刷新：设置 > 通用 > 后台 App 刷新打开时，把间隔设为 1 小时，一段时间后不打开 App 也能看到更新时间变化（iOS 调度时间不保证）。
+- 后台刷新（进程已被系统回收）：间隔设为 1 小时后打开很多别的 App（或等一夜）让系统回收 AnixOps Net 的进程，不是从多任务里上划关闭；
+  之后不打开 App，用 Xcode 的 `e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"net.anixops.subscriptions.refresh"]`
+  或等系统调度。再打开 App 时更新时间已变化，后台刷新请求仍在（下一次照常触发）。
+- 连接中导入新节点或新订阅后自动重连：导入完成页写“正在重新连接”，首页、小组件和实时活动的节点与实际出口一致。
+- 连接中下拉更新、且当前节点被服务商删除后，自动重连到新的默认节点；内容没变的更新不会断开连接。
+- 后台刷新换了当前节点时不断开连接；下次打开 App 回到前台时重连一次，之后首页节点与实际出口一致。
+- 重启手机后、首次输入锁屏密码前让系统触发后台刷新（上面的 `_simulateLaunchForTaskWithIdentifier`，此时钥匙串还读不到订阅）；
+  输入锁屏密码后打开 App：首页和代理页照常列出全部订阅分组，不出现欢迎页；此时导入一个新订阅，原有分组都还在，没有被新分组替换。
+  读不到时导入或更新会提示“还没读到已保存的订阅，请先输入锁屏密码，再重试。”，不改动已保存的分组。
+- 同一进程内的后台重试：重启手机后、首次输入锁屏密码前触发一次后台刷新（同上），不让系统回收进程（不打开别的大量 App）；输入锁屏密码但不打开
+  AnixOps Net，再用同一条 `_simulateLaunchForTaskWithIdentifier` 触发一次（模拟系统安排的重试）。这次后台运行读到已保存的订阅并更新
+  到期的分组：之后打开 App，更新时间已变化，分组都在。
+- 调试模式用户在 App 未运行时用快捷指令执行 `anixops://connect`（或点网页上的 `anixops://import` 链接）冷启动 App：仍是调试模式的
+  “请求 · 改写 · 出口 · 设置”四个标签，没有被改成代理模式。
+- 网络切换导致隧道断开、首页出现“连接已断开…”卡片后，等自动重连（按需连接）成功：卡片自动消失；在卡片还在时点“重试”不会断开已连上的隧道。
+- 首页出现带“重试”“换个节点”和“技术详情”的卡片后，切到别的 App 再回来，按钮和详情都还在。
+- 首次连接前（调试模式连接条、代理首页）状态行显示“轻点连接，首次需要允许添加 VPN 配置”/出口文字，没有英文诊断；
+  启用别的 VPN App 让本配置被停用后显示“已被其他 VPN 停用，轻点重新启用”。macOS 上为“打开开关…”。
+- 粘贴 `http://` 订阅链接：预览直接提示“只支持 HTTPS 订阅链接…”，不会下载后再报“链接可能已失效”。
+- 订阅里节点 B 经节点 A 中转时，在 A 的菜单里点“删除节点”先弹出确认，说明 B 会一并删除；确认后 A、B 都删除，其余节点照常连接和测速。
+- 订阅启用 ANX 授权的面板：节点列表测速和节点体检对 ANX 节点给出延迟结果，不再全部显示“失败”。
+- 规则模式下在策略组里切换成员（不断开），然后在本地规则里加一条规则：状态显示规则已热重载，隧道不重连、下载不中断。
 
 ## Windows 启动即管理员运行真机验收
 
@@ -98,9 +120,35 @@ GUI 清单改为 `requireAdministrator`，登录后启动从 HKCU Run 改为按�
 桌面模式下 HTTPS 解密改由客户端进程自己运行（客户端已固定以管理员运行），不再需要 Windows 服务：
 
 - [ ] 扩展页开启 HTTPS 解密，连接成功；浏览器访问 HTTPS 站点证书颁发者为 NetworkCore 根证书，插件改写生效。
+      （客户端用自己的 managed-config 校验，跳过内核里“解密必须由服务持有代理”这条服务时代的规则，见 `apps/windows-gui/src/gui/managed_config.rs`；内核放宽后可去掉。）
+- [ ] 便携版留下的服务时代配置（`system_proxy_owner: service` 且解密已开）在导入或更新订阅后能写入，解密保持开启。
 - [ ] 已连接时开启/关闭 HTTPS 解密，客户端自动重连，系统代理保持在 127.0.0.1:7890。
+- [ ] 抓包中添加解密域名、保存映射或启停插件：引擎重启后抓包自动重新开启，“已保存的会话”里多一条“重连前自动保存”；提示写明已保存。
+- [ ] 抓包中断开连接或从托盘退出：“已保存的会话”里多一条“断开时自动保存”。
 - [ ] 关闭 HTTPS 解密后，根证书和私钥保留（再次开启不需要重新信任）；根证书只在卸载时，或用户自己在 `certmgr.msc` 里删除时才移除。
 - [ ] 断开连接后 7890/7891 端口都被释放。
+
+## Windows 节点热切换、订阅重载与桌面界面真机验收（1.0.0 评审 c3）
+
+CI 只跑纯函数和组件逻辑的单测，以下需要 Windows 真机（系统代理模式和 TUN 模式各一遍）：
+
+- [ ] 已连接时在代理页切换节点、在规则页切换 select 策略组：提示“现有连接不受影响”，正在进行的下载 / 视频通话不中断，系统代理和 TUN 网卡不被重置；概览的出口地址随之改变。
+- [ ] 单节点配置（没有策略组）切换节点：提示“内核已重启”，连接恢复正常。
+- [ ] 开启“自动选择最快节点”并连接 1 小时以上：日志里多数轮次是“相差不大，保持不变”，只有当前节点不通或明显更慢时才切换，切换时现有连接不中断；FINAL 走 url-test / fallback 组时不会被改掉。
+- [ ] 已连接时在代理页对另一个订阅点“使用”：提示“当前连接已改用它”，出口地址变成新订阅的节点；对另一个订阅里的节点直接点选也能切过去。
+- [ ] 服务商只改了节点密码（或手动改订阅内容）后“更新当前订阅”：连接自动改用新凭据并能上网；内容没变化的自动更新不会中断连接。
+- [ ] TUN 模式下点“连接”，在网卡创建的几秒内窗口不出现“未响应”，托盘菜单可点。
+- [ ] 300 个节点“全部测速”进行中，点连接开关或按 Ctrl+Shift+C 能立即断开；连接或断开进行中再按会提示“正在连接或断开，请稍候”。
+- [ ] 中文、繁體中文、English 三种界面语言下，连接、断开、切换节点、更新订阅、保存规则的提示和“活动 › 当前会话 › 运行状态”都是对应语言。
+- [ ] 调试模式抓包到预算上限（持续浏览 + 一条长时间的 HTTP/2 或 WebSocket 连接）：请求列表不会一次性清空大量仍可导出的请求，被淘汰连接上的“进行中”行会消失。
+- [ ] 请求页打开重放编辑器修改请求体后改动筛选条件：编辑器和内容保留，检查器注明“已不在列表中”。
+- [ ] 调试一个 SSE 流式接口：流结束后消息面板显示最后的 `data: [DONE]`，“共 N 条”与实际一致。
+- [ ] Linux 桌面窗口三种语言下：导入插件、启用 / 停用 / 删除插件、保存 / 删除映射、在解密列表里添加（解密与排除各一次）/ 编辑 / 暂停 / 删除域名，提示先说改了什么（插件名和脚本数、映射规则、域名），再说对连接的作用（已应用到当前连接 / 下次连接时生效 / 开启 HTTPS 解密后生效）；根证书未信任时开启 HTTPS 解密，提示后半句是“根证书还没有信任”。
+
+已知限制（1.0.0 之后跟进）：
+
+- 内核只在被淘汰连接的最大 seq 超过已有值时抬高 `dropped_before_seq`；之后淘汰较年轻（seq 更小）或请求都还在进行中的连接不会抬高它，这些行要等下一次抬高时才从桌面请求列表消失。需要内核提供淘汰计数或最小保留标记。
+- 活动页的 `lastError` / `configurationError` 是后端动态生成的英文错误文本，没有结果代码，界面原样显示。
 
 ## Windows TUN 模式真机验收
 
@@ -111,6 +159,7 @@ GUI 清单改为 `requireAdministrator`，登录后启动从 HKCU Run 改为按�
 - [ ] 不走系统代理的程序（`curl --noproxy "*" https://www.google.com/generate_204`、游戏）经过代理；活动页可能只显示系统代理那一路的连接。
 - [ ] 代理服务器连接不回环：连接稳定、CPU 正常，`netstat -ano` 中客户端到节点的连接本地地址是物理网卡 IP。
 - [ ] 关闭 TUN 模式或断开后，`AnixOps Net` 网卡和路由消失，网络恢复正常。
+- [ ] 已连接时开启 TUN 但网卡创建失败（例如安全软件拦截 Wintun）：开关回到关闭，连接按原设置恢复，系统代理仍指向客户端，提示写明“已按原设置恢复连接”；原设置也连不上时提示写明“当前已断开”，界面显示未连接。
 - [ ] 已知限制：DNS 服务器在本地网段（如路由器 192.168.1.1）时 Windows 可能并发向它查询；切换 Wi-Fi/有线后需要重连一次。
 
 ## macOS Developer ID 版真机验收
@@ -121,9 +170,23 @@ macOS 客户端改为官网分发（Developer ID 签名 + 公证），隧道从 
 - [ ] 解开 ZIP / 挂载 DMG，把 AnixOps Net 拖进「应用程序」后打开，Gatekeeper 不报「无法验证开发者」；`spctl -a -vv` 显示 `Notarized Developer ID`。
 - [ ] 第一次连接时提示允许网络扩展；在「系统设置 › 通用 › 登录项与扩展 › 网络扩展」允许后，再连接成功。
 - [ ] 不在「应用程序」里直接打开时，连接给出「请先把 AnixOps Net 拖进应用程序文件夹」的提示。
-- [ ] 订阅规则、HTTPS 解密（根证书已信任）、脚本插件在 Mac 上照常生效（隧道读的是 App 启动时交给它的密钥副本）。
+- [ ] 订阅规则、HTTPS 解密（根证书已信任）、脚本插件在 Mac 上照常生效（隧道读的是 App 启动时交给它、并在配置改动后
+  随时更新的密钥副本）。
 - [ ] 睡眠唤醒、从系统设置的 VPN 开关直接连接（不经 App）也能连上。
 - [ ] 安装新版本后再连接，系统扩展被替换为新版本（`systemextensionsctl list` 版本号更新）。
+- [ ] 抓包会话（ios-bridge-features-01，CI 跑不到 root 系统扩展）：连接后开始抓包、解密几个请求，“更多 › 保存当前抓包”成功；
+  从 App 断开后请求页写“已加密保存”，重连后“已保存的会话”里有“断开时自动保存”并能载入；App 内换节点触发重连后，之前的抓包也存成了会话；
+  重启 Mac、安装新版本替换系统扩展后旧会话仍可打开；开发者诊断的扩展事件里没有 `capture storage unavailable`；
+  `sudo ls -l` 扩展容器的 `Application Support/capture-session.key` 为 `-rw-------  root`，32 字节。
+- [ ] 换根证书（ios-bridge-features-07、apple-extensions-mac-06）：已连接并在解密时，扩展页“重新生成…”确认后隧道自动重连，
+  系统要求登录密码撤销旧证书信任；信任新证书后 Safari 打开解密的站点证书链指向新根。`security dump-trust-settings` 里不再有旧根，
+  用导出的旧 `.cer` 签发的证书链不被信任；取消登录密码时页面说明旧证书仍受信任并保留在“钥匙串访问”里。“使用自己的根证书…”同样核对一遍。
+- [ ] 换根后从系统设置的 VPN 开关、控制中心，或重启后由 On Demand 连接：Safari 证书链仍指向新根。断开但自动重连仍开着时换根，
+  再让系统拉起隧道：第一次启动失败（`root certificate in the kept start secrets is older than the profile`，原因为
+  `start secrets are older than the profile`），App 在运行或下次回到前台时带新副本重连一次并连上，证书链指向新根；同一根不会反复重连。
+- [ ] 旧版本留下的信任（1.0.0 之前“重新生成”只删了钥匙串条目，没撤销信任，旧根仍被信任且在“钥匙串访问”里看不到）：
+  发行说明写明手动清理办法：`security dump-trust-settings` 查看用户域信任；有旧证书 `.cer` 时
+  `security remove-trusted-cert <旧证书.cer>` 删除。不要整体导入改写用户域信任设置，会误删其他证书的信任。
 
 ## macOS 应用内更新
 
@@ -157,6 +220,9 @@ CI 只能跑规则与重建逻辑的单元测试（`OnDemandSettingsTests`、`Ne
 
 - [ ] S3 崩溃自愈（iOS、macOS）：连接后强杀扩展（iOS 用 Xcode Debug › Attach 后 kill，或 `kill -9` macOS 的
   `com.example.networkcore.macos.packettunnel` 进程），记录到重新显示“已连接”的时间，目标 ≤ 5 s；手动断开后不应自己连上。
+- [ ] S3 崩溃自愈（Android）：连接后 `adb shell am crash io.anixops.net`（或在开发者选项里结束进程），系统重启 VPN 服务后
+  重新连接；手动断开后再结束进程不应自己连上；10 分钟内连续崩溃 3 次后停止重启并出现“不再自动重新连接”通知。
+- [ ] Android “始终开启的 VPN”：在系统设置里打开后，连接失败（例如删掉全部节点）时出现“VPN 未能连接”通知，而不是静默失败。
 - [ ] S4 唤醒/切网（iOS）：Wi-Fi ↔ 蜂窝、两个 Wi-Fi 之间各切 20 次，每次切换后网页和 Hysteria2/TUIC 节点都能在几秒内恢复；
   开发者模式的事件里每次有一条 `network change: reset … sessions, closed … connections`，扩展内存（诊断里的
   footprint）20 次后不持续增长。锁屏超过 1 分钟再解锁，应有 `wake: … closed …`。
@@ -164,6 +230,26 @@ CI 只能跑规则与重建逻辑的单元测试（`OnDemandSettingsTests`、`Ne
   `log stream --predicate 'subsystem == "com.apple.networkextension"'` 的时间戳计时），离开后自动连接。
 - [ ] S4 桌面（Windows、Linux，本机代理模式）：拔插网线或换 Wi-Fi、睡眠 2 分钟后唤醒，网页几秒内恢复；Windows 日志
   （`tauri-gui`）里有 `network change: engine reset {...}` / `wake: engine reset {...}`。TUN 模式这一项不覆盖。
+
+## Windows 系统代理残留恢复真机验收
+
+CI 只跑归属记录、启动恢复、卸载恢复和断开步骤的单元测试（`owned_proxy`、`connection` 的测试），以下需要真机：
+
+- [ ] 连接后在任务管理器结束 `networkcore-windows-gui.exe`，再启动客户端（未开自动连接）：系统代理恢复为连接前的设置，
+  弹出“网络设置已恢复”通知，`gui.log`（`tauri-gui`）有 `its system proxy was restored`；`netsh winhttp show proxy`
+  恢复为连接前的值。
+- [ ] 连接后结束进程，先在 Windows 设置里关掉“使用代理服务器”，再启动客户端：用户的新设置不被改动，
+  但 `netsh winhttp show proxy` 恢复为连接前的值，日志有 `its system proxy was restored`。
+- [ ] 连接后结束进程，先改掉用户代理，再用 `netsh winhttp set proxy` 设成别的值，然后启动客户端：两者都不被改动，
+  日志有 `stale proxy ownership dropped`。
+- [ ] 开启“自动恢复核心”，连接后让断开时的代理恢复失败（例如用调试器暂停注册表写入或拒绝写 Internet Settings 键）再点“断开”：
+  界面报错，核心已停止，之后不会自动重连，也不弹“连接已断开”；设置页“恢复网络设置”可再次恢复。
+- [ ] 连接状态下注销、关机和重启：再次登录后代理已是连接前的设置（`session end (query): system proxy restored`）。
+  注销时被其他程序取消后，客户端仍连接且代理重新指向本机端口（`session end cancelled: system proxy applied again`）。
+- [ ] 连接状态下从“应用和功能”卸载：卸载后浏览器能直接上网，`netsh winhttp show proxy` 为直连，`gui.log` 的 `purged:` 行
+  有 `proxy_users=1 winhttp_proxy=true`。
+- [ ] 把 `desktop-state.json` 截短后启动：客户端能启动并弹出“设置已重置”，数据文件夹里有 `desktop-state.json.broken-*`。
+- [ ] 把 `managed-config.json` 改成无效 JSON 后点“断开”和托盘“退出”：核心停止、代理恢复。
 
 ## 苹果平台 VPN 配置写入真机验收
 
@@ -180,6 +266,25 @@ CI 只能跑规则与重建逻辑的单元测试（`OnDemandSettingsTests`、`Ne
   开发者模式的诊断里没有 `node key is unavailable`。
 - [ ] 从 0.3.0-beta.11 升级：在 beta.11 上因快速切换节点出现 `node key is unavailable` 的设备，升级后打开 App 一次即可
   重新连接（App 启动时为当前节点重新保存配置）；单个粘贴的节点需要重新导入。
+- [ ] macOS Developer ID 版（System Extension 读不到钥匙串，只用 App 交给它的密钥副本）：连接后，分别做一次
+  规则模式下在同一订阅里换节点（命令面板或 `anixops://select`）、连接中导入一个节点、订阅更新换了当前节点、修改插件；
+  每次之后 `sudo kill -9` 系统扩展进程、重启 Mac（开机自动连接），以及从系统设置的 VPN 开关直接连接，都能连上，
+  开发者模式的诊断里有 `start secrets updated by the app`，没有 `node key is unavailable`，HTTPS 解密状态不变。
+- [ ] macOS：隧道断开但自动重连仍开着时（例如 Wi-Fi 规则为“断开”的网络里）换一个节点，再离开该网络：系统拉起隧道
+  失败一次（`start secrets are older than the profile`）后，App 在运行或下次回到前台时自动带新密钥重连一次并连上；
+  再次失败时提示“网络扩展保存的配置副本已过期……请重新连接”，不再提示节点没有响应。
+- [ ] macOS：隧道断开但自动重连仍开着时，改插件（启用一个、在仍有插件启用时停用一个，或改内容）或调试映射，再让系统拉起隧道（离开该网络、
+  重启后自动连接或从系统设置的 VPN 开关直接连接）：第一次启动失败（`https decryption payload missing from the kept
+  start secrets`，原因为 `start secrets are older than the profile`），App 在运行或下次回到前台时带新副本重连一次并连上，
+  HTTPS 解密保持开启、用的是新插件；同一配置不会反复重连（退出并重新打开 App 也不再重连）。
+- [ ] macOS 已知限制：隧道断开时只在同一订阅里换策略组成员（不换节点、不改插件）时，系统不经 App 拉起的隧道仍按上次
+  交给系统扩展的分组选择运行，不报错；打开 App 连接一次或连接后再选一次即恢复。确认该行为与说明一致。
+
+## iOS 更换根证书真机验收（ios-app-tools-03）
+
+- [ ] 已连接并在解密时，“HTTPS 解密证书 › 重新生成根证书”确认后隧道自动重连；安装并信任新描述文件、删除旧描述文件后，
+  解密域名的请求恢复，不需要手动断开再连；请求页不再出现“隧道仍在用旧证书签发”。
+- [ ] 未连接时重新生成：连接后直接用新根，不出现上面的提示。
 
 ## iOS / macOS HTTPS 解密首次确认真机验收
 
@@ -211,6 +316,12 @@ CI 只能跑规则与重建逻辑的单元测试（`OnDemandSettingsTests`、`Ne
 - [ ] 「macOS with ANX」workflow 给 `Contents/MacOS/anixops` 用 Developer ID 签名并开 Hardened Runtime，公证通过。
 - [ ] App 运行时 `anixops status` 显示状态；macOS 15 上不弹「想要访问其他 App 的数据」。
 - [ ] App 未运行时 `anixops connect` 在后台打开 App 并连上；`anixops status -q; echo $?` 未连接为 3、已连接为 0。
+- [ ] 按 docs/macos-cli.md 用 `sudo ln -sf … /usr/local/bin/anixops` 安装后，在任意目录（不是 App 所在目录）、App 未运行时执行
+  `anixops connect`：App 被打开并连上，不报“没有运行”。
+- [ ] App 正常退出（⌘Q）后 `ls ~/Library/Group\ Containers/*net.anixops.networkcore/cli.sock` 不存在；`kill -9` App 后留下的旧套接字
+  也不影响：再执行 `anixops connect`，工具等到 App 真正开始监听再发送，一次成功。
+- [ ] 关掉主窗口只留菜单栏：订阅仍按间隔自动更新（更新时间变化），“自动检查更新”打开时照常检查，脚本插件的通知照常出现；
+  重新打开主窗口不会重复读取配置或出现两份脚本通知。
 - [ ] `anixops mode rule`、`anixops select <节点>`、`anixops test`、`anixops import <订阅链接>` 与窗口里同样的操作效果一致，窗口实时更新。
 - [ ] 另一个用户（或 `sudo -u nobody`）运行 `anixops status` 连不上（退出码 69 或 71）。
 
@@ -242,6 +353,11 @@ Play 版是开源版（用户 2026-11-15 决定），包名 `io.anixops.net.andr
   tag 时，从 main 运行要先在 Environment 的 Deployment branches 里临时加上 `main`。
 - [ ] 每次上传的 versionCode 必须比上一次大（`apps/android-native/app/build.gradle.kts`）。
 - [ ] Play Console 里的应用签名、商店信息、隐私政策、数据安全、内容分级、VPN 和前台服务声明只能人工填写。
+- [ ] 用户协议（`TERMS.md`）目前只有中文，而 1.0.0 起系统语言不是中文时界面为英文，首次启动仍要同意中文协议。上架 Play 前由维护者
+  决定并提供英文版协议（属于法律文本，产品范围的决定，不由代码自动生成），再在首次启动和设置页按 App 语言显示。
+- [ ] 1.0.0 起申请 `ACCESS_BACKGROUND_LOCATION`：在 Play Console → 应用内容 → 位置权限里声明用途（Wi-Fi 规则在后台读取
+  Wi-Fi 名称，App 内先说明再跳系统设置），附演示视频；前台服务声明补充“打开 Wi-Fi 规则时 VPN 断开后保持等待网络”的用途。
+  数据安全表单里位置一项仍是“不收集”（名称只在本机比对）。
 - [ ] VPN 服务和前台服务声明要附 90 秒内的演示视频：手动运行 `play-demo-video.yml`（Actions → Play demo video → Run
   workflow），它在模拟器上跑真实的调试版 APK 并加上英文字幕；下载 artifact 里的 `anixops-net-play-demo.mp4`，由维护者
   上传到 YouTube（不公开列出）或云盘，再把链接填进两项声明。
@@ -344,24 +460,48 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 
 - [ ] 连接后概览页显示出口地址和位置，与浏览器打开 `https://www.cloudflare.com/cdn-cgi/trace` 看到的一致。
 - [ ] 活动页“生成诊断报告”后提示保存到 `Download/anixops-net-diagnostics-<时间>.log`，文件管理器里能打开，是纯文本，末尾有应用日志。
+- [ ] Android 8 / 9：首次生成诊断报告或打开 HTTPS 解密时询问存储权限，允许后文件出现在「下载」；拒绝后提示需要存储权限，不报成功。
+  再次打开解密（同一根证书）不产生 `(1)` 副本；换一张根证书时文件名带新指纹前 8 位。
 
 ## 系统通知真机验收（T11）
 
-- [ ] Windows（MSI 安装后从开始菜单打开）、Linux（GNOME / KDE）、Android 13+（首次连接时允许通知）：设置页“通知”三个开关默认打开。
+- [ ] Windows（MSI 安装后从开始菜单打开）、Linux（GNOME / KDE）、Android 13+：设置页“通知”三个开关默认打开。
+- [ ] Android 13+：首次连接成功后系统询问通知权限（之前不问）；拒绝后设置页“通知”出现“系统未允许本应用发送通知”一行和“打开设置”按钮，
+  在通知关闭时打开任一通知开关会再次询问或跳到系统设置。
+- [ ] Android：点击“连接已断开”“订阅更新失败”通知打开 App；点击带链接的脚本通知打开浏览器（只接受 http / https）；
+  长文字可展开；连续两次断开只留一条“连接已断开”；切换 App 语言后通知渠道名和通知文字都跟着变。
 - [ ] 装一个会调用 `$notification.post` 的插件脚本，命中后系统通知中心出现脚本标题和内容。
 - [ ] 连接后结束内核或在 Android 系统设置里断开 VPN，几秒内出现“连接已断开”；Windows 打开“内核意外退出时自动恢复一次”时文字是“正在重新连接”。
 - [ ] 把订阅地址改成打不开的地址并等到自动更新，出现“订阅更新失败”。关掉对应开关后不再出现；切换界面语言后通知文字跟着变。
+- [ ] iOS / macOS 全新安装：导入订阅后第一次连接成功（在添加 VPN 配置的系统提示之后）出现通知授权提示，启动 App 时不会弹
+  （从旧版本升级、隧道已由按需连接连上且从未回答过的用户，打开 App 时会弹一次，属预期）。
+  拒绝后设置 › 通知显示“在系统设置中开启通知”和说明开关不起作用的脚注；从未回答时显示“允许 AnixOps Net 发送通知”。
+  允许后，意外断开出现“已断开”，自动更新失败出现“订阅更新失败”。
+- [ ] iOS / macOS：脚本通知的 `url` 为 `anixops://mode?set=direct` 或 `anixops://disconnect` 时，点按通知只打开 App，不切换模式、不断开；
+  `https://` 链接照常在浏览器打开。
+- [ ] iOS：连接后锁屏，在实时活动（锁屏横幅和灵动岛）上点“断开”：隧道断开，实时活动立即消失，不再显示“已连接”和计时；
+  从控制中心断开后，下一次后台刷新或打开 App 时实时活动结束。
 
 ## `anixops://` 链接真机验收（T13）
 
 - [ ] Windows、Linux（GNOME / KDE）、Android：启动过一次客户端后，在浏览器地址栏或终端（`xdg-open` / `start`）打开 `anixops://connect`、`anixops://disconnect`、`anixops://toggle`，客户端窗口来到前台并执行。
 - [ ] `anixops://mode?set=direct`、`anixops://select?node=<节点名>`、`anixops://select?policy=<策略组>&node=<成员>` 生效；`anixops://import?url=<订阅链接>` 打开代理页的订阅、链接已填好，点“导入”才保存。
 - [ ] 客户端没运行时打开链接：启动客户端并执行（Windows / Linux 只有一个窗口，不会多开）。
+- [ ] 客户端没运行、且是新装（没有订阅）时打开 `anixops://select?node=<节点名>`：不会先弹“找不到节点”，节点加载后再切换；打开 `anixops://toggle` 时等状态读完再执行，不会被静默忽略；新用户打开 `anixops://import?url=<订阅链接>`，同意条款并选好模式后直接进入代理（调试模式为“出口”）页，订阅链接已填好。
+- [ ] Windows（MSI 安装后）：客户端在托盘运行时，在浏览器打开 `anixops://toggle`：不弹 UAC，窗口来到前台并执行；注册表 `HKCU\Software\Classes\anixops\shell\open\command` 指向安装目录里的 `anixops-net-link.exe`。
+- [ ] Windows：客户端没运行时打开链接：只弹一次 UAC，同意后客户端启动并执行；在 UAC 里点“否”：弹出提示说明客户端没有启动、链接已保留，一小时内从开始菜单打开客户端后链接被执行。
+- [ ] Windows：从 0.3.0 测试版升级后首次启动客户端，上述注册自动改为指向 `anixops-net-link.exe`；客户端运行时再从开始菜单点一次快捷方式，窗口来到前台，不会出现第二个托盘图标。
+- [ ] Linux：已连接并接管系统代理时，在浏览器打开 `anixops://import?url=…`，或在启动器里再点一次图标：窗口来到前台，`gsettings get org.gnome.system.proxy mode`（KDE 看 `kioslaverc`）仍是 `manual`，浏览器流量仍经过代理；`~/.config/anixops-net/state.json` 的 `proxy_backup` 没有被清空。第二个进程立即退出，不弹 TUN 授权框。
 
 ## Wi-Fi 规则真机验收（T12）
 
 - [ ] Windows：设置页打开“Wi-Fi 规则”，点“当前网络”填入 Wi-Fi 名称（Windows 11 先在“隐私和安全性 > 位置”允许桌面应用），设为“断开”；连上后切到这个 Wi-Fi，十几秒内断开，换到别的 Wi-Fi 或有线后按规则连接。
 - [ ] Android：打开规则时系统询问位置权限；允许后“当前网络”能填入 Wi-Fi 名称。Wi-Fi 和移动网络来回切换时按规则连接 / 断开（App 在后台也生效），拒绝权限时“其他 Wi-Fi”规则仍生效。
+- [ ] Android 10+ 后台：只给“使用时允许”位置时，设置页“Wi-Fi 规则”出现后台位置提示；点“允许”先看到说明对话框，再跳到
+  系统设置选“始终允许”。之后锁屏超过 1 分钟（或 `adb shell am make-uid-idle io.anixops.net`），在后台切到指定 Wi-Fi，
+  规则仍按名称执行；不给“始终允许”时后台切到指定 Wi-Fi 不应被当成“其他 Wi-Fi”。关掉系统定位时设置页出现“位置信息已关闭”提示。
+- [ ] Android 后台重连：规则让 VPN 断开后通知栏保留“Wi-Fi 规则：等待下一个网络”通知；App 在后台（锁屏或划掉最近任务）切到“连接”规则的网络，
+  能重新连上。国产系统（MIUI、ColorOS 等）的后台冻结 / 省电策略下也确认一次，如被冻结在说明里写明需要关闭省电限制。
 - [ ] 手动连接或断开后，在同一个网络里不会被规则改回，换网络后才按规则执行。
 
 ## 按网络选择策略组（subnet 组）真机验收
@@ -582,3 +722,54 @@ iOS、macOS 的“向订阅服务商报告连接质量”改为设置开关、�
     `pinned_certificate_sha256`；iOS 会自动更新的订阅组在打开 App 后更新时间变为当前时间。
 - [ ] 内核对“`insecure` 且没有固定”的节点只经 `tracing` 记一条警告，客户端目前没有安装 tracing subscriber，看不到这条警告；
   节点详情里标出“未验证服务器证书”的节点留作后续。
+
+## iOS / macOS 引擎配置 64 KiB 上限（1.0.0 后续，需要改内核）
+
+iOS / macOS 的隧道扩展把整份 JSON 配置一次交给内核 `networkcore_ios_runtime_init`，内核 1c14184 在
+`crates/engine-embedded/src/ffi.rs` 里限定 `MAX_CONFIG_LEN = 64 * 1024`，超出就拒绝整份配置。插件原文、调试映射生成的插件
+（Map Local 响应体按 Base64 内联）和订阅规则都在这份配置里，所以实际可用的远小于 App 允许的 8 MB 解密总量和 4 MB 映射上限：
+
+- 一个常见的去广告插件（约 68–450 KB）单独就超出，HTTPS 解密在连接时被关闭；
+- 一条超过约 46 KB 的 Map Local 响应体同样会让解密关闭；
+- 订阅里超过约 1,500 条内联规则时规则不生效，隧道只用选中的节点。
+
+1.0.0 的客户端已经做到不静默失败：扩展先测量（`EngineBudget`），按脚本、HTTPS 解密、规则的顺序去掉超出的部分，请求页和规则页
+说明原因；插件页和映射页在已启用插件加映射已经放不进 64 KiB 时直接提示“连接时 HTTPS 解密会被关闭”。但功能本身受限，
+需要内核改动后才能解决（客户端不能单方面放宽，`EngineBudget.maxConfigBytes` 必须与内核一致）：
+
+- [ ] 内核（networkcore_anixops，engine-embedded）：二选一，由维护者决定——
+  - 提高 `MAX_CONFIG_LEN`（`networkcore_ios_runtime_init`、`networkcore_ios_measure_delay`、`networkcore_ios_checkup` 三处检查都用它），
+    同时确认 Network Extension 的内存上限（iOS 约 50 MB）下解析数 MB JSON 的峰值内存；或
+  - 像脚本（`script_assets`）一样，把 `mitm.plugins` 和 `routing` 改为由扩展写入文件、配置里只传路径，内核读文件时仍按
+    `MAX_POLICY_BYTES`（8 MB）等各自上限检查。
+- [ ] 内核合并后，本仓库在同一个 commit 里：升级 `Cargo.toml` 固定的内核 rev；按新上限改
+  `apps/ios/Sources/NetworkCoreBridge/EngineBudget.swift` 的 `maxConfigBytes`（改为文件方式时，改为只测量仍内联的部分）；
+  更新 `EngineBudgetTests`、`apps/ios/README.md` 的 “Engine budgets” 一节、插件页 / 映射页的 64 KB 提示文案
+  （`TunnelController.decryptionExceedsConfigWarning`，Localizable.xcstrings 里的英文和繁体同步改）和发布说明。
+- [ ] 真机验收（改内核后）：iOS 与 macOS 各导入一个 100 KB 以上的去广告插件并打开 HTTPS 解密，连接后请求页不再显示
+  “合计超出了隧道配置的上限”，插件的重写生效；保存一条 200 KB 的 Map Local 响应体，命中时返回该内容；导入含 3,000 条以上内联
+  规则的订阅，规则页不再提示“规则没有生效”，开发者诊断的扩展事件里没有 `config too large`。
+- [ ] 改内核前的 1.0.0 真机确认：启用一个 100 KB 的插件，插件页和映射页显示 64 KB 提示；连接后请求页显示
+  “HTTPS 解密没有生效：……超出了隧道配置的上限”，VPN 正常连接、其余规则生效。
+## 引擎 IPC 与核心服务加固（1.0.0，client-core-ipc-01/02/03/04/05/07/13）
+
+CI 只跑单元测试和管理员账号下的端到端测试，以下需要人工或真机：
+
+- [ ] 已保存的抓包会话与解密域名（安卓、Linux Tauri）：抓包页“保存会话”后能在“已保存的会话”里列出、打开、删除；
+  开着解密访问几个网站后，解密域名页列出这些域名（失败的带原因），“清除”后列表变空。运行中保存“我的规则”提示
+  “applied; open connections stay”，正在进行的下载不中断。
+- [ ] 安卓 ANX 设备授权：在要求设备授权的面板上刷新订阅后 ANX 节点能连接，面板能看到这台设备；授权目录在 App 数据
+  目录下的 `anx-license`（宿主机上的契约测试有 HOME，测不出这一点）。原生 Windows 服务沿用从旧版搬来的设备密钥，
+  面板里不多出一台设备。
+- [ ] 原生 Windows / Linux 窗口从文件导入订阅：在导入框里填一个本地订阅文件的路径，窗口以当前用户读文件，导入后订阅
+  名是文件名；填另一个用户才能读的文件、文件夹或超过 16 MiB 的文件时，窗口说明原因，核心不读任何路径。
+- [ ] Windows 命名管道（标准用户真机，原生版发布后）：标准用户的窗口照常连上服务（访问表 `0x12019b` 不含建实例权限，
+  CI 的管理员账号测不到这一点）；另一个标准用户运行一个对 `\\.\pipe\AnixOpsNet.Core` 调 `CreateNamedPipeW` 的小程序，
+  服务运行时得到拒绝访问；停掉服务后它抢先建出同名管道，窗口显示“不是 AnixOps Net 核心服务的管道”且不连上。
+- [ ] Windows 服务失败重启：`sc qfailure AnixOpsNetCore` 显示三次 RESTART，`sc qfailureflag AnixOpsNetCore` 为 TRUE；
+  用 PowerShell 循环打开、关闭 `\\.\pipe\AnixOpsNet.Core` 一分钟，服务一直在运行，窗口仍能连接。
+- [ ] Linux 守护进程（deb / rpm 带上 `anixops-netd` 之后）：`cat /proc/$(pidof anixops-netd)/limits` 的 Max open files
+  软上限为 524288；经代理开上千条并发连接（BT、压测工具）后守护进程不退出；用没有登录会话的账号开几百条不说话的连接，
+  超过 16 条的被立即关闭，5 秒后其余的也被关闭，正常用户的窗口不受影响。
+- [ ] Linux 根证书更换：先信任生成的根证书，再在扩展页导入团队 CA：导入的提示说明这台电脑还没信任它，扩展页显示未信任；
+  点“信任根证书”后显示已信任，`certutil -d sql:$HOME/.pki/nssdb -L -n "AnixOps Net HTTPS Decryption Root" -a` 只列出一张证书。

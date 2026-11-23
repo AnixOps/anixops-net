@@ -42,6 +42,7 @@ impl NetworkFacts {
     pub fn new(network: Option<&on_demand::Network>, addresses: Vec<std::net::IpAddr>) -> Self {
         let (kind, ssid) = match network {
             Some(on_demand::Network::Wifi(ssid)) => (Some("wifi"), ssid.clone()),
+            Some(on_demand::Network::WifiWithheld) => (Some("wifi"), None),
             Some(on_demand::Network::Cellular) => (Some("cellular"), None),
             _ => (None, None),
         };
@@ -134,10 +135,26 @@ pub fn is_trunk(node: &NodeDescriptor) -> bool {
         .any(|entry| entry.key == NODE_METADATA_PATH && entry.value.trim() == NODE_PATH_TRUNK)
 }
 
-/// This device's ANX license directory (`anx_license`), beside the saved state.
+/// The data directory whose `anx-license` folder holds this device's ANX keys and licenses ([`use_license_dir`]).
+static LICENSE_DATA_DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+
+/// The ANX license directory (`anx_license`) of the client whose data directory is `dir`.
+pub fn license_dir(dir: &std::path::Path) -> std::path::PathBuf {
+    dir.join("anx-license")
+}
+
+/// Keeps the ANX licenses in the data directory `dir` (the backend's `Config.dir`), set when the backend opens.
+/// Never `$HOME` or `$XDG_CONFIG_HOME`: a system service, the Linux daemon and the Android app have neither,
+/// or one they cannot write. The first directory set stays, as with the other files the backend names.
+pub fn use_license_dir(dir: &std::path::Path) {
+    let _ = LICENSE_DATA_DIR.set(dir.to_path_buf());
+}
+
+/// This device's ANX license directory (`anx_license`), beside the saved state; none before the backend opened.
 pub fn license_store() -> Option<anx_license::LicenseStore> {
-    super::state::Store::default_dir()
-        .map(|dir| anx_license::LicenseStore::new(dir.join("anx-license")))
+    LICENSE_DATA_DIR
+        .get()
+        .map(|dir| anx_license::LicenseStore::new(license_dir(dir)))
 }
 
 /// Hands each subscription origin's device key and license file to the ANX outbounds of that origin's
@@ -318,10 +335,12 @@ fn linked(profile: &Value, other: &OtherSource) -> Option<Value> {
         .then_some(profile)
 }
 
-/// Kernel control commands the client may send: reading traffic, connections and rule sets, closing
-/// connections, refreshing remote rule sets and packet capture. Mode and group changes go through the saved
-/// profile instead.
-const ACTIVITY_COMMANDS: [&str; 17] = [
+/// Kernel control commands a window may send (`runtime_control`): reading traffic, connections and rule sets,
+/// closing connections, refreshing remote rule sets, packet capture and the per-domain decryption results. Mode
+/// and group changes go through the saved profile instead. What only the backend sends (the capture session
+/// storage and key, saved sessions, `reload_rules`) is not here: it goes through [`Engine::request`]. The
+/// Windows/Linux Tauri app checks its window's requests with the same list ([`activity_request`]).
+pub const ACTIVITY_COMMANDS: [&str; 19] = [
     "traffic",
     "connections",
     "close_connection",
@@ -340,6 +359,9 @@ const ACTIVITY_COMMANDS: [&str; 17] = [
     "capture_requests",
     "capture_exchange",
     "capture_h2_frames",
+    // Per-domain decryption results for the decryption list; they only read or clear counters.
+    "mitm_hosts",
+    "clear_mitm_hosts",
 ];
 
 /// The request bytes for an activity page command, or why it is refused.
@@ -487,6 +509,15 @@ impl Engine {
     /// Answers one activity page request (see [`activity_request`]) while the engine runs.
     pub fn control(&self, request: &serde_json::Value) -> Result<serde_json::Value, String> {
         let request = activity_request(request)?;
+        let answer = self.control_bytes(&request)?;
+        serde_json::from_slice(&answer).map_err(|error| error.to_string())
+    }
+
+    /// Answers one request the backend itself makes while the engine runs: the capture session storage and
+    /// key, saved sessions, `reload_rules` and the decryption results. It skips [`activity_request`], so it
+    /// must never carry a window's request as it came; windows go through [`Engine::control`].
+    pub(crate) fn request(&self, request: &serde_json::Value) -> Result<serde_json::Value, String> {
+        let request = serde_json::to_vec(request).map_err(|error| error.to_string())?;
         let answer = self.control_bytes(&request)?;
         serde_json::from_slice(&answer).map_err(|error| error.to_string())
     }
@@ -693,6 +724,8 @@ mod tests {
             hidden.request(),
             br#"{"cmd":"set_network","type":"wifi"}"#.to_vec()
         );
+        let withheld = NetworkFacts::new(Some(&on_demand::Network::WifiWithheld), Vec::new());
+        assert_eq!(withheld, hidden);
     }
 
     #[test]
@@ -737,6 +770,15 @@ mod tests {
     #[test]
     fn no_licenses_without_a_store() {
         assert!(anx_licenses(None).is_empty());
+    }
+
+    #[test]
+    fn licenses_live_in_the_data_directory() {
+        let dir = std::path::Path::new("/var/lib/anixops-net");
+        assert_eq!(
+            license_dir(dir),
+            std::path::PathBuf::from("/var/lib/anixops-net/anx-license")
+        );
     }
 
     const LINK: &str = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@82.47.34.99:11111#HK";
@@ -790,6 +832,42 @@ mod tests {
         assert!(Engine::default()
             .control(&serde_json::json!({"cmd": "traffic"}))
             .is_err());
+    }
+
+    #[test]
+    fn windows_may_read_decryption_results_but_not_backend_commands() {
+        // The decryption list asks through `runtime_control` on the Linux desktop.
+        assert!(activity_request(&json!({"cmd": "mitm_hosts"})).is_ok());
+        assert!(activity_request(&json!({"cmd": "clear_mitm_hosts"})).is_ok());
+        // Only the backend names the session storage and key, picks saved sessions and reloads rules.
+        for command in [
+            desktop_mitm::sessions::STORAGE_COMMAND,
+            "capture_sessions",
+            "save_capture",
+            "load_capture",
+            "delete_capture",
+            "reload_rules",
+            "replay_proxy",
+            "start_replay_proxy",
+        ] {
+            assert!(
+                activity_request(&json!({ "cmd": command })).is_err(),
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
+    fn backend_requests_reach_the_engine_without_the_window_list() {
+        // A stopped engine answers that it is not running, not that the command is unavailable.
+        let error = Engine::default()
+            .request(&json!({"cmd": "reload_rules", "rules": []}))
+            .unwrap_err();
+        assert_eq!(error, "the engine is not running");
+        let refused = Engine::default()
+            .control(&json!({"cmd": "reload_rules", "rules": []}))
+            .unwrap_err();
+        assert!(refused.contains("is not available"), "{refused}");
     }
 
     #[test]

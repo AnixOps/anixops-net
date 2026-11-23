@@ -1,6 +1,28 @@
 import type { CaptureRequest, CaptureRequestsAnswer } from "./bridge";
 import { t } from "./i18n";
 
+/**
+ * The capture budget this window asks for whenever it turns capture on: the engine's largest (16 MiB). The engine's
+ * own default (2 MiB) is sized for the iOS Network Extension's memory limit; on a desktop, ordinary connections would
+ * push decrypted requests out of it within seconds. A larger value is clamped by the engine.
+ */
+export const DESKTOP_CAPTURE_BUDGET = 16 * 1024 * 1024;
+
+/** The `set_capture` request, always with the budget: the engine only changes the budget when one is given. */
+export function setCaptureRequest(enabled: boolean, maxTotalBytes: number = DESKTOP_CAPTURE_BUDGET) {
+  return { cmd: "set_capture", enabled, max_total_bytes: maxTotalBytes };
+}
+
+/**
+ * Whether the engine behind the list is a new one: a changed setting, a node switch or a reconnect restarts it, and
+ * its counters start again from 1, below what the list has read. The list then starts over, or the old cursor would
+ * hide every new request and old rows would share keys with new ones.
+ */
+export function engineRestarted(cursor: { lastSeq: number; lastRev: number | null }, answer: CaptureRequestsAnswer): boolean {
+  if (answer.last_rev != null && cursor.lastRev != null) return answer.last_rev < cursor.lastRev;
+  return answer.last_seq != null && answer.last_seq < cursor.lastSeq;
+}
+
 /** Most requests the list keeps; older ones fall off the top. */
 export const MAX_REQUESTS = 2000;
 
@@ -92,8 +114,12 @@ export function newerCopy(shown: CaptureRequest | undefined, next: CaptureReques
 
 /**
  * The list after one answer: newer copies of a request replace older ones (a request under way is updated in place
- * as its response arrives, and an older copy arriving late is ignored), ended requests the engine dropped leave,
- * oldest first.
+ * as its response arrives, and an older copy arriving late is ignored), oldest first.
+ *
+ * `dropped_before_seq` is not applied here. The engine drops whole connections, oldest connection first, and sets it
+ * to the highest seq of a dropped connection; seqs are given as requests end, across all connections, so a
+ * long-lived connection dropped first can carry the newest seq while requests of younger connections with smaller
+ * seqs are still kept. Rows the engine no longer holds leave through `keepOnly` after a full read (`droppedMore`).
  */
 export function mergeRequests(rows: CaptureRequest[], answer: CaptureRequestsAnswer): CaptureRequest[] {
   const byKey = new Map(rows.map((row) => [requestKey(row), row]));
@@ -101,8 +127,75 @@ export function mergeRequests(rows: CaptureRequest[], answer: CaptureRequestsAns
     const key = requestKey(request);
     if (newerCopy(byKey.get(key), request)) byKey.set(key, request);
   }
-  const dropped = answer.dropped_before_seq ?? 0;
-  // A request still under way has no seq yet; if its connection went, it is simply not updated again.
-  const merged = [...byKey.values()].filter((row) => row.seq === 0 || row.seq > dropped).sort(compareArrival);
+  const merged = [...byKey.values()].sort(compareArrival);
   return merged.length > MAX_REQUESTS ? merged.slice(merged.length - MAX_REQUESTS) : merged;
+}
+
+/**
+ * Whether the engine dropped something since `known` (the last `dropped_before_seq` the list saw): the budget pushed
+ * out a connection, capture was cleared or a session was loaded. The list then reads everything the engine still
+ * holds (`keepOnly`), since the number alone does not say which rows went.
+ */
+export function droppedMore(known: number, answer: CaptureRequestsAnswer): boolean {
+  return (answer.dropped_before_seq ?? 0) > known;
+}
+
+/**
+ * The rows the engine still holds after a full read of everything it keeps (`kept`, the keys of every row it
+ * listed). Rows it no longer lists went with their connection, those still under way included.
+ */
+export function keepOnly(rows: CaptureRequest[], kept: Set<string>): CaptureRequest[] {
+  return rows.filter((row) => kept.has(requestKey(row)));
+}
+
+/** Least time between two full reads while the budget keeps pushing connections out. */
+export const RESYNC_INTERVAL_MS = 5000;
+
+/**
+ * The selected request as the inspector shows it: the row in the list, or, while that row is not in the list (a new
+ * filter is being read, the list dropped it, the engine pushed it out), the copy kept from when it was. Only choosing
+ * another request (or none) replaces the copy, so an open replay or mapping editor is not closed under the user.
+ */
+export function selectedRequest(
+  rows: CaptureRequest[],
+  selected: string | null,
+  held: CaptureRequest | null,
+): { request: CaptureRequest | null; missing: boolean } {
+  if (selected == null) return { request: null, missing: false };
+  const found = rows.find((row) => requestKey(row) === selected);
+  if (found) return { request: found, missing: false };
+  if (held && requestKey(held) === selected) return { request: held, missing: true };
+  return { request: null, missing: false };
+}
+
+/** Most pages one full read takes; a capture holding more is read again later rather than without end. */
+export const MAX_RESYNC_PAGES = 16;
+
+/**
+ * Reads every row the engine holds, a page at a time: by `since_rev` from 0 (the engine lists in the order things
+ * changed, so a full page carries on after its last row), or by `since_seq` for a kernel without `rev`. `complete` is
+ * false when a page failed or the read stopped after `maxPages`; the list then must not drop rows it did not see.
+ */
+export async function readAllKept(
+  read: (sinceSeq: number, sinceRev: number) => Promise<CaptureRequestsAnswer>,
+  page: number,
+  maxPages: number = MAX_RESYNC_PAGES,
+): Promise<{ answers: CaptureRequestsAnswer[]; complete: boolean }> {
+  const answers: CaptureRequestsAnswer[] = [];
+  let sinceSeq = 0;
+  let sinceRev = 0;
+  for (let count = 0; count < maxPages; count += 1) {
+    const answer = await read(sinceSeq, sinceRev);
+    if (answer.error) return { answers, complete: false };
+    answers.push(answer);
+    const rows = answer.requests ?? [];
+    if (rows.length < page) return { answers, complete: true };
+    const last = rows[rows.length - 1];
+    if (answer.last_rev != null && last.rev != null) {
+      sinceRev = last.rev;
+    } else {
+      sinceSeq = last.seq;
+    }
+  }
+  return { answers, complete: false };
 }

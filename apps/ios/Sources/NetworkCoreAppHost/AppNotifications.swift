@@ -26,6 +26,65 @@ enum AppNotifications {
         _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
     }
 
+    /// The system's answer on notifications for this app.
+    static func authorizationStatus() async -> NotificationPermission.Status {
+        switch await UNUserNotificationCenter.current().notificationSettings().authorizationStatus {
+        case .notDetermined:
+            return .notDetermined
+        case .denied:
+            return .denied
+        default:
+            return .allowed
+        }
+    }
+
+    /// Set while `requestIfUndetermined` runs, so two status changes in a row ask once.
+    @MainActor private static var asking = false
+
+    /// Asks for permission when it was never asked, a kind of notification is on and the app is in front
+    /// (`NotificationPermission.shouldAsk`). The switches are on by default, and without an answer the system drops
+    /// every notification, the stop and subscription ones included. Called once the tunnel is first connected, after
+    /// the system's own prompt to add the VPN configuration, rather than at launch. Only the app can ask: the tunnel
+    /// extension cannot show the prompt.
+    @MainActor static func requestIfUndetermined() async {
+        guard !asking else {
+            return
+        }
+        asking = true
+        defer { asking = false }
+        let status = await authorizationStatus()
+        #if DEBUG
+        let demo = TunnelController.isDemo
+        #else
+        let demo = false
+        #endif
+        guard NotificationPermission.shouldAsk(status: status, settings: settings, appActive: isAppActive, demo: demo) else {
+            return
+        }
+        await requestAuthorization()
+    }
+
+    @MainActor private static var isAppActive: Bool {
+        #if os(macOS)
+        NSApp.isActive
+        #else
+        UIApplication.shared.applicationState == .active
+        #endif
+    }
+
+    /// Opens the system settings where this app's notifications are turned on.
+    @MainActor static func openSystemSettings() {
+        #if os(macOS)
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
+            NSWorkspace.shared.open(url)
+        }
+        #else
+        if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
+        #endif
+    }
+
     static func post(title: String, subtitle: String = "", body: String, thread: String, id: String? = nil, openURL: String? = nil) {
         let content = UNMutableNotificationContent()
         content.title = title
@@ -55,10 +114,12 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         defer { completionHandler() }
-        guard let raw = response.notification.request.content.userInfo["open-url"] as? String,
-              let url = URL(string: raw), let scheme = url.scheme?.lowercased(),
-              ["http", "https", AppURLCommand.scheme].contains(scheme)
-        else {
+        // Web links only (`NotificationPermission.openableURL`): an `anixops://` link from a script would run its
+        // command (disconnect, direct mode, another node) the moment the notification is tapped. Checked here too,
+        // so notifications posted by an older version and still in Notification Center are covered.
+        guard let url = NotificationPermission.openableURL(
+            response.notification.request.content.userInfo["open-url"] as? String
+        ) else {
             return
         }
         DispatchQueue.main.async {
@@ -92,7 +153,8 @@ extension TunnelController {
                 for item in answer.notifications.prefix(8) {
                     AppNotifications.post(
                         title: item.title, subtitle: item.subtitle, body: item.content,
-                        thread: "plugin-scripts", openURL: item.openURL
+                        thread: "plugin-scripts",
+                        openURL: NotificationPermission.openableURL(item.openURL)?.absoluteString
                     )
                 }
             }
@@ -103,8 +165,12 @@ extension TunnelController {
     /// Changes the notification settings and hands them to the tunnel: the saved profile for the next start, and the
     /// running extension at once.
     func applyNotificationSettings(_ next: NotificationSettings) async {
+        let previous = AppNotifications.settings
         AppNotifications.save(next)
-        if next.scripts || next.connection || next.subscriptions {
+        // Asked when a kind was turned on, not when one was turned off.
+        let turnedOn = (next.scripts && !previous.scripts) || (next.connection && !previous.connection)
+            || (next.subscriptions && !previous.subscriptions)
+        if turnedOn {
             await AppNotifications.requestAuthorization()
         }
         await saveNotificationSettingsToProfile(next)
@@ -119,16 +185,49 @@ extension TunnelController {
 struct NotificationSettingsSection: View {
     var tunnel: TunnelController
     @State private var settings = AppNotifications.settings
+    /// The system's answer, read when the section appears and when the app comes back from the system settings.
+    @State private var permission: NotificationPermission.Status?
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Section {
+            switch permission.map({ NotificationPermission.offer(status: $0, settings: settings) }) ?? .nothing {
+            case .ask:
+                Button("允许 AnixOps Net 发送通知") {
+                    Task {
+                        await AppNotifications.requestAuthorization()
+                        permission = await AppNotifications.authorizationStatus()
+                    }
+                }
+            case .openSystemSettings:
+                Button("在系统设置中开启通知") {
+                    AppNotifications.openSystemSettings()
+                }
+            case .nothing:
+                EmptyView()
+            }
             Toggle("插件脚本的通知", isOn: binding(\.scripts))
             Toggle("连接意外断开", isOn: binding(\.connection))
             Toggle("订阅自动更新失败", isOn: binding(\.subscriptions))
         } header: {
             Text("通知")
         } footer: {
-            Text("关掉后不再发出这类系统通知；也可以在系统设置里关闭 AnixOps Net 的全部通知。")
+            if permission == .denied, settings.anyOn {
+                Text("系统设置里关闭了 AnixOps Net 的通知，上面的开关目前不会发出任何通知。")
+            } else {
+                Text("关掉后不再发出这类系统通知；也可以在系统设置里关闭 AnixOps Net 的全部通知。")
+            }
+        }
+        .task {
+            permission = await AppNotifications.authorizationStatus()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else {
+                return
+            }
+            Task {
+                permission = await AppNotifications.authorizationStatus()
+            }
         }
     }
 
@@ -140,6 +239,7 @@ struct NotificationSettingsSection: View {
                 let next = settings
                 Task {
                     await tunnel.applyNotificationSettings(next)
+                    permission = await AppNotifications.authorizationStatus()
                 }
             }
         )

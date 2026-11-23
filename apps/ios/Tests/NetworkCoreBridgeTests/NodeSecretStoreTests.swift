@@ -1,5 +1,6 @@
 @testable import NetworkCoreBridge
 import XCTest
+import Security
 
 final class NodeSecretStoreTests: XCTestCase {
     func testCleanUpKeepsTheSavedKeyAndTheKeysOfSavesOnTheirWay() {
@@ -27,5 +28,13 @@ final class NodeSecretStoreTests: XCTestCase {
         XCTAssertEqual(NodeSecretStore.staleNodeKeyAccounts([first, second], keeping: ["first", "second"]), [])
         XCTAssertEqual(NodeSecretStore.staleNodeKeyAccounts([first, second], keeping: ["second"]), [first])
         XCTAssertEqual(NodeSecretStore.staleNodeKeyAccounts([first, second], keeping: []), [first, second])
+    }
+
+    func testOnlyALockedKeychainCountsAsReadableLater() {
+        // The app reads its subscription groups again after the first unlock and refuses to overwrite them until
+        // then; a failure that repeats on every read must not block every write for good.
+        XCTAssertTrue(NodeSecretStore.Failure(status: errSecInteractionNotAllowed).isLockedUntilFirstUnlock)
+        XCTAssertFalse(NodeSecretStore.Failure(status: errSecDecode).isLockedUntilFirstUnlock)
+        XCTAssertFalse(NodeSecretStore.Failure(status: errSecMissingEntitlement).isLockedUntilFirstUnlock)
     }
 }

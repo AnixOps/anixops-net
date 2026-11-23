@@ -78,7 +78,14 @@ struct PluginsSection: View {
         } header: {
             Text("插件")
         } footer: {
-            Text(model.footer)
+            VStack(alignment: .leading, spacing: 4) {
+                // Within the 8 MB decryption budget but over the engine config this version takes.
+                if tunnel.decryptionExceedsConfig(with: model.library) {
+                    Text(TunnelController.decryptionExceedsConfigWarning)
+                        .foregroundStyle(brand.warning)
+                }
+                Text(model.footer)
+            }
         }
         .fileImporter(isPresented: $importingFile, allowedContentTypes: PluginsModel.contentTypes) { result in
             Task { await model.importFile(result, tunnel: tunnel) }
@@ -290,7 +297,7 @@ final class PluginsModel: ObservableObject {
         }
         switch trustState {
         case .trusted:
-            return String(localized: "HTTPS 只解密插件 [MITM] 列出的主机，明文 HTTP 全部交给插件处理，仅支持 HTTP/1.1。使用前需要先连上 VPN。")
+            return String(localized: "插件只解密自己 [MITM] 列出的主机，解密域名和映射不受这个开关影响、另外生效；明文 HTTP 全部交给插件处理，仅支持 HTTP/1.1。使用前需要先连上 VPN。")
         case .notTrusted, .notGenerated:
             return String(localized: "开启前请先在上面生成并信任 HTTPS 解密证书。")
         }
@@ -310,6 +317,15 @@ final class PluginsModel: ObservableObject {
         }
         var next = library
         next.isEnabled = enabled
+        // Plugins enabled under the switch, with the debug mappings, must fit the engine's decryption budget.
+        if enabled {
+            do {
+                try next.checkBudget(reserving: tunnel.debugMappings.pluginBytes)
+            } catch {
+                note = Self.describe(error)
+                return
+            }
+        }
         await commit(next, tunnel: tunnel)
         if enabled {
             await fetchMissingResources(tunnel: tunnel)
@@ -319,7 +335,7 @@ final class PluginsModel: ObservableObject {
     func setEnabled(_ enabled: Bool, for id: UUID, tunnel: TunnelController) async {
         var next = library
         do {
-            try next.setEnabled(enabled, for: id)
+            try next.setEnabled(enabled, for: id, reserving: tunnel.debugMappings.pluginBytes)
         } catch {
             note = Self.describe(error)
             return
@@ -369,7 +385,7 @@ final class PluginsModel: ObservableObject {
                 sourceURL: sourceURL,
                 inspection: MitmPluginInspector.inspect(text)
             )
-            try next.add(plugin)
+            try next.add(plugin, reserving: tunnel.debugMappings.pluginBytes)
         } catch {
             note = Self.describe(error)
             return
@@ -505,7 +521,7 @@ final class PluginsModel: ObservableObject {
         case MitmPluginError.nothingToApply:
             return String(localized: "没有找到可用的重写、脚本或 [MITM] 主机")
         case MitmPluginError.libraryFull:
-            return String(localized: "启用的插件合计超过 8 MB，请先停用一些插件")
+            return String(localized: "启用的插件和调试映射合计超过 8 MB，请先停用一些插件或减少映射响应体")
         case MitmScriptError.tooLarge:
             return String(localized: "脚本超过 4 MB")
         case MitmScriptError.notText, MitmScriptError.notHTTPS:

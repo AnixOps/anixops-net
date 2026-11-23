@@ -45,6 +45,31 @@ export function connectionTitle(connection: string | undefined, phase: ConnectPh
   return t((connection && connectionTitles[connection]) || phaseTitles[phase]);
 }
 
+// The runtime state line the backends report (Windows: what the engine and the proxy are doing; Linux: the
+// connection state itself). Fixed sentences, so the window words them.
+const connectionLabels: Record<string, string> = {
+  "The embedded engine is running and managing the current-user proxy.": "内核正在运行，并管理当前用户的系统代理",
+  "The embedded engine is running; the current-user proxy is not applied.": "内核正在运行，当前用户的系统代理未应用",
+  "Connect to start the embedded engine.": "连接后启动内核",
+  Connected: "已连接",
+  "Not connected": "未连接",
+  ...connectionTitles,
+};
+
+/** The activity page's runtime state, in the window's language; anything unknown is shown as is. */
+export function connectionLabelText(label: string | undefined): string {
+  if (!label) return t("读取中");
+  return connectionLabels[label] ? t(connectionLabels[label]) : label;
+}
+
+const refreshResults: Record<string, string> = { success: "成功", failed: "失败", running: "进行中" };
+
+/** The last automatic subscription update's result (`success`, `failed`, `running`), in the window's language. */
+export function refreshResultText(result: string | undefined): string {
+  if (!result) return t("等待中");
+  return refreshResults[result] ? t(refreshResults[result]) : result;
+}
+
 /**
  * Why the connection failed, in the backend's words, or where to read more when it gave none. Only while it has
  * failed. The overview shows it under the state; the sidebar shows it on every page, because debug mode has no

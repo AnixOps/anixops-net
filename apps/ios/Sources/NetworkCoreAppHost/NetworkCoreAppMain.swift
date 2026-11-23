@@ -27,7 +27,12 @@ struct NetworkCoreAppMain: App {
                         return
                     }
                     #endif
-                    await tunnel.load()
+                    // A background refresh may have launched the app and read everything already. `loaded` alone is not
+                    // enough: a background launch before the first unlock could not read the subscription groups, and
+                    // the front loads again so the groups appear (writes refuse to replace them until then).
+                    if !tunnel.loaded || !tunnel.subscriptionsRead {
+                        await tunnel.load()
+                    }
                     await tunnel.refreshDueSubscriptions()
                 }
         }
@@ -38,6 +43,8 @@ struct NetworkCoreAppMain: App {
                     // Settings, the widget, Control Center, the Live Activity or Shortcuts may have changed the VPN
                     // configuration while the app was in the background.
                     await tunnel.reloadProfile()
+                    // A background update may have left the running tunnel on the nodes from before it.
+                    tunnel.reconnectIfPending()
                     await tunnel.refreshDueSubscriptions()
                 }
             case .background:
@@ -47,8 +54,11 @@ struct NetworkCoreAppMain: App {
             }
         }
         // Subscription groups that are due update in the background too (`TunnelController.scheduleBackgroundRefresh`).
+        // The system may launch the app for it without a window, so it reads the saved data itself first
+        // (`refreshInBackground`), then ends a Live Activity the tunnel has left behind while the app was not running.
         .backgroundTask(.appRefresh(TunnelController.backgroundRefreshID)) {
-            await tunnel.refreshDueSubscriptions()
+            await tunnel.refreshInBackground()
+            await LiveActivityController.sync(tunnel: tunnel)
         }
     }
 }
@@ -160,7 +170,11 @@ struct RootView: View {
     /// First run only: after loading, with nothing imported and the welcome screen never closed.
     private var showsOnboarding: Binding<Bool> {
         Binding(
-            get: { tunnel.loaded && tunnel.appMode == .proxy && tunnel.hasNoNodes && !onboardingDone && !needsTerms },
+            get: {
+                // Unread groups (Keychain locked) are not "nothing imported".
+                tunnel.loaded && tunnel.subscriptionsRead && tunnel.appMode == .proxy && tunnel.hasNoNodes
+                    && !onboardingDone && !needsTerms
+            },
             set: { shown in
                 if !shown {
                     onboardingDone = true
@@ -210,9 +224,16 @@ struct RootView: View {
             }
             Task {
                 // Someone who arrives through a link (a subscription, usually) uses the proxy client: they are not
-                // asked which mode they want (plan A4).
-                if tunnel.appMode == nil {
-                    await tunnel.setAppMode(.proxy)
+                // asked which mode they want (plan A4). A link that launched the app arrives before the saved mode
+                // was read, so the check waits for `load()`: a nil mode before then is not "never picked", and
+                // setting one would replace a saved debug mode.
+                let loaded = await tunnel.awaitLoaded()
+                var isCommand = false
+                if case .success = AppURLCommand.parse(url) {
+                    isCommand = true
+                }
+                if let mode = AppMode.forLinkArrival(current: tunnel.appMode, loaded: loaded, isCommand: isCommand) {
+                    await tunnel.setAppMode(mode)
                 }
                 if await tunnel.handle(url: url) == .openImport {
                     importing = true
@@ -230,7 +251,7 @@ struct RootView: View {
                 tab = first
             }
         }
-        .onChange(of: tunnel.loaded) { _, loaded in
+        .onChange(of: tunnel.loaded && tunnel.subscriptionsRead) { _, loaded in
             // Someone who already has nodes never needs the welcome screen, even after deleting them all later.
             if loaded, !tunnel.hasNoNodes {
                 onboardingDone = true

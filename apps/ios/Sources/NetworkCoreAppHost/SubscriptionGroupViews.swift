@@ -142,6 +142,18 @@ struct SubscriptionGroupSummary: View {
                 .foregroundStyle(brand.warning)
             }
 
+            if group.needsNetworkRulesReimport, !group.needsReimport, !updating {
+                Group {
+                    if group.isUpdatable {
+                        Label("由旧版本导入：更新后按网络选择的策略组才会生效", systemImage: "wifi.exclamationmark")
+                    } else {
+                        Label("由旧版本导入：重新导入后按网络选择的策略组才会生效", systemImage: "wifi.exclamationmark")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(brand.warning)
+            }
+
             if let failed = group.lastFailureAt, !updating {
                 Label("上次更新失败（\(failed, format: .dateTime.month().day().hour().minute())）", systemImage: "exclamationmark.triangle")
                     .font(.caption)

@@ -6,6 +6,7 @@
 import AppKit
 import Darwin
 import Foundation
+import MachO
 import NetworkCoreBridge
 
 func printError(_ text: String) {
@@ -28,11 +29,23 @@ func homeFolder() -> String {
     return NSHomeDirectory()
 }
 
+/// This executable's path as the system started it (the PATH entry when run through a symlink). `argv[0]` is only
+/// the bare name then, which would be read against the current folder.
+func executablePath() -> URL? {
+    var size: UInt32 = 0
+    _ = _NSGetExecutablePath(nil, &size)
+    if size > 0 {
+        var buffer = [CChar](repeating: 0, count: Int(size) + 1)
+        if _NSGetExecutablePath(&buffer, &size) == 0 {
+            return URL(fileURLWithPath: String(cString: buffer))
+        }
+    }
+    return Bundle.main.executableURL
+}
+
 /// The app this tool belongs to: the bundle around Contents/MacOS/anixops, through a symlink in PATH.
 func enclosingApp() -> URL? {
-    let executable = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
-    let app = executable.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-    return app.pathExtension == "app" ? app : nil
+    executablePath().flatMap { CommandLineTool.enclosingApp(ofExecutable: $0) }
 }
 
 final class Flag: @unchecked Sendable {
@@ -52,7 +65,8 @@ final class Flag: @unchecked Sendable {
     }
 }
 
-/// Opens the app in the background and waits for its socket.
+/// Opens the app in the background and waits until it accepts connections. Not until the socket file exists: one
+/// left by an app that quit or crashed is there before the new app has read its configuration and listens.
 func launchApp(socket: String) -> Bool {
     guard let app = enclosingApp() else {
         return false
@@ -69,14 +83,7 @@ func launchApp(socket: String) -> Bool {
     guard launched.value else {
         return false
     }
-    let deadline = Date().addingTimeInterval(15)
-    while Date() < deadline {
-        if FileManager.default.fileExists(atPath: socket) {
-            return true
-        }
-        Thread.sleep(forTimeInterval: 0.25)
-    }
-    return false
+    return ControlClient.waitUntilListening(at: socket, timeout: 30)
 }
 
 func readImport(_ source: CommandLineInvocation.ImportSource) -> String {
