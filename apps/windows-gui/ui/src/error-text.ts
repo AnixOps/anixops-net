@@ -104,6 +104,18 @@ export function errorLine(error: unknown, operation?: string): string {
   return detail ? t("{text}（{detail}）", { text, detail }) : text;
 }
 
+/**
+ * Why a subscription's last update failed, for the line that stays on its card or row. Windows sends the reason code
+ * beside the English (`errorCode`, `subscriptionRefreshErrorCode`); the shared client core (Linux) keeps only the
+ * refusal, which reads `<code>: <English>` when the kernel coded it (`subscription.core.clash_yaml_unsupported: …`).
+ * Either way a known reason is shown in the window's words, as on Windows; anything else as "订阅操作失败" with the
+ * backend's words in brackets, never the English or the code alone (finding feature-gap-07).
+ */
+export function subscriptionFailureLine(code: string | null | undefined, message: string): string {
+  const split = splitRefusal(message).code;
+  return subscriptionErrorText(code) ?? (split?.startsWith("subscription.") ? subscriptionErrorText(split) : undefined) ?? errorLine(message, "subscription");
+}
+
 /** The kind of each line `routing_warnings` sends (`<kernel code>: <English>`), in Chinese. */
 export const routingWarningKinds: Record<string, string> = {
   "config.core.routing_import.rule_skipped": "跳过了规则",

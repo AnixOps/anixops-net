@@ -34,7 +34,10 @@ describe("failureReason", () => {
   });
 
   it("words a coded reason in the window's language, never the backend's English alone", () => {
-    expect(failureReason({ lastError: "error.vpn_off: the VPN is not on; connect again" }, "failed", "proxy")).toBe("VPN 没有打开，请重新连接");
+    // In place a failure reads "文案（原文）" (docs/ui-ux.md): the window's words first, the backend's English after.
+    expect(failureReason({ lastError: "error.vpn_off: the VPN is not on; connect again" }, "failed", "proxy")).toBe(
+      "VPN 没有打开，请重新连接（the VPN is not on; connect again）",
+    );
     setLanguage("en");
     expect(failureReason({ lastError: "boom" }, "failed", "proxy")).toBe("Connection failed (boom)");
     setLanguage("zh");

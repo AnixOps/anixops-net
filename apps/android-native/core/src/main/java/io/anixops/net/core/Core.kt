@@ -53,7 +53,7 @@ class Core(
                 put("nodes", nodes)
                 put("traffic", traffic)
             },
-        )
+        ).let { it.copy(error = it.error?.let { raw -> texts.refusalText(raw) }) }
         val connections = if (connected) {
             orNull { decode(ConnectionsSnapshot.serializer(), control("connections")) }
         } else {
@@ -166,8 +166,9 @@ class Core(
     suspend fun subscriptions(): List<SubscriptionRow> {
         val intervals = call("list_subscriptions", ListSerializer(SubscriptionInterval.serializer()))
             .associate { it.id to it.updateIntervalHours }
+        // A row's error is the client's refusal as it kept it (`<code>: <English>`): shown in the app's words.
         return call("subscriptions", SubscriptionsView.serializer()).subscriptions
-            .map { it.copy(intervalHours = intervals[it.id] ?: 0) }
+            .map { it.copy(intervalHours = intervals[it.id] ?: 0, error = it.error?.let { raw -> texts.refusalText(raw) }) }
     }
 
     suspend fun importSubscription(location: String): OperationResult =

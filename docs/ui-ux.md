@@ -80,6 +80,10 @@
     `error.<name>`，内核的 `DomainError` 本来就是这个形式，例如 `subscription.core.clash_yaml_unsupported: …`）。认识的代码显示
     本端文案；不认识的只显示“什么失败了”（“连接失败”“操作没有完成”），英文原文放在“详情”里（桌面提示条的折叠详情，
     行内显示时放在括号里），日志和诊断报告保留英文。新增拒绝原因时给它代码，并在各端文案表里补三种语言（测试会检查）。
+  - 客户端作为状态保存的拒绝原因（快照的 `lastError`、`configurationError`、`subscriptionError`，订阅的 `lastUpdateError`，以及
+    `view.overview`、`view.subscriptions` 原样转交的 `error`）同样按代码显示，不能原样上屏：桌面用 `errorLine`，订阅卡片和行用
+    `subscriptionFailureLine`（Windows 有 `errorCode` 时按它，Linux 只有拒绝原因时按其中的 `subscription.core.*` 代码），Android 由
+    `Core.overview`、`Core.subscriptions` 经 `CoreTexts.refusalText` 换成 App 语言的文案，连接条和订阅行显示的已是本端文案。
   - 规则导入时跳过的内容按内核代码显示类别（跳过了规则、策略组、成员、忽略的选项），内核的英文句子作为明细。
 - 一词多义要分开写。“连接”“代理”在英文里各对应几个词：单独的“连接”只用作连接列表（Connections），单独的“代理”只用作页面名（Proxies）。
   动作“连接”、连接开关、模式名“代理”、规则策略“代理”各用自己的文案：桌面端写成带含义的键（`"连接|verb"`、`"连接|noun"`、

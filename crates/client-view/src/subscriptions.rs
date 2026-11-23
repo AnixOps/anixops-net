@@ -20,7 +20,8 @@ fn text<'a>(subscription: &'a Value, name: &str) -> Option<&'a str> {
 ///   wording instead.
 /// - `nodes`: how many nodes it has, or `null` when the core has not counted them.
 /// - `updated`: when it was last downloaded, in the core's words, or `null`.
-/// - `error`: why the last update did not work, or `null`.
+/// - `error`: why the last update did not work, the refusal as the client kept it (`<code>: <English>` when the
+///   kernel coded it), or `null`. A window words it by its code before showing it (Android: `Core.subscriptions`).
 /// - `used`, `total`: bytes used (up and down together) and bytes allowed, each `null` when the server
 ///   did not say; a `total` of 0 is "did not say".
 /// - `expire`: Unix seconds, or `null` when it does not expire or the server did not say; `expireDate` is

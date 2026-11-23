@@ -5,6 +5,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -63,6 +64,8 @@ class CoreTest {
             "decrypt.decrypting" to "将解密 {host}",
             "plugins.applied_next" to "下次连接时生效",
             "error.name_required" to "请输入名称",
+            "error.vpn_off" to "VPN 没有打开，请重新连接",
+            "subscription.core.clash_yaml_unsupported" to "订阅里有本应用不支持的节点类型或写法",
         )
 
         override fun text(code: String, params: Map<String, String>): String? =
@@ -116,6 +119,66 @@ class CoreTest {
             Core(Recording(fixture("rename_subscription_error.json")), StandardTestDispatcher(testScheduler)).connect()
         }.exceptionOrNull() as CoreException
         assertEquals("enter a name", english.message)
+    }
+
+    /** Refusals the client keeps as state and a `view.*` command passes on are worded too (finding feature-gap-07). */
+    @Test
+    fun keptRefusalsAreShownInTheAppsWords() = runTest {
+        fun transport(overviewError: String, subscriptionError: String) = object : CoreTransport {
+            override fun invoke(command: String, args: String): String = when (command) {
+                "runtime_snapshot" -> fixture("runtime_snapshot.json")
+                "list_nodes" -> """{"ok":[]}"""
+                "runtime_control" -> """{"error":"the engine is not running"}"""
+                "view.overview" -> buildJsonObject {
+                    put("ok", buildJsonObject {
+                        put("state", JsonPrimitive("failed"))
+                        put("egress", JsonPrimitive("node"))
+                        put("canConnect", JsonPrimitive(true))
+                        put("error", JsonPrimitive(overviewError))
+                    })
+                }.toString()
+                "list_subscriptions" -> """{"ok":[{"id":"s1","location":"https://example.com/sub","name":"One"}]}"""
+                "subscriptions" -> buildJsonObject {
+                    put("ok", buildJsonObject {
+                        put("subscriptions", buildJsonArray {
+                            add(buildJsonObject {
+                                put("id", JsonPrimitive("s1"))
+                                put("name", JsonPrimitive("One"))
+                                put("error", JsonPrimitive(subscriptionError))
+                            })
+                        })
+                    })
+                }.toString()
+                else -> error("unexpected $command")
+            }
+        }
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val known = Core(
+            transport(
+                "error.vpn_off: the VPN is not on; connect again",
+                "subscription.core.clash_yaml_unsupported: clash proxy type must be ss",
+            ),
+            dispatcher,
+            Chinese,
+        )
+        assertEquals("VPN 没有打开，请重新连接", known.overview().overview.error)
+        assertEquals("订阅里有本应用不支持的节点类型或写法", known.subscriptions().single().error)
+        // A code the app has no words for: what did not finish, with the English but never the code.
+        val unknown = Core(
+            transport(
+                "error.future_thing: something new went wrong",
+                "subscription.core.x_unsupported: x proxy type must be ss",
+            ),
+            dispatcher,
+            Chinese,
+        )
+        val overviewError = unknown.overview().overview.error.orEmpty()
+        val rowError = unknown.subscriptions().single().error.orEmpty()
+        assertEquals("操作没有完成：something new went wrong", overviewError)
+        assertEquals("操作没有完成：x proxy type must be ss", rowError)
+        for (shown in listOf(overviewError, rowError)) {
+            assertFalse(shown, shown.contains("error.") || shown.contains("subscription.core."))
+        }
     }
 
     @Test

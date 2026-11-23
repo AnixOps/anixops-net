@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { afterEach, describe, expect, it } from "vitest";
-import { errorLine, errorText, errorTexts, failedOperation, operationFailures, routingWarningKinds, routingWarningText, splitRefusal } from "./error-text";
+import { errorLine, errorText, errorTexts, failedOperation, operationFailures, routingWarningKinds, routingWarningText, splitRefusal, subscriptionFailureLine } from "./error-text";
 import { setLanguage } from "./i18n";
 import { english } from "./i18n-en";
 import { traditional } from "./i18n-zh-hant";
@@ -78,6 +78,21 @@ describe("refusal codes", () => {
       text: "订阅里有写法不正确的节点 (subscription.core.vmess_link_invalid)",
       detail: "vmess link is not valid",
     });
+  });
+
+  it("says why a subscription's last update failed on its row, on Windows and on Linux", () => {
+    // Windows: the reason code beside the English.
+    expect(subscriptionFailureLine("windows.subscription.fetch_timeout", "The download timed out.")).toBe("下载订阅超时 (windows.subscription.fetch_timeout)");
+    // Linux: no reason code, only the kernel's coded refusal; never its English or code alone.
+    expect(subscriptionFailureLine(undefined, "subscription.core.vmess_link_invalid: vmess link is not valid")).toBe(
+      "订阅里有写法不正确的节点 (subscription.core.vmess_link_invalid)",
+    );
+    expect(subscriptionFailureLine(null, "subscription.core.clash_yaml_unsupported: clash proxy type must be ss")).toBe(
+      "订阅里有本应用不支持的节点类型或写法 (subscription.core.clash_yaml_unsupported)",
+    );
+    // A client refusal is worded by its own code; a plain one gets the operation's headline.
+    expect(subscriptionFailureLine(undefined, "error.no_nodes: no nodes found")).toBe("订阅里没有找到节点（no nodes found）");
+    expect(subscriptionFailureLine(undefined, "connection reset")).toBe("订阅操作失败（connection reset）");
   });
 
   it("puts the detail in brackets for a line in place", () => {

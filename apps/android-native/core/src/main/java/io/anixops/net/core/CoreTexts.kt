@@ -64,7 +64,17 @@ internal fun CoreTexts.word(result: SavedFileResult): SavedFileResult {
 /** A refusal in the app's words: by its code, or as what did not finish with the client's English after it. */
 internal fun CoreTexts.refusal(error: CoreException): CoreException {
     val raw = error.message.orEmpty()
-    val (code, english) = CoreTexts.split(raw) ?: (null to raw)
-    val known = code?.let { text(it) }
-    return CoreException(known ?: failed(english.ifEmpty { raw }), detail = raw, code = code)
+    return CoreException(refusalText(raw), detail = raw, code = CoreTexts.split(raw)?.first)
+}
+
+/**
+ * The words for a refusal [raw] (`<code>: <English>` or plain English): the code's own words when the app knows
+ * them, otherwise what did not finish with the client's English after it, never the code or the English alone. Also
+ * for refusals the client keeps as state and a `view.*` command passes on (`view.overview`'s `error`, a subscription
+ * row's `error`), which a screen shows as they are.
+ */
+internal fun CoreTexts.refusalText(raw: String): String {
+    val split = CoreTexts.split(raw)
+    val known = split?.let { text(it.first) }
+    return known ?: failed(split?.second?.ifEmpty { null } ?: raw)
 }
