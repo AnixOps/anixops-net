@@ -3559,6 +3559,22 @@
         }
       }
     },
+    "还没读到已保存的订阅，请解锁设备后再试。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your saved subscriptions haven't been read yet. Unlock the device and try again."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "還沒讀到已儲存的訂閱，請解鎖裝置後再試。"
+          }
+        }
+      }
+    },
     "无法读取 VPN 配置": {
       "localizations": {
         "en": {

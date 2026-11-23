@@ -242,8 +242,9 @@ while connected and posts the disconnect notice from the stop error. Tapping a s
 `anixops://` link is dropped, since it would run its command (disconnect, direct mode, another node) on the tap.
 
 The system drops every notification until the user allows them. The app asks once, the first time the tunnel is
-connected while the app is in front (after the system's prompt to add the VPN configuration, never at launch or in
-the demo), and when a switch is turned on. While permission was never asked Settings › 通知 offers a button that asks;
+connected while the app is in front (after the system's prompt to add the VPN configuration; never in the demo), and
+when a switch is turned on. On a fresh install that is the first connect, never the launch; someone upgrading whose
+tunnel is already up (On Demand) and who never answered sees it once when the app opens. While permission was never asked Settings › 通知 offers a button that asks;
 when it was refused, a button that opens the system settings and a footer saying the switches do nothing until then.
 
 ## Extension log levels and modules

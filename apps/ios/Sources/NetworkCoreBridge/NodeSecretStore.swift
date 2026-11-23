@@ -13,6 +13,13 @@ public enum NodeSecretStore {
         public init(status: OSStatus) {
             self.status = status
         }
+
+        /// The device is locked and has not been unlocked since it started (`errSecInteractionNotAllowed`): the
+        /// value is there but cannot be read yet, and a read after the first unlock succeeds. Any other failure
+        /// repeats on the next read.
+        public var isLockedUntilFirstUnlock: Bool {
+            status == errSecInteractionNotAllowed
+        }
     }
 
     static let service = "networkcore.node-key"

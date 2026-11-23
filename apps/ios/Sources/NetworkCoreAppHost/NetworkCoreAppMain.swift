@@ -27,8 +27,10 @@ struct NetworkCoreAppMain: App {
                         return
                     }
                     #endif
-                    // A background refresh may have launched the app and read everything already.
-                    if !tunnel.loaded {
+                    // A background refresh may have launched the app and read everything already. `loaded` alone is not
+                    // enough: a background launch before the first unlock could not read the subscription groups, and
+                    // the front loads again so the groups appear (writes refuse to replace them until then).
+                    if !tunnel.loaded || !tunnel.subscriptionsRead {
                         await tunnel.load()
                     }
                     await tunnel.refreshDueSubscriptions()
@@ -168,7 +170,11 @@ struct RootView: View {
     /// First run only: after loading, with nothing imported and the welcome screen never closed.
     private var showsOnboarding: Binding<Bool> {
         Binding(
-            get: { tunnel.loaded && tunnel.appMode == .proxy && tunnel.hasNoNodes && !onboardingDone && !needsTerms },
+            get: {
+                // Unread groups (Keychain locked) are not "nothing imported".
+                tunnel.loaded && tunnel.subscriptionsRead && tunnel.appMode == .proxy && tunnel.hasNoNodes
+                    && !onboardingDone && !needsTerms
+            },
             set: { shown in
                 if !shown {
                     onboardingDone = true
@@ -245,7 +251,7 @@ struct RootView: View {
                 tab = first
             }
         }
-        .onChange(of: tunnel.loaded) { _, loaded in
+        .onChange(of: tunnel.loaded && tunnel.subscriptionsRead) { _, loaded in
             // Someone who already has nodes never needs the welcome screen, even after deleting them all later.
             if loaded, !tunnel.hasNoNodes {
                 onboardingDone = true

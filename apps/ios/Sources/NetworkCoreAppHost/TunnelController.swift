@@ -59,10 +59,13 @@ final class TunnelController {
     private(set) var latencies: [String: NodeLatency] = [:]
     /// Groups being downloaded now.
     private(set) var updatingGroups: Set<String> = []
-    /// Set once `subscriptions` holds what the Keychain has (`load()` read it). Before that, or when the Keychain
-    /// could not be read (before the first unlock), an empty list says nothing about the groups, and the background
-    /// refresh is not withdrawn for it (`scheduleBackgroundRefresh`).
-    @ObservationIgnored private var subscriptionsRead = false
+    /// Set once `subscriptions` holds what the Keychain has (`readSavedSubscriptions()`). Before that, or when the
+    /// Keychain could not be read (before the first unlock, for example in a background launch), an empty list says
+    /// nothing about the groups: the background refresh is not withdrawn for it (`scheduleBackgroundRefresh`), the
+    /// app reads them again when it comes to the front (`RootView`, `reloadNow`), and `store` refuses to replace the
+    /// saved groups with a list built on the empty one. `loaded` alone does not say the groups were read. Observed, so
+    /// the welcome screen waits for it (`RootView`).
+    private(set) var subscriptionsRead = false
     /// Whether the last `importLink` reconnected a running tunnel on what it imported, for the import sheet.
     @ObservationIgnored private(set) var importReconnected = false
     /// The saved tunnel's mode: by rules, everything through the selected node, or everything direct.
@@ -242,25 +245,7 @@ final class TunnelController {
         if let saved = try? LocalRules.load(from: LocalRules.defaultURL) {
             localRules = saved
         }
-        switch Result(catching: { try NodeSecretStore.value(account: SubscriptionGroups.keychainAccount) }) {
-        case let .success(.some(value)):
-            if let saved = try? SubscriptionGroups.fromKeychainValue(value) {
-                // Saved again so the tunnel's library has what this version adds to it (the ANX license origin of
-                // each node, anx spec §2.4.1) without waiting for a subscription update.
-                store(saved)
-                subscriptionsRead = true
-            }
-        case .failure:
-            // The Keychain is not readable now (for example before the first unlock); keep what is shown.
-            break
-        case .success(.none):
-            // A library saved before subscription groups existed becomes the first group.
-            let previous = (try? NodeSecretStore.value(account: NodeLibrary.keychainAccount))
-                .flatMap { $0 }
-                .flatMap { try? NodeLibrary.fromKeychainValue($0) }
-            store(SubscriptionGroups.migrating(previous, name: String(localized: "导入的节点")))
-            subscriptionsRead = true
-        }
+        readSavedSubscriptions()
         // Shortcuts or Control Center may have switched the mode while the app was not running.
         followSavedMode()
         refresh()
@@ -281,6 +266,43 @@ final class TunnelController {
             _ = startAfterStaleCopy(failure: await lastStopDescription(), requiresOnDemand: true)
         }
         #endif
+    }
+
+    /// Reads the subscription groups from the Keychain unless they were read already. Runs in `profileWrites`
+    /// (`loadNow`, `reloadNow`), so no write is between building its groups and storing them while this replaces
+    /// them. A Keychain that cannot be read now (before the first unlock) leaves `subscriptionsRead` false, and the
+    /// next call tries again.
+    private func readSavedSubscriptions() {
+        guard !subscriptionsRead else {
+            return
+        }
+        switch Result(catching: { try NodeSecretStore.value(account: SubscriptionGroups.keychainAccount) }) {
+        case let .success(.some(value)):
+            // Set before `store`, which refuses to write while the groups are unread.
+            subscriptionsRead = true
+            if let saved = try? SubscriptionGroups.fromKeychainValue(value) {
+                // Saved again so the tunnel's library has what this version adds to it (the ANX license origin of
+                // each node, anx spec §2.4.1) without waiting for a subscription update.
+                store(saved)
+            }
+            // A value that does not decode will not decode on a later try either: the groups stay empty and the next
+            // save replaces it, as before groups were guarded.
+        case let .failure(error):
+            if (error as? NodeSecretStore.Failure)?.isLockedUntilFirstUnlock == true {
+                // Not readable before the first unlock: keep what is shown and read again later.
+                break
+            }
+            // Any other failure repeats on every read; waiting for it would block every write for good. The groups
+            // stay empty and the next save replaces the value, as before groups were guarded.
+            subscriptionsRead = true
+        case .success(.none):
+            subscriptionsRead = true
+            // A library saved before subscription groups existed becomes the first group.
+            let previous = (try? NodeSecretStore.value(account: NodeLibrary.keychainAccount))
+                .flatMap { $0 }
+                .flatMap { try? NodeLibrary.fromKeychainValue($0) }
+            store(SubscriptionGroups.migrating(previous, name: String(localized: "导入的节点")))
+        }
     }
 
     /// Reads the VPN configuration again once the writes queued before are done: when the app comes back to the
@@ -313,6 +335,9 @@ final class TunnelController {
             return
         }
         #endif
+        // A launch in the background before the first unlock could not read the groups; every write and every
+        // return to the front reads them once the Keychain allows it, so no write starts from the empty list.
+        readSavedSubscriptions()
         guard let managers = try? await NETunnelProviderManager.loadAllFromPreferences() else {
             return
         }
@@ -589,6 +614,11 @@ final class TunnelController {
             return false
         }
         return await writing { () async -> Bool in
+            // Before the groups are read, a new group would replace every saved one.
+            guard subscriptionsRead else {
+                message = Self.subscriptionsUnreadText
+                return false
+            }
             var groups = subscriptions
             if let report = imported.report {
                 let group = SubscriptionGroup(
@@ -1257,6 +1287,13 @@ final class TunnelController {
         activate: Bool,
         trigger: SubscriptionUpdateTrigger
     ) async -> Bool {
+        // Before the groups are read, the downloaded group would replace every saved one.
+        guard subscriptionsRead else {
+            if trigger == .user {
+                message = Self.subscriptionsUnreadText
+            }
+            return false
+        }
         // A group deleted while it downloaded stays deleted: the result is dropped instead of coming back as a new
         // group (third-party review F08).
         if let groupID, subscriptions.group(id: groupID) == nil {
@@ -1405,8 +1442,13 @@ final class TunnelController {
         return license?.record(url: url, header: header) ?? false
     }
 
-    /// Saves the groups and the library the extension reads, both to the Keychain.
+    /// Saves the groups and the library the extension reads, both to the Keychain. Refused while the saved groups
+    /// are unread (`subscriptionsRead`): `groups` was then built on an empty list and would overwrite them.
     private func store(_ groups: SubscriptionGroups) {
+        guard subscriptionsRead else {
+            message = Self.subscriptionsUnreadText
+            return
+        }
         let next = groups.activeLibrary()
         subscriptions = groups
         library = next
@@ -2898,6 +2940,12 @@ final class TunnelController {
         #endif
     }
 
+    /// Shown when a change to the subscription groups waits for them to be read: the Keychain cannot be read before
+    /// the device is first unlocked after a restart.
+    static let subscriptionsUnreadText = String(
+        localized: "还没读到已保存的订阅，请解锁设备后再试。"
+    )
+
     /// Shown for an `http://` subscription link: iOS and macOS refuse plain HTTP downloads (App Transport Security).
     static let plainHTTPSubscriptionText = String(
         localized: "只支持 HTTPS 订阅链接：系统不允许 App 用不加密的 http:// 下载订阅。请向服务商索取 https:// 链接。"
@@ -3106,6 +3154,8 @@ extension TunnelController {
         if let text = UserDefaults.standard.string(forKey: "AnixOpsNotice"), !text.isEmpty {
             message = text
         }
+        // The made-up groups stand for the saved ones: the demo's changes are stored as before.
+        subscriptionsRead = true
         loaded = true
     }
 
