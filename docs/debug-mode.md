@@ -157,6 +157,9 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含调试模式的 `deb
   - 重启前，如果实时抓包开着且有内容，后端先把它加密保存成会话“重连前自动保存”；用户断开、退出程序（Android 上 VPN 被系统收回）时保存成“断开时自动保存”，名称跟随界面语言。正在查看的已保存会话（`load_capture` 会关掉抓包）不会再存一次。保存失败只记日志并在提示里说明，不会挡住重启或断开。
   - 重启后自动重新开启抓包，并带上原来的容量上限；操作提示写明“当前抓包已保存为……”。
   - 新引擎的 `seq` / `rev` 和连接 id 从 1 重新计数：请求表发现内核返回的计数比已读到的小（`engineRestarted`），就清空列表从头读，并取消原来的选中，免得旧行挡住新请求或同 id 指向别的请求。Android 的 `Core.requests` 做同样的判断。
+  - Android 每秒读一次请求表，只让整份行列表在有变化时穿过 JNI：下一次读取的位置（`nextSince` / `nextRev`，与 client-view 的
+    `next_since` / `next_rev` 逐行对应，`ViewModelsTest` 用 client-view 的样例核对）在 Kotlin 里算；内核没有新请求、也没有挤出
+    已列出的行时，不再合并和重排，沿用上次的结果；暂停期间只在换排序时重排一次。
   - Linux 和 Android 由 `client-core` 在重启（`restart_if_running`）、断开和退出时做同样的保存与恢复。会话密钥在用户开启抓包时由客户端读出后交给后端，重启时不会在持有后端锁的情况下去问钥匙环或 Keystore；没拿到密钥时抓包照常恢复，只是不保存。
 - **桌面抓包容量**：内核默认只留 2 MiB（按 iOS 网络扩展的内存上限定的），桌面窗口每次开启抓包都带上 `max_total_bytes` = 16 MiB（内核允许的最大值，`DESKTOP_CAPTURE_BUDGET`），否则普通连接几秒就会把解密的请求挤出去。Android 仍用内核默认值。
 - **Map Local / Map Remote**（`desktop_mitm::mappings`）：存放在插件目录的 `debug-mappings.json`，格式与 Apple 端相同。`plugins::apply` 把生成的“AnixOps 调试映射”接在导入的插件后面。映射要开启 HTTPS 解密才生效，保存后正在运行的引擎会重新加载。

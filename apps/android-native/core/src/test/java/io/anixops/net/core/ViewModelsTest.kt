@@ -1,11 +1,18 @@
 package io.anixops.net.core
 
 import java.io.File
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
+import kotlinx.serialization.json.longOrNull
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -71,5 +78,47 @@ class ViewModelsTest {
             assertTrue(view.bars.size == 24 || view.bars.size == 7)
             assertEquals(view.upload + view.download, view.bars.sumOf { it.bytes })
         }
+    }
+
+    private fun samples(command: String) = cases.filter { it["command"]?.jsonPrimitive?.content == command && "answer" in it }
+
+    /** The list's cursor is worked out in Kotlin; it gives what client-view's `next_since` gives for its samples. */
+    @Test
+    fun nextSinceFollowsTheClientViewSamples() {
+        val samples = samples("view.next_since")
+        assertTrue("no view.next_since samples", samples.isNotEmpty())
+        samples.forEach { case ->
+            val args = case.getValue("args").jsonObject
+            val rows = args["rows"]?.jsonArray ?: JsonArray(emptyList())
+            val lastSeq = args["lastSeq"]?.jsonPrimitive?.longOrNull ?: 0L
+            assertEquals(case.toString(), case.getValue("answer").jsonPrimitive.long, nextSince(rows, lastSeq))
+        }
+    }
+
+    @Test
+    fun nextRevFollowsTheClientViewSamples() {
+        val samples = samples("view.next_rev")
+        assertTrue("no view.next_rev samples", samples.isNotEmpty())
+        samples.forEach { case ->
+            val args = case.getValue("args").jsonObject
+            val current = (args["current"] as? JsonPrimitive)?.longOrNull
+            val page = args["page"]?.jsonPrimitive?.intOrNull ?: 0
+            val expected = (case.getValue("answer") as? JsonPrimitive)?.longOrNull
+            assertEquals(case.toString(), expected, nextRev(current, args["answer"] ?: JsonNull, page))
+        }
+    }
+
+    /**
+     * Merging an answer with no request and no row pushed out gives rows from an earlier merge (already in order)
+     * back as they are, so the list skips the merge.
+     */
+    @Test
+    fun anEmptyAnswerChangesNothing() {
+        val rows = Envelope.json.parseToJsonElement("""[{"seq":3,"connection_id":1,"index":3},{"seq":0,"connection_id":1,"index":4}]""").jsonArray
+        assertTrue(mergeChangesNothing(rows, Envelope.json.parseToJsonElement("""{"requests":[],"last_seq":3}""")))
+        assertTrue(mergeChangesNothing(rows, Envelope.json.parseToJsonElement("""{"last_seq":3,"dropped_before_seq":2}""")))
+        assertFalse(mergeChangesNothing(rows, Envelope.json.parseToJsonElement("""{"requests":[],"dropped_before_seq":3}""")))
+        assertFalse(mergeChangesNothing(rows, Envelope.json.parseToJsonElement("""{"requests":[{"seq":4,"connection_id":1,"index":4}]}""")))
+        assertFalse(mergeChangesNothing(rows, JsonNull))
     }
 }

@@ -3,6 +3,10 @@ package io.anixops.net.core
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.longOrNull
 
 /** Whether the engine keeps captured traffic, and how much of its budget it holds (`capture`). */
 @Serializable
@@ -71,6 +75,71 @@ fun engineRestarted(feed: RequestFeed, lastSeq: Long?, lastRev: Long?): Boolean 
     val readRev = feed.lastRev
     if (lastRev != null && readRev != null) return lastRev < readRev
     return lastSeq != null && lastSeq < feed.lastSeq
+}
+
+/*
+ * The cursor of the next read, worked out here rather than through `view.next_since` / `view.next_rev`: those take
+ * the whole list (up to 2000 rows) across JNI every second only to return a number. They follow client-view's
+ * `next_since` and `next_rev` (crates/client-view/src/capture.rs) line by line, and ViewModelsTest checks them
+ * against that crate's samples (crates/client-view/fixtures/cases.json).
+ */
+
+private fun JsonObject.unsigned(name: String): Long? =
+    (get(name) as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull?.takeIf { it >= 0 }
+
+private fun JsonObject.signed(name: String): Long? = (get(name) as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull
+
+private fun JsonObject.string(name: String): String? = (get(name) as? JsonPrimitive)?.takeIf { it.isString }?.content
+
+private fun JsonObject.seq(): Long = unsigned("seq") ?: 0L
+
+/** Whether the engine may still fill in this request's response; see client-view `pending`. */
+private fun JsonObject.pending(): Boolean = when (val state = string("state")) {
+    null -> signed("status") == null && signed("ended_at_ms") == null && string("note").isNullOrEmpty()
+    else -> state == "in_progress"
+}
+
+/**
+ * Where the next read by `since_seq` starts (kernels without `since_rev`): before the oldest request still waiting
+ * for its response, so it comes back with the response, or [lastSeq], after the newest one seen.
+ */
+fun nextSince(rows: JsonArray, lastSeq: Long): Long {
+    for (row in rows) {
+        val request = row as? JsonObject ?: continue
+        val seq = request.seq()
+        if (seq > 0 && request.pending()) return seq - 1
+    }
+    return lastSeq
+}
+
+/**
+ * The `since_rev` of the next read after [answer], or null for a kernel without `since_rev`: a full page ([page]
+ * rows) carries on from its last row, since the engine lists in the order things changed; otherwise the read starts
+ * after the newest change.
+ */
+fun nextRev(current: Long?, answer: JsonElement, page: Int): Long? {
+    val read = answer as? JsonObject ?: return null
+    val lastRev = read.unsigned("last_rev") ?: return null
+    val requests = read["requests"] as? JsonArray ?: JsonArray(emptyList())
+    val last = if (page > 0 && requests.size >= page) (requests.lastOrNull() as? JsonObject)?.unsigned("rev") else null
+    return maxOf(current ?: 0L, last ?: lastRev)
+}
+
+/**
+ * Whether merging [answer] into [rows] (`view.merge_requests`) would give [rows] back unchanged: the engine sent no
+ * request and pushed out none of the rows. [rows] come from an earlier merge, so they are already in order and within
+ * the list's limit. The list then needs neither the merge nor ordering again.
+ */
+fun mergeChangesNothing(rows: JsonArray, answer: JsonElement): Boolean {
+    val read = answer as? JsonObject ?: return false
+    val requests = read["requests"]
+    if (requests != null && requests !is JsonArray) return false
+    if ((requests as? JsonArray)?.isNotEmpty() == true) return false
+    val dropped = read.unsigned("dropped_before_seq") ?: 0L
+    return rows.none { row ->
+        val seq = (row as? JsonObject)?.seq() ?: 0L
+        seq in 1..dropped
+    }
 }
 
 /** One read of the list: what was read, the rows to show in order, and why the engine refused the filter. */

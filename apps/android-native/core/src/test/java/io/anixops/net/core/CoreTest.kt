@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -291,11 +292,10 @@ class CoreTest {
 
         override fun invoke(command: String, args: String): String {
             calls += command to args
+            // `view.next_since` and `view.next_rev` are not asked: the cursor is worked out without sending the rows.
             return when (command) {
-                "view.next_since" -> """{"ok":0}"""
                 "runtime_control" -> engine
                 "view.merge_requests" -> """{"ok":[{"seq":0,"connection_id":3,"index":0,"method":"GET","state":"in_progress"}]}"""
-                "view.next_rev" -> """{"ok":5}"""
                 "view.request_rows" -> """{"ok":[{"seq":0,"connection_id":3,"index":0,"method":"GET","path":"/a","tone":"pending"}]}"""
                 else -> error("unexpected $command")
             }
@@ -315,6 +315,33 @@ class CoreTest {
         assertEquals(RequestKey(3, 0), page.shown.single().key)
         assertEquals("pending", page.shown.single().tone)
         assertNull(page.error)
+    }
+
+    /** An idle list sends no rows across JNI: with nothing new from the engine the rows shown last are kept. */
+    @Test
+    fun anIdleListIsNeitherMergedNorOrderedAgain() = runTest {
+        val rows = buildJsonArray {
+            add(buildJsonObject { put("seq", 7); put("connection_id", 3); put("index", 1); put("status", 200); put("rev", 9) })
+            add(buildJsonObject { put("seq", 0); put("connection_id", 3); put("index", 2); put("state", "in_progress"); put("rev", 10) })
+        }
+        val feed = RequestFeed(rows, lastSeq = 7, lastRev = 10)
+        val shown = listOf(RequestRow(seq = 7, connectionId = 3, index = 1, method = "GET", path = "/", tone = "success"))
+        val idle = RequestsTransport("""{"ok":{"requests":[],"last_seq":7,"last_rev":10,"dropped_before_seq":0}}""")
+        val page = Core(idle, StandardTestDispatcher(testScheduler)).requests(feed, "", "seq", true, shown = shown)
+        assertEquals(shown, page.shown)
+        assertTrue(page.feed.rows === rows)
+        assertEquals(10L, page.feed.lastRev)
+        assertEquals(listOf("runtime_control"), idle.calls.map { it.first })
+        // since_seq stops before the oldest finished request still listed as under way; here none is.
+        assertTrue(idle.calls.single().second.contains("\"since_seq\":7"))
+
+        // Without the rows shown last, or once the engine pushed one out, the list is merged and ordered again.
+        val listed = RequestsTransport("""{"ok":{"requests":[],"last_seq":7,"last_rev":10}}""")
+        Core(listed, StandardTestDispatcher(testScheduler)).requests(feed, "", "seq", true)
+        assertEquals(listOf("runtime_control", "view.merge_requests", "view.request_rows"), listed.calls.map { it.first })
+        val dropped = RequestsTransport("""{"ok":{"requests":[],"last_seq":8,"last_rev":11,"dropped_before_seq":7}}""")
+        Core(dropped, StandardTestDispatcher(testScheduler)).requests(feed, "", "seq", true, shown = shown)
+        assertTrue(dropped.calls.any { it.first == "view.merge_requests" })
     }
 
     @Test
