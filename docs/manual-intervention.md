@@ -187,7 +187,13 @@ CI 只能跑规则与重建逻辑的单元测试（`OnDemandSettingsTests`、`Ne
   开发者模式的诊断里有 `start secrets updated by the app`，没有 `node key is unavailable`，HTTPS 解密状态不变。
 - [ ] macOS：隧道断开但自动重连仍开着时（例如 Wi-Fi 规则为“断开”的网络里）换一个节点，再离开该网络：系统拉起隧道
   失败一次（`start secrets are older than the profile`）后，App 在运行或下次回到前台时自动带新密钥重连一次并连上；
-  再次失败时提示“网络扩展保存的节点密钥副本已过期……请重新连接”，不再提示节点没有响应。
+  再次失败时提示“网络扩展保存的配置副本已过期……请重新连接”，不再提示节点没有响应。
+- [ ] macOS：隧道断开但自动重连仍开着时，改插件（启用一个、在仍有插件启用时停用一个，或改内容）或调试映射，再让系统拉起隧道（离开该网络、
+  重启后自动连接或从系统设置的 VPN 开关直接连接）：第一次启动失败（`https decryption payload missing from the kept
+  start secrets`，原因为 `start secrets are older than the profile`），App 在运行或下次回到前台时带新副本重连一次并连上，
+  HTTPS 解密保持开启、用的是新插件；同一配置不会反复重连（退出并重新打开 App 也不再重连）。
+- [ ] macOS 已知限制：隧道断开时只在同一订阅里换策略组成员（不换节点、不改插件）时，系统不经 App 拉起的隧道仍按上次
+  交给系统扩展的分组选择运行，不报错；打开 App 连接一次或连接后再选一次即恢复。确认该行为与说明一致。
 
 ## iOS / macOS HTTPS 解密首次确认真机验收
 

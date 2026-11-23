@@ -52,8 +52,12 @@ their own gates pass.
   Tapping a node whose save is pending waits for that save. At launch a profile whose key is missing (left by
   0.3.0-beta.11) is saved again for the selected node. On macOS every saved write and node library change is also
   handed to a running System Extension (`TunnelAppMessage.startSecrets`); a start the system made on a copy older
-  than the profile fails with `start secrets are older than the profile` and the app, when it runs or next becomes
-  active, starts the tunnel once more with options for that profile.
+  than the profile (an older node key version, or HTTPS decryption chunks that do not match the profile's digest
+  after a plugin or debug mapping change) fails with `start secrets are older than the profile` and the app, when it
+  runs or next becomes active, starts the tunnel once more with options for that profile (node key version plus
+  payload reference; remembered across launches, so it never loops). Known limit: a group member picked while the
+  tunnel is down keeps neither a new key version nor a new payload, so a system-initiated start runs the previous
+  selections until the app connects or hands the copy over again.
 - UI: the app follows AnixOps Design (github.com/AnixOps/anixops-design), the brand and token system shared by every
   AnixOps product (five tabs: 首页, 代理, 规则, 扩展, 设置). The design repository is vendored unmodified into
   `apps/windows-gui/ui/src/design/anixops/` by `python3 .github/scripts/sync_design.py --source <clone> --ref <tag>`

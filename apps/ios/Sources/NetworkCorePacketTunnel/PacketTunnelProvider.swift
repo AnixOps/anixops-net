@@ -92,6 +92,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         events.record("startTunnel")
         watchMemoryPressure()
         startSecrets = Self.resolveStartSecrets(options: options, events: events)
+        // macOS: the copy kept from an earlier start, when the app passed nothing this time (On Demand, login,
+        // System Settings); nil when it passed fresh values, and always nil on iOS, which keeps no copy.
+        let keptCopy = TunnelStartSecrets(options: options) == nil ? startSecrets : nil
         let completionHandler: (Error?) -> Void = { [events] error in
             if let error = error {
                 Self.log.error("startTunnel failed: \(error.localizedDescription, privacy: .public)")
@@ -183,6 +186,17 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             events.record("dns \(dns.servers.count) servers, \(dns.rules.count) rules, \(dns.hosts.count) hosts")
         }
         events.record("profile loaded, mtu \(interface.mtu), \(interface.addresses.count) addresses, \(interface.includedRoutes.count) routes, \(interface.dnsServers.count) dns servers")
+
+        // A kept copy without the profile's HTTPS decryption payload would start with decryption silently off; fail
+        // with the stale-copy reason instead, so the app starts the tunnel once more with options.
+        if let reason = TunnelStartSecrets.mitmBundleFailureReason(
+            profileValue: tunnelProtocol.providerConfiguration?[TunnelProfileKeys.mitmBundle] as? Data,
+            keptCopy: keptCopy
+        ) {
+            events.record("https decryption payload missing from the kept start secrets")
+            completionHandler(PacketTunnelFailure(reason: reason))
+            return
+        }
 
         let session: EmbeddedRuntimeSession
         do {

@@ -68,8 +68,26 @@ public struct TunnelStartSecrets: Codable, Equatable {
         return "node key is unavailable (keychain status \(status))"
     }
 
-    /// The fixed reason for a copy older than the profile (`nodeKeyFailureReason`); the app looks for it in the
-    /// system's record of the last stop.
+    /// The extension's failure reason when the profile carries an HTTPS decryption payload
+    /// (`TunnelProfileKeys.mitmBundle`, `profileValue`) that the copy kept from an earlier start (`keptCopy`; nil
+    /// when the app passed the values in this start's options, or on iOS) does not hold: plugins, scripts or debug
+    /// mappings changed while the tunnel was not running, so the app could not hand the new chunks over, and the
+    /// system then started the tunnel without the app. The payload is checked by its digest, so a copy for another
+    /// payload never decrypts with the wrong plugins; without this the tunnel would run with HTTPS decryption off and
+    /// say nothing. A copy without chunks falls back to the Keychain read the extension makes anyway (an app
+    /// extension can, a System Extension cannot). Nil when the payload loads, or when the profile has none.
+    public static func mitmBundleFailureReason(profileValue: Data?, keptCopy: TunnelStartSecrets?) -> String? {
+        guard let keptCopy, let profileValue,
+              (try? JSONDecoder().decode(MitmProfileBundle.Reference.self, from: profileValue)) != nil,
+              MitmProfileBundle.load(fromProfileValue: profileValue, chunks: keptCopy.mitmBundleChunks) == nil
+        else {
+            return nil
+        }
+        return staleCopyReason
+    }
+
+    /// The fixed reason for a copy older than the profile (`nodeKeyFailureReason`, `mitmBundleFailureReason`); the
+    /// app looks for it in the system's record of the last stop.
     public static let staleCopyReason = "start secrets are older than the profile; open the app and connect"
 
     /// Whether the description of the last stop (`NEVPNConnection.fetchLastDisconnectError`, with its underlying
@@ -78,13 +96,25 @@ public struct TunnelStartSecrets: Codable, Equatable {
         description?.contains(staleCopyReason) == true
     }
 
+    /// What identifies a saved profile for `retriesStaleCopy`: its node key version and its HTTPS decryption payload
+    /// reference (`TunnelProfileKeys.mitmBundle`, a digest and a chunk count). A plugin change keeps the key
+    /// version but changes the reference, so it counts as another profile. Nil when the profile has neither, as the
+    /// extension then never reports a stale copy. Holds no secret: the reference is only hashed again.
+    public static func staleCopyProfileStamp(nodeKeyVersion: String?, mitmBundle: Data?) -> String? {
+        guard nodeKeyVersion != nil || mitmBundle != nil else {
+            return nil
+        }
+        return (nodeKeyVersion ?? "-") + "/" + (mitmBundle.map(MitmProfileBundle.digest) ?? "-")
+    }
+
     /// Whether the app starts the tunnel again, with options, after a start failed on a stale copy: once for each
-    /// saved profile (`profileVersion`), so a start that fails again for another reason does not loop.
-    public static func retriesStaleCopy(failure: String?, profileVersion: String?, retriedVersion: String?) -> Bool {
-        guard isStaleCopyFailure(failure), let profileVersion else {
+    /// saved profile (`profile`, a `staleCopyProfileStamp`), so a start that fails again for another reason does
+    /// not loop.
+    public static func retriesStaleCopy(failure: String?, profile: String?, retriedProfile: String?) -> Bool {
+        guard isStaleCopyFailure(failure), let profile else {
             return false
         }
-        return profileVersion != retriedVersion
+        return profile != retriedProfile
     }
 
     /// The `TunnelAppMessage.startSecrets` payload and the start options' value. Keys are sorted, so the same

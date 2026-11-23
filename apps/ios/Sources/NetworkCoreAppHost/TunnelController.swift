@@ -127,9 +127,15 @@ final class TunnelController {
     /// macOS: the start secrets last handed to the running System Extension (`handOverStartSecrets()`), encoded; nil
     /// while the tunnel is not connected, so the next connect hands them over again.
     @ObservationIgnored private var handedOverStartSecrets: Data?
-    /// macOS: the key version of the profile the app last started again after a start failed on a stale copy of the
-    /// start secrets (`startAfterStaleCopy`), so it tries once for each saved profile.
-    @ObservationIgnored private var staleCopyRetriedVersion: String?
+    /// macOS: the profile (`TunnelStartSecrets.staleCopyProfileStamp`) the app last started again after a start
+    /// failed on a stale copy of the start secrets (`startAfterStaleCopy`), so it tries once for each saved profile.
+    /// Kept across launches: the system's record of the last stop outlives the app, and a retry already made for
+    /// this profile is not made again at every launch.
+    private var staleCopyRetriedProfile: String? {
+        get { UserDefaults.standard.string(forKey: Self.staleCopyRetriedKey) }
+        set { UserDefaults.standard.set(newValue, forKey: Self.staleCopyRetriedKey) }
+    }
+    private static let staleCopyRetriedKey = "networkcore.stale-copy-retried-profile"
     /// Capture as the app last set it in the running engine (`set_capture`; `load_capture` turns it off).
     @ObservationIgnored private var captureOn = false
     /// Set when the app restarts the tunnel itself (a new node, a decrypted domain) while capture is on: the new
@@ -172,9 +178,9 @@ final class TunnelController {
                 self?.checkStaleStartSecrets()
             }
         })
-        // A new MITM root goes to the running System Extension's copy of the start secrets.
+        // A new or deleted MITM root goes to the running System Extension's copy of the start secrets.
         reloadObservers.append(NotificationCenter.default.addObserver(
-            forName: MitmCertificateStore.didSaveNotification,
+            forName: MitmCertificateStore.didChangeNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
@@ -2093,7 +2099,8 @@ final class TunnelController {
 
     /// Starts the tunnel with options once more after a start failed because the System Extension's copy of the start
     /// secrets belongs to an older profile (`TunnelStartSecrets.staleCopyReason`): the profile was saved again while
-    /// the tunnel was not running, and the system then started it without the app. Once for each saved profile, so
+    /// the tunnel was not running (a new node key version, or a new HTTPS decryption payload after a plugin or debug
+    /// mapping change), and the system then started it without the app. Once for each saved profile, so
     /// a start that fails again does not loop; `requiresOnDemand` (on launch and on becoming active) leaves a tunnel
     /// the user turned off alone. Runs in `profileWrites`. Returns whether it started the tunnel.
     private func startAfterStaleCopy(failure: String?, requiresOnDemand: Bool) -> Bool {
@@ -2102,13 +2109,17 @@ final class TunnelController {
         else {
             return false
         }
-        let version = Self.nodeKeyVersion(of: manager)
+        let profile = TunnelStartSecrets.staleCopyProfileStamp(
+            nodeKeyVersion: Self.nodeKeyVersion(of: manager),
+            mitmBundle: (manager.protocolConfiguration as? NETunnelProviderProtocol)?
+                .providerConfiguration?[TunnelProfileKeys.mitmBundle] as? Data
+        )
         guard TunnelStartSecrets.retriesStaleCopy(
-            failure: failure, profileVersion: version, retriedVersion: staleCopyRetriedVersion
+            failure: failure, profile: profile, retriedProfile: staleCopyRetriedProfile
         ) else {
             return false
         }
-        staleCopyRetriedVersion = version
+        staleCopyRetriedProfile = profile
         startTunnel(manager)
         return true
     }
@@ -2534,13 +2545,13 @@ final class TunnelController {
         if AppNotifications.settings.connection {
             AppNotifications.post(
                 title: String(localized: "AnixOps Net 已断开"),
-                body: String(localized: "网络扩展保存的节点密钥副本已过期。请打开 App 重新连接。"),
+                body: String(localized: "网络扩展保存的配置副本已过期。请打开 App 重新连接。"),
                 thread: "connection",
                 id: "connection-stopped"
             )
         }
         notice = AppNotice(
-            text: String(localized: "网络扩展保存的节点密钥副本已过期，自动重连没有成功。请重新连接。"),
+            text: String(localized: "网络扩展保存的配置副本已过期，自动重连没有成功。请重新连接。"),
             detail: text,
             actions: [.retry]
         )
