@@ -182,7 +182,7 @@
     <string name="notifications_turned_on">已開啟這類通知</string>
     <string name="notifications_turned_off">已關閉這類通知</string>
     <string name="wifi_rules">Wi-Fi 規則</string>
-    <string name="wifi_rules_note">加入網路時自動連線或中斷，App 在背景執行時生效。讀取 Wi-Fi 名稱需要位置權限，開啟時會詢問一次。手動連線或中斷會保持到下次換網路。</string>
+    <string name="wifi_rules_note">加入網路時自動連線或中斷。規則開啟時，App 會以一則通知等待網路，因此在背景也生效。讀取 Wi-Fi 名稱需要精確位置，在背景還需要「一律允許」位置；沒有這些權限時，指定的網路依「其他 Wi-Fi」處理，或等到開啟 App 時再判斷。手動連線或中斷會保持到下次換網路。</string>
     <string name="wifi_rules_enabled">依網路自動連線</string>
     <string name="wifi_name">Wi-Fi 名稱</string>
     <string name="wifi_current_network">目前網路</string>
@@ -194,7 +194,7 @@
     <string name="wifi_action_disconnect">斷開</string>
     <string name="wifi_action_ignore">保持不變</string>
     <string name="wifi_not_on_wifi">目前沒有連線 Wi-Fi</string>
-    <string name="wifi_name_withheld">讀不到 Wi-Fi 名稱，請在系統設定裡允許本 App 使用位置資訊</string>
+    <string name="wifi_name_withheld">讀不到 Wi-Fi 名稱，請在系統設定裡允許本 App 使用精確位置，並開啟位置資訊</string>
     <string name="wifi_name_filled">已填入目前 Wi-Fi 名稱</string>
     <string name="wifi_rules_on">已開啟 Wi-Fi 規則</string>
     <string name="wifi_rules_off">已關閉 Wi-Fi 規則</string>
@@ -642,4 +642,28 @@
     <string name="checkup_section_latency">延遲</string>
     <string name="checkup_start">開始體檢</string>
     <string name="checkup_throughput">測下載速度</string>
+
+    <!-- The VPN service, Wi-Fi rules in the background, permissions, files saved to Downloads. -->
+    <string name="downloads_permission_needed">儲存到「下載」需要儲存空間權限。請在 App 詢問時允許，或到系統設定 › 應用程式 › AnixOps Net › 權限裡開啟。</string>
+    <string name="vpn_start_refused">系統未允許 VPN 啟動：%1$s</string>
+    <string name="vpn_foreground_refused">系統未允許 VPN 服務在前景執行</string>
+    <string name="notification_connecting">正在連線</string>
+    <string name="notification_waiting">Wi-Fi 規則：等待下一個網路</string>
+    <string name="notification_reconnecting">連線意外中斷，正在重新連線</string>
+    <string name="vpn_start_failed">VPN 未能連線</string>
+    <string name="vpn_restart_gave_up">連線接連多次意外停止，不再自動重新連線。請開啟 AnixOps Net 連線。</string>
+    <string name="notifications_blocked">系統未允許本 App 傳送通知，以上提醒不會顯示。</string>
+    <string name="action_allow">允許</string>
+    <string name="action_open_settings">開啟設定</string>
+    <string name="action_continue">繼續</string>
+    <string name="action_not_now">暫不</string>
+    <string name="wifi_precise_location_off">沒有精確位置權限時，系統不提供 Wi-Fi 名稱，指定的網路依「其他 Wi-Fi」處理。</string>
+    <string name="wifi_location_off">位置資訊已關閉，系統隱藏 Wi-Fi 名稱，指定的網路要等能讀到名稱時再判斷。</string>
+    <string name="wifi_background_location_off">指定的網路只在 App 開啟時識別。將位置權限設為「一律允許」後，背景也會依規則處理。</string>
+    <string name="background_location_title">在背景使用位置資訊</string>
+    <string name="background_location_disclosure">AnixOps Net 會讀取目前 Wi-Fi 的名稱，App 關閉或未在使用時也會讀取，用來依你的 Wi-Fi 規則自動連線或中斷。系統把 Wi-Fi 名稱視為位置資訊。名稱只在本機與你的規則比對，不會傳送到任何地方。下一步請選擇「一律允許」。你隨時可以在系統設定裡關閉。</string>
+    <string name="decryption_root_saved">已開啟 HTTPS 解密。根憑證已儲存為 %1$s，請在 設定 › 安全性 › 加密與憑證 › 安裝憑證 › CA 憑證 裡安裝。忽略使用者憑證的 App 不會被解密。</string>
+    <string name="decryption_root_fingerprint">SHA-256：%1$s</string>
+    <string name="decryption_root_not_saved">已開啟 HTTPS 解密，但根憑證未能儲存到「下載」：%1$s</string>
+    <string name="diagnostics_saved">診斷報告已儲存到 %1$s</string>
 </resources>

@@ -101,9 +101,11 @@ class Core(
                 put("query", query)
             },
         )
-        val editable = decode(ListSerializer(NodeSummary.serializer()), nodes, "list_nodes")
-            .filter { it.editable }
-            .mapTo(mutableSetOf()) { it.id }
+        val editable = withContext(dispatcher) {
+            decode(ListSerializer(NodeSummary.serializer()), nodes, "list_nodes")
+                .filter { it.editable }
+                .mapTo(mutableSetOf()) { it.id }
+        }
         return ProxiesPage(view, editable)
     }
 
@@ -275,7 +277,7 @@ class Core(
     // Extensions / 改写: HTTPS decryption, the decrypted domains and the plugins.
 
     /** Turns decryption on; on Android the root certificate is saved to Downloads for the user to install. */
-    suspend fun enableHttpsMitm(): OperationResult = call("enable_https_mitm", OperationResult.serializer())
+    suspend fun enableHttpsMitm(): SavedFileResult = call("enable_https_mitm", SavedFileResult.serializer())
 
     suspend fun disableHttpsMitm(): OperationResult = call("disable_https_mitm", OperationResult.serializer())
 
@@ -406,7 +408,7 @@ class Core(
         call("set_crash_reports", OperationResult.serializer(), args("enabled" to JsonPrimitive(enabled)))
 
     /** Writes the diagnostics report to Downloads; the answer names the file. */
-    suspend fun createDiagnostics(): OperationResult = call("create_diagnostics", OperationResult.serializer())
+    suspend fun createDiagnostics(): SavedFileResult = call("create_diagnostics", SavedFileResult.serializer())
 
     // Activity: the app's log and the traffic statistics.
 
@@ -697,7 +699,11 @@ class Core(
         command: String,
         answer: KSerializer<T>,
         args: JsonObject = Envelope.empty,
-    ): T = decode(answer, raw(command, args), command)
+    ): T {
+        val element = raw(command, args)
+        // Off the caller's thread too: a long answer (thousands of nodes) is not decoded on the main thread.
+        return withContext(dispatcher) { decode(answer, element, command) }
+    }
 
     /** The answer to [command] as JSON, for passing on to a `view.*` command unchanged. */
     suspend fun raw(command: String, args: JsonObject = Envelope.empty): JsonElement = withContext(dispatcher) {

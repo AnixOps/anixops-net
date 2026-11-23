@@ -1,5 +1,6 @@
 package io.anixops.net.ui
 
+import android.os.Build
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -56,6 +57,14 @@ data class SettingsActions(
     /** Opens the system's per-app language page; null where Android has none (before 13). */
     val openLanguageSettings: (() -> Unit)? = null,
     val toggleNotification: (NotificationKind) -> Unit = {},
+    /** Asks for the notification permission, or opens the app's notification settings once it cannot be asked. */
+    val allowNotifications: () -> Unit = {},
+    /** Asks for precise location, which the Wi-Fi name needs. */
+    val allowPreciseLocation: () -> Unit = {},
+    /** Opens the system's location settings, to turn location on. */
+    val openLocationSettings: () -> Unit = {},
+    /** Explains, then asks for location "all the time", for named rules in the background. */
+    val allowBackgroundLocation: () -> Unit = {},
     val setOnDemandEnabled: (Boolean) -> Unit = {},
     val addWifiRule: (String) -> Unit = {},
     val setWifiRule: (ssid: String, action: String) -> Unit = { _, _ -> },
@@ -113,9 +122,16 @@ fun SettingsScreen(
                     }
                 }
                 Note(stringResource(R.string.notifications_note))
+                if (!state.system.notifications) {
+                    SystemRow(
+                        stringResource(R.string.notifications_blocked),
+                        stringResource(R.string.action_allow),
+                        actions.allowNotifications,
+                    )
+                }
             }
         }
-        state.onDemand?.let { WifiRulesSection(it, state.currentSsid, enabled, actions) }
+        state.onDemand?.let { WifiRulesSection(it, state.currentSsid, state.system, enabled, actions) }
         Section(stringResource(R.string.activity)) {
             InfoRow(stringResource(R.string.logs), stringResource(R.string.action_view), onClick = actions.openLogs)
             InfoRow(
@@ -183,7 +199,13 @@ private fun notificationHint(kind: NotificationKind): Int = when (kind) {
 }
 
 @Composable
-private fun WifiRulesSection(settings: OnDemandSettings, currentSsid: String?, enabled: Boolean, actions: SettingsActions) {
+private fun WifiRulesSection(
+    settings: OnDemandSettings,
+    currentSsid: String?,
+    system: SystemAccess,
+    enabled: Boolean,
+    actions: SettingsActions,
+) {
     var draft by rememberSaveable { mutableStateOf("") }
     LaunchedEffect(currentSsid) { if (currentSsid != null) draft = currentSsid }
     val name = draft.trim()
@@ -244,6 +266,52 @@ private fun WifiRulesSection(settings: OnDemandSettings, currentSsid: String?, e
             }
         }
         Note(stringResource(R.string.wifi_rules_note))
+        if (settings.enabled) {
+            // Why named rules may not apply, and the way to fix it: precise location, location on, then
+            // location "all the time" for the background.
+            when {
+                !system.preciseLocation -> SystemRow(
+                    stringResource(R.string.wifi_precise_location_off),
+                    stringResource(R.string.action_allow),
+                    actions.allowPreciseLocation,
+                )
+                !system.locationOn -> SystemRow(
+                    stringResource(R.string.wifi_location_off),
+                    stringResource(R.string.action_open_settings),
+                    actions.openLocationSettings,
+                )
+                Permissions.offersBackgroundLocation(
+                    Build.VERSION.SDK_INT,
+                    namedRules = settings.wifi.isNotEmpty(),
+                    precise = system.preciseLocation,
+                    background = system.backgroundLocation,
+                ) -> SystemRow(
+                    stringResource(R.string.wifi_background_location_off),
+                    stringResource(R.string.action_allow),
+                    actions.allowBackgroundLocation,
+                )
+            }
+        }
+    }
+}
+
+/** What the system does not allow yet, under a section, with the button that fixes it. */
+@Composable
+private fun SystemRow(text: String, action: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = BrandSpacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(BrandSpacing.xs),
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodySmall,
+            color = LocalBrandPalette.current.text2,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onClick) { Text(action) }
     }
 }
 

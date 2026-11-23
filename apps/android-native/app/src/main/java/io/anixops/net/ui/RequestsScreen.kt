@@ -180,7 +180,7 @@ fun RequestsScreen(state: UiState, requests: RequestsState, actions: RequestsAct
 
 /** A line of a list drawn as one card: the first rounds its top corners, the last its bottom ones. */
 @Composable
-private fun lineShape(first: Boolean, last: Boolean): RoundedCornerShape {
+internal fun lineShape(first: Boolean, last: Boolean): RoundedCornerShape {
     val corner = MaterialTheme.shapes.medium.topStart
     val none = CornerSize(0.dp)
     return RoundedCornerShape(
@@ -222,7 +222,7 @@ private fun ConnectionLine(connection: ConnectionSnapshot, first: Boolean, last:
 }
 
 /** A lazy item's width: the page's column, centred on tablets. */
-private fun Modifier.content(): Modifier = widthIn(max = ContentMaxWidth)
+internal fun Modifier.content(): Modifier = widthIn(max = ContentMaxWidth)
     .fillMaxWidth()
     .padding(horizontal = BrandSpacing.md)
 

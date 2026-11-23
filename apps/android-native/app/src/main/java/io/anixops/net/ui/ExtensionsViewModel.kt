@@ -53,14 +53,25 @@ data class ExtensionsState(
     val editingRedirect: RedirectEditor? = null,
 )
 
+/** A sentence for the snackbar: what the client answered, or one the app writes in its own language. */
+sealed interface ExtensionsMessage {
+    data class Text(val text: String) : ExtensionsMessage
+
+    /** Decryption is on and the root certificate is in Downloads at [location]. */
+    data class RootSaved(val location: String, val fingerprint: String?) : ExtensionsMessage
+
+    /** Decryption is on, but the root certificate could not be saved ([error]). */
+    data class RootNotSaved(val error: String) : ExtensionsMessage
+}
+
 class ExtensionsViewModel(private val core: Core, private val preferences: SharedPreferences) : ViewModel() {
     private val _state = MutableStateFlow(ExtensionsState(consented = preferences.contains(CONSENT_KEY)))
     val state: StateFlow<ExtensionsState> = _state.asStateFlow()
 
-    private val _messages = Channel<String>(Channel.BUFFERED)
+    private val _messages = Channel<ExtensionsMessage>(Channel.BUFFERED)
 
     /** What commands answered, for a snackbar. */
-    val messages: Flow<String> = _messages.receiveAsFlow()
+    val messages: Flow<ExtensionsMessage> = _messages.receiveAsFlow()
 
     /** Reads the page every [POLL_MILLIS] until cancelled: plugins update scripts and a request can add a domain. */
     suspend fun poll() {
@@ -76,7 +87,33 @@ class ExtensionsViewModel(private val core: Core, private val preferences: Share
         _state.update { it.copy(consented = true) }
     }
 
-    fun enableDecryption() = perform { core.enableHttpsMitm() }
+    /**
+     * Turns decryption on. Android saves the root to Downloads: the message says where, and its fingerprint to
+     * compare in the system's list, in the app's language.
+     */
+    fun enableDecryption() {
+        if (_state.value.busy) return
+        _state.update { it.copy(busy = true) }
+        viewModelScope.launch {
+            try {
+                val result = core.enableHttpsMitm()
+                val location = result.location
+                val saveError = result.saveError
+                _messages.send(
+                    when {
+                        location != null -> ExtensionsMessage.RootSaved(location, result.fingerprint)
+                        saveError != null -> ExtensionsMessage.RootNotSaved(saveError)
+                        else -> ExtensionsMessage.Text(result.message)
+                    },
+                )
+            } catch (error: CoreException) {
+                _messages.send(ExtensionsMessage.Text(error.message.orEmpty()))
+            } finally {
+                refresh()
+                _state.update { it.copy(busy = false) }
+            }
+        }
+    }
 
     fun disableDecryption() = perform { core.disableHttpsMitm() }
 
@@ -112,16 +149,30 @@ class ExtensionsViewModel(private val core: Core, private val preferences: Share
             val details = core.mitmPluginDetails(plugin.id)
             _state.update { it.copy(inspected = plugin to details) }
         } catch (error: CoreException) {
-            _messages.send(error.message.orEmpty())
+            _messages.send(ExtensionsMessage.Text(error.message.orEmpty()))
         }
     }
 
     fun closeInspector() = _state.update { it.copy(inspected = null) }
 
-    /** Opens the mapping editor on [entry], or on a new mapping answering JSON locally. */
-    fun editMapping(entry: DebugMapping?) = _state.update { it.copy(editingMapping = entry ?: NEW_MAPPING) }
+    /**
+     * The open mapping editor's fields, kept here from opening to saving or leaving so that a rotation or another page
+     * does not lose what was typed.
+     */
+    var mappingDraft: MappingDraft? = null
+        private set
 
-    fun closeMappingEditor() = _state.update { it.copy(editingMapping = null) }
+    /** Opens the mapping editor on [entry], or on a new mapping answering JSON locally. */
+    fun editMapping(entry: DebugMapping?) {
+        val mapping = entry ?: NEW_MAPPING
+        mappingDraft = MappingDraft(mapping)
+        _state.update { it.copy(editingMapping = mapping) }
+    }
+
+    fun closeMappingEditor() {
+        mappingDraft = null
+        _state.update { it.copy(editingMapping = null) }
+    }
 
     /** Saves the edited mapping and closes the editor once the core has taken it. */
     fun saveMapping(entry: DebugMapping) = perform(onSuccess = { closeMappingEditor() }) { core.saveDebugMapping(entry) }
@@ -183,9 +234,9 @@ class ExtensionsViewModel(private val core: Core, private val preferences: Share
             try {
                 val result = command()
                 onSuccess()
-                _messages.send(result.message)
+                _messages.send(ExtensionsMessage.Text(result.message))
             } catch (error: CoreException) {
-                _messages.send(error.message.orEmpty())
+                _messages.send(ExtensionsMessage.Text(error.message.orEmpty()))
             } finally {
                 refresh()
                 _state.update { it.copy(busy = false) }

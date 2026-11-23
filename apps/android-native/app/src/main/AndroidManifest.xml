@@ -12,12 +12,20 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Wi-Fi rules: the network kind, and the Wi-Fi name, which Android gives only with the location permission.
-         The app asks for it only when the user turns the rules on. -->
+    <!-- Wi-Fi rules: the network kind, and the Wi-Fi name, which Android gives only with the precise location
+         permission. The app asks for it only when the user turns the rules on. On Android 10 and later the name is
+         hidden while the app is in the background unless location is allowed all the time: the settings page offers
+         that, after its own explanation, only once named rules exist (Play: background location declaration). -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <!-- Android 8 and 9 save the root certificate, diagnostics reports and capture exports straight into the public
+         Downloads folder; Android 10 and later go through MediaStore without any permission. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
     <!-- These permissions make Google Play assume the Wi-Fi and location hardware are required, which hides the app
          from devices without them (Play: "Required hardware feature declarations"). Wi-Fi rules are optional. -->
     <uses-feature
@@ -77,7 +85,8 @@
         </provider>
 
         <!-- Only the system may bind it (BIND_VPN_SERVICE); the app starts it when the client opens the tunnel, and
-             the system starts it when the user sets the app as the always-on VPN. -->
+             the system starts it when the user sets the app as the always-on VPN. It is in the foreground while
+             connecting, connected, and, with the Wi-Fi rules on, while waiting for the next network. -->
         <service
             android:name=".platform.AnxVpnService"
             android:exported="false"

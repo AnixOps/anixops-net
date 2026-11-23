@@ -27,7 +27,24 @@ data class SettingsState(
     val health: HealthStatus? = null,
     /** The Wi-Fi name the 当前网络 button filled in, for the add field. */
     val currentSsid: String? = null,
+    /** What the system allows the app, read by the page each time it shows. */
+    val system: SystemAccess = SystemAccess(),
     val busy: Boolean = false,
+)
+
+/**
+ * What the system allows that the settings depend on; all true until read, and where a system version does not
+ * have the setting.
+ */
+data class SystemAccess(
+    /** Notifications are allowed (Android 13+: the permission; before: not turned off for the app). */
+    val notifications: Boolean = true,
+    /** Precise location, without which Android never gives the Wi-Fi name. */
+    val preciseLocation: Boolean = true,
+    /** Location is on for the device; off, Android hides the Wi-Fi name even with the permission. */
+    val locationOn: Boolean = true,
+    /** Android 10+: location "all the time", without which the name is hidden while the app is in the background. */
+    val backgroundLocation: Boolean = true,
 )
 
 /** The three notification switches, in the order every client lists them. */
@@ -38,6 +55,9 @@ sealed interface SettingsEvent {
     data class Message(val text: String) : SettingsEvent
 
     data class Resource(@param:StringRes val id: Int) : SettingsEvent
+
+    /** The diagnostics report is in Downloads at [location]. */
+    data class Saved(val location: String) : SettingsEvent
 }
 
 class SettingsViewModel(private val core: Core) : ViewModel() {
@@ -59,6 +79,27 @@ class SettingsViewModel(private val core: Core) : ViewModel() {
             val health = quiet { core.health() }
             if (health != null) _state.update { it.copy(health = health) }
             delay(POLL_MILLIS)
+        }
+    }
+
+    fun setSystemAccess(access: SystemAccess) {
+        _state.update { it.copy(system = access) }
+    }
+
+    /** Tells the client the app's language, for the texts of its notifications; quietly, at start and on a change. */
+    suspend fun applyLanguage(language: String) {
+        quiet { core.notificationSettings(language) }
+    }
+
+    /** Whether the Wi-Fi rules are on, read once when the app starts. */
+    suspend fun rulesEnabled(): Boolean = quiet { core.onDemandSettings() }?.enabled == true
+
+    /** Whether [kind] is on now; null before the switches were read. */
+    fun notificationOn(kind: NotificationKind): Boolean? = _state.value.notifications?.let {
+        when (kind) {
+            NotificationKind.Scripts -> it.scripts
+            NotificationKind.Connection -> it.connection
+            NotificationKind.Subscriptions -> it.subscriptions
         }
     }
 
@@ -133,7 +174,10 @@ class SettingsViewModel(private val core: Core) : ViewModel() {
         SettingsEvent.Message(result.message)
     }
 
-    fun createDiagnostics() = perform { SettingsEvent.Message(core.createDiagnostics().message) }
+    fun createDiagnostics() = perform {
+        val result = core.createDiagnostics()
+        result.location?.let { SettingsEvent.Saved(it) } ?: SettingsEvent.Message(result.message)
+    }
 
     private fun saveOnDemand(change: (OnDemandSettings) -> OnDemandSettings, @StringRes done: Int) {
         val current = _state.value.onDemand ?: return

@@ -161,18 +161,30 @@ private fun ToggleLine(
 }
 
 /** A body in a text box: editable when it is text, kept as the saved bytes otherwise until cleared. */
-private sealed interface BodyDraft {
+internal sealed interface BodyDraft {
     data class Text(val text: String) : BodyDraft
 
     class Bytes(val bytes: ByteArray) : BodyDraft
 }
 
-private fun bodyDraft(base64: String): BodyDraft {
+internal fun bodyDraft(base64: String): BodyDraft {
     val bytes = MappingText.bytes(base64)
     return MappingText.text(bytes)?.let { BodyDraft.Text(it) } ?: BodyDraft.Bytes(bytes)
 }
 
-/** Adds or changes one mapping; the page replaces 扩展 until it is saved or left. */
+/**
+ * The mapping editor's fields while it is open on [initial]. [ExtensionsViewModel] keeps it from opening to saving or
+ * leaving, so neither a rotation nor another page loses what was typed; it stays out of the saved-state Bundle
+ * because a response body can be large.
+ */
+class MappingDraft(val initial: DebugMapping) {
+    internal val entry = mutableStateOf(initial)
+    internal val headers = mutableStateOf(MappingText.headerLines(initial.headers))
+    internal val body = mutableStateOf(bodyDraft(initial.body))
+    internal val status = mutableStateOf(initial.status.toString())
+}
+
+/** Adds or changes one mapping; the page replaces 扩展 until it is saved or left. [editorDraft] keeps the fields. */
 @Composable
 fun MappingEditorScreen(
     initial: DebugMapping,
@@ -180,11 +192,14 @@ fun MappingEditorScreen(
     onSave: (DebugMapping) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    editorDraft: MappingDraft? = null,
 ) {
-    var entry by remember(initial) { mutableStateOf(initial) }
-    var headers by rememberSaveable(initial) { mutableStateOf(MappingText.headerLines(initial.headers)) }
-    var body by remember(initial) { mutableStateOf(bodyDraft(initial.body)) }
-    var status by rememberSaveable(initial) { mutableStateOf(initial.status.toString()) }
+    val own = remember(initial) { MappingDraft(initial) }
+    val fields = editorDraft?.takeIf { it.initial == initial } ?: own
+    var entry by fields.entry
+    var headers by fields.headers
+    var body by fields.body
+    var status by fields.status
     val local = entry.kind == "local"
     val statusCode = status.toIntOrNull()?.takeIf { it in STATUS_RANGE }
     val canSave = entry.pattern.isNotBlank() && (if (local) statusCode != null else entry.target.isNotBlank())

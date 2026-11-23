@@ -63,7 +63,11 @@ class ConnectTile : TileService() {
         if (working) return
         when (tileTap(snapshot?.state, VpnService.prepare(this) == null)) {
             TileTap.OpenApp -> openApp()
-            TileTap.Connect -> perform { app.core.connect() }
+            TileTap.Connect -> perform {
+                // The client's notifications follow the app's language, also when the app was not opened.
+                runCatching { app.applyLanguage() }
+                app.core.connect()
+            }
             TileTap.Disconnect -> perform { app.core.disconnect() }
         }
     }

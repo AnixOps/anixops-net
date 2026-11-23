@@ -62,6 +62,8 @@ class ProxiesViewModel(private val core: Core) : ViewModel() {
 
     private var checking: Job? = null
 
+    private var searching: Job? = null
+
     /** Reads the page every [POLL_MILLIS] until cancelled (subscriptions update in the background). */
     suspend fun poll() {
         while (true) {
@@ -70,9 +72,17 @@ class ProxiesViewModel(private val core: Core) : ViewModel() {
         }
     }
 
+    /**
+     * Shows the nodes matching [query] once typing pauses; a newer query cancels the read of an older one, and
+     * [refresh] drops an answer for a query that is no longer the page's.
+     */
     fun search(query: String) {
         _state.update { it.copy(query = query) }
-        viewModelScope.launch { refresh() }
+        searching?.cancel()
+        searching = viewModelScope.launch {
+            delay(SEARCH_PAUSE_MILLIS)
+            refresh()
+        }
     }
 
     fun select(nodeId: String) = perform { core.switchNode(nodeId) }
@@ -174,8 +184,16 @@ class ProxiesViewModel(private val core: Core) : ViewModel() {
     private suspend fun refresh() {
         try {
             val subscriptions = core.subscriptions()
-            val page = core.proxies(_state.value.query, delays)
-            _state.update { it.copy(subscriptions = subscriptions, page = page, loaded = true) }
+            val query = _state.value.query
+            val page = core.proxies(query, delays)
+            // Reads overlap (the poll, a search, a test): an answer for a query the user has typed past is not shown.
+            _state.update {
+                if (it.query != query) {
+                    it.copy(subscriptions = subscriptions)
+                } else {
+                    it.copy(subscriptions = subscriptions, page = page, loaded = true)
+                }
+            }
         } catch (error: CoreException) {
             _events.send(ProxiesEvent.Message(error.message.orEmpty()))
         }
@@ -198,6 +216,9 @@ class ProxiesViewModel(private val core: Core) : ViewModel() {
 
     companion object {
         private const val POLL_MILLIS = 3_000L
+
+        /** How long typing must pause before the search runs. */
+        const val SEARCH_PAUSE_MILLIS = 250L
 
         /** The automatic update intervals offered, in hours; 0 is by hand (`subscription-format.ts`). */
         val INTERVALS = listOf(0, 1, 3, 6, 12, 24, 48, 72, 168)

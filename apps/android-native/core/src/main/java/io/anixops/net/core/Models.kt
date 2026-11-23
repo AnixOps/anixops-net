@@ -38,6 +38,19 @@ data class StatusFact(
 @Serializable
 data class OperationResult(val message: String)
 
+/**
+ * What a command that saves to Downloads answers: the core's sentence, and where the file went ([location]), so the
+ * app can say it in its own language; the decryption root adds its SHA-256 [fingerprint], or why it was not saved
+ * ([saveError]).
+ */
+@Serializable
+data class SavedFileResult(
+    val message: String,
+    val location: String? = null,
+    val fingerprint: String? = null,
+    val saveError: String? = null,
+)
+
 enum class ConnectionState {
     Connected,
     NotConnected,
