@@ -16,3 +16,4 @@ pub mod private_file;
 pub mod trusted_roots;
 
 mod descriptor;
+mod entry;

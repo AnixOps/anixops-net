@@ -189,19 +189,28 @@ mod gui {
         use windows_sys::Win32::System::ApplicationInstallationAndServicing::MsiEnumRelatedProductsW;
 
         let code = wide(UPGRADE_CODE);
-        let mut installed = 0;
         // A product code is 38 characters in braces.
         let mut product = [0_u16; 39];
-        for index in 0..16 {
-            // SAFETY: `code` is NUL-terminated and `product` holds the 39 characters the call writes.
-            let result =
-                unsafe { MsiEnumRelatedProductsW(code.as_ptr(), 0, index, product.as_mut_ptr()) };
-            if result != 0 {
-                break;
-            }
-            installed += 1;
-        }
-        is_upgrade(installed)
+        let installed: Vec<String> = (0..16)
+            .map_while(|index| {
+                // SAFETY: `code` is NUL-terminated and `product` holds the 39 characters the call writes.
+                let result = unsafe {
+                    MsiEnumRelatedProductsW(code.as_ptr(), 0, index, product.as_mut_ptr())
+                };
+                (result == 0).then(|| String::from_utf16_lossy(&product[..38]))
+            })
+            .collect();
+        let upgrade = is_upgrade(installed.len());
+        // A failed upgrade can leave two versions registered, and every later removal is then taken
+        // for an upgrade too; the log says which ones were found.
+        let _ = append_managed_log(
+            "gui",
+            &format!(
+                "versions of the package registered during removal: {}",
+                installed.join(", ")
+            ),
+        );
+        upgrade
     }
 
     /// A removal with another version of the package registered beside the one

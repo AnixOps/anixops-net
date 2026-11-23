@@ -6,8 +6,8 @@ use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, LUID};
 use windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW;
 use windows_sys::Win32::Security::{
     AdjustTokenPrivileges, GetTokenInformation, LookupPrivilegeValueW, TokenUser,
-    LUID_AND_ATTRIBUTES, SE_PRIVILEGE_ENABLED, SE_RESTORE_NAME, SE_TAKE_OWNERSHIP_NAME,
-    TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES, TOKEN_QUERY, TOKEN_USER,
+    LUID_AND_ATTRIBUTES, SE_BACKUP_NAME, SE_PRIVILEGE_ENABLED, SE_RESTORE_NAME,
+    SE_TAKE_OWNERSHIP_NAME, TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES, TOKEN_QUERY, TOKEN_USER,
 };
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
@@ -71,14 +71,41 @@ pub fn current_user_sid() -> Option<String> {
     Some(unsafe { take_local_string(text) })
 }
 
-/// Turns on the administrators' rights to take ownership of any file and to set any owner, which taking back
-/// something an ordinary user put in the data folder needs. A right the token does not hold stays off; the
-/// change that needs it then fails and says so.
-pub(crate) fn enable_ownership_privileges() {
+/// Rights turned on by [`enable_ownership_privileges`]; dropping it puts each back as it was.
+#[must_use = "the rights are turned off again when this is dropped"]
+pub(crate) struct OwnershipPrivileges {
+    token: Option<Token>,
+    /// What each right was before, for the rights this changed, in the order they were changed.
+    previous: Vec<TOKEN_PRIVILEGES>,
+}
+
+impl Drop for OwnershipPrivileges {
+    fn drop(&mut self) {
+        let Some(token) = &self.token else {
+            return;
+        };
+        for before in self.previous.iter().rev() {
+            // SAFETY: `before` is the state AdjustTokenPrivileges reported; no previous state is asked for.
+            unsafe {
+                AdjustTokenPrivileges(token.0, 0, before, 0, null_mut(), null_mut());
+            }
+        }
+    }
+}
+
+/// Turns on the administrators' rights to open any file for backup and restore, to take ownership of any
+/// file and to set any owner, which taking back something an ordinary user put in the data folder needs,
+/// for as long as the value returned lives: the rest of the program runs without them. A right the token
+/// does not hold stays off; the change that needs it then fails and says so.
+pub(crate) fn enable_ownership_privileges() -> OwnershipPrivileges {
     let Some(token) = Token::open(TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY) else {
-        return;
+        return OwnershipPrivileges {
+            token: None,
+            previous: Vec::new(),
+        };
     };
-    for name in [SE_TAKE_OWNERSHIP_NAME, SE_RESTORE_NAME] {
+    let mut previous = Vec::new();
+    for name in [SE_BACKUP_NAME, SE_RESTORE_NAME, SE_TAKE_OWNERSHIP_NAME] {
         let mut luid = LUID::default();
         // SAFETY: `name` is a NUL-terminated constant and `luid` is valid for the value written.
         if unsafe { LookupPrivilegeValueW(null(), name, &mut luid) } == 0 {
@@ -91,10 +118,31 @@ pub(crate) fn enable_ownership_privileges() {
                 Attributes: SE_PRIVILEGE_ENABLED,
             }],
         };
-        // SAFETY: `privileges` is a valid TOKEN_PRIVILEGES and no previous state is asked for.
-        unsafe {
-            AdjustTokenPrivileges(token.0, 0, &privileges, 0, null_mut(), null_mut());
+        let mut before = TOKEN_PRIVILEGES {
+            PrivilegeCount: 0,
+            Privileges: [LUID_AND_ATTRIBUTES::default()],
+        };
+        let mut length = 0_u32;
+        // SAFETY: `privileges` is a valid TOKEN_PRIVILEGES; `before` holds the one entry a change of one
+        // right reports, and its size is passed.
+        let changed = unsafe {
+            AdjustTokenPrivileges(
+                token.0,
+                0,
+                &privileges,
+                std::mem::size_of::<TOKEN_PRIVILEGES>() as u32,
+                &mut before,
+                &mut length,
+            )
+        };
+        // A right that was already on, or that the token does not hold, reports nothing to put back.
+        if changed != 0 && before.PrivilegeCount > 0 {
+            previous.push(before);
         }
+    }
+    OwnershipPrivileges {
+        token: Some(token),
+        previous,
     }
 }
 

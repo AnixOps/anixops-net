@@ -42,6 +42,12 @@ needs two rules for every release:
   `release.yml` stamps the MSI version into the GUI executable's file version
   (`major.minor.patch.msiBuild`) and fails when the built executable does not
   carry it; the CLI has no version resource and is replaced by content.
+  Bundled third-party DLLs (`WebView2Loader.dll`, `wintun.dll`) keep their
+  own file versions: an upgrade replaces them only when that version rises.
+  A release that ships a different build of one of them under the same file
+  version leaves the old file in place, and the GUI's start-up integrity check
+  then fails; such a DLL needs a new file version (or a new file name and
+  component) before it ships.
 
 The betas' packages did not tell an upgrade from a removal. When a beta is
 upgraded, its uninstall actions run the new version's GUI, which sees two
@@ -52,7 +58,10 @@ repaired the next time the GUI starts: the imported profile's engine block is
 written back from `embedded\envelope.json` (HTTPS decryption stays off until
 the user turns it on again), and the logon task of a user who chose "start
 after sign-in" is registered again. That choice is kept per user
-(`start_after_login_users` in `desktop-state.json`).
+(`start_after_login_users` in `desktop-state.json`). The betas kept one
+switch for the whole computer: on a computer with several administrators, the
+first one to start 1.0 takes that switch over as their own choice, and the
+others choose again on the settings page.
 
 CI builds the same source twice with different file versions, installs the
 older MSI (with the betas' uninstall conditions), upgrades to the newer one and
@@ -70,7 +79,13 @@ protected access list: SYSTEM and Administrators in full control). The first
 start after an upgrade also resets everything in it, removes links and removes
 what someone other than SYSTEM, Administrators or the user running the GUI
 owns (an ordinary user could have put it there for the elevated GUI to read),
-then writes `.access-closed`; later starts only check the folder. If the folder
+then writes `.access-closed`; later starts only check the folder. Each entry is
+opened once as itself (never through a link) and checked, reset or removed
+through that handle: symbolic links, junctions and files with more than one
+name (hard links, whose other name may be outside the folder) are removed by
+that name only, and what is removed keeps its owner and access list, so nothing
+outside the folder is changed. The folder must also be where its path says,
+with no link on the way. If the folder
 cannot be closed, the GUI shows the error and does not start. Device keys and
 the decryption key are also written closed to everyone but their owner,
 SYSTEM and Administrators.

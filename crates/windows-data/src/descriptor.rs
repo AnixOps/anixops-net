@@ -4,15 +4,20 @@ use std::io;
 use std::path::Path;
 use std::ptr::null_mut;
 
-use windows_sys::Win32::Foundation::{GetLastError, LocalFree, ERROR_INSUFFICIENT_BUFFER};
+use windows_sys::Win32::Foundation::{GetLastError, LocalFree, ERROR_INSUFFICIENT_BUFFER, HANDLE};
 use windows_sys::Win32::Security::Authorization::{
     ConvertSecurityDescriptorToStringSecurityDescriptorW,
     ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
 };
 use windows_sys::Win32::Security::{
-    GetFileSecurityW, SetFileSecurityW, DACL_SECURITY_INFORMATION, OBJECT_SECURITY_INFORMATION,
-    OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR,
+    GetFileSecurityW, GetKernelObjectSecurity, SetFileSecurityW, SetKernelObjectSecurity,
+    DACL_SECURITY_INFORMATION, OBJECT_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
+    PSECURITY_DESCRIPTOR,
 };
+
+/// What [`describe`] reads: the owner and the access list.
+const DESCRIBED: OBJECT_SECURITY_INFORMATION =
+    OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION;
 
 pub(crate) fn wide(path: &Path) -> Vec<u16> {
     use std::os::windows::ffi::OsStrExt;
@@ -93,13 +98,45 @@ pub(crate) fn set(
     Ok(())
 }
 
+/// Sets the parts of the security of the open file or folder `handle` that `information` names from the
+/// descriptor `text`. The handle must have been opened with the rights the change needs.
+pub(crate) fn set_handle(
+    handle: HANDLE,
+    information: OBJECT_SECURITY_INFORMATION,
+    text: &str,
+) -> io::Result<()> {
+    let descriptor = Descriptor::new(text)?;
+    // SAFETY: the caller passes an open handle; `descriptor` is a valid security descriptor.
+    if unsafe { SetKernelObjectSecurity(handle, information, descriptor.0) } == 0 {
+        return Err(last_error());
+    }
+    Ok(())
+}
+
 /// The owner and access list of `path` in their text form, such as `O:BAD:P(A;OICI;FA;;;SY)`.
 pub fn describe(path: &Path) -> io::Result<String> {
     let name = wide(path);
-    let wanted = OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION;
+    // SAFETY: `name` is NUL-terminated; `describe_with` passes a buffer valid for the length it gives.
+    describe_with(|descriptor, length, needed| unsafe {
+        GetFileSecurityW(name.as_ptr(), DESCRIBED, descriptor, length, needed)
+    })
+}
+
+/// [`describe`] for the open file or folder `handle`, which must have been opened with `READ_CONTROL`.
+pub(crate) fn describe_handle(handle: HANDLE) -> io::Result<String> {
+    // SAFETY: the caller passes an open handle; `describe_with` passes a buffer valid for the length it
+    // gives.
+    describe_with(|descriptor, length, needed| unsafe {
+        GetKernelObjectSecurity(handle, DESCRIBED, descriptor, length, needed)
+    })
+}
+
+/// Reads a descriptor with `read` (called first without a buffer for the size, then with one) and gives
+/// its owner and access list in their text form.
+fn describe_with(read: impl Fn(PSECURITY_DESCRIPTOR, u32, &mut u32) -> i32) -> io::Result<String> {
     let mut needed = 0_u32;
-    // SAFETY: with no buffer the call only reports the size needed.
-    let sized = unsafe { GetFileSecurityW(name.as_ptr(), wanted, null_mut(), 0, &mut needed) };
+    // With no buffer the call only reports the size needed.
+    let sized = read(null_mut(), 0, &mut needed);
     // SAFETY: reads this thread's last error code.
     if sized == 0 && unsafe { GetLastError() } != ERROR_INSUFFICIENT_BUFFER {
         return Err(last_error());
@@ -107,17 +144,7 @@ pub fn describe(path: &Path) -> io::Result<String> {
     // Descriptors hold pointers-sized fields; a buffer of `u64` is aligned for them.
     let mut buffer = vec![0_u64; (needed as usize).div_ceil(8).max(1)];
     let descriptor: PSECURITY_DESCRIPTOR = buffer.as_mut_ptr().cast();
-    // SAFETY: `buffer` is valid for writes of the `needed` bytes passed.
-    let read = unsafe {
-        GetFileSecurityW(
-            name.as_ptr(),
-            wanted,
-            descriptor,
-            (buffer.len() * 8) as u32,
-            &mut needed,
-        )
-    };
-    if read == 0 {
+    if read(descriptor, (buffer.len() * 8) as u32, &mut needed) == 0 {
         return Err(last_error());
     }
     let mut text: *mut u16 = null_mut();
@@ -128,7 +155,7 @@ pub fn describe(path: &Path) -> io::Result<String> {
         ConvertSecurityDescriptorToStringSecurityDescriptorW(
             descriptor,
             SDDL_REVISION_1,
-            wanted,
+            DESCRIBED,
             &mut text,
             &mut length,
         )

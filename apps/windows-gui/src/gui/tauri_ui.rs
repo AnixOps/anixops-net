@@ -4851,7 +4851,10 @@ async fn import_mitm_root(
                     error.message
                 ),
             );
+            // Neither half of the imported root is kept: a certificate left without its key would be
+            // overwritten by the next root generated, and trusted meanwhile for nothing.
             let _ = remove_windows_managed_mitm_private_key(&private_key_path);
+            let _ = std::fs::remove_file(&replaced);
             return Err(error.message);
         }
         Ok(OperationResult {

@@ -10,23 +10,21 @@
 //! that earlier versions left open (the window client's): it takes the folder and everything in it back,
 //! once, and removes what someone else put there.
 
+use std::ffi::OsString;
 use std::fs;
 use std::io;
-use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 use windows_sys::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS};
 use windows_sys::Win32::Security::{
-    DACL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION,
-    SECURITY_ATTRIBUTES,
+    DACL_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION, SECURITY_ATTRIBUTES,
 };
-use windows_sys::Win32::Storage::FileSystem::{
-    CreateDirectoryW, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_REPARSE_POINT,
-};
+use windows_sys::Win32::Storage::FileSystem::CreateDirectoryW;
 
 use crate::account;
 pub use crate::descriptor::{describe, owner};
-use crate::descriptor::{last_error, set, wide, Descriptor};
+use crate::descriptor::{last_error, wide, Descriptor};
+use crate::entry::{final_child, Entry};
 
 /// Owned by administrators; the system and administrators in full, for the folder and everything made in
 /// it later; nothing inherited from the folder above.
@@ -42,6 +40,10 @@ const FILE_ACCESS: &str = "O:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)";
 /// folder itself. It counts only when an administrator or the system made it.
 pub const CLOSED_MARKER: &str = ".access-closed";
 
+/// How deep [`close_with_contents`] goes into folders in the data folder. The client's own go a few
+/// levels down; deeper ones were put there by someone else, and the folder is then not used.
+const MAX_DEPTH: usize = 64;
+
 /// What [`close_with_contents`] did.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Closed {
@@ -50,8 +52,8 @@ pub struct Closed {
     pub walked: bool,
     /// Files and folders given the closed access list.
     pub reset: usize,
-    /// What was removed: links out of the folder, and what someone other than the system or an administrator
-    /// put in it.
+    /// What was removed: links out of the folder (symbolic links, junctions, and files with more than one
+    /// name), and what someone other than the system or an administrator put in it.
     pub removed: Vec<PathBuf>,
 }
 
@@ -67,6 +69,52 @@ pub fn closed(described: &str) -> bool {
         && described.contains("(A;OICI;FA;;;SY)")
         && described.contains("(A;OICI;FA;;;BA)")
         && described.matches('(').count() == 2
+}
+
+fn refused(message: String) -> io::Error {
+    io::Error::new(io::ErrorKind::PermissionDenied, message)
+}
+
+/// Makes the folders above `path` when missing and gives where `path` must turn out to be once opened:
+/// the folder above, opened as itself and with every link on the way to it resolved, and `path`'s name.
+/// A folder above that is itself a link is refused.
+fn final_path_inside_parent(path: &Path) -> io::Result<String> {
+    let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{} is not a folder inside another", path.display()),
+        ));
+    };
+    // The folders above are shared with other programs and keep the access the system gives them.
+    fs::create_dir_all(parent)?;
+    let above = Entry::open(parent)?;
+    if above.is_link() || !above.is_folder() {
+        return Err(refused(format!(
+            "{} is a link or not a folder and is not used",
+            parent.display()
+        )));
+    }
+    Ok(final_child(&above.final_path()?, &name.to_string_lossy()))
+}
+
+/// Opens the folder `path` as itself, and only when it is where `expected` says: not a link, and not
+/// reached through a folder above that was swapped for a link since `expected` was read.
+fn open_folder(path: &Path, expected: &str) -> io::Result<Entry> {
+    let folder = Entry::open(path)?;
+    if folder.is_link() || !folder.is_folder() {
+        return Err(refused(format!(
+            "{} is not a folder and is not used",
+            path.display()
+        )));
+    }
+    let found = folder.final_path()?;
+    if !found.eq_ignore_ascii_case(expected) {
+        return Err(refused(format!(
+            "{} leads to {found} and is not used",
+            path.display()
+        )));
+    }
+    Ok(folder)
 }
 
 /// Makes `path` closed to ordinary users. `Ok(false)` when something is already there.
@@ -91,64 +139,24 @@ fn create_closed(path: &Path) -> io::Result<bool> {
 
 /// Makes `path` (and the folders above it) when missing, closed to ordinary users. A folder that is
 /// already there has its access list set again, unless someone other than the system or an administrator
-/// owns it, which is an error.
+/// owns it, which is an error, as is a link in its place. The folder is opened as itself and checked and
+/// changed through that one handle, so the change never lands on what a link leads to.
 pub fn secure(path: &Path) -> io::Result<()> {
-    if let Some(parent) = path.parent() {
-        // The folders above are shared with other programs and keep the access the system gives them.
-        fs::create_dir_all(parent)?;
-    }
-    if create_closed(path)? {
+    let expected = final_path_inside_parent(path)?;
+    let made = create_closed(path)?;
+    let folder = open_folder(path, &expected)?;
+    if made {
         return Ok(());
     }
-    if !path.is_dir() {
-        return Err(io::Error::new(
-            io::ErrorKind::AlreadyExists,
-            format!("{} is not a folder", path.display()),
-        ));
+    if !trusted_owner(&folder.describe()?) {
+        return Err(refused(format!(
+            "{} was made by someone other than the system or an administrator and is not used",
+            path.display()
+        )));
     }
-    if !trusted_owner(&describe(path)?) {
-        return Err(io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            format!(
-                "{} was made by someone other than the system or an administrator and is not used",
-                path.display()
-            ),
-        ));
-    }
-    set(
-        path,
+    folder.set(
         DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
         ACCESS_ONLY,
-    )
-}
-
-fn is_link(metadata: &fs::Metadata) -> bool {
-    metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-}
-
-/// Removes a link (symbolic link or junction) itself, never what it points to.
-fn remove_link(path: &Path, metadata: &fs::Metadata) -> io::Result<()> {
-    if metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY != 0 {
-        fs::remove_dir(path)
-    } else {
-        fs::remove_file(path)
-    }
-}
-
-/// Gives `path` the owner and access list in `access`. Taking ownership comes first when the access list
-/// does not let administrators change it: the owner may always change the access list.
-fn take_over(path: &Path, access: &str) -> io::Result<()> {
-    let everything = OWNER_SECURITY_INFORMATION
-        | DACL_SECURITY_INFORMATION
-        | PROTECTED_DACL_SECURITY_INFORMATION;
-    if set(path, everything, access).is_ok() {
-        return Ok(());
-    }
-    set(path, OWNER_SECURITY_INFORMATION, access)?;
-    set(
-        path,
-        DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
-        access,
     )
 }
 
@@ -160,137 +168,161 @@ fn trusted_owners() -> Vec<String> {
     owners
 }
 
-fn owned_by(path: &Path, owners: &[String]) -> bool {
-    describe(path)
-        .ok()
-        .as_deref()
-        .and_then(owner)
-        .is_some_and(|found| {
-            owners
-                .iter()
-                .any(|trusted| trusted.eq_ignore_ascii_case(found))
-        })
-}
-
 fn not_found(error: &io::Error) -> bool {
     error.kind() == io::ErrorKind::NotFound
 }
 
+/// Whether the marker in the folder was left there by the client: a file of its own with no other name.
+/// A link, or a second name of a file elsewhere that the system owns, does not count.
+fn marker_is_ours(marker: &Path, owners: &[String]) -> bool {
+    Entry::open(marker).is_ok_and(|entry| {
+        !entry.is_link() && !entry.is_folder() && entry.links() == 1 && entry.owned_by(owners)
+    })
+}
+
 /// Makes `path` (and the folders above it) when missing, closed to ordinary users, as [`secure`] does. A
 /// folder that is already there is taken back with everything in it, once: the folder and each file and
-/// folder in it are owned by administrators and let in only the system and administrators, links are removed
-/// (never followed), and what was owned by someone other than the system, an administrator or this account
-/// is removed, since an ordinary user could have put it there for the client to read. Later starts find the
+/// folder in it are owned by administrators and let in only the system and administrators; links are
+/// removed, never followed, and so are files with more than one name, whose other names may be outside the
+/// folder; and what was owned by someone other than the system, an administrator or this account is
+/// removed, since an ordinary user could have put it there for the client to read. Later starts find the
 /// folder closed with [`CLOSED_MARKER`] in it and only check that.
+///
+/// Each entry is opened once, as itself, and checked, changed or removed through that handle, so that
+/// nothing an ordinary user renames or links meanwhile can turn a change meant for the folder's contents
+/// onto a file elsewhere. What is removed is removed without its security being changed first.
 ///
 /// Fails when any of it cannot be done: the caller then must not read or write the folder.
 pub fn close_with_contents(path: &Path) -> io::Result<Closed> {
-    if let Some(parent) = path.parent() {
-        // The folders above are shared with other programs and keep the access the system gives them.
-        fs::create_dir_all(parent)?;
-        if is_link(&fs::symlink_metadata(parent)?) {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                format!("{} is a link and is not used", parent.display()),
-            ));
-        }
-    }
+    // On before anything is opened: an open for backup and restore with these rights may change the owner
+    // and access list of, or remove, what the access list alone would refuse. Off again on return.
+    let _privileges = account::enable_ownership_privileges();
+    let expected = final_path_inside_parent(path)?;
     let marker = path.join(CLOSED_MARKER);
     if create_closed(path)? {
+        let _folder = open_folder(path, &expected)?;
         fs::write(&marker, b"")?;
         return Ok(Closed::default());
     }
-    let metadata = fs::symlink_metadata(path)?;
-    if is_link(&metadata) || !metadata.is_dir() {
-        return Err(io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            format!("{} is not a folder and is not used", path.display()),
-        ));
-    }
+    let folder = open_folder(path, &expected)?;
     let owners = trusted_owners();
-    if closed(&describe(path)?) && marker.is_file() && owned_by(&marker, &owners) {
+    if closed(&folder.describe()?) && marker_is_ours(&marker, &owners) {
         return Ok(Closed::default());
     }
 
-    account::enable_ownership_privileges();
     // The folder first: from here on no one else can add to it while its contents are gone through.
-    take_over(path, ACCESS)?;
-    let mut outcome = Closed {
-        walked: true,
-        ..Closed::default()
+    folder.take_over(ACCESS)?;
+    let mut walk = Walk {
+        owners,
+        outcome: Closed {
+            walked: true,
+            ..Closed::default()
+        },
     };
-    let mut folders = vec![path.to_path_buf()];
-    let mut foreign_folders = Vec::new();
-    while let Some(folder) = folders.pop() {
-        let entries = match fs::read_dir(&folder) {
-            Ok(entries) => entries,
-            Err(error) if not_found(&error) => continue,
+    walk.contents(path, &expected, true, 0)?;
+    fs::write(&marker, b"")?;
+    Ok(walk.outcome)
+}
+
+/// Going through the data folder's contents for [`close_with_contents`].
+struct Walk {
+    owners: Vec<String>,
+    outcome: Closed,
+}
+
+impl Walk {
+    /// Goes through what is in `folder` (already taken back; `folder_final` is its [`Entry::final_path`]).
+    /// With `keep`, what is the client's own is taken back and kept; without, everything is removed.
+    fn contents(
+        &mut self,
+        folder: &Path,
+        folder_final: &str,
+        keep: bool,
+        depth: usize,
+    ) -> io::Result<()> {
+        if depth >= MAX_DEPTH {
+            return Err(refused(format!(
+                "{} is nested too deeply and is not used",
+                folder.display()
+            )));
+        }
+        // Listed in full first, so that nothing of the folder is held open while its entries are removed.
+        let names = match fs::read_dir(folder) {
+            Ok(entries) => entries
+                .map(|entry| entry.map(|entry| entry.file_name()))
+                .collect::<io::Result<Vec<OsString>>>()?,
+            Err(error) if not_found(&error) => return Ok(()),
             Err(error) => return Err(error),
         };
-        for entry in entries {
-            let child = entry?.path();
-            let metadata = match fs::symlink_metadata(&child) {
-                Ok(metadata) => metadata,
+        for name in names {
+            let child = folder.join(&name);
+            let entry = match Entry::open(&child) {
+                Ok(entry) => entry,
                 Err(error) if not_found(&error) => continue,
                 Err(error) => return Err(error),
             };
-            if is_link(&metadata) {
-                remove_link(&child, &metadata)?;
-                outcome.removed.push(child);
+            let is_folder = entry.is_folder();
+            if entry.is_link() || (!is_folder && entry.links() > 1) {
+                // A link out of the folder: only this name goes. What it leads to, or the file's other
+                // names, are never opened for a change, so their owner and access list stay as they are.
+                entry.remove()?;
+                self.outcome.removed.push(child);
                 continue;
             }
-            let is_folder = metadata.is_dir();
-            // Read before the owner is replaced below.
-            let ours = owned_by(&child, &owners);
+            let child_final = final_child(folder_final, &name.to_string_lossy());
+            let found = entry.final_path()?;
+            if !found.eq_ignore_ascii_case(&child_final) {
+                return Err(refused(format!(
+                    "{} leads to {found} and is not used",
+                    child.display()
+                )));
+            }
+            if !(keep && entry.owned_by(&self.owners)) {
+                if is_folder {
+                    // Taken back only so that it can be emptied: what is in it may refuse administrators.
+                    entry.take_over(ACCESS)?;
+                    self.contents(&child, &child_final, false, depth + 1)?;
+                }
+                // Its folder belongs to administrators by now, which lets them remove what is in it.
+                entry.remove()?;
+                self.outcome.removed.push(child);
+                continue;
+            }
             let access = if is_folder { ACCESS } else { FILE_ACCESS };
-            if let Err(error) = take_over(&child, access) {
-                // What cannot be taken back is removed: its folder belongs to administrators by now.
-                let removed = if is_folder {
-                    fs::remove_dir_all(&child)
-                } else {
-                    fs::remove_file(&child)
-                };
-                if let Err(removal) = removed {
-                    if !not_found(&removal) {
-                        return Err(io::Error::new(
-                            error.kind(),
-                            format!(
-                                "{} could not be closed ({error}) or removed ({removal})",
-                                child.display()
-                            ),
-                        ));
-                    }
+            if let Err(error) = entry.take_over(access) {
+                if is_folder {
+                    return Err(io::Error::new(
+                        error.kind(),
+                        format!("{} could not be closed: {error}", child.display()),
+                    ));
                 }
-                outcome.removed.push(child);
+                // A file that cannot be taken back is removed.
+                entry.remove().map_err(|removal| {
+                    io::Error::new(
+                        error.kind(),
+                        format!(
+                            "{} could not be closed ({error}) or removed ({removal})",
+                            child.display()
+                        ),
+                    )
+                })?;
+                self.outcome.removed.push(child);
                 continue;
             }
-            outcome.reset += 1;
+            self.outcome.reset += 1;
             if is_folder {
-                // Its contents are taken back too, so that the whole of it can be removed afterwards.
-                folders.push(child.clone());
-                if !ours {
-                    foreign_folders.push(child);
-                }
-            } else if !ours {
-                fs::remove_file(&child)?;
-                outcome.removed.push(child);
+                self.contents(&child, &child_final, true, depth + 1)?;
             }
         }
+        Ok(())
     }
-    for folder in foreign_folders {
-        match fs::remove_dir_all(&folder) {
-            Ok(()) => outcome.removed.push(folder),
-            Err(error) if not_found(&error) => {}
-            Err(error) => return Err(error),
-        }
-    }
-    fs::write(&marker, b"")?;
-    Ok(outcome)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::descriptor::set;
+    use windows_sys::Win32::Security::OWNER_SECURITY_INFORMATION;
 
     fn scratch(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
@@ -421,9 +453,9 @@ mod tests {
         )
         .unwrap();
         fs::write(dir.join(CLOSED_MARKER), b"").unwrap();
-        account::enable_ownership_privileges();
+        let _privileges = account::enable_ownership_privileges();
         // Closing only the folder (as the installer does) leaves the files as they were.
-        take_over(&dir, ACCESS).unwrap();
+        Entry::open(&dir).unwrap().take_over(ACCESS).unwrap();
         if set(&dir.join(CLOSED_MARKER), OWNER_SECURITY_INFORMATION, "O:BU").is_ok() {
             let outcome = close_with_contents(&dir).unwrap();
             assert!(outcome.walked);
@@ -465,13 +497,105 @@ mod tests {
         let own = dir.join("desktop-state.json");
         fs::write(&planted, "{}").unwrap();
         fs::write(&own, "{}").unwrap();
-        account::enable_ownership_privileges();
+        let _privileges = account::enable_ownership_privileges();
         // Giving a file to the users group needs the restore right, which an elevated administrator has.
         if set(&planted, OWNER_SECURITY_INFORMATION, "O:BU").is_ok() {
             let outcome = close_with_contents(&dir).unwrap();
             assert!(outcome.removed.contains(&planted), "{:?}", outcome.removed);
             assert!(!planted.exists());
             assert!(own.exists());
+        }
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_second_name_of_a_file_elsewhere_is_removed_and_the_file_left_as_it_was() {
+        let root = scratch("hardlink");
+        let dir = root.join("NetworkCore");
+        let embedded = dir.join("embedded");
+        fs::create_dir_all(&embedded).unwrap();
+        // Files outside the data folder: one as an administrator's program leaves it (owned by
+        // administrators, which the walk counts as the client's own) and, where the restore right allows,
+        // one given to another owner (which the walk counts as someone else's).
+        let own = root.join("outside-own.txt");
+        let foreign = root.join("outside-foreign.txt");
+        fs::write(&own, "own").unwrap();
+        fs::write(&foreign, "foreign").unwrap();
+        let open = "D:(A;;FA;;;BA)(A;;FA;;;SY)(A;;FR;;;BU)";
+        set(&own, DACL_SECURITY_INFORMATION, open).unwrap();
+        set(&foreign, DACL_SECURITY_INFORMATION, open).unwrap();
+        {
+            let _privileges = account::enable_ownership_privileges();
+            let _ = set(&foreign, OWNER_SECURITY_INFORMATION, "O:BU");
+        }
+        let own_before = describe(&own).unwrap();
+        let foreign_before = describe(&foreign).unwrap();
+        // As an ordinary user could have done while earlier versions left the folder open.
+        let own_link = embedded.join("x.json");
+        let foreign_link = dir.join("y.json");
+        fs::hard_link(&own, &own_link).unwrap();
+        fs::hard_link(&foreign, &foreign_link).unwrap();
+        let state = dir.join("desktop-state.json");
+        fs::write(&state, "{}").unwrap();
+
+        let outcome = close_with_contents(&dir).unwrap();
+        assert!(outcome.walked);
+        for link in [&own_link, &foreign_link] {
+            assert!(outcome.removed.contains(link), "{:?}", outcome.removed);
+            assert!(fs::symlink_metadata(link).is_err(), "{}", link.display());
+        }
+        // The files outside keep their owner, access list and contents.
+        assert_eq!(describe(&own).unwrap(), own_before);
+        assert_eq!(describe(&foreign).unwrap(), foreign_before);
+        assert_eq!(fs::read_to_string(&own).unwrap(), "own");
+        assert_eq!(fs::read_to_string(&foreign).unwrap(), "foreign");
+        // What is the client's own is kept and closed.
+        assert!(state.exists());
+        assert!(!open_to_users(&describe(&state).unwrap()));
+        assert!(closed(&describe(&embedded).unwrap()));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_marker_with_a_second_name_does_not_skip_the_contents() {
+        let root = scratch("marker-link");
+        let dir = root.join("NetworkCore");
+        fs::create_dir_all(&dir).unwrap();
+        let state = dir.join("desktop-state.json");
+        fs::write(&state, "{}").unwrap();
+        set(
+            &state,
+            DACL_SECURITY_INFORMATION,
+            "D:(A;;FA;;;BA)(A;;FR;;;BU)",
+        )
+        .unwrap();
+        // A file the system or an administrator owns elsewhere, linked in as the marker.
+        let elsewhere = root.join("elsewhere");
+        fs::write(&elsewhere, b"").unwrap();
+        fs::hard_link(&elsewhere, dir.join(CLOSED_MARKER)).unwrap();
+        {
+            let _privileges = account::enable_ownership_privileges();
+            Entry::open(&dir).unwrap().take_over(ACCESS).unwrap();
+        }
+        let outcome = close_with_contents(&dir).unwrap();
+        assert!(outcome.walked);
+        assert!(!open_to_users(&describe(&state).unwrap()));
+        // The marker written afterwards is a file of its own.
+        assert!(marker_is_ours(&dir.join(CLOSED_MARKER), &trusted_owners()));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_folder_above_that_is_a_link_is_refused() {
+        let root = scratch("parent-link");
+        let real = root.join("real");
+        fs::create_dir_all(&real).unwrap();
+        let link = root.join("AnixOps");
+        // Making a link needs a right that not every account has; without it there is nothing to test.
+        if std::os::windows::fs::symlink_dir(&real, &link).is_ok() {
+            assert!(close_with_contents(&link.join("NetworkCore")).is_err());
+            assert!(secure(&link.join("NetworkCore")).is_err());
+            assert!(!real.join("NetworkCore").exists());
         }
         fs::remove_dir_all(&root).unwrap();
     }
