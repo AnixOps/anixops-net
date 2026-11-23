@@ -552,12 +552,12 @@ iOS、macOS 的“向订阅服务商报告连接质量”改为设置开关、�
 - [ ] 通知面板（anix-control）一侧：上报现在只在用户打开开关后才有，大多数客户端不再上报；macOS 客户端的 `platform`
   从原来误报的 `ios` 改为 `macos`，面板的字段校验需要接受 `macos`。
 
-## 内核 443aea4：直连模式 DNS、规则集本机缓存、证书固定（1.0.0）
+## 内核 1c14184：直连模式 DNS、规则集本机缓存、证书固定、局域网共享防护（1.0.0）
 
-客户端固定的内核从 cce9d63 升到 443aea4（networkcore_anixops #265）。CI 只跑单元测试，以下需要人工或真机：
+客户端固定的内核从 cce9d63 升到 1c14184（networkcore_anixops #265、#266）。CI 只跑单元测试，以下需要人工或真机：
 
-- [ ] anx 仓库的 Cargo.lock 内核与本仓库 `Cargo.toml` 固定的内核（443aea4）一致后，再触发 anx 的 ANX 构建和
-  `publish-client.yml`。本仓库的 `Cargo.lock` 是按内核 443aea4 的 `Cargo.toml` 手工改的（只有 `transport-tls` 新增
+- [ ] anx 仓库的 Cargo.lock 内核与本仓库 `Cargo.toml` 固定的内核（1c14184）一致后，再触发 anx 的 ANX 构建和
+  `publish-client.yml`。本仓库的 `Cargo.lock` 是按内核 1c14184 的 `Cargo.toml` 手工改的（依赖与 443aea4 相同）（只有 `transport-tls` 新增
   `ring`、`tracing` 两条依赖边，两者已在锁文件里）；CI 的 `--locked` 构建如果报锁文件需要更新，运行一次
   `Refresh Cargo Lock` workflow。
 - [ ] 直连模式（五个平台）：选一个已失效的节点（例如改错端口），切到“直连”，DNS 保持默认，打开 TUN（Windows / Linux）
