@@ -1559,6 +1559,7 @@ final class TunnelController {
             providerConfiguration[TunnelProfileKeys.localRules] = value
         }
         providerConfiguration[TunnelProfileKeys.notifications] = AppNotifications.settings.profileValue
+        Self.applyMitmRootFingerprint(Self.currentMitmRootFingerprint(), to: &providerConfiguration)
         do {
             try Self.savedMitmBundle(mappings: debugMappings).apply(to: &providerConfiguration)
         } catch {
@@ -1723,6 +1724,93 @@ final class TunnelController {
             accepted: UserDefaults.standard.string(forKey: DecryptionConsent.storageKey)
         )
     }
+
+    // MARK: - MITM root changes
+
+    /// The fingerprint of the MITM root in the Keychain now, or nil without a readable one.
+    static func currentMitmRootFingerprint() -> String? {
+        (try? MitmCertificateStore.load())?.sha256Fingerprint
+    }
+
+    /// Writes `fingerprint` as the profile's `TunnelProfileKeys.mitmRootFingerprint`, or removes it without a root.
+    private static func applyMitmRootFingerprint(_ fingerprint: String?, to configuration: inout [String: Any]) {
+        if let fingerprint {
+            configuration[TunnelProfileKeys.mitmRootFingerprint] = fingerprint
+        } else {
+            configuration.removeValue(forKey: TunnelProfileKeys.mitmRootFingerprint)
+        }
+    }
+
+    /// The MITM root was generated or replaced. The extension reads the root only at start, so a running tunnel
+    /// would keep issuing certificates from the old one, which the person is about to stop trusting. This records
+    /// the new root's fingerprint in the profile (a macOS start without the app's values then fails on an older kept
+    /// copy, `TunnelStartSecrets.mitmRootFailureReason`, and the app starts it again with options), hands a running
+    /// macOS extension the new values for the starts the system makes itself, and reconnects a running tunnel that
+    /// decrypts anything. Call it after the new root is saved and before the old one's trust is taken back.
+    func rootCertificateChanged() async {
+        let fingerprint = Self.currentMitmRootFingerprint()
+        let decrypts: Bool = await writing { () async -> Bool in
+            do {
+                // A saved write hands the new values over (`writeProfile`).
+                try await writeProfile { target in
+                    guard let tunnelProtocol = target.protocolConfiguration as? NETunnelProviderProtocol else {
+                        return false
+                    }
+                    var configuration = tunnelProtocol.providerConfiguration ?? [:]
+                    guard configuration[TunnelProfileKeys.mitmRootFingerprint] as? String != fingerprint else {
+                        return false
+                    }
+                    Self.applyMitmRootFingerprint(fingerprint, to: &configuration)
+                    tunnelProtocol.providerConfiguration = configuration
+                    target.protocolConfiguration = tunnelProtocol
+                    return true
+                }
+            } catch {
+                // Not fatal: the restart below still hands a running macOS tunnel the new root; only a later start
+                // without the app's values could not tell its kept copy is older.
+                message = String(localized: "无法把新根证书记录到 VPN 配置") + Self.errorCode(error)
+            }
+            refresh()
+            let configuration = (manager?.protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration
+            return MitmProfileBundle.referencesPayload(configuration)
+                || configuration?[TunnelProfileKeys.mitmPlugins] != nil
+        }
+        guard isConnected, decrypts else {
+            return
+        }
+        #if os(macOS)
+        await handOverStartSecretsBeforeRestart()
+        #endif
+        restart()
+    }
+
+    #if os(macOS)
+    /// `handOverStartSecrets()`, waiting for the extension's answer, so that a start the system makes without the
+    /// app's values right after `restart()` (On Demand winning the race against the app's own start) finds the new
+    /// copy rather than failing on the old one and waiting for `startAfterStaleCopy`.
+    private func handOverStartSecretsBeforeRestart() async {
+        #if DEBUG
+        if Self.isDemo {
+            return
+        }
+        #endif
+        guard let manager, let session = manager.connection as? NETunnelProviderSession, isConnected,
+              let data = TunnelStartSecrets.fromKeychain(nodeKeyVersion: Self.nodeKeyVersion(of: manager)).encoded()
+        else {
+            return
+        }
+        let answer: Data? = await withCheckedContinuation { continuation in
+            do {
+                try session.sendProviderMessage(TunnelAppMessage.startSecrets(data).encoded) { answer in
+                    continuation.resume(returning: answer)
+                }
+            } catch {
+                continuation.resume(returning: nil)
+            }
+        }
+        handedOverStartSecrets = TunnelStartSecrets.handOverAccepted(answer) ? data : nil
+    }
+    #endif
 
     // MARK: - HTTPS decryption confirmation
 
@@ -2372,20 +2460,21 @@ final class TunnelController {
 
     /// Starts the tunnel with options once more after a start failed because the System Extension's copy of the start
     /// secrets belongs to an older profile (`TunnelStartSecrets.staleCopyReason`): the profile was saved again while
-    /// the tunnel was not running (a new node key version, or a new HTTPS decryption payload after a plugin or debug
-    /// mapping change), and the system then started it without the app. Once for each saved profile, so
-    /// a start that fails again does not loop; `requiresOnDemand` (on launch and on becoming active) leaves a tunnel
-    /// the user turned off alone. Runs in `profileWrites`. Returns whether it started the tunnel.
+    /// the tunnel was not running (a new node key version, a new HTTPS decryption payload after a plugin or debug
+    /// mapping change, or a new MITM root), and the system then started it without the app. Once for each saved
+    /// profile, so a start that fails again does not loop; `requiresOnDemand` (on launch and on becoming active)
+    /// leaves a tunnel the user turned off alone. Runs in `profileWrites`. Returns whether it started the tunnel.
     private func startAfterStaleCopy(failure: String?, requiresOnDemand: Bool) -> Bool {
         guard let manager, manager.isEnabled, manager.connection.status == .disconnected,
               !requiresOnDemand || manager.isOnDemandEnabled
         else {
             return false
         }
+        let configuration = (manager.protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration
         let profile = TunnelStartSecrets.staleCopyProfileStamp(
             nodeKeyVersion: Self.nodeKeyVersion(of: manager),
-            mitmBundle: (manager.protocolConfiguration as? NETunnelProviderProtocol)?
-                .providerConfiguration?[TunnelProfileKeys.mitmBundle] as? Data
+            mitmBundle: configuration?[TunnelProfileKeys.mitmBundle] as? Data,
+            mitmRoot: configuration?[TunnelProfileKeys.mitmRootFingerprint] as? String
         )
         guard TunnelStartSecrets.retriesStaleCopy(
             failure: failure, profile: profile, retriedProfile: staleCopyRetriedProfile

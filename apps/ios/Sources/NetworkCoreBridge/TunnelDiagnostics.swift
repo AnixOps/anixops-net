@@ -130,16 +130,32 @@ public struct HttpsDecryptionState: Codable, Equatable {
     public var plugins: Int
     /// With `tooLarge`, the bytes measured against `EngineBudget`.
     public var bytes: Int?
+    /// The SHA-256 fingerprint (`MitmCertificateAuthority.sha256Fingerprint`) of the root the engine issues
+    /// certificates from while `on`, so the app can tell when the root changed after the tunnel started. Nil from
+    /// an older extension.
+    public var rootFingerprint: String?
 
     enum CodingKeys: String, CodingKey {
-        case status, reason, plugins, bytes
+        case status, reason, plugins, bytes, rootFingerprint
     }
 
-    public init(status: Status, reason: Reason? = nil, plugins: Int = 0, bytes: Int? = nil) {
+    public init(
+        status: Status, reason: Reason? = nil, plugins: Int = 0, bytes: Int? = nil, rootFingerprint: String? = nil
+    ) {
         self.status = status
         self.reason = reason
         self.plugins = plugins
         self.bytes = bytes
+        self.rootFingerprint = rootFingerprint
+    }
+
+    /// Whether the running engine issues certificates from another root than `current` (the one in the Keychain
+    /// now): the root was generated or replaced after the tunnel started. False when either is unknown.
+    public func usesOtherRoot(than current: String?) -> Bool {
+        guard status == .on, let rootFingerprint, let current else {
+            return false
+        }
+        return rootFingerprint != current
     }
 
     /// A reason this app does not know (from a newer extension) reads as none, rather than losing the whole state.
@@ -149,6 +165,7 @@ public struct HttpsDecryptionState: Codable, Equatable {
         reason = (try? container.decodeIfPresent(String.self, forKey: .reason)).flatMap { Reason(rawValue: $0) }
         plugins = try container.decodeIfPresent(Int.self, forKey: .plugins) ?? 0
         bytes = try? container.decodeIfPresent(Int.self, forKey: .bytes)
+        rootFingerprint = try? container.decodeIfPresent(String.self, forKey: .rootFingerprint)
     }
 
     public func encoded() -> Data? {

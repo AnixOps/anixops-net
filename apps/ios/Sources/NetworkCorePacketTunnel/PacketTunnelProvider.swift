@@ -226,6 +226,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             completionHandler(PacketTunnelFailure(reason: reason))
             return
         }
+        // The same for a kept copy with an older MITM root than the profile names: the root was generated or
+        // replaced while the tunnel was not running, and certificates from the old one must not be issued.
+        let decrypts = MitmProfileBundle.referencesPayload(tunnelProtocol.providerConfiguration)
+            || tunnelProtocol.providerConfiguration?[TunnelProfileKeys.mitmPlugins] != nil
+        if let reason = TunnelStartSecrets.mitmRootFailureReason(
+            profileFingerprint: tunnelProtocol.providerConfiguration?[TunnelProfileKeys.mitmRootFingerprint] as? String,
+            decrypts: decrypts,
+            keptCopy: keptCopy
+        ) {
+            events.record("root certificate in the kept start secrets is older than the profile")
+            completionHandler(PacketTunnelFailure(reason: reason))
+            return
+        }
 
         let session: EmbeddedRuntimeSession
         do {
@@ -411,14 +424,25 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
     }
 
-    /// Tells the engine when the network under the tunnel changes (Wi-Fi to cellular, another Wi-Fi), for the
-    /// plugins' `network-changed` scripts. The first path seen is the one the tunnel started on.
-    /// Lets the engine seal saved capture sessions: a folder in this extension's container and a key that stays in
-    /// the Keychain on this device. Without either, saving sessions is simply unavailable.
+    /// Lets the engine seal saved capture sessions: a folder in this extension's container and a key that never
+    /// leaves this device (`CaptureSessionStorage.key()`: the Keychain on iOS, a root-only file on macOS, where the
+    /// System Extension cannot use the data protection keychain). Without either, saving sessions is unavailable and
+    /// the app says so (`CaptureStopNotice`). Only fixed reasons and codes are logged, never the key.
     private func setUpCaptureStorage(_ session: EmbeddedRuntimeSession) {
         do {
             if session.control(try CaptureSessionStorage.setupRequest().request) == nil {
                 events.record("capture storage refused")
+            }
+        } catch let failure as NodeSecretStore.Failure {
+            events.record("capture storage unavailable (keychain status \(failure.status))")
+        } catch let failure as CaptureSessionKeyFile.Failure {
+            switch failure {
+            case .unreadable:
+                events.record("capture storage unavailable: key file unreadable")
+            case let .malformed(length):
+                events.record("capture storage unavailable: key file holds \(length) bytes")
+            case let .notWritten(code):
+                events.record("capture storage unavailable: key file not written (errno \(code))")
             }
         } catch {
             events.record("capture storage unavailable")
@@ -441,6 +465,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         events.record(answer != nil ? "capture saved on stop, \(status.connections) connections" : "capture not saved on stop")
     }
 
+    /// Tells the engine when the network under the tunnel changes (Wi-Fi to cellular, another Wi-Fi), for the
+    /// plugins' `network-changed` scripts. The first path seen is the one the tunnel started on.
     private func watchNetworkPath() {
         pathObservation?.invalidate()
         pathObservation = observe(\.defaultPath, options: [.initial, .new]) { [weak self] provider, _ in
@@ -740,7 +766,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                                 packetFlow: packetFlow
                             )
                             events.record("https decryption on, \(mitmPlugins.count) plugins, \(mitmScripts.count) scripts")
-                            httpsDecryption = HttpsDecryptionState(status: .on, plugins: mitmPlugins.count)
+                            httpsDecryption = HttpsDecryptionState(
+                                status: .on, plugins: mitmPlugins.count, rootFingerprint: authority.sha256Fingerprint
+                            )
                             return session
                         } catch let failure as EmbeddedRuntimeSession.Failure {
                             events.record("scripts off: runtime refused them (code \(failure.code))")
@@ -757,7 +785,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                         packetFlow: packetFlow
                     )
                     events.record("https decryption on, \(mitmPlugins.count) plugins")
-                    httpsDecryption = HttpsDecryptionState(status: .on, plugins: mitmPlugins.count)
+                    httpsDecryption = HttpsDecryptionState(
+                        status: .on, plugins: mitmPlugins.count, rootFingerprint: authority.sha256Fingerprint
+                    )
                     return session
                 }
                 events.record("https decryption off: no root certificate")

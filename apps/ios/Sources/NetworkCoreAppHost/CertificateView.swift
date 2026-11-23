@@ -15,7 +15,7 @@ struct ExtensionsView: View {
             Form {
                 Section {
                     NavigationLink {
-                        CertificateView()
+                        CertificateView(tunnel: tunnel)
                     } label: {
                         Label("HTTPS 解密证书", systemImage: "lock.shield")
                     }
@@ -40,6 +40,7 @@ struct ExtensionsView: View {
 /// Walks the user through generating the root, installing its profile and turning on full trust, and shows
 /// which step the device is at.
 struct CertificateView: View {
+    var tunnel: TunnelController
     @Environment(\.brand) private var brand
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
@@ -79,7 +80,7 @@ struct CertificateView: View {
             Section {
                 if model.authority == nil {
                     Button("生成根证书") {
-                        model.generate()
+                        generate()
                     }
                 } else {
                     Button("安装描述文件") {
@@ -116,7 +117,7 @@ struct CertificateView: View {
                         confirmingRegenerate = true
                     }
                 } footer: {
-                    Text("重新生成后旧证书立即失效，需要重新安装并信任。请同时在 设置 > 通用 > VPN与设备管理 删除旧描述文件。")
+                    Text("重新生成后已连接的隧道会自动重新连接，改用新证书签发；新证书需要重新安装并信任。请同时在 设置 > 通用 > VPN与设备管理 删除旧描述文件，否则旧证书仍受这台设备信任。")
                 }
             }
 
@@ -133,8 +134,10 @@ struct CertificateView: View {
         .navigationTitle("HTTPS 解密证书")
         .confirmationDialog("重新生成根证书？", isPresented: $confirmingRegenerate, titleVisibility: .visible) {
             Button("重新生成", role: .destructive) {
-                model.generate()
+                generate()
             }
+        } message: {
+            Text("已连接的隧道会自动重新连接并改用新证书。新证书需要重新安装并信任，之后请删除旧描述文件。")
         }
         .task {
             model.load()
@@ -144,6 +147,17 @@ struct CertificateView: View {
             if phase == .active {
                 model.refresh()
             }
+        }
+    }
+
+    /// Makes a new root; once saved, the tunnel moves to it (`TunnelController.rootCertificateChanged`): the
+    /// extension reads the root only at start.
+    private func generate() {
+        guard model.generate() else {
+            return
+        }
+        Task {
+            await tunnel.rootCertificateChanged()
         }
     }
 
@@ -182,16 +196,22 @@ final class CertificateModel: ObservableObject {
         refresh()
     }
 
-    func generate() {
+    /// Makes and saves a new root; returns whether it did.
+    @discardableResult
+    func generate() -> Bool {
+        defer {
+            refresh()
+        }
         do {
             let created = try MitmCertificateAuthority.generate()
             try MitmCertificateStore.save(created)
             authority = created
             error = nil
+            return true
         } catch {
             self.error = String(localized: "生成证书失败（\(Self.describe(error))）")
+            return false
         }
-        refresh()
     }
 
     func refresh() {

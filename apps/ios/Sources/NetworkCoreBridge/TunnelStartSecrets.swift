@@ -86,8 +86,44 @@ public struct TunnelStartSecrets: Codable, Equatable {
         return staleCopyReason
     }
 
-    /// The fixed reason for a copy older than the profile (`nodeKeyFailureReason`, `mitmBundleFailureReason`); the
-    /// app looks for it in the system's record of the last stop.
+    /// The extension's failure reason when the profile decrypts HTTPS (`decrypts`) and names a MITM root
+    /// (`TunnelProfileKeys.mitmRootFingerprint`, `profileFingerprint`) other than the one in the copy kept from an
+    /// earlier start (`keptCopy`; nil when the app passed the values in this start's options, or on iOS): the root
+    /// was generated or replaced while the tunnel was not running, so the app could not hand it over. Starting on
+    /// the old root would issue certificates from one the person is about to stop trusting, so the start fails
+    /// with the stale-copy reason like a stale payload (`mitmBundleFailureReason`) and the app starts the tunnel
+    /// once more with options. Nil for a profile that decrypts nothing or names no root (saved before the
+    /// fingerprint existed), and when the roots match.
+    public static func mitmRootFailureReason(
+        profileFingerprint: String?, decrypts: Bool, keptCopy: TunnelStartSecrets?
+    ) -> String? {
+        guard let keptCopy, decrypts, !keptCopy.mitmRootMatches(profileFingerprint: profileFingerprint) else {
+            return nil
+        }
+        return staleCopyReason
+    }
+
+    /// Whether this copy's MITM root is the one a profile naming `profileFingerprint`
+    /// (`TunnelProfileKeys.mitmRootFingerprint`) was saved with. The app writes the fingerprint whenever the root
+    /// changes, so a copy kept from an earlier start with an older root, or none, does not match. A profile from
+    /// before the fingerprint names none: unknown, and the copy is used as before.
+    public func mitmRootMatches(profileFingerprint: String?) -> Bool {
+        guard let profileFingerprint else {
+            return true
+        }
+        guard let mitmAuthority, let fingerprint = Self.rootFingerprint(ofStoredValue: mitmAuthority) else {
+            return false
+        }
+        return fingerprint == profileFingerprint
+    }
+
+    /// The SHA-256 fingerprint of a root as `MitmCertificateStore` keeps it, or nil when it does not decode.
+    public static func rootFingerprint(ofStoredValue value: Data) -> String? {
+        (try? MitmCertificateStore.authority(fromStoredValue: value))?.sha256Fingerprint
+    }
+
+    /// The fixed reason for a copy older than the profile (`nodeKeyFailureReason`, `mitmBundleFailureReason`,
+    /// `mitmRootFailureReason`); the app looks for it in the system's record of the last stop.
     public static let staleCopyReason = "start secrets are older than the profile; open the app and connect"
 
     /// Whether the description of the last stop (`NEVPNConnection.fetchLastDisconnectError`, with its underlying
@@ -96,15 +132,20 @@ public struct TunnelStartSecrets: Codable, Equatable {
         description?.contains(staleCopyReason) == true
     }
 
-    /// What identifies a saved profile for `retriesStaleCopy`: its node key version and its HTTPS decryption payload
-    /// reference (`TunnelProfileKeys.mitmBundle`, a digest and a chunk count). A plugin change keeps the key
-    /// version but changes the reference, so it counts as another profile. Nil when the profile has neither, as the
-    /// extension then never reports a stale copy. Holds no secret: the reference is only hashed again.
-    public static func staleCopyProfileStamp(nodeKeyVersion: String?, mitmBundle: Data?) -> String? {
-        guard nodeKeyVersion != nil || mitmBundle != nil else {
+    /// What identifies a saved profile for `retriesStaleCopy`: its node key version, its HTTPS decryption payload
+    /// reference (`TunnelProfileKeys.mitmBundle`, a digest and a chunk count) and its MITM root fingerprint
+    /// (`TunnelProfileKeys.mitmRootFingerprint`). A plugin change keeps the key version but changes the reference,
+    /// and a new root changes only the fingerprint, so each counts as another profile. Nil when the profile has none
+    /// of them, as the extension then never reports a stale copy. Holds no secret: the reference is only hashed
+    /// again, and the fingerprint is public.
+    public static func staleCopyProfileStamp(
+        nodeKeyVersion: String?, mitmBundle: Data?, mitmRoot: String? = nil
+    ) -> String? {
+        guard nodeKeyVersion != nil || mitmBundle != nil || mitmRoot != nil else {
             return nil
         }
-        return (nodeKeyVersion ?? "-") + "/" + (mitmBundle.map(MitmProfileBundle.digest) ?? "-")
+        let base = (nodeKeyVersion ?? "-") + "/" + (mitmBundle.map(MitmProfileBundle.digest) ?? "-")
+        return mitmRoot.map { base + "/" + $0 } ?? base
     }
 
     /// Whether the app starts the tunnel again, with options, after a start failed on a stale copy: once for each

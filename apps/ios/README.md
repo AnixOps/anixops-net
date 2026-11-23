@@ -52,10 +52,10 @@ their own gates pass.
   Tapping a node whose save is pending waits for that save. At launch a profile whose key is missing (left by
   0.3.0-beta.11) is saved again for the selected node. On macOS every saved write and node library change is also
   handed to a running System Extension (`TunnelAppMessage.startSecrets`); a start the system made on a copy older
-  than the profile (an older node key version, or HTTPS decryption chunks that do not match the profile's digest
-  after a plugin or debug mapping change) fails with `start secrets are older than the profile` and the app, when it
-  runs or next becomes active, starts the tunnel once more with options for that profile (node key version plus
-  payload reference; remembered across launches, so it never loops). Known limit: a group member picked while the
+  than the profile (an older node key version, HTTPS decryption chunks that do not match the profile's digest
+  after a plugin or debug mapping change, or another MITM root than the profile's fingerprint) fails with `start secrets are older than the profile` and the app, when it
+  runs or next becomes active, starts the tunnel once more with options for that profile (node key version, payload
+  reference and root fingerprint; remembered across launches, so it never loops). Known limit: a group member picked while the
   tunnel is down keeps neither a new key version nor a new payload, so a system-initiated start runs the previous
   selections until the app connects or hands the copy over again.
 - Subscription updates and the running tunnel: the extension reads the node and the node library only at start, so
@@ -148,6 +148,19 @@ Keychain at all: the app hands it the root, node key, node library, HTTPS decryp
 (`TunnelStartSecrets`), and again whenever one of them or the saved profile changes while the tunnel runs
 (`TunnelAppMessage.startSecrets`), so the copy the extension keeps for starts without options (On Demand, login,
 System Settings) follows the saved profile. Firefox keeps its own certificate list.
+
+Generating or importing a new root (on iOS and macOS alike) calls `TunnelController.rootCertificateChanged()`: the
+profile records the new root's SHA-256 fingerprint (`TunnelProfileKeys.mitmRootFingerprint`), a running macOS
+extension is handed the new values (`TunnelAppMessage.startSecrets`, waiting for its answer) and a running tunnel
+that decrypts anything reconnects, since the extension reads the root only at start. A macOS start the system makes
+without the app's values on a kept copy whose root does not match the profile's fingerprint fails like an older
+payload (`start secrets are older than the profile`, `TunnelStartSecrets.mitmRootFailureReason`) and the app starts
+the tunnel once more with options; a profile saved before the fingerprint existed checks nothing. While decryption
+is on the extension reports the root it issues from (`HttpsDecryptionState.rootFingerprint`), and the request page
+asks to reconnect when it differs from the Keychain's. After the tunnel moved, the Mac takes back its trust in the
+replaced root (`MitmRootRevocation`): the user trust setting first (`SecTrustSettingsRemoveTrustSettings`, login
+password), then the login keychain item, then a trust check of the old root. Deleting only the item, as builds
+before 1.0.0 did, left the old root trusted; see docs/manual-intervention.md for removing such leftovers by hand.
 
 ## Plugins
 

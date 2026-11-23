@@ -98,8 +98,13 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含调试模式的 `deb
 - 只列 MITM 解密后的请求和明文 HTTP 请求；抓包未开启时空白页给出“开始抓包”。
 - 没有解密出请求的抓包连接不会藏起来（Apple，`CaptureCoverage`）：列表为空时按域名或地址分组列在下面（连接数、流量、TCP/UDP），点进去看原始字节，未在解密列表里的域名旁有“解密”，点后加入调试解密列表并重连；列表有请求时，状态行给出“另有 N 个连接没有解密出请求”的入口。已在解密列表却没有请求的域名会说明可能原因（加入前建立的连接、证书绑定、非 443 端口）。只在没有筛选条件时统计。
 - App 侧的检查清单只看本机（根证书已信任、有解密域名）；隧道扩展另外报告引擎是否真的开了解密（`TunnelAppMessage.httpsDecryption`：`on` / `off` + 原因 / `unused`），`off` 时请求页标红说明原因。
+- 更换根证书（Apple，iOS 和 macOS）：生成或导入新根证书后（`TunnelController.rootCertificateChanged()`），VPN 配置记下新根的 SHA-256 指纹（`networkcore.mitm-root-fingerprint`，公开值），已连接且在解密的隧道自动重连改用新根；macOS 还先把新值交给运行中的系统扩展保存并等它应答（`TunnelAppMessage.startSecrets`），这样抢先由 On Demand 发起的启动也用新根。
+  - macOS 由系统发起、不带 App 值的启动（On Demand、系统设置的 VPN 开关、重启后）用的是上次 App 交给扩展的副本；配置在解密而副本里的根证书指纹与 VPN 配置记下的不一致时（断开期间换了根），和解密包摘要不一致一样，启动以 `start secrets are older than the profile` 失败，App 在运行或下次回到前台时带新值重连一次（同一配置、同一根只重连一次），不会用旧根签发。旧配置没有指纹时照旧使用副本。
+  - 隧道 `on` 时同时报告正在使用的根证书指纹；与钥匙串里的不一致时（换根后还没重连），请求页标红提示重新连接。
+  - macOS 换根后撤销这台 Mac 对旧根的信任：先删用户域信任设置（`SecTrustSettingsRemoveTrustSettings`，要登录密码），再删登录钥匙串里的证书，最后用旧根签一张探测证书核对系统已不再信任（`MitmRootRevocation`）。取消授权或删不掉时保留钥匙串条目并说明到“钥匙串访问”手动删除；信任设置在系统级（管理员域、“系统”钥匙串）时 App 无权更改，同样提示手动删除。iOS 上旧描述文件只能由用户在设置里删除，证书页写明。
 - 抓包跟隧道同生命周期：
   - 用户或系统断开隧道，抓包随之停止；扩展在 `stopTunnel` 里先把仍在进行且有内容的抓包加密保存成会话（名称“断开时自动保存”），请求页清掉“抓包中”状态并提示到“已保存的会话”查看。正在查看的已保存会话（`load_capture` 会关掉抓包）不会再存一次。
+  - 断开提示按实际情况说（`CaptureStopNotice`）：App 在连接时问一次 `capture_sessions`，有应答说明扩展的会话存储可用，断开后提示“已加密保存”；没有应答时提示“这台设备上无法保存会话，断开前抓到的内容没有保存”（红字）；还没来得及问就断开时，提示“会尝试加密保存，连接后查看是否保存成功”。
   - App 自己发起的重连（换节点、点“解密此域名”、改插件或映射）开始前抓包是开着的，重连后 App 自动重新开启抓包。
 
 ## 导出单条请求与加密会话（计划 F1 / F5 / E11）
@@ -107,7 +112,10 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含调试模式的 `deb
 - 请求详情的“导出这条请求”：cURL、代码（Python requests / JavaScript fetch / Swift URLSession / Kotlin OkHttp / Go net/http）、Postman、Insomnia、HAR，经内核 `export_capture` 的 `id` + `exchange` 生成。
 - “遮盖 Cookie、令牌和密码”默认打开（内核 `redact`）；整份 pcapng / HAR 导出也按内核默认脱敏。
 - 请求列表“更多”里可以“保存当前抓包”和查看“已保存的会话”。
-  - 隧道扩展在引擎启动后自己调用 `set_capture_storage`：目录是扩展自己的 Application Support/AnixOps-Captures，密钥是钥匙串里仅本机可用的 32 字节随机数（`CaptureSessionStorage`），不经过 App。
+  - 隧道扩展在引擎启动后自己调用 `set_capture_storage`：目录是扩展自己的 Application Support/AnixOps-Captures，密钥是仅本机可用的 32 字节随机数（`CaptureSessionStorage`），不经过 App。
+    - iOS：密钥在钥匙串里（`AfterFirstUnlockThisDeviceOnly`）。
+    - macOS：Developer ID 版的隧道是以 root 运行的 System Extension，不在用户登录上下文里，用不了数据保护钥匙串（Apple TN3137），所以密钥是扩展容器里的文件 Application Support/`capture-session.key`（不在会话目录里），权限 0600，只有 root 能读，与 `start-secrets.json` 同一保护级别（`CaptureSessionKeyFile`）。新密钥先写进私有临时文件，再用 `link` 放到位，已有文件永不覆盖；文件读不出来或长度不是 32 字节时报错，不换新密钥，免得已保存的会话全部打不开（与 Tauri 端规则相同）。之前能读到的钥匙串密钥（只有非系统扩展的构建才可能有）在第一次创建文件时沿用。
+    - 设置失败时扩展事件里记固定原因（钥匙串状态码、密钥文件不可读 / 长度不对 / 写不进去的 errno），不记密钥。macOS 的“已保存的会话”页在这种情况下写“隧道扩展读不到会话密钥”。
   - 会话用 ChaCha20-Poly1305 加密，保留 7 天。打开会话会替换当前抓包并停止实时抓包，之后照常筛选、查看和导出。
 
 ## Tauri 客户端（Windows / Linux / Android）

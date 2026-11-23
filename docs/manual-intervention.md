@@ -147,6 +147,19 @@ macOS 客户端改为官网分发（Developer ID 签名 + 公证），隧道从 
   随时更新的密钥副本）。
 - [ ] 睡眠唤醒、从系统设置的 VPN 开关直接连接（不经 App）也能连上。
 - [ ] 安装新版本后再连接，系统扩展被替换为新版本（`systemextensionsctl list` 版本号更新）。
+- [ ] 抓包会话（ios-bridge-features-01，CI 跑不到 root 系统扩展）：连接后开始抓包、解密几个请求，“更多 › 保存当前抓包”成功；
+  从 App 断开后请求页写“已加密保存”，重连后“已保存的会话”里有“断开时自动保存”并能载入；App 内换节点触发重连后，之前的抓包也存成了会话；
+  重启 Mac、安装新版本替换系统扩展后旧会话仍可打开；开发者诊断的扩展事件里没有 `capture storage unavailable`；
+  `sudo ls -l` 扩展容器的 `Application Support/capture-session.key` 为 `-rw-------  root`，32 字节。
+- [ ] 换根证书（ios-bridge-features-07、apple-extensions-mac-06）：已连接并在解密时，扩展页“重新生成…”确认后隧道自动重连，
+  系统要求登录密码撤销旧证书信任；信任新证书后 Safari 打开解密的站点证书链指向新根。`security dump-trust-settings` 里不再有旧根，
+  用导出的旧 `.cer` 签发的证书链不被信任；取消登录密码时页面说明旧证书仍受信任并保留在“钥匙串访问”里。“使用自己的根证书…”同样核对一遍。
+- [ ] 换根后从系统设置的 VPN 开关、控制中心，或重启后由 On Demand 连接：Safari 证书链仍指向新根。断开但自动重连仍开着时换根，
+  再让系统拉起隧道：第一次启动失败（`root certificate in the kept start secrets is older than the profile`，原因为
+  `start secrets are older than the profile`），App 在运行或下次回到前台时带新副本重连一次并连上，证书链指向新根；同一根不会反复重连。
+- [ ] 旧版本留下的信任（1.0.0 之前“重新生成”只删了钥匙串条目，没撤销信任，旧根仍被信任且在“钥匙串访问”里看不到）：
+  发行说明写明手动清理办法：`security dump-trust-settings` 查看用户域信任；有旧证书 `.cer` 时
+  `security remove-trusted-cert <旧证书.cer>` 删除。不要整体导入改写用户域信任设置，会误删其他证书的信任。
 
 ## macOS 应用内更新
 
@@ -219,6 +232,12 @@ CI 只能跑规则与重建逻辑的单元测试（`OnDemandSettingsTests`、`Ne
   HTTPS 解密保持开启、用的是新插件；同一配置不会反复重连（退出并重新打开 App 也不再重连）。
 - [ ] macOS 已知限制：隧道断开时只在同一订阅里换策略组成员（不换节点、不改插件）时，系统不经 App 拉起的隧道仍按上次
   交给系统扩展的分组选择运行，不报错；打开 App 连接一次或连接后再选一次即恢复。确认该行为与说明一致。
+
+## iOS 更换根证书真机验收（ios-app-tools-03）
+
+- [ ] 已连接并在解密时，“HTTPS 解密证书 › 重新生成根证书”确认后隧道自动重连；安装并信任新描述文件、删除旧描述文件后，
+  解密域名的请求恢复，不需要手动断开再连；请求页不再出现“隧道仍在用旧证书签发”。
+- [ ] 未连接时重新生成：连接后直接用新根，不出现上面的提示。
 
 ## iOS / macOS HTTPS 解密首次确认真机验收
 

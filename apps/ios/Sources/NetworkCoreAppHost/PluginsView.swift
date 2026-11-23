@@ -297,7 +297,7 @@ final class PluginsModel: ObservableObject {
         }
         switch trustState {
         case .trusted:
-            return String(localized: "HTTPS 只解密插件 [MITM] 列出的主机，明文 HTTP 全部交给插件处理，仅支持 HTTP/1.1。使用前需要先连上 VPN。")
+            return String(localized: "插件只解密自己 [MITM] 列出的主机，解密域名和映射不受这个开关影响、另外生效；明文 HTTP 全部交给插件处理，仅支持 HTTP/1.1。使用前需要先连上 VPN。")
         case .notTrusted, .notGenerated:
             return String(localized: "开启前请先在上面生成并信任 HTTPS 解密证书。")
         }

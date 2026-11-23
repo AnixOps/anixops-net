@@ -41,9 +41,14 @@ struct CaptureRequestsView: View {
     @State private var decryption: HttpsDecryptionState?
     /// The enabled plugins, for which domains are decrypted; read when the list appears.
     @State private var pluginLibrary = MitmPluginLibrary()
-    /// The tunnel went down while capture was on and held something: capture stopped with it and the extension
-    /// sealed what it caught into a saved session.
-    @State private var stoppedWithTunnel = false
+    /// The tunnel went down while capture was on and held something: capture stopped with it, and whether the
+    /// extension could seal what it caught into a saved session (`CaptureStopNotice`).
+    @State private var stopNotice: CaptureStopNotice?
+    /// Whether the running tunnel can save sessions (`capture_sessions` answers); nil until asked.
+    @State private var storageAvailable: Bool?
+    /// The running tunnel issues certificates from another root than the one in the Keychain now: it was generated
+    /// or replaced after the tunnel started.
+    @State private var rootOutdated = false
 
     private var filter: String {
         CaptureFilter.compose(chips: chips, text: query)
@@ -135,15 +140,26 @@ struct CaptureRequestsView: View {
             hostGroups = []
             pluginLibrary = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)) ?? MitmPluginLibrary()
             if tunnel.connection == .connected {
-                stoppedWithTunnel = false
+                stopNotice = nil
                 decryption = await tunnel.httpsDecryptionState()
+                rootOutdated = decryption?.usesOtherRoot(than: TunnelController.currentMitmRootFingerprint()) ?? false
+                // The extension sets session storage up before it reports connected; without it nothing is saved
+                // when the tunnel goes down.
+                storageAvailable = RuntimeControl.decode(
+                    PacketCapture.SessionsAnswer.self, from: await tunnel.control(.captureSessions)
+                ) != nil
             } else {
                 // Capture lives in the tunnel's engine: it ends when the tunnel does (`saveCaptureOnStop`).
-                if let capture, capture.enabled, capture.connections > 0 {
-                    stoppedWithTunnel = true
+                if let notice = CaptureStopNotice.afterStop(
+                    captured: capture.map { $0.enabled && $0.connections > 0 } ?? false,
+                    storageAvailable: storageAvailable
+                ) {
+                    stopNotice = notice
                 }
                 capture = nil
                 decryption = nil
+                rootOutdated = false
+                storageAvailable = nil
             }
             while !Task.isCancelled {
                 if !paused {
@@ -219,8 +235,20 @@ struct CaptureRequestsView: View {
                 }
                 .buttonStyle(.borderless)
             }
-            if stoppedWithTunnel, tunnel.connection != .connected {
-                Text("连接已断开，抓包随之停止。断开前抓到的内容已加密保存，连接后在 ⋯ › 已保存的会话 查看。")
+            if rootOutdated, tunnel.connection == .connected {
+                Text("HTTPS 解密证书已更换，隧道仍在用旧证书签发。请断开再连接。")
+                    .foregroundStyle(brand.danger)
+            }
+            if let stopNotice, tunnel.connection != .connected {
+                switch stopNotice {
+                case .saved:
+                    Text("连接已断开，抓包随之停止。断开前抓到的内容已加密保存，连接后在 ⋯ › 已保存的会话 查看。")
+                case .notSaved:
+                    Text("连接已断开，抓包随之停止。这台设备上无法保存会话，断开前抓到的内容没有保存。")
+                        .foregroundStyle(brand.danger)
+                case .unknown:
+                    Text("连接已断开，抓包随之停止。断开时会尝试加密保存抓到的内容，连接后在 ⋯ › 已保存的会话 查看是否保存成功。")
+                }
             }
             if let notice {
                 Text(notice)

@@ -29,7 +29,7 @@
 | 单条请求导出 cURL / 代码 / Postman / Insomnia，默认脱敏 | ✅ | ✅ | ◐ | ✅ | ✅ | Apple #137（A1） |
 | 抓包会话加密保存、7 天清理、载入回看 | ✅ | ✅ | ✅ | ✅ | ✅ | Tauri 见 `debug-mode.md`；Apple #137（A1） |
 | 单条重放、编辑后重放 | ✅ | ✅ | ◐ | ✅ | ✅ | Android 经内核重放代理（#128） |
-| Map Local / Map Remote | ✅ | ✅ | ✅ | ✅ | ✅ | 需开启 HTTPS 解密 |
+| Map Local / Map Remote | ✅ | ✅ | ✅ | ✅ | ✅ | 桌面和 Android 需开启 HTTPS 解密；Apple 端不受插件总开关影响，首次新增要解密的主机时先确认条款（docs/debug-mode.md） |
 | HTTP/2 MITM | ✅ | ✅ | ✅ | ✅ | ✅ | 内核 #233，各平台共用 |
 | HTTPS 解密开关 + 首次开启确认条款 | ✅ | ✅ | ✅ | ✅ | ✅ | #117；Apple 端解密域名、“解密此域名”和映射也先确认（docs/debug-mode.md） |
 | 根证书由用户手动信任、关闭解密保留证书 | ✅ | ✅ | ✅ | ✅ | ✅ | 桌面 #123；Android 本来就在系统设置里手动安装 |
