@@ -585,6 +585,9 @@ mod tests {
                 winhttp_access_type: 1,
                 winhttp_server: String::new(),
                 winhttp_bypass: String::new(),
+                winhttp_untouched: false,
+                applied: None,
+                connections: Vec::new(),
             }),
             applied_proxy: Some(WindowsProxySettings {
                 enabled: true,

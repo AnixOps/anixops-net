@@ -26,7 +26,9 @@ use platform_windows::managed::{
     windows_managed_data_directory, write_managed_text_atomic, WindowsProxySettings,
     WindowsProxySnapshot,
 };
-use platform_windows::system_integration::WindowsWinHttpProxy;
+use platform_windows::system_integration::{
+    WindowsWinHttpProxy, WININET_PROXY_TYPE_DIRECT, WININET_PROXY_TYPE_PROXY,
+};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
@@ -136,6 +138,18 @@ pub fn sanitized(
         snapshot.winhttp_server.clear();
         snapshot.winhttp_bypass.clear();
     }
+    if applied.enabled {
+        for connection in &mut snapshot.connections {
+            if connection.flags & WININET_PROXY_TYPE_PROXY != 0
+                && connection.server == applied.server
+            {
+                connection.flags =
+                    (connection.flags & !WININET_PROXY_TYPE_PROXY) | WININET_PROXY_TYPE_DIRECT;
+                connection.server.clear();
+                connection.bypass.clear();
+            }
+        }
+    }
     snapshot
 }
 
@@ -163,8 +177,9 @@ pub trait ProxyHalves {
     fn current_proxy(&self) -> Result<WindowsProxySettings, String>;
     /// The machine's WinHTTP proxy.
     fn winhttp(&self) -> Result<WindowsWinHttpProxy, String>;
-    /// Puts the current user's WinINet settings back to `previous`.
-    fn restore_user(&mut self, previous: &WindowsProxySettings) -> Result<(), String>;
+    /// Puts the current user's WinINet settings back to `previous`: the LAN values, and in a snapshot taken
+    /// since 1.0 each dial-up / VPN connection that still holds the applied proxy.
+    fn restore_user(&mut self, previous: &WindowsProxySnapshot) -> Result<(), String>;
     /// Puts the machine's WinHTTP proxy back to `previous`.
     fn restore_winhttp(&mut self, previous: &WindowsWinHttpProxy) -> Result<(), String>;
 }
@@ -195,26 +210,29 @@ pub fn put_back(
     applied: &WindowsProxySettings,
     snapshot: &WindowsProxySnapshot,
 ) -> Result<PutBack, String> {
-    let clean = sanitized(snapshot.clone(), applied);
+    let mut clean = sanitized(snapshot.clone(), applied);
+    clean.applied.get_or_insert_with(|| applied.clone());
     let mut done = PutBack::default();
     let mut errors = Vec::new();
-    match proxy.winhttp() {
-        Ok(current) if winhttp_still_applied(&current, applied) => {
-            match proxy.restore_winhttp(&winhttp_settings(&clean)) {
-                Ok(()) => done.winhttp = true,
-                Err(error) => errors.push(error),
+    // Since 1.0 connecting leaves WinHTTP alone (`winhttp_untouched`): a WinHTTP proxy that names the local port
+    // is then the user's own, and stays.
+    if !clean.winhttp_untouched {
+        match proxy.winhttp() {
+            Ok(current) if winhttp_still_applied(&current, applied) => {
+                match proxy.restore_winhttp(&winhttp_settings(&clean)) {
+                    Ok(()) => done.winhttp = true,
+                    Err(error) => errors.push(error),
+                }
             }
+            Ok(_) => {}
+            Err(error) => errors.push(error),
         }
-        Ok(_) => {}
-        Err(error) => errors.push(error),
     }
     match proxy.current_proxy() {
-        Ok(current) if still_applied(&current, applied) => {
-            match proxy.restore_user(&user_settings(&clean)) {
-                Ok(()) => done.user = true,
-                Err(error) => errors.push(error),
-            }
-        }
+        Ok(current) if still_applied(&current, applied) => match proxy.restore_user(&clean) {
+            Ok(()) => done.user = true,
+            Err(error) => errors.push(error),
+        },
         Ok(_) => {}
         Err(error) => errors.push(error),
     }
@@ -345,13 +363,17 @@ pub fn restore_for_removal(
             let from_record = records
                 .records
                 .iter()
-                .find(|record| winhttp_still_applied(&current, &record.applied))
+                .find(|record| {
+                    !record.snapshot.winhttp_untouched
+                        && winhttp_still_applied(&current, &record.applied)
+                })
                 .map(|record| sanitized(record.snapshot.clone(), &record.applied));
             let from_desktop = || {
                 let desktop = desktop?;
                 let applied = desktop.applied_proxy.as_ref()?;
                 let snapshot = desktop.proxy_snapshot.clone()?;
-                winhttp_still_applied(&current, applied).then(|| sanitized(snapshot, applied))
+                (!snapshot.winhttp_untouched && winhttp_still_applied(&current, applied))
+                    .then(|| sanitized(snapshot, applied))
             };
             let (snapshot, desktop_copy) = match from_record {
                 Some(snapshot) => (Some(snapshot), false),
@@ -482,9 +504,15 @@ pub fn forget_current_user() -> Result<(), String> {
     })
 }
 
-/// What to put back when connecting: the user's WinINet settings `current` and the machine's WinHTTP proxy now.
-pub fn snapshot_now(current: &WindowsProxySettings) -> Result<WindowsProxySnapshot, String> {
+/// What to put back when connecting with `applied`: the user's WinINet settings `current`, each of their
+/// connections' own settings and the machine's WinHTTP proxy now, as the kernel's apply records them (WinHTTP is
+/// left alone since 1.0, so `winhttp_untouched`).
+pub fn snapshot_now(
+    current: &WindowsProxySettings,
+    applied: &WindowsProxySettings,
+) -> Result<WindowsProxySnapshot, String> {
     let winhttp = native::read_winhttp()?;
+    let connections = native::read_connections()?;
     Ok(WindowsProxySnapshot {
         enabled: current.enabled,
         server: current.server.clone(),
@@ -492,6 +520,9 @@ pub fn snapshot_now(current: &WindowsProxySettings) -> Result<WindowsProxySnapsh
         winhttp_access_type: winhttp.access_type,
         winhttp_server: winhttp.server,
         winhttp_bypass: winhttp.bypass,
+        winhttp_untouched: true,
+        applied: Some(applied.clone()),
+        connections,
     })
 }
 
@@ -566,10 +597,13 @@ pub use native::NativeProxySystem;
 
 mod native {
     use super::{MachineProxy, ProxyHalves, ProxyOwner, ProxySystem};
-    use platform_windows::managed::WindowsProxySettings;
+    use platform_windows::managed::{
+        WindowsConnectionProxySnapshot, WindowsProxySettings, WindowsProxySnapshot,
+    };
     use platform_windows::system_integration::{
-        read_current_user_system_proxy, restore_current_user_system_proxy, restore_winhttp_proxy,
-        WindowsWinHttpProxy,
+        read_current_user_connection_proxies, read_current_user_system_proxy,
+        restore_current_user_system_proxy, restore_winhttp_proxy, NativeWindowsSystemIntegration,
+        WindowsSystemIntegration, WindowsWinHttpProxy,
     };
     use std::ffi::c_void;
     use std::mem::zeroed;
@@ -655,6 +689,10 @@ mod native {
     }
 
     /// The machine's WinHTTP proxy.
+    pub fn read_connections() -> Result<Vec<WindowsConnectionProxySnapshot>, String> {
+        read_current_user_connection_proxies().map_err(|error| error.to_string())
+    }
+
     pub fn read_winhttp() -> Result<WindowsWinHttpProxy, String> {
         // SAFETY: WINHTTP_PROXY_INFO is plain data the call fills; the strings it allocates are freed below.
         unsafe {
@@ -841,8 +879,18 @@ mod native {
             read_winhttp()
         }
 
-        fn restore_user(&mut self, previous: &WindowsProxySettings) -> Result<(), String> {
-            restore_current_user_system_proxy(previous).map_err(|error| error.to_string())
+        fn restore_user(&mut self, previous: &WindowsProxySnapshot) -> Result<(), String> {
+            if previous.connections.is_empty() {
+                // A snapshot from before 1.0: only the LAN values were recorded.
+                return restore_current_user_system_proxy(&super::user_settings(previous))
+                    .map_err(|error| error.to_string());
+            }
+            // The kernel puts back each connection that still holds the applied proxy; WinHTTP is handled apart.
+            let mut whole = previous.clone();
+            whole.winhttp_untouched = true;
+            NativeWindowsSystemIntegration::new()
+                .restore_system_proxy(&whole)
+                .map_err(|error| error.to_string())
         }
 
         fn restore_winhttp(&mut self, previous: &WindowsWinHttpProxy) -> Result<(), String> {
@@ -922,6 +970,9 @@ mod tests {
             winhttp_access_type: WINHTTP_NO_PROXY,
             winhttp_server: String::new(),
             winhttp_bypass: String::new(),
+            winhttp_untouched: false,
+            applied: None,
+            connections: Vec::new(),
         }
     }
 
@@ -977,12 +1028,13 @@ mod tests {
             Ok(self.winhttp.clone())
         }
 
-        fn restore_user(&mut self, previous: &WindowsProxySettings) -> Result<(), String> {
+        fn restore_user(&mut self, previous: &WindowsProxySnapshot) -> Result<(), String> {
             if let Some(error) = &self.restore_error {
                 return Err(error.clone());
             }
+            let previous = user_settings(previous);
             self.restored_user.push(previous.clone());
-            self.current = Ok(previous.clone());
+            self.current = Ok(previous);
             Ok(())
         }
 
@@ -1092,7 +1144,7 @@ mod tests {
             fn winhttp(&self) -> Result<WindowsWinHttpProxy, String> {
                 self.0.winhttp()
             }
-            fn restore_user(&mut self, previous: &WindowsProxySettings) -> Result<(), String> {
+            fn restore_user(&mut self, previous: &WindowsProxySnapshot) -> Result<(), String> {
                 self.0.restore_user(previous)
             }
             fn restore_winhttp(&mut self, _: &WindowsWinHttpProxy) -> Result<(), String> {
@@ -1242,6 +1294,9 @@ mod tests {
             winhttp_access_type: WINHTTP_NAMED_PROXY,
             winhttp_server: "127.0.0.1:7890".to_string(),
             winhttp_bypass: "<local>".to_string(),
+            winhttp_untouched: false,
+            applied: None,
+            connections: Vec::new(),
         };
         let clean = sanitized(polluted, &applied());
         assert!(!clean.enabled);
@@ -1454,5 +1509,53 @@ mod tests {
             Err("registry unavailable".to_string())
         );
         assert_eq!(system.winhttp, no_winhttp());
+    }
+    #[test]
+    fn a_snapshot_since_1_0_leaves_winhttp_alone() {
+        // Connecting no longer writes WinHTTP: one that names the local port was set by the user.
+        let mut snapshot = original();
+        snapshot.winhttp_untouched = true;
+        let mut system = FakeSystem::new(applied());
+        let done = put_back(&mut system, &applied(), &snapshot).unwrap();
+        assert!(done.user);
+        assert!(!done.winhttp);
+        assert!(system.restored_winhttp.is_empty());
+        assert_eq!(system.restored_user, [user_settings(&original())]);
+    }
+
+    #[test]
+    fn a_connection_holding_the_applied_proxy_goes_back_to_direct() {
+        use platform_windows::managed::WindowsConnectionProxySnapshot;
+        let mut polluted = original();
+        polluted.connections = vec![
+            WindowsConnectionProxySnapshot {
+                connection: Some("Work VPN".to_string()),
+                flags: WININET_PROXY_TYPE_DIRECT | WININET_PROXY_TYPE_PROXY,
+                server: "127.0.0.1:7890".to_string(),
+                bypass: "<local>".to_string(),
+                auto_config_url: "http://wpad.example/proxy.pac".to_string(),
+            },
+            WindowsConnectionProxySnapshot {
+                connection: None,
+                flags: WININET_PROXY_TYPE_DIRECT | WININET_PROXY_TYPE_PROXY,
+                server: "corp.example:8080".to_string(),
+                bypass: "*.corp.example".to_string(),
+                auto_config_url: String::new(),
+            },
+        ];
+        let clean = sanitized(polluted, &applied());
+        assert_eq!(clean.connections[0].flags, WININET_PROXY_TYPE_DIRECT);
+        assert!(clean.connections[0].server.is_empty());
+        assert!(clean.connections[0].bypass.is_empty());
+        // The automatic configuration script is the user's own and stays.
+        assert_eq!(
+            clean.connections[0].auto_config_url,
+            "http://wpad.example/proxy.pac"
+        );
+        assert_eq!(clean.connections[1].server, "corp.example:8080");
+        assert_eq!(
+            clean.connections[1].flags,
+            WININET_PROXY_TYPE_DIRECT | WININET_PROXY_TYPE_PROXY
+        );
     }
 }
