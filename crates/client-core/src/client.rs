@@ -572,7 +572,13 @@ impl Client {
         let (id, delay) = engine::fastest_node(&nodes, DELAY_URL)
             .ok_or_else(|| "no node answered the delay test".to_string())?;
         let switched = self.backend().switch_node(&id)?;
-        let node = switched.params.get("node").cloned().unwrap_or_default();
+        // Switching to a node of another subscription whose policy groups choose names that subscription.
+        let node = switched
+            .params
+            .get("node")
+            .or_else(|| switched.params.get("name"))
+            .cloned()
+            .unwrap_or_default();
         Ok(OperationResult::coded(
             "fastest.selected_delay",
             format!("{} ({})", switched.message, format_delay(delay)),
@@ -666,18 +672,20 @@ impl Client {
         Ok(result)
     }
 
-    /// Changes the plugin library outside the lock, then applies it to a running engine.
+    /// Changes the plugin library outside the lock, then applies it to a running engine. `change` answers what
+    /// was changed, coded; the window words that, then what it did to the connection (`follow`).
     fn change_plugins<F>(&self, change: F) -> Result<OperationResult, String>
     where
-        F: FnOnce(&Path) -> Result<String, String>,
+        F: FnOnce(&Path) -> Result<OperationResult, String>,
     {
         let directory = self.backend().plugins_dir();
-        let message = change(&directory)?;
+        let changed = change(&directory)?;
         let applied = self.backend().plugins_changed()?;
-        // The window words what the change did to the connection; the English keeps what was changed too.
         Ok(OperationResult {
-            message: format!("{message}; {}", applied.message),
-            ..applied
+            message: format!("{}; {}", changed.message, applied.message),
+            follow: applied.code,
+            note: applied.note,
+            ..changed
         })
     }
 
@@ -691,14 +699,11 @@ impl Client {
         if trusted {
             return Ok(result);
         }
-        Ok(OperationResult {
-            message: format!(
-                "{}. The root certificate is not trusted yet: choose Trust root certificate under Extensions",
-                result.message
-            ),
-            code: Some("mitm.on_root_untrusted"),
-            ..result
-        })
+        // The window words what turning it on did (now, or with the next connection), then what is still to do.
+        Ok(result.followed_by(
+            "mitm.root_untrusted",
+            "The root certificate is not trusted yet: choose Trust root certificate under Extensions",
+        ))
     }
 
     /// Android has no trust store an app may change: the root is saved to Downloads, the user installs it in
@@ -806,26 +811,27 @@ impl Client {
         let result = self
             .backend()
             .import_mitm_root(certificate_pem, private_key_pem)?;
-        Ok(OperationResult {
-            message: format!("{}{}", result.message, self.imported_root_note()),
-            ..result
+        // The window words what was saved, then what is still to do (`mitm.root_untrusted`).
+        Ok(match self.imported_root_note() {
+            Some(note) => result.followed_by("mitm.root_untrusted", note),
+            None => result,
         })
     }
 
     #[cfg(not(target_os = "android"))]
-    fn imported_root_note(&self) -> &'static str {
+    fn imported_root_note(&self) -> Option<&'static str> {
         let root = self.backend().mitm_root();
         if self.root_trusted(&root) {
-            ""
+            None
         } else {
-            ". This computer does not trust it yet: choose Trust root certificate under Extensions"
+            Some("This computer does not trust it yet: choose Trust root certificate under Extensions")
         }
     }
 
     /// Android: the user installs the root in the system settings, as the answer already says.
     #[cfg(target_os = "android")]
-    fn imported_root_note(&self) -> &'static str {
-        ""
+    fn imported_root_note(&self) -> Option<&'static str> {
+        None
     }
 
     /// The user's own request to stop trusting the root: the user's own store where the session keeps
@@ -1168,14 +1174,18 @@ fn handler(name: &str) -> Option<Handler> {
             let Mapping { entry } = parse(args)?;
             json(client.change_plugins(move |directory| {
                 let saved = mappings::save(directory, entry)?;
-                Ok(format!("Mapping saved: {}", saved.pattern))
+                Ok(OperationResult::coded(
+                    "mapping.saved",
+                    format!("Mapping saved: {}", saved.pattern),
+                )
+                .with("pattern", &saved.pattern))
             })?)
         },
         "remove_debug_mapping" => |client, args| {
             let Id { id } = parse(args)?;
             json(client.change_plugins(move |directory| {
                 mappings::remove(directory, &id)?;
-                Ok("Mapping removed".to_string())
+                Ok(OperationResult::coded("mapping.removed", "Mapping removed"))
             })?)
         },
         // The patterns decrypted (the list's lines that are on, not exclusions), for the request list.
@@ -1193,11 +1203,12 @@ fn handler(name: &str) -> Option<Handler> {
             json(client.change_plugins(move |directory| {
                 mappings::add_host(directory, &host, exclude)?;
                 let name = host.trim().trim_start_matches(['-', '!']);
-                Ok(if exclude || name.len() < host.trim().len() {
-                    format!("Excluding {name}")
+                let result = if exclude || name.len() < host.trim().len() {
+                    OperationResult::coded("decrypt.excluding", format!("Excluding {name}"))
                 } else {
-                    format!("Decrypting {name}")
-                })
+                    OperationResult::coded("decrypt.decrypting", format!("Decrypting {name}"))
+                };
+                Ok(result.with("host", name))
             })?)
         },
         "edit_decrypt_host" => |client, args| {
@@ -1208,25 +1219,32 @@ fn handler(name: &str) -> Option<Handler> {
             } = parse(args)?;
             json(client.change_plugins(move |directory| {
                 mappings::edit_host(directory, &pattern, &host, exclude)?;
-                Ok(format!("Saved {host}"))
+                Ok(
+                    OperationResult::coded("decrypt.saved", format!("Saved {host}"))
+                        .with("host", &host),
+                )
             })?)
         },
         "set_decrypt_host_enabled" => |client, args| {
             let HostEnabled { pattern, enabled } = parse(args)?;
             json(client.change_plugins(move |directory| {
                 mappings::set_host_enabled(directory, &pattern, enabled)?;
-                Ok(if enabled {
-                    format!("Turned on {pattern}")
+                let result = if enabled {
+                    OperationResult::coded("decrypt.on", format!("Turned on {pattern}"))
                 } else {
-                    format!("Paused {pattern}")
-                })
+                    OperationResult::coded("decrypt.paused", format!("Paused {pattern}"))
+                };
+                Ok(result.with("pattern", &pattern))
             })?)
         },
         "remove_decrypt_host" => |client, args| {
             let Host { host, .. } = parse(args)?;
             json(client.change_plugins(move |directory| {
                 mappings::remove_host(directory, &host)?;
-                Ok(format!("Removed {host}"))
+                Ok(
+                    OperationResult::coded("decrypt.removed", format!("Removed {host}"))
+                        .with("host", &host),
+                )
             })?)
         },
         // What decryption did per domain since the engine started (`mitm_hosts`): decrypted and failed
@@ -1480,14 +1498,14 @@ fn handler(name: &str) -> Option<Handler> {
             let Url { url } = parse(args)?;
             json(client.change_plugins(move |directory| {
                 let plugin = plugins::import(directory, &url, plugins::download)?;
-                Ok(format!("Plugin imported: {}", plugin.name))
+                Ok(plugin_imported(&plugin))
             })?)
         },
         "import_mitm_plugin_text" => |client, args| {
             let PluginText { text, source } = parse(args)?;
             json(client.change_plugins(move |directory| {
                 let plugin = plugins::import_text(directory, &source, &text, plugins::download)?;
-                Ok(format!("Plugin imported: {}", plugin.name))
+                Ok(plugin_imported(&plugin))
             })?)
         },
         "mitm_plugin_details" => |client, args| {
@@ -1500,18 +1518,17 @@ fn handler(name: &str) -> Option<Handler> {
             json(client.change_plugins(move |directory| {
                 plugins::set_enabled(directory, &id, enabled)?;
                 Ok(if enabled {
-                    "Plugin enabled"
+                    OperationResult::coded("plugins.enabled", "Plugin enabled")
                 } else {
-                    "Plugin disabled"
-                }
-                .to_string())
+                    OperationResult::coded("plugins.disabled", "Plugin disabled")
+                })
             })?)
         },
         "remove_mitm_plugin" => |client, args| {
             let Id { id } = parse(args)?;
             json(client.change_plugins(move |directory| {
                 plugins::remove(directory, &id)?;
-                Ok("Plugin removed".to_string())
+                Ok(OperationResult::coded("plugins.removed", "Plugin removed"))
             })?)
         },
         "phone_qr_code" => |_, args| {
@@ -1581,6 +1598,19 @@ fn json<T: Serialize>(value: T) -> Result<Value, String> {
 
 fn parse<T: DeserializeOwned>(args: Value) -> Result<T, String> {
     serde_json::from_value(args).map_err(|error| format!("invalid arguments: {error}"))
+}
+
+/// What importing a plugin did, coded: its name and how many scripts it brought.
+fn plugin_imported(plugin: &plugins::PluginSummary) -> OperationResult {
+    OperationResult::coded(
+        "plugins.imported",
+        format!(
+            "Plugin imported: {} ({} scripts)",
+            plugin.name, plugin.script_count
+        ),
+    )
+    .with("name", &plugin.name)
+    .with("scripts", plugin.script_count)
 }
 
 /// The search of a command that takes one; no arguments at all is the empty search.
@@ -2356,6 +2386,21 @@ mod tests {
             )
             .unwrap_err()
             .starts_with("invalid arguments"));
+        // A change to the decryption list says what was changed, then what that did to the connection.
+        assert_eq!(
+            client
+                .invoke(
+                    "add_decrypt_host",
+                    serde_json::json!({ "host": "-ads.example.com" })
+                )
+                .unwrap(),
+            serde_json::json!({
+                "message": "Excluding ads.example.com; turn on HTTPS decryption for it to take effect",
+                "code": "decrypt.excluding",
+                "params": { "host": "ads.example.com" },
+                "follow": "plugins.need_decryption",
+            })
+        );
         assert!(!client.receive_app_links(vec!["https://example.com".to_string()]));
         assert!(client.receive_app_links(vec!["anixops://connect".to_string()]));
         assert_eq!(

@@ -234,6 +234,10 @@ pub struct OperationResult {
     pub code: Option<&'static str>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub params: BTreeMap<&'static str, String>,
+    /// A second code the window words after `code`, with no parameters: what the change did to the connection
+    /// (`plugins.applied_running` after `mapping.saved`, say), or what is still to do (`mitm.root_untrusted`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub follow: Option<&'static str>,
     /// Already in the window's language (what a restart did with capture); shown after the coded text.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
@@ -246,6 +250,7 @@ impl OperationResult {
             message: message.into(),
             code: None,
             params: BTreeMap::new(),
+            follow: None,
             note: None,
         }
     }
@@ -261,6 +266,13 @@ impl OperationResult {
     /// Fills `{name}` of the coded text.
     pub fn with(mut self, name: &'static str, value: impl ToString) -> Self {
         self.params.insert(name, value.to_string());
+        self
+    }
+
+    /// Has the window word `code` after this result's own code; `message` is its English, added to this one's.
+    pub fn followed_by(mut self, code: &'static str, message: &str) -> Self {
+        self.message = format!("{}. {message}", self.message.trim_end_matches('.'));
+        self.follow = Some(code);
         self
     }
 
@@ -2732,10 +2744,13 @@ mod tests {
         backend.import(PASTED_LOCATION, LINK).unwrap();
         assert!(!backend.snapshot().https_decryption_enabled);
         assert!(!backend.envelope().unwrap().contains("\"mitm\""));
+        let changed = backend.plugins_changed().unwrap();
+        assert_eq!(changed.code, Some("plugins.need_decryption"));
         assert_eq!(
-            backend.plugins_changed().unwrap(),
+            changed.message,
             "turn on HTTPS decryption for it to take effect"
         );
+        assert_eq!(changed.note, None);
 
         backend.set_https_decryption(true).unwrap();
         assert!(backend.mitm_root().exists());
@@ -2752,10 +2767,10 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(
-            backend.plugins_changed().unwrap(),
-            "it applies with the next connection"
-        );
+        let changed = backend.plugins_changed().unwrap();
+        assert_eq!(changed.code, Some("plugins.applied_next"));
+        assert_eq!(changed.message, "it applies with the next connection");
+        assert_eq!(changed.note, None);
         let envelope = backend.envelope().unwrap();
         let parsed: Value = serde_json::from_str(&envelope).unwrap();
         assert_eq!(parsed["mitm"]["plugins"], serde_json::json!([PLUGIN]));

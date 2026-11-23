@@ -609,6 +609,8 @@ export interface OperationResult {
   message: string;
   code?: string;
   params?: Record<string, string>;
+  /** A second code, worded after `code`: what the change did to the connection, or what is still to do. */
+  follow?: string;
   note?: string;
 }
 

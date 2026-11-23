@@ -124,6 +124,8 @@ export function useRequestFeed(capturing: boolean, filter: string, paused: boole
     }
     // The engine dropped something: reads every row it still holds and lets go of the others, whatever their seq.
     async function resync() {
+      // Every attempt counts, so a read that comes back incomplete (or fails) waits the interval before the next.
+      state.current = { ...state.current, resyncAt: Date.now() };
       const full = await readAllKept((sinceSeq, sinceRev) => desktop.captureRequests(sinceSeq, sinceRev, filter), REQUEST_PAGE);
       if (cancelled || !full.complete || full.answers.some((answer) => engineRestarted(state.current, answer))) return;
       let rows = state.current.rows;

@@ -105,7 +105,6 @@ export const operationTexts: Record<string, string> = {
   "mitm.off": "HTTPS 解密已关闭",
   "mitm.on": "HTTPS 解密已开启",
   "mitm.on_next": "HTTPS 解密已开启，下次连接时生效",
-  "mitm.on_root_untrusted": "HTTPS 解密已开启。根证书还没有信任：在“扩展”里选择“信任根证书”",
   "node.switched_to": "已切换到 {node}",
   "nodes.imported": "已导入 {supported} 个节点（共 {total} 个）",
   "plugins.applied_next": "下次连接时生效",
@@ -126,14 +125,34 @@ export const operationTexts: Record<string, string> = {
   "tun.on_next": "TUN 模式已开启，下次连接会接管所有应用",
   "tun.on_next_password": "TUN 模式已开启，下次连接时会请求管理员密码",
   "validate.supported": "{supported} 个节点（共 {total} 个）可以在内核上运行",
+  "mapping.saved": "已保存映射：{pattern}",
+  "mapping.removed": "映射已删除",
+  "decrypt.excluding": "已排除 {host}，不再解密",
+  "decrypt.decrypting": "将解密 {host}",
+  "decrypt.saved": "解密列表已保存：{host}",
+  "decrypt.on": "已启用 {pattern}",
+  "decrypt.paused": "已暂停 {pattern}",
+  "decrypt.removed": "已从解密列表移除 {host}",
+  "plugins.imported": "已导入插件：{name}（{scripts} 个脚本）",
+  "plugins.enabled": "插件已启用",
+  "plugins.disabled": "插件已停用",
+  "plugins.removed": "插件已删除",
+  "mitm.root_untrusted": "根证书还没有信任：在“扩展”里选择“信任根证书”",
 };
 
+/** How a result's `follow` text joins its own text, as two sentences. */
+export const followJoin = "{first}。{then}";
+
 /**
- * The text a result shows: its code's words in the window's language, with the parameters filled in and the
- * backend's note after them, or the backend's own message for a code this window does not know.
+ * The text a result shows: its code's words in the window's language, with the parameters filled in, then the words
+ * of its `follow` code (what a change did to the connection), then the backend's note; or the backend's own message
+ * when this window does not know one of the codes.
  */
-export function operationText(result: Pick<OperationResult, "message" | "code" | "params" | "note">): string {
+export function operationText(result: Pick<OperationResult, "message" | "code" | "params" | "follow" | "note">): string {
   const source = result.code ? operationTexts[result.code] : undefined;
-  if (!source) return result.message;
-  return [t(source, result.params), result.note].filter(Boolean).join(" ");
+  const follow = result.follow ? operationTexts[result.follow] : undefined;
+  if (!source || (result.follow && !follow)) return result.message;
+  let text = t(source, result.params);
+  if (follow) text = t(followJoin, { first: text.replace(/[.。]$/, ""), then: t(follow) });
+  return [text, result.note].filter(Boolean).join(" ");
 }

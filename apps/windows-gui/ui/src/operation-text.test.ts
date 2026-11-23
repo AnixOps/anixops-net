@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { setLanguage } from "./i18n";
 import { english } from "./i18n-en";
 import { traditional } from "./i18n-zh-hant";
-import { operationText, operationTexts } from "./operation-text";
+import { followJoin, operationText, operationTexts } from "./operation-text";
 
 // The backends that answer this window: the Windows app and the shared client core (Linux).
 const backends = import.meta.glob(["../../src/gui/**/*.rs", "../../../../crates/client-core/src/**/*.rs"], {
@@ -14,9 +14,10 @@ const backends = import.meta.glob(["../../src/gui/**/*.rs", "../../../../crates/
 
 // The areas result codes are named in; a quoted `<area>.<name>` in the backends is a code (file names aside).
 const areas = [
-  "certificate", "connect", "crash_reports", "data_lists", "delay", "devices", "diagnostics", "disconnect", "dns",
-  "driver", "egress", "fastest", "group", "links", "mitm", "node", "nodes", "plugins", "preferences", "profile", "proxy",
-  "quic", "redirects", "restart", "root", "routing", "rules", "script_runtime", "subscription", "tun", "validate",
+  "certificate", "connect", "crash_reports", "data_lists", "decrypt", "delay", "devices", "diagnostics", "disconnect",
+  "dns", "driver", "egress", "fastest", "group", "links", "mapping", "mitm", "node", "nodes", "plugins", "preferences",
+  "profile", "proxy", "quic", "redirects", "restart", "root", "routing", "rules", "script_runtime", "subscription", "tun",
+  "validate",
 ];
 const codePattern = new RegExp(`"((?:${areas.join("|")})\\.[a-z_]+)"`, "g");
 
@@ -42,7 +43,7 @@ describe("operation result codes", () => {
     const codes = backendCodes();
     expect(codes.length).toBeGreaterThan(50);
     expect(codes.filter((code) => !(code in operationTexts))).toEqual([]);
-    const texts = Object.values(operationTexts);
+    const texts = [...Object.values(operationTexts), followJoin];
     expect(texts.filter((text) => !(text in english))).toEqual([]);
     expect(texts.filter((text) => !(text in traditional))).toEqual([]);
   });
@@ -58,6 +59,20 @@ describe("operation result codes", () => {
     expect(operationText({ message: "Disconnected", code: "disconnect.done", note: "目前的抓包已儲存為「中斷連線前」。" })).toBe(
       "已中斷連線 目前的抓包已儲存為「中斷連線前」。",
     );
+    // What was changed, then what that did to the connection (`follow`), as two sentences.
+    const changed = {
+      message: "Decrypting example.com; it applies with the next connection",
+      code: "decrypt.decrypting",
+      params: { host: "example.com" },
+      follow: "plugins.applied_next",
+    };
+    setLanguage("zh");
+    expect(operationText(changed)).toBe("将解密 example.com。下次连接时生效");
+    setLanguage("en");
+    expect(operationText(changed)).toBe("example.com will be decrypted. It applies with the next connection.");
+    setLanguage("zh-Hant");
+    expect(operationText(changed)).toBe("將解密 example.com。下次連線時生效");
+    expect(operationText({ ...changed, follow: "future.thing" })).toBe(changed.message);
     // A code this window does not know (another version of the backend), or none: the backend's own words.
     expect(operationText({ message: "Something new happened.", code: "future.thing" })).toBe("Something new happened.");
     expect(operationText({ message: "Plain." })).toBe("Plain.");
