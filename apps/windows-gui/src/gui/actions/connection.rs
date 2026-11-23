@@ -476,7 +476,7 @@ fn apply_proxy_after_direct_readiness(
     // What to put back, recorded before the proxy changes so that a crash right after still finds it.
     let planned = match existing_snapshot {
         Some(snapshot) => snapshot,
-        None => match owned_proxy::snapshot_now(&current) {
+        None => match owned_proxy::snapshot_now(&current, proxy) {
             Ok(snapshot) => snapshot,
             Err(error) => {
                 core.stop();
@@ -872,11 +872,12 @@ mod tests {
             Ok(self.winhttp.clone())
         }
 
-        fn restore_user(&mut self, previous: &WindowsProxySettings) -> Result<(), String> {
+        fn restore_user(&mut self, previous: &WindowsProxySnapshot) -> Result<(), String> {
             if let Some(error) = &self.restore_error {
                 return Err(error.clone());
             }
-            self.restored_user.push(previous.clone());
+            self.restored_user
+                .push(owned_proxy::user_settings(previous));
             Ok(())
         }
 
@@ -926,6 +927,9 @@ mod tests {
             winhttp_access_type: 1,
             winhttp_server: String::new(),
             winhttp_bypass: String::new(),
+            winhttp_untouched: false,
+            applied: None,
+            connections: Vec::new(),
         }
     }
 
