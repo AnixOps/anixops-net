@@ -8,13 +8,26 @@
 //! pair, which the window shows.
 
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard};
 
 use desktop_mitm::phone::LanShareAuth;
 use desktop_mitm::sessions::write_private;
 
+/// Serialises the read-modify-write below, so two first uses at once cannot each keep a different pair.
+static LOCK: Mutex<()> = Mutex::new(());
+
+fn lock() -> MutexGuard<'static, ()> {
+    LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 /// The credentials kept in `dir`, made and kept on first use. Users who had the share on before it asked for a
 /// password get theirs here, the first time they start it, with the password required.
 pub fn load(dir: &Path) -> Result<LanShareAuth, String> {
+    let _guard = lock();
+    load_locked(dir)
+}
+
+fn load_locked(dir: &Path) -> Result<LanShareAuth, String> {
     if let Some(auth) = read(dir)? {
         return Ok(auth);
     }
@@ -25,14 +38,16 @@ pub fn load(dir: &Path) -> Result<LanShareAuth, String> {
 
 /// New credentials in place of the kept ones; whether they are required stays as it was.
 pub fn regenerate(dir: &Path) -> Result<LanShareAuth, String> {
-    let auth = load(dir)?.regenerated()?;
+    let _guard = lock();
+    let auth = load_locked(dir)?.regenerated()?;
     save(dir, &auth)?;
     Ok(auth)
 }
 
 /// Whether phones must send the credentials; the kept pair stays for when it is turned on again.
 pub fn set_required(dir: &Path, required: bool) -> Result<LanShareAuth, String> {
-    let mut auth = load(dir)?;
+    let _guard = lock();
+    let mut auth = load_locked(dir)?;
     auth.required = required;
     save(dir, &auth)?;
     Ok(auth)
