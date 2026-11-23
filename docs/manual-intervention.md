@@ -373,9 +373,14 @@ Play 版是开源版（用户 2026-11-15 决定），包名 `io.anixops.net.andr
 另有固定直链 `/windows/`、`/windows-portable/`、`/linux-deb/`、`/linux/`、`/android/`（跳转到最新版文件）和
 `latest.json`。`release.yml` 发布 Release 后会自动触发它。
 
+有正式版后，「最新版」、固定直链和 `latest.json` 只指向最新的正式版（不是草稿、不是预发布），1.0.0 之后再发的 beta 不会顶替它；
+`latest.json` 带 `channel`（`stable`，只有在还没有正式版时才是 `beta`）。比正式版更新的预发布单列在页面的「测试版」小节，
+另有 `latest-beta.json` 和 `/beta/windows/` 这类测试版直链。脚本读取全部分页的 Release，测试在 `download_page_test.py`。
+
 - [ ] 维护者在 Settings → Pages 把 Source 设为「GitHub Actions」（只做一次；没设之前 `Deploy to GitHub Pages` job 会失败）。
   设好后手动运行一次 `Download page` workflow。
-- [ ] 打开下载页，确认各平台按钮指向最新版，`/windows/` 等固定链接能跳转。
+- [ ] 打开下载页，确认各平台按钮指向最新正式版，`/windows/` 等固定链接能跳转；发了比正式版新的 beta 后，`/windows/` 仍指向正式版，
+  `/beta/windows/` 指向 beta。
 
 
 ## 手机连电脑抓包（真机验收）

@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
 """Builds the static download page of the open-source client (GitHub Pages, workflow download-page.yml).
 
-Input: the JSON of `GET /repos/{owner}/{repo}/releases` (newest first). The newest published release, beta or
-not, is "latest": GitHub's own /releases/latest skips prereleases, and every release so far is a beta.
+Input: the JSON of `GET /repos/{owner}/{repo}/releases` (newest first, every page). Once a stable release exists,
+"latest" is the newest published (not draft) release that is not a prerelease, like GitHub's own /releases/latest:
+a beta published after 1.0.0 never replaces it. Before the first stable release, the newest published prerelease is
+"latest" and the page labels it as a test version.
+
+A prerelease newer than the stable "latest" is the beta channel: it gets its own section on the page, its own
+latest-beta.json and its own fixed links under beta/. The fixed links without beta/ always point to "latest".
 
 Output directory:
-  index.html          one page with every platform
-  latest.json         {version, url, published_at, assets: {key: url}} for scripts and the panel
-  <key>/index.html    fixed links that redirect to the newest file, e.g. /windows/ -> the MSI
+  index.html               one page with every platform
+  latest.json              {version, url, published_at, prerelease, channel, assets: {key: url}} for scripts and
+                           the panel; channel is "stable", or "beta" only while no stable release exists
+  <key>/index.html         fixed links that redirect to the newest file, e.g. /windows/ -> the MSI
+  latest-beta.json         same fields for a prerelease newer than the stable release (only when there is one)
+  beta/<key>/index.html    fixed links to that prerelease's files (only when there is one)
 
 Only the open-source edition is listed. The ANX edition (closed source) is never published here; the page
 points its users to the panel.
@@ -30,9 +38,32 @@ ASSETS = [
 ]
 
 
+def published_releases(releases):
+    """Releases that are not drafts, in the order the API lists them (newest first)."""
+    return [release for release in releases if not release.get("draft")]
+
+
 def latest_release(releases):
-    for release in releases:
-        if not release.get("draft"):
+    """The newest published stable release, or the newest published prerelease while there is no stable one."""
+    published = published_releases(releases)
+    stable = next((release for release in published if not release.get("prerelease")), None)
+    return stable or (published[0] if published else None)
+
+
+def beta_release(releases):
+    """The newest published prerelease listed before (newer than) the stable latest release, or None.
+
+    Without a stable release the newest prerelease already is "latest", so there is no separate beta channel.
+    Order comes from the API (newest first), not from comparing tag strings, where beta.10 sorts before beta.9.
+    """
+    published = published_releases(releases)
+    latest = latest_release(releases)
+    if latest is None or latest.get("prerelease"):
+        return None
+    for release in published:
+        if release is latest:
+            return None
+        if release.get("prerelease"):
             return release
     return None
 
@@ -83,25 +114,43 @@ a{color:var(--accent)}
 """
 
 
-def page(release, found, sums, repo):
-    version = html.escape(release["tag_name"])
-    release_url = html.escape(release["html_url"], quote=True)
-    published = html.escape(release.get("published_at", "")[:10])
+def cards_html(found, prefix=""):
     cards = []
     for key, _suffix, platform, label, note in ASSETS:
         asset = found.get(key)
         if asset:
+            link = f"{prefix}{key}/"
             cards.append(
                 f"<div class=\"card\"><div class=\"p\">{html.escape(platform)} · {html.escape(label)}</div>"
                 f"<div class=\"n\">{html.escape(note)}<br><code>{html.escape(asset['name'])}</code> · {size_text(asset['size'])}</div>"
                 f"<a class=\"btn\" href=\"{html.escape(asset['browser_download_url'], quote=True)}\">下载</a>"
-                f"<div class=\"n\">固定链接：<a href=\"{key}/\">{key}/</a></div></div>"
+                f"<div class=\"n\">固定链接：<a href=\"{link}\">{link}</a></div></div>"
             )
         else:
             cards.append(
                 f"<div class=\"card\"><div class=\"p\">{html.escape(platform)} · {html.escape(label)}</div>"
                 f"<div class=\"n\">{html.escape(note)}</div><span class=\"btn off\">本版没有这个包</span></div>"
             )
+    return "".join(cards)
+
+
+def page(release, found, sums, repo, beta=None, beta_found=None):
+    version = html.escape(release["tag_name"])
+    release_url = html.escape(release["html_url"], quote=True)
+    published = html.escape(release.get("published_at", "")[:10])
+    # Before the first stable release the newest prerelease is "latest"; say so instead of calling it the
+    # newest (stable) version.
+    latest_label = "最新测试版" if release.get("prerelease") else "最新正式版"
+    cards = cards_html(found)
+    beta_section = ""
+    if beta is not None and beta_found:
+        beta_section = (
+            "<h2>测试版</h2>\n"
+            f"<p class=\"sub\">比正式版更新的测试版 <a href=\"{html.escape(beta['html_url'], quote=True)}\">"
+            f"{html.escape(beta['tag_name'])}</a> · {html.escape(beta.get('published_at', '')[:10])}。"
+            "测试版可能不稳定，一般用户请用上面的正式版。</p>\n"
+            f"<div class=\"grid\">\n{cards_html(beta_found, 'beta/')}\n</div>\n"
+        )
     sums_line = ""
     if sums:
         sums_line = (
@@ -109,6 +158,7 @@ def page(release, found, sums, repo):
             "<code>sha256sum -c SHA256SUMS</code>；来源证明：<code>gh attestation verify &lt;文件&gt; --repo "
             f"{html.escape(repo)}</code>。"
         )
+    beta_json = "，测试版：<a href=\"latest-beta.json\">latest-beta.json</a>" if beta_section else ""
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -120,14 +170,15 @@ def page(release, found, sums, repo):
 <body>
 <main>
 <h1>AnixOps Net 下载</h1>
-<p class="sub">最新版 <a href="{release_url}">{version}</a> · {published}</p>
+<p class="sub">{latest_label} <a href="{release_url}">{version}</a> · {published}</p>
 <p class="sub">这是开源版，支持 SS、SS-2022、VLESS、Trojan 等公开协议。</p>
 
 <h2>开源版</h2>
 <div class="grid">
-{''.join(cards)}
+{cards}
 </div>
 
+{beta_section}
 <h2>ANX 版（服务商提供）</h2>
 <div class="grid">
 <div class="card"><div class="p">Windows / Linux / macOS / 安卓</div>
@@ -138,44 +189,68 @@ def page(release, found, sums, repo):
 
 <p class="foot">{sums_line}<br>
 所有历史版本见 <a href="https://github.com/{html.escape(repo)}/releases">GitHub Releases</a>。
-机器可读的最新版信息：<a href="latest.json">latest.json</a>。</p>
+机器可读的最新版信息：<a href="latest.json">latest.json</a>{beta_json}。</p>
 </main>
 </body>
 </html>
 """
 
 
-def main():
-    releases_path, out_dir, repo = sys.argv[1:4]
-    with open(releases_path, encoding="utf-8") as f:
-        releases = json.load(f)
+def write_redirects(out_dir, found):
+    for key, asset in found.items():
+        os.makedirs(os.path.join(out_dir, key), exist_ok=True)
+        with open(os.path.join(out_dir, key, "index.html"), "w", encoding="utf-8") as f:
+            f.write(redirect_page(asset["browser_download_url"]))
+
+
+def release_json(release, found, sums, channel):
+    data = {
+        "version": release["tag_name"],
+        "url": release["html_url"],
+        "published_at": release.get("published_at"),
+        "prerelease": release.get("prerelease", False),
+        "channel": channel,
+        "assets": {key: asset["browser_download_url"] for key, asset in found.items()},
+    }
+    if sums:
+        data["assets"]["sha256sums"] = sums["browser_download_url"]
+    return data
+
+
+def write_json(path, data):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+
+
+def build(releases, out_dir, repo):
     release = latest_release(releases)
     if release is None:
         sys.exit("no published release")
     found, sums = find_assets(release)
     if not found:
         sys.exit(f"release {release['tag_name']} has none of the expected assets")
+    beta = beta_release(releases)
+    beta_found, beta_sums = find_assets(beta) if beta is not None else ({}, None)
 
     os.makedirs(out_dir, exist_ok=True)
     with open(os.path.join(out_dir, "index.html"), "w", encoding="utf-8") as f:
-        f.write(page(release, found, sums, repo))
-    for key, asset in found.items():
-        os.makedirs(os.path.join(out_dir, key), exist_ok=True)
-        with open(os.path.join(out_dir, key, "index.html"), "w", encoding="utf-8") as f:
-            f.write(redirect_page(asset["browser_download_url"]))
-    latest = {
-        "version": release["tag_name"],
-        "url": release["html_url"],
-        "published_at": release.get("published_at"),
-        "prerelease": release.get("prerelease", False),
-        "assets": {key: asset["browser_download_url"] for key, asset in found.items()},
-    }
-    if sums:
-        latest["assets"]["sha256sums"] = sums["browser_download_url"]
-    with open(os.path.join(out_dir, "latest.json"), "w", encoding="utf-8") as f:
-        json.dump(latest, f, ensure_ascii=False, indent=2)
-        f.write("\n")
-    print(f"download page for {release['tag_name']}: {sorted(found)}")
+        f.write(page(release, found, sums, repo, beta, beta_found))
+    write_redirects(out_dir, found)
+    channel = "beta" if release.get("prerelease") else "stable"
+    write_json(os.path.join(out_dir, "latest.json"), release_json(release, found, sums, channel))
+    if beta is not None and beta_found:
+        write_redirects(os.path.join(out_dir, "beta"), beta_found)
+        write_json(os.path.join(out_dir, "latest-beta.json"), release_json(beta, beta_found, beta_sums, "beta"))
+        print(f"beta channel {beta['tag_name']}: {sorted(beta_found)}")
+    print(f"download page for {release['tag_name']} ({channel}): {sorted(found)}")
+
+
+def main():
+    releases_path, out_dir, repo = sys.argv[1:4]
+    with open(releases_path, encoding="utf-8") as f:
+        releases = json.load(f)
+    build(releases, out_dir, repo)
 
 
 if __name__ == "__main__":
