@@ -14,12 +14,15 @@ struct ExtensionsView: View {
         NavigationStack {
             Form {
                 Section {
+                    DecryptionToggle(tunnel: tunnel, model: plugins)
                     NavigationLink {
                         CertificateView(tunnel: tunnel)
                     } label: {
                         Label("HTTPS 解密证书", systemImage: "lock.shield")
                     }
                     .listRowBackground(brand.surface)
+                } header: {
+                    Text("HTTPS 解密")
                 } footer: {
                     Text("解密 HTTPS 需要先在本机生成并信任一张根证书。证书和私钥只保存在本机钥匙串。")
                 }

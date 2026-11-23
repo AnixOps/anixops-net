@@ -45,10 +45,14 @@ SWIFT
 shoot() {
     # A fourth argument opens the command palette (`palette`) or the import sheet (`import`) over the page and
     # names the picture after it.
-    local section="$1" appearance="$2" mode="${3:-proxy}" overlay="${4:-}"
+    # A fifth argument opens a settings sub-page (`advanced`, `privacy`) and names the picture after it.
+    local section="$1" appearance="$2" mode="${3:-proxy}" overlay="${4:-}" subpage="${5:-}"
     local file="${out}/${section}-${appearance}.png"
     if [ "${mode}" != proxy ]; then
         file="${out}/${mode}-${section}-${appearance}.png"
+    fi
+    if [ -n "${subpage}" ]; then
+        file="${out}/${section}-${subpage}-${appearance}.png"
     fi
     local show_palette=NO show_import=NO
     if [ -n "${overlay}" ]; then
@@ -63,7 +67,7 @@ shoot() {
         accepted="none"
     fi
     open -n "${app}" --args -AnixOpsDemo YES -AnixOpsMode "${mode}" -AnixOpsSection "${section}" -appearance "${appearance}" \
-        -AnixOpsPalette "${show_palette}" -AnixOpsImport "${show_import}" -AppleLanguages "(${language})" -terms-accepted-version "${accepted}"
+        -AnixOpsPalette "${show_palette}" -AnixOpsImport "${show_import}" -AnixOpsSettingsPage "${subpage}" -AppleLanguages "(${language})" -terms-accepted-version "${accepted}"
     local id=""
     for _ in 1 2 3 4 5 6 7 8 9 10; do
         sleep 2
@@ -100,6 +104,9 @@ shoot rules light
 shoot extensions light
 shoot activity light
 shoot settings light
+# The sub-pages one level below the settings (docs/ui-ux.md).
+shoot settings light proxy "" advanced
+shoot settings light proxy "" privacy
 shoot terms light
 # Debug mode (requests · rewrite · exit · settings, opening on the requests table) and the first-launch mode choice.
 shoot activity light debug
