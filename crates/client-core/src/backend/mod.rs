@@ -485,6 +485,8 @@ impl Backend {
         let envelope = desktop_dns::apply(&envelope, self.state.dns_preset)?;
         let envelope = desktop_dns::apply_block_quic(&envelope, self.state.block_quic)?;
         let envelope = desktop_dns::redirects::apply(&envelope)?;
+        let envelope =
+            desktop_dns::rules::with_rule_set_cache(&envelope, &self.rule_set_cache_dir())?;
         if !self.state.preferences.https_decryption {
             return Ok(envelope);
         }
@@ -503,6 +505,14 @@ impl Backend {
             self.routed_envelope()?
         };
         desktop_dns::rules::apply(&envelope, lines)
+    }
+
+    /// Where the engine keeps the remote rule sets' last good downloads between runs
+    /// (`routing.rule_set_cache_dir`), beside the rest of this client's data.
+    fn rule_set_cache_dir(&self) -> PathBuf {
+        self.store
+            .dir()
+            .join(desktop_dns::rules::RULE_SET_CACHE_DIR)
     }
 
     /// Where "我的规则" are kept, as the text the user wrote.
@@ -2508,7 +2518,20 @@ rules:
             direct["routing"]["rules"],
             serde_json::json!(["FINAL,DIRECT"])
         );
+        // The engine starts in its direct mode, so DNS through a node (the default 1.1.1.1:53 among it) goes
+        // direct too, and the remote rule sets keep their downloads in the client's folder.
+        assert_eq!(direct["mode"], "direct");
+        assert_eq!(
+            direct["routing"]["rule_set_cache_dir"],
+            serde_json::json!(backend.rule_set_cache_dir().to_str().unwrap())
+        );
         backend.set_routing_mode(RoutingMode::Rule).unwrap();
+        let rule: serde_json::Value = serde_json::from_str(&backend.envelope().unwrap()).unwrap();
+        assert!(rule.get("mode").is_none());
+        assert_eq!(
+            rule["routing"]["rule_set_cache_dir"],
+            serde_json::json!(backend.rule_set_cache_dir().to_str().unwrap())
+        );
 
         // Choices belong to the subscription they were made in.
         let _ = backend.import(PASTED_LOCATION, LINK);

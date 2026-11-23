@@ -232,5 +232,8 @@ final class NodeLibraryTests: XCTestCase {
         XCTAssertNil(library.routing)
         XCTAssertFalse(library.followsRules)
         XCTAssertEqual(library.groupSelections, [:])
+        // Imported before certificate pins reached the outbounds.
+        XCTAssertEqual(library.importRevision, 0)
+        XCTAssertTrue(library.predatesCertificatePins)
     }
 }

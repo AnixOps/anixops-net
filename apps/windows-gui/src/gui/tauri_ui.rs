@@ -24,6 +24,7 @@ use desktop_mitm::mappings;
 use engine_embedded::config::{RuntimeConfig, CONFIG_SCHEMA_VERSION};
 use engine_embedded::delay::measure_delay;
 use engine_embedded::nodes::{outbound_for_node, routing_envelope_with_sets, single_node_envelope};
+use engine_embedded::profile::{envelope_for_mode, RoutingMode};
 use node_edits::{NodeEdits, NodeForm};
 use on_demand::{
     Action as OnDemandAction, Current as CurrentNetwork, Network, Settings as OnDemandSettings,
@@ -73,8 +74,6 @@ const EMBEDDED_PROFILE_ID: &str = "windows-tauri-profile";
 const EMBEDDED_LISTEN_PORT: u16 = 7890;
 /// The embedded engine's listener behind HTTPS MITM, which relays to it.
 const EMBEDDED_MITM_UPSTREAM_PORT: u16 = 7891;
-/// Routed id of a single-outbound profile once a routing mode applies.
-const EMBEDDED_PROXY_OUTBOUND: &str = "proxy";
 const EMBEDDED_DELAY_TIMEOUT: Duration = Duration::from_secs(5);
 /// Nodes the fastest-node search measures at once.
 const EMBEDDED_DELAY_PARALLELISM: usize = 16;
@@ -469,6 +468,9 @@ struct SubscriptionSummary {
     expire: Option<u64>,
     update_interval_hours: u32,
     refreshable: bool,
+    /// Its saved nodes were imported by an earlier version, which left the subscription's certificate pins out:
+    /// they apply once it is updated or imported again.
+    needs_reimport: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -522,6 +524,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             let _ = save_desktop_state(&desktop);
         }
     }
+    refresh_imported_profile(&mut desktop);
     let health_dir = desktop_state_path()
         .parent()
         .map(Path::to_path_buf)
@@ -1521,6 +1524,10 @@ fn list_subscriptions(
             expire: source.user_info.and_then(|info| info.expire),
             update_interval_hours: source.effective_interval_hours(),
             refreshable: is_subscription_url(&source.location),
+            needs_reimport: linked_sources::predates_certificate_pins(
+                &source_cache_directory(),
+                &source.id,
+            ),
         })
         .collect())
 }
@@ -2723,6 +2730,40 @@ fn embedded_block_lost(
 /// Puts the engine block back into managed-config.json when an upgrade lost
 /// it (see [`embedded_block_lost`]). HTTPS decryption is not turned back on:
 /// nothing else records that it was on, and it is the user's to turn on.
+/// Builds the saved envelope again for this version, before anything connects. The envelope on disk is only
+/// rewritten when the user changes something, so without this an upgrade would keep running what the earlier
+/// version wrote:
+/// - A profile an earlier importer built has no certificate pins in its outbounds: it is imported again from
+///   the kept subscription content with the saved node edits, as a node edit does. Without kept content the
+///   subscription list asks for an update instead (`needs_reimport`).
+/// - Otherwise the envelope is written again from the imported profile, so the routing mode is the engine's
+///   current one (the direct mode now starts the engine in its own direct mode, DNS included).
+///
+/// A failure leaves the files as they were and only goes to the log.
+fn refresh_imported_profile(desktop: &mut DesktopState) {
+    if !matches!(active_embedded_config(), Ok(Some(_))) || !embedded_profile_path().is_file() {
+        return;
+    }
+    let current = fs::read_to_string(profile_import_revision_path())
+        .is_ok_and(|revision| revision.trim() == linked_sources::IMPORT_REVISION);
+    let outcome = if !current && profile_source_text_path().is_file() {
+        let before = desktop.clone();
+        match reapply_node_edits(desktop).and_then(|()| save_desktop_state(desktop)) {
+            Ok(()) => "imported profile built again with certificate pins".to_string(),
+            Err(error) => {
+                *desktop = before;
+                format!("imported profile could not be built again: {error}")
+            }
+        }
+    } else {
+        match rewrite_embedded_envelope(desktop, desktop.dns_preset) {
+            Ok(()) => return,
+            Err(error) => format!("saved envelope could not be written again: {error}"),
+        }
+    };
+    let _ = append_managed_log(APP_LOG_SCOPE, &outcome);
+}
+
 fn repair_managed_config(desktop: &DesktopState) {
     let envelope_path = embedded_directory().join("envelope.json");
     let present = envelope_path.is_file() && embedded_profile_path().is_file();
@@ -3461,6 +3502,11 @@ fn import_embedded_subscription(
     desktop.profile_source_url = source_url;
     desktop.profile_node_id = selected_node_id;
     desktop.profile_node_catalog = node_catalog;
+    // Without it the next start only builds the profile again from the kept content.
+    let _ = write_managed_text_atomic(
+        &profile_import_revision_path(),
+        linked_sources::IMPORT_REVISION,
+    );
     Ok(())
 }
 
@@ -3499,6 +3545,12 @@ fn embedded_profile_path() -> PathBuf {
 /// The imported subscription's content, so node edits can be applied to it again without fetching it.
 fn profile_source_text_path() -> PathBuf {
     embedded_directory().join("source.txt")
+}
+
+/// The importer revision (`linked_sources::IMPORT_REVISION`) the imported profile was last built with; absent
+/// when an earlier version built it.
+fn profile_import_revision_path() -> PathBuf {
+    embedded_directory().join("import-revision")
 }
 
 /// The user's edits of the imported profile's nodes (`node_edits`), dropped when it is updated.
@@ -3575,34 +3627,22 @@ fn embedded_envelope_with_rules(
     Ok(envelope)
 }
 
-/// The imported envelope in `mode`. Rule mode keeps the profile's own rules and groups (or sends everything
-/// through its one node); direct mode replaces them with `FINAL,DIRECT`. Public builds ship no preset list modes
-/// (docs/no-presets.md).
+/// The imported envelope in `mode`, as the engine builds it (`engine_embedded::profile::envelope_for_mode`, the
+/// same as Linux and Android). Rule mode keeps the profile's own rules and groups (or sends everything through its
+/// one node); direct mode starts the engine in its direct mode (`"mode": "direct"`), where every connection and
+/// every DNS query goes direct and no rule applies, with the rules replaced by `FINAL,DIRECT`. Public builds ship
+/// no preset list modes (docs/no-presets.md).
 fn mode_envelope(profile: &str, mode: DesktopRoutingMode) -> Result<String, String> {
-    RuntimeConfig::from_json(profile.as_bytes())
-        .map_err(|error| format!("embedded profile was rejected: {}", error.message))?;
-    if mode == DesktopRoutingMode::Rule {
-        return Ok(profile.to_string());
-    }
-    let mut envelope: Value = serde_json::from_str(profile).map_err(|error| error.to_string())?;
-    let object = envelope
-        .as_object_mut()
-        .ok_or_else(|| "embedded profile must be a JSON object".to_string())?;
-    let mut routing = match (object.remove("outbound"), object.remove("routing")) {
-        (Some(outbound), None) => json!({ "outbounds": { EMBEDDED_PROXY_OUTBOUND: outbound } }),
-        (None, Some(routing)) => routing,
-        _ => return Err("embedded profile must carry one outbound or routing".to_string()),
+    let mode = match mode {
+        DesktopRoutingMode::Rule => RoutingMode::Rule,
+        DesktopRoutingMode::Direct => RoutingMode::Direct,
     };
-    let routing_object = routing
-        .as_object_mut()
-        .ok_or_else(|| "embedded profile routing must be a JSON object".to_string())?;
-    routing_object.insert("rules".to_string(), json!(["FINAL,DIRECT"]));
-    routing_object.insert("rule_sets".to_string(), json!({}));
-    object.insert("routing".to_string(), routing);
-    let rendered = serde_json::to_string(&envelope).map_err(|error| error.to_string())?;
-    RuntimeConfig::from_json(rendered.as_bytes())
-        .map_err(|error| format!("routed embedded profile was rejected: {}", error.message))?;
-    Ok(rendered)
+    envelope_for_mode(profile, mode).map_err(|error| {
+        format!(
+            "embedded profile was rejected in {} mode: {error}",
+            mode.as_str()
+        )
+    })
 }
 
 /// The subscription text, where it came from, and what the server's headers said about it.
@@ -5250,6 +5290,26 @@ mod tests {
                 .unwrap();
         assert_eq!(direct["routing"]["rules"], json!(["FINAL,DIRECT"]));
         assert_eq!(direct["routing"]["rule_sets"], json!({}));
+        // The engine starts in its direct mode: without it DNS servers asked through a node (the default
+        // 1.1.1.1:53 among them) still went through the node in "直连".
+        assert_eq!(direct["mode"], "direct");
+        assert_eq!(
+            direct["routing"]["outbounds"]["proxy"],
+            json!({ "type": "direct" })
+        );
+
+        let routed = r#"{"schema_version":1,"profile_id":"p","routing":{"outbounds":{"n1":{"type":"shadowsocks","server":"192.0.2.1","port":443,"method":"2022-blake3-aes-128-gcm","password":"AAECAwQFBgcICQoLDA0ODw=="}},"groups":[{"id":"Proxy","type":"select","members":["n1","DIRECT"]}],"rules":["DOMAIN,a.test,DIRECT","FINAL,Proxy"]}}"#;
+        let rule: Value =
+            serde_json::from_str(&mode_envelope(routed, DesktopRoutingMode::Rule).unwrap())
+                .unwrap();
+        assert!(rule.get("mode").is_none());
+        let direct: Value =
+            serde_json::from_str(&mode_envelope(routed, DesktopRoutingMode::Direct).unwrap())
+                .unwrap();
+        assert_eq!(direct["mode"], "direct");
+        assert_eq!(direct["routing"]["rules"], json!(["FINAL,DIRECT"]));
+        assert_eq!(direct["routing"]["groups"][0]["id"], "Proxy");
+        assert!(mode_envelope("{}", DesktopRoutingMode::Direct).is_err());
     }
 
     fn node(id: &str, label: &str) -> DesktopProfileNode {

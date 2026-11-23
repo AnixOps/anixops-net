@@ -130,6 +130,18 @@ struct SubscriptionGroupSummary: View {
                 .foregroundStyle(brand.text2)
             }
 
+            if group.needsReimport, !updating {
+                Group {
+                    if group.isUpdatable {
+                        Label("由旧版本导入：更新后证书固定才会生效", systemImage: "lock.trianglebadge.exclamationmark")
+                    } else {
+                        Label("由旧版本导入：重新导入后证书固定才会生效", systemImage: "lock.trianglebadge.exclamationmark")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(brand.warning)
+            }
+
             if let failed = group.lastFailureAt, !updating {
                 Label("上次更新失败（\(failed, format: .dateTime.month().day().hour().minute())）", systemImage: "exclamationmark.triangle")
                     .font(.caption)

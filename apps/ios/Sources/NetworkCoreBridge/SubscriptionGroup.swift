@@ -192,12 +192,23 @@ public struct SubscriptionGroup: Codable, Equatable, Identifiable {
         url != nil
     }
 
-    /// When the next automatic update is due, nil when it updates by hand only.
+    /// When the next automatic update is due, nil when it updates by hand only. Nodes an earlier version imported
+    /// lack the subscription's certificate pins, so such a group is due at once.
     public var nextUpdate: Date? {
         guard isUpdatable, updateIntervalHours > 0 else {
             return nil
         }
+        if library.predatesCertificatePins {
+            return library.updatedAt
+        }
         return library.updatedAt.addingTimeInterval(TimeInterval(updateIntervalHours) * 3600)
+    }
+
+    /// Whether the group's nodes still lack the subscription's certificate pins: an earlier version imported them and
+    /// no update has replaced them yet. A group that updates itself is replaced at the next automatic update (due at
+    /// once); pasted text and groups updated by hand need the user to update or import them again.
+    public var needsReimport: Bool {
+        library.predatesCertificatePins
     }
 
     public func isDue(at date: Date) -> Bool {

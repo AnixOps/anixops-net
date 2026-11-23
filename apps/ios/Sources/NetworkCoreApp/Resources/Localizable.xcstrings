@@ -14390,6 +14390,38 @@
           }
         }
       }
+    },
+    "由旧版本导入：更新后证书固定才会生效": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported by an earlier version: update it to apply certificate pins"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "由舊版本匯入：更新後憑證固定才會生效"
+          }
+        }
+      }
+    },
+    "由旧版本导入：重新导入后证书固定才会生效": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported by an earlier version: import it again to apply certificate pins"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "由舊版本匯入：重新匯入後憑證固定才會生效"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

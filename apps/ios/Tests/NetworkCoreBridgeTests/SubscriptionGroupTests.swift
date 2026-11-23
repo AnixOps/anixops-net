@@ -91,6 +91,41 @@ final class SubscriptionGroupTests: XCTestCase {
         XCTAssertNil(pasted.nextUpdate)
     }
 
+    /// Nodes an earlier version imported have no certificate pins in their outbounds: a group that updates itself is
+    /// due at once, and every such group asks to be updated or imported again until an update replaces them.
+    func testGroupsImportedBeforeCertificatePinsAreUpdatedOrFlagged() throws {
+        let url = "https://sub.example/x"
+        let current = SubscriptionGroup(report: try report(plainReport), url: url, response: .init(), at: start)
+        XCTAssertEqual(current.library.importRevision, NodeLibrary.currentImportRevision)
+        XCTAssertFalse(current.needsReimport)
+
+        // A library saved before revisions decodes as revision 0.
+        var saved = try JSONSerialization.jsonObject(with: JSONEncoder().encode(current.library)) as? [String: Any] ?? [:]
+        XCTAssertEqual(saved["importRevision"] as? Int, NodeLibrary.currentImportRevision)
+        saved.removeValue(forKey: "importRevision")
+        let old = try JSONDecoder().decode(NodeLibrary.self, from: JSONSerialization.data(withJSONObject: saved))
+        XCTAssertEqual(old.importRevision, 0)
+        XCTAssertTrue(old.predatesCertificatePins)
+
+        let stale = SubscriptionGroup(name: "Old", library: old)
+        XCTAssertNotEqual(stale.id, current.id)
+        XCTAssertTrue(stale.needsReimport)
+        XCTAssertEqual(stale.nextUpdate, start)
+        XCTAssertTrue(stale.isDue(at: start.addingTimeInterval(60)))
+        XCTAssertEqual(SubscriptionGroups(groups: [current, stale]).due(at: start.addingTimeInterval(60)).map(\.id), [stale.id])
+
+        // Updated by hand only, or pasted: never fetched on its own, so only flagged.
+        var manual = stale
+        manual.updateIntervalHours = 0
+        XCTAssertNil(manual.nextUpdate)
+        XCTAssertTrue(manual.needsReimport)
+
+        // An update replaces the nodes with the current importer's.
+        let refreshed = stale.refreshed(with: try report(plainReport), response: .init(), at: start.addingTimeInterval(60))
+        XCTAssertFalse(refreshed.needsReimport)
+        XCTAssertEqual(refreshed.nextUpdate, start.addingTimeInterval(60 + 24 * 3600))
+    }
+
     func testRefreshKeepsNameIntervalAndSelectionAndClearsTheFailure() throws {
         var group = SubscriptionGroup(
             report: try report(plainReport),

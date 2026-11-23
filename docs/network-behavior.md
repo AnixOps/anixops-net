@@ -88,7 +88,9 @@ AnixOps Net 各平台客户端（iOS、macOS、Android、Windows、Linux，开�
 ## GEOSITE,cn 与 GEOIP,CN 列表
 
 - **什么时候**：只有你导入或自己写的规则里用到 `GEOSITE,cn` 或 `GEOIP,CN`、而订阅没有自带同名规则集时，内核在连接后
-  下载，一天最多一次（docs/no-presets.md）。
+  下载，一天最多一次（docs/no-presets.md）。下载成功的列表由内核保存在本机 App 自己的数据目录（`rule-sets` 文件夹，
+  文件名是地址的摘要，不含地址本身），下次启动直接使用，满一天后才再下载；下载失败时继续用上次的列表。没有保存过的
+  列表在连接后立即下载。你自己按地址添加的规则集和订阅自带的规则集也是这样。
 - **发往**：直连 `raw.githubusercontent.com` 上的两份公开列表（gaoyifan/china-operator-ip、Loyalsoldier/v2ray-rules-dat）。
   不带任何标识。
 
@@ -99,6 +101,9 @@ AnixOps Net 各平台客户端（iOS、macOS、Android、Windows、Linux，开�
   `dns.google`、Quad9 `9.9.9.9`，自定义 DNS 示例里的 `dns.adguard-dns.com`）只是服务器地址，选了才用。
 - 规则选中“直连”或“拒绝”不会让设为“经代理”的 DNS 服务器改走直连（内核 docs/architecture/embedded-dns.md
   “DNS 泄露核对”）。
+- “直连”模式下内核不看任何规则：所有连接和所有 DNS 查询（包括设为“经代理”的服务器，以及没有设置 DNS 时隧道内置的
+  `1.1.1.1:53`）都从你自己的网络直接发出，不经任何节点（内核 docs/architecture/embedded-dns.md
+  “直连模式不经节点”）。五个平台相同。
 
 ## macOS 软件更新
 

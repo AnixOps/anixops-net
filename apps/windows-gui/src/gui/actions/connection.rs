@@ -1,6 +1,8 @@
 use crate::gui::{
     load_validated_managed_configuration, mitm_plugins,
-    startup::{my_rules_path, owns_current_proxy, save_desktop_state, DesktopState},
+    startup::{
+        my_rules_path, owns_current_proxy, rule_set_cache_dir, save_desktop_state, DesktopState,
+    },
     tun_mode::DesktopTun,
     ui_state::ConnectionState,
 };
@@ -281,7 +283,8 @@ pub fn direct_egress_envelope(
         desktop_dns::rules::apply(&profile, &desktop_dns::rules::load_lines(&my_rules_path()))?;
     let envelope = desktop_dns::apply(&profile, dns)?;
     let envelope = desktop_dns::apply_block_quic(&envelope, block_quic)?;
-    desktop_dns::redirects::apply(&envelope)
+    let envelope = desktop_dns::redirects::apply(&envelope)?;
+    desktop_dns::rules::with_rule_set_cache(&envelope, &rule_set_cache_dir())
 }
 
 pub fn disconnect_direct(
@@ -344,15 +347,18 @@ fn desktop_connection_plan(managed: WindowsManagedConfig) -> Result<DesktopConne
     })
 }
 
-/// The envelope the desktop engines run on: the profile's, plus a `mitm`
-/// section when HTTPS decryption is on. The root key only joins it in
-/// memory; the saved envelope never holds it.
+/// The envelope the desktop engines run on: the profile's, with the rule
+/// set cache folder, plus a `mitm` section when HTTPS decryption is on. The
+/// root key only joins it in memory; the saved envelope never holds it.
 fn desktop_envelope(
     embedded: &WindowsManagedEmbeddedConfig,
     mitm: Option<&WindowsManagedNativeMitmConfig>,
 ) -> Result<Vec<u8>, String> {
-    let envelope = fs::read(&embedded.envelope_path)
+    let envelope = fs::read_to_string(&embedded.envelope_path)
         .map_err(|error| format!("embedded engine configuration could not be read: {error}"))?;
+    // Added here rather than in the saved file, so an envelope saved by an earlier version gets it too.
+    let envelope =
+        desktop_dns::rules::with_rule_set_cache(&envelope, &rule_set_cache_dir())?.into_bytes();
     match mitm {
         Some(mitm) => with_native_mitm(envelope, mitm),
         None => Ok(envelope),

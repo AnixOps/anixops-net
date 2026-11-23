@@ -189,6 +189,12 @@ pub fn my_rules_path() -> PathBuf {
     windows_managed_data_directory().join("my-rules.txt")
 }
 
+/// Where the engine keeps the remote rule sets' last good downloads between runs (`routing.rule_set_cache_dir`):
+/// a folder of its own inside the data folder, which is closed to everyone but the system and administrators.
+pub fn rule_set_cache_dir() -> PathBuf {
+    windows_managed_data_directory().join(desktop_dns::rules::RULE_SET_CACHE_DIR)
+}
+
 /// The "自定义" DNS text and the Fake-IP switch (`desktop_dns::custom`), next to the desktop state.
 pub fn dns_settings_path() -> PathBuf {
     windows_managed_data_directory().join("dns-settings.json")

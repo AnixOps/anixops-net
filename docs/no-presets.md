@@ -19,7 +19,8 @@ Android APK 与 Google Play、原生桌面预览版，以及 anx 私有构建出
   （Loyalsoldier/v2ray-rules-dat，GPL-3.0）。App 里只有地址，列表由设备自己下载，来源写在规则页的说明里。
   用户 2026-11-15 确认不内置其它列表；订阅自带的同名规则集优先于内置地址。
 - **用户按 URL 添加的 GeoIP / ASN 数据**（2026-11-19）：`GEOIP,US`、`IP-ASN,13335` 这类规则的数据不内置，
-  由用户在规则页“GeoIP 与 ASN 数据”里填列表地址（名字是 `geoip-<国家>` 或 `asn-<号>`，最多 16 份），经 PROXY 每天下载一次，
+  由用户在规则页“GeoIP 与 ASN 数据”里填列表地址（名字是 `geoip-<国家>` 或 `asn-<号>`，最多 16 份），经 PROXY 每天下载一次
+  （上次成功下载的内容保存在本机，重启后直接使用，见 network-behavior.md），
   替换同名的内置列表和订阅自带的规则集。内核在 `rule_sets` 的 `missing` 里报告规则用到却没人提供的数据，规则页逐条显示，
   不会静默不匹配（桌面和 Android 的 `desktop-dns/src/data_sources.rs`，iOS / macOS 的 `LocalRules.dataSources`）。
 - 全局、直连、规则三种代理模式本身；规则模式下订阅没有规则时，只按用户自己的规则分流，其余走代理。

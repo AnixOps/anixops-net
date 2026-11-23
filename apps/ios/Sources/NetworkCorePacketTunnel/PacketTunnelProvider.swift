@@ -470,11 +470,33 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     /// The engine config of a start: the subscription and local rules (`withRouting` already applied by
-    /// `withSubscriptionRules`), then the mode, DNS, destination rewrites and QUIC blocking.
+    /// `withSubscriptionRules`), then the mode, DNS, destination rewrites, QUIC blocking and the rule set cache.
     private static func assemble(_ base: ReloadBase, routing config: EmbeddedRuntimeConfig) -> EmbeddedRuntimeConfig {
         let assembled = config.withMode(base.mode).withDns(base.dns).withRedirects(base.redirects)
-            .withBlockQuic(base.blockQuic)
+            .withBlockQuic(base.blockQuic).withRuleSetCache(ruleSetCachePath())
         return base.anxLicense.map { assembled.withAnxLicense($0) } ?? assembled
+    }
+
+    /// Where the engine keeps the remote rule sets' last good downloads between starts: a folder in the
+    /// extension's own Application Support, as for the script store. Only the extension reads it, and on macOS the
+    /// tunnel may run as a root System Extension that has no access to the user's app group container. The lists
+    /// are downloaded again when lost, so the folder is left out of backups. Nil (no cache) when it cannot be made.
+    private static func ruleSetCachePath() -> String? {
+        guard var url = try? FileManager.default
+            .url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+            .appendingPathComponent("rule-sets", isDirectory: true)
+        else {
+            return nil
+        }
+        do {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        } catch {
+            return nil
+        }
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? url.setResourceValues(values)
+        return url.path
     }
 
     /// Builds the config a start with `value` (new local rules) would run. When only its rule lines differ from the
