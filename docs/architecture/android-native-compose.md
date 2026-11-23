@@ -120,7 +120,11 @@ JNI 一次调用是微秒级，筛选在 Rust 里做不比 Kotlin 慢。`client-
 ### 7. 文案与语言
 
 英文（默认与回退，`values/`）、简体（`values-zh/`）、繁体（`values-zh-rTW/`）三种语言，系统语言不在其中时显示英文；
-App 内选择的语言同时用于界面、通知，以及内核保存根证书和诊断报告后返回的提示；其余内核返回的提示（`OperationResult.message`）仍是英文，待内核按语言返回文案后跟随。文案用单一来源生成各端格式（安卓 `strings.xml`，Windows `.resw`，Linux gettext，
+App 内选择的语言同时用于界面、通知和客户端返回的结果与拒绝原因：`Core` 按结果的 `code`（及 `params`、`follow`）和拒绝原因开头的
+代码（`<code>: <English>`，`crates/client-core/src/refusal.rs`）换成 `strings.xml` 里的 `code_*` 文案（`CodeTexts`，与桌面
+`operation-text.ts`、`error-text.ts` 同一套文字），界面直接显示 `OperationResult.message` 和 `CoreException.message`；不认识的
+拒绝原因显示“操作没有完成：”加英文原文，`CoreException.detail` 保留原文。`CodeTextsTest` 检查 `client-core` 发出的每个代码
+三种语言都有文案。规则导入时跳过的内容按内核代码显示类别，内核的英文句子作为明细。文案用单一来源生成各端格式（安卓 `strings.xml`，Windows `.resw`，Linux gettext，
 Tauri 的 TS 表），与原生 Windows / Linux 方案共用。现在 TS 表以简体原文为 key，迁移时换成稳定 id。
 安卓侧 Android Lint 的 `MissingTranslation` 设为错误。
 

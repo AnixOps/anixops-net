@@ -56,6 +56,77 @@ class CoreTest {
         assertEquals("Connected through tokyo-01", core.connect().message)
     }
 
+    /** Words for a few codes, as the app's resources give them (finding ux-i18n-a11y-02). */
+    private object Chinese : CoreTexts {
+        private val words = mapOf(
+            "connect.connected_via" to "已通过 {node} 连接",
+            "decrypt.decrypting" to "将解密 {host}",
+            "plugins.applied_next" to "下次连接时生效",
+            "error.name_required" to "请输入名称",
+        )
+
+        override fun text(code: String, params: Map<String, String>): String? =
+            words[code]?.let { CoreTexts.fill(it, params) }
+
+        override fun join(first: String, then: String): String = "$first。$then"
+
+        override fun failed(detail: String): String = "操作没有完成：$detail"
+
+        override fun unreadable(): String = "客户端返回了无法识别的结果"
+    }
+
+    @Test
+    fun resultsAreWordedByTheirCode() = runTest {
+        val core = Core(Recording(fixture("connect_ok.json")), StandardTestDispatcher(testScheduler), Chinese)
+        val result = core.connect()
+        assertEquals("已通过 tokyo-01 连接", result.message)
+        assertEquals("connect.connected_via", result.code)
+        // What was changed, then what that did to the connection.
+        val followed = Core(
+            Recording("""{"ok":{"message":"Decrypting a.example","code":"decrypt.decrypting","params":{"host":"a.example"},"follow":"plugins.applied_next"}}"""),
+            StandardTestDispatcher(testScheduler),
+            Chinese,
+        ).connect()
+        assertEquals("将解密 a.example。下次连接时生效", followed.message)
+        // A code the app does not know keeps the client's words.
+        val unknown = Core(
+            Recording("""{"ok":{"message":"Something new","code":"future.thing"}}"""),
+            StandardTestDispatcher(testScheduler),
+            Chinese,
+        ).connect()
+        assertEquals("Something new", unknown.message)
+    }
+
+    @Test
+    fun refusalsAreWordedAndKeepTheEnglishAsDetail() = runTest {
+        val coded = runCatching {
+            Core(Recording(fixture("rename_subscription_error.json")), StandardTestDispatcher(testScheduler), Chinese).connect()
+        }.exceptionOrNull() as CoreException
+        assertEquals("请输入名称", coded.message)
+        assertEquals("error.name_required", coded.code)
+        assertEquals("error.name_required: enter a name", coded.detail)
+        // No code: what did not finish, never the client's English alone.
+        val plain = runCatching {
+            Core(Recording(fixture("connect_error.json")), StandardTestDispatcher(testScheduler), Chinese).connect()
+        }.exceptionOrNull() as CoreException
+        assertEquals("操作没有完成：the current subscription has no nodes", plain.message)
+        assertNull(plain.code)
+        // Without words of its own the app shows the English, without the code.
+        val english = runCatching {
+            Core(Recording(fixture("rename_subscription_error.json")), StandardTestDispatcher(testScheduler)).connect()
+        }.exceptionOrNull() as CoreException
+        assertEquals("enter a name", english.message)
+    }
+
+    @Test
+    fun anUnreadableAnswerIsSaidInTheAppsLanguage() = runTest {
+        val error = runCatching {
+            Core(Recording("""{"ok":{"no":"message"}}"""), StandardTestDispatcher(testScheduler), Chinese).connect()
+        }.exceptionOrNull() as CoreException
+        assertEquals("客户端返回了无法识别的结果", error.message)
+        assertTrue(error.detail.orEmpty().startsWith("Unexpected answer to connect"))
+    }
+
     @Test
     fun subscriptionRowsGetTheirUpdateInterval() = runTest {
         val transport = object : CoreTransport {

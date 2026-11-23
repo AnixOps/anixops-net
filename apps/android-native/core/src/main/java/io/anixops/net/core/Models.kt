@@ -34,9 +34,20 @@ data class StatusFact(
     val tone: String,
 )
 
-/** What most commands answer: a sentence for the user. */
+/**
+ * What most commands answer. [code] and [params] name the result, which the app words in its own language
+ * ([CoreTexts]); [follow] is a second code with no parameters said after it (what the change did to the connection),
+ * [note] a sentence already in the app's language. [message] is the client's English, for a code the app does not
+ * know; [Core] replaces it with the app's words when it knows them.
+ */
 @Serializable
-data class OperationResult(val message: String)
+data class OperationResult(
+    val message: String,
+    val code: String? = null,
+    val params: Map<String, String> = emptyMap(),
+    val follow: String? = null,
+    val note: String? = null,
+)
 
 /**
  * What a command that saves to Downloads answers: the core's sentence, and where the file went ([location]), so the
@@ -46,6 +57,8 @@ data class OperationResult(val message: String)
 @Serializable
 data class SavedFileResult(
     val message: String,
+    val code: String? = null,
+    val params: Map<String, String> = emptyMap(),
     val location: String? = null,
     val fingerprint: String? = null,
     val saveError: String? = null,

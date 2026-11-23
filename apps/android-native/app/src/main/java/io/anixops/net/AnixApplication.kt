@@ -30,6 +30,8 @@ class AnixApplication : Application() {
                 NativeCore.open(File(filesDir, DATA_DIR), platform)
                 NativeCore.invoke(command, args)
             },
+            // Results and refusals in the app's language, never the client's English (CodeTexts).
+            texts = CodeTexts(this),
         )
     }
 
