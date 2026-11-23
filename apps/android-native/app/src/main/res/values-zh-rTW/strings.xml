@@ -184,6 +184,14 @@
     <string name="wifi_rules">Wi-Fi 規則</string>
     <string name="wifi_rules_note">加入網路時自動連線或中斷。規則開啟時，App 會以一則通知等待網路，因此在背景也生效。讀取 Wi-Fi 名稱需要精確位置，在背景還需要「一律允許」位置；沒有這些權限時，指定的網路依「其他 Wi-Fi」處理，或等到開啟 App 時再判斷。手動連線或中斷會保持到下次換網路。</string>
     <string name="wifi_rules_enabled">依網路自動連線</string>
+    <string name="settings_connection">連線</string>
+    <string name="settings_privacy_page">隱私與診斷</string>
+    <string name="settings_advanced">進階</string>
+    <string name="plugins_show_all">顯示全部 %1$d 個外掛</string>
+    <string name="plugins_show_less">收起</string>
+    <plurals name="wifi_rule_count">
+        <item quantity="other">%d 條</item>
+    </plurals>
     <string name="wifi_name">Wi-Fi 名稱</string>
     <string name="wifi_current_network">目前網路</string>
     <string name="wifi_add">新增</string>

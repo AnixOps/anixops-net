@@ -182,6 +182,59 @@ class ScreenshotTest {
     )
 
     @Test
+    fun settingsAdvancedPhoneLightZh() = capture(
+        "settings-advanced-phone-light-zh",
+        PHONE,
+        "zh-rCN",
+        dark = false,
+        destination = Destination.Settings,
+        settingsPage = SettingsPage.Advanced,
+    )
+
+    @Test
+    fun settingsPrivacyPhoneDarkEn() = capture(
+        "settings-privacy-phone-dark-en",
+        PHONE,
+        "en",
+        dark = true,
+        destination = Destination.Settings,
+        settingsPage = SettingsPage.Privacy,
+    )
+
+    @Test
+    fun settingsWifiRulesPhoneLightZh() = capture(
+        "settings-wifi-rules-phone-light-zh",
+        PHONE,
+        "zh-rCN",
+        dark = false,
+        destination = Destination.Settings,
+        settingsPage = SettingsPage.WifiRules,
+    )
+
+    @Test
+    fun settingsNotificationsPhoneDarkEn() = capture(
+        "settings-notifications-phone-dark-en",
+        PHONE,
+        "en",
+        dark = true,
+        destination = Destination.Settings,
+        settingsPage = SettingsPage.Notifications,
+    )
+
+    /** More than five plugins fold behind the "show all" row. */
+    @Test
+    fun extensionsManyPluginsPhoneLightZh() = capture(
+        "extensions-many-plugins-phone-light-zh",
+        PHONE,
+        "zh-rCN",
+        dark = false,
+        destination = Destination.Extensions,
+        extensions = extensionsState.copy(
+            plugins = extensionsState.plugins + (4..7).map { MitmPlugin(id = "p$it", name = "Plugin $it", level = "unsupported") },
+        ),
+    )
+
+    @Test
     fun termsConsentPhoneLightZh() = captureTerms("terms-consent-phone-light-zh", PHONE, "zh-rCN", dark = false, consent = true)
 
     @Test

@@ -558,6 +558,9 @@ internal fun patternMatches(pattern: String, host: String): Boolean {
     return pi == p.length
 }
 
+/** More plugins than this fold behind a "show all" row. */
+private const val COLLAPSED_PLUGIN_COUNT = 5
+
 @Composable
 private fun PluginsSection(
     state: ExtensionsState,
@@ -595,7 +598,11 @@ private fun PluginsSection(
                     )
                 }
             }
-            plugins.forEachIndexed { index, plugin ->
+            // A long list folds to its first few plugins, so the sections below stay in reach.
+            val foldable = plugins.size > COLLAPSED_PLUGIN_COUNT
+            var expanded by rememberSaveable { mutableStateOf(false) }
+            val shown = if (foldable && !expanded) plugins.take(COLLAPSED_PLUGIN_COUNT) else plugins
+            shown.forEachIndexed { index, plugin ->
                 if (index > 0) RowDivider()
                 PluginLine(
                     plugin,
@@ -604,6 +611,15 @@ private fun PluginsSection(
                     onInspect = { actions.inspect(plugin) },
                     onRemove = { onRemove(plugin) },
                 )
+            }
+            if (foldable) {
+                RowDivider()
+                TextButton(onClick = { expanded = !expanded }, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        if (expanded) stringResource(R.string.plugins_show_less)
+                        else stringResource(R.string.plugins_show_all, plugins.size),
+                    )
+                }
             }
         }
         Note(stringResource(R.string.plugins_note))

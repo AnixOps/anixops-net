@@ -711,8 +711,11 @@ private fun rememberExtensionsActions(
     )
 }
 
-/** The pages opened from 设置. */
-enum class SettingsPage { Logs, Traffic }
+/**
+ * The pages opened from 设置. [Logs] and [Traffic] are opened from [Privacy], and go back to it; the others go back
+ * to 设置.
+ */
+enum class SettingsPage { Notifications, WifiRules, Privacy, Advanced, Logs, Traffic }
 
 /** The navigation and the current page: a bottom bar on phones, a side rail on wide windows. */
 @Composable
@@ -752,7 +755,9 @@ fun AnixScaffold(
     initialEgressRules: Boolean = false,
 ) {
     var settingsPage by rememberSaveable { mutableStateOf(initialSettingsPage) }
-    val closePage = { settingsPage = null }
+    val closePage = {
+        settingsPage = if (settingsPage == SettingsPage.Logs || settingsPage == SettingsPage.Traffic) SettingsPage.Privacy else null
+    }
     var egressRules by rememberSaveable { mutableStateOf(initialEgressRules) }
     val closeRules = { egressRules = false }
     val destinations = Destination.of(mode)
@@ -804,31 +809,51 @@ fun AnixScaffold(
                             LaunchedEffect(Unit) { pollRules() }
                             RulesScreen(state.snapshot, state.busy, rulesState, rules)
                         }
-                        Destination.Settings -> when (settingsPage) {
-                            SettingsPage.Logs -> {
-                                BackTo(closePage)
-                                LaunchedEffect(Unit) { pollLogs() }
-                                LogsScreen(logsState, activity.copy(back = closePage))
-                            }
-                            SettingsPage.Traffic -> {
-                                BackTo(closePage)
-                                LaunchedEffect(Unit) { pollTraffic() }
-                                TrafficScreen(trafficState, activity.copy(back = closePage))
-                            }
-                            null -> {
-                                LaunchedEffect(Unit) { pollSettings() }
-                                SettingsScreen(
-                                    mode,
-                                    version,
-                                    termsVersion,
-                                    state.snapshot,
-                                    settingsState,
-                                    settings.copy(
-                                        setMode = onModeChange,
-                                        openLogs = { settingsPage = SettingsPage.Logs },
-                                        openTraffic = { settingsPage = SettingsPage.Traffic },
-                                    ),
-                                )
+                        Destination.Settings -> {
+                            val openActions = settings.copy(
+                                setMode = onModeChange,
+                                openLogs = { settingsPage = SettingsPage.Logs },
+                                openTraffic = { settingsPage = SettingsPage.Traffic },
+                                openNotifications = { settingsPage = SettingsPage.Notifications },
+                                openWifiRules = { settingsPage = SettingsPage.WifiRules },
+                                openPrivacyPage = { settingsPage = SettingsPage.Privacy },
+                                openAdvanced = { settingsPage = SettingsPage.Advanced },
+                            )
+                            when (settingsPage) {
+                                SettingsPage.Logs -> {
+                                    BackTo(closePage)
+                                    LaunchedEffect(Unit) { pollLogs() }
+                                    LogsScreen(logsState, activity.copy(back = closePage))
+                                }
+                                SettingsPage.Traffic -> {
+                                    BackTo(closePage)
+                                    LaunchedEffect(Unit) { pollTraffic() }
+                                    TrafficScreen(trafficState, activity.copy(back = closePage))
+                                }
+                                SettingsPage.Notifications -> {
+                                    BackTo(closePage)
+                                    LaunchedEffect(Unit) { pollSettings() }
+                                    NotificationsScreen(settingsState, openActions, closePage)
+                                }
+                                SettingsPage.WifiRules -> {
+                                    BackTo(closePage)
+                                    LaunchedEffect(Unit) { pollSettings() }
+                                    WifiRulesScreen(settingsState, openActions, closePage)
+                                }
+                                SettingsPage.Privacy -> {
+                                    BackTo(closePage)
+                                    LaunchedEffect(Unit) { pollSettings() }
+                                    PrivacyScreen(settingsState, openActions, closePage)
+                                }
+                                SettingsPage.Advanced -> {
+                                    BackTo(closePage)
+                                    LaunchedEffect(Unit) { pollSettings() }
+                                    AdvancedScreen(state.snapshot, settingsState, openActions, closePage)
+                                }
+                                null -> {
+                                    LaunchedEffect(Unit) { pollSettings() }
+                                    SettingsScreen(mode, version, termsVersion, settingsState, openActions)
+                                }
                             }
                         }
                         Destination.Egress -> if (egressRules) {

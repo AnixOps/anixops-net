@@ -206,6 +206,15 @@
     <string name="wifi_rules">Wi-Fi rules</string>
     <string name="wifi_rules_note">Connects or disconnects when the phone joins a network. While the rules are on, the app waits for the network with a notification, so they also work in the background. Wi-Fi names need precise location, and in the background location all the time; without them a named network counts as other Wi-Fi, or waits until the app is opened. A connect or disconnect by hand holds until the next network.</string>
     <string name="wifi_rules_enabled">Connect by network</string>
+    <string name="settings_connection">Connection</string>
+    <string name="settings_privacy_page">Privacy &amp; Diagnostics</string>
+    <string name="settings_advanced">Advanced</string>
+    <string name="plugins_show_all">Show all %1$d plugins</string>
+    <string name="plugins_show_less">Show less</string>
+    <plurals name="wifi_rule_count">
+        <item quantity="one">%d rule</item>
+        <item quantity="other">%d rules</item>
+    </plurals>
     <string name="wifi_name">Wi-Fi name</string>
     <string name="wifi_current_network">Current network</string>
     <string name="wifi_add">Add</string>
