@@ -90,7 +90,9 @@ SKIPPED_NAMES = {
 
 def not_packaged(path: str) -> bool:
     p = PurePosixPath(path)
-    if path.startswith(("docs/", "examples/", ".github/", "apps/windows-gui/ui/src/design/")) or p.suffix == ".md":
+    # third_party/notices/ holds license texts: their addresses are citations, never contacted.
+    if path.startswith(("docs/", "examples/", ".github/", "apps/windows-gui/ui/src/design/", "third_party/notices/")) \
+            or p.suffix == ".md":
         return True
     if set(p.parts) & {"Tests", "tests", "test", "androidTest", "screenshots", "fixtures", "Tools"}:
         return True
