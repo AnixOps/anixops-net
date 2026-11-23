@@ -26,8 +26,9 @@ public struct NodeLibrary: Codable, Equatable {
     public var importRevision: Int
 
     /// Revision 1: outbounds carry the subscription's certificate pins (`pinned_certificate_sha256`,
-    /// `pinned_public_key_sha256`).
-    public static let currentImportRevision = 1
+    /// `pinned_public_key_sha256`). Revision 2: policy groups keep the importer's `network_rules` and
+    /// `evaluate_before_use`, which earlier versions dropped when decoding.
+    public static let currentImportRevision = 2
 
     enum CodingKeys: String, CodingKey {
         case subscriptionURL
@@ -98,7 +99,13 @@ public struct NodeLibrary: Codable, Equatable {
 
     /// Whether the nodes were imported by an earlier version that left the subscription's certificate pins out.
     public var predatesCertificatePins: Bool {
-        importRevision < Self.currentImportRevision
+        importRevision < 1
+    }
+
+    /// Whether the subscription's groups that pick by network were imported by an earlier version, which dropped
+    /// their network rules: such a group always uses its default until the subscription is imported again.
+    public var predatesNetworkRules: Bool {
+        importRevision < 2 && (routing?.groups.contains(where: \.picksByNetwork) ?? false)
     }
 
     /// The same subscription after a refresh to `report`: the selected node, the rules switch and the group picks
@@ -134,15 +141,17 @@ public struct NodeLibrary: Codable, Equatable {
         followsRules && routing != nil
     }
 
-    /// The member a group uses: the user's pick, then the subscription's default, then the first member.
+    /// The member a group uses: the user's pick, then the subscription's default, then the first member. A group
+    /// that picks by network starts on its default (`displayMembers`); the running engine says what it uses now.
     public func selection(in group: NativeImportReport.Routing.Group) -> String? {
-        if let picked = groupSelections[group.id], group.members.contains(picked) {
+        let members = group.displayMembers
+        if let picked = groupSelections[group.id], members.contains(picked) {
             return picked
         }
-        if let initial = group.default, group.members.contains(initial) {
+        if let initial = group.default, members.contains(initial) {
             return initial
         }
-        return group.members.first
+        return members.first
     }
 
     /// What to show for a group member: a node's name (or server), otherwise the group or policy name.

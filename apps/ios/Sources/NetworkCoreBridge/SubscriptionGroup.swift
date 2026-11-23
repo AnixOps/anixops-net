@@ -193,12 +193,13 @@ public struct SubscriptionGroup: Codable, Equatable, Identifiable {
     }
 
     /// When the next automatic update is due, nil when it updates by hand only. Nodes an earlier version imported
-    /// lack the subscription's certificate pins, so such a group is due at once.
+    /// lack the subscription's certificate pins, or the network rules of its groups that pick by network, so such a
+    /// group is due at once.
     public var nextUpdate: Date? {
         guard isUpdatable, updateIntervalHours > 0 else {
             return nil
         }
-        if library.predatesCertificatePins {
+        if library.predatesCertificatePins || library.predatesNetworkRules {
             return library.updatedAt
         }
         return library.updatedAt.addingTimeInterval(TimeInterval(updateIntervalHours) * 3600)
@@ -209,6 +210,12 @@ public struct SubscriptionGroup: Codable, Equatable, Identifiable {
     /// once); pasted text and groups updated by hand need the user to update or import them again.
     public var needsReimport: Bool {
         library.predatesCertificatePins
+    }
+
+    /// Whether the group's groups that pick by network lost their network rules to an earlier version and still
+    /// use only their default: updated like `needsReimport`.
+    public var needsNetworkRulesReimport: Bool {
+        library.predatesNetworkRules
     }
 
     public func isDue(at date: Date) -> Bool {
@@ -389,19 +396,15 @@ public struct SubscriptionGroups: Codable, Equatable {
             ))
         }
         let policyIDs = linked.map(\.policyID)
+        // A copy rather than a new group, so every field the subscription set (network rules, waiting for the
+        // first health check, ...) stays.
         let groups = routing.groups.map { group -> NativeImportReport.Routing.Group in
             guard group.isSelectable else {
                 return group
             }
-            return NativeImportReport.Routing.Group(
-                id: group.id,
-                type: group.type,
-                members: group.members + policyIDs,
-                default: group.default,
-                url: group.url,
-                intervalSecs: group.intervalSecs,
-                toleranceMs: group.toleranceMs
-            )
+            var group = group
+            group.members += policyIDs
+            return group
         }
         library.nodes = nodes
         library.routing = NativeImportReport.Routing(rules: routing.rules, groups: groups + extraGroups, ruleSets: routing.ruleSets)

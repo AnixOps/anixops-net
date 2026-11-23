@@ -148,6 +148,32 @@ final class SubscriptionGroupTests: XCTestCase {
         XCTAssertEqual(refreshed.userInfo?.total, 10)
     }
 
+    /// Linking another group copies the subscription's groups rather than rebuilding them, so a `subnet` group keeps
+    /// its network rules and a health-checked group its `evaluate_before_use`.
+    func testLinkedGroupsKeepEveryFieldOfTheSubscriptionsGroups() throws {
+        let networkReport = """
+        {"nodes":[
+        {"id":"a","name":"Tokyo","protocol":"trojan","server":"a.example","port":443,
+         "outbound":{"type":"trojan","server":"a.example","port":443,"password":"pa"}}],
+        "unsupported":[],
+        "routing":{"rules":["FINAL,Proxy"],
+        "groups":[{"id":"Proxy","type":"select","members":["Auto","Home","DIRECT"],"default":null},
+        {"id":"Auto","type":"url-test","members":["a"],"url":"http://www.gstatic.com/generate_204",
+        "interval_secs":300,"evaluate_before_use":true},
+        {"id":"Home","type":"subnet","members":[],"default":"Auto",
+        "network_rules":[{"when":"SUBNET:192.168.1.0/24","target":"DIRECT"}]}]}}
+        """
+        let routed = SubscriptionGroup(report: try report(networkReport), url: "https://rules.example/s", response: .init(), at: start)
+        let other = SubscriptionGroup(report: try report(plainReport), url: "https://two.example/s", response: .init(), at: start)
+        let library = try XCTUnwrap(SubscriptionGroups(groups: [routed, other], activeID: routed.id).activeLibrary())
+        let groups = try XCTUnwrap(library.routing?.groups)
+        XCTAssertEqual(groups.map(\.id).prefix(3), ["Proxy", "Auto", "Home"])
+        XCTAssertEqual(groups[0].members.count, 4)
+        XCTAssertEqual(groups[1].evaluateBeforeUse, true)
+        XCTAssertEqual(groups[2].networkRules, [.init(when: "SUBNET:192.168.1.0/24", target: "DIRECT")])
+        XCTAssertEqual(groups[2].members, [])
+    }
+
     func testStoreFindsGroupsByLinkAndPicksTheNextActiveOnDelete() throws {
         let first = SubscriptionGroup(report: try report(plainReport), url: "https://one.example/s", response: .init(), at: start)
         let second = SubscriptionGroup(report: try report(plainReport), url: "https://two.example/s", response: .init(), at: start)

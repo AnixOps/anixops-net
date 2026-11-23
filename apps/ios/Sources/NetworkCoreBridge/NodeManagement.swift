@@ -119,7 +119,7 @@ extension NodeLibrary {
         guard let routing else {
             return true
         }
-        let named = routing.groups.contains { $0.members.contains(id) }
+        let named = routing.groups.contains { $0.referencedNames.contains(id) }
             || routing.rules.contains { $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.contains(id) }
         return !named
     }

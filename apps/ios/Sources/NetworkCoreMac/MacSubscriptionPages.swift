@@ -523,7 +523,7 @@ struct MacRulesPage: View {
                         .foregroundStyle(brand.text2)
                 }
                 Spacer()
-                Text("\(group.members.count) 个成员")
+                Text("\(group.displayMembers.count) 个成员")
                     .font(.caption)
                     .foregroundStyle(brand.text2)
             }

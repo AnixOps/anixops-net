@@ -236,4 +236,88 @@ final class NodeLibraryTests: XCTestCase {
         XCTAssertEqual(library.importRevision, 0)
         XCTAssertTrue(library.predatesCertificatePins)
     }
+
+    /// A subscription's `subnet` group (no members, a default and network rules) and a health-checked group that
+    /// waits for its first measurement, as the importer's `routing_json` writes them.
+    private let networkGroupsReport = """
+    {"nodes":[
+    {"id":"a","name":"Tokyo","protocol":"trojan","server":"a.example","port":443,
+     "outbound":{"type":"trojan","server":"a.example","port":443,"password":"pa"}},
+    {"id":"b","name":"","protocol":"hysteria2","server":"b.example","port":8443,
+     "outbound":{"type":"hysteria2","server":"b.example","port":8443,"password":"pb"}}],
+    "unsupported":[],
+    "routing":{"rules":["FINAL,Home"],
+    "groups":[{"id":"Home","type":"subnet","members":[],"default":"Auto","url":null,"interval_secs":null,
+    "tolerance_ms":null,"network_rules":[{"when":"SUBNET:192.168.1.0/24","target":"DIRECT"},
+    {"when":"TYPE:CELLULAR","target":"b"}]},
+    {"id":"Auto","type":"url-test","members":["a"],"default":null,"url":"http://www.gstatic.com/generate_204",
+    "interval_secs":300,"tolerance_ms":null,"evaluate_before_use":true}]}}
+    """
+
+    /// Groups keep the importer's `network_rules` and `evaluate_before_use` through the Keychain copy into the
+    /// engine's routing section, unchanged and in order; a subnet group keeps no members.
+    func testGroupsKeepNetworkRulesAndEvaluateBeforeUse() throws {
+        let report = try NativeImportReport.decoded(from: Data(networkGroupsReport.utf8))
+        let home = try XCTUnwrap(report.routing?.groups.first)
+        XCTAssertEqual(home.networkRules, [
+            .init(when: "SUBNET:192.168.1.0/24", target: "DIRECT"),
+            .init(when: "TYPE:CELLULAR", target: "b"),
+        ])
+        XCTAssertTrue(home.picksByNetwork)
+        XCTAssertEqual(home.typeTitle, String(localized: "按网络选择"))
+        XCTAssertEqual(home.displayMembers, ["Auto", "DIRECT", "b"])
+        XCTAssertEqual(report.routing?.groups.last?.evaluateBeforeUse, true)
+
+        let library = NodeLibrary(report: report, subscriptionURL: "https://s.example/x", keeping: nil)
+        XCTAssertEqual(library.selection(in: home), "Auto")
+        XCTAssertFalse(library.predatesNetworkRules)
+        // Named only by the subnet group's rules: deleting it would leave a rule pointing at nothing.
+        XCTAssertFalse(library.canRemove("b"))
+
+        let stored = try NodeLibrary.fromKeychainValue(library.keychainValue())
+        XCTAssertEqual(stored, library)
+        let routing = try XCTUnwrap(stored.runtimeRouting())
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(routing)) as? [String: Any])
+        let groups = try XCTUnwrap(json["groups"] as? [[String: Any]])
+        XCTAssertEqual(groups.first?["members"] as? [String], [])
+        XCTAssertEqual(groups.first?["default"] as? String, "Auto")
+        let rules = try XCTUnwrap(groups.first?["network_rules"] as? [[String: String]])
+        XCTAssertEqual(rules, [
+            ["when": "SUBNET:192.168.1.0/24", "target": "DIRECT"],
+            ["when": "TYPE:CELLULAR", "target": "b"],
+        ])
+        XCTAssertNil(groups.first?["evaluate_before_use"])
+        XCTAssertEqual(groups.last?["evaluate_before_use"] as? Bool, true)
+        XCTAssertNil(groups.last?["network_rules"])
+    }
+
+    /// A library saved before groups kept their network rules still loads; its subnet groups are flagged so the
+    /// subscription is imported again, and a library without such a group is not.
+    func testLibrariesSavedBeforeNetworkRulesLoadAndAreFlagged() throws {
+        let report = try NativeImportReport.decoded(from: Data(networkGroupsReport.utf8))
+        let library = NodeLibrary(report: report, subscriptionURL: "https://s.example/x", keeping: nil)
+        var saved = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(library.keychainValue().utf8)) as? [String: Any]
+        )
+        var routing = try XCTUnwrap(saved["routing"] as? [String: Any])
+        routing["groups"] = (routing["groups"] as? [[String: Any]] ?? []).map { group in
+            group.filter { $0.key != "network_rules" && $0.key != "evaluate_before_use" }
+        }
+        saved["routing"] = routing
+        saved["importRevision"] = 1
+        let old = try NodeLibrary.fromKeychainValue(
+            String(decoding: JSONSerialization.data(withJSONObject: saved), as: UTF8.self)
+        )
+        XCTAssertNil(old.routing?.groups.first?.networkRules)
+        XCTAssertTrue(old.predatesNetworkRules)
+        XCTAssertFalse(old.predatesCertificatePins)
+        let group = SubscriptionGroup(name: "Old", library: old)
+        XCTAssertTrue(group.needsNetworkRulesReimport)
+        XCTAssertFalse(group.needsReimport)
+        XCTAssertEqual(group.nextUpdate, old.updatedAt)
+
+        var plain = NodeLibrary(report: try decoded(), subscriptionURL: "https://s.example/x", keeping: nil)
+        plain.importRevision = 1
+        XCTAssertFalse(plain.predatesNetworkRules)
+    }
 }

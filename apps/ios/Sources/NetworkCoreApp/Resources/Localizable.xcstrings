@@ -14582,6 +14582,54 @@
           }
         }
       }
+    },
+    "按网络选择": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "By network"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按網路選擇"
+          }
+        }
+      }
+    },
+    "由旧版本导入：更新后按网络选择的策略组才会生效": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported by an earlier version: update it to apply its by-network groups"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "由舊版本匯入：更新後按網路選擇的策略組才會生效"
+          }
+        }
+      }
+    },
+    "由旧版本导入：重新导入后按网络选择的策略组才会生效": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported by an earlier version: import it again to apply its by-network groups"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "由舊版本匯入：重新匯入後按網路選擇的策略組才會生效"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
