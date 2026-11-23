@@ -1490,11 +1490,14 @@ jobs:
           if (-not (Test-Path (Join-Path $app "AnixOpsNet.exe"))) { throw "the published window has no AnixOpsNet.exe" }
           dotnet tool install --global wix --version 5.0.2
           if ($LASTEXITCODE -ne 0) { throw "WiX was not installed" }
+          wix extension add -g WixToolset.Util.wixext/5.0.2
+          if ($LASTEXITCODE -ne 0) { throw "the WiX utility extension was not installed" }
           $out = Join-Path $env:RUNNER_TEMP "native-msi"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
           foreach ($version in @("0.3.0", "0.3.1")) {
             wix build installer/windows-native/Package.wxs `
               -arch x64 `
+              -ext WixToolset.Util.wixext `
               -d "ProductVersion=$version" `
               -d "AppDir=$app" `
               -d "ServiceExe=$env:ANIXOPS_NET_SERVICE_EXE" `

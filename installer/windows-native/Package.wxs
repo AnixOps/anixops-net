@@ -2,7 +2,8 @@
 <!-- The installer of the native Windows client (apps/windows-native and apps/windows-service). WiX 5.
      Built in CI with: ProductVersion, AppDir (the published window, self-contained), ServiceExe and WintunDir
      (wintun.dll and its licence, from .github/scripts/fetch-wintun.ps1). -->
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
   <!-- Its own upgrade code and folder: it installs beside the web client (AnixOps NetworkCore) until the
        cutover, and never replaces it by accident. -->
   <Package
@@ -64,14 +65,15 @@
                   OnInstall="yes"
                   OnReinstall="yes"
                   FailureActionsWhen="failedToStopOrReturnedError" />
-              <ServiceConfigFailureActions
-                  OnInstall="yes"
-                  OnReinstall="yes"
-                  ResetPeriod="86400">
-                <Failure Action="restartService" Delay="5000" />
-                <Failure Action="restartService" Delay="30000" />
-                <Failure Action="restartService" Delay="60000" />
-              </ServiceConfigFailureActions>
+              <!-- The restart actions come from the WiX utility extension: Windows Installer's own
+                   MsiServiceConfigFailureActions opens the service without SERVICE_START, which restart actions
+                   need, and fails with error 1939 (access denied). -->
+              <util:ServiceConfig
+                  FirstFailureActionType="restart"
+                  SecondFailureActionType="restart"
+                  ThirdFailureActionType="restart"
+                  RestartServiceDelayInSeconds="5"
+                  ResetPeriodInDays="1" />
             </ServiceInstall>
             <ServiceControl
                 Id="CoreServiceControl"
