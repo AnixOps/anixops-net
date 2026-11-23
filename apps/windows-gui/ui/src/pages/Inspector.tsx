@@ -184,7 +184,7 @@ function MessagePanel({ side, url, message, part, onPart }: {
   const shown: Part = part === "query" && query.length === 0 ? "headers" : part;
   const lead = <Segmented label={side === "request" ? t("请求的部分") : t("响应的部分")} className="compact" options={options} value={shown} onChange={onPart} />;
 
-  if (shown === "body" && hasBody) return <BodyViewer message={message} lead={lead} />;
+  if (shown === "body" && hasBody) return <BodyViewer message={message} lead={lead} side={side} />;
   const pairs = shown === "query" ? query : message.headers;
   return (
     <div className="body-viewer">

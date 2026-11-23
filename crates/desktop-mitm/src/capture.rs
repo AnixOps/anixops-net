@@ -255,9 +255,226 @@ pub fn save_new_file(dir: &Path, name: &str, data: &[u8]) -> Result<PathBuf, Str
     Err(format!("{}: too many files named {name}", dir.display()))
 }
 
+/// A captured body the inspector saves or hands to another app (`save_body`, `open_body`): the bytes it shows (after
+/// the Content-Encoding is undone), their `Content-Type`, and a name for the file without its extension.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BodyFile {
+    pub data_base64: String,
+    #[serde(default)]
+    pub content_type: String,
+    #[serde(default)]
+    pub name: String,
+}
+
+/// The file extension for a body of `content_type`, and whether another app may be asked to open such a file.
+/// Types that run code where they open (HTML, SVG, scripts, XML with style sheets, spreadsheets that read CSV
+/// formulas) are saved but never opened from here; anything unknown is `bin`, which is not opened either.
+fn body_type(content_type: &str) -> (&'static str, bool) {
+    let media = content_type
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    match media.as_str() {
+        "image/png" => ("png", true),
+        "image/jpeg" | "image/jpg" => ("jpg", true),
+        "image/gif" => ("gif", true),
+        "image/webp" => ("webp", true),
+        "image/avif" => ("avif", true),
+        "image/bmp" => ("bmp", true),
+        "image/x-icon" | "image/vnd.microsoft.icon" => ("ico", true),
+        "application/pdf" => ("pdf", true),
+        "text/plain" => ("txt", true),
+        "video/mp4" => ("mp4", true),
+        "video/webm" => ("webm", true),
+        "audio/mpeg" => ("mp3", true),
+        "audio/mp4" => ("m4a", true),
+        "audio/ogg" => ("ogg", true),
+        "audio/wav" | "audio/x-wav" => ("wav", true),
+        "application/json" => ("json", true),
+        media if media.ends_with("+json") => ("json", true),
+        "image/svg+xml" => ("svg", false),
+        "text/html" => ("html", false),
+        "text/css" => ("css", false),
+        "text/csv" => ("csv", false),
+        "text/javascript" | "application/javascript" => ("js", false),
+        "application/xml" | "text/xml" => ("xml", false),
+        media if media.ends_with("+xml") => ("xml", false),
+        "application/x-www-form-urlencoded" => ("txt", false),
+        "font/woff2" => ("woff2", false),
+        "font/woff" => ("woff", false),
+        "application/zip" => ("zip", false),
+        _ => ("bin", false),
+    }
+}
+
+/// Whether `open_body` will hand a body of `content_type` to another app.
+pub fn may_open_body(content_type: &str) -> bool {
+    body_type(content_type).1
+}
+
+/// `name` (or "body") with the extension of `content_type`, safe as a file name.
+pub fn body_file_name(name: &str, content_type: &str) -> String {
+    let stem = safe_file_name(name);
+    let stem = if name.trim().is_empty() {
+        "body"
+    } else {
+        stem.as_str()
+    };
+    format!("{stem}.{}", body_type(content_type).0)
+}
+
+/// Saves the body in `dir` without replacing an older file and answers where it went.
+pub fn save_body(file: &BodyFile, dir: &Path) -> Result<PathBuf, String> {
+    let data = decode_base64(&file.data_base64)?;
+    save_new_file(dir, &body_file_name(&file.name, &file.content_type), &data)
+}
+
+/// Where bodies handed to other apps are written: a folder of the system's temporary directory, emptied of files
+/// older than a day each time one is added.
+fn open_dir() -> PathBuf {
+    std::env::temp_dir().join("anixops-net-bodies")
+}
+
+/// Removes files older than a day from `dir`; failures are left for the next time.
+fn prune_old_files(dir: &Path) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    let day = std::time::Duration::from_secs(24 * 60 * 60);
+    for entry in entries.flatten() {
+        let old = entry
+            .metadata()
+            .ok()
+            .filter(fs::Metadata::is_file)
+            .and_then(|meta| meta.modified().ok())
+            .and_then(|modified| modified.elapsed().ok())
+            .is_some_and(|age| age > day);
+        if old {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+}
+
+/// Writes the body to a temporary file and opens it with the app the system uses for its type. Refuses types
+/// that [`may_open_body`] does not allow, before writing anything.
+pub fn open_body(file: &BodyFile) -> Result<PathBuf, String> {
+    if !may_open_body(&file.content_type) {
+        return Err(format!(
+            "a body of type {:?} is saved, not opened",
+            file.content_type
+        ));
+    }
+    let data = decode_base64(&file.data_base64)?;
+    let dir = open_dir();
+    prune_old_files(&dir);
+    let path = save_new_file(&dir, &body_file_name(&file.name, &file.content_type), &data)?;
+    open_with_system(&path)?;
+    Ok(path)
+}
+
+/// Opens `path` with its default app: Explorer's file association on Windows, `xdg-open` on Linux. No shell is
+/// involved, and the path is one this module wrote.
+fn open_with_system(path: &Path) -> Result<(), String> {
+    #[cfg(windows)]
+    let mut command = std::process::Command::new("explorer.exe");
+    #[cfg(all(unix, not(target_os = "android"), not(target_vendor = "apple")))]
+    let mut command = std::process::Command::new("xdg-open");
+    #[cfg(any(
+        windows,
+        all(unix, not(target_os = "android"), not(target_vendor = "apple"))
+    ))]
+    {
+        let mut child = command
+            .arg(path)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .map_err(|error| format!("no app could be started to open the file: {error}"))?;
+        // Explorer and xdg-open hand the file on and exit; waiting off this thread keeps no zombie behind.
+        std::thread::spawn(move || {
+            let _ = child.wait();
+        });
+        Ok(())
+    }
+    #[cfg(not(any(
+        windows,
+        all(unix, not(target_os = "android"), not(target_vendor = "apple"))
+    )))]
+    {
+        let _ = path;
+        Err("this platform opens files itself".to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn names_body_files_by_type() {
+        assert_eq!(
+            body_file_name("response-body", "image/png"),
+            "response-body.png"
+        );
+        assert_eq!(
+            body_file_name("", "application/problem+json; charset=utf-8"),
+            "body.json"
+        );
+        assert_eq!(body_file_name("../x", "application/x-protobuf"), "x.bin");
+        assert_eq!(body_file_name("b", "Text/HTML"), "b.html");
+    }
+
+    #[test]
+    fn opens_only_types_that_run_no_code() {
+        for open in [
+            "image/png",
+            "image/jpeg",
+            "application/pdf",
+            "text/plain; charset=utf-8",
+            "application/json",
+            "audio/mpeg",
+        ] {
+            assert!(may_open_body(open), "{open}");
+        }
+        for saved in [
+            "image/svg+xml",
+            "text/html",
+            "text/javascript",
+            "application/xml",
+            "text/csv",
+            "application/octet-stream",
+            "",
+            "application/x-msdownload",
+        ] {
+            assert!(!may_open_body(saved), "{saved}");
+        }
+        let refused = open_body(&BodyFile {
+            data_base64: encode_base64(b"<svg onload=alert(1)>"),
+            content_type: "image/svg+xml".to_string(),
+            name: "x".to_string(),
+        });
+        assert!(refused.is_err());
+    }
+
+    #[test]
+    fn saves_bodies_without_replacing() {
+        let dir = std::env::temp_dir().join(format!("body-save-{}", std::process::id()));
+        let file = BodyFile {
+            data_base64: encode_base64(&[0x89, b'P', b'N', b'G']),
+            content_type: "image/png".to_string(),
+            name: "response-body".to_string(),
+        };
+        let first = save_body(&file, &dir).unwrap();
+        let second = save_body(&file, &dir).unwrap();
+        assert_eq!(first.file_name().unwrap(), "response-body.png");
+        assert_eq!(second.file_name().unwrap(), "response-body (2).png");
+        assert_eq!(fs::read(&first).unwrap(), [0x89, b'P', b'N', b'G']);
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn decodes_base64_with_and_without_padding() {

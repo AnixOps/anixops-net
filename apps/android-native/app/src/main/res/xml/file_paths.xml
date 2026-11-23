@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the file provider may hand to other apps: only the captured bodies the request inspector shares or opens
+     (BodyFiles.kt), each in a folder of its own under the cache. -->
+<paths>
+    <cache-path name="bodies" path="bodies/" />
+</paths>

@@ -442,6 +442,18 @@ impl Client {
         )
     }
 
+    /// Saves a body as the inspector shows it (decoded) where exports go, and answers where it went.
+    fn save_body(&self, file: &desktop_mitm::capture::BodyFile) -> Result<SavedFile, String> {
+        let name = desktop_mitm::capture::body_file_name(&file.name, &file.content_type);
+        let export = desktop_mitm::capture::Export {
+            file_name: name,
+            content_type: file.content_type.clone(),
+            data_base64: file.data_base64.clone(),
+        };
+        let location = self.save_export(&export)?;
+        Ok(SavedFile { location })
+    }
+
     #[cfg(not(target_os = "android"))]
     fn save_export(&self, export: &desktop_mitm::capture::Export) -> Result<String, String> {
         let dir = desktop_mitm::capture::downloads_dir()
@@ -960,6 +972,17 @@ fn handler(name: &str) -> Option<Handler> {
             let DecodeBody { request } = parse(args)?;
             desktop_mitm::capture::decode_body(&request)
         },
+        "save_body" => |client, args| {
+            let Body { file } = parse(args)?;
+            json(client.save_body(&file)?)
+        },
+        "open_body" => |_, args| {
+            let Body { file } = parse(args)?;
+            let path = desktop_mitm::capture::open_body(&file)?;
+            json(SavedFile {
+                location: path.display().to_string(),
+            })
+        },
         "capture_session" => |client, args| {
             let CaptureSession { action } = parse(args)?;
             client.capture_session(action)
@@ -1392,6 +1415,11 @@ struct Request {
 #[derive(Deserialize)]
 struct DecodeBody {
     request: desktop_mitm::capture::DecodeRequest,
+}
+
+#[derive(Deserialize)]
+struct Body {
+    file: desktop_mitm::capture::BodyFile,
 }
 
 #[derive(Deserialize)]
