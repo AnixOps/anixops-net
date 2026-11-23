@@ -7,7 +7,8 @@ extension AppMode {
         case .debug:
             return "调试网络"
         case .proxy:
-            return "代理"
+            // The mode's name, singular; "代理" alone is the Proxies page.
+            return "mode.proxy"
         }
     }
 

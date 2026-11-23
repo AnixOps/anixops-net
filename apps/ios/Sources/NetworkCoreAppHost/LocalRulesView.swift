@@ -49,7 +49,8 @@ enum LocalRulesText {
     static func policy(_ policy: LocalRules.Policy) -> String {
         switch policy {
         case .proxy:
-            return String(localized: "代理")
+            // The policy (PROXY), singular; "代理" alone is the Proxies page.
+            return String(localized: "policy.proxy")
         case .direct:
             return String(localized: "直连")
         case .reject:

@@ -40,8 +40,12 @@ static PROTECTING: AtomicBool = AtomicBool::new(false);
 /// Starts the helper through `pkexec` (the desktop asks for the administrator password), takes the TUN descriptor
 /// it hands back, and binds the engine's sockets to the interface the default route used before.
 pub fn open(mtu: u32) -> Result<RawFd, String> {
-    let physical = default_interface()
-        .ok_or("no default route: connect to a network before turning on TUN mode")?;
+    let physical = default_interface().ok_or_else(|| {
+        crate::refusal::coded(
+            "error.no_default_route",
+            "no default route: connect to a network before turning on TUN mode",
+        )
+    })?;
     let program = helper_program()?;
     let (ours, theirs) =
         UnixStream::pair().map_err(|error| format!("the helper socket failed: {error}"))?;

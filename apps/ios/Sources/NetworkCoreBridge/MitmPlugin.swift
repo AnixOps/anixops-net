@@ -18,7 +18,7 @@ public struct MitmPlugin: Codable, Equatable, Identifiable {
 
     public init(
         text: String,
-        fallbackName: String = "未命名插件",
+        fallbackName: String = String(localized: "未命名插件"),
         sourceURL: URL? = nil,
         id: UUID = UUID(),
         inspection: MitmPluginInspection? = nil

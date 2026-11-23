@@ -1,9 +1,9 @@
 /// <reference types="vite/client" />
 import { afterEach, describe, expect, it } from "vitest";
-import { resolveLanguage, setLanguage, t } from "./i18n";
+import { resolveLanguage, setLanguage, sourceText, t } from "./i18n";
 import { english } from "./i18n-en";
 import { traditional } from "./i18n-zh-hant";
-import { connectionTitle, factLabel } from "./labels";
+import { connectionSwitchLabel, connectionTitle, factLabel } from "./labels";
 
 const sources = import.meta.glob(["./**/*.ts", "./**/*.tsx", "!./**/*.test.ts", "!./i18n-en.ts", "!./i18n-zh-hant.ts"], {
   query: "?raw",
@@ -88,5 +88,48 @@ describe("Traditional Chinese table", () => {
       (key) => placeholders(key).join() !== placeholders(traditional[key]).join(),
     );
     expect(mismatched).toEqual([]);
+  });
+});
+
+describe("words with more than one sense", () => {
+  afterEach(() => setLanguage("zh"));
+
+  it("shows the Chinese before the bar and translates each sense on its own", () => {
+    expect(sourceText("连接|verb")).toBe("连接");
+    expect(sourceText("a | b")).toBe("a | b");
+    expect(t("连接|verb")).toBe("连接");
+    expect(t("代理|mode")).toBe("代理");
+    setLanguage("en");
+    expect(t("连接")).toBe("Connections");
+    expect(t("连接|noun")).toBe("Connection");
+    expect(t("连接|verb")).toBe("Connect");
+    expect(t("代理")).toBe("Proxies");
+    expect(t("代理|mode")).toBe("Proxy");
+    setLanguage("zh-Hant");
+    expect(t("连接|verb")).toBe("連線");
+  });
+
+  // "连接" alone is the Connections list and "代理" alone the Proxies page. Anywhere else (an action, the connection
+  // switch, a mode name) needs its sense key, or English shows a plural noun where a verb belongs (ux-i18n-a11y-04).
+  it("uses the bare words only where the plural noun is meant", () => {
+    const allowed: Record<string, string[]> = {
+      "连接": ["./pages/ActivityPage.tsx", "./pages/CaptureViews.tsx", "./pages/RequestsPage.tsx"],
+      "代理": ["./App.tsx"],
+    };
+    for (const [word, files] of Object.entries(allowed)) {
+      const users = Object.entries(sources)
+        .filter(([, source]) => codeLines(source).some((line) => line.includes(`"${word}"`)))
+        .map(([file]) => file)
+        .sort();
+      expect(users).toEqual(files);
+    }
+  });
+
+  it("names the connection switch the same whatever its state", () => {
+    setLanguage("en");
+    expect(connectionSwitchLabel()).toBe("Connection");
+    for (const source of Object.values(sources)) {
+      expect(source).not.toMatch(/label=\{phase === "on" \?/);
+    }
   });
 });

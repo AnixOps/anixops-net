@@ -9,7 +9,8 @@ struct AnixOpsShortcuts: AppShortcutsProvider {
                 "用 \(.applicationName) 连接",
                 "Connect \(.applicationName)",
             ],
-            shortTitle: "连接",
+            // The verb, as "断开" below; "连接" alone is the noun "Connection" in the catalog.
+            shortTitle: "action.connect",
             systemImageName: "network"
         )
         AppShortcut(

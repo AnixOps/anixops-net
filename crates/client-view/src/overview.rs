@@ -69,7 +69,9 @@ fn traffic(counters: &Value) -> Option<Value> {
 /// - `egress`: [`egress`].
 /// - `node`: the node in use as the core listed it, or `null`.
 /// - `canConnect`: whether connecting can work at all: a node is chosen, or traffic leaves directly.
-/// - `error`: why the client is not connected, in the core's words, or `null`. Never set while connected.
+/// - `error`: why the client is not connected, the refusal as the client kept it (`<code>: <English>` when coded,
+///   crates/client-core/src/refusal.rs), or `null`. Never set while connected. A window words it by its code before
+///   showing it (Android: `Core.overview`).
 /// - `traffic`: rates in bytes per second, totals in bytes and the number of open connections, or `null`
 ///   while not connected or before the engine has answered.
 pub fn overview(snapshot: &Value, nodes: &[Value], counters: &Value) -> Value {

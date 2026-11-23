@@ -6,7 +6,7 @@ import { Select } from "../controls";
 import { t } from "../i18n";
 
 const actions: Array<{ value: OnDemandAction; label: string }> = [
-  { value: "connect", label: "连接" },
+  { value: "connect", label: "连接|verb" },
   { value: "disconnect", label: "断开" },
   { value: "ignore", label: "保持不变" },
 ];

@@ -8,6 +8,7 @@ import { formatBytes, subscriptionErrorText } from "../subscription-format";
 import { connectionLabelText, refreshResultText } from "../labels";
 import { Card, EmptyState, IconButton, MenuItem, MoreMenu, Row, Run, Segmented, Switch } from "../ui";
 import { t } from "../i18n";
+import { errorLine, subscriptionFailureLine } from "../error-text";
 import { CaptureDetail, exportCapture } from "./CaptureViews";
 import { LogsCard } from "./LogsCard";
 import { TrafficStatsCard } from "./TrafficStatsCard";
@@ -22,9 +23,13 @@ export function ActivityPage({ snapshot, busy, run }: { snapshot: RuntimeSnapsho
  * as the "Connections" view of the requests page, where capture is switched from the page toolbar instead.
  */
 export function ConnectionsView({ snapshot, busy, run, debug = false }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run; debug?: boolean }) {
+  // Why the last automatic update failed in the window's words: Linux sends no reason code, only the (coded) refusal.
+  const refreshFailure = snapshot?.subscriptionError
+    ? subscriptionFailureLine(snapshot.subscriptionRefreshErrorCode, snapshot.subscriptionError)
+    : subscriptionErrorText(snapshot?.subscriptionRefreshErrorCode);
   const refresh = snapshot?.subscriptionLastAttempt
-    ? [refreshResultText(snapshot.subscriptionRefreshResult), snapshot.subscriptionLastAttempt, subscriptionErrorText(snapshot.subscriptionRefreshErrorCode)].filter(Boolean).join(" · ")
-    : t("还没有自动更新记录");
+    ? [refreshResultText(snapshot.subscriptionRefreshResult), snapshot.subscriptionLastAttempt, refreshFailure].filter(Boolean).join(" · ")
+    : refreshFailure ?? t("还没有自动更新记录");
 
   const [detail, setDetail] = useState<ConnectionSnapshot | null>(null);
   const live = liveEngine(snapshot);
@@ -35,9 +40,9 @@ export function ConnectionsView({ snapshot, busy, run, debug = false }: { snapsh
   const session = (
     <Card title={t("当前会话")} description={t("只有独立核实过的运行状态才会显示为已连接。")}>
       <Row icon={CircleDot} color={snapshot?.connection === "Connected" ? "green" : "gray"} label={t("运行状态")} value={connectionLabelText(snapshot?.connectionLabel)} />
-      <Row icon={TriangleAlert} color={snapshot?.lastError ? "red" : "gray"} label={t("最近错误")} value={snapshot?.lastError ?? t("无")} />
-      <Row icon={BadgeCheck} color={snapshot?.configurationError ? "red" : "gray"} label={t("配置校验")} value={snapshot?.configurationError ?? t("通过")} />
-      <Row icon={RefreshCw} color={snapshot?.subscriptionError ? "red" : "gray"} label={t("订阅自动更新")} value={snapshot?.subscriptionRefreshErrorCode ? refresh : snapshot?.subscriptionError ?? refresh} />
+      <Row icon={TriangleAlert} color={snapshot?.lastError ? "red" : "gray"} label={t("最近错误")} value={snapshot?.lastError ? errorLine(snapshot.lastError, "connect") : t("无")} />
+      <Row icon={BadgeCheck} color={snapshot?.configurationError ? "red" : "gray"} label={t("配置校验")} value={snapshot?.configurationError ? errorLine(snapshot.configurationError, "validate") : t("通过")} />
+      <Row icon={RefreshCw} color={snapshot?.subscriptionError ? "red" : "gray"} label={t("订阅自动更新")} value={refresh} />
       <Row icon={ClipboardList} color="indigo" label={t("诊断报告")} hint={t("从受管的运行状态和日志生成一份有大小限制的报告，不包含节点密码。")}>
         <button className="secondary compact" disabled={Boolean(busy)} onClick={() => void run("diagnostics", desktop.diagnostics)}>{t("生成诊断报告")}</button>
       </Row>
@@ -75,7 +80,7 @@ function Connections({ snapshot, busy, run, onOpen, captureControls }: {
 
   const close = (task: () => Promise<unknown>) => {
     setFailure(null);
-    task().then(() => { reload(); reloadCapture(); }).catch((error: unknown) => setFailure(String(error)));
+    task().then(() => { reload(); reloadCapture(); }).catch((error: unknown) => setFailure(errorLine(error)));
   };
 
   if (!list) {

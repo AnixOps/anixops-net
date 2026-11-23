@@ -270,10 +270,10 @@ struct MacCommandPalette: View {
             }
             modes.append((.global, String(localized: "全局")))
             modes.append((.direct, String(localized: "直连")))
-            let prefix = String(localized: "代理模式")
             for (value, name) in modes where value != tunnel.mode {
                 list.append(Entry(
-                    item: .init(id: "cmd.mode.\(value.rawValue)", kind: .command, title: "\(prefix)：\(name)"),
+                    // One key for the whole title, so a translation can use its own punctuation and word order.
+                    item: .init(id: "cmd.mode.\(value.rawValue)", kind: .command, title: String(localized: "代理模式：\(name)")),
                     run: {
                         Task {
                             await tunnel.setMode(value)
@@ -282,12 +282,11 @@ struct MacCommandPalette: View {
                 ))
             }
         }
-        let takeoverPrefix = String(localized: "接管方式")
         for value in TrafficTakeover.choices(macOS: true) where value != tunnel.takeover {
             list.append(Entry(
                 item: .init(
                     id: "cmd.takeover.\(value.rawValue)", kind: .command,
-                    title: "\(takeoverPrefix)：\(TakeoverSection.title(value))"
+                    title: String(localized: "接管方式：\(TakeoverSection.title(value))")
                 ),
                 run: {
                     Task {
@@ -363,7 +362,7 @@ struct MacShortcutList: View {
         return AppShortcut.all.filter { $0.group == group }.map { shortcut in
             Line(
                 id: shortcut.id,
-                title: String(localized: String.LocalizationValue(shortcut.title)),
+                title: String(localized: shortcut.title),
                 keys: shortcut.display
             )
         }

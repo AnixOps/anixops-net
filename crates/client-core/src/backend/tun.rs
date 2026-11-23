@@ -88,7 +88,9 @@ impl TunEngine {
             .as_ref()
             .filter(|descriptor| !descriptor.dead.load(Ordering::Acquire))
             .map(|descriptor| (descriptor.fd, descriptor.dead.clone()))
-            .ok_or("the VPN is not on; connect again")?;
+            .ok_or_else(|| {
+                crate::refusal::coded("error.vpn_off", "the VPN is not on; connect again")
+            })?;
         let mut runtime = EmbeddedRuntime::from_json(envelope.as_bytes())
             .map_err(|error| error.message.to_string())?;
         runtime

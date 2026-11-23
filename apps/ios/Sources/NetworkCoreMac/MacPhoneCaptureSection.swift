@@ -14,6 +14,7 @@ struct MacPhoneCaptureSection: View {
     @State private var portText = String(MacPhoneCaptureSection.defaultPort)
     @State private var address: String?
     @State private var working = false
+    /// Shown as written: assign it from String(localized:), never a bare literal.
     @State private var error: String?
 
     static let defaultPort: UInt16 = 8899
@@ -146,7 +147,7 @@ struct MacPhoneCaptureSection: View {
         let request: RuntimeControl
         if on {
             guard let port else {
-                error = "端口要在 1024 到 65535 之间。"
+                error = String(localized: "端口要在 1024 到 65535 之间。")
                 return
             }
             request = .startLanShare(port: port)
@@ -154,7 +155,9 @@ struct MacPhoneCaptureSection: View {
             request = .stopLanShare
         }
         guard let answer = RuntimeControl.decode(RuntimeControl.LanShare.self, from: await tunnel.control(request)) else {
-            error = on ? "手机抓包没有开启：端口可能被占用，或者网络扩展版本太旧。" : "手机抓包没有关闭，请重试。"
+            error = on
+                ? String(localized: "手机抓包没有开启：端口可能被占用，或者网络扩展版本太旧。")
+                : String(localized: "手机抓包没有关闭，请重试。")
             return
         }
         error = nil

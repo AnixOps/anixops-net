@@ -30,11 +30,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
+import io.anixops.net.CodeTexts
 import io.anixops.net.R
 import io.anixops.net.core.DnsText
 import io.anixops.net.core.MyRules
@@ -297,22 +299,34 @@ private fun RuleSetsSection(sets: List<RuleSetStatus>, enabled: Boolean, onUpdat
     }
 }
 
-/** What importing the subscription's rules left out, so a rule that does not run is never silent. */
+/**
+ * What importing the subscription's rules left out, so a rule that does not run is never silent: each line's kind in
+ * the app's language, then the kernel's English line, which names the rule or group.
+ */
 @Composable
 private fun RoutingWarningsSection(warnings: List<String>) {
+    val context = LocalContext.current
+    val texts = remember(context) { CodeTexts(context) }
     Column {
         Section(stringResource(R.string.rules_import_warnings)) {
             warnings.forEachIndexed { index, warning ->
                 if (index > 0) RowDivider()
-                Text(
-                    warning,
+                val (kind, detail) = texts.routingWarning(warning)
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = RowMinHeight)
                         .padding(horizontal = BrandSpacing.md, vertical = BrandSpacing.xs),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = LocalBrandPalette.current.warning,
-                )
+                ) {
+                    Text(kind, style = MaterialTheme.typography.bodySmall, color = LocalBrandPalette.current.warning)
+                    if (detail != null) {
+                        Text(
+                            detail,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LocalBrandPalette.current.text2,
+                        )
+                    }
+                }
             }
         }
         Note(stringResource(R.string.rules_import_warnings_note))

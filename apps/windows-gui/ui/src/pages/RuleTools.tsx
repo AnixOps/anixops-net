@@ -5,6 +5,7 @@ import { busiestRules, dataName, dataRule } from "../rule-sets";
 import { liveEngine, usePolling } from "../live";
 import { Card, Field, IconButton, Row, Run, Segmented } from "../ui";
 import { t } from "../i18n";
+import { errorLine } from "../error-text";
 
 /**
  * The GEOIP and IP-ASN data lists: the client builds in only the mainland China lists, so `GEOIP,US` or
@@ -157,7 +158,7 @@ export function RuleTester({ snapshot, busy }: { snapshot: RuntimeSnapshot | nul
       process: process.trim() || undefined,
     }).then(setAnswer).catch((reason) => {
       setAnswer(null);
-      setError(String(reason));
+      setError(errorLine(reason));
     });
   };
 

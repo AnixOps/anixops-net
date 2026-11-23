@@ -4,6 +4,8 @@ import { traditional } from "./i18n-zh-hant";
 
 // Simplified Chinese is the source language: the UI is written with Chinese strings, and `t` looks each one up in
 // the English or Traditional Chinese table when that language is active. Strings a table lacks are shown as written.
+// A Chinese word that has more than one meaning in another language carries its sense after a bar, "连接|verb" or
+// "代理|mode": the tables translate the whole key, and Chinese shows the part before the bar.
 export type Language = "zh" | "zh-Hant" | "en";
 export type LanguageChoice = "system" | Language;
 
@@ -18,10 +20,15 @@ export const languages: Array<{ value: LanguageChoice; label: string }> = [
 const storageKey = "anixops.language";
 let current: Language = "zh";
 
+/** The Chinese a source key shows: the key without its `|sense` (lower-case Latin letters after the last bar). */
+export function sourceText(text: string): string {
+  return /^(.+)\|[a-z]+$/.exec(text)?.[1] ?? text;
+}
+
 /** Translates a Chinese UI string and fills `{name}` placeholders. */
 export function t(text: string, values?: Record<string, string | number | null | undefined>): string {
   const table = current === "en" ? english : current === "zh-Hant" ? traditional : undefined;
-  let result = table?.[text] ?? text;
+  let result = table?.[text] ?? sourceText(text);
   if (values) {
     for (const [name, value] of Object.entries(values)) result = result.split(`{${name}}`).join(String(value ?? ""));
   }

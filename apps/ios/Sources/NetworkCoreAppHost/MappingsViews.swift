@@ -1018,7 +1018,7 @@ struct DebugSetupChecklist: View {
 
     private static func title(_ step: Step) -> LocalizedStringKey {
         switch step {
-        case .connect: "连接"
+        case .connect: "action.connect"
         case .certificate: "信任根证书"
         case .domains: "添加要解密的域名"
         case .capture: "开始抓包"

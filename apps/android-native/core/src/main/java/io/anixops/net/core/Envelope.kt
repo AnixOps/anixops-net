@@ -8,8 +8,12 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 
-/** A command the Rust client refused, or an answer that could not be read; [message] is what to show. */
-class CoreException(message: String) : Exception(message)
+/**
+ * A command the Rust client refused, or an answer that could not be read; [message] is what to show. [Core] words a
+ * refusal in the app's language ([CoreTexts]): then [code] is the refusal's code, if it had one, and [detail] the
+ * client's own English.
+ */
+class CoreException(message: String, val detail: String? = null, val code: String? = null) : Exception(message)
 
 /**
  * The `{"ok": answer}` / `{"error": "..."}` envelope both directions of the bridge use: Rust answers commands in

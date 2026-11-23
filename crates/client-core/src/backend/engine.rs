@@ -83,12 +83,17 @@ pub fn parse_nodes(content: &str) -> Result<Vec<NodeDescriptor>, String> {
         source_id: PROFILE_ID.to_string(),
         content: content.to_string(),
     };
-    let document = service.parse(&raw).map_err(|error| error.message)?;
+    // The kernel's refusal keeps its code (`subscription.core.clash_yaml_unsupported: …`), so the window can say
+    // what is wrong in its own language (`crate::refusal`).
+    let document = service.parse(&raw).map_err(|error| error.to_string())?;
     let catalog = service
         .normalize(&document)
-        .map_err(|error| error.message)?;
+        .map_err(|error| error.to_string())?;
     if catalog.nodes.is_empty() {
-        return Err("no nodes were found in the subscription".to_string());
+        return Err(crate::refusal::coded(
+            "error.no_nodes",
+            "no nodes were found in the subscription",
+        ));
     }
     Ok(catalog.nodes)
 }
@@ -241,20 +246,28 @@ pub fn subscription_routing(
 /// Most [`routing_warnings`] lines; one more says how many were left out.
 const MAX_ROUTING_WARNINGS: usize = 32;
 
+/// The code of the line [`routing_warnings`] adds when it leaves lines out.
+pub const ROUTING_WARNINGS_MORE: &str = "routing_warnings.more";
+
 /// What importing `content`'s rules leaves out (rules of unsupported types counted by type, Surge's built-in
-/// `RULE-SET,SYSTEM`, targets that were not imported, ...), one English line each, as the kernel words them, so
-/// the rules page can show it instead of the rules silently matching less. Never a rule-set URL.
+/// `RULE-SET,SYSTEM`, targets that were not imported, ...), so the rules page can show it instead of the rules
+/// silently matching less. One line each, `<kernel code>: <English>` as the kernel words it (`crate::refusal`):
+/// the window names the kind of line (a rule, a policy group, a member, an option skipped) in its own language
+/// and shows the English as its detail. Never a rule-set URL.
 pub fn routing_warnings(content: &str, parsed: &[NodeDescriptor]) -> Vec<String> {
     let mut warnings = import_subscription_routing(content, parsed)
         .diagnostics
         .into_iter()
         .filter(|diagnostic| diagnostic.severity == DiagnosticSeverity::Warning)
-        .map(|diagnostic| diagnostic.message)
+        .map(|diagnostic| format!("{}: {}", diagnostic.code, diagnostic.message))
         .collect::<Vec<_>>();
     if warnings.len() > MAX_ROUTING_WARNINGS {
         let more = warnings.len() - MAX_ROUTING_WARNINGS;
         warnings.truncate(MAX_ROUTING_WARNINGS);
-        warnings.push(format!("{more} more were left out"));
+        warnings.push(crate::refusal::coded(
+            ROUTING_WARNINGS_MORE,
+            format!("{more} more were left out"),
+        ));
     }
     warnings
 }
