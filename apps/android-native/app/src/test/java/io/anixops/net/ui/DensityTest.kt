@@ -3,6 +3,7 @@ package io.anixops.net.ui
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -68,8 +69,9 @@ class DensityTest {
         assertTrue("${height}dp of content on the first screen of 设置, at most ${limit}dp", height <= limit)
     }
 
+    private val plugins = extensionsState.plugins + (4..8).map { MitmPlugin(id = "p$it", name = "Plugin $it", level = "unsupported") }
+
     private fun showExtensions() {
-        val plugins = extensionsState.plugins + (4..8).map { MitmPlugin(id = "p$it", name = "Plugin $it", level = "unsupported") }
         check(plugins.size == PLUGINS)
         compose.setContent {
             AnixTheme {
@@ -86,14 +88,17 @@ class DensityTest {
 
     private val userItems = hasTestTag(USER_ITEM_TAG) and hasAnyAncestor(hasTestTag(USER_LIST_TAG))
 
+    /** The plugin rows only: the page has other folded lists (the decrypted domains) with items of their own. */
+    private val pluginItems = userItems and plugins.map { hasAnyDescendant(hasText(it.name)) }.reduce { a, b -> a or b }
+
     @Test
     fun longPluginListFoldsAndOpens() {
         showExtensions()
-        val shown = compose.onAllNodes(userItems, useUnmergedTree = true).fetchSemanticsNodes().size
+        val shown = compose.onAllNodes(pluginItems, useUnmergedTree = true).fetchSemanticsNodes().size
         assertTrue("$shown of $PLUGINS plugins shown, at most $MAX_FOLDED_ITEMS before \"show all\"", shown in 1..MAX_FOLDED_ITEMS)
         compose.onNodeWithText(text(R.string.plugins_show_all, PLUGINS)).performClick()
         compose.waitForIdle()
-        compose.onAllNodes(userItems, useUnmergedTree = true).assertCountEquals(PLUGINS)
+        compose.onAllNodes(pluginItems, useUnmergedTree = true).assertCountEquals(PLUGINS)
     }
 
     @Test
