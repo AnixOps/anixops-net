@@ -6,8 +6,8 @@ use super::root_trust;
 use super::runtime_status::{read_runtime_status, WindowsRuntimeStatus};
 use super::startup::{
     desktop_state_path, dns_settings_path, load_desktop_state, my_rules_path, owns_current_proxy,
-    save_desktop_state, DesktopProfileNode, DesktopRoutingMode, DesktopState,
-    DesktopSubscriptionSource,
+    save_desktop_state, set_start_after_login, start_after_login_wanted, startup_repair,
+    DesktopProfileNode, DesktopRoutingMode, DesktopState, DesktopSubscriptionSource, StartupRepair,
 };
 use super::ui_state::ConnectionState;
 use super::{
@@ -38,6 +38,7 @@ use platform_windows::managed::{
 };
 use platform_windows::mitm_security::{
     protect_windows_managed_mitm_private_key, remove_windows_managed_mitm_private_key,
+    windows_managed_mitm_private_key_path,
 };
 use platform_windows::system_integration::{
     current_user_startup_enabled, disable_current_user_startup, enable_current_user_startup,
@@ -501,6 +502,12 @@ struct PreferenceValues {
 pub(super) fn run(debug: bool) -> Result<(), String> {
     let mut desktop = load_desktop_state()?;
     let _ = append_managed_log(APP_LOG_SCOPE, &format!("startup debug={debug}"));
+    // Upgrades from the betas' MSI removed every user's logon task and reset
+    // managed-config.json; both are put back from what the user chose.
+    if reconcile_start_after_login(&mut desktop) {
+        let _ = save_desktop_state(&desktop);
+    }
+    repair_managed_config(&desktop);
     // Saved capture sessions expire after a week even when the engine does not run to delete them.
     capture_sessions::purge_expired();
     desktop_dns::custom::use_file(dns_settings_path());
@@ -2643,6 +2650,103 @@ async fn save_preferences(
     run_blocking(move || save_preferences_blocking(preferences, state)).await
 }
 
+/// Makes the current user's logon task match what they chose: one they
+/// turned on but that is gone (the betas' MSI removed every user's task when
+/// it was upgraded) is registered again. Afterwards `start_after_login`
+/// shows whether the task is there, which the settings page reads. Returns
+/// whether the per-user choices changed and need saving.
+fn reconcile_start_after_login(desktop: &mut DesktopState) -> bool {
+    let (Ok(executable), Some(sid)) = (
+        std::env::current_exe(),
+        windows_data::account::current_user_sid(),
+    ) else {
+        return false;
+    };
+    let before = desktop.start_after_login_users.clone();
+    let wanted = start_after_login_wanted(desktop, &sid);
+    let present = match current_user_startup_enabled(&executable) {
+        Ok(present) => present,
+        Err(error) => {
+            let _ = append_managed_log(
+                APP_LOG_SCOPE,
+                &format!("sign-in startup could not be checked: {}", error.message),
+            );
+            desktop.start_after_login = wanted;
+            return desktop.start_after_login_users != before;
+        }
+    };
+    let present = match startup_repair(wanted, present) {
+        StartupRepair::Keep => present,
+        StartupRepair::Register => match enable_current_user_startup(&executable) {
+            Ok(()) => {
+                let _ = append_managed_log(APP_LOG_SCOPE, "sign-in startup registered again");
+                true
+            }
+            Err(error) => {
+                let _ = append_managed_log(
+                    APP_LOG_SCOPE,
+                    &format!(
+                        "sign-in startup could not be registered again: {}",
+                        error.message
+                    ),
+                );
+                false
+            }
+        },
+    };
+    if present && !wanted {
+        // A task the user has is their choice, whatever the shared file said.
+        set_start_after_login(desktop, Some(&sid), true);
+    }
+    desktop.start_after_login = present;
+    desktop.start_after_login_users != before
+}
+
+/// Whether managed-config.json lost the imported profile's engine block while
+/// the profile itself is still there: the betas' MSI removed the user's
+/// managed-config.json when it was upgraded and put the empty default back.
+fn embedded_block_lost(
+    managed: &WindowsManagedConfig,
+    desktop: &DesktopState,
+    profile_files_present: bool,
+) -> bool {
+    let imported = desktop.profile_source_url.is_some()
+        || desktop.profile_source_path.is_some()
+        || !desktop.profile_node_catalog.is_empty();
+    let running = managed
+        .embedded
+        .as_ref()
+        .is_some_and(|embedded| embedded.enabled);
+    imported && profile_files_present && !running
+}
+
+/// Puts the engine block back into managed-config.json when an upgrade lost
+/// it (see [`embedded_block_lost`]). HTTPS decryption is not turned back on:
+/// nothing else records that it was on, and it is the user's to turn on.
+fn repair_managed_config(desktop: &DesktopState) {
+    let envelope_path = embedded_directory().join("envelope.json");
+    let present = envelope_path.is_file() && embedded_profile_path().is_file();
+    let mut managed = match managed_config_or_default() {
+        Ok(managed) => managed,
+        Err(error) => {
+            let _ = append_managed_log(
+                APP_LOG_SCOPE,
+                &format!("managed configuration could not be read for repair: {error}"),
+            );
+            return;
+        }
+    };
+    if !embedded_block_lost(&managed, desktop, present) {
+        return;
+    }
+    set_embedded_listener(&mut managed, envelope_path, false);
+    let outcome = match write_managed_config(&windows_managed_config_path(), &managed) {
+        Ok(()) => "managed configuration repaired: the imported profile runs again".to_string(),
+        Err(error) => format!("managed configuration repair failed: {error}"),
+    };
+    let _ = append_managed_log(APP_LOG_SCOPE, &outcome);
+}
+
 fn save_preferences_blocking(
     preferences: PreferenceValues,
     state: DesktopAppState,
@@ -2659,7 +2763,11 @@ fn save_preferences_blocking(
         .desktop
         .lock()
         .map_err(|_| "desktop state lock failed")?;
-    desktop.start_after_login = preferences.start_after_login;
+    set_start_after_login(
+        &mut desktop,
+        windows_data::account::current_user_sid().as_deref(),
+        preferences.start_after_login,
+    );
     desktop.auto_connect = preferences.auto_connect;
     desktop.auto_recover_core = preferences.auto_recover_core;
     desktop.auto_subscription_refresh = preferences.auto_subscription_refresh;
@@ -4716,11 +4824,36 @@ async fn import_mitm_root(
     private_key_pem: String,
 ) -> Result<OperationResult, String> {
     run_blocking(move || {
-        desktop_mitm::Root::import(
-            &windows_managed_data_directory().join("mitm"),
-            &certificate_pem,
-            &private_key_pem,
-        )?;
+        let directory = windows_managed_data_directory().join("mitm");
+        // The root being replaced may be trusted by this or another user:
+        // noted, so that removing the client still takes it out of their stores.
+        let replaced = directory.join("root-ca.pem");
+        if replaced.is_file() {
+            match root_trust::thumbprint(&replaced) {
+                Ok(thumbprint) => root_trust::note(&thumbprint),
+                Err(error) => {
+                    let _ = append_managed_log(
+                        APP_LOG_SCOPE,
+                        &format!("the replaced HTTPS decryption root could not be read: {error}"),
+                    );
+                }
+            }
+        }
+        desktop_mitm::Root::import(&directory, &certificate_pem, &private_key_pem)?;
+        // Closed to everyone but this account and the system at once, not only
+        // when decryption is next turned on.
+        let private_key_path = windows_managed_mitm_private_key_path();
+        if let Err(error) = protect_windows_managed_mitm_private_key(&private_key_path) {
+            let _ = append_managed_log(
+                APP_LOG_SCOPE,
+                &format!(
+                    "imported HTTPS decryption key protection failed: {}",
+                    error.message
+                ),
+            );
+            let _ = remove_windows_managed_mitm_private_key(&private_key_path);
+            return Err(error.message);
+        }
         Ok(OperationResult {
             message:
                 "Your root certificate is saved. Turn HTTPS decryption off and on again to use it, \
@@ -4946,6 +5079,50 @@ fn managed_script_runtime_configured() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn default_managed_config() -> WindowsManagedConfig {
+        // As the MSI installs it: every value empty.
+        serde_json::from_str(include_str!(
+            "../../../../installer/windows/default-managed-config.json"
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn an_upgrade_that_reset_the_managed_configuration_is_repaired() {
+        let imported = DesktopState {
+            profile_source_url: Some("https://sub.example/link".to_string()),
+            ..DesktopState::default()
+        };
+        let reset = default_managed_config();
+        assert!(embedded_block_lost(&reset, &imported, true));
+        // A profile imported from a file, or known only by its nodes, counts too.
+        let from_file = DesktopState {
+            profile_source_path: Some(PathBuf::from(r"C:\profiles\nodes.yaml")),
+            ..DesktopState::default()
+        };
+        assert!(embedded_block_lost(&reset, &from_file, true));
+        // Nothing imported, or the profile's files gone: nothing to put back.
+        assert!(!embedded_block_lost(&reset, &DesktopState::default(), true));
+        assert!(!embedded_block_lost(&reset, &imported, false));
+
+        let mut repaired = reset;
+        set_embedded_listener(
+            &mut repaired,
+            PathBuf::from(r"C:\ProgramData\AnixOps\NetworkCore\embedded\envelope.json"),
+            false,
+        );
+        assert!(repaired.validate().is_ok());
+        assert!(!embedded_block_lost(&repaired, &imported, true));
+        let embedded = repaired.embedded.as_ref().unwrap();
+        assert_eq!(embedded.listen_port, EMBEDDED_LISTEN_PORT);
+        assert_eq!(
+            repaired.system_proxy.as_ref().unwrap().server,
+            format!("127.0.0.1:{EMBEDDED_LISTEN_PORT}")
+        );
+        // HTTPS decryption is left for the user to turn on.
+        assert!(repaired.native_mitm.is_none());
+    }
 
     #[test]
     fn trace_gives_the_exit_address_and_country() {

@@ -29,7 +29,10 @@ included in system or cloud backups:
 - Crash reports, with addresses, domains and keys removed. You decide whether to export and send them.
 - A device key per subscription server, used only as described below.
 
-Uninstalling the app deletes this data.
+Uninstalling the app deletes this data. On Windows the client keeps it in a folder for the whole computer
+(`%ProgramData%\AnixOps\NetworkCore`) that only the system and administrators can open, not other users of the
+computer. Uninstalling there removes the HTTPS decryption key and the decryption root from the certificate stores of
+the users signed in at the time; your subscriptions, settings and logs stay in that folder until you delete it.
 
 ### Connections the client makes
 
@@ -90,7 +93,9 @@ Changes to this policy are published in this file, with the history in the publi
 - 崩溃报告（已去掉地址、域名、密钥），是否导出发送由你决定。
 - 每个订阅服务器各一把设备密钥，用途见下文。
 
-卸载应用即删除以上数据。
+卸载应用即删除以上数据。Windows 版把这些数据放在整台电脑共用的目录（`%ProgramData%\AnixOps\NetworkCore`）里，
+只有系统和管理员能打开，本机其他用户不能读取。在 Windows 上卸载会删除 HTTPS 解密私钥，并从卸载时已登录用户的证书存储里
+删除解密根证书；订阅、设置和日志留在该目录里，需要你自己删除。
 
 ### 客户端会发出的连接
 

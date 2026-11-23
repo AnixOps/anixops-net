@@ -163,8 +163,15 @@ pub struct DesktopState {
     pub profile_refresh_error_code: Option<String>,
     #[serde(default)]
     pub profile_last_update_error: Option<String>,
+    /// The current user's "start after sign-in" switch, as their logon task stands. The file is shared by
+    /// every user of the machine while the task is each user's own, so what each one chose is kept in
+    /// `start_after_login_users`; this field only matters for a state saved before that list was kept.
     #[serde(default)]
     pub start_after_login: bool,
+    /// The SIDs of the users who turned on "start after sign-in". The start-up check registers a user's
+    /// logon task again when it is missing (an upgrade from a beta removed every user's task).
+    #[serde(default)]
+    pub start_after_login_users: Vec<String>,
     #[serde(default)]
     pub auto_connect: bool,
     #[serde(default)]
@@ -212,6 +219,50 @@ pub fn save_desktop_state(state: &DesktopState) -> Result<(), String> {
     write_managed_text_atomic(&desktop_state_path(), &content).map_err(|error| error.to_string())
 }
 
+/// Whether the user with `sid` asked for the window to start after they sign in. A state saved before the
+/// choice was kept per user has only the shared switch: the first user to start the window after the upgrade
+/// takes it over, which is why `state` may change.
+pub fn start_after_login_wanted(state: &mut DesktopState, sid: &str) -> bool {
+    if state.start_after_login_users.is_empty() && state.start_after_login {
+        state.start_after_login_users.push(sid.to_string());
+    }
+    state
+        .start_after_login_users
+        .iter()
+        .any(|user| user.eq_ignore_ascii_case(sid))
+}
+
+/// Records the choice of the user with `sid` (`None` when the account is not known: only the switch).
+pub fn set_start_after_login(state: &mut DesktopState, sid: Option<&str>, wanted: bool) {
+    if let Some(sid) = sid {
+        state
+            .start_after_login_users
+            .retain(|user| !user.eq_ignore_ascii_case(sid));
+        if wanted {
+            state.start_after_login_users.push(sid.to_string());
+        }
+    }
+    state.start_after_login = wanted;
+}
+
+/// What the start-up check does about the current user's logon task, from what the user chose and whether
+/// the task is there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StartupRepair {
+    /// Nothing to do.
+    Keep,
+    /// The user chose it but the task is gone: register it again.
+    Register,
+}
+
+pub fn startup_repair(wanted: bool, task_present: bool) -> StartupRepair {
+    if wanted && !task_present {
+        StartupRepair::Register
+    } else {
+        StartupRepair::Keep
+    }
+}
+
 pub fn owns_current_proxy(state: &DesktopState, current: &WindowsProxySettings) -> bool {
     state.proxy_snapshot.is_some()
         && state.applied_proxy.as_ref().is_some_and(|expected| {
@@ -224,6 +275,51 @@ pub fn owns_current_proxy(state: &DesktopState, current: &WindowsProxySettings) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const ALICE: &str = "S-1-5-21-1-2-3-1001";
+    const BOB: &str = "S-1-5-21-1-2-3-1002";
+
+    #[test]
+    fn a_beta_state_gives_start_after_sign_in_to_the_first_user_after_the_upgrade() {
+        let mut state: DesktopState =
+            serde_json::from_str(r#"{"start_after_login":true}"#).unwrap();
+        assert!(state.start_after_login_users.is_empty());
+        assert!(start_after_login_wanted(&mut state, ALICE));
+        assert_eq!(state.start_after_login_users, [ALICE]);
+        // Another user of the same machine never chose it.
+        assert!(!start_after_login_wanted(&mut state, BOB));
+        assert!(start_after_login_wanted(
+            &mut state,
+            &ALICE.to_ascii_lowercase()
+        ));
+    }
+
+    #[test]
+    fn each_user_keeps_their_own_start_after_sign_in_choice() {
+        let mut state = DesktopState::default();
+        assert!(!start_after_login_wanted(&mut state, ALICE));
+        set_start_after_login(&mut state, Some(ALICE), true);
+        set_start_after_login(&mut state, Some(BOB), true);
+        set_start_after_login(&mut state, Some(BOB), false);
+        assert!(start_after_login_wanted(&mut state, ALICE));
+        assert!(!start_after_login_wanted(&mut state, BOB));
+        set_start_after_login(&mut state, Some(ALICE), true);
+        assert_eq!(state.start_after_login_users, [ALICE]);
+        set_start_after_login(&mut state, Some(ALICE), false);
+        // Nobody wants it: an old switch left on does not hand it to the next user.
+        assert!(state.start_after_login_users.is_empty());
+        assert!(!state.start_after_login);
+        assert!(!start_after_login_wanted(&mut state, BOB));
+    }
+
+    #[test]
+    fn a_missing_logon_task_is_registered_again_only_when_chosen() {
+        assert_eq!(startup_repair(true, false), StartupRepair::Register);
+        assert_eq!(startup_repair(true, true), StartupRepair::Keep);
+        assert_eq!(startup_repair(false, false), StartupRepair::Keep);
+        // A task the user has is theirs: the check never removes one.
+        assert_eq!(startup_repair(false, true), StartupRepair::Keep);
+    }
 
     #[test]
     fn old_state_defaults_daily_lifecycle_preferences() {

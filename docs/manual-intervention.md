@@ -99,7 +99,7 @@ GUI 清单改为 `requireAdministrator`，登录后启动从 HKCU Run 改为按�
 
 - [ ] 扩展页开启 HTTPS 解密，连接成功；浏览器访问 HTTPS 站点证书颁发者为 NetworkCore 根证书，插件改写生效。
 - [ ] 已连接时开启/关闭 HTTPS 解密，客户端自动重连，系统代理保持在 127.0.0.1:7890。
-- [ ] 关闭 HTTPS 解密后，「受信任的根证书颁发机构」里的 NetworkCore 根证书被移除。
+- [ ] 关闭 HTTPS 解密后，根证书和私钥保留（再次开启不需要重新信任）；根证书只在卸载时，或用户自己在 `certmgr.msc` 里删除时才移除。
 - [ ] 断开连接后 7890/7891 端口都被释放。
 
 ## Windows TUN 模式真机验收
@@ -294,8 +294,15 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 - [ ] 在 beta.6 上选「Windows 服务」运行方式并连接，然后用 MSI 升级：升级后 `sc query AnixOpsNetworkCore` 报不存在，
   客户端以窗口进程连接，系统代理和 HTTPS 解密正常。
 - [ ] 便携版：旧便携版注册过服务的机器上启动新版，`gui.log` 有删除旧服务的记录，服务不存在，之前由服务设置的系统代理已恢复。
-- [ ] MSI 卸载后根证书（NetworkCore 根证书和 HTTPS 解密根证书）和驱动都被删除；`%ProgramData%\AnixOps\NetworkCore\logs\gui.log`
-  有 `purged` 记录。卸载过程中不弹窗。
+- [ ] MSI 卸载后：卸载时已登录用户自己「受信任的根证书颁发机构」（当前用户）里信任过的 HTTPS 解密根证书被删除，
+  `mitm\root-ca-key.pem` 私钥被删除，设置页安装过的驱动被卸载；`%ProgramData%\AnixOps\NetworkCore\logs\gui.log`
+  有 `purged:` 记录。卸载过程中不弹窗。未登录的用户仍保留根证书，需要自己在 `certmgr.msc` 里删除。
+- [ ] 从 beta.11 用 MSI 升级到 1.0：升级后分组列表和节点仍在、可以直接连接（`gui.log` 有 `--purge skipped`，
+  若托管配置已被旧版重置则有 `managed configuration repaired`）；开过「登录后启动」的用户重新登录后客户端自动启动；
+  信任过的解密根证书仍受信任；HTTPS 解密如之前开着，升级后需要在扩展页重新开启。
+- [ ] 1.0 首次启动后，`icacls C:\ProgramData\AnixOps\NetworkCore` 和其中的 `desktop-state.json`、`embedded\`、
+  `anx-license\` 只有 SYSTEM 和 Administrators；用另一个标准用户执行 `type C:\ProgramData\AnixOps\NetworkCore\desktop-state.json`
+  报拒绝访问。
 
 ## 节点编辑与分享真机验收（T4 / T5）
 

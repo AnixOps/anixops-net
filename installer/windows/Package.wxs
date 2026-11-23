@@ -10,9 +10,33 @@
       InstallerVersion="500"
       Compressed="yes">
     <SummaryInformation Description="AnixOps NetworkCore managed Windows client" />
-    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <!--
+      The earlier version is removed only after this one is installed (afterInstallExecute): files
+      and components that both versions share keep their reference, so managed-config.json, which
+      the client rewrites at runtime, is kept as the user left it. That needs every component to keep
+      its identity (Id, folder, file name, key path) from one version to the next, and every
+      versioned file to carry a higher file version in each release (release.yml stamps the MSI
+      version into the GUI executable and checks it).
+    -->
+    <MajorUpgrade
+        Schedule="afterInstallExecute"
+        DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
     <MediaTemplate EmbedCab="yes" />
     <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+
+    <!--
+      Where an earlier version was installed, so that an upgrade installs over it: with the removal
+      after the installation, a different folder would leave the earlier files behind.
+    -->
+    <Property Id="INSTALLFOLDER" Secure="yes">
+      <RegistrySearch
+          Id="RememberedInstallFolder"
+          Root="HKLM"
+          Key="Software\AnixOps\NetworkCore"
+          Name="InstallFolder"
+          Type="raw"
+          Bitness="always64" />
+    </Property>
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="ManufacturerFolder" Name="AnixOps">
@@ -58,6 +82,16 @@
                 KeyPath="yes" />
           </Component>
 
+          <Component Id="InstallFolderRegistryComponent" Guid="*">
+            <RegistryValue
+                Root="HKLM"
+                Key="Software\AnixOps\NetworkCore"
+                Name="InstallFolder"
+                Type="string"
+                Value="[INSTALLFOLDER]"
+                KeyPath="yes" />
+          </Component>
+
           <Component Id="CliComponent" Guid="*">
             <File
                 Id="CliExe"
@@ -73,6 +107,17 @@
     <StandardDirectory Id="CommonAppDataFolder">
       <Directory Id="ProgramDataManufacturerFolder" Name="AnixOps">
         <Directory Id="MANAGEDDATADIR" Name="NetworkCore">
+          <!--
+            The data folder holds subscriptions, node credentials and keys: only the system and
+            administrators may open it. The client also closes it, and takes back what earlier
+            versions left in it open to all users, each time it starts
+            (crates/windows-data, close_with_contents).
+          -->
+          <Component Id="ManagedDataFolderComponent" Guid="8DA5618D-CE64-4C14-AD11-F06D2F7BB2A5" KeyPath="yes">
+            <CreateFolder>
+              <PermissionEx Sddl="D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)" />
+            </CreateFolder>
+          </Component>
           <Component Id="ManagedConfigurationComponent" Guid="*" NeverOverwrite="yes">
             <File
                 Id="DefaultManagedConfiguration"
@@ -91,6 +136,8 @@
       <ComponentRef Id="CliComponent" />
       <ComponentRef Id="IntegrityListComponent" />
       <ComponentRef Id="ManagedConfigurationComponent" />
+      <ComponentRef Id="ManagedDataFolderComponent" />
+      <ComponentRef Id="InstallFolderRegistryComponent" />
     </Feature>
 
     <CustomAction
@@ -107,15 +154,21 @@
         Execute="deferred"
         Impersonate="no"
         Return="ignore" />
+    <!--
+      Only on a full removal: an upgrade keeps the users' sign-in startup tasks, the decryption roots
+      they trusted and the key. The packages before 1.0 lack the UPGRADINGPRODUCTCODE test; when they
+      are upgraded their actions run this version's program, which tells an upgrade apart itself
+      (main.rs, removal_is_an_upgrade).
+    -->
     <InstallExecuteSequence>
       <Custom
           Action="PurgeManagedNetworkState"
           Before="RemoveFiles"
-          Condition="Installed AND REMOVE=&quot;ALL&quot;" />
+          Condition="Installed AND REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
       <Custom
           Action="CleanupCurrentUserStartup"
           Before="RemoveFiles"
-          Condition="Installed AND REMOVE=&quot;ALL&quot;" />
+          Condition="Installed AND REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
     </InstallExecuteSequence>
   </Package>
 </Wix>

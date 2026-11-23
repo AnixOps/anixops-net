@@ -98,7 +98,9 @@
 
 Windows 只有一种运行方式：内核在客户端窗口进程里运行，关窗口即断开。服务模式（`networkcore-windows-service`）已删除：
 MSI 升级时旧服务随旧版本一起卸载；便携版注册过的服务由客户端下次启动时删除，并恢复它改过的系统代理。卸载时的清理
-（根证书、驱动）改由 `networkcore-windows-gui.exe --purge` 完成。
+（卸载时已登录用户信任过的 HTTPS 解密根证书、它的私钥、设置页安装的驱动）改由 `networkcore-windows-gui.exe --purge` 完成，
+升级时不执行；升级保留托管配置、登录后启动任务和信任过的根证书（`installer/windows/README.md`）。数据目录
+`%ProgramData%\AnixOps\NetworkCore` 只有 SYSTEM 和 Administrators 可以访问。
 
 ## 系统限制
 

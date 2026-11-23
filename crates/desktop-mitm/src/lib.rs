@@ -137,7 +137,24 @@ impl Root {
     }
 }
 
+/// Writes a private key readable only by its owner (mode 0600 on Unix; on Windows its owner, the system and
+/// administrators). It goes to a file beside `path` that is closed before the key is written to it, which
+/// then replaces `path`: the key is never readable by others, not even for a moment, and a failure leaves an
+/// earlier key at `path` as it was.
 fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let name = path
+        .file_name()
+        .ok_or_else(|| format!("{} is not a file", path.display()))?;
+    let temporary = path.with_file_name(format!(".{}.tmp", name.to_string_lossy()));
+    let written = write_closed(&temporary, bytes).and_then(|()| fs::rename(&temporary, path));
+    if written.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    written.map_err(|error| error.to_string())
+}
+
+/// Makes `path` closed to other users and only then writes `bytes` to it.
+fn write_closed(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     let mut options = fs::OpenOptions::new();
     options.write(true).create(true).truncate(true);
     #[cfg(unix)]
@@ -145,10 +162,11 @@ fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    options
-        .open(path)
-        .and_then(|mut file| file.write_all(bytes))
-        .map_err(|error| error.to_string())
+    let mut file = options.open(path)?;
+    #[cfg(windows)]
+    windows_data::private_file::restrict(path)?;
+    file.write_all(bytes)?;
+    file.sync_all()
 }
 
 /// `envelope` with a `mitm` section made of the PEM root, `policy` and the enabled plugins of the library in
@@ -229,6 +247,34 @@ pub fn pem_body(pem: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_private_key_replaces_the_old_one_and_is_closed_to_others() {
+        let directory =
+            std::env::temp_dir().join(format!("desktop-mitm-private-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("root-ca-key.pem");
+        write_private(&path, b"first").unwrap();
+        write_private(&path, b"second").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "second");
+        assert!(!directory.join(".root-ca-key.pem.tmp").exists());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(&path).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
+        #[cfg(windows)]
+        {
+            let described = windows_data::data_dir::describe(&path).unwrap();
+            assert!(described.contains("D:P"), "{described}");
+            for open in [";;;WD)", ";;;BU)", ";;;AU)", ";;;IU)"] {
+                assert!(!described.contains(open), "{described}");
+            }
+        }
+        fs::remove_dir_all(&directory).unwrap();
+    }
 
     #[test]
     fn pem_bodies_are_the_base64_between_the_markers() {

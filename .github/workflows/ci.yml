@@ -431,9 +431,16 @@ jobs:
         shell: bash
         run: cargo test --locked --workspace --all-targets
 
+      # Two builds of the same source for the MSI upgrade test below: the older one with a lower file version,
+      # as release.yml stamps each release's MSI version into the executable (TAURI_CONFIG).
       - name: Build the GUI
         shell: bash
-        run: cargo build --locked -p networkcore-windows-gui
+        run: |
+          set -euo pipefail
+          TAURI_CONFIG='{"version":"0.3.0+1"}' cargo build --locked -p networkcore-windows-gui
+          mkdir -p dist/windows-ci/previous
+          cp target/x86_64-pc-windows-gnu/debug/networkcore-windows-gui.exe dist/windows-ci/previous/
+          TAURI_CONFIG='{"version":"0.3.0+2"}' cargo build --locked -p networkcore-windows-gui
 
       # The MSI also ships the kernel's Windows CLI, built from the pinned kernel checkout with its own lockfile.
       - name: Build the kernel Windows CLI
@@ -471,35 +478,69 @@ jobs:
           }
           $defaultConfig = (Resolve-Path "installer\windows\default-managed-config.json").Path
           $wintunPath = & .github/scripts/fetch-wintun.ps1 -Destination (Join-Path $env:RUNNER_TEMP "wintun")
-          $integrityPath = Join-Path $env:RUNNER_TEMP "integrity\integrity.sha256"
-          & .github/scripts/write-integrity.ps1 -Output $integrityPath -Entry @(
-            "networkcore-windows-gui.exe=$releaseDir\networkcore-windows-gui.exe",
-            "networkcore-windows.exe=$releaseDir\networkcore-windows.exe",
-            "WebView2Loader.dll=$webView2LoaderPath",
-            "wintun.dll=$wintunPath"
-          )
-          wix build installer/windows/Package.wxs `
-            -ext WixToolset.UI.wixext `
-            -arch x64 `
-            -d "ProductVersion=0.2.1" `
-            -d "CliExe=$releaseDir\networkcore-windows.exe" `
-            -d "GuiExe=$releaseDir\networkcore-windows-gui.exe" `
-            -d "WebView2LoaderDll=$webView2LoaderPath" `
-            -d "WintunDll=$wintunPath" `
-            -d "DefaultConfig=$defaultConfig" `
-            -d "IntegrityList=$integrityPath" `
-            -o dist\windows-ci\networkcore-windows-ci.msi
-          wix msi validate dist\windows-ci\networkcore-windows-ci.msi
-          if ((Get-Item dist\windows-ci\networkcore-windows-ci.msi).Length -le 0) {
-            throw "Windows managed client MSI is empty."
+          $currentGui = "$releaseDir\networkcore-windows-gui.exe"
+          $previousGui = (Resolve-Path "dist\windows-ci\previous\networkcore-windows-gui.exe").Path
+          foreach ($gui in @($currentGui, $previousGui)) {
+            $info = (Get-Item $gui).VersionInfo
+            Write-Output "$gui file version $($info.FileMajorPart).$($info.FileMinorPart).$($info.FileBuildPart).$($info.FilePrivatePart)"
+          }
+          if ((Get-Item $currentGui).VersionInfo.FilePrivatePart -le (Get-Item $previousGui).VersionInfo.FilePrivatePart) {
+            throw "The GUI built for the upgrade test does not have a higher file version than the previous one."
           }
 
-      - name: Install and uninstall Windows managed client MSI
+          # The previous package has the uninstall conditions of the packages before 1.0 (no
+          # UPGRADINGPRODUCTCODE test), so the upgrade test also covers upgrading a beta: its actions then
+          # run the new program, which must leave the upgrade alone.
+          $currentWxs = Get-Content installer/windows/Package.wxs -Raw
+          $previousWxs = $currentWxs.Replace(" AND NOT UPGRADINGPRODUCTCODE", "")
+          if ($previousWxs -eq $currentWxs) {
+            throw "Package.wxs no longer has the UPGRADINGPRODUCTCODE conditions the upgrade test removes."
+          }
+          $previousWxsPath = Join-Path (Resolve-Path installer/windows).Path "Package-previous-ci.wxs"
+          Set-Content -Path $previousWxsPath -Value $previousWxs -Encoding utf8
+
+          $packages = @(
+            @{ Source = $previousWxsPath; Version = "0.2.1"; Gui = $previousGui; Name = "networkcore-windows-ci-previous" },
+            @{ Source = "installer/windows/Package.wxs"; Version = "0.2.2"; Gui = $currentGui; Name = "networkcore-windows-ci" }
+          )
+          foreach ($package in $packages) {
+            $integrityPath = Join-Path $env:RUNNER_TEMP "integrity-$($package.Name)\integrity.sha256"
+            & .github/scripts/write-integrity.ps1 -Output $integrityPath -Entry @(
+              "networkcore-windows-gui.exe=$($package.Gui)",
+              "networkcore-windows.exe=$releaseDir\networkcore-windows.exe",
+              "WebView2Loader.dll=$webView2LoaderPath",
+              "wintun.dll=$wintunPath"
+            )
+            $msiPath = "dist\windows-ci\$($package.Name).msi"
+            wix build $package.Source `
+              -ext WixToolset.UI.wixext `
+              -arch x64 `
+              -d "ProductVersion=$($package.Version)" `
+              -d "CliExe=$releaseDir\networkcore-windows.exe" `
+              -d "GuiExe=$($package.Gui)" `
+              -d "WebView2LoaderDll=$webView2LoaderPath" `
+              -d "WintunDll=$wintunPath" `
+              -d "DefaultConfig=$defaultConfig" `
+              -d "IntegrityList=$integrityPath" `
+              -o $msiPath
+            if ($LASTEXITCODE -ne 0) { throw "WiX could not build $msiPath." }
+            wix msi validate $msiPath
+            if ($LASTEXITCODE -ne 0) { throw "$msiPath did not validate." }
+            if ((Get-Item $msiPath).Length -le 0) {
+              throw "Windows managed client MSI $msiPath is empty."
+            }
+          }
+          Remove-Item -Force $previousWxsPath
+
+      - name: Install, upgrade and uninstall Windows managed client MSI
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $msiPath = (Resolve-Path "dist\windows-ci\networkcore-windows-ci.msi").Path
-          $installLog = Join-Path $env:RUNNER_TEMP "networkcore-msi-install.log"
+          $previousMsiPath = (Resolve-Path "dist\windows-ci\networkcore-windows-ci-previous.msi").Path
+          $currentGuiSource = (Resolve-Path "target\x86_64-pc-windows-gnu\debug\networkcore-windows-gui.exe").Path
+          $previousInstallLog = Join-Path $env:RUNNER_TEMP "networkcore-msi-previous-install.log"
+          $upgradeLog = Join-Path $env:RUNNER_TEMP "networkcore-msi-upgrade.log"
           $uninstallLog = Join-Path $env:RUNNER_TEMP "networkcore-msi-uninstall.log"
 
           function Invoke-MsiTransaction {
@@ -525,48 +566,147 @@ jobs:
             }
           }
 
-          Invoke-MsiTransaction `
-            -Arguments @("/i", "`"$msiPath`"", "/qn", "/norestart", "/l*v", "`"$installLog`"") `
-            -LogPath $installLog `
-            -Operation "install"
+          $installDir = Join-Path $env:ProgramFiles "AnixOps\NetworkCore"
+          $guiExe = Join-Path $installDir "networkcore-windows-gui.exe"
+          $dataDir = Join-Path $env:ProgramData "AnixOps\NetworkCore"
+          $managedConfigPath = Join-Path $dataDir "managed-config.json"
+          $guiLog = Join-Path $dataDir "logs\gui.log"
+          $decryptionKey = Join-Path $dataDir "mitm\root-ca-key.pem"
 
+          # The integrity list the client checks at start must match the installed files.
+          function Assert-InstalledIntegrity {
+            $integrityList = Join-Path $installDir "integrity.sha256"
+            if (-not (Test-Path $integrityList -PathType Leaf)) {
+              throw "Windows managed client MSI did not install integrity.sha256."
+            }
+            foreach ($line in Get-Content $integrityList) {
+              if (-not $line.Trim()) { continue }
+              $expected, $name = $line -split "  ", 2
+              $actual = (Get-FileHash -Algorithm SHA256 -Path (Join-Path $installDir $name)).Hash.ToLowerInvariant()
+              if ($actual -ne $expected) {
+                throw "Installed $name does not match integrity.sha256."
+              }
+            }
+          }
+
+          # Sign-in startup is a per-user elevated logon task (the GUI manifest requires
+          # administrator rights, which the Run key silently skips). Seeded the way the GUI
+          # registers it.
+          $startupSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+          $startupTaskName = "AnixOps Net $startupSid"
+          function Register-StartupTask {
+            $startupAction = New-ScheduledTaskAction -Execute $guiExe -Argument "--start-after-login"
+            $startupTrigger = New-ScheduledTaskTrigger -AtLogOn
+            Register-ScheduledTask -TaskPath "\AnixOps\" -TaskName $startupTaskName -Action $startupAction -Trigger $startupTrigger -Force | Out-Null
+          }
+          function Test-StartupTask {
+            $null -ne (Get-ScheduledTask -TaskPath "\AnixOps\" -TaskName $startupTaskName -ErrorAction SilentlyContinue)
+          }
+
+          # --- Upgrade: the previous package (with the uninstall conditions of the betas), then this one.
+          Invoke-MsiTransaction `
+            -Arguments @("/i", "`"$previousMsiPath`"", "/qn", "/norestart", "/l*v", "`"$previousInstallLog`"") `
+            -LogPath $previousInstallLog `
+            -Operation "previous version install"
+
+          if (-not (Test-Path $managedConfigPath -PathType Leaf)) {
+            throw "Windows managed client MSI did not install managed-config.json."
+          }
+          # The data folder holds subscriptions and keys: only the system and administrators may open it.
+          $dataSddl = (Get-Acl -Path $dataDir).Sddl
+          Write-Output "Data folder access: $dataSddl"
+          if ($dataSddl -match ';;;(BU|AU|WD|IU)\)') {
+            throw "The data folder the MSI created is open to ordinary users: $dataSddl"
+          }
+
+          # What the user set up on the previous version: an imported profile in managed-config.json, a
+          # sign-in startup task, an HTTPS decryption root trusted in their own store (copied in through the
+          # registry, which adding through the certificate store would stop to confirm), its key, and a
+          # driver the settings page installed.
+          $userConfig = @'
+          {
+            "schema_version": 2,
+            "system_proxy": { "enabled": true, "server": "127.0.0.1:7890", "bypass": "<local>" },
+            "system_proxy_owner": "desktop",
+            "root_certificate_path": null,
+            "driver_package": null,
+            "native_mitm": null,
+            "embedded": {
+              "enabled": true,
+              "envelope_path": "C:\\ProgramData\\AnixOps\\NetworkCore\\embedded\\envelope.json",
+              "listen_host": "127.0.0.1",
+              "listen_port": 7890
+            }
+          }
+          '@
+          Set-Content -Path $managedConfigPath -Value $userConfig -NoNewline -Encoding utf8
+          $userConfigHash = (Get-FileHash -Algorithm SHA256 -Path $managedConfigPath).Hash
+          Register-StartupTask
+          $seedRoot = New-SelfSignedCertificate -Subject "CN=AnixOps Net CI decryption root" `
+            -CertStoreLocation "Cert:\CurrentUser\My" -KeyUsage CertSign -NotAfter (Get-Date).AddDays(1)
+          $rootThumbprint = $seedRoot.Thumbprint
+          & reg.exe copy "HKCU\Software\Microsoft\SystemCertificates\My\Certificates\$rootThumbprint" `
+            "HKCU\Software\Microsoft\SystemCertificates\Root\Certificates\$rootThumbprint" /s /f | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "The CI decryption root could not be put in the user's root store." }
+          if (-not (Test-Path "Cert:\CurrentUser\Root\$rootThumbprint")) {
+            throw "The CI decryption root is not trusted in the user's root store."
+          }
+          Set-Content -Path (Join-Path $dataDir "trusted-roots.txt") -Value $rootThumbprint -Encoding ascii
+          New-Item -ItemType Directory -Force -Path (Join-Path $dataDir "mitm") | Out-Null
+          Set-Content -Path $decryptionKey -Value "ci placeholder key" -Encoding ascii
+          $missingDriver = Join-Path $env:RUNNER_TEMP "anixops-ci-missing-driver.inf"
+          @{ driver_inf_path = $missingDriver } | ConvertTo-Json | Set-Content -Path (Join-Path $dataDir "desktop-state.json") -Encoding utf8
+
+          Invoke-MsiTransaction `
+            -Arguments @("/i", "`"$msiPath`"", "/qn", "/norestart", "/l*v", "`"$upgradeLog`"") `
+            -LogPath $upgradeLog `
+            -Operation "upgrade"
+
+          if (-not (Test-Path $managedConfigPath -PathType Leaf)) {
+            throw "The MSI upgrade removed managed-config.json."
+          }
+          if ((Get-FileHash -Algorithm SHA256 -Path $managedConfigPath).Hash -ne $userConfigHash) {
+            Get-Content $managedConfigPath
+            throw "The MSI upgrade changed the user's managed-config.json."
+          }
+          if (-not (Test-StartupTask)) {
+            throw "The MSI upgrade removed the sign-in startup task."
+          }
+          if (-not (Test-Path "Cert:\CurrentUser\Root\$rootThumbprint")) {
+            throw "The MSI upgrade removed the trusted HTTPS decryption root."
+          }
+          if (-not (Test-Path $decryptionKey -PathType Leaf)) {
+            throw "The MSI upgrade removed the HTTPS decryption key."
+          }
+          # The previous package's uninstall actions ran the new program, which left the upgrade alone.
+          $logText = if (Test-Path $guiLog) { Get-Content $guiLog -Raw } else { "" }
+          foreach ($action in @("--purge", "--cleanup-startup")) {
+            if (-not $logText.Contains("$action skipped: the package is being upgraded")) {
+              Write-Output $logText
+              throw "The previous package's $action action did not recognise the upgrade."
+            }
+          }
+          if ((Get-FileHash -Algorithm SHA256 -Path $guiExe).Hash -ne (Get-FileHash -Algorithm SHA256 -Path $currentGuiSource).Hash) {
+            throw "The MSI upgrade did not replace the GUI executable with the new version's."
+          }
+          Assert-InstalledIntegrity
+
+          # --- The installed client.
           # The client has no Windows service any more.
           if ($null -ne (Get-Service -Name "AnixOpsNetworkCore" -ErrorAction SilentlyContinue)) {
             throw "Windows managed client MSI registered the removed AnixOpsNetworkCore service."
           }
-
-          $installDir = Join-Path $env:ProgramFiles "AnixOps\NetworkCore"
           if (Test-Path (Join-Path $installDir "networkcore-windows-service.exe")) {
             throw "Windows managed client MSI installed the removed service executable."
-          }
-          $guiExe = Join-Path $env:ProgramFiles "AnixOps\NetworkCore\networkcore-windows-gui.exe"
-          $webView2Loader = Join-Path $env:ProgramFiles "AnixOps\NetworkCore\WebView2Loader.dll"
-          $managedConfigPath = Join-Path $env:ProgramData "AnixOps\NetworkCore\managed-config.json"
-          if (-not (Test-Path $managedConfigPath -PathType Leaf)) {
-            throw "Windows managed client MSI did not install managed-config.json."
           }
           if (-not (Test-Path $guiExe -PathType Leaf)) {
             throw "Windows managed client MSI did not install the GUI executable."
           }
-          if (-not (Test-Path $webView2Loader -PathType Leaf)) {
+          if (-not (Test-Path (Join-Path $installDir "WebView2Loader.dll") -PathType Leaf)) {
             throw "Windows managed client MSI did not install WebView2Loader.dll beside the GUI executable."
           }
-          if (-not (Test-Path (Join-Path $env:ProgramFiles "AnixOps\NetworkCore\wintun.dll") -PathType Leaf)) {
+          if (-not (Test-Path (Join-Path $installDir "wintun.dll") -PathType Leaf)) {
             throw "Windows managed client MSI did not install wintun.dll beside the GUI executable."
-          }
-          # The integrity list the client checks at start must match the installed files.
-          $installDir = Join-Path $env:ProgramFiles "AnixOps\NetworkCore"
-          $integrityList = Join-Path $installDir "integrity.sha256"
-          if (-not (Test-Path $integrityList -PathType Leaf)) {
-            throw "Windows managed client MSI did not install integrity.sha256."
-          }
-          foreach ($line in Get-Content $integrityList) {
-            if (-not $line.Trim()) { continue }
-            $expected, $name = $line -split "  ", 2
-            $actual = (Get-FileHash -Algorithm SHA256 -Path (Join-Path $installDir $name)).Hash.ToLowerInvariant()
-            if ($actual -ne $expected) {
-              throw "Installed $name does not match integrity.sha256."
-            }
           }
 
           # GitHub-hosted Windows runners have no dependable interactive desktop session for
@@ -581,17 +721,10 @@ jobs:
             throw "Windows GUI cleanup entrypoint exited with code $($guiProcess.ExitCode)."
           }
 
-          # Sign-in startup is a per-user elevated logon task (the GUI manifest requires
-          # administrator rights, which the Run key silently skips). Seed one the way the
-          # GUI registers it; the uninstaller, running as LocalSystem, must remove it.
-          $startupSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-          $startupTaskName = "AnixOps Net $startupSid"
-          $startupAction = New-ScheduledTaskAction -Execute $guiExe -Argument "--start-after-login"
-          $startupTrigger = New-ScheduledTaskTrigger -AtLogOn
-          Register-ScheduledTask -TaskPath "\AnixOps\" -TaskName $startupTaskName -Action $startupAction -Trigger $startupTrigger -Force | Out-Null
-
-          # A service an earlier version registered (portable copies did it by hand): the
-          # uninstaller's purge step, run as LocalSystem, must remove it.
+          # --- Removal. The uninstaller, running as LocalSystem, must remove the sign-in task, the
+          # service an earlier version registered (portable copies did it by hand), the decryption
+          # root from the signed-in user's own store and its key, and try the recorded driver.
+          Register-StartupTask
           New-Service -Name "AnixOpsNetworkCore" -BinaryPathName "`"$guiExe`" --legacy-service-placeholder" -StartupType Manual | Out-Null
 
           Invoke-MsiTransaction `
@@ -602,9 +735,21 @@ jobs:
           if ($null -ne (Get-Service -Name "AnixOpsNetworkCore" -ErrorAction SilentlyContinue)) {
             throw "Windows managed client MSI uninstall left the legacy AnixOpsNetworkCore service registered."
           }
-          if ($null -ne (Get-ScheduledTask -TaskPath "\AnixOps\" -TaskName $startupTaskName -ErrorAction SilentlyContinue)) {
+          if (Test-StartupTask) {
             throw "Windows managed client MSI uninstall left the NetworkCore sign-in startup task."
           }
+          if ((Test-Path "Cert:\CurrentUser\Root\$rootThumbprint") -or (Test-Path "Cert:\LocalMachine\Root\$rootThumbprint")) {
+            throw "Windows managed client MSI uninstall left the trusted HTTPS decryption root."
+          }
+          if (Test-Path $decryptionKey) {
+            throw "Windows managed client MSI uninstall left the HTTPS decryption key."
+          }
+          $logText = if (Test-Path $guiLog) { Get-Content $guiLog -Raw } else { "" }
+          if (-not ($logText -match "purged: machine_roots=\d+ drivers=1 user_roots=1")) {
+            Write-Output $logText
+            throw "The uninstall purge did not record the removed root and the recorded driver."
+          }
+          Remove-Item -Path "Cert:\CurrentUser\My\$rootThumbprint" -DeleteKey -ErrorAction SilentlyContinue
 
   swift:
     name: Swift package build, test and manifest validation
