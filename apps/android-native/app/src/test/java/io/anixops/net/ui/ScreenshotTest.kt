@@ -729,7 +729,7 @@ class ScreenshotTest {
             logs = LogsView(
                 modules = listOf("app", "mitm"),
                 shown = listOf(
-                    LogEntry(LOG_TIME + 9_000, "app", "error", "订阅更新失败：HTTP 503（panel.example.com/api/v1/client/subscribe）"),
+                    LogEntry(LOG_TIME + 9_000, "app", "error", "订阅更新失败：HTTP 503（https://panel.example.com）"),
                     LogEntry(LOG_TIME + 6_000, "mitm", "warn", "api.example.com 的证书不受信任，已直连"),
                     LogEntry(LOG_TIME + 3_000, "app", "info", "Connected through 东京 01"),
                     LogEntry(LOG_TIME, "app", "info", "Engine started (rule mode)"),
