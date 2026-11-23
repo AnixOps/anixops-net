@@ -38,6 +38,12 @@ public struct TrafficRedirects: Codable, Equatable {
         public var line: String {
             "\(match),\(target)"
         }
+
+        /// Whether the engine takes the line (`TrafficRedirects.isValidLine`). An entry an earlier version saved
+        /// without checking it fully may not be; it never reaches the tunnel.
+        public var isValid: Bool {
+            TrafficRedirects.isValidLine(line)
+        }
     }
 
     public var entries: [Entry]
@@ -51,9 +57,15 @@ public struct TrafficRedirects: Codable, Equatable {
         entries = try container.decodeIfPresent([Entry].self, forKey: .entries) ?? []
     }
 
-    /// The lines the engine gets: the enabled entries, in order.
+    /// The lines the engine gets: the enabled entries the engine takes, in order. One bad line would make the engine
+    /// refuse the whole config, so an invalid entry (`Entry.isValid`) is left out rather than stopping the tunnel.
     public var lines: [String] {
-        entries.filter(\.enabled).map(\.line)
+        Self.validLines(entries.filter(\.enabled).map(\.line))
+    }
+
+    /// The entries that never reach the tunnel because the engine would refuse them.
+    public var invalidEntries: [Entry] {
+        entries.filter { !$0.isValid }
     }
 
     public var isEmpty: Bool {
@@ -128,24 +140,12 @@ public struct TrafficRedirects: Codable, Equatable {
     /// One condition from the source field.
     static func condition(_ source: String) throws -> String {
         if source.contains(",") {
-            // A whole rule typed by hand; the engine checks the rest when the tunnel starts.
-            let kind = source.split(separator: ",", maxSplits: 1)[0].trimmingCharacters(in: .whitespaces).uppercased()
-            guard ruleTypes.contains(kind), !source.contains("\n") else {
+            // A whole rule typed by hand, checked as the engine parses it (`check(rule:)`): one it would refuse
+            // would stop the tunnel from starting.
+            guard !source.contains(where: \.isNewline) else {
                 throw TrafficRedirectsError.invalidSource
             }
-            if kind == "AND" || kind == "OR" || kind == "NOT" {
-                guard source.filter({ $0 == "(" }).count == source.filter({ $0 == ")" }).count,
-                      source.hasSuffix(")")
-                else {
-                    throw TrafficRedirectsError.invalidSource
-                }
-            } else {
-                // `TYPE,value` only: a third field would be read as the target.
-                let fields = source.split(separator: ",", omittingEmptySubsequences: false)
-                guard fields.count == 2, !fields[1].trimmingCharacters(in: .whitespaces).isEmpty else {
-                    throw TrafficRedirectsError.invalidSource
-                }
-            }
+            try check(rule: source)
             return source
         }
         let parts = source.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
@@ -166,6 +166,216 @@ public struct TrafficRedirects: Codable, Equatable {
             throw TrafficRedirectsError.invalidSource
         }
         return "DOMAIN-SUFFIX,\(domain)"
+    }
+
+    // MARK: - The engine's rule syntax
+
+    /// Most levels of `AND`, `OR` and `NOT` inside each other the engine takes.
+    static let maxLogicalDepth = 8
+
+    static let logicalTypes: Set<String> = ["AND", "OR", "NOT"]
+
+    /// What `PROTOCOL` may name.
+    static let protocols: Set<String> = ["TCP", "UDP", "QUIC", "HTTP", "HTTPS", "STUN", "DOH", "DOQ"]
+
+    /// Whether the engine takes `line` (a rule, then the new destination) as a redirect, as config-core's
+    /// `parse_redirect_line` reads it, limited to the rule types the editor offers (`ruleTypes`, also inside `AND`,
+    /// `OR` and `NOT`): never `GEOIP`, `GEOSITE`, `RULE-SET` or another type that needs data only routing loads.
+    public static func isValidLine(_ line: String) -> Bool {
+        let line = line.trimmingCharacters(in: .whitespaces)
+        guard !line.contains(where: \.isNewline), let comma = line.firstIndex(of: ",") else {
+            return false
+        }
+        let kind = line[..<comma].trimmingCharacters(in: .whitespaces).uppercased()
+        let rest = line[line.index(after: comma)...]
+        do {
+            let target: Substring
+            if logicalTypes.contains(kind) {
+                let (inner, after) = try splitParenthesized(rest)
+                try checkLogical(kind, inner, depth: 1)
+                let tail = after.drop { $0 == " " }
+                guard tail.hasPrefix(",") else {
+                    return false
+                }
+                target = tail.dropFirst()
+            } else {
+                let fields = rest.split(separator: ",", omittingEmptySubsequences: false)
+                guard fields.count == 2 else {
+                    return false
+                }
+                try checkMatcher(kind, fields[0])
+                target = fields[1]
+            }
+            guard !target.contains(","), (try? Self.target(String(target))) != nil else {
+                return false
+            }
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// The lines of `lines` the engine takes (`isValidLine`), at most `maxEntries`, in order.
+    public static func validLines(_ lines: [String]) -> [String] {
+        Array(lines.filter(isValidLine).prefix(maxEntries))
+    }
+
+    /// Throws `invalidSource` unless `rule` (a rule without its target: `TYPE,value` or `AND,((…),(…))`) is one the
+    /// engine takes for a redirect.
+    static func check(rule: String) throws {
+        let rule = rule.trimmingCharacters(in: .whitespaces)
+        guard let comma = rule.firstIndex(of: ",") else {
+            throw TrafficRedirectsError.invalidSource
+        }
+        let kind = rule[..<comma].trimmingCharacters(in: .whitespaces).uppercased()
+        let rest = rule[rule.index(after: comma)...]
+        if logicalTypes.contains(kind) {
+            let (inner, after) = try splitParenthesized(rest)
+            // Anything after the closing parenthesis would be read as the target.
+            guard after.allSatisfy({ $0 == " " }) else {
+                throw TrafficRedirectsError.invalidSource
+            }
+            try checkLogical(kind, inner, depth: 1)
+        } else {
+            // `TYPE,value` only: a third field would be read as the target.
+            guard !rest.contains(",") else {
+                throw TrafficRedirectsError.invalidSource
+            }
+            try checkMatcher(kind, rest)
+        }
+    }
+
+    /// `(inner)rest` split at the parenthesis that closes the first one.
+    static func splitParenthesized(_ text: Substring) throws -> (inner: Substring, after: Substring) {
+        let text = text.drop { $0 == " " }
+        guard text.first == "(" else {
+            throw TrafficRedirectsError.invalidSource
+        }
+        var depth = 0
+        for index in text.indices {
+            switch text[index] {
+            case "(":
+                depth += 1
+            case ")":
+                depth -= 1
+                if depth == 0 {
+                    return (text[text.index(after: text.startIndex)..<index], text[text.index(after: index)...])
+                }
+            default:
+                break
+            }
+        }
+        throw TrafficRedirectsError.invalidSource
+    }
+
+    /// The rules inside a logical rule, `(A,a),(B,b)`: at least one, exactly one for `NOT`, separated by commas.
+    static func checkLogical(_ kind: String, _ inner: Substring, depth: Int) throws {
+        guard depth <= maxLogicalDepth else {
+            throw TrafficRedirectsError.invalidSource
+        }
+        var count = 0
+        var rest = inner.drop { $0 == " " }
+        while !rest.isEmpty {
+            let (item, after) = try splitParenthesized(rest)
+            try checkSubRule(item, depth: depth)
+            count += 1
+            let next = after.drop { $0 == " " }
+            if next.hasPrefix(",") {
+                rest = next.dropFirst().drop { $0 == " " }
+            } else if next.isEmpty {
+                rest = next
+            } else {
+                throw TrafficRedirectsError.invalidSource
+            }
+        }
+        guard count > 0, kind != "NOT" || count == 1 else {
+            throw TrafficRedirectsError.invalidSource
+        }
+    }
+
+    /// One rule inside a logical rule: a type and a value (`no-resolve` may follow), or another logical rule.
+    static func checkSubRule(_ text: Substring, depth: Int) throws {
+        guard let comma = text.firstIndex(of: ",") else {
+            throw TrafficRedirectsError.invalidSource
+        }
+        let kind = text[..<comma].trimmingCharacters(in: .whitespaces).uppercased()
+        let value = text[text.index(after: comma)...]
+        if logicalTypes.contains(kind) {
+            let (inner, after) = try splitParenthesized(value)
+            guard after.allSatisfy({ $0 == " " }) else {
+                throw TrafficRedirectsError.invalidSource
+            }
+            try checkLogical(kind, inner, depth: depth + 1)
+            return
+        }
+        let parts = value.split(separator: ",", omittingEmptySubsequences: false)
+        guard parts.dropFirst().allSatisfy({ $0.trimmingCharacters(in: .whitespaces).lowercased() == "no-resolve" }) else {
+            throw TrafficRedirectsError.invalidSource
+        }
+        try checkMatcher(kind, parts[0])
+    }
+
+    /// The value of one condition, as the engine's `parse_matcher` checks it.
+    static func checkMatcher(_ kind: String, _ raw: Substring) throws {
+        let value = raw.trimmingCharacters(in: .whitespaces)
+        let valid: Bool
+        switch kind {
+        case "DOMAIN", "DOMAIN-KEYWORD":
+            valid = isRuleDomain(value)
+        case "DOMAIN-SUFFIX":
+            valid = isRuleDomain(String(raw.drop { $0 == "." }).trimmingCharacters(in: .whitespaces))
+        case "DOMAIN-WILDCARD":
+            let pattern = normalizedRuleDomain(value)
+            valid = pattern.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "-._*?".contains($0)) }
+                && pattern.contains { $0.isASCII && ($0.isLetter || $0.isNumber) }
+        case "IP-CIDR", "IP-CIDR6":
+            valid = LocalRules.isNetwork(value)
+        case "DST-PORT", "DEST-PORT":
+            valid = isRulePortRange(value)
+        case "PROTOCOL":
+            valid = protocols.contains(value.uppercased())
+        default:
+            // The editor's types only: GEOIP, GEOSITE, RULE-SET and the rest need data only routing loads, or
+            // match nothing a redirect sees.
+            valid = false
+        }
+        guard valid else {
+            throw TrafficRedirectsError.invalidSource
+        }
+    }
+
+    /// The engine's domain value: lower-cased without a trailing dot, ASCII letters, digits and `-._`, not starting
+    /// with a dot and without `..`.
+    static func isRuleDomain(_ value: String) -> Bool {
+        let domain = normalizedRuleDomain(value)
+        return !domain.isEmpty
+            && domain.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "-._".contains($0)) }
+            && !domain.hasPrefix(".")
+            && !domain.contains("..")
+    }
+
+    static func normalizedRuleDomain(_ value: String) -> String {
+        var domain = Substring(value.trimmingCharacters(in: .whitespaces))
+        while domain.hasSuffix(".") {
+            domain = domain.dropLast()
+        }
+        return domain.lowercased()
+    }
+
+    /// A port or an inclusive `start-end` range, as the engine reads it.
+    static func isRulePortRange(_ value: String) -> Bool {
+        let parts = value.split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        guard let start = UInt16(parts[0]) else {
+            return false
+        }
+        guard parts.count == 2 else {
+            return true
+        }
+        guard let end = UInt16(parts[1]) else {
+            return false
+        }
+        return start <= end
     }
 
     /// A normalized target: `host`, `host:port`, `[v6]`, `[v6]:port` or `:port`.

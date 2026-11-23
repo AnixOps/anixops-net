@@ -37,6 +37,16 @@ struct RedirectsView: View {
 
     var body: some View {
         List {
+            // Entries an earlier version saved without checking them fully: the engine would refuse them, so they
+            // never reach the tunnel.
+            if !redirects.invalidEntries.isEmpty {
+                Section {
+                    Text("有 \(redirects.invalidEntries.count) 条重定向内核无法使用，不会生效。请编辑或删除标出的条目。")
+                        .font(.footnote)
+                        .foregroundStyle(brand.warning)
+                        .listRowBackground(brand.surface)
+                }
+            }
             Section {
                 ForEach(redirects.entries) { entry in
                     row(entry)
@@ -89,9 +99,16 @@ struct RedirectsView: View {
                 editing = RedirectEdit(original: entry)
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(verbatim: entry.match)
-                        .font(.footnote.monospaced())
-                        .lineLimit(2)
+                    HStack(spacing: 4) {
+                        if !entry.isValid {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(brand.warning)
+                                .accessibilityLabel(Text("无效，不会生效"))
+                        }
+                        Text(verbatim: entry.match)
+                            .font(.footnote.monospaced())
+                            .lineLimit(2)
+                    }
                     Text(verbatim: "→ \(entry.target)")
                         .font(.footnote.monospaced())
                         .foregroundStyle(brand.text2)

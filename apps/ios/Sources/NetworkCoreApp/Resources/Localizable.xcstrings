@@ -14630,6 +14630,38 @@
           }
         }
       }
+    },
+    "有 %lld 条重定向内核无法使用，不会生效。请编辑或删除标出的条目。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld redirects can't be used by the engine and are not in effect. Edit or delete the marked entries."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有 %lld 條重新導向核心無法使用，不會生效。請編輯或刪除標出的項目。"
+          }
+        }
+      }
+    },
+    "无效，不会生效": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invalid, not in effect"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無效，不會生效"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
