@@ -24,8 +24,9 @@ android {
         // is not above the previous release's, and Google Play refuses a code it has already seen (3001 went to
         // internal testing on 2026-11-16).
         versionCode = 3007
-        // release.yml passes the tag without its "v" (-Panixops.versionName=0.3.0-beta.7); local and CI builds
-        // show the plain version.
+        // release.yml and play-bundle.yml pass the tag without its "v" (-Panixops.versionName=0.3.0-beta.7); local
+        // and CI builds show the plain version. The default is a copy of Cargo.toml's workspace version, kept equal
+        // by .github/scripts/version.py (set it with `version.py set X.Y.Z`).
         versionName = findProperty("anixops.versionName") as String? ?: "0.3.0"
         // arm64 only in the APK; CI's emulator smoke test builds x86_64 instead (-Panixops.abis=x86_64).
         ndk {
@@ -129,27 +130,44 @@ dependencies {
     androidTestImplementation(libs.compose.ui.test.junit4)
 }
 
-/** Packs the user agreement (TERMS.md at the repository root) into the assets, so the app shows the one it was built with. */
-abstract class TermsAsset : DefaultTask() {
+/**
+ * Packs the user agreement and the privacy policy (TERMS.md and PRIVACY.md at the repository root) into the assets, so
+ * the app shows the ones it was built with; with -Panixops.noticesFile (release.yml and play-bundle.yml pass the file
+ * .github/actions/third-party-notices writes) also the third-party notices, as THIRD_PARTY_NOTICES.txt.
+ */
+abstract class DocumentAssets : DefaultTask() {
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.NAME_ONLY)
+    abstract val documents: ConfigurableFileCollection
+
+    @get:Optional
     @get:InputFile
     @get:PathSensitive(PathSensitivity.NONE)
-    abstract val source: RegularFileProperty
+    abstract val notices: RegularFileProperty
 
     @get:OutputDirectory
     abstract val output: DirectoryProperty
 
     @TaskAction
     fun copy() {
-        source.get().asFile.copyTo(output.get().file("TERMS.md").asFile, overwrite = true)
+        val directory = output.get().asFile
+        directory.deleteRecursively()
+        directory.mkdirs()
+        documents.files.forEach { it.copyTo(File(directory, it.name), overwrite = true) }
+        notices.orNull?.asFile?.copyTo(File(directory, "THIRD_PARTY_NOTICES.txt"), overwrite = true)
     }
 }
 
-val termsAsset = tasks.register<TermsAsset>("termsAsset") {
-    source.set(rootProject.layout.projectDirectory.file("../../TERMS.md"))
+val documentAssets = tasks.register<DocumentAssets>("documentAssets") {
+    documents.from(
+        rootProject.layout.projectDirectory.file("../../TERMS.md"),
+        rootProject.layout.projectDirectory.file("../../PRIVACY.md"),
+    )
+    (project.findProperty("anixops.noticesFile") as String?)?.takeIf { it.isNotBlank() }?.let { notices.set(project.file(it)) }
 }
 
 androidComponents {
     onVariants { variant ->
-        variant.sources.assets?.addGeneratedSourceDirectory(termsAsset, TermsAsset::output)
+        variant.sources.assets?.addGeneratedSourceDirectory(documentAssets, DocumentAssets::output)
     }
 }

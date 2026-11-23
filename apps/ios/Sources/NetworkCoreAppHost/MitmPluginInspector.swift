@@ -22,3 +22,20 @@ enum MitmPluginInspector {
         return MitmPluginInspection.decode(Data(bytes: pointer, count: buffer.len))
     }
 }
+
+extension MitmPluginLibrary {
+    /// The saved plugin library with every plugin inspected by the kernel, for views that show which hosts plugins
+    /// decrypt. Plugins saved before the app inspected them are inspected once and saved, as the plugin page
+    /// (`PluginsModel.load`) does, so a view opened before that page counts their hosts as the engine reads them.
+    /// Callers are views on the main thread, as the plugin page is, so reading and saving happen in one step that no
+    /// other change to the file can come in between.
+    static func loadInspected() -> MitmPluginLibrary {
+        guard var library = try? load(from: defaultURL) else {
+            return MitmPluginLibrary()
+        }
+        if library.inspectMissing(MitmPluginInspector.inspect) {
+            try? library.save(to: defaultURL)
+        }
+        return library
+    }
+}

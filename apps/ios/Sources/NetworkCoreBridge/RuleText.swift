@@ -193,6 +193,48 @@ public enum RuleText {
         return tokens
     }
 
+    /// The colored pieces of the lines `range` of `text` covers, at their places in the whole text. The editor colors
+    /// only the lines a keystroke changed instead of the whole text; `range` should start at a line's start, as
+    /// `changedLines(from:to:)` gives it.
+    public static func tokens(in text: String, lines range: NSRange) -> [Token] {
+        let whole = text as NSString
+        let start = min(max(range.location, 0), whole.length)
+        let end = min(max(NSMaxRange(range), start), whole.length)
+        let part = whole.substring(with: NSRange(location: start, length: end - start))
+        return tokens(in: part).map { Token(kind: $0.kind, location: $0.location + start, length: $0.length) }
+    }
+
+    /// The whole lines of `new` that differ from `old`, line breaks included, or nil when nothing changed: the
+    /// characters between the common start and the common end of both, widened to line starts and ends.
+    public static func changedLines(from old: String, to new: String) -> NSRange? {
+        let before = Array(old.utf16)
+        let after = Array(new.utf16)
+        var prefix = 0
+        while prefix < before.count, prefix < after.count, before[prefix] == after[prefix] {
+            prefix += 1
+        }
+        if prefix == before.count, prefix == after.count {
+            return nil
+        }
+        var suffix = 0
+        while suffix < before.count - prefix, suffix < after.count - prefix,
+              before[before.count - 1 - suffix] == after[after.count - 1 - suffix] {
+            suffix += 1
+        }
+        let changed = NSRange(location: prefix, length: after.count - suffix - prefix)
+        return (new as NSString).lineRange(for: changed)
+    }
+
+    /// The unsaved text the editor kept for a scene, when it can be offered again: it was written over `base`, the
+    /// saved rules are still exactly `base` as text, and it differs from them. Nil otherwise, so a draft is never put
+    /// over rules changed since (by the list, a subscription or another window).
+    public static func restorableDraft(_ draft: String, base: String, current: String) -> String? {
+        guard !draft.isEmpty, base == current, draft != current else {
+            return nil
+        }
+        return draft
+    }
+
     // MARK: - Checking
 
     /// Every line that cannot be kept, top to bottom, at most one problem a line.

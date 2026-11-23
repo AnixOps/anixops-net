@@ -219,11 +219,10 @@ private struct PluginRow: View {
     let setEnabled: (Bool) -> Void
 
     var body: some View {
-        let summary = plugin.summary
         Toggle(isOn: Binding(get: { plugin.isEnabled }, set: setEnabled)) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(plugin.name)
-                Text(Self.detail(summary))
+                Text(Self.detail(plugin.counts))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -231,13 +230,26 @@ private struct PluginRow: View {
         }
     }
 
-    private static func detail(_ summary: MitmPluginSummary) -> String {
-        var parts = [String(localized: "\(summary.hostnames.count) 个主机"), String(localized: "\(summary.rewriteLines) 条重写")]
-        if summary.scriptLines > 0 {
-            parts.append(String(localized: "\(summary.scriptLines) 个脚本"))
-        }
-        if summary.ruleLines > 0 {
-            parts.append(String(localized: "\(summary.ruleLines) 条分流规则"))
+    /// Counted as the kernel imports the plugin (any format); plugins not inspected yet are counted by section.
+    private static func detail(_ counts: MitmPluginCounts) -> String {
+        var parts = [String(localized: "\(counts.hostnames) 个主机")]
+        switch counts.source {
+        case let .kernel(applied, unsupported):
+            parts.append(String(localized: "\(applied) 行生效"))
+            if unsupported > 0 {
+                parts.append(String(localized: "\(unsupported) 行不支持"))
+            }
+            if counts.scripts > 0 {
+                parts.append(String(localized: "\(counts.scripts) 个脚本"))
+            }
+        case let .sections(rewrites, rules):
+            parts.append(String(localized: "\(rewrites) 条重写"))
+            if counts.scripts > 0 {
+                parts.append(String(localized: "\(counts.scripts) 个脚本"))
+            }
+            if rules > 0 {
+                parts.append(String(localized: "\(rules) 条分流规则"))
+            }
         }
         return parts.joined(separator: " · ")
     }

@@ -15,7 +15,7 @@ const backends = import.meta.glob(["../../src/gui/**/*.rs", "../../../../crates/
 // The areas result codes are named in; a quoted `<area>.<name>` in the backends is a code (file names aside).
 const areas = [
   "certificate", "connect", "crash_reports", "data_lists", "decrypt", "delay", "devices", "diagnostics", "disconnect",
-  "dns", "driver", "egress", "fastest", "group", "links", "mapping", "mitm", "node", "nodes", "plugins", "preferences",
+  "dns", "driver", "egress", "fastest", "group", "links", "mapping", "metrics", "mitm", "node", "nodes", "plugins", "preferences",
   "profile", "proxy", "quic", "redirects", "restart", "root", "routing", "rules", "script_runtime", "subscription", "tun",
   "validate",
 ];

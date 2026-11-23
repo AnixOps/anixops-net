@@ -334,6 +334,16 @@ fn done(code: &'static str, message: impl Into<String>) -> Result<OperationResul
     Ok(OperationResult::coded(code, message))
 }
 
+/// What saving the DNS settings says first when some of their `RULE-SET` lines name a rule set the profile lacks.
+fn dns_rule_sets_missing(names: &[String]) -> OperationResult {
+    let names = names.join(", ");
+    OperationResult::coded(
+        "dns.rule_sets_missing",
+        format!("The current profile has no rule set named {names}; the lines that use them are left out."),
+    )
+    .with("names", names)
+}
+
 /// The preferences the interface saves; fields Linux does not use are ignored.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -406,6 +416,13 @@ impl Backend {
                 }
             },
         };
+        // Earlier versions saved the download error as reqwest wrote it, with the subscription's full URL and so its
+        // token; it is shortened the way the log shortens links.
+        for source in &mut state.sources {
+            if let Some(error) = source.last_error.as_mut() {
+                *error = app_log::redact(error);
+            }
+        }
         // The cached contents and node edits on disk name the numbers in use, whatever the index says.
         state.reserve_source_numbers(store.highest_source_number());
         desktop_dns::custom::use_file(store.dir().join("dns-settings.json"));
@@ -1168,7 +1185,7 @@ impl Backend {
     ) -> Result<OperationResult, String> {
         if text.fake_ip && !cfg!(target_os = "android") {
             return Err(
-                "Fake-IP needs the packet tunnel; this Linux client uses the system proxy, which already sees domain names"
+                "Fake-IP is not offered on Linux yet: the system proxy already sees domain names, and the TUN mode has no Fake-IP switch yet"
                     .to_string(),
             );
         }
@@ -1185,20 +1202,37 @@ impl Backend {
             }
             Ok(())
         })?;
-        if in_use && self.restart_if_running()? {
-            return done(
+        let missing = self.missing_dns_rule_sets(&settings);
+        let (code, message) = if in_use && self.restart_if_running()? {
+            (
                 "dns.settings_saved_restarted",
                 "DNS settings saved; the engine restarted with them",
-            );
-        }
-        if in_use {
-            done("dns.settings_saved_next", "DNS settings saved")
+            )
+        } else if in_use {
+            ("dns.settings_saved_next", "DNS settings saved")
         } else {
-            done(
+            (
                 "dns.settings_saved_custom",
                 "DNS settings saved; choose Custom to use them",
             )
+        };
+        if missing.is_empty() {
+            return done(code, message);
         }
+        Ok(dns_rule_sets_missing(&missing).followed_by(code, message))
+    }
+
+    /// The `RULE-SET` names of the DNS settings the rule-mode profile does not define: their lines are left out of
+    /// the engine's DNS, which saving says. None in direct mode or debug mode, where no rule set is meant to be.
+    fn missing_dns_rule_sets(&self, settings: &desktop_dns::custom::DnsSettings) -> Vec<String> {
+        if self.state.direct_egress || self.state.routing_mode != RoutingMode::Rule {
+            return Vec::new();
+        }
+        self.envelope_with_rules(&desktop_dns::rules::load_lines(&self.my_rules_path()))
+            .ok()
+            .and_then(|envelope| serde_json::from_str::<Value>(&envelope).ok())
+            .map(|envelope| settings.missing_rule_sets(&envelope))
+            .unwrap_or_default()
     }
 
     /// Whether a connect opens the TUN device first (desktop TUN mode).
@@ -2358,11 +2392,14 @@ impl Backend {
                     source.failures = 0;
                 }
                 Err(error) => {
-                    source.last_error = Some(error.clone());
+                    source.last_error = Some(app_log::redact(error));
                     source.failures = source.failures.saturating_add(1);
                 }
             }
         }
+        // The state is saved before the line is logged, so a log that fails cannot lose the update.
+        let saved = self.save();
+        self.reload_nodes();
         let name = self.source_name(id);
         match &result {
             Ok(count) => self.log(
@@ -2374,8 +2411,6 @@ impl Backend {
                 &format!("subscription {name} update failed: {error}"),
             ),
         }
-        let saved = self.save();
-        self.reload_nodes();
         saved?;
         result.map(|count| {
             OperationResult::coded(
@@ -2795,7 +2830,7 @@ mod tests {
         backend.set_https_decryption(true).unwrap();
         assert!(backend.mitm_root().exists());
         assert!(backend.snapshot().https_decryption_enabled);
-        desktop_mitm::plugins::import(
+        let imported = desktop_mitm::plugins::import(
             &backend.plugins_dir(),
             "https://plugins.example/a.plugin",
             |url, _| {
@@ -2807,6 +2842,10 @@ mod tests {
             },
         )
         .unwrap();
+        // Imported off; nothing of it is in the envelope until the user turns it on after looking at it.
+        assert!(!imported.enabled);
+        assert!(!backend.envelope().unwrap().contains("script_assets"));
+        desktop_mitm::plugins::set_enabled(&backend.plugins_dir(), &imported.id, true).unwrap();
         let changed = backend.plugins_changed().unwrap();
         assert_eq!(changed.code, Some("plugins.applied_next"));
         assert_eq!(changed.message, "it applies with the next connection");
@@ -3239,6 +3278,43 @@ rules:
         assert_eq!(logs[1].level, LogLevel::Error);
         assert!(!logs[1].message.contains("token"));
         assert!(backend.logs(true).unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_token_in_the_path_stays_out_of_the_log_the_state_and_the_notice() {
+        let (mut backend, dir) = backend("logs-path-token");
+        backend
+            .import("https://a.example/link/SECRET?sub=3", LINK)
+            .unwrap();
+        let id = backend.state.sources[0].id.clone();
+        let error =
+            "error sending request for url (https://a.example/link/SECRET?sub=3)".to_string();
+        let _ = backend.finish_refresh(&id, Err(error.clone()));
+        let logs = backend.logs(false).unwrap();
+        assert!(logs.iter().all(|entry| !entry.message.contains("SECRET")));
+        let summary = &backend.subscriptions()[0];
+        assert!(!summary
+            .last_update_error
+            .as_deref()
+            .unwrap()
+            .contains("SECRET"));
+        let notice = backend.subscription_failed_notice(&id, &error).unwrap();
+        assert!(!notice.body.contains("SECRET"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_name_with_a_link_after_chinese_text_updates_and_logs() {
+        let (mut backend, dir) = backend("logs-multibyte");
+        backend.import("https://a.example/sub", LINK).unwrap();
+        let id = backend.state.sources[0].id.clone();
+        backend.state.sources[0].name = Some("XX加速｜官网：https://xx.com".to_string());
+        assert!(backend.finish_refresh(&id, Ok(LINK.to_string())).is_ok());
+        let logs = backend.logs(false).unwrap();
+        assert!(logs
+            .iter()
+            .any(|entry| entry.message.contains("官网：https://xx.com updated")));
         let _ = std::fs::remove_dir_all(dir);
     }
 

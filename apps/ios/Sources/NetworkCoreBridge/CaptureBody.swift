@@ -87,7 +87,9 @@ public enum CaptureBody {
         // Plenty of servers send JSON as text/plain, so the text decides as well as the header.
         let start = text.unicodeScalars.first { !CharacterSet.whitespacesAndNewlines.contains($0) && $0 != "\u{FEFF}" }
         let openers: [Unicode.Scalar] = ["{", "["]
-        if media.contains("json") || start.map(openers.contains) == true {
+        // A body cut short is not whole JSON, so it is not parsed: building most of a large tree only to fail at its
+        // end costs the inspector a second for nothing.
+        if !cut, media.contains("json") || start.map(openers.contains) == true {
             if let node = JsonDocument.parse(text) {
                 return .json(node)
             }
@@ -174,5 +176,55 @@ public enum CaptureBody {
                 millis: span.end == nil ? nil : Int((length * 1000).rounded())
             )
         }
+    }
+}
+
+/// Long text cut into pieces a lazy list lays out one at a time, for the inspector's code views: one SwiftUI Text
+/// holding a whole formatted body is laid out at once, on the main thread. Lines are kept together up to
+/// `width` characters a piece; a longer line (minified JSON, a token) is split every `width` characters. Only the
+/// first `limit` characters are kept.
+public struct CodeTextChunks: Equatable, Sendable {
+    public static let maxCharacters = 200_000
+    public static let chunkCharacters = 2_000
+
+    public let chunks: [String]
+    /// The text was longer than the limit and only its start is in `chunks`.
+    public let cut: Bool
+
+    public init(_ text: String, limit: Int = CodeTextChunks.maxCharacters, width: Int = CodeTextChunks.chunkCharacters) {
+        let width = max(width, 1)
+        let end = text.index(text.startIndex, offsetBy: max(limit, 0), limitedBy: text.endIndex)
+        let shown = end.map { text[..<$0] } ?? text[...]
+        cut = end.map { $0 < text.endIndex } ?? false
+        var chunks: [String] = []
+        var current = ""
+        var count = 0
+        var started = false
+        for line in shown.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline) {
+            var rest = line
+            repeat {
+                let stop = rest.index(rest.startIndex, offsetBy: width, limitedBy: rest.endIndex) ?? rest.endIndex
+                let piece = rest[..<stop]
+                let length = piece.count
+                if started, count + 1 + length > width {
+                    chunks.append(current)
+                    current = ""
+                    count = 0
+                    started = false
+                }
+                if started {
+                    current += "\n"
+                    count += 1
+                }
+                current += piece
+                count += length
+                started = true
+                rest = rest[stop...]
+            } while !rest.isEmpty
+        }
+        if started || chunks.isEmpty {
+            chunks.append(current)
+        }
+        self.chunks = chunks
     }
 }

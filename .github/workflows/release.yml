@@ -44,7 +44,7 @@ jobs:
       release_kind: ${{ steps.policy.outputs.release_kind }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The Android versionCode check reads build.gradle.kts at the previous release tag.
           fetch-depth: 0
@@ -133,6 +133,31 @@ jobs:
             echo "| Release kind | ${release_kind} |"
           } >> "${GITHUB_STEP_SUMMARY}"
 
+      # Every artifact takes its version from the source (Cargo.toml's workspace version and its checked copies,
+      # .github/scripts/version.py), so the tag must be that version (plus a prerelease suffix): otherwise a v1.0.0
+      # release would ship clients that call themselves 0.3.0.
+      - name: Tag matches the source version
+        shell: bash
+        env:
+          VERSION: ${{ steps.policy.outputs.version }}
+        run: python3 -I .github/scripts/version.py check --tag "${VERSION}"
+
+      # The pinned Android release certificate is checked before anything is built: sign-android refuses a tag
+      # release without it, after the 90-minute build. It is public (Play Console → App signing), so it is a
+      # repository variable, never a secret (a job output that contains a secret's value is dropped).
+      - name: Android release certificate is pinned
+        if: ${{ steps.policy.outputs.is_tag_release == 'true' }}
+        shell: bash
+        env:
+          EXPECTED_CERT: ${{ vars.ANDROID_RELEASE_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          normalized="$(printf '%s' "${EXPECTED_CERT}" | tr -d ': ' | tr 'A-F' 'a-f')"
+          if [[ ! "${normalized}" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Repository variable ANDROID_RELEASE_CERT_SHA256 must hold the SHA-256 of the Android app signing certificate (docs/manual-intervention.md, 安卓正式签名密钥)."
+            exit 1
+          fi
+
       # Checked before anything is built, so a release never goes out without notes or with an Android versionCode
       # that cannot install over the previous release.
       - name: Release notes and Android versionCode
@@ -201,7 +226,7 @@ jobs:
       ci_checked_at: ${{ steps.validate.outputs.ci_checked_at }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Validate same-commit CI success
         id: validate
@@ -305,6 +330,33 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
 
 
+  # THIRD_PARTY_NOTICES.txt for every artifact, from the package managers' metadata (.github/actions/
+  # third-party-notices). Each package job ships the file for its platform and checks it is inside the package.
+  third-party-notices:
+    name: Third-party notices
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs:
+      - release-policy
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Write the notices
+        uses: ./.github/actions/third-party-notices
+        with:
+          output-dir: ${{ runner.temp }}/notices
+
+      - name: Upload the notices
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: third-party-notices-${{ needs.release-policy.outputs.version }}
+          path: ${{ runner.temp }}/notices/*/THIRD_PARTY_NOTICES.txt
+          if-no-files-found: error
+          retention-days: 14
+
   package-linux-gui:
     name: Package Linux desktop client
     runs-on: ubuntu-latest
@@ -312,6 +364,7 @@ jobs:
     needs:
       - release-policy
       - release-ci-gate
+      - third-party-notices
     permissions:
       contents: read
     outputs:
@@ -324,7 +377,7 @@ jobs:
       deb_manifest_name: ${{ steps.package.outputs.deb_manifest_name }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Tauri on Linux renders through WebKitGTK.
       - name: Install WebKitGTK
@@ -333,16 +386,22 @@ jobs:
           bash .github/scripts/apt-install.sh libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: 9
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
           cache-dependency-path: apps/windows-gui/ui/pnpm-lock.yaml
+
+      - name: Download the third-party notices
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: third-party-notices-${{ needs.release-policy.outputs.version }}
+          path: ${{ runner.temp }}/notices
 
       # The Linux window shares the Windows React interface.
       - name: Build the shared interface
@@ -363,6 +422,7 @@ jobs:
           RELEASE_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           RELEASE_SHA: ${{ github.sha }}
           SOURCE_REF: ${{ github.ref }}
+          NOTICES: ${{ runner.temp }}/notices/desktop/THIRD_PARTY_NOTICES.txt
         run: |
           set -euo pipefail
           checkout_sha="$(git rev-parse HEAD)"
@@ -370,6 +430,7 @@ jobs:
             echo "::error::Checkout SHA ${checkout_sha} does not match release SHA ${RELEASE_SHA}."
             exit 1
           fi
+          test -s "${NOTICES}"
 
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile "${RUST_PROFILE}"
           rustup default "${RUST_TOOLCHAIN}"
@@ -406,6 +467,7 @@ jobs:
           install -m 0644 apps/linux-gui/icons/networkcore.png "${staging}/share/icons/hicolor/256x256/apps/anixops-net.png"
           desktop_entry anixops-net > "${staging}/share/applications/anixops-net.desktop"
           install -m 0644 LICENSE "${staging}/LICENSE"
+          install -m 0644 "${NOTICES}" "${staging}/THIRD_PARTY_NOTICES.txt"
           # Install integrity list the client checks at start (crates/client-health): paths beside bin/anixops-net.
           mkdir -p "${staging}/share/anixops-net"
           (cd "${staging}/bin" && sha256sum anixops-net) > "${staging}/share/anixops-net/integrity.sha256"
@@ -430,7 +492,10 @@ jobs:
           share/polkit-1/actions/io.anixops.net.tun.policy so the prompt names the app.
 
           Uninstall: quit the app, delete this directory and ~/.config/autostart/anixops-net.desktop if
-          you enabled start after login. Rollback: run the previous version's extracted directory.
+          you enabled start after login. Your subscriptions, settings and logs stay in
+          \$XDG_CONFIG_HOME/anixops-net (usually ~/.config/anixops-net), also after removing the .deb;
+          delete that directory to remove them (PRIVACY.md). Rollback: run the previous version's
+          extracted directory.
           EOF
           archive_name="${stem}.tar.gz"
           tar -czf "${output_dir}/${archive_name}" -C "${dist_dir}/staging" "${stem}"
@@ -444,7 +509,25 @@ jobs:
           install -m 0755 "${binary_path}" "${deb_root}/usr/bin/anixops-net"
           install -m 0644 apps/linux-gui/icons/networkcore.png "${deb_root}/usr/share/icons/hicolor/256x256/apps/anixops-net.png"
           desktop_entry /usr/bin/anixops-net > "${deb_root}/usr/share/applications/anixops-net.desktop"
-          install -m 0644 LICENSE "${deb_root}/usr/share/doc/anixops-net/copyright"
+          # Debian copyright file (DEP-5): the client's own license, and where the third-party notices are.
+          install -m 0644 "${NOTICES}" "${deb_root}/usr/share/doc/anixops-net/THIRD_PARTY_NOTICES.txt"
+          {
+            echo "Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/"
+            echo "Upstream-Name: AnixOps Net"
+            echo "Upstream-Contact: contact@anixops.com"
+            echo "Source: https://github.com/AnixOps/anixops-net"
+            echo
+            echo "Files: *"
+            echo "Copyright: AnixOps"
+            echo "License: Apache-2.0"
+            echo "Comment: The binary also contains third-party software under its own licenses (MIT, BSD, ISC,"
+            echo " Apache-2.0, MPL-2.0 and others). Their copyright notices and license texts, and where the source"
+            echo " of the MPL-2.0 components is, are in /usr/share/doc/anixops-net/THIRD_PARTY_NOTICES.txt."
+            echo
+            echo "License: Apache-2.0"
+            sed -e 's/^[[:space:]]*$/./' -e 's/^/ /' LICENSE
+          } > "${deb_root}/usr/share/doc/anixops-net/copyright"
+          chmod 0644 "${deb_root}/usr/share/doc/anixops-net/copyright"
           mkdir -p "${deb_root}/usr/share/anixops-net"
           (cd "${deb_root}/usr/bin" && sha256sum anixops-net) > "${deb_root}/usr/share/anixops-net/integrity.sha256"
           # TUN mode: pkexec runs /usr/bin/anixops-net --tun-helper under this action (tun_helper.rs).
@@ -470,6 +553,19 @@ jobs:
           deb_name="anixops-net_${deb_version}_amd64.deb"
           dpkg-deb --root-owner-group --build "${deb_root}" "${output_dir}/${deb_name}"
           dpkg-deb --info "${output_dir}/${deb_name}" >/dev/null
+          # Both packages carry the license notices.
+          for notice in ./usr/share/doc/anixops-net/copyright ./usr/share/doc/anixops-net/THIRD_PARTY_NOTICES.txt; do
+            if ! dpkg-deb -c "${output_dir}/${deb_name}" | awk '{ print $NF }' | grep -qxF "${notice}"; then
+              echo "::error::${deb_name} lacks ${notice}"
+              exit 1
+            fi
+          done
+          for notice in LICENSE THIRD_PARTY_NOTICES.txt; do
+            if ! tar -tzf "${output_dir}/${archive_name}" | grep -qxF "${stem}/${notice}"; then
+              echo "::error::${archive_name} lacks ${stem}/${notice}"
+              exit 1
+            fi
+          done
 
           manifest() {
             local file="$1" kind="$2" format="$3" checksum="$4"
@@ -556,7 +652,7 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload Linux desktop release bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ steps.package.outputs.bundle_name }}
           path: ${{ steps.package.outputs.output_dir }}/*
@@ -570,6 +666,7 @@ jobs:
     needs:
       - release-policy
       - release-ci-gate
+      - third-party-notices
     permissions:
       contents: read
     outputs:
@@ -594,20 +691,26 @@ jobs:
       output_dir: ${{ steps.package.outputs.output_dir }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download the third-party notices
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: third-party-notices-${{ needs.release-policy.outputs.version }}
+          path: ${{ runner.temp }}/notices
 
       - name: Setup pnpm for Windows GUI assets
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: 9.15.4
 
       - name: Setup Node for Windows GUI assets
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
 
       - name: Setup Windows C toolchain
-        uses: msys2/setup-msys2@v2
+        uses: msys2/setup-msys2@3c51bf698df1e37b2261f53cb67797b97761185c # v2.34.0
         id: msys2
         with:
           msystem: MINGW64
@@ -656,8 +759,14 @@ jobs:
           RELEASE_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           RELEASE_SHA: ${{ github.sha }}
           SOURCE_REF: ${{ github.ref }}
+          NOTICES: ${{ runner.temp }}/notices/desktop/THIRD_PARTY_NOTICES.txt
         run: |
           $ErrorActionPreference = "Stop"
+          if (-not (Test-Path $env:NOTICES -PathType Leaf) -or (Get-Item $env:NOTICES).Length -le 0) {
+            throw "The third-party notices are missing: $env:NOTICES"
+          }
+          $noticesPath = (Resolve-Path $env:NOTICES).Path
+          $licensePath = (Resolve-Path LICENSE).Path
           pnpm --dir apps/windows-gui/ui install --frozen-lockfile
           pnpm --dir apps/windows-gui/ui run build
           $checkoutSha = (git rev-parse HEAD).Trim()
@@ -806,6 +915,7 @@ jobs:
           Remove-Item -Recurse -Force $distDir -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
           $wintunPath = & .github/scripts/fetch-wintun.ps1 -Destination (Join-Path $env:RUNNER_TEMP "wintun")
+          $wintunLicensePath = Join-Path (Split-Path $wintunPath) "wintun-LICENSE.txt"
           # Install integrity list the client checks at start (crates/client-health), in the MSI and the ZIP.
           $integrityPath = Join-Path $distDir "integrity\integrity.sha256"
           & .github/scripts/write-integrity.ps1 -Output $integrityPath -Entry @(
@@ -826,8 +936,22 @@ jobs:
             -d "WintunDll=$wintunPath" `
             -d "DefaultConfig=$defaultConfigPath" `
             -d "IntegrityList=$integrityPath" `
+            -d "LicenseFile=$licensePath" `
+            -d "NoticesFile=$noticesPath" `
+            -d "WintunLicense=$wintunLicensePath" `
             -o $archivePath
           wix msi validate $archivePath
+          # The MSI carries the license notices: an administrative image lists the files it installs.
+          $msiImage = Join-Path $env:RUNNER_TEMP "msi-image"
+          Remove-Item -Recurse -Force $msiImage -ErrorAction SilentlyContinue
+          $adminInstall = Start-Process -FilePath msiexec.exe -Wait -PassThru `
+            -ArgumentList @("/a", "`"$archivePath`"", "/qn", "TARGETDIR=`"$msiImage`"")
+          if ($adminInstall.ExitCode -ne 0) { throw "Administrative image of the MSI failed ($($adminInstall.ExitCode))." }
+          foreach ($notice in @("LICENSE.txt", "THIRD_PARTY_NOTICES.txt", "wintun-LICENSE.txt")) {
+            $found = @(Get-ChildItem -Path $msiImage -Recurse -Filter $notice | Where-Object { $_.Length -gt 0 })
+            if ($found.Count -ne 1) { throw "The MSI does not install $notice." }
+          }
+          Remove-Item -Recurse -Force $msiImage
           # WiX emits a .wixpdb beside the MSI; it is a build symbol, not a release asset.
           $wixPdbPath = [System.IO.Path]::ChangeExtension($archivePath, ".wixpdb")
           Remove-Item -Force $wixPdbPath -ErrorAction SilentlyContinue
@@ -838,7 +962,9 @@ jobs:
           Copy-Item -Path $linkPath -Destination (Join-Path $portableStageDir "anixops-net-link.exe")
           Copy-Item -Path $webView2LoaderPath -Destination (Join-Path $portableStageDir "WebView2Loader.dll")
           Copy-Item -Path $wintunPath -Destination (Join-Path $portableStageDir "wintun.dll")
-          Copy-Item -Path (Join-Path (Split-Path $wintunPath) "wintun-LICENSE.txt") -Destination (Join-Path $portableStageDir "wintun-LICENSE.txt")
+          Copy-Item -Path $wintunLicensePath -Destination (Join-Path $portableStageDir "wintun-LICENSE.txt")
+          Copy-Item -Path $licensePath -Destination (Join-Path $portableStageDir "LICENSE.txt")
+          Copy-Item -Path $noticesPath -Destination (Join-Path $portableStageDir "THIRD_PARTY_NOTICES.txt")
           Copy-Item -Path $defaultConfigPath -Destination (Join-Path $portableStageDir "managed-config.json")
           Copy-Item -Path $portableReadmePath -Destination (Join-Path $portableStageDir "README.txt")
           Copy-Item -Path $integrityPath -Destination (Join-Path $portableStageDir "integrity.sha256")
@@ -851,6 +977,12 @@ jobs:
           }
           if ((Get-Item $portableLoaderPath).Length -le 0) {
             throw "Portable ZIP contains an empty WebView2Loader.dll."
+          }
+          foreach ($notice in @("LICENSE.txt", "THIRD_PARTY_NOTICES.txt", "wintun-LICENSE.txt")) {
+            $noticeFile = Join-Path $portableInspectionDir "$portableStem\$notice"
+            if (-not (Test-Path $noticeFile -PathType Leaf) -or (Get-Item $noticeFile).Length -le 0) {
+              throw "Portable ZIP does not contain $notice."
+            }
           }
 
           $checksumValue = (Get-FileHash -Algorithm SHA256 -Path $archivePath).Hash.ToLowerInvariant()
@@ -891,7 +1023,10 @@ jobs:
               [ordered]@{ path = "wintun.dll"; kind = "runtime"; required = $true; source = "wintun.net/builds/wintun-0.14.1.zip:bin/amd64" },
               [ordered]@{ path = "networkcore-windows.exe"; kind = "binary"; required = $true; source = "AnixOps/networkcore_anixops:apps/windows-cli" },
               [ordered]@{ path = "managed-config.json"; kind = "configuration"; required = $true; source = "installer/windows/default-managed-config.json" },
-              [ordered]@{ path = "integrity.sha256"; kind = "integrity"; required = $true; source = ".github/scripts/write-integrity.ps1" }
+              [ordered]@{ path = "integrity.sha256"; kind = "integrity"; required = $true; source = ".github/scripts/write-integrity.ps1" },
+              [ordered]@{ path = "LICENSE.txt"; kind = "documentation"; required = $true; source = "LICENSE" },
+              [ordered]@{ path = "THIRD_PARTY_NOTICES.txt"; kind = "documentation"; required = $true; source = ".github/actions/third-party-notices" },
+              [ordered]@{ path = "wintun-LICENSE.txt"; kind = "documentation"; required = $true; source = "wintun.net/builds/wintun-0.14.1.zip:LICENSE.txt" }
             )
             install_model = "wix-per-machine-msi"
             system_mutation_policy = "managed-apply-and-rollback"
@@ -968,6 +1103,8 @@ jobs:
               [ordered]@{ path = "$portableStem/networkcore-windows.exe"; kind = "binary"; required = $true; source = "AnixOps/networkcore_anixops:apps/windows-cli" },
               [ordered]@{ path = "$portableStem/managed-config.json"; kind = "configuration"; required = $true; source = "installer/windows/default-managed-config.json" },
               [ordered]@{ path = "$portableStem/README.txt"; kind = "documentation"; required = $true; source = "installer/windows/PORTABLE-README.txt" },
+              [ordered]@{ path = "$portableStem/LICENSE.txt"; kind = "documentation"; required = $true; source = "LICENSE" },
+              [ordered]@{ path = "$portableStem/THIRD_PARTY_NOTICES.txt"; kind = "documentation"; required = $true; source = ".github/actions/third-party-notices" },
               [ordered]@{ path = "$portableStem/integrity.sha256"; kind = "integrity"; required = $true; source = ".github/scripts/write-integrity.ps1" }
             )
             install_model = "manual-extract"
@@ -1078,7 +1215,7 @@ jobs:
           ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
       - name: Upload Windows release bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ steps.package.outputs.bundle_name }}
           path: |
@@ -1108,7 +1245,7 @@ jobs:
       attestation_status: ${{ steps.attestation-output.outputs.attestation_status }}
     steps:
       - name: Download Linux desktop release bundle
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: ${{ needs.package-linux-gui.outputs.bundle_name }}
           path: dist/linux-gui-attestation
@@ -1124,7 +1261,7 @@ jobs:
           )
 
       - name: Generate Linux desktop artifact attestation
-        uses: actions/attest@v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: dist/linux-gui-attestation/*
 
@@ -1149,7 +1286,7 @@ jobs:
       provenance_file: ${{ steps.attestation-output.outputs.provenance_file }}
     steps:
       - name: Download Windows release bundle
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: ${{ needs.package-windows.outputs.bundle_name }}
           path: dist/windows-attestation
@@ -1189,7 +1326,7 @@ jobs:
           )
 
       - name: Generate Windows artifact attestation
-        uses: actions/attest@v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: |
             dist/windows-attestation/${{ needs.package-windows.outputs.artifact_name }}
@@ -1210,28 +1347,31 @@ jobs:
           echo "provenance_file=github-artifact-attestation" >> "${GITHUB_OUTPUT}"
           echo "windows-package-artifact-attestation-execution-status=attested"
 
-  # Android APK (arm64), built by the same composite action as ci.yml. Signed with the ANDROID_KEYSTORE_*
-  # secrets when they are set; until then with a throwaway key per build, and the release notes say that
-  # upgrading needs the old version uninstalled first.
+  # Android APK (arm64), built by the same composite action as ci.yml, in two jobs so that the release signing key
+  # never shares a job with Gradle, the Rust build or a third-party action:
+  # - package-android builds the APK without any secret and hands it over unsigned, with its SHA-256;
+  # - sign-android enters the android-release environment (only on a tag release: required reviewer, v* tags only,
+  #   the only place the ANDROID_KEYSTORE_* secrets live), checks the APK against that SHA-256 and signs it with
+  #   the plain-shell sign-apk action. A tag release fails instead of falling back to a throwaway key, and the
+  #   signing certificate must be the one pinned in the ANDROID_RELEASE_CERT_SHA256 variable.
+  # A run from main (build check only) does not enter the environment and signs with a throwaway key.
+  # docs/manual-intervention.md, 安卓正式签名密钥.
   package-android:
     name: Package Android APK
     runs-on: ubuntu-latest
     timeout-minutes: 90
     needs:
       - release-policy
+      - third-party-notices
     permissions:
       contents: read
-      id-token: write
-      attestations: write
     env:
       CARGO_INCREMENTAL: "0"
     outputs:
-      # No artifact or APK name here: GitHub drops a job output that contains a secret's value, and the key alias
-      # secret ("anixops") is part of every name. Publish GitHub Release derives both names from the version.
-      signing_kind: ${{ steps.apk.outputs.kind }}
+      unsigned_sha256: ${{ steps.stage.outputs.sha256 }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Android versionName
         id: version-name
@@ -1240,15 +1380,135 @@ jobs:
           VERSION: ${{ needs.release-policy.outputs.version }}
         run: echo "name=${VERSION#v}" >> "${GITHUB_OUTPUT}"
 
-      - name: Build and sign the APK
+      - name: Download the third-party notices
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: third-party-notices-${{ needs.release-policy.outputs.version }}
+          path: ${{ runner.temp }}/notices
+
+      - name: Build the unsigned APK
         id: apk
         uses: ./.github/actions/android-apk
         with:
+          sign: "false"
+          version-name: ${{ steps.version-name.outputs.name }}
+          notices-file: ${{ runner.temp }}/notices/android/THIRD_PARTY_NOTICES.txt
+
+      - name: Stage the unsigned APK
+        id: stage
+        shell: bash
+        env:
+          APK: ${{ steps.apk.outputs.apk }}
+          KIND: ${{ steps.apk.outputs.kind }}
+        run: |
+          set -euo pipefail
+          test "${KIND}" = unsigned
+          # The user agreement, the privacy policy and the third-party notices are inside the APK.
+          for asset in assets/TERMS.md assets/PRIVACY.md assets/THIRD_PARTY_NOTICES.txt; do
+            if ! unzip -Z1 "${APK}" | grep -qxF "${asset}"; then
+              echo "::error::The APK lacks ${asset}"
+              exit 1
+            fi
+          done
+          mkdir -p dist/android-unsigned
+          cp "${APK}" dist/android-unsigned/app-release-unsigned.apk
+          sha="$(sha256sum dist/android-unsigned/app-release-unsigned.apk | cut -d' ' -f1)"
+          echo "sha256=${sha}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload the unsigned APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: android-unsigned-${{ needs.release-policy.outputs.version }}
+          path: dist/android-unsigned/app-release-unsigned.apk
+          if-no-files-found: error
+          retention-days: 1
+
+  sign-android:
+    name: Sign Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs:
+      - release-policy
+      - package-android
+    # Only a tag release enters the environment: its deployment rule allows v* tags only, so a run from main would be
+    # rejected there, and it has nothing to sign for users anyway.
+    environment: ${{ needs.release-policy.outputs.is_tag_release == 'true' && 'android-release' || '' }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    outputs:
+      # No artifact or APK name here: GitHub drops a job output that contains a secret's value, and the key alias
+      # secret ("anixops") is part of every name. Publish GitHub Release derives both names from the version.
+      signing_kind: ${{ steps.apk.outputs.kind }}
+    steps:
+      # Only first-party actions pinned to a commit and the repository's own shell (sign-apk), from the tag.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Fails closed: a tag release never falls back to a throwaway key (users could not install it over the
+      # previous version, and later releases could not be installed over it). Names only, never values.
+      - name: The release signing key is configured
+        if: ${{ needs.release-policy.outputs.is_tag_release == 'true' }}
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::${name} is not set in the android-release environment"
+              missing=1
+            fi
+          done
+          exit "${missing}"
+
+      - name: Download the unsigned APK
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: android-unsigned-${{ needs.release-policy.outputs.version }}
+          path: ${{ runner.temp }}/android-unsigned
+
+      - name: The APK is the one the build job made
+        shell: bash
+        env:
+          EXPECTED: ${{ needs.package-android.outputs.unsigned_sha256 }}
+        run: |
+          set -euo pipefail
+          apk="${RUNNER_TEMP}/android-unsigned/app-release-unsigned.apk"
+          actual="$(sha256sum "${apk}" | cut -d' ' -f1)"
+          if [[ ! "${EXPECTED}" =~ ^[0-9a-f]{64}$ ]] || [ "${actual}" != "${EXPECTED}" ]; then
+            echo "::error::Unsigned APK SHA-256 ${actual} does not match the build job's '${EXPECTED}'"
+            exit 1
+          fi
+
+      - name: Sign the APK
+        id: apk
+        uses: ./.github/actions/sign-apk
+        with:
+          unsigned: ${{ runner.temp }}/android-unsigned/app-release-unsigned.apk
+          name: anixops-net-android-arm64
           keystore-base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
           key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          version-name: ${{ steps.version-name.outputs.name }}
+
+      # The pinned certificate (public: Play Console → App signing → App signing key certificate) catches a secret
+      # replaced by another keystore, such as the Play upload key.
+      - name: Signed with the release key
+        if: ${{ needs.release-policy.outputs.is_tag_release == 'true' }}
+        shell: bash
+        env:
+          APK: ${{ steps.apk.outputs.apk }}
+          KIND: ${{ steps.apk.outputs.kind }}
+          EXPECTED_CERT: ${{ vars.ANDROID_RELEASE_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          bash .github/scripts/android-signing-gate.sh "${KIND}" "${EXPECTED_CERT}" "${APK}"
 
       - name: Stage the APK
         id: stage
@@ -1266,12 +1526,12 @@ jobs:
           echo "artifact_name=anixops-net-android-${VERSION}" >> "${GITHUB_OUTPUT}"
 
       - name: Generate Android artifact attestation
-        uses: actions/attest@v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: dist/android/${{ steps.stage.outputs.apk_name }}
 
       - name: Upload the APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ steps.stage.outputs.artifact_name }}
           path: dist/android/*
@@ -1289,29 +1549,29 @@ jobs:
       - package-windows
       - attest-linux-gui
       - attest-windows
-      - package-android
+      - sign-android
     if: ${{ needs.release-policy.outputs.is_tag_release == 'true' && github.ref_type == 'tag' }}
     permissions:
       contents: write
       actions: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download Linux desktop release bundle
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: ${{ needs.package-linux-gui.outputs.bundle_name }}
           path: dist/release
 
       - name: Download Windows release bundle
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: ${{ needs.package-windows.outputs.bundle_name }}
           path: dist/release
 
       - name: Download Android APK
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: anixops-net-android-${{ needs.release-policy.outputs.version }}
           path: dist/android
@@ -1331,17 +1591,18 @@ jobs:
           LINUX_TARBALL: ${{ needs.package-linux-gui.outputs.archive_name }}
           LINUX_DEB: ${{ needs.package-linux-gui.outputs.deb_name }}
           ANDROID_APK: anixops-net-${{ needs.release-policy.outputs.version }}-android-arm64.apk
-          ANDROID_SIGNING: ${{ needs.package-android.outputs.signing_kind }}
+          ANDROID_SIGNING: ${{ needs.sign-android.outputs.signing_kind }}
           KERNEL_REV_SOURCE: Cargo.toml
         run: |
           set -euo pipefail
           test "${LINUX_GUI_ATTESTATION_STATUS}" = "attested"
           test "${WINDOWS_ATTESTATION_STATUS}" = "attested"
-          # Empty when GitHub dropped the output (see package-android); the note below must not guess.
-          case "${ANDROID_SIGNING}" in
-            release|debug) ;;
-            *) echo "::error::Android signing kind is missing ('${ANDROID_SIGNING}')."; exit 1 ;;
-          esac
+          # A published release only ships an APK signed with the release key (sign-android already failed
+          # otherwise); empty when GitHub dropped the output (see sign-android).
+          if [ "${ANDROID_SIGNING}" != "release" ]; then
+            echo "::error::Android APK is not signed with the release key (kind '${ANDROID_SIGNING}')."
+            exit 1
+          fi
           test "$(find dist/release -maxdepth 1 -type f | wc -l | tr -d ' ')" = "16"
           (
             cd dist/release
@@ -1378,9 +1639,6 @@ jobs:
           test "${#assets[@]}" = "6"
 
           android_note="安卓 8.0 及以上（arm64），下载后直接安装。"
-          if [ "${ANDROID_SIGNING}" != "release" ]; then
-            android_note="${android_note}还没有正式签名密钥，本版用临时签名，装新版前要先卸载旧版。"
-          fi
           kernel_rev="$(grep -m1 -oE 'rev = "[0-9a-f]{40}"' "${KERNEL_REV_SOURCE}" | cut -d'"' -f2)"
           # The notes (checked in release-policy) go first; their own top-level heading is dropped because the
           # release title already names the version.

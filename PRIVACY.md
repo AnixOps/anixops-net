@@ -21,18 +21,37 @@ on, and it goes to the provider of your subscription, not to a separate server o
 
 ### Data that stays on your device
 
-The client stores the following only on your device, in app-private storage. It is not uploaded to us and is not
-included in system or cloud backups:
+The client stores the following only on your device. None of it is uploaded to us:
 
 - Subscriptions, nodes, rules, plugins and scripts that you add, and your settings.
 - Connection logs, traffic statistics and, when you turn it on, packet captures. You decide whether to export them.
 - Crash reports, with addresses, domains and keys removed. You decide whether to export and send them.
 - A device key per subscription server, used only as described below.
 
-Uninstalling the app deletes this data, except on Windows. There the client keeps it in a folder for the whole computer
-(`%ProgramData%\AnixOps\NetworkCore`) that only the system and administrators can open, not other users of the
-computer. Uninstalling there removes the HTTPS decryption key and the decryption root from the certificate stores of
-the users signed in at the time; your subscriptions, settings and logs stay in that folder until you delete it.
+Where it is kept, whether it is backed up, and what uninstalling removes, by platform:
+
+- **Android**: app-private storage. It is excluded from Google backups and device-to-device transfer, and
+  uninstalling the app deletes it.
+- **iOS and iPadOS**: subscriptions, node credentials, the device keys, the HTTPS decryption root and the key that
+  protects saved packet captures are kept in the system keychain, limited to this device: they are not synced to
+  iCloud Keychain and not moved to another device. Deleting the app does **not** delete these keychain items; if you
+  install the app again, your subscriptions come back. Rules, plugins, scripts, settings, traffic statistics and crash
+  reports are kept in the app's container, which deleting the app removes; until then they are included in iCloud and
+  computer backups (downloaded rule sets are not). To remove everything, delete your subscriptions and the decryption
+  root in the app before deleting it, or erase the device.
+- **macOS**: the same split between the keychain (this Mac only) and the app's container
+  (`~/Library/Containers/` and `~/Library/Group Containers/` folders named after the app), which Time Machine backs
+  up. Moving the app to the Trash removes neither; delete your subscriptions and the decryption root in the app first,
+  then delete those folders.
+- **Windows**: a folder for the whole computer (`%ProgramData%\AnixOps\NetworkCore`) that only the system and
+  administrators can open, not other users of the computer. Uninstalling removes the HTTPS decryption key and the
+  decryption root from the certificate stores of the users signed in at the time; your subscriptions, settings, logs
+  and device keys stay in that folder until you delete it. The portable version uses the same folder.
+- **Linux**: `$XDG_CONFIG_HOME/anixops-net` (usually `~/.config/anixops-net`); files holding credentials can only be
+  read by you. Removing the package (`apt remove` or `apt purge`) or the extracted folder does not delete it; delete
+  that folder yourself.
+
+We do not sell, share or disclose any of this data, and we do not use it for any purpose: it never reaches us.
 
 ### Connections the client makes
 
@@ -89,16 +108,29 @@ Changes to this policy are published in this file, with the history in the publi
 
 ### 只保存在你设备上的数据
 
-以下内容只保存在本机的应用私有存储里，不上传给我们，也不进入系统或云备份：
+以下内容只保存在本机，不会上传给我们：
 
 - 你添加的订阅、节点、规则、插件、脚本，以及各项设置。
 - 连接日志、流量统计，以及你开启后才有的抓包记录，是否导出由你决定。
 - 崩溃报告（已去掉地址、域名、密钥），是否导出发送由你决定。
 - 每个订阅服务器各一把设备密钥，用途见下文。
 
-除 Windows 外，卸载应用即删除以上数据。Windows 版把这些数据放在整台电脑共用的目录（`%ProgramData%\AnixOps\NetworkCore`）里，
-只有系统和管理员能打开，本机其他用户不能读取。在 Windows 上卸载会删除 HTTPS 解密私钥，并从卸载时已登录用户的证书存储里
-删除解密根证书；订阅、设置和日志留在该目录里，需要你自己删除。
+各平台保存位置、是否进入备份、卸载时删除什么：
+
+- **Android**：保存在应用私有存储，不进入 Google 备份，也不参与设备间迁移；卸载应用即删除。
+- **iOS、iPadOS**：订阅、节点凭据、设备密钥、HTTPS 解密根证书和保护已保存抓包会话的密钥存放在系统钥匙串里，仅限本机：
+  不同步到 iCloud 钥匙串，也不会迁移到其他设备。删除 App **不会**删除这些钥匙串条目，重新安装后订阅会恢复。规则、插件、
+  脚本、设置、流量统计和崩溃报告保存在 App 容器里，删除 App 时一并删除；在此之前它们会随 iCloud 备份和电脑备份一起备份
+  （下载的规则集除外）。要全部清除，请在删除 App 前先在 App 内删除订阅和解密根证书，或抹掉设备。
+- **macOS**：同样分为钥匙串（仅限这台 Mac）和 App 容器（`~/Library/Containers/`、`~/Library/Group Containers/` 下以 App
+  命名的文件夹），容器会进入时间机器备份。把 App 移到废纸篓不会删除二者；请先在 App 内删除订阅和解密根证书，再删除这些文件夹。
+- **Windows**：保存在整台电脑共用的目录（`%ProgramData%\AnixOps\NetworkCore`）里，只有系统和管理员能打开，本机其他用户
+  不能读取。卸载会删除 HTTPS 解密私钥，并从卸载时已登录用户的证书存储里删除解密根证书；订阅、设置、日志和设备密钥留在
+  该目录里，需要你自己删除。便携版使用同一个目录。
+- **Linux**：保存在 `$XDG_CONFIG_HOME/anixops-net`（通常是 `~/.config/anixops-net`），含凭据的文件只有你自己能读。卸载软件包
+  （`apt remove` 或 `apt purge`）或删除解压目录都不会删除它，需要你自己删除这个目录。
+
+我们不出售、不共享、不向任何人披露这些数据，也不将其用于任何目的：它们不会到达我们这里。
 
 ### 客户端会发出的连接
 

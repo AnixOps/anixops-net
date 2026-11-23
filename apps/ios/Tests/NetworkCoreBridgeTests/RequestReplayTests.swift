@@ -58,6 +58,46 @@ final class RequestReplayTests: XCTestCase {
         XCTAssertFalse(request.httpShouldHandleCookies)
     }
 
+    /// HTTP/2 may split the Cookie header into one `cookie` field per cookie. Sent again they must form one Cookie
+    /// header joined with "; "; URLRequest.addValue would join them with a comma, which breaks the first cookie.
+    func testSplitCookiesAreJoinedWithSemicolons() throws {
+        let (captured, _) = RequestReplay.captured(
+            method: "GET",
+            url: "https://example.com/account",
+            headers: [
+                (":authority", "example.com"),
+                ("cookie", "a=1"),
+                ("accept", "*/*"),
+                ("cookie", "b=2"),
+            ],
+            body: Data(),
+            bodyTruncated: false
+        )
+        XCTAssertEqual(captured.headers, [.init(name: "cookie", value: "a=1; b=2"), .init(name: "accept", value: "*/*")])
+        XCTAssertEqual(captured.headerText, "cookie: a=1; b=2\naccept: */*")
+
+        // Typed in the editor as several lines, with stray separators and an empty one.
+        let edited = try RequestReplay.headers(from: "cookie: a=1;\nCookie: b=2\nX-A: 1\nCOOKIE:  ; \nX-A: 2")
+        let request = try RequestReplay(url: "https://example.com", headers: edited).urlRequest()
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Cookie"), "a=1; b=2")
+        let repeated = try XCTUnwrap(request.value(forHTTPHeaderField: "X-A"))
+        XCTAssertTrue(repeated.contains("1") && repeated.contains("2"))
+
+        // The round trip through the editor text sends what was captured.
+        let resent = try RequestReplay(url: captured.url, headers: RequestReplay.headers(from: captured.headerText)).urlRequest()
+        XCTAssertEqual(resent.value(forHTTPHeaderField: "Cookie"), "a=1; b=2")
+
+        // Only empty cookie lines: no Cookie header at all.
+        let empty = try RequestReplay(url: "https://example.com", headers: [
+            .init(name: "Cookie", value: " "), .init(name: "cookie", value: ";"),
+        ]).urlRequest()
+        XCTAssertNil(empty.value(forHTTPHeaderField: "Cookie"))
+        // One cookie line is sent as it is.
+        let single = try RequestReplay(url: "https://example.com", headers: [.init(name: "Cookie", value: "a=1; b=2")])
+            .urlRequest()
+        XCTAssertEqual(single.value(forHTTPHeaderField: "Cookie"), "a=1; b=2")
+    }
+
     func testURLRequestErrors() {
         XCTAssertThrowsError(try RequestReplay(method: "GE T", url: "https://example.com").urlRequest()) {
             XCTAssertEqual($0 as? RequestReplayError, .invalidMethod)

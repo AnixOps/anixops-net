@@ -516,7 +516,7 @@ struct DecryptHostsView: View {
             .decryptionConsentAlert(tunnel, inSheet: true)
         }
         .task(id: tunnel.connection) {
-            plugins = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)) ?? MitmPluginLibrary()
+            plugins = MitmPluginLibrary.loadInspected()
             outcomes = nil
             while tunnel.connection == .connected, !Task.isCancelled {
                 await loadOutcomes()
@@ -975,7 +975,7 @@ struct DebugSetupChecklist: View {
         return steps
     }
 
-    /// The list's domains, the active mappings' hosts and the enabled plugins' `[MITM]` hosts.
+    /// The list's domains, the active mappings' hosts and the enabled plugins' hosts as the kernel imports them.
     private var domainCount: Int {
         let mappings = tunnel.debugMappings
         return mappings.hosts.count + mappings.active.compactMap(\.host).count + pluginDomains
@@ -983,9 +983,9 @@ struct DebugSetupChecklist: View {
 
     private func refresh() {
         trusted = (try? MitmCertificateStore.load())?.trustState() == .trusted
-        let library = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)) ?? MitmPluginLibrary()
+        let library = MitmPluginLibrary.loadInspected()
         pluginDomains = library.isEnabled
-            ? library.plugins.filter(\.isEnabled).reduce(0) { $0 + $1.summary.hostnames.count }
+            ? library.plugins.filter(\.isEnabled).reduce(0) { $0 + $1.decryptedHostnames.count }
             : 0
     }
 

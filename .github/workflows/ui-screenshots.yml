@@ -46,17 +46,17 @@ jobs:
       # On a pull request this is the merge of the branch into its base, so the comparison below shows exactly
       # what merging would change; the base is the merge's first parent.
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: 9
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -137,7 +137,7 @@ jobs:
 
       - name: Upload the screenshots
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ui-screenshots-${{ github.sha }}
           path: |

@@ -84,6 +84,33 @@ final class DnsSettingsTests: XCTestCase {
         XCTAssertThrowsError(try base.settingHost("bad name", addresses: "10.0.0.1"))
     }
 
+    /// A refused line of a pasted list is named by its number as the user sees it, empty lines included, so the
+    /// add-rule sheet can say which line to fix while it keeps the text.
+    func testRefusedRuleLineIsNamedByNumber() throws {
+        let base = try DnsSettings().saving(DnsSettings.Server(name: "ali", url: "223.5.5.5", via: .direct))
+        XCTAssertThrowsError(try base.addingRule("example.com\n\nDOMAIN-SUFIX,example.org", server: "ali")) { error in
+            XCTAssertEqual(error as? DnsSettingsError, .atLine(3, .invalidRule))
+        }
+        XCTAssertThrowsError(try base.addingRule("a.example\r\nDOMAIN-SUFFIX,taobao.com,DIRECT", server: "ali")) { error in
+            XCTAssertEqual(error as? DnsSettingsError, .atLine(2, .invalidDomain))
+        }
+        XCTAssertThrowsError(try base.addingRule("\n\n*.example.com", server: "ali")) { error in
+            XCTAssertEqual(error as? DnsSettingsError, .atLine(3, .invalidDomain))
+        }
+        XCTAssertThrowsError(try base.addingRule("GEOSITE,cn\nRULE-SET,other", server: "ali")) { error in
+            XCTAssertEqual(error as? DnsSettingsError, .atLine(2, .invalidRule))
+        }
+        // A line of only a comma used to index an empty split.
+        XCTAssertThrowsError(try base.addingRule(",", server: "ali")) { error in
+            XCTAssertEqual(error as? DnsSettingsError, .invalidRule)
+        }
+        XCTAssertTrue(DnsSettingsError.atLine(3, .invalidDomain).message.contains("3"))
+        // Errors that are not about one line keep their own case.
+        XCTAssertThrowsError(try base.addingRule("cn", server: "missing")) { error in
+            XCTAssertEqual(error as? DnsSettingsError, .unknownServer)
+        }
+    }
+
     /// The engine refuses the whole config when the DNS rules list more than 4096 domains, suffixes and keywords in
     /// all; rule sets do not count. Adding over it is refused with the reason, and settings saved over it by an
     /// earlier version reach the tunnel with their last rules left out.

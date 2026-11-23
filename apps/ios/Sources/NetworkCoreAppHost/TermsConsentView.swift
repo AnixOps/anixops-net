@@ -1,7 +1,8 @@
 import NetworkCoreBridge
 import SwiftUI
 
-/// First start, on iOS and macOS: the user agreement in short, a link to the full text, one primary action to accept
+/// First start, on iOS and macOS: the user agreement in short, what happens to the user's data (App Review 5.4: a VPN
+/// app says so before it is used), links to the full agreement and the privacy policy, one primary action to accept
 /// it and a way to decline. Nothing else in the app is usable until it is accepted (`TermsConsent`). Declining keeps
 /// this screen and says why; the app never quits by itself.
 struct TermsConsentView: View {
@@ -23,9 +24,15 @@ struct TermsConsentView: View {
                     point("lock.shield", "HTTPS 解密只用于你自己的流量。根证书由你本人在系统设置里手动信任，只解密你列出的域名。")
                     point("hand.raised", "不得用于入侵他人系统、窃取数据，或绕过游戏、支付、登录等服务的安全机制。")
                     point("shippingbox", "本 App 不提供节点或订阅，导入的内容由提供方负责。软件按现状提供，不作担保。")
+                    point("network", "流量只在本机按你的规则转发到你配置的服务器，我们看不到也不收集。App 不含统计、广告或崩溃上报 SDK，数据只保存在你的设备上。")
                 }
                 Link(destination: TermsConsent.url) {
                     Label("阅读完整协议", systemImage: "doc.text")
+                        .font(.body.weight(.semibold))
+                }
+                .foregroundStyle(brand.primary)
+                Link(destination: PrivacyPolicy.url) {
+                    Label("阅读隐私政策", systemImage: "hand.raised")
                         .font(.body.weight(.semibold))
                 }
                 .foregroundStyle(brand.primary)

@@ -144,6 +144,37 @@ final class CaptureBodyTests: XCTestCase {
         )
     }
 
+    /// A body that was cut short is not parsed as JSON even when its start happens to be whole: the inspector skips
+    /// building a tree that would fail at the end.
+    func testCutBodyIsNotParsedAsJson() {
+        XCTAssertEqual(CaptureBody.kind(contentType: "application/json", text: "[1]", cut: true), .text)
+        XCTAssertEqual(CaptureBody.kind(contentType: "application/json", text: "[1]", cut: false), .json(.array([.number("1")])))
+    }
+
+    /// The code views lay out long text piece by piece: lines are kept together up to the width, a longer line is
+    /// split, empty lines stay, and only the first `limit` characters are kept.
+    func testCodeTextChunks() {
+        let lines = CodeTextChunks("ab\n\ncd\nef", width: 5)
+        XCTAssertEqual(lines.chunks, ["ab\n", "cd\nef"])
+        XCTAssertFalse(lines.cut)
+        XCTAssertEqual(lines.chunks.joined(separator: "\n"), "ab\n\ncd\nef")
+
+        let minified = CodeTextChunks(String(repeating: "x", count: 12), width: 5)
+        XCTAssertEqual(minified.chunks, ["xxxxx", "xxxxx", "xx"])
+
+        let long = CodeTextChunks(String(repeating: "y", count: 30), limit: 10, width: 4)
+        XCTAssertTrue(long.cut)
+        XCTAssertEqual(long.chunks.joined().count, 10)
+
+        XCTAssertEqual(CodeTextChunks("").chunks, [""])
+        XCTAssertFalse(CodeTextChunks("short").cut)
+        // Each piece stays within the width, so no single Text holds the whole body.
+        let pretty = JsonDocument.pretty(.array(Array(repeating: .string(String(repeating: "z", count: 50)), count: 500)))
+        let chunked = CodeTextChunks(pretty)
+        XCTAssertTrue(chunked.chunks.allSatisfy { $0.count <= CodeTextChunks.chunkCharacters })
+        XCTAssertEqual(chunked.chunks.joined(separator: "\n"), pretty)
+    }
+
     func testModes() {
         XCTAssertEqual(CaptureBody.modes(.json(.null)), [.tree, .pretty, .raw, .hex])
         XCTAssertEqual(CaptureBody.modes(.binary), [.hex])

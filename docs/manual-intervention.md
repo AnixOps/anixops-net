@@ -41,7 +41,7 @@ ios-upload-external-testflight=blocked
 ios-upload-beta-app-review=blocked-not-required-for-internal
 ios-upload-bundle-id-storage=github-variables-only
 ios-upload-api-key-status=team-key-added-to-environment
-ios-export-compliance-answer=standard-https-only-exempt-2026-10-13
+ios-export-compliance-answer=pending-reanswer-standard-algorithms-non-exempt
 ios-upload-internal-confirmation-status=confirmed
 ios-upload-internal-confirmation-items=app-record,export-compliance,internal-testing-group,app-privacy-determination,privacy-policy-determination,environment-secrets-and-variables
 ios-upload-internal-workflow=.github/workflows/ios-testflight.yml
@@ -206,7 +206,7 @@ macOS 客户端改为官网分发（Developer ID 签名 + 公证），隧道从 
 
 见 [`docs/architecture/client-health.md`](architecture/client-health.md)。Linux 的冷启动、指标端点与完整性由 CI 验证，其余需真机：
 
-- [ ] Windows：连接后浏览器打开 `http://127.0.0.1:9477/metrics`，有 `networkcore_upload_bytes_total` 与 `anixops_client_integrity{state="verified"} 1`（MSI 安装版）。
+- [ ] Windows：全新安装后 `http://127.0.0.1:9477/metrics` 连不上（默认关闭）；在设置 › 诊断与隐私 打开「Prometheus 指标」，连接后浏览器打开该地址，有 `networkcore_upload_bytes_total` 与 `anixops_client_integrity{state="verified"} 1`（MSI 安装版）；`curl -H "Host: evil.example:9477" http://127.0.0.1:9477/metrics` 返回 403；关掉开关后端口关闭，重启后保持关闭。从 0.x 升级的安装，端点升级后同样是关闭的。
 - [ ] Windows：设置 › 诊断与隐私 显示「安装完整性：完整」；改动安装目录里的 `wintun.dll` 后重启客户端显示「文件缺失或被改动」。
 - [ ] 关闭「崩溃报告」后 `crashes` 目录被删除；重新打开后开关状态在重启后保持。
 - [ ] iOS / macOS：设置 › 隐私 有「崩溃报告」开关；开发者模式（macOS 为活动页）复制的诊断信息里有 `install integrity: verified` 与 `metrics:` 段，`metrics:` 段里没有节点名、策略组名。
@@ -327,15 +327,12 @@ CI 只跑归属记录、启动恢复、卸载恢复和断开步骤的单元测�
 
 ## 安卓 APK 签名与真机验收
 
-CI 的 `android-native` job 每次都产出原生版 arm64 APK（artifact `anixops-net-android-<sha>`）。没有签名密钥时用临时调试密钥签名，
-每次构建的密钥都不同，装新版前要先卸载旧版。
+CI 的 `android-native` job 每次都产出原生版 arm64 APK（artifact `anixops-net-android-<sha>`），一律用每次运行临时生成的
+调试密钥签名（文件名 `*-debug.apk`），每次构建的密钥都不同，装新版前要先卸载旧版，也不能覆盖安装正式版。
+正式签名密钥只在 `release.yml` 的 tag 发布里使用，见下面「安卓正式签名密钥」。
 
-- [ ] 生成正式签名密钥（只做一次，丢了就无法给已安装的用户升级）：
-  `keytool -genkeypair -v -keystore anixops-net.jks -alias anixops-net -keyalg RSA -keysize 4096 -validity 10000`，
-  把 `base64 -w0 anixops-net.jks` 的结果和密码写入仓库 secrets：`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、
-  `ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。配置后 CI 自动改用它签名（文件名里的 `debug` 变成 `release`）。
-- [ ] 发版时 `release.yml` 会把 APK 作为 `anixops-net-<版本>-android-arm64.apk` 放进 GitHub Release。配置正式密钥前，
-  Release 说明会写明「临时签名，装新版前要先卸载旧版」。
+- [ ] 发版时 `release.yml` 把正式签名的 APK 作为 `anixops-net-<版本>-android-arm64.apk` 放进 GitHub Release。没有正式密钥、
+  签名证书与 `ANDROID_RELEASE_CERT_SHA256` 不符时发布直接失败，不再用临时签名发布。
 - [ ] 真机验收：安装 APK，首次启动同意用户协议，导入订阅，点连接时允许 VPN，浏览器能打开网页，断开后网络恢复。
 - [ ] 原生版另验：快捷设置里加“AnixOps”磁贴，点它连接 / 断开；系统设置 › VPN 里设为“始终开启”，重启手机后自动连上；
   浏览器打开 `anixops://toggle` 能切换连接；另一个 VPN 接管后 App 与磁贴显示已断开。
@@ -373,9 +370,14 @@ Play 版是开源版（用户 2026-11-15 决定），包名 `io.anixops.net.andr
 另有固定直链 `/windows/`、`/windows-portable/`、`/linux-deb/`、`/linux/`、`/android/`（跳转到最新版文件）和
 `latest.json`。`release.yml` 发布 Release 后会自动触发它。
 
+有正式版后，「最新版」、固定直链和 `latest.json` 只指向最新的正式版（不是草稿、不是预发布），1.0.0 之后再发的 beta 不会顶替它；
+`latest.json` 带 `channel`（`stable`，只有在还没有正式版时才是 `beta`）。比正式版更新的预发布单列在页面的「测试版」小节，
+另有 `latest-beta.json` 和 `/beta/windows/` 这类测试版直链。脚本读取全部分页的 Release，测试在 `download_page_test.py`。
+
 - [ ] 维护者在 Settings → Pages 把 Source 设为「GitHub Actions」（只做一次；没设之前 `Deploy to GitHub Pages` job 会失败）。
   设好后手动运行一次 `Download page` workflow。
-- [ ] 打开下载页，确认各平台按钮指向最新版，`/windows/` 等固定链接能跳转。
+- [ ] 打开下载页，确认各平台按钮指向最新正式版，`/windows/` 等固定链接能跳转；发了比正式版新的 beta 后，`/windows/` 仍指向正式版，
+  `/beta/windows/` 指向 beta。
 
 
 ## 手机连电脑抓包（真机验收）
@@ -442,9 +444,10 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 
 ## 插件从文件 / 粘贴导入真机验收（T7）
 
-- [ ] Windows、Linux：扩展页插件卡片“更多导入方式 → 从文件导入”选一个 `.plugin` / `.sgmodule` 文件，插件出现在列表里，脚本已下载，开启 HTTPS 解密后生效。
+- [ ] Windows、Linux：扩展页插件卡片“更多导入方式 → 从文件导入”选一个 `.plugin` / `.sgmodule` 文件，插件出现在列表里，脚本已下载；在随即弹出的审阅里点“打开插件”，开启 HTTPS 解密后生效。
 - [ ] Android：同样从文件导入（系统文件选择器）和粘贴插件内容都能导入；插件行的“更多”按钮不用长按就能看到。
 - [ ] 插件行“更多 → 查看内容”显示解密域名、脚本地址和逐行报告；再次导入同名插件替换原来那条，不会出现两条。
+- [ ] 导入前审阅（feature-gap-05）：Windows、Linux、Android 三种语言下导入一个带脚本的插件，插件出现在列表里但开关是关的，随即弹出审阅：说明打开后会解密哪些域名、运行哪些脚本，列出解密域名、改写行数和脚本；点“暂不打开”插件保持关闭、已连接时不重连；点“打开插件”后生效（解密开着时重连一次）。`hostname = *` 的插件在审阅里有红色警告。关着的插件拨开关先弹审阅，关掉开着的插件立即生效。已打开的插件原样再导入一次保持打开；改了一个脚本后再导入，插件变回关闭并再次弹出审阅。从旧版本升级：升级前已导入并打开的插件升级后仍是打开的。
 
 ## 流量统计真机验收（T9）
 
@@ -453,7 +456,7 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 
 ## 日志查看真机验收（T10）
 
-- [ ] Windows、Linux、Android：连接、断开、更新订阅后，活动页“日志”列出对应记录；订阅地址只显示到路径，不含 token 等查询参数。
+- [ ] Windows、Linux、Android：连接、断开、更新订阅后，活动页“日志”列出对应记录；网址只显示协议和域名（`https://sub.example.com/…`），路径、查询参数里的 token 和分享链接的密码都不出现；订阅更新失败的系统通知同样不含网址里的 token。
 - [ ] 级别切到“错误”只剩出错的行；Windows 有多份日志时能按模块筛选；“更多 → 拷贝筛选出的日志”能粘贴出文本，“清空日志”确认后清空。
 
 ## Android 诊断报告与出口地址真机验收（T8）
@@ -496,6 +499,7 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 ## Wi-Fi 规则真机验收（T12）
 
 - [ ] Windows：设置页打开“Wi-Fi 规则”，点“当前网络”填入 Wi-Fi 名称（Windows 11 先在“隐私和安全性 > 位置”允许桌面应用），设为“断开”；连上后切到这个 Wi-Fi，十几秒内断开，换到别的 Wi-Fi 或有线后按规则连接。
+- [ ] Windows（简体中文和繁体中文系统各一台）：连上中文名称的 Wi-Fi（如“我的家”），点“当前网络”填入的名称与系统托盘显示一致，不是乱码；按此名称加的“断开”规则能生效。手动输入同一名称也能匹配。旧版本用“当前网络”存下的乱码名称在规则行下显示“名称读取有误”，删除后重新添加即可（写入发布说明）。名称从 WLAN 服务按原始字节读取，不再解析 `netsh` 输出。
 - [ ] Android：打开规则时系统询问位置权限；允许后“当前网络”能填入 Wi-Fi 名称。Wi-Fi 和移动网络来回切换时按规则连接 / 断开（App 在后台也生效），拒绝权限时“其他 Wi-Fi”规则仍生效。
 - [ ] Android 10+ 后台：只给“使用时允许”位置时，设置页“Wi-Fi 规则”出现后台位置提示；点“允许”先看到说明对话框，再跳到
   系统设置选“始终允许”。之后锁屏超过 1 分钟（或 `adb shell am make-uid-idle io.anixops.net`），在后台切到指定 Wi-Fi，
@@ -546,6 +550,9 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 - [ ] Windows 代码签名证书：发布物现在没有 Authenticode 签名。原生版把内核放进系统服务，未签名的服务更容易被安全软件
   拦截，安装时也有 SmartScreen 警告。正式切换到原生版之前需要维护者申请证书，并把证书或托管签名服务的凭据配置成仓库
   secrets。不阻塞开发。
+- [ ] 原生版键盘浏览（Windows 与 Linux）：代理页节点列表和“策略组”对话框的成员列表里，用方向键、Home / End、Page Up / Page Down
+  上下移动，核心的在用节点和策略组的选择都不变（`proxies` / `groups` 命令核对）；在某一行按空格或回车才换到这一行，单击同样。
+  CI 的 UI Automation / AT-SPI 测试目前只经选择接口换节点，键盘路径待补自动化（发送 VK_DOWN / `Atspi.generate_keyboard_event`）。
 - [ ] 原生预览版真机验收（预览版发布后）：Windows 11 上检查贴靠布局、125% 和 150% 缩放、中文输入法、讲述人朗读；
   Linux 上在 GNOME 和 KDE 各检查一次窗口、托盘、深浅色和触控板滚动。
 - [ ] Windows 请求列表的滚动手感（原生预览版发布后）：在请求页放入几万条请求，用触控板惯性滚动、鼠标滚轮快速滚动、
@@ -790,3 +797,111 @@ CI 只跑单元测试和管理员账号下的端到端测试，以下需要人�
   超过 16 条的被立即关闭，5 秒后其余的也被关闭，正常用户的窗口不受影响。
 - [ ] Linux 根证书更换：先信任生成的根证书，再在扩展页导入团队 CA：导入的提示说明这台电脑还没信任它，扩展页显示未信任；
   点“信任根证书”后显示已信任，`certutil -d sql:$HOME/.pki/nssdb -L -n "AnixOps Net HTTPS Decryption Root" -a` 只列出一张证书。
+
+## 1.0.0 发布准备（release-prep：ci-release-02/03/07/08/09，release-readiness-05/08/09/10）
+
+### 版本号（单一来源）
+
+版本号的来源是 `Cargo.toml` 的 `[workspace.package] version`。其他构建系统读不了它，各自保留一份副本：`Cargo.lock` 里的
+各工作区成员、两份 `tauri.conf.json`、`apps/windows-gui/ui/package.json`、`apps/windows-native/Directory.Build.props`、
+`app.manifest`（四段式 `X.Y.Z.0`）、`apps/ios/project.yml` 的 `MARKETING_VERSION`、`build.gradle.kts` 的 versionName 默认值。
+`.github/scripts/version.py` 负责改写和检查：CI 每次检查所有副本等于来源；`release.yml`、`release-tag.yml`（读要打 tag 的那个
+提交里的文件）、`play-bundle.yml` 和 `ios-testflight.yml`（在 tag 上运行时）还检查来源等于 tag 去掉 `v` 和预发布后缀后的版本。
+源码只写 `X.Y.Z`，`-beta.N` / `-rc.N` 由 tag 带上。
+
+- [ ] 打 `v1.0.0`（或 `v1.0.0-rc.1`）之前，先在一个 PR 里运行 `python3 .github/scripts/version.py set 1.0.0`（只改上面这些字段，
+  `Cargo.lock` 里恰好也是 0.3.0 的第三方包不会被改），同时把 `build.gradle.kts` 的 versionCode 升到下一个值，写好
+  `docs/release-notes/v1.0.0.md`。这个 PR 的 CI 通过后再用 `release-tag.yml` 打 tag。iOS / macOS 的「关于」页会显示新版本，
+  截图对比会变，PR 描述里写明「界面变化：版本号」。
+- [ ] `play-bundle.yml` 在 tag 上运行时用 tag 作为 AAB 的 versionName；不在 tag 上运行时必须填 `version-name`。已经带着
+  错误 versionName 上传过的 versionCode 不能复用。
+
+### 安卓正式签名密钥
+
+正式签名密钥（Google Play 应用签名密钥，别名 `anixops`）以前是仓库级 secret，CI 的每次运行（含同仓库 PR 和任意分支的手动运行）
+都会拿到。现在 CI 一律用临时密钥；只有 `release.yml` 的 `sign-android` job 在 tag 发布时进入 Environment `android-release`
+使用它。这个 job 不跑 Gradle、Rust 和第三方 action，只下载构建 job 交出的未签名 APK、核对 SHA-256、签名、核对证书、出证明。
+以下只能由维护者在 GitHub 设置里完成，**完成前 tag 发布会在 `sign-android` 失败**（不会再发出临时签名的 APK）：
+
+- [ ] Settings → Environments → New environment，名字 `android-release`（必须完全一致；拼错时 GitHub 会新建一个空 Environment，
+  `sign-android` 的 “The release signing key is configured” 步骤会因此失败）。
+- [ ] 该 Environment → Deployment protection rules：勾选 Required reviewers，填维护者本人。
+- [ ] 该 Environment → Deployment branches and tags：选 “Selected branches and tags” → Add deployment branch or tag rule →
+  Ref type 选 **Tag**，Name pattern 填 `v*`。不要添加任何分支规则（从 main 手动运行 `release.yml` 只做构建验证，不进入这个
+  Environment，用临时密钥签名）。
+- [ ] 该 Environment → Environment secrets → Add secret，逐个写入 `ANDROID_KEYSTORE_BASE64`（`base64 -w0 <keystore>.jks`）、
+  `ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。GitHub 不能导出已有 secret 的值，需要用维护者
+  保管的原始 keystore 和密码重新填写。
+- [ ] Settings → Secrets and variables → Actions → Repository secrets：**删除**同名的四个仓库级 secret。不删就等于没修：不声明
+  Environment 的 workflow（含 PR 上的 CI）仍能读到仓库级 secret。
+- [ ] Settings → Secrets and variables → Actions → Variables → New repository variable：`ANDROID_RELEASE_CERT_SHA256`，值为应用签名
+  证书的 SHA-256（Play Console → 测试和发布 → 应用完整性 → 应用签名 → “应用签名密钥证书”的 SHA-256 证书指纹；或
+  `keytool -list -v -keystore <keystore>.jks -alias anixops`）。带冒号、大小写均可。它是公开信息，用 variable 而不是 secret。
+  `release.yml` 的 release policy 和 `release-tag.yml` 在构建前检查它，`sign-android` 签名后比对，防止 secret 被误换成上传密钥等
+  其他 keystore。
+- [ ] 验证：从 main 手动运行一次 `Release`（只构建），`Sign Android APK` 不请求审批、产出 `*-debug` 签名；第一次 tag 发布时
+  `Sign Android APK` 请求审批，批准后 “Signed with the release key” 通过。
+- [ ] 评估密钥暴露：2026-11-16 起这把密钥进过大量同仓库 PR（含代理会话分支）和 main 的 CI 运行，并与当时按标签引用的第三方 action
+  在同一个 job。目前没有泄露证据。请检查这些运行的日志有无异常步骤或外发，并决定是否准备轮换预案：APK 签名方案 v3.1 的
+  `apksigner rotate` 只对 Android 9 及以上生效（minSdk 26 的 8.x 设备仍只认旧证书），Play 侧需要在 Play Console 申请应用签名
+  密钥升级。
+
+### 第三方 action 固定到提交 SHA
+
+所有 workflow 和 `.github/actions/*` 里的 action 都固定到完整的 40 位提交 SHA，旁边注释对应的正式 release 标签；
+`.github/scripts/workflow_policy.py` 在 CI 第一个 job 里检查（同时检查安卓正式密钥只出现在 `release.yml` 声明了
+`android-release` 的 job，Play 密钥只出现在声明了 `google-play` 的 job）。`.github/dependabot.yml` 每周提出 action 升级 PR。
+`cargo-deny` 固定为 0.22.0。
+
+- [ ] Settings → Actions → General → Actions permissions：勾选 “Require actions to be pinned to a full-length commit SHA”。
+- [ ] Settings → Code security → Dependabot：确认 Dependabot version updates 已启用，升级 PR 照常经过完整 CI。
+
+### 出口合规（App Store Connect 加密问卷，release-readiness-09）
+
+2026-10-13 的答案 `standard-https-only-exempt` 只适用于当时「只调用系统 HTTPS」的内部 TestFlight 构建。现在 App 与隧道扩展（iOS 和
+macOS）都链接 `NetworkCoreRuntime.xcframework`，其中自带 TLS（rustls + ring）、Shadowsocks AEAD（AES-GCM、ChaCha20-Poly1305）、
+WireGuard、QUIC 类传输等加密实现，用来保护用户流量的机密性，不属于 Category 5 Part 2 的豁免情形。因此 `apps/ios/project.yml`
+的四个目标（`NetworkCoreApp`、`NetworkCorePacketTunnel`、`NetworkCoreMac`、`NetworkCoreMacTunnel`）已改为
+`ITSAppUsesNonExemptEncryption: true`（Widget 不链接运行时，不声明）。CI 检查这些值不再是 false，且本文件不再保留旧答案。
+以下只能由维护者（必要时与法务）完成：
+
+- [ ] App Store Connect → App → 通用 → App 加密文稿（App Encryption Documentation）→ 新建，按实际二进制回答：
+  1. 使用加密：是；
+  2. 是否符合美国 EAR 第 5 类第 2 部分的豁免：否（加密用于保护用户流量，不是仅用于认证、版权保护等豁免用途）；
+  3. 是否实现专有或非标准算法：否（开源版只用公开标准算法）；
+  4. 是否在 Apple 系统加密之外或之上实现标准算法：是。
+  美国 EAR 侧通常按大众市场（5A992 / 5D992，§740.17(b)(1)）处理。2021 年 BIS 规则之后，大多数大众市场终端产品已不再需要年度
+  自分类报告，是否仍需提交请法务确认后再写入本文件，不要照抄旧做法。
+- [ ] 法国区：在法国上架需要先向 ANSSI 完成加密产品申报，再把申报文件上传到上面的加密文稿；Apple 审核通过后给出合规码。
+  不在法国上架就在「价格与销售范围」里排除法国，并把这个决定记在这里。
+- [ ] 拿到合规码后，在 `project.yml` 的 `NetworkCoreApp` 和 `NetworkCorePacketTunnel`（及 macOS 两个目标）加
+  `ITSEncryptionExportComplianceCode`，或在 workflow 里从 Variables 注入。没有合规码之前，每个 TestFlight 构建都会显示
+  「缺少出口合规信息」，需要在该构建页面回答一次后内部测试者才能安装（`ios-testflight.yml` 的 summary 也会提示）。
+  不要用删除 `ITSAppUsesNonExemptEncryption` 来绕过，删掉的效果相同，只是不显眼。
+- [ ] 完成后把第 44 行的标记改成实际答案与日期，例如 `ios-export-compliance-answer=standard-algorithms-non-exempt-YYYY-MM-DD`，
+  并按 `docs/architecture/ios-app-review-manual-confirmation-source-contract.md` 记录 `ios-app-review-export-compliance`。
+- [ ] ANX 版（anx 仓库 `release-ios.yml` 复用本仓库的 `project.yml`）含未公开的专有协议，属于「专有或非标准算法」，
+  需要单独回答问卷（通常需要 CCATS 和法国申报），并在该 workflow 里显式写 ANX 版自己的 ITS 键和合规码，不能继承开源版的答案。
+
+### 第三方许可声明（release-readiness-10）
+
+每个发布产物都附带 `THIRD_PARTY_NOTICES.txt`，由 `.github/actions/third-party-notices` 从包管理器的元数据生成
+（`.github/scripts/third_party_notices.py`）：cargo-about 0.9.3 扫描客户端和固定内核各自的 `Cargo.lock`（许可证白名单
+`about.toml` 与 `deny.toml` 相同），`pnpm licenses list --prod` 扫描桌面界面，Android 的 `releaseRuntimeClasspath` 读取各模块
+POM（只接受 Apache-2.0，其他许可证要人工补充后才能通过），再加上 `third_party/notices/` 里人工维护的条目（随 -sys crate 编译进来的
+QuickJS-ng、PCRE2，Windows 附带的 WebView2Loader.dll 与 wintun.dll）和 Inter 字体的 OFL。文件开头写明本项目源码地址，并按
+MPL-2.0 §3.2 列出每个 MPL-2.0 组件的源码下载地址。无法确定许可证、许可证不在白名单或必有条目缺失时生成失败。
+
+放置位置：Linux tar 包根目录和 deb 的 `/usr/share/doc/anixops-net/`（`copyright` 改为 DEP-5 格式），Windows MSI 安装目录和
+便携 ZIP（同时附 `LICENSE.txt`、`wintun-LICENSE.txt`），APK / AAB 的 `assets/`，iOS App 包内。各打包步骤都检查文件确实在包里。
+CI 的 `Third-party notices` job 在每次相关改动时跑同一套生成，提前暴露问题。
+
+- [ ] 1.0.0 发布前人工复核一次生成的 `THIRD_PARTY_NOTICES.txt`（CI artifact `third-party-notices-<sha>`），重点看 ring、
+  MPL-2.0 组件和人工条目。
+- [ ] Windows 版的 `mitm-anixops-sys` 静态链接 MSYS2 的 libsystre（TRE，BSD-2-Clause），它可能连带 libintl / libiconv
+  （LGPL-2.1+）。请确认实际链接了哪些库；如有 LGPL 库静态链接，需要改为动态链接或换用不依赖它们的实现，并在
+  `third_party/notices/` 补充相应声明。这一项不能由生成器自动判断。
+- [ ] macOS Developer ID 版和 ANX 版由 anx 仓库打包，需要在那边接入同一个 composite action（ANX 版还要并入 anx 自有依赖）。
+- [ ] 应用内「关于 › 开源许可」页面（Android、iOS / macOS、Tauri）尚未实现：目前声明文件随包附带但不在界面里显示。
+- [ ] WiX 安装界面（`WixUI_InstallDir`）的许可协议页仍是 WiX 默认的占位文本，建议设置 `WixUILicenseRtf` 为本项目许可证，
+  或换用不带许可协议页的对话框集。

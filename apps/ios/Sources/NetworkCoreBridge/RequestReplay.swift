@@ -36,8 +36,9 @@ public struct RequestReplay: Equatable, Sendable {
     }
 
     /// The request as captured. HTTP/2 pseudo-headers (`:authority` and the like) and the headers URLSession sets
-    /// are dropped. `complete` is false when the captured body was cut off, so sending it unchanged would not
-    /// repeat the request.
+    /// are dropped, and the `cookie` fields HTTP/2 may split a Cookie header into are joined back into one line at
+    /// the place of the first, as `urlRequest()` sends them. `complete` is false when the captured body was cut off,
+    /// so sending it unchanged would not repeat the request.
     public static func captured(
         method: String,
         url: String,
@@ -45,9 +46,9 @@ public struct RequestReplay: Equatable, Sendable {
         body: Data,
         bodyTruncated: Bool
     ) -> (replay: RequestReplay, complete: Bool) {
-        let kept = headers
+        let kept = joiningCookies(headers
             .filter { !$0.name.hasPrefix(":") && !managedHeaders.contains($0.name.lowercased()) }
-            .map { Header(name: $0.name, value: $0.value) }
+            .map { Header(name: $0.name, value: $0.value) })
         let replay = RequestReplay(method: method, url: url, headers: kept, body: bodyTruncated ? Data() : body)
         return (replay, !bodyTruncated)
     }
@@ -77,6 +78,37 @@ public struct RequestReplay: Equatable, Sendable {
         return headers
     }
 
+    static func isCookie(_ name: String) -> Bool {
+        name.caseInsensitiveCompare("cookie") == .orderedSame
+    }
+
+    /// `headers` with every Cookie line joined into one at the place of the first, the cookies separated by "; "
+    /// (RFC 9113 §8.2.3, RFC 6265 §5.4). Empty cookie lines and stray separators are dropped; when no cookie is left
+    /// the Cookie line goes. Other headers keep their order and repetitions.
+    static func joiningCookies(_ headers: [Header]) -> [Header] {
+        guard headers.filter({ isCookie($0.name) }).count > 1 else {
+            return headers
+        }
+        let separators = CharacterSet.whitespaces.union(CharacterSet(charactersIn: ";"))
+        let crumbs = headers
+            .filter { isCookie($0.name) }
+            .map { $0.value.trimmingCharacters(in: separators) }
+            .filter { !$0.isEmpty }
+        var joined: [Header] = []
+        var placed = false
+        for header in headers {
+            guard isCookie(header.name) else {
+                joined.append(header)
+                continue
+            }
+            if !placed, !crumbs.isEmpty {
+                joined.append(Header(name: header.name, value: crumbs.joined(separator: "; ")))
+            }
+            placed = true
+        }
+        return joined
+    }
+
     /// The URLSession request, or why it cannot be sent.
     public func urlRequest(timeout: TimeInterval = 30) throws -> URLRequest {
         let method = method.trimmingCharacters(in: .whitespaces).uppercased()
@@ -95,8 +127,15 @@ public struct RequestReplay: Equatable, Sendable {
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: timeout)
         request.httpMethod = method
         request.httpShouldHandleCookies = false
-        for header in headers where !Self.managedHeaders.contains(header.name.lowercased()) {
-            request.addValue(header.value, forHTTPHeaderField: header.name)
+        // Repeated Cookie lines (HTTP/2 splits the header into one field per cookie, and the editor may hold several)
+        // are joined with "; " here: URLRequest.addValue would join them with a comma, which servers read as part of
+        // the first cookie's value. Other repeated headers are joined with a comma as RFC 9110 allows.
+        for header in Self.joiningCookies(headers) where !Self.managedHeaders.contains(header.name.lowercased()) {
+            if Self.isCookie(header.name) {
+                request.setValue(header.value, forHTTPHeaderField: "Cookie")
+            } else {
+                request.addValue(header.value, forHTTPHeaderField: header.name)
+            }
         }
         if !body.isEmpty {
             request.httpBody = body

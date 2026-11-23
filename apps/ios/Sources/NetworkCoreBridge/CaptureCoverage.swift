@@ -82,8 +82,10 @@ public enum CaptureCoverage {
 }
 
 /// The domains HTTPS decryption is asked for: the decryption list, the active mappings' hosts and the enabled
-/// plugins' `[MITM]` hostnames, less the exclusions of the list and the plugins (an exclusion wins over every
-/// include, as the engine merges them). Only for what the app shows; the engine decides from the same lists.
+/// plugins' hostnames, less the exclusions of the list and the plugins (an exclusion wins over every include, as the
+/// engine merges them). Only for what the app shows; the engine decides from the same lists. The plugins' hosts are
+/// the kernel's import of them (`MitmPlugin.decryptedHostnames`), so Quantumult X snippets and Surge modules count
+/// as the engine reads them.
 public struct DecryptionDomains: Equatable {
     public let patterns: [String]
     public let excluded: [String]
@@ -91,8 +93,8 @@ public struct DecryptionDomains: Equatable {
     public init(mappings: DebugMappings, plugins: MitmPluginLibrary) {
         let enabled = plugins.isEnabled ? plugins.plugins.filter(\.isEnabled) : []
         self.init(
-            patterns: mappings.hosts + mappings.active.compactMap(\.host) + enabled.flatMap(\.summary.hostnames),
-            excluded: mappings.excludedHosts + enabled.flatMap(\.summary.excludedHostnames)
+            patterns: mappings.hosts + mappings.active.compactMap(\.host) + enabled.flatMap(\.decryptedHostnames),
+            excluded: mappings.excludedHosts + enabled.flatMap(\.excludedHostnames)
         )
     }
 

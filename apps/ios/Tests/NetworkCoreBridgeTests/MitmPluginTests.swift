@@ -218,6 +218,50 @@ final class MitmPluginTests: XCTestCase {
         }
     }
 
+    /// The plugin list and the decryption coverage count a plugin's hosts as the kernel imports it: a Quantumult X
+    /// snippet without a `[MITM]` section still decrypts its `hostname =` hosts, and its `-host` exclusions win over a
+    /// wildcard in the debug list. Plugins not inspected yet fall back to the `[MITM]` section.
+    func testHostsAndCountsComeFromTheKernelImport() throws {
+        var inspection = quantumultInspection
+        inspection.hostnames = ["a.example.com", "A.example.com"]
+        inspection.excludedHostnames = ["pay.example.com"]
+        inspection.lines = .init(supported: 2, partial: 1, unsupported: 1)
+        let snippet = try MitmPlugin(text: quantumultSnippet, inspection: inspection)
+        XCTAssertEqual(snippet.summary.hostnames, [], "the section reader sees no [MITM] section")
+        XCTAssertEqual(snippet.decryptedHostnames, ["a.example.com"])
+        XCTAssertEqual(snippet.excludedHostnames, ["pay.example.com"])
+        XCTAssertEqual(snippet.counts, MitmPluginCounts(hostnames: 1, scripts: 1, source: .kernel(appliedLines: 3, unsupportedLines: 1)))
+
+        var library = MitmPluginLibrary()
+        library.isEnabled = true
+        try library.add(snippet)
+        let mappings = try DebugMappings().addingHost("*.example.com")
+        let domains = DecryptionDomains(mappings: mappings, plugins: library)
+        XCTAssertTrue(domains.covers("a.example.com"))
+        XCTAssertFalse(domains.covers("pay.example.com"))
+        XCTAssertTrue(domains.excludes("pay.example.com"))
+        XCTAssertTrue(DecryptionDomains(mappings: DebugMappings(), plugins: library).covers("a.example.com"))
+
+        // The engine drops a hostname line it cannot read; the kernel's import says so, the section reader does not.
+        let dropped = try MitmPlugin(text: adBlock, inspection: MitmPluginInspection(level: "partial", lines: .init(supported: 2)))
+        XCTAssertEqual(dropped.decryptedHostnames, [])
+        let droppedLibrary = try libraryWith(dropped)
+        XCTAssertFalse(DecryptionDomains(mappings: DebugMappings(), plugins: droppedLibrary).covers("api.example.com"))
+
+        // Not inspected yet: the [MITM] section.
+        let legacy = try MitmPlugin(text: adBlock)
+        XCTAssertEqual(legacy.decryptedHostnames, ["api.example.com", "old.example.com"])
+        XCTAssertEqual(legacy.excludedHostnames, ["login.example.com"])
+        XCTAssertEqual(legacy.counts, MitmPluginCounts(hostnames: 2, scripts: 1, source: .sections(rewriteLines: 2, ruleLines: 1)))
+    }
+
+    private func libraryWith(_ plugin: MitmPlugin) throws -> MitmPluginLibrary {
+        var library = MitmPluginLibrary()
+        library.isEnabled = true
+        try library.add(plugin)
+        return library
+    }
+
     func testInspectionDecodesTheKernelJSONAndOldPluginsAreInspectedOnce() throws {
         let json = Data(#"""
         {"name":"QX Snippet","level":"partial","hostnames":["a.example.com"],"excluded_hostnames":["b.example.com"],

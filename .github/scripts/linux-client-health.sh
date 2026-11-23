@@ -5,8 +5,9 @@
 # 2. Cold start: launches it RUNS times with an empty config directory and ANIXOPS_STARTUP_PROBE set, so it
 #    quits as soon as the window's page has loaded. The wall time of each launch (exec to exit) is measured
 #    here; the median must stay within BUDGET_MS.
-# 3. Health: launches it once more without the probe and checks the loopback Prometheus endpoint, including
-#    the install integrity result.
+# 3. Health: launches it once more without the probe, with the endpoint turned on in health.json (it is off by
+#    default), and checks the loopback Prometheus endpoint, including the install integrity result and that a
+#    request naming another host is refused.
 #
 # Usage: linux-client-health.sh <path to anixops-net>   (inside xvfb-run)
 set -euo pipefail
@@ -63,7 +64,8 @@ fi
 
 # Health endpoint and integrity.
 config="${work}/config-health"
-mkdir -p "${config}"
+mkdir -p "${config}/anixops-net"
+echo '{"metrics_enabled": true}' > "${config}/anixops-net/health.json"
 XDG_CONFIG_HOME="${config}" "${app}" > "${work}/health.log" 2>&1 &
 pid=$!
 metrics=""
@@ -77,6 +79,8 @@ for _ in $(seq 1 60); do
   sleep 0.5
 done
 root_status="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}/" || true)"
+# A web page that rebinds its own name to 127.0.0.1 sends that name as Host.
+rebound_status="$(curl -s -o /dev/null -w '%{http_code}' -H "Host: rebound.example:${port}" "http://127.0.0.1:${port}/metrics" || true)"
 kill "${pid}" 2>/dev/null || true
 wait "${pid}" 2>/dev/null || true
 if [ -z "${metrics}" ]; then
@@ -99,6 +103,10 @@ for line in \
 done
 if [ "${root_status}" != "404" ]; then
   echo "::error::the endpoint should answer 404 outside /metrics, got ${root_status}"
+  exit 1
+fi
+if [ "${rebound_status}" != "403" ]; then
+  echo "::error::the endpoint should answer 403 to another Host, got ${rebound_status}"
   exit 1
 fi
 echo "metrics endpoint and integrity check OK"

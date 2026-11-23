@@ -156,7 +156,8 @@ impl Settings {
         Notice::new(NoticeKind::Connection, title, body)
     }
 
-    /// The notice when updating subscription `name` failed with `error`.
+    /// The notice when updating subscription `name` failed with `error`. Links in the error keep only their scheme
+    /// and host: a subscription's address carries its token, and a notification shows on the lock screen.
     pub fn subscription_failed(&self, name: &str, error: &str) -> Option<Notice> {
         if !self.subscriptions {
             return None;
@@ -169,7 +170,7 @@ impl Settings {
         Some(Notice {
             kind: NoticeKind::Subscription,
             title,
-            body: error.chars().take(200).collect(),
+            body: app_log::redact(error).chars().take(200).collect(),
             open_url: None,
         })
     }
@@ -364,6 +365,19 @@ mod tests {
         assert!(settings.disconnected(false).is_none());
         assert!(settings.on_demand_failed("x").is_none());
         assert!(settings.subscription_failed("HK", "x").is_none());
+    }
+
+    #[test]
+    fn a_failed_subscription_notice_never_shows_the_subscription_token() {
+        let settings = Settings::default();
+        let notice = settings
+            .subscription_failed(
+                "HK",
+                "error sending request for url (https://sub.example.com/link/SECRET?token=SECRET2)",
+            )
+            .unwrap();
+        assert!(!notice.body.contains("SECRET"));
+        assert!(notice.body.contains("https://sub.example.com/…"));
     }
 
     #[test]

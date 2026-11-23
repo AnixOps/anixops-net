@@ -653,6 +653,8 @@ export interface HealthStatus {
   crashReportsKept: number;
   /** The build sends reports to an address; otherwise they stay on this computer. */
   crashUploadConfigured: boolean;
+  /** The endpoint is turned on (off by default). */
+  metricsEnabled?: boolean;
   /** `http://127.0.0.1:9477/metrics` while the endpoint runs. */
   metricsAddress?: string | null;
   metricsError?: string | null;
@@ -812,6 +814,7 @@ export const desktop = {
   diagnostics: () => invoke<OperationResult>("create_diagnostics"),
   health: () => invoke<HealthStatus>("health_status"),
   setCrashReports: (enabled: boolean) => invoke<OperationResult>("set_crash_reports", { enabled }),
+  setMetrics: (enabled: boolean) => invoke<OperationResult>("set_metrics", { enabled }),
   importSubscription: (location: string) =>
     invoke<OperationResult>("import_subscription", { location }),
   updateSubscription: () => invoke<OperationResult>("update_subscription"),

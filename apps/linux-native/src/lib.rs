@@ -21,6 +21,8 @@ pub mod connection_list;
 #[cfg(all(feature = "gui", target_os = "linux"))]
 pub mod group_list;
 #[cfg(all(feature = "gui", target_os = "linux"))]
+pub mod list_keys;
+#[cfg(all(feature = "gui", target_os = "linux"))]
 pub mod node_dialog;
 #[cfg(all(feature = "gui", target_os = "linux"))]
 pub mod overview_page;

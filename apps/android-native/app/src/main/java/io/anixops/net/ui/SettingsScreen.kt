@@ -78,6 +78,7 @@ data class SettingsActions(
     val setCrashReports: (Boolean) -> Unit = {},
     val createDiagnostics: () -> Unit = {},
     val openTerms: () -> Unit = {},
+    val openPrivacy: () -> Unit = {},
     val openLogs: () -> Unit = {},
     val openTraffic: () -> Unit = {},
 )
@@ -150,6 +151,12 @@ fun SettingsScreen(
                 stringResource(R.string.terms_version, termsVersion),
                 divider = true,
                 onClick = actions.openTerms,
+            )
+            InfoRow(
+                stringResource(R.string.privacy_policy),
+                stringResource(R.string.action_view),
+                divider = true,
+                onClick = actions.openPrivacy,
             )
         }
     }

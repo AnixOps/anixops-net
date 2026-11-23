@@ -6,7 +6,7 @@ import { Appearance, appearances } from "../theme";
 import { factLabel } from "../labels";
 import { Card, Loading, MoreMenu, Row, Run, Segmented, StatusDot, TileColor, ToggleRow } from "../ui";
 import { currentLanguage, LanguageChoice, languages, t } from "../i18n";
-import { TermsViewer, termsVersion } from "../terms";
+import { PrivacyViewer, TermsViewer, termsVersion } from "../terms";
 import { AppMode, modes } from "../mode";
 import { OnDemandCard } from "./OnDemandCard";
 
@@ -122,15 +122,20 @@ export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, l
   );
 }
 
-/** The user agreement this build ships with, to read again at any time. */
+/** The user agreement and privacy policy this build ships with, to read again at any time. */
 function AboutCard() {
   const [reading, setReading] = useState(false);
+  const [readingPrivacy, setReadingPrivacy] = useState(false);
   return (
     <Card title={t("关于")}>
       <Row icon={ScrollText} color="gray" label={t("用户协议")} hint={t("用户协议、禁止用途与免责声明，版本 {version}", { version: termsVersion })}>
-        <button className="secondary compact" onClick={() => setReading(true)}>{t("查看")}</button>
+        <button className="secondary compact" aria-label={t("查看用户协议")} onClick={() => setReading(true)}>{t("查看")}</button>
+      </Row>
+      <Row icon={ShieldCheck} color="green" label={t("隐私政策")} hint={t("我们收集什么、数据保存在哪里、如何删除")}>
+        <button className="secondary compact" aria-label={t("查看隐私政策")} onClick={() => setReadingPrivacy(true)}>{t("查看")}</button>
       </Row>
       {reading && <TermsViewer onClose={() => setReading(false)} />}
+      {readingPrivacy && <PrivacyViewer onClose={() => setReadingPrivacy(false)} />}
     </Card>
   );
 }
@@ -169,6 +174,16 @@ function HealthCard({ busy, run }: { busy: string | null; run: Run }) {
     setHealth(await desktop.health());
     return result;
   });
+  const toggleMetrics = () => void run("metrics", async () => {
+    const result = await desktop.setMetrics(!health.metricsEnabled);
+    setHealth(await desktop.health());
+    return result;
+  });
+  const metricsHint = !health.metricsEnabled
+    ? t("默认关闭。打开后在本机回环地址提供指标，其中有策略组、所选节点和规则集的名称。")
+    : health.metricsAddress
+      ? t("正在监听 {address}，只接受本机回环地址的请求。指标里有策略组、所选节点和规则集的名称。", { address: health.metricsAddress })
+      : t("端口被占用");
   return (
     <Card title={t("诊断与隐私")}>
       <ToggleRow
@@ -182,7 +197,15 @@ function HealthCard({ busy, run }: { busy: string | null; run: Run }) {
         disabled={Boolean(busy)}
         onChange={toggle}
       />
-      <Row icon={Gauge} color="indigo" label={t("Prometheus 指标")} hint={t("只监听本机回环地址。")} value={health.metricsAddress ?? (health.metricsError ? t("端口被占用") : t("已关闭"))} />
+      <ToggleRow
+        icon={Gauge}
+        color="indigo"
+        label={t("Prometheus 指标")}
+        hint={metricsHint}
+        checked={Boolean(health.metricsEnabled)}
+        disabled={Boolean(busy)}
+        onChange={toggleMetrics}
+      />
       <Row icon={FileCheck} color="green" label={t("安装完整性")} hint={health.integrityDetail ?? undefined} value={<><StatusDot tone={integrity.tone} />{t(integrity.label)}</>} />
       {health.coldStartMs != null && <Row icon={Timer} color="gray" label={t("启动耗时")} value={`${health.coldStartMs} ms`} />}
     </Card>

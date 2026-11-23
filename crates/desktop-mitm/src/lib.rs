@@ -105,12 +105,27 @@ impl Root {
         }
         fs::create_dir_all(directory).map_err(|error| error.to_string())?;
         let root = Self::at(directory);
-        write_private(&root.private_key_path, key.serialize_pem().as_bytes())?;
-        fs::write(
-            &root.certificate_path,
-            certificate_pem.trim().to_string() + "\n",
-        )
-        .map_err(|error| error.to_string())?;
+        // The certificate is written in full beside the old one first, then the key replaces its file and the
+        // certificate follows; a failure on the way leaves the earlier key and certificate as they were, never a
+        // key with a certificate that is not its own.
+        let staged = root.certificate_path.with_file_name(".root-ca.pem.tmp");
+        if let Err(error) = fs::write(&staged, certificate_pem.trim().to_string() + "\n") {
+            let _ = fs::remove_file(&staged);
+            return Err(error.to_string());
+        }
+        let earlier_key = fs::read(&root.private_key_path).ok();
+        if let Err(error) = write_private(&root.private_key_path, key.serialize_pem().as_bytes()) {
+            let _ = fs::remove_file(&staged);
+            return Err(error);
+        }
+        if let Err(error) = fs::rename(&staged, &root.certificate_path) {
+            let _ = fs::remove_file(&staged);
+            let _ = match &earlier_key {
+                Some(earlier) => write_private(&root.private_key_path, earlier),
+                None => fs::remove_file(&root.private_key_path).map_err(|error| error.to_string()),
+            };
+            return Err(error.to_string());
+        }
         Ok(root)
     }
 
@@ -378,6 +393,23 @@ mod tests {
             envelope["mitm"]["ca_certificate"].as_str(),
             pem_body(&certificate).as_deref()
         );
+        let _ = fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn an_import_that_cannot_write_the_certificate_keeps_the_earlier_key() {
+        let directory =
+            std::env::temp_dir().join(format!("desktop-mitm-import-pair-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&directory);
+        let generated = Root::ensure(&directory).unwrap();
+        let earlier_key = fs::read(&generated.private_key_path).unwrap();
+        // A folder where the certificate goes: it cannot be replaced.
+        fs::remove_file(&generated.certificate_path).unwrap();
+        fs::create_dir_all(generated.certificate_path.join("blocked")).unwrap();
+        let (certificate, key) = own_ca("Team Debug CA");
+        assert!(Root::import(&directory, &certificate, &key).is_err());
+        assert_eq!(fs::read(&generated.private_key_path).unwrap(), earlier_key);
+        assert!(!directory.join(".root-ca.pem.tmp").exists());
         let _ = fs::remove_dir_all(&directory);
     }
 }

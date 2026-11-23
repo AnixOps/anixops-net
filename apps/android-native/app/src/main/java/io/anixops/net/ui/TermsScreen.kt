@@ -40,9 +40,10 @@ import io.anixops.net.ui.theme.LocalBrandPalette
 private val TermsMaxWidth = 720.dp
 
 /**
- * The user agreement in full. With [onAccept] it is the first-start consent (as the other clients): accepting is
- * the one primary action, declining explains that the app cannot be used and leaves the screen up. Without it the
- * page is the 关于 › 用户协议 viewer and [onClose] leaves it.
+ * The user agreement in full. With [onAccept] it is the first-start consent (as the other clients): it also says
+ * what happens to the user's data and links the privacy policy ([onPrivacy]), accepting is the one primary action,
+ * declining explains that the app cannot be used and leaves the screen up. Without it the page is a viewer and
+ * [onClose] leaves it: 关于 › 用户协议, or with [title] and [contentLabel] set, 关于 › 隐私政策 ([Privacy]).
  */
 @Composable
 fun TermsScreen(
@@ -50,11 +51,14 @@ fun TermsScreen(
     modifier: Modifier = Modifier,
     onAccept: (() -> Unit)? = null,
     onClose: () -> Unit = {},
+    onPrivacy: (() -> Unit)? = null,
+    title: Int = R.string.terms,
+    contentLabel: Int = R.string.terms_full_text,
 ) {
     val blocks = remember(markdown) { Terms.blocks(markdown) }
     var declined by rememberSaveable { mutableStateOf(false) }
     val palette = LocalBrandPalette.current
-    val fullText = stringResource(R.string.terms_full_text)
+    val fullText = stringResource(contentLabel)
     Surface(color = MaterialTheme.colorScheme.background, modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -74,11 +78,13 @@ fun TermsScreen(
                     verticalArrangement = Arrangement.spacedBy(BrandSpacing.xs),
                 ) {
                     Text(
-                        stringResource(if (onAccept != null) R.string.terms_consent_title else R.string.terms),
+                        stringResource(if (onAccept != null) R.string.terms_consent_title else title),
                         style = MaterialTheme.typography.headlineSmall,
                     )
                     if (onAccept != null) {
                         Text(stringResource(R.string.terms_consent_summary), style = MaterialTheme.typography.bodyMedium, color = palette.text2)
+                        // What happens to the user's data, before the VPN is ever used (Google Play user data policy).
+                        Text(stringResource(R.string.terms_consent_data), style = MaterialTheme.typography.bodyMedium, color = palette.text2)
                     }
                 }
                 Surface(
@@ -112,6 +118,9 @@ fun TermsScreen(
                     horizontalArrangement = Arrangement.spacedBy(BrandSpacing.xs, Alignment.End),
                 ) {
                     if (onAccept != null) {
+                        if (onPrivacy != null) {
+                            TextButton(onClick = onPrivacy) { Text(stringResource(R.string.privacy_policy)) }
+                        }
                         TextButton(onClick = { declined = true }) { Text(stringResource(R.string.terms_decline)) }
                         Button(onClick = onAccept) { Text(stringResource(R.string.terms_accept)) }
                     } else {

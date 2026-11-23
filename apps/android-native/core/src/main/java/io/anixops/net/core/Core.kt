@@ -487,13 +487,20 @@ class Core(
      * Reads what changed since [feed] (requests still under way included) through [filter], and lists every row
      * ordered by the column [by] (`seq`, `status`, `host`, `path`, `size` or `duration`). A refused filter leaves
      * [feed] as it was.
+     *
+     * [shown] is what an earlier read listed from this same [feed] in this same order, when the caller has it: if the
+     * engine has nothing new, it is returned as it is, so an idle list sends no rows across JNI. Otherwise the rows go
+     * across twice, to merge the answer in and to order the result; the cursor is worked out here ([nextSince],
+     * [nextRev]).
      */
-    suspend fun requests(feed: RequestFeed, filter: String, by: String, descending: Boolean): RequestPage {
-        val since = call(
-            "view.next_since",
-            Long.serializer(),
-            args("rows" to feed.rows, "lastSeq" to JsonPrimitive(feed.lastSeq)),
-        )
+    suspend fun requests(
+        feed: RequestFeed,
+        filter: String,
+        by: String,
+        descending: Boolean,
+        shown: List<RequestRow>? = null,
+    ): RequestPage {
+        val since = nextSince(feed.rows, feed.lastSeq)
         val answer = controlRequest(
             buildJsonObject {
                 put("cmd", "capture_requests")
@@ -504,7 +511,7 @@ class Core(
             },
         )
         (answer as? JsonObject)?.get("error")?.let { error ->
-            return RequestPage(feed, requestRows(feed.rows, by, descending), decode(FilterError.serializer(), error))
+            return RequestPage(feed, shown ?: requestRows(feed.rows, by, descending), decode(FilterError.serializer(), error))
         }
         val answerSeq = ((answer as? JsonObject)?.get("last_seq") as? JsonPrimitive)?.content?.toLongOrNull()
         val answerRev = ((answer as? JsonObject)?.get("last_rev") as? JsonPrimitive)?.content?.toLongOrNull()
@@ -512,18 +519,13 @@ class Core(
             // A new engine: the next read starts from nothing and takes everything it holds.
             return RequestPage(RequestFeed(), emptyList())
         }
+        val lastSeq = answerSeq ?: 0L
+        val lastRev = nextRev(feed.lastRev, answer, REQUEST_PAGE)
+        if (shown != null && mergeChangesNothing(feed.rows, answer)) {
+            return RequestPage(RequestFeed(feed.rows, maxOf(feed.lastSeq, lastSeq), lastRev), shown)
+        }
         val merged = raw("view.merge_requests", args("rows" to feed.rows, "answer" to answer)) as? JsonArray
             ?: throw CoreException(texts.unreadable(), detail = "Unexpected answer to view.merge_requests")
-        val lastSeq = ((answer as? JsonObject)?.get("last_seq") as? JsonPrimitive)?.content?.toLongOrNull() ?: 0
-        val nextRev = raw(
-            "view.next_rev",
-            args(
-                "current" to (feed.lastRev?.let(::JsonPrimitive) ?: JsonNull),
-                "answer" to answer,
-                "page" to JsonPrimitive(REQUEST_PAGE),
-            ),
-        )
-        val lastRev = (nextRev as? JsonPrimitive)?.content?.toLongOrNull()
         return RequestPage(RequestFeed(merged, maxOf(feed.lastSeq, lastSeq), lastRev), requestRows(merged, by, descending))
     }
 

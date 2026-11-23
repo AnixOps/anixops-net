@@ -2,7 +2,14 @@
 //! Quantumult X texts). Each plugin is kept with the scripts and data files
 //! it names, downloaded once at import; enabled plugins join the `mitm`
 //! section of the envelope the desktop engine runs on, next to the built-in
-//! policy. Importing a plugin is the user's consent to run its scripts.
+//! policy.
+//!
+//! Importing is not consent to run anything: a plugin is saved turned off,
+//! and the window shows what it decrypts, rewrites and which scripts it runs
+//! ([`details`]) before the user turns it on, as iOS asks before a script
+//! runs. Importing it again keeps it on only when its text and every script
+//! are byte for byte what the user turned on; anything else turns it off for
+//! another look. Plugins saved by earlier versions keep their switch.
 
 use engine_embedded::mitm::inspect::{inspect_plugin_json, MAX_PLUGIN_LEN};
 use serde::{Deserialize, Serialize};
@@ -56,6 +63,10 @@ pub struct PluginSummary {
     pub level: String,
     pub hostnames: Vec<String>,
     pub script_count: usize,
+    /// Set by an import that replaced a plugin which was on: what the engine runs changed even when the new one
+    /// is off. Not part of the list the window shows.
+    #[serde(skip)]
+    pub replaced_one_on: bool,
 }
 
 impl StoredPlugin {
@@ -68,6 +79,7 @@ impl StoredPlugin {
             level: self.level.clone(),
             hostnames: self.hostnames.clone(),
             script_count: self.scripts.len(),
+            replaced_one_on: false,
         }
     }
 }
@@ -81,7 +93,8 @@ pub fn list(directory: &Path) -> Result<Vec<PluginSummary>, String> {
 }
 
 /// Downloads the plugin at `url` and every script and data file it names,
-/// and saves it enabled. Importing the same URL again replaces the plugin.
+/// and saves it turned off for the user to review. Importing the same URL
+/// again replaces the plugin (see [`save`] for when it stays on).
 pub fn import(
     directory: &Path,
     url: &str,
@@ -100,8 +113,8 @@ pub fn import(
 }
 
 /// Saves a plugin the user opened from a file or pasted, named `source` (the file name, or empty when
-/// pasted), with every script and data file it names downloaded as for [`import`]. Importing a plugin with
-/// the same name again replaces it.
+/// pasted), with every script and data file it names downloaded as for [`import`], turned off for the user to
+/// review. Importing a plugin with the same name again replaces it.
 pub fn import_text(
     directory: &Path,
     source: &str,
@@ -137,7 +150,10 @@ pub fn import_text(
     save(directory, id, source.trim(), text, &description, fetch)
 }
 
-/// Downloads the files the plugin names and saves it enabled, in place of a plugin with the same id.
+/// Downloads the files the plugin names and saves it in place of a plugin with the same id: turned off, unless
+/// that plugin was on and its text and scripts are unchanged. A failed import never leaves a plugin on with files the
+/// user did not look at: nothing is written until every file has downloaded, and a plugin that was on is saved off
+/// before its files are replaced.
 fn save(
     directory: &Path,
     id: String,
@@ -149,8 +165,27 @@ fn save(
     let text = String::from_utf8(text).map_err(|_| "Plugin text is not UTF-8.".to_string())?;
 
     fs::create_dir_all(directory).map_err(|error| error.to_string())?;
-    let mut scripts = BTreeMap::new();
-    let mut resources = BTreeMap::new();
+    let mut library = read_library(directory)?;
+    let existing = library
+        .plugins
+        .iter()
+        .find(|existing| existing.id == id)
+        .cloned();
+    // What the user turned on, read before anything on disk changes.
+    let previous = existing
+        .as_ref()
+        .filter(|existing| existing.enabled)
+        .map(|existing| {
+            let bodies: BTreeMap<String, Option<Vec<u8>>> = existing
+                .scripts
+                .iter()
+                .map(|(url, file)| (url.clone(), fs::read(directory.join(file)).ok()))
+                .collect();
+            (existing.text.clone(), bodies)
+        });
+
+    // Every file is downloaded before the folder is touched, so a file that fails to download changes nothing.
+    let mut downloads: Vec<(String, bool, Vec<u8>)> = Vec::new();
     let listed = description["resources"]
         .as_array()
         .cloned()
@@ -159,7 +194,7 @@ fn save(
         let Some(resource_url) = resource["url"].as_str() else {
             continue;
         };
-        if scripts.contains_key(resource_url) || resources.contains_key(resource_url) {
+        if downloads.iter().any(|(known, _, _)| known == resource_url) {
             continue;
         }
         if !is_https(resource_url) {
@@ -170,13 +205,46 @@ fn save(
         let script = resource["kind"].as_str() == Some(KIND_SCRIPT);
         let body = fetch(resource_url, MAX_RESOURCE_LEN)
             .map_err(|error| format!("{resource_url} could not be downloaded: {error}"))?;
+        downloads.push((resource_url.to_string(), script, body));
+    }
+
+    let replaced_one_on = previous.is_some();
+    let script_count = downloads.iter().filter(|(_, script, _)| *script).count();
+    let unchanged = previous.is_some_and(|(previous_text, previous_scripts)| {
+        previous_text == text
+            && previous_scripts.len() == script_count
+            && downloads
+                .iter()
+                .filter(|(_, script, _)| *script)
+                .all(|(url, _, body)| {
+                    previous_scripts
+                        .get(url)
+                        .is_some_and(|previous| previous.as_deref() == Some(body.as_slice()))
+                })
+    });
+    // The new files take the names the plugin that is on points to. Turn it off on disk first, so an error while
+    // they are written cannot leave it on with scripts nobody looked at.
+    if replaced_one_on && !unchanged {
+        if let Some(stored) = library
+            .plugins
+            .iter_mut()
+            .find(|existing| existing.id == id)
+        {
+            stored.enabled = false;
+        }
+        write_library(directory, &library)?;
+    }
+
+    let mut scripts = BTreeMap::new();
+    let mut resources = BTreeMap::new();
+    for (resource_url, script, body) in downloads {
         let extension = if script { "js" } else { "dat" };
-        let file = format!("{id}-{:016x}.{extension}", hash(resource_url));
-        fs::write(directory.join(&file), body).map_err(|error| error.to_string())?;
+        let file = format!("{id}-{:016x}.{extension}", hash(&resource_url));
+        write_file(directory, &file, &body)?;
         if script {
-            scripts.insert(resource_url.to_string(), file);
+            scripts.insert(resource_url, file);
         } else {
-            resources.insert(resource_url.to_string(), file);
+            resources.insert(resource_url, file);
         }
     }
 
@@ -188,7 +256,7 @@ fn save(
             .unwrap_or(if url.is_empty() { "Plugin" } else { url })
             .to_string(),
         url: url.to_string(),
-        enabled: true,
+        enabled: unchanged,
         level: description["level"]
             .as_str()
             .unwrap_or_default()
@@ -206,8 +274,16 @@ fn save(
         scripts,
         resources,
     };
-    let summary = plugin.summary();
-    let mut library = read_library(directory)?;
+    let summary = PluginSummary {
+        replaced_one_on,
+        ..plugin.summary()
+    };
+    let kept: Vec<String> = plugin
+        .scripts
+        .values()
+        .chain(plugin.resources.values())
+        .cloned()
+        .collect();
     match library
         .plugins
         .iter_mut()
@@ -217,6 +293,14 @@ fn save(
         None => library.plugins.push(plugin),
     }
     write_library(directory, &library)?;
+    // Files the plugin no longer names.
+    if let Some(existing) = existing {
+        for file in existing.scripts.values().chain(existing.resources.values()) {
+            if !kept.contains(file) {
+                let _ = fs::remove_file(directory.join(file));
+            }
+        }
+    }
     Ok(summary)
 }
 
@@ -411,6 +495,16 @@ fn read_library(directory: &Path) -> Result<Library, String> {
     }
 }
 
+/// Writes `name` in `directory` whole or not at all: a failed write never leaves part of a script behind.
+fn write_file(directory: &Path, name: &str, contents: &[u8]) -> Result<(), String> {
+    let temporary = directory.join(format!("{name}.tmp"));
+    fs::write(&temporary, contents).map_err(|error| error.to_string())?;
+    fs::rename(&temporary, directory.join(name)).map_err(|error| {
+        let _ = fs::remove_file(&temporary);
+        error.to_string()
+    })
+}
+
 fn write_library(directory: &Path, library: &Library) -> Result<(), String> {
     fs::create_dir_all(directory).map_err(|error| error.to_string())?;
     let bytes = serde_json::to_vec_pretty(library).map_err(|error| error.to_string())?;
@@ -476,13 +570,22 @@ mod tests {
     #[test]
     fn imported_plugins_join_the_mitm_section_with_their_scripts() {
         let directory = scratch("import");
-        let summary = import(&directory, PLUGIN_URL, fetch).unwrap();
-        assert_eq!(summary.name, "ipleak test");
-        assert_eq!(summary.hostnames, ["ipleak.net"]);
-        assert_eq!(summary.script_count, 1);
+        let imported = import(&directory, PLUGIN_URL, fetch).unwrap();
+        assert_eq!(imported.name, "ipleak test");
+        assert_eq!(imported.hostnames, ["ipleak.net"]);
+        assert_eq!(imported.script_count, 1);
+        // Saved off: nothing of it runs before the user has looked at it and turned it on.
+        assert!(!imported.enabled);
+        let mut mitm = Map::new();
+        apply(&directory, &mut mitm);
+        assert!(mitm.is_empty());
+        set_enabled(&directory, &imported.id, true).unwrap();
+        let summary = list(&directory).unwrap().remove(0);
         assert!(summary.enabled);
-        // The same address replaces the plugin instead of adding a second one.
-        import(&directory, PLUGIN_URL, fetch).unwrap();
+        // The same address replaces the plugin instead of adding a second one, and the same content stays on.
+        let again = import(&directory, PLUGIN_URL, fetch).unwrap();
+        assert!(again.enabled && again.replaced_one_on);
+        assert_eq!(again.id, summary.id);
         assert_eq!(list(&directory).unwrap(), std::slice::from_ref(&summary));
 
         let mut mitm = Map::new();
@@ -506,6 +609,145 @@ mod tests {
 
         remove(&directory, &summary.id).unwrap();
         assert!(list(&directory).unwrap().is_empty());
+        let _ = fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn a_plugin_whose_script_or_text_changed_is_turned_off_for_another_look() {
+        let directory = scratch("changed");
+        let id = import(&directory, PLUGIN_URL, fetch).unwrap().id;
+        set_enabled(&directory, &id, true).unwrap();
+        // The script at the same address now does something else.
+        let changed_script = |url: &str, limit: usize| match url {
+            SCRIPT_URL => Ok(b"$done({ body: 'other' });".to_vec()),
+            _ => fetch(url, limit),
+        };
+        assert!(
+            !import(&directory, PLUGIN_URL, changed_script)
+                .unwrap()
+                .enabled
+        );
+        let mut mitm = Map::new();
+        apply(&directory, &mut mitm);
+        assert!(mitm.is_empty());
+
+        // Turned on again, then the plugin decrypts one more domain.
+        set_enabled(&directory, &id, true).unwrap();
+        let more_hosts = |url: &str, limit: usize| match url {
+            PLUGIN_URL => Ok(PLUGIN
+                .replace("hostname = ipleak.net", "hostname = ipleak.net, *")
+                .into_bytes()),
+            _ => changed_script(url, limit),
+        };
+        assert!(!import(&directory, PLUGIN_URL, more_hosts).unwrap().enabled);
+
+        // Pasted text follows the same rule.
+        let pasted = import_text(&directory, "", PLUGIN, fetch).unwrap();
+        assert!(!pasted.enabled);
+        let _ = fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn a_failed_import_never_leaves_a_plugin_on_with_scripts_nobody_looked_at() {
+        const SECOND_URL: &str = "https://plugins.example/second.js";
+        let directory = scratch("failed-again");
+        let id = import(&directory, PLUGIN_URL, fetch).unwrap().id;
+        set_enabled(&directory, &id, true).unwrap();
+        let script_file = |mitm: &Map<String, Value>| {
+            mitm.get("script_assets")
+                .and_then(|assets| assets[SCRIPT_URL].as_str())
+                .map(PathBuf::from)
+        };
+        let mut mitm = Map::new();
+        apply(&directory, &mut mitm);
+        let original = script_file(&mitm).unwrap();
+
+        // The plugin now names a second script; the first one changed and the second does not download.
+        let with_second = PLUGIN.replace(
+            "[MITM]\n",
+            "http-response ^https?:\\/\\/ipleak\\.net\\/second script-path=https://plugins.example/second.js, requires-body=true, tag=second\n[MITM]\n",
+        );
+        let second_missing = |url: &str, limit: usize| match url {
+            PLUGIN_URL => Ok(with_second.clone().into_bytes()),
+            SCRIPT_URL => Ok(b"$done({ body: 'other' });".to_vec()),
+            _ => fetch(url, limit),
+        };
+        let error = import(&directory, PLUGIN_URL, second_missing).unwrap_err();
+        assert!(error.contains(SECOND_URL), "{error}");
+        // Nothing on disk changed: what runs is still what the user turned on.
+        let mut mitm = Map::new();
+        apply(&directory, &mut mitm);
+        assert_eq!(mitm["plugins"], json!([PLUGIN]));
+        assert_eq!(script_file(&mitm).as_ref(), Some(&original));
+        assert_eq!(fs::read(&original).unwrap(), b"$done({});");
+
+        // The second script downloads but cannot be written: the plugin is off before any new file lands.
+        let second_changed = |url: &str, limit: usize| match url {
+            SECOND_URL => Ok(b"$done({});".to_vec()),
+            _ => second_missing(url, limit),
+        };
+        let blocked = directory.join(format!("{id}-{:016x}.js.tmp", hash(SECOND_URL)));
+        fs::create_dir_all(&blocked).unwrap();
+        assert!(import(&directory, PLUGIN_URL, second_changed).is_err());
+        assert!(!list(&directory).unwrap()[0].enabled);
+        let mut mitm = Map::new();
+        apply(&directory, &mut mitm);
+        assert!(mitm.is_empty());
+
+        // Once it can be written, the new content is saved off for review.
+        fs::remove_dir_all(&blocked).unwrap();
+        let again = import(&directory, PLUGIN_URL, second_changed).unwrap();
+        assert!(!again.enabled);
+        assert_eq!(again.script_count, 2);
+        let _ = fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn a_plugin_that_names_fewer_files_leaves_none_behind() {
+        let directory = scratch("fewer");
+        let id = import(&directory, PLUGIN_URL, fetch).unwrap().id;
+        let script = directory.join(format!("{id}-{:016x}.js", hash(SCRIPT_URL)));
+        assert!(script.is_file());
+        let without_script = |url: &str, limit: usize| match url {
+            PLUGIN_URL => Ok(PLUGIN
+                .lines()
+                .filter(|line| !line.contains("script-path"))
+                .collect::<Vec<_>>()
+                .join("\n")
+                .into_bytes()),
+            _ => fetch(url, limit),
+        };
+        assert_eq!(
+            import(&directory, PLUGIN_URL, without_script)
+                .unwrap()
+                .script_count,
+            0
+        );
+        assert!(!script.exists());
+        let _ = fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn plugins_saved_before_the_review_keep_their_switch() {
+        let directory = scratch("earlier");
+        fs::create_dir_all(&directory).unwrap();
+        // A library an earlier version wrote: imported on, with its script.
+        fs::write(directory.join("old-script.js"), b"$done({});").unwrap();
+        let library = json!({ "plugins": [{
+            "id": "0123456789abcdef",
+            "name": "ipleak test",
+            "url": PLUGIN_URL,
+            "enabled": true,
+            "level": "full",
+            "hostnames": ["ipleak.net"],
+            "text": PLUGIN,
+            "scripts": { SCRIPT_URL: "old-script.js" },
+        }] });
+        fs::write(directory.join(LIBRARY_FILE), library.to_string()).unwrap();
+        assert!(list(&directory).unwrap()[0].enabled);
+        let mut mitm = Map::new();
+        apply(&directory, &mut mitm);
+        assert_eq!(mitm["plugins"], json!([PLUGIN]));
         let _ = fs::remove_dir_all(&directory);
     }
 

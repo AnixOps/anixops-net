@@ -73,6 +73,35 @@
                 KeyPath="yes" />
           </Component>
 
+          <!--
+            License notices: the client's own license, the third-party notices (release.yml generates them from the
+            package managers' metadata, .github/scripts/third_party_notices.py) and Wintun's license, which its terms
+            ask to keep beside wintun.dll.
+          -->
+          <Component Id="LicenseComponent" Guid="*">
+            <File
+                Id="LicenseText"
+                Source="$(LicenseFile)"
+                Name="LICENSE.txt"
+                KeyPath="yes" />
+          </Component>
+
+          <Component Id="ThirdPartyNoticesComponent" Guid="*">
+            <File
+                Id="ThirdPartyNotices"
+                Source="$(NoticesFile)"
+                Name="THIRD_PARTY_NOTICES.txt"
+                KeyPath="yes" />
+          </Component>
+
+          <Component Id="WintunLicenseComponent" Guid="*">
+            <File
+                Id="WintunLicense"
+                Source="$(WintunLicense)"
+                Name="wintun-LICENSE.txt"
+                KeyPath="yes" />
+          </Component>
+
           <!-- The install integrity list the client checks at start (crates/client-health). -->
           <Component Id="IntegrityListComponent" Guid="*">
             <File
@@ -149,6 +178,9 @@
       <ComponentRef Id="CliComponent" />
       <ComponentRef Id="LinkHandlerComponent" />
       <ComponentRef Id="IntegrityListComponent" />
+      <ComponentRef Id="LicenseComponent" />
+      <ComponentRef Id="ThirdPartyNoticesComponent" />
+      <ComponentRef Id="WintunLicenseComponent" />
       <ComponentRef Id="ManagedConfigurationComponent" />
       <ComponentRef Id="ManagedDataFolderComponent" />
       <ComponentRef Id="InstallFolderRegistryComponent" />
