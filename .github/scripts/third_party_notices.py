@@ -461,7 +461,8 @@ def self_test():
             failures.append(f"output lacks {expected!r}")
     if "client-core" in text:
         failures.append("output lists AnixOps's own crate")
-    if text.count("androidx.core:core 1.16.0") != 1:
+    # The component list names each module once; the "Used by" line of its license text names it again.
+    if text.count("  androidx.core:core 1.16.0 [") != 1:
         failures.append("a Gradle constraint line was listed as a module")
     run("unknown crate license", ["--cargo", f"client={cargo_unknown}"], False)
     run("non-Apache Gradle module", ["--gradle-deps", gradle_gpl, "--gradle-cache", cache, "--apache-text", apache],
