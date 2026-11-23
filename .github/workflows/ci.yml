@@ -674,6 +674,9 @@ jobs:
           $missingDriver = Join-Path $env:RUNNER_TEMP "anixops-ci-missing-driver.inf"
           @{ driver_inf_path = $missingDriver } | ConvertTo-Json | Set-Content -Path (Join-Path $dataDir "desktop-state.json") -Encoding utf8
 
+          if (-not (Test-Path $rootKey)) {
+            throw "The CI decryption root left the user's root store before the upgrade."
+          }
           Invoke-MsiTransaction `
             -Arguments @("/i", "`"$msiPath`"", "/qn", "/norestart", "/l*v", "`"$upgradeLog`"") `
             -LogPath $upgradeLog `
@@ -693,6 +696,7 @@ jobs:
             throw "The MSI upgrade removed the sign-in startup task."
           }
           if (-not (Test-Path $rootKey)) {
+            if (Test-Path $guiLog) { Get-Content $guiLog -Tail 80 }
             throw "The MSI upgrade removed the trusted HTTPS decryption root."
           }
           if (-not (Test-Path $decryptionKey -PathType Leaf)) {
