@@ -159,7 +159,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
         // The subscription's rules and groups go in whatever the mode, so the app can switch modes without a restart.
         let mode = ProxyMode.saved(in: tunnelProtocol.providerConfiguration)
-        let dns = DnsSettings.fromProfileValue(tunnelProtocol.providerConfiguration?[TunnelProfileKeys.dns] as? Data)
+        // Rules an earlier version saved over the engine's domain limit are left out (`withinDomainLimit()`): the
+        // engine would refuse the whole config.
+        let dnsLimit = DnsSettings.fromProfileValue(tunnelProtocol.providerConfiguration?[TunnelProfileKeys.dns] as? Data)?
+            .withinDomainLimit()
+        let dns = dnsLimit?.settings
+        if let dropped = dnsLimit?.droppedRules, dropped > 0 {
+            events.record("dns: \(dropped) rules skipped (over \(DnsSettings.maxRuleDomains) domains)")
+        }
         // Lines an earlier version saved without checking them all are skipped (`TrafficRedirects.validLines`): the
         // engine would refuse the whole config for one of them.
         let savedRedirects = TrafficRedirects.lines(

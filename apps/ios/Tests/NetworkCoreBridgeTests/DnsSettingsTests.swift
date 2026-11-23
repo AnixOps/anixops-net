@@ -84,6 +84,46 @@ final class DnsSettingsTests: XCTestCase {
         XCTAssertThrowsError(try base.settingHost("bad name", addresses: "10.0.0.1"))
     }
 
+    /// The engine refuses the whole config when the DNS rules list more than 4096 domains, suffixes and keywords in
+    /// all; rule sets do not count. Adding over it is refused with the reason, and settings saved over it by an
+    /// earlier version reach the tunnel with their last rules left out.
+    func testDnsRulesStayWithinTheEnginesDomainLimit() throws {
+        XCTAssertEqual(DnsSettings.maxRuleDomains, 4096)
+        func lines(_ count: Int, from start: Int = 0) -> String {
+            (start..<(start + count)).map { "DOMAIN-SUFFIX,host-\($0).example" }.joined(separator: "\n")
+        }
+        let base = split
+        XCTAssertEqual(base.ruleDomainCount, 1)
+
+        // Exactly at the limit is fine, one more is refused, and a refusal changes nothing.
+        let full = try base.addingRule(lines(4095), server: "alidns")
+        XCTAssertEqual(full.ruleDomainCount, 4096)
+        XCTAssertThrowsError(try full.addingRule("DOMAIN,one-more.example", server: "alidns")) { error in
+            XCTAssertEqual(error as? DnsSettingsError, .tooManyDomains)
+        }
+        XCTAssertThrowsError(try base.addingRule(lines(4096), server: "alidns")) { error in
+            XCTAssertEqual(error as? DnsSettingsError, .tooManyDomains)
+        }
+        XCTAssertThrowsError(try full.addingRule("DOMAIN-KEYWORD,ads", server: "alidns"))
+        // Rule sets do not count.
+        let withSet = try full.addingRule("GEOSITE,cn", server: "cloudflare")
+        XCTAssertEqual(withSet.ruleDomainCount, 4096)
+        XCTAssertEqual(withSet.rules.count, full.rules.count + 1)
+
+        // Over the limit, as an earlier version could save it: the tunnel keeps the rules that fit, in order.
+        var over = full
+        over.rules.insert(DnsSettings.Rule(domain: ["early.example"], server: "alidns"), at: 0)
+        over.rules.append(DnsSettings.Rule(ruleSet: "geosite-cn", server: "cloudflare"))
+        XCTAssertEqual(over.ruleDomainCount, 4097)
+        let limited = over.withinDomainLimit()
+        XCTAssertEqual(limited.droppedRules, 1)
+        XCTAssertEqual(limited.settings.ruleDomainCount, 2)
+        XCTAssertEqual(limited.settings.rules.first?.domain, ["early.example"])
+        XCTAssertEqual(limited.settings.rules.last?.ruleSet, "geosite-cn")
+        XCTAssertEqual(full.withinDomainLimit().settings, full)
+        XCTAssertEqual(full.withinDomainLimit().droppedRules, 0)
+    }
+
     func testRuntimeConfigCarriesDnsAndItsRuleSets() throws {
         let routing = EmbeddedRuntimeConfig.Routing(outbounds: ["a": [:]], rules: ["FINAL,a"], groups: [])
         let config = EmbeddedRuntimeConfig(

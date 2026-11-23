@@ -14758,6 +14758,54 @@
           }
         }
       }
+    },
+    "DNS 规则合计最多 %lld 个域名、后缀和关键词。较长的列表请改用 RULE-SET 或 GEOSITE 规则集。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DNS rules can list at most %lld domains, suffixes and keywords in total. Use a RULE-SET or GEOSITE rule set for longer lists."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DNS 規則合計最多 %lld 個網域、後綴和關鍵字。較長的列表請改用 RULE-SET 或 GEOSITE 規則集。"
+          }
+        }
+      }
+    },
+    "已用 %lld / %lld 个域名、后缀和关键词": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld of %lld domains, suffixes and keywords used"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已用 %lld / %lld 個網域、後綴和關鍵字"
+          }
+        }
+      }
+    },
+    "超出上限，排在后面的规则不会生效。请删除一些规则，较长的列表改用 RULE-SET 或 GEOSITE 规则集。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Over the limit: the last rules are not in effect. Delete some rules, and use a RULE-SET or GEOSITE rule set for longer lists."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "超出上限，排在後面的規則不會生效。請刪除一些規則，較長的列表改用 RULE-SET 或 GEOSITE 規則集。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
