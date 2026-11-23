@@ -90,16 +90,6 @@
                 Type="string"
                 Value="[INSTALLFOLDER]"
                 KeyPath="yes" />
-            <!--
-              Read by the GUI's uninstall actions (main.rs, removal_is_an_upgrade): written before the
-              earlier version's removal, which then finds a product code that is not registered yet.
-            -->
-            <RegistryValue
-                Root="HKLM"
-                Key="Software\AnixOps\NetworkCore"
-                Name="InstallingProductCode"
-                Type="string"
-                Value="[ProductCode]" />
           </Component>
 
           <Component Id="CliComponent" Guid="*">
@@ -165,12 +155,40 @@
         Impersonate="no"
         Return="ignore" />
     <!--
+      During an upgrade the earlier version's uninstall actions run this version's program, and
+      before 1.0 they did not tell an upgrade from a removal. This version notes the upgrade while it
+      installs its files, before the earlier version is removed, and clears the note afterwards
+      (main.rs, removal_is_an_upgrade).
+    -->
+    <CustomAction
+        Id="NoteUpgrade"
+        FileRef="GuiExe"
+        ExeCommand="--note-upgrade"
+        Execute="deferred"
+        Impersonate="no"
+        Return="ignore" />
+    <CustomAction
+        Id="ClearUpgradeNote"
+        FileRef="GuiExe"
+        ExeCommand="--clear-upgrade-note"
+        Execute="deferred"
+        Impersonate="no"
+        Return="ignore" />
+    <!--
       Only on a full removal: an upgrade keeps the users' sign-in startup tasks, the decryption roots
       they trusted and the key. The packages before 1.0 lack the UPGRADINGPRODUCTCODE test; when they
       are upgraded their actions run this version's program, which tells an upgrade apart itself
       (main.rs, removal_is_an_upgrade).
     -->
     <InstallExecuteSequence>
+      <Custom
+          Action="NoteUpgrade"
+          After="InstallFiles"
+          Condition="WIX_UPGRADE_DETECTED AND NOT REMOVE=&quot;ALL&quot;" />
+      <Custom
+          Action="ClearUpgradeNote"
+          After="RemoveExistingProducts"
+          Condition="WIX_UPGRADE_DETECTED AND NOT REMOVE=&quot;ALL&quot;" />
       <Custom
           Action="PurgeManagedNetworkState"
           Before="RemoveFiles"

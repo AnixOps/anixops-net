@@ -11,6 +11,15 @@ fn main() {
     client_health::startup::mark_process_start();
     // Run by the MSI as LocalSystem, where no one can see a message box: the
     // outcome goes to the log only.
+    // Run by the new package during an upgrade, around the earlier version's removal.
+    if std::env::args().any(|argument| argument == "--note-upgrade") {
+        gui::note_upgrade();
+        return;
+    }
+    if std::env::args().any(|argument| argument == "--clear-upgrade-note") {
+        gui::clear_upgrade_note();
+        return;
+    }
     if std::env::args().any(|argument| argument == "--purge") {
         if gui::removal_is_an_upgrade() {
             gui::log_upgrade_skip("--purge");
@@ -185,12 +194,12 @@ mod gui {
     /// from a removal, run this, the new version's program. An upgrade keeps
     /// the user's sign-in startup, trusted roots and keys.
     ///
-    /// Windows registers the new version only when the whole installation
-    /// commits, so during the old version's removal only the old one is
-    /// listed. The new version has already written its product code to the
-    /// registry by then (Package.wxs, `InstallingProductCode`), so a product
-    /// code there that is not among the registered versions means a newer
-    /// version is being installed.
+    /// The registered versions do not show it: during the old version's
+    /// removal Windows lists only one. So the new package notes the upgrade
+    /// in the registry while it installs its files (`--note-upgrade`) and
+    /// clears the note once the old version is gone (`--clear-upgrade-note`,
+    /// Package.wxs). A note left by an installation that failed is ignored
+    /// once it is older than [`UPGRADE_NOTE_LIFETIME`].
     pub fn removal_is_an_upgrade() -> bool {
         use windows_sys::Win32::System::ApplicationInstallationAndServicing::MsiEnumRelatedProductsW;
 
@@ -206,40 +215,99 @@ mod gui {
                 (result == 0).then(|| String::from_utf16_lossy(&product[..38]))
             })
             .collect();
-        let installing = installing_product_code();
-        let upgrade = is_upgrade(&installed, installing.as_deref());
+        let noted = read_upgrade_note();
+        let upgrade = is_upgrade(installed.len(), noted, unix_now());
         // A failed upgrade can leave two versions registered, and every later removal is then taken
         // for an upgrade too; the log says which ones were found.
         let _ = append_managed_log(
             "gui",
             &format!(
-                "versions of the package registered during removal: {}; installing: {}",
+                "versions of the package registered during removal: {}; upgrade noted at: {}",
                 installed.join(", "),
-                installing.as_deref().unwrap_or("none")
+                noted.map_or_else(|| "none".to_string(), |at| at.to_string())
             ),
         );
         upgrade
     }
 
-    /// The product code the newest installation of the package wrote to
-    /// `HKLM\Software\AnixOps\NetworkCore` (`InstallingProductCode`).
-    fn installing_product_code() -> Option<String> {
+    /// Where the new package notes an upgrade: `HKLM\Software\AnixOps\NetworkCore`, which only
+    /// administrators can write, value `UpgradeStartedAt` (Unix seconds).
+    const UPGRADE_NOTE_KEY: &str = r"Software\AnixOps\NetworkCore";
+    const UPGRADE_NOTE_VALUE: &str = "UpgradeStartedAt";
+    /// How long a note counts. The old version's removal follows the note within seconds; a
+    /// note this old was left by an installation that did not finish.
+    const UPGRADE_NOTE_LIFETIME: u64 = 15 * 60;
+
+    fn unix_now() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_secs())
+    }
+
+    /// Notes that this package is upgrading an earlier version.
+    pub fn note_upgrade() {
+        use windows_sys::Win32::System::Registry::{RegSetKeyValueW, HKEY_LOCAL_MACHINE, REG_SZ};
+
+        let key = wide(UPGRADE_NOTE_KEY);
+        let name = wide(UPGRADE_NOTE_VALUE);
+        let value = wide(&unix_now().to_string());
+        // SAFETY: `key`, `name` and `value` are NUL-terminated, and the length given is `value`'s,
+        // in bytes, with its NUL.
+        let result = unsafe {
+            RegSetKeyValueW(
+                HKEY_LOCAL_MACHINE,
+                key.as_ptr(),
+                name.as_ptr(),
+                REG_SZ,
+                value.as_ptr().cast(),
+                (value.len() * 2) as u32,
+            )
+        };
+        let _ = append_managed_log(
+            "gui",
+            &if result == 0 {
+                "upgrade noted".to_string()
+            } else {
+                format!("the upgrade could not be noted: error {result}")
+            },
+        );
+    }
+
+    /// Clears the note once the earlier version is removed.
+    pub fn clear_upgrade_note() {
+        use windows_sys::Win32::System::Registry::{RegDeleteKeyValueW, HKEY_LOCAL_MACHINE};
+
+        let key = wide(UPGRADE_NOTE_KEY);
+        let name = wide(UPGRADE_NOTE_VALUE);
+        // SAFETY: `key` and `name` are NUL-terminated.
+        let result = unsafe { RegDeleteKeyValueW(HKEY_LOCAL_MACHINE, key.as_ptr(), name.as_ptr()) };
+        // 2 is ERROR_FILE_NOT_FOUND: there was no note.
+        if result != 0 && result != 2 {
+            let _ = append_managed_log(
+                "gui",
+                &format!("the upgrade note could not be cleared: error {result}"),
+            );
+        }
+    }
+
+    /// When the note was written, if there is one.
+    fn read_upgrade_note() -> Option<u64> {
         use windows_sys::Win32::System::Registry::{
-            RegGetValueW, HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ, RRF_SUBKEY_WOW6464KEY,
+            RegGetValueW, HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ,
         };
 
-        let key = wide(r"Software\AnixOps\NetworkCore");
-        let name = wide("InstallingProductCode");
-        let mut value = [0_u16; 64];
+        let key = wide(UPGRADE_NOTE_KEY);
+        let name = wide(UPGRADE_NOTE_VALUE);
+        let mut value = [0_u16; 32];
         let mut size = (value.len() * 2) as u32;
-        // SAFETY: `key` and `name` are NUL-terminated, `value` holds `size` bytes, and the call writes
-        // at most that many (a NUL-terminated string, as RRF_RT_REG_SZ asks).
+        // SAFETY: `key` and `name` are NUL-terminated, `value` holds `size` bytes, and the call
+        // writes at most that many (a NUL-terminated string, as RRF_RT_REG_SZ asks).
         let result = unsafe {
             RegGetValueW(
                 HKEY_LOCAL_MACHINE,
                 key.as_ptr(),
                 name.as_ptr(),
-                RRF_RT_REG_SZ | RRF_SUBKEY_WOW6464KEY,
+                RRF_RT_REG_SZ,
                 std::ptr::null_mut(),
                 value.as_mut_ptr().cast(),
                 &mut size,
@@ -249,21 +317,19 @@ mod gui {
             return None;
         }
         let length = value.iter().position(|&unit| unit == 0).unwrap_or(0);
-        let code = String::from_utf16_lossy(&value[..length]);
-        (!code.is_empty()).then_some(code)
+        String::from_utf16_lossy(&value[..length])
+            .trim()
+            .parse()
+            .ok()
     }
 
     /// A removal is an upgrade when another version of the package is
-    /// registered beside the one being removed, or when the newest
-    /// installation's product code is not registered yet: that version is
-    /// being installed and the one being removed is the older.
-    fn is_upgrade(installed: &[String], installing: Option<&str>) -> bool {
-        installed.len() >= 2
-            || installing.is_some_and(|code| {
-                !installed
-                    .iter()
-                    .any(|registered| registered.eq_ignore_ascii_case(code))
-            })
+    /// registered beside the one being removed, or when the new package
+    /// noted an upgrade a short while ago (and not in the future, as a
+    /// clock set back would make it seem).
+    fn is_upgrade(installed_versions: usize, noted_at: Option<u64>, now: u64) -> bool {
+        installed_versions >= 2
+            || noted_at.is_some_and(|at| at <= now && now - at <= UPGRADE_NOTE_LIFETIME)
     }
 
     pub fn log_upgrade_skip(action: &str) {
@@ -712,23 +778,18 @@ mod gui {
 
         #[test]
         fn only_a_removal_beside_another_version_is_an_upgrade() {
-            let old = "{5A19919B-CC18-417F-9AA5-2425AA029C94}".to_string();
-            let new = "{0C1F3D52-7E0B-4D2B-9A41-6B1E5F7A2C10}".to_string();
-            // Nothing registered and nothing written: a removal.
-            assert!(!is_upgrade(&[], None));
-            // A beta's removal on its own, with no product code written.
-            assert!(!is_upgrade(std::slice::from_ref(&old), None));
-            // The installed version's own removal.
-            assert!(!is_upgrade(std::slice::from_ref(&old), Some(&old)));
-            assert!(!is_upgrade(
-                std::slice::from_ref(&old),
-                Some(&old.to_ascii_lowercase())
-            ));
-            // The old version's removal while the new one, not yet registered, is being installed.
-            assert!(is_upgrade(std::slice::from_ref(&old), Some(&new)));
+            let now = 1_800_000_000;
+            // A plain removal: one version registered, no note.
+            assert!(!is_upgrade(0, None, now));
+            assert!(!is_upgrade(1, None, now));
             // Two versions registered.
-            assert!(is_upgrade(&[old.clone(), new.clone()], Some(&new)));
-            assert!(is_upgrade(&[old, new], None));
+            assert!(is_upgrade(2, None, now));
+            // The new package noted the upgrade seconds ago.
+            assert!(is_upgrade(1, Some(now - 5), now));
+            assert!(is_upgrade(1, Some(now - UPGRADE_NOTE_LIFETIME), now));
+            // A note left by an installation that failed long ago, or dated in the future.
+            assert!(!is_upgrade(1, Some(now - UPGRADE_NOTE_LIFETIME - 1), now));
+            assert!(!is_upgrade(1, Some(now + 60), now));
         }
 
         #[test]
