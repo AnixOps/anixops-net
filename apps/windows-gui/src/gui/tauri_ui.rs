@@ -5691,7 +5691,7 @@ fn reconnect_running_direct_core(
             .lock()
             .map_err(|_| "desktop core lock failed")?;
         let mut steps = WindowSteps {
-            core: &mut *core,
+            core: &mut core,
             desktop,
             previous: previous.clone(),
             restore_files,
@@ -5728,7 +5728,7 @@ fn reconnect_running_direct_core(
             reconnect::Outcome::Applied(())
         }
         reconnect::Outcome::Restored { error, connected } => {
-            reverted(&mut *persisted);
+            reverted(&mut persisted);
             persisted.proxy_snapshot = Some(connected.snapshot);
             persisted.applied_proxy = Some(connected.applied_proxy);
             save_desktop_state(&persisted)?;
@@ -5745,7 +5745,7 @@ fn reconnect_running_direct_core(
             restored,
         } => {
             if restored {
-                reverted(&mut *persisted);
+                reverted(&mut persisted);
             }
             // As after a disconnect: the proxy went back when the engine stopped and the window owns none,
             // unless it could not be put back, when the snapshot stays for "Restore network settings".
