@@ -2,12 +2,14 @@ use super::actions::connection;
 use super::capture_sessions;
 use super::linked_sources::{self, CachedNode, OtherSource};
 use super::mitm_plugins::{self, PluginSummary};
+use super::owned_proxy;
 use super::root_trust;
 use super::runtime_status::{read_runtime_status, WindowsRuntimeStatus};
 use super::startup::{
-    desktop_state_path, dns_settings_path, load_desktop_state, my_rules_path, owns_current_proxy,
-    save_desktop_state, set_start_after_login, start_after_login_wanted, startup_repair,
-    DesktopProfileNode, DesktopRoutingMode, DesktopState, DesktopSubscriptionSource, StartupRepair,
+    desktop_state_path, dns_settings_path, load_desktop_state_or_set_aside, my_rules_path,
+    owns_current_proxy, save_desktop_state, set_start_after_login, start_after_login_wanted,
+    startup_repair, DesktopProfileNode, DesktopRoutingMode, DesktopState, DesktopStateLoad,
+    DesktopSubscriptionSource, StartupRepair,
 };
 use super::ui_state::ConnectionState;
 use super::{
@@ -502,8 +504,19 @@ struct PreferenceValues {
 }
 
 pub(super) fn run(debug: bool) -> Result<(), String> {
-    let mut desktop = load_desktop_state()?;
+    // A desktop state that cannot be read is set aside and the defaults are used, rather than the window never
+    // starting again; the proxy owner record is a file of its own, so the start-up check still finds it.
+    let DesktopStateLoad {
+        state: mut desktop,
+        set_aside,
+    } = load_desktop_state_or_set_aside();
     let _ = append_managed_log(APP_LOG_SCOPE, &format!("startup debug={debug}"));
+    if let Some(set_aside) = &set_aside {
+        let _ = append_managed_log(
+            APP_LOG_SCOPE,
+            &format!("desktop state could not be read and was set aside: {set_aside}"),
+        );
+    }
     // Upgrades from the betas' MSI removed every user's logon task and reset
     // managed-config.json; both are put back from what the user chose.
     if reconcile_start_after_login(&mut desktop) {
@@ -573,7 +586,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             ))),
         })
         .manage(HealthState(health))
-        .setup(|app| {
+        .setup(move |app| {
             install_tray(app)?;
             if let Some(window) = app.get_webview_window("main") {
                 super::backdrop::apply(&window);
@@ -582,6 +595,22 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             start_app_links(app.handle());
             let state = app.state::<DesktopAppState>().inner().clone();
             remove_legacy_service(&state);
+            // Before automatic connection, which would otherwise keep a dead local port as the setting to
+            // put back.
+            recover_orphaned_proxy(app.handle(), &state);
+            if set_aside.is_some() {
+                post_notice(
+                    app.handle(),
+                    &notification_settings_now(&state).desktop_state_set_aside(),
+                );
+            }
+            let core = state.direct_core.clone();
+            super::session_end::install(move || {
+                core.lock()
+                    .ok()
+                    .and_then(|mut core| core.is_running().ok())
+                    .unwrap_or(false)
+            });
             start_automatic_connection(state.clone());
             start_network_watch(state.clone());
             start_core_recovery_monitor(app.handle().clone(), state);
@@ -714,8 +743,75 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             install_driver,
             remove_driver,
         ])
-        .run(tauri::generate_context!())
-        .map_err(|error| error.to_string())
+        .build(tauri::generate_context!())
+        .map_err(|error| error.to_string())?
+        .run(|app, event| {
+            // However the event loop ends (the tray's Quit, an exit request), the engine stops and the proxy is
+            // put back; a sign-out or shutdown is handled by `session_end`, a crash by the next start.
+            if let tauri::RunEvent::Exit = event {
+                if let Some(state) = app.try_state::<DesktopAppState>() {
+                    stop_desktop_core_for_exit(state.inner().clone());
+                }
+            }
+        });
+    Ok(())
+}
+
+/// The start-up check of `owned_proxy`: puts back the proxy a window of this user left behind when it did not
+/// stop properly (crash, killed, signed out or shut down while connected), and tells the user.
+fn recover_orphaned_proxy(app: &AppHandle, state: &DesktopAppState) {
+    let Ok(mut desktop) = state.desktop.lock() else {
+        return;
+    };
+    let before = (
+        desktop.proxy_snapshot.clone(),
+        desktop.applied_proxy.clone(),
+    );
+    let outcome = match owned_proxy::recover_at_start_now(&mut desktop) {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            let _ = append_managed_log(
+                APP_LOG_SCOPE,
+                &format!("orphaned proxy check failed: {error}"),
+            );
+            return;
+        }
+    };
+    if (
+        desktop.proxy_snapshot.clone(),
+        desktop.applied_proxy.clone(),
+    ) != before
+    {
+        if let Err(error) = save_desktop_state(&desktop) {
+            let _ = append_managed_log(
+                APP_LOG_SCOPE,
+                &format!("orphaned proxy state save failed: {error}"),
+            );
+        }
+    }
+    drop(desktop);
+    if !outcome.errors.is_empty() {
+        let _ = append_managed_log(
+            APP_LOG_SCOPE,
+            &format!("orphaned proxy could not be restored: {:?}", outcome.errors),
+        );
+    }
+    if outcome.forgotten {
+        let _ = append_managed_log(
+            APP_LOG_SCOPE,
+            "orphaned proxy ownership dropped: the settings were changed since",
+        );
+    }
+    if outcome.restored {
+        let _ = append_managed_log(
+            APP_LOG_SCOPE,
+            "the previous session did not stop properly; its system proxy was restored",
+        );
+        post_notice(
+            app,
+            &notification_settings_now(state).proxy_restored_after_unclean_exit(),
+        );
+    }
 }
 
 fn install_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
@@ -734,9 +830,6 @@ fn install_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             "show" => show_main_window(app),
             "quit" => {
                 if let Some(state) = app.try_state::<DesktopAppState>() {
-                    if let Ok(mut recorder) = state.traffic.lock() {
-                        recorder.save();
-                    }
                     stop_desktop_core_for_exit(state.inner().clone());
                 }
                 app.exit(0);
@@ -1724,7 +1817,6 @@ fn disconnect_blocking(state: DesktopAppState) -> Result<OperationResult, String
         .map_err(|_| "desktop state lock failed")?
         .clone();
     let message = connection::disconnect_direct(
-        windows_managed_config_path(),
         desktop,
         &mut *state
             .direct_core
@@ -1742,7 +1834,16 @@ fn disconnect_blocking(state: DesktopAppState) -> Result<OperationResult, String
     Ok(OperationResult { message })
 }
 
+/// Stops the engine and puts the proxy back as the process exits: from the tray's Quit and from the
+/// application's exit event alike, once.
 fn stop_desktop_core_for_exit(state: DesktopAppState) {
+    static DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if DONE.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    if let Ok(mut recorder) = state.traffic.lock() {
+        recorder.save();
+    }
     let desktop = match state.desktop.lock() {
         Ok(desktop) => desktop.clone(),
         Err(_) => return,
@@ -1751,14 +1852,23 @@ fn stop_desktop_core_for_exit(state: DesktopAppState) {
         .direct_core
         .lock()
         .map_err(|_| "desktop core lock failed".to_string())
-        .and_then(|mut core| {
-            connection::disconnect_direct(windows_managed_config_path(), desktop, &mut core)
-        });
-    if let Err(error) = result {
-        let _ = append_managed_log(
-            APP_LOG_SCOPE,
-            &format!("desktop exit cleanup failed: {error}"),
-        );
+        .and_then(|mut core| connection::disconnect_direct(desktop, &mut core));
+    match result {
+        Ok(_) => {
+            if let Ok(mut persisted) = state.desktop.lock() {
+                if persisted.proxy_snapshot.is_some() || persisted.applied_proxy.is_some() {
+                    persisted.proxy_snapshot = None;
+                    persisted.applied_proxy = None;
+                    let _ = save_desktop_state(&persisted);
+                }
+            }
+        }
+        Err(error) => {
+            let _ = append_managed_log(
+                APP_LOG_SCOPE,
+                &format!("desktop exit cleanup failed: {error}"),
+            );
+        }
     }
 }
 
@@ -1775,7 +1885,6 @@ fn restart_service_blocking(state: DesktopAppState) -> Result<OperationResult, S
         .map_err(|_| "desktop state lock failed")?
         .clone();
     let _ = connection::disconnect_direct(
-        windows_managed_config_path(),
         desktop.clone(),
         &mut *state
             .direct_core
@@ -3779,6 +3888,16 @@ fn read_subscription(location: &str) -> Result<SubscriptionRead, String> {
     ))
 }
 
+/// Drops the current user's proxy owner record (`owned_proxy`) once the proxy is no longer the window's.
+fn forget_proxy_owner_record() {
+    if let Err(error) = owned_proxy::forget_current_user() {
+        let _ = append_managed_log(
+            APP_LOG_SCOPE,
+            &format!("proxy owner record could not be removed: {error}"),
+        );
+    }
+}
+
 #[tauri::command]
 async fn restore_network_settings(
     state: State<'_, DesktopAppState>,
@@ -3801,6 +3920,7 @@ fn restore_network_settings_blocking(state: DesktopAppState) -> Result<Operation
         desktop.proxy_snapshot = None;
         desktop.applied_proxy = None;
         save_desktop_state(&desktop)?;
+        forget_proxy_owner_record();
         return Ok(OperationResult {
             message: "Current proxy settings no longer match the GUI-owned value and were left unchanged."
                 .to_string(),
@@ -3812,6 +3932,7 @@ fn restore_network_settings_blocking(state: DesktopAppState) -> Result<Operation
     desktop.proxy_snapshot = None;
     desktop.applied_proxy = None;
     save_desktop_state(&desktop)?;
+    forget_proxy_owner_record();
     mark_gui_connection_stopped(&state);
     Ok(OperationResult {
         message: "Network settings restored from the GUI-owned proxy snapshot.".to_string(),
@@ -4744,8 +4865,7 @@ fn reconnect_running_direct_core(state: &DesktopAppState) -> Result<(), String> 
     if !core.is_running()? {
         return Ok(());
     }
-    let _ =
-        connection::disconnect_direct(windows_managed_config_path(), desktop.clone(), &mut core);
+    let _ = connection::disconnect_direct(desktop.clone(), &mut core);
     let connected = connection::connect_direct(windows_managed_config_path(), desktop, &mut core)?;
     drop(core);
     let mut persisted = state

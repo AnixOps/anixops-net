@@ -204,6 +204,21 @@ CI 只能跑规则与重建逻辑的单元测试（`OnDemandSettingsTests`、`Ne
 - [ ] S4 桌面（Windows、Linux，本机代理模式）：拔插网线或换 Wi-Fi、睡眠 2 分钟后唤醒，网页几秒内恢复；Windows 日志
   （`tauri-gui`）里有 `network change: engine reset {...}` / `wake: engine reset {...}`。TUN 模式这一项不覆盖。
 
+## Windows 系统代理残留恢复真机验收
+
+CI 只跑归属记录、启动恢复、卸载恢复和断开步骤的单元测试（`owned_proxy`、`connection` 的测试），以下需要真机：
+
+- [ ] 连接后在任务管理器结束 `networkcore-windows-gui.exe`，再启动客户端（未开自动连接）：系统代理恢复为连接前的设置，
+  弹出“网络设置已恢复”通知，`gui.log`（`tauri-gui`）有 `its system proxy was restored`；`netsh winhttp show proxy`
+  恢复为连接前的值。
+- [ ] 连接后结束进程，先在 Windows 设置里改掉代理，再启动客户端：不改动用户的新设置，日志有 `ownership dropped`。
+- [ ] 连接状态下注销、关机和重启：再次登录后代理已是连接前的设置（`session end (query): system proxy restored`）。
+  注销时被其他程序取消后，客户端仍连接且代理重新指向本机端口（`session end cancelled: system proxy applied again`）。
+- [ ] 连接状态下从“应用和功能”卸载：卸载后浏览器能直接上网，`netsh winhttp show proxy` 为直连，`gui.log` 的 `purged:` 行
+  有 `proxy_users=1 winhttp_proxy=true`。
+- [ ] 把 `desktop-state.json` 截短后启动：客户端能启动并弹出“设置已重置”，数据文件夹里有 `desktop-state.json.broken-*`。
+- [ ] 把 `managed-config.json` 改成无效 JSON 后点“断开”和托盘“退出”：核心停止、代理恢复。
+
 ## 苹果平台 VPN 配置写入真机验收
 
 小组件、控制中心、实时活动、快捷指令和系统设置都会改同一份 VPN 配置。App 现在把对 VPN 配置和节点密钥的每次改动排成

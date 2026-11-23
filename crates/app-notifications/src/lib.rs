@@ -115,6 +115,47 @@ impl Settings {
         ))
     }
 
+    /// The notice when the window found, as it started, the system proxy of a session that did not end properly
+    /// (a crash, the process ended, a sign-out or shutdown while connected) and put the user's own settings back.
+    /// Shown whatever the switches: the user's network settings changed.
+    pub fn proxy_restored_after_unclean_exit(&self) -> Notice {
+        let (title, body) = match self.language() {
+            Language::English => (
+                "Network settings restored",
+                "AnixOps Net did not quit properly last time. The system proxy it had set was turned back to your own settings.",
+            ),
+            Language::Traditional => (
+                "網路設定已還原",
+                "AnixOps Net 上次未正常結束，已把它設定的系統代理還原為你原來的設定。",
+            ),
+            Language::Simplified => (
+                "网络设置已恢复",
+                "AnixOps Net 上次未正常退出，已把它设置的系统代理恢复为你原来的设置。",
+            ),
+        };
+        Notice::new(title, body)
+    }
+
+    /// The notice when the saved settings could not be read at start-up and were set aside, so that the window
+    /// starts with the defaults. Shown whatever the switches.
+    pub fn desktop_state_set_aside(&self) -> Notice {
+        let (title, body) = match self.language() {
+            Language::English => (
+                "Settings reset",
+                "The saved settings could not be read, so AnixOps Net started with the defaults. The unreadable file was kept in its data folder.",
+            ),
+            Language::Traditional => (
+                "設定已重設",
+                "無法讀取已儲存的設定，AnixOps Net 已以預設設定啟動。無法讀取的檔案已保留在資料資料夾中。",
+            ),
+            Language::Simplified => (
+                "设置已重置",
+                "无法读取已保存的设置，AnixOps Net 已以默认设置启动。无法读取的文件已保留在数据文件夹中。",
+            ),
+        };
+        Notice::new(title, body)
+    }
+
     /// The notice when updating subscription `name` failed with `error`.
     pub fn subscription_failed(&self, name: &str, error: &str) -> Option<Notice> {
         if !self.subscriptions {
@@ -323,6 +364,32 @@ mod tests {
         assert!(settings.disconnected(false).is_none());
         assert!(settings.on_demand_failed("x").is_none());
         assert!(settings.subscription_failed("HK", "x").is_none());
+    }
+
+    #[test]
+    fn recovery_notices_follow_the_language_whatever_the_switches() {
+        let mut settings = Settings {
+            scripts: false,
+            connection: false,
+            subscriptions: false,
+            language: String::new(),
+        };
+        assert_eq!(
+            settings.proxy_restored_after_unclean_exit().title,
+            "网络设置已恢复"
+        );
+        assert_eq!(settings.desktop_state_set_aside().title, "设置已重置");
+        settings.language = "zh-Hant".to_string();
+        assert_eq!(
+            settings.proxy_restored_after_unclean_exit().title,
+            "網路設定已還原"
+        );
+        assert_eq!(settings.desktop_state_set_aside().title, "設定已重設");
+        settings.language = "en".to_string();
+        let notice = settings.proxy_restored_after_unclean_exit();
+        assert_eq!(notice.title, "Network settings restored");
+        assert!(notice.open_url.is_none());
+        assert_eq!(settings.desktop_state_set_aside().title, "Settings reset");
     }
 
     #[test]

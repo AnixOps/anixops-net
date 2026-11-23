@@ -22,7 +22,14 @@ The installer:
   - the decryption root's private key (`mitm\root-ca-key.pem`);
   - the driver installed from the settings page and the root certificates and
     driver older versions recorded;
-  - the Windows service versions before 0.3.0-beta.7 registered.
+  - the Windows service versions before 0.3.0-beta.7 registered;
+  - the system proxy the GUI set and could not put back itself (it was killed,
+    or was connected when the removal began), from its owner record
+    `owned-proxy.json`: the machine's WinHTTP proxy, and the WinINet settings
+    of each recorded user who is signed in, each only while it is still the
+    value the GUI applied. A user who is not signed in keeps the record; the
+    GUI puts their proxy back if it is installed and started again, otherwise
+    they turn the proxy off in Windows Settings › Network & internet › Proxy.
 
   The outcome goes to `logs\gui.log` (`purged: ...`); a failure does not block
   the uninstall. The rest of the data folder (subscriptions, settings, logs)
@@ -127,7 +134,20 @@ manifest files. Extract the ZIP, keep its files together, and run
 The GUI runs the embedded engine in its own process (it always runs elevated).
 Home `Connect` starts the engine, waits for its loopback listener and only then
 applies the configured proxy for the interactive user and atomically saves that
-snapshot. The snapshot is restored on disconnect, on exit and after a failure.
+snapshot. Before the proxy changes, the GUI writes an owner record
+(`owned-proxy.json`: the user, the GUI process and its start time, the applied
+proxy and the settings to put back). The snapshot is restored on disconnect, on
+exit (tray Quit or any other end of the application), when Windows signs the
+user out, shuts down or asks the GUI to close for an installer, and after a
+failed connection. When the GUI could not do it (a crash, the process ended in
+Task Manager, a forced shutdown), its next start — also from the sign-in task —
+restores it when the owner process is gone and the settings are still the ones
+it applied, tells the user in a notification, and only then connects
+automatically; settings the user changed since are left alone. Disconnecting
+reads no configuration, so a missing or invalid `managed-config.json` never
+keeps the proxy pointing at a stopped engine. A `desktop-state.json` that
+cannot be read is moved aside to `desktop-state.json.broken-<unix seconds>` and
+the GUI starts with the defaults and a notification instead of not starting.
 The manual GUI `Restore network settings` action restores only a snapshot owned
 by that GUI session; it cannot enable an unverified proxy endpoint.
 The shipped `managed-config.json` deliberately contains only `null` values.

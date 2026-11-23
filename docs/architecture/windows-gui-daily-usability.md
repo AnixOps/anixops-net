@@ -70,6 +70,34 @@ before stopping the engine only when the current proxy still exactly matches
 the GUI-owned setting. A later GUI startup or status refresh uses the same rule
 after the engine is no longer valid; it never overwrites a user-changed proxy.
 
+Before applying the proxy the GUI writes an owner record, `owned-proxy.json`
+next to the desktop state (`src/gui/owned_proxy.rs`): the user's SID, the GUI
+process id and creation time, the applied proxy and the WinINet/WinHTTP values
+to put back. Disconnect removes it, and disconnect no longer reads the managed
+configuration: it restores the owned proxy first and stops the engine even when
+the restore fails. The record is used when the GUI does not get to disconnect:
+
+- a hidden top-level window answers `WM_QUERYENDSESSION` / `WM_ENDSESSION`
+  (sign-out, shutdown, Restart Manager) by restoring the proxy, and applies it
+  again when the session end is cancelled and the engine still runs; a console
+  control handler does the same for a closed console (`src/gui/session_end.rs`);
+- the Tauri `RunEvent::Exit` stops the engine and restores the proxy however
+  the event loop ends;
+- the next start, before automatic connection, restores this user's record when
+  its process is gone and the current proxy is still the applied one, clears
+  the ownership so the next connection snapshots the user's own settings, and
+  posts a notification; a snapshot saved by an earlier version in
+  `desktop-state.json` is handled the same way;
+- the MSI `--purge` (LocalSystem) restores the WinHTTP proxy and each signed-in
+  recorded user's WinINet settings under `HKEY_USERS`.
+
+A snapshot that already holds the applied proxy (taken while an earlier
+connection's proxy was still in place) restores to "no proxy" instead of the
+dead local port. A `desktop-state.json` that cannot be read is set aside as
+`desktop-state.json.broken-<unix seconds>` and the GUI starts with defaults; a
+DNS choice it does not know reads as the default. Saves of the desktop state
+are serialized within the process.
+
 Managed configuration schema 2 makes proxy ownership explicit. Existing schema
 1 data migrates in memory to `Service`, preserving CLI/service behavior. A GUI
 profile import writes `Desktop`, so the user-session GUI is the sole owner of

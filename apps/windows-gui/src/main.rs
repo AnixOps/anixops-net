@@ -63,8 +63,10 @@ mod gui {
     mod capture_sessions;
     mod linked_sources;
     mod mitm_plugins;
+    mod owned_proxy;
     mod root_trust;
     mod runtime_status;
+    mod session_end;
     mod startup;
     mod tauri_ui;
     mod tun_mode;
@@ -430,7 +432,11 @@ mod gui {
     /// registered; the root certificates and drivers recorded as installed
     /// machine-wide; the HTTPS decryption roots out of the own certificate
     /// stores of the users signed in now (a user who is not signed in keeps
-    /// it); and the decryption root's private key. The rest of the data folder
+    /// it); and the decryption root's private key. It also puts back the
+    /// system proxy the window set and did not put back itself
+    /// (`owned_proxy::restore_for_removal`): the machine's WinHTTP proxy, and
+    /// the WinINet settings of each recorded user who is signed in, when they
+    /// still are the ones the window applied. The rest of the data folder
     /// stays, closed to ordinary users.
     pub fn purge_managed_network_state() -> Result<(), String> {
         let integration = NativeWindowsSystemIntegration::new();
@@ -441,6 +447,18 @@ mod gui {
         }
         let mut managed = read_managed_state(&state_path).ok();
         let mut desktop = startup::load_desktop_state().ok();
+        // The system proxy the window set and could not put back (it was killed, or is connected now and goes
+        // with the program): the WinHTTP proxy, and the settings of each recorded user who is signed in.
+        let proxy = owned_proxy::restore_for_removal_now(desktop.as_ref(), &mut errors);
+        if proxy.desktop_restored {
+            if let Some(state) = desktop.as_mut() {
+                state.proxy_snapshot = None;
+                state.applied_proxy = None;
+                if let Err(error) = startup::save_desktop_state(state) {
+                    errors.push(format!("desktop state: {error}"));
+                }
+            }
+        }
         let records = purge_records(managed.as_ref(), desktop.as_ref());
         for thumbprint in &records.machine_roots {
             if let Err(error) = integration.remove_root_certificate(thumbprint) {
@@ -488,9 +506,12 @@ mod gui {
         let _ = append_managed_log(
             "gui",
             &format!(
-                "purged: machine_roots={} drivers={} user_roots={removed_roots} errors={errors:?}",
+                "purged: machine_roots={} drivers={} user_roots={removed_roots} \
+                 proxy_users={} winhttp_proxy={} errors={errors:?}",
                 records.machine_roots.len(),
-                records.drivers.len()
+                records.drivers.len(),
+                proxy.users_restored,
+                proxy.winhttp_restored
             ),
         );
         if errors.is_empty() {

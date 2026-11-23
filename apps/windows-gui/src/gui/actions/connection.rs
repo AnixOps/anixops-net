@@ -1,5 +1,5 @@
 use crate::gui::{
-    load_validated_managed_configuration, mitm_plugins,
+    append_managed_log, load_validated_managed_configuration, mitm_plugins, owned_proxy,
     startup::{
         my_rules_path, owns_current_proxy, rule_set_cache_dir, save_desktop_state, DesktopState,
     },
@@ -287,28 +287,66 @@ pub fn direct_egress_envelope(
     desktop_dns::rules::with_rule_set_cache(&envelope, &rule_set_cache_dir())
 }
 
-pub fn disconnect_direct(
-    config_path: PathBuf,
-    desktop: DesktopState,
-    core: &mut DesktopCore,
+/// Stops the engine and puts back the proxy this window set. It reads no configuration: a managed
+/// configuration that went missing or invalid must never keep the window from disconnecting, nor leave the proxy
+/// pointing at the stopped engine (connecting and restarting still validate it).
+pub fn disconnect_direct(desktop: DesktopState, core: &mut DesktopCore) -> Result<String, String> {
+    disconnect_steps(&desktop, &mut NativeProxyAccess, || core.stop())
+}
+
+/// The system proxy as disconnecting sees it, so that the steps can be tested without the real settings.
+pub trait ProxyAccess {
+    fn current(&self) -> Result<WindowsProxySettings, String>;
+    fn restore(&mut self, snapshot: &WindowsProxySnapshot) -> Result<(), String>;
+    /// Drops the owner record (`owned_proxy`) once the proxy is no longer the window's.
+    fn forget_owner_record(&mut self) -> Result<(), String>;
+}
+
+struct NativeProxyAccess;
+
+impl ProxyAccess for NativeProxyAccess {
+    fn current(&self) -> Result<WindowsProxySettings, String> {
+        read_current_user_system_proxy().map_err(|error| error.to_string())
+    }
+
+    fn restore(&mut self, snapshot: &WindowsProxySnapshot) -> Result<(), String> {
+        NativeWindowsSystemIntegration::new()
+            .restore_system_proxy(snapshot)
+            .map_err(|error| error.to_string())
+    }
+
+    fn forget_owner_record(&mut self) -> Result<(), String> {
+        owned_proxy::forget_current_user()
+    }
+}
+
+/// Puts back the window's proxy when it still is the window's, then stops the engine whatever happened to the
+/// proxy. A failed restore is reported after the engine stopped and keeps the owner record, so that the next
+/// start of the window tries again.
+pub fn disconnect_steps(
+    desktop: &DesktopState,
+    proxy: &mut impl ProxyAccess,
+    stop: impl FnOnce(),
 ) -> Result<String, String> {
-    // Debug mode's direct egress runs without an imported profile.
-    if !desktop.direct_egress || config_path.exists() {
-        load_validated_daily_managed_configuration(&config_path)?;
+    let restored = match desktop.proxy_snapshot.as_ref() {
+        None => Ok(false),
+        Some(snapshot) => proxy.current().and_then(|current| {
+            if owns_current_proxy(desktop, &current) {
+                proxy.restore(snapshot).map(|()| true)
+            } else {
+                Ok(false)
+            }
+        }),
+    };
+    stop();
+    let restored = restored?;
+    if let Err(error) = proxy.forget_owner_record() {
+        let _ = append_managed_log(
+            "tauri-gui",
+            &format!("proxy owner record could not be removed: {error}"),
+        );
     }
-    let integration = NativeWindowsSystemIntegration::new();
-    let mut proxy_restored = false;
-    if let Some(snapshot) = desktop.proxy_snapshot.as_ref() {
-        let current = read_current_user_system_proxy().map_err(|error| error.to_string())?;
-        if owns_current_proxy(&desktop, &current) {
-            integration
-                .restore_system_proxy(snapshot)
-                .map_err(|error| error.to_string())?;
-            proxy_restored = true;
-        }
-    }
-    core.stop();
-    Ok(if proxy_restored {
+    Ok(if restored {
         "Desktop core stopped and the GUI-owned proxy snapshot was restored.".to_string()
     } else {
         "Desktop core stopped. The current-user proxy was left unchanged because it was not owned by this GUI session.".to_string()
@@ -441,22 +479,58 @@ fn apply_proxy_after_direct_readiness(
     core: &mut DesktopCore,
 ) -> Result<ConnectedProxy, String> {
     let integration = NativeWindowsSystemIntegration::new();
-    let current = read_current_user_system_proxy().map_err(|error| error.to_string())?;
-    let existing_snapshot = owns_current_proxy(&desktop, &current)
-        .then(|| desktop.proxy_snapshot.clone())
-        .flatten();
-    let applied_snapshot = match integration.apply_system_proxy(proxy) {
-        Ok(snapshot) => snapshot,
+    let current = match read_current_user_system_proxy() {
+        Ok(current) => current,
         Err(error) => {
             core.stop();
             return Err(error.to_string());
         }
     };
-    let snapshot = existing_snapshot.unwrap_or(applied_snapshot);
+    let existing_snapshot = owns_current_proxy(&desktop, &current)
+        .then(|| desktop.proxy_snapshot.clone())
+        .flatten();
+    let reused = existing_snapshot.is_some();
+    // What to put back, recorded before the proxy changes so that a crash right after still finds it.
+    let planned = match existing_snapshot {
+        Some(snapshot) => snapshot,
+        None => match owned_proxy::snapshot_now(&current) {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                core.stop();
+                return Err(error);
+            }
+        },
+    };
+    let planned = owned_proxy::sanitized(planned, proxy);
+    if let Err(error) = owned_proxy::record_before_apply(proxy, &planned) {
+        core.stop();
+        return Err(format!(
+            "the system proxy was not changed because its owner record could not be saved: {error}"
+        ));
+    }
+    let applied_snapshot = match integration.apply_system_proxy(proxy) {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            let _ = owned_proxy::forget_current_user();
+            core.stop();
+            return Err(error.to_string());
+        }
+    };
+    let snapshot = if reused {
+        planned
+    } else {
+        owned_proxy::sanitized(applied_snapshot, proxy)
+    };
+    if snapshot != planned {
+        // The settings changed between the two reads: the record follows what applying found.
+        let _ = owned_proxy::record_before_apply(proxy, &snapshot);
+    }
     desktop.proxy_snapshot = Some(snapshot.clone());
     desktop.applied_proxy = Some(proxy.clone());
     if let Err(error) = save_desktop_state(&desktop) {
-        let _ = integration.restore_system_proxy(&snapshot);
+        if integration.restore_system_proxy(&snapshot).is_ok() {
+            let _ = owned_proxy::forget_current_user();
+        }
         core.stop();
         return Err(format!(
             "desktop proxy ownership could not be saved after connection: {error}"
@@ -778,5 +852,122 @@ mod tests {
         assert!(scripted.decrypts_https());
         drop(scripted);
         let _ = fs::remove_dir_all(&plugins);
+    }
+
+    struct FakeProxy {
+        current: Result<WindowsProxySettings, String>,
+        restore_error: Option<String>,
+        restored: Vec<WindowsProxySnapshot>,
+        forgotten: bool,
+    }
+
+    impl ProxyAccess for FakeProxy {
+        fn current(&self) -> Result<WindowsProxySettings, String> {
+            self.current.clone()
+        }
+
+        fn restore(&mut self, snapshot: &WindowsProxySnapshot) -> Result<(), String> {
+            if let Some(error) = &self.restore_error {
+                return Err(error.clone());
+            }
+            self.restored.push(snapshot.clone());
+            Ok(())
+        }
+
+        fn forget_owner_record(&mut self) -> Result<(), String> {
+            self.forgotten = true;
+            Ok(())
+        }
+    }
+
+    fn applied_proxy() -> WindowsProxySettings {
+        WindowsProxySettings {
+            enabled: true,
+            server: "127.0.0.1:7890".to_string(),
+            bypass: "<local>".to_string(),
+        }
+    }
+
+    fn original_proxy() -> WindowsProxySnapshot {
+        WindowsProxySnapshot {
+            enabled: false,
+            server: String::new(),
+            bypass: String::new(),
+            winhttp_access_type: 1,
+            winhttp_server: String::new(),
+            winhttp_bypass: String::new(),
+        }
+    }
+
+    fn connected_desktop() -> DesktopState {
+        DesktopState {
+            proxy_snapshot: Some(original_proxy()),
+            applied_proxy: Some(applied_proxy()),
+            ..DesktopState::default()
+        }
+    }
+
+    #[test]
+    fn disconnecting_reads_no_configuration_and_puts_the_proxy_back() {
+        // No managed configuration is read: disconnecting works with it missing or invalid.
+        let mut proxy = FakeProxy {
+            current: Ok(applied_proxy()),
+            restore_error: None,
+            restored: Vec::new(),
+            forgotten: false,
+        };
+        let mut stopped = false;
+        let message = disconnect_steps(&connected_desktop(), &mut proxy, || stopped = true)
+            .expect("disconnect");
+        assert!(message.contains("restored"), "{message}");
+        assert_eq!(proxy.restored, [original_proxy()]);
+        assert!(stopped);
+        assert!(proxy.forgotten);
+    }
+
+    #[test]
+    fn a_failed_restore_still_stops_the_engine_and_keeps_the_owner_record() {
+        let mut proxy = FakeProxy {
+            current: Ok(applied_proxy()),
+            restore_error: Some("registry unavailable".to_string()),
+            restored: Vec::new(),
+            forgotten: false,
+        };
+        let mut stopped = false;
+        let error = disconnect_steps(&connected_desktop(), &mut proxy, || stopped = true)
+            .expect_err("the failed restore is reported");
+        assert_eq!(error, "registry unavailable");
+        assert!(stopped);
+        assert!(!proxy.forgotten);
+
+        // Reading the current settings failing stops the engine too.
+        let mut proxy = FakeProxy {
+            current: Err("read failed".to_string()),
+            restore_error: None,
+            restored: Vec::new(),
+            forgotten: false,
+        };
+        let mut stopped = false;
+        assert!(disconnect_steps(&connected_desktop(), &mut proxy, || stopped = true).is_err());
+        assert!(stopped);
+    }
+
+    #[test]
+    fn a_proxy_changed_by_the_user_is_left_alone_on_disconnect() {
+        let mut proxy = FakeProxy {
+            current: Ok(WindowsProxySettings {
+                enabled: true,
+                server: "corp.example:8080".to_string(),
+                bypass: String::new(),
+            }),
+            restore_error: None,
+            restored: Vec::new(),
+            forgotten: false,
+        };
+        let mut stopped = false;
+        disconnect_steps(&connected_desktop(), &mut proxy, || stopped = true).unwrap();
+        assert!(proxy.restored.is_empty());
+        assert!(stopped);
+        assert!(proxy.forgotten);
     }
 }
