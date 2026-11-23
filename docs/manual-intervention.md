@@ -723,6 +723,13 @@ iOS、macOS 的“向订阅服务商报告连接质量”改为设置开关、�
 - [ ] 内核对“`insecure` 且没有固定”的节点只经 `tracing` 记一条警告，客户端目前没有安装 tracing subscriber，看不到这条警告；
   节点详情里标出“未验证服务器证书”的节点留作后续。
 
+## 内核 6892161：订阅导入容错、HTTP / SOCKS5 节点、MITM 改写与抓包加固（1.0.0）
+
+客户端固定的内核从 1c14184 升到 6892161（networkcore_anixops #267、#268）。两次合并没有新增依赖（只有
+`platform-windows` 多开了几个 `windows-sys` feature），`Cargo.lock` 只换了内核提交，`cargo metadata --locked` 通过。
+
+- [ ] anx 仓库的 Cargo.lock 内核换成 6892161 后，再触发 anx 的 ANX 构建和 `publish-client.yml`。
+
 ## iOS / macOS 引擎配置 64 KiB 上限（1.0.0 后续，需要改内核）
 
 iOS / macOS 的隧道扩展把整份 JSON 配置一次交给内核 `networkcore_ios_runtime_init`，内核 1c14184 在
