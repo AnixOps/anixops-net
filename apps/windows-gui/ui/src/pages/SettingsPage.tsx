@@ -6,7 +6,7 @@ import { Appearance, appearances } from "../theme";
 import { factLabel } from "../labels";
 import { Card, Loading, MoreMenu, Row, Run, Segmented, StatusDot, TileColor, ToggleRow } from "../ui";
 import { currentLanguage, LanguageChoice, languages, t } from "../i18n";
-import { TermsViewer, termsVersion } from "../terms";
+import { PrivacyViewer, TermsViewer, termsVersion } from "../terms";
 import { AppMode, modes } from "../mode";
 import { OnDemandCard } from "./OnDemandCard";
 
@@ -122,15 +122,20 @@ export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, l
   );
 }
 
-/** The user agreement this build ships with, to read again at any time. */
+/** The user agreement and privacy policy this build ships with, to read again at any time. */
 function AboutCard() {
   const [reading, setReading] = useState(false);
+  const [readingPrivacy, setReadingPrivacy] = useState(false);
   return (
     <Card title={t("关于")}>
       <Row icon={ScrollText} color="gray" label={t("用户协议")} hint={t("用户协议、禁止用途与免责声明，版本 {version}", { version: termsVersion })}>
         <button className="secondary compact" onClick={() => setReading(true)}>{t("查看")}</button>
       </Row>
+      <Row icon={ShieldCheck} color="green" label={t("隐私政策")} hint={t("我们收集什么、数据保存在哪里、如何删除")}>
+        <button className="secondary compact" onClick={() => setReadingPrivacy(true)}>{t("查看")}</button>
+      </Row>
       {reading && <TermsViewer onClose={() => setReading(false)} />}
+      {readingPrivacy && <PrivacyViewer onClose={() => setReadingPrivacy(false)} />}
     </Card>
   );
 }

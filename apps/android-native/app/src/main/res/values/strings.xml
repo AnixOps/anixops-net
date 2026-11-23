@@ -250,6 +250,9 @@
     <string name="terms_decline">Decline</string>
     <string name="terms_accept">Agree and continue</string>
     <string name="terms_full_text">Full user agreement</string>
+    <string name="privacy_policy">Privacy policy</string>
+    <string name="privacy_full_text">Full privacy policy</string>
+    <string name="terms_consent_data">Your traffic is forwarded on this device to the servers you configure, following your rules: we can\'t see it and collect nothing. No analytics, advertising or crash-reporting SDK; your data stays on your device.</string>
     <string name="action_done">Done</string>
     <string name="activity">Activity</string>
     <string name="action_view">View</string>

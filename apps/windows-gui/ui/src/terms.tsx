@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { ScrollText } from "lucide-react";
+import { ScrollText, ShieldCheck } from "lucide-react";
 import { Heading } from "react-aria-components";
 import { ModalDialog } from "./controls";
 import termsMarkdown from "../../../../TERMS.md?raw";
-import { t } from "./i18n";
+import privacyMarkdown from "../../../../PRIVACY.md?raw";
+import { currentLanguage, t } from "./i18n";
 
 // The user agreement (TERMS.md at the repository root) ships inside the app, so it can be read offline and is always
 // the version this build was made with. Someone accepts it once; a new major version of the terms asks again.
+// The privacy policy (PRIVACY.md) ships the same way and can be read from the consent screen and from Settings.
 
 const storageKey = "anixops.terms-accepted";
 
@@ -85,10 +87,27 @@ export function termsBlocks(markdown: string): Block[] {
   return blocks;
 }
 
-function TermsText() {
+/**
+ * The privacy policy in English when `english`, else in Chinese: the shared title and effective date, then that
+ * language's half. The line linking the two halves is dropped, since the viewer cannot follow in-page anchors. A file
+ * without both halves comes back whole. Same rule as Privacy.forLanguage in the Android app.
+ */
+export function privacyForLanguage(markdown: string, english: boolean): string {
+  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  const englishAt = lines.findIndex((line) => line.trim() === "## English");
+  const chineseAt = lines.findIndex((line) => line.trim() === "## 中文");
+  if (englishAt < 0 || chineseAt < 0) return markdown;
+  const head = lines.slice(0, Math.min(englishAt, chineseAt)).filter((line) => !line.includes("](#"));
+  const body = english
+    ? lines.slice(englishAt + 1, englishAt < chineseAt ? chineseAt : lines.length)
+    : lines.slice(chineseAt + 1, chineseAt < englishAt ? englishAt : lines.length);
+  return [...head, "", ...body].join("\n").trim();
+}
+
+function DocumentText({ markdown, label }: { markdown: string; label: string }) {
   return (
-    <div className="terms-text" tabIndex={0} aria-label={t("用户协议全文")}>
-      {termsBlocks(termsMarkdown).map((block, index) => {
+    <div className="terms-text" tabIndex={0} aria-label={label}>
+      {termsBlocks(markdown).map((block, index) => {
         if (block.kind === "h1") return <h3 key={index}>{block.text}</h3>;
         if (block.kind === "h2") return <h4 key={index}>{block.text}</h4>;
         return <p key={index} className={block.kind === "li" ? "terms-item" : undefined}>{block.text}</p>;
@@ -97,12 +116,21 @@ function TermsText() {
   );
 }
 
+function TermsText() {
+  return <DocumentText markdown={termsMarkdown} label={t("用户协议全文")} />;
+}
+
+function PrivacyText() {
+  return <DocumentText markdown={privacyForLanguage(privacyMarkdown, currentLanguage() === "en")} label={t("隐私政策全文")} />;
+}
+
 /**
  * First start: the agreement in full, one primary action to accept it, and a way to decline. Declining keeps the
  * app closed off: nothing else is usable until the terms are accepted.
  */
 export function TermsConsent({ onAccept }: { onAccept: () => void }) {
   const [declined, setDeclined] = useState(false);
+  const [privacy, setPrivacy] = useState(false);
   return (
     <ModalDialog>
       <header className="terms-head">
@@ -110,11 +138,13 @@ export function TermsConsent({ onAccept }: { onAccept: () => void }) {
         <div>
           <Heading slot="title" level={2}>{t("使用前请阅读用户协议")}</Heading>
           <p>{t("只在自己的设备上使用；HTTPS 解密只用于你自己的流量，根证书由你手动信任；不得用于入侵、窃取数据或绕过他人的安全机制。")}</p>
+          <p>{t("流量只在本机按你的规则转发到你配置的服务器，我们看不到也不收集。App 不含统计、广告或崩溃上报 SDK，数据只保存在你的设备上。")}</p>
         </div>
       </header>
-      <TermsText />
+      {privacy ? <PrivacyText /> : <TermsText />}
       {declined && <p className="terms-declined" role="status">{t("不同意就不能使用 AnixOps Net。你可以关闭窗口并卸载，或重新阅读后同意。")}</p>}
       <footer className="terms-actions">
+        <button className="secondary" onClick={() => setPrivacy(!privacy)}>{privacy ? t("阅读用户协议") : t("阅读隐私政策")}</button>
         <button className="secondary" onClick={() => setDeclined(true)}>{t("不同意")}</button>
         <button className="primary" onClick={onAccept}>{t("同意并继续")}</button>
       </footer>
@@ -134,6 +164,25 @@ export function TermsViewer({ onClose }: { onClose: () => void }) {
         </div>
       </header>
       <TermsText />
+      <footer className="terms-actions">
+        <button className="secondary" autoFocus onClick={onClose}>{t("关闭")}</button>
+      </footer>
+    </ModalDialog>
+  );
+}
+
+/** Settings: the privacy policy this build ships with. */
+export function PrivacyViewer({ onClose }: { onClose: () => void }) {
+  return (
+    <ModalDialog onClose={onClose}>
+      <header className="terms-head">
+        <ShieldCheck size={22} aria-hidden />
+        <div>
+          <Heading slot="title" level={2}>{t("隐私政策")}</Heading>
+          <p>{t("不收集数据：没有统计、广告或崩溃上报 SDK，数据只保存在你的设备上。")}</p>
+        </div>
+      </header>
+      <PrivacyText />
       <footer className="terms-actions">
         <button className="secondary" autoFocus onClick={onClose}>{t("关闭")}</button>
       </footer>

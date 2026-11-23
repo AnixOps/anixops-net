@@ -232,6 +232,9 @@
     <string name="terms_decline">不同意</string>
     <string name="terms_accept">同意并继续</string>
     <string name="terms_full_text">用户协议全文</string>
+    <string name="privacy_policy">隐私政策</string>
+    <string name="privacy_full_text">隐私政策全文</string>
+    <string name="terms_consent_data">流量只在本机按你的规则转发到你配置的服务器，我们看不到也不收集。App 不含统计、广告或崩溃上报 SDK，数据只保存在你的设备上。</string>
     <string name="action_done">完成</string>
     <string name="activity">活动</string>
     <string name="action_view">查看</string>

@@ -36,6 +36,13 @@ public enum TermsConsent {
     }
 }
 
+/// The privacy policy (PRIVACY.md at the root of the anixops-net repository), linked from the first-start consent
+/// screen and from Settings › About on iOS and macOS. The same address is entered in App Store Connect.
+public enum PrivacyPolicy {
+    /// The full text, in the public repository.
+    public static let url = URL(string: "https://github.com/AnixOps/anixops-net/blob/main/PRIVACY.md")!
+}
+
 /// The extra confirmation the first time someone turns HTTPS decryption on (TERMS.md section 4: capture and decrypt
 /// only traffic you are entitled to see). Asked once per installation, on iOS and macOS alike.
 ///

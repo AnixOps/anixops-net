@@ -455,7 +455,10 @@ jobs:
           share/polkit-1/actions/io.anixops.net.tun.policy so the prompt names the app.
 
           Uninstall: quit the app, delete this directory and ~/.config/autostart/anixops-net.desktop if
-          you enabled start after login. Rollback: run the previous version's extracted directory.
+          you enabled start after login. Your subscriptions, settings and logs stay in
+          \$XDG_CONFIG_HOME/anixops-net (usually ~/.config/anixops-net), also after removing the .deb;
+          delete that directory to remove them (PRIVACY.md). Rollback: run the previous version's
+          extracted directory.
           EOF
           archive_name="${stem}.tar.gz"
           tar -czf "${output_dir}/${archive_name}" -C "${dist_dir}/staging" "${stem}"

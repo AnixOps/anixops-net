@@ -122,7 +122,7 @@ jobs:
       # Pull requests run only the platforms their paths touch. Manual runs, every push to main that changes
       # anything besides documentation, and any change to the workspace, lockfile, workflows, scripts, Rust tool
       # configuration or a path classify-changes.sh does not name run everything. A push to main that only changes
-      # documentation (root *.md other than TERMS.md, docs/) runs nothing: no build reads those files. Its CI summary then has skipped jobs, which release.yml does not
+      # documentation (root *.md other than TERMS.md and PRIVACY.md, docs/) runs nothing: no build reads those files. Its CI summary then has skipped jobs, which release.yml does not
       # accept, so such a commit is released only after a manual (full) run.
       - name: Classify changed paths
         id: changes
@@ -138,12 +138,13 @@ jobs:
           rust=false; ui=false; windows=false; linux=false; apple=false; android_native=false
           windows_native=false; linux_native=false
           all() { rust=true; ui=true; windows=true; linux=true; apple=true; android_native=true; windows_native=true; linux_native=true; }
-          # Documentation no build, test or packaging step reads. TERMS.md is not here: the apps bundle it.
+          # Documentation no build, test or packaging step reads. TERMS.md and PRIVACY.md are not here: the apps
+          # bundle them.
           docs_only() {
             local path
             while IFS= read -r path; do
               case "${path}" in
-                TERMS.md) return 1 ;;
+                TERMS.md | PRIVACY.md) return 1 ;;
                 docs/*) ;;
                 # A README.md inside a crate or app can be read by the build (rustdoc include_str!).
                 */*) return 1 ;;

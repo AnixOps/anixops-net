@@ -20050,6 +20050,54 @@
           }
         }
       }
+    },
+    "流量只在本机按你的规则转发到你配置的服务器，我们看不到也不收集。App 不含统计、广告或崩溃上报 SDK，数据只保存在你的设备上。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Traffic is forwarded on this device to the servers you configure, following your rules; we cannot see it and collect nothing. The app has no analytics, advertising or crash-reporting SDK, and your data stays on your device."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "流量只在本機按你的規則轉發到你設定的伺服器，我們看不到也不收集。App 不含統計、廣告或當機回報 SDK，資料只儲存在你的裝置上。"
+          }
+        }
+      }
+    },
+    "阅读隐私政策": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read the Privacy Policy"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "閱讀隱私權政策"
+          }
+        }
+      }
+    },
+    "隐私政策": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy Policy"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隱私權政策"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

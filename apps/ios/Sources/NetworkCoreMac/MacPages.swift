@@ -686,6 +686,9 @@ struct MacSettingsPage: View {
                 LabeledContent("用户协议") {
                     Link("查看", destination: TermsConsent.url)
                 }
+                LabeledContent("隐私政策") {
+                    Link("查看", destination: PrivacyPolicy.url)
+                }
             }
         }
         .formStyle(.grouped)

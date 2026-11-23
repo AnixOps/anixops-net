@@ -220,8 +220,25 @@ fun AnixApp(
     }
     val termsText = terms ?: return
     val termsVersion = remember(termsText) { Terms.version(termsText) }
+    // The privacy policy, in the app's language: from the first-start consent and from 设置 › 关于.
+    val privacy by produceState<String?>(null) {
+        value = withContext(Dispatchers.IO) { context.assets.open(Privacy.ASSET).bufferedReader().use { it.readText() } }
+    }
+    val privacyEnglish = clientLanguage(LocalConfiguration.current.locales[0]) == "en"
+    var readingPrivacy by rememberSaveable { mutableStateOf(false) }
+    val privacyText = privacy
+    if (readingPrivacy && privacyText != null) {
+        BackTo { readingPrivacy = false }
+        TermsScreen(
+            remember(privacyText, privacyEnglish) { Privacy.forLanguage(privacyText, privacyEnglish) },
+            onClose = { readingPrivacy = false },
+            title = R.string.privacy_policy,
+            contentLabel = R.string.privacy_full_text,
+        )
+        return
+    }
     if (Terms.needsConsent(termsAccepted, termsVersion)) {
-        TermsScreen(termsText, onAccept = { app.acceptTerms(termsVersion) })
+        TermsScreen(termsText, onAccept = { app.acceptTerms(termsVersion) }, onPrivacy = { readingPrivacy = true })
         return
     }
     // After the agreement, a new user picks proxy or debugging once; someone who already has a subscription or nodes
@@ -266,7 +283,9 @@ fun AnixApp(
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { settings.setSystemAccess(systemAccess(context)) }
     val storage = rememberStorageGate()
-    val settingsActions = rememberSettingsActions(settings, app, storage) { readingTerms = true }
+    val settingsActions = rememberSettingsActions(settings, app, storage, openPrivacy = { readingPrivacy = true }) {
+        readingTerms = true
+    }
     val extensionsActions = rememberExtensionsActions(extensions, snackbar, storage)
     val denied = stringResource(R.string.home_vpn_denied)
     val consent = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -432,6 +451,7 @@ private fun rememberSettingsActions(
     settings: SettingsViewModel,
     app: AppViewModel,
     storage: (() -> Unit) -> Unit,
+    openPrivacy: () -> Unit,
     openTerms: () -> Unit,
 ): SettingsActions {
     val context = LocalContext.current
@@ -552,6 +572,7 @@ private fun rememberSettingsActions(
         setCrashReports = settings::setCrashReports,
         createDiagnostics = { storage(settings::createDiagnostics) },
         openTerms = openTerms,
+        openPrivacy = openPrivacy,
     )
 }
 

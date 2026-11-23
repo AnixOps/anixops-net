@@ -130,27 +130,44 @@ dependencies {
     androidTestImplementation(libs.compose.ui.test.junit4)
 }
 
-/** Packs the user agreement (TERMS.md at the repository root) into the assets, so the app shows the one it was built with. */
-abstract class TermsAsset : DefaultTask() {
+/**
+ * Packs the user agreement and the privacy policy (TERMS.md and PRIVACY.md at the repository root) into the assets, so
+ * the app shows the ones it was built with; with -Panixops.noticesFile (release.yml and play-bundle.yml pass the file
+ * .github/actions/third-party-notices writes) also the third-party notices, as THIRD_PARTY_NOTICES.txt.
+ */
+abstract class DocumentAssets : DefaultTask() {
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.NAME_ONLY)
+    abstract val documents: ConfigurableFileCollection
+
+    @get:Optional
     @get:InputFile
     @get:PathSensitive(PathSensitivity.NONE)
-    abstract val source: RegularFileProperty
+    abstract val notices: RegularFileProperty
 
     @get:OutputDirectory
     abstract val output: DirectoryProperty
 
     @TaskAction
     fun copy() {
-        source.get().asFile.copyTo(output.get().file("TERMS.md").asFile, overwrite = true)
+        val directory = output.get().asFile
+        directory.deleteRecursively()
+        directory.mkdirs()
+        documents.files.forEach { it.copyTo(java.io.File(directory, it.name), overwrite = true) }
+        notices.orNull?.asFile?.copyTo(java.io.File(directory, "THIRD_PARTY_NOTICES.txt"), overwrite = true)
     }
 }
 
-val termsAsset = tasks.register<TermsAsset>("termsAsset") {
-    source.set(rootProject.layout.projectDirectory.file("../../TERMS.md"))
+val documentAssets = tasks.register<DocumentAssets>("documentAssets") {
+    documents.from(
+        rootProject.layout.projectDirectory.file("../../TERMS.md"),
+        rootProject.layout.projectDirectory.file("../../PRIVACY.md"),
+    )
+    (project.findProperty("anixops.noticesFile") as String?)?.takeIf { it.isNotBlank() }?.let { notices.set(project.file(it)) }
 }
 
 androidComponents {
     onVariants { variant ->
-        variant.sources.assets?.addGeneratedSourceDirectory(termsAsset, TermsAsset::output)
+        variant.sources.assets?.addGeneratedSourceDirectory(documentAssets, DocumentAssets::output)
     }
 }

@@ -119,7 +119,7 @@ AnixOps Net 各平台客户端（iOS、macOS、Android、Windows、Linux，开�
 
 ## 只在用户点开时打开的链接
 
-- 用户协议、开源许可等页面里的 `github.com` 链接，只有你点了才由系统浏览器打开，App 自己不请求。
+- 用户协议、隐私政策等页面里的 `github.com` 链接，只有你点了才由系统浏览器打开，App 自己不请求。
 
 ## 用户自己的配置
 
