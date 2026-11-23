@@ -30,7 +30,12 @@ function Invoke-Msi {
   }
   # 3010 would mean something is only gone after a restart, which is a leftover until then.
   if ($process.ExitCode -ne 0) {
-    if (Test-Path $log) { Get-Content $log -Tail 200 }
+    if (Test-Path $log) {
+      # The action that failed and what it logged just before, then the end of the log.
+      Select-String -Path $log -Pattern "Return value 3", "Error 1[0-9]{3}\.", "error code" -Context 25, 2 |
+        Select-Object -First 5 | Out-String -Width 400 | Write-Host
+      Get-Content $log -Tail 200
+    }
     throw "$Operation ended with exit code $($process.ExitCode)."
   }
   Write-Host "${Operation}: ok"
