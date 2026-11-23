@@ -20,7 +20,7 @@ export type Delays = Record<string, NodeDelay>;
 export type SetDelays = (update: (current: Delays) => Delays) => void;
 
 /**
- * The overview, a dashboard in the manner of Surge: the connection with the node and mode, the subscription's
+ * The overview, a dashboard: the connection with the node and mode, the subscription's
  * allowance, live traffic, delays through the node, and what is using the connection right now.
  */
 export function HomePage({ snapshot, nodes, phase, busy, run, toggle, goTo, delays, setDelays }: {

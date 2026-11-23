@@ -58,7 +58,7 @@ public struct SubscriptionUserInfo: Codable, Equatable {
     }
 }
 
-/// What a subscription download returned besides the body: the headers Loon, Clash and Shadowrocket read.
+/// What a subscription download returned besides the body: the commonly used subscription headers.
 public struct SubscriptionResponseInfo: Equatable {
     public var userInfo: SubscriptionUserInfo?
     /// `profile-update-interval`, in hours.
@@ -140,7 +140,7 @@ public struct SubscriptionResponseInfo: Equatable {
     }
 }
 
-/// One subscription, Loon or Shadowrocket style: its own name, nodes, rules and picks, the last update and the
+/// One subscription as its own group: its own name, nodes, rules and picks, the last update and the
 /// server's traffic and expiry, updated by hand or every `updateIntervalHours`.
 public struct SubscriptionGroup: Codable, Equatable, Identifiable {
     public static let defaultUpdateIntervalHours = 24

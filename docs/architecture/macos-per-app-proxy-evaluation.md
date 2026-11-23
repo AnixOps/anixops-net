@@ -77,4 +77,3 @@ iOS 没有进程表可查，系统也不给包隧道来源 App；按 App 只有 
   `NETestAppMapping`）
 - [Transparent Proxy overrides sourceApplicationSigningIdentifier](https://developer.apple.com/forums/thread/763912)（来源元数据与
   `setMetadata(on:)`）
-- [Surge Mac 进程规则](https://manual.nssurge.com/rules/process.html)（同类产品只在 Mac 上支持进程规则）

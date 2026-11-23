@@ -1,6 +1,6 @@
 import Foundation
 
-/// How the tunnel sends traffic, as Surge, Loon and Clash clients name the modes: by the subscription's rules,
+/// How the tunnel sends traffic, in the usual three modes: by the subscription's rules,
 /// everything through the selected node, or everything direct. The engine switches between them without a restart.
 public enum ProxyMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case rule

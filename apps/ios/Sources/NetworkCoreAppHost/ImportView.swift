@@ -204,7 +204,7 @@ struct ImportView: View {
                         .foregroundStyle(brand.danger)
                 }
 
-                Text("支持订阅链接，Clash / Surge / Loon / Quantumult X 订阅内容，Trojan、VMess、VLESS、Shadowsocks、Hysteria2、TUIC 链接，以及单个 Peer 的 WireGuard 配置。")
+                Text("支持订阅链接、常见格式的订阅内容，Trojan、VMess、VLESS、Shadowsocks、Hysteria2、TUIC 链接，以及单个 Peer 的 WireGuard 配置。")
                     .font(.caption)
                     .foregroundStyle(brand.text2)
 

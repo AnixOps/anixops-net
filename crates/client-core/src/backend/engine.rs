@@ -293,7 +293,7 @@ impl OtherSource {
 }
 
 /// Adds every other source to a routed envelope as a select policy group of its nodes, and that group to
-/// every select group, as Loon does with subscription groups. A source is left out when its ids clash or the
+/// every select group. A source is left out when its ids clash or the
 /// engine would reject the result (it allows 64 nodes and 64 groups).
 pub fn link_sources(envelope: &str, others: &[OtherSource]) -> String {
     let Ok(mut profile) = serde_json::from_str::<Value>(envelope) else {

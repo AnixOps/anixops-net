@@ -1,5 +1,5 @@
 //! "我的规则" on Windows, Linux and Android: rule lines the user writes, matched before the routing mode's or the
-//! subscription's own rules, as on iOS and macOS (`LocalRules`). They are kept as text, one Surge / Loon style line
+//! subscription's own rules, as on iOS and macOS (`LocalRules`). They are kept as text, one line in common rule syntax
 //! each (`DOMAIN-SUFFIX,example.com,PROXY`), checked here line by line and then by the engine with the rest of the
 //! envelope.
 //!

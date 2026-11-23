@@ -125,7 +125,7 @@ struct LocalRulesView: View {
                 remainderSection
             }
             Section {
-                Button("从 Loon / Surge 配置导入规则") {
+                Button("从配置文件导入规则") {
                     importing = true
                 }
                 if !rules.rules.isEmpty {
@@ -267,7 +267,7 @@ struct LocalRulesView: View {
             Text("我的规则")
         } footer: {
             if rules.rules.isEmpty {
-                Text("按域名、IP、端口等写规则，写法和 Surge、Loon 一样。")
+                Text("按域名、IP、端口等写规则，兼容常见规则语法。")
             }
         }
         .listRowBackground(brand.surface)
@@ -362,7 +362,7 @@ struct LocalRulesView: View {
         } header: {
             Text("规则集")
         } footer: {
-            Text("填任意 Surge、Loon、Clash 规则列表的 https 链接，由内核经代理下载，每天自动更新。")
+            Text("填任意常见格式规则列表的 https 链接，由内核经代理下载，每天自动更新。")
         }
         .listRowBackground(brand.surface)
     }
@@ -462,7 +462,7 @@ struct RuleSetSubscriptionSheet: View {
                     TextField("链接", text: $url, prompt: Text(verbatim: "https://raw.githubusercontent.com/…/rules.list"))
                         .plainTextEntry(url: true)
                 } footer: {
-                    Text("支持 Surge、Loon 的 .list 和 Clash 的 classical / domain 列表（https）。")
+                    Text("支持常见的 .list 规则列表和 classical / domain 列表（https）。")
                 }
                 .listRowBackground(brand.surface)
                 Section {
@@ -684,9 +684,9 @@ private struct LocalRuleSheet: View {
         case "DEVICE-NAME":
             return String(localized: "Mac 作为网关时，按在“设备名”里给局域网设备起的名字匹配。")
         case "RULE-SET":
-            return String(localized: "Surge / Loon 格式的规则列表 https 地址，经代理每天下载一次。")
+            return String(localized: "常见规则语法的规则列表 https 地址，经代理每天下载一次。")
         default:
-            return String(localized: "与 Surge、Loon 的同名规则写法相同。")
+            return String(localized: "兼容常见规则语法中的同名规则。")
         }
     }
 
@@ -740,7 +740,7 @@ private struct LocalRulesImportSheet: View {
                 Section {
                     EmptyView()
                 } footer: {
-                    Text("可以粘贴整份 Loon / Surge 配置（只读 [Rule] 段）或每行一条规则。DIRECT、REJECT 保留，其他策略名都当作代理；FINAL 和不支持的类型会跳过。")
+                    Text("可以粘贴整份配置（只读 [Rule] 段）或每行一条规则。DIRECT、REJECT 保留，其他策略名都当作代理；FINAL 和不支持的类型会跳过。")
                 }
             }
             .scrollContentBackground(.hidden)

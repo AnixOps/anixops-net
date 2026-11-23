@@ -168,7 +168,7 @@ export function CaptureDetail({ connection, busy, run, onBack, initialExchange }
         <Card><p className="muted">{t("还没有数据")}</p></Card>
       )}
 
-      <Card title={t("导出")} description={t("pcapng 可用 Wireshark 打开，HAR 可导入浏览器开发者工具、Charles 或 Proxyman。导出内容可能包含账号、Cookie 等敏感信息，请只发给信任的人。")}>
+      <Card title={t("导出")} description={t("pcapng 可用 Wireshark 打开，HAR 可导入浏览器开发者工具或其他抓包工具。导出内容可能包含账号、Cookie 等敏感信息，请只发给信任的人。")}>
         <Row icon={Download} color="indigo" label={t("导出 pcapng")} hint={t("保存到“下载”文件夹")}>
           <button className="secondary compact" disabled={Boolean(busy)} onClick={() => exportCapture(run, "pcapng", connection.id, { redact })}>{t("导出")}</button>
         </Row>

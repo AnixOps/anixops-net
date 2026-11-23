@@ -33,8 +33,8 @@ public struct NetworkFacts: Equatable, Sendable {
         self.radio = kind == "cellular" ? radio : nil
     }
 
-    /// The engine's name for a Core Telephony radio technology (`CTRadioAccessTechnologyNRNSA` is `NRNSA`), as Surge's
-    /// `CELLULAR-RADIO` writes it, upper case; nil for anything else.
+    /// The engine's name for a Core Telephony radio technology (`CTRadioAccessTechnologyNRNSA` is `NRNSA`), as the
+    /// `CELLULAR-RADIO` rule writes it, upper case; nil for anything else.
     public static func radio(telephony: String?) -> String? {
         let prefix = "CTRadioAccessTechnology"
         guard let telephony, telephony.hasPrefix(prefix) else {
