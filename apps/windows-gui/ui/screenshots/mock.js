@@ -202,6 +202,12 @@
     list_mitm_plugins: () => [
       { id: "p1", name: "Bilibili 去广告", url: "https://example.com/bili.plugin", enabled: true, level: "full", hostnames: ["api.bilibili.com", "app.bilibili.com"], scriptCount: 3 },
       { id: "p2", name: "YouTube 去广告", url: "https://example.com/yt.plugin", enabled: true, level: "partial", hostnames: ["*.googlevideo.com"], scriptCount: 1 },
+      // More than five, so the list shows folded with its "显示全部" row.
+      { id: "p3", name: "微博 去广告", url: "https://example.com/weibo.plugin", enabled: true, level: "full", hostnames: ["api.weibo.cn"], scriptCount: 2 },
+      { id: "p4", name: "知乎 净化", url: "https://example.com/zhihu.plugin", enabled: false, level: "full", hostnames: ["api.zhihu.com"], scriptCount: 1 },
+      { id: "p5", name: "京东 比价", url: "https://example.com/jd.plugin", enabled: false, level: "partial", hostnames: ["api.m.jd.com"], scriptCount: 2 },
+      { id: "p6", name: "网页 去重定向", url: "https://example.com/redirect.plugin", enabled: true, level: "full", hostnames: ["*.example.org"], scriptCount: 0 },
+      { id: "p7", name: "天气 小组件", url: "https://example.com/weather.plugin", enabled: false, level: "full", hostnames: ["weather.example.com"], scriptCount: 1 },
     ],
     custom_dns: () => ({ servers: "", rules: "", hosts: "", fake_ip: false }),
     routing_warnings: () => ["2 rules of type SCRIPT were not imported: the client does not support them yet"],

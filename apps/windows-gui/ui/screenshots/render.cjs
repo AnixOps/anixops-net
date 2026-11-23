@@ -60,6 +60,13 @@ const shots = [
   { name: "extensions-dark", mode: "proxy", theme: "dark", nav: "扩展", size: LAPTOP },
   { name: "activity-dark", mode: "proxy", theme: "dark", nav: "活动", size: LAPTOP },
   { name: "settings-dark", mode: "proxy", theme: "dark", nav: "设置", size: LAPTOP },
+  // The settings sub-pages and the folded plugin list, reached the way a person does.
+  { name: "settings-advanced-light", mode: "proxy", theme: "light", nav: "设置", size: LAPTOP, steps: async (page) => { await page.getByRole("button", { name: "高级" }).click(); } },
+  { name: "settings-advanced-dark", mode: "proxy", theme: "dark", nav: "设置", size: LAPTOP, steps: async (page) => { await page.getByRole("button", { name: "高级" }).click(); } },
+  { name: "settings-privacy-light", mode: "proxy", theme: "light", nav: "设置", size: LAPTOP, steps: async (page) => { await page.getByRole("button", { name: "隐私与诊断" }).click(); } },
+  { name: "settings-wifi-light", mode: "proxy", theme: "light", nav: "设置", size: LAPTOP, steps: async (page) => { await page.getByRole("button", { name: "Wi-Fi 规则" }).click(); } },
+  { name: "settings-advanced-en-dark", mode: "proxy", theme: "dark", language: "en", nav: "Settings", size: SMALL, steps: async (page) => { await page.getByRole("button", { name: "Advanced" }).click(); } },
+  { name: "extensions-expanded-light", mode: "proxy", theme: "light", nav: "扩展", size: LAPTOP, steps: async (page) => { await page.getByRole("button", { name: "显示全部 7 个插件" }).click(); } },
   { name: "debug-rewrite-dark", mode: "debug", theme: "dark", nav: "改写", size: LAPTOP },
   { name: "debug-exit-dark", mode: "debug", theme: "dark", nav: "出口", size: LAPTOP },
   { name: "debug-settings-dark", mode: "debug", theme: "dark", nav: "设置", size: LAPTOP },
