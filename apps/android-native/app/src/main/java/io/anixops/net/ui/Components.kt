@@ -49,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
@@ -63,6 +64,16 @@ internal val ContentMaxWidth = 640.dp
 
 /** Minimum touch height of a row (docs/ui-ux.md: 48dp on Android). */
 val RowMinHeight = 48.dp
+
+/**
+ * Test tags the density checks count (DensityTest, docs/ui-ux.md N25-N27): a page's content column, each [Section] and
+ * each row in one, and the list of things the user adds with its items. They change no layout.
+ */
+internal const val PAGE_CONTENT_TAG = "page-content"
+internal const val SECTION_TAG = "section"
+internal const val ROW_TAG = "row"
+internal const val USER_LIST_TAG = "user-list"
+internal const val USER_ITEM_TAG = "user-item"
 
 /**
  * A scrolling page: its title, then [content] in one column, clear of the status bar and centred on tablets.
@@ -84,6 +95,7 @@ fun Page(
     ) {
         Column(
             modifier = Modifier
+                .testTag(PAGE_CONTENT_TAG)
                 .widthIn(max = ContentMaxWidth)
                 .fillMaxWidth()
                 .padding(horizontal = BrandSpacing.md, vertical = BrandSpacing.lg),
@@ -110,7 +122,7 @@ fun Section(
     action: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(BrandSpacing.xs)) {
+    Column(modifier = modifier.testTag(SECTION_TAG), verticalArrangement = Arrangement.spacedBy(BrandSpacing.xs)) {
         if (title != null || action != null) {
             Row(
                 modifier = Modifier
@@ -150,6 +162,7 @@ fun InfoRow(
     if (divider) RowDivider()
     Row(
         modifier = modifier
+            .testTag(ROW_TAG)
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .heightIn(min = RowMinHeight)
@@ -184,6 +197,7 @@ fun RowDivider() {
 fun SwitchRow(label: String, hint: String?, checked: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         modifier = Modifier
+            .testTag(ROW_TAG)
             .fillMaxWidth()
             .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange)
             .heightIn(min = RowMinHeight)

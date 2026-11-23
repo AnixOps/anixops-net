@@ -32,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -602,15 +603,17 @@ private fun PluginsSection(
             val foldable = plugins.size > COLLAPSED_PLUGIN_COUNT
             var expanded by rememberSaveable { mutableStateOf(false) }
             val shown = if (foldable && !expanded) plugins.take(COLLAPSED_PLUGIN_COUNT) else plugins
-            shown.forEachIndexed { index, plugin ->
-                if (index > 0) RowDivider()
-                PluginLine(
-                    plugin,
-                    enabled = enabled,
-                    onToggle = { actions.setPluginEnabled(plugin.id, it) },
-                    onInspect = { actions.inspect(plugin) },
-                    onRemove = { onRemove(plugin) },
-                )
+            Column(Modifier.fillMaxWidth().testTag(USER_LIST_TAG)) {
+                shown.forEachIndexed { index, plugin ->
+                    if (index > 0) RowDivider()
+                    PluginLine(
+                        plugin,
+                        enabled = enabled,
+                        onToggle = { actions.setPluginEnabled(plugin.id, it) },
+                        onInspect = { actions.inspect(plugin) },
+                        onRemove = { onRemove(plugin) },
+                    )
+                }
             }
             if (foldable) {
                 RowDivider()
@@ -637,6 +640,7 @@ private fun PluginLine(
     val palette = LocalBrandPalette.current
     Row(
         modifier = Modifier
+            .testTag(USER_ITEM_TAG)
             .fillMaxWidth()
             .heightIn(min = RowMinHeight)
             .padding(start = BrandSpacing.md, end = BrandSpacing.md, top = BrandSpacing.sm, bottom = BrandSpacing.sm),

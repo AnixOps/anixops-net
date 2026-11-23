@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -237,7 +238,10 @@ fun PrivacyScreen(state: SettingsState, actions: SettingsActions, onBack: () -> 
 @Composable
 private fun GeneralSection(mode: AppMode, actions: SettingsActions) {
     Section(stringResource(R.string.settings_general)) {
-        Column(Modifier.padding(BrandSpacing.md), verticalArrangement = Arrangement.spacedBy(BrandSpacing.xs)) {
+        Column(
+            Modifier.testTag(ROW_TAG).padding(BrandSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(BrandSpacing.xs),
+        ) {
             Text(stringResource(R.string.settings_usage), style = MaterialTheme.typography.bodyLarge)
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                 AppMode.entries.forEachIndexed { index, option ->
@@ -397,6 +401,7 @@ private fun ActionRow(
     var open by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
+            .testTag(ROW_TAG)
             .fillMaxWidth()
             .heightIn(min = RowMinHeight)
             .padding(start = BrandSpacing.md),
@@ -443,6 +448,7 @@ private fun CoreSection(core: StatusFact?, enabled: Boolean, actions: SettingsAc
         Section(stringResource(R.string.core)) {
             Row(
                 modifier = Modifier
+                    .testTag(ROW_TAG)
                     .fillMaxWidth()
                     .heightIn(min = RowMinHeight)
                     .padding(horizontal = BrandSpacing.md, vertical = BrandSpacing.sm),
