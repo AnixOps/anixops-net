@@ -64,9 +64,12 @@ jobs:
           python3 .github/scripts/ui_lint.py
 
       # Every address the client sources name is described in docs/network-behavior.md: a new update server,
-      # statistics endpoint or lookup service fails here until it is documented.
+      # statistics endpoint or lookup service fails here until it is documented. Addresses built at run time
+      # (the connection-quality report) are listed with a source marker; the self-test checks those rules first.
       - name: Outbound addresses are documented
-        run: python3 .github/scripts/outbound_hosts.py
+        run: |
+          python3 .github/scripts/outbound_hosts.py --self-test
+          python3 .github/scripts/outbound_hosts.py
 
       - name: Path classification maps every input to the jobs that read it
         run: bash .github/scripts/classify-changes.test.sh

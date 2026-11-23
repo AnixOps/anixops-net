@@ -121,4 +121,176 @@ final class ClientReportTests: XCTestCase {
         let credentials = OutboundHealth.Health(counts: .init(fallback: 3), stopped: true, hint: "credentials_or_clock")
         XCTAssertTrue(ClientReport.stoppedText(node: "Tokyo", health: credentials).contains("Tokyo"))
     }
+
+    // MARK: - The setting
+
+    private func freshDefaults(file: StaticString = #filePath, line: UInt = #line) throws -> UserDefaults {
+        let name = "ClientReportTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name), file: file, line: line)
+        addTeardownBlock { UserDefaults(suiteName: name)?.removePersistentDomain(forName: name) }
+        return defaults
+    }
+
+    private func health(okA: UInt64, okB: UInt64 = 7) throws -> OutboundHealth {
+        let json = """
+        {"outbounds":[
+         {"node":"a","protocol":"anx","health":{"counts":{"ok":\(okA)},"consecutive_fallbacks":0,"stopped":false,
+          "clock_skew_secs":null,"hint":null}},
+         {"node":"b","protocol":"anx","health":{"counts":{"ok":\(okB)},"consecutive_fallbacks":0,"stopped":false,
+          "clock_skew_secs":null,"hint":null}}]}
+        """
+        return try XCTUnwrap(RuntimeControl.decode(OutboundHealth.self, from: Data(json.utf8)))
+    }
+
+    func testReportIsOffByDefaultAndSendsNothing() throws {
+        let defaults = try freshDefaults()
+        let store = ClientReportStore(defaults: defaults)
+        XCTAssertFalse(store.isEnabled)
+        let start = Date(timeIntervalSince1970: 1_000_000)
+        let planner = ClientReportPlanner(store: store, now: start, interval: { 3600 })
+        let groups = try groups(url: "https://panel.example.com/s/tok9")
+        for hours in [0.0, 1, 2, 30] {
+            let step = planner.next(health: try health(okA: 100), groups: groups, network: "wifi", client: "c",
+                                    now: start.addingTimeInterval(hours * 3600))
+            XCTAssertEqual(step, .wait)
+        }
+        XCTAssertNil(defaults.object(forKey: ClientReportStore.snapshotKey), "nothing is kept while the report is off")
+        XCTAssertNil(defaults.object(forKey: ClientReportStore.lastReportKey))
+    }
+
+    func testStateOfAnEarlierVersionIsDeletedWhileOff() throws {
+        let defaults = try freshDefaults()
+        // An earlier version reported without a setting and kept these.
+        defaults.set(try JSONEncoder().encode(["a": OutboundHealth.Counts(ok: 3)]), forKey: ClientReportStore.snapshotKey)
+        defaults.set(Date(timeIntervalSince1970: 5), forKey: ClientReportStore.lastReportKey)
+        ClientReportStore(defaults: defaults).forgetIfDisabled()
+        XCTAssertNil(defaults.object(forKey: ClientReportStore.snapshotKey))
+        XCTAssertNil(defaults.object(forKey: ClientReportStore.lastReportKey))
+
+        // While on, the state stays.
+        let store = ClientReportStore(defaults: defaults)
+        store.setEnabled(true, now: Date(timeIntervalSince1970: 10))
+        store.forgetIfDisabled()
+        XCTAssertEqual(store.lastReport, Date(timeIntervalSince1970: 10))
+    }
+
+    func testTurningOnStartsFromTheCurrentCounts() throws {
+        let defaults = try freshDefaults()
+        let store = ClientReportStore(defaults: defaults)
+        let groups = try groups(url: "https://panel.example.com/s/tok9")
+        let endpoint = try XCTUnwrap(URL(string: "https://panel.example.com/s/tok9/report"))
+        let enabledAt = Date(timeIntervalSince1970: 2_000_000)
+        store.setEnabled(true, now: enabledAt)
+        XCTAssertTrue(store.isEnabled)
+        XCTAssertNil(store.snapshot)
+        XCTAssertEqual(store.lastReport, enabledAt)
+
+        let planner = ClientReportPlanner(store: store, now: enabledAt, interval: { 3600 })
+        // The counts from before the user turned the report on only become the baseline.
+        XCTAssertEqual(
+            planner.next(health: try health(okA: 500), groups: groups, network: "wifi", client: "c",
+                         now: enabledAt.addingTimeInterval(5)),
+            .baseline
+        )
+        XCTAssertEqual(store.snapshot?["a"], OutboundHealth.Counts(ok: 500))
+        // Not due yet.
+        XCTAssertEqual(
+            planner.next(health: try health(okA: 510), groups: groups, network: "wifi", client: "c",
+                         now: enabledAt.addingTimeInterval(1800)),
+            .wait
+        )
+        // Due: only what happened since, over the window since it was turned on.
+        let now = enabledAt.addingTimeInterval(3600)
+        guard case let .send(bodies, counts) = planner.next(
+            health: try health(okA: 520), groups: groups, network: "cellular", client: "c", platform: "macos", now: now
+        ) else {
+            return XCTFail("a report is due")
+        }
+        let body = try XCTUnwrap(bodies[endpoint])
+        XCTAssertEqual(body.nodes.map(\.node), ["Tokyo"], "b has nothing new")
+        XCTAssertEqual(body.nodes.first?.counts, OutboundHealth.Counts(ok: 20))
+        XCTAssertEqual(body.windowSecs, 3600)
+        XCTAssertEqual(body.platform, "macos")
+        XCTAssertEqual(body.network, "cellular")
+        planner.delivered(counts, at: now)
+        XCTAssertEqual(store.snapshot?["a"], OutboundHealth.Counts(ok: 520))
+        XCTAssertEqual(store.lastReport, now)
+    }
+
+    func testTurningOffDeletesTheStateAndOnAgainDoesNotBackFill() throws {
+        let defaults = try freshDefaults()
+        let store = ClientReportStore(defaults: defaults)
+        let groups = try groups(url: "https://panel.example.com/s/tok9")
+        let start = Date(timeIntervalSince1970: 3_000_000)
+        store.setEnabled(true, now: start)
+        let first = ClientReportPlanner(store: store, now: start, interval: { 3600 })
+        XCTAssertEqual(first.next(health: try health(okA: 10), groups: groups, network: "wifi", client: "c", now: start), .baseline)
+
+        store.setEnabled(false, now: start.addingTimeInterval(60))
+        XCTAssertFalse(store.isEnabled)
+        XCTAssertNil(defaults.object(forKey: ClientReportStore.snapshotKey))
+        XCTAssertNil(defaults.object(forKey: ClientReportStore.lastReportKey))
+        // A planner made before the switch stops too, and a report in flight no longer saves anything.
+        XCTAssertEqual(
+            first.next(health: try health(okA: 99), groups: groups, network: "wifi", client: "c",
+                       now: start.addingTimeInterval(7200)),
+            .wait
+        )
+        first.delivered(["a": OutboundHealth.Counts(ok: 99)], at: start.addingTimeInterval(7200))
+        XCTAssertNil(defaults.object(forKey: ClientReportStore.snapshotKey))
+
+        // Ten hours off, then on again: the counts from the off period are never sent.
+        let again = start.addingTimeInterval(36_000)
+        store.setEnabled(true, now: again)
+        let second = ClientReportPlanner(store: store, now: again, interval: { 3600 })
+        XCTAssertEqual(
+            second.next(health: try health(okA: 900), groups: groups, network: "wifi", client: "c",
+                        now: again.addingTimeInterval(1)),
+            .baseline
+        )
+        guard case let .send(bodies, _) = second.next(
+            health: try health(okA: 905), groups: groups, network: "wifi", client: "c", now: again.addingTimeInterval(3600)
+        ) else {
+            return XCTFail("a report is due")
+        }
+        let body = try XCTUnwrap(bodies.values.first)
+        XCTAssertEqual(body.nodes.first?.counts, OutboundHealth.Counts(ok: 5))
+        XCTAssertEqual(body.windowSecs, 3600)
+    }
+
+    func testFailedReportRetriesAfterThePanelMinimum() throws {
+        let defaults = try freshDefaults()
+        let store = ClientReportStore(defaults: defaults)
+        let groups = try groups(url: "https://panel.example.com/s/tok9")
+        let start = Date(timeIntervalSince1970: 4_000_000)
+        store.setEnabled(true, now: start)
+        let planner = ClientReportPlanner(store: store, now: start, interval: { 3600 })
+        _ = planner.next(health: try health(okA: 1), groups: groups, network: "wifi", client: "c", now: start)
+        let due = start.addingTimeInterval(3600)
+        guard case .send = planner.next(health: try health(okA: 2), groups: groups, network: "wifi", client: "c", now: due) else {
+            return XCTFail("a report is due")
+        }
+        planner.failed(at: due)
+        XCTAssertEqual(store.lastReport, start, "a failed report keeps the window")
+        XCTAssertEqual(
+            planner.next(health: try health(okA: 2), groups: groups, network: "wifi", client: "c",
+                         now: due.addingTimeInterval(ClientReport.minimumInterval - 1)),
+            .wait
+        )
+        guard case let .send(bodies, _) = planner.next(
+            health: try health(okA: 3), groups: groups, network: "wifi", client: "c",
+            now: due.addingTimeInterval(ClientReport.minimumInterval)
+        ) else {
+            return XCTFail("retried after the panel's minimum")
+        }
+        XCTAssertEqual(bodies.values.first?.nodes.first?.counts, OutboundHealth.Counts(ok: 2))
+    }
+
+    func testPlatformNamesTheSystem() {
+        #if os(macOS)
+        XCTAssertEqual(ClientReport.platform, "macos")
+        #else
+        XCTAssertEqual(ClientReport.platform, "ios")
+        #endif
+    }
 }

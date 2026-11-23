@@ -2047,8 +2047,9 @@ final class TunnelController {
     @ObservationIgnored private var reporter: ClientReporter?
 
     /// Reads the engine's per-node dial health: tells the user once when a node stopped because its server kept
-    /// rejecting this client (expired subscription or wrong device time), and hands the counts to the panel
-    /// reporter. `network` is `wifi`, `cellular`, `ethernet` or `unknown`.
+    /// rejecting this client (expired subscription or wrong device time), and, only when the user turned the panel
+    /// report on in Settings, hands the counts to the panel reporter. `network` is `wifi`, `cellular`, `ethernet`
+    /// or `other`.
     func checkOutboundHealth(network: String) async {
         guard let health = RuntimeControl.decode(OutboundHealth.self, from: await control(.outboundHealth)) else {
             return
@@ -2069,9 +2070,25 @@ final class TunnelController {
                 actions: actions
             )
         }
-        let reporter = self.reporter ?? ClientReporter()
+        let store = ClientReportStore()
+        guard store.isEnabled else {
+            self.reporter?.retire()
+            self.reporter = nil
+            store.forgetIfDisabled()
+            return
+        }
+        let reporter = self.reporter ?? ClientReporter(store: store)
         self.reporter = reporter
         reporter.offer(health, groups: subscriptions, network: network)
+    }
+
+    /// The panel report setting (off by default). Turning it on starts from the counts at the next look, so the
+    /// time it was off is never reported; turning it off deletes the saved baseline. The stopped-node notice above
+    /// stays either way: it is shown on this device only.
+    func setPanelReport(enabled: Bool) {
+        reporter?.retire()
+        reporter = nil
+        ClientReportStore().setEnabled(enabled)
     }
 
     /// Lets a stopped node dial again after the user fixed the time or the subscription.

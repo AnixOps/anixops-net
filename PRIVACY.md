@@ -1,6 +1,6 @@
 # AnixOps Net Privacy Policy / 隐私政策
 
-Effective date / 生效日期：2026-11-21
+Effective date / 生效日期：2026-11-23
 
 [English](#english) · [中文](#中文)
 
@@ -13,9 +13,11 @@ the source code in CI.
 
 ### What we collect
 
-**Nothing.** We do not run any server that the client reports to. The client contains no analytics, telemetry,
-advertising, crash-reporting or remote-configuration SDK, and it never sends us your device identifiers, advertising
-ID, location, contacts, installed-app list, browsing history or network traffic.
+**Nothing by default.** The client contains no analytics, telemetry, advertising, crash-reporting or
+remote-configuration SDK, and it never sends us your device identifiers, advertising ID, location, contacts,
+installed-app list, browsing history or network traffic. The only report the client can send on its own is the
+optional connection-quality report on iOS and macOS (see "Connections the client makes"): it is off until you turn it
+on, and it goes to the provider of your subscription, not to a separate server of ours.
 
 ### Data that stays on your device
 
@@ -38,6 +40,16 @@ Uninstalling the app deletes this data.
   and we cannot see this traffic. The operator of each server you choose handles your data under its own policy.
 - **Latency and exit-address checks** run when you tap them or right after you connect, and send empty requests that
   carry no identifiers (details in docs/network-behavior.md).
+- **Connection-quality report (iOS and macOS, off by default).** Only if you turn on "Report connection quality to
+  subscription provider" in Settings › Privacy, then while the app is open and connected, about once an hour, the
+  client sends the connection counts of nodes using the ANX protocol to the subscription provider that supplied
+  them. The address is your subscription link without its query and file extension, plus `/report`; the token in
+  the link goes with it, so the provider can match the report to your account. The report contains the app version,
+  platform, network type (Wi-Fi, cellular, wired or other), the period covered, and for each node its name, server
+  address and port, protocol, success and failure counts, whether it was paused after repeated rejections, and its
+  clock offset. It never contains the sites or addresses you visit. The provider handles it under its own policy.
+  Turning the setting off stops the report and deletes the counts kept for it; turning it on again does not send
+  anything from the time it was off. If none of your nodes use the ANX protocol, nothing is sent.
 
 ### Android permissions
 
@@ -65,8 +77,9 @@ Changes to this policy are published in this file, with the history in the publi
 
 ### 我们收集什么
 
-**不收集任何数据。** 我们没有接收客户端上报的服务器。客户端不含任何统计、遥测、广告、崩溃上报或远程配置 SDK，
-不会向我们发送设备标识、广告标识、位置、通讯录、已安装应用列表、浏览记录或网络流量。
+**默认不收集任何数据。** 客户端不含任何统计、遥测、广告、崩溃上报或远程配置 SDK，不会向我们发送设备标识、广告标识、
+位置、通讯录、已安装应用列表、浏览记录或网络流量。客户端唯一可能自己发出的上报是 iOS、macOS 上可选的连接质量报告
+（见“客户端会发出的连接”）：在你打开之前不会发送，发往你的订阅服务商，而不是我们另设的服务器。
 
 ### 只保存在你设备上的数据
 
@@ -86,6 +99,12 @@ Changes to this policy are published in this file, with the history in the publi
 - **经 VPN 转发的流量**发往你自己配置的服务器。我们不提供服务器，也看不到这些流量；你选用的服务器由其运营方按
   其自己的政策处理你的数据。
 - **延迟和出口地址检测**在你点按或刚连接后进行，发出的是不带任何标识的空请求（详见 docs/network-behavior.md）。
+- **连接质量报告（iOS、macOS，默认关闭）**：只有你在“设置 › 隐私”打开“向订阅服务商报告连接质量”后，App 打开且已连接时，
+  客户端才约每小时把使用 ANX 协议的节点的连接计数发给提供这些节点的订阅服务商。发往的地址是订阅链接去掉参数和扩展名后
+  加 `/report`，链接里的令牌随之发出，服务商能据此对应到你的账号。内容为 App 版本、平台、网络类型（Wi-Fi、蜂窝、有线或
+  其他）、统计时长，以及每个节点的名称、服务器地址和端口、协议、成功和各类失败次数、是否因连续被拒而暂停、时间偏差；
+  不含你访问的网站或地址。服务商按其自己的政策处理。关闭开关即停止上报并删除为此保存的计数；重新打开不会补发关闭期间的
+  数据。没有使用 ANX 协议的节点时不会发送。
 
 ### Android 权限
 

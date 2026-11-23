@@ -516,3 +516,18 @@ tag 由 Actions 的 “Release tag”（`release-tag.yml`）打，流程同 beta
 - [ ] 策略组：拔掉自动测速组当前节点的网络，下一条连接换到其他节点；切换 Wi-Fi 后测速结果清空重测。
 - [ ] REJECT-TINYGIF 对明文 HTTP 回 1x1 GIF；同一主机 30 秒内被拒超过 10 次后改为静默丢弃。
 - [ ] iOS ANX 版：开启设备授权的订阅里 ANX 节点能连接（不再出现 code 6）。
+
+## 连接质量报告（iOS、macOS，默认关闭）
+
+iOS、macOS 的“向订阅服务商报告连接质量”改为设置开关、默认关闭（docs/network-behavior.md “连接质量报告”，PRIVACY.md
+已同步）。以下无法由 CI 完成：
+
+- [ ] 法务确认这项可选上报是否需要在 App Store Connect 的 App Privacy 里申报（建议：诊断数据 / 其他诊断数据，与身份
+  关联，不用于跟踪，用途为 App 功能）；确认后同步两份 `PrivacyInfo.xcprivacy` 和
+  `apps/ios/Privacy/PrivacyManifestDataInventory.md`，并更新上方 `app-privacy-determination` 的确认日期。公开版和 ANX 版
+  共用同一个 bundle ID，答案对两者都适用。
+- [ ] 真机抓包确认：新装或从旧版本升级后默认不发出 `/report` 请求；打开开关并停在概览约一小时后发出一次，内容与
+  network-behavior.md 一致；关闭后不再发送。同时确认连接时这条请求实际走的路径（是否进入隧道），与 network-behavior.md
+  “走哪条路”一致，不一致时改文档。
+- [ ] 通知面板（anix-control）一侧：上报现在只在用户打开开关后才有，大多数客户端不再上报；macOS 客户端的 `platform`
+  从原来误报的 `ios` 改为 `macos`，面板的字段校验需要接受 `macos`。
