@@ -180,11 +180,17 @@ mod gui {
 
     /// Whether the MSI runs this program for the old version's removal inside
     /// an upgrade. The package schedules that removal after the new version is
-    /// installed (`MajorUpgrade Schedule="afterInstallExecute"`), so both
-    /// versions are registered then, and the old package's uninstall actions,
-    /// which before 1.0 did not tell an upgrade from a removal, run this, the
-    /// new version's program. An upgrade keeps the user's sign-in startup,
-    /// trusted roots and keys.
+    /// installed (`MajorUpgrade Schedule="afterInstallExecute"`), and the old
+    /// package's uninstall actions, which before 1.0 did not tell an upgrade
+    /// from a removal, run this, the new version's program. An upgrade keeps
+    /// the user's sign-in startup, trusted roots and keys.
+    ///
+    /// Windows registers the new version only when the whole installation
+    /// commits, so during the old version's removal only the old one is
+    /// listed. The new version has already written its product code to the
+    /// registry by then (Package.wxs, `InstallingProductCode`), so a product
+    /// code there that is not among the registered versions means a newer
+    /// version is being installed.
     pub fn removal_is_an_upgrade() -> bool {
         use windows_sys::Win32::System::ApplicationInstallationAndServicing::MsiEnumRelatedProductsW;
 
@@ -200,23 +206,64 @@ mod gui {
                 (result == 0).then(|| String::from_utf16_lossy(&product[..38]))
             })
             .collect();
-        let upgrade = is_upgrade(installed.len());
+        let installing = installing_product_code();
+        let upgrade = is_upgrade(&installed, installing.as_deref());
         // A failed upgrade can leave two versions registered, and every later removal is then taken
         // for an upgrade too; the log says which ones were found.
         let _ = append_managed_log(
             "gui",
             &format!(
-                "versions of the package registered during removal: {}",
-                installed.join(", ")
+                "versions of the package registered during removal: {}; installing: {}",
+                installed.join(", "),
+                installing.as_deref().unwrap_or("none")
             ),
         );
         upgrade
     }
 
-    /// A removal with another version of the package registered beside the one
-    /// being removed is an upgrade.
-    fn is_upgrade(installed_versions: usize) -> bool {
-        installed_versions >= 2
+    /// The product code the newest installation of the package wrote to
+    /// `HKLM\Software\AnixOps\NetworkCore` (`InstallingProductCode`).
+    fn installing_product_code() -> Option<String> {
+        use windows_sys::Win32::System::Registry::{
+            RegGetValueW, HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ, RRF_SUBKEY_WOW6464KEY,
+        };
+
+        let key = wide(r"Software\AnixOps\NetworkCore");
+        let name = wide("InstallingProductCode");
+        let mut value = [0_u16; 64];
+        let mut size = (value.len() * 2) as u32;
+        // SAFETY: `key` and `name` are NUL-terminated, `value` holds `size` bytes, and the call writes
+        // at most that many (a NUL-terminated string, as RRF_RT_REG_SZ asks).
+        let result = unsafe {
+            RegGetValueW(
+                HKEY_LOCAL_MACHINE,
+                key.as_ptr(),
+                name.as_ptr(),
+                RRF_RT_REG_SZ | RRF_SUBKEY_WOW6464KEY,
+                std::ptr::null_mut(),
+                value.as_mut_ptr().cast(),
+                &mut size,
+            )
+        };
+        if result != 0 {
+            return None;
+        }
+        let length = value.iter().position(|&unit| unit == 0).unwrap_or(0);
+        let code = String::from_utf16_lossy(&value[..length]);
+        (!code.is_empty()).then_some(code)
+    }
+
+    /// A removal is an upgrade when another version of the package is
+    /// registered beside the one being removed, or when the newest
+    /// installation's product code is not registered yet: that version is
+    /// being installed and the one being removed is the older.
+    fn is_upgrade(installed: &[String], installing: Option<&str>) -> bool {
+        installed.len() >= 2
+            || installing.is_some_and(|code| {
+                !installed
+                    .iter()
+                    .any(|registered| registered.eq_ignore_ascii_case(code))
+            })
     }
 
     pub fn log_upgrade_skip(action: &str) {
@@ -665,9 +712,23 @@ mod gui {
 
         #[test]
         fn only_a_removal_beside_another_version_is_an_upgrade() {
-            assert!(!is_upgrade(0));
-            assert!(!is_upgrade(1));
-            assert!(is_upgrade(2));
+            let old = "{5A19919B-CC18-417F-9AA5-2425AA029C94}".to_string();
+            let new = "{0C1F3D52-7E0B-4D2B-9A41-6B1E5F7A2C10}".to_string();
+            // Nothing registered and nothing written: a removal.
+            assert!(!is_upgrade(&[], None));
+            // A beta's removal on its own, with no product code written.
+            assert!(!is_upgrade(std::slice::from_ref(&old), None));
+            // The installed version's own removal.
+            assert!(!is_upgrade(std::slice::from_ref(&old), Some(&old)));
+            assert!(!is_upgrade(
+                std::slice::from_ref(&old),
+                Some(&old.to_ascii_lowercase())
+            ));
+            // The old version's removal while the new one, not yet registered, is being installed.
+            assert!(is_upgrade(std::slice::from_ref(&old), Some(&new)));
+            // Two versions registered.
+            assert!(is_upgrade(&[old.clone(), new.clone()], Some(&new)));
+            assert!(is_upgrade(&[old, new], None));
         }
 
         #[test]

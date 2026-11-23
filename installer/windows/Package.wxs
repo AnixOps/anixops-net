@@ -90,6 +90,16 @@
                 Type="string"
                 Value="[INSTALLFOLDER]"
                 KeyPath="yes" />
+            <!--
+              Read by the GUI's uninstall actions (main.rs, removal_is_an_upgrade): written before the
+              earlier version's removal, which then finds a product code that is not registered yet.
+            -->
+            <RegistryValue
+                Root="HKLM"
+                Key="Software\AnixOps\NetworkCore"
+                Name="InstallingProductCode"
+                Type="string"
+                Value="[ProductCode]" />
           </Component>
 
           <Component Id="CliComponent" Guid="*">
