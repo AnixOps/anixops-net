@@ -646,22 +646,26 @@ jobs:
             -CertStoreLocation "Cert:\CurrentUser\My" -KeyUsage CertSign -NotAfter (Get-Date).AddDays(1)
           $rootThumbprint = $seedRoot.Thumbprint
           # Adding to CurrentUser\Root through the certificate APIs asks the user to confirm, so the
-          # root is written straight into the store. CurrentUser\My keeps its certificates either in
-          # the registry or, as on hosted runners, as files under %APPDATA%; both hold the same
-          # serialized blob that the registry-backed Root store reads from its "Blob" value.
-          $myFile = Join-Path $env:APPDATA "Microsoft\SystemCertificates\My\Certificates\$rootThumbprint"
-          $myKey = "HKCU:\Software\Microsoft\SystemCertificates\My\Certificates\$rootThumbprint"
+          # root is written straight into the registry-backed Root store. Its "Blob" value is a
+          # serialized certificate element: property id 0x20 (CERT_CERT_PROP_ID), reserved 1, the
+          # length, then the DER certificate.
           $rootKey = "HKCU:\Software\Microsoft\SystemCertificates\Root\Certificates\$rootThumbprint"
-          if (Test-Path $myKey) {
-            $blob = (Get-ItemProperty -Path $myKey -Name Blob).Blob
-          } elseif (Test-Path $myFile) {
-            $blob = [System.IO.File]::ReadAllBytes($myFile)
-          } else {
-            throw "The CI decryption root was not found in the user's personal store."
-          }
+          $der = $seedRoot.RawData
+          $element = New-Object System.IO.MemoryStream
+          $writer = New-Object System.IO.BinaryWriter($element)
+          $writer.Write([UInt32]0x20)
+          $writer.Write([UInt32]1)
+          $writer.Write([UInt32]$der.Length)
+          $writer.Write($der)
+          $writer.Flush()
           New-Item -Path $rootKey -Force | Out-Null
-          New-ItemProperty -Path $rootKey -Name Blob -PropertyType Binary -Value $blob -Force | Out-Null
-          if (-not (Test-Path "Cert:\CurrentUser\Root\$rootThumbprint")) {
+          New-ItemProperty -Path $rootKey -Name Blob -PropertyType Binary -Value $element.ToArray() -Force | Out-Null
+          $writer.Dispose()
+          $rootStore = New-Object System.Security.Cryptography.X509Certificates.X509Store("Root", "CurrentUser")
+          $rootStore.Open("ReadOnly")
+          $found = $rootStore.Certificates.Find("FindByThumbprint", $rootThumbprint, $false).Count
+          $rootStore.Close()
+          if ($found -ne 1) {
             throw "The CI decryption root could not be put in the user's root store."
           }
           if (-not (Test-Path "Cert:\CurrentUser\Root\$rootThumbprint")) {
