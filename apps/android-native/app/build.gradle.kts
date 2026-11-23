@@ -153,8 +153,8 @@ abstract class DocumentAssets : DefaultTask() {
         val directory = output.get().asFile
         directory.deleteRecursively()
         directory.mkdirs()
-        documents.files.forEach { it.copyTo(java.io.File(directory, it.name), overwrite = true) }
-        notices.orNull?.asFile?.copyTo(java.io.File(directory, "THIRD_PARTY_NOTICES.txt"), overwrite = true)
+        documents.files.forEach { it.copyTo(File(directory, it.name), overwrite = true) }
+        notices.orNull?.asFile?.copyTo(File(directory, "THIRD_PARTY_NOTICES.txt"), overwrite = true)
     }
 }
 
