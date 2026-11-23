@@ -58,7 +58,11 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
       return imported;
     }).then(async () => {
       const result = imported as OperationResult | null;
-      if (!result) return;
+      if (!result) {
+        // A failed import can still have turned a plugin off (its new scripts were being written), so show the list as saved.
+        loadPlugins();
+        return;
+      }
       done();
       const list = await desktop.mitmPlugins().catch(() => [] as MitmPlugin[]);
       setPlugins(list);

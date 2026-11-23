@@ -151,7 +151,9 @@ pub fn import_text(
 }
 
 /// Downloads the files the plugin names and saves it in place of a plugin with the same id: turned off, unless
-/// that plugin was on and its text and scripts are unchanged.
+/// that plugin was on and its text and scripts are unchanged. A failed import never leaves a plugin on with files the
+/// user did not look at: nothing is written until every file has downloaded, and a plugin that was on is saved off
+/// before its files are replaced.
 fn save(
     directory: &Path,
     id: String,
@@ -163,11 +165,15 @@ fn save(
     let text = String::from_utf8(text).map_err(|_| "Plugin text is not UTF-8.".to_string())?;
 
     fs::create_dir_all(directory).map_err(|error| error.to_string())?;
-    // What the user turned on, read before the new files replace it.
-    let previous = read_library(directory)?
+    let mut library = read_library(directory)?;
+    let existing = library
         .plugins
-        .into_iter()
+        .iter()
         .find(|existing| existing.id == id)
+        .cloned();
+    // What the user turned on, read before anything on disk changes.
+    let previous = existing
+        .as_ref()
         .filter(|existing| existing.enabled)
         .map(|existing| {
             let bodies: BTreeMap<String, Option<Vec<u8>>> = existing
@@ -175,11 +181,11 @@ fn save(
                 .iter()
                 .map(|(url, file)| (url.clone(), fs::read(directory.join(file)).ok()))
                 .collect();
-            (existing.text, bodies)
+            (existing.text.clone(), bodies)
         });
-    let mut fetched_scripts: BTreeMap<String, Vec<u8>> = BTreeMap::new();
-    let mut scripts = BTreeMap::new();
-    let mut resources = BTreeMap::new();
+
+    // Every file is downloaded before the folder is touched, so a file that fails to download changes nothing.
+    let mut downloads: Vec<(String, bool, Vec<u8>)> = Vec::new();
     let listed = description["resources"]
         .as_array()
         .cloned()
@@ -188,7 +194,7 @@ fn save(
         let Some(resource_url) = resource["url"].as_str() else {
             continue;
         };
-        if scripts.contains_key(resource_url) || resources.contains_key(resource_url) {
+        if downloads.iter().any(|(known, _, _)| known == resource_url) {
             continue;
         }
         if !is_https(resource_url) {
@@ -199,27 +205,49 @@ fn save(
         let script = resource["kind"].as_str() == Some(KIND_SCRIPT);
         let body = fetch(resource_url, MAX_RESOURCE_LEN)
             .map_err(|error| format!("{resource_url} could not be downloaded: {error}"))?;
-        let extension = if script { "js" } else { "dat" };
-        let file = format!("{id}-{:016x}.{extension}", hash(resource_url));
-        fs::write(directory.join(&file), &body).map_err(|error| error.to_string())?;
-        if script {
-            scripts.insert(resource_url.to_string(), file);
-            fetched_scripts.insert(resource_url.to_string(), body);
-        } else {
-            resources.insert(resource_url.to_string(), file);
-        }
+        downloads.push((resource_url.to_string(), script, body));
     }
 
     let replaced_one_on = previous.is_some();
+    let script_count = downloads.iter().filter(|(_, script, _)| *script).count();
     let unchanged = previous.is_some_and(|(previous_text, previous_scripts)| {
         previous_text == text
-            && previous_scripts.len() == fetched_scripts.len()
-            && fetched_scripts.iter().all(|(url, body)| {
-                previous_scripts
-                    .get(url)
-                    .is_some_and(|previous| previous.as_deref() == Some(body.as_slice()))
-            })
+            && previous_scripts.len() == script_count
+            && downloads
+                .iter()
+                .filter(|(_, script, _)| *script)
+                .all(|(url, _, body)| {
+                    previous_scripts
+                        .get(url)
+                        .is_some_and(|previous| previous.as_deref() == Some(body.as_slice()))
+                })
     });
+    // The new files take the names the plugin that is on points to. Turn it off on disk first, so an error while
+    // they are written cannot leave it on with scripts nobody looked at.
+    if replaced_one_on && !unchanged {
+        if let Some(stored) = library
+            .plugins
+            .iter_mut()
+            .find(|existing| existing.id == id)
+        {
+            stored.enabled = false;
+        }
+        write_library(directory, &library)?;
+    }
+
+    let mut scripts = BTreeMap::new();
+    let mut resources = BTreeMap::new();
+    for (resource_url, script, body) in downloads {
+        let extension = if script { "js" } else { "dat" };
+        let file = format!("{id}-{:016x}.{extension}", hash(&resource_url));
+        write_file(directory, &file, &body)?;
+        if script {
+            scripts.insert(resource_url, file);
+        } else {
+            resources.insert(resource_url, file);
+        }
+    }
+
     let plugin = StoredPlugin {
         id: id.clone(),
         name: description["name"]
@@ -250,7 +278,12 @@ fn save(
         replaced_one_on,
         ..plugin.summary()
     };
-    let mut library = read_library(directory)?;
+    let kept: Vec<String> = plugin
+        .scripts
+        .values()
+        .chain(plugin.resources.values())
+        .cloned()
+        .collect();
     match library
         .plugins
         .iter_mut()
@@ -260,6 +293,14 @@ fn save(
         None => library.plugins.push(plugin),
     }
     write_library(directory, &library)?;
+    // Files the plugin no longer names.
+    if let Some(existing) = existing {
+        for file in existing.scripts.values().chain(existing.resources.values()) {
+            if !kept.contains(file) {
+                let _ = fs::remove_file(directory.join(file));
+            }
+        }
+    }
     Ok(summary)
 }
 
@@ -454,6 +495,16 @@ fn read_library(directory: &Path) -> Result<Library, String> {
     }
 }
 
+/// Writes `name` in `directory` whole or not at all: a failed write never leaves part of a script behind.
+fn write_file(directory: &Path, name: &str, contents: &[u8]) -> Result<(), String> {
+    let temporary = directory.join(format!("{name}.tmp"));
+    fs::write(&temporary, contents).map_err(|error| error.to_string())?;
+    fs::rename(&temporary, directory.join(name)).map_err(|error| {
+        let _ = fs::remove_file(&temporary);
+        error.to_string()
+    })
+}
+
 fn write_library(directory: &Path, library: &Library) -> Result<(), String> {
     fs::create_dir_all(directory).map_err(|error| error.to_string())?;
     let bytes = serde_json::to_vec_pretty(library).map_err(|error| error.to_string())?;
@@ -593,6 +644,86 @@ mod tests {
         // Pasted text follows the same rule.
         let pasted = import_text(&directory, "", PLUGIN, fetch).unwrap();
         assert!(!pasted.enabled);
+        let _ = fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn a_failed_import_never_leaves_a_plugin_on_with_scripts_nobody_looked_at() {
+        const SECOND_URL: &str = "https://plugins.example/second.js";
+        let directory = scratch("failed-again");
+        let id = import(&directory, PLUGIN_URL, fetch).unwrap().id;
+        set_enabled(&directory, &id, true).unwrap();
+        let script_file = |mitm: &Map<String, Value>| {
+            mitm.get("script_assets")
+                .and_then(|assets| assets[SCRIPT_URL].as_str())
+                .map(PathBuf::from)
+        };
+        let mut mitm = Map::new();
+        apply(&directory, &mut mitm);
+        let original = script_file(&mitm).unwrap();
+
+        // The plugin now names a second script; the first one changed and the second does not download.
+        let with_second = PLUGIN.replace(
+            "[MITM]\n",
+            "http-response ^https?:\\/\\/ipleak\\.net\\/second script-path=https://plugins.example/second.js, requires-body=true, tag=second\n[MITM]\n",
+        );
+        let second_missing = |url: &str, limit: usize| match url {
+            PLUGIN_URL => Ok(with_second.clone().into_bytes()),
+            SCRIPT_URL => Ok(b"$done({ body: 'other' });".to_vec()),
+            _ => fetch(url, limit),
+        };
+        let error = import(&directory, PLUGIN_URL, second_missing).unwrap_err();
+        assert!(error.contains(SECOND_URL), "{error}");
+        // Nothing on disk changed: what runs is still what the user turned on.
+        let mut mitm = Map::new();
+        apply(&directory, &mut mitm);
+        assert_eq!(mitm["plugins"], json!([PLUGIN]));
+        assert_eq!(script_file(&mitm).as_ref(), Some(&original));
+        assert_eq!(fs::read(&original).unwrap(), b"$done({});");
+
+        // The second script downloads but cannot be written: the plugin is off before any new file lands.
+        let second_changed = |url: &str, limit: usize| match url {
+            SECOND_URL => Ok(b"$done({});".to_vec()),
+            _ => second_missing(url, limit),
+        };
+        let blocked = directory.join(format!("{id}-{:016x}.js.tmp", hash(SECOND_URL)));
+        fs::create_dir_all(&blocked).unwrap();
+        assert!(import(&directory, PLUGIN_URL, second_changed).is_err());
+        assert!(!list(&directory).unwrap()[0].enabled);
+        let mut mitm = Map::new();
+        apply(&directory, &mut mitm);
+        assert!(mitm.is_empty());
+
+        // Once it can be written, the new content is saved off for review.
+        fs::remove_dir_all(&blocked).unwrap();
+        let again = import(&directory, PLUGIN_URL, second_changed).unwrap();
+        assert!(!again.enabled);
+        assert_eq!(again.script_count, 2);
+        let _ = fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn a_plugin_that_names_fewer_files_leaves_none_behind() {
+        let directory = scratch("fewer");
+        let id = import(&directory, PLUGIN_URL, fetch).unwrap().id;
+        let script = directory.join(format!("{id}-{:016x}.js", hash(SCRIPT_URL)));
+        assert!(script.is_file());
+        let without_script = |url: &str, limit: usize| match url {
+            PLUGIN_URL => Ok(PLUGIN
+                .lines()
+                .filter(|line| !line.contains("script-path"))
+                .collect::<Vec<_>>()
+                .join("\n")
+                .into_bytes()),
+            _ => fetch(url, limit),
+        };
+        assert_eq!(
+            import(&directory, PLUGIN_URL, without_script)
+                .unwrap()
+                .script_count,
+            0
+        );
+        assert!(!script.exists());
         let _ = fs::remove_dir_all(&directory);
     }
 
