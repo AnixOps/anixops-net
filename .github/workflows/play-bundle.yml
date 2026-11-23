@@ -5,7 +5,8 @@ name: Google Play bundle
 # it with the app signing key it holds (Play App Signing). The AAB is kept as a workflow artifact and, unless the track
 # is "none", uploaded to that Play testing track as a draft release that is NOT sent for review: the maintainer sends
 # it for review in Play Console (Publishing overview). The service account (PLAY_SERVICE_ACCOUNT_JSON) only has rights
-# on testing tracks (docs/manual-intervention.md, Google Play).
+# on testing tracks (docs/manual-intervention.md, Google Play). The AAB's versionName is the release tag the workflow
+# runs on (or the version-name input off a tag), checked against the source version (.github/scripts/version.py).
 
 on:
   workflow_dispatch:
@@ -20,6 +21,10 @@ on:
           - none
       notes:
         description: Release notes (en-US) shown to testers
+        type: string
+        default: ""
+      version-name:
+        description: versionName when not run on a release tag, e.g. 1.0.0-rc.1 (on a tag the tag is used)
         type: string
         default: ""
 
@@ -40,7 +45,7 @@ jobs:
       CARGO_INCREMENTAL: "0"
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: The upload key is configured
         env:
@@ -59,11 +64,43 @@ jobs:
           done
           exit "${missing}"
 
+      # The AAB's versionName comes from the release tag, like release.yml's APK, never from the default in
+      # build.gradle.kts; the source version (.github/scripts/version.py) must match it.
+      - name: Version
+        id: version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION_NAME: ${{ inputs.version-name }}
+        run: |
+          set -euo pipefail
+          # Same pattern as release.yml's release policy.
+          version_pattern='^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[1-9][0-9]*)?$'
+          if [ "${REF_TYPE}" = "tag" ]; then
+            tag="${REF_NAME}"
+            if [ -n "${INPUT_VERSION_NAME}" ] && [ "v${INPUT_VERSION_NAME}" != "${tag}" ]; then
+              echo "::error::version-name ${INPUT_VERSION_NAME} differs from the tag ${tag}; leave it empty on a tag."
+              exit 1
+            fi
+          elif [ -n "${INPUT_VERSION_NAME}" ]; then
+            tag="v${INPUT_VERSION_NAME}"
+          else
+            echo "::error::Run this on a release tag, or give version-name (for example 1.0.0-rc.1)."
+            exit 1
+          fi
+          if [[ ! "${tag}" =~ ${version_pattern} ]]; then
+            echo "::error::${tag} is not a release version (v1.0.0, v1.0.0-beta.1, v1.0.0-rc.1)."
+            exit 1
+          fi
+          python3 -I .github/scripts/version.py check --tag "${tag}"
+          echo "name=${tag#v}" >> "${GITHUB_OUTPUT}"
+
       - name: Build the APK and the signed AAB
         id: build
         uses: ./.github/actions/android-apk
         with:
           bundle: "true"
+          version-name: ${{ steps.version.outputs.name }}
           upload-keystore-base64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_BASE64 }}
           upload-keystore-password: ${{ secrets.PLAY_UPLOAD_KEYSTORE_PASSWORD }}
           upload-key-alias: ${{ secrets.PLAY_UPLOAD_KEY_ALIAS }}
@@ -74,6 +111,7 @@ jobs:
         env:
           AAB: ${{ steps.build.outputs.aab }}
           AAB_KIND: ${{ steps.build.outputs.aab-kind }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
         run: |
           set -euo pipefail
           if [ "${AAB_KIND}" != play-signed ] || [ ! -f "${AAB}" ]; then
@@ -82,9 +120,8 @@ jobs:
           fi
           gradle_file=apps/android-native/app/build.gradle.kts
           code="$(sed -n 's/^ *versionCode = \([0-9]*\).*/\1/p' "${gradle_file}")"
-          # versionName = findProperty("anixops.versionName") as String? ?: "0.3.0": take the last quoted string,
-          # the default a build without the property gets.
-          version="$(sed -n 's/^ *versionName = .*"\([^"]*\)".*/\1/p' "${gradle_file}")"
+          # The versionName the build was given (the Version step), not build.gradle.kts's default.
+          version="${VERSION_NAME}"
           if [ -z "${code}" ] || [ -z "${version}" ]; then
             echo "::error::Could not read versionCode ('${code}') or versionName ('${version}') from ${gradle_file}"
             exit 1
@@ -105,7 +142,7 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload the AAB
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ steps.stage.outputs.artifact_name }}
           path: dist/play/*

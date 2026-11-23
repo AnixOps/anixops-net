@@ -34,7 +34,7 @@ jobs:
       linux_native: ${{ steps.changes.outputs.linux_native }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -81,6 +81,23 @@ jobs:
 
       - name: Path classification maps every input to the jobs that read it
         run: bash .github/scripts/classify-changes.test.sh
+
+      # One version: Cargo.toml's workspace version is the source, and every copy the other build systems read
+      # (Cargo.lock, tauri.conf.json, package.json, the .NET props and manifest, project.yml, build.gradle.kts)
+      # equals it. release.yml and release-tag.yml also check it against the tag.
+      - name: Version copies match the source
+        run: |
+          python3 -I .github/scripts/version.py --self-test
+          python3 -I .github/scripts/version.py check
+
+      # Every action is pinned to a commit SHA, and the Android release key and the Play keys appear only in jobs that
+      # declare their protected environment (the release key only in release.yml's sign-android). The self-tests
+      # check the rules first; android-signing-gate.test.sh covers the release APK signing gate.
+      - name: Workflow supply chain and signing keys
+        run: |
+          python3 -I .github/scripts/workflow_policy.py --self-test
+          python3 -I .github/scripts/workflow_policy.py
+          bash .github/scripts/android-signing-gate.test.sh
 
       # The download page and latest.json point to the newest stable release; a later beta never replaces it.
       - name: Download page picks the stable release
@@ -157,15 +174,15 @@ jobs:
     if: ${{ needs.changes.outputs.ui == 'true' || needs.changes.outputs.windows == 'true' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: 9
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -193,7 +210,7 @@ jobs:
         run: pnpm --dir apps/windows-gui/ui run build
 
       - name: Upload the built interface
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows-gui-ui-${{ github.sha }}
           path: apps/windows-gui/ui/dist
@@ -208,12 +225,12 @@ jobs:
     if: ${{ needs.changes.outputs.rust == 'true' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install cargo-deny
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2.90.8
         with:
-          tool: cargo-deny
+          tool: cargo-deny@0.22.0
 
       - name: cargo deny check
         shell: bash
@@ -229,7 +246,7 @@ jobs:
     if: ${{ needs.changes.outputs.rust == 'true' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Rust
         shell: bash
@@ -240,7 +257,7 @@ jobs:
           rustup component add rustfmt clippy
 
       - name: Restore Rust build cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
@@ -266,7 +283,7 @@ jobs:
     if: ${{ needs.changes.outputs.linux == 'true' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Tauri on Linux renders through WebKitGTK.
       - name: Install WebKitGTK
@@ -275,12 +292,12 @@ jobs:
           bash .github/scripts/apt-install.sh libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: 9
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -299,7 +316,7 @@ jobs:
           rustup default stable
 
       - name: Restore Rust build cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: linux-gui
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
@@ -346,10 +363,10 @@ jobs:
       }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download the built interface
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: windows-gui-ui-${{ github.sha }}
           path: apps/windows-gui/ui/dist
@@ -359,7 +376,7 @@ jobs:
         run: test -s apps/windows-gui/ui/dist/index.html
 
       - name: Setup Windows C toolchain
-        uses: msys2/setup-msys2@v2
+        uses: msys2/setup-msys2@3c51bf698df1e37b2261f53cb67797b97761185c # v2.34.0
         id: msys2
         with:
           msystem: MINGW64
@@ -398,7 +415,7 @@ jobs:
           rustup target add x86_64-pc-windows-gnu
 
       - name: Restore Rust build cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: windows-gnu
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
@@ -420,7 +437,7 @@ jobs:
 
       - name: Restore windres compatibility shim
         id: windres-shim-cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             .github/scripts/windres.exe
@@ -822,7 +839,7 @@ jobs:
     if: ${{ needs.changes.outputs.apple == 'true' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Validate Package.swift against the activation gate
         shell: bash
@@ -844,7 +861,7 @@ jobs:
         run: bash .github/scripts/appcast-tamper-check.sh
 
       - name: Setup Go for the anix-kit interop check
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version: '1.26.x'
           cache: false
@@ -862,7 +879,7 @@ jobs:
     if: ${{ needs.changes.outputs.apple == 'true' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Rust
         shell: bash
@@ -872,7 +889,7 @@ jobs:
           rustup default stable
 
       - name: Restore Rust build cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: ios-runtime
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
@@ -1052,7 +1069,7 @@ jobs:
         run: tar -C apps/ios/build/Build -czf "${RUNNER_TEMP}/apple-products.tgz" Products
 
       - name: Upload the built products
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: apple-products-${{ github.sha }}
           path: ${{ runner.temp }}/apple-products.tgz
@@ -1071,10 +1088,10 @@ jobs:
     if: ${{ needs.changes.outputs.apple == 'true' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download the built products
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: apple-products-${{ github.sha }}
           path: ${{ runner.temp }}
@@ -1100,7 +1117,7 @@ jobs:
 
       - name: Upload the macOS UI test results
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mac-ui-tests-${{ github.sha }}
           path: |
@@ -1125,7 +1142,7 @@ jobs:
       # Main's pictures are the baseline later pull requests compare with, so they are kept longer.
       - name: Upload the macOS screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mac-screenshots-${{ github.sha }}
           path: ${{ runner.temp }}/mac-screenshots
@@ -1135,7 +1152,7 @@ jobs:
 
       - name: Upload the macOS screenshot comparison
         if: ${{ always() && github.event_name == 'pull_request' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mac-screenshot-report-${{ github.sha }}
           path: ${{ runner.temp }}/mac-screenshot-compare/report
@@ -1155,10 +1172,10 @@ jobs:
     if: ${{ needs.changes.outputs.apple == 'true' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download the built products
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: apple-products-${{ github.sha }}
           path: ${{ runner.temp }}
@@ -1188,7 +1205,7 @@ jobs:
 
       - name: Upload the iOS screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ios-screenshots-${{ github.sha }}
           path: ${{ runner.temp }}/ios-screenshots
@@ -1198,7 +1215,7 @@ jobs:
 
       - name: Upload the iOS screenshot comparison
         if: ${{ always() && github.event_name == 'pull_request' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ios-screenshot-report-${{ github.sha }}
           path: ${{ runner.temp }}/ios-screenshot-compare/report
@@ -1219,10 +1236,10 @@ jobs:
     if: ${{ needs.changes.outputs.apple == 'true' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download the built products
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: apple-products-${{ github.sha }}
           path: ${{ runner.temp }}
@@ -1243,7 +1260,7 @@ jobs:
 
       - name: Upload the iOS UI test results
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ios-ui-tests-${{ matrix.part }}-${{ github.sha }}
           path: ${{ runner.temp }}/ios-ui-tests.xcresult
@@ -1254,8 +1271,8 @@ jobs:
   # built for arm64 by cargo-ndk, then Gradle runs lint (warnings are errors), the unit tests (the Kotlin side of
   # the command bridge against the shared fixtures) and the Roborazzi screenshots. The screenshots are recorded
   # again and must equal the committed ones; when they differ the job fails and uploads the new images. The APK
-  # (io.anixops.net.android) is signed with ANDROID_KEYSTORE_* secrets when they are set, otherwise with a throwaway
-  # debug key made for this run.
+  # (io.anixops.net.android) is always signed with a throwaway debug key made for this run (file name *-debug.apk):
+  # it cannot be installed over a release build. Only release.yml signs with the release key.
   android-native:
     name: Android native app
     runs-on: ubuntu-latest
@@ -1266,11 +1283,13 @@ jobs:
     if: ${{ needs.changes.outputs.android_native == 'true' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Lint (warnings are errors), the unit tests and the screenshots run in the same Gradle call as the release
-      # build; the APK is signed like the release one.
-      - name: Lint, unit tests, screenshots and the signed APK
+      # build. The APK is signed with a throwaway key made for this run: the release signing key lives only in the
+      # android-release environment, which only release.yml's tag releases enter (workflow_policy.py checks that
+      # no other job names it), so pull requests and branch runs never receive it.
+      - name: Lint, unit tests, screenshots and the APK
         id: apk
         uses: ./.github/actions/android-apk
         with:
@@ -1278,10 +1297,6 @@ jobs:
           # The Google Play bundle is built too (left unsigned here: the upload key lives in the google-play
           # environment, used only by play-bundle.yml).
           bundle: "true"
-          keystore-base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
-          key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
           save-cache: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
       - name: Screenshots match the committed baselines
@@ -1297,7 +1312,7 @@ jobs:
 
       - name: Upload the screenshots
         if: ${{ failure() && steps.screenshots.outcome == 'failure' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: android-native-screenshots-${{ github.sha }}
           path: apps/android-native/app/src/test/screenshots
@@ -1305,7 +1320,7 @@ jobs:
 
       - name: Upload the lint and test reports
         if: ${{ failure() && steps.screenshots.outcome != 'failure' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: android-native-reports-${{ github.sha }}
           path: |
@@ -1314,7 +1329,7 @@ jobs:
           retention-days: 3
 
       - name: Upload the APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: anixops-net-android-${{ github.sha }}
           path: ${{ steps.apk.outputs.apk }}
@@ -1337,11 +1352,11 @@ jobs:
       CARGO_INCREMENTAL: "0"
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The same Rust toolchain as the "Windows build, test and MSI" job, for the service.
       - name: Setup Windows C toolchain
-        uses: msys2/setup-msys2@v2
+        uses: msys2/setup-msys2@3c51bf698df1e37b2261f53cb67797b97761185c # v2.34.0
         id: msys2
         with:
           msystem: MINGW64
@@ -1377,14 +1392,14 @@ jobs:
           rustup target add x86_64-pc-windows-gnu
 
       - name: Restore Rust build cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: windows-gnu-service-release
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
       - name: Restore windres compatibility shim
         id: windres-shim-cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             .github/scripts/windres.exe
@@ -1415,7 +1430,7 @@ jobs:
           "ANIXOPS_NET_WINTUN_DIR=$wintunDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: 10.0.x
 
@@ -1542,7 +1557,7 @@ jobs:
 
       - name: Upload screenshots
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows-native-screenshots-${{ github.sha }}
           path: ${{ runner.temp }}\windows-native-screenshots
@@ -1563,7 +1578,7 @@ jobs:
     if: ${{ needs.changes.outputs.linux_native == 'true' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Build: the GTK 4 and libadwaita development files. Run: a display, a session bus, the accessibility
       # bus and its Python bindings, the icon theme the sidebar's icons come from, and a font with Chinese.
@@ -1580,7 +1595,7 @@ jobs:
           rustup default stable
 
       - name: Restore Rust build cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: linux-native
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
@@ -1645,7 +1660,7 @@ jobs:
 
       - name: Upload screenshots
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: linux-native-screenshots-${{ github.sha }}
           path: ${{ runner.temp }}/linux-native-screenshots
@@ -1664,10 +1679,10 @@ jobs:
     if: ${{ needs.changes.outputs.android_native == 'true' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: "17"
@@ -1679,7 +1694,7 @@ jobs:
           rustup target add x86_64-linux-android
 
       - name: Restore Rust build cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: android-native-x86_64
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
@@ -1697,7 +1712,7 @@ jobs:
             build --release --locked -p anixops-net-android
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
         with:
           gradle-version: "8.14.3"
           cache-read-only: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
@@ -1712,7 +1727,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Run the smoke test on an emulator
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 34
           arch: x86_64
@@ -1723,7 +1738,7 @@ jobs:
 
       - name: Upload the smoke test report
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: android-native-smoke-${{ github.sha }}
           path: apps/android-native/app/build/reports/androidTests

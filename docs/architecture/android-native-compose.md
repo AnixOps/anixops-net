@@ -141,14 +141,19 @@ CI 新 job `android-native`（GitHub 托管 runner，变更范围检测同现有
    随界面改动一起更新，PR 描述附前后对照。
 4. 模拟器冒烟测试（x86_64，API 34，PR 2 之后单独一个 PR，随首页迁移一起）：启动 → 同意协议 → 调试模式直连出口 → 连接（VPN 授权用测试专用的
    `prepare` 预授权）→ 本机 HTTP 请求出现在请求列表 → 断开。
-5. 组装 arm64 release APK，用与 Tauri 版共用的 `.github/actions/sign-apk` 签名（见下节）。
+5. 组装 arm64 release APK，CI 用每次运行临时生成的调试密钥签名（见下节），正式签名只在 `release.yml` 的 tag 发布里做。
 
 ### 9. 包名与签名延续
 
 - applicationId 保持 `io.anixops.net.android`，签名沿用 `ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` /
   `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD` 四个 secrets 和同一段 zipalign + apksigner。这样切换后从 Tauri 版直接
   覆盖升级，数据目录（`files/anixops-net`）不变，订阅、节点、插件、设置原样保留。
-- 现在还没有发布密钥，CI 每次用临时调试密钥签名，任意两个 APK 之间本来就不能覆盖安装；用户给出密钥后才有升级链路。
+- 正式签名密钥只放在需要审批、只允许 `v*` tag 的 Environment `android-release` 里，只有 `release.yml` 的 `sign-android`
+  job 在 tag 发布时进入它：构建 job 不带任何 secret，交出未签名 APK 和它的 SHA-256；签名 job 只运行固定到提交 SHA 的
+  官方 action 和本仓库的 shell（`sign-apk`），并核对签名证书与仓库变量 `ANDROID_RELEASE_CERT_SHA256` 一致。tag 发布没有
+  正式密钥时直接失败，不会退回临时签名。
+- CI（含 PR、分支运行和 main）一律用每次运行临时生成的调试密钥签名，文件名是 `*-debug.apk`，不能覆盖安装正式版；需要测试
+  覆盖升级时用 Release 里的正式包。`.github/scripts/workflow_policy.py` 在 CI 里检查正式密钥只出现在该 job。
 - 迁移期间（已定，见文末第 2 项）原生版用 `applicationIdSuffix = ".next"` 和名称“AnixOps Net（预览）”，可以与现有版本
   并存安装测试；切换的那个 PR 去掉后缀。
 

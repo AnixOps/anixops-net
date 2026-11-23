@@ -327,15 +327,12 @@ CI 只跑归属记录、启动恢复、卸载恢复和断开步骤的单元测�
 
 ## 安卓 APK 签名与真机验收
 
-CI 的 `android-native` job 每次都产出原生版 arm64 APK（artifact `anixops-net-android-<sha>`）。没有签名密钥时用临时调试密钥签名，
-每次构建的密钥都不同，装新版前要先卸载旧版。
+CI 的 `android-native` job 每次都产出原生版 arm64 APK（artifact `anixops-net-android-<sha>`），一律用每次运行临时生成的
+调试密钥签名（文件名 `*-debug.apk`），每次构建的密钥都不同，装新版前要先卸载旧版，也不能覆盖安装正式版。
+正式签名密钥只在 `release.yml` 的 tag 发布里使用，见下面「安卓正式签名密钥」。
 
-- [ ] 生成正式签名密钥（只做一次，丢了就无法给已安装的用户升级）：
-  `keytool -genkeypair -v -keystore anixops-net.jks -alias anixops-net -keyalg RSA -keysize 4096 -validity 10000`，
-  把 `base64 -w0 anixops-net.jks` 的结果和密码写入仓库 secrets：`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、
-  `ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。配置后 CI 自动改用它签名（文件名里的 `debug` 变成 `release`）。
-- [ ] 发版时 `release.yml` 会把 APK 作为 `anixops-net-<版本>-android-arm64.apk` 放进 GitHub Release。配置正式密钥前，
-  Release 说明会写明「临时签名，装新版前要先卸载旧版」。
+- [ ] 发版时 `release.yml` 把正式签名的 APK 作为 `anixops-net-<版本>-android-arm64.apk` 放进 GitHub Release。没有正式密钥、
+  签名证书与 `ANDROID_RELEASE_CERT_SHA256` 不符时发布直接失败，不再用临时签名发布。
 - [ ] 真机验收：安装 APK，首次启动同意用户协议，导入订阅，点连接时允许 VPN，浏览器能打开网页，断开后网络恢复。
 - [ ] 原生版另验：快捷设置里加“AnixOps”磁贴，点它连接 / 断开；系统设置 › VPN 里设为“始终开启”，重启手机后自动连上；
   浏览器打开 `anixops://toggle` 能切换连接；另一个 VPN 接管后 App 与磁贴显示已断开。
@@ -795,3 +792,61 @@ CI 只跑单元测试和管理员账号下的端到端测试，以下需要人�
   超过 16 条的被立即关闭，5 秒后其余的也被关闭，正常用户的窗口不受影响。
 - [ ] Linux 根证书更换：先信任生成的根证书，再在扩展页导入团队 CA：导入的提示说明这台电脑还没信任它，扩展页显示未信任；
   点“信任根证书”后显示已信任，`certutil -d sql:$HOME/.pki/nssdb -L -n "AnixOps Net HTTPS Decryption Root" -a` 只列出一张证书。
+
+## 1.0.0 发布准备（release-prep：ci-release-02/03/07/08/09，release-readiness-05/08/09/10）
+
+### 版本号（单一来源）
+
+版本号的来源是 `Cargo.toml` 的 `[workspace.package] version`。其他构建系统读不了它，各自保留一份副本：`Cargo.lock` 里的
+各工作区成员、两份 `tauri.conf.json`、`apps/windows-gui/ui/package.json`、`apps/windows-native/Directory.Build.props`、
+`app.manifest`（四段式 `X.Y.Z.0`）、`apps/ios/project.yml` 的 `MARKETING_VERSION`、`build.gradle.kts` 的 versionName 默认值。
+`.github/scripts/version.py` 负责改写和检查：CI 每次检查所有副本等于来源；`release.yml`、`release-tag.yml`（读要打 tag 的那个
+提交里的文件）、`play-bundle.yml` 和 `ios-testflight.yml`（在 tag 上运行时）还检查来源等于 tag 去掉 `v` 和预发布后缀后的版本。
+源码只写 `X.Y.Z`，`-beta.N` / `-rc.N` 由 tag 带上。
+
+- [ ] 打 `v1.0.0`（或 `v1.0.0-rc.1`）之前，先在一个 PR 里运行 `python3 .github/scripts/version.py set 1.0.0`（只改上面这些字段，
+  `Cargo.lock` 里恰好也是 0.3.0 的第三方包不会被改），同时把 `build.gradle.kts` 的 versionCode 升到下一个值，写好
+  `docs/release-notes/v1.0.0.md`。这个 PR 的 CI 通过后再用 `release-tag.yml` 打 tag。iOS / macOS 的「关于」页会显示新版本，
+  截图对比会变，PR 描述里写明「界面变化：版本号」。
+- [ ] `play-bundle.yml` 在 tag 上运行时用 tag 作为 AAB 的 versionName；不在 tag 上运行时必须填 `version-name`。已经带着
+  错误 versionName 上传过的 versionCode 不能复用。
+
+### 安卓正式签名密钥
+
+正式签名密钥（Google Play 应用签名密钥，别名 `anixops`）以前是仓库级 secret，CI 的每次运行（含同仓库 PR 和任意分支的手动运行）
+都会拿到。现在 CI 一律用临时密钥；只有 `release.yml` 的 `sign-android` job 在 tag 发布时进入 Environment `android-release`
+使用它。这个 job 不跑 Gradle、Rust 和第三方 action，只下载构建 job 交出的未签名 APK、核对 SHA-256、签名、核对证书、出证明。
+以下只能由维护者在 GitHub 设置里完成，**完成前 tag 发布会在 `sign-android` 失败**（不会再发出临时签名的 APK）：
+
+- [ ] Settings → Environments → New environment，名字 `android-release`（必须完全一致；拼错时 GitHub 会新建一个空 Environment，
+  `sign-android` 的 “The release signing key is configured” 步骤会因此失败）。
+- [ ] 该 Environment → Deployment protection rules：勾选 Required reviewers，填维护者本人。
+- [ ] 该 Environment → Deployment branches and tags：选 “Selected branches and tags” → Add deployment branch or tag rule →
+  Ref type 选 **Tag**，Name pattern 填 `v*`。不要添加任何分支规则（从 main 手动运行 `release.yml` 只做构建验证，不进入这个
+  Environment，用临时密钥签名）。
+- [ ] 该 Environment → Environment secrets → Add secret，逐个写入 `ANDROID_KEYSTORE_BASE64`（`base64 -w0 <keystore>.jks`）、
+  `ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。GitHub 不能导出已有 secret 的值，需要用维护者
+  保管的原始 keystore 和密码重新填写。
+- [ ] Settings → Secrets and variables → Actions → Repository secrets：**删除**同名的四个仓库级 secret。不删就等于没修：不声明
+  Environment 的 workflow（含 PR 上的 CI）仍能读到仓库级 secret。
+- [ ] Settings → Secrets and variables → Actions → Variables → New repository variable：`ANDROID_RELEASE_CERT_SHA256`，值为应用签名
+  证书的 SHA-256（Play Console → 测试和发布 → 应用完整性 → 应用签名 → “应用签名密钥证书”的 SHA-256 证书指纹；或
+  `keytool -list -v -keystore <keystore>.jks -alias anixops`）。带冒号、大小写均可。它是公开信息，用 variable 而不是 secret。
+  `release.yml` 的 release policy 和 `release-tag.yml` 在构建前检查它，`sign-android` 签名后比对，防止 secret 被误换成上传密钥等
+  其他 keystore。
+- [ ] 验证：从 main 手动运行一次 `Release`（只构建），`Sign Android APK` 不请求审批、产出 `*-debug` 签名；第一次 tag 发布时
+  `Sign Android APK` 请求审批，批准后 “Signed with the release key” 通过。
+- [ ] 评估密钥暴露：2026-11-16 起这把密钥进过大量同仓库 PR（含代理会话分支）和 main 的 CI 运行，并与当时按标签引用的第三方 action
+  在同一个 job。目前没有泄露证据。请检查这些运行的日志有无异常步骤或外发，并决定是否准备轮换预案：APK 签名方案 v3.1 的
+  `apksigner rotate` 只对 Android 9 及以上生效（minSdk 26 的 8.x 设备仍只认旧证书），Play 侧需要在 Play Console 申请应用签名
+  密钥升级。
+
+### 第三方 action 固定到提交 SHA
+
+所有 workflow 和 `.github/actions/*` 里的 action 都固定到完整的 40 位提交 SHA，旁边注释对应的正式 release 标签；
+`.github/scripts/workflow_policy.py` 在 CI 第一个 job 里检查（同时检查安卓正式密钥只出现在 `release.yml` 声明了
+`android-release` 的 job，Play 密钥只出现在声明了 `google-play` 的 job）。`.github/dependabot.yml` 每周提出 action 升级 PR。
+`cargo-deny` 固定为 0.22.0。
+
+- [ ] Settings → Actions → General → Actions permissions：勾选 “Require actions to be pinned to a full-length commit SHA”。
+- [ ] Settings → Code security → Dependabot：确认 Dependabot version updates 已启用，升级 PR 照常经过完整 CI。
