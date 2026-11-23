@@ -89,8 +89,9 @@ public enum RuntimeControl {
     case captureH2Frames(id: UInt64, since: UInt64)
     /// The engine opened to phones on the local network that set this Mac as their Wi-Fi proxy (`LanShare`).
     case lanShare
-    /// Starts (or restarts) the LAN share on `port`; `0` picks a free one.
-    case startLanShare(port: UInt16)
+    /// Starts (or restarts) the LAN share on `port`; `0` picks a free one. With `auth` required, phones must send its
+    /// username and password; otherwise the share asks for none.
+    case startLanShare(port: UInt16, auth: LanShareAuth)
     case stopLanShare
     /// The `127.0.0.1` listener the tunnel registers as the system proxy (`TrafficTakeover`).
     case systemProxy
@@ -233,8 +234,13 @@ public enum RuntimeControl {
             object = ["cmd": "capture_h2_frames", "id": id, "since": since]
         case .lanShare:
             object = ["cmd": "lan_share"]
-        case let .startLanShare(port):
-            object = ["cmd": "start_lan_share", "port": Int(port)]
+        case let .startLanShare(port, auth):
+            var request: [String: Any] = ["cmd": "start_lan_share", "port": Int(port)]
+            if auth.required {
+                request["username"] = auth.username
+                request["password"] = auth.password
+            }
+            object = request
         case .stopLanShare:
             object = ["cmd": "stop_lan_share"]
         case .systemProxy:
@@ -261,11 +267,13 @@ public enum RuntimeControl {
         public let pageHost: String
         public let httpsDecryption: Bool
         public let certificate: Bool
+        /// Whether the share asks phones for the proxy username and password; nil from an engine that does not say.
+        public let credentials: Bool?
         public let active: UInt64
         public let pages: UInt64
 
         enum CodingKeys: String, CodingKey {
-            case running, port, addresses, url, certificate, active, pages
+            case running, port, addresses, url, certificate, credentials, active, pages
             case pageHost = "page_host"
             case httpsDecryption = "https_decryption"
         }

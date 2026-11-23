@@ -14,8 +14,16 @@ final class RuntimeControlTests: XCTestCase {
 
     func testLanShareCommandsAndAnswer() throws {
         XCTAssertEqual(String(decoding: RuntimeControl.lanShare.request, as: UTF8.self), #"{"cmd":"lan_share"}"#)
+        // The share asks phones for the kept username and password unless the user turned that off.
+        let auth = LanShareAuth(username: "anx-abcdef", password: "abcdefghjkmnpqrstuvw")
         XCTAssertEqual(
-            String(decoding: RuntimeControl.startLanShare(port: 8899).request, as: UTF8.self),
+            String(decoding: RuntimeControl.startLanShare(port: 8899, auth: auth).request, as: UTF8.self),
+            #"{"cmd":"start_lan_share","password":"abcdefghjkmnpqrstuvw","port":8899,"username":"anx-abcdef"}"#
+        )
+        var open = auth
+        open.required = false
+        XCTAssertEqual(
+            String(decoding: RuntimeControl.startLanShare(port: 8899, auth: open).request, as: UTF8.self),
             #"{"cmd":"start_lan_share","port":8899}"#
         )
         XCTAssertEqual(String(decoding: RuntimeControl.stopLanShare.request, as: UTF8.self), #"{"cmd":"stop_lan_share"}"#)
@@ -27,6 +35,7 @@ final class RuntimeControlTests: XCTestCase {
         XCTAssertEqual(share.addresses, ["192.168.1.5", "10.0.0.2"])
         XCTAssertEqual(share.setupURL(address: "10.0.0.2"), "http://10.0.0.2:8899/")
         XCTAssertTrue(share.httpsDecryption)
+        XCTAssertEqual(share.credentials, false)
         let stopped = try XCTUnwrap(RuntimeControl.decode(RuntimeControl.LanShare.self, from: Data("""
         {"running":false,"port":null,"addresses":[],"url":null,"page_host":"cert.anixops","https_decryption":false,
          "certificate":false,"credentials":false,"accepted":0,"rejected":0,"active":0,"pages":0}

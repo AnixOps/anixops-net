@@ -6,7 +6,8 @@ import SwiftUI
 
 /// Phone debugging on the Extensions page: the tunnel opens a second proxy port to the local network, the phone sets
 /// this Mac as its Wi-Fi proxy and scans the QR code for the engine's setup page, which also hands out the HTTPS
-/// decryption root (`engine_embedded::lan_share`). Only devices on the local network are answered.
+/// decryption root (`engine_embedded::lan_share`). Only devices on the local network are answered, and by default
+/// only with the proxy username and password this section shows (`LanShareAuth`, kept in the Keychain).
 struct MacPhoneCaptureSection: View {
     var tunnel: TunnelController
     @Environment(\.brand) private var brand
@@ -14,6 +15,9 @@ struct MacPhoneCaptureSection: View {
     @State private var portText = String(MacPhoneCaptureSection.defaultPort)
     @State private var address: String?
     @State private var working = false
+    /// The share's credentials, read from the Keychain (made there on first use).
+    @State private var auth: LanShareAuth?
+    @State private var revealed = false
     /// Shown as written: assign it from String(localized:), never a bare literal.
     @State private var error: String?
 
@@ -30,6 +34,78 @@ struct MacPhoneCaptureSection: View {
                 }
             }
             .disabled(working || !tunnel.isConnected || (!running && port == nil))
+
+            Toggle(isOn: Binding(get: { auth?.required ?? true }, set: { on in Task { await setRequired(on) } })) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("需要密码")
+                    Text("手机要在 Wi-Fi 代理里填用户名和密码才能使用这个代理")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .disabled(working || auth == nil)
+
+            if let auth {
+                if auth.required {
+                    LabeledContent("用户名") {
+                        HStack(spacing: 8) {
+                            Text(auth.username)
+                                .font(.body.monospaced())
+                                .textSelection(.enabled)
+                            Button {
+                                Self.copy(auth.username)
+                            } label: {
+                                Image(systemName: "doc.on.doc")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("拷贝用户名")
+                            .accessibilityLabel("拷贝用户名")
+                        }
+                    }
+                    LabeledContent("密码") {
+                        HStack(spacing: 8) {
+                            Text(revealed ? auth.password : Self.masked(auth.password))
+                                .font(.body.monospaced())
+                                .textSelection(.enabled)
+                            Button {
+                                revealed.toggle()
+                            } label: {
+                                Image(systemName: revealed ? "eye.slash" : "eye")
+                            }
+                            .buttonStyle(.borderless)
+                            .help(revealed ? "隐藏密码" : "显示密码")
+                            .accessibilityLabel(revealed ? "隐藏密码" : "显示密码")
+                            Button {
+                                Self.copy(auth.password)
+                            } label: {
+                                Image(systemName: "doc.on.doc")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("拷贝密码")
+                            .accessibilityLabel("拷贝密码")
+                            Button {
+                                Task { await regenerate() }
+                            } label: {
+                                Image(systemName: "arrow.clockwise")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(working)
+                            .help("重新生成用户名和密码")
+                            .accessibilityLabel("重新生成用户名和密码")
+                        }
+                    }
+                    Text("用随机数生成，只保存在这台 Mac 的钥匙串里。重新生成后，已经设置过的手机要重新填写。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Label(
+                        "任何人都能使用这个代理：同一网络里的任何设备都能通过这台 Mac 和你的节点上网，它们的请求也会进入抓包。只在可信的网络里关闭密码。",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(brand.warning)
+                }
+            }
 
             if !running {
                 LabeledContent("端口") {
@@ -79,6 +155,11 @@ struct MacPhoneCaptureSection: View {
                                 Text("设置页里有 iPhone 和 Android 的步骤和根证书下载。设好代理后在手机上打开 http://\(share.pageHost) 检查是否生效。")
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
+                                if share.credentials == true {
+                                    Text("iPhone：在 Wi-Fi 代理设置里打开认证，填上面的用户名和密码。Android 的 Wi-Fi 代理没有密码栏，浏览器会在第一次访问时询问，其他应用可能连不上。")
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
                                 Label(
                                     share.httpsDecryption ? "HTTPS 解密已开启" : "HTTPS 解密未开启，只能看到连接",
                                     systemImage: share.httpsDecryption ? "lock.fill" : "lock.open"
@@ -104,7 +185,10 @@ struct MacPhoneCaptureSection: View {
         } header: {
             Text("手机抓包")
         } footer: {
-            Text("手机和 Mac 连同一个 Wi-Fi，把手机的 Wi-Fi 代理设成 Mac，手机的请求就会出现在请求页。只接受局域网里的设备；断开连接时一并关闭。")
+            Text("手机和 Mac 连同一个 Wi-Fi，把手机的 Wi-Fi 代理设成 Mac，手机的请求就会出现在请求页。只接受局域网里的设备，默认还要填用户名和密码；断开连接时一并关闭。")
+        }
+        .task {
+            loadAuth()
         }
         .task(id: tunnel.isConnected) {
             await refreshLoop()
@@ -150,7 +234,10 @@ struct MacPhoneCaptureSection: View {
                 error = String(localized: "端口要在 1024 到 65535 之间。")
                 return
             }
-            request = .startLanShare(port: port)
+            guard let auth = loadAuth() else {
+                return
+            }
+            request = .startLanShare(port: port, auth: auth)
         } else {
             request = .stopLanShare
         }
@@ -162,6 +249,69 @@ struct MacPhoneCaptureSection: View {
         }
         error = nil
         share = answer
+    }
+
+    /// The kept credentials, made on first use; nil, with the error shown, when the Keychain refuses. The share is
+    /// then not started at all rather than started without a password.
+    @discardableResult
+    private func loadAuth() -> LanShareAuth? {
+        do {
+            let loaded = try LanShareAuthStore.load()
+            auth = loaded
+            return loaded
+        } catch {
+            self.error = String(localized: "无法读取钥匙串里的手机抓包密码，手机抓包没有开启。")
+            return nil
+        }
+    }
+
+    private func regenerate() async {
+        await changeAuth {
+            try LanShareAuthStore.regenerate()
+        }
+    }
+
+    private func setRequired(_ required: Bool) async {
+        await changeAuth {
+            try LanShareAuthStore.setRequired(required)
+        }
+    }
+
+    /// Changes the kept credentials and starts a running share again on its port, which is when it takes them.
+    private func changeAuth(_ change: () throws -> LanShareAuth) async {
+        working = true
+        defer { working = false }
+        let changed: LanShareAuth
+        do {
+            changed = try change()
+        } catch {
+            self.error = String(localized: "无法把手机抓包密码保存到钥匙串。")
+            return
+        }
+        auth = changed
+        revealed = false
+        error = nil
+        guard running, let port = share?.port else {
+            return
+        }
+        guard let answer = RuntimeControl.decode(
+            RuntimeControl.LanShare.self,
+            from: await tunnel.control(.startLanShare(port: port, auth: changed))
+        ) else {
+            share = nil
+            self.error = String(localized: "手机抓包没有用新的设置重新开启，请关闭后再打开。")
+            return
+        }
+        share = answer
+    }
+
+    static func masked(_ password: String) -> String {
+        String(repeating: "\u{2022}", count: password.count)
+    }
+
+    static func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     /// A sharp QR code of `text`.

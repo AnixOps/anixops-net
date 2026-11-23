@@ -601,6 +601,16 @@ export interface LanShareStatus {
 }
 
 /**
+ * The LAN share's proxy username and password, made on first use and kept in the system's key store. With
+ * `required` (the default) the backend puts them into every share it starts and phones must send them.
+ */
+export interface LanShareAuth {
+  required: boolean;
+  username: string;
+  password: string;
+}
+
+/**
  * What a backend command did. The window words `code` itself, in its own language (operation-text.ts), with `params`
  * filled in; `message` is the backend's English, shown only for a code this window does not know (an older or newer
  * backend). `note` is already in the window's language (a note on capture or a reconnect) and follows the text.
@@ -866,7 +876,11 @@ export const desktop = {
   removeMitmPlugin: (id: string) => invoke<OperationResult>("remove_mitm_plugin", { id }),
   /** The LAN share of the running engine; rejects while the engine does not run in this window. */
   lanShare: () => invoke<LanShareStatus>("runtime_control", { request: { cmd: "lan_share" } }),
+  /** Starts (or restarts) the share; the backend adds the kept credentials while they are required. */
   startLanShare: (port: number) => invoke<LanShareStatus>("runtime_control", { request: { cmd: "start_lan_share", port } }),
+  lanShareAuth: () => invoke<LanShareAuth>("lan_share_auth"),
+  regenerateLanShareAuth: () => invoke<LanShareAuth>("regenerate_lan_share_auth"),
+  setLanShareAuthRequired: (required: boolean) => invoke<LanShareAuth>("set_lan_share_auth_required", { required }),
   stopLanShare: () => invoke<LanShareStatus>("runtime_control", { request: { cmd: "stop_lan_share" } }),
   /** An SVG QR code of `text`. */
   phoneQrCode: (text: string) => invoke<string>("phone_qr_code", { text }),

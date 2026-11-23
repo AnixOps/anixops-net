@@ -50,9 +50,20 @@ pub fn load(dir: &Path) -> Result<SessionKey, String> {
 }
 
 fn lookup() -> Option<Vec<u8>> {
+    let key = decode_base64(&secret_lookup(&ATTRIBUTES)?).ok()?;
+    (key.len() == KEY_LEN).then_some(key)
+}
+
+fn store(key: &[u8]) -> bool {
+    secret_store(LABEL, &ATTRIBUTES, &encode_base64(key))
+}
+
+/// The text the Secret Service keeps under `attributes`, trimmed, or `None` when there is none or it cannot be
+/// read (no `secret-tool`, no Secret Service, a locked keyring).
+pub(crate) fn secret_lookup(attributes: &[&str]) -> Option<String> {
     let output = Command::new("secret-tool")
         .arg("lookup")
-        .args(ATTRIBUTES)
+        .args(attributes)
         .stdin(Stdio::null())
         .stderr(Stdio::null())
         .output()
@@ -60,15 +71,15 @@ fn lookup() -> Option<Vec<u8>> {
     if !output.status.success() {
         return None;
     }
-    let key = decode_base64(String::from_utf8(output.stdout).ok()?.trim()).ok()?;
-    (key.len() == KEY_LEN).then_some(key)
+    Some(String::from_utf8(output.stdout).ok()?.trim().to_string())
 }
 
-fn store(key: &[u8]) -> bool {
+/// Puts `secret` into the Secret Service under `attributes`, replacing what was there; whether that worked.
+pub(crate) fn secret_store(label: &str, attributes: &[&str], secret: &str) -> bool {
     let Ok(mut child) = Command::new("secret-tool")
         .arg("store")
-        .arg(format!("--label={LABEL}"))
-        .args(ATTRIBUTES)
+        .arg(format!("--label={label}"))
+        .args(attributes)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -79,7 +90,7 @@ fn store(key: &[u8]) -> bool {
     let written = child
         .stdin
         .take()
-        .is_some_and(|mut stdin| stdin.write_all(encode_base64(key).as_bytes()).is_ok());
+        .is_some_and(|mut stdin| stdin.write_all(secret.as_bytes()).is_ok());
     child.wait().is_ok_and(|status| status.success()) && written
 }
 

@@ -3,6 +3,8 @@
 //! out and does network fetches and delay tests outside the lock.
 
 pub mod engine;
+#[cfg(not(target_os = "android"))]
+pub mod lan_share_auth;
 pub mod legacy_windows;
 #[cfg(not(any(target_os = "android", windows)))]
 pub mod session_key;
@@ -696,6 +698,11 @@ impl Backend {
 
     fn mitm_dir(&self) -> PathBuf {
         self.store.dir().join("mitm")
+    }
+
+    /// Where the LAN share's proxy credentials are kept (`lan_share_auth`): the data folder itself.
+    pub fn lan_share_dir(&self) -> PathBuf {
+        self.store.dir().to_path_buf()
     }
 
     /// Saved capture sessions and, without a Secret Service, their key (`desktop_mitm::sessions`).

@@ -209,6 +209,10 @@
     devices: () => [{ address: "192.168.1.30", name: "Apple TV" }],
     my_rules: () => ({ text: "DOMAIN-SUFFIX,example.com,PROXY\nDOMAIN-KEYWORD,ads,REJECT\n", count: 2 }),
     phone_qr_code: () => "",
+    // Made-up credentials: the screenshots show them masked.
+    lan_share_auth: () => ({ required: true, username: "anx-k7m2qp", password: "x4ve9tqh2nbs7wdk3m8r" }),
+    regenerate_lan_share_auth: () => ({ required: true, username: "anx-r5t8wz", password: "c6hj3pq9vk2mx7ns4bfe" }),
+    set_lan_share_auth_required: (args) => ({ required: Boolean(args && args.required), username: "anx-k7m2qp", password: "x4ve9tqh2nbs7wdk3m8r" }),
   };
   let callbacks = 0;
   window.__TAURI_INTERNALS__ = {

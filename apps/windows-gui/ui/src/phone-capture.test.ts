@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parsePort, setupUrl } from "./pages/PhoneCaptureCards";
+import { maskPassword, parsePort, setupUrl } from "./pages/PhoneCaptureCards";
 
 describe("phone debugging", () => {
   it("accepts unprivileged ports only", () => {
@@ -13,5 +13,11 @@ describe("phone debugging", () => {
 
   it("builds the setup page address the QR code holds", () => {
     expect(setupUrl("192.168.1.5", 8899)).toBe("http://192.168.1.5:8899/");
+  });
+
+  it("hides the share password behind dots of the same length", () => {
+    expect(maskPassword("abcdefghjkmnpqrstuvw")).toBe("\u2022".repeat(20));
+    expect(maskPassword("abc")).not.toContain("a");
+    expect(maskPassword("")).toBe("");
   });
 });
