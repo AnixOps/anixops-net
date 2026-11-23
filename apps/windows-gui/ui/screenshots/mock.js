@@ -127,7 +127,9 @@
     selectedNode: "香港 01", subscription: "AnixOps", subscriptionLastUpdated: stamp, subscriptionRefreshResult: "success",
     subscriptionAddedNodeCount: 0, subscriptionRemovedNodeCount: 0, subscriptionChangedNodeCount: 0,
     startAfterLogin: true, autoConnect: true, autoRecoverCore: true, autoSubscriptionRefresh: true, autoSelectFastestNode: false,
-    tunModeEnabled: false, scriptRuntimeConfigured: true, httpsDecryptionEnabled: window.localStorage.getItem("anixops.mock-decryption") !== "off", darkTheme: false, routingMode: "rule", dnsPreset: "encrypted", blockQuic: false, directEgress: false, embeddedEngine: true,
+    tunModeEnabled: false, scriptRuntimeConfigured: true, darkTheme: false, routingMode: "rule", dnsPreset: "encrypted", blockQuic: false, directEgress: false, embeddedEngine: true,
+    // Read when the page asks, not when this file loads: render.cjs stores the shot's values after it.
+    get httpsDecryptionEnabled() { return window.localStorage.getItem("anixops.mock-decryption") !== "off"; },
   };
   const hours = Array.from({ length: 24 }, (_, i) => ({
     start: Math.floor(start / 3600e3) * 3600 - (23 - i) * 3600, upload: 2e6 * (1 + (i % 5)), download: 60e6 * (1 + ((i * 3) % 7)),
