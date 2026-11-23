@@ -24,17 +24,17 @@ pub fn load(dir: &Path) -> Result<SessionKey, String> {
 }
 
 fn protect(data: &[u8]) -> Result<Vec<u8>, String> {
-    crypt(data, true)
+    crypt(data, true, "capture session key")
 }
 
 fn unprotect(data: &[u8]) -> Result<Vec<u8>, String> {
-    crypt(data, false)
+    crypt(data, false, "capture session key")
 }
 
-/// DPAPI in the current user's scope, with no prompt.
-fn crypt(data: &[u8], seal: bool) -> Result<Vec<u8>, String> {
+/// DPAPI in the current user's scope, with no prompt; `what` names the data in errors.
+pub(crate) fn crypt(data: &[u8], seal: bool, what: &str) -> Result<Vec<u8>, String> {
     let input = CRYPT_INTEGER_BLOB {
-        cbData: u32::try_from(data.len()).map_err(|_| "the capture session key is too large")?,
+        cbData: u32::try_from(data.len()).map_err(|_| format!("the {what} is too large"))?,
         pbData: data.as_ptr().cast_mut(),
     };
     let mut output = CRYPT_INTEGER_BLOB {
@@ -68,9 +68,9 @@ fn crypt(data: &[u8], seal: bool) -> Result<Vec<u8>, String> {
     };
     if ok == 0 || output.pbData.is_null() {
         return Err(if seal {
-            "the capture session key could not be sealed with Windows Data Protection".to_string()
+            format!("the {what} could not be sealed with Windows Data Protection")
         } else {
-            "the capture session key could not be opened by this Windows account".to_string()
+            format!("the {what} could not be opened by this Windows account")
         });
     }
     // SAFETY: on success DPAPI returns `cbData` bytes at `pbData`, allocated with LocalAlloc.
