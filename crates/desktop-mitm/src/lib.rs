@@ -72,7 +72,8 @@ impl Root {
 
     /// Replaces the root in `directory` with the user's own CA (a team root, say), both PEM: the certificate must
     /// be a CA certificate and the key its PKCS#8 private key. Nothing is written when either is refused. The
-    /// engine and the trust stores pick it up at the next start of HTTPS decryption.
+    /// engine picks it up at the next start of HTTPS decryption. Trust stores do not: they still hold the
+    /// earlier root, so the user trusts this one again, and a trust check compares the certificate itself.
     pub fn import(
         directory: &Path,
         certificate_pem: &str,

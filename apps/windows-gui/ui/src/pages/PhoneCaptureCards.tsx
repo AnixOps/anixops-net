@@ -125,7 +125,7 @@ export function PhoneCaptureCards({ busy, run }: { busy: string | null; run: Run
 
       <Card
         title={t("自己的根证书")}
-        description={t("默认每台电脑生成自己的根证书。团队已有 CA 时可以换成它：粘贴 PEM 格式的 CA 证书和它的 PKCS#8 私钥（BEGIN PRIVATE KEY）。换完后手机和其他设备需要重新安装。")}
+        description={t("默认每台电脑生成自己的根证书。团队已有 CA 时可以换成它：粘贴 PEM 格式的 CA 证书和它的 PKCS#8 私钥（BEGIN PRIVATE KEY）。换完后这台电脑要重新信任，手机和其他设备需要重新安装。")}
       >
         <Row icon={KeyRound} color="gray" label={t("当前根证书指纹（SHA-256）")} hint={fingerprint ?? t("开启 HTTPS 解密后生成")}/>
         <div className="root-import">

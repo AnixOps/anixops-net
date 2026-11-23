@@ -344,7 +344,7 @@ export const english: Record<string, string> = {
   "HTTPS 解密已开启": "HTTPS decryption is on",
   "HTTPS 解密未开启，只能看到连接": "HTTPS decryption is off: connections only",
   "自己的根证书": "Your Own Root Certificate",
-  "默认每台电脑生成自己的根证书。团队已有 CA 时可以换成它：粘贴 PEM 格式的 CA 证书和它的 PKCS#8 私钥（BEGIN PRIVATE KEY）。换完后手机和其他设备需要重新安装。": "Each computer makes its own root certificate. If your team has a CA, use it instead: paste the CA certificate as PEM and its PKCS#8 private key (BEGIN PRIVATE KEY). Phones and other devices then need to install it again.",
+  "默认每台电脑生成自己的根证书。团队已有 CA 时可以换成它：粘贴 PEM 格式的 CA 证书和它的 PKCS#8 私钥（BEGIN PRIVATE KEY）。换完后这台电脑要重新信任，手机和其他设备需要重新安装。": "Each computer makes its own root certificate. If your team has a CA, use it instead: paste the CA certificate as PEM and its PKCS#8 private key (BEGIN PRIVATE KEY). Trust it again on this computer, and install it again on phones and other devices.",
   "当前根证书指纹（SHA-256）": "Current root fingerprint (SHA-256)",
   "开启 HTTPS 解密后生成": "Made when HTTPS decryption is turned on",
   "CA 证书 PEM": "CA certificate PEM",

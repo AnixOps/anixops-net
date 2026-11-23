@@ -727,7 +727,9 @@ impl Client {
         let Ok(pem) = fs::read_to_string(&root.certificate_path) else {
             return false;
         };
-        session.trusts_root(&pem).unwrap_or_else(trust::is_trusted)
+        session
+            .trusts_root(&pem)
+            .unwrap_or_else(|| trust::is_trusted(&pem))
     }
 
     /// The user's own request to trust the root. Where the session keeps the user's store, the window adds
@@ -753,6 +755,37 @@ impl Client {
         Ok(OperationResult {
             message: "Root certificate trusted for this user".to_string(),
         })
+    }
+
+    /// Replaces the root with the user's own CA. Stores that trusted the earlier root do not trust this one:
+    /// where nothing here trusts it yet the answer says to trust it again.
+    fn import_mitm_root(
+        &self,
+        certificate_pem: &str,
+        private_key_pem: &str,
+    ) -> Result<OperationResult, String> {
+        let result = self
+            .backend()
+            .import_mitm_root(certificate_pem, private_key_pem)?;
+        Ok(OperationResult {
+            message: format!("{}{}", result.message, self.imported_root_note()),
+        })
+    }
+
+    #[cfg(not(target_os = "android"))]
+    fn imported_root_note(&self) -> &'static str {
+        let root = self.backend().mitm_root();
+        if self.root_trusted(&root) {
+            ""
+        } else {
+            ". This computer does not trust it yet: choose Trust root certificate under Extensions"
+        }
+    }
+
+    /// Android: the user installs the root in the system settings, as the answer already says.
+    #[cfg(target_os = "android")]
+    fn imported_root_note(&self) -> &'static str {
+        ""
     }
 
     /// The user's own request to stop trusting the root: the user's own store where the session keeps
@@ -1449,11 +1482,7 @@ fn handler(name: &str) -> Option<Handler> {
                 certificate_pem,
                 private_key_pem,
             } = parse(args)?;
-            json(
-                client
-                    .backend()
-                    .import_mitm_root(&certificate_pem, &private_key_pem)?,
-            )
+            json(client.import_mitm_root(&certificate_pem, &private_key_pem)?)
         },
         "mitm_root_fingerprint" => |client, _| json(client.backend().mitm_root_fingerprint()),
         _ => return None,
@@ -1966,11 +1995,7 @@ const NO_PATHS_IN_SERVICE: &str =
 /// The label of a source imported from a file's content: the file's name without its folder, never one that
 /// reads as a link (which would make the source updatable) or as pasted links.
 fn file_label(name: &str) -> String {
-    let name = name
-        .rsplit(['/', '\\'])
-        .next()
-        .unwrap_or_default()
-        .trim();
+    let name = name.rsplit(['/', '\\']).next().unwrap_or_default().trim();
     if name.is_empty() || name.contains("://") || name == PASTED_LOCATION {
         "subscription file".to_string()
     } else {

@@ -105,13 +105,73 @@ fn succeeded(command: &mut Command) -> Result<bool, std::io::Error> {
         .map(|status| status.success())
 }
 
+fn certutil_command(database: &Path, arguments: &[&str]) -> Command {
+    let mut command = Command::new("certutil");
+    command
+        .arg("-d")
+        .arg(format!("sql:{}", database.display()))
+        .args(arguments);
+    command
+}
+
 fn certutil(database: &Path, arguments: &[&str]) -> Result<bool, std::io::Error> {
-    succeeded(
-        Command::new("certutil")
-            .arg("-d")
-            .arg(format!("sql:{}", database.display()))
-            .args(arguments),
-    )
+    succeeded(&mut certutil_command(database, arguments))
+}
+
+/// What `certutil` prints, when it succeeds.
+fn certutil_output(database: &Path, arguments: &[&str]) -> Option<String> {
+    let output = certutil_command(database, arguments)
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// Most certificates under the root's name one database is cleared of: several keys generated or imported
+/// over time leave several roots with the same subject, and `certutil -D` takes one at a time.
+const MAX_SAME_NAME: usize = 16;
+
+/// Deletes every certificate under the root's name from `database`; answers how many there were.
+fn delete_all(database: &Path) -> usize {
+    (0..MAX_SAME_NAME)
+        .take_while(|_| {
+            matches!(
+                certutil(database, &["-D", "-n", ROOT_COMMON_NAME]),
+                Ok(true)
+            )
+        })
+        .count()
+}
+
+/// Whether `pem`, one or more PEM certificates (`certutil -L -a` prints every certificate under a name, with
+/// Windows or Unix line ends), holds the certificate whose SHA-1 thumbprint is `thumbprint`.
+pub fn holds(pem: &str, thumbprint: &str) -> bool {
+    let mut block: Option<String> = None;
+    for line in pem.lines().map(str::trim) {
+        if line == "-----BEGIN CERTIFICATE-----" {
+            block = Some(format!("{line}\n"));
+        } else if let Some(open) = block.as_mut() {
+            open.push_str(line);
+            open.push('\n');
+            if line == "-----END CERTIFICATE-----" {
+                let done = block.take().unwrap_or_default();
+                if desktop_mitm::thumbprint(&done).is_ok_and(|found| found == thumbprint) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Whether the anchor file at `anchor` is this root, by content: a file left there for an earlier root
+/// does not make a new one trusted.
+pub fn anchor_holds(anchor: &Path, thumbprint: &str) -> bool {
+    fs::read_to_string(anchor).is_ok_and(|text| holds(&text, thumbprint))
 }
 
 /// Runs `script` as root with `arguments` as `$1`, `$2`…; polkit asks the user.
@@ -129,8 +189,8 @@ pub fn install(certificate: &Path) -> Outcome {
     let certificate_text = certificate.to_string_lossy();
     let databases = home().map(|home| nss_databases(&home)).unwrap_or_default();
     for database in &databases {
-        // A root left by an earlier key would shadow the new one under the same name.
-        let _ = certutil(database, &["-D", "-n", ROOT_COMMON_NAME]);
+        // Roots left by earlier keys would shadow the new one under the same name.
+        delete_all(database);
         match certutil(
             database,
             &[
@@ -178,15 +238,19 @@ pub fn install(certificate: &Path) -> Outcome {
     outcome
 }
 
-/// Whether a browser database or the system store already holds the root. Nothing is changed.
-pub fn is_trusted() -> bool {
+/// Whether a browser database or the system store already holds this root, `certificate_pem`. Compared by
+/// content, not by name: after the root is replaced (`import_mitm_root`, or a new key) the stores still hold
+/// the old one under the same name, which does not make the new one trusted. Nothing is changed.
+pub fn is_trusted(certificate_pem: &str) -> bool {
+    let Ok(thumbprint) = desktop_mitm::thumbprint(certificate_pem) else {
+        return false;
+    };
     let databases = home().map(|home| nss_databases(&home)).unwrap_or_default();
     databases.iter().any(|database| {
-        matches!(
-            certutil(database, &["-L", "-n", ROOT_COMMON_NAME]),
-            Ok(true)
-        )
-    }) || system_anchor(Path::new("/")).is_some_and(|(anchor, _)| anchor.exists())
+        certutil_output(database, &["-L", "-n", ROOT_COMMON_NAME, "-a"])
+            .is_some_and(|listed| holds(&listed, &thumbprint))
+    }) || system_anchor(Path::new("/"))
+        .is_some_and(|(anchor, _)| anchor_holds(&anchor, &thumbprint))
 }
 
 /// Takes the root out of every browser database and, when it was installed there, the system store.
@@ -194,7 +258,7 @@ pub fn remove() -> Outcome {
     let mut outcome = Outcome::default();
     let databases = home().map(|home| nss_databases(&home)).unwrap_or_default();
     for database in &databases {
-        if let Ok(true) = certutil(database, &["-D", "-n", ROOT_COMMON_NAME]) {
+        if delete_all(database) > 0 {
             outcome.browsers += 1;
         }
     }
@@ -271,6 +335,37 @@ mod tests {
             Some("update-ca-certificates")
         );
         let _ = fs::remove_dir_all(root);
+    }
+
+    /// The trust state compares the certificate, not the name it is stored under (client-core-ipc-13).
+    #[test]
+    fn a_store_trusts_the_root_only_when_it_holds_that_certificate() {
+        let dir = scratch("content");
+        let old = desktop_mitm::Root::ensure(&dir.join("old")).unwrap();
+        let new = desktop_mitm::Root::ensure(&dir.join("new")).unwrap();
+        let old_pem = fs::read_to_string(&old.certificate_path).unwrap();
+        let new_pem = fs::read_to_string(&new.certificate_path).unwrap();
+        let new_thumbprint = desktop_mitm::thumbprint(&new_pem).unwrap();
+        assert_ne!(desktop_mitm::thumbprint(&old_pem).unwrap(), new_thumbprint);
+
+        assert!(holds(&new_pem, &new_thumbprint));
+        assert!(!holds(&old_pem, &new_thumbprint));
+        assert!(!holds("", &new_thumbprint));
+        // `certutil -L -a` lists every certificate under the name, here with Windows line ends.
+        let listed = format!("{old_pem}\n{new_pem}").replace('\n', "\r\n");
+        assert!(holds(&listed, &new_thumbprint));
+
+        // The system anchor left for the earlier root does not count for the new one.
+        let anchor = dir.join(ANCHOR_FILE);
+        assert!(!anchor_holds(&anchor, &new_thumbprint));
+        fs::write(&anchor, &old_pem).unwrap();
+        assert!(!anchor_holds(&anchor, &new_thumbprint));
+        fs::write(&anchor, &new_pem).unwrap();
+        assert!(anchor_holds(&anchor, &new_thumbprint));
+
+        // Not a certificate: nothing is trusted.
+        assert!(!is_trusted("not a certificate"));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

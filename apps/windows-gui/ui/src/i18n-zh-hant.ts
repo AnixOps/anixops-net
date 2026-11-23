@@ -343,7 +343,7 @@ export const traditional: Record<string, string> = {
   "HTTPS 解密已开启": "HTTPS 解密已開啟",
   "HTTPS 解密未开启，只能看到连接": "HTTPS 解密未開啟，只能看到連線",
   "自己的根证书": "自己的根憑證",
-  "默认每台电脑生成自己的根证书。团队已有 CA 时可以换成它：粘贴 PEM 格式的 CA 证书和它的 PKCS#8 私钥（BEGIN PRIVATE KEY）。换完后手机和其他设备需要重新安装。": "預設每台電腦產生自己的根憑證。團隊已有 CA 時可以換成它：貼上 PEM 格式的 CA 憑證和它的 PKCS#8 私鑰（BEGIN PRIVATE KEY）。換完後手機和其他裝置需要重新安裝。",
+  "默认每台电脑生成自己的根证书。团队已有 CA 时可以换成它：粘贴 PEM 格式的 CA 证书和它的 PKCS#8 私钥（BEGIN PRIVATE KEY）。换完后这台电脑要重新信任，手机和其他设备需要重新安装。": "預設每台電腦產生自己的根憑證。團隊已有 CA 時可以換成它：貼上 PEM 格式的 CA 憑證和它的 PKCS#8 私鑰（BEGIN PRIVATE KEY）。換完後這台電腦要重新信任，手機和其他裝置需要重新安裝。",
   "当前根证书指纹（SHA-256）": "目前根憑證指紋（SHA-256）",
   "开启 HTTPS 解密后生成": "開啟 HTTPS 解密後產生",
   "CA 证书 PEM": "CA 憑證 PEM",

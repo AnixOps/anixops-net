@@ -198,7 +198,11 @@ headless GitHub Actions Windows job and are tracked in
   `~/.config/anixops-net/mitm/` on first use, adds it to the Chrome/Chromium
   and Firefox NSS databases with `certutil` and to the system store through
   `pkexec`, and removes it on disable. Linux has no built-in policy: only the
-  hosts of enabled plugins are decrypted.
+  hosts of enabled plugins are decrypted. Whether the root is trusted is
+  decided by the certificate itself (its thumbprint against `certutil -L -a`
+  and the system anchor file), not by its name: after importing the user's own
+  CA the Extensions page shows it untrusted until the user trusts it again,
+  which also deletes every older root left under the same name.
 - Select the Bilibili web trial while HTTPS MITM is disabled, enable HTTPS MITM,
   and confirm the persisted managed config selects the first-party request-only
   policy. Browse a Bilibili search page over controlled HTTP/1.1 TLS and confirm
