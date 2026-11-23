@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { NativeGroupSummary, NodeSummary } from "./bridge";
-import { findLinkMember, findLinkNode, maxImportLength, parseAppLink } from "./app-link";
+import { findLinkMember, findLinkNode, linkMustWait, LinkReadiness, maxImportLength, nextAppLink, parseAppLink } from "./app-link";
 
 describe("anixops:// links", () => {
   it("reads the actions in all three spellings", () => {
@@ -42,5 +42,63 @@ describe("anixops:// links", () => {
     expect(findLinkMember(groups, "proxy", "日本")).toEqual({ tag: "Proxy", outbound: "n2" });
     expect(findLinkMember(groups, "Proxy", "n1")).toEqual({ tag: "Proxy", outbound: "n1" });
     expect(findLinkMember(groups, "Proxy", "美国")).toBeUndefined();
+  });
+
+  describe("links that arrive before the window is ready", () => {
+    const starting: LinkReadiness = { loaded: false, modeChosen: false, busy: false, phase: "loading" };
+    const ready: LinkReadiness = { loaded: true, modeChosen: true, busy: false, phase: "off" };
+
+    it("keeps a cold start select until the nodes are loaded, then finds the node", () => {
+      const queue = ["anixops://select?node=%E9%A6%99%E6%B8%AF01"];
+      // Before the first snapshot the node list is empty: the link waits instead of reporting a missing node.
+      expect(nextAppLink(queue, starting)).toBeUndefined();
+      expect(queue).toHaveLength(1);
+      const link = nextAppLink(queue, ready);
+      expect(link).toEqual({ action: "select", node: "香港01" });
+      expect(queue).toHaveLength(0);
+      const nodes: NodeSummary[] = [{ id: "7", label: "香港01", protocol: "ss", selected: false }];
+      expect(link && "node" in link ? findLinkNode(nodes, link.node)?.id : undefined).toBe("7");
+    });
+
+    it("runs a toggle that arrived while the state was loading once it is known", () => {
+      const queue = ["anixops://toggle"];
+      expect(nextAppLink(queue, { ...ready, phase: "loading" })).toBeUndefined();
+      expect(nextAppLink(queue, { ...ready, phase: "connecting" })).toBeUndefined();
+      expect(nextAppLink(queue, { ...ready, phase: "disconnecting" })).toBeUndefined();
+      expect(nextAppLink(queue, { ...ready, busy: true })).toBeUndefined();
+      expect(queue).toEqual(["anixops://toggle"]);
+      expect(nextAppLink(queue, { ...ready, phase: "on" })).toEqual({ action: "toggle" });
+      expect(queue).toEqual([]);
+    });
+
+    it("does not start a second connection while one is being made", () => {
+      expect(linkMustWait({ action: "connect" }, { ...ready, phase: "connecting" })).toBe(true);
+      expect(linkMustWait({ action: "connect" }, { ...ready, busy: true })).toBe(true);
+      expect(linkMustWait({ action: "connect" }, { ...ready, phase: "failed" })).toBe(false);
+      expect(linkMustWait({ action: "disconnect" }, { ...ready, phase: "on" })).toBe(false);
+    });
+
+    it("keeps an import until the first-launch mode question is answered", () => {
+      const queue = ["anixops://import?url=https%3A%2F%2Fa.example%2Fsub"];
+      expect(nextAppLink(queue, { ...ready, modeChosen: false })).toBeUndefined();
+      expect(queue).toHaveLength(1);
+      // An import only fills in the form, so a running operation does not hold it back.
+      expect(nextAppLink(queue, { ...ready, busy: true })).toEqual({ action: "import", url: "https://a.example/sub" });
+    });
+
+    it("holds operations back one at a time and keeps the order", () => {
+      const queue = ["anixops://mode?set=rule", "anixops://select?node=HK"];
+      expect(nextAppLink(queue, ready)).toEqual({ action: "mode", mode: "rule" });
+      // The mode change is running: the selection waits behind it.
+      expect(nextAppLink(queue, { ...ready, busy: true })).toBeUndefined();
+      expect(nextAppLink(queue, ready)).toEqual({ action: "select", node: "HK" });
+      expect(nextAppLink(queue, ready)).toBeUndefined();
+    });
+
+    it("tells a refused link only once the window can show it", () => {
+      const queue = ["anixops://reboot"];
+      expect(nextAppLink(queue, starting)).toBeUndefined();
+      expect(nextAppLink(queue, { ...ready, busy: true })).toEqual({ error: "不认识的操作", detail: "reboot" });
+    });
   });
 });

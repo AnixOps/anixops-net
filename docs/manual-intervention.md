@@ -460,6 +460,7 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 - [ ] Windows、Linux（GNOME / KDE）、Android：启动过一次客户端后，在浏览器地址栏或终端（`xdg-open` / `start`）打开 `anixops://connect`、`anixops://disconnect`、`anixops://toggle`，客户端窗口来到前台并执行。
 - [ ] `anixops://mode?set=direct`、`anixops://select?node=<节点名>`、`anixops://select?policy=<策略组>&node=<成员>` 生效；`anixops://import?url=<订阅链接>` 打开代理页的订阅、链接已填好，点“导入”才保存。
 - [ ] 客户端没运行时打开链接：启动客户端并执行（Windows / Linux 只有一个窗口，不会多开）。
+- [ ] 客户端没运行、且是新装（没有订阅）时打开 `anixops://select?node=<节点名>`：不会先弹“找不到节点”，节点加载后再切换；打开 `anixops://toggle` 时等状态读完再执行，不会被静默忽略；新用户打开 `anixops://import?url=<订阅链接>`，同意条款并选好模式后直接进入代理（调试模式为“出口”）页，订阅链接已填好。
 - [ ] Linux：已连接并接管系统代理时，在浏览器打开 `anixops://import?url=…`，或在启动器里再点一次图标：窗口来到前台，`gsettings get org.gnome.system.proxy mode`（KDE 看 `kioslaverc`）仍是 `manual`，浏览器流量仍经过代理；`~/.config/anixops-net/state.json` 的 `proxy_backup` 没有被清空。第二个进程立即退出，不弹 TUN 授权框。
 
 ## Wi-Fi 规则真机验收（T12）

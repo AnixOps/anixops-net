@@ -3,7 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatRate } from "./activity-format";
-import { AppLink, findLinkMember, findLinkNode, parseAppLink } from "./app-link";
+import { AppLink, AppLinkError, findLinkMember, findLinkNode, nextAppLink } from "./app-link";
 import { desktop, NodeDelay, NodeSummary, RuntimeSnapshot } from "./bridge";
 import { Wordmark } from "./brand";
 import { connectionTitle, connectPhase, failureReason, routingLabel, sidebarDetail } from "./labels";
@@ -127,10 +127,10 @@ export function App() {
     else void run("connect", desktop.connect);
   }, [busy, phase, run]);
 
-  // `anixops://` links: read once at start and whenever the backend says one arrived; the newest handler acts.
+  // `anixops://` links: read once at start and whenever the backend says one arrived, kept in the window's own queue
+  // and followed one at a time once the window is ready for them (`nextAppLink`, below).
   const [pendingImport, setPendingImport] = useState<string | null>(null);
-  const followLink = useCallback((raw: string) => {
-    const link: AppLink | { error: string; detail?: string } = parseAppLink(raw);
+  const followLink = useCallback((link: AppLink | AppLinkError) => {
     if ("error" in link) {
       show(t("无法打开链接：{reason}", { reason: t(link.error) + (link.detail ? ` (${link.detail})` : "") }), "danger");
       return;
@@ -167,13 +167,18 @@ export function App() {
         show(t("核对订阅链接后点“导入”"), "success");
     }
   }, [nodes, phase, run, show, toggleConnection]);
-  const linkHandler = useRef(followLink);
-  linkHandler.current = followLink;
+  const linkQueue = useRef<string[]>([]);
+  // Counts arrivals and followed links, so the queue is looked at again after each.
+  const [linkTurn, setLinkTurn] = useState(0);
   useEffect(() => {
     if (needsTerms) return;
     let stopped = false;
     let unlisten: (() => void) | undefined;
-    const drain = () => void desktop.takeAppLinks().then((links) => links.forEach((link) => linkHandler.current(link))).catch(() => undefined);
+    const drain = () => void desktop.takeAppLinks().then((links) => {
+      if (links.length === 0) return;
+      linkQueue.current.push(...links);
+      setLinkTurn((turn) => turn + 1);
+    }).catch(() => undefined);
     drain();
     void listen("app-link", drain).then((off) => {
       if (stopped) off();
@@ -213,6 +218,21 @@ export function App() {
     chooseMode(next);
     setPage(sidebarOf(next).main[0].page);
   };
+
+  // Follows the first queued link once the state is loaded and the mode chosen, and the operation before it has
+  // finished: a link that opened the app at a cold start is not run against an empty node list or a loading state, and
+  // an import is not hidden behind the first-launch question. One link per pass; an operation it starts sets `busy`,
+  // which holds the next one back until it is done.
+  const linksLoaded = snapshot !== null;
+  const modeChosen = resolved !== "wait" && resolved !== "ask";
+  const operating = busy !== null;
+  useEffect(() => {
+    if (needsTerms) return;
+    const link = nextAppLink(linkQueue.current, { loaded: linksLoaded, modeChosen, busy: operating, phase });
+    if (!link) return;
+    followLink(link);
+    setLinkTurn((turn) => turn + 1);
+  }, [needsTerms, linksLoaded, modeChosen, operating, phase, linkTurn, followLink]);
 
   // Debug mode with the direct exit runs the engine with no node; the backend keeps the choice, so it is sent only
   // when it differs, once per wanted value.
