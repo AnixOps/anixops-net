@@ -1,4 +1,5 @@
 import type { DnsPreset, RuntimeSnapshot } from "./bridge";
+import { errorLine } from "./error-text";
 import { t } from "./i18n";
 
 export type ConnectPhase = "loading" | "off" | "connecting" | "on" | "disconnecting" | "failed";
@@ -80,8 +81,8 @@ export function refreshResultText(result: string | undefined): string {
 }
 
 /**
- * Why the connection failed, in the backend's words, or where to read more when it gave none. Only while it has
- * failed. The overview shows it under the state; the sidebar shows it on every page, because debug mode has no
+ * Why the connection failed, in the window's language (a coded reason in its own words, otherwise "连接失败" with the
+ * backend's words in brackets, error-text.ts), or where to read more when it gave none. Only while it has failed. The overview shows it under the state; the sidebar shows it on every page, because debug mode has no
  * overview and a failure must never go unexplained (docs/ui-ux.md, "提示在所有页面可见").
  */
 export function failureReason(
@@ -90,8 +91,9 @@ export function failureReason(
   mode: "proxy" | "debug",
 ): string | undefined {
   if (phase !== "failed") return undefined;
-  return snapshot?.configurationError ?? snapshot?.lastError
-    ?? (mode === "debug" ? t("查看“请求 › 连接”了解原因") : t("查看“活动”了解原因"));
+  const reason = snapshot?.configurationError ?? snapshot?.lastError;
+  if (reason) return errorLine(reason, "connect");
+  return mode === "debug" ? t("查看“请求 › 连接”了解原因") : t("查看“活动”了解原因");
 }
 
 /**

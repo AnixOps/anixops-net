@@ -7,6 +7,7 @@ import { defaultSort, RequestSort } from "../request-table";
 import { defaultShare, Dock, inspectorSize, parseDock, parseShare, shareFor } from "../split-pane";
 import { EmptyState, IconButton, MoreMenu, PageTools, Run, Segmented, Switch } from "../ui";
 import { t } from "../i18n";
+import { errorLine } from "../error-text";
 import { captureMenu, ConnectionsView } from "./ActivityPage";
 import { CaptureSessions } from "./CaptureSessions";
 import { DebugSetupCard } from "./DecryptHosts";
@@ -162,7 +163,7 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
 
   const change = useCallback((task: () => Promise<unknown>) => {
     setFailure(null);
-    task().then(reloadCapture).catch((error: unknown) => setFailure(String(error)));
+    task().then(reloadCapture).catch((error: unknown) => setFailure(errorLine(error)));
   }, [reloadCapture]);
   // Clearing the capture removes every request: the selection goes with them.
   const clearCapture = useCallback(() => {

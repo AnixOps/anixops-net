@@ -19,6 +19,7 @@ use super::{
     managed_config_or_default, profile_node_options, write_diagnostic_report_at,
 };
 use app_notifications::{DisconnectWatch, Notice, Settings as NotificationSettings};
+use client_core::refusal;
 use client_health::{startup as cold_start, Health};
 use config_core::routing_import::import_subscription_routing;
 use config_core::CoreSubscriptionService;
@@ -3536,7 +3537,12 @@ async fn select_subscription(
             .iter()
             .find(|source| source.id == id)
             .map(|source| source.location.clone())
-            .ok_or_else(|| "Selected subscription source was not found.".to_string())?;
+            .ok_or_else(|| {
+                refusal::coded(
+                    "error.subscription_missing",
+                    "Selected subscription source was not found.",
+                )
+            })?;
         import_subscription_blocking(state, location, SubscriptionImport::Selected)
     })
     .await
@@ -3564,7 +3570,10 @@ fn remove_subscription_blocking(
         .subscription_sources
         .retain(|source| source.id != id);
     if desktop.subscription_sources.len() == before {
-        return Err("Selected subscription source was not found.".to_string());
+        return Err(refusal::coded(
+            "error.subscription_missing",
+            "Selected subscription source was not found.",
+        ));
     }
     linked_sources::remove_cache(&source_cache_directory(), &id);
     relink_active_profile(&mut desktop, None)?;
@@ -3688,7 +3697,10 @@ fn import_subscription_only(state: &DesktopAppState, location: String) -> Result
         .iter()
         .any(|source| source.id == id)
     {
-        return Err("The subscription was removed while it was updating.".to_string());
+        return Err(refusal::coded(
+            "error.subscription_removed",
+            "The subscription was removed while it was updating.",
+        ));
     }
     let before = active_envelope();
     record_subscription_import(&location, fetched, &mut desktop)?;
@@ -3824,7 +3836,11 @@ fn record_subscription_import(
                 Some(error_code.clone()),
             );
             let _ = save_desktop_state(desktop);
-            Err(format!("Subscription refresh failed ({error_code})."))
+            // Coded by the reason, which the window words (subscription-format.ts); the code carries no token.
+            Err(refusal::coded(
+                "error.subscription_failed",
+                format!("Subscription refresh failed ({error_code})."),
+            ))
         }
     }
 }
@@ -3974,6 +3990,13 @@ fn record_subscription_outcome(desktop: &mut DesktopState, location: &str, succe
 }
 
 fn redacted_subscription_error_code(error: &str) -> String {
+    // The kernel's parse refusals start with their code (`subscription.core.clash_yaml_unsupported: …`): a fixed
+    // identifier, never part of the payload, so it is kept and the window says what was wrong with the content.
+    if let Some((code, _)) = refusal::split(error) {
+        if code.starts_with("subscription.core.") {
+            return code.to_string();
+        }
+    }
     let normalized = error.to_ascii_lowercase();
     if normalized.contains("timed out") || normalized.contains("timeout") {
         "windows.subscription.fetch_timeout".to_string()
@@ -4089,7 +4112,10 @@ fn import_embedded_subscription(
         .normalize(&document)
         .map_err(|error| error.to_string())?;
     if catalog.nodes.is_empty() {
-        return Err("Profile did not contain a supported proxy node".to_string());
+        return Err(refusal::coded(
+            "error.no_supported_nodes",
+            "Profile did not contain a supported proxy node",
+        ));
     }
     // The subscription's rules and groups name the nodes as served; the engine runs them with the user's edits.
     // Its ANX nodes get the license of the origin it was fetched from, and nothing for a file.
@@ -4320,7 +4346,10 @@ fn embedded_envelope_with_rules(
             } else if rules.is_empty() {
                 format!("the DNS choice was rejected: {}", error.message)
             } else {
-                format!("the engine rejected the rules: {}", error.message)
+                refusal::coded(
+                    "error.rules_rejected",
+                    format!("the engine rejected the rules: {}", error.message),
+                )
             }
         })?;
     }
@@ -4971,8 +5000,12 @@ fn save_my_rules_blocking(text: &str, state: DesktopAppState) -> Result<Operatio
                 r#"{"schema_version":1,"profile_id":"desktop","outbound":{"type":"direct"}}"#,
                 &lines,
             )?;
-            RuntimeConfig::from_json(direct.as_bytes())
-                .map_err(|error| format!("the engine rejected the rules: {}", error.message))?;
+            RuntimeConfig::from_json(direct.as_bytes()).map_err(|error| {
+                refusal::coded(
+                    "error.rules_rejected",
+                    format!("the engine rejected the rules: {}", error.message),
+                )
+            })?;
         }
     }
     let previous_text = desktop_dns::rules::load(&my_rules_path());
@@ -5101,7 +5134,10 @@ fn ensure_routing_configuration_stopped(state: &DesktopAppState) -> Result<(), S
         .map_err(|_| "desktop core lock failed")?
         .is_running()?
     {
-        return Err("Disconnect before changing the routing mode.".to_string());
+        return Err(refusal::coded(
+            "error.disconnect_first",
+            "Disconnect before changing the routing mode.",
+        ));
     }
     Ok(())
 }
@@ -6468,6 +6504,24 @@ mod tests {
         assert_eq!(
             redacted_subscription_error_code("Profile did not contain a supported proxy node"),
             "windows.subscription.invalid_payload"
+        );
+        assert_eq!(
+            redacted_subscription_error_code(&refusal::coded(
+                "error.no_supported_nodes",
+                "Profile did not contain a supported proxy node"
+            )),
+            "windows.subscription.invalid_payload"
+        );
+        // The kernel's own code says what is wrong with the content; the message after it is dropped.
+        assert_eq!(
+            redacted_subscription_error_code(
+                "subscription.core.clash_yaml_unsupported: clash proxy type must be ss, password=never-store"
+            ),
+            "subscription.core.clash_yaml_unsupported"
+        );
+        assert_eq!(
+            redacted_subscription_error_code("other.code: request timed out"),
+            "windows.subscription.fetch_timeout"
         );
     }
 

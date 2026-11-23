@@ -73,6 +73,14 @@
   - 桌面（Windows、Linux）：`resolveLanguage`（`apps/windows-gui/ui/src/i18n.ts`）；原生预览：`client-strings` 的
     `preferred()` 与 `Strings.Preferred`。
   新平台或新的语言判断照此实现，并加一条“日语系统显示英文”的测试。
+- 后端（Windows 桌面后端、`client-core`、内核）的结果和拒绝原因不直接显示英文原文：
+  - 结果（`OperationResult`）带稳定的 `code`、`params`、`follow`，各端按代码用自己的文案表显示（桌面 `operation-text.ts`，
+    Android `CoreTexts`），`message` 只是英文后备和日志。
+  - 拒绝原因仍是一个字符串；带代码的写成 `<code>: <English>`（`crates/client-core/src/refusal.rs`，客户端自己的代码是
+    `error.<name>`，内核的 `DomainError` 本来就是这个形式，例如 `subscription.core.clash_yaml_unsupported: …`）。认识的代码显示
+    本端文案；不认识的只显示“什么失败了”（“连接失败”“操作没有完成”），英文原文放在“详情”里（桌面提示条的折叠详情，
+    行内显示时放在括号里），日志和诊断报告保留英文。新增拒绝原因时给它代码，并在各端文案表里补三种语言（测试会检查）。
+  - 规则导入时跳过的内容按内核代码显示类别（跳过了规则、策略组、成员、忽略的选项），内核的英文句子作为明细。
 - 一词多义要分开写。“连接”“代理”在英文里各对应几个词：单独的“连接”只用作连接列表（Connections），单独的“代理”只用作页面名（Proxies）。
   动作“连接”、连接开关、模式名“代理”、规则策略“代理”各用自己的文案：桌面端写成带含义的键（`"连接|verb"`、`"连接|noun"`、
   `"代理|mode"`，竖线后的含义只用于查表，中文界面显示竖线前的部分，见 `apps/windows-gui/ui/src/i18n.ts`），Apple 端用

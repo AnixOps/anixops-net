@@ -116,6 +116,10 @@ nav { display: grid; gap: 1px; }
 .toast.success > svg { flex: 0 0 auto; color: var(--success); }
 .toast.danger > svg { flex: 0 0 auto; color: var(--danger); }
 .toast span { flex: 1; overflow-wrap: anywhere; }
+.toast-body { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 0; }
+.toast details { color: var(--text2); font-size: 12px; }
+.toast summary { cursor: pointer; }
+.toast details code { display: block; margin-top: 4px; font-family: var(--font-mono); overflow-wrap: anywhere; white-space: pre-wrap; }
 .toast button { display: grid; flex: 0 0 auto; place-items: center; width: 22px; height: 22px; color: var(--text3); background: none; border: 0; border-radius: 6px; }
 .toast button:hover { background: var(--fill-1); }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }

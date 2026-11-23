@@ -23,6 +23,7 @@ import { currentLanguage, t, useLanguage } from "./i18n";
 import { TermsConsent, useTermsConsent } from "./terms";
 import { AppMode, initialMode, useDebugExit, useMode, wantsDirectEgress } from "./mode";
 import { ModeChoice } from "./mode-choice";
+import { errorText } from "./error-text";
 import { operationText } from "./operation-text";
 import { busyOperation, connectionOperation, finishOperation, startOperation, toggleAction } from "./operations";
 
@@ -61,6 +62,8 @@ const pageWidths: Partial<Record<Page, "full" | "wide">> = { home: "full", proxi
 interface Notice {
   text: string;
   tone: "success" | "danger";
+  /** The backend's own words behind a failure, under "Details" (error-text.ts). */
+  detail?: string;
 }
 
 export function App() {
@@ -81,13 +84,17 @@ export function App() {
   const [debugExit, setDebugExit] = useDebugExit();
   const noticeTimer = useRef<number>();
 
-  const show = useCallback((text: string, tone: Notice["tone"]) => {
+  const show = useCallback((text: string, tone: Notice["tone"], detail?: string) => {
     window.clearTimeout(noticeTimer.current);
-    setNotice({ text, tone });
+    setNotice({ text, tone, detail });
     // Results fade on their own; errors stay until dismissed.
     if (tone === "success") noticeTimer.current = window.setTimeout(() => setNotice(null), 4000);
   }, []);
-  const showError = useCallback((error: unknown) => show(error instanceof Error ? error.message : String(error), "danger"), [show]);
+  // A refusal is worded in the window's language by its code, or as what failed; the backend's English is the detail.
+  const showError = useCallback((error: unknown, operation?: string) => {
+    const { text, detail } = errorText(error, operation);
+    show(text, "danger", detail);
+  }, [show]);
 
   const visible = usePageVisible();
 
@@ -111,7 +118,7 @@ export function App() {
     const poll = () => {
       if (polling) return;
       polling = true;
-      void refresh().catch(showError).finally(() => {
+      void refresh().catch((error: unknown) => showError(error)).finally(() => {
         polling = false;
       });
     };
@@ -128,7 +135,7 @@ export function App() {
       show(operationText(result), "success");
       await refresh();
     } catch (error) {
-      showError(error);
+      showError(error, operation);
       // A failed change can still have moved things (a setting put back, the connection restored or down):
       // the switches and the connection state show where it ended up at once, not at the next poll.
       await refresh().catch(() => undefined);
@@ -385,7 +392,15 @@ export function App() {
         {notice && (
           <div className={`toast ${notice.tone}`} role={notice.tone === "danger" ? "alert" : "status"}>
             {notice.tone === "danger" ? <CircleAlert size={16} /> : <CheckCircle2 size={16} />}
-            <span>{notice.text}</span>
+            <div className="toast-body">
+              <span>{notice.text}</span>
+              {notice.detail && (
+                <details>
+                  <summary>{t("详情")}</summary>
+                  <code>{notice.detail}</code>
+                </details>
+              )}
+            </div>
             <button aria-label={t("关闭提示")} onClick={() => setNotice(null)}><X size={14} /></button>
           </div>
         )}

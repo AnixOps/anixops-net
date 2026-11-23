@@ -8,6 +8,7 @@ import { formatBytes, subscriptionErrorText } from "../subscription-format";
 import { connectionLabelText, refreshResultText } from "../labels";
 import { Card, EmptyState, IconButton, MenuItem, MoreMenu, Row, Run, Segmented, Switch } from "../ui";
 import { t } from "../i18n";
+import { errorLine } from "../error-text";
 import { CaptureDetail, exportCapture } from "./CaptureViews";
 import { LogsCard } from "./LogsCard";
 import { TrafficStatsCard } from "./TrafficStatsCard";
@@ -75,7 +76,7 @@ function Connections({ snapshot, busy, run, onOpen, captureControls }: {
 
   const close = (task: () => Promise<unknown>) => {
     setFailure(null);
-    task().then(() => { reload(); reloadCapture(); }).catch((error: unknown) => setFailure(String(error)));
+    task().then(() => { reload(); reloadCapture(); }).catch((error: unknown) => setFailure(errorLine(error)));
   };
 
   if (!list) {
