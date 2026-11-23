@@ -245,6 +245,11 @@ macOS / iOS 用 XCUITest 的 `performAccessibilityAudit`（对比度、文字被
 | macOS、iOS | 接入中：XCUITest 的 `performAccessibilityAudit(for: .all)`，两种模式的每一页 × 浅色、深色 × 中文、英文 | 第一次运行列出的问题（对比度、元素说明、点击区域、动态字体、文字截断等）修完后，作为阻断检查接入 iOS、macOS 的 UI 测试 job；不设豁免，只排除系统自带的 Touch Bar |
 | Android、Windows 原生、Linux 原生 | 接入中 | |
 
+桌面端的密度检查（`audit.cjs` 的 `density`，对应 AnixOps Design 的 N25–N27）直接读页面结构：带 `data-settings-first-screen` 的设置首屏不超过 8 个分组、24 行，
+高度不超过两个参考窗口（2 × 760 px，不是当前截图的视口，因为截图有窄窗口、笔记本等不同尺寸）；带 `data-user-list`（`folded` / `expanded` / `short`）的用户自添加列表，
+不是 `expanded` 时直接子行不超过 5 行，`folded` 的必须有一个可见的 `aria-expanded="false"` 按钮；列表里的 `role="switch"` 必须在某一行之内，
+总开关不能混在条目当中。没有标记、但同类行超过 8 行的 `.rows` / 分组只写进 `audit.json` 的 `measures`（`unmarkedList`），不拦 CI，供找出还没折叠的列表。
+
 截图清单要覆盖：每一页的浅色和深色、英文（更长的词会暴露截断）、窄窗口、每种弹层（对话框、菜单、弹出列表）的浅色和深色。
 新页面、新对话框加进清单时，检查自动跟上。
 

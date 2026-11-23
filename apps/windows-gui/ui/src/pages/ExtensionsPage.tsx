@@ -199,7 +199,7 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
         {plugins.length === 0 ? (
           <EmptyState icon={Puzzle} title={t("还没有插件")} message={t("粘贴一个插件的 https 网址并导入，开启 HTTPS 解密后生效。")} />
         ) : (
-          <div className="rows">
+          <div className="rows" data-user-list={allPlugins ? "expanded" : plugins.length > collapsedPluginCount ? "folded" : "short"}>
             {(allPlugins ? plugins : plugins.slice(0, collapsedPluginCount)).map((plugin) => (
               <Row
                 key={plugin.id}

@@ -1,5 +1,5 @@
 // Checks one drawn page for the interface problems a screenshot comparison cannot see (docs/ui-ux.md, 自动检查,
-// 第二层). render.cjs calls it after the picture is taken, so nothing here changes the pixels. Three checks:
+// 第二层). render.cjs calls it after the picture is taken, so nothing here changes the pixels. Four checks:
 //
 //   axe      AnixOps Design accessibility.md: axe with WCAG 2.2 A/AA, serious and critical findings = 0.
 //            Colour contrast is the one that matters most here: it is computed on the real, layered colours.
@@ -8,6 +8,11 @@
 //   layer    A dialog, menu, pop-up list, tooltip or toast that does not stand apart from what is under it: neither
 //            its surface nor its edge differs enough from the pixels just outside it (layout.md, Elevation).
 //            Measured on the screenshot itself, in CIE L* (0 black, 100 white).
+//
+//   density  AnixOps Design density.md N25–N27, read from the DOM. N25: a page with [data-settings-first-screen] has at
+//            most 8 cards, 24 rows and a height of two reference windows. N26: each [data-user-list] that is not
+//            "expanded" shows at most 5 item rows, and a "folded" one has a visible button with aria-expanded="false".
+//            N27: no role=switch among the items of such a list. Unmarked lists of more than 8 rows are only measured.
 //
 // Each finding is one line; the caller fails the shot when there is any. Needs axe-core and pngjs resolvable.
 const fs = require("node:fs");
@@ -21,6 +26,14 @@ const AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 // light window passes by its hairline and shadow; a #1C1C1E sheet on a #1C1C1E window fails both.
 const SURFACE_DELTA_L = 4;
 const EDGE_DELTA_L = 6;
+// N25/N26 limits. The height is two reference windows (1100×760 is the desktop reference size), not two viewports of the
+// shot being checked: the shots use other sizes (narrow, laptop), and the rule is about how much a person has to read.
+const FIRST_SCREEN_CARDS = 8;
+const FIRST_SCREEN_ROWS = 24;
+const REFERENCE_WINDOW_HEIGHT = 760;
+const FIRST_SCREEN_HEIGHT = 2 * REFERENCE_WINDOW_HEIGHT;
+const LIST_FOLDED_ROWS = 5;
+const UNMARKED_LIST_ROWS = 8;
 const OVERLAYS = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [role="tooltip"], .popover, .toast';
 
 function srgbToLinear(c) {
@@ -116,6 +129,56 @@ async function audit(page, screenshotPath) {
     return out;
   });
   findings.push(...clipped);
+
+  // Density: the settings first screen and the lists of things the user adds (N25–N27).
+  const density = await page.evaluate((limits) => {
+    const out = { findings: [], measures: [] };
+    const describe = (el) => {
+      const id = el.id ? `#${el.id}` : "";
+      const cls = typeof el.className === "string" && el.className.trim() ? `.${el.className.trim().split(/\s+/).join(".")}` : "";
+      return `${el.tagName.toLowerCase()}${id}${cls} "${(el.textContent || "").trim().slice(0, 40)}"`;
+    };
+    const visible = (el) => el.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+    const isRow = (el) => el.classList.contains("row");
+
+    for (const root of document.querySelectorAll("[data-settings-first-screen]")) {
+      const cards = root.querySelectorAll(".card").length;
+      const rows = root.querySelectorAll(".row").length;
+      const height = root.getBoundingClientRect().height;
+      out.measures.push({ settingsFirstScreen: { cards, rows, height: Math.round(height) } });
+      if (cards > limits.cards) out.findings.push(`density N25: settings first screen has ${cards} sections (> ${limits.cards})`);
+      if (rows > limits.rows) out.findings.push(`density N25: settings first screen has ${rows} rows (> ${limits.rows})`);
+      if (height > limits.height) out.findings.push(`density N25: settings first screen is ${Math.round(height)} px tall (> ${limits.height}, two reference windows)`);
+    }
+
+    for (const list of document.querySelectorAll("[data-user-list]")) {
+      const state = list.getAttribute("data-user-list");
+      const items = [...list.children].filter(isRow);
+      out.measures.push({ userList: describe(list), state, rows: items.length });
+      if (state !== "expanded" && items.length > limits.folded) {
+        out.findings.push(`density N26: user list shows ${items.length} rows while ${state} (> ${limits.folded}): ${describe(list)}`);
+      }
+      if (state === "folded") {
+        const toggle = [...list.querySelectorAll('button[aria-expanded="false"]')].find(visible);
+        if (!toggle) out.findings.push(`density N26: folded user list has no visible button with aria-expanded="false": ${describe(list)}`);
+      }
+      for (const control of list.querySelectorAll('[role="switch"]')) {
+        if (!items.some((item) => item.contains(control))) out.findings.push(`density N27: master switch among list items: ${describe(control)} in ${describe(list)}`);
+      }
+    }
+
+    // Discovery only: long runs of rows nobody marked as a user list, so the audit JSON shows what to look at next.
+    for (const container of document.querySelectorAll(".rows, .card .group")) {
+      if (container.closest("[data-user-list]") || container.closest("[data-settings-first-screen]") || !visible(container)) continue;
+      const byClass = new Map();
+      for (const child of container.children) if (isRow(child)) byClass.set(child.className, (byClass.get(child.className) || 0) + 1);
+      const most = Math.max(0, ...byClass.values());
+      if (most > limits.unmarked) out.measures.push({ unmarkedList: describe(container), rows: most });
+    }
+    return out;
+  }, { cards: FIRST_SCREEN_CARDS, rows: FIRST_SCREEN_ROWS, height: FIRST_SCREEN_HEIGHT, folded: LIST_FOLDED_ROWS, unmarked: UNMARKED_LIST_ROWS });
+  findings.push(...density.findings);
+  measures.push(...density.measures);
 
   // Overlays against what is under them, on the picture just taken.
   const boxes = await page.evaluate((selector) => [...document.querySelectorAll(selector)]

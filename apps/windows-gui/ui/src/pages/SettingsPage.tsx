@@ -151,7 +151,7 @@ export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, l
   }
 
   return (
-    <div className="page-stack">
+    <div className="page-stack" data-settings-first-screen>
       <Card title={t("通用")}>
         <Row icon={Bug} color="pink" label={t("使用方式")} hint={t(modes.find((option) => option.value === mode)?.hint ?? "")}>
           <Segmented label={t("使用方式")} options={modes.map((option) => ({ value: option.value, label: t(option.label) }))} value={mode} onChange={setMode} />
