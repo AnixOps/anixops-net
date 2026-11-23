@@ -99,6 +99,17 @@ impl Windows {
         let mut connection = Connection::new(reader, writer);
         connection.greet(Role::Core, version, Role::Window)?;
         let (reader, writer) = connection.into_parts();
+        self.serve_greeted(commands, reader, writer)
+    }
+
+    /// [`Windows::serve`] for a window the caller has greeted already (`Connection::greet`), for a caller
+    /// that limits how long the greeting may take (the Linux daemon) and lets the window take its time after.
+    pub fn serve_greeted(
+        self: &Arc<Self>,
+        commands: Arc<dyn Commands>,
+        reader: impl Read,
+        writer: impl Write + Send + 'static,
+    ) -> io::Result<()> {
         let peer = Peer::new(writer);
         // The window's answer is read by the loop below, so the question is asked from another thread.
         let joining = {

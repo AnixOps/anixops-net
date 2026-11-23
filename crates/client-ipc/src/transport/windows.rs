@@ -517,7 +517,7 @@ mod tests {
     fn signed_in_users_may_connect_but_not_serve_the_pipe() {
         let aces: Vec<&str> = ACCESS
             .trim_start_matches("D:P")
-            .split(|c| c == '(' || c == ')')
+            .split(['(', ')'])
             .filter(|ace| !ace.is_empty())
             .collect();
         assert_eq!(aces.len(), 4, "{ACCESS}");

@@ -1967,7 +1967,7 @@ const NO_PATHS_IN_SERVICE: &str =
 /// reads as a link (which would make the source updatable) or as pasted links.
 fn file_label(name: &str) -> String {
     let name = name
-        .rsplit(|c| c == '/' || c == '\\')
+        .rsplit(['/', '\\'])
         .next()
         .unwrap_or_default()
         .trim();
