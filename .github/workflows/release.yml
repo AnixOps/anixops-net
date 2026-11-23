@@ -330,6 +330,33 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
 
 
+  # THIRD_PARTY_NOTICES.txt for every artifact, from the package managers' metadata (.github/actions/
+  # third-party-notices). Each package job ships the file for its platform and checks it is inside the package.
+  third-party-notices:
+    name: Third-party notices
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs:
+      - release-policy
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Write the notices
+        uses: ./.github/actions/third-party-notices
+        with:
+          output-dir: ${{ runner.temp }}/notices
+
+      - name: Upload the notices
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: third-party-notices-${{ needs.release-policy.outputs.version }}
+          path: ${{ runner.temp }}/notices/*/THIRD_PARTY_NOTICES.txt
+          if-no-files-found: error
+          retention-days: 14
+
   package-linux-gui:
     name: Package Linux desktop client
     runs-on: ubuntu-latest
@@ -337,6 +364,7 @@ jobs:
     needs:
       - release-policy
       - release-ci-gate
+      - third-party-notices
     permissions:
       contents: read
     outputs:
@@ -369,6 +397,12 @@ jobs:
           cache: pnpm
           cache-dependency-path: apps/windows-gui/ui/pnpm-lock.yaml
 
+      - name: Download the third-party notices
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: third-party-notices-${{ needs.release-policy.outputs.version }}
+          path: ${{ runner.temp }}/notices
+
       # The Linux window shares the Windows React interface.
       - name: Build the shared interface
         shell: bash
@@ -388,6 +422,7 @@ jobs:
           RELEASE_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           RELEASE_SHA: ${{ github.sha }}
           SOURCE_REF: ${{ github.ref }}
+          NOTICES: ${{ runner.temp }}/notices/desktop/THIRD_PARTY_NOTICES.txt
         run: |
           set -euo pipefail
           checkout_sha="$(git rev-parse HEAD)"
@@ -395,6 +430,7 @@ jobs:
             echo "::error::Checkout SHA ${checkout_sha} does not match release SHA ${RELEASE_SHA}."
             exit 1
           fi
+          test -s "${NOTICES}"
 
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile "${RUST_PROFILE}"
           rustup default "${RUST_TOOLCHAIN}"
@@ -431,6 +467,7 @@ jobs:
           install -m 0644 apps/linux-gui/icons/networkcore.png "${staging}/share/icons/hicolor/256x256/apps/anixops-net.png"
           desktop_entry anixops-net > "${staging}/share/applications/anixops-net.desktop"
           install -m 0644 LICENSE "${staging}/LICENSE"
+          install -m 0644 "${NOTICES}" "${staging}/THIRD_PARTY_NOTICES.txt"
           # Install integrity list the client checks at start (crates/client-health): paths beside bin/anixops-net.
           mkdir -p "${staging}/share/anixops-net"
           (cd "${staging}/bin" && sha256sum anixops-net) > "${staging}/share/anixops-net/integrity.sha256"
@@ -472,7 +509,25 @@ jobs:
           install -m 0755 "${binary_path}" "${deb_root}/usr/bin/anixops-net"
           install -m 0644 apps/linux-gui/icons/networkcore.png "${deb_root}/usr/share/icons/hicolor/256x256/apps/anixops-net.png"
           desktop_entry /usr/bin/anixops-net > "${deb_root}/usr/share/applications/anixops-net.desktop"
-          install -m 0644 LICENSE "${deb_root}/usr/share/doc/anixops-net/copyright"
+          # Debian copyright file (DEP-5): the client's own license, and where the third-party notices are.
+          install -m 0644 "${NOTICES}" "${deb_root}/usr/share/doc/anixops-net/THIRD_PARTY_NOTICES.txt"
+          {
+            echo "Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/"
+            echo "Upstream-Name: AnixOps Net"
+            echo "Upstream-Contact: contact@anixops.com"
+            echo "Source: https://github.com/AnixOps/anixops-net"
+            echo
+            echo "Files: *"
+            echo "Copyright: AnixOps"
+            echo "License: Apache-2.0"
+            echo "Comment: The binary also contains third-party software under its own licenses (MIT, BSD, ISC,"
+            echo " Apache-2.0, MPL-2.0 and others). Their copyright notices and license texts, and where the source"
+            echo " of the MPL-2.0 components is, are in /usr/share/doc/anixops-net/THIRD_PARTY_NOTICES.txt."
+            echo
+            echo "License: Apache-2.0"
+            sed -e 's/^[[:space:]]*$/./' -e 's/^/ /' LICENSE
+          } > "${deb_root}/usr/share/doc/anixops-net/copyright"
+          chmod 0644 "${deb_root}/usr/share/doc/anixops-net/copyright"
           mkdir -p "${deb_root}/usr/share/anixops-net"
           (cd "${deb_root}/usr/bin" && sha256sum anixops-net) > "${deb_root}/usr/share/anixops-net/integrity.sha256"
           # TUN mode: pkexec runs /usr/bin/anixops-net --tun-helper under this action (tun_helper.rs).
@@ -498,6 +553,19 @@ jobs:
           deb_name="anixops-net_${deb_version}_amd64.deb"
           dpkg-deb --root-owner-group --build "${deb_root}" "${output_dir}/${deb_name}"
           dpkg-deb --info "${output_dir}/${deb_name}" >/dev/null
+          # Both packages carry the license notices.
+          for notice in ./usr/share/doc/anixops-net/copyright ./usr/share/doc/anixops-net/THIRD_PARTY_NOTICES.txt; do
+            if ! dpkg-deb -c "${output_dir}/${deb_name}" | awk '{ print $NF }' | grep -qxF "${notice}"; then
+              echo "::error::${deb_name} lacks ${notice}"
+              exit 1
+            fi
+          done
+          for notice in LICENSE THIRD_PARTY_NOTICES.txt; do
+            if ! tar -tzf "${output_dir}/${archive_name}" | grep -qxF "${stem}/${notice}"; then
+              echo "::error::${archive_name} lacks ${stem}/${notice}"
+              exit 1
+            fi
+          done
 
           manifest() {
             local file="$1" kind="$2" format="$3" checksum="$4"
@@ -598,6 +666,7 @@ jobs:
     needs:
       - release-policy
       - release-ci-gate
+      - third-party-notices
     permissions:
       contents: read
     outputs:
@@ -623,6 +692,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download the third-party notices
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: third-party-notices-${{ needs.release-policy.outputs.version }}
+          path: ${{ runner.temp }}/notices
 
       - name: Setup pnpm for Windows GUI assets
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
@@ -684,8 +759,14 @@ jobs:
           RELEASE_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           RELEASE_SHA: ${{ github.sha }}
           SOURCE_REF: ${{ github.ref }}
+          NOTICES: ${{ runner.temp }}/notices/desktop/THIRD_PARTY_NOTICES.txt
         run: |
           $ErrorActionPreference = "Stop"
+          if (-not (Test-Path $env:NOTICES -PathType Leaf) -or (Get-Item $env:NOTICES).Length -le 0) {
+            throw "The third-party notices are missing: $env:NOTICES"
+          }
+          $noticesPath = (Resolve-Path $env:NOTICES).Path
+          $licensePath = (Resolve-Path LICENSE).Path
           pnpm --dir apps/windows-gui/ui install --frozen-lockfile
           pnpm --dir apps/windows-gui/ui run build
           $checkoutSha = (git rev-parse HEAD).Trim()
@@ -834,6 +915,7 @@ jobs:
           Remove-Item -Recurse -Force $distDir -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
           $wintunPath = & .github/scripts/fetch-wintun.ps1 -Destination (Join-Path $env:RUNNER_TEMP "wintun")
+          $wintunLicensePath = Join-Path (Split-Path $wintunPath) "wintun-LICENSE.txt"
           # Install integrity list the client checks at start (crates/client-health), in the MSI and the ZIP.
           $integrityPath = Join-Path $distDir "integrity\integrity.sha256"
           & .github/scripts/write-integrity.ps1 -Output $integrityPath -Entry @(
@@ -854,8 +936,22 @@ jobs:
             -d "WintunDll=$wintunPath" `
             -d "DefaultConfig=$defaultConfigPath" `
             -d "IntegrityList=$integrityPath" `
+            -d "LicenseFile=$licensePath" `
+            -d "NoticesFile=$noticesPath" `
+            -d "WintunLicense=$wintunLicensePath" `
             -o $archivePath
           wix msi validate $archivePath
+          # The MSI carries the license notices: an administrative image lists the files it installs.
+          $msiImage = Join-Path $env:RUNNER_TEMP "msi-image"
+          Remove-Item -Recurse -Force $msiImage -ErrorAction SilentlyContinue
+          $adminInstall = Start-Process -FilePath msiexec.exe -Wait -PassThru `
+            -ArgumentList @("/a", "`"$archivePath`"", "/qn", "TARGETDIR=`"$msiImage`"")
+          if ($adminInstall.ExitCode -ne 0) { throw "Administrative image of the MSI failed ($($adminInstall.ExitCode))." }
+          foreach ($notice in @("LICENSE.txt", "THIRD_PARTY_NOTICES.txt", "wintun-LICENSE.txt")) {
+            $found = @(Get-ChildItem -Path $msiImage -Recurse -Filter $notice | Where-Object { $_.Length -gt 0 })
+            if ($found.Count -ne 1) { throw "The MSI does not install $notice." }
+          }
+          Remove-Item -Recurse -Force $msiImage
           # WiX emits a .wixpdb beside the MSI; it is a build symbol, not a release asset.
           $wixPdbPath = [System.IO.Path]::ChangeExtension($archivePath, ".wixpdb")
           Remove-Item -Force $wixPdbPath -ErrorAction SilentlyContinue
@@ -866,7 +962,9 @@ jobs:
           Copy-Item -Path $linkPath -Destination (Join-Path $portableStageDir "anixops-net-link.exe")
           Copy-Item -Path $webView2LoaderPath -Destination (Join-Path $portableStageDir "WebView2Loader.dll")
           Copy-Item -Path $wintunPath -Destination (Join-Path $portableStageDir "wintun.dll")
-          Copy-Item -Path (Join-Path (Split-Path $wintunPath) "wintun-LICENSE.txt") -Destination (Join-Path $portableStageDir "wintun-LICENSE.txt")
+          Copy-Item -Path $wintunLicensePath -Destination (Join-Path $portableStageDir "wintun-LICENSE.txt")
+          Copy-Item -Path $licensePath -Destination (Join-Path $portableStageDir "LICENSE.txt")
+          Copy-Item -Path $noticesPath -Destination (Join-Path $portableStageDir "THIRD_PARTY_NOTICES.txt")
           Copy-Item -Path $defaultConfigPath -Destination (Join-Path $portableStageDir "managed-config.json")
           Copy-Item -Path $portableReadmePath -Destination (Join-Path $portableStageDir "README.txt")
           Copy-Item -Path $integrityPath -Destination (Join-Path $portableStageDir "integrity.sha256")
@@ -879,6 +977,12 @@ jobs:
           }
           if ((Get-Item $portableLoaderPath).Length -le 0) {
             throw "Portable ZIP contains an empty WebView2Loader.dll."
+          }
+          foreach ($notice in @("LICENSE.txt", "THIRD_PARTY_NOTICES.txt", "wintun-LICENSE.txt")) {
+            $noticeFile = Join-Path $portableInspectionDir "$portableStem\$notice"
+            if (-not (Test-Path $noticeFile -PathType Leaf) -or (Get-Item $noticeFile).Length -le 0) {
+              throw "Portable ZIP does not contain $notice."
+            }
           }
 
           $checksumValue = (Get-FileHash -Algorithm SHA256 -Path $archivePath).Hash.ToLowerInvariant()
@@ -919,7 +1023,10 @@ jobs:
               [ordered]@{ path = "wintun.dll"; kind = "runtime"; required = $true; source = "wintun.net/builds/wintun-0.14.1.zip:bin/amd64" },
               [ordered]@{ path = "networkcore-windows.exe"; kind = "binary"; required = $true; source = "AnixOps/networkcore_anixops:apps/windows-cli" },
               [ordered]@{ path = "managed-config.json"; kind = "configuration"; required = $true; source = "installer/windows/default-managed-config.json" },
-              [ordered]@{ path = "integrity.sha256"; kind = "integrity"; required = $true; source = ".github/scripts/write-integrity.ps1" }
+              [ordered]@{ path = "integrity.sha256"; kind = "integrity"; required = $true; source = ".github/scripts/write-integrity.ps1" },
+              [ordered]@{ path = "LICENSE.txt"; kind = "documentation"; required = $true; source = "LICENSE" },
+              [ordered]@{ path = "THIRD_PARTY_NOTICES.txt"; kind = "documentation"; required = $true; source = ".github/actions/third-party-notices" },
+              [ordered]@{ path = "wintun-LICENSE.txt"; kind = "documentation"; required = $true; source = "wintun.net/builds/wintun-0.14.1.zip:LICENSE.txt" }
             )
             install_model = "wix-per-machine-msi"
             system_mutation_policy = "managed-apply-and-rollback"
@@ -996,6 +1103,8 @@ jobs:
               [ordered]@{ path = "$portableStem/networkcore-windows.exe"; kind = "binary"; required = $true; source = "AnixOps/networkcore_anixops:apps/windows-cli" },
               [ordered]@{ path = "$portableStem/managed-config.json"; kind = "configuration"; required = $true; source = "installer/windows/default-managed-config.json" },
               [ordered]@{ path = "$portableStem/README.txt"; kind = "documentation"; required = $true; source = "installer/windows/PORTABLE-README.txt" },
+              [ordered]@{ path = "$portableStem/LICENSE.txt"; kind = "documentation"; required = $true; source = "LICENSE" },
+              [ordered]@{ path = "$portableStem/THIRD_PARTY_NOTICES.txt"; kind = "documentation"; required = $true; source = ".github/actions/third-party-notices" },
               [ordered]@{ path = "$portableStem/integrity.sha256"; kind = "integrity"; required = $true; source = ".github/scripts/write-integrity.ps1" }
             )
             install_model = "manual-extract"
@@ -1253,6 +1362,7 @@ jobs:
     timeout-minutes: 90
     needs:
       - release-policy
+      - third-party-notices
     permissions:
       contents: read
     env:
@@ -1270,12 +1380,19 @@ jobs:
           VERSION: ${{ needs.release-policy.outputs.version }}
         run: echo "name=${VERSION#v}" >> "${GITHUB_OUTPUT}"
 
+      - name: Download the third-party notices
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: third-party-notices-${{ needs.release-policy.outputs.version }}
+          path: ${{ runner.temp }}/notices
+
       - name: Build the unsigned APK
         id: apk
         uses: ./.github/actions/android-apk
         with:
           sign: "false"
           version-name: ${{ steps.version-name.outputs.name }}
+          notices-file: ${{ runner.temp }}/notices/android/THIRD_PARTY_NOTICES.txt
 
       - name: Stage the unsigned APK
         id: stage
@@ -1286,6 +1403,13 @@ jobs:
         run: |
           set -euo pipefail
           test "${KIND}" = unsigned
+          # The user agreement, the privacy policy and the third-party notices are inside the APK.
+          for asset in assets/TERMS.md assets/PRIVACY.md assets/THIRD_PARTY_NOTICES.txt; do
+            if ! unzip -Z1 "${APK}" | grep -qxF "${asset}"; then
+              echo "::error::The APK lacks ${asset}"
+              exit 1
+            fi
+          done
           mkdir -p dist/android-unsigned
           cp "${APK}" dist/android-unsigned/app-release-unsigned.apk
           sha="$(sha256sum dist/android-unsigned/app-release-unsigned.apk | cut -d' ' -f1)"

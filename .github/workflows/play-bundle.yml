@@ -36,10 +36,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # THIRD_PARTY_NOTICES.txt for the app, written outside the job that holds the Play keys.
+  notices:
+    name: Third-party notices
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Write the notices
+        uses: ./.github/actions/third-party-notices
+        with:
+          output-dir: ${{ runner.temp }}/notices
+
+      - name: Upload the notices
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: third-party-notices-play-${{ github.run_id }}
+          path: ${{ runner.temp }}/notices/android/THIRD_PARTY_NOTICES.txt
+          if-no-files-found: error
+          retention-days: 3
+
   bundle:
     name: Build and sign the Play bundle
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    needs: notices
     environment: google-play
     env:
       CARGO_INCREMENTAL: "0"
@@ -95,12 +118,19 @@ jobs:
           python3 -I .github/scripts/version.py check --tag "${tag}"
           echo "name=${tag#v}" >> "${GITHUB_OUTPUT}"
 
+      - name: Download the third-party notices
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: third-party-notices-play-${{ github.run_id }}
+          path: ${{ runner.temp }}/notices
+
       - name: Build the APK and the signed AAB
         id: build
         uses: ./.github/actions/android-apk
         with:
           bundle: "true"
           version-name: ${{ steps.version.outputs.name }}
+          notices-file: ${{ runner.temp }}/notices/THIRD_PARTY_NOTICES.txt
           upload-keystore-base64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_BASE64 }}
           upload-keystore-password: ${{ secrets.PLAY_UPLOAD_KEYSTORE_PASSWORD }}
           upload-key-alias: ${{ secrets.PLAY_UPLOAD_KEY_ALIAS }}
@@ -118,6 +148,13 @@ jobs:
             echo "::error::The AAB was not signed with the upload key (kind '${AAB_KIND}', path '${AAB}')"
             exit 1
           fi
+          # The user agreement, the privacy policy and the third-party notices are inside the bundle.
+          for asset in base/assets/TERMS.md base/assets/PRIVACY.md base/assets/THIRD_PARTY_NOTICES.txt; do
+            if ! unzip -Z1 "${AAB}" | grep -qxF "${asset}"; then
+              echo "::error::The AAB lacks ${asset}"
+              exit 1
+            fi
+          done
           gradle_file=apps/android-native/app/build.gradle.kts
           code="$(sed -n 's/^ *versionCode = \([0-9]*\).*/\1/p' "${gradle_file}")"
           # The versionName the build was given (the Version step), not build.gradle.kts's default.

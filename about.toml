@@ -1,0 +1,31 @@
+# cargo-about (third-party notices, .github/scripts/third_party_notices.py): the licenses the shipped crates may be
+# used under, in order of preference. Same set as deny.toml's [licenses] allow, which cargo-deny enforces; a crate
+# whose license is not satisfied by this list fails the notices job. The kernel checkout is scanned with this file
+# too (its deny.toml allows the same set).
+accepted = [
+    "Apache-2.0",
+    "MIT",
+    "BSD-3-Clause",
+    "BSD-2-Clause",
+    "ISC",
+    "Zlib",
+    "0BSD",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "MIT-0",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Unlicense",
+    "Apache-2.0 WITH LLVM-exception",
+    "OpenSSL",
+    "MPL-2.0",
+]
+# Build scripts and test-only crates are not shipped.
+ignore-build-dependencies = true
+ignore-dev-dependencies = true
+# Workspace members are scanned too: vendored crates such as the kernel's netstack-smoltcp (MIT OR Apache-2.0) are
+# workspace members, and the notices script leaves out only AnixOps's own crates.
+private = { ignore = false }
+# ring and rustls carry license files cargo-about cannot read alone (ISC + OpenSSL notices for ring).
+workarounds = ["ring", "rustls"]

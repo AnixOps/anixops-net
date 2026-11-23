@@ -41,6 +41,12 @@ inputs:
       build.gradle.kts (CI builds)
     required: false
     default: ""
+  notices-file:
+    description: >-
+      THIRD_PARTY_NOTICES.txt to pack into the assets (release.yml and play-bundle.yml, from
+      .github/actions/third-party-notices); empty = none (CI builds)
+    required: false
+    default: ""
   bundle:
     description: Also build the AAB (:app:bundleRelease)
     required: false
@@ -163,6 +169,7 @@ runs:
         CHECKS: ${{ inputs.checks }}
         BUNDLE: ${{ inputs.bundle }}
         VERSION_NAME: ${{ inputs.version-name }}
+        NOTICES_FILE: ${{ inputs.notices-file }}
       run: |
         set -euo pipefail
         tasks=":app:assembleRelease"
@@ -176,6 +183,10 @@ runs:
             exit 1
           fi
           props+=("-Panixops.versionName=${VERSION_NAME}")
+        fi
+        if [ -n "${NOTICES_FILE}" ]; then
+          test -s "${NOTICES_FILE}"
+          props+=("-Panixops.noticesFile=${NOTICES_FILE}")
         fi
         # Word splitting is wanted: CHECKS and tasks are lists of Gradle task names.
         # shellcheck disable=SC2086

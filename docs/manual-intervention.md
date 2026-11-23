@@ -877,3 +877,26 @@ WireGuard、QUIC 类传输等加密实现，用来保护用户流量的机密性
   并按 `docs/architecture/ios-app-review-manual-confirmation-source-contract.md` 记录 `ios-app-review-export-compliance`。
 - [ ] ANX 版（anx 仓库 `release-ios.yml` 复用本仓库的 `project.yml`）含未公开的专有协议，属于「专有或非标准算法」，
   需要单独回答问卷（通常需要 CCATS 和法国申报），并在该 workflow 里显式写 ANX 版自己的 ITS 键和合规码，不能继承开源版的答案。
+
+### 第三方许可声明（release-readiness-10）
+
+每个发布产物都附带 `THIRD_PARTY_NOTICES.txt`，由 `.github/actions/third-party-notices` 从包管理器的元数据生成
+（`.github/scripts/third_party_notices.py`）：cargo-about 0.9.3 扫描客户端和固定内核各自的 `Cargo.lock`（许可证白名单
+`about.toml` 与 `deny.toml` 相同），`pnpm licenses list --prod` 扫描桌面界面，Android 的 `releaseRuntimeClasspath` 读取各模块
+POM（只接受 Apache-2.0，其他许可证要人工补充后才能通过），再加上 `third_party/notices/` 里人工维护的条目（随 -sys crate 编译进来的
+QuickJS-ng、PCRE2，Windows 附带的 WebView2Loader.dll 与 wintun.dll）和 Inter 字体的 OFL。文件开头写明本项目源码地址，并按
+MPL-2.0 §3.2 列出每个 MPL-2.0 组件的源码下载地址。无法确定许可证、许可证不在白名单或必有条目缺失时生成失败。
+
+放置位置：Linux tar 包根目录和 deb 的 `/usr/share/doc/anixops-net/`（`copyright` 改为 DEP-5 格式），Windows MSI 安装目录和
+便携 ZIP（同时附 `LICENSE.txt`、`wintun-LICENSE.txt`），APK / AAB 的 `assets/`，iOS App 包内。各打包步骤都检查文件确实在包里。
+CI 的 `Third-party notices` job 在每次相关改动时跑同一套生成，提前暴露问题。
+
+- [ ] 1.0.0 发布前人工复核一次生成的 `THIRD_PARTY_NOTICES.txt`（CI artifact `third-party-notices-<sha>`），重点看 ring、
+  MPL-2.0 组件和人工条目。
+- [ ] Windows 版的 `mitm-anixops-sys` 静态链接 MSYS2 的 libsystre（TRE，BSD-2-Clause），它可能连带 libintl / libiconv
+  （LGPL-2.1+）。请确认实际链接了哪些库；如有 LGPL 库静态链接，需要改为动态链接或换用不依赖它们的实现，并在
+  `third_party/notices/` 补充相应声明。这一项不能由生成器自动判断。
+- [ ] macOS Developer ID 版和 ANX 版由 anx 仓库打包，需要在那边接入同一个 composite action（ANX 版还要并入 anx 自有依赖）。
+- [ ] 应用内「关于 › 开源许可」页面（Android、iOS / macOS、Tauri）尚未实现：目前声明文件随包附带但不在界面里显示。
+- [ ] WiX 安装界面（`WixUI_InstallDir`）的许可协议页仍是 WiX 默认的占位文本，建议设置 `WixUILicenseRtf` 为本项目许可证，
+  或换用不带许可协议页的对话框集。

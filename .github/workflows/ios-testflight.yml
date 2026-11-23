@@ -61,11 +61,37 @@ jobs:
             python3 -I .github/scripts/version.py check
           fi
 
+  # THIRD_PARTY_NOTICES.txt for the app (the kernel runtime's crates and the hand-kept notices), written outside the
+  # job that holds the signing material.
+  notices:
+    name: Third-party notices
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: ios-upload-preflight
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Write the notices
+        uses: ./.github/actions/third-party-notices
+        with:
+          output-dir: ${{ runner.temp }}/notices
+
+      - name: Upload the notices
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: third-party-notices-ios-${{ github.run_id }}
+          path: ${{ runner.temp }}/notices/apple/THIRD_PARTY_NOTICES.txt
+          if-no-files-found: error
+          retention-days: 3
+
   ios-archive-upload:
     name: iOS archive and internal TestFlight upload
     runs-on: macos-26
     timeout-minutes: 45
-    needs: ios-upload-preflight
+    needs:
+      - ios-upload-preflight
+      - notices
     environment: ios-app-store-connect
     env:
       IOS_APP_BUNDLE_ID: ${{ vars.IOS_APP_BUNDLE_ID }}
@@ -170,6 +196,13 @@ jobs:
         shell: bash
         run: bash .github/scripts/build-ios-runtime-xcframework.sh device
 
+      # Inside the app bundle as a resource: XcodeGen copies the files of Sources/NetworkCoreApp/Resources.
+      - name: Download the third-party notices
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: third-party-notices-ios-${{ github.run_id }}
+          path: apps/ios/Sources/NetworkCoreApp/Resources
+
       - name: Install XcodeGen
         shell: bash
         run: brew install xcodegen
@@ -232,6 +265,11 @@ jobs:
             -destination 'generic/platform=iOS' \
             -archivePath "${RUNNER_TEMP}/NetworkCore.xcarchive" \
             archive
+          notices="$(find "${RUNNER_TEMP}/NetworkCore.xcarchive/Products/Applications" -maxdepth 2 -name THIRD_PARTY_NOTICES.txt -size +0)"
+          if [ -z "${notices}" ]; then
+            echo "::error::The archived app does not contain THIRD_PARTY_NOTICES.txt"
+            exit 1
+          fi
 
       - name: Export and upload to internal TestFlight
         shell: bash

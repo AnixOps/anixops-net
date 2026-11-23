@@ -1,0 +1,102 @@
+name: Third-party notices
+description: >-
+  Writes THIRD_PARTY_NOTICES.txt for each kind of artifact from the package managers' own metadata
+  (.github/scripts/third_party_notices.py): cargo-about over the client's and the pinned kernel's Cargo.lock,
+  pnpm's license list of the desktop interface, the Android app's Gradle runtime classpath and its POMs, plus the
+  hand-kept notices in third_party/notices. Fails when a license cannot be determined or is not one the project
+  accepts (about.toml, the same set as deny.toml), so no artifact ships without complete notices.
+  Outputs <output-dir>/desktop, android and apple/THIRD_PARTY_NOTICES.txt. Used by ci.yml, release.yml,
+  play-bundle.yml and ios-testflight.yml.
+
+inputs:
+  output-dir:
+    description: Directory to write desktop/, android/ and apple/ into
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Java
+      uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+      with:
+        distribution: temurin
+        java-version: "17"
+
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+      with:
+        gradle-version: "8.14.3"
+        cache-read-only: true
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      with:
+        version: 9.15.4
+
+    - name: Setup Node
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: 22
+
+    - name: Install cargo-about
+      uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2.90.8
+      with:
+        tool: cargo-about@0.9.3
+
+    - name: Collect licenses and write the notices
+      shell: bash
+      env:
+        OUTPUT_DIR: ${{ inputs.output-dir }}
+      run: |
+        set -euo pipefail
+        raw="${OUTPUT_DIR}/raw"
+        mkdir -p "${raw}" "${OUTPUT_DIR}/desktop" "${OUTPUT_DIR}/android" "${OUTPUT_DIR}/apple"
+        about="${GITHUB_WORKSPACE}/about.toml"
+
+        # The client's workspace (desktop apps, Android bridge) and the pinned kernel's own workspace (the Windows
+        # CLI in the MSI, the iOS / macOS runtime), each with its own lockfile.
+        cargo about generate --workspace --locked --format json -c "${about}" -o "${raw}/cargo-client.json"
+        kernel="$(bash .github/scripts/kernel-root.sh)"
+        cargo about generate --workspace --locked --format json -c "${about}" \
+          -m "${kernel}/Cargo.toml" -o "${raw}/cargo-kernel.json"
+
+        # The desktop interface's production dependencies, with the license files of the installed packages.
+        pnpm --dir apps/windows-gui/ui install --frozen-lockfile
+        pnpm --dir apps/windows-gui/ui licenses list --prod --json > "${raw}/pnpm.json"
+
+        # The Android app's release runtime classpath; the POMs are then in Gradle's cache.
+        gradle -p apps/android-native --no-daemon -q :app:dependencies --configuration releaseRuntimeClasspath \
+          > "${raw}/gradle-deps.txt"
+        gradle_cache="${GRADLE_USER_HOME:-${HOME}/.gradle}/caches/modules-2/files-2.1"
+
+        notices=third_party/notices
+        python3 -I .github/scripts/third_party_notices.py build \
+          --title "AnixOps Net for Windows and Linux" \
+          --out "${OUTPUT_DIR}/desktop/THIRD_PARTY_NOTICES.txt" \
+          --cargo "client=${raw}/cargo-client.json" \
+          --cargo "kernel=${raw}/cargo-kernel.json" \
+          --pnpm "${raw}/pnpm.json" \
+          --extra "${notices}/quickjs-ng.txt" \
+          --extra "${notices}/pcre2.txt" \
+          --extra "${notices}/webview2.txt" \
+          --extra "${notices}/wintun.txt" \
+          --extra apps/windows-gui/ui/src/design/anixops/fonts/inter/OFL.txt \
+          --require ring --require rquickjs-sys --require react --require QuickJS-ng
+        python3 -I .github/scripts/third_party_notices.py build \
+          --title "AnixOps Net for Android" \
+          --out "${OUTPUT_DIR}/android/THIRD_PARTY_NOTICES.txt" \
+          --cargo "client=${raw}/cargo-client.json" \
+          --gradle-deps "${raw}/gradle-deps.txt" \
+          --gradle-cache "${gradle_cache}" \
+          --apache-text LICENSE \
+          --extra "${notices}/quickjs-ng.txt" \
+          --extra "${notices}/pcre2.txt" \
+          --require ring --require rquickjs-sys --require androidx.core:core --require QuickJS-ng
+        python3 -I .github/scripts/third_party_notices.py build \
+          --title "AnixOps Net for iOS and macOS" \
+          --out "${OUTPUT_DIR}/apple/THIRD_PARTY_NOTICES.txt" \
+          --cargo "kernel=${raw}/cargo-kernel.json" \
+          --extra "${notices}/quickjs-ng.txt" \
+          --extra "${notices}/pcre2.txt" \
+          --require ring --require QuickJS-ng
+        wc -c "${OUTPUT_DIR}"/*/THIRD_PARTY_NOTICES.txt

@@ -9,6 +9,7 @@ updates:
       - "/"
       - "/.github/actions/android-apk"
       - "/.github/actions/sign-apk"
+      - "/.github/actions/third-party-notices"
     schedule:
       interval: weekly
     groups:
