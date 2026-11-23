@@ -623,6 +623,15 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 secret 值的 job output（安卓 artifact 名和 APK 名都含 `anixops`）丢弃，发布步骤拿不到安卓包。修复后 release.yml 由版本号直接推出这两个名字。
 tag 当时指向的 d225b10 还是旧 workflow，需要把 tag 移到包含修复的 commit 再推（Release 没有发出，移动 tag 不影响用户）。
 
+## v1.0.0 发布前后的人工事项
+
+发布说明在 `docs/release-notes/v1.0.0.md`，版本号由 `version.py set 1.0.0` 统一设置，安卓 versionCode 3008（beta.11 是 3007）。
+tag 由 Actions 的 “Release tag”（`release-tag.yml`）打，流程同 beta.11。内核 networkcore cb7f768，anx 的 Cargo.lock 已一致（anx #293）。
+
+- [ ] anx 的 ANX 构建和 `publish-client.yml` 进 Environment `apple-anx` / `anx-release`，需要维护者在 Actions 页面批准。
+- [ ] Linux 的 ANX 构建只能在带 WebKitGTK 的自托管 runner（标签 `9700x`）上跑，发布时需要它在线。
+- [ ] App Store Connect 的出口合规按“使用非豁免加密”重新回答（plist 已是 `ITSAppUsesNonExemptEncryption = true`）。
+
 ## v0.3.0-beta.11 发布前后的人工事项
 
 发布说明在 `docs/release-notes/v0.3.0-beta.11.md`，安卓 versionCode 3007（beta.10 是 3005；3006 已于 2026-11-22 上传到 Google Play 测试轨道的草稿）。

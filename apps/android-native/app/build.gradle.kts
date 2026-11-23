@@ -23,7 +23,7 @@ android {
         // Android takes this as an upgrade. Raise it with each release: release.yml refuses a tag whose versionCode
         // is not above the previous release's, and Google Play refuses a code it has already seen (3001 went to
         // internal testing on 2026-11-16).
-        versionCode = 3007
+        versionCode = 3008
         // release.yml and play-bundle.yml pass the tag without its "v" (-Panixops.versionName=0.3.0-beta.7); local
         // and CI builds show the plain version. The default is a copy of Cargo.toml's workspace version, kept equal
         // by .github/scripts/version.py (set it with `version.py set X.Y.Z`).
