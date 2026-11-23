@@ -91,6 +91,17 @@ the restore fails. The record is used when the GUI does not get to disconnect:
 - the MSI `--purge` (LocalSystem) restores the WinHTTP proxy and each signed-in
   recorded user's WinINet settings under `HKEY_USERS`.
 
+The two halves of the system proxy are judged apart everywhere the GUI puts it
+back (next start, session end, disconnect, "Restore network settings";
+`owned_proxy::put_back`): the user's WinINet settings go back only while they
+are still the applied value, and the machine-wide WinHTTP proxy likewise, on
+its own. A user who turned "Use a proxy server" off in Windows Settings after a
+crash therefore keeps that change, and WinHTTP (used by services and Windows
+Update) still goes back before the record is dropped. A half that cannot be
+read or written keeps the record for the next attempt. Disconnect marks the
+connection as stopped even when the restore failed, since the engine is
+stopped either way, so the recovery monitor does not reconnect.
+
 A snapshot that already holds the applied proxy (taken while an earlier
 connection's proxy was still in place) restores to "no proxy" instead of the
 dead local port. A `desktop-state.json` that cannot be read is set aside as

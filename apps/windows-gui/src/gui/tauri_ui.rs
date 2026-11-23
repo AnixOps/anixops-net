@@ -799,7 +799,7 @@ fn recover_orphaned_proxy(app: &AppHandle, state: &DesktopAppState) {
     if outcome.forgotten {
         let _ = append_managed_log(
             APP_LOG_SCOPE,
-            "orphaned proxy ownership dropped: the settings were changed since",
+            "stale proxy ownership dropped: neither the user's nor the WinHTTP proxy was still the applied one (already restored, or changed since)",
         );
     }
     if outcome.restored {
@@ -1816,13 +1816,19 @@ fn disconnect_blocking(state: DesktopAppState) -> Result<OperationResult, String
         .lock()
         .map_err(|_| "desktop state lock failed")?
         .clone();
-    let message = connection::disconnect_direct(
+    let result = connection::disconnect_direct(
         desktop,
         &mut *state
             .direct_core
             .lock()
             .map_err(|_| "desktop core lock failed")?,
-    )?;
+    );
+    // `disconnect_direct` stops the engine even when the proxy could not be put back, so the connection is
+    // over either way: left marked as this window's, the recovery monitor would take the stop for a lost
+    // connection and reconnect against the user's wish. A failed restore keeps the snapshot and the owner
+    // record, for "Restore network settings" and the next start.
+    mark_gui_connection_stopped(&state);
+    let message = result?;
     let mut persisted = state
         .desktop
         .lock()
@@ -1830,7 +1836,6 @@ fn disconnect_blocking(state: DesktopAppState) -> Result<OperationResult, String
     persisted.proxy_snapshot = None;
     persisted.applied_proxy = None;
     save_desktop_state(&persisted)?;
-    mark_gui_connection_stopped(&state);
     Ok(OperationResult { message })
 }
 
@@ -1853,6 +1858,9 @@ fn stop_desktop_core_for_exit(state: DesktopAppState) {
         .lock()
         .map_err(|_| "desktop core lock failed".to_string())
         .and_then(|mut core| connection::disconnect_direct(desktop, &mut core));
+    // The engine is stopped whatever happened to the proxy: keep the recovery monitor from restarting it while
+    // the process exits.
+    mark_gui_connection_stopped(&state);
     match result {
         Ok(_) => {
             if let Ok(mut persisted) = state.desktop.lock() {
@@ -3906,6 +3914,9 @@ async fn restore_network_settings(
     run_blocking(move || restore_network_settings_blocking(state)).await
 }
 
+/// Puts back each half of the system proxy that is still the window's (`owned_proxy::put_back`): the user's own
+/// settings when they still are the applied ones, and the machine-wide WinHTTP proxy even when the user changed
+/// their own since. The ownership is dropped once nothing of it is left; a half that cannot be put back keeps it.
 fn restore_network_settings_blocking(state: DesktopAppState) -> Result<OperationResult, String> {
     let mut desktop = state
         .desktop
@@ -3915,27 +3926,30 @@ fn restore_network_settings_blocking(state: DesktopAppState) -> Result<Operation
         .proxy_snapshot
         .clone()
         .ok_or_else(|| "No GUI-owned system proxy snapshot is available to restore.".to_string())?;
-    let current = read_current_user_system_proxy().map_err(|error| error.to_string())?;
-    if !owns_current_proxy(&desktop, &current) {
-        desktop.proxy_snapshot = None;
-        desktop.applied_proxy = None;
-        save_desktop_state(&desktop)?;
-        forget_proxy_owner_record();
-        return Ok(OperationResult {
-            message: "Current proxy settings no longer match the GUI-owned value and were left unchanged."
-                .to_string(),
-        });
-    }
-    NativeWindowsSystemIntegration::new()
-        .restore_system_proxy(&snapshot)
-        .map_err(|error| error.to_string())?;
+    let done = match desktop.applied_proxy.clone() {
+        Some(applied) => {
+            owned_proxy::put_back(&mut owned_proxy::NativeProxySystem, &applied, &snapshot)?
+        }
+        None => owned_proxy::PutBack::default(),
+    };
     desktop.proxy_snapshot = None;
     desktop.applied_proxy = None;
     save_desktop_state(&desktop)?;
     forget_proxy_owner_record();
-    mark_gui_connection_stopped(&state);
+    if done.user {
+        mark_gui_connection_stopped(&state);
+        return Ok(OperationResult {
+            message: "Network settings restored from the GUI-owned proxy snapshot.".to_string(),
+        });
+    }
     Ok(OperationResult {
-        message: "Network settings restored from the GUI-owned proxy snapshot.".to_string(),
+        message: if done.winhttp {
+            "Current proxy settings no longer match the GUI-owned value and were left unchanged; the machine-wide WinHTTP proxy was restored."
+                .to_string()
+        } else {
+            "Current proxy settings no longer match the GUI-owned value and were left unchanged."
+                .to_string()
+        },
     })
 }
 

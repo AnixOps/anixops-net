@@ -211,7 +211,12 @@ CI 只跑归属记录、启动恢复、卸载恢复和断开步骤的单元测�
 - [ ] 连接后在任务管理器结束 `networkcore-windows-gui.exe`，再启动客户端（未开自动连接）：系统代理恢复为连接前的设置，
   弹出“网络设置已恢复”通知，`gui.log`（`tauri-gui`）有 `its system proxy was restored`；`netsh winhttp show proxy`
   恢复为连接前的值。
-- [ ] 连接后结束进程，先在 Windows 设置里改掉代理，再启动客户端：不改动用户的新设置，日志有 `ownership dropped`。
+- [ ] 连接后结束进程，先在 Windows 设置里关掉“使用代理服务器”，再启动客户端：用户的新设置不被改动，
+  但 `netsh winhttp show proxy` 恢复为连接前的值，日志有 `its system proxy was restored`。
+- [ ] 连接后结束进程，先改掉用户代理，再用 `netsh winhttp set proxy` 设成别的值，然后启动客户端：两者都不被改动，
+  日志有 `stale proxy ownership dropped`。
+- [ ] 开启“自动恢复核心”，连接后让断开时的代理恢复失败（例如用调试器暂停注册表写入或拒绝写 Internet Settings 键）再点“断开”：
+  界面报错，核心已停止，之后不会自动重连，也不弹“连接已断开”；设置页“恢复网络设置”可再次恢复。
 - [ ] 连接状态下注销、关机和重启：再次登录后代理已是连接前的设置（`session end (query): system proxy restored`）。
   注销时被其他程序取消后，客户端仍连接且代理重新指向本机端口（`session end cancelled: system proxy applied again`）。
 - [ ] 连接状态下从“应用和功能”卸载：卸载后浏览器能直接上网，`netsh winhttp show proxy` 为直连，`gui.log` 的 `purged:` 行

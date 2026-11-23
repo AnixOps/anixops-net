@@ -291,52 +291,40 @@ pub fn direct_egress_envelope(
 /// configuration that went missing or invalid must never keep the window from disconnecting, nor leave the proxy
 /// pointing at the stopped engine (connecting and restarting still validate it).
 pub fn disconnect_direct(desktop: DesktopState, core: &mut DesktopCore) -> Result<String, String> {
-    disconnect_steps(&desktop, &mut NativeProxyAccess, || core.stop())
+    disconnect_steps(&desktop, &mut owned_proxy::NativeProxySystem, || {
+        core.stop()
+    })
 }
 
-/// The system proxy as disconnecting sees it, so that the steps can be tested without the real settings.
-pub trait ProxyAccess {
-    fn current(&self) -> Result<WindowsProxySettings, String>;
-    fn restore(&mut self, snapshot: &WindowsProxySnapshot) -> Result<(), String>;
+/// The system proxy as disconnecting sees it (both halves, see `owned_proxy::ProxyHalves`), so that the steps
+/// can be tested without the real settings.
+pub trait ProxyAccess: owned_proxy::ProxyHalves {
     /// Drops the owner record (`owned_proxy`) once the proxy is no longer the window's.
     fn forget_owner_record(&mut self) -> Result<(), String>;
 }
 
-struct NativeProxyAccess;
-
-impl ProxyAccess for NativeProxyAccess {
-    fn current(&self) -> Result<WindowsProxySettings, String> {
-        read_current_user_system_proxy().map_err(|error| error.to_string())
-    }
-
-    fn restore(&mut self, snapshot: &WindowsProxySnapshot) -> Result<(), String> {
-        NativeWindowsSystemIntegration::new()
-            .restore_system_proxy(snapshot)
-            .map_err(|error| error.to_string())
-    }
-
+impl ProxyAccess for owned_proxy::NativeProxySystem {
     fn forget_owner_record(&mut self) -> Result<(), String> {
         owned_proxy::forget_current_user()
     }
 }
 
-/// Puts back the window's proxy when it still is the window's, then stops the engine whatever happened to the
-/// proxy. A failed restore is reported after the engine stopped and keeps the owner record, so that the next
-/// start of the window tries again.
+/// Puts back each half of the window's proxy that is still the window's (`owned_proxy::put_back`): the user's
+/// WinINet settings, and the machine's WinHTTP proxy even when the user changed their own settings since. Then
+/// stops the engine whatever happened to the proxy. A failed restore is reported after the engine stopped and
+/// keeps the owner record, so that the next start of the window tries again; the caller must treat the
+/// connection as stopped either way.
 pub fn disconnect_steps(
     desktop: &DesktopState,
     proxy: &mut impl ProxyAccess,
     stop: impl FnOnce(),
 ) -> Result<String, String> {
-    let restored = match desktop.proxy_snapshot.as_ref() {
-        None => Ok(false),
-        Some(snapshot) => proxy.current().and_then(|current| {
-            if owns_current_proxy(desktop, &current) {
-                proxy.restore(snapshot).map(|()| true)
-            } else {
-                Ok(false)
-            }
-        }),
+    let restored = match (
+        desktop.proxy_snapshot.as_ref(),
+        desktop.applied_proxy.as_ref(),
+    ) {
+        (Some(snapshot), Some(applied)) => owned_proxy::put_back(&mut *proxy, applied, snapshot),
+        _ => Ok(owned_proxy::PutBack::default()),
     };
     stop();
     let restored = restored?;
@@ -346,8 +334,10 @@ pub fn disconnect_steps(
             &format!("proxy owner record could not be removed: {error}"),
         );
     }
-    Ok(if restored {
+    Ok(if restored.user {
         "Desktop core stopped and the GUI-owned proxy snapshot was restored.".to_string()
+    } else if restored.winhttp {
+        "Desktop core stopped. The current-user proxy was changed since and left as it is; the machine-wide WinHTTP proxy was restored.".to_string()
     } else {
         "Desktop core stopped. The current-user proxy was left unchanged because it was not owned by this GUI session.".to_string()
     })
@@ -597,6 +587,7 @@ mod tests {
     use platform_windows::managed::{
         WindowsSystemProxyOwner, WINDOWS_MANAGED_CONFIG_SCHEMA_VERSION,
     };
+    use platform_windows::system_integration::WindowsWinHttpProxy;
 
     fn managed_config(
         owner: WindowsSystemProxyOwner,
@@ -856,27 +847,73 @@ mod tests {
 
     struct FakeProxy {
         current: Result<WindowsProxySettings, String>,
+        winhttp: WindowsWinHttpProxy,
         restore_error: Option<String>,
-        restored: Vec<WindowsProxySnapshot>,
+        restored_user: Vec<WindowsProxySettings>,
+        restored_winhttp: Vec<WindowsWinHttpProxy>,
         forgotten: bool,
     }
 
-    impl ProxyAccess for FakeProxy {
-        fn current(&self) -> Result<WindowsProxySettings, String> {
+    impl FakeProxy {
+        fn new(
+            current: Result<WindowsProxySettings, String>,
+            winhttp: WindowsWinHttpProxy,
+        ) -> Self {
+            Self {
+                current,
+                winhttp,
+                restore_error: None,
+                restored_user: Vec::new(),
+                restored_winhttp: Vec::new(),
+                forgotten: false,
+            }
+        }
+    }
+
+    impl owned_proxy::ProxyHalves for FakeProxy {
+        fn current_proxy(&self) -> Result<WindowsProxySettings, String> {
             self.current.clone()
         }
 
-        fn restore(&mut self, snapshot: &WindowsProxySnapshot) -> Result<(), String> {
+        fn winhttp(&self) -> Result<WindowsWinHttpProxy, String> {
+            Ok(self.winhttp.clone())
+        }
+
+        fn restore_user(&mut self, previous: &WindowsProxySettings) -> Result<(), String> {
             if let Some(error) = &self.restore_error {
                 return Err(error.clone());
             }
-            self.restored.push(snapshot.clone());
+            self.restored_user.push(previous.clone());
             Ok(())
         }
 
+        fn restore_winhttp(&mut self, previous: &WindowsWinHttpProxy) -> Result<(), String> {
+            self.restored_winhttp.push(previous.clone());
+            self.winhttp = previous.clone();
+            Ok(())
+        }
+    }
+
+    impl ProxyAccess for FakeProxy {
         fn forget_owner_record(&mut self) -> Result<(), String> {
             self.forgotten = true;
             Ok(())
+        }
+    }
+
+    fn applied_winhttp() -> WindowsWinHttpProxy {
+        WindowsWinHttpProxy {
+            access_type: owned_proxy::WINHTTP_NAMED_PROXY,
+            server: "127.0.0.1:7890".to_string(),
+            bypass: "<local>".to_string(),
+        }
+    }
+
+    fn no_winhttp() -> WindowsWinHttpProxy {
+        WindowsWinHttpProxy {
+            access_type: owned_proxy::WINHTTP_NO_PROXY,
+            server: String::new(),
+            bypass: String::new(),
         }
     }
 
@@ -910,29 +947,30 @@ mod tests {
     #[test]
     fn disconnecting_reads_no_configuration_and_puts_the_proxy_back() {
         // No managed configuration is read: disconnecting works with it missing or invalid.
-        let mut proxy = FakeProxy {
-            current: Ok(applied_proxy()),
-            restore_error: None,
-            restored: Vec::new(),
-            forgotten: false,
-        };
+        let mut proxy = FakeProxy::new(Ok(applied_proxy()), applied_winhttp());
         let mut stopped = false;
         let message = disconnect_steps(&connected_desktop(), &mut proxy, || stopped = true)
             .expect("disconnect");
         assert!(message.contains("restored"), "{message}");
-        assert_eq!(proxy.restored, [original_proxy()]);
+        assert_eq!(
+            proxy.restored_user,
+            [owned_proxy::user_settings(&original_proxy())]
+        );
+        assert_eq!(
+            proxy.restored_winhttp,
+            [owned_proxy::winhttp_settings(&original_proxy())]
+        );
         assert!(stopped);
         assert!(proxy.forgotten);
     }
 
     #[test]
     fn a_failed_restore_still_stops_the_engine_and_keeps_the_owner_record() {
-        let mut proxy = FakeProxy {
-            current: Ok(applied_proxy()),
-            restore_error: Some("registry unavailable".to_string()),
-            restored: Vec::new(),
-            forgotten: false,
-        };
+        // The engine is stopped even when the proxy could not be put back: the caller marks the connection as
+        // stopped either way (`disconnect_blocking`), or the recovery monitor would take the stop for a lost
+        // connection and reconnect.
+        let mut proxy = FakeProxy::new(Ok(applied_proxy()), no_winhttp());
+        proxy.restore_error = Some("registry unavailable".to_string());
         let mut stopped = false;
         let error = disconnect_steps(&connected_desktop(), &mut proxy, || stopped = true)
             .expect_err("the failed restore is reported");
@@ -940,34 +978,41 @@ mod tests {
         assert!(stopped);
         assert!(!proxy.forgotten);
 
-        // Reading the current settings failing stops the engine too.
-        let mut proxy = FakeProxy {
-            current: Err("read failed".to_string()),
-            restore_error: None,
-            restored: Vec::new(),
-            forgotten: false,
-        };
+        // Reading the current settings failing stops the engine too, and WinHTTP still goes back.
+        let mut proxy = FakeProxy::new(Err("read failed".to_string()), applied_winhttp());
         let mut stopped = false;
         assert!(disconnect_steps(&connected_desktop(), &mut proxy, || stopped = true).is_err());
         assert!(stopped);
+        assert!(!proxy.forgotten);
+        assert_eq!(proxy.winhttp, no_winhttp());
     }
 
     #[test]
     fn a_proxy_changed_by_the_user_is_left_alone_on_disconnect() {
-        let mut proxy = FakeProxy {
-            current: Ok(WindowsProxySettings {
-                enabled: true,
-                server: "corp.example:8080".to_string(),
-                bypass: String::new(),
-            }),
-            restore_error: None,
-            restored: Vec::new(),
-            forgotten: false,
+        let changed = WindowsProxySettings {
+            enabled: true,
+            server: "corp.example:8080".to_string(),
+            bypass: String::new(),
         };
+        // Both halves changed since: nothing is touched.
+        let mut proxy = FakeProxy::new(Ok(changed.clone()), no_winhttp());
         let mut stopped = false;
         disconnect_steps(&connected_desktop(), &mut proxy, || stopped = true).unwrap();
-        assert!(proxy.restored.is_empty());
+        assert!(proxy.restored_user.is_empty());
+        assert!(proxy.restored_winhttp.is_empty());
         assert!(stopped);
+        assert!(proxy.forgotten);
+
+        // Only the user's own settings changed: WinHTTP still names the stopped engine and goes back.
+        let mut proxy = FakeProxy::new(Ok(changed), applied_winhttp());
+        let message =
+            disconnect_steps(&connected_desktop(), &mut proxy, || {}).expect("disconnect");
+        assert!(message.contains("WinHTTP"), "{message}");
+        assert!(proxy.restored_user.is_empty());
+        assert_eq!(
+            proxy.restored_winhttp,
+            [owned_proxy::winhttp_settings(&original_proxy())]
+        );
         assert!(proxy.forgotten);
     }
 }

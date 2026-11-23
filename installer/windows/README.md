@@ -143,7 +143,9 @@ failed connection. When the GUI could not do it (a crash, the process ended in
 Task Manager, a forced shutdown), its next start — also from the sign-in task —
 restores it when the owner process is gone and the settings are still the ones
 it applied, tells the user in a notification, and only then connects
-automatically; settings the user changed since are left alone. Disconnecting
+automatically; settings the user changed since are left alone. The user's
+WinINet settings and the machine's WinHTTP proxy are judged apart, so when the
+user has already turned their own proxy off, the WinHTTP proxy still goes back. Disconnecting
 reads no configuration, so a missing or invalid `managed-config.json` never
 keeps the proxy pointing at a stopped engine. A `desktop-state.json` that
 cannot be read is moved aside to `desktop-state.json.broken-<unix seconds>` and

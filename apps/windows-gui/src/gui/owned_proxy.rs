@@ -8,7 +8,9 @@
 //!
 //! - the window's next start ([`recover_at_start`], also when the sign-in task starts it) puts this user's
 //!   settings back when they are still the ones the record applied, and otherwise only forgets the record, so a
-//!   proxy the user changed since is never overwritten;
+//!   proxy the user changed since is never overwritten. The two halves are judged apart ([`put_back`]): a user
+//!   who turned their own proxy off in Windows Settings leaves the machine's WinHTTP proxy still pointing at the
+//!   dead port, and that half is still put back before the record goes;
 //! - the window's session-end guard (`session_end`) puts them back when Windows signs out, shuts down or asks
 //!   the window to close for an installer;
 //! - the uninstaller's `--purge`, which runs as LocalSystem, puts back the WinHTTP proxy and the WinINet
@@ -19,7 +21,7 @@
 //! (`proxy_snapshot` / `applied_proxy`) for the settings page; an earlier version only had that copy, and
 //! [`recover_at_start`] uses it when there is no record.
 
-use super::startup::{owns_current_proxy, set_aside, DesktopState};
+use super::startup::{set_aside, DesktopState};
 use platform_windows::managed::{
     windows_managed_data_directory, write_managed_text_atomic, WindowsProxySettings,
     WindowsProxySnapshot,
@@ -138,7 +140,7 @@ pub fn sanitized(
 }
 
 /// The user's WinINet part of `snapshot`.
-fn user_settings(snapshot: &WindowsProxySnapshot) -> WindowsProxySettings {
+pub fn user_settings(snapshot: &WindowsProxySnapshot) -> WindowsProxySettings {
     WindowsProxySettings {
         enabled: snapshot.enabled,
         server: snapshot.server.clone(),
@@ -147,7 +149,7 @@ fn user_settings(snapshot: &WindowsProxySnapshot) -> WindowsProxySettings {
 }
 
 /// The WinHTTP part of `snapshot`.
-fn winhttp_settings(snapshot: &WindowsProxySnapshot) -> WindowsWinHttpProxy {
+pub fn winhttp_settings(snapshot: &WindowsProxySnapshot) -> WindowsWinHttpProxy {
     WindowsWinHttpProxy {
         access_type: snapshot.winhttp_access_type,
         server: snapshot.winhttp_server.clone(),
@@ -155,41 +157,80 @@ fn winhttp_settings(snapshot: &WindowsProxySnapshot) -> WindowsWinHttpProxy {
     }
 }
 
-/// What a record found at start-up calls for.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Orphan {
-    /// Its process still runs (another window of this user): leave it alone.
-    OwnerRunning,
-    /// Its process is gone and the settings are still the ones it applied: put them back.
-    Restore,
-    /// Its process is gone and the settings were changed since: only forget the record.
-    Forget,
+/// The two halves of the system proxy, so that putting them back can be tested without the real settings.
+pub trait ProxyHalves {
+    /// The current user's WinINet settings.
+    fn current_proxy(&self) -> Result<WindowsProxySettings, String>;
+    /// The machine's WinHTTP proxy.
+    fn winhttp(&self) -> Result<WindowsWinHttpProxy, String>;
+    /// Puts the current user's WinINet settings back to `previous`.
+    fn restore_user(&mut self, previous: &WindowsProxySettings) -> Result<(), String>;
+    /// Puts the machine's WinHTTP proxy back to `previous`.
+    fn restore_winhttp(&mut self, previous: &WindowsWinHttpProxy) -> Result<(), String>;
 }
 
-pub fn orphan_verdict(
-    owner_running: bool,
-    current: &WindowsProxySettings,
-    record: &OwnedProxy,
-) -> Orphan {
-    if owner_running {
-        Orphan::OwnerRunning
-    } else if still_applied(current, &record.applied) {
-        Orphan::Restore
-    } else {
-        Orphan::Forget
+/// What [`put_back`] put back.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PutBack {
+    /// The user's WinINet settings were still the ones applied, and were put back.
+    pub user: bool,
+    /// The machine's WinHTTP proxy was still the one applied, and was put back.
+    pub winhttp: bool,
+}
+
+impl PutBack {
+    pub fn any(self) -> bool {
+        self.user || self.winhttp
     }
 }
 
-/// What the start-up check needs from the system, so that it can be tested without touching the real settings.
-pub trait ProxySystem {
+/// Puts back each half of the system proxy that is still the one `applied` set, from `snapshot` (without the
+/// applied proxy, see [`sanitized`]). The halves are judged apart: the user can change their own WinINet
+/// settings (Windows Settings, a browser) without touching the machine's WinHTTP proxy, which then still points
+/// at the local port and must go back too; a half changed since is left alone. A half that cannot be read or
+/// written does not keep the other from being put back, and makes the result an error: the caller then keeps
+/// the owner record, and a later attempt only finds what is still the applied value.
+pub fn put_back(
+    proxy: &mut impl ProxyHalves,
+    applied: &WindowsProxySettings,
+    snapshot: &WindowsProxySnapshot,
+) -> Result<PutBack, String> {
+    let clean = sanitized(snapshot.clone(), applied);
+    let mut done = PutBack::default();
+    let mut errors = Vec::new();
+    match proxy.winhttp() {
+        Ok(current) if winhttp_still_applied(&current, applied) => {
+            match proxy.restore_winhttp(&winhttp_settings(&clean)) {
+                Ok(()) => done.winhttp = true,
+                Err(error) => errors.push(error),
+            }
+        }
+        Ok(_) => {}
+        Err(error) => errors.push(error),
+    }
+    match proxy.current_proxy() {
+        Ok(current) if still_applied(&current, applied) => {
+            match proxy.restore_user(&user_settings(&clean)) {
+                Ok(()) => done.user = true,
+                Err(error) => errors.push(error),
+            }
+        }
+        Ok(_) => {}
+        Err(error) => errors.push(error),
+    }
+    if errors.is_empty() {
+        Ok(done)
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
+/// What the start-up check needs from the system besides the proxy itself.
+pub trait ProxySystem: ProxyHalves {
     /// The SID of the account the window runs as.
     fn current_user(&self) -> Option<String>;
     /// Whether `owner` still runs (and is not a later process given the same id).
     fn owner_running(&self, owner: &ProxyOwner) -> bool;
-    /// The current user's WinINet settings.
-    fn current_proxy(&self) -> Result<WindowsProxySettings, String>;
-    /// Puts the current user's WinINet settings and the machine's WinHTTP proxy back to `snapshot`.
-    fn restore(&mut self, snapshot: &WindowsProxySnapshot) -> Result<(), String>;
 }
 
 /// What the start-up check did.
@@ -197,7 +238,8 @@ pub trait ProxySystem {
 pub struct StartRecovery {
     /// A proxy left by a window that did not stop properly was put back.
     pub restored: bool,
-    /// A record was dropped without changing anything, the settings having been changed since.
+    /// A record was dropped without changing anything: neither half of the proxy was the applied value any more
+    /// (changed since, or already put back by the window's session-end guard).
     pub forgotten: bool,
     /// What could not be done; the record is kept so that the next start tries again.
     pub errors: Vec<String>,
@@ -227,22 +269,13 @@ pub fn recover_at_start(
         if system.owner_running(&record.owner) {
             return outcome;
         }
-        let current = match system.current_proxy() {
-            Ok(current) => current,
+        match put_back(system, &record.applied, &record.snapshot) {
+            Ok(done) if done.any() => outcome.restored = true,
+            Ok(_) => outcome.forgotten = true,
             Err(error) => {
                 outcome.errors.push(error);
                 return outcome;
             }
-        };
-        match orphan_verdict(false, &current, &record) {
-            Orphan::Restore => {
-                if let Err(error) = system.restore(&sanitized(record.snapshot, &record.applied)) {
-                    outcome.errors.push(error);
-                    return outcome;
-                }
-                outcome.restored = true;
-            }
-            Orphan::Forget | Orphan::OwnerRunning => outcome.forgotten = true,
         }
         records.records.remove(index);
         if !other_running {
@@ -258,23 +291,16 @@ pub fn recover_at_start(
     let Some(snapshot) = desktop.proxy_snapshot.clone() else {
         return outcome;
     };
-    let current = match system.current_proxy() {
-        Ok(current) => current,
-        Err(error) => {
-            outcome.errors.push(error);
-            return outcome;
+    // Without the applied value there is nothing to judge the settings by: they are left alone.
+    if let Some(applied) = desktop.applied_proxy.clone() {
+        match put_back(system, &applied, &snapshot) {
+            Ok(done) if done.any() => outcome.restored = true,
+            Ok(_) => outcome.forgotten = true,
+            Err(error) => {
+                outcome.errors.push(error);
+                return outcome;
+            }
         }
-    };
-    if owns_current_proxy(desktop, &current) {
-        let snapshot = match desktop.applied_proxy.as_ref() {
-            Some(applied) => sanitized(snapshot, applied),
-            None => snapshot,
-        };
-        if let Err(error) = system.restore(&snapshot) {
-            outcome.errors.push(error);
-            return outcome;
-        }
-        outcome.restored = true;
     } else {
         outcome.forgotten = true;
     }
@@ -386,22 +412,21 @@ pub fn records_path() -> PathBuf {
     windows_managed_data_directory().join(OWNED_PROXY_FILE)
 }
 
-/// The records at `path`; none when there is no file. A file that cannot be read is set aside
-/// (`owned-proxy.json.broken-<unix seconds>`) and counts as none, so it never blocks a connection.
-pub fn load_at(path: &Path) -> OwnedProxies {
+/// The records at `path`; none when there is no file. A file whose content cannot be parsed is set aside
+/// (`owned-proxy.json.broken-<unix seconds>`) and counts as none, so it never blocks a connection. A file that
+/// cannot be read now (shared, access denied) is an error and stays where it is: setting it aside would lose
+/// the records that put the proxy back.
+pub fn load_at(path: &Path) -> Result<OwnedProxies, String> {
     let bytes = match fs::read(path) {
         Ok(bytes) => bytes,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return OwnedProxies::default(),
-        Err(_) => {
-            let _ = set_aside(path);
-            return OwnedProxies::default();
-        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(OwnedProxies::default()),
+        Err(error) => return Err(format!("{} could not be read: {error}", path.display())),
     };
     match serde_json::from_slice(&bytes) {
-        Ok(records) => records,
+        Ok(records) => Ok(records),
         Err(_) => {
             let _ = set_aside(path);
-            OwnedProxies::default()
+            Ok(OwnedProxies::default())
         }
     }
 }
@@ -425,7 +450,7 @@ pub fn update_at<T>(path: &Path, change: impl FnOnce(&mut OwnedProxies) -> T) ->
     let _guard = RECORDS_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let mut records = load_at(path);
+    let mut records = load_at(path)?;
     let before = records.clone();
     let answer = change(&mut records);
     if records != before {
@@ -479,11 +504,12 @@ pub fn recover_at_start_now(desktop: &mut DesktopState) -> Result<StartRecovery,
 
 /// The session-end guard's part: puts back the proxy this process set, when it is still in place, and drops the
 /// record. Returns the record, so that a cancelled sign-out or shutdown can apply the proxy again.
+///
+/// Each half is put back only while it is still the applied value ([`put_back`]). The record is returned only
+/// when the user's own settings were put back: when the user had changed them, applying the record again would
+/// overwrite that change, so a cancelled end leaves the proxy as the user set it. When a half cannot be put back
+/// the record stays, for the next start.
 pub fn release_for_session_end() -> Option<OwnedProxy> {
-    use platform_windows::system_integration::{
-        read_current_user_system_proxy, NativeWindowsSystemIntegration, WindowsSystemIntegration,
-    };
-
     let me = native::current_owner();
     update_at(&records_path(), |records| {
         let index = records
@@ -491,17 +517,14 @@ pub fn release_for_session_end() -> Option<OwnedProxy> {
             .iter()
             .position(|record| record.owner.pid == me.pid)?;
         let record = records.records[index].clone();
-        let current = read_current_user_system_proxy().ok()?;
-        if still_applied(&current, &record.applied) {
-            NativeWindowsSystemIntegration::new()
-                .restore_system_proxy(&sanitized(record.snapshot.clone(), &record.applied))
-                .ok()?;
-            records.records.remove(index);
-            Some(record)
-        } else {
-            records.records.remove(index);
-            None
-        }
+        let done = put_back(
+            &mut native::NativeProxySystem,
+            &record.applied,
+            &record.snapshot,
+        )
+        .ok()?;
+        records.records.remove(index);
+        done.user.then_some(record)
     })
     .ok()
     .flatten()
@@ -539,12 +562,14 @@ pub fn restore_for_removal_now(
     }
 }
 
+pub use native::NativeProxySystem;
+
 mod native {
-    use super::{MachineProxy, ProxyOwner, ProxySystem};
-    use platform_windows::managed::{WindowsProxySettings, WindowsProxySnapshot};
+    use super::{MachineProxy, ProxyHalves, ProxyOwner, ProxySystem};
+    use platform_windows::managed::WindowsProxySettings;
     use platform_windows::system_integration::{
-        read_current_user_system_proxy, restore_winhttp_proxy, NativeWindowsSystemIntegration,
-        WindowsSystemIntegration, WindowsWinHttpProxy,
+        read_current_user_system_proxy, restore_current_user_system_proxy, restore_winhttp_proxy,
+        WindowsWinHttpProxy,
     };
     use std::ffi::c_void;
     use std::mem::zeroed;
@@ -623,6 +648,9 @@ mod native {
         if unsafe { GetExitCodeProcess(process.0, &mut code) } == 0 || code != STILL_ACTIVE {
             return false;
         }
+        // Without the recorded creation time a later process given the same id cannot be told apart, and is taken
+        // for the owner: the conservative direction, which leaves the proxy alone rather than taking it from a
+        // window that may still use it (the next start after that process ends puts it back).
         owner.started == 0 || creation_time(process.0) == owner.started
     }
 
@@ -804,6 +832,24 @@ mod native {
     /// The window, as the signed-in user it runs for.
     pub struct NativeProxySystem;
 
+    impl ProxyHalves for NativeProxySystem {
+        fn current_proxy(&self) -> Result<WindowsProxySettings, String> {
+            read_current_user_system_proxy().map_err(|error| error.to_string())
+        }
+
+        fn winhttp(&self) -> Result<WindowsWinHttpProxy, String> {
+            read_winhttp()
+        }
+
+        fn restore_user(&mut self, previous: &WindowsProxySettings) -> Result<(), String> {
+            restore_current_user_system_proxy(previous).map_err(|error| error.to_string())
+        }
+
+        fn restore_winhttp(&mut self, previous: &WindowsWinHttpProxy) -> Result<(), String> {
+            restore_winhttp_proxy(previous).map_err(|error| error.to_string())
+        }
+    }
+
     impl ProxySystem for NativeProxySystem {
         fn current_user(&self) -> Option<String> {
             windows_data::account::current_user_sid()
@@ -811,16 +857,6 @@ mod native {
 
         fn owner_running(&self, owner: &ProxyOwner) -> bool {
             owner_running(owner)
-        }
-
-        fn current_proxy(&self) -> Result<WindowsProxySettings, String> {
-            read_current_user_system_proxy().map_err(|error| error.to_string())
-        }
-
-        fn restore(&mut self, snapshot: &WindowsProxySnapshot) -> Result<(), String> {
-            NativeWindowsSystemIntegration::new()
-                .restore_system_proxy(snapshot)
-                .map_err(|error| error.to_string())
         }
     }
 
@@ -863,6 +899,7 @@ mod native {
 
 #[cfg(test)]
 mod tests {
+    use super::super::startup::owns_current_proxy;
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -905,19 +942,54 @@ mod tests {
         user: Option<String>,
         running: Vec<u32>,
         current: Result<WindowsProxySettings, String>,
+        winhttp: WindowsWinHttpProxy,
         restore_error: Option<String>,
-        restored: Vec<WindowsProxySnapshot>,
+        /// What was put back: the user's settings and the WinHTTP proxy, each as it was written.
+        restored_user: Vec<WindowsProxySettings>,
+        restored_winhttp: Vec<WindowsWinHttpProxy>,
     }
 
     impl FakeSystem {
+        /// The window's proxy in place in both halves, unless `current` says otherwise for the user's.
         fn new(current: WindowsProxySettings) -> Self {
             Self {
                 user: Some(ALICE.to_string()),
                 running: Vec::new(),
                 current: Ok(current),
+                winhttp: applied_winhttp(),
                 restore_error: None,
-                restored: Vec::new(),
+                restored_user: Vec::new(),
+                restored_winhttp: Vec::new(),
             }
+        }
+
+        fn touched(&self) -> bool {
+            !self.restored_user.is_empty() || !self.restored_winhttp.is_empty()
+        }
+    }
+
+    impl ProxyHalves for FakeSystem {
+        fn current_proxy(&self) -> Result<WindowsProxySettings, String> {
+            self.current.clone()
+        }
+
+        fn winhttp(&self) -> Result<WindowsWinHttpProxy, String> {
+            Ok(self.winhttp.clone())
+        }
+
+        fn restore_user(&mut self, previous: &WindowsProxySettings) -> Result<(), String> {
+            if let Some(error) = &self.restore_error {
+                return Err(error.clone());
+            }
+            self.restored_user.push(previous.clone());
+            self.current = Ok(previous.clone());
+            Ok(())
+        }
+
+        fn restore_winhttp(&mut self, previous: &WindowsWinHttpProxy) -> Result<(), String> {
+            self.restored_winhttp.push(previous.clone());
+            self.winhttp = previous.clone();
+            Ok(())
         }
     }
 
@@ -929,18 +1001,13 @@ mod tests {
         fn owner_running(&self, owner: &ProxyOwner) -> bool {
             self.running.contains(&owner.pid)
         }
+    }
 
-        fn current_proxy(&self) -> Result<WindowsProxySettings, String> {
-            self.current.clone()
-        }
-
-        fn restore(&mut self, snapshot: &WindowsProxySnapshot) -> Result<(), String> {
-            if let Some(error) = &self.restore_error {
-                return Err(error.clone());
-            }
-            self.restored.push(snapshot.clone());
-            self.current = Ok(user_settings(snapshot));
-            Ok(())
+    fn no_winhttp() -> WindowsWinHttpProxy {
+        WindowsWinHttpProxy {
+            access_type: WINHTTP_NO_PROXY,
+            server: String::new(),
+            bypass: String::new(),
         }
     }
 
@@ -961,7 +1028,8 @@ mod tests {
         let outcome = recover_at_start(&mut records, &mut desktop, &mut system);
         assert!(outcome.restored);
         assert!(outcome.errors.is_empty());
-        assert_eq!(system.restored, [original()]);
+        assert_eq!(system.restored_user, [user_proxy(&original())]);
+        assert_eq!(system.restored_winhttp, [winhttp_settings(&original())]);
         assert!(records.records.is_empty());
         // Automatic connection then takes the user's own settings as the ones to put back.
         assert!(desktop.proxy_snapshot.is_none());
@@ -979,13 +1047,96 @@ mod tests {
             server: "other.example:3128".to_string(),
             bypass: String::new(),
         };
-        let mut system = FakeSystem::new(changed);
+        let mut system = FakeSystem::new(changed.clone());
+        system.winhttp = no_winhttp();
         let outcome = recover_at_start(&mut records, &mut desktop, &mut system);
         assert!(!outcome.restored);
         assert!(outcome.forgotten);
-        assert!(system.restored.is_empty());
+        assert!(!system.touched());
+        assert_eq!(system.current, Ok(changed));
+        assert_eq!(system.winhttp, no_winhttp());
         assert!(records.records.is_empty());
         assert!(desktop.proxy_snapshot.is_none());
+    }
+
+    #[test]
+    fn winhttp_still_applied_is_put_back_when_the_user_changed_their_own_proxy() {
+        // Connected, then killed; the browser failing, the user turned "Use a proxy server" off.
+        let mut records = OwnedProxies::default();
+        records.put(record(Some(ALICE), 100));
+        let mut desktop = owned_desktop();
+        let turned_off = WindowsProxySettings {
+            enabled: false,
+            server: "127.0.0.1:7890".to_string(),
+            bypass: "<local>".to_string(),
+        };
+        let mut system = FakeSystem::new(turned_off.clone());
+        let outcome = recover_at_start(&mut records, &mut desktop, &mut system);
+        assert!(outcome.restored);
+        assert!(outcome.errors.is_empty());
+        // WinHTTP goes back; the user's own change stays.
+        assert_eq!(system.restored_winhttp, [winhttp_settings(&original())]);
+        assert!(system.restored_user.is_empty());
+        assert_eq!(system.current, Ok(turned_off));
+        assert!(records.records.is_empty());
+        assert!(desktop.proxy_snapshot.is_none());
+    }
+
+    #[test]
+    fn a_failed_winhttp_restore_keeps_the_record() {
+        struct DeniedWinHttp(FakeSystem);
+        impl ProxyHalves for DeniedWinHttp {
+            fn current_proxy(&self) -> Result<WindowsProxySettings, String> {
+                self.0.current_proxy()
+            }
+            fn winhttp(&self) -> Result<WindowsWinHttpProxy, String> {
+                self.0.winhttp()
+            }
+            fn restore_user(&mut self, previous: &WindowsProxySettings) -> Result<(), String> {
+                self.0.restore_user(previous)
+            }
+            fn restore_winhttp(&mut self, _: &WindowsWinHttpProxy) -> Result<(), String> {
+                Err("access denied".to_string())
+            }
+        }
+        impl ProxySystem for DeniedWinHttp {
+            fn current_user(&self) -> Option<String> {
+                self.0.current_user()
+            }
+            fn owner_running(&self, owner: &ProxyOwner) -> bool {
+                self.0.owner_running(owner)
+            }
+        }
+
+        let mut records = OwnedProxies::default();
+        records.put(record(Some(ALICE), 100));
+        let mut desktop = owned_desktop();
+        let mut system = DeniedWinHttp(FakeSystem::new(user_proxy(&original())));
+        let outcome = recover_at_start(&mut records, &mut desktop, &mut system);
+        assert!(!outcome.restored);
+        assert!(!outcome.forgotten);
+        assert_eq!(outcome.errors, ["access denied"]);
+        assert_eq!(records.records.len(), 1);
+        assert!(desktop.proxy_snapshot.is_some());
+    }
+
+    #[test]
+    fn a_winhttp_proxy_another_tool_set_since_is_left_alone() {
+        let mut records = OwnedProxies::default();
+        records.put(record(Some(ALICE), 100));
+        let mut desktop = owned_desktop();
+        let mut system = FakeSystem::new(applied());
+        let other = WindowsWinHttpProxy {
+            access_type: WINHTTP_NAMED_PROXY,
+            server: "corp.example:8080".to_string(),
+            bypass: String::new(),
+        };
+        system.winhttp = other.clone();
+        let outcome = recover_at_start(&mut records, &mut desktop, &mut system);
+        assert!(outcome.restored);
+        assert_eq!(system.restored_user, [user_proxy(&original())]);
+        assert!(system.restored_winhttp.is_empty());
+        assert_eq!(system.winhttp, other);
     }
 
     #[test]
@@ -997,7 +1148,7 @@ mod tests {
         system.running.push(100);
         let outcome = recover_at_start(&mut records, &mut desktop, &mut system);
         assert_eq!(outcome, StartRecovery::default());
-        assert!(system.restored.is_empty());
+        assert!(!system.touched());
         assert_eq!(records.records.len(), 1);
         assert!(desktop.proxy_snapshot.is_some());
     }
@@ -1008,6 +1159,7 @@ mod tests {
         records.put(record(Some(ALICE), 100));
         let mut desktop = owned_desktop();
         let mut system = FakeSystem::new(applied());
+        system.winhttp = no_winhttp();
         system.restore_error = Some("access denied".to_string());
         let outcome = recover_at_start(&mut records, &mut desktop, &mut system);
         assert!(!outcome.restored);
@@ -1024,7 +1176,7 @@ mod tests {
         let mut system = FakeSystem::new(applied());
         let outcome = recover_at_start(&mut records, &mut desktop, &mut system);
         assert_eq!(outcome, StartRecovery::default());
-        assert!(system.restored.is_empty());
+        assert!(!system.touched());
         assert_eq!(records.records.len(), 1);
     }
 
@@ -1035,9 +1187,30 @@ mod tests {
         let mut system = FakeSystem::new(applied());
         let outcome = recover_at_start(&mut records, &mut desktop, &mut system);
         assert!(outcome.restored);
-        assert_eq!(system.restored, [original()]);
+        assert_eq!(system.restored_user, [user_proxy(&original())]);
+        assert_eq!(system.restored_winhttp, [winhttp_settings(&original())]);
         assert!(desktop.proxy_snapshot.is_none());
         assert!(desktop.applied_proxy.is_none());
+
+        // The user turned their own proxy off since: WinHTTP still goes back from the earlier version's copy.
+        let mut records = OwnedProxies::default();
+        let mut desktop = owned_desktop();
+        let mut system = FakeSystem::new(user_proxy(&original()));
+        let outcome = recover_at_start(&mut records, &mut desktop, &mut system);
+        assert!(outcome.restored);
+        assert!(system.restored_user.is_empty());
+        assert_eq!(system.restored_winhttp, [winhttp_settings(&original())]);
+        assert!(desktop.proxy_snapshot.is_none());
+
+        // Both changed since: nothing is touched, the copy is dropped.
+        let mut records = OwnedProxies::default();
+        let mut desktop = owned_desktop();
+        let mut system = FakeSystem::new(user_proxy(&original()));
+        system.winhttp = no_winhttp();
+        let outcome = recover_at_start(&mut records, &mut desktop, &mut system);
+        assert!(outcome.forgotten);
+        assert!(!system.touched());
+        assert!(desktop.proxy_snapshot.is_none());
 
         // Not while a connected window of another user shares the desktop state.
         let mut records = OwnedProxies::default();
@@ -1057,7 +1230,7 @@ mod tests {
         let mut system = FakeSystem::new(applied());
         let outcome = recover_at_start(&mut records, &mut desktop, &mut system);
         assert_eq!(outcome, StartRecovery::default());
-        assert!(system.restored.is_empty());
+        assert!(!system.touched());
     }
 
     #[test]
@@ -1113,10 +1286,10 @@ mod tests {
         ));
         fs::create_dir_all(&directory).unwrap();
         let path = directory.join(OWNED_PROXY_FILE);
-        assert_eq!(load_at(&path), OwnedProxies::default());
+        assert_eq!(load_at(&path), Ok(OwnedProxies::default()));
 
         update_at(&path, |records| records.put(record(Some(ALICE), 7))).unwrap();
-        assert_eq!(load_at(&path).records, [record(Some(ALICE), 7)]);
+        assert_eq!(load_at(&path).unwrap().records, [record(Some(ALICE), 7)]);
         // The last record gone, the file goes too.
         update_at(&path, |records| {
             records.take_user(Some(ALICE));
@@ -1125,7 +1298,7 @@ mod tests {
         assert!(!path.exists());
 
         fs::write(&path, b"{\"records\": [ {\"user\": ").unwrap();
-        assert_eq!(load_at(&path), OwnedProxies::default());
+        assert_eq!(load_at(&path), Ok(OwnedProxies::default()));
         assert!(!path.exists());
         let set_aside = fs::read_dir(&directory)
             .unwrap()
@@ -1247,25 +1420,39 @@ mod tests {
     }
 
     #[test]
-    fn the_verdict_follows_the_owner_and_the_settings() {
-        let record = record(Some(ALICE), 1);
-        assert_eq!(
-            orphan_verdict(true, &applied(), &record),
-            Orphan::OwnerRunning
-        );
-        assert_eq!(orphan_verdict(false, &applied(), &record), Orphan::Restore);
-        assert_eq!(
-            orphan_verdict(false, &user_proxy(&original()), &record),
-            Orphan::Forget
-        );
+    fn the_halves_are_judged_apart() {
         assert!(winhttp_still_applied(&applied_winhttp(), &applied()));
-        assert!(!winhttp_still_applied(
-            &WindowsWinHttpProxy {
-                access_type: WINHTTP_NO_PROXY,
-                server: String::new(),
-                bypass: String::new(),
-            },
-            &applied()
-        ));
+        assert!(!winhttp_still_applied(&no_winhttp(), &applied()));
+        assert!(still_applied(&applied(), &applied()));
+        assert!(!still_applied(&user_proxy(&original()), &applied()));
+
+        // WinINet changed by the user, WinHTTP still applied: WinHTTP goes back, WinINet is untouched.
+        let mut system = FakeSystem::new(user_proxy(&original()));
+        let done = put_back(&mut system, &applied(), &original()).unwrap();
+        assert_eq!(
+            done,
+            PutBack {
+                user: false,
+                winhttp: true
+            }
+        );
+        assert!(system.restored_user.is_empty());
+        assert_eq!(system.winhttp, no_winhttp());
+
+        // Both changed: nothing is touched.
+        let mut system = FakeSystem::new(user_proxy(&original()));
+        system.winhttp = no_winhttp();
+        let done = put_back(&mut system, &applied(), &original()).unwrap();
+        assert!(!done.any());
+        assert!(!system.touched());
+
+        // A failed half does not keep the other from going back.
+        let mut system = FakeSystem::new(applied());
+        system.restore_error = Some("registry unavailable".to_string());
+        assert_eq!(
+            put_back(&mut system, &applied(), &original()),
+            Err("registry unavailable".to_string())
+        );
+        assert_eq!(system.winhttp, no_winhttp());
     }
 }
