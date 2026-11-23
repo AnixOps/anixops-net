@@ -187,7 +187,7 @@
     }))),
     take_app_links: () => [],
     notification_settings: () => ({ scripts: true, connection: true, subscriptions: true, language: "zh-Hans" }),
-    on_demand_settings: () => ({ enabled: true, wifi: [{ ssid: "Home", action: "disconnect" }, { ssid: "Office", action: "disconnect" }, { ssid: "Cafe", action: "connect" }, { ssid: "Library", action: "connect" }, { ssid: "Airport", action: "disconnect" }, { ssid: "Hotel", action: "connect" }], otherWifi: "connect", cellular: "connect", other: "ignore" }),
+    on_demand_settings: () => ({ enabled: true, wifi: [{ ssid: "Home", action: "disconnect" }, { ssid: "Office", action: "disconnect" }, { ssid: "Cafe", action: "connect" }, { ssid: "Library", action: "connect" }, { ssid: "Station", action: "disconnect" }, { ssid: "Hotel", action: "connect" }], otherWifi: "connect", cellular: "connect", other: "ignore" }),
     health_status: () => ({ crashReports: false, crashReportsKept: 0, crashUploadConfigured: false, integrity: "verified", coldStartMs: 412 }),
     list_debug_mappings: () => [
       { id: "m1", name: "订单接口返回 500", enabled: true, kind: "local", match: "prefix", pattern: "https://api.example.com/v2/orders", status: 500, headers: [], body: utf8('{"error":"boom"}'), target: "" },
