@@ -14,6 +14,14 @@ const actions: Array<{ value: OnDemandAction; label: string }> = [
 /** Longest Wi-Fi name (IEEE 802.11), as the backend checks. */
 const maxSsidBytes = 32;
 
+/**
+ * Whether a saved name holds replacement characters: earlier Windows versions read the Wi-Fi name in the console's
+ * code page, which turned a Chinese name into these, so the rule never matches the network it was added for.
+ */
+function misread(ssid: string): boolean {
+  return ssid.includes("\uFFFD");
+}
+
 function ssidFits(ssid: string): boolean {
   const bytes = new TextEncoder().encode(ssid).length;
   return bytes > 0 && bytes <= maxSsidBytes;
@@ -66,6 +74,7 @@ export function OnDemandCard({ busy, run, android }: { busy: string | null; run:
     if (network.kind !== "wifi") return { message: t("现在没有连接 Wi-Fi") };
     if (!network.ssid) return { message: android ? t("读不到 Wi-Fi 名称，请在系统设置里允许本应用使用位置信息") : t("读不到 Wi-Fi 名称，请在 Windows 设置的“隐私和安全性 > 位置”里允许桌面应用访问位置") };
     setDraft(network.ssid);
+    if (!ssidFits(network.ssid)) return { message: t("这个 Wi-Fi 名称超过 32 字节，不能添加规则") };
     return { message: t("已填入当前 Wi-Fi 名称") };
   });
   const setRule = (ssid: string, action: OnDemandAction) =>
@@ -85,7 +94,7 @@ export function OnDemandCard({ busy, run, android }: { busy: string | null; run:
       {settings.enabled && (
         <>
           {settings.wifi.map((rule) => (
-            <Row key={rule.ssid} icon={Wifi} color="indigo" label={rule.ssid}>
+            <Row key={rule.ssid} icon={Wifi} color="indigo" label={rule.ssid} hint={misread(rule.ssid) ? t("名称读取有误，请删除后用“当前网络”重新添加") : undefined}>
               <ActionPicker label={rule.ssid} value={rule.action} disabled={disabled} onChange={(action) => setRule(rule.ssid, action)} />
               <IconButton label={t("删除") + " " + rule.ssid} disabled={disabled} onClick={() => removeRule(rule.ssid)}>
                 <Trash2 size={14} aria-hidden="true" />

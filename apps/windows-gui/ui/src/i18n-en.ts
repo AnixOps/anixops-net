@@ -688,6 +688,8 @@ export const english: Record<string, string> = {
   "已关闭 Wi-Fi 规则": "Wi-Fi rules are off",
   "已删除 Wi-Fi 规则": "Wi-Fi rule deleted",
   "已填入当前 Wi-Fi 名称": "Filled in the current Wi-Fi name",
+  "这个 Wi-Fi 名称超过 32 字节，不能添加规则": "This Wi-Fi name is longer than 32 bytes, so no rule can be added for it",
+  "名称读取有误，请删除后用“当前网络”重新添加": "This name was read wrongly. Delete it and add it again with Current network.",
   "已打开 Wi-Fi 规则": "Wi-Fi rules are on",
   "已添加 Wi-Fi 规则": "Wi-Fi rule added",
   "当前网络": "Current network",

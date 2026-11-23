@@ -143,7 +143,7 @@ fn on_demand_settings_path() -> PathBuf {
     windows_managed_data_directory().join("on-demand.json")
 }
 
-/// The network under the connection: the Wi-Fi name from `netsh`, otherwise Ethernet or another interface,
+/// The network under the connection: the Wi-Fi name from the WLAN service, otherwise Ethernet or another interface,
 /// or offline when no route leaves the computer.
 fn current_network_now(path: Option<&String>) -> Network {
     match on_demand::windows_wifi() {

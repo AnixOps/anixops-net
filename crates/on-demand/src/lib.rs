@@ -4,7 +4,7 @@
 //!
 //! The system applies the iOS rules itself; here the client samples the network every few seconds and acts when it
 //! changes, so a connect or disconnect by hand holds until the next network. [`windows_wifi`] reads the Windows
-//! Wi-Fi name; Android reads it in the VPN plugin.
+//! Wi-Fi name from the WLAN service; Android reads it in the VPN plugin.
 
 use std::fs;
 use std::io;
@@ -203,47 +203,155 @@ impl Watch {
     }
 }
 
-/// The Wi-Fi network from `netsh wlan show interfaces`: `Some(Some(name))` when connected to a named network,
-/// `Some(None)` when connected but the name is withheld (Windows 11 asks for the location permission), `None`
-/// when no Wi-Fi is connected. The field names are the same in every Windows language; the state is read from
-/// the presence of an SSID line.
-pub fn parse_netsh(output: &str) -> Option<Option<String>> {
-    // Windows 11 without the location permission prints only where to grant it.
-    if output.contains("privacy-location") {
-        return Some(None);
+/// The name of a Wi-Fi network from the raw bytes of its SSID (at most 32): UTF-8, which every current system
+/// writes, else `legacy` (the system's ANSI code page on Windows, for an old router named in GBK or Big5), else UTF-8
+/// with the broken bytes replaced. `None` for a hidden network's empty SSID.
+pub fn ssid_name(bytes: &[u8], legacy: impl FnOnce(&[u8]) -> Option<String>) -> Option<String> {
+    if bytes.is_empty() {
+        return None;
     }
-    let mut connected = false;
-    for line in output.lines() {
-        let Some((key, value)) = line.split_once(':') else {
-            continue;
-        };
-        let key = key.trim();
-        let value = value.trim();
-        if key == "SSID" {
-            if value.is_empty() {
-                connected = true;
-                continue;
-            }
-            return Some(Some(value.to_string()));
-        }
-        if key == "BSSID" && !value.is_empty() {
-            connected = true;
-        }
+    match std::str::from_utf8(bytes) {
+        Ok(name) => Some(name.to_string()),
+        Err(_) => legacy(bytes)
+            .filter(|name| !name.is_empty())
+            .or_else(|| Some(String::from_utf8_lossy(bytes).into_owned())),
     }
-    connected.then_some(None)
 }
 
-/// The Windows Wi-Fi network, or none when Wi-Fi is not connected (or `netsh` is missing).
+/// The Windows Wi-Fi network, read from the WLAN service as the SSID's raw bytes (`netsh` prints it in the console's
+/// code page, which turns a Chinese name into replacement characters): `Some(Some(name))` when connected to a named
+/// network, `Some(None)` when connected but the name is hidden or withheld (Windows 11 asks for the location
+/// permission), `None` when no Wi-Fi is connected or the WLAN service is not running.
 #[cfg(windows)]
 pub fn windows_wifi() -> Option<Option<String>> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let output = std::process::Command::new("netsh")
-        .args(["wlan", "show", "interfaces"])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .ok()?;
-    parse_netsh(&String::from_utf8_lossy(&output.stdout))
+    wlan::current()
+}
+
+#[cfg(windows)]
+mod wlan {
+    use std::ffi::c_void;
+    use std::ptr;
+
+    use windows_sys::Win32::Foundation::{ERROR_ACCESS_DENIED, ERROR_SUCCESS, HANDLE};
+    use windows_sys::Win32::Globalization::{MultiByteToWideChar, CP_ACP, MB_ERR_INVALID_CHARS};
+    use windows_sys::Win32::NetworkManagement::WiFi::{
+        wlan_interface_state_connected, wlan_intf_opcode_current_connection, WlanCloseHandle,
+        WlanEnumInterfaces, WlanFreeMemory, WlanOpenHandle, WlanQueryInterface,
+        WLAN_CONNECTION_ATTRIBUTES, WLAN_INTERFACE_INFO, WLAN_INTERFACE_INFO_LIST,
+    };
+
+    /// The client version of the Vista and later WLAN API.
+    const CLIENT_VERSION: u32 = 2;
+
+    struct Client(HANDLE);
+
+    impl Drop for Client {
+        fn drop(&mut self) {
+            // SAFETY: the handle came from a successful WlanOpenHandle and is closed once.
+            unsafe {
+                WlanCloseHandle(self.0, ptr::null());
+            }
+        }
+    }
+
+    /// Memory the WLAN API allocated.
+    struct Owned<T>(*mut T);
+
+    impl<T> Drop for Owned<T> {
+        fn drop(&mut self) {
+            if !self.0.is_null() {
+                // SAFETY: the pointer came from the WLAN API and is freed once.
+                unsafe { WlanFreeMemory(self.0 as *const c_void) }
+            }
+        }
+    }
+
+    pub fn current() -> Option<Option<String>> {
+        let mut negotiated = 0u32;
+        let mut handle: HANDLE = ptr::null_mut();
+        // SAFETY: both out pointers are valid for the call.
+        if unsafe { WlanOpenHandle(CLIENT_VERSION, ptr::null(), &mut negotiated, &mut handle) }
+            != ERROR_SUCCESS
+        {
+            // No WLAN service (a desktop without Wi-Fi): no Wi-Fi network.
+            return None;
+        }
+        let client = Client(handle);
+        let mut list: *mut WLAN_INTERFACE_INFO_LIST = ptr::null_mut();
+        // SAFETY: the handle is open and `list` is a valid out pointer.
+        let status = unsafe { WlanEnumInterfaces(client.0, ptr::null(), &mut list) };
+        let list = Owned(list);
+        if status != ERROR_SUCCESS || list.0.is_null() {
+            return None;
+        }
+        // SAFETY: the list holds `dwNumberOfItems` entries from `InterfaceInfo` on, in memory the API allocated.
+        let interfaces = unsafe {
+            let count = (*list.0).dwNumberOfItems as usize;
+            let first = ptr::addr_of!((*list.0).InterfaceInfo).cast::<WLAN_INTERFACE_INFO>();
+            std::slice::from_raw_parts(first, count)
+        };
+        let mut connected = false;
+        for interface in interfaces
+            .iter()
+            .filter(|interface| interface.isState == wlan_interface_state_connected)
+        {
+            connected = true;
+            let mut size = 0u32;
+            let mut data: *mut c_void = ptr::null_mut();
+            // SAFETY: the handle is open, the GUID lives in the list, and the out pointers are valid.
+            let status = unsafe {
+                WlanQueryInterface(
+                    client.0,
+                    &interface.InterfaceGuid,
+                    wlan_intf_opcode_current_connection,
+                    ptr::null(),
+                    &mut size,
+                    &mut data,
+                    ptr::null_mut(),
+                )
+            };
+            let data = Owned(data.cast::<WLAN_CONNECTION_ATTRIBUTES>());
+            if status == ERROR_ACCESS_DENIED {
+                // Windows 11 withholds the network without the location permission.
+                continue;
+            }
+            if status != ERROR_SUCCESS
+                || data.0.is_null()
+                || (size as usize) < std::mem::size_of::<WLAN_CONNECTION_ATTRIBUTES>()
+            {
+                continue;
+            }
+            // SAFETY: the API returned a whole WLAN_CONNECTION_ATTRIBUTES.
+            let ssid = unsafe { (*data.0).wlanAssociationAttributes.dot11Ssid };
+            let length = (ssid.uSSIDLength as usize).min(ssid.ucSSID.len());
+            if let Some(name) = super::ssid_name(&ssid.ucSSID[..length], ansi) {
+                return Some(Some(name));
+            }
+        }
+        connected.then_some(None)
+    }
+
+    /// `bytes` in the system's ANSI code page (GBK on Simplified Chinese Windows, Big5 on Traditional).
+    fn ansi(bytes: &[u8]) -> Option<String> {
+        let length = i32::try_from(bytes.len()).ok()?;
+        let mut wide = [0u16; 64];
+        // SAFETY: the input is `length` bytes and the output buffer holds `wide.len()` units; an SSID of at most 32
+        // bytes never needs more than 32.
+        let written = unsafe {
+            MultiByteToWideChar(
+                CP_ACP,
+                MB_ERR_INVALID_CHARS,
+                bytes.as_ptr(),
+                length,
+                wide.as_mut_ptr(),
+                wide.len() as i32,
+            )
+        };
+        let written = usize::try_from(written)
+            .ok()
+            .filter(|&written| written > 0)?;
+        String::from_utf16(&wide[..written]).ok()
+    }
 }
 
 #[cfg(test)]
@@ -409,16 +517,40 @@ mod tests {
     }
 
     #[test]
-    fn reads_netsh() {
-        let connected = "There is 1 interface on the system:\n\n    Name                   : WLAN\n    State                  : connected\n    SSID                   : Home Net\n    BSSID                  : aa:bb:cc:dd:ee:ff\n";
-        assert_eq!(parse_netsh(connected), Some(Some("Home Net".to_string())));
-        let hidden = "    名称                   : WLAN\n    状态                   : 已连接\n    SSID                   : \n    BSSID                  : aa:bb:cc:dd:ee:ff\n";
-        assert_eq!(parse_netsh(hidden), Some(None));
-        let disconnected =
-            "    Name                   : WLAN\n    State                  : disconnected\n";
-        assert_eq!(parse_netsh(disconnected), None);
-        assert_eq!(parse_netsh(""), None);
-        let refused = "Network shell commands need location permission to access WLAN information. ms-settings:privacy-location\n";
-        assert_eq!(parse_netsh(refused), Some(None));
+    fn reads_the_ssid_bytes() {
+        let none = |_: &[u8]| -> Option<String> { None };
+        // UTF-8, as current routers and phones name networks.
+        assert_eq!(
+            ssid_name("我的家".as_bytes(), none),
+            Some("我的家".to_string())
+        );
+        assert_eq!(ssid_name(b"Home Net", none), Some("Home Net".to_string()));
+        // A hidden network.
+        assert_eq!(ssid_name(b"", none), None);
+        // GBK bytes of 我的家 go to the system's code page.
+        let gbk = [0xCE, 0xD2, 0xB5, 0xC4, 0xBC, 0xD2];
+        assert_eq!(
+            ssid_name(&gbk, |bytes| {
+                assert_eq!(bytes, gbk);
+                Some("我的家".to_string())
+            }),
+            Some("我的家".to_string())
+        );
+        // Without a code page that reads them, the name is still something to match on.
+        assert!(ssid_name(&gbk, none).is_some_and(|name| !name.is_empty()));
+        // A 32-byte UTF-8 name stays whole.
+        let long = "家里的无线网络名称十".as_bytes();
+        assert!(long.len() <= MAX_SSID_BYTES);
+        assert_eq!(
+            ssid_name(long, none).as_deref(),
+            Some("家里的无线网络名称十")
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn reads_the_windows_wifi_without_failing() {
+        // CI runners have no Wi-Fi; the call must answer rather than fail.
+        let _ = windows_wifi();
     }
 }
