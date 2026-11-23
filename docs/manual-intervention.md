@@ -165,6 +165,22 @@ CI 只能跑规则与重建逻辑的单元测试（`OnDemandSettingsTests`、`Ne
 - [ ] S4 桌面（Windows、Linux，本机代理模式）：拔插网线或换 Wi-Fi、睡眠 2 分钟后唤醒，网页几秒内恢复；Windows 日志
   （`tauri-gui`）里有 `network change: engine reset {...}` / `wake: engine reset {...}`。TUN 模式这一项不覆盖。
 
+## 苹果平台 VPN 配置写入真机验收
+
+小组件、控制中心、实时活动、快捷指令和系统设置都会改同一份 VPN 配置。App 现在把对 VPN 配置和节点密钥的每次改动排成
+一队、一次一个（`SerialAsyncQueue`），每次改动前重新读取系统里保存的配置、只改自己负责的字段（`ConfigurationWrite`），
+收到 `NEVPNConfigurationChange` 和回到前台时也会重新读取。CI 只跑单元测试（`SerialAsyncQueueTests`、
+`ConfigurationWriteTests`、`NodeSecretStoreTests`），以下需要真机：
+
+- [ ] iOS：从控制中心或小组件连接（自动重连随之打开），再在 App 里断开：隧道保持断开，不会被自动重连拉起。
+- [ ] iOS：在实时活动里断开后，在 App 里改一次 DNS、再换一个节点：隧道不会自己连上，“自动重连”仍是关闭状态。
+- [ ] iOS、macOS：用快捷指令把模式切到全局，回到 App 首页显示“全局”；随后改一次 DNS、再换一个节点，模式仍是全局。
+  切到直连同理。
+- [ ] iOS、macOS：连接状态下在代理页快速连点两个不同节点，再连点同一个节点几次：最终用的是最后点的节点，隧道重连成功，
+  开发者模式的诊断里没有 `node key is unavailable`。
+- [ ] 从 0.3.0-beta.11 升级：在 beta.11 上因快速切换节点出现 `node key is unavailable` 的设备，升级后打开 App 一次即可
+  重新连接（App 启动时为当前节点重新保存配置）；单个粘贴的节点需要重新导入。
+
 ## macOS 命令行工具
 
 `anixops` 的解析、退出码和套接字通道有单元测试，CI 还在构建好的 App 里运行工具检查帮助、版本和退出码

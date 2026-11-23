@@ -126,6 +126,16 @@ final class NodeLibraryTests: XCTestCase {
         }
         XCTAssertEqual(native.type, "shadowsocks")
         XCTAssertEqual(native.settings["via"], .object(line.outbound))
+        // The profile copy keeps neither the via nor a secret, and the extension gets the node back whole from it
+        // and the Keychain value. Before 1.0 that copy, its type and address alone, did not load and the tunnel
+        // failed to start.
+        let stored = try profile.config.withoutSecret().encoded()
+        let storedText = String(decoding: stored, as: UTF8.self)
+        for setting in ["AAECAwQFBgcICQoLDA0ODw==", "2022-blake3", "via", "iwan"] {
+            XCTAssertFalse(storedText.contains(setting), setting)
+        }
+        let secret = NodeSecret.fromKeychainValue(try profile.config.secret.keychainValue())
+        XCTAssertEqual(try EmbeddedRuntimeConfig.decoded(from: stored).withSecret(secret), profile.config)
 
         // A loop is left for the engine to refuse rather than dropped.
         let loop = try XCTUnwrap(library.node(id: "loop"))

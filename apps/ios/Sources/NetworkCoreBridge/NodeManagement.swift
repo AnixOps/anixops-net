@@ -104,9 +104,16 @@ extension NodeLibrary {
         return copy
     }
 
-    /// Whether a node can be deleted: the subscription's rules and groups must not name it, and one node must remain.
+    /// Whether a node can be deleted: no other node may connect through it (`via`), the subscription's rules and groups
+    /// must not name it, and one node must remain.
     public func canRemove(_ id: String) -> Bool {
         guard nodes.count > 1, node(id: id) != nil else {
+            return false
+        }
+        // Deleting it would leave the other node's `via` naming nothing: the engine refuses the routing section that
+        // holds both, and that node on its own, rather than connect it directly. Lists of links and JSON outbound
+        // configs, where such chains come from, have no subscription rules, so this goes before the rules.
+        guard !nodes.contains(where: { $0.id != id && $0.via == id }) else {
             return false
         }
         guard let routing else {

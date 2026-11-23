@@ -571,7 +571,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         return OutboundLicenses(fieldsByOrigin: fieldsByOrigin, nodes: library?.nodes ?? [])
     }
 
-    /// Creates the runtime. When it refuses the subscription's rules, the selected node runs alone.
+    /// Creates the runtime. When it refuses the subscription's rules, or there are none, the selected node runs alone
+    /// (`EmbeddedRuntimeConfig.selectedNodeAlone()`).
     private func makeSession(
         _ config: EmbeddedRuntimeConfig,
         mitmPlugins: [String],
@@ -581,7 +582,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let resourceAssets = Self.resourceAssets(mitmResources)
         guard config.routing != nil else {
             return try makeRuntimeSession(
-                config, mitmPlugins: mitmPlugins, mitmScripts: mitmScripts, resourceAssets: resourceAssets
+                config.selectedNodeAlone(),
+                mitmPlugins: mitmPlugins,
+                mitmScripts: mitmScripts,
+                resourceAssets: resourceAssets
             )
         }
         do {
@@ -594,7 +598,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             events.record("subscription rules off: runtime refused them")
         }
         return try makeRuntimeSession(
-            config.withRouting(nil), mitmPlugins: mitmPlugins, mitmScripts: mitmScripts, resourceAssets: resourceAssets
+            config.selectedNodeAlone(),
+            mitmPlugins: mitmPlugins,
+            mitmScripts: mitmScripts,
+            resourceAssets: resourceAssets
         )
     }
 
