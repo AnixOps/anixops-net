@@ -222,7 +222,8 @@ No third-party proxy binary is downloaded or started.
    `%ProgramData%\AnixOps\NetworkCore\embedded` and writes the envelope.
 2. Use Home `Connect`.
 3. Switch nodes, run delay tests, or pick the fastest node; a connected engine
-   restarts on the new choice. Subscription rules and policy groups appear on
+   takes the new choice in place (a single-node profile reconnects). Selecting
+   or updating a subscription while connected reconnects the engine on it. Subscription rules and policy groups appear on
    the Rules page, where select groups can be switched.
 
 Accepted inputs are `ss://`, `trojan://`, `vless://`, `vmess://`,

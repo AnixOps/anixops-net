@@ -98,8 +98,17 @@ action, with a bounded client timeout; `Update URL` fetches the saved URL
 through the same pipeline, and a failed download or parse leaves the saved
 source and current managed config unchanged.
 
-Switching a node or a select group rewrites the envelope and restarts a
-connected engine. Delay tests and `Select fastest node` run in the GUI process
+Switching a node or a select group rewrites the envelope. A connected engine
+on a routed profile takes the new choice in place through its `select` control
+command (in TUN mode in both of its engines): open connections, the
+current-user proxy and the TUN adapter stay. A single-node profile, or a choice
+the running engine cannot make in place, reconnects the engine on the new
+envelope. Importing, updating or selecting a subscription (and the automatic
+update) reconnects a connected engine when the envelope changed, and leaves it
+alone when it did not. The opt-in 30-minute monitor only moves off the current
+node when it failed or another node is faster by more than the larger of 50 ms
+(the engine's url-test tolerance) and 30 % of its delay; it leaves a FINAL route
+that already chooses through a url-test or fallback group alone. Delay tests and `Select fastest node` run in the GUI process
 against each node's own outbound (HTTP(S) URL, 5-second timeout, 16 at a time)
 without changing the managed config. url-test and fallback groups run
 background health checks inside the engine. Supported protocols are

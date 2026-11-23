@@ -98,6 +98,28 @@ impl DesktopCore {
             .map_err(|error| error.message.to_string())
     }
 
+    /// Makes `member` the choice of policy group `group` in the running engine, in TUN mode in both of its
+    /// engines: new connections take it, open ones and the system proxy stay as they are. An error (a profile
+    /// without policy groups, a group the running envelope lacks) leaves the caller to restart the engine, which
+    /// also brings both engines back to one choice.
+    pub fn select(&self, group: &str, member: &str) -> Result<(), String> {
+        let request =
+            serde_json::json!({ "cmd": "select", "group": group, "member": member }).to_string();
+        let chose = |answer: Vec<u8>| -> Result<(), String> {
+            let answer: serde_json::Value =
+                serde_json::from_slice(&answer).map_err(|error| error.to_string())?;
+            if answer.get("now").and_then(serde_json::Value::as_str) == Some(member) {
+                Ok(())
+            } else {
+                Err(format!("the engine did not choose {member} in {group}"))
+            }
+        };
+        if let Some(tun) = self.tun.as_ref().filter(|tun| tun.is_running()) {
+            chose(tun.control(request.as_bytes())?)?;
+        }
+        chose(self.control(request.as_bytes())?)
+    }
+
     fn stop_embedded(&mut self) {
         if let Some(mut proxy) = self.embedded.take() {
             proxy.stop();
@@ -297,13 +319,22 @@ pub fn disconnect_steps(
         );
     }
     Ok(if restored.user {
-        "Desktop core stopped and the GUI-owned proxy snapshot was restored.".to_string()
+        STOPPED_PROXY_RESTORED.to_string()
     } else if restored.winhttp {
-        "Desktop core stopped. The current-user proxy was changed since and left as it is; the machine-wide WinHTTP proxy was restored.".to_string()
+        STOPPED_WINHTTP_RESTORED.to_string()
     } else {
-        "Desktop core stopped. The current-user proxy was left unchanged because it was not owned by this GUI session.".to_string()
+        STOPPED_PROXY_LEFT.to_string()
     })
 }
+
+/// `disconnect_direct`'s answer when the proxy this window set was put back.
+pub const STOPPED_PROXY_RESTORED: &str =
+    "Desktop core stopped and the GUI-owned proxy snapshot was restored.";
+/// `disconnect_direct`'s answer when the user changed their own proxy since (left alone), and only the
+/// machine-wide WinHTTP proxy this window set was put back.
+pub const STOPPED_WINHTTP_RESTORED: &str = "Desktop core stopped. The current-user proxy was changed since and left as it is; the machine-wide WinHTTP proxy was restored.";
+/// `disconnect_direct`'s answer when the proxy was no longer the one this window set, and was left alone.
+pub const STOPPED_PROXY_LEFT: &str = "Desktop core stopped. The current-user proxy was left unchanged because it was not owned by this GUI session.";
 
 fn load_validated_daily_managed_configuration(
     config_path: &Path,

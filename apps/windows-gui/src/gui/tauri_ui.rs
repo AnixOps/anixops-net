@@ -54,8 +54,10 @@ use rcgen::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, TryLockError};
 use std::{
     fs,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -367,6 +369,9 @@ struct DesktopTray {
 
 #[derive(Default)]
 struct RuntimeLifecycle {
+    /// Whether the engine ran when its lock was last free (`core_running_now`). The status poll reads this while
+    /// connect, disconnect or a restart holds the lock for seconds, instead of waiting for it.
+    core_running_seen: AtomicBool,
     gui_started_connection: Mutex<bool>,
     core_recovery_attempted: Mutex<bool>,
     subscription_refresh_active: Arc<Mutex<bool>>,
@@ -488,10 +493,50 @@ struct NativeGroupSummary {
     outbound_labels: Vec<String>,
 }
 
+/// What a command did. The window shows `code` in its own language (ui/src/operation-text.ts, with `params` filled
+/// in); `message` is the English text for the app log and for a code the window does not know.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct OperationResult {
     message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    code: Option<&'static str>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    params: BTreeMap<&'static str, String>,
+    /// Written in the window's language already (a note on capture or on a reconnect); shown after the coded text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    note: Option<String>,
+}
+
+impl OperationResult {
+    /// A result the window words itself, by `code`; `message` is the English for the log.
+    fn coded(code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            code: Some(code),
+            params: BTreeMap::new(),
+            note: None,
+        }
+    }
+
+    /// Fills `{name}` of the coded text.
+    fn with(mut self, name: &'static str, value: impl ToString) -> Self {
+        self.params.insert(name, value.to_string());
+        self
+    }
+
+    /// Adds a note already in the window's language; an empty one is left out.
+    fn noted(mut self, note: &str) -> Self {
+        let note = note.trim();
+        if !note.is_empty() {
+            self.message = reconnect::joined([self.message.as_str(), note]);
+            self.note = Some(match self.note.take() {
+                Some(earlier) => reconnect::joined([earlier.as_str(), note]),
+                None => note.to_string(),
+            });
+        }
+        self
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -1207,14 +1252,25 @@ fn start_subscription_refresh_monitor(app: AppHandle, state: DesktopAppState) {
             continue;
         };
         let name = subscription_name(&state, &location);
-        match import_subscription_blocking(
-            state.clone(),
-            location.clone(),
-            "Automatic subscription update completed.",
-        ) {
-            Ok(_) => {
+        match import_subscription_only(&state, location.clone()) {
+            Ok(changed) => {
                 let _ =
                     append_managed_log(APP_LOG_SCOPE, "automatic subscription update completed");
+                // A running engine moves to the updated subscription (a provider that changed passwords or
+                // servers); an update that changed nothing leaves the connection alone.
+                if let Err(error) =
+                    apply_subscription_import(&state, SubscriptionImport::Automatic, changed)
+                {
+                    let _ = append_managed_log(
+                        APP_LOG_SCOPE,
+                        "the connection could not move to the updated subscription",
+                    );
+                    if let Some(mut notice) = notification_settings_now(&state).disconnected(false)
+                    {
+                        notice.body = error.chars().take(200).collect();
+                        post_notice(&app, &notice);
+                    }
+                }
             }
             Err(error) => {
                 let _ = append_managed_log(
@@ -1285,7 +1341,7 @@ fn start_fastest_node_monitor(state: DesktopAppState) {
             if !enabled || !node_operations_runtime_running(&state).unwrap_or(false) {
                 continue;
             }
-            match select_fastest_node_blocking(state.clone()) {
+            match select_fastest_node_blocking(state.clone(), true) {
                 Ok(result) => {
                     let _ = append_managed_log(APP_LOG_SCOPE, &result.message);
                 }
@@ -1326,25 +1382,55 @@ async fn runtime_snapshot(state: State<'_, DesktopAppState>) -> Result<RuntimeSn
     run_blocking(move || runtime_snapshot_blocking(state)).await
 }
 
+/// The status for the window. It never waits for the engine's lock (connect, disconnect and restarts hold it while
+/// the engine starts, for seconds with TUN mode) and holds the desktop lock only to copy the state: a poll that
+/// waited would pile up blocking threads every two seconds and hold every command that needs the desktop state.
 fn runtime_snapshot_blocking(state: DesktopAppState) -> Result<RuntimeSnapshot, String> {
+    let direct_running = core_running_now(&state)?;
+    let status = read_runtime_status();
     let desktop = state
         .desktop
         .lock()
-        .map_err(|_| "desktop state lock failed")?;
-    let direct_running = state
-        .direct_core
-        .lock()
-        .map_err(|_| "desktop core lock failed")?
-        .is_running()?;
-    Ok(snapshot(&read_runtime_status(), &desktop, direct_running))
+        .map_err(|_| "desktop state lock failed")?
+        .clone();
+    Ok(snapshot(&status, &desktop, direct_running))
 }
 
+/// Whether the engine runs, without waiting: read under its lock when that is free, otherwise what was read last
+/// time it was (the operation holding it reports its own progress in the window).
+fn core_running_now(state: &DesktopAppState) -> Result<bool, String> {
+    core_running_without_waiting(&state.direct_core, &state.lifecycle.core_running_seen)
+}
+
+fn core_running_without_waiting(
+    core: &Mutex<connection::DesktopCore>,
+    seen: &AtomicBool,
+) -> Result<bool, String> {
+    match core.try_lock() {
+        Ok(mut core) => {
+            let running = core.is_running()?;
+            seen.store(running, Ordering::Relaxed);
+            Ok(running)
+        }
+        Err(TryLockError::WouldBlock) => Ok(seen.load(Ordering::Relaxed)),
+        Err(TryLockError::Poisoned(_)) => Err("desktop core lock failed".to_string()),
+    }
+}
+
+/// The node list. Async, so that it runs off the window's main thread; the desktop state is copied and its lock let
+/// go before the other subscriptions' caches are read from disk.
 #[tauri::command]
-fn list_nodes(state: State<'_, DesktopAppState>) -> Result<Vec<NodeSummary>, String> {
+async fn list_nodes(state: State<'_, DesktopAppState>) -> Result<Vec<NodeSummary>, String> {
+    let state = state.inner().clone();
+    run_blocking(move || list_nodes_blocking(&state)).await
+}
+
+fn list_nodes_blocking(state: &DesktopAppState) -> Result<Vec<NodeSummary>, String> {
     let desktop = state
         .desktop
         .lock()
-        .map_err(|_| "desktop state lock failed")?;
+        .map_err(|_| "desktop state lock failed")?
+        .clone();
     let selected = |id: &str| desktop.profile_node_id.as_deref() == Some(id);
     let group = active_source_id(&desktop).and_then(|id| {
         desktop
@@ -1702,13 +1788,22 @@ async fn capture_session(
 }
 
 #[tauri::command]
-fn list_subscriptions(
+async fn list_subscriptions(
     state: State<'_, DesktopAppState>,
+) -> Result<Vec<SubscriptionSummary>, String> {
+    let state = state.inner().clone();
+    run_blocking(move || list_subscriptions_blocking(&state)).await
+}
+
+/// The saved subscriptions; the state is copied first, since each one's cache is looked at on disk.
+fn list_subscriptions_blocking(
+    state: &DesktopAppState,
 ) -> Result<Vec<SubscriptionSummary>, String> {
     let desktop = state
         .desktop
         .lock()
-        .map_err(|_| "desktop state lock failed")?;
+        .map_err(|_| "desktop state lock failed")?
+        .clone();
     Ok(desktop
         .subscription_sources
         .iter()
@@ -1750,36 +1845,60 @@ fn is_subscription_url(location: &str) -> bool {
 }
 
 #[tauri::command]
-fn rename_subscription(
+async fn rename_subscription(
     id: String,
     name: String,
     state: State<'_, DesktopAppState>,
 ) -> Result<OperationResult, String> {
-    let name = subscription_meta::clean_name(&name).ok_or("Enter a name.")?;
-    change_subscription_source(&state, &id, |source| source.name = Some(name))?;
+    let state = state.inner().clone();
+    run_blocking(move || rename_subscription_blocking(&state, &id, &name)).await
+}
+
+fn rename_subscription_blocking(
+    state: &DesktopAppState,
+    id: &str,
+    name: &str,
+) -> Result<OperationResult, String> {
+    let name = subscription_meta::clean_name(name).ok_or("Enter a name.")?;
+    change_subscription_source(state, id, |source| source.name = Some(name))?;
     // Linked policy groups are named after their subscriptions.
-    relink_saved_profile(&state)?;
-    Ok(OperationResult {
-        message: "Subscription renamed.".to_string(),
-    })
+    relink_saved_profile(state)?;
+    Ok(OperationResult::coded(
+        "subscription.renamed",
+        "Subscription renamed.",
+    ))
 }
 
 #[tauri::command]
-fn set_subscription_interval(
+async fn set_subscription_interval(
     id: String,
     hours: u32,
     state: State<'_, DesktopAppState>,
 ) -> Result<OperationResult, String> {
+    let state = state.inner().clone();
+    run_blocking(move || set_subscription_interval_blocking(&state, &id, hours)).await
+}
+
+fn set_subscription_interval_blocking(
+    state: &DesktopAppState,
+    id: &str,
+    hours: u32,
+) -> Result<OperationResult, String> {
     let hours = hours.min(subscription_meta::MAX_UPDATE_INTERVAL_HOURS);
-    change_subscription_source(&state, &id, |source| {
+    change_subscription_source(state, id, |source| {
         source.update_interval_hours = Some(hours)
     })?;
-    Ok(OperationResult {
-        message: if hours == 0 {
-            "Automatic updates are off for this subscription.".to_string()
-        } else {
-            format!("This subscription updates every {hours} hours while it is in use.")
-        },
+    Ok(if hours == 0 {
+        OperationResult::coded(
+            "subscription.interval_off",
+            "Automatic updates are off for this subscription.",
+        )
+    } else {
+        OperationResult::coded(
+            "subscription.interval",
+            format!("This subscription updates every {hours} hours while it is in use."),
+        )
+        .with("hours", hours)
     })
 }
 
@@ -1835,10 +1954,10 @@ fn connect_blocking(state: DesktopAppState) -> Result<OperationResult, String> {
     persisted.applied_proxy = Some(connected.applied_proxy);
     save_desktop_state(&persisted)?;
     mark_gui_started_connection(&state);
-    Ok(OperationResult {
-        message: "Connected. The desktop-owned core and current-user proxy are verified."
-            .to_string(),
-    })
+    Ok(OperationResult::coded(
+        "connect.connected",
+        "Connected. The desktop-owned core and current-user proxy are verified.",
+    ))
 }
 
 /// Starts the engine in this window on the saved profile and applies the proxy.
@@ -1925,7 +2044,14 @@ fn disconnect_blocking(state: DesktopAppState) -> Result<OperationResult, String
     let note = capture
         .note(AutoSave::Disconnect, &language)
         .unwrap_or_default();
-    let message = reconnect::joined([message.as_str(), note.as_str()]);
+    let code = if message == connection::STOPPED_PROXY_LEFT {
+        "disconnect.proxy_left"
+    } else if message == connection::STOPPED_WINHTTP_RESTORED {
+        "disconnect.winhttp_restored"
+    } else {
+        "disconnect.proxy_restored"
+    };
+    let result = OperationResult::coded(code, message).noted(&note);
     let mut persisted = state
         .desktop
         .lock()
@@ -1933,7 +2059,7 @@ fn disconnect_blocking(state: DesktopAppState) -> Result<OperationResult, String
     persisted.proxy_snapshot = None;
     persisted.applied_proxy = None;
     save_desktop_state(&persisted)?;
-    Ok(OperationResult { message })
+    Ok(result)
 }
 
 /// Stops the engine and puts the proxy back as the process exits: from the tray's Quit and from the
@@ -2015,9 +2141,10 @@ fn restart_service_blocking(state: DesktopAppState) -> Result<OperationResult, S
     persisted.proxy_snapshot = Some(connected.snapshot);
     persisted.applied_proxy = Some(connected.applied_proxy);
     save_desktop_state(&persisted)?;
-    Ok(OperationResult {
-        message: "Desktop core restarted and proxy settings were reapplied.".to_string(),
-    })
+    Ok(OperationResult::coded(
+        "restart.done",
+        "Desktop core restarted and proxy settings were reapplied.",
+    ))
 }
 
 #[tauri::command]
@@ -2027,9 +2154,10 @@ async fn validate_configuration() -> Result<OperationResult, String> {
 
 fn validate_configuration_blocking() -> Result<OperationResult, String> {
     load_validated_managed_configuration(&windows_managed_config_path())?;
-    Ok(OperationResult {
-        message: "Managed configuration and enabled core preflight succeeded.".to_string(),
-    })
+    Ok(OperationResult::coded(
+        "validate.ok",
+        "Managed configuration and enabled core preflight succeeded.",
+    ))
 }
 
 #[tauri::command]
@@ -2067,18 +2195,86 @@ fn switch_node_blocking(
     }
     let node = selected_catalog_node(&desktop, &node_id)?;
     let embedded = require_embedded_config()?;
-    switch_embedded_node(&state, &desktop, &embedded, &node.id, update_running_core)?;
-    Ok(OperationResult {
-        message: if update_running_core {
-            "Active node switched and the embedded engine restarted with it.".to_string()
-        } else {
-            "Active node saved. It will be applied when the core next connects.".to_string()
-        },
+    let applied = switch_embedded_node(&state, &desktop, &embedded, &node.id, update_running_core)?;
+    Ok(node_switched(applied).with("node", &node.label))
+}
+
+/// The answer to a node switch, by how the engine took it.
+fn node_switched(applied: ChoiceApplied) -> OperationResult {
+    match applied {
+        ChoiceApplied::Selected => OperationResult::coded(
+            "node.switched",
+            "Active node switched; open connections stay.",
+        ),
+        ChoiceApplied::Restarted => OperationResult::coded(
+            "node.switched_restarted",
+            "Active node switched and the embedded engine restarted with it.",
+        ),
+        ChoiceApplied::Saved => OperationResult::coded(
+            "node.saved",
+            "Active node saved. It will be applied when the core next connects.",
+        ),
+    }
+}
+
+/// How a running engine took a changed node or policy group choice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChoiceApplied {
+    /// No engine runs: the saved profile has the choice for the next connection.
+    Saved,
+    /// The running engine switched through its policy groups: open connections, the system proxy and the TUN
+    /// adapter stayed as they were.
+    Selected,
+    /// The engine restarted on the saved profile: one without policy groups, or one it could not switch in place.
+    Restarted,
+}
+
+/// Applies the choices just saved in the profile (`selections`: policy group and member, outermost group first) to
+/// a running engine. A routed profile switches in place through the engine's `select` command, in TUN mode in both
+/// of its engines. When it cannot (no `selections`, a profile without groups, a group the running envelope lacks),
+/// the engine reconnects on the saved envelope, checked and done under its lock (`reconnect_running_direct_core`).
+fn apply_choice_to_running_core(
+    state: &DesktopAppState,
+    selections: &[(String, String)],
+) -> Result<ChoiceApplied, String> {
+    {
+        let mut core = state
+            .direct_core
+            .lock()
+            .map_err(|_| "desktop core lock failed")?;
+        if !core.is_running()? {
+            return Ok(ChoiceApplied::Saved);
+        }
+        if !selections.is_empty() {
+            match selections
+                .iter()
+                .try_for_each(|(group, member)| core.select(group, member))
+            {
+                Ok(()) => return Ok(ChoiceApplied::Selected),
+                Err(error) => {
+                    let _ = append_managed_log(
+                        APP_LOG_SCOPE,
+                        &format!("policy group could not switch in place, restarting: {error}"),
+                    );
+                }
+            }
+        }
+    }
+    let reconnected = reconnect_running_direct_core(state, None)?;
+    let running = !matches!(reconnected.outcome, reconnect::Outcome::NotRunning);
+    reconnected.result(OperationResult::coded(
+        "restart.done",
+        "Desktop core restarted and proxy settings were reapplied.",
+    ))?;
+    Ok(if running {
+        ChoiceApplied::Restarted
+    } else {
+        ChoiceApplied::Saved
     })
 }
 
 /// Switches to a node of another subscription: through its linked policy group when the imported profile
-/// has one, otherwise by importing that subscription (disconnected only, as every import).
+/// has one, otherwise by importing that subscription and choosing the node in it; a running engine follows once.
 fn switch_other_source_node(
     state: &DesktopAppState,
     desktop: &DesktopState,
@@ -2115,19 +2311,27 @@ fn switch_other_source_node(
                 persisted.profile_node_id = routed_selected_node(&profile);
                 save_desktop_state(&persisted)?;
             }
-            if update_running_core {
-                restart_service_blocking(state.clone())?;
+            let mut selections = Vec::new();
+            if let Some(main) = routed_switch_group_for_node(&profile, &group) {
+                selections.push((main, group.clone()));
             }
-            return Ok(OperationResult {
-                message: format!("Switched to {} through policy group {group}.", node.label),
-            });
+            selections.push((group.clone(), listed_id.to_string()));
+            let applied = if update_running_core {
+                apply_choice_to_running_core(state, &selections)?
+            } else {
+                ChoiceApplied::Saved
+            };
+            return Ok(OperationResult::coded(
+                match applied {
+                    ChoiceApplied::Selected => "node.switched_via_group",
+                    ChoiceApplied::Restarted => "node.switched_via_group_restarted",
+                    ChoiceApplied::Saved => "node.saved_via_group",
+                },
+                format!("Switched to {} through policy group {group}.", node.label),
+            )
+            .with("node", &node.label)
+            .with("group", &group));
         }
-    }
-    if update_running_core {
-        return Err(format!(
-            "Disconnect first to use {}: its subscription is not part of the current profile's policy groups.",
-            node.label
-        ));
     }
     let location = desktop
         .subscription_sources
@@ -2135,16 +2339,42 @@ fn switch_other_source_node(
         .find(|source| source.id == other.id)
         .map(|source| source.location.clone())
         .ok_or_else(|| "The subscription was not found.".to_string())?;
-    import_subscription_blocking(state.clone(), location, "Subscription selected.")?;
-    // A routed subscription whose main group cannot pick the node runs on its own choices.
-    Ok(
-        switch_node_blocking(node.id.clone(), state.clone()).unwrap_or_else(|_| OperationResult {
-            message: format!(
+    // The other subscription becomes the profile, as on iOS: imported without restarting the engine, the node
+    // chosen in it, then one reconnect of a running engine on the result.
+    import_subscription_only(state, location)?;
+    let embedded = require_embedded_config()?;
+    let now = desktop_now(state)?;
+    let switched = selected_catalog_node(&now, &node.id)
+        .and_then(|picked| switch_embedded_node(state, &now, &embedded, &picked.id, false));
+    let applied = if update_running_core {
+        apply_choice_to_running_core(state, &[])?
+    } else {
+        ChoiceApplied::Saved
+    };
+    Ok(match switched {
+        Ok(_) => node_switched(applied).with("node", &node.label),
+        // A routed subscription whose main group cannot pick the node runs on its own choices.
+        Err(_) => OperationResult::coded(
+            match applied {
+                ChoiceApplied::Saved => "subscription.switched_groups_choose_saved",
+                _ => "subscription.switched_groups_choose",
+            },
+            format!(
                 "Switched to {}; its policy groups choose the node.",
                 other.name
             ),
-        }),
-    )
+        )
+        .with("name", &other.name),
+    })
+}
+
+/// A copy of the window's state as it is now.
+fn desktop_now(state: &DesktopAppState) -> Result<DesktopState, String> {
+    Ok(state
+        .desktop
+        .lock()
+        .map_err(|_| "desktop state lock failed")?
+        .clone())
 }
 
 #[tauri::command]
@@ -2238,9 +2468,7 @@ async fn edit_node(
     run_blocking(move || {
         let change = node_edits::check(&name, &server, &port)?;
         change_node_edits(&state, &node_id, |edits| edits.change(&node_id, change))?;
-        Ok(OperationResult {
-            message: "Node saved.".to_string(),
-        })
+        Ok(OperationResult::coded("node.edit_saved", "Node saved."))
     })
     .await
 }
@@ -2253,9 +2481,7 @@ async fn remove_node(
     let state = state.inner().clone();
     run_blocking(move || {
         change_node_edits(&state, &node_id, |edits| edits.remove(&node_id))?;
-        Ok(OperationResult {
-            message: "Node removed.".to_string(),
-        })
+        Ok(OperationResult::coded("node.removed", "Node removed."))
     })
     .await
 }
@@ -2330,10 +2556,15 @@ fn reapply_node_edits(desktop: &mut DesktopState) -> Result<(), String> {
 #[tauri::command]
 async fn select_fastest_node(state: State<'_, DesktopAppState>) -> Result<OperationResult, String> {
     let state = state.inner().clone();
-    run_blocking(move || select_fastest_node_blocking(state)).await
+    run_blocking(move || select_fastest_node_blocking(state, false)).await
 }
 
-fn select_fastest_node_blocking(state: DesktopAppState) -> Result<OperationResult, String> {
+/// Tests the nodes and moves to the fastest. `automatic` (the 30-minute monitor) keeps the current node unless it
+/// failed or another one is clearly faster (`keeps_current_node`), and leaves a route that chooses for itself alone.
+fn select_fastest_node_blocking(
+    state: DesktopAppState,
+    automatic: bool,
+) -> Result<OperationResult, String> {
     let desktop = state
         .desktop
         .lock()
@@ -2344,7 +2575,7 @@ fn select_fastest_node_blocking(state: DesktopAppState) -> Result<OperationResul
         .as_deref()
         .unwrap_or(DEFAULT_NODE_SELECTION_URL);
     let embedded = require_embedded_config()?;
-    select_fastest_embedded_node(&state, &desktop, &embedded, test_url)
+    select_fastest_embedded_node(&state, &desktop, &embedded, test_url, automatic)
 }
 
 fn test_node_delay_blocking(
@@ -2359,9 +2590,12 @@ fn test_node_delay_blocking(
         .clone();
     require_embedded_config()?;
     let delay = listed_node_delay(&desktop, &node_id, &url)?;
-    Ok(OperationResult {
-        message: format!("{} ms via {url}", delay.as_millis()),
-    })
+    Ok(OperationResult::coded(
+        "delay.result",
+        format!("{} ms via {url}", delay.as_millis()),
+    )
+    .with("ms", delay.as_millis())
+    .with("url", &url))
 }
 
 /// Delay through a node of the profile or of another subscription.
@@ -2737,19 +2971,32 @@ fn select_embedded_group_member(
         persisted.profile_node_id = routed_selected_node(&profile);
         save_desktop_state(&persisted)?;
     }
-    let running = node_operations_runtime_running(state)?;
-    if running {
-        restart_service_blocking(state.clone())?;
-    }
-    Ok(OperationResult {
-        message: if running {
+    let applied =
+        apply_choice_to_running_core(state, &[(group_id.to_string(), member.to_string())])?;
+    let (code, message) = match applied {
+        ChoiceApplied::Selected => (
+            "group.member_selected",
+            format!("Policy group {group_id} now uses {member}; open connections stay."),
+        ),
+        ChoiceApplied::Restarted => (
+            "group.member_restarted",
             format!(
                 "Policy group {group_id} now uses {member}; the embedded engine restarted with it."
-            )
-        } else {
-            format!("Policy group {group_id} now uses {member}. It applies when the core next connects.")
-        },
-    })
+            ),
+        ),
+        ChoiceApplied::Saved => (
+            "group.member_saved",
+            format!("Policy group {group_id} now uses {member}. It applies when the core next connects."),
+        ),
+    };
+    let label = desktop
+        .profile_node_catalog
+        .iter()
+        .find(|node| node.id == member)
+        .map_or(member, |node| node.label.as_str());
+    Ok(OperationResult::coded(code, message)
+        .with("group", group_id)
+        .with("member", label))
 }
 
 /// Envelope with the one outbound saved for `node_id` at import.
@@ -2782,16 +3029,18 @@ fn measure_embedded_node_delay(node_id: &str, url: &str) -> Result<Duration, Str
         .map_err(|error| error.to_string())
 }
 
-/// Makes `node_id` the profile's outbound, reapplies the routing mode and,
-/// when the core runs, restarts it on the new envelope.
+/// Makes `node_id` the profile's outbound and reapplies the routing mode. When `update_running_core`, a running
+/// engine takes it too: a routed profile in place through its policy group (open connections stay), a single-node
+/// profile by restarting on the new envelope.
 fn switch_embedded_node(
     state: &DesktopAppState,
     desktop: &DesktopState,
     embedded: &WindowsManagedEmbeddedConfig,
     node_id: &str,
     update_running_core: bool,
-) -> Result<(), String> {
+) -> Result<ChoiceApplied, String> {
     let current = read_embedded_profile()?;
+    let mut selections = Vec::new();
     let profile = if current.get("routing").is_some() {
         // A routed profile keeps its rules: the node becomes the choice of the
         // select group it belongs to on the route FINAL takes.
@@ -2801,6 +3050,7 @@ fn switch_embedded_node(
                 .to_string()
         })?;
         set_routed_group_default(&mut routed, &group, node_id)?;
+        selections.push((group, node_id.to_string()));
         routed.to_string()
     } else {
         embedded_node_profile(node_id)?
@@ -2824,9 +3074,10 @@ fn switch_embedded_node(
         save_desktop_state(&persisted)?;
     }
     if update_running_core {
-        restart_service_blocking(state.clone())?;
+        apply_choice_to_running_core(state, &selections)
+    } else {
+        Ok(ChoiceApplied::Saved)
     }
-    Ok(())
 }
 
 fn select_fastest_embedded_node(
@@ -2834,11 +3085,21 @@ fn select_fastest_embedded_node(
     desktop: &DesktopState,
     embedded: &WindowsManagedEmbeddedConfig,
     test_url: &str,
+    automatic: bool,
 ) -> Result<OperationResult, String> {
     // On a routed profile only nodes of the main policy group can be chosen.
     let routed = read_embedded_profile()
         .ok()
         .filter(|profile| profile.get("routing").is_some());
+    if automatic {
+        if desktop.routing_mode == DesktopRoutingMode::Direct {
+            return Err("all traffic goes direct; no node is in use".to_string());
+        }
+        // A route that already chooses by itself (FINAL through a url-test or fallback group) is not overridden.
+        if routed.as_ref().is_some_and(final_chain_chooses_itself) {
+            return Err("the profile's own groups choose the node".to_string());
+        }
+    }
     let candidates: Vec<DesktopProfileNode> = desktop
         .profile_node_catalog
         .iter()
@@ -2854,6 +3115,8 @@ fn select_fastest_embedded_node(
     // node does.
     let mut fastest: Option<(&DesktopProfileNode, Duration)> = None;
     let mut fastest_trunk: Option<(&DesktopProfileNode, Duration)> = None;
+    // The node in use, as this round measured it: its result counts with the same network conditions.
+    let mut current: Option<CurrentDelay> = None;
     for chunk in candidates.chunks(EMBEDDED_DELAY_PARALLELISM) {
         let delays: Vec<_> = std::thread::scope(|scope| {
             let handles: Vec<_> = chunk
@@ -2866,6 +3129,12 @@ fn select_fastest_embedded_node(
                 .collect()
         });
         for (node, delay) in chunk.iter().zip(delays) {
+            if desktop.profile_node_id.as_deref() == Some(node.id.as_str()) {
+                current = Some(CurrentDelay {
+                    trunk: node.trunk,
+                    delay,
+                });
+            }
             let Some(delay) = delay else { continue };
             if fastest.is_none_or(|(_, best)| delay < best) {
                 fastest = Some((node, delay));
@@ -2880,17 +3149,82 @@ fn select_fastest_embedded_node(
         .ok_or_else(|| "No imported node returned a successful delay test.".to_string())?;
     let delay_millis = delay.as_millis();
     if desktop.profile_node_id.as_deref() == Some(node.id.as_str()) {
-        return Ok(OperationResult {
-            message: format!(
+        return Ok(OperationResult::coded(
+            "fastest.already",
+            format!(
                 "{} is already the fastest responding node at {delay_millis} ms.",
                 node.label
             ),
-        });
+        )
+        .with("node", &node.label)
+        .with("ms", delay_millis));
+    }
+    if automatic && keeps_current_node(current.as_ref(), node.trunk, delay) {
+        let current_millis = current
+            .and_then(|current| current.delay)
+            .map_or(0, |delay| delay.as_millis());
+        return Ok(OperationResult::coded(
+            "fastest.kept",
+            format!(
+                "Kept the current node at {current_millis} ms; {} at {delay_millis} ms is not enough faster.",
+                node.label
+            ),
+        )
+        .with("node", &node.label)
+        .with("ms", delay_millis)
+        .with("current_ms", current_millis));
     }
     let update_running_core = node_operations_runtime_running(state)?;
-    switch_embedded_node(state, desktop, embedded, &node.id, update_running_core)?;
-    Ok(OperationResult {
-        message: format!("Selected fastest node: {} ({delay_millis} ms).", node.label),
+    let applied = switch_embedded_node(state, desktop, embedded, &node.id, update_running_core)?;
+    Ok(OperationResult::coded(
+        match applied {
+            ChoiceApplied::Restarted => "fastest.selected_restarted",
+            _ => "fastest.selected",
+        },
+        format!("Selected fastest node: {} ({delay_millis} ms).", node.label),
+    )
+    .with("node", &node.label)
+    .with("ms", delay_millis))
+}
+
+/// The node in use as one round of delay tests found it: `delay` is `None` when it did not answer.
+#[derive(Debug, Clone, Copy)]
+struct CurrentDelay {
+    trunk: bool,
+    delay: Option<Duration>,
+}
+
+/// Least gain before the automatic choice leaves a node that still answers: the engine's own url-test tolerance.
+const AUTO_SELECT_TOLERANCE: Duration =
+    Duration::from_millis(config_core::routing::DEFAULT_URL_TEST_TOLERANCE_MS as u64);
+/// ... or this share of the current node's delay, when that is more: ordinary jitter on a slow path is larger.
+const AUTO_SELECT_SHARE_PERCENT: u32 = 30;
+
+/// Whether the automatic choice stays on the current node (hysteresis): only when it answered, is in the main group
+/// (`current` is `None` otherwise), is not a direct node while the best is a trunk one (F-51), and the best is not
+/// faster by more than the larger of [`AUTO_SELECT_TOLERANCE`] and [`AUTO_SELECT_SHARE_PERCENT`] of its delay.
+/// Without it, every round's noise switched nodes and cut the open connections.
+fn keeps_current_node(current: Option<&CurrentDelay>, best_trunk: bool, best: Duration) -> bool {
+    let Some(current) = current else {
+        return false;
+    };
+    let Some(delay) = current.delay else {
+        return false;
+    };
+    if best_trunk && !current.trunk {
+        return false;
+    }
+    let margin = AUTO_SELECT_TOLERANCE.max(delay * AUTO_SELECT_SHARE_PERCENT / 100);
+    best + margin >= delay
+}
+
+/// Whether FINAL's route passes a group that picks its member itself (url-test, fallback, load-balance) before it
+/// ends at a node: the profile chooses, and the automatic selection leaves it alone.
+fn final_chain_chooses_itself(profile: &Value) -> bool {
+    let (chain, _) = routed_final_chain(profile);
+    chain.iter().any(|id| {
+        routed_group(profile, id)
+            .is_some_and(|group| group.get("type").and_then(Value::as_str) != Some("select"))
     })
 }
 
@@ -3076,9 +3410,10 @@ fn save_preferences_blocking(
     desktop.auto_select_fastest_node = preferences.auto_select_fastest_node;
     desktop.dark_theme = preferences.dark_theme;
     save_desktop_state(&desktop)?;
-    Ok(OperationResult {
-        message: "Desktop preferences saved.".to_string(),
-    })
+    Ok(OperationResult::coded(
+        "preferences.saved",
+        "Desktop preferences saved.",
+    ))
 }
 
 #[tauri::command]
@@ -3094,28 +3429,36 @@ fn health_status(health: State<'_, HealthState>) -> Value {
 }
 
 #[tauri::command]
-fn set_crash_reports(
+async fn set_crash_reports(
     health: State<'_, HealthState>,
     enabled: bool,
 ) -> Result<OperationResult, String> {
+    // Turning reports off deletes the kept ones: disk work, off the window's main thread.
+    let health = health.0.clone();
+    run_blocking(move || set_crash_reports_blocking(&health, enabled)).await
+}
+
+fn set_crash_reports_blocking(health: &Health, enabled: bool) -> Result<OperationResult, String> {
     health
-        .0
         .set_crash_reports(enabled)
         .map_err(|error| format!("The setting could not be saved: {error}"))?;
-    Ok(OperationResult {
-        message: if enabled {
-            "Crash reports on.".to_string()
-        } else {
-            "Crash reports off; kept reports deleted.".to_string()
-        },
+    Ok(if enabled {
+        OperationResult::coded("crash_reports.on", "Crash reports on.")
+    } else {
+        OperationResult::coded(
+            "crash_reports.off",
+            "Crash reports off; kept reports deleted.",
+        )
     })
 }
 
 fn create_diagnostics_blocking(health: &str) -> Result<OperationResult, String> {
     let path = write_diagnostic_report_at(&windows_managed_config_path(), health)?;
-    Ok(OperationResult {
-        message: format!("Diagnostics written to {}", path.display()),
-    })
+    Ok(OperationResult::coded(
+        "diagnostics.saved",
+        format!("Diagnostics written to {}", path.display()),
+    )
+    .with("path", path.display()))
 }
 
 #[tauri::command]
@@ -3124,8 +3467,10 @@ async fn import_subscription(
     state: State<'_, DesktopAppState>,
 ) -> Result<OperationResult, String> {
     let state = state.inner().clone();
-    run_blocking(move || import_subscription_blocking(state, location, "Subscription imported."))
-        .await
+    run_blocking(move || {
+        import_subscription_blocking(state, location, SubscriptionImport::Imported)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -3141,7 +3486,7 @@ async fn update_subscription(state: State<'_, DesktopAppState>) -> Result<Operat
             .ok_or_else(|| {
                 "Import an HTTP or HTTPS subscription URL before updating it.".to_string()
             })?;
-        import_subscription_blocking(state, location, "Subscription updated.")
+        import_subscription_blocking(state, location, SubscriptionImport::Updated)
     })
     .await
 }
@@ -3171,7 +3516,7 @@ async fn update_subscription_source(
             }
             source.location.clone()
         };
-        import_subscription_blocking(state, location, "Subscription updated.")
+        import_subscription_blocking(state, location, SubscriptionImport::Updated)
     })
     .await
 }
@@ -3192,7 +3537,7 @@ async fn select_subscription(
             .find(|source| source.id == id)
             .map(|source| source.location.clone())
             .ok_or_else(|| "Selected subscription source was not found.".to_string())?;
-        import_subscription_blocking(state, location, "Subscription selected.")
+        import_subscription_blocking(state, location, SubscriptionImport::Selected)
     })
     .await
 }
@@ -3224,17 +3569,102 @@ fn remove_subscription_blocking(
     linked_sources::remove_cache(&source_cache_directory(), &id);
     relink_active_profile(&mut desktop, None)?;
     save_desktop_state(&desktop)?;
-    Ok(OperationResult {
-        message: "Subscription source removed from the catalog.".to_string(),
-    })
+    Ok(OperationResult::coded(
+        "subscription.removed",
+        "Subscription source removed from the catalog.",
+    ))
 }
 
+/// Why a subscription was imported, for the answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SubscriptionImport {
+    Imported,
+    Updated,
+    Selected,
+    Automatic,
+}
+
+impl SubscriptionImport {
+    /// The answer; `reconnected` when a running engine moved to it.
+    fn result(self, reconnected: bool) -> OperationResult {
+        let (code, message) = match (self, reconnected) {
+            (Self::Imported, false) => ("subscription.imported", "Subscription imported."),
+            (Self::Imported, true) => (
+                "subscription.imported_reconnected",
+                "Subscription imported; the connection now uses it.",
+            ),
+            (Self::Updated, false) => ("subscription.updated", "Subscription updated."),
+            (Self::Updated, true) => (
+                "subscription.updated_reconnected",
+                "Subscription updated; the connection now uses it.",
+            ),
+            (Self::Selected, false) => ("subscription.selected", "Subscription selected."),
+            (Self::Selected, true) => (
+                "subscription.selected_reconnected",
+                "Subscription selected; the connection now uses it.",
+            ),
+            (Self::Automatic, false) => (
+                "subscription.auto_updated",
+                "Automatic subscription update completed.",
+            ),
+            (Self::Automatic, true) => (
+                "subscription.auto_updated_reconnected",
+                "Automatic subscription update completed; the connection now uses it.",
+            ),
+        };
+        OperationResult::coded(code, message)
+    }
+}
+
+/// Imports the subscription at `location` (a new one, an update, or another saved one put in use) and moves a
+/// running engine to it.
 fn import_subscription_blocking(
     state: DesktopAppState,
     location: String,
-    message: &'static str,
+    kind: SubscriptionImport,
 ) -> Result<OperationResult, String> {
-    let _refresh_guard = acquire_subscription_refresh(&state)?;
+    let changed = import_subscription_only(&state, location)?;
+    apply_subscription_import(&state, kind, changed)
+}
+
+/// Moves a running engine to what an import wrote, when it `changed` the envelope the engine runs. The import itself
+/// stays recorded as a success whatever happens here; a reconnect that fails says where the connection ended up.
+fn apply_subscription_import(
+    state: &DesktopAppState,
+    kind: SubscriptionImport,
+    changed: bool,
+) -> Result<OperationResult, String> {
+    if !changed {
+        return Ok(kind.result(false));
+    }
+    let reconnected = reconnect_running_direct_core(state, None)?;
+    let running = !matches!(reconnected.outcome, reconnect::Outcome::NotRunning);
+    reconnected.result(kind.result(running))
+}
+
+/// The envelope the engine starts on for the imported profile, as it is on disk now.
+fn active_envelope() -> Option<Vec<u8>> {
+    active_embedded_config()
+        .ok()
+        .flatten()
+        .and_then(|embedded| fs::read(&embedded.envelope_path).ok())
+}
+
+/// Whether an import that took the envelope from `before` to `after` must reach a running engine. Not when nothing
+/// changed (an automatic update of an unchanged subscription keeps the connections), and not while traffic leaves
+/// directly, which runs without the profile's envelope. Compared as bytes: a provider that only changed a node's
+/// password changes the envelope but not the node list.
+fn import_changes_running_envelope(
+    before: Option<&[u8]>,
+    after: Option<&[u8]>,
+    direct_egress: bool,
+) -> bool {
+    !direct_egress && after.is_some() && before != after
+}
+
+/// Downloads and records the subscription at `location`; whether the envelope a running engine uses changed.
+fn import_subscription_only(state: &DesktopAppState, location: String) -> Result<bool, String> {
+    let _refresh_guard = acquire_subscription_refresh(state)?;
     // Only the download runs without the lock. The attempt and the result are written into the state as it is
     // then, never a copy taken before the download, so settings another command saved meanwhile stay
     // (third-party review F07).
@@ -3260,10 +3690,14 @@ fn import_subscription_blocking(
     {
         return Err("The subscription was removed while it was updating.".to_string());
     }
+    let before = active_envelope();
     record_subscription_import(&location, fetched, &mut desktop)?;
-    Ok(OperationResult {
-        message: message.to_string(),
-    })
+    let after = active_envelope();
+    Ok(import_changes_running_envelope(
+        before.as_deref(),
+        after.as_deref(),
+        desktop.direct_egress,
+    ))
 }
 
 fn acquire_subscription_refresh(
@@ -3318,14 +3752,20 @@ fn check_profile_runtime_blocking(state: DesktopAppState) -> Result<OperationRes
                 .iter()
                 .find(|node| node.id == id)
         })
-        .map(|node| node.label.clone())
-        .unwrap_or_else(|| "the profile's rules".to_string());
-    Ok(OperationResult {
-        message: format!(
-            "Profile ready: {active} ({} nodes)",
-            desktop.profile_node_catalog.len()
+        .map(|node| node.label.clone());
+    let count = desktop.profile_node_catalog.len();
+    Ok(match active {
+        Some(active) => OperationResult::coded(
+            "profile.ready",
+            format!("Profile ready: {active} ({count} nodes)"),
+        )
+        .with("node", active),
+        None => OperationResult::coded(
+            "profile.ready_rules",
+            format!("Profile ready: the profile's rules ({count} nodes)"),
         ),
-    })
+    }
+    .with("count", count))
 }
 
 /// Applies a finished download (`fetched`) to the state and saves it; the attempt is recorded already.
@@ -4046,18 +4486,21 @@ fn restore_network_settings_blocking(state: DesktopAppState) -> Result<Operation
     forget_proxy_owner_record();
     if done.user {
         mark_gui_connection_stopped(&state);
-        return Ok(OperationResult {
-            message: "Network settings restored from the GUI-owned proxy snapshot.".to_string(),
-        });
+        return Ok(OperationResult::coded(
+            "proxy.restored",
+            "Network settings restored from the GUI-owned proxy snapshot.",
+        ));
     }
-    Ok(OperationResult {
-        message: if done.winhttp {
-            "Current proxy settings no longer match the GUI-owned value and were left unchanged; the machine-wide WinHTTP proxy was restored."
-                .to_string()
-        } else {
-            "Current proxy settings no longer match the GUI-owned value and were left unchanged."
-                .to_string()
-        },
+    Ok(if done.winhttp {
+        OperationResult::coded(
+            "proxy.winhttp_restored",
+            "Current proxy settings no longer match the GUI-owned value and were left unchanged; the machine-wide WinHTTP proxy was restored.",
+        )
+    } else {
+        OperationResult::coded(
+            "proxy.left_unchanged",
+            "Current proxy settings no longer match the GUI-owned value and were left unchanged.",
+        )
     })
 }
 
@@ -4091,12 +4534,16 @@ fn set_routing_mode_blocking(
         .map_err(|error| error.to_string())?;
     desktop.routing_mode = mode;
     save_desktop_state(&desktop)?;
-    Ok(OperationResult {
-        message: format!(
+    Ok(OperationResult::coded(
+        match mode {
+            DesktopRoutingMode::Direct => "routing.saved_direct",
+            DesktopRoutingMode::Rule => "routing.saved_rule",
+        },
+        format!(
             "{} routing mode saved. Connect to apply the updated route.",
             routing_mode_label(mode)
         ),
-    })
+    ))
 }
 
 #[tauri::command]
@@ -4122,9 +4569,10 @@ fn set_dns_preset_blocking(
     rewrite_embedded_envelope(&desktop, preset)?;
     desktop.dns_preset = preset;
     save_desktop_state(&desktop)?;
-    Ok(OperationResult {
-        message: "DNS choice saved. Connect to apply it.".to_string(),
-    })
+    Ok(OperationResult::coded(
+        "dns.choice_saved",
+        "DNS choice saved. Connect to apply it.",
+    ))
 }
 
 /// Writes the imported profile's envelope again with `preset` and the saved
@@ -4198,8 +4646,10 @@ fn replace_redirects(
             rewrite_embedded_envelope(&desktop, desktop.dns_preset)
         })
     });
-    reconnect_running_direct_core(state, Some(rollback))?
-        .result("Redirects saved. They apply to the running connection, or the next one.")
+    reconnect_running_direct_core(state, Some(rollback))?.result(OperationResult::coded(
+        "redirects.saved",
+        "Redirects saved. They apply to the running connection, or the next one.",
+    ))
 }
 
 /// The GEOIP and IP-ASN data lists the user added by URL, by name.
@@ -4258,8 +4708,10 @@ fn replace_data_sources(
             rewrite_embedded_envelope(&desktop, desktop.dns_preset)
         })
     });
-    reconnect_running_direct_core(state, Some(rollback))?
-        .result("Data lists saved. The engine downloads them through the proxy.")
+    reconnect_running_direct_core(state, Some(rollback))?.result(OperationResult::coded(
+        "data_lists.saved",
+        "Data lists saved. The engine downloads them through the proxy.",
+    ))
 }
 
 /// The names given to local network devices for `DEVICE-NAME` rules, by address.
@@ -4317,7 +4769,10 @@ fn replace_devices(
             rewrite_embedded_envelope(&desktop, desktop.dns_preset)
         })
     });
-    reconnect_running_direct_core(state, Some(rollback))?.result("Device names saved.")
+    reconnect_running_direct_core(state, Some(rollback))?.result(OperationResult::coded(
+        "devices.saved",
+        "Device names saved.",
+    ))
 }
 
 /// The "自定义" DNS text and the Fake-IP switch as saved.
@@ -4367,12 +4822,16 @@ fn save_custom_dns_blocking(
         }
         Ok(())
     })?;
-    Ok(OperationResult {
-        message: if in_use {
-            "DNS settings saved. Connect to apply them.".to_string()
-        } else {
-            "DNS settings saved. Choose Custom to use them.".to_string()
-        },
+    Ok(if in_use {
+        OperationResult::coded(
+            "dns.settings_saved",
+            "DNS settings saved. Connect to apply them.",
+        )
+    } else {
+        OperationResult::coded(
+            "dns.settings_saved_custom",
+            "DNS settings saved. Choose Custom to use them.",
+        )
     })
 }
 
@@ -4407,9 +4866,10 @@ fn set_direct_egress_blocking(
             .lock()
             .map_err(|_| "desktop state lock failed")?;
         if desktop.direct_egress == enabled {
-            return Ok(OperationResult {
-                message: "Egress unchanged.".to_string(),
-            });
+            return Ok(OperationResult::coded(
+                "egress.unchanged",
+                "Egress unchanged.",
+            ));
         }
         let previous = desktop.clone();
         desktop.direct_egress = enabled;
@@ -4420,9 +4880,9 @@ fn set_direct_egress_blocking(
         now.direct_egress = before.direct_egress;
     });
     reconnect_running_direct_core(&state, Some(rollback))?.result(if enabled {
-        "Traffic leaves directly."
+        OperationResult::coded("egress.direct", "Traffic leaves directly.")
     } else {
-        "Traffic leaves through the selected node."
+        OperationResult::coded("egress.node", "Traffic leaves through the selected node.")
     })
 }
 
@@ -4557,9 +5017,11 @@ fn save_my_rules_blocking(text: &str, state: DesktopAppState) -> Result<Operatio
             })
     };
     if reloaded {
-        return Ok(OperationResult {
-            message: format!("{count} rules saved and applied; open connections stay."),
-        });
+        return Ok(OperationResult::coded(
+            "rules.applied",
+            format!("{count} rules saved and applied; open connections stay."),
+        )
+        .with("count", count));
     }
     let previous = state
         .desktop
@@ -4575,9 +5037,13 @@ fn save_my_rules_blocking(text: &str, state: DesktopAppState) -> Result<Operatio
             None => Ok(()),
         }
     });
-    reconnect_running_direct_core(&state, Some(rollback))?.result(&format!(
-        "{count} rules saved. They apply to the running connection, or the next one."
-    ))
+    reconnect_running_direct_core(&state, Some(rollback))?.result(
+        OperationResult::coded(
+            "rules.saved",
+            format!("{count} rules saved. They apply to the running connection, or the next one."),
+        )
+        .with("count", count),
+    )
 }
 
 /// Saves QUIC blocking into the envelope and the desktop state. A core this
@@ -4622,8 +5088,10 @@ fn set_block_quic_blocking(
             write_managed_text_atomic(&path, &text).map_err(|error| error.to_string())
         }));
     }
-    reconnect_running_direct_core(&state, Some(rollback))?
-        .result("QUIC setting saved. It applies to the running connection, or the next one.")
+    reconnect_running_direct_core(&state, Some(rollback))?.result(OperationResult::coded(
+        "quic.saved",
+        "QUIC setting saved. It applies to the running connection, or the next one.",
+    ))
 }
 
 fn ensure_routing_configuration_stopped(state: &DesktopAppState) -> Result<(), String> {
@@ -4678,13 +5146,7 @@ async fn import_mitm_plugin_text(
             &text,
             mitm_plugins::download,
         )?;
-        apply_mitm_plugins(
-            &state,
-            &format!(
-                "Plugin imported: {} ({} scripts).",
-                plugin.name, plugin.script_count
-            ),
-        )
+        apply_mitm_plugins(&state, Some((plugin.name.as_str(), plugin.script_count)))
     })
     .await
 }
@@ -4703,13 +5165,7 @@ async fn import_mitm_plugin(
     run_blocking(move || {
         let plugin =
             mitm_plugins::import(&mitm_plugins::directory(), &url, mitm_plugins::download)?;
-        apply_mitm_plugins(
-            &state,
-            &format!(
-                "Plugin imported: {} ({} scripts).",
-                plugin.name, plugin.script_count
-            ),
-        )
+        apply_mitm_plugins(&state, Some((plugin.name.as_str(), plugin.script_count)))
     })
     .await
 }
@@ -4723,7 +5179,7 @@ async fn set_mitm_plugin_enabled(
     let state = state.inner().clone();
     run_blocking(move || {
         mitm_plugins::set_enabled(&mitm_plugins::directory(), &id, enabled)?;
-        apply_mitm_plugins(&state, "")
+        apply_mitm_plugins(&state, None)
     })
     .await
 }
@@ -4736,7 +5192,7 @@ async fn remove_mitm_plugin(
     let state = state.inner().clone();
     run_blocking(move || {
         mitm_plugins::remove(&mitm_plugins::directory(), &id)?;
-        apply_mitm_plugins(&state, "")
+        apply_mitm_plugins(&state, None)
     })
     .await
 }
@@ -4754,7 +5210,7 @@ async fn save_debug_mapping(
     let state = state.inner().clone();
     run_blocking(move || {
         mappings::save(&mitm_plugins::directory(), entry)?;
-        apply_mitm_plugins(&state, "")
+        apply_mitm_plugins(&state, None)
     })
     .await
 }
@@ -4767,7 +5223,7 @@ async fn remove_debug_mapping(
     let state = state.inner().clone();
     run_blocking(move || {
         mappings::remove(&mitm_plugins::directory(), &id)?;
-        apply_mitm_plugins(&state, "")
+        apply_mitm_plugins(&state, None)
     })
     .await
 }
@@ -4794,7 +5250,7 @@ async fn add_decrypt_host(
     let state = state.inner().clone();
     run_blocking(move || {
         mappings::add_host(&mitm_plugins::directory(), &host, exclude.unwrap_or(false))?;
-        apply_mitm_plugins(&state, "")
+        apply_mitm_plugins(&state, None)
     })
     .await
 }
@@ -4809,7 +5265,7 @@ async fn edit_decrypt_host(
     let state = state.inner().clone();
     run_blocking(move || {
         mappings::edit_host(&mitm_plugins::directory(), &pattern, &host, exclude)?;
-        apply_mitm_plugins(&state, "")
+        apply_mitm_plugins(&state, None)
     })
     .await
 }
@@ -4823,7 +5279,7 @@ async fn set_decrypt_host_enabled(
     let state = state.inner().clone();
     run_blocking(move || {
         mappings::set_host_enabled(&mitm_plugins::directory(), &pattern, enabled)?;
-        apply_mitm_plugins(&state, "")
+        apply_mitm_plugins(&state, None)
     })
     .await
 }
@@ -4836,7 +5292,7 @@ async fn remove_decrypt_host(
     let state = state.inner().clone();
     run_blocking(move || {
         mappings::remove_host(&mitm_plugins::directory(), &host)?;
-        apply_mitm_plugins(&state, "")
+        apply_mitm_plugins(&state, None)
     })
     .await
 }
@@ -4846,19 +5302,42 @@ async fn remove_decrypt_host(
 /// policy of a running engine (only `reload_rules` for rules), so the engine restarts; what capture holds is
 /// saved as a session first and capture carries on in the new engine. The library change itself is not undone
 /// when the engine does not start again: the answer says the connection is down.
-fn apply_mitm_plugins(state: &DesktopAppState, done: &str) -> Result<OperationResult, String> {
-    if !managed_https_decryption_enabled() {
-        return Ok(OperationResult {
-            message: reconnect::joined([
-                done,
+fn apply_mitm_plugins(
+    state: &DesktopAppState,
+    imported: Option<(&str, usize)>,
+) -> Result<OperationResult, String> {
+    let result = |applied: bool| {
+        let (code, follow) = match (imported.is_some(), applied) {
+            (true, true) => (
+                "plugins.imported_applied",
+                "Plugins are applied to the running connection, or the next one.",
+            ),
+            (true, false) => (
+                "plugins.imported_need_decryption",
                 "Turn on HTTPS decryption for plugins to take effect.",
-            ]),
-        });
+            ),
+            (false, true) => (
+                "plugins.applied",
+                "Plugins are applied to the running connection, or the next one.",
+            ),
+            (false, false) => (
+                "plugins.need_decryption",
+                "Turn on HTTPS decryption for plugins to take effect.",
+            ),
+        };
+        let done = imported
+            .map(|(name, scripts)| format!("Plugin imported: {name} ({scripts} scripts)."))
+            .unwrap_or_default();
+        let mut result = OperationResult::coded(code, reconnect::joined([done.as_str(), follow]));
+        if let Some((name, scripts)) = imported {
+            result = result.with("name", name).with("scripts", scripts);
+        }
+        result
+    };
+    if !managed_https_decryption_enabled() {
+        return Ok(result(false));
     }
-    reconnect_running_direct_core(state, None)?.result(&reconnect::joined([
-        done,
-        "Plugins are applied to the running connection, or the next one.",
-    ]))
+    reconnect_running_direct_core(state, None)?.result(result(true))
 }
 
 #[tauri::command]
@@ -4890,9 +5369,10 @@ fn clear_script_runtime_blocking() -> Result<OperationResult, String> {
     native_mitm.script_runtime = None;
     managed_config::write(&windows_managed_config_path(), &managed)
         .map_err(|error| error.to_string())?;
-    Ok(OperationResult {
-        message: "Managed script runtime cleared.".to_string(),
-    })
+    Ok(OperationResult::coded(
+        "script_runtime.cleared",
+        "Managed script runtime cleared.",
+    ))
 }
 
 #[tauri::command]
@@ -4939,10 +5419,14 @@ fn enable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult,
     managed_config::write(&windows_managed_config_path(), &managed)
         .map_err(|error| format!("Managed configuration update failed: {error}"))?;
     reconnect_running_direct_core(&state, Some(managed_rollback(&state, previous)?))?.result(
-        &format!(
-            "HTTPS MITM enabled with CA material at {}.",
-            certificate_path.display()
-        ),
+        OperationResult::coded(
+            "mitm.enabled",
+            format!(
+                "HTTPS MITM enabled with CA material at {}.",
+                certificate_path.display()
+            ),
+        )
+        .with("path", certificate_path.display()),
     )
 }
 
@@ -5005,9 +5489,9 @@ fn set_tun_mode_blocking(enabled: bool, state: DesktopAppState) -> Result<Operat
         now.tun_mode_enabled = before.tun_mode_enabled;
     });
     reconnect_running_direct_core(&state, Some(rollback))?.result(if enabled {
-        "TUN mode is on."
+        OperationResult::coded("tun.on", "TUN mode is on.")
     } else {
-        "TUN mode is off."
+        OperationResult::coded("tun.off", "TUN mode is off.")
     })
 }
 
@@ -5165,16 +5649,14 @@ struct Reconnected {
 impl Reconnected {
     /// `applied` (what the change did) with the note on capture when the change runs or waits for the next
     /// connection; otherwise an error that says where the connection ended up.
-    fn result(self, applied: &str) -> Result<OperationResult, String> {
+    fn result(self, applied: OperationResult) -> Result<OperationResult, String> {
         let language = reconnect::Language::from_id(&self.language);
         let capture = self
             .capture
             .note(AutoSave::Reconnect, &self.language)
             .unwrap_or_default();
         match reconnect::outcome_text(&self.outcome, reconnect::not_applied(language), language) {
-            None => Ok(OperationResult {
-                message: reconnect::joined([applied, capture.as_str()]),
-            }),
+            None => Ok(applied.noted(&capture)),
             Some(failed) => Err(reconnect::joined([failed.as_str(), capture.as_str()])),
         }
     }
@@ -5310,7 +5792,10 @@ fn disable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult
     managed_config::write(&windows_managed_config_path(), &managed)
         .map_err(|error| error.to_string())?;
     let result = reconnect_running_direct_core(&state, Some(managed_rollback(&state, previous)?))?
-        .result("HTTPS MITM disabled; the embedded engine is the system proxy again.")?;
+        .result(OperationResult::coded(
+            "mitm.disabled",
+            "HTTPS MITM disabled; the embedded engine is the system proxy again.",
+        ))?;
     // Only once decryption is off for good: removing the service-era root cannot be undone, so it waits until
     // the engine runs without decryption (or none runs).
     let certificate_cleanup_error =
@@ -5389,9 +5874,10 @@ async fn open_mitm_root() -> Result<OperationResult, String> {
     run_blocking(|| {
         let (certificate_path, _) = ensure_protected_mitm_ca_material()?;
         root_trust::open_dialog(&certificate_path)?;
-        Ok(OperationResult {
-            message: format!("{}.", root_trust::STEPS),
-        })
+        Ok(OperationResult::coded(
+            "root.steps",
+            format!("{}.", root_trust::STEPS),
+        ))
     })
     .await
 }
@@ -5471,19 +5957,26 @@ async fn import_mitm_root(
             let _ = std::fs::remove_file(&replaced);
             return Err(error.message);
         }
-        Ok(OperationResult {
-            message:
-                "Your root certificate is saved. Turn HTTPS decryption off and on again to use it, \
-                      then install it again on phones and other devices."
-                    .to_string(),
-        })
+        Ok(OperationResult::coded(
+            "root.imported",
+            "Your root certificate is saved. Turn HTTPS decryption off and on again to use it, \
+             then install it again on phones and other devices.",
+        ))
     })
     .await
 }
 
 /// SHA-256 of the HTTPS decryption root, for checking it against the phone setup page.
 #[tauri::command]
-fn mitm_root_fingerprint() -> Option<String> {
+async fn mitm_root_fingerprint() -> Option<String> {
+    // Reads and hashes the certificate file: off the window's main thread.
+    tauri::async_runtime::spawn_blocking(mitm_root_fingerprint_blocking)
+        .await
+        .ok()
+        .flatten()
+}
+
+fn mitm_root_fingerprint_blocking() -> Option<String> {
     let root = desktop_mitm::Root::at(&windows_managed_data_directory().join("mitm"));
     if root.exists() {
         root.fingerprint().ok()
@@ -5508,9 +6001,10 @@ fn install_certificate_blocking(
     // Opened in Windows' certificate dialog: the user installs and trusts it there by hand.
     let _ = state;
     root_trust::open_dialog(&PathBuf::from(path))?;
-    Ok(OperationResult {
-        message: format!("{}.", root_trust::STEPS),
-    })
+    Ok(OperationResult::coded(
+        "root.steps",
+        format!("{}.", root_trust::STEPS),
+    ))
 }
 
 #[tauri::command]
@@ -5533,9 +6027,10 @@ fn remove_certificate_blocking(state: DesktopAppState) -> Result<OperationResult
         .map_err(|error| error.to_string())?;
     desktop.certificate_sha1 = None;
     save_desktop_state(&desktop)?;
-    Ok(OperationResult {
-        message: "Certificate removed.".to_string(),
-    })
+    Ok(OperationResult::coded(
+        "certificate.removed",
+        "Certificate removed.",
+    ))
 }
 
 #[tauri::command]
@@ -5560,9 +6055,10 @@ fn install_driver_blocking(
         .map_err(|_| "desktop state lock failed")?;
     desktop.driver_inf_path = Some(installed.inf_path);
     save_desktop_state(&desktop)?;
-    Ok(OperationResult {
-        message: "Driver installed.".to_string(),
-    })
+    Ok(OperationResult::coded(
+        "driver.installed",
+        "Driver installed.",
+    ))
 }
 
 #[tauri::command]
@@ -5585,9 +6081,7 @@ fn remove_driver_blocking(state: DesktopAppState) -> Result<OperationResult, Str
         .map_err(|error| error.to_string())?;
     desktop.driver_inf_path = None;
     save_desktop_state(&desktop)?;
-    Ok(OperationResult {
-        message: "Driver removed.".to_string(),
-    })
+    Ok(OperationResult::coded("driver.removed", "Driver removed."))
 }
 
 fn selected_catalog_node(
@@ -6016,5 +6510,170 @@ mod tests {
         desktop.subscription_sources[0].update_interval_hours = None;
         desktop.auto_subscription_refresh = false;
         assert_eq!(profile_next_attempt(&desktop), None);
+    }
+
+    #[test]
+    fn the_status_poll_does_not_wait_for_the_engine_lock() {
+        let core = Mutex::new(connection::DesktopCore::default());
+        let seen = AtomicBool::new(false);
+        // Free lock: read, and remembered.
+        assert_eq!(core_running_without_waiting(&core, &seen), Ok(false));
+        // Connect holds the lock while the engine starts: the poll answers at once with what it saw last.
+        seen.store(true, Ordering::Relaxed);
+        let held = core.lock().unwrap();
+        let started = Instant::now();
+        assert_eq!(core_running_without_waiting(&core, &seen), Ok(true));
+        assert!(started.elapsed() < Duration::from_millis(200));
+        drop(held);
+        assert_eq!(core_running_without_waiting(&core, &seen), Ok(false));
+        assert!(!seen.load(Ordering::Relaxed));
+    }
+
+    /// Tauri runs a synchronous command on the window's main thread: one that takes the shared desktop state (whose
+    /// lock connect and the status poll hold) or reads disk would freeze the window and the tray menu.
+    #[test]
+    fn commands_on_the_shared_state_are_async() {
+        let source = include_str!("tauri_ui.rs");
+        let mut synchronous = Vec::new();
+        let mut lines = source.lines();
+        while let Some(line) = lines.next() {
+            if line.trim() != "#[tauri::command]" {
+                continue;
+            }
+            let mut signature = String::new();
+            for next in lines.by_ref() {
+                signature.push_str(next.trim());
+                if next.contains('{') {
+                    break;
+                }
+            }
+            let takes_state = signature.contains("State<'_, DesktopAppState>");
+            if takes_state && !signature.starts_with("async fn") {
+                synchronous.push(signature);
+            }
+        }
+        assert!(synchronous.is_empty(), "{synchronous:#?}");
+    }
+
+    #[test]
+    fn automatic_selection_keeps_a_node_within_the_tolerance() {
+        let ms = Duration::from_millis;
+        let answered = |delay: u64, trunk: bool| CurrentDelay {
+            trunk,
+            delay: Some(ms(delay)),
+        };
+        // Within 50 ms (the engine's url-test tolerance): stays.
+        assert!(keeps_current_node(
+            Some(&answered(120, false)),
+            false,
+            ms(80)
+        ));
+        // Faster by more than the tolerance and 30 %: moves.
+        assert!(!keeps_current_node(
+            Some(&answered(120, false)),
+            false,
+            ms(60)
+        ));
+        // On a slow path 30 % is the larger margin: 400 ms against 300 ms stays, against 250 ms moves.
+        assert!(keeps_current_node(
+            Some(&answered(400, false)),
+            false,
+            ms(300)
+        ));
+        assert!(!keeps_current_node(
+            Some(&answered(400, false)),
+            false,
+            ms(250)
+        ));
+        // The current node failed this round, or is not in the main group: moves.
+        let failed = CurrentDelay {
+            trunk: false,
+            delay: None,
+        };
+        assert!(!keeps_current_node(Some(&failed), false, ms(500)));
+        assert!(!keeps_current_node(None, false, ms(500)));
+        // A trunk node answering wins over a direct current node, however close (F-51).
+        assert!(!keeps_current_node(
+            Some(&answered(100, false)),
+            true,
+            ms(99)
+        ));
+        assert!(keeps_current_node(Some(&answered(100, true)), true, ms(99)));
+    }
+
+    #[test]
+    fn automatic_selection_leaves_a_route_that_chooses_itself() {
+        let mut profile = routed_profile();
+        // FINAL goes Proxy -> Auto, a url-test group.
+        assert!(final_chain_chooses_itself(&profile));
+        set_routed_group_default(&mut profile, "Proxy", "jp").unwrap();
+        assert!(!final_chain_chooses_itself(&profile));
+    }
+
+    #[test]
+    fn the_running_envelope_keeps_the_profile_group_ids_for_switching_in_place() {
+        let routed = r#"{"schema_version":1,"profile_id":"p","routing":{"outbounds":{"n1":{"type":"shadowsocks","server":"192.0.2.1","port":443,"method":"2022-blake3-aes-128-gcm","password":"AAECAwQFBgcICQoLDA0ODw=="}},"groups":[{"id":"Proxy","type":"select","members":["n1","DIRECT"]}],"rules":["DOMAIN,a.test,DIRECT","FINAL,Proxy"]}}"#;
+        let rule: Value =
+            serde_json::from_str(&mode_envelope(routed, DesktopRoutingMode::Rule).unwrap())
+                .unwrap();
+        assert_eq!(rule["routing"]["groups"][0]["id"], "Proxy");
+        assert_eq!(
+            rule["routing"]["groups"][0]["members"],
+            json!(["n1", "DIRECT"])
+        );
+    }
+
+    #[test]
+    fn an_import_reaches_the_running_engine_only_when_its_envelope_changed() {
+        let old: &[u8] = br#"{"outbound":{"password":"a"}}"#;
+        let rotated: &[u8] = br#"{"outbound":{"password":"b"}}"#;
+        // Same envelope (an automatic update of an unchanged subscription): the connections stay.
+        assert!(!import_changes_running_envelope(
+            Some(old),
+            Some(old),
+            false
+        ));
+        // Only a password changed: the node list is the same, the envelope is not.
+        assert!(import_changes_running_envelope(
+            Some(old),
+            Some(rotated),
+            false
+        ));
+        // The first profile, or another subscription put in use.
+        assert!(import_changes_running_envelope(None, Some(rotated), false));
+        // Traffic leaves directly: the engine does not run the profile's envelope.
+        assert!(!import_changes_running_envelope(
+            Some(old),
+            Some(rotated),
+            true
+        ));
+        assert!(!import_changes_running_envelope(Some(old), None, false));
+    }
+
+    #[test]
+    fn operation_results_carry_codes_params_and_notes() {
+        let result = OperationResult::coded("rules.saved", "3 rules saved.")
+            .with("count", 3)
+            .noted("当前抓包已保存为“重连前”。")
+            .noted("  ");
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["code"], "rules.saved");
+        assert_eq!(json["params"], json!({ "count": "3" }));
+        assert_eq!(json["note"], "当前抓包已保存为“重连前”。");
+        assert!(json["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("3 rules saved."));
+        let plain =
+            serde_json::to_value(OperationResult::coded("tun.on", "TUN mode is on.")).unwrap();
+        assert!(plain.get("params").is_none() && plain.get("note").is_none());
+        assert_eq!(
+            SubscriptionImport::Automatic.result(true).code,
+            Some("subscription.auto_updated_reconnected")
+        );
+        assert_eq!(
+            SubscriptionImport::Selected.result(false).code,
+            Some("subscription.selected")
+        );
     }
 }

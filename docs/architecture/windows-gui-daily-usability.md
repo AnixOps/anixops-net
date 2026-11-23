@@ -121,8 +121,8 @@ its current-user snapshot.
 | Connect / Disconnect | Active | Managed config and envelope preflight, engine start/stop, loopback listener observation, then current-user proxy snapshot/rollback. |
 | Restart service | Active | Desktop-owned daily profile: preflight, GUI-owned proxy restore, stop, and the same verified connection path. Service-owned advanced configuration: existing SCM restart path only. |
 | Node list / filter | Active | Imported nodes from `embedded/nodes.json`, filtered locally in the React view. |
-| Switch node | Active | Rewrites the envelope for the chosen node (or the main policy group's choice in a routed profile) and restarts a connected engine. |
-| Test delay / fastest node | Active | In-process URL requests through each node's own outbound (5-second timeout, 16 at a time); the opt-in 30-minute monitor picks the fastest node. |
+| Switch node | Active | Rewrites the envelope for the chosen node (or the main policy group's choice in a routed profile). A connected routed engine switches in place through its `select` command (open connections stay); a single-node profile reconnects on the new envelope. |
+| Test delay / fastest node | Active | In-process URL requests through each node's own outbound (5-second timeout, 16 at a time); the opt-in 30-minute monitor moves to the fastest node only when the current one failed or is slower by more than max(50 ms, 30 %), and never overrides a url-test or fallback choice on FINAL's route. |
 | Routing mode | Active | Rule (the subscription's own rules and the user's rules) or direct; public builds ship no preset list modes ([no-presets.md](../no-presets.md)). |
 | Policy groups | Active | Lists the subscription's select/url-test/fallback groups; select groups can be switched. url-test and fallback groups run background health checks in the engine. |
 | DNS | Informational | The embedded engine resolves domains that IP rules need with the system resolver; connections through a node have the node server resolve the domain. |

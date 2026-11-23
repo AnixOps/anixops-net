@@ -91,6 +91,16 @@ impl DesktopTun {
                 .is_ok_and(|runtime| matches!(runtime.status().state, RuntimeState::Running))
     }
 
+    /// Answers one kernel control request of the packet engine (a policy group choice, so that it routes as the
+    /// local proxy does).
+    pub fn control(&self, request: &[u8]) -> Result<Vec<u8>, String> {
+        self.runtime
+            .lock()
+            .map_err(|_| "TUN engine lock failed".to_string())?
+            .control_json(request)
+            .map_err(|error| error.message.to_string())
+    }
+
     /// Removes the adapter (and its routes) first, then stops the engine and
     /// releases the sockets' interface pinning.
     pub fn stop(mut self) {

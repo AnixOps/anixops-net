@@ -23,6 +23,7 @@ pub mod tun_helper;
 // background core links it without the engine. The paths here stay as they were.
 pub use client_session::{autostart, session, system_proxy};
 
+use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -224,9 +225,54 @@ pub struct SubscriptionSummary {
     pub pasted: bool,
 }
 
+/// What an operation did. A window words `code` itself, in its own language (the desktop UI's operation-text.ts),
+/// with `params` filled in; `message` is the English for the log and for a window that does not know the code.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct OperationResult {
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<&'static str>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub params: BTreeMap<&'static str, String>,
+    /// Already in the window's language (what a restart did with capture); shown after the coded text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+impl OperationResult {
+    /// A result with no code: a window shows `message` as it is.
+    pub fn plain(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            code: None,
+            params: BTreeMap::new(),
+            note: None,
+        }
+    }
+
+    /// A result a window words itself, by `code`; `message` is the English.
+    pub fn coded(code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            code: Some(code),
+            ..Self::plain(message)
+        }
+    }
+
+    /// Fills `{name}` of the coded text.
+    pub fn with(mut self, name: &'static str, value: impl ToString) -> Self {
+        self.params.insert(name, value.to_string());
+        self
+    }
+
+    /// Adds a note already in the window's language; an empty one is left out.
+    pub fn noted(mut self, note: &str) -> Self {
+        let note = note.trim();
+        if !note.is_empty() {
+            self.message = format!("{}. {note}", self.message);
+            self.note = Some(note.to_string());
+        }
+        self
+    }
 }
 
 /// "我的规则" for the Rules page: the text as written and how many rules it holds.
@@ -262,10 +308,8 @@ fn join_links(before: &str, pasted: &str) -> Option<String> {
     (lines.len() > had).then(|| lines.join("\n"))
 }
 
-fn done(message: impl Into<String>) -> Result<OperationResult, String> {
-    Ok(OperationResult {
-        message: message.into(),
-    })
+fn done(code: &'static str, message: impl Into<String>) -> Result<OperationResult, String> {
+    Ok(OperationResult::coded(code, message))
 }
 
 /// The preferences the interface saves; fields Linux does not use are ignored.
@@ -556,7 +600,11 @@ impl Backend {
         };
         desktop_dns::rules::save(&self.my_rules_path(), text)?;
         if !self.engine.is_running() {
-            return done(format!("{} rules saved", lines.len()));
+            return Ok(OperationResult::coded(
+                "rules.saved_next",
+                format!("{} rules saved", lines.len()),
+            )
+            .with("count", lines.len()));
         }
         let reloaded = envelope
             .as_deref()
@@ -568,16 +616,24 @@ impl Backend {
             })
             .is_some_and(|answer| answer.get("reloaded") == Some(&serde_json::Value::Bool(true)));
         if reloaded {
-            return done(format!(
-                "{} rules saved and applied; open connections stay",
-                lines.len()
-            ));
+            return Ok(OperationResult::coded(
+                "rules.applied",
+                format!(
+                    "{} rules saved and applied; open connections stay",
+                    lines.len()
+                ),
+            )
+            .with("count", lines.len()));
         }
         self.restart_if_running()?;
-        done(format!(
-            "{} rules saved; the engine restarted with them",
-            lines.len()
-        ))
+        Ok(OperationResult::coded(
+            "rules.saved_restarted",
+            format!(
+                "{} rules saved; the engine restarted with them",
+                lines.len()
+            ),
+        )
+        .with("count", lines.len()))
     }
 
     /// The profile (routed, or the chosen node) in the routing mode.
@@ -663,11 +719,17 @@ impl Backend {
     ) -> Result<OperationResult, String> {
         Root::import(&self.mitm_dir(), certificate_pem, private_key_pem)?;
         let restarted = self.state.preferences.https_decryption && self.restart_if_running()?;
-        done(if restarted {
-            "Your root certificate is in use. Install it again on phones and other devices"
+        if restarted {
+            done(
+                "root.in_use",
+                "Your root certificate is in use. Install it again on phones and other devices",
+            )
         } else {
-            "Your root certificate is saved; it is used the next time HTTPS decryption runs"
-        })
+            done(
+                "root.saved_next",
+                "Your root certificate is saved; it is used the next time HTTPS decryption runs",
+            )
+        }
     }
 
     /// SHA-256 of the HTTPS decryption root, when there is one.
@@ -688,35 +750,47 @@ impl Backend {
         self.state.preferences.https_decryption = enabled;
         self.save()?;
         let restarted = self.restart_if_running()?;
-        let message = match (enabled, restarted) {
-            (true, true) => "HTTPS decryption is on",
-            (true, false) => "HTTPS decryption is on; it starts with the next connection",
-            (false, _) => "HTTPS decryption is off",
+        let (code, message) = match (enabled, restarted) {
+            (true, true) => ("mitm.on", "HTTPS decryption is on"),
+            (true, false) => (
+                "mitm.on_next",
+                "HTTPS decryption is on; it starts with the next connection",
+            ),
+            (false, _) => ("mitm.off", "HTTPS decryption is off"),
         };
-        done(self.with_capture_note(message))
+        let note = self.take_capture_note();
+        Ok(OperationResult::coded(code, message).noted(&note))
     }
 
     /// Restarts a running engine after the plugin library changed (plugins, mappings, the decryption list), when
     /// it decrypts. The pinned kernel cannot swap the decryption policy of a running engine, so it restarts;
     /// what capture holds is saved as a session first and capture carries on ([`Backend::restart_if_running`]).
-    pub fn plugins_changed(&mut self) -> Result<String, String> {
+    pub fn plugins_changed(&mut self) -> Result<OperationResult, String> {
         if !self.state.preferences.https_decryption {
-            return Ok("turn on HTTPS decryption for it to take effect".to_string());
+            return done(
+                "plugins.need_decryption",
+                "turn on HTTPS decryption for it to take effect",
+            );
         }
-        let message = if self.restart_if_running()? {
-            "applied to the running connection"
+        let (code, message) = if self.restart_if_running()? {
+            (
+                "plugins.applied_running",
+                "applied to the running connection",
+            )
         } else {
-            "it applies with the next connection"
+            (
+                "plugins.applied_next",
+                "it applies with the next connection",
+            )
         };
-        Ok(self.with_capture_note(message))
+        let note = self.take_capture_note();
+        Ok(OperationResult::coded(code, message).noted(&note))
     }
 
-    /// `message` with what the last restart said about capture, which is then forgotten.
-    fn with_capture_note(&mut self, message: &str) -> String {
-        match self.capture_note.take() {
-            Some(note) => format!("{message}. {note}"),
-            None => message.to_string(),
-        }
+    /// What the last restart said about capture (in the window's language), which is then forgotten; empty when
+    /// it said nothing.
+    fn take_capture_note(&mut self) -> String {
+        self.capture_note.take().unwrap_or_default()
     }
 
     /// Keeps the capture session key for saving capture before the engine stops; the client hands it over when
@@ -999,11 +1073,19 @@ impl Backend {
         self.save()?;
         let label = self.node_name(member).unwrap_or_else(|| member.to_string());
         if self.restart_if_running()? {
-            done(format!(
-                "Policy group {group} now uses {label}; reconnected"
-            ))
+            Ok(OperationResult::coded(
+                "group.member_reconnected",
+                format!("Policy group {group} now uses {label}; reconnected"),
+            )
+            .with("group", group)
+            .with("member", label))
         } else {
-            done(format!("Policy group {group} now uses {label}"))
+            Ok(OperationResult::coded(
+                "group.member_set",
+                format!("Policy group {group} now uses {label}"),
+            )
+            .with("group", group)
+            .with("member", label))
         }
     }
 
@@ -1016,7 +1098,13 @@ impl Backend {
             return Err(error);
         }
         self.save()?;
-        done(format!("Routing mode set to {}", mode.as_str()))
+        done(
+            match mode {
+                RoutingMode::Rule => "routing.set_rule",
+                RoutingMode::Direct => "routing.set_direct",
+            },
+            format!("Routing mode set to {}", mode.as_str()),
+        )
     }
 
     /// Switches the DNS choice. A running engine restarts on it.
@@ -1028,7 +1116,14 @@ impl Backend {
             return Err(error);
         }
         self.save()?;
-        done(format!("DNS set to {}", preset.as_str()))
+        done(
+            match preset.as_str() {
+                "system" => "dns.set_system",
+                "encrypted" => "dns.set_encrypted",
+                _ => "dns.set_custom",
+            },
+            format!("DNS set to {}", preset.as_str()),
+        )
     }
 
     /// The "自定义" DNS text and the Fake-IP switch as saved.
@@ -1062,13 +1157,19 @@ impl Backend {
             Ok(())
         })?;
         if in_use && self.restart_if_running()? {
-            return done("DNS settings saved; the engine restarted with them");
+            return done(
+                "dns.settings_saved_restarted",
+                "DNS settings saved; the engine restarted with them",
+            );
         }
-        done(if in_use {
-            "DNS settings saved"
+        if in_use {
+            done("dns.settings_saved_next", "DNS settings saved")
         } else {
-            "DNS settings saved; choose Custom to use them"
-        })
+            done(
+                "dns.settings_saved_custom",
+                "DNS settings saved; choose Custom to use them",
+            )
+        }
     }
 
     /// Whether a connect opens the TUN device first (desktop TUN mode).
@@ -1084,13 +1185,22 @@ impl Backend {
         }
         self.state.tun_mode = on;
         self.save()?;
-        done(if !on {
-            "TUN mode is off; the next connection uses the system proxy"
+        if !on {
+            done(
+                "tun.off_next",
+                "TUN mode is off; the next connection uses the system proxy",
+            )
         } else if cfg!(windows) {
-            "TUN mode is on; the next connection carries every application"
+            done(
+                "tun.on_next",
+                "TUN mode is on; the next connection carries every application",
+            )
         } else {
-            "TUN mode is on; the next connection asks for the administrator password"
-        })
+            done(
+                "tun.on_next_password",
+                "TUN mode is on; the next connection asks for the administrator password",
+            )
+        }
     }
 
     /// Turns QUIC blocking on or off. A running engine restarts on it.
@@ -1102,11 +1212,11 @@ impl Backend {
             return Err(error);
         }
         self.save()?;
-        done(if on {
-            "QUIC is blocked"
+        if on {
+            done("quic.blocked", "QUIC is blocked")
         } else {
-            "QUIC is allowed"
-        })
+            done("quic.allowed", "QUIC is allowed")
+        }
     }
 
     /// What importing the selected subscription's rules left out ([`engine::routing_warnings`]), for the rules
@@ -1157,11 +1267,17 @@ impl Backend {
             }
             self.restart_if_running()
         })?;
-        done(if restarted {
-            "Data lists saved; the engine is downloading them"
+        if restarted {
+            done(
+                "data_lists.downloading",
+                "Data lists saved; the engine is downloading them",
+            )
         } else {
-            "Data lists saved; they download on the next connection"
-        })
+            done(
+                "data_lists.next",
+                "Data lists saved; they download on the next connection",
+            )
+        }
     }
 
     /// The names given to local network devices for `DEVICE-NAME` rules, by address.
@@ -1195,11 +1311,17 @@ impl Backend {
             }
             self.restart_if_running()
         })?;
-        done(if restarted {
-            "Device names saved; the engine restarted with them"
+        if restarted {
+            done(
+                "devices.restarted",
+                "Device names saved; the engine restarted with them",
+            )
         } else {
-            "Device names saved; they apply on the next connection"
-        })
+            done(
+                "devices.next",
+                "Device names saved; they apply on the next connection",
+            )
+        }
     }
 
     /// The destination rewrites, as the window lists them.
@@ -1238,17 +1360,20 @@ impl Backend {
             }
             self.restart_if_running()
         })?;
-        done(if restarted {
-            "Redirects saved and applied"
+        if restarted {
+            done("redirects.applied", "Redirects saved and applied")
         } else {
-            "Redirects saved; they apply on the next connection"
-        })
+            done(
+                "redirects.next",
+                "Redirects saved; they apply on the next connection",
+            )
+        }
     }
 
     /// Runs debug mode's node-less profile (`on`) or the nodes and rules again. A running engine restarts on it.
     pub fn set_direct_egress(&mut self, on: bool) -> Result<OperationResult, String> {
         if self.state.direct_egress == on {
-            return done("Egress unchanged");
+            return done("egress.unchanged", "Egress unchanged");
         }
         let previous = self.state.direct_egress;
         self.state.direct_egress = on;
@@ -1257,11 +1382,11 @@ impl Backend {
             return Err(error);
         }
         self.save()?;
-        done(if on {
-            "Traffic leaves directly"
+        if on {
+            done("egress.direct", "Traffic leaves directly")
         } else {
-            "Traffic leaves through the selected node"
-        })
+            done("egress.node", "Traffic leaves through the selected node")
+        }
     }
 
     /// Where a replayed request goes in (the running engine's local proxy) and the HTTPS decryption root it has
@@ -1363,7 +1488,7 @@ impl Backend {
         self.save()?;
         // Linked policy groups are named after their subscriptions.
         self.reload_nodes();
-        done("Subscription renamed")
+        done("subscription.renamed", "Subscription renamed")
     }
 
     pub fn set_subscription_interval(
@@ -1375,9 +1500,16 @@ impl Backend {
         self.source_mut(id)?.update_interval_hours = Some(hours);
         self.save()?;
         if hours == 0 {
-            done("Automatic updates are off for this subscription")
+            done(
+                "subscription.interval_off",
+                "Automatic updates are off for this subscription",
+            )
         } else {
-            done(format!("This subscription updates every {hours} hours"))
+            Ok(OperationResult::coded(
+                "subscription.interval",
+                format!("This subscription updates every {hours} hours"),
+            )
+            .with("hours", hours))
         }
     }
 
@@ -1584,7 +1716,11 @@ impl Backend {
         let (label, address) = self.launch()?;
         // Through the TUN device every application is carried already; the system proxy stays as it is.
         if self.engine.address().is_none() {
-            return done(format!("Connected through {label}"));
+            return Ok(OperationResult::coded(
+                "connect.connected_via",
+                format!("Connected through {label}"),
+            )
+            .with("node", &label));
         }
         if self.state.preferences.system_proxy
             && self.state.proxy_backup.is_none()
@@ -1595,7 +1731,12 @@ impl Backend {
                 return Err(error);
             }
         }
-        done(format!("Connected through {label} on {address}"))
+        Ok(OperationResult::coded(
+            "connect.connected_via_at",
+            format!("Connected through {label} on {address}"),
+        )
+        .with("node", &label)
+        .with("address", address))
     }
 
     /// Points the desktop's proxy at `port` and keeps the backup on disk. A backup that cannot be saved undoes the
@@ -1669,7 +1810,8 @@ impl Backend {
         self.log(LogLevel::Info, "Disconnected");
         // A failure stays the last error, which the window shows; the engine is stopped either way.
         let _ = self.restore_proxy();
-        done(self.with_capture_note("Disconnected"))
+        let note = self.take_capture_note();
+        Ok(OperationResult::coded("disconnect.done", "Disconnected").noted(&note))
     }
 
     /// Puts the desktop's proxy settings back from the backup and forgets it once that is on disk. A failure is
@@ -1696,11 +1838,14 @@ impl Backend {
 
     pub fn restore_network_settings(&mut self) -> Result<OperationResult, String> {
         if self.state.proxy_backup.is_none() {
-            return done("The system proxy settings are not changed by this app");
+            return done(
+                "proxy.not_managed",
+                "The system proxy settings are not changed by this app",
+            );
         }
         self.restore_proxy()?;
         self.proxy_restore_pending = false;
-        done("System proxy settings restored")
+        done("proxy.restored", "System proxy settings restored")
     }
 
     /// Live traffic and connections from the running engine.
@@ -1844,7 +1989,10 @@ impl Backend {
         self.state.selected_node = Some(node.id.clone());
         self.save()?;
         self.restart_if_running()?;
-        done(format!("Switched to {}", node.name))
+        Ok(
+            OperationResult::coded("node.switched_to", format!("Switched to {}", node.name))
+                .with("node", &node.name),
+        )
     }
 
     /// Switches to a node of another source: through its linked policy group when the selected source's rules
@@ -1869,7 +2017,11 @@ impl Backend {
                 self.state.group_choices.extend(choices);
                 self.save()?;
                 self.restart_if_running()?;
-                return done(format!("Switched to {name}"));
+                return Ok(OperationResult::coded(
+                    "node.switched_to",
+                    format!("Switched to {name}"),
+                )
+                .with("node", &name));
             }
         }
         self.state.select_source(&source_id);
@@ -1881,9 +2033,13 @@ impl Backend {
         // A routed subscription whose main group cannot pick the node still runs, on its own choices.
         self.switch_node(&node_id).or_else(|_| {
             self.restart_if_running()?;
-            done(format!(
-                "Switched to the subscription with {name}; its policy groups choose the node"
-            ))
+            Ok(OperationResult::coded(
+                "subscription.switched_groups_choose",
+                format!(
+                    "Switched to the subscription with {name}; its policy groups choose the node"
+                ),
+            )
+            .with("name", &name))
         })
     }
 
@@ -1973,9 +2129,12 @@ impl Backend {
         self.node_form(id)?;
         self.change_node_edits(|edits| edits.change(id, change))?;
         if self.restart_if_running()? {
-            return done("Node saved; the engine restarted with it");
+            return done(
+                "node.edit_saved_restarted",
+                "Node saved; the engine restarted with it",
+            );
         }
-        done("Node saved")
+        done("node.edit_saved", "Node saved")
     }
 
     /// Removes a node of the selected source until the subscription is updated. A running engine restarts on it.
@@ -1989,9 +2148,12 @@ impl Backend {
             self.save()?;
         }
         if self.restart_if_running()? {
-            return done("Node removed; the engine restarted without it");
+            return done(
+                "node.removed_restarted",
+                "Node removed; the engine restarted without it",
+            );
         }
-        done("Node removed")
+        done("node.removed", "Node removed")
     }
 
     fn change_node_edits(&mut self, change: impl FnOnce(&mut NodeEdits)) -> Result<(), String> {
@@ -2061,7 +2223,7 @@ impl Backend {
                 let saved = self.save();
                 self.reload_nodes();
                 saved?;
-                return done("These links were imported before");
+                return done("links.imported_before", "These links were imported before");
             };
             let count = engine::parse_nodes(&joined)?.len();
             if let Err(error) = self.store.write_source(&id, &joined) {
@@ -2093,7 +2255,9 @@ impl Backend {
         saved?;
         let message = format!("Imported {supported} of {} nodes", nodes.len());
         self.log(LogLevel::Info, &message);
-        done(message)
+        Ok(OperationResult::coded("nodes.imported", message)
+            .with("supported", supported)
+            .with("total", nodes.len()))
     }
 
     /// The share links pasted before, if the user did not give them a name of their own: their id and
@@ -2170,8 +2334,12 @@ impl Backend {
         let saved = self.save();
         self.reload_nodes();
         saved?;
-        result.map(|count| OperationResult {
-            message: format!("Subscription updated: {count} nodes"),
+        result.map(|count| {
+            OperationResult::coded(
+                "subscription.updated_count",
+                format!("Subscription updated: {count} nodes"),
+            )
+            .with("count", count)
         })
     }
 
@@ -2184,7 +2352,10 @@ impl Backend {
         let saved = self.save();
         self.reload_nodes();
         saved?;
-        done("Subscription selected; reconnect to use it")
+        done(
+            "subscription.selected_reconnect",
+            "Subscription selected; reconnect to use it",
+        )
     }
 
     pub fn remove_subscription(&mut self, id: &str) -> Result<OperationResult, String> {
@@ -2203,7 +2374,7 @@ impl Backend {
         let saved = self.save();
         self.reload_nodes();
         saved?;
-        done("Subscription removed")
+        done("subscription.removed", "Subscription removed")
     }
 
     pub fn save_preferences(
@@ -2216,7 +2387,7 @@ impl Backend {
         }
         self.state.preferences.auto_connect = input.auto_connect;
         self.save()?;
-        done("Settings saved")
+        done("preferences.saved", "Settings saved")
     }
 
     pub fn validate(&self) -> Result<OperationResult, String> {
@@ -2231,10 +2402,15 @@ impl Backend {
         if supported == 0 {
             return Err("no node the embedded engine can run".to_string());
         }
-        done(format!(
-            "{supported} of {} nodes can run on the embedded engine",
-            self.nodes.len()
-        ))
+        Ok(OperationResult::coded(
+            "validate.supported",
+            format!(
+                "{supported} of {} nodes can run on the embedded engine",
+                self.nodes.len()
+            ),
+        )
+        .with("supported", supported)
+        .with("total", self.nodes.len()))
     }
 
     /// Writes a report without node addresses, names or credentials. `health` is the client health section
@@ -2245,7 +2421,11 @@ impl Backend {
             .store
             .write_report(&format!("diagnostics-{}.log", now()), &report)
             .map_err(|error| format!("the report could not be written: {error}"))?;
-        done(format!("Diagnostics report saved to {}", path.display()))
+        Ok(OperationResult::coded(
+            "diagnostics.saved",
+            format!("Diagnostics report saved to {}", path.display()),
+        )
+        .with("path", path.display()))
     }
 
     /// The diagnostics report: the client's state, `health`, and the last lines of the app's log.

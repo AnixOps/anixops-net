@@ -572,9 +572,13 @@ impl Client {
         let (id, delay) = engine::fastest_node(&nodes, DELAY_URL)
             .ok_or_else(|| "no node answered the delay test".to_string())?;
         let switched = self.backend().switch_node(&id)?;
-        Ok(OperationResult {
-            message: format!("{} ({})", switched.message, format_delay(delay)),
-        })
+        let node = switched.params.get("node").cloned().unwrap_or_default();
+        Ok(OperationResult::coded(
+            "fastest.selected_delay",
+            format!("{} ({})", switched.message, format_delay(delay)),
+        )
+        .with("node", node)
+        .with("delay", format_delay(delay)))
     }
 
     fn create_diagnostics(&self) -> Result<SavedFileResult, String> {
@@ -586,6 +590,8 @@ impl Client {
             let saved = self.platform.save_to_downloads(&name, &report)?;
             return Ok(SavedFileResult {
                 message: format!("Diagnostics report saved to {saved}"),
+                code: Some("diagnostics.saved"),
+                params: [("path", saved.clone())].into_iter().collect(),
                 location: Some(saved),
                 ..SavedFileResult::default()
             });
@@ -594,6 +600,8 @@ impl Client {
             .diagnostics(&section)
             .map(|result| SavedFileResult {
                 message: result.message,
+                code: result.code,
+                params: result.params,
                 ..SavedFileResult::default()
             })
     }
@@ -602,12 +610,13 @@ impl Client {
         self.health
             .set_crash_reports(enabled)
             .map_err(|error| format!("the setting could not be saved: {error}"))?;
-        Ok(OperationResult {
-            message: if enabled {
-                "Crash reports on".to_string()
-            } else {
-                "Crash reports off; kept reports deleted".to_string()
-            },
+        Ok(if enabled {
+            OperationResult::coded("crash_reports.on", "Crash reports on")
+        } else {
+            OperationResult::coded(
+                "crash_reports.off",
+                "Crash reports off; kept reports deleted",
+            )
         })
     }
 
@@ -665,8 +674,10 @@ impl Client {
         let directory = self.backend().plugins_dir();
         let message = change(&directory)?;
         let applied = self.backend().plugins_changed()?;
+        // The window words what the change did to the connection; the English keeps what was changed too.
         Ok(OperationResult {
-            message: format!("{message}; {applied}"),
+            message: format!("{message}; {}", applied.message),
+            ..applied
         })
     }
 
@@ -677,13 +688,16 @@ impl Client {
         let root = self.backend().ensure_mitm_root()?;
         let trusted = self.root_trusted(&root);
         let result = self.backend().set_https_decryption(true)?;
-        let note = if trusted {
-            ""
-        } else {
-            ". The root certificate is not trusted yet: choose Trust root certificate under Extensions"
-        };
+        if trusted {
+            return Ok(result);
+        }
         Ok(OperationResult {
-            message: format!("{}{note}", result.message),
+            message: format!(
+                "{}. The root certificate is not trusted yet: choose Trust root certificate under Extensions",
+                result.message
+            ),
+            code: Some("mitm.on_root_untrusted"),
+            ..result
         })
     }
 
@@ -769,18 +783,17 @@ impl Client {
             .map_err(|error| format!("the root certificate could not be read: {error}"))?;
         if session.trusts_root(&pem).is_none() {
             let trusted = trust::install(&root.certificate_path);
-            return Ok(OperationResult {
-                message: trusted.summary("trusted"),
-            });
+            return Ok(OperationResult::plain(trusted.summary("trusted")));
         }
         let thumbprint = desktop_mitm::thumbprint(&pem)?;
         // Noted before the user answers: a root that was noted and then refused costs nothing, one that
         // was trusted and not noted would stay behind when the client is removed.
         self.backend().note_trusted_root(&thumbprint);
         session.trust_root(&pem)?;
-        Ok(OperationResult {
-            message: "Root certificate trusted for this user".to_string(),
-        })
+        Ok(OperationResult::coded(
+            "root.trusted_user",
+            "Root certificate trusted for this user",
+        ))
     }
 
     /// Replaces the root with the user's own CA. Stores that trusted the earlier root do not trust this one:
@@ -795,6 +808,7 @@ impl Client {
             .import_mitm_root(certificate_pem, private_key_pem)?;
         Ok(OperationResult {
             message: format!("{}{}", result.message, self.imported_root_note()),
+            ..result
         })
     }
 
@@ -824,13 +838,12 @@ impl Client {
         match pem.filter(|pem| session.trusts_root(pem).is_some()) {
             Some(pem) => {
                 session.untrust_root(&pem)?;
-                Ok(OperationResult {
-                    message: "Root certificate removed for this user".to_string(),
-                })
+                Ok(OperationResult::coded(
+                    "root.removed_user",
+                    "Root certificate removed for this user",
+                ))
             }
-            None => Ok(OperationResult {
-                message: trust::remove().summary("removed"),
-            }),
+            None => Ok(OperationResult::plain(trust::remove().summary("removed"))),
         }
     }
 
@@ -1227,9 +1240,11 @@ fn handler(name: &str) -> Option<Handler> {
                 .delay_target(&node_id)
                 .ok_or("the node is not in any subscription")?;
             let delay = engine::node_delay(&nodes, &id, &url)?;
-            json(OperationResult {
-                message: format!("{name}: {}", format_delay(delay)),
-            })
+            json(
+                OperationResult::coded("delay.node", format!("{name}: {}", format_delay(delay)))
+                    .with("node", &name)
+                    .with("delay", format_delay(delay)),
+            )
         },
         // Node checkup (节点体检): latency rounds and an optional download through one node. The
         // options are the kernel's `CheckupOptions`; unknown fields are rejected. The answer carries the
@@ -1547,6 +1562,11 @@ fn root_download_name(fingerprint: &str) -> String {
 #[serde(rename_all = "camelCase")]
 pub struct SavedFileResult {
     pub message: String,
+    /// The code and its values a window words the result by, as in [`OperationResult`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<&'static str>,
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub params: std::collections::BTreeMap<&'static str, String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
