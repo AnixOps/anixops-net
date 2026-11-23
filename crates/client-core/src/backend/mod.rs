@@ -2830,7 +2830,7 @@ mod tests {
         backend.set_https_decryption(true).unwrap();
         assert!(backend.mitm_root().exists());
         assert!(backend.snapshot().https_decryption_enabled);
-        desktop_mitm::plugins::import(
+        let imported = desktop_mitm::plugins::import(
             &backend.plugins_dir(),
             "https://plugins.example/a.plugin",
             |url, _| {
@@ -2842,6 +2842,10 @@ mod tests {
             },
         )
         .unwrap();
+        // Imported off; nothing of it is in the envelope until the user turns it on after looking at it.
+        assert!(!imported.enabled);
+        assert!(!backend.envelope().unwrap().contains("script_assets"));
+        desktop_mitm::plugins::set_enabled(&backend.plugins_dir(), &imported.id, true).unwrap();
         let changed = backend.plugins_changed().unwrap();
         assert_eq!(changed.code, Some("plugins.applied_next"));
         assert_eq!(changed.message, "it applies with the next connection");

@@ -346,10 +346,14 @@
     <string name="plugin_file_unreadable">This file could not be read</string>
     <string name="plugins_empty">No plugins yet</string>
     <string name="plugins_empty_body">Import a plugin by its https address. It takes effect once HTTPS decryption is on.</string>
-    <string name="plugins_note">Works with Loon, Surge and Quantumult X plugins. Importing also downloads the scripts a plugin names, and allows them to run.</string>
+    <string name="plugins_note">Works with Loon, Surge and Quantumult X plugins. An imported plugin stays off: look at the domains it decrypts, its rewrite rules and its scripts, and turn it on once you agree; only then do its scripts run.</string>
     <string name="plugin_partial">Partly supported</string>
     <string name="plugin_unsupported">Not supported</string>
     <string name="plugin_view">View contents</string>
+    <string name="plugin_review_warning">When on, this plugin decrypts the domains below, rewrites requests and responses by its rules and runs the scripts below. Scripts can read and change decrypted traffic and can reach the network themselves. Turn on only plugins from sources you trust.</string>
+    <string name="plugin_review_broad">This plugin decrypts every site (wildcard *), including the traffic of banks, mail and other sensitive sites.</string>
+    <string name="plugin_review_enable">Turn on plugin</string>
+    <string name="plugin_review_later">Not now</string>
     <string name="plugin_remove">Remove plugin</string>
     <string name="plugin_confirm_remove">Remove %1$s?</string>
     <string name="plugin_no_hosts">No domains to decrypt</string>
@@ -755,6 +759,7 @@
     <string name="code_plugins_disabled">Plugin turned off.</string>
     <string name="code_plugins_enabled">Plugin turned on.</string>
     <string name="code_plugins_imported">Plugin imported: {name} ({scripts} scripts).</string>
+    <string name="code_plugins_imported_off">Plugin imported: {name} ({scripts} scripts). It stays off until you have looked at it and turned it on.</string>
     <string name="code_plugins_need_decryption">Turn on HTTPS decryption for this to take effect.</string>
     <string name="code_plugins_removed">Plugin deleted.</string>
     <string name="code_preferences_saved">Settings saved.</string>

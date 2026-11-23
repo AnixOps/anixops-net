@@ -695,6 +695,7 @@ private fun rememberExtensionsActions(
         setPluginEnabled = extensions::setPluginEnabled,
         removePlugin = extensions::removePlugin,
         inspect = { extensions.inspect(it) },
+        enableReviewed = { extensions.enableReviewed(it) },
         closeInspector = extensions::closeInspector,
         editMapping = extensions::editMapping,
         closeMappingEditor = extensions::closeMappingEditor,

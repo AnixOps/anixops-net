@@ -322,10 +322,14 @@
     <string name="plugin_file_unreadable">讀不了這個檔案</string>
     <string name="plugins_empty">還沒有外掛</string>
     <string name="plugins_empty_body">匯入一個外掛的 https 網址，開啟 HTTPS 解密後生效。</string>
-    <string name="plugins_note">支援 Loon、Surge 和 Quantumult X 的外掛。匯入時會一併下載外掛裡的腳本，匯入即表示允許這些腳本執行。</string>
+    <string name="plugins_note">支援 Loon、Surge 和 Quantumult X 的外掛。匯入後先保持關閉：查看它解密的網域、改寫規則和腳本，確認後再開啟，腳本才會執行。</string>
     <string name="plugin_partial">部分支援</string>
     <string name="plugin_unsupported">不支援</string>
     <string name="plugin_view">檢視內容</string>
+    <string name="plugin_review_warning">開啟後，這個外掛會解密下方的網域、依規則改寫請求和回應，並執行下方的腳本。腳本可以查看和改寫解密後的流量，也可以自行連網。只開啟你信任的來源。</string>
+    <string name="plugin_review_broad">這個外掛要解密所有網站（萬用字元 *），包括銀行、郵件等敏感網站的流量。</string>
+    <string name="plugin_review_enable">開啟外掛</string>
+    <string name="plugin_review_later">暫不開啟</string>
     <string name="plugin_remove">刪除外掛</string>
     <string name="plugin_confirm_remove">確認刪除 %1$s</string>
     <string name="plugin_no_hosts">沒有解密網域</string>
@@ -719,6 +723,7 @@
     <string name="code_plugins_disabled">外掛已停用</string>
     <string name="code_plugins_enabled">外掛已啟用</string>
     <string name="code_plugins_imported">已匯入外掛：{name}（{scripts} 個腳本）</string>
+    <string name="code_plugins_imported_off">已匯入外掛：{name}（{scripts} 個腳本），先保持關閉，查看內容並確認後再開啟</string>
     <string name="code_plugins_need_decryption">開啟 HTTPS 解密後生效</string>
     <string name="code_plugins_removed">外掛已刪除</string>
     <string name="code_preferences_saved">設定已儲存</string>

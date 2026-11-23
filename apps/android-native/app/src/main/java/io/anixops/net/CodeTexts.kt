@@ -83,6 +83,7 @@ class CodeTexts(private val context: Context) : CoreTexts {
             "plugins.disabled" to R.string.code_plugins_disabled,
             "plugins.enabled" to R.string.code_plugins_enabled,
             "plugins.imported" to R.string.code_plugins_imported,
+            "plugins.imported_off" to R.string.code_plugins_imported_off,
             "plugins.need_decryption" to R.string.code_plugins_need_decryption,
             "plugins.removed" to R.string.code_plugins_removed,
             "preferences.saved" to R.string.code_preferences_saved,

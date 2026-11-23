@@ -48,6 +48,11 @@ data class ExtensionsState(
     val consented: Boolean = false,
     /** The plugin whose contents are open, with what the engine read of it. */
     val inspected: Pair<MitmPlugin, MitmPluginDetails>? = null,
+    /**
+     * The open plugin is being looked at before it is turned on: after an import, which leaves a plugin off, or
+     * when its switch is turned on. The dialog then offers to turn it on.
+     */
+    val reviewing: Boolean = false,
     /** The mapping open in its editor page; a new one has an empty id. */
     val editingMapping: DebugMapping? = null,
     val editingRedirect: RedirectEditor? = null,
@@ -136,24 +141,56 @@ class ExtensionsViewModel(private val core: Core, private val preferences: Share
         _state.update { it.copy(outcomes = outcomes) }
     }
 
-    fun importPlugin(url: String) = perform { core.importMitmPlugin(url.trim()) }
+    /**
+     * Imports a plugin, which the client saves off (feature-gap-05): nothing it holds runs until the user has looked
+     * at its domains, rewrite lines and scripts, so the review opens right after.
+     */
+    fun importPlugin(url: String) = perform(onSuccess = ::reviewImported) { core.importMitmPlugin(url.trim()) }
 
-    fun importPluginText(text: String, source: String) = perform { core.importMitmPluginText(text, source) }
+    fun importPluginText(text: String, source: String) =
+        perform(onSuccess = ::reviewImported) { core.importMitmPluginText(text, source) }
 
-    fun setPluginEnabled(id: String, enabled: Boolean) = perform { core.setMitmPluginEnabled(id, enabled) }
+    /** Turning a plugin on opens the review first; turning one off is at once. */
+    fun setPluginEnabled(id: String, enabled: Boolean) {
+        if (enabled) {
+            _state.value.plugins.firstOrNull { it.id == id }?.let { review(it) }
+        } else {
+            perform { core.setMitmPluginEnabled(id, false) }
+        }
+    }
+
+    /** Opens [plugin] for the user to look at before turning it on. */
+    fun review(plugin: MitmPlugin) = inspect(plugin, reviewing = true)
+
+    /** Turns on the plugin the user has looked at, and closes the review once the client took it. */
+    fun enableReviewed(id: String) =
+        perform(onSuccess = { closeInspector() }) { core.setMitmPluginEnabled(id, true) }
 
     fun removePlugin(id: String) = perform { core.removeMitmPlugin(id) }
 
-    fun inspect(plugin: MitmPlugin) = viewModelScope.launch {
+    fun inspect(plugin: MitmPlugin, reviewing: Boolean = false) = viewModelScope.launch {
         try {
             val details = core.mitmPluginDetails(plugin.id)
-            _state.update { it.copy(inspected = plugin to details) }
+            _state.update { it.copy(inspected = plugin to details, reviewing = reviewing) }
         } catch (error: CoreException) {
             _messages.send(ExtensionsMessage.Text(error.message.orEmpty()))
         }
     }
 
-    fun closeInspector() = _state.update { it.copy(inspected = null) }
+    fun closeInspector() = _state.update { it.copy(inspected = null, reviewing = false) }
+
+    /** Opens the review of the plugin an import left off, read afresh so that it shows what was just saved. */
+    private fun reviewImported(result: OperationResult) {
+        val id = pluginToReview(result) ?: return
+        viewModelScope.launch {
+            val plugin = try {
+                core.mitmPlugins().firstOrNull { it.id == id }
+            } catch (error: CoreException) {
+                null
+            } ?: return@launch
+            if (!plugin.enabled) review(plugin)
+        }
+    }
 
     /**
      * The open mapping editor's fields, kept here from opening to saving or leaving so that a rotation or another page
@@ -226,14 +263,17 @@ class ExtensionsViewModel(private val core: Core, private val preferences: Share
         }
     }
 
-    /** Runs [command] once at a time; [onSuccess] runs when the core took it (an editor then closes). */
-    private fun perform(onSuccess: () -> Unit = {}, command: suspend () -> OperationResult) {
+    /**
+     * Runs [command] once at a time; [onSuccess] runs with the answer when the core took it (an editor then closes,
+     * an import opens its review).
+     */
+    private fun perform(onSuccess: (OperationResult) -> Unit = {}, command: suspend () -> OperationResult) {
         if (_state.value.busy) return
         _state.update { it.copy(busy = true) }
         viewModelScope.launch {
             try {
                 val result = command()
-                onSuccess()
+                onSuccess(result)
                 _messages.send(ExtensionsMessage.Text(result.message))
             } catch (error: CoreException) {
                 _messages.send(ExtensionsMessage.Text(error.message.orEmpty()))

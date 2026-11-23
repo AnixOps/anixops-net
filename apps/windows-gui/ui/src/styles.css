@@ -129,6 +129,8 @@ nav { display: grid; gap: 1px; }
 .card-header h2 { display: flex; gap: 8px; align-items: baseline; color: var(--text2); font-size: 12px; font-weight: 600; }
 .card-actions { display: flex; flex: 0 0 auto; gap: 6px; align-items: center; }
 .card-footer { margin: 6px var(--row-pad) 0; color: var(--text2); font-size: 12px; line-height: 1.45; }
+.card-note { margin: 8px var(--row-pad); color: var(--text2); font-size: 12px; line-height: 1.45; }
+.card-note.danger { color: var(--danger); }
 .group { padding: 0 var(--row-pad); overflow: hidden; background: var(--group); border-radius: 10px; box-shadow: 0 0 0 .5px var(--hairline), var(--shadow-1); }
 .group + .group, .node-section + .node-section { margin-top: 14px; }
 .group > :not(.row):not([role="radiogroup"]):not(.list):not(.rows) { padding-block: 12px; }

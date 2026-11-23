@@ -5251,7 +5251,7 @@ async fn import_mitm_plugin_text(
             &text,
             mitm_plugins::download,
         )?;
-        apply_mitm_plugins(&state, Some((plugin.name.as_str(), plugin.script_count)))
+        plugin_imported(&state, &plugin)
     })
     .await
 }
@@ -5270,7 +5270,7 @@ async fn import_mitm_plugin(
     run_blocking(move || {
         let plugin =
             mitm_plugins::import(&mitm_plugins::directory(), &url, mitm_plugins::download)?;
-        apply_mitm_plugins(&state, Some((plugin.name.as_str(), plugin.script_count)))
+        plugin_imported(&state, &plugin)
     })
     .await
 }
@@ -5400,6 +5400,34 @@ async fn remove_decrypt_host(
         apply_mitm_plugins(&state, None)
     })
     .await
+}
+
+/// What importing `plugin` did. A plugin is saved off unless it is one the user had on and nothing in it changed
+/// (`mitm_plugins::import`); the window then opens it by `id` for the user to look at before turning it on. Applied
+/// either way: an import can turn off a plugin that was on.
+fn plugin_imported(
+    state: &DesktopAppState,
+    plugin: &PluginSummary,
+) -> Result<OperationResult, String> {
+    if plugin.enabled {
+        return apply_mitm_plugins(state, Some((plugin.name.as_str(), plugin.script_count)))
+            .map(|result| result.with("id", &plugin.id));
+    }
+    let off = OperationResult::coded(
+        "plugins.imported_off",
+        format!(
+            "Plugin imported: {} ({} scripts); it is off until you look at what it does and turn it on.",
+            plugin.name, plugin.script_count
+        ),
+    )
+    .with("name", &plugin.name)
+    .with("scripts", plugin.script_count)
+    .with("id", &plugin.id);
+    // A new plugin saved off changes nothing the engine runs.
+    if !plugin.replaced_one_on || !managed_https_decryption_enabled() {
+        return Ok(off);
+    }
+    reconnect_running_direct_core(state, None)?.result(off)
 }
 
 /// Restarts a running desktop core so a change to the plugin library (plugins, mappings, the decryption list)

@@ -817,7 +817,10 @@ mod tests {
                 .to_vec()
             })
         };
-        mitm_plugins::import(&plugins, "https://plugins.example/a.plugin", fetch).unwrap();
+        let imported =
+            mitm_plugins::import(&plugins, "https://plugins.example/a.plugin", fetch).unwrap();
+        // Imported off; the user turns it on after looking at it.
+        mitm_plugins::set_enabled(&plugins, &imported.id, true).unwrap();
         let envelope = envelope_with_mitm(
             ENVELOPE,
             &certificate.pem(),

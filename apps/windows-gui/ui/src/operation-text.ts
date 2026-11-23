@@ -137,6 +137,7 @@ export const operationTexts: Record<string, string> = {
   "decrypt.paused": "已暂停 {pattern}",
   "decrypt.removed": "已从解密列表移除 {host}",
   "plugins.imported": "已导入插件：{name}（{scripts} 个脚本）",
+  "plugins.imported_off": "已导入插件：{name}（{scripts} 个脚本），先关着，查看内容并确认后再打开",
   "plugins.enabled": "插件已启用",
   "plugins.disabled": "插件已停用",
   "plugins.removed": "插件已删除",

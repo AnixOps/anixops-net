@@ -709,6 +709,16 @@ impl Client {
         })
     }
 
+    /// What importing `plugin` did. A new plugin is saved off and changes nothing the engine runs; one that
+    /// replaced a plugin which was on is applied like any other change.
+    fn plugin_imported(&self, plugin: &plugins::PluginSummary) -> Result<OperationResult, String> {
+        let result = plugin_imported(plugin);
+        if plugin.enabled || plugin.replaced_one_on {
+            return self.change_plugins(move |_| Ok(result));
+        }
+        Ok(result)
+    }
+
     /// Generates the root on first use and restarts a running engine with decryption on. The root is not
     /// trusted here: the user does that with `open_mitm_root` (TERMS.md section 4).
     #[cfg(not(target_os = "android"))]
@@ -1525,17 +1535,15 @@ fn handler(name: &str) -> Option<Handler> {
         },
         "import_mitm_plugin" => |client, args| {
             let Url { url } = parse(args)?;
-            json(client.change_plugins(move |directory| {
-                let plugin = plugins::import(directory, &url, plugins::download)?;
-                Ok(plugin_imported(&plugin))
-            })?)
+            let directory = client.backend().plugins_dir();
+            let plugin = plugins::import(&directory, &url, plugins::download)?;
+            json(client.plugin_imported(&plugin)?)
         },
         "import_mitm_plugin_text" => |client, args| {
             let PluginText { text, source } = parse(args)?;
-            json(client.change_plugins(move |directory| {
-                let plugin = plugins::import_text(directory, &source, &text, plugins::download)?;
-                Ok(plugin_imported(&plugin))
-            })?)
+            let directory = client.backend().plugins_dir();
+            let plugin = plugins::import_text(&directory, &source, &text, plugins::download)?;
+            json(client.plugin_imported(&plugin)?)
         },
         "mitm_plugin_details" => |client, args| {
             let Id { id } = parse(args)?;
@@ -1651,17 +1659,31 @@ fn trust_result(outcome: &trust::Outcome, removed: bool) -> OperationResult {
     OperationResult::coded(code, message).with("count", outcome.browsers)
 }
 
-/// What importing a plugin did, coded: its name and how many scripts it brought.
+/// What importing a plugin did, coded: its name, how many scripts it brought, and its id, by which the window opens
+/// the plugin for the user to look at before turning it on. A plugin is saved off unless it is one the user had on
+/// and nothing in it changed (`plugins::import`).
 fn plugin_imported(plugin: &plugins::PluginSummary) -> OperationResult {
-    OperationResult::coded(
-        "plugins.imported",
-        format!(
-            "Plugin imported: {} ({} scripts)",
-            plugin.name, plugin.script_count
-        ),
-    )
-    .with("name", &plugin.name)
-    .with("scripts", plugin.script_count)
+    let result = if plugin.enabled {
+        OperationResult::coded(
+            "plugins.imported",
+            format!(
+                "Plugin imported: {} ({} scripts)",
+                plugin.name, plugin.script_count
+            ),
+        )
+    } else {
+        OperationResult::coded(
+            "plugins.imported_off",
+            format!(
+                "Plugin imported: {} ({} scripts); it is off until you look at what it does and turn it on",
+                plugin.name, plugin.script_count
+            ),
+        )
+    };
+    result
+        .with("name", &plugin.name)
+        .with("scripts", plugin.script_count)
+        .with("id", &plugin.id)
 }
 
 /// The search of a command that takes one; no arguments at all is the empty search.

@@ -326,10 +326,14 @@
     <string name="plugin_file_unreadable">读不了这个文件</string>
     <string name="plugins_empty">还没有插件</string>
     <string name="plugins_empty_body">导入一个插件的 https 网址，开启 HTTPS 解密后生效。</string>
-    <string name="plugins_note">支持 Loon、Surge 和 Quantumult X 的插件。导入时会一并下载插件里的脚本，导入即表示允许这些脚本运行。</string>
+    <string name="plugins_note">支持 Loon、Surge 和 Quantumult X 的插件。导入后先关着：查看它解密的域名、改写规则和脚本，确认后再打开，脚本才会运行。</string>
     <string name="plugin_partial">部分支持</string>
     <string name="plugin_unsupported">不支持</string>
     <string name="plugin_view">查看内容</string>
+    <string name="plugin_review_warning">打开后，这个插件会解密下面的域名、按规则改写请求和响应，并运行下面的脚本。脚本可以查看和改写解密后的流量，也可以自行联网。只打开你信任的来源。</string>
+    <string name="plugin_review_broad">这个插件要解密所有网站（通配 *），包括银行、邮箱等敏感网站的流量。</string>
+    <string name="plugin_review_enable">打开插件</string>
+    <string name="plugin_review_later">暂不打开</string>
     <string name="plugin_remove">删除插件</string>
     <string name="plugin_confirm_remove">确认删除 %1$s</string>
     <string name="plugin_no_hosts">没有解密域名</string>
@@ -723,6 +727,7 @@
     <string name="code_plugins_disabled">插件已停用</string>
     <string name="code_plugins_enabled">插件已启用</string>
     <string name="code_plugins_imported">已导入插件：{name}（{scripts} 个脚本）</string>
+    <string name="code_plugins_imported_off">已导入插件：{name}（{scripts} 个脚本），先关着，查看内容并确认后再打开</string>
     <string name="code_plugins_need_decryption">开启 HTTPS 解密后生效</string>
     <string name="code_plugins_removed">插件已删除</string>
     <string name="code_preferences_saved">设置已保存</string>
