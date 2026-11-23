@@ -37,6 +37,8 @@ export const operationTexts: Record<string, string> = {
   "preferences.saved": "设置已保存",
   "crash_reports.on": "已开启崩溃报告",
   "crash_reports.off": "已关闭崩溃报告，保存的报告已删除",
+  "metrics.on": "已打开 Prometheus 指标",
+  "metrics.off": "已关闭 Prometheus 指标",
   "diagnostics.saved": "诊断报告已保存到 {path}",
   "subscription.renamed": "订阅已重命名",
   "subscription.interval_off": "已关闭这个订阅的自动更新",

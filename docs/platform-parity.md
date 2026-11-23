@@ -88,7 +88,7 @@
 | 开机 / 登录后启动、自动连接 | ✅ | ✅ | ✅ | ✅ | ◐ | Android 在系统设置里把本 App 设为“始终开启的 VPN”后，开机由系统启动并自动连接；App 自己不能开机连接，见系统限制 |
 | `anixops://` 链接 | ✅ | ✅ | ✅ | ✅ | ✅ | 与 iOS 相同的动作：connect / disconnect / toggle、`mode?set=`、`select?node=&group=` 或 `policy=`、`import?url=`（只填进导入框，用户点“导入”才保存）。桌面没有 `global` 模式；公开版不带预设分流模式（[no-presets.md](no-presets.md)），旧版预设模式名一律拒绝。Windows 写当前用户的 `HKCU\Software\Classes\anixops`，命令是不需要管理员权限的 `anixops-net-link.exe`：客户端在运行时经窗口消息把链接交给它，不弹 UAC；没运行时才以管理员身份启动客户端（一次 UAC），拒绝 UAC 时链接保留一小时、下次启动客户端时处理（`installer/windows/README.md`）。Linux 写 `~/.local/share/applications` 里的 handler 并调 `xdg-mime`，都在启动时注册；第二次启动先把链接交给已运行的窗口再退出，不打开数据目录、不碰系统代理（Linux 因此改为单实例，并以数据目录里的 `instance.lock` 兜底）。冷启动收到的链接排队，等节点和状态读完、模式选定后再执行。Android 在 manifest 里声明 scheme，由共用的 `view.parse_app_link` 解析（T13） |
 | 崩溃报告（本机、脱敏） | ✅ | ✅ | ✅ | ✅ | ✅ | |
-| 本机 Prometheus 指标 | ⛔ | ✅ | ✅ | ✅ | ✅ | macOS 在设置页打开，`127.0.0.1:9477/metrics`，默认关闭（A3）；iOS 见系统限制 |
+| 本机 Prometheus 指标 | ⛔ | ✅ | ✅ | ✅ | ⛔ | `127.0.0.1:9477/metrics`，各端都默认关闭，在设置页打开（macOS A3；Windows / Linux 在“诊断与隐私”）；只回答 `Host` 为本机回环地址的请求。iOS 见系统限制；Android 上本机任何 App 都能连回环端口，不提供 |
 | 用户协议同意、协议入口 | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | 简体 / 繁体中文 / 英文 | ✅ | ✅ | ✅ | ✅ | ✅ | 跟随系统语言；其他语言一律显示英文（[ui-ux.md](ui-ux.md)“界面语言”） |
 | 应用内更新 | — | ✅ | ❌ | ❌ | ❌ | macOS 渠道未开；其余平台目前从下载页更新 |
@@ -127,7 +127,7 @@ MSI 升级时旧服务随旧版本一起卸载；便携版注册过的服务由�
   systemd-networkd、iwd），自带按连接执行脚本的办法，客户端不做。
 - **iOS 指标端口**：Packet Tunnel 扩展的监听端口对其他 App 不可见，iOS 上用导出日志代替。
 - **macOS 指标端口与自有根证书**：端口由 App 自己在 127.0.0.1 上监听（沙盒加了 `network.server`），每次抓取时向系统扩展里的
-  引擎要指标，所以 App 退出后端口关闭；为免意外开放端口默认关闭，Windows / Linux 默认打开。引擎只用 ECDSA P-256 签发证书，
+  引擎要指标，所以 App 退出后端口关闭；为免意外开放端口默认关闭，Windows / Linux 同样默认关闭。引擎只用 ECDSA P-256 签发证书，
   所以自有根证书的私钥必须是 P-256。
 
 ## 补齐计划

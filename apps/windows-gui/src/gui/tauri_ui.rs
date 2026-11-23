@@ -763,6 +763,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             create_diagnostics,
             health_status,
             set_crash_reports,
+            set_metrics,
             import_subscription,
             update_subscription,
             select_subscription,
@@ -3462,6 +3463,27 @@ fn set_crash_reports_blocking(health: &Health, enabled: bool) -> Result<Operatio
             "Crash reports off; kept reports deleted.",
         )
     })
+}
+
+/// Turns the local Prometheus endpoint on or off (off by default).
+#[tauri::command]
+async fn set_metrics(
+    health: State<'_, HealthState>,
+    enabled: bool,
+) -> Result<OperationResult, String> {
+    // Stopping the endpoint waits for its thread: off the window's main thread.
+    let health = health.0.clone();
+    run_blocking(move || {
+        health
+            .set_metrics(enabled)
+            .map_err(|error| format!("The setting could not be saved: {error}"))?;
+        Ok(if enabled {
+            OperationResult::coded("metrics.on", "Prometheus metrics on.")
+        } else {
+            OperationResult::coded("metrics.off", "Prometheus metrics off.")
+        })
+    })
+    .await
 }
 
 fn create_diagnostics_blocking(health: &str) -> Result<OperationResult, String> {

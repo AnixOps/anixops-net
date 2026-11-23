@@ -631,6 +631,18 @@ impl Client {
         })
     }
 
+    /// Turns the local Prometheus endpoint on or off (off by default).
+    fn set_metrics(&self, enabled: bool) -> Result<OperationResult, String> {
+        self.health
+            .set_metrics(enabled)
+            .map_err(|error| format!("the setting could not be saved: {error}"))?;
+        Ok(if enabled {
+            OperationResult::coded("metrics.on", "Prometheus metrics on")
+        } else {
+            OperationResult::coded("metrics.off", "Prometheus metrics off")
+        })
+    }
+
     fn import_subscription(&self, location: &str) -> Result<OperationResult, String> {
         let location = location.trim();
         if location.is_empty() {
@@ -1411,6 +1423,10 @@ fn handler(name: &str) -> Option<Handler> {
         "set_crash_reports" => |client, args| {
             let Enabled { enabled } = parse(args)?;
             json(client.set_crash_reports(enabled)?)
+        },
+        "set_metrics" => |client, args| {
+            let Enabled { enabled } = parse(args)?;
+            json(client.set_metrics(enabled)?)
         },
         "import_subscription" => |client, args| {
             let Location { location } = parse(args)?;

@@ -206,7 +206,7 @@ macOS 客户端改为官网分发（Developer ID 签名 + 公证），隧道从 
 
 见 [`docs/architecture/client-health.md`](architecture/client-health.md)。Linux 的冷启动、指标端点与完整性由 CI 验证，其余需真机：
 
-- [ ] Windows：连接后浏览器打开 `http://127.0.0.1:9477/metrics`，有 `networkcore_upload_bytes_total` 与 `anixops_client_integrity{state="verified"} 1`（MSI 安装版）。
+- [ ] Windows：全新安装后 `http://127.0.0.1:9477/metrics` 连不上（默认关闭）；在设置 › 诊断与隐私 打开「Prometheus 指标」，连接后浏览器打开该地址，有 `networkcore_upload_bytes_total` 与 `anixops_client_integrity{state="verified"} 1`（MSI 安装版）；`curl -H "Host: evil.example:9477" http://127.0.0.1:9477/metrics` 返回 403；关掉开关后端口关闭，重启后保持关闭。从 0.x 升级的安装，端点升级后同样是关闭的。
 - [ ] Windows：设置 › 诊断与隐私 显示「安装完整性：完整」；改动安装目录里的 `wintun.dll` 后重启客户端显示「文件缺失或被改动」。
 - [ ] 关闭「崩溃报告」后 `crashes` 目录被删除；重新打开后开关状态在重启后保持。
 - [ ] iOS / macOS：设置 › 隐私 有「崩溃报告」开关；开发者模式（macOS 为活动页）复制的诊断信息里有 `install integrity: verified` 与 `metrics:` 段，`metrics:` 段里没有节点名、策略组名。
