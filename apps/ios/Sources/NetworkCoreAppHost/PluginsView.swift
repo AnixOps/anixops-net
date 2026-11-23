@@ -248,7 +248,6 @@ final class PluginsModel: ObservableObject {
     @Published private(set) var trustState = MitmTrustState.notGenerated
     @Published private(set) var note: String?
     @Published private(set) var isDownloading = false
-    /// Shows the one-time confirmation before HTTPS decryption is turned on for the first time.
 
     func load() {
         do {

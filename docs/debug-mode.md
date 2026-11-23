@@ -72,6 +72,7 @@ HTTPS 解密按域名逐个开启，不默认解密全部流量。
 - 首次解密确认（Apple，TERMS.md 第 4 节）：开启 HTTPS 解密的每条路径共用一道确认（`TunnelController.requireDecryptionConsent()`，根视图 `RootView` / `MacRootView` 上的同一个对话框，编辑表单打开时由表单弹出）。插件总开关；解密域名的添加、编辑、启用停用的行、“改为解密”；加密连接详情和请求页的“解密此域名 / 解密”；Map Local / Map Remote 的保存和开关，只要让映射插件新增了要解密的域名（`DecryptionConsent.isRequired`），都会先问；删除、停用、只加排除行不问。取消则不保存。确认写入 `https-decryption-consent-version`，一次安装只问一次。
   - 兜底：未确认时，会解密任何域名的映射插件不写进 VPN 配置（`DecryptionConsent.profilePlugin`）；只有排除行或不带主机的映射照常写入。解密列表和映射本身仍保存在 `debug-mappings.json`。
   - 旧版本保存了解密域名或映射、但从未确认过的用户：启动后问一次（每次启动最多一次）；确认后映射插件写进配置，取消则从配置里拿掉，不解密。
+    取消后列表里的域名仍在、但不解密，加密连接详情也不再显示“解密此域名”（域名已在列表里）。要恢复解密：下次启动时确认，或打开插件总开关，或添加一个新的解密域名，任一处确认后全部生效。
 
 ## 截图
 
