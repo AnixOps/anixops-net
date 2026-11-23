@@ -133,7 +133,7 @@ impl Settings {
                 "AnixOps Net 上次未正常退出，已把它设置的系统代理恢复为你原来的设置。",
             ),
         };
-        Notice::new(title, body)
+        Notice::new(NoticeKind::Connection, title, body)
     }
 
     /// The notice when the saved settings could not be read at start-up and were set aside, so that the window
@@ -153,7 +153,7 @@ impl Settings {
                 "无法读取已保存的设置，AnixOps Net 已以默认设置启动。无法读取的文件已保留在数据文件夹中。",
             ),
         };
-        Notice::new(title, body)
+        Notice::new(NoticeKind::Connection, title, body)
     }
 
     /// The notice when updating subscription `name` failed with `error`.
