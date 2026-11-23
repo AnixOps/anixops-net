@@ -898,18 +898,23 @@ WireGuard、QUIC 类传输等加密实现，用来保护用户流量的机密性
   4. 是否在 Apple 系统加密之外或之上实现标准算法：是。
   美国 EAR 侧通常按大众市场（5A992 / 5D992，§740.17(b)(1)）处理。2021 年 BIS 规则之后，大多数大众市场终端产品已不再需要年度
   自分类报告，是否仍需提交请法务确认后再写入本文件，不要照抄旧做法。
-- [ ] 法国区：在法国上架需要先向 ANSSI 完成加密产品申报，再把申报文件上传到上面的加密文稿；Apple 审核通过后给出合规码。
+- [x] 法国区：在法国上架需要先向 ANSSI 完成加密产品申报，再把申报文件上传到上面的加密文稿；Apple 审核通过后给出合规码。
   不在法国上架就在「价格与销售范围」里排除法国，并把这个决定记在这里。
+  决定（维护者，2026-11-23）：ANSSI 申报完成前不在法国分发；中国大陆暂不分发。App Store Connect 已设为免费、173 个国家或地区
+  （排除法国和中国大陆）。TestFlight 每个构建的加密问题按「使用标准算法、不在法国销售」回答。正式上架 App Store 暂缓：
+  VPN 类 App 需要组织开发者账号（审核指南 5.4），当前是个人账号。要在法国分发时，先完成 ANSSI 申报再改销售范围。
 - [ ] 拿到合规码后，把它设为仓库 Variable `IOS_EXPORT_COMPLIANCE_CODE`（本仓库 `ios-testflight.yml` 与 anx 的 `release-ios.yml`
   都会写入 `ITSEncryptionExportComplianceCode`）。没有合规码时，App Store Connect 会拒收声明了 `true` 却不带合规码的包，
   所以两个 workflow 上传前去掉 `ITSAppUsesNonExemptEncryption`，每个 TestFlight 构建都会显示「缺少出口合规证明」，需要在该构建
   页面回答一次后内部测试者才能安装：「代替或补充 Apple 系统加密使用标准算法」，「不在法国分发」（2026-11-23 起的答案；
   App Store Connect 对这一组答案的提示是不需要上传文稿）。`project.yml` 里仍保持 `true`，CI 检查不变。
-  不要用删除 `ITSAppUsesNonExemptEncryption` 来绕过，删掉的效果相同，只是不显眼。
+  不要在 `project.yml` 里删除这个键或改成 false 来绕过：源码里的声明保持真实，只在上传用的副本里按有无合规码处理。
 - [ ] 完成后把第 44 行的标记改成实际答案与日期，例如 `ios-export-compliance-answer=standard-algorithms-non-exempt-YYYY-MM-DD`，
   并按 `docs/architecture/ios-app-review-manual-confirmation-source-contract.md` 记录 `ios-app-review-export-compliance`。
 - [ ] ANX 版（anx 仓库 `release-ios.yml` 复用本仓库的 `project.yml`）含未公开的专有协议，属于「专有或非标准算法」，
   需要单独回答问卷（通常需要 CCATS 和法国申报），并在该 workflow 里显式写 ANX 版自己的 ITS 键和合规码，不能继承开源版的答案。
+  2026-11-23 的 1.0.0 ANX 构建按「标准算法」回答：协议私有，但用到的原语都是公开标准（X25519、ML-KEM-768、HKDF-SHA256、
+  ChaCha20-Poly1305、AES-GCM、Ed25519、ECDSA P-256）。是否需要按「专有」重新申报，由维护者（必要时与法务）确认。
 
 ### 第三方许可声明（release-readiness-10）
 

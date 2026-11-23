@@ -44,6 +44,43 @@ expect() {
 }
 
 expect pass release "${pinned}" "${pinned}"
+
+# fake_apksigner_schemes <scheme>=<digest>...: build-tools 37 format, one block per signature scheme.
+fake_apksigner_schemes() {
+  local script="${work}/apksigner" pair
+  {
+    echo '#!/usr/bin/env bash'
+    echo "echo 'WARNING: A restricted method in java.lang.System has been called' >&2"
+    for pair in "$@"; do
+      echo "echo '${pair%%=*} Signer: certificate DN: CN=Unknown, OU=Unknown'"
+      echo "echo '${pair%%=*} Signer: certificate SHA-256 digest: ${pair#*=}'"
+      echo "echo '${pair%%=*} Signer: certificate SHA-1 digest: 0000'"
+    done
+  } > "${script}"
+  chmod +x "${script}"
+  echo "${script}"
+}
+
+# expect_schemes pass|fail <expected pin> <scheme>=<digest>...
+expect_schemes() {
+  local want="$1" pin="$2" result
+  shift 2
+  if APKSIGNER="$(fake_apksigner_schemes "$@")" bash "${here}/android-signing-gate.sh" release "${pin}" "${apk}" > /dev/null 2>&1; then
+    result=pass
+  else
+    result=fail
+  fi
+  if [ "${result}" != "${want}" ]; then
+    echo "::error::android-signing-gate (scheme format) pin=${pin} signers=[$*]: expected ${want}, got ${result}"
+    failures=$((failures + 1))
+  fi
+}
+
+expect_schemes pass "${pinned}" "V3.0=${pinned}"
+expect_schemes pass "${pinned}" "V2=${pinned}" "V3.0=${pinned}" "V3.1=${pinned}"
+expect_schemes fail "${pinned}" "V3.0=${other}"
+expect_schemes fail "${pinned}" "V3.0=${pinned}" "V3.1=${other}"
+expect_schemes fail "${pinned}"
 # Fingerprints as Play Console shows them: upper case with colons.
 expect pass release "$(echo "${pinned}" | tr 'a-f' 'A-F' | sed 's/../&:/g; s/:$//')" "${pinned}"
 expect fail debug "${pinned}" "${pinned}"
