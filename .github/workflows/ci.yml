@@ -687,6 +687,9 @@ jobs:
             throw "The MSI upgrade changed the user's managed-config.json."
           }
           if (-not (Test-StartupTask)) {
+            if (Test-Path $guiLog) { Get-Content $guiLog -Tail 80 }
+            Select-String -Path $upgradeLog -Pattern "CleanupCurrentUserStartup|PurgeManagedNetworkState|RemoveExistingProducts|UPGRADINGPRODUCTCODE" |
+              Select-Object -First 60 | ForEach-Object { $_.Line }
             throw "The MSI upgrade removed the sign-in startup task."
           }
           if (-not (Test-Path $rootKey)) {
