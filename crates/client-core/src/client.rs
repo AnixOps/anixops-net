@@ -745,6 +745,7 @@ impl Client {
             location,
             fingerprint,
             save_error,
+            ..SavedFileResult::default()
         })
     }
 
