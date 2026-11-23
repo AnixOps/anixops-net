@@ -21,8 +21,10 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
     }
 
     /// An outbound the app passes through without interpreting: Trojan, VMess, VLESS over TLS, Hysteria2, TUIC
-    /// and the rest of crates/node-import's output. `settings` (everything but the type and address) is the
-    /// secret: it holds the password or user id, and the profile keeps only `type`, `server` and `port`.
+    /// and the rest of crates/node-import's output, including every Shadowsocks, VLESS REALITY or WireGuard node
+    /// with more than its dedicated case holds (a `via`, a transport, multiplexing, a WireGuard address). `settings`
+    /// (everything but the type and address) is the secret: it holds the password or user id, and the profile keeps
+    /// only `type`, `server` and `port`.
     public struct NativeOutbound: Equatable {
         static let addressKeys: Set<String> = ["type", "server", "port"]
 
@@ -36,6 +38,15 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
             self.server = server
             self.port = port
             self.settings = settings
+        }
+
+        /// The runtime outbound entry: the settings with the type and address, as `encode(to:)` writes it.
+        var entry: [String: JSONValue] {
+            var entry = settings
+            entry["type"] = .string(type)
+            entry["server"] = .string(server)
+            entry["port"] = .int(Int64(port))
+            return entry
         }
     }
 
@@ -54,7 +65,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         public var shortID: String
         public var fingerprint: String
 
-        enum CodingKeys: String, CodingKey {
+        enum CodingKeys: String, CodingKey, CaseIterable {
             case serverName = "server_name"
             case publicKey = "public_key"
             case shortID = "short_id"
@@ -362,6 +373,38 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         return copy
     }
 
+    /// The same config as the engine runs the selected node alone: without subscription rules to add, or when the
+    /// engine refuses them. That is the top-level outbound, but for two cases:
+    /// - A profile saved before 1.0 may hold a shorter copy of a subscription's Shadowsocks, VLESS REALITY or
+    ///   WireGuard node, in its dedicated case without what that case has no field for (an xhttp transport,
+    ///   multiplexing, the WireGuard address). When the refused routing section has the same node as its global
+    ///   target, that full node runs instead.
+    /// - A WireGuard node from the importer (native, with its own `local_address`) is the only node of a routing
+    ///   section, as in the subscription's one. As the top-level outbound the engine would run it as the
+    ///   whole-device tunnel, sealing the device's packets straight to the peer from the tunnel interface's
+    ///   address, the fixed `TunnelInterface.proxy` for such a node rather than the address the server gave it: the
+    ///   peer drops them and DNS to 198.18.0.2 goes unanswered. A pasted `wg-quick` config (`.wireguard`) stays the
+    ///   whole-device tunnel, with the interface its file describes.
+    public func selectedNodeAlone() -> EmbeddedRuntimeConfig {
+        var copy = self
+        copy.routing = nil
+        if let routing, let id = routing.global, let node = routing.outbounds[id], node["via"] == nil,
+           outbound.isDedicatedCopy(of: node),
+           let full = try? JSONDecoder().decode(Outbound.self, from: JSONEncoder().encode(node))
+        {
+            copy.outbound = full
+        }
+        if case let .native(native) = copy.outbound, native.type == "wireguard" {
+            copy.routing = Routing(
+                outbounds: [native.type: native.entry],
+                rules: ["FINAL,\(native.type)"],
+                groups: [],
+                global: native.type
+            )
+        }
+        return copy
+    }
+
     /// The same config decrypting HTTPS for the plugins' hosts with `authority`, running the allowed scripts in
     /// `scriptAssets`. No plugins removes the section.
     public func withMitm(
@@ -451,23 +494,72 @@ extension EmbeddedRuntimeConfig.Outbound: Codable {
         case reality
     }
 
+    /// The keys of a dedicated case: all of `needed` (the type, the address and `needs`) and nothing outside
+    /// `allowed` (those and `mayHave`).
+    private struct DedicatedKeys {
+        let needed: Set<String>
+        let allowed: Set<String>
+
+        init(needs: [CodingKeys], mayHave: [CodingKeys] = []) {
+            let address: [CodingKeys] = [.type, .server, .port]
+            needed = Set((address + needs).map(\.rawValue))
+            allowed = needed.union(mayHave.map(\.rawValue))
+        }
+
+        func match(_ keys: Set<String>) -> Bool {
+            needed.isSubset(of: keys) && keys.isSubset(of: allowed)
+        }
+    }
+
+    private static let shadowsocksKeys = DedicatedKeys(needs: [.method, .password])
+    private static let wireGuardKeys = DedicatedKeys(
+        needs: [.privateKey, .peerPublicKey],
+        mayHave: [.presharedKey, .persistentKeepaliveSecs]
+    )
+    private static let vlessKeys = DedicatedKeys(needs: [.uuid, .reality], mayHave: [.flow])
+    /// `RealitySettings` needs every one of its fields and keeps no other.
+    private static let realityKeys = Set(EmbeddedRuntimeConfig.RealitySettings.CodingKeys.allCases.map(\.rawValue))
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let type = try container.decode(String.self, forKey: .type)
         let server = try container.decode(String.self, forKey: .server)
         let port = try container.decode(UInt16.self, forKey: .port)
-        // The dedicated cases have no `via`, so a node that connects through another one stays native.
-        let hasVia = try decoder.container(keyedBy: DynamicCodingKey.self).contains(DynamicCodingKey("via"))
+        let all = try decoder.container(keyedBy: DynamicCodingKey.self)
+        let keys = Set(all.allKeys.map(\.stringValue))
+        if let dedicated = try Self.dedicated(type, server: server, port: port, keys: keys, in: container) {
+            self = dedicated
+            return
+        }
+        var settings: [String: JSONValue] = [:]
+        for key in all.allKeys where !EmbeddedRuntimeConfig.NativeOutbound.addressKeys.contains(key.stringValue) {
+            settings[key.stringValue] = try all.decode(JSONValue.self, forKey: key)
+        }
+        self = .native(EmbeddedRuntimeConfig.NativeOutbound(type: type, server: server, port: port, settings: settings))
+    }
+
+    /// The dedicated case of an outbound whose keys are exactly what that case keeps, otherwise nil and the outbound
+    /// stays native. A node with anything more (a `via`, a transport, multiplexing, a WireGuard address and MTU)
+    /// would lose it in the dedicated case. The profile copies stay in their case too (`withoutSecret()`): a
+    /// dedicated case keeps its secret fields there, empty, and a native outbound keeps only `type`, `server` and
+    /// `port`, which no dedicated case takes, so `withSecret(_:)` gives it back all its settings from the Keychain.
+    private static func dedicated(
+        _ type: String,
+        server: String,
+        port: UInt16,
+        keys: Set<String>,
+        in container: KeyedDecodingContainer<CodingKeys>
+    ) throws -> EmbeddedRuntimeConfig.Outbound? {
         switch type {
-        case "shadowsocks" where !hasVia:
-            self = .shadowsocks(
+        case "shadowsocks" where shadowsocksKeys.match(keys):
+            return .shadowsocks(
                 server: server,
                 port: port,
                 method: try container.decode(String.self, forKey: .method),
                 password: try container.decode(String.self, forKey: .password)
             )
-        case "wireguard":
-            self = .wireguard(
+        case "wireguard" where wireGuardKeys.match(keys):
+            return .wireguard(
                 EmbeddedRuntimeConfig.WireGuardPeer(
                     privateKey: try container.decode(String.self, forKey: .privateKey),
                     peerPublicKey: try container.decode(String.self, forKey: .peerPublicKey),
@@ -477,9 +569,13 @@ extension EmbeddedRuntimeConfig.Outbound: Codable {
                     persistentKeepaliveSecs: try container.decodeIfPresent(UInt16.self, forKey: .persistentKeepaliveSecs)
                 )
             )
-        // VLESS over TLS or a transport is a native outbound; only REALITY has its own case.
-        case "vless" where container.contains(.reality) && !hasVia:
-            self = .vless(
+        // VLESS over TLS or a transport is a native outbound; only REALITY over TCP has its own case.
+        case "vless" where vlessKeys.match(keys):
+            let reality = try container.nestedContainer(keyedBy: DynamicCodingKey.self, forKey: .reality)
+            guard Set(reality.allKeys.map(\.stringValue)) == realityKeys else {
+                return nil
+            }
+            return .vless(
                 EmbeddedRuntimeConfig.VlessOutbound(
                     server: server,
                     port: port,
@@ -489,12 +585,7 @@ extension EmbeddedRuntimeConfig.Outbound: Codable {
                 )
             )
         default:
-            var settings: [String: JSONValue] = [:]
-            let all = try decoder.container(keyedBy: DynamicCodingKey.self)
-            for key in all.allKeys where !EmbeddedRuntimeConfig.NativeOutbound.addressKeys.contains(key.stringValue) {
-                settings[key.stringValue] = try all.decode(JSONValue.self, forKey: key)
-            }
-            self = .native(EmbeddedRuntimeConfig.NativeOutbound(type: type, server: server, port: port, settings: settings))
+            return nil
         }
     }
 
@@ -536,6 +627,32 @@ extension EmbeddedRuntimeConfig.Outbound: Codable {
             // Encoded above.
             break
         }
+    }
+}
+
+extension EmbeddedRuntimeConfig.Outbound {
+    /// Whether this dedicated case holds the node of the runtime outbound entry `entry`: the same type, address and
+    /// secret, whatever else `entry` has. A native outbound is never such a copy.
+    func isDedicatedCopy(of entry: [String: JSONValue]) -> Bool {
+        switch self {
+        case let .shadowsocks(server, port, method, password):
+            return Self.matches(entry, type: "shadowsocks", server: server, port: port)
+                && entry["method"] == .string(method)
+                && entry["password"] == .string(password)
+        case let .vless(vless):
+            return Self.matches(entry, type: "vless", server: vless.server, port: vless.port)
+                && entry["uuid"] == .string(vless.uuid)
+        case let .wireguard(peer):
+            return Self.matches(entry, type: "wireguard", server: peer.server, port: peer.port)
+                && entry["private_key"] == .string(peer.privateKey)
+                && entry["peer_public_key"] == .string(peer.peerPublicKey)
+        case .native:
+            return false
+        }
+    }
+
+    private static func matches(_ entry: [String: JSONValue], type: String, server: String, port: UInt16) -> Bool {
+        entry["type"] == .string(type) && entry["server"] == .string(server) && entry["port"] == .int(Int64(port))
     }
 }
 

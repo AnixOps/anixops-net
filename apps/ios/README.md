@@ -28,12 +28,18 @@ their own gates pass.
   links and single-peer WireGuard `wg-quick` configs are read in Swift; any other share link the engine runs (Trojan,
   VMess, VLESS over TLS/WebSocket/gRPC, Shadowsocks AEAD, Hysteria2, TUIC) and subscription texts (base64 link lists,
   Clash YAML, JSON outbound configs, Surge/Loon/Quantumult X proxy lines) go through the Rust importer, and the first runnable
-  node becomes a native outbound whose settings are the Keychain secret. Node secrets (the Shadowsocks password, the WireGuard private and preshared keys) go into the
+  node becomes a native outbound whose settings are the Keychain secret. An importer node takes a Swift case
+  (Shadowsocks, VLESS REALITY over TCP) only when it has exactly that case's fields; one with more (a `via`, a
+  transport, multiplexing) and every importer WireGuard node stay native, so nothing the importer wrote is dropped and
+  the profile copy of such a node keeps only `type`, `server` and `port` (`EmbeddedRuntimeConfig.Outbound`). Node secrets (the Shadowsocks password, the WireGuard private and preshared keys) go into the
   Keychain as one `NodeSecret` JSON value (`NodeSecretStore`, `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`) and
   the profile keeps only its persistent reference in `NETunnelProviderProtocol.passwordReference`;
   `providerConfiguration` holds the runtime config without secrets and a `TunnelInterface` (addresses, routes, DNS,
-  MTU) that the extension turns into `NEPacketTunnelNetworkSettings`. Shadowsocks uses the fixed full-tunnel
-  interface; WireGuard uses the config's `Address`, `AllowedIPs`, `DNS` and `MTU`. Both targets list `$(AppIdentifierPrefix)networkcore.shared` first in `keychain-access-groups`, so the
+  MTU) that the extension turns into `NEPacketTunnelNetworkSettings`. Shadowsocks and every importer node use the fixed
+  full-tunnel interface; a pasted WireGuard config uses its `Address`, `AllowedIPs`, `DNS` and `MTU` and runs as the
+  whole-device tunnel. A WireGuard node from a subscription or `wireguard://` link runs in the engine's userspace stack
+  with its own `local_address`: as a node of the routing section, and when it runs alone (no node list, or the engine
+  refused the rules) as the only node of one (`EmbeddedRuntimeConfig.selectedNodeAlone()`). Both targets list `$(AppIdentifierPrefix)networkcore.shared` first in `keychain-access-groups`, so the
   extension reads the item the app saved. The default team-prefixed profiles already allow this group.
 - Profile writes: the widget, the Control Center switch, the Live Activity, Shortcuts and Settings change the same VPN
   configuration from other processes. Every change the app makes to it and to the node keys runs one at a time in
