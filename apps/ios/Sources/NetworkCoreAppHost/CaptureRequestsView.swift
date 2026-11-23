@@ -138,7 +138,7 @@ struct CaptureRequestsView: View {
             log.reset()
             invalidFilter = nil
             hostGroups = []
-            pluginLibrary = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)) ?? MitmPluginLibrary()
+            pluginLibrary = MitmPluginLibrary.loadInspected()
             if tunnel.connection == .connected {
                 stopNotice = nil
                 decryption = await tunnel.httpsDecryptionState()

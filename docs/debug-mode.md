@@ -60,6 +60,10 @@ AnixOps Net 是一个 App 两种模式（计划 A3/A4）：**代理**按订阅�
 HTTPS 解密按域名逐个开启，不默认解密全部流量。
 
 - 解密的域名来自三处：改写 › 解密域名 里的列表、启用的插件的 `[MITM]`、启用的映射匹配的主机。
+  - 插件的主机和排除按内核导入的结果计算（iOS / macOS 的 `MitmPlugin.decryptedHostnames`，与引擎读到的一致）：没有段头的
+    Quantumult X 片段（`hostname = …`）、被注释的段头（`#[mitm]`）、Surge `[General]` 的 `force-http-engine-hosts` 都算在内，
+    引擎因写法读不懂而丢掉的 hostname 行不算。插件列表显示“N 个主机 · M 行生效（K 行不支持）· S 个脚本”；还没被内核检查过的
+    旧插件按段名统计，打开插件页、解密域名页或请求页时会补做一次检查。
 - 列表和映射存在同一个 `debug-mappings.json`，最多 500 行。列表（2026-11-18 起）是 `domains`：每行 `pattern`、`exclude`（排除）、`enabled`（停用的行保留但不下发）；同时仍写 `hosts`（启用的解密行），旧版本只读它，旧文件只有 `hosts` 时按全部启用读入。
   - 通配符与引擎 `[MITM] hostname` 一致：`*` 匹配任意字符（含点），`?` 匹配一个字符；`*.example.com` 匹配所有子域名，不含 `example.com` 本身。通配行必须含点和至少一个字母或数字，单独的 `*` 不能加入。
   - 排除行写成 `-pattern`，优先于列表、插件和映射里的所有解密规则（引擎合并插件时任一插件的排除都胜出）；输入框里直接写 `-example.com` 也是排除。

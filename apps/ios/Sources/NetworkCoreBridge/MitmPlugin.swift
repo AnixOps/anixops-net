@@ -107,6 +107,54 @@ public struct MitmPlugin: Codable, Equatable, Identifiable {
         Self.summarize(text)
     }
 
+    /// Hosts the plugin decrypts, lower-cased, without exclusions: from the kernel's import when there is one, which
+    /// also reads Quantumult X snippets without section headers, commented headers (`#[mitm]`) and Surge's
+    /// `force-http-engine-hosts`, and leaves out a hostname line the engine drops; from the `[MITM]` section of the
+    /// text until the plugin is inspected.
+    public var decryptedHostnames: [String] {
+        guard let inspection else {
+            return summary.hostnames
+        }
+        return Self.unique(inspection.hostnames)
+    }
+
+    /// Hosts the plugin never decrypts (`-host` items), lower-cased and without the `-`, from the same source as
+    /// `decryptedHostnames`.
+    public var excludedHostnames: [String] {
+        guard let inspection else {
+            return summary.excludedHostnames
+        }
+        return Self.unique(inspection.excludedHostnames)
+    }
+
+    /// What the plugin list says about the plugin, counted as the engine imports it when the kernel inspected it.
+    public var counts: MitmPluginCounts {
+        guard let inspection else {
+            let summary = summary
+            return MitmPluginCounts(
+                hostnames: summary.hostnames.count,
+                scripts: summary.scriptLines,
+                source: .sections(rewriteLines: summary.rewriteLines, ruleLines: summary.ruleLines)
+            )
+        }
+        let scripts = Set(inspection.resources.filter { $0.kind == MitmPluginInspection.Resource.script }.map(\.url))
+        return MitmPluginCounts(
+            hostnames: decryptedHostnames.count,
+            scripts: scripts.count,
+            source: .kernel(
+                appliedLines: inspection.lines.supported + inspection.lines.partial,
+                unsupportedLines: inspection.lines.unsupported
+            )
+        )
+    }
+
+    private static func unique(_ hosts: [String]) -> [String] {
+        var seen: Set<String> = []
+        return hosts
+            .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
     /// Reads `#!name`, the `[MITM] hostname` list and how many lines each kind of section holds.
     public static func summarize(_ text: String) -> MitmPluginSummary {
         var summary = MitmPluginSummary()
@@ -175,6 +223,26 @@ public struct MitmPlugin: Codable, Equatable, Identifiable {
             }
         }
         return summary
+    }
+}
+
+/// The numbers the plugin list shows for one plugin.
+public struct MitmPluginCounts: Equatable {
+    public enum Source: Equatable {
+        /// The kernel's import: lines the engine applies (fully or in part) and lines it does not support.
+        case kernel(appliedLines: Int, unsupportedLines: Int)
+        /// Read from Loon section names, for a plugin not inspected yet.
+        case sections(rewriteLines: Int, ruleLines: Int)
+    }
+
+    public var hostnames: Int
+    public var scripts: Int
+    public var source: Source
+
+    public init(hostnames: Int, scripts: Int, source: Source) {
+        self.hostnames = hostnames
+        self.scripts = scripts
+        self.source = source
     }
 }
 

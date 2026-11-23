@@ -20226,6 +20226,38 @@
           }
         }
       }
+    },
+    "%lld 行生效": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld lines apply"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 行生效"
+          }
+        }
+      }
+    },
+    "%lld 行不支持": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld lines unsupported"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 行不支援"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
