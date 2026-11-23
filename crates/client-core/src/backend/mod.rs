@@ -1185,7 +1185,7 @@ impl Backend {
     ) -> Result<OperationResult, String> {
         if text.fake_ip && !cfg!(target_os = "android") {
             return Err(
-                "Fake-IP needs the packet tunnel; this Linux client uses the system proxy, which already sees domain names"
+                "Fake-IP is not offered on Linux yet: the system proxy already sees domain names, and the TUN mode has no Fake-IP switch yet"
                     .to_string(),
             );
         }
