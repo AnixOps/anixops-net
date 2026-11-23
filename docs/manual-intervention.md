@@ -387,6 +387,13 @@ Play 版是开源版（用户 2026-11-15 决定），包名 `io.anixops.net.andr
 - [ ] macOS：连接后打开「扩展 → 手机抓包」，iPhone 扫码，按设置页的步骤设代理并安装、信任描述文件，`http://cert.anixops/` 显示“代理已生效”，请求页能看到 `LAN <iPhone 地址>` 的连接，HTTPS 内容能解密。
 - [ ] Windows（桌面模式）与 Linux：同样的步骤，再用一台 Android 手机安装 `.crt` 验收一遍。
 - [ ] 第一次开启时，macOS 和 Windows 可能弹出防火墙提示，需要允许传入连接。
+- [ ] 代理认证（默认开启）：iPhone 在 Wi-Fi 代理里打开认证并填电脑上显示的用户名和密码后能上网；不填或填错时浏览器提示需要
+  代理认证。Android Chrome 第一次访问时弹窗询问用户名和密码。关闭「需要密码」后不填也能上网，页面显示警告；「重新生成」后
+  旧密码失效。macOS 在钥匙串里能看到 `networkcore.lan-share-auth` 项；Windows 在 `%LOCALAPPDATA%\AnixOps Net\` 下有
+  `lan-share-auth.dpapi`；Linux 在 Secret Service 里有 `AnixOps Net LAN share` 项（没有 Secret Service 时数据目录下有权限 600 的
+  `lan-share-auth.json`）。
+- [ ] 截图基准：Windows / Linux「扩展」页的「手机抓包」卡片多了「需要密码」开关和用户名、密码两行（`apps/windows-gui/ui/screenshots`
+  的扩展页截图）；macOS「扩展」页的「手机抓包」分组同样变化。需要在 CI 里重新生成并人工确认后更新基准图。
 
 
 ## 抓包会话加密保存（Tauri，真机验收）
@@ -739,6 +746,13 @@ iOS、macOS 的“向订阅服务商报告连接质量”改为设置开关、�
 - [ ] Windows 系统代理（内核 1.0 起连接时同时写入每个拨号 / VPN 连接，不再改 WinHTTP）：建一个 VPN 连接并给它单独设代理，
   连接后该 VPN 条目的代理指向本机端口；正常断开、结束进程后重新打开窗口、注销取消这三种情况都恢复为原值，WinHTTP
   （`netsh winhttp show proxy`）始终不变。卸载程序替其他账户恢复时仍只恢复局域网设置；该账户 VPN 条目上的本机端口代理需要手动关掉（后续改进：卸载时读取该账户的 Connections 注册表值一并恢复）。
+
+## 内核 cb7f768：1.0.0 评审第 6 批内核修复（1.0.0）
+
+客户端固定的内核从 6892161 升到 cb7f768（networkcore_anixops #270：DNS 缓存、脚本内存上限、包隧道 TCP 等内核修复，
+MITM 子模块到 d6edc0c）。没有新增依赖，`Cargo.lock` 只换了内核提交，`cargo metadata --locked` 通过；anx 的 Cargo.lock 已同步（anx #293）。
+
+- [ ] 触发 anx 的 ANX 构建和 `publish-client.yml` 时用这个内核（anx main 已是 cb7f768）。
 
 ## iOS / macOS 英文界面截图检查（1.0.0）
 

@@ -56,6 +56,10 @@ const NOT_UPDATABLE: &str = "error.not_updatable";
 
 const NO_DOWNLOADS: &str = "this platform has no shared Downloads folder";
 
+/// What the LAN share commands answer where there is no share (Android).
+#[cfg(target_os = "android")]
+const LAN_SHARE_UNAVAILABLE: &str = "LAN share is not available on this platform";
+
 /// Commands the Windows client has and this backend does not; the interface hides their controls.
 const WINDOWS_ONLY: &[&str] = &[
     "configure_script_runtime",
@@ -464,7 +468,48 @@ impl Client {
                 ),
             }
         }
+        // The share starts with the kept credentials, never with what the window put in (`desktop_mitm::phone`).
+        if desktop_mitm::phone::is_start(request) {
+            let auth = self.lan_share_auth()?;
+            let request = desktop_mitm::phone::authorized_start(request, &auth)?;
+            return self.backend().runtime_control(&request);
+        }
         self.backend().runtime_control(request)
+    }
+
+    /// The LAN share's proxy credentials, made and kept on first use. Read outside the backend's lock: the
+    /// key store can be slow or ask the user.
+    #[cfg(not(target_os = "android"))]
+    fn lan_share_auth(&self) -> Result<desktop_mitm::phone::LanShareAuth, String> {
+        let dir = self.backend().lan_share_dir();
+        crate::backend::lan_share_auth::load(&dir)
+    }
+
+    /// Android offers no LAN share, so it keeps no credentials and starts none.
+    #[cfg(target_os = "android")]
+    fn lan_share_auth(&self) -> Result<desktop_mitm::phone::LanShareAuth, String> {
+        Err(LAN_SHARE_UNAVAILABLE.to_string())
+    }
+
+    /// New LAN share credentials, or the switch that requires them changed.
+    #[cfg(not(target_os = "android"))]
+    fn change_lan_share_auth(
+        &self,
+        required: Option<bool>,
+    ) -> Result<desktop_mitm::phone::LanShareAuth, String> {
+        let dir = self.backend().lan_share_dir();
+        match required {
+            Some(required) => crate::backend::lan_share_auth::set_required(&dir, required),
+            None => crate::backend::lan_share_auth::regenerate(&dir),
+        }
+    }
+
+    #[cfg(target_os = "android")]
+    fn change_lan_share_auth(
+        &self,
+        _required: Option<bool>,
+    ) -> Result<desktop_mitm::phone::LanShareAuth, String> {
+        Err(LAN_SHARE_UNAVAILABLE.to_string())
     }
 
     /// Android: the Keystore keeps the key, through the platform.
@@ -1165,6 +1210,12 @@ fn handler(name: &str) -> Option<Handler> {
             }
             client.runtime_control(&request)
         },
+        "lan_share_auth" => |client, _| json(client.lan_share_auth()?),
+        "regenerate_lan_share_auth" => |client, _| json(client.change_lan_share_auth(None)?),
+        "set_lan_share_auth_required" => |client, args| {
+            let Required { required } = parse(args)?;
+            json(client.change_lan_share_auth(Some(required))?)
+        },
         "export_capture" => |client, args| {
             let ExportCapture {
                 format,
@@ -1724,6 +1775,11 @@ struct GroupOutbound {
 #[derive(Deserialize)]
 struct Request {
     request: Value,
+}
+
+#[derive(Deserialize)]
+struct Required {
+    required: bool,
 }
 
 #[derive(Deserialize)]
@@ -2505,6 +2561,56 @@ mod tests {
             client.invoke("take_app_links", Value::Null).unwrap(),
             serde_json::json!([])
         );
+        client.shutdown();
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// The LAN share commands answer the kept credentials and change them. Linux keeps them in a file here (one is
+    /// already there, so the test never reaches the runner's keyring).
+    #[cfg(all(not(windows), not(target_os = "android")))]
+    #[test]
+    fn lan_share_credentials_are_kept_shown_and_changed() {
+        let dir = scratch("lan-share");
+        let kept = desktop_mitm::phone::LanShareAuth {
+            required: true,
+            username: "anx-abcdef".to_string(),
+            password: "abcdefghjkmnpqrstuvw".to_string(),
+        };
+        desktop_mitm::sessions::write_private(
+            &dir.join("lan-share-auth.json"),
+            &kept.to_bytes().unwrap(),
+        )
+        .unwrap();
+        let client = Client::open(
+            Config {
+                dir: dir.clone(),
+                executable: dir.join("anixops-net"),
+                shared_service: false,
+            },
+            Arc::new(NoPlatform),
+        );
+        assert_eq!(
+            client.invoke("lan_share_auth", Value::Null).unwrap(),
+            serde_json::json!({
+                "required": true,
+                "username": "anx-abcdef",
+                "password": "abcdefghjkmnpqrstuvw",
+            })
+        );
+        let off = client
+            .invoke(
+                "set_lan_share_auth_required",
+                serde_json::json!({ "required": false }),
+            )
+            .unwrap();
+        assert_eq!(off["required"], false);
+        assert_eq!(off["password"], kept.password);
+        let fresh = client
+            .invoke("regenerate_lan_share_auth", Value::Null)
+            .unwrap();
+        assert_eq!(fresh["required"], false);
+        assert_ne!(fresh["password"], kept.password);
+        assert_eq!(client.invoke("lan_share_auth", Value::Null).unwrap(), fresh);
         client.shutdown();
         let _ = fs::remove_dir_all(dir);
     }

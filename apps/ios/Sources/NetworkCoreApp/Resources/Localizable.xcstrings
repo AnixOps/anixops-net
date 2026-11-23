@@ -19331,22 +19331,6 @@
         }
       }
     },
-    "手机和 Mac 连同一个 Wi-Fi，把手机的 Wi-Fi 代理设成 Mac，手机的请求就会出现在请求页。只接受局域网里的设备；断开连接时一并关闭。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Put the phone and the Mac on the same Wi-Fi and set the phone's Wi-Fi proxy to the Mac; the phone's requests then appear on the Requests page. Only devices on the local network are accepted, and it turns off when you disconnect."
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "手機和 Mac 連同一個 Wi-Fi，把手機的 Wi-Fi 代理設成 Mac，手機的請求就會出現在請求頁。只接受區域網路裡的裝置；斷開連線時一併關閉。"
-          }
-        }
-      }
-    },
     "端口要在 1024 到 65535 之间。": {
       "localizations": {
         "en": {
@@ -20255,6 +20239,262 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld 行不支援"
+          }
+        }
+      }
+    },
+    "手机和 Mac 连同一个 Wi-Fi，把手机的 Wi-Fi 代理设成 Mac，手机的请求就会出现在请求页。只接受局域网里的设备，默认还要填用户名和密码；断开连接时一并关闭。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Put the phone and the Mac on the same Wi-Fi and set the phone's Wi-Fi proxy to the Mac; the phone's requests then appear on the Requests page. Only devices on the local network are accepted, by default they must enter a username and password, and it turns off when you disconnect."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "手機和 Mac 連同一個 Wi-Fi，把手機的 Wi-Fi 代理設成 Mac，手機的請求就會出現在請求頁。只接受區域網路裡的裝置，預設還要填使用者名稱和密碼；斷開連線時一併關閉。"
+          }
+        }
+      }
+    },
+    "需要密码": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Require Password"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要密碼"
+          }
+        }
+      }
+    },
+    "手机要在 Wi-Fi 代理里填用户名和密码才能使用这个代理": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Phones must enter the username and password in their Wi-Fi proxy settings to use this proxy"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "手機要在 Wi-Fi 代理裡填使用者名稱和密碼才能使用這個代理"
+          }
+        }
+      }
+    },
+    "用户名": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Username"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用者名稱"
+          }
+        }
+      }
+    },
+    "密码": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Password"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "密碼"
+          }
+        }
+      }
+    },
+    "拷贝用户名": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Username"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拷貝使用者名稱"
+          }
+        }
+      }
+    },
+    "拷贝密码": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Password"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拷貝密碼"
+          }
+        }
+      }
+    },
+    "显示密码": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Password"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示密碼"
+          }
+        }
+      }
+    },
+    "隐藏密码": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Password"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隱藏密碼"
+          }
+        }
+      }
+    },
+    "重新生成用户名和密码": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Make a New Username and Password"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新產生使用者名稱和密碼"
+          }
+        }
+      }
+    },
+    "用随机数生成，只保存在这台 Mac 的钥匙串里。重新生成后，已经设置过的手机要重新填写。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Randomly generated and kept only in this Mac's keychain. After making new ones, phones set up before must enter them again."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以隨機數產生，只儲存在這台 Mac 的鑰匙圈裡。重新產生後，已經設定過的手機要重新填寫。"
+          }
+        }
+      }
+    },
+    "任何人都能使用这个代理：同一网络里的任何设备都能通过这台 Mac 和你的节点上网，它们的请求也会进入抓包。只在可信的网络里关闭密码。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anyone can use this proxy: any device on the same network can go online through this Mac and your nodes, and its requests end up in the capture. Turn the password off only on a network you trust."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "任何人都能使用這個代理：同一網路裡的任何裝置都能透過這台 Mac 和你的節點上網，它們的請求也會進入抓包。只在可信的網路裡關閉密碼。"
+          }
+        }
+      }
+    },
+    "iPhone：在 Wi-Fi 代理设置里打开认证，填上面的用户名和密码。Android 的 Wi-Fi 代理没有密码栏，浏览器会在第一次访问时询问，其他应用可能连不上。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone: turn on Authentication in the Wi-Fi proxy settings and enter the username and password above. Android's Wi-Fi proxy has no password field: the browser asks on the first visit, other apps may not connect."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone：在 Wi-Fi 代理設定裡開啟認證，填上面的使用者名稱和密碼。Android 的 Wi-Fi 代理沒有密碼欄，瀏覽器會在第一次造訪時詢問，其他 App 可能連不上。"
+          }
+        }
+      }
+    },
+    "无法读取钥匙串里的手机抓包密码，手机抓包没有开启。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The phone debugging password could not be read from the keychain, so phone debugging did not turn on."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法讀取鑰匙圈裡的手機抓包密碼，手機抓包沒有開啟。"
+          }
+        }
+      }
+    },
+    "无法把手机抓包密码保存到钥匙串。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The phone debugging password could not be saved to the keychain."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法把手機抓包密碼儲存到鑰匙圈。"
+          }
+        }
+      }
+    },
+    "手机抓包没有用新的设置重新开启，请关闭后再打开。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Phone debugging did not restart with the new settings. Turn it off and on again."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "手機抓包沒有用新的設定重新開啟，請關閉後再開啟。"
           }
         }
       }

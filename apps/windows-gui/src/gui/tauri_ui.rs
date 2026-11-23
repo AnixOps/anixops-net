@@ -795,6 +795,9 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             set_mitm_plugin_enabled,
             remove_mitm_plugin,
             phone_qr_code,
+            lan_share_auth,
+            regenerate_lan_share_auth,
+            set_lan_share_auth_required,
             import_mitm_root,
             mitm_root_fingerprint,
             set_tun_mode,
@@ -1653,6 +1656,14 @@ async fn runtime_control(
 ) -> Result<Value, String> {
     let state = state.inner().clone();
     run_blocking(move || {
+        // The LAN share starts with the kept credentials, never with what the window put in
+        // (`desktop_mitm::phone::authorized_start`); they are read before the core's lock is taken.
+        let request = if desktop_mitm::phone::is_start(&request) {
+            let auth = client_core::backend::lan_share_auth::load(&lan_share_dir()?)?;
+            desktop_mitm::phone::authorized_start(&request, &auth)?
+        } else {
+            request
+        };
         let request = connection::activity_request(&request)?;
         let answer = state
             .direct_core
@@ -1660,6 +1671,38 @@ async fn runtime_control(
             .map_err(|_| "desktop core lock failed")?
             .control(&request)?;
         serde_json::from_slice(&answer).map_err(|error| error.to_string())
+    })
+    .await
+}
+
+/// `%LOCALAPPDATA%\AnixOps Net`: where the LAN share's credentials are kept, sealed with Windows Data Protection
+/// for this Windows account (`client_core::backend::lan_share_auth`).
+fn lan_share_dir() -> Result<PathBuf, String> {
+    capture_sessions::capture_dir()?
+        .parent()
+        .map(Path::to_path_buf)
+        .ok_or_else(|| "the local application data folder could not be found".to_string())
+}
+
+/// The LAN share's proxy username and password and whether phones must send them; made and kept on first use.
+#[tauri::command]
+async fn lan_share_auth() -> Result<desktop_mitm::phone::LanShareAuth, String> {
+    run_blocking(move || client_core::backend::lan_share_auth::load(&lan_share_dir()?)).await
+}
+
+/// A new LAN share username and password; a running share must be started again to use them.
+#[tauri::command]
+async fn regenerate_lan_share_auth() -> Result<desktop_mitm::phone::LanShareAuth, String> {
+    run_blocking(move || client_core::backend::lan_share_auth::regenerate(&lan_share_dir()?)).await
+}
+
+/// Whether phones must send the LAN share credentials; a running share must be started again for it to apply.
+#[tauri::command]
+async fn set_lan_share_auth_required(
+    required: bool,
+) -> Result<desktop_mitm::phone::LanShareAuth, String> {
+    run_blocking(move || {
+        client_core::backend::lan_share_auth::set_required(&lan_share_dir()?, required)
     })
     .await
 }
