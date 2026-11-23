@@ -10,7 +10,7 @@
 //            Measured on the screenshot itself, in CIE L* (0 black, 100 white).
 //
 //   density  AnixOps Design density.md N25–N27, read from the DOM. N25: a page with [data-settings-first-screen] has at
-//            most 8 cards, 24 rows and a height of two reference windows. N26: each [data-user-list] that is not
+//            most 8 cards, 16 rows and a height of two reference windows. N26: each [data-user-list] that is not
 //            "expanded" shows at most 5 item rows, and a "folded" one has a visible button with aria-expanded="false".
 //            N27: no role=switch among the items of such a list. Unmarked lists of more than 8 rows are only measured.
 //
@@ -29,7 +29,7 @@ const EDGE_DELTA_L = 6;
 // N25/N26 limits. The height is two reference windows (1100×760 is the desktop reference size), not two viewports of the
 // shot being checked: the shots use other sizes (narrow, laptop), and the rule is about how much a person has to read.
 const FIRST_SCREEN_CARDS = 8;
-const FIRST_SCREEN_ROWS = 24;
+const FIRST_SCREEN_ROWS = 16;
 const REFERENCE_WINDOW_HEIGHT = 760;
 const FIRST_SCREEN_HEIGHT = 2 * REFERENCE_WINDOW_HEIGHT;
 const LIST_FOLDED_ROWS = 5;
