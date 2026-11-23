@@ -8,8 +8,10 @@
 //! - Linux: the socket file's mode and the folder it is in. The core also reads the caller's user id from
 //!   the kernel ([`peer_uid`]) to decide what that user may do.
 //! - Windows: the pipe's access list lets in the system, administrators and users signed in at the machine,
-//!   and refuses callers from the network. The pipe is made with the "first instance" flag, so the core
-//!   notices when another program has taken the name.
+//!   and refuses callers from the network. Signed-in users may connect but not serve instances of their own.
+//!   The pipe is made with the "first instance" flag, so the core notices when another program has taken
+//!   the name, and the window ([`connect`]) checks that the pipe it reached belongs to the system or the
+//!   administrators, so a pipe another user made while the core was stopped is refused.
 
 #[cfg(target_os = "linux")]
 mod unix;

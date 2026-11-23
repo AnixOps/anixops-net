@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.IO.Pipes;
+using System.Security.Principal;
 using System.Text.Json;
 using Xunit;
 
@@ -252,6 +253,36 @@ public class ChannelTests
             await Frame.WriteAsync(core, "{ \"type\": \"unknown\" }"u8.ToArray());
             await Assert.ThrowsAsync<ChannelClosedException>(() => asking);
             await Assert.ThrowsAsync<InvalidDataException>(() => window.Closed.WaitAsync(Soon));
+        }
+    }
+
+    [Fact]
+    public async Task OnlyTheSystemOrAdministratorsServeTheDefaultPipe()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+        var user = WindowsIdentity.GetCurrent().User;
+        Assert.NotNull(user);
+        var other = new SecurityIdentifier("S-1-5-21-1-2-3-1002");
+        var system = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
+        var administrators = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+        Assert.True(Channel.TrustedOwner(system, Channel.DefaultPipeName, user));
+        Assert.True(Channel.TrustedOwner(administrators, Channel.DefaultPipeName, user));
+        // Another user's pipe, or even this user's, is not the installed core.
+        Assert.False(Channel.TrustedOwner(other, Channel.DefaultPipeName, user));
+        Assert.False(Channel.TrustedOwner(user, Channel.DefaultPipeName, user));
+        // A core this user runs in a console on a pipe of its own.
+        Assert.True(Channel.TrustedOwner(user, "anixops-net-test", user));
+        Assert.False(Channel.TrustedOwner(other, "anixops-net-test", user));
+
+        // A pipe this process serves belongs to this user (or, elevated, the administrators).
+        var (core, window) = await PipeAsync();
+        await using (core)
+        await using (window)
+        {
+            Channel.VerifyServer((PipeStream)window, "anixops-net-test");
         }
     }
 }

@@ -64,7 +64,7 @@ Tauri（过渡期）        ── 同进程调用                             P
    `crates/client-core`，把系统代理、证书信任、开机启动提成 `Platform` 方法，并给 Windows 写一个实现（Wintun、
    系统代理、证书库、开机启动、Wi-Fi 取样）。`tauri_ui.rs` 缩成薄包装。Tauri 版行为不变，两套后端变一套。
 2. **`crates/client-ipc`。** 把 `Client::invoke` 和事件流通过本机通道传输：长度前缀的 JSON 帧，请求带编号，事件单向
-   推送。Windows 命名管道按安装用户的 SID 设 ACL；Linux 用 `SO_PEERCRED` 核对对端用户，特权动作再过 polkit。
+   推送。Windows 命名管道的访问表只让本机登录用户连接、不能另建实例，界面连上后核对管道属于系统或管理员；Linux 用 `SO_PEERCRED` 核对对端用户，特权动作再过 polkit。
    线上格式（第一版，协议号 1）：每条消息一帧，4 字节大端长度加 UTF-8 JSON，单帧上限 64 MiB。消息有四种 `type`：
    `hello`（双方各先发一条，协议号不同或对端角色不对就断开）、`request`（带 `id`、`command`、`args`）、`response`
    （同 `id`，带 `ok` 或 `error`）、`event`（`name`、`payload`，不需要应答）。两边都可以发请求：界面请求核心执行
@@ -78,7 +78,13 @@ Tauri（过渡期）        ── 同进程调用                             P
    通道本身在 `client_ipc::transport`：Linux 是 Unix 套接字 `/run/anixops-net/core.sock`，核心从内核读对端的用户
    编号（`SO_PEERCRED`），哪个用户可以控制核心在守护进程里决定；Windows 是命名管道 `\\.\pipe\AnixOpsNet.Core`，
    访问表只放行系统、管理员和在本机登录的用户，拒绝来自网络的调用方，第一个实例带"首个实例"标志，名字被别的程序占了
-   核心会启动失败而不是悄悄共用。界面连接时只让核心知道自己是谁，不允许核心以界面用户的身份做事。管道的所有句柄都按
+   核心会启动失败而不是悄悄共用。本机登录用户只有读写（`0x12019b`，即 `FILE_GENERIC_READ | FILE_GENERIC_WRITE` 去掉
+   `FILE_CREATE_PIPE_INSTANCE`），不能给核心的管道另建实例去接走别人的窗口；建实例只有系统、管理员和管道的所有者
+   （以普通用户在控制台运行的核心自己）可以。界面（Rust 的 `transport::connect` 和 C# 的 `Channel.ConnectAsync`）
+   连上后、打招呼之前读管道的所有者：只接受系统（`SY`）或管理员（`BA`），普通用户建不出这样的管道，所以服务停止时被
+   别的用户抢注的同名管道会被拒绝，窗口不会听它的 `session.apply_proxy`、`session.trust_root`；测试用的非默认管道名
+   另外接受窗口自己的用户。抢注仍会让服务起不来，但不会把窗口交给别人。界面连接时只让核心知道自己是谁，不允许核心以
+   界面用户的身份做事。管道的所有句柄都按
    重叠 I/O 打开，否则一个线程在读的时候别的线程写不进去。
    核心和界面怎么接上通道在 `crates/client-service`：服务一侧的 `Windows` 记着当前连着的界面，把界面的命令交给
    `Client::invoke`，同时就是核心的 `UserSession`——系统代理和登录启动项的读写都转成 `session.*` 请求发给界面
