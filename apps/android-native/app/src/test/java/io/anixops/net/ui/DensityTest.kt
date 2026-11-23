@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import io.anixops.net.R
 import io.anixops.net.core.DecryptDomain
 import io.anixops.net.core.MitmPlugin
@@ -96,7 +97,7 @@ class DensityTest {
         showExtensions()
         val shown = compose.onAllNodes(pluginItems, useUnmergedTree = true).fetchSemanticsNodes().size
         assertTrue("$shown of $PLUGINS plugins shown, at most $MAX_FOLDED_ITEMS before \"show all\"", shown in 1..MAX_FOLDED_ITEMS)
-        compose.onNodeWithText(text(R.string.plugins_show_all, PLUGINS)).performClick()
+        compose.onNodeWithText(text(R.string.plugins_show_all, PLUGINS)).performScrollTo().performClick()
         compose.waitForIdle()
         compose.onAllNodes(pluginItems, useUnmergedTree = true).assertCountEquals(PLUGINS)
     }
