@@ -12,7 +12,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use app_notifications::{Notice, Settings as NotificationSettings};
 use client_health::Health;
@@ -103,11 +103,25 @@ pub trait Platform: Send + Sync + 'static {
     /// Closes the system VPN again.
     fn close_tunnel(&self) {}
 
+    /// Closes the system VPN while the Wi-Fi rules are on, which may have to connect again by themselves on the
+    /// next network: the platform keeps what lets them (Android: the VPN service stays in the foreground,
+    /// waiting for the network, so the process is neither frozen nor stopped). As [`Platform::close_tunnel`]
+    /// by default.
+    fn close_tunnel_for_rules(&self) {
+        self.close_tunnel();
+    }
+
     /// Puts a text file where the user can open it from the system settings (Android: Downloads) and returns
     /// where it went.
     fn save_to_downloads(&self, name: &str, contents: &str) -> Result<String, String> {
         let _ = (name, contents);
         Err(NO_DOWNLOADS.to_string())
+    }
+
+    /// As [`Platform::save_to_downloads`], but a file of the same name the app saved earlier is replaced instead
+    /// of kept next to the new one (the decryption root, saved again each time decryption is turned on).
+    fn replace_in_downloads(&self, name: &str, contents: &str) -> Result<String, String> {
+        self.save_to_downloads(name, contents)
     }
 
     /// Puts a binary file, given as base64, in the same place as [`Platform::save_to_downloads`] and returns
@@ -356,8 +370,16 @@ impl Client {
     /// Stops the engine and closes the system VPN, if the platform has one, or the desktop's TUN mode device.
     fn close_tunnel(&self) {
         if self.platform.has_system_vpn() {
-            self.backend().stop_engine();
-            self.platform.close_tunnel();
+            let rules_on = {
+                let mut backend = self.backend();
+                backend.stop_engine();
+                backend.on_demand_enabled()
+            };
+            if rules_on {
+                self.platform.close_tunnel_for_rules();
+            } else {
+                self.platform.close_tunnel();
+            }
         } else if self.backend().tun_mode() {
             self.backend().stop_engine();
         }
@@ -517,18 +539,25 @@ impl Client {
         })
     }
 
-    fn create_diagnostics(&self) -> Result<OperationResult, String> {
+    fn create_diagnostics(&self) -> Result<SavedFileResult, String> {
         let section = self.health.diagnostics();
         // Android: the app's own directory is out of the user's reach, so the report goes to Downloads.
         if self.platform.has_system_vpn() {
             let report = self.backend().diagnostics_report(&section);
             let name = format!("anixops-net-diagnostics-{}.log", unix_seconds());
             let saved = self.platform.save_to_downloads(&name, &report)?;
-            return Ok(OperationResult {
+            return Ok(SavedFileResult {
                 message: format!("Diagnostics report saved to {saved}"),
+                location: Some(saved),
+                ..SavedFileResult::default()
             });
         }
-        self.backend().diagnostics(&section)
+        self.backend()
+            .diagnostics(&section)
+            .map(|result| SavedFileResult {
+                message: result.message,
+                ..SavedFileResult::default()
+            })
     }
 
     fn set_crash_reports(&self, enabled: bool) -> Result<OperationResult, String> {
@@ -607,14 +636,23 @@ impl Client {
 
     /// Android has no trust store an app may change: the root is saved to Downloads, the user installs it in
     /// the system settings, and only apps that trust user certificates (most browsers) accept it.
+    ///
+    /// The file is named after the root's fingerprint, so a new root (after the app's data was cleared) never
+    /// takes the name of an old one left in Downloads, and saving the same root again replaces its file. The
+    /// answer carries where it went (`location`), the fingerprint the user can compare in the system's list of
+    /// certificates, and why it was not saved (`saveError`), for the app to say in its own language.
     #[cfg(target_os = "android")]
-    fn enable_https_mitm(&self) -> Result<OperationResult, String> {
+    fn enable_https_mitm(&self) -> Result<SavedFileResult, String> {
         let root = self.backend().ensure_mitm_root()?;
+        let fingerprint = root.fingerprint().ok();
         let saved = fs::read_to_string(&root.certificate_path)
             .map_err(|error| format!("the root certificate could not be read: {error}"))
-            .and_then(|pem| self.platform.save_to_downloads(ROOT_DOWNLOAD_NAME, &pem));
+            .and_then(|pem| {
+                let name = root_download_name(fingerprint.as_deref().unwrap_or_default());
+                self.platform.replace_in_downloads(&name, &pem)
+            });
         let result = self.backend().set_https_decryption(true)?;
-        let install = match saved {
+        let install = match &saved {
             Ok(location) => format!(
                 "The root certificate is saved as {location}; install it under Settings > Security > \
                  Encryption & credentials > Install a certificate > CA certificate"
@@ -623,11 +661,18 @@ impl Client {
                 format!("The root certificate could not be saved to Downloads: {error}")
             }
         };
-        Ok(OperationResult {
+        let (location, save_error) = match saved {
+            Ok(location) => (Some(location), None),
+            Err(error) => (None, Some(error)),
+        };
+        Ok(SavedFileResult {
             message: format!(
                 "{}. {install}. Apps that ignore user certificates are not decrypted",
                 result.message
             ),
+            location,
+            fingerprint,
+            save_error,
         })
     }
 
@@ -771,24 +816,48 @@ impl Client {
             return;
         }
         let client = self.clone();
-        thread::spawn(move || loop {
-            thread::sleep(Duration::from_secs(10));
-            if !client.backend().on_demand_enabled() {
-                continue;
-            }
-            let Some(network) = client.platform.current_network(false) else {
-                continue;
-            };
-            let action = client.backend().on_demand_action(network);
-            match action {
-                Some(OnDemandAction::Connect) => {
-                    let _ = client.connect_through_tunnel();
+        thread::spawn(move || {
+            // A connect the rules started that failed: when to try again on the same network, and how many
+            // failures in a row. The first failure is notified, the retries are not.
+            let mut retry: Option<(Instant, u32)> = None;
+            loop {
+                thread::sleep(Duration::from_secs(10));
+                if !client.backend().on_demand_enabled() {
+                    retry = None;
+                    continue;
                 }
-                Some(OnDemandAction::Disconnect) => {
-                    let _ = client.backend().disconnect();
-                    client.close_tunnel();
+                let Some(network) = client.platform.current_network(false) else {
+                    continue;
+                };
+                let due = retry.is_some_and(|(at, _)| Instant::now() >= at);
+                if due {
+                    client.backend().retry_on_demand();
                 }
-                _ => {}
+                let action = client.backend().on_demand_action(network);
+                match action {
+                    Some(OnDemandAction::Connect) => match client.connect_through_tunnel() {
+                        Ok(_) => retry = None,
+                        Err(error) => {
+                            let failures = retry.map_or(0, |(_, failures)| failures) + 1;
+                            retry =
+                                Some((Instant::now() + on_demand_retry_after(failures), failures));
+                            let notice = (failures == 1)
+                                .then(|| client.backend().on_demand_failed_notice(&error))
+                                .flatten();
+                            if let Some(notice) = notice {
+                                client.platform.post_notice(&notice);
+                            }
+                        }
+                    },
+                    Some(OnDemandAction::Disconnect) => {
+                        retry = None;
+                        let _ = client.backend().disconnect();
+                        client.close_tunnel();
+                    }
+                    // Connected meanwhile (by hand, or the network now wants no connect): nothing to retry.
+                    _ if due || client.backend().engine_running() => retry = None,
+                    _ => {}
+                }
             }
         });
     }
@@ -1360,9 +1429,44 @@ fn handler(name: &str) -> Option<Handler> {
     Some(handler)
 }
 
-/// The name the decryption root gets in Downloads.
-#[cfg(target_os = "android")]
-const ROOT_DOWNLOAD_NAME: &str = "AnixOps-Net-HTTPS-root.crt";
+/// How long the Wi-Fi rules wait before trying again a connect that failed `failures` times in a row on the
+/// same network: half a minute, doubling, at most ten minutes.
+fn on_demand_retry_after(failures: u32) -> Duration {
+    let doublings = failures.saturating_sub(1).min(5);
+    Duration::from_secs(30 * (1u64 << doublings)).min(Duration::from_secs(600))
+}
+
+/// The name the decryption root gets in Downloads: the first eight hex digits of its SHA-256 fingerprint
+/// (`AB:CD:…`) keep two roots apart; without a fingerprint the plain name.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn root_download_name(fingerprint: &str) -> String {
+    let digits: String = fingerprint
+        .chars()
+        .filter(char::is_ascii_hexdigit)
+        .take(8)
+        .collect::<String>()
+        .to_ascii_uppercase();
+    if digits.is_empty() {
+        "AnixOps-Net-HTTPS-root.crt".to_string()
+    } else {
+        format!("AnixOps-Net-HTTPS-root-{digits}.crt")
+    }
+}
+
+/// What a command that saves a file answers: the message the other clients show, plus, where a file went to
+/// Downloads (Android), its location, so the app can say it in its own language. The extra fields are left out
+/// when absent, so the answer reads as an [`OperationResult`] everywhere else.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedFileResult {
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fingerprint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub save_error: Option<String>,
+}
 
 fn json<T: Serialize>(value: T) -> Result<Value, String> {
     serde_json::to_value(value).map_err(|error| error.to_string())
@@ -1830,6 +1934,50 @@ fn fetch(location: &str) -> Result<(String, ResponseMeta), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_root_file_is_named_after_its_fingerprint() {
+        assert_eq!(
+            root_download_name("ab:cd:01:23:45:67:89:EF:00"),
+            "AnixOps-Net-HTTPS-root-ABCD0123.crt"
+        );
+        // A new root never takes an old root's name.
+        assert_ne!(
+            root_download_name("AB:CD:01:23:45:67:89:EF"),
+            root_download_name("AB:CD:01:24:45:67:89:EF")
+        );
+        assert_eq!(root_download_name(""), "AnixOps-Net-HTTPS-root.crt");
+    }
+
+    #[test]
+    fn saved_file_answers_read_as_operation_results() {
+        let plain = json(SavedFileResult {
+            message: "Saved".to_string(),
+            ..SavedFileResult::default()
+        })
+        .unwrap();
+        assert_eq!(plain, serde_json::json!({"message": "Saved"}));
+        let located = json(SavedFileResult {
+            message: "Saved".to_string(),
+            location: Some("Download/a.log".to_string()),
+            save_error: Some("denied".to_string()),
+            ..SavedFileResult::default()
+        })
+        .unwrap();
+        assert_eq!(
+            located,
+            serde_json::json!({"message": "Saved", "location": "Download/a.log", "saveError": "denied"})
+        );
+    }
+
+    #[test]
+    fn wifi_rule_retries_back_off() {
+        assert_eq!(on_demand_retry_after(1), Duration::from_secs(30));
+        assert_eq!(on_demand_retry_after(2), Duration::from_secs(60));
+        assert_eq!(on_demand_retry_after(5), Duration::from_secs(480));
+        assert_eq!(on_demand_retry_after(6), Duration::from_secs(600));
+        assert_eq!(on_demand_retry_after(u32::MAX), Duration::from_secs(600));
+    }
 
     #[test]
     fn trace_gives_the_exit_address_and_country() {

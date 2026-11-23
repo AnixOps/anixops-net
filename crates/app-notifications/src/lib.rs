@@ -84,7 +84,35 @@ impl Settings {
             }
             (Language::Simplified, true) => ("连接已断开", "连接意外断开，正在重新连接。"),
         };
-        Some(Notice::new(title, body))
+        Some(Notice::new(NoticeKind::Connection, title, body))
+    }
+
+    /// The notice when the Wi-Fi rules could not connect by themselves (`error` says why). Under the connection
+    /// switch, as the disconnect notice.
+    pub fn on_demand_failed(&self, error: &str) -> Option<Notice> {
+        if !self.connection {
+            return None;
+        }
+        let (title, lead) = match self.language() {
+            Language::English => (
+                "Wi-Fi rules could not connect",
+                "Open AnixOps Net to connect. The system or battery settings may stop the app in the background",
+            ),
+            Language::Traditional => (
+                "Wi-Fi 規則未能連線",
+                "打開 AnixOps Net 連線。系統或省電設定可能會在背景停止本應用",
+            ),
+            Language::Simplified => (
+                "Wi-Fi 规则未能连接",
+                "打开 AnixOps Net 连接。系统或省电设置可能会在后台停止本应用",
+            ),
+        };
+        let error: String = error.chars().take(200).collect();
+        Some(Notice::new(
+            NoticeKind::Connection,
+            title,
+            &format!("{lead} ({error})"),
+        ))
     }
 
     /// The notice when updating subscription `name` failed with `error`.
@@ -98,6 +126,7 @@ impl Settings {
             Language::Simplified => format!("“{name}”更新失败"),
         };
         Some(Notice {
+            kind: NoticeKind::Subscription,
             title,
             body: error.chars().take(200).collect(),
             open_url: None,
@@ -138,6 +167,7 @@ impl Settings {
                     lower.starts_with("https://") || lower.starts_with("http://")
                 });
                 Some(Notice {
+                    kind: NoticeKind::Script,
                     title: if title.is_empty() {
                         "AnixOps Net".to_string()
                     } else {
@@ -165,9 +195,33 @@ enum Language {
     English,
 }
 
+/// What a notification is about. A platform may let a newer notice of the connection or subscription kind
+/// replace the older one, as iOS does, while script notices stack.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoticeKind {
+    /// An unexpected disconnect, or the Wi-Fi rules failing to connect.
+    Connection,
+    /// A failed subscription update.
+    Subscription,
+    /// What a plugin script posted.
+    Script,
+}
+
+impl NoticeKind {
+    /// The name the platforms read (`connection`, `subscription`, `script`).
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Connection => "connection",
+            Self::Subscription => "subscription",
+            Self::Script => "script",
+        }
+    }
+}
+
 /// One system notification.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Notice {
+    pub kind: NoticeKind,
     pub title: String,
     pub body: String,
     /// An http(s) link a script attached; opened when the notification is clicked where the platform allows.
@@ -175,8 +229,9 @@ pub struct Notice {
 }
 
 impl Notice {
-    fn new(title: &str, body: &str) -> Self {
+    fn new(kind: NoticeKind, title: &str, body: &str) -> Self {
         Self {
+            kind,
             title: title.to_string(),
             body: body.to_string(),
             open_url: None,
@@ -251,9 +306,22 @@ mod tests {
             .unwrap()
             .body
             .contains("正在重新連線"));
+        assert_eq!(
+            settings.disconnected(false).unwrap().kind,
+            NoticeKind::Connection
+        );
+        let failed = settings.on_demand_failed("timed out").unwrap();
+        assert_eq!(failed.title, "Wi-Fi 規則未能連線");
+        assert!(failed.body.ends_with("(timed out)"));
+        assert_eq!(failed.kind, NoticeKind::Connection);
+        assert_eq!(
+            settings.subscription_failed("HK", "x").unwrap().kind,
+            NoticeKind::Subscription
+        );
         settings.connection = false;
         settings.subscriptions = false;
         assert!(settings.disconnected(false).is_none());
+        assert!(settings.on_demand_failed("x").is_none());
         assert!(settings.subscription_failed("HK", "x").is_none());
     }
 
@@ -269,6 +337,8 @@ mod tests {
         assert_eq!(notices.len(), 2);
         assert_eq!(notices[0].body, "成功\n+1");
         assert_eq!(notices[0].open_url.as_deref(), Some("https://a.example"));
+        assert_eq!(notices[0].kind, NoticeKind::Script);
+        assert_eq!(notices[0].kind.id(), "script");
         assert_eq!(notices[1].title, "AnixOps Net");
         assert_eq!(notices[1].open_url, None);
         settings.scripts = false;

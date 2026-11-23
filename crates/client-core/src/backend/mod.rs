@@ -1415,6 +1415,26 @@ impl Backend {
         self.on_demand.enabled
     }
 
+    /// Whether the engine runs, for the Wi-Fi rules to tell that a failed connect no longer needs a retry.
+    pub fn engine_running(&self) -> bool {
+        self.engine.is_running()
+    }
+
+    /// Forgets the network the Wi-Fi rules acted on last, so that a connect they started and that failed is tried
+    /// again on the same network at the next sample.
+    pub fn retry_on_demand(&mut self) {
+        self.on_demand_watch.reset();
+    }
+
+    /// The notice when a connect the Wi-Fi rules started failed with `error`; logged too.
+    pub fn on_demand_failed_notice(&self, error: &str) -> Option<Notice> {
+        self.log(
+            LogLevel::Error,
+            &format!("Wi-Fi rules: connecting failed: {error}"),
+        );
+        self.notifications.on_demand_failed(error)
+    }
+
     /// What the rules want on `network` when it is new and the connection is not already that way.
     pub fn on_demand_action(&mut self, network: Network) -> Option<OnDemandAction> {
         let running = self.engine.is_running();

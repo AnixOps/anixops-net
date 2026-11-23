@@ -69,8 +69,13 @@ pub const MAX_RULES: usize = 64;
 /// The network the device is on.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Network {
-    /// Wi-Fi; the name is unknown when the system withholds it (no location permission).
+    /// Wi-Fi; the name is unknown when the app may not read it (no location permission), and such a network
+    /// counts as "other Wi-Fi".
     Wifi(Option<String>),
+    /// Wi-Fi whose name the app may read but the system hides for now: Android 10 and later hide it while the app
+    /// is in the background without the background location permission, or while location is off. It may well be
+    /// a named network, so the named rules cannot tell; see [`Watch::observe`].
+    WifiWithheld,
     Cellular,
     /// Ethernet or another interface.
     Other,
@@ -78,10 +83,12 @@ pub enum Network {
 }
 
 impl Network {
-    /// The network the Android plugin reports: `kind` is wifi, cellular, other or offline.
+    /// The network the Android plugin reports: `kind` is wifi, wifi-withheld (the name is hidden for now),
+    /// cellular, other or offline.
     pub fn from_kind(kind: &str, ssid: Option<String>) -> Self {
         match kind {
             "wifi" => Self::Wifi(ssid.filter(|ssid| !ssid.is_empty())),
+            "wifi-withheld" => Self::WifiWithheld,
             "cellular" => Self::Cellular,
             "offline" => Self::Offline,
             _ => Self::Other,
@@ -92,6 +99,7 @@ impl Network {
     pub fn current(&self) -> Current {
         let (kind, ssid) = match self {
             Self::Wifi(ssid) => ("wifi", ssid.clone()),
+            Self::WifiWithheld => ("wifi", None),
             Self::Cellular => ("cellular", None),
             Self::Other => ("other", None),
             Self::Offline => ("offline", None),
@@ -158,6 +166,9 @@ impl Settings {
                 .as_ref()
                 .and_then(|ssid| self.wifi.iter().find(|rule| &rule.ssid == ssid))
                 .map_or(self.other_wifi, |rule| rule.action),
+            // Any named rule could be the one for this network: nothing until the name can be read.
+            Network::WifiWithheld if !self.wifi.is_empty() => Action::Ignore,
+            Network::WifiWithheld => self.other_wifi,
             Network::Cellular => self.cellular,
             Network::Other => self.other,
             Network::Offline => Action::Ignore,
@@ -173,6 +184,11 @@ pub struct Watch {
 
 impl Watch {
     pub fn observe(&mut self, settings: &Settings, network: Network) -> Option<Action> {
+        // A hidden name is not a new network: with named rules it neither acts nor replaces the network seen
+        // last, so the same Wi-Fi read with its name again (the app back in front) is no change either.
+        if network == Network::WifiWithheld && !settings.wifi.is_empty() {
+            return None;
+        }
         if self.last.as_ref() == Some(&network) {
             return None;
         }
@@ -305,6 +321,50 @@ mod tests {
     }
 
     #[test]
+    fn a_withheld_name_is_no_change() {
+        let settings = rules();
+        assert_eq!(settings.action(&Network::WifiWithheld), Action::Ignore);
+        let mut watch = Watch::default();
+        assert_eq!(
+            watch.observe(&settings, Network::Wifi(Some("Home".into()))),
+            Some(Action::Disconnect)
+        );
+        // The app went to the background: the same network without its name does nothing ...
+        assert_eq!(watch.observe(&settings, Network::WifiWithheld), None);
+        // ... and reading the name again is not a new network either.
+        assert_eq!(
+            watch.observe(&settings, Network::Wifi(Some("Home".into()))),
+            None
+        );
+        // A new Wi-Fi first seen in the background waits for its name.
+        assert_eq!(
+            watch.observe(&settings, Network::Cellular),
+            Some(Action::Connect)
+        );
+        assert_eq!(watch.observe(&settings, Network::WifiWithheld), None);
+        assert_eq!(
+            watch.observe(&settings, Network::Wifi(Some("Home".into()))),
+            Some(Action::Disconnect)
+        );
+        // Without the permission the name is unknown, not withheld: that is still "other Wi-Fi".
+        assert_eq!(
+            watch.observe(&settings, Network::Wifi(None)),
+            Some(Action::Connect)
+        );
+        // Without named rules a hidden name cannot matter: it is other Wi-Fi, once.
+        let unnamed = Settings {
+            wifi: Vec::new(),
+            ..rules()
+        };
+        let mut watch = Watch::default();
+        assert_eq!(
+            watch.observe(&unnamed, Network::WifiWithheld),
+            Some(Action::Connect)
+        );
+        assert_eq!(watch.observe(&unnamed, Network::WifiWithheld), None);
+    }
+
+    #[test]
     fn checks_names_and_round_trips() {
         let mut settings = rules();
         settings.wifi.push(Rule {
@@ -338,6 +398,11 @@ mod tests {
             Network::from_kind("wifi", Some(String::new())),
             Network::Wifi(None)
         );
+        assert_eq!(
+            Network::from_kind("wifi-withheld", None),
+            Network::WifiWithheld
+        );
+        assert_eq!(Network::WifiWithheld.current().kind, "wifi");
         assert_eq!(Network::from_kind("cellular", None), Network::Cellular);
         assert_eq!(Network::from_kind("ethernet", None), Network::Other);
         assert_eq!(Network::Offline.current().kind, "offline");

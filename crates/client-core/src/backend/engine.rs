@@ -42,6 +42,7 @@ impl NetworkFacts {
     pub fn new(network: Option<&on_demand::Network>, addresses: Vec<std::net::IpAddr>) -> Self {
         let (kind, ssid) = match network {
             Some(on_demand::Network::Wifi(ssid)) => (Some("wifi"), ssid.clone()),
+            Some(on_demand::Network::WifiWithheld) => (Some("wifi"), None),
             Some(on_demand::Network::Cellular) => (Some("cellular"), None),
             _ => (None, None),
         };
@@ -693,6 +694,8 @@ mod tests {
             hidden.request(),
             br#"{"cmd":"set_network","type":"wifi"}"#.to_vec()
         );
+        let withheld = NetworkFacts::new(Some(&on_demand::Network::WifiWithheld), Vec::new());
+        assert_eq!(withheld, hidden);
     }
 
     #[test]
