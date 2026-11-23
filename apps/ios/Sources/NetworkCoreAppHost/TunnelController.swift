@@ -154,6 +154,19 @@ final class TunnelController {
     /// engine starts with capture off, so the app turns it back on once connected. A disconnect by the user, or by
     /// the system, ends capture with the tunnel.
     @ObservationIgnored private var resumeCapture = false
+    /// The saved capture session the request and connection lists show instead of the live capture, opened in the
+    /// app's own capture viewer (`CaptureViewer`); nil shows the live capture of the running tunnel.
+    var viewedCapture: PacketCapture.Session?
+    /// The app opened `viewedCapture` itself when the tunnel went down; the lists go back to the live capture when
+    /// it connects again.
+    var viewedOnStop = false
+    /// The running tunnel's session id for its live capture (`PacketCapture.Status.runSession`): the app's copy of
+    /// it opens when the tunnel goes down.
+    @ObservationIgnored var captureRun: String?
+    /// What the live capture held at the app's last copy of it, so an unchanged capture is not copied again.
+    @ObservationIgnored var copiedCapture: PacketCapture.Status?
+    /// Copies the live capture into the app every few seconds while connected (`runCaptureMirror`).
+    @ObservationIgnored var captureMirror: Task<Void, Never>?
 
     init() {
         coordinator = AppCoordinator(status: Self.platformStatus(saved: false))
@@ -2200,6 +2213,8 @@ final class TunnelController {
         restartAfterStop = false
         restartStartQueued = false
         resumeCapture = false
+        // The tunnel seals its capture as it stops; a last copy now lets the app show all of it right away.
+        await copyLiveCaptureBeforeStop()
         do {
             try await writeProfile { target in
                 guard target.isOnDemandEnabled else {
@@ -2608,8 +2623,23 @@ final class TunnelController {
     }
 
     /// Sends a control request to the running engine (live traffic, the connection list). Nil while the tunnel is
-    /// not connected, or when the engine refused the request.
+    /// not connected, or when the engine refused the request. While a saved capture session is shown
+    /// (`viewedCapture`), the requests that read capture and the connection list go to the app's capture viewer
+    /// instead, connected or not.
     func control(_ command: RuntimeControl) async -> Data? {
+        #if DEBUG
+        if Self.isDemo {
+            return Self.demoControl(command)
+        }
+        #endif
+        if viewedCapture != nil, Self.readsCapture(command) {
+            return await CaptureViewer.shared.control(command)
+        }
+        return await tunnelControl(command)
+    }
+
+    /// `control` sent to the running engine whatever the lists show.
+    func tunnelControl(_ command: RuntimeControl) async -> Data? {
         #if DEBUG
         if Self.isDemo {
             return Self.demoControl(command)
@@ -2812,6 +2842,7 @@ final class TunnelController {
         }
         if connection == .connected, previous != .connected {
             lastConnections = nil
+            captureConnected()
             // The first connection is when notifications start to matter (an unexpected stop, a failed update):
             // ask for permission now, once, if it was never asked (`AppNotifications.requestIfUndetermined`).
             Task {
@@ -2826,6 +2857,9 @@ final class TunnelController {
         }
         if connection != .connected {
             captureOn = false
+            if previous == .connected {
+                captureStopped()
+            }
         }
         if connection == .disconnected, !restartAfterStop, !restartStartQueued {
             // A stop the app did not ask for (the user, the system, a failure): capture ends with the tunnel.

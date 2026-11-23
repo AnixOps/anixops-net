@@ -1,4 +1,5 @@
 import NetworkCoreBridge
+import NetworkExtension
 import SwiftUI
 
 /// Byte counts and rates as the traffic card and the connection list show them.
@@ -152,6 +153,7 @@ struct ConnectionsView: View {
                 }
             } header: {
                 VStack(alignment: .leading, spacing: 4) {
+                    SavedCaptureBanner(tunnel: tunnel)
                     if showingLast {
                         Text("隧道已断开，显示断开前的记录")
                     }
@@ -187,7 +189,7 @@ struct ConnectionsView: View {
                 // The destructive action is not a neighbour of pause: it sits in the "more" menu and is confirmed
                 // (AnixOps Design, actions D1 and D2).
                 Menu {
-                    if tunnel.connection == .connected {
+                    if tunnel.connection == .connected || tunnel.viewedCapture != nil {
                         CaptureMenuItems(tunnel: tunnel, status: capture) {
                             await load()
                         }
@@ -198,7 +200,7 @@ struct ConnectionsView: View {
                     } label: {
                         Label("断开全部连接", systemImage: "xmark.circle")
                     }
-                    .disabled(list.active.isEmpty || tunnel.connection != .connected)
+                    .disabled(list.active.isEmpty || tunnel.connection != .connected || tunnel.viewedCapture != nil)
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -215,7 +217,7 @@ struct ConnectionsView: View {
         } message: {
             Text("App 会自动重新建立需要的连接。")
         }
-        .task(id: tunnel.connection) {
+        .task(id: ListSource(connection: tunnel.connection, viewed: tunnel.viewedCapture?.id)) {
             while !Task.isCancelled {
                 if !paused {
                     await load()
@@ -317,13 +319,19 @@ struct ConnectionsView: View {
         return paused ? count + String(localized: " · 已暂停刷新") : count
     }
 
+    /// What the list reads from: the running tunnel, or a saved capture session.
+    private struct ListSource: Equatable {
+        let connection: NEVPNStatus
+        let viewed: String?
+    }
+
     /// The tunnel is off and the list is the one kept from before it stopped.
     private var showingLast: Bool {
-        tunnel.connection != .connected && tunnel.lastConnections != nil
+        tunnel.connection != .connected && tunnel.viewedCapture == nil && tunnel.lastConnections != nil
     }
 
     private var emptyText: LocalizedStringKey {
-        if tunnel.connection != .connected, !showingLast {
+        if tunnel.connection != .connected, !showingLast, tunnel.viewedCapture == nil {
             return "连接后显示经过隧道的每个连接。"
         }
         if !query.isEmpty || filter != .all {
@@ -351,7 +359,7 @@ struct ConnectionsView: View {
         }
         #endif
         guard let data = await tunnel.control(.connections), let next = RuntimeControl.decodeConnections(data) else {
-            if tunnel.connection != .connected {
+            if tunnel.connection != .connected, tunnel.viewedCapture == nil {
                 // Keep showing what went through the tunnel before it stopped.
                 list = tunnel.lastConnections ?? RuntimeControl.Connections()
                 loaded = tunnel.lastConnections != nil
@@ -360,7 +368,9 @@ struct ConnectionsView: View {
         }
         list = next
         loaded = true
-        tunnel.remember(next)
+        if tunnel.viewedCapture == nil {
+            tunnel.remember(next)
+        }
         let status = await tunnel.control(.captureStatus)
         capture = RuntimeControl.decode(PacketCapture.Status.self, from: status)
     }

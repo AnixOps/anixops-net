@@ -1,9 +1,12 @@
+import CoreTransferable
 import NetworkCoreBridge
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// Saved capture sessions (plan F1/E11): what was captured, sealed with a key that never leaves this device (the
-/// Keychain on iOS, a file only the root System Extension reads on macOS: `CaptureSessionStorage.key()`), kept for
-/// seven days. Opening one replaces what the request list shows and stops live capture.
+/// Saved capture sessions (plan F1/E11): what was captured, sealed with a key that never leaves this device, kept for
+/// seven days. The list is the app's own copies (`CaptureViewer`), so it opens with the tunnel off too; while
+/// connected it first copies what the tunnel saved meanwhile. Opening one shows it in the request and connection
+/// lists instead of live capture, which carries on unseen; each one also exports as a zip on its own.
 struct CaptureSessionsView: View {
     var tunnel: TunnelController
     /// Called after a session was opened, so the request list starts over.
@@ -43,6 +46,12 @@ struct CaptureSessionsView: View {
                         }
                     }
                     .contextMenu {
+                        if !session.unreadable {
+                            let file = CaptureSessionExportFile(tunnel: tunnel, session: session)
+                            ShareLink(item: file, preview: SharePreview(file.title)) {
+                                Label("打包导出 zip", systemImage: "doc.zipper")
+                            }
+                        }
                         Button(role: .destructive) {
                             deleting = session
                         } label: {
@@ -77,7 +86,11 @@ struct CaptureSessionsView: View {
                 opening = nil
             }
         } message: {
-            Text("当前未保存的抓包内容会被替换，抓包会停止。")
+            Text(
+                tunnel.connection == .connected
+                    ? LocalizedStringKey("请求列表改为显示这个会话，实时抓包照常进行，随时可以回到实时抓包。")
+                    : LocalizedStringKey("请求列表改为显示这个会话。")
+            )
         }
         .confirmationDialog(
             "删除会话“\(deleting.map(Self.title) ?? "")”？",
@@ -97,6 +110,11 @@ struct CaptureSessionsView: View {
         }
         .task(id: tunnel.connection) {
             await load()
+            if tunnel.connection == .connected {
+                // Sessions the tunnel saved since the last look: copy them, then list again.
+                await tunnel.syncSavedCaptures()
+                await load()
+            }
         }
     }
 
@@ -136,45 +154,30 @@ struct CaptureSessionsView: View {
     }
 
     private var footerText: LocalizedStringKey {
-        #if os(macOS)
-        return "会话用只保存在这台 Mac 上的密钥加密，只有系统级的隧道扩展能读取，保留 7 天后自动删除。打开会话会替换当前的抓包内容并停止抓包，之后可以照常查看、筛选和导出。"
-        #else
-        return "会话用只保存在本机钥匙串里的密钥加密，保留 7 天后自动删除。打开会话会替换当前的抓包内容并停止抓包，之后可以照常查看、筛选和导出。"
-        #endif
+        "会话用只保存在本机钥匙串里的密钥加密，保留 7 天后自动删除。隧道断开时会自动保存当次的抓包，断开后也能打开。打开会话后请求列表显示它的内容，可以照常查看、筛选和导出；长按会话可以直接打包导出。"
     }
 
     private var emptyText: LocalizedStringKey {
-        if tunnel.connection != .connected {
-            return "连接后可以查看和打开已保存的会话。"
-        }
         if unavailable {
-            #if os(macOS)
-            return "这台 Mac 上无法保存会话（隧道扩展读不到会话密钥，开发者诊断的扩展事件里有原因）。"
-            #else
-            return "这台设备上无法保存会话（钥匙串不可用）。"
-            #endif
+            return "这台设备上无法打开会话（钥匙串不可用）。"
         }
-        return loaded ? "还没有保存的会话。在请求列表右上角“更多”中保存当前抓包。" : "正在读取…"
+        return loaded ? "还没有保存的会话。隧道断开时会自动保存当次的抓包，也可以在请求列表右上角“更多”中保存当前抓包。" : "正在读取…"
     }
 
     private func load() async {
-        guard tunnel.connection == .connected else {
-            sessions = []
-            loaded = false
-            return
-        }
-        guard let answer = RuntimeControl.decode(PacketCapture.SessionsAnswer.self, from: await tunnel.control(.captureSessions)) else {
+        do {
+            sessions = try await CaptureViewer.shared.sessions()
+            unavailable = false
+        } catch {
             unavailable = true
-            loaded = true
-            return
         }
-        unavailable = false
-        sessions = answer.sessions.sorted { $0.savedAt > $1.savedAt }
         loaded = true
     }
 
     private func open(_ session: PacketCapture.Session) async {
-        guard RuntimeControl.decode(PacketCapture.Status.self, from: await tunnel.control(.loadCapture(session.id))) != nil else {
+        do {
+            try await tunnel.openSavedCapture(session)
+        } catch {
             failure = String(localized: "无法打开这个会话")
             return
         }
@@ -184,9 +187,77 @@ struct CaptureSessionsView: View {
     }
 
     private func delete(_ session: PacketCapture.Session) async {
-        if await tunnel.control(.deleteCapture(session.id)) == nil {
+        do {
+            try await tunnel.deleteSavedCapture(session)
+        } catch {
             failure = String(localized: "无法删除这个会话")
         }
         await load()
+    }
+}
+
+/// A saved session as one zip for the share sheet: it is opened in the viewer first (and shown in the lists), since
+/// the viewer exports the session it has open.
+struct CaptureSessionExportFile: Transferable {
+    let tunnel: TunnelController
+    let session: PacketCapture.Session
+
+    var title: String {
+        String(localized: "打包导出 zip（遮盖密码和 Cookie）")
+    }
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: .data) { file in
+            SentTransferredFile(try await file.write())
+        }
+    }
+
+    func write() async throws -> URL {
+        try await tunnel.openSavedCapture(session)
+        guard let answer = RuntimeControl.decode(
+            PacketCapture.ExportAnswer.self,
+            from: try await CaptureViewer.shared.send(.exportCapture(.zip, id: nil))
+        ) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        return try PacketCapture.write(answer)
+    }
+}
+
+/// Above the request and connection lists while a saved session is shown instead of live capture: which one, and
+/// the way back.
+struct SavedCaptureBanner: View {
+    var tunnel: TunnelController
+    @Environment(\.brand) private var brand
+
+    var body: some View {
+        if let session = tunnel.viewedCapture {
+            VStack(alignment: .leading, spacing: 4) {
+                Label {
+                    if tunnel.viewedOnStop {
+                        Text("隧道已断开，下面是断开前抓到的内容，已加密保存 7 天，可以在 ⋯ 里打包导出。")
+                    } else {
+                        Text("正在查看已保存的会话：\(CaptureSessionsView.title(session))")
+                    }
+                } icon: {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .foregroundStyle(brand.primary)
+                }
+                Text(CaptureSessionsView.detail(session))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(brand.text2)
+                if tunnel.connection == .connected {
+                    Button("回到实时抓包") {
+                        tunnel.showLiveCapture()
+                    }
+                    .buttonStyle(.borderless)
+                } else if !tunnel.viewedOnStop {
+                    Button("关闭会话") {
+                        tunnel.showLiveCapture()
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+        }
     }
 }

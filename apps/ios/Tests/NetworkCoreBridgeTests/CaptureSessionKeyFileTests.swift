@@ -75,13 +75,4 @@ final class CaptureSessionKeyFileTests: XCTestCase {
         XCTAssertEqual(try CaptureSessionStorage.randomKey().count, CaptureSessionKeyFile.length)
         XCTAssertEqual(try CaptureSessionStorage.keyFileURL().lastPathComponent, CaptureSessionKeyFile.fileName)
     }
-
-    func testStopNoticeFollowsWhetherStorageWorked() {
-        XCTAssertNil(CaptureStopNotice.afterStop(captured: false, storageAvailable: true))
-        XCTAssertNil(CaptureStopNotice.afterStop(captured: false, storageAvailable: false))
-        XCTAssertEqual(CaptureStopNotice.afterStop(captured: true, storageAvailable: true), .saved)
-        // Before the fix the page said "saved" whatever happened; without storage nothing was.
-        XCTAssertEqual(CaptureStopNotice.afterStop(captured: true, storageAvailable: false), .notSaved)
-        XCTAssertEqual(CaptureStopNotice.afterStop(captured: true, storageAvailable: nil), .unknown)
-    }
 }

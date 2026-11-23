@@ -199,6 +199,8 @@ targets:
       - path: Sources/NetworkCoreAppHost/RuleTextEditor.swift
       - path: Sources/NetworkCoreAppHost/RuleToolsView.swift
       - path: Sources/NetworkCoreAppHost/TunnelController.swift
+      - path: Sources/NetworkCoreAppHost/TunnelController+CaptureCopies.swift
+      - path: Sources/NetworkCoreAppHost/CaptureViewer.swift
       - path: Sources/NetworkCoreAppHost/URLCommandHandler.swift
       - path: Sources/NetworkCoreAppHost/AppNotifications.swift
       - path: Sources/NetworkCoreAppHost/BlockQuicSection.swift

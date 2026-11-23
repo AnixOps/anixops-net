@@ -17,6 +17,11 @@ final class PacketCaptureTests: XCTestCase {
             request(.exportCapture(.pcapng, id: 4)),
             #"{"cmd":"export_capture","format":"pcapng","id":4}"#
         )
+        XCTAssertEqual(request(.exportCapture(.zip, id: nil)), #"{"cmd":"export_capture","format":"zip"}"#)
+        XCTAssertEqual(
+            request(.exportCapture(.zip, id: nil, redact: false)),
+            #"{"cmd":"export_capture","format":"zip","redact":false}"#
+        )
     }
 
     func testDecodesStatusConnectionAndExport() throws {

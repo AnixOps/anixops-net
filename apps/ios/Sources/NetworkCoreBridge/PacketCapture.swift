@@ -15,6 +15,8 @@ public enum PacketCapture {
         case pcapng
         /// HAR 1.2 of the decrypted HTTP messages, for browser developer tools, Charles or Proxyman.
         case har
+        /// Everything in one file: a README, the connection list (`connections.json`), the HAR and the pcapng.
+        case zip
 
         public var id: String {
             rawValue
@@ -27,19 +29,51 @@ public enum PacketCapture {
         public let maxTotalBytes: UInt64
         public let usedBytes: UInt64
         public let connections: Int
+        /// The session id this tunnel run's capture is saved and copied under (`saveCapture(run:)`,
+        /// `copyCapture`); nil from an engine before it, and in the capture viewer's answers it is the viewer's own.
+        public let runSession: String?
+        /// Exchanges and bodies the memory budget let go of since the last clear; with `usedBytes` and
+        /// `connections` they tell whether anything changed since the app last copied the capture.
+        public let droppedExchanges: UInt64
+        public let droppedBodies: UInt64
 
         enum CodingKeys: String, CodingKey {
             case enabled
             case maxTotalBytes = "max_total_bytes"
             case usedBytes = "used_bytes"
             case connections
+            case runSession = "run_session"
+            case droppedExchanges = "dropped_exchanges"
+            case droppedBodies = "dropped_bodies"
         }
 
-        public init(enabled: Bool, maxTotalBytes: UInt64 = 0, usedBytes: UInt64 = 0, connections: Int = 0) {
+        public init(
+            enabled: Bool,
+            maxTotalBytes: UInt64 = 0,
+            usedBytes: UInt64 = 0,
+            connections: Int = 0,
+            runSession: String? = nil,
+            droppedExchanges: UInt64 = 0,
+            droppedBodies: UInt64 = 0
+        ) {
             self.enabled = enabled
             self.maxTotalBytes = maxTotalBytes
             self.usedBytes = usedBytes
             self.connections = connections
+            self.runSession = runSession
+            self.droppedExchanges = droppedExchanges
+            self.droppedBodies = droppedBodies
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            enabled = try container.decode(Bool.self, forKey: .enabled)
+            maxTotalBytes = try container.decode(UInt64.self, forKey: .maxTotalBytes)
+            usedBytes = try container.decode(UInt64.self, forKey: .usedBytes)
+            connections = try container.decode(Int.self, forKey: .connections)
+            runSession = try container.decodeIfPresent(String.self, forKey: .runSession)
+            droppedExchanges = try container.decodeIfPresent(UInt64.self, forKey: .droppedExchanges) ?? 0
+            droppedBodies = try container.decodeIfPresent(UInt64.self, forKey: .droppedBodies) ?? 0
         }
     }
 
