@@ -63,6 +63,14 @@ jobs:
           python3 .github/scripts/ui_lint.py --self-test
           python3 .github/scripts/ui_lint.py
 
+      # iOS / macOS interface text: every Chinese string in apps/ios/Sources is an entry of Localizable.xcstrings
+      # with English and Traditional Chinese, and reaches the screen through a lookup, not as a plain String
+      # (docs/ui-ux.md, 自动检查). The self-test checks the rules first.
+      - name: Apple interface strings are localized
+        run: |
+          python3 .github/scripts/apple_strings.py --self-test
+          python3 .github/scripts/apple_strings.py
+
       # Every address the client sources name is described in docs/network-behavior.md: a new update server,
       # statistics endpoint or lookup service fails here until it is documented. Addresses built at run time
       # (the connection-quality report) are listed with a source marker; the self-test checks those rules first.

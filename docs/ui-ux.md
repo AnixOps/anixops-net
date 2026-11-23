@@ -184,6 +184,25 @@ CI 的 “UI lint” 步骤运行 `.github/scripts/ui_lint.py`（几秒钟，在
 需要的颜色令牌里没有时，在 `apps/ios/Design/tokens.json` 里引用 AnixOps Design 已有的令牌加一个名字，再运行 `design_tokens.py` 生成；
 AnixOps Design 里也没有，就先在 anixops-design 提 PR。`ui_lint.py --self-test` 是检查本身的测试，改规则时一起改。
 
+### 第一层：iOS / macOS 文案本地化（`apple_strings.py`）
+
+iOS、macOS 的界面文字用简体中文写在 Swift 里，由 SwiftUI / Foundation 到 `apps/ios/Sources/NetworkCoreApp/Resources/Localizable.xcstrings`
+（App、Mac App、隧道扩展、小组件共用一份）查英文和繁体中文。工程由 XcodeGen 生成、目录手工维护，构建时不会自动抽取键，所以缺键或
+没经过查找的文字会直接以简体中文显示给英文和繁体用户。CI 的 “Apple interface strings are localized” 步骤运行
+`.github/scripts/apple_strings.py`，对 `apps/ios/Sources` 下每一个含中文的字符串字面量：
+
+| 规则 | 拦什么 | 改成什么 |
+|---|---|---|
+| S1 缺键 | 目录里没有这条（插值按任意格式符匹配） | 在目录里加这条，en 和 zh-Hant 都写好；插值用编译器生成的格式符：Int `%lld`、UInt64 `%llu`、UInt32 `%u`、Int32 `%d`、String `%@`，语序变化时译文用 `%1$@` 这类位置参数 |
+| S2 未翻译 | 目录里任何一条（用到没用到都算）缺 en / zh-Hant、状态不是 translated，或译文的格式符和键不一致 | 补译文 |
+| S3 没查表 | 文字以 String 交给界面：参数声明为 String 的辅助函数、返回 String 的属性、String 状态、`Text(verbatim:)`、`joined(separator: "、")` | 参数和属性改成 `LocalizedStringKey` / `LocalizedStringResource` / `String.LocalizationValue`，或在赋值处写 `String(localized:)`；列表用 `.formatted(.list(type:))` |
+| S4 看不出 | 检查跟不到的位置（闭包结果、没写类型的常量） | 写成查表可见的形式：`String(localized:)`、`LocalizedStringKey` 参数或属性 |
+
+不是界面文字的中文（演示数据里的节点名、写进生成的插件文件里的文字、和中文 `TERMS.md` 匹配的正则）列在脚本的 `DATA` 里，
+每条写明原因；命令行工具 `anixops` 的终端输出（`docs/macos-cli.md`）和 Siri / 快捷指令短语（属于单独的 AppShortcuts 表）不在检查范围内。
+`apple_strings.py --self-test` 是检查本身的测试；`apps/ios/Tests/NetworkCoreBridgeTests/LocalizationCatalogueTests.swift`
+另外确认目录每条都有 en、zh-Hant，以及经 String 显示的校验提示都有译文。
+
 ### 第二层：运行检查（截图任务里，各平台并行）
 
 用各平台已经构建好的 App 跑无障碍检查，不另起构建，并且和截图分在并行的 job 里，不拉长 CI：桌面端用 axe（对比度、文字溢出截断、弹层与背景分层），
