@@ -130,23 +130,29 @@ mod tests {
         validate(&config).expect("desktop-owned decryption is valid");
     }
 
+    /// Every kernel rule except the owner rule still refuses a desktop-owned file, with the kernel's own error:
+    /// each broken value below fails a kernel check that runs before the owner rule, so the kernel's verdict on
+    /// the same configuration is that error too.
     #[test]
     fn every_other_rule_still_applies() {
-        let mut config = decrypting(WindowsSystemProxyOwner::Desktop);
-        config.native_mitm.as_mut().unwrap().listen_port = 0;
-        assert!(validate(&config).is_err());
-
-        let mut config = decrypting(WindowsSystemProxyOwner::Desktop);
-        config.native_mitm.as_mut().unwrap().ca_private_key_path = PathBuf::new();
-        assert!(validate(&config).is_err());
-
-        let mut config = decrypting(WindowsSystemProxyOwner::Desktop);
-        config.schema_version = 99;
-        assert!(validate(&config).is_err());
-
-        let mut config = decrypting(WindowsSystemProxyOwner::Desktop);
-        config.system_proxy.as_mut().unwrap().server = "127.0.0.1:7890\n".to_string();
-        assert!(validate(&config).is_err());
+        let broken: [fn(&mut WindowsManagedConfig); 5] = [
+            |config| config.native_mitm.as_mut().unwrap().listen_port = 0,
+            |config| config.native_mitm.as_mut().unwrap().ca_private_key_path = PathBuf::new(),
+            |config| config.schema_version = 99,
+            |config| config.system_proxy.as_mut().unwrap().server = "127.0.0.1:7890\0".to_string(),
+            |config| config.system_proxy.as_mut().unwrap().server = "  ".to_string(),
+        ];
+        for (case, breaks) in broken.into_iter().enumerate() {
+            let mut config = decrypting(WindowsSystemProxyOwner::Desktop);
+            breaks(&mut config);
+            let desktop = validate(&config);
+            assert!(desktop.is_err(), "case {case} must be refused");
+            assert_eq!(
+                desktop,
+                config.validate(),
+                "case {case} gives the kernel's error"
+            );
+        }
     }
 
     #[test]
