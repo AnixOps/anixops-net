@@ -3036,7 +3036,7 @@ final class TunnelController {
     /// Shown when a change to the subscription groups waits for them to be read: the Keychain cannot be read before
     /// the device is first unlocked after a restart.
     static let subscriptionsUnreadText = String(
-        localized: "还没读到已保存的订阅，请解锁设备后再试。"
+        localized: "还没读到已保存的订阅，请先输入锁屏密码，再重试。"
     )
 
     /// Shown for an `http://` subscription link: iOS and macOS refuse plain HTTP downloads (App Transport Security).
