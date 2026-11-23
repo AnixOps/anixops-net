@@ -110,48 +110,10 @@ impl DesktopCore {
     }
 }
 
-/// Kernel control commands the client may send: reading traffic, connections
-/// and rule sets, closing connections, refreshing remote rule sets and packet
-/// capture. Mode and group changes go through the saved profile instead.
-const ACTIVITY_COMMANDS: [&str; 19] = [
-    "traffic",
-    "connections",
-    "close_connection",
-    "close_all",
-    "rule_sets",
-    "update_rule_sets",
-    // The rule tester and per-rule hit counts on the rules page.
-    "rule_hits",
-    "clear_rule_hits",
-    "test_route",
-    "capture",
-    "set_capture",
-    "clear_capture",
-    "capture_connection",
-    "export_capture",
-    "capture_requests",
-    "capture_exchange",
-    "capture_h2_frames",
-    // Per-domain decryption results for the decryption list.
-    "mitm_hosts",
-    "clear_mitm_hosts",
-];
-
-/// The request bytes for an activity page command, or why it is refused.
-pub fn activity_request(request: &serde_json::Value) -> Result<Vec<u8>, String> {
-    let command = request
-        .get("cmd")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or_default();
-    if !ACTIVITY_COMMANDS.contains(&command)
-        && !desktop_mitm::phone::CONTROL_COMMANDS.contains(&command)
-    {
-        return Err(format!(
-            "runtime control command {command:?} is not available"
-        ));
-    }
-    serde_json::to_vec(request).map_err(|error| error.to_string())
-}
+/// The request bytes for an activity page command, or why it is refused: the
+/// same window command list as the client-core backends, so the two cannot
+/// drift apart again.
+pub use client_core::backend::engine::activity_request;
 
 pub const fn can_connect(connection: ConnectionState) -> bool {
     !matches!(

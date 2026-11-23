@@ -319,10 +319,12 @@ fn linked(profile: &Value, other: &OtherSource) -> Option<Value> {
         .then_some(profile)
 }
 
-/// Kernel control commands the client may send: reading traffic, connections and rule sets, closing
-/// connections, refreshing remote rule sets and packet capture. Mode and group changes go through the saved
-/// profile instead.
-const ACTIVITY_COMMANDS: [&str; 17] = [
+/// Kernel control commands a window may send (`runtime_control`): reading traffic, connections and rule sets,
+/// closing connections, refreshing remote rule sets, packet capture and the per-domain decryption results. Mode
+/// and group changes go through the saved profile instead. What only the backend sends (the capture session
+/// storage and key, saved sessions, `reload_rules`) is not here: it goes through [`Engine::request`]. The
+/// Windows/Linux Tauri app checks its window's requests with the same list ([`activity_request`]).
+pub const ACTIVITY_COMMANDS: [&str; 19] = [
     "traffic",
     "connections",
     "close_connection",
@@ -341,6 +343,9 @@ const ACTIVITY_COMMANDS: [&str; 17] = [
     "capture_requests",
     "capture_exchange",
     "capture_h2_frames",
+    // Per-domain decryption results for the decryption list; they only read or clear counters.
+    "mitm_hosts",
+    "clear_mitm_hosts",
 ];
 
 /// The request bytes for an activity page command, or why it is refused.
@@ -488,6 +493,15 @@ impl Engine {
     /// Answers one activity page request (see [`activity_request`]) while the engine runs.
     pub fn control(&self, request: &serde_json::Value) -> Result<serde_json::Value, String> {
         let request = activity_request(request)?;
+        let answer = self.control_bytes(&request)?;
+        serde_json::from_slice(&answer).map_err(|error| error.to_string())
+    }
+
+    /// Answers one request the backend itself makes while the engine runs: the capture session storage and
+    /// key, saved sessions, `reload_rules` and the decryption results. It skips [`activity_request`], so it
+    /// must never carry a window's request as it came; windows go through [`Engine::control`].
+    pub(crate) fn request(&self, request: &serde_json::Value) -> Result<serde_json::Value, String> {
+        let request = serde_json::to_vec(request).map_err(|error| error.to_string())?;
         let answer = self.control_bytes(&request)?;
         serde_json::from_slice(&answer).map_err(|error| error.to_string())
     }
@@ -793,6 +807,42 @@ mod tests {
         assert!(Engine::default()
             .control(&serde_json::json!({"cmd": "traffic"}))
             .is_err());
+    }
+
+    #[test]
+    fn windows_may_read_decryption_results_but_not_backend_commands() {
+        // The decryption list asks through `runtime_control` on the Linux desktop.
+        assert!(activity_request(&json!({"cmd": "mitm_hosts"})).is_ok());
+        assert!(activity_request(&json!({"cmd": "clear_mitm_hosts"})).is_ok());
+        // Only the backend names the session storage and key, picks saved sessions and reloads rules.
+        for command in [
+            desktop_mitm::sessions::STORAGE_COMMAND,
+            "capture_sessions",
+            "save_capture",
+            "load_capture",
+            "delete_capture",
+            "reload_rules",
+            "replay_proxy",
+            "start_replay_proxy",
+        ] {
+            assert!(
+                activity_request(&json!({ "cmd": command })).is_err(),
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
+    fn backend_requests_reach_the_engine_without_the_window_list() {
+        // A stopped engine answers that it is not running, not that the command is unavailable.
+        let error = Engine::default()
+            .request(&json!({"cmd": "reload_rules", "rules": []}))
+            .unwrap_err();
+        assert_eq!(error, "the engine is not running");
+        let refused = Engine::default()
+            .control(&json!({"cmd": "reload_rules", "rules": []}))
+            .unwrap_err();
+        assert!(refused.contains("is not available"), "{refused}");
     }
 
     #[test]

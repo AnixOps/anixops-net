@@ -419,8 +419,9 @@ impl Client {
         let protection = key.protection;
         let answer = {
             let backend = self.backend();
-            backend.runtime_control(&storage)?;
-            backend.runtime_control(&request)?
+            // Both are the backend's own requests: the window's command list leaves them out on purpose.
+            backend.engine_request(&storage)?;
+            backend.engine_request(&request)?
         };
         Ok(desktop_mitm::sessions::with_protection(answer, protection))
     }

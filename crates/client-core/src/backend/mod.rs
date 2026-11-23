@@ -553,7 +553,7 @@ impl Backend {
             .and_then(desktop_dns::rules::rules_of)
             .and_then(|rules| {
                 self.engine
-                    .control(&serde_json::json!({ "cmd": "reload_rules", "rules": rules }))
+                    .request(&serde_json::json!({ "cmd": "reload_rules", "rules": rules }))
                     .ok()
             })
             .is_some_and(|answer| answer.get("reloaded") == Some(&serde_json::Value::Bool(true)));
@@ -1625,6 +1625,16 @@ impl Backend {
         self.engine.control(request)
     }
 
+    /// One request the backend itself makes of the running engine, past the window's command list
+    /// ([`Engine::request`]): the capture session storage and key, and the saved session commands
+    /// (`Client::capture_session`). Never an invoke: a window's own requests go through [`Self::runtime_control`].
+    pub(crate) fn engine_request(
+        &self,
+        request: &serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        self.engine.request(request)
+    }
+
     /// The running engine's per-domain decryption results (`mitm_hosts`), cleared first with `clear`;
     /// `{"enabled": false, "hosts": []}` while there is no engine or it answers no such command.
     pub fn mitm_hosts(&self, clear: bool) -> serde_json::Value {
@@ -1635,10 +1645,10 @@ impl Backend {
         if clear {
             let _ = self
                 .engine
-                .control(&serde_json::json!({ "cmd": "clear_mitm_hosts" }));
+                .request(&serde_json::json!({ "cmd": "clear_mitm_hosts" }));
         }
         self.engine
-            .control(&serde_json::json!({ "cmd": "mitm_hosts" }))
+            .request(&serde_json::json!({ "cmd": "mitm_hosts" }))
             .ok()
             .filter(|answer| answer.get("hosts").is_some_and(serde_json::Value::is_array))
             .unwrap_or(empty)
@@ -2351,6 +2361,61 @@ mod tests {
         let rules = desktop_dns::rules::rules_of(&envelope).unwrap();
         assert_eq!(rules[0], "DOMAIN-SUFFIX,ads.test,REJECT");
         assert_eq!(rules[2], "DOMAIN,a.test,DIRECT");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// The backend's own engine commands are not held to the window's command list: rules reload in place,
+    /// saved capture sessions work and the decryption results are read (client-core-ipc-01).
+    #[cfg(not(target_os = "android"))]
+    #[test]
+    fn backend_commands_reach_a_running_engine() {
+        let (mut backend, dir) = backend("engine-commands");
+        backend.set_direct_egress(true).unwrap();
+        backend.save_my_rules("DOMAIN,kept.test,DIRECT").unwrap();
+        let envelope = backend.envelope().unwrap();
+        let address = backend.engine.start(&envelope, "direct", 0).unwrap();
+
+        // `reload_rules`: the rules apply while the engine keeps running, with no restart.
+        let saved = backend
+            .save_my_rules("DOMAIN,kept.test,DIRECT\nDOMAIN-SUFFIX,ads.test,REJECT")
+            .unwrap();
+        assert!(
+            saved.message.contains("open connections stay"),
+            "{}",
+            saved.message
+        );
+        assert_eq!(backend.engine.address(), Some(address));
+
+        // Saved sessions: the storage and key first, then the session command.
+        let sessions = dir.join("sessions");
+        std::fs::create_dir_all(&sessions).unwrap();
+        let key = desktop_mitm::sessions::SessionKey::new(
+            &[7u8; desktop_mitm::sessions::KEY_LEN],
+            desktop_mitm::sessions::Protection::File,
+        )
+        .unwrap();
+        let storage = desktop_mitm::sessions::storage_request(&sessions, &key);
+        backend.engine_request(&storage).unwrap();
+        let list = desktop_mitm::sessions::SessionAction::List
+            .request()
+            .unwrap();
+        let answer = backend.engine_request(&list).unwrap();
+        assert!(answer["sessions"].is_array(), "{answer}");
+        // A window still cannot name the storage or the key, nor reload rules itself.
+        assert!(backend.runtime_control(&storage).is_err());
+        assert!(backend
+            .runtime_control(&serde_json::json!({ "cmd": "reload_rules", "rules": [] }))
+            .is_err());
+
+        // The decryption results come from the engine, through the backend and through a window's request.
+        let hosts = backend.mitm_hosts(true);
+        assert!(hosts["hosts"].is_array(), "{hosts}");
+        let asked = backend
+            .runtime_control(&serde_json::json!({ "cmd": "mitm_hosts" }))
+            .unwrap();
+        assert!(asked["hosts"].is_array(), "{asked}");
+
+        backend.engine.stop();
         let _ = std::fs::remove_dir_all(dir);
     }
 
