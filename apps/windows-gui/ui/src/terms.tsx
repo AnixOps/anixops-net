@@ -95,7 +95,8 @@ export function termsBlocks(markdown: string): Block[] {
 export function privacyForLanguage(markdown: string, english: boolean): string {
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
   const englishAt = lines.findIndex((line) => line.trim() === "## English");
-  const chineseAt = lines.findIndex((line) => line.trim() === "## 中文");
+  // "## 中文", PRIVACY.md's heading for its Chinese half: a marker in the file, not UI text to translate.
+  const chineseAt = lines.findIndex((line) => line.trim() === "## \u4e2d\u6587");
   if (englishAt < 0 || chineseAt < 0) return markdown;
   const head = lines.slice(0, Math.min(englishAt, chineseAt)).filter((line) => !line.includes("](#"));
   const body = english
