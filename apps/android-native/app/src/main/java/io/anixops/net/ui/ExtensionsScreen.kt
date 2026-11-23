@@ -32,7 +32,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -354,8 +353,7 @@ private fun HostsSection(state: ExtensionsState, enabled: Boolean, actions: Exte
                 onChange = { exclude = it },
                 modifier = Modifier.padding(start = BrandSpacing.md, end = BrandSpacing.md, bottom = BrandSpacing.sm),
             )
-            (state.domains.filter { !it.exclude } + state.domains.filter { it.exclude }).forEach { domain ->
-                RowDivider()
+            FoldedList(state.domains.filter { !it.exclude } + state.domains.filter { it.exclude }, leadingDivider = true) { domain ->
                 DomainRow(
                     domain = domain,
                     status = domainStatus(domain, state.outcomes),
@@ -559,9 +557,6 @@ internal fun patternMatches(pattern: String, host: String): Boolean {
     return pi == p.length
 }
 
-/** More plugins than this fold behind a "show all" row. */
-private const val COLLAPSED_PLUGIN_COUNT = 5
-
 @Composable
 private fun PluginsSection(
     state: ExtensionsState,
@@ -600,29 +595,14 @@ private fun PluginsSection(
                 }
             }
             // A long list folds to its first few plugins, so the sections below stay in reach.
-            val foldable = plugins.size > COLLAPSED_PLUGIN_COUNT
-            var expanded by rememberSaveable { mutableStateOf(false) }
-            val shown = if (foldable && !expanded) plugins.take(COLLAPSED_PLUGIN_COUNT) else plugins
-            Column(Modifier.fillMaxWidth().testTag(USER_LIST_TAG)) {
-                shown.forEachIndexed { index, plugin ->
-                    if (index > 0) RowDivider()
-                    PluginLine(
-                        plugin,
-                        enabled = enabled,
-                        onToggle = { actions.setPluginEnabled(plugin.id, it) },
-                        onInspect = { actions.inspect(plugin) },
-                        onRemove = { onRemove(plugin) },
-                    )
-                }
-            }
-            if (foldable) {
-                RowDivider()
-                TextButton(onClick = { expanded = !expanded }, modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        if (expanded) stringResource(R.string.plugins_show_less)
-                        else stringResource(R.string.plugins_show_all, plugins.size),
-                    )
-                }
+            FoldedList(plugins, showAll = { stringResource(R.string.plugins_show_all, it) }) { plugin ->
+                PluginLine(
+                    plugin,
+                    enabled = enabled,
+                    onToggle = { actions.setPluginEnabled(plugin.id, it) },
+                    onInspect = { actions.inspect(plugin) },
+                    onRemove = { onRemove(plugin) },
+                )
             }
         }
         Note(stringResource(R.string.plugins_note))
@@ -640,7 +620,6 @@ private fun PluginLine(
     val palette = LocalBrandPalette.current
     Row(
         modifier = Modifier
-            .testTag(USER_ITEM_TAG)
             .fillMaxWidth()
             .heightIn(min = RowMinHeight)
             .padding(start = BrandSpacing.md, end = BrandSpacing.md, top = BrandSpacing.sm, bottom = BrandSpacing.sm),

@@ -361,6 +361,9 @@
     <plurals name="decrypt_host_count">
         <item quantity="other">%1$d 个域名</item>
     </plurals>
+    <plurals name="list_show_all">
+        <item quantity="other">显示全部 %1$d 项</item>
+    </plurals>
     <plurals name="plugin_count">
         <item quantity="other">%1$d 个插件</item>
     </plurals>

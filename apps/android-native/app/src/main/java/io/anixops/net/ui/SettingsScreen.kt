@@ -301,8 +301,7 @@ private fun WifiRulesSection(
     }
     Column {
         Section(stringResource(R.string.wifi_rules)) {
-            settings.wifi.forEachIndexed { index, rule ->
-                if (index > 0) RowDivider()
+            FoldedList(settings.wifi) { rule ->
                 ActionRow(rule.ssid, rule.action, enabled, { actions.setWifiRule(rule.ssid, it) }) {
                     IconButton(onClick = { actions.removeWifiRule(rule.ssid) }, enabled = enabled) {
                         Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.wifi_rule_remove, rule.ssid))

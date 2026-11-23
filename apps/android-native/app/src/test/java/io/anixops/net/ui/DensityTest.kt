@@ -12,7 +12,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import io.anixops.net.R
+import io.anixops.net.core.DecryptDomain
 import io.anixops.net.core.MitmPlugin
+import io.anixops.net.core.WifiRule
 import io.anixops.net.ui.UiFixtures.extensionsState
 import io.anixops.net.ui.UiFixtures.settingsState
 import io.anixops.net.ui.UiFixtures.snapshot
@@ -104,9 +106,48 @@ class DensityTest {
         compose.onAllNodes(label and hasAnyAncestor(hasTestTag(USER_LIST_TAG)), useUnmergedTree = true).assertCountEquals(0)
     }
 
+    private fun showAllText(count: Int) =
+        RuntimeEnvironment.getApplication().resources.getQuantityString(R.plurals.list_show_all, count, count)
+
+    @Test
+    fun longWifiRuleListFoldsAndKeepsItsSwitchOut() {
+        val rules = (1..PLUGINS).map { WifiRule("Wi-Fi $it", "connect") }
+        val state = settingsState.copy(onDemand = settingsState.onDemand!!.copy(enabled = true, wifi = rules))
+        compose.setContent {
+            AnixTheme {
+                WifiRulesScreen(state = state, actions = SettingsActions(), onBack = {})
+            }
+        }
+        compose.waitForIdle()
+        val shown = compose.onAllNodes(userItems, useUnmergedTree = true).fetchSemanticsNodes().size
+        assertTrue("$shown of $PLUGINS Wi-Fi rules shown, at most $MAX_FOLDED_ITEMS before \"show all\"", shown in 1..MAX_FOLDED_ITEMS)
+        compose.onNodeWithText(showAllText(PLUGINS)).assertExists()
+        // The on/off switch stays on 设置, not among the rules (N27).
+        compose.onAllNodes(hasText(text(R.string.wifi_rules_enabled)), useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun longHostListFolds() {
+        val domains = extensionsState.domains + (1..PLUGINS).map { DecryptDomain("host$it.example.com") }
+        compose.setContent {
+            AnixTheme {
+                ExtensionsScreen(
+                    title = "扩展",
+                    snapshot = snapshot,
+                    state = extensionsState.copy(domains = domains),
+                    actions = ExtensionsActions(),
+                )
+            }
+        }
+        compose.waitForIdle()
+        // The hosts list folds behind its own "show all"; the other lists of the fixture are short.
+        compose.onNodeWithText(showAllText(domains.size)).assertExists()
+    }
+
     private companion object {
         const val MAX_SECTIONS = 8
-        const val MAX_ROWS = 24
+        /** N25: the first screen of 设置 has at most 16 rows. */
+        const val MAX_ROWS = 16
         const val MAX_FOLDED_ITEMS = 5
         const val MAX_VIEWPORTS = 2
         const val VIEWPORT_HEIGHT = 852

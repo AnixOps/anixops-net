@@ -383,6 +383,10 @@
         <item quantity="one">%1$d domain</item>
         <item quantity="other">%1$d domains</item>
     </plurals>
+    <plurals name="list_show_all">
+        <item quantity="one">Show all %1$d</item>
+        <item quantity="other">Show all %1$d</item>
+    </plurals>
     <plurals name="plugin_count">
         <item quantity="one">%1$d plugin</item>
         <item quantity="other">%1$d plugins</item>

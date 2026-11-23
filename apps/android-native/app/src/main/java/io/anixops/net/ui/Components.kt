@@ -50,6 +50,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
@@ -210,6 +211,40 @@ fun SwitchRow(label: String, hint: String?, checked: Boolean, enabled: Boolean, 
             if (hint != null) Text(hint, style = MaterialTheme.typography.bodySmall, color = LocalBrandPalette.current.text2)
         }
         Switch(checked = checked, onCheckedChange = null, enabled = enabled)
+    }
+}
+
+/** A list of things the user adds shows this many items, then folds behind "show all" (N26). */
+internal const val FOLDED_ITEM_COUNT = 5
+
+/**
+ * The items of a list the user adds to, in one column tagged [USER_LIST_TAG] with each item tagged [USER_ITEM_TAG]:
+ * the first [collapsed] and, when there are more, a "show all" / "show less" button under them (docs/ui-ux.md N26).
+ * Hairlines go between the items, and before the first when [leadingDivider]; [showAll] names the button.
+ */
+@Composable
+fun <T> FoldedList(
+    items: List<T>,
+    modifier: Modifier = Modifier,
+    collapsed: Int = FOLDED_ITEM_COUNT,
+    leadingDivider: Boolean = false,
+    showAll: @Composable (Int) -> String = { pluralStringResource(R.plurals.list_show_all, it, it) },
+    item: @Composable (T) -> Unit,
+) {
+    val foldable = items.size > collapsed
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val shown = if (foldable && !expanded) items.take(collapsed) else items
+    Column(modifier.fillMaxWidth().testTag(USER_LIST_TAG)) {
+        shown.forEachIndexed { index, entry ->
+            if (index > 0 || leadingDivider) RowDivider()
+            Box(Modifier.fillMaxWidth().testTag(USER_ITEM_TAG)) { item(entry) }
+        }
+    }
+    if (foldable) {
+        RowDivider()
+        TextButton(onClick = { expanded = !expanded }, modifier = Modifier.fillMaxWidth()) {
+            Text(if (expanded) stringResource(R.string.plugins_show_less) else showAll(items.size))
+        }
     }
 }
 

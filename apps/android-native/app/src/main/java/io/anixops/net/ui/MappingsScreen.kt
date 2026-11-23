@@ -71,8 +71,7 @@ fun MappingsSection(
             if (loaded && mappings.isEmpty()) {
                 EmptyRows(stringResource(R.string.mappings_empty), stringResource(R.string.mappings_empty_body))
             }
-            mappings.forEachIndexed { index, entry ->
-                if (index > 0) RowDivider()
+            FoldedList(mappings) { entry ->
                 val label = mappingLabel(entry)
                 val hint = if (entry.kind == "local") {
                     stringResource(R.string.mapping_local_hint, entry.status, formatBytes(MappingText.bytes(entry.body).size.toLong()))
@@ -108,8 +107,7 @@ fun RedirectsSection(
             if (loaded && redirects.isEmpty()) {
                 EmptyRows(stringResource(R.string.redirects_empty), stringResource(R.string.redirects_empty_body))
             }
-            redirects.forEachIndexed { index, entry ->
-                if (index > 0) RowDivider()
+            FoldedList(redirects) { entry ->
                 ToggleLine(redirectLabel(entry), "→ " + entry.target, entry.enabled, enabled, onToggle = { onToggle(entry, it) }) { close ->
                     if (entry.draft != null) MenuItem(R.string.action_edit, close) { onEdit(entry) }
                     MenuItem(R.string.redirect_remove, close) { onRemove(entry) }
