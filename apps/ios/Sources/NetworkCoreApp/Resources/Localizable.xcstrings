@@ -1863,22 +1863,6 @@
         }
       }
     },
-    "启用的插件合计超过 8 MB，请先停用一些插件": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Enabled plugins exceed 8 MB in total. Turn some off first."
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "啟用的外掛合計超過 8 MB，請先停用一些外掛"
-          }
-        }
-      }
-    },
     "图片里没有找到二维码": {
       "localizations": {
         "en": {
@@ -14723,6 +14707,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "無效，不會生效"
+          }
+        }
+      }
+    },
+    "映射合计超过 4 MB（响应体按 Base64 计算，约为原大小的 4/3）。请删除或缩小一些 Map Local 响应体。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mappings exceed 4 MB in total (response bodies count in Base64, about 4/3 of their size). Delete or shrink some Map Local response bodies."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "對應合計超過 4 MB（回應內文按 Base64 計算，約為原大小的 4/3）。請刪除或縮小一些 Map Local 回應內文。"
+          }
+        }
+      }
+    },
+    "映射和已启用的插件合计超过 8 MB。请减少映射响应体或停用一些插件。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mappings and enabled plugins exceed 8 MB in total. Shrink mapping response bodies or turn off some plugins."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "對應和已啟用的外掛合計超過 8 MB。請減少對應回應內文或停用一些外掛。"
+          }
+        }
+      }
+    },
+    "启用的插件和调试映射合计超过 8 MB，请先停用一些插件或减少映射响应体": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enabled plugins and debug mappings exceed 8 MB in total. Turn some plugins off or shrink mapping response bodies first."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "啟用的外掛和除錯對應合計超過 8 MB，請先停用一些外掛或減少對應回應內文"
           }
         }
       }

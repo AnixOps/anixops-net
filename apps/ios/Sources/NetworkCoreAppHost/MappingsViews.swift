@@ -86,6 +86,7 @@ struct MappingsView: View {
         .sheet(item: $editing) { draft in
             MappingEditor(draft: draft) { entry in
                 let next = try mappings.saving(entry)
+                try tunnel.checkDebugMappingsBudget(next)
                 // Asked while the sheet is still open, so the confirmation shows over it.
                 guard await tunnel.allowsDecryption(of: next) else {
                     return false

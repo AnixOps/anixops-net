@@ -71,6 +71,37 @@ final class MitmPluginTests: XCTestCase {
         XCTAssertEqual(library.plugins.count, 2)
     }
 
+    /// The debug mappings' plugin shares the budget: adding or enabling a plugin, or turning the switch on, is refused
+    /// when it would not fit, while turning a plugin off always works, even over the budget.
+    func testLibraryBudgetCountsTheMappingsAndAlwaysAllowsTurningOff() throws {
+        var library = MitmPluginLibrary()
+        let body = "[MITM]\nhostname = a.example\n" + String(repeating: "#", count: 3 * 1024 * 1024)
+        let first = try MitmPlugin(text: body)
+        try library.add(first)
+        let mappings = 3 * 1024 * 1024
+        XCTAssertThrowsError(try library.add(MitmPlugin(text: body), reserving: mappings)) {
+            XCTAssertEqual($0 as? MitmPluginError, .libraryFull)
+        }
+        let second = try MitmPlugin(text: body)
+        try library.add(second)
+        XCTAssertThrowsError(try library.checkBudget(reserving: mappings))
+
+        try library.setEnabled(false, for: second.id, reserving: mappings)
+        XCTAssertThrowsError(try library.setEnabled(true, for: second.id, reserving: mappings)) {
+            XCTAssertEqual($0 as? MitmPluginError, .libraryFull)
+        }
+        XCTAssertFalse(library.plugins[1].isEnabled)
+        try library.setEnabled(true, for: second.id)
+        XCTAssertEqual(library.enabledBytes, 2 * body.utf8.count)
+
+        // A library an earlier version left over the budget can still be turned off.
+        var over = library
+        over.plugins.append(try MitmPlugin(text: body))
+        XCTAssertThrowsError(try over.checkBudget())
+        XCTAssertNoThrow(try over.setEnabled(false, for: first.id, reserving: mappings))
+        XCTAssertFalse(over.plugins[0].isEnabled)
+    }
+
     func testLibraryAndProfileValueRoundTrip() throws {
         var library = MitmPluginLibrary()
         library.isEnabled = true

@@ -203,8 +203,9 @@ public enum MitmPluginError: Error, Equatable {
 /// The plugins the user imported and the master switch, saved as JSON in the app's Application Support folder.
 /// Only the containing app reads this file; the tunnel gets the enabled texts through the tunnel profile.
 public struct MitmPluginLibrary: Codable, Equatable {
-    /// Matches `MAX_POLICY_BYTES` in the kernel's engine-embedded mitm module.
-    public static let maxActiveBytes = 8 * 1024 * 1024
+    /// Matches `MAX_POLICY_BYTES` in the kernel's engine-embedded mitm module (`EngineBudget`), shared with the debug
+    /// mappings' generated plugin.
+    public static let maxActiveBytes = EngineBudget.maxDecryptionBytes
 
     public var isEnabled = false
     public private(set) var plugins: [MitmPlugin] = []
@@ -216,20 +217,26 @@ public struct MitmPluginLibrary: Codable, Equatable {
         isEnabled ? plugins.filter(\.isEnabled).map(\.text) : []
     }
 
-    public mutating func add(_ plugin: MitmPlugin) throws {
+    /// Adds `plugin`, enabled; `reserving` is what the debug mappings' plugin takes of the same budget
+    /// (`DebugMappings.pluginBytes`).
+    public mutating func add(_ plugin: MitmPlugin, reserving: Int = 0) throws {
         var next = self
         next.plugins.append(plugin)
-        try next.checkSize()
+        try next.checkBudget(reserving: reserving)
         self = next
     }
 
-    public mutating func setEnabled(_ enabled: Bool, for id: UUID) throws {
+    /// Turns a plugin on or off. Only turning one on is checked against the budget: turning off always works, even
+    /// for plugins an earlier version left over it.
+    public mutating func setEnabled(_ enabled: Bool, for id: UUID, reserving: Int = 0) throws {
         guard let index = plugins.firstIndex(where: { $0.id == id }) else {
             return
         }
         var next = self
         next.plugins[index].isEnabled = enabled
-        try next.checkSize()
+        if enabled, !plugins[index].isEnabled {
+            try next.checkBudget(reserving: reserving)
+        }
         self = next
     }
 
@@ -263,8 +270,15 @@ public struct MitmPluginLibrary: Codable, Equatable {
         Set(plugins.flatMap(\.dataReferences).map(\.path))
     }
 
-    private func checkSize() throws {
-        if plugins.filter(\.isEnabled).reduce(0, { $0 + $1.text.utf8.count }) > Self.maxActiveBytes {
+    /// The enabled plugins' bytes, whatever the master switch says, as the engine counts them.
+    public var enabledBytes: Int {
+        EngineBudget.decryptionBytes(plugins.filter(\.isEnabled).map(\.text))
+    }
+
+    /// Throws `libraryFull` when the enabled plugins and `reserving` (the debug mappings' plugin) are over the
+    /// engine's decryption budget.
+    public func checkBudget(reserving: Int = 0) throws {
+        if enabledBytes + reserving > Self.maxActiveBytes {
             throw MitmPluginError.libraryFull
         }
     }

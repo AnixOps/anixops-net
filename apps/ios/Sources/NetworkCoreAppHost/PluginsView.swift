@@ -310,6 +310,15 @@ final class PluginsModel: ObservableObject {
         }
         var next = library
         next.isEnabled = enabled
+        // Plugins enabled under the switch, with the debug mappings, must fit the engine's decryption budget.
+        if enabled {
+            do {
+                try next.checkBudget(reserving: tunnel.debugMappings.pluginBytes)
+            } catch {
+                note = Self.describe(error)
+                return
+            }
+        }
         await commit(next, tunnel: tunnel)
         if enabled {
             await fetchMissingResources(tunnel: tunnel)
@@ -319,7 +328,7 @@ final class PluginsModel: ObservableObject {
     func setEnabled(_ enabled: Bool, for id: UUID, tunnel: TunnelController) async {
         var next = library
         do {
-            try next.setEnabled(enabled, for: id)
+            try next.setEnabled(enabled, for: id, reserving: tunnel.debugMappings.pluginBytes)
         } catch {
             note = Self.describe(error)
             return
@@ -369,7 +378,7 @@ final class PluginsModel: ObservableObject {
                 sourceURL: sourceURL,
                 inspection: MitmPluginInspector.inspect(text)
             )
-            try next.add(plugin)
+            try next.add(plugin, reserving: tunnel.debugMappings.pluginBytes)
         } catch {
             note = Self.describe(error)
             return
@@ -505,7 +514,7 @@ final class PluginsModel: ObservableObject {
         case MitmPluginError.nothingToApply:
             return String(localized: "没有找到可用的重写、脚本或 [MITM] 主机")
         case MitmPluginError.libraryFull:
-            return String(localized: "启用的插件合计超过 8 MB，请先停用一些插件")
+            return String(localized: "启用的插件和调试映射合计超过 8 MB，请先停用一些插件或减少映射响应体")
         case MitmScriptError.tooLarge:
             return String(localized: "脚本超过 4 MB")
         case MitmScriptError.notText, MitmScriptError.notHTTPS:

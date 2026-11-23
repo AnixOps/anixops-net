@@ -1568,11 +1568,27 @@ final class TunnelController {
         await applyMitmPlugins(imported.plugins, scripts: imported.scripts, resources: imported.resources)
     }
 
+    /// Throws a `DebugMappingsError` when `next`, replacing the saved mappings, makes their plugin larger and over
+    /// its own limit or, with the enabled plugins, over the engine's decryption budget. An editor sheet calls it
+    /// before it closes, so the reason shows in the sheet.
+    func checkDebugMappingsBudget(_ next: DebugMappings) throws {
+        let imported = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL))?.enabledBytes ?? 0
+        try next.checkBudget(replacing: debugMappings, importedBytes: imported)
+    }
+
     /// Saves the Map Local / Map Remote entries and puts their plugin in the saved profile; a running tunnel
     /// reconnects to use them. A change that decrypts a new domain first needs the HTTPS decryption confirmation
     /// (`allowsDecryption(of:)`); without it nothing is saved. Returns whether they were saved.
     @discardableResult
     func applyDebugMappings(_ next: DebugMappings) async -> Bool {
+        // The mappings' plugin shares the engine's decryption budget with the enabled plugins; every change that
+        // makes it larger is checked here, whichever view made it (toggles and moves included).
+        do {
+            try checkDebugMappingsBudget(next)
+        } catch {
+            message = (error as? DebugMappingsError)?.message ?? String(localized: "无法保存映射")
+            return false
+        }
         guard await allowsDecryption(of: next) else {
             return false
         }
