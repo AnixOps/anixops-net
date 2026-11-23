@@ -300,8 +300,9 @@ private struct H2FrameRow: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// Which link and which way: the app's link reads App → / ← App, the server's link reads → 服务器 / ← 服务器.
-    private var direction: String {
+    /// Which link and which way: the app's link reads App → / → App, the server's link reads → 服务器 / 服务器 →.
+    /// A catalogue key, so "服务器" is translated (a String would be shown as written).
+    private var direction: LocalizedStringKey {
         switch (frame.link, frame.isUpload) {
         case (.app, true):
             return "App →"

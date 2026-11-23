@@ -161,7 +161,8 @@ struct CertificateView: View {
         }
     }
 
-    private func step(_ number: Int, _ title: String, done: Bool, note: String? = nil) -> some View {
+    // Title and note are catalogue keys: a String here would be shown as written, in Chinese, in every language.
+    private func step(_ number: Int, _ title: LocalizedStringKey, done: Bool, note: LocalizedStringKey? = nil) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: done ? "checkmark.circle.fill" : "\(number).circle")
                 .foregroundStyle(done ? brand.primary : brand.text3)

@@ -3063,7 +3063,8 @@ final class TunnelController {
             case .tooLarge:
                 return String(localized: "订阅内容过大")
             case let .noSupportedNode(protocols, _):
-                let names = Array(Set(protocols)).sorted().joined(separator: "、")
+                // The locale's own list punctuation ("a、b" in Chinese, "a, b" in English).
+                let names = Array(Set(protocols)).sorted().formatted(.list(type: .and))
                 return names.isEmpty
                     ? String(localized: "没有可用的节点")
                     : String(localized: "没有可用的节点（暂不支持：\(names)）")

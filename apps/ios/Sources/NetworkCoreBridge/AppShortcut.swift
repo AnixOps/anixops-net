@@ -23,13 +23,15 @@ public struct AppShortcut: Equatable, Identifiable, Sendable {
     }
 
     public let id: String
-    /// The command's name: a key of the string catalog.
-    public let title: String
+    /// The command's name, looked up in the app's string catalogue (`String(localized: shortcut.title)`). A
+    /// localization value rather than a String, so a literal here is a catalogue key with its interpolations
+    /// (`前往第 %lld 页`) and the strings check can see it.
+    public let title: String.LocalizationValue
     public let key: Character
     public let modifiers: Modifiers
     public let group: Group
 
-    public init(id: String, title: String, key: Character, modifiers: Modifiers, group: Group) {
+    public init(id: String, title: String.LocalizationValue, key: Character, modifiers: Modifiers, group: Group) {
         self.id = id
         self.title = title
         self.key = key

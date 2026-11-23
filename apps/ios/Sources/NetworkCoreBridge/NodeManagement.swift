@@ -292,8 +292,8 @@ public struct PendingNodeDeletion: Identifiable {
         "\(groupID)\u{1F}\(node.id)"
     }
 
-    /// The dependent nodes' names, for the confirmation.
+    /// The dependent nodes' names, for the confirmation, joined the way the user's language writes a list.
     public var dependentNames: String {
-        dependents.map(\.displayName).joined(separator: "、")
+        dependents.map(\.displayName).formatted(.list(type: .and))
     }
 }

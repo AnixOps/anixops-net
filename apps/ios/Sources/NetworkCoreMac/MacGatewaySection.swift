@@ -28,7 +28,7 @@ struct MacGatewaySection: View {
             .disabled(!tunnel.takeover.routesTraffic)
             if tunnel.gateway, tunnel.takeover.routesTraffic {
                 LabeledContent("设备的路由器填") {
-                    Text(addresses.isEmpty ? String(localized: "没有连上局域网") : addresses.joined(separator: "、"))
+                    Text(addresses.isEmpty ? String(localized: "没有连上局域网") : addresses.formatted(.list(type: .or)))
                         .textSelection(.enabled)
                 }
                 LabeledContent("设备的 DNS 填") {
