@@ -17,7 +17,9 @@ XcodeGen and the catalogue is kept by hand), so this check does it. Four rules:
                     translation has different format specifiers from the key.
   S3 not-looked-up  Chinese text that reaches the screen as a plain String: an argument of a parameter declared
                     String, a value returned from a function or property declared String, a String variable, or
-                    Text(verbatim:). SwiftUI shows such a String as it is, entry or not. Make the parameter
+                    Text(verbatim:), or a literal written inside another literal's interpolation
+                    (`"原因：\\(x ?? "无记录")"`, `"\\(a.joined(separator: "、")) 失败"`), which is inserted as it is.
+                    SwiftUI shows such a String as it is, entry or not. Make the parameter
                     LocalizedStringKey / LocalizedStringResource, or write String(localized: "...").
   S4 unknown        Chinese text in a place this check cannot follow (a closure's result, an untyped constant). Write
                     it where the lookup is visible: String(localized:), a LocalizedStringKey parameter or property.
@@ -36,7 +38,7 @@ import json
 import re
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -105,6 +107,15 @@ class Literal:
     start: int
     end: int
     parts: tuple[tuple[str, str], ...]  # ("lit", text) / ("expr", interpolated expression)
+    # A literal written inside another literal's interpolation (`"\(a ?? "无")"`): the interpolated expression
+    # with its own literals blanked out, the literal's offset in it, and the start of the outermost literal.
+    context: str = ""
+    at: int = 0
+    parent: int = -1
+
+    @property
+    def nested(self) -> bool:
+        return self.parent >= 0
 
     @property
     def text(self) -> str:
@@ -133,7 +144,9 @@ def lex(text: str) -> tuple[list[Literal], str]:
             if code[k] != "\n":
                 code[k] = " "
 
-    def read_string(i: int) -> tuple[int, list[tuple[str, str]]]:
+    def read_string(i: int) -> tuple[int, list[tuple[str, str]], list[Literal]]:
+        """(end, parts, the literals written inside its interpolations, at any depth, with absolute offsets)."""
+        nested: list[Literal] = []
         hashes = 0
         while text[i] == "#":
             hashes += 1
@@ -153,17 +166,32 @@ def lex(text: str) -> tuple[list[Literal], str]:
                 c = text[j]
                 if c == "(":
                     depth, k = 1, j + 1
+                    inner: list[tuple[int, int, list[tuple[str, str]]]] = []
                     while k < n and depth:
                         ch = text[k]
                         if ch == '"' or (ch == "#" and re.match(r'#+"', text[k:k + 8])):
-                            k, _ = read_string(k)
+                            end, inner_parts, deeper = read_string(k)
+                            inner.append((k, end, inner_parts))
+                            nested.extend(deeper)
+                            k = end
                             continue
                         depth += {"(": 1, ")": -1}.get(ch, 0)
                         k += 1
                     if buf:
                         parts.append(("lit", "".join(buf)))
                         buf = []
-                    parts.append(("expr", text[j + 1:k - 1]))
+                    expr_start, expr_end = j + 1, k - 1
+                    parts.append(("expr", text[expr_start:expr_end]))
+                    # The expression as code: its literals blanked like the outer code, a '"' at each start.
+                    context = list(text[expr_start:expr_end])
+                    for a, b, _ in inner:
+                        for x in range(a - expr_start, min(b, expr_end) - expr_start):
+                            if context[x] != "\n":
+                                context[x] = " "
+                        context[a - expr_start] = '"'
+                    context_text = "".join(context)
+                    for a, b, p in inner:
+                        nested.append(Literal(a, b, tuple(p), context_text, a - expr_start))
                     i = k
                     continue
                 simple = {"n": "\n", "t": "\t", '"': '"', "\\": "\\", "'": "'", "0": "\0", "r": "\r"}
@@ -188,7 +216,7 @@ def lex(text: str) -> tuple[list[Literal], str]:
             parts.append(("lit", "".join(buf)))
         if multi:
             parts = dedent(parts)
-        return i, parts
+        return i, parts, nested
 
     i = 0
     while i < n:
@@ -209,8 +237,9 @@ def lex(text: str) -> tuple[list[Literal], str]:
             blank(i, j)
             i = j
         elif text[i] == '"' or (text[i] == "#" and re.match(r'#+"', text[i:i + 8])):
-            end, parts = read_string(i)
+            end, parts, nested = read_string(i)
             literals.append(Literal(i, end, tuple(parts)))
+            literals.extend(replace(lit, parent=i) for lit in nested)
             blank(i, end)
             code[i] = '"'
             i = end
@@ -486,6 +515,27 @@ def classify(code: str, lit: Literal, indexes: tuple[Index, ...], file_vars: dic
         return kind_of([declared]) if declared else "unknown", "result"
 
 
+def classify_nested(lit: Literal) -> tuple[str, str]:
+    """A literal inside an interpolation. Its value is inserted into the outer text as it is (an interpolated
+    String is never looked up, not even in a LocalizedStringKey), so only String(localized:) around it looks it up."""
+    pos = lit.at
+    while True:
+        c, opener = enclosing(lit.context, pos)
+        if c != "(":
+            return "string", "inserted into another string by an interpolation"
+        label, _, _ = argument(lit.context, opener, pos)
+        m = re.search(r"([\w.]+)\s*$", lit.context[:opener])
+        callee = (m.group(1) if m else "").split(".")[-1]
+        if callee == "String" and label == "localized":
+            return "lookup", "String(localized:) in an interpolation"
+        if callee == "":
+            pos = opener  # a parenthesised expression or a tuple
+            continue
+        if callee == "joined":
+            return "string", "joined(separator:) in an interpolation"  # use .formatted(.list(type:))
+        return "string", f"{callee}({label}:) in an interpolation, inserted into another string"
+
+
 # ---------------------------------------------------------------------------------------------------------------
 # Catalogue
 
@@ -532,13 +582,30 @@ def is_data(path: str, lit: Literal) -> bool:
 def check_source(path: str, text: str, index: Index, keys: set[str], with_specifiers: list[str]) -> list[str]:
     literals, code = lex(text)
     file_index = index_file(code)
+    outer = {lit.start: lit for lit in literals if not lit.nested}
+    outer_kinds: dict[int, str] = {}
+
+    def outer_skipped(start: int) -> bool:
+        """A literal inside the interpolation of a literal that is data or never shown (a log line) is not shown
+        either."""
+        if start not in outer_kinds:
+            parent = outer[start]
+            outer_kinds[start] = ("skip" if is_data(path, parent)
+                                  else classify(code, parent, (file_index, index), file_index.vars)[0])
+        return outer_kinds[start] == "skip"
+
     findings = []
     for lit in literals:
         if not HAN.search(lit.text) or is_data(path, lit):
             continue
+        if lit.nested and outer_skipped(lit.parent):
+            continue
         line = text.count("\n", 0, lit.start) + 1
         shown = lit.text.replace("\n", "\\n")[:120]
-        kind, where = classify(code, lit, (file_index, index), file_index.vars)
+        if lit.nested:
+            kind, where = classify_nested(lit)
+        else:
+            kind, where = classify(code, lit, (file_index, index), file_index.vars)
         if kind == "skip":
             continue
         if kind == "string":
@@ -583,7 +650,7 @@ def run(root: Path) -> int:
 
 
 def self_test() -> int:
-    keys = {"继续", "%lld 个请求", "生成根证书", "代理模式：%@"}
+    keys = {"继续", "%lld 个请求", "生成根证书", "代理模式：%@", "%@ 失败", "原因：%@"}
     with_specifiers = [k for k in keys if "%" in k]
     helpers = """
     private func step(_ number: Int, _ title: String, done: Bool) -> some View { Text(title) }
@@ -614,6 +681,13 @@ def self_test() -> int:
         ('let names = [", ".joined(separator: "、")]', ["S3", "S1"]),
         ('AppShortcut(intent: X(), phrases: ["用 \\(.applicationName) 连接"], shortTitle: "继续")', []),
         ('LabeledContent("继续", value: "没有的键")', ["S4", "S1"]),
+        # Literals inside an interpolation are inserted as they are unless String(localized:) looks them up.
+        ('let s = String(localized: "\\(a.joined(separator: "、")) 失败")', ["S3", "S1"]),
+        ('Text("原因：\\(x ?? "无记录")")', ["S3", "S1"]),
+        ('Text("原因：\\(x ?? String(localized: "继续"))")', []),
+        ('Text("原因：\\(x ?? String(localized: "没有的键"))")', ["S1"]),
+        ('Text("\\(flag ? String(localized: "继续") : "生成根证书") 了")', ["S3", "S1"]),
+        ('logger.info("原因：\\(x ?? "无记录")")', []),
     ]
     failed = 0
     for source, expected in cases:

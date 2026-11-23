@@ -687,9 +687,11 @@ final class TunnelController {
             notice = shown.flatMap { $0.origin.applies(whileConnected: isConnected) ? $0 : nil }
         }
         if !failed.isEmpty, AppNotifications.settings.subscriptions {
+            // The locale's list format ("A and B", "A、B", "A 和 B"), not a Chinese separator in every language.
+            let names = failed.formatted(.list(type: .and))
             AppNotifications.post(
                 title: String(localized: "订阅更新失败"),
-                body: String(localized: "\(failed.joined(separator: "、")) 没有更新成功，仍在使用上次的节点。"),
+                body: String(localized: "\(names) 没有更新成功，仍在使用上次的节点。"),
                 thread: "subscriptions",
                 id: "subscriptions-failed"
             )

@@ -195,9 +195,10 @@ iOS、macOS 的界面文字用简体中文写在 Swift 里，由 SwiftUI / Found
 |---|---|---|
 | S1 缺键 | 目录里没有这条（插值按任意格式符匹配） | 在目录里加这条，en 和 zh-Hant 都写好；插值用编译器生成的格式符：Int `%lld`、UInt64 `%llu`、UInt32 `%u`、Int32 `%d`、String `%@`，语序变化时译文用 `%1$@` 这类位置参数 |
 | S2 未翻译 | 目录里任何一条（用到没用到都算）缺 en / zh-Hant、状态不是 translated，或译文的格式符和键不一致 | 补译文 |
-| S3 没查表 | 文字以 String 交给界面：参数声明为 String 的辅助函数、返回 String 的属性、String 状态、`Text(verbatim:)`、`joined(separator: "、")` | 参数和属性改成 `LocalizedStringKey` / `LocalizedStringResource` / `String.LocalizationValue`，或在赋值处写 `String(localized:)`；列表用 `.formatted(.list(type:))` |
+| S3 没查表 | 文字以 String 交给界面：参数声明为 String 的辅助函数、返回 String 的属性、String 状态、`Text(verbatim:)`、`joined(separator: "、")`；写在另一个字面量插值里的字面量（`"原因：\(x ?? "无记录")"`、`"\(a.joined(separator: "、")) 失败"`），插值按原样插入，不查表 | 参数和属性改成 `LocalizedStringKey` / `LocalizedStringResource` / `String.LocalizationValue`，或在赋值处写 `String(localized:)`；插值里的文字写 `String(localized:)`；列表先用 `.formatted(.list(type:))` 生成、放进局部常量再插值 |
 | S4 看不出 | 检查跟不到的位置（闭包结果、没写类型的常量） | 写成查表可见的形式：`String(localized:)`、`LocalizedStringKey` 参数或属性 |
 
+插值里的字面量同样要过 S1、S3；外层字面量是 `DATA` 或只写进日志时，里面的也跳过。
 不是界面文字的中文（演示数据里的节点名、写进生成的插件文件里的文字、和中文 `TERMS.md` 匹配的正则）列在脚本的 `DATA` 里，
 每条写明原因；命令行工具 `anixops` 的终端输出（`docs/macos-cli.md`）和 Siri / 快捷指令短语（属于单独的 AppShortcuts 表）不在检查范围内。
 `apple_strings.py --self-test` 是检查本身的测试；`apps/ios/Tests/NetworkCoreBridgeTests/LocalizationCatalogueTests.swift`
