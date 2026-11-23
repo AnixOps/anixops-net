@@ -456,9 +456,10 @@ private fun rememberSettingsActions(
     }
     val background = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { refresh() }
     var disclosing by rememberSaveable { mutableStateOf(false) }
-    if (disclosing && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+    if (disclosing) {
         // Google Play's prominent disclosure: what is read, what for, and that it stays on the phone, before the
-        // system's question.
+        // system's question. Only reachable on Android 10+ (Permissions.offersBackgroundLocation); the single version
+        // check sits directly around the API 29 call below.
         AlertDialog(
             onDismissRequest = { disclosing = false },
             title = { Text(stringResource(R.string.background_location_title)) },
@@ -506,12 +507,11 @@ private fun rememberSettingsActions(
             // Asking is apart from the switch: turning one off never asks, turning one on asks when needed.
             val turningOn = settings.notificationOn(kind) == false
             settings.toggleNotification(kind)
-            val granted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-                permitted(context, Manifest.permission.POST_NOTIFICATIONS)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                Permissions.asksOnSwitch(Build.VERSION.SDK_INT, granted, turningOn)
-            ) {
-                notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val granted = permitted(context, Manifest.permission.POST_NOTIFICATIONS)
+                if (Permissions.asksOnSwitch(Build.VERSION.SDK_INT, granted, turningOn)) {
+                    notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
             }
         },
         allowNotifications = {
