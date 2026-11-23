@@ -38,6 +38,8 @@ AnixOps Net 是一个 App 两种模式（计划 A3/A4）：**代理**按订阅�
 - App 用 URLSession 发出（`NetworkCoreBridge/RequestReplay.swift`），连接中会经过隧道，自然出现在抓包里。
 - 不用 Cookie 存储和缓存，不跟随重定向，显示服务器自己的响应（状态、耗时、响应头、响应体）。
 - 去掉 HTTP/2 伪头（`:authority` 等）和 Host、Content-Length 等由系统填写的头；请求体最大 1 MB。
+- HTTP/2 可以把 Cookie 拆成多个 `cookie` 字段；重放时多条 Cookie（抓到的或在编辑框里写成多行的）合并成一行，用 `; ` 分隔
+  （RFC 9113 §8.2.3），编辑框里显示的就是实际发出的内容。其他同名头照常用逗号合并。
 - 抓到的请求体被截断时不能直接重放，只能编辑后重放。
 
 ## Map Local / Map Remote（计划 E3）
