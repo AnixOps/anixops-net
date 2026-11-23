@@ -245,7 +245,7 @@ struct RuleTextEditorView: View {
 }
 
 /// The editor's colors, taken from the brand palette so both themes read well.
-struct RuleTextColors {
+struct RuleTextColors: Equatable {
     let text: Color
     let kind: Color
     let value: Color
@@ -346,21 +346,22 @@ struct RuleTextColors {
     }
 
     /// Colors `storage`: all of it when `revision` is newer than the coordinator last painted (new issues, or text
-    /// set from outside), else only the lines changed since the last paint.
+    /// set from outside) or the colors changed (the theme), else only the lines changed since the last paint.
     func update(_ storage: NSTextStorage, issues: [RuleText.Issue], revision: Int, painted: inout PaintState) {
         let current = storage.string
-        if painted.revision != revision || painted.text == nil {
+        if painted.revision != revision || painted.text == nil || painted.colors != self {
             paint(storage, issues: issues)
         } else if let previous = painted.text, let lines = RuleText.changedLines(from: previous, to: current) {
             paint(storage, lines: lines)
         }
-        painted = PaintState(revision: revision, text: current)
+        painted = PaintState(revision: revision, text: current, colors: self)
     }
 
     /// What a text view was last colored for.
     struct PaintState {
         var revision: Int?
         var text: String?
+        var colors: RuleTextColors?
     }
 }
 
