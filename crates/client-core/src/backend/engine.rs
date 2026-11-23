@@ -419,6 +419,8 @@ impl Engine {
         self.stop_runtime();
         let address = self.start_runtime(envelope, port)?;
         self.node_id = Some(node_id.to_string());
+        // The lists read the new engine now; a session the viewer held after the last stop is let go.
+        desktop_mitm::sessions::close_viewer();
         Ok(address)
     }
 
@@ -495,11 +497,18 @@ impl Engine {
         false
     }
 
-    /// One kernel control request to the running engine.
+    /// One kernel control request to the running engine. With no engine running, the capture commands go to the
+    /// kernel's capture viewer (`desktop_mitm::sessions::viewer_control`), so saved sessions open, and the session
+    /// saved at the last stop stays on screen, while disconnected.
     fn control_bytes(&self, request: &[u8]) -> Result<Vec<u8>, String> {
         #[cfg(any(target_os = "android", target_os = "linux", windows))]
         if let Some(tunnel) = self.tunnel.as_ref().filter(|tunnel| tunnel.is_running()) {
             return tunnel.control_json(request);
+        }
+        if !self.is_running() {
+            if let Some(answer) = desktop_mitm::sessions::viewer_control(request) {
+                return answer;
+            }
         }
         self.proxy_control(request)
     }

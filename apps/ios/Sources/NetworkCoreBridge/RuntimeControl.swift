@@ -59,15 +59,22 @@ public enum RuntimeControl {
     case clearCapture
     /// The bytes and decrypted HTTP messages kept of one connection (`{"capture": … | null}`).
     case captureConnection(UInt64)
-    /// Everything captured, or one connection, as a pcapng or HAR file (`PacketCapture.ExportAnswer`).
-    case exportCapture(PacketCapture.ExportFormat, id: UInt64?)
+    /// Everything captured, or one connection, as a pcapng, HAR or zip file (`PacketCapture.ExportAnswer`);
+    /// `redact` hides cookies, tokens and passwords.
+    case exportCapture(PacketCapture.ExportFormat, id: UInt64?, redact: Bool = true)
     /// One captured request (`exchange` of connection `id`) as cURL, code, Postman, Insomnia or HAR; `redact` hides
     /// cookies, tokens and passwords.
     case exportRequest(PacketCapture.RequestExport, id: UInt64, exchange: Int, redact: Bool)
     /// Where saved sessions go and the key that seals them; set by the extension after the engine starts.
     case setCaptureStorage(dir: String, keyBase64: String, retentionDays: Int)
-    /// Seals what is captured now into a session file.
-    case saveCapture(name: String?)
+    /// Seals what is captured now into a session file: a new one, or with `run` this tunnel run's own session
+    /// (`PacketCapture.Status.runSession`), replaced each time.
+    case saveCapture(name: String?, run: Bool = false)
+    /// A saved session sealed again under `keyBase64` (the app's key), or without `session` what is captured now as
+    /// this run's session named `name` (`PacketCapture.CopyAnswer`), for the app's capture viewer.
+    case copyCapture(session: String?, keyBase64: String, name: String?)
+    /// The capture viewer keeps a `copyCapture` file as session `session` (`PacketCapture.SavedAnswer`).
+    case importCapture(session: String, dataBase64: String)
     case captureSessions
     /// Replaces what is captured with a saved session (and stops live capture).
     case loadCapture(String)
@@ -166,8 +173,12 @@ public enum RuntimeControl {
             object = ["cmd": "clear_capture"]
         case let .captureConnection(id):
             object = ["cmd": "capture_connection", "id": id]
-        case let .exportCapture(format, id):
+        case let .exportCapture(format, id, redact):
             var request: [String: Any] = ["cmd": "export_capture", "format": format.rawValue]
+            if !redact {
+                // The engine masks by default.
+                request["redact"] = false
+            }
             if let id {
                 request["id"] = id
             }
@@ -182,12 +193,26 @@ public enum RuntimeControl {
             object = request
         case let .setCaptureStorage(dir, keyBase64, retentionDays):
             object = ["cmd": "set_capture_storage", "dir": dir, "key_base64": keyBase64, "retention_days": retentionDays]
-        case let .saveCapture(name):
+        case let .saveCapture(name, run):
             var request: [String: Any] = ["cmd": "save_capture"]
             if let name, !name.isEmpty {
                 request["name"] = name
             }
+            if run {
+                request["run"] = true
+            }
             object = request
+        case let .copyCapture(session, keyBase64, name):
+            var request: [String: Any] = ["cmd": "copy_capture", "key_base64": keyBase64]
+            if let session {
+                request["session"] = session
+            }
+            if let name, !name.isEmpty {
+                request["name"] = name
+            }
+            object = request
+        case let .importCapture(session, dataBase64):
+            object = ["cmd": "import_capture", "session": session, "data_base64": dataBase64]
         case .captureSessions:
             object = ["cmd": "capture_sessions"]
         case let .loadCapture(session):

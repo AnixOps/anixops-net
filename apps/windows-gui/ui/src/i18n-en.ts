@@ -652,7 +652,6 @@ export const english: Record<string, string> = {
   "暂停刷新": "Pause updates",
   "继续刷新": "Resume updates",
   "更多抓包操作": "More capture actions",
-  "用连接开关连接后，经过本机的 HTTP 请求会逐条列在这里。调试模式默认直连，不需要节点。": "Connect with the connection switch and the HTTP requests through this device are listed here one by one. Debug mode goes out directly by default and needs no node.",
   "筛选示例：host:api.example.com status:4xx type:json -method:OPTIONS，多组条件用 OR 连接。": "Example: host:api.example.com status:4xx type:json -method:OPTIONS; join groups of conditions with OR.",
   "类型": "Type",
   "请求列表": "Request list",
@@ -1083,4 +1082,10 @@ export const english: Record<string, string> = {
   "已从 {count} 个浏览器证书库中移除根证书": "Root certificate removed from {count} browser certificate stores.",
   "已从系统证书库中移除根证书": "Root certificate removed from the system store.",
   "没有证书库信任过根证书，无需移除": "No certificate store trusted the root certificate; nothing was removed.",
+  "用连接开关连接后，经过本机的 HTTP 请求会逐条列在这里。调试模式默认直连，不需要节点。断开前抓到的内容会自动保存，可以在“已保存”里打开。": "Connect with the connection switch and the HTTP requests through this device are listed here one by one. Debug mode goes out directly by default and needs no node. What was captured before a disconnect is saved automatically; open it under Saved.",
+  "打包导出 zip（遮盖密码和 Cookie）": "Export as zip (passwords and cookies masked)",
+  "打包导出 zip（完整，不遮盖）": "Export as zip (complete, unmasked)",
+  "关闭会话": "Close session",
+  "隧道已断开，下面是断开前抓到的内容，已加密保存 7 天，可以在“更多”里打包导出。": "The tunnel is disconnected. Below is what was captured before that, saved encrypted for 7 days; export it as a zip from More.",
+  "已打开会话：{name}，在“请求”里查看。": "Opened session {name}; see it under Requests.",
 };

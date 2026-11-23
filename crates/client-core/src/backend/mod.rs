@@ -887,6 +887,21 @@ impl Backend {
         carry
     }
 
+    /// After a stop: the session [`Self::preserve_capture`] just saved opens in the kernel's capture viewer, so the
+    /// request and connection lists keep showing what was captured, and it can be exported, while disconnected.
+    fn view_saved_capture(&self, carry: &desktop_mitm::sessions::CaptureCarry) {
+        let (Some(session), Some(key)) = (carry.saved.as_deref(), self.capture_key.as_ref()) else {
+            return;
+        };
+        let dir = self.capture_dir().join("sessions");
+        if let Err(error) = desktop_mitm::sessions::open_in_viewer(&dir, key, session) {
+            self.log(
+                LogLevel::Warn,
+                &format!("the capture saved at the stop could not be opened: {error}"),
+            );
+        }
+    }
+
     /// Turns capture on again, with its budget, in the engine that started after a restart.
     fn resume_capture(&self, carry: &desktop_mitm::sessions::CaptureCarry) {
         if let Some(request) = carry.resume_request() {
@@ -1873,14 +1888,17 @@ impl Backend {
     /// the VPN's TUN descriptor.
     pub fn stop_engine(&mut self) {
         // Android's VPN went away (revoked, or another VPN took over): what capture holds is kept as a session.
-        let _ = self.preserve_capture(desktop_mitm::sessions::AutoSave::Disconnect);
+        let carry = self.preserve_capture(desktop_mitm::sessions::AutoSave::Disconnect);
         self.engine.stop();
+        self.view_saved_capture(&carry);
     }
 
     pub fn disconnect(&mut self) -> Result<OperationResult, String> {
-        // Capture lives only as long as the engine: what it holds is kept as a session, as on iOS and macOS.
-        let _ = self.preserve_capture(desktop_mitm::sessions::AutoSave::Disconnect);
+        // Capture lives only as long as the engine: what it holds is kept as a session, as on iOS and macOS, and
+        // stays on screen from the capture viewer.
+        let carry = self.preserve_capture(desktop_mitm::sessions::AutoSave::Disconnect);
         self.engine.stop();
+        self.view_saved_capture(&carry);
         self.disconnect_watch.disconnected();
         self.last_error = None;
         self.log(LogLevel::Info, "Disconnected");
@@ -2933,6 +2951,15 @@ mod tests {
 
         backend.disconnect().unwrap();
         assert!(!backend.engine.is_running());
+        // Disconnected, the capture commands reach the kernel's capture viewer, so saved sessions still open; the
+        // other commands still say there is no engine.
+        let status = backend
+            .runtime_control(&json!({ "cmd": "capture" }))
+            .unwrap();
+        assert_eq!(status["enabled"], false, "{status}");
+        assert!(backend
+            .runtime_control(&json!({ "cmd": "traffic" }))
+            .is_err());
         let _ = std::fs::remove_dir_all(dir);
     }
 

@@ -516,6 +516,10 @@
     <string name="export_note">保存到“下载”文件夹。导出内容可能包含账号等敏感信息，请只发给信任的人。</string>
     <string name="requests_export_har">导出全部为 HAR</string>
     <string name="requests_export_pcapng">导出全部为 pcapng</string>
+    <string name="requests_export_zip">打包导出 zip（遮盖密码和 Cookie）</string>
+    <string name="requests_export_zip_full">打包导出 zip（完整，不遮盖）</string>
+    <string name="requests_close_session">关闭会话</string>
+    <string name="requests_saved_hint">隧道已断开，下面是断开前抓到的内容，已加密保存 7 天，可以在“更多”里打包导出。</string>
     <string name="sessions">抓包会话</string>
     <string name="sessions_save">保存当前抓包</string>
     <string name="sessions_nothing">还没有抓到内容</string>

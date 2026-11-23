@@ -20243,6 +20243,294 @@
         }
       }
     },
+    "查看已保存的抓包": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View Saved Captures"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查看已儲存的抓包"
+          }
+        }
+      }
+    },
+    "隧道没有连接。断开前抓到的内容已加密保存，可以打开查看和导出。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The tunnel is not connected. What was captured before it disconnected is saved encrypted; open it to view and export."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隧道沒有連線。中斷前抓到的內容已加密儲存，可以開啟檢視和匯出。"
+          }
+        }
+      }
+    },
+    "这个会话里没有解密出的请求。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This session has no decrypted requests."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這個工作階段裡沒有解密出的請求。"
+          }
+        }
+      }
+    },
+    "打包导出 zip": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export as zip"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打包匯出 zip"
+          }
+        }
+      }
+    },
+    "请求列表改为显示这个会话，实时抓包照常进行，随时可以回到实时抓包。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The request list shows this session instead. Live capture keeps running, and you can go back to it at any time."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請求列表改為顯示這個工作階段，即時抓包照常進行，隨時可以回到即時抓包。"
+          }
+        }
+      }
+    },
+    "请求列表改为显示这个会话。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The request list shows this session instead."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請求列表改為顯示這個工作階段。"
+          }
+        }
+      }
+    },
+    "会话用只保存在本机钥匙串里的密钥加密，保留 7 天后自动删除。隧道断开时会自动保存当次的抓包，断开后也能打开。打开会话后请求列表显示它的内容，可以照常查看、筛选和导出；长按会话可以直接打包导出。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessions are encrypted with a key kept only in this device's keychain and are deleted after 7 days. The capture of each tunnel run is saved automatically when the tunnel disconnects and can be opened afterwards. An open session shows in the request list, where you can view, filter and export it as usual; touch and hold a session to export it as a zip."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作階段用只儲存在本機鑰匙圈裡的密鑰加密，保留 7 天後自動刪除。隧道中斷時會自動儲存當次的抓包，中斷後也能開啟。開啟工作階段後請求列表顯示它的內容，可以照常檢視、篩選和匯出；長按工作階段可以直接打包匯出。"
+          }
+        }
+      }
+    },
+    "这台设备上无法打开会话（钥匙串不可用）。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessions cannot be opened on this device (the keychain is unavailable)."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這台裝置上無法開啟工作階段（鑰匙圈無法使用）。"
+          }
+        }
+      }
+    },
+    "还没有保存的会话。隧道断开时会自动保存当次的抓包，也可以在请求列表右上角“更多”中保存当前抓包。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No saved sessions yet. The capture is saved automatically when the tunnel disconnects; you can also save the current capture from More at the top right of the request list."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "還沒有儲存的工作階段。隧道中斷時會自動儲存當次的抓包，也可以在請求列表右上角「更多」中儲存目前抓包。"
+          }
+        }
+      }
+    },
+    "打包导出 zip（遮盖密码和 Cookie）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export as zip (passwords and cookies masked)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打包匯出 zip（遮蓋密碼和 Cookie）"
+          }
+        }
+      }
+    },
+    "隧道已断开，下面是断开前抓到的内容，已加密保存 7 天，可以在 ⋯ 里打包导出。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The tunnel disconnected. Below is what was captured before that, saved encrypted for 7 days; export it as a zip from ⋯."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隧道已中斷，下面是中斷前抓到的內容，已加密儲存 7 天，可以在 ⋯ 裡打包匯出。"
+          }
+        }
+      }
+    },
+    "正在查看已保存的会话：%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Viewing saved session: %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在檢視已儲存的工作階段：%@"
+          }
+        }
+      }
+    },
+    "回到实时抓包": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to Live Capture"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "回到即時抓包"
+          }
+        }
+      }
+    },
+    "关闭会话": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close Session"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉工作階段"
+          }
+        }
+      }
+    },
+    "打包导出 zip（完整，不遮盖）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export as zip (complete, unmasked)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打包匯出 zip（完整，不遮蓋）"
+          }
+        }
+      }
+    },
+    "zip 里有连接清单、HAR 和 pcapng；pcapng 可用 Wireshark 打开，HAR 可导入浏览器开发者工具或其他抓包工具。“完整”不遮盖账号、Cookie 等敏感信息，请只发给信任的人。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The zip holds a connection list, HAR and pcapng. Open the pcapng in Wireshark; import the HAR into browser developer tools or other capture tools. “Complete” does not mask accounts, cookies or other sensitive data, so share it only with people you trust."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "zip 裡有連線清單、HAR 和 pcapng；pcapng 可用 Wireshark 開啟，HAR 可匯入瀏覽器開發者工具或其他抓包工具。「完整」不遮蓋帳號、Cookie 等敏感資訊，請只傳給信任的人。"
+          }
+        }
+      }
+    },
+    "隧道已断开。断开前的抓包会自动保存，可以在请求页右上角 ⋯ › 已保存的会话 查看和导出。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The tunnel disconnected. The capture from before that is saved automatically; view and export it from ⋯ › Saved Sessions at the top right of the Requests page."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隧道已中斷。中斷前的抓包會自動儲存，可以在請求頁右上角 ⋯ › 已儲存的工作階段 檢視和匯出。"
+          }
+        }
+      }
+    },
+    "已保存的抓包里没有这个连接：它出现在最后一次保存之后，或已被更新的连接挤出（抓包内存有上限）。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This connection is not in the saved capture: it appeared after the last save, or newer connections pushed it out (capture memory is limited)."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已儲存的抓包裡沒有這個連線：它出現在最後一次儲存之後，或已被更新的連線擠出（抓包記憶體有上限）。"
+          }
+        }
+      }
+    },
     "手机和 Mac 连同一个 Wi-Fi，把手机的 Wi-Fi 代理设成 Mac，手机的请求就会出现在请求页。只接受局域网里的设备，默认还要填用户名和密码；断开连接时一并关闭。": {
       "localizations": {
         "en": {

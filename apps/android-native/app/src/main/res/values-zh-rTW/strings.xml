@@ -512,6 +512,10 @@
     <string name="export_note">儲存到「下載」資料夾。匯出內容可能包含帳號等敏感資訊，請只傳給信任的人。</string>
     <string name="requests_export_har">全部匯出為 HAR</string>
     <string name="requests_export_pcapng">全部匯出為 pcapng</string>
+    <string name="requests_export_zip">打包匯出 zip（遮蓋密碼和 Cookie）</string>
+    <string name="requests_export_zip_full">打包匯出 zip（完整，不遮蓋）</string>
+    <string name="requests_close_session">關閉工作階段</string>
+    <string name="requests_saved_hint">隧道已中斷，下面是中斷前擷取到的內容，已加密儲存 7 天，可以在「更多」裡打包匯出。</string>
     <string name="sessions">封包擷取工作階段</string>
     <string name="sessions_save">儲存目前擷取的封包</string>
     <string name="sessions_nothing">還沒有擷取到內容</string>

@@ -27,6 +27,19 @@ final class CaptureSessionsTests: XCTestCase {
         )
         XCTAssertEqual(request(.saveCapture(name: nil)), #"{"cmd":"save_capture"}"#)
         XCTAssertEqual(request(.saveCapture(name: "登录")), #"{"cmd":"save_capture","name":"登录"}"#)
+        XCTAssertEqual(request(.saveCapture(name: "x", run: true)), #"{"cmd":"save_capture","name":"x","run":true}"#)
+        XCTAssertEqual(
+            request(.copyCapture(session: nil, keyBase64: "AA==", name: "自动")),
+            #"{"cmd":"copy_capture","key_base64":"AA==","name":"自动"}"#
+        )
+        XCTAssertEqual(
+            request(.copyCapture(session: "1-0a0b0c0d", keyBase64: "AA==", name: nil)),
+            #"{"cmd":"copy_capture","key_base64":"AA==","session":"1-0a0b0c0d"}"#
+        )
+        XCTAssertEqual(
+            request(.importCapture(session: "1-0a0b0c0d", dataBase64: "QQ==")),
+            #"{"cmd":"import_capture","data_base64":"QQ==","session":"1-0a0b0c0d"}"#
+        )
         XCTAssertEqual(request(.captureSessions), #"{"cmd":"capture_sessions"}"#)
         XCTAssertEqual(request(.loadCapture("s1")), #"{"cmd":"load_capture","session":"s1"}"#)
         XCTAssertEqual(request(.deleteCapture("s1")), #"{"cmd":"delete_capture","session":"s1"}"#)

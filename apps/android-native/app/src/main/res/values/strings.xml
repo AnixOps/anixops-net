@@ -546,6 +546,10 @@
     <string name="export_note">Saved to the Downloads folder. Exports can hold account details, so share them only with people you trust.</string>
     <string name="requests_export_har">Export All as HAR</string>
     <string name="requests_export_pcapng">Export All as pcapng</string>
+    <string name="requests_export_zip">Export as zip (passwords and cookies masked)</string>
+    <string name="requests_export_zip_full">Export as zip (complete, unmasked)</string>
+    <string name="requests_close_session">Close Session</string>
+    <string name="requests_saved_hint">The tunnel is disconnected. Below is what was captured before that, saved encrypted for 7 days; export it as a zip from More.</string>
     <string name="sessions">Capture Sessions</string>
     <string name="sessions_save">Save Current Capture</string>
     <string name="sessions_nothing">Nothing captured yet</string>
