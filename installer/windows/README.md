@@ -86,7 +86,23 @@ name (hard links, whose other name may be outside the folder) are removed by
 that name only, and what is removed keeps its owner and access list, so nothing
 outside the folder is changed. Compressed, deduplicated and cloud files are
 reparse points too but hold their own data, so they are kept like any other
-file. The folder must also be where its path says, with no link on the way.
+file. The folder must also be where its path says, with no link on the way,
+and every entry is checked to be inside it (by the path its open handle
+resolves to) before it is reset or removed, so a folder swapped for a link
+during the walk stops it instead of redirecting it. `.access-closed` is made
+by its own handle, never through a link, and checked to be in the folder; a
+marker that is a link or has a second name stops the start. The folder above,
+`%ProgramData%\AnixOps`, must be a real folder (not a link or other reparse
+point). If someone other than SYSTEM, Administrators or TrustedInstaller owns
+it, or it lets others delete, rename or change the access of what is in it,
+the GUI takes it over through the same handle (owner Administrators,
+protected access list: SYSTEM and Administrators in full control, Users read
+and traverse only) and does not start when that fails. The installer's
+`PermissionEx` SDDL for the data folder sets no owner, and the installer
+leaves the access of an existing `%ProgramData%\AnixOps` as it is, so a data
+folder or folder above it that a standard user made first (for example on a
+machine that ran a beta) keeps that user as owner after installing; the client
+takes both over on its first start.
 The folder and the one above it are never removed and are opened without
 asking to, so a console whose current folder is one of them, or a backup or
 virus scan reading them, does not stop the GUI from starting; a file the

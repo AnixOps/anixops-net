@@ -11,7 +11,8 @@ use std::path::Path;
 use std::ptr::{null, null_mut};
 
 use windows_sys::Win32::Foundation::{
-    CloseHandle, ERROR_ACCESS_DENIED, ERROR_SHARING_VIOLATION, HANDLE, INVALID_HANDLE_VALUE,
+    CloseHandle, ERROR_ACCESS_DENIED, ERROR_FILE_EXISTS, ERROR_SHARING_VIOLATION, HANDLE,
+    INVALID_HANDLE_VALUE,
 };
 use windows_sys::Win32::Security::{
     DACL_SECURITY_INFORMATION, OBJECT_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
@@ -20,8 +21,9 @@ use windows_sys::Win32::Security::{
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, FileAttributeTagInfo, FileDispositionInfo, FileDispositionInfoEx,
     GetFileInformationByHandle, GetFileInformationByHandleEx, GetFinalPathNameByHandleW,
-    SetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION, DELETE, FILE_ATTRIBUTE_DIRECTORY,
-    FILE_ATTRIBUTE_REPARSE_POINT, FILE_ATTRIBUTE_TAG_INFO, FILE_DISPOSITION_FLAG_DELETE,
+    SetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION, CREATE_NEW, DELETE,
+    FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_REPARSE_POINT,
+    FILE_ATTRIBUTE_TAG_INFO, FILE_DISPOSITION_FLAG_DELETE,
     FILE_DISPOSITION_FLAG_IGNORE_READONLY_ATTRIBUTE, FILE_DISPOSITION_FLAG_POSIX_SEMANTICS,
     FILE_DISPOSITION_INFO, FILE_DISPOSITION_INFO_EX, FILE_FLAG_BACKUP_SEMANTICS,
     FILE_FLAG_OPEN_REPARSE_POINT, FILE_NAME_NORMALIZED, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE,
@@ -126,39 +128,74 @@ impl Entry {
                 }
                 return Err(error);
             }
-            let mut entry = Self {
-                handle,
-                access,
-                attributes: 0,
-                links: 0,
-                surrogate: false,
-            };
-            let mut information = BY_HANDLE_FILE_INFORMATION::default();
-            // SAFETY: the handle is open and `information` is valid for the structure written.
-            if unsafe { GetFileInformationByHandle(handle, &mut information) } == 0 {
-                return Err(last_error());
-            }
-            entry.attributes = information.dwFileAttributes;
-            entry.links = information.nNumberOfLinks;
-            if entry.attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-                let mut tag = FILE_ATTRIBUTE_TAG_INFO::default();
-                // SAFETY: the handle is open and `tag` is the structure this class takes, of the size passed.
-                if unsafe {
-                    GetFileInformationByHandleEx(
-                        handle,
-                        FileAttributeTagInfo,
-                        (&mut tag as *mut FILE_ATTRIBUTE_TAG_INFO).cast(),
-                        std::mem::size_of::<FILE_ATTRIBUTE_TAG_INFO>() as u32,
-                    )
-                } == 0
-                {
-                    return Err(last_error());
-                }
-                entry.surrogate = tag.ReparseTag & NAME_SURROGATE != 0;
-            }
-            return Ok(entry);
+            return Self::from_handle(handle, access);
         }
         Err(refusal.unwrap_or_else(|| io::Error::from(io::ErrorKind::PermissionDenied)))
+    }
+
+    /// Makes the file `path`, empty, and opens it as itself with `DELETE`, so that it can be removed again
+    /// when it turns out to be somewhere else. `Ok(None)` when something (a file, a folder or a link, which
+    /// is never followed) already has that name; nothing is then opened or changed.
+    pub(crate) fn create_new(path: &Path) -> io::Result<Option<Self>> {
+        let name = wide(path);
+        let access = BASE | READ_CONTROL | DELETE;
+        // SAFETY: `name` is NUL-terminated; no security attributes or template are passed, so the file
+        // gets the access list its folder gives what is made in it.
+        let handle = unsafe {
+            CreateFileW(
+                name.as_ptr(),
+                access,
+                FILE_SHARE_READ,
+                null(),
+                CREATE_NEW,
+                FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS,
+                null_mut(),
+            )
+        };
+        if handle == INVALID_HANDLE_VALUE {
+            let error = last_error();
+            if error.raw_os_error() == Some(ERROR_FILE_EXISTS as i32) {
+                return Ok(None);
+            }
+            return Err(error);
+        }
+        Self::from_handle(handle, access).map(Some)
+    }
+
+    /// Takes over `handle`, opened with `access`, and reads what it is.
+    fn from_handle(handle: HANDLE, access: u32) -> io::Result<Self> {
+        // Closed when dropped, also when reading what it is fails below.
+        let mut entry = Self {
+            handle,
+            access,
+            attributes: 0,
+            links: 0,
+            surrogate: false,
+        };
+        let mut information = BY_HANDLE_FILE_INFORMATION::default();
+        // SAFETY: the handle is open and `information` is valid for the structure written.
+        if unsafe { GetFileInformationByHandle(handle, &mut information) } == 0 {
+            return Err(last_error());
+        }
+        entry.attributes = information.dwFileAttributes;
+        entry.links = information.nNumberOfLinks;
+        if entry.attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            let mut tag = FILE_ATTRIBUTE_TAG_INFO::default();
+            // SAFETY: the handle is open and `tag` is the structure this class takes, of the size passed.
+            if unsafe {
+                GetFileInformationByHandleEx(
+                    handle,
+                    FileAttributeTagInfo,
+                    (&mut tag as *mut FILE_ATTRIBUTE_TAG_INFO).cast(),
+                    std::mem::size_of::<FILE_ATTRIBUTE_TAG_INFO>() as u32,
+                )
+            } == 0
+            {
+                return Err(last_error());
+            }
+            entry.surrogate = tag.ReparseTag & NAME_SURROGATE != 0;
+        }
+        Ok(entry)
     }
 
     /// Whether it is a symbolic link, junction or other reparse point that leads to another file or
@@ -166,6 +203,11 @@ impl Entry {
     /// is not a link.
     pub(crate) fn is_link(&self) -> bool {
         self.surrogate
+    }
+
+    /// Whether it is a reparse point of any kind, a link or not.
+    pub(crate) fn is_reparse_point(&self) -> bool {
+        self.attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
     }
 
     pub(crate) fn is_folder(&self) -> bool {
@@ -243,14 +285,22 @@ impl Entry {
         let everything = OWNER_SECURITY_INFORMATION
             | DACL_SECURITY_INFORMATION
             | PROTECTED_DACL_SECURITY_INFORMATION;
-        if self.set(everything, access).is_ok() {
+        let Err(first) = self.set(everything, access) else {
             return Ok(());
-        }
-        self.set(OWNER_SECURITY_INFORMATION, access)?;
-        self.set(
-            DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
-            access,
-        )
+        };
+        self.set(OWNER_SECURITY_INFORMATION, access)
+            .and_then(|()| {
+                self.set(
+                    DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                    access,
+                )
+            })
+            .map_err(|second| {
+                io::Error::new(
+                    second.kind(),
+                    format!("{first}; owner first, then access list: {second}"),
+                )
+            })
     }
 
     /// Removes this name: a link goes, never what it leads to; a file with other names keeps them, with
@@ -332,6 +382,22 @@ mod tests {
         assert_eq!(entry.links(), 1);
         assert!(entry.final_path().unwrap().starts_with(r"\\?\"));
         entry.remove().unwrap();
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn a_new_file_is_made_only_where_nothing_is() {
+        let path = std::env::temp_dir().join(format!(
+            "anixops-windows-data-entry-new-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let made = Entry::create_new(&path).unwrap().unwrap();
+        assert!(!made.is_reparse_point());
+        assert_eq!(made.links(), 1);
+        drop(made);
+        assert!(Entry::create_new(&path).unwrap().is_none());
+        Entry::open(&path).unwrap().remove().unwrap();
         assert!(!path.exists());
     }
 

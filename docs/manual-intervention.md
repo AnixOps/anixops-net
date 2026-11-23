@@ -307,6 +307,9 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
   目录外文件（如 `C:\Windows\win.ini`）的硬链接 `mklink /H x.json C:\Windows\win.ini`（Windows 拒绝建立时记下即可，说明这条路径本就不通），再升级到 1.0 并启动：`gui.log` 的
   `data folder closed` 记录里 `removed` 含该链接，`icacls C:\Windows\win.ini` 与升级前一致。CI 的单元测试覆盖同样情形
   （`crates/windows-data` 的硬链接测试），真机只复核实际权限。
+- [ ] 标准用户抢先建的上级目录被接管：在干净机器上用标准用户执行 `mkdir C:\ProgramData\AnixOps`，再安装并启动 1.0：
+  `icacls C:\ProgramData\AnixOps` 的属主为 Administrators，只有 SYSTEM、Administrators 完全控制和 Users 读取/执行，
+  客户端正常启动。CI 的单元测试覆盖同样情形（`crates/windows-data` 中上级目录属主的测试），真机只复核实际权限。
 - [ ] 数据目录被其他程序占用时仍能启动：开一个命令提示符 `cd /d C:\ProgramData\AnixOps\NetworkCore`（再开一个停在
   `C:\ProgramData\AnixOps`），保持窗口打开，分别在首次升级到 1.0 和之后的普通启动时打开客户端：都能正常启动，
   `icacls` 结果同上。CI 的单元测试覆盖同样情形（`crates/windows-data` 中占用目录和文件的测试）。
