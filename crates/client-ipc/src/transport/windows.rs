@@ -18,12 +18,11 @@ use windows_sys::Win32::Foundation::{
     ERROR_PIPE_NOT_CONNECTED, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
 };
 use windows_sys::Win32::Security::Authorization::{
-    ConvertSecurityDescriptorToStringSecurityDescriptorW, ConvertSidToStringSidW,
-    ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+    ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
 };
 use windows_sys::Win32::Security::{
-    GetKernelObjectSecurity, GetTokenInformation, TokenUser, OWNER_SECURITY_INFORMATION,
-    PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES, TOKEN_QUERY, TOKEN_USER,
+    GetKernelObjectSecurity, GetSecurityDescriptorOwner, GetTokenInformation, TokenUser,
+    OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES, TOKEN_QUERY, TOKEN_USER,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, ReadFile, WriteFile, FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_FLAG_OVERLAPPED,
@@ -359,7 +358,7 @@ fn verify_server(pipe: HANDLE, endpoint: &str) -> io::Result<()> {
     ))
 }
 
-/// The owner of the open pipe `pipe` as SDDL writes it: `SY`, `BA`, or a SID such as `S-1-5-21-…`.
+/// The owner of the open pipe `pipe` ([`owner_name`]): `SY`, `BA`, or a SID such as `S-1-5-21-…`.
 fn pipe_owner(pipe: HANDLE) -> io::Result<String> {
     let mut needed = 0_u32;
     // SAFETY: with no buffer the call only reports the size needed.
@@ -386,37 +385,38 @@ fn pipe_owner(pipe: HANDLE) -> io::Result<String> {
     if read == 0 {
         return Err(os_error(last_error()));
     }
-    let mut text: *mut u16 = null_mut();
-    let mut length = 0_u32;
-    // SAFETY: `descriptor` was filled above; `text` and `length` are valid for what is written to them.
-    let converted = unsafe {
-        ConvertSecurityDescriptorToStringSecurityDescriptorW(
-            descriptor,
-            SDDL_REVISION_1,
-            OWNER_SECURITY_INFORMATION,
-            &mut text,
-            &mut length,
-        )
-    };
-    if converted == 0 || text.is_null() {
+    let mut owner = null_mut();
+    let mut defaulted = 0;
+    // SAFETY: `descriptor` was filled above and stays alive in `buffer`; the owner SID points into it.
+    if unsafe { GetSecurityDescriptorOwner(descriptor, &mut owner, &mut defaulted) } == 0 {
         return Err(os_error(last_error()));
     }
-    // SAFETY: on success `text` is a NUL-terminated string the conversion allocated with `LocalAlloc`.
-    let described = unsafe { take_local_string(text) };
-    owner_of(&described)
-        .map(str::to_string)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::PermissionDenied, "the pipe has no owner"))
+    if owner.is_null() {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "the pipe has no owner",
+        ));
+    }
+    let mut text: *mut u16 = null_mut();
+    // SAFETY: `owner` is a valid SID inside `buffer`; `text` is valid for the pointer written.
+    if unsafe { ConvertSidToStringSidW(owner, &mut text) } == 0 || text.is_null() {
+        return Err(os_error(last_error()));
+    }
+    // SAFETY: on success `text` is a NUL-terminated string allocated with `LocalAlloc`.
+    let sid = unsafe { take_local_string(text) };
+    Ok(owner_name(&sid).to_string())
 }
 
-/// The owner in an SDDL text such as `O:SY` or `O:S-1-5-21-…D:…`.
-fn owner_of(described: &str) -> Option<&str> {
-    let rest = described.strip_prefix("O:")?;
-    let end = rest
-        .find("G:")
-        .or_else(|| rest.find("D:"))
-        .unwrap_or(rest.len());
-    let owner = &rest[..end];
-    (!owner.is_empty()).then_some(owner)
+/// The owner as [`trusted_owner`] compares it: the system and the administrators by their SDDL names, any other
+/// owner by its full SID. The SID is read as such rather than from the descriptor's SDDL text, which writes
+/// machine-relative accounts by alias (the built-in Administrator as `LA`), and those would never match the
+/// window's own SID.
+fn owner_name(sid: &str) -> &str {
+    match sid {
+        "S-1-5-18" => "SY",
+        "S-1-5-32-544" => "BA",
+        other => other,
+    }
 }
 
 /// The SID of the user this process runs as, such as `S-1-5-21-…-1001`.
@@ -569,15 +569,12 @@ mod tests {
     }
 
     #[test]
-    fn the_owner_is_read_from_the_text_form() {
-        assert_eq!(owner_of("O:SY"), Some("SY"));
-        assert_eq!(owner_of("O:BAG:SYD:P(A;;GA;;;SY)"), Some("BA"));
-        assert_eq!(
-            owner_of("O:S-1-5-21-1-2-3-1001D:(A;;GA;;;OW)"),
-            Some("S-1-5-21-1-2-3-1001")
-        );
-        assert_eq!(owner_of("D:(A;;GA;;;SY)"), None);
-        assert_eq!(owner_of("O:"), None);
+    fn the_owner_is_named_by_its_sid() {
+        assert_eq!(owner_name("S-1-5-18"), "SY");
+        assert_eq!(owner_name("S-1-5-32-544"), "BA");
+        // The built-in Administrator (RID 500) stays a full SID, so it can match the window's own SID.
+        assert_eq!(owner_name("S-1-5-21-1-2-3-500"), "S-1-5-21-1-2-3-500");
+        assert_eq!(owner_name("S-1-5-21-1-2-3-1001"), "S-1-5-21-1-2-3-1001");
     }
 
     /// The pipe this process serves is accepted: its owner is this process's (elevated: the administrators;
