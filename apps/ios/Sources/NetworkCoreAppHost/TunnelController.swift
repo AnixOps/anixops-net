@@ -615,7 +615,7 @@ final class TunnelController {
         }
     }
 
-    /// Deletes a node that the group's rules do not name (`NodeLibrary.canRemove`).
+    /// Deletes a node that no other node connects through and the group's rules do not name (`NodeLibrary.canRemove`).
     func deleteNode(_ nodeID: String, inGroup groupID: String) async {
         await writing {
             guard var group = subscriptions.group(id: groupID), group.library.canRemove(nodeID) else {

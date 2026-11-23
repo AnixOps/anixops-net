@@ -3,10 +3,17 @@ import NetworkCoreBridge
 import XCTest
 
 final class NodeManagementTests: XCTestCase {
-    private func node(_ id: String, _ name: String, server: String = "s.example", protocol kind: String = "trojan") -> NativeImportReport.Node {
+    private func node(
+        _ id: String,
+        _ name: String,
+        server: String = "s.example",
+        protocol kind: String = "trojan",
+        via: String? = nil
+    ) -> NativeImportReport.Node {
+        let link = via.map { ",\"via\":\"\($0)\"" } ?? ""
         let json = """
         {"id":"\(id)","name":"\(name)","protocol":"\(kind)","server":"\(server)","port":443,
-         "outbound":{"type":"\(kind)","server":"\(server)","port":443,"password":"p"}}
+         "outbound":{"type":"\(kind)","server":"\(server)","port":443,"password":"p"\(link)}}
         """
         return try! JSONDecoder().decode(NativeImportReport.Node.self, from: Data(json.utf8))
     }
@@ -62,6 +69,46 @@ final class NodeManagementTests: XCTestCase {
         XCTAssertTrue(library.canRemove("a"))
         XCTAssertFalse(library.canRemove("b"))
         XCTAssertFalse(library.canRemove("c"))
+    }
+
+    /// A node another node connects through (`via`) stays while that node does: deleting it would leave the other
+    /// node's `via` naming nothing, and the engine would refuse the rules and that node with them.
+    func testNodesOthersConnectThroughCannotBeRemoved() {
+        var library = NodeLibrary(
+            subscriptionURL: nil,
+            nodes: [node("line", "Line", protocol: "iwan"), node("land", "Land", via: "line"), node("solo", "Solo")],
+            selectedID: "line",
+            updatedAt: Date(timeIntervalSince1970: 0)
+        )
+        XCTAssertEqual(library.node(id: "land")?.via, "line")
+        XCTAssertFalse(library.canRemove("line"))
+        XCTAssertTrue(library.canRemove("land"))
+        XCTAssertTrue(library.canRemove("solo"))
+        XCTAssertEqual(library.removing("line"), library)
+        // Once nothing connects through it, it can go.
+        XCTAssertTrue(library.removing("land").canRemove("line"))
+
+        // Subscription rules and groups add to that, they do not lift it.
+        library.routing = try? JSONDecoder().decode(
+            NativeImportReport.Routing.self,
+            from: Data(#"{"rules":["FINAL,G"],"groups":[{"id":"G","type":"select","members":["land"]}]}"#.utf8)
+        )
+        XCTAssertNotNil(library.routing)
+        XCTAssertFalse(library.canRemove("line"))
+        XCTAssertFalse(library.canRemove("land"))
+        XCTAssertTrue(library.canRemove("solo"))
+
+        // Along a chain only the node nothing connects through can go; a node naming itself does not hold itself.
+        let chain = NodeLibrary(
+            subscriptionURL: nil,
+            nodes: [node("a", "A", via: "b"), node("b", "B", via: "c"), node("c", "C"), node("loop", "Loop", via: "loop")],
+            selectedID: "a",
+            updatedAt: Date(timeIntervalSince1970: 0)
+        )
+        XCTAssertTrue(chain.canRemove("a"))
+        XCTAssertFalse(chain.canRemove("b"))
+        XCTAssertFalse(chain.canRemove("c"))
+        XCTAssertTrue(chain.canRemove("loop"))
     }
 
     func testSortByNameAndLatency() {
