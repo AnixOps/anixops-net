@@ -118,6 +118,7 @@
             TextWrapping="Wrap"
             Visibility="Collapsed" />
 
+        <!-- Arrow keys only move focus: a node is switched to by a click, Space or Enter, never by browsing. -->
         <ListView
             x:Name="NodeList"
             Grid.Row="5"
@@ -126,7 +127,8 @@
             ItemsSource="{x:Bind Groups.View, Mode=OneWay}"
             SelectionChanged="OnSelectionChanged"
             SelectionMode="Single"
-            ShowsScrollingPlaceholders="False">
+            ShowsScrollingPlaceholders="False"
+            SingleSelectionFollowsFocus="False">
             <ListView.ItemsPanel>
                 <ItemsPanelTemplate>
                     <ItemsStackPanel AreStickyGroupHeadersEnabled="True" CacheLength="2" />

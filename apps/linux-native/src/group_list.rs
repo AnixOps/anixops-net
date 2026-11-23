@@ -81,12 +81,25 @@ fn show_members(
     selection.set_autoselect(false);
     selection.set_can_unselect(true);
     selection.set_selected(place(&row.borrow()));
+    // Made before the list so the selection handler can tell browsing from choosing; attached to it below.
+    let browsing = Rc::new(Cell::new(false));
     selection.connect_selected_notify({
         let row = Rc::clone(&row);
         let drawing = Rc::clone(&drawing);
         let chosen = Rc::clone(chosen);
+        let browsing = Rc::clone(&browsing);
         move |selection| {
             if drawing.get() {
+                return;
+            }
+            if browsing.get() {
+                // The arrow keys only move the focus: the selection stays on the member in use.
+                let in_use = place(&row.borrow());
+                if selection.selected() != in_use {
+                    drawing.set(true);
+                    selection.set_selected(in_use);
+                    drawing.set(false);
+                }
                 return;
             }
             let choice = {
@@ -131,6 +144,8 @@ fn show_members(
         }
     });
     let list = gtk::ListView::new(Some(selection.clone()), Some(names));
+    crate::list_keys::mark_browsing(&list, &browsing);
+    crate::list_keys::enter_chooses(&list, &selection);
     list.set_widget_name("members");
     list.add_css_class("rich-list");
     list.update_property(&[gtk::accessible::Property::Label(row.borrow().tag.as_str())]);
