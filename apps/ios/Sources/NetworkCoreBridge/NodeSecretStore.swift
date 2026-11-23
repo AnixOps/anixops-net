@@ -23,17 +23,27 @@ public enum NodeSecretStore {
     public static let tunnelProfileAccount = "default"
 
     /// The account of the node key saved with one tunnel profile. Each save writes a new one, so the profile in the
-    /// system settings keeps its own key until the next profile is saved, whatever happens in between.
+    /// system settings keeps its own key until the next profile is saved, whatever happens in between. The app runs
+    /// its saves one at a time, so one save's clean-up never removes the key another save is writing.
     public static func versionedAccount(_ version: String) -> String {
         "\(tunnelProfileAccount)@\(version)"
     }
 
-    /// Removes the versioned node keys of every profile but `version`'s, once that profile is saved.
-    public static func removeNodeKeys(keeping version: String) {
-        let kept = versionedAccount(version)
-        for account in (try? accounts()) ?? [] where account.hasPrefix(tunnelProfileAccount + "@") && account != kept {
+    /// Removes the versioned node keys of every profile but those of `versions`, once a profile is saved: the version
+    /// the saved profile names, read back from the system settings, and the version of every save still on its way,
+    /// whose profile may be the next one saved.
+    public static func removeNodeKeys(keeping versions: Set<String>) {
+        for account in staleNodeKeyAccounts((try? accounts()) ?? [], keeping: versions) {
             try? delete(account: account)
         }
+    }
+
+    /// The versioned node key accounts among `accounts` that `versions` does not name: what `removeNodeKeys` removes.
+    /// The fixed account and the store's other values (subscription groups, node library, license, HTTPS decryption
+    /// chunks) are no key versions and always stay.
+    public static func staleNodeKeyAccounts(_ accounts: [String], keeping versions: Set<String>) -> [String] {
+        let kept = Set(versions.map(versionedAccount))
+        return accounts.filter { $0.hasPrefix(tunnelProfileAccount + "@") && !kept.contains($0) }
     }
 
     /// Every account this store holds a value for.

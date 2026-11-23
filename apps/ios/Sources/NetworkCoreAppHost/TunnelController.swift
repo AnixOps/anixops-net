@@ -5,12 +5,20 @@ import Observation
 #if os(iOS)
 import BackgroundTasks
 import WidgetKit
+#elseif os(macOS)
+import AppKit
 #endif
 
 /// Owns the app's single VPN configuration: imports a node (a share link of any protocol the engine runs, a
 /// subscription text or a WireGuard config), saves it as the
 /// tunnel profile, and starts or stops the packet tunnel. Node secrets go only into the Keychain; the saved
 /// profile holds a persistent reference to them and a config without them.
+///
+/// The widget, Control Center, the Live Activity, Shortcuts and Settings change the same VPN configuration from
+/// other processes. Every change the app makes to it, and to the node keys, therefore runs in `profileWrites`, one
+/// at a time, and starts from the configuration as saved at that moment (`writing(_:)`, `writeProfile`): a change
+/// sets only what it owns, so it never puts back an On Demand switch or a mode another process changed. The app
+/// also reads the configuration again when it changes (`NEVPNConfigurationChange`) and when the app becomes active.
 ///
 /// Observable (not ObservableObject): a view redraws only when a property it actually read changes, so the speed
 /// and latency updates no longer redraw every screen that holds the controller.
@@ -88,10 +96,23 @@ final class TunnelController {
     /// The link an `anixops://import` asked for, until the import sheet takes it (`takePendingImportLink()`).
     @ObservationIgnored var pendingImportLink: String?
 
+    /// The VPN configuration as last read from or saved to the system settings. Only `writeProfile` and the reloads
+    /// replace it; nothing changes it in place.
     @ObservationIgnored private var manager: NETunnelProviderManager?
     @ObservationIgnored private var statusObserver: NSObjectProtocol?
-    /// Set when a node switch stopped the tunnel; the tunnel starts again once it is down.
+    /// `NEVPNConfigurationChange`, and on macOS the app becoming active: both read the configuration again.
+    @ObservationIgnored private var reloadObservers: [NSObjectProtocol] = []
+    /// Every read-modify-write of the VPN configuration and the node keys, one at a time (`SerialAsyncQueue`).
+    private let profileWrites = SerialAsyncQueue()
+    /// Node key versions written by saves that have not finished; the clean-up after a save never removes them.
+    @ObservationIgnored private var keyVersionsInFlight: Set<String> = []
+    /// Set while a reload waits in `profileWrites`; the notifications that arrive meanwhile share it.
+    @ObservationIgnored private var reloadQueued = false
+    /// Set when `restart()` stopped the tunnel; the tunnel starts again once it is down.
     @ObservationIgnored private var restartAfterStop = false
+    /// Set while the start after such a stop waits in `profileWrites`, so it starts on the profile the writes before
+    /// it saved. The user's disconnect clears both.
+    @ObservationIgnored private var restartStartQueued = false
     /// Capture as the app last set it in the running engine (`set_capture`; `load_capture` turns it off).
     @ObservationIgnored private var captureOn = false
     /// Set when the app restarts the tunnel itself (a new node, a decrypted domain) while capture is on: the new
@@ -110,11 +131,38 @@ final class TunnelController {
                 self?.refresh()
             }
         }
+        // Another process changed the configuration (or the app saved it): read it again once the writes already
+        // queued are done.
+        reloadObservers.append(NotificationCenter.default.addObserver(
+            forName: .NEVPNConfigurationChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.scheduleReload()
+            }
+        })
+        #if os(macOS)
+        // System Settings may have changed it while the app was in the background; iOS reloads on the scene becoming
+        // active (`NetworkCoreAppMain`).
+        reloadObservers.append(NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.scheduleReload()
+            }
+        })
+        #endif
     }
 
     deinit {
         if let statusObserver = statusObserver {
             NotificationCenter.default.removeObserver(statusObserver)
+        }
+        for observer in reloadObservers {
+            NotificationCenter.default.removeObserver(observer)
         }
     }
 
@@ -123,6 +171,12 @@ final class TunnelController {
     }
 
     func load() async {
+        await profileWrites.run {
+            await loadNow()
+        }
+    }
+
+    private func loadNow() async {
         do {
             manager = try await NETunnelProviderManager.loadAllFromPreferences().first
             message = nil
@@ -158,6 +212,8 @@ final class TunnelController {
                 .flatMap { try? NodeLibrary.fromKeychainValue($0) }
             store(SubscriptionGroups.migrating(previous, name: String(localized: "导入的节点")))
         }
+        // Shortcuts or Control Center may have switched the mode while the app was not running.
+        followSavedMode()
         refresh()
         let stored = UserDefaults.standard.string(forKey: AppMode.storageKey)
         appMode = AppMode.resolve(
@@ -169,6 +225,126 @@ final class TunnelController {
             UserDefaults.standard.set(appMode.rawValue, forKey: AppMode.storageKey)
         }
         loaded = true
+        await repairMissingNodeKey()
+    }
+
+    /// Reads the VPN configuration again once the writes queued before are done: when the app comes back to the
+    /// front, where Settings, the widget, Control Center, the Live Activity or Shortcuts may have changed it.
+    func reloadProfile() async {
+        await profileWrites.run {
+            await reloadNow()
+        }
+    }
+
+    /// `reloadProfile()` for a notification; the notifications that arrive while it waits share it.
+    private func scheduleReload() {
+        guard !reloadQueued else {
+            return
+        }
+        reloadQueued = true
+        Task {
+            await profileWrites.run {
+                reloadQueued = false
+                await reloadNow()
+            }
+        }
+    }
+
+    /// Reads the VPN configuration as saved now; runs in `profileWrites`. A failed read keeps the copy shown.
+    private func reloadNow() async {
+        #if DEBUG
+        if Self.isDemo {
+            // The screenshots' made-up state stays; the demo reads no configuration.
+            return
+        }
+        #endif
+        guard let managers = try? await NETunnelProviderManager.loadAllFromPreferences() else {
+            return
+        }
+        manager = managers.first
+        followSavedMode()
+        refresh()
+    }
+
+    /// The active group's rules switch follows the mode the VPN configuration is saved in
+    /// (`SubscriptionGroups.followingSavedMode`), so the next profile the app saves keeps a mode that Shortcuts or
+    /// Control Center picked.
+    private func followSavedMode() {
+        guard let configuration = (manager?.protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration,
+              let groups = subscriptions.followingSavedMode(ProxyMode.saved(in: configuration))
+        else {
+            return
+        }
+        store(groups)
+    }
+
+    /// Runs `operation` in `profileWrites` once the VPN configuration has been read again, so it starts from what
+    /// is saved when its turn comes rather than from what the app read before.
+    private func writing<T>(_ operation: () async -> T) async -> T {
+        await profileWrites.run { () async -> T in
+            await reloadNow()
+            return await operation()
+        }
+    }
+
+    /// One read-modify-write of the VPN configuration (`ConfigurationWrite`); runs in `profileWrites`. `change` sets
+    /// the fields its write owns on a copy read right before, and returns false when the copy has them already.
+    /// `creating` adds a configuration when there is none, which only an import or a connect does. `manager` becomes
+    /// the configuration as saved afterwards, or as saved now when the write failed.
+    @discardableResult
+    private func writeProfile(
+        creating: Bool = false,
+        _ change: (NETunnelProviderManager) throws -> Bool
+    ) async throws -> ConfigurationWrite.Outcome<NETunnelProviderManager> {
+        let create: (() -> NETunnelProviderManager)? = creating ? { NETunnelProviderManager() } : nil
+        do {
+            let outcome = try await ConfigurationWrite.run(
+                load: { try await NETunnelProviderManager.loadAllFromPreferences().first },
+                create: create,
+                save: { (target: NETunnelProviderManager) in
+                    try await target.saveToPreferences()
+                    // Reloaded so its connection object reflects the saved profile.
+                    try await target.loadFromPreferences()
+                },
+                isStale: { Self.isStale($0) },
+                change: change
+            )
+            manager = outcome.object
+            return outcome
+        } catch {
+            if let saved = try? await NETunnelProviderManager.loadAllFromPreferences() {
+                manager = saved.first
+            }
+            throw error
+        }
+    }
+
+    /// A save refused because another process saved the configuration after this copy was read.
+    nonisolated private static func isStale(_ error: Error) -> Bool {
+        (error as? NEVPNError)?.code == .configurationStale
+    }
+
+    /// A profile saved by 0.3.0-beta.11 or earlier may name a node key that another save removed while both ran, and
+    /// the tunnel then stops at once with "node key is unavailable". Saving the profile again for the selected node
+    /// writes the key anew. Only a key the Keychain reports missing counts (a Keychain that cannot be read yet, before
+    /// the first unlock, is left alone), and only for the profile the system has turned on, so the save takes no other
+    /// app's VPN configuration's place. A single pasted node lives only in the profile and has to be imported again.
+    private func repairMissingNodeKey() async {
+        guard let manager, manager.isEnabled,
+              let configuration = (manager.protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration,
+              let version = configuration[TunnelProfileKeys.nodeKeyVersion] as? String,
+              case .success(.none) = Result(catching: {
+                  try NodeSecretStore.value(account: NodeSecretStore.versionedAccount(version))
+              })
+        else {
+            return
+        }
+        if runsDirectProfile {
+            _ = await saveDirectProfile()
+        } else if subscriptions.activeID != nil, let groups = Self.withSelectedNode(subscriptions),
+                  await saveActiveProfile(groups) {
+            store(groups)
+        }
     }
 
     /// Nothing imported yet: no node profile and no subscription groups. Debug mode's direct profile is no node.
@@ -227,28 +403,30 @@ final class TunnelController {
 
     /// Saves the profile the mode and exit call for, when it is not the saved one, and reconnects a running tunnel.
     private func applyExit() async {
-        let saved: Bool
-        if usesDirectExit {
-            // Without a saved profile nothing is saved yet: the system asks to add the VPN configuration on the
-            // first connect (`toggle()`), not when a mode is picked.
-            guard manager != nil, !runsDirectProfile else {
+        await writing {
+            let saved: Bool
+            if usesDirectExit {
+                // Without a saved profile nothing is saved yet: the system asks to add the VPN configuration on the
+                // first connect (`toggle()`), not when a mode is picked.
+                guard manager != nil, !runsDirectProfile else {
+                    return
+                }
+                saved = await saveDirectProfile()
+            } else if runsDirectProfile, let groups = Self.withSelectedNode(subscriptions) {
+                saved = await saveActiveProfile(groups)
+                if saved {
+                    store(groups)
+                }
+            } else {
                 return
             }
-            saved = await saveDirectProfile()
-        } else if runsDirectProfile, let groups = Self.withSelectedNode(subscriptions) {
-            saved = await saveActiveProfile(groups)
             if saved {
-                store(groups)
+                restart()
             }
-        } else {
-            return
-        }
-        if saved, isConnected {
-            restart()
         }
     }
 
-    /// Saves the direct profile (`TunnelProfile.direct`).
+    /// Saves the direct profile (`TunnelProfile.direct`); runs in `profileWrites`.
     private func saveDirectProfile() async -> Bool {
         await save(TunnelProfile.direct(profileID: Self.profileID, displayName: String(localized: "直连")))
     }
@@ -313,24 +491,26 @@ final class TunnelController {
             message = String(localized: "无法解析节点")
             return false
         }
-        var groups = subscriptions
-        if let report = imported.report {
-            let group = SubscriptionGroup(
-                name: String(localized: "导入的节点"),
-                library: NodeLibrary(report: report, subscriptionURL: nil, keeping: nil),
-                updateIntervalHours: 0
-            )
-            groups.upsert(group)
-            groups.activeID = group.id
-        } else {
-            // A single node runs on its own; the subscription groups stay for switching back.
-            groups.activeID = nil
+        return await writing { () async -> Bool in
+            var groups = subscriptions
+            if let report = imported.report {
+                let group = SubscriptionGroup(
+                    name: String(localized: "导入的节点"),
+                    library: NodeLibrary(report: report, subscriptionURL: nil, keeping: nil),
+                    updateIntervalHours: 0
+                )
+                groups.upsert(group)
+                groups.activeID = group.id
+            } else {
+                // A single node runs on its own; the subscription groups stay for switching back.
+                groups.activeID = nil
+            }
+            guard await save(imported.profile, routed: groups.activeLibrary()?.routesByRules == true) else {
+                return false
+            }
+            store(groups)
+            return true
         }
-        guard await save(imported.profile, routed: groups.activeLibrary()?.routesByRules == true) else {
-            return false
-        }
-        store(groups)
-        return true
     }
 
     /// Downloads one subscription group again. The selected node, the rules switch and the group picks carry
@@ -403,57 +583,62 @@ final class TunnelController {
 
     /// Deletes a group. When it was active, the next group takes over and a running tunnel restarts on it.
     func deleteSubscription(_ groupID: String) async {
-        var groups = subscriptions
-        let wasActive = groups.activeID == groupID
-        groups.remove(id: groupID)
-        let wasRunning = isConnected
-        if wasActive, groups.active != nil {
-            guard await saveActiveProfile(groups) else {
-                return
+        await writing {
+            var groups = subscriptions
+            let wasActive = groups.activeID == groupID
+            groups.remove(id: groupID)
+            if wasActive, groups.active != nil {
+                guard await saveActiveProfile(groups) else {
+                    return
+                }
             }
-        }
-        store(groups)
-        latencies = latencies.filter { !$0.key.hasPrefix(Self.latencyKey(group: groupID, node: "")) }
-        if wasActive, wasRunning, groups.active != nil {
-            restart()
+            store(groups)
+            latencies = latencies.filter { !$0.key.hasPrefix(Self.latencyKey(group: groupID, node: "")) }
+            if wasActive, groups.active != nil {
+                restart()
+            }
         }
     }
 
     /// Saves an edited node into its group. A running tunnel that may use the node, because its group is active or
     /// the active rules reach other groups, restarts on the edit.
     func updateNode(_ node: NativeImportReport.Node, inGroup groupID: String) async -> Bool {
-        guard var group = subscriptions.group(id: groupID), let old = group.library.node(id: node.id) else {
-            return false
+        await writing { () async -> Bool in
+            guard var group = subscriptions.group(id: groupID), let old = group.library.node(id: node.id) else {
+                return false
+            }
+            guard old != node else {
+                return true
+            }
+            group.library = group.library.replacing(node)
+            return await changeGroup(group)
         }
-        guard old != node else {
-            return true
-        }
-        group.library = group.library.replacing(node)
-        return await changeGroup(group)
     }
 
     /// Deletes a node that the group's rules do not name (`NodeLibrary.canRemove`).
     func deleteNode(_ nodeID: String, inGroup groupID: String) async {
-        guard var group = subscriptions.group(id: groupID), group.library.canRemove(nodeID) else {
-            return
+        await writing {
+            guard var group = subscriptions.group(id: groupID), group.library.canRemove(nodeID) else {
+                return
+            }
+            group.library = group.library.removing(nodeID)
+            latencies.removeValue(forKey: Self.latencyKey(group: groupID, node: nodeID))
+            _ = await changeGroup(group)
         }
-        group.library = group.library.removing(nodeID)
-        latencies.removeValue(forKey: Self.latencyKey(group: groupID, node: nodeID))
-        _ = await changeGroup(group)
     }
 
+    /// Stores a changed group, saving the profile first when the tunnel may use it; runs in `profileWrites`.
     private func changeGroup(_ group: SubscriptionGroup) async -> Bool {
         var groups = subscriptions
         groups.upsert(group)
         let affectsTunnel = groups.activeID == group.id || library?.routesByRules == true
-        let wasRunning = isConnected
         if affectsTunnel, groups.active != nil {
             guard await saveActiveProfile(groups) else {
                 return false
             }
         }
         store(groups)
-        if affectsTunnel, wasRunning {
+        if affectsTunnel {
             restart()
         }
         return true
@@ -468,39 +653,42 @@ final class TunnelController {
     /// Switches between the rule, global and direct modes. A running engine switches in place and drops its open
     /// connections so they reconnect in the new mode; an older engine restarts the tunnel instead.
     func setMode(_ next: ProxyMode) async {
-        guard next != mode, let manager, let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol else {
-            return
-        }
-        if next == .rule, library == nil {
-            message = String(localized: "单个节点没有节点列表，无法按规则分流。导入订阅或多个节点后可用")
-            return
-        }
-        // The rule and global modes are also the active subscription's rules switch.
-        if next != .direct, var group = subscriptions.active, group.library.routing != nil,
-           group.library.followsRules != (next == .rule) {
-            group.library.followsRules = next == .rule
-            var groups = subscriptions
-            groups.upsert(group)
-            store(groups)
-        }
-        var configuration = tunnelProtocol.providerConfiguration ?? [:]
-        configuration[TunnelProfileKeys.mode] = next.rawValue
-        if next == .rule {
-            configuration[TunnelProfileKeys.routing] = true
-        } else if next == .global {
-            configuration.removeValue(forKey: TunnelProfileKeys.routing)
-        }
-        tunnelProtocol.providerConfiguration = configuration
-        manager.protocolConfiguration = tunnelProtocol
-        do {
-            self.manager = try await persist(manager)
-        } catch {
-            message = String(localized: "保存模式到 VPN 配置失败") + Self.errorCode(error)
+        let saved = await writing { () async -> Bool in
+            guard next != mode, manager != nil else {
+                return false
+            }
+            if next == .rule, library == nil {
+                message = String(localized: "单个节点没有节点列表，无法按规则分流。导入订阅或多个节点后可用")
+                return false
+            }
+            let outcome: ConfigurationWrite.Outcome<NETunnelProviderManager>
+            do {
+                outcome = try await writeProfile { target in
+                    guard let tunnelProtocol = target.protocolConfiguration as? NETunnelProviderProtocol else {
+                        return false
+                    }
+                    var configuration = tunnelProtocol.providerConfiguration ?? [:]
+                    configuration[TunnelProfileKeys.mode] = next.rawValue
+                    if next == .rule {
+                        configuration[TunnelProfileKeys.routing] = true
+                    } else if next == .global {
+                        configuration.removeValue(forKey: TunnelProfileKeys.routing)
+                    }
+                    tunnelProtocol.providerConfiguration = configuration
+                    target.protocolConfiguration = tunnelProtocol
+                    return true
+                }
+            } catch {
+                message = String(localized: "保存模式到 VPN 配置失败") + Self.errorCode(error)
+                refresh()
+                return false
+            }
+            // The rule and global modes are also the active subscription's rules switch.
+            followSavedMode()
             refresh()
-            return
+            return outcome.isSaved
         }
-        refresh()
-        guard isConnected else {
+        guard saved, isConnected else {
             return
         }
         let answer = RuntimeControl.decode(RuntimeControl.ModeAnswer.self, from: await control(.setMode(next)))
@@ -568,23 +756,28 @@ final class TunnelController {
     /// Writes `takeover`, `proxyExceptions` and `gateway` into the saved profile and restarts a running tunnel on
     /// them.
     private func saveTakeoverSettings(failure: String, restarts: Bool = true) async {
-        guard let manager, let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol else {
-            return
-        }
-        var configuration = tunnelProtocol.providerConfiguration ?? [:]
-        Self.applyTakeover(takeover, exceptions: proxyExceptions, gateway: gateway, to: &configuration)
-        tunnelProtocol.providerConfiguration = configuration
-        manager.protocolConfiguration = tunnelProtocol
-        do {
-            self.manager = try await persist(manager)
-        } catch {
-            message = failure + Self.errorCode(error)
+        await profileWrites.run {
+            let outcome: ConfigurationWrite.Outcome<NETunnelProviderManager>
+            do {
+                outcome = try await writeProfile { target in
+                    guard let tunnelProtocol = target.protocolConfiguration as? NETunnelProviderProtocol else {
+                        return false
+                    }
+                    var configuration = tunnelProtocol.providerConfiguration ?? [:]
+                    Self.applyTakeover(takeover, exceptions: proxyExceptions, gateway: gateway, to: &configuration)
+                    tunnelProtocol.providerConfiguration = configuration
+                    target.protocolConfiguration = tunnelProtocol
+                    return true
+                }
+            } catch {
+                message = failure + Self.errorCode(error)
+                refresh()
+                return
+            }
             refresh()
-            return
-        }
-        refresh()
-        if restarts, isConnected {
-            restart()
+            if restarts, outcome.isSaved {
+                restart()
+            }
         }
     }
 
@@ -616,26 +809,32 @@ final class TunnelController {
         }
         blockQuic = on
         UserDefaults.standard.set(on, forKey: Self.blockQuicKey)
-        guard let manager, let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol else {
-            return
-        }
-        var configuration = tunnelProtocol.providerConfiguration ?? [:]
-        if on {
-            configuration[TunnelProfileKeys.blockQuic] = true
-        } else {
-            configuration.removeValue(forKey: TunnelProfileKeys.blockQuic)
-        }
-        tunnelProtocol.providerConfiguration = configuration
-        manager.protocolConfiguration = tunnelProtocol
-        do {
-            self.manager = try await persist(manager)
-        } catch {
-            message = String(localized: "保存 QUIC 设置到 VPN 配置失败") + Self.errorCode(error)
+        let saved = await profileWrites.run { () async -> Bool in
+            let outcome: ConfigurationWrite.Outcome<NETunnelProviderManager>
+            do {
+                outcome = try await writeProfile { target in
+                    guard let tunnelProtocol = target.protocolConfiguration as? NETunnelProviderProtocol else {
+                        return false
+                    }
+                    var configuration = tunnelProtocol.providerConfiguration ?? [:]
+                    if on {
+                        configuration[TunnelProfileKeys.blockQuic] = true
+                    } else {
+                        configuration.removeValue(forKey: TunnelProfileKeys.blockQuic)
+                    }
+                    tunnelProtocol.providerConfiguration = configuration
+                    target.protocolConfiguration = tunnelProtocol
+                    return true
+                }
+            } catch {
+                message = String(localized: "保存 QUIC 设置到 VPN 配置失败") + Self.errorCode(error)
+                refresh()
+                return false
+            }
             refresh()
-            return
+            return outcome.isSaved
         }
-        refresh()
-        guard isConnected else {
+        guard saved, isConnected else {
             return
         }
         let answer = RuntimeControl.decode(RuntimeControl.BlockQuicAnswer.self, from: await control(.setBlockQuic(on)))
@@ -653,25 +852,30 @@ final class TunnelController {
     /// Picks the member a `select` group uses. In the policy group of another subscription group this picks that
     /// group's selected node. A tunnel running by the rules restarts on it.
     func selectMember(_ member: String, inGroup groupID: String) async {
-        guard let current = library,
-              let group = current.routing?.groups.first(where: { $0.id == groupID }),
-              group.isSelectable, group.members.contains(member), current.selection(in: group) != member
-        else {
-            return
+        // In `profileWrites`, so the pick does not go between another write's copy of the groups and that write
+        // storing them.
+        let picked = await profileWrites.run { () -> Bool in
+            guard let current = library,
+                  let group = current.routing?.groups.first(where: { $0.id == groupID }),
+                  group.isSelectable, group.members.contains(member), current.selection(in: group) != member
+            else {
+                return false
+            }
+            var groups = subscriptions
+            if let link = groups.linkedGroups().first(where: { $0.policyID == groupID }),
+               var linked = groups.group(id: link.groupID), member.hasPrefix(link.prefix) {
+                linked.library.selectedID = String(member.dropFirst(link.prefix.count))
+                groups.upsert(linked)
+            } else if var active = groups.active {
+                active.library.groupSelections[groupID] = member
+                groups.upsert(active)
+            } else {
+                return false
+            }
+            store(groups)
+            return current.routesByRules
         }
-        var groups = subscriptions
-        if let link = groups.linkedGroups().first(where: { $0.policyID == groupID }),
-           var linked = groups.group(id: link.groupID), member.hasPrefix(link.prefix) {
-            linked.library.selectedID = String(member.dropFirst(link.prefix.count))
-            groups.upsert(linked)
-        } else if var active = groups.active {
-            active.library.groupSelections[groupID] = member
-            groups.upsert(active)
-        } else {
-            return
-        }
-        store(groups)
-        if current.routesByRules, isConnected {
+        if picked, isConnected {
             // The engine switches select groups in place; an older one restarts on the new pick.
             let answer = RuntimeControl.decode(RuntimeControl.SelectAnswer.self, from: await control(.select(group: groupID, member: member)))
             if answer?.now != member {
@@ -681,8 +885,17 @@ final class TunnelController {
     }
 
     /// Makes a node of any group the tunnel's node; its group becomes active. A running tunnel restarts on it
-    /// unless that group's rules pick the nodes.
+    /// unless that group's rules pick the nodes. Another tap on the same node while its save waits or runs waits for
+    /// that save instead of saving again (`SerialAsyncQueue.run(unlessRepeating:_:)`).
     func selectNode(_ nodeID: String, inGroup groupID: String) async {
+        await profileWrites.run(unlessRepeating: Self.latencyKey(group: groupID, node: nodeID)) {
+            await selectNodeNow(nodeID, inGroup: groupID)
+        }
+    }
+
+    /// `selectNode` in `profileWrites`, on the configuration as saved when its turn comes.
+    private func selectNodeNow(_ nodeID: String, inGroup groupID: String) async {
+        await reloadNow()
         guard var group = subscriptions.group(id: groupID), group.library.node(id: nodeID) != nil else {
             return
         }
@@ -694,21 +907,27 @@ final class TunnelController {
         var groups = subscriptions
         groups.upsert(group)
         groups.activeID = groupID
-        let wasRunning = isConnected
         guard await saveActiveProfile(groups) else {
             return
         }
         store(groups)
-        if wasRunning, !(sameGroup && group.library.routesByRules) {
+        if !(sameGroup && group.library.routesByRules) {
             restart()
         }
     }
 
-    /// Stops the tunnel and starts it again once it is down, so the extension reads the new profile and node list.
+    /// Stops a running tunnel and starts it again once it is down, so the extension reads the new profile and node
+    /// list. Called after the profile is saved; a tunnel that is not running, or already stopping, is left alone.
     private func restart() {
-        restartAfterStop = true
-        resumeCapture = captureOn
-        manager?.connection.stopVPNTunnel()
+        switch manager?.connection.status ?? .invalid {
+        case .connected, .connecting, .reasserting:
+            restartAfterStop = true
+            // A second restart before the tunnel came back finds capture already off: keep the first one's wish.
+            resumeCapture = resumeCapture || captureOn
+            manager?.connection.stopVPNTunnel()
+        default:
+            break
+        }
     }
 
     /// The `latencies` key of a node in a group; node ids repeat across subscriptions.
@@ -790,7 +1009,7 @@ final class TunnelController {
             text = downloaded.0
             response = downloaded.1
         } catch {
-            markFailure(groupID)
+            await markFailure(groupID)
             notice = AppNotice(
                 text: String(localized: "订阅下载失败：链接可能已失效，或当前网络连不上订阅服务器。现有节点仍可使用。"),
                 detail: error.localizedDescription,
@@ -802,14 +1021,28 @@ final class TunnelController {
         do {
             report = try NativeImportReport.decoded(from: NativeNodeImporterFFI.importNodes(text))
         } catch let failure as NativeImportFailure {
-            markFailure(groupID)
+            await markFailure(groupID)
             message = Self.describe(.native(failure))
             return false
         } catch {
-            markFailure(groupID)
+            await markFailure(groupID)
             message = Self.describe(.native(.unavailable))
             return false
         }
+        return await writing { () async -> Bool in
+            await merge(report, response: response, url: url, groupID: groupID, activate: activate)
+        }
+    }
+
+    /// Puts a downloaded subscription into its group and saves the profile when the tunnel's node or rules switch
+    /// changed; runs in `profileWrites`.
+    private func merge(
+        _ report: NativeImportReport,
+        response: SubscriptionResponseInfo,
+        url: URL,
+        groupID: String?,
+        activate: Bool
+    ) async -> Bool {
         // A group deleted while it downloaded stays deleted: the result is dropped instead of coming back as a new
         // group (third-party review F08).
         if let groupID, subscriptions.group(id: groupID) == nil {
@@ -821,7 +1054,7 @@ final class TunnelController {
         let group = groupID.flatMap { groups.group(id: $0) }?.refreshed(with: report, response: response)
             ?? SubscriptionGroup(report: report, url: url.absoluteString, response: response)
         guard group.library.selected != nil else {
-            markFailure(groupID)
+            failed(groupID)
             message = Self.describe(.native(.noSupportedNode(
                 protocols: report.unsupported.map(\.protocol),
                 reasons: []
@@ -858,7 +1091,16 @@ final class TunnelController {
         return true
     }
 
-    private func markFailure(_ groupID: String?) {
+    /// Marks a group whose update failed, in `profileWrites` so it does not go between another write's copy of the
+    /// groups and that write storing them.
+    private func markFailure(_ groupID: String?) async {
+        await profileWrites.run {
+            failed(groupID)
+        }
+    }
+
+    /// `markFailure` for code already running in `profileWrites`.
+    private func failed(_ groupID: String?) {
         guard let groupID, var group = subscriptions.group(id: groupID) else {
             return
         }
@@ -967,7 +1209,8 @@ final class TunnelController {
     /// Listed under `BGTaskSchedulerPermittedIdentifiers` in project.yml.
     static let backgroundRefreshID = "net.anixops.subscriptions.refresh"
 
-    /// Saves `profile` as the tunnel profile; `routed` makes the extension follow the node library's rules.
+    /// Saves `profile` as the tunnel profile; `routed` makes the extension follow the node library's rules. Runs in
+    /// `profileWrites`.
     private func save(_ requested: TunnelProfile, routed requestedRouted: Bool = false) async -> Bool {
         let profileID = Self.profileID
         // Debug mode with the direct exit keeps the direct profile whichever node is picked or refreshed; the
@@ -1006,11 +1249,11 @@ final class TunnelController {
             message = String(localized: "无法把节点密钥保存到钥匙串")
             return false
         }
+        keyVersionsInFlight.insert(keyVersion)
+        defer {
+            keyVersionsInFlight.remove(keyVersion)
+        }
 
-        let tunnelProtocol = NETunnelProviderProtocol()
-        tunnelProtocol.providerBundleIdentifier = providerBundleIdentifier
-        tunnelProtocol.serverAddress = profile.serverAddress
-        tunnelProtocol.passwordReference = keyReference
         var providerConfiguration: [String: Any] = [
             TunnelProfileKeys.runtimeConfig: config,
             TunnelProfileKeys.tunnelInterface: interface,
@@ -1020,17 +1263,6 @@ final class TunnelController {
         if routed {
             providerConfiguration[TunnelProfileKeys.routing] = true
         }
-        // With subscription rules the rules switch decides between the rule and global modes; a node list without
-        // them keeps the mode the user picked (local rules), and a single node has no rule mode.
-        let savedMode: ProxyMode
-        if mode == .direct || profile.isDirect {
-            savedMode = .direct
-        } else if routed || (mode == .rule && library != nil && library?.routing == nil) {
-            savedMode = .rule
-        } else {
-            savedMode = .global
-        }
-        providerConfiguration[TunnelProfileKeys.mode] = savedMode.rawValue
         if let value = try? dns.profileValue() {
             providerConfiguration[TunnelProfileKeys.dns] = value
         }
@@ -1051,57 +1283,67 @@ final class TunnelController {
             message = String(localized: "保存插件到 VPN 配置失败") + Self.errorCode(error)
             return false
         }
-        tunnelProtocol.providerConfiguration = providerConfiguration
 
         // Saving the profile does not need the extension to be running, only connecting does. While macOS waits for
         // the user to allow it, the import goes on and the notice says what to do.
         guard await activateSystemExtension(allowPending: true) else {
             return false
         }
-        let target = manager ?? NETunnelProviderManager()
-        target.protocolConfiguration = tunnelProtocol
-        target.localizedDescription = "AnixOps Net"
-        target.isEnabled = true
-        // A saved profile keeps running On Demand while it is on; a new one starts it with the first connect.
-        onDemand.apply(to: target, active: target.isOnDemandEnabled)
+        // A node list without subscription rules keeps the rule mode of its local rules (`ProxyMode.forNewProfile`).
+        let localRuleList = library != nil && library?.routing == nil
+        let outcome: ConfigurationWrite.Outcome<NETunnelProviderManager>
         do {
-            manager = try await persist(target)
-            // The fixed account follows the saved profile for readers from before key versions; keys no saved profile
-            // names any more go.
-            _ = try? NodeSecretStore.save(keyValue, account: profileID)
-            NodeSecretStore.removeNodeKeys(keeping: keyVersion)
-            // Keep the hint to allow the extension: the profile is saved, but connecting still needs it.
-            message = systemExtensionPending ? Self.systemExtensionApprovalText : nil
+            outcome = try await writeProfile(creating: true) { target in
+                // The mode and On Demand stay as saved now, whoever set them: the app, Shortcuts, Control Center,
+                // the widget, the Live Activity or Settings.
+                let current = ProxyMode.saved(
+                    in: (target.protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration
+                )
+                var configuration = providerConfiguration
+                configuration[TunnelProfileKeys.mode] = ProxyMode.forNewProfile(
+                    current: current,
+                    routed: routed,
+                    direct: profile.isDirect,
+                    localRuleList: localRuleList
+                ).rawValue
+                let tunnelProtocol = NETunnelProviderProtocol()
+                tunnelProtocol.providerBundleIdentifier = providerBundleIdentifier
+                tunnelProtocol.serverAddress = profile.serverAddress
+                tunnelProtocol.passwordReference = keyReference
+                tunnelProtocol.providerConfiguration = configuration
+                target.protocolConfiguration = tunnelProtocol
+                target.localizedDescription = "AnixOps Net"
+                target.isEnabled = true
+                // A saved profile keeps running On Demand while it is on; a new one starts it with the first connect.
+                onDemand.apply(to: target, active: target.isOnDemandEnabled)
+                return true
+            }
         } catch {
             message = String(localized: "保存 VPN 配置失败或未获授权") + Self.errorCode(error)
             refresh()
             return false
         }
+        // The version the saved profile names, read back from the system settings.
+        let savedVersion = (outcome.object?.protocolConfiguration as? NETunnelProviderProtocol)?
+            .providerConfiguration?[TunnelProfileKeys.nodeKeyVersion] as? String
+        if savedVersion == keyVersion {
+            // The fixed account follows the saved profile for readers from before key versions.
+            _ = try? NodeSecretStore.save(keyValue, account: profileID)
+        }
+        // Keys no saved profile names any more go: all but the saved profile's and those of saves still on their way.
+        // A tunnel that is starting may still be reading the key of the profile it started with, so while it is,
+        // they wait for the next save.
+        if manager?.connection.status != .connecting {
+            var kept = keyVersionsInFlight
+            if let savedVersion {
+                kept.insert(savedVersion)
+            }
+            NodeSecretStore.removeNodeKeys(keeping: kept)
+        }
+        // Keep the hint to allow the extension: the profile is saved, but connecting still needs it.
+        message = systemExtensionPending ? Self.systemExtensionApprovalText : nil
         refresh()
         return true
-    }
-
-
-    /// Saves `target` and reloads it so its connection object reflects the saved profile. When the save fails, for
-    /// example because the object went stale after a widget, the Control Center switch or Settings changed the
-    /// configuration, or because the configuration was removed in Settings, the saved configuration is read again
-    /// and the same settings are saved once more on that fresh object. Returns the object that was saved.
-    private func persist(_ target: NETunnelProviderManager) async throws -> NETunnelProviderManager {
-        do {
-            try await target.saveToPreferences()
-            try await target.loadFromPreferences()
-            return target
-        } catch {
-            let fresh = (try? await NETunnelProviderManager.loadAllFromPreferences().first) ?? NETunnelProviderManager()
-            fresh.protocolConfiguration = target.protocolConfiguration?.copy() as? NEVPNProtocol
-            fresh.localizedDescription = target.localizedDescription
-            fresh.isEnabled = target.isEnabled
-            fresh.onDemandRules = target.onDemandRules
-            fresh.isOnDemandEnabled = target.isOnDemandEnabled
-            try await fresh.saveToPreferences()
-            try await fresh.loadFromPreferences()
-            return fresh
-        }
     }
 
     /// The system error's domain and code after a failed save, so a screenshot of the notice says why
@@ -1120,41 +1362,40 @@ final class TunnelController {
         scripts: [String: String] = [:],
         resources: [String: Data] = [:]
     ) async -> Bool {
-        guard let manager,
-              let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol
-        else {
-            return false
-        }
-        var configuration = tunnelProtocol.providerConfiguration ?? [:]
         // The Map Local / Map Remote entries ride along as one more plugin (`DebugMappings.pluginText`).
         let plugins = texts + [debugMappings.pluginText].compactMap { $0 }
         let next = MitmProfileBundle(plugins: plugins, scripts: scripts, resources: resources)
-        let carriesOldKeys = configuration[TunnelProfileKeys.mitmPlugins] != nil
-            || configuration[TunnelProfileKeys.mitmScripts] != nil
-            || configuration[TunnelProfileKeys.mitmResources] != nil
-        guard carriesOldKeys || MitmProfileBundle.fromProfile(configuration) != next else {
-            return false
-        }
-        do {
-            try next.apply(to: &configuration)
-        } catch {
-            message = String(localized: "保存插件到 VPN 配置失败") + Self.errorCode(error)
-            return false
-        }
-        tunnelProtocol.providerConfiguration = configuration
-        manager.protocolConfiguration = tunnelProtocol
-        do {
-            self.manager = try await persist(manager)
-        } catch {
-            message = String(localized: "保存插件到 VPN 配置失败") + Self.errorCode(error)
+        return await profileWrites.run { () async -> Bool in
+            let outcome: ConfigurationWrite.Outcome<NETunnelProviderManager>
+            do {
+                outcome = try await writeProfile { target in
+                    guard let tunnelProtocol = target.protocolConfiguration as? NETunnelProviderProtocol else {
+                        return false
+                    }
+                    var configuration = tunnelProtocol.providerConfiguration ?? [:]
+                    let carriesOldKeys = configuration[TunnelProfileKeys.mitmPlugins] != nil
+                        || configuration[TunnelProfileKeys.mitmScripts] != nil
+                        || configuration[TunnelProfileKeys.mitmResources] != nil
+                    guard carriesOldKeys || MitmProfileBundle.fromProfile(configuration) != next else {
+                        return false
+                    }
+                    try next.apply(to: &configuration)
+                    tunnelProtocol.providerConfiguration = configuration
+                    target.protocolConfiguration = tunnelProtocol
+                    return true
+                }
+            } catch {
+                message = String(localized: "保存插件到 VPN 配置失败") + Self.errorCode(error)
+                refresh()
+                return false
+            }
             refresh()
-            return false
-        }
-        refresh()
-        if isConnected {
+            guard outcome.isSaved else {
+                return false
+            }
             restart()
+            return true
         }
-        return true
     }
 
     /// The plugins, allowed scripts and downloaded bodies saved on the device, with the debug mappings' plugin
@@ -1194,9 +1435,6 @@ final class TunnelController {
         return true
     }
 
-    /// Saves the DNS settings and puts them in the saved profile. A running tunnel reconnects to use them.
-    /// Returns whether they were saved.
-    @discardableResult
     /// Saves the local rules now, so quick edits build on each other, then puts them in the saved profile. A running
     /// tunnel takes them in place when only rule lines changed (see `applyLocalRulesToProfile`), else reconnects.
     func updateLocalRules(_ next: LocalRules) {
@@ -1214,33 +1452,41 @@ final class TunnelController {
 
     /// Puts the current local rules in the saved profile and reconnects a running tunnel when they changed.
     private func applyLocalRulesToProfile() async {
-        guard let manager, let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol,
-              let value = try? localRules.profileValue()
-        else {
-            // The next import picks them up.
-            return
-        }
-        var configuration = tunnelProtocol.providerConfiguration ?? [:]
-        guard configuration[TunnelProfileKeys.localRules] as? Data != value else {
-            return
-        }
-        configuration[TunnelProfileKeys.localRules] = value
-        tunnelProtocol.providerConfiguration = configuration
-        manager.protocolConfiguration = tunnelProtocol
-        do {
-            self.manager = try await persist(manager)
-        } catch {
-            message = String(localized: "保存本地规则到 VPN 配置失败") + Self.errorCode(error)
+        // The rules as they are when this write's turn comes, so the last of quick edits is the one saved.
+        let saved = await profileWrites.run { () async -> Data? in
+            guard let value = try? localRules.profileValue() else {
+                return nil
+            }
+            let outcome: ConfigurationWrite.Outcome<NETunnelProviderManager>
+            do {
+                outcome = try await writeProfile { target in
+                    // Without a profile the next import picks them up.
+                    guard let tunnelProtocol = target.protocolConfiguration as? NETunnelProviderProtocol else {
+                        return false
+                    }
+                    var configuration = tunnelProtocol.providerConfiguration ?? [:]
+                    guard configuration[TunnelProfileKeys.localRules] as? Data != value else {
+                        return false
+                    }
+                    configuration[TunnelProfileKeys.localRules] = value
+                    tunnelProtocol.providerConfiguration = configuration
+                    target.protocolConfiguration = tunnelProtocol
+                    return true
+                }
+            } catch {
+                message = String(localized: "保存本地规则到 VPN 配置失败") + Self.errorCode(error)
+                refresh()
+                return nil
+            }
             refresh()
-            return
+            return outcome.isSaved ? value : nil
         }
-        refresh()
-        guard isConnected else {
+        guard let saved, isConnected else {
             return
         }
         // Rule lines alone swap into the running engine without dropping a connection; anything more (a new rule
         // list URL, an older extension, a refused line) restarts the tunnel as before.
-        if let answer = await reloadLocalRules(value), answer.reloaded {
+        if let answer = await reloadLocalRules(saved), answer.reloaded {
             lastRulesReload = Date()
         } else {
             restart()
@@ -1255,20 +1501,22 @@ final class TunnelController {
     /// Puts the notification settings in the saved profile for the next start. No restart: a running extension
     /// gets them as a message (`applyNotificationSettings`).
     func saveNotificationSettingsToProfile(_ next: NotificationSettings) async {
-        guard let manager, let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol else {
-            return
+        await profileWrites.run {
+            _ = try? await writeProfile { target in
+                guard let tunnelProtocol = target.protocolConfiguration as? NETunnelProviderProtocol else {
+                    return false
+                }
+                var configuration = tunnelProtocol.providerConfiguration ?? [:]
+                guard configuration[TunnelProfileKeys.notifications] as? Data != next.profileValue else {
+                    return false
+                }
+                configuration[TunnelProfileKeys.notifications] = next.profileValue
+                tunnelProtocol.providerConfiguration = configuration
+                target.protocolConfiguration = tunnelProtocol
+                return true
+            }
+            refresh()
         }
-        var configuration = tunnelProtocol.providerConfiguration ?? [:]
-        guard configuration[TunnelProfileKeys.notifications] as? Data != next.profileValue else {
-            return
-        }
-        configuration[TunnelProfileKeys.notifications] = next.profileValue
-        tunnelProtocol.providerConfiguration = configuration
-        manager.protocolConfiguration = tunnelProtocol
-        if let saved = try? await persist(manager) {
-            self.manager = saved
-        }
-        refresh()
     }
 
     /// Hands new local rules to the running extension (`TunnelAppMessage.reloadLocalRules`). Nil when the tunnel is
@@ -1289,6 +1537,9 @@ final class TunnelController {
         return RuntimeControl.decode(RuntimeControl.ReloadAnswer.self, from: data)
     }
 
+    /// Saves the DNS settings and puts them in the saved profile. A running tunnel reconnects to use them.
+    /// Returns whether they were saved.
+    @discardableResult
     func applyDns(_ next: DnsSettings) async -> Bool {
         do {
             try next.save(to: DnsSettings.defaultURL)
@@ -1297,34 +1548,40 @@ final class TunnelController {
             return false
         }
         dns = next
-        guard let manager, let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol else {
-            // The next import picks them up.
-            return true
-        }
-        var configuration = tunnelProtocol.providerConfiguration ?? [:]
-        let value = try? next.profileValue()
-        guard configuration[TunnelProfileKeys.dns] as? Data != value else {
-            return true
-        }
-        if let value {
-            configuration[TunnelProfileKeys.dns] = value
-        } else {
-            configuration.removeValue(forKey: TunnelProfileKeys.dns)
-        }
-        tunnelProtocol.providerConfiguration = configuration
-        manager.protocolConfiguration = tunnelProtocol
-        do {
-            self.manager = try await persist(manager)
-        } catch {
-            message = String(localized: "保存 DNS 设置到 VPN 配置失败") + Self.errorCode(error)
+        return await profileWrites.run { () async -> Bool in
+            // The settings as they are when this write's turn comes, so the last of quick edits is the one saved.
+            let value = try? dns.profileValue()
+            let outcome: ConfigurationWrite.Outcome<NETunnelProviderManager>
+            do {
+                outcome = try await writeProfile { target in
+                    // Without a profile the next import picks them up.
+                    guard let tunnelProtocol = target.protocolConfiguration as? NETunnelProviderProtocol else {
+                        return false
+                    }
+                    var configuration = tunnelProtocol.providerConfiguration ?? [:]
+                    guard configuration[TunnelProfileKeys.dns] as? Data != value else {
+                        return false
+                    }
+                    if let value {
+                        configuration[TunnelProfileKeys.dns] = value
+                    } else {
+                        configuration.removeValue(forKey: TunnelProfileKeys.dns)
+                    }
+                    tunnelProtocol.providerConfiguration = configuration
+                    target.protocolConfiguration = tunnelProtocol
+                    return true
+                }
+            } catch {
+                message = String(localized: "保存 DNS 设置到 VPN 配置失败") + Self.errorCode(error)
+                refresh()
+                return false
+            }
             refresh()
-            return false
+            if outcome.isSaved {
+                restart()
+            }
+            return true
         }
-        refresh()
-        if isConnected {
-            restart()
-        }
-        return true
     }
 
     /// Saves the destination rewrites and puts the enabled ones in the saved profile. A running tunnel reconnects to
@@ -1338,83 +1595,110 @@ final class TunnelController {
             return false
         }
         redirects = next
-        guard let manager, let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol else {
-            // The next import picks them up.
-            return true
-        }
-        var configuration = tunnelProtocol.providerConfiguration ?? [:]
-        let value = try? next.profileValue()
-        guard configuration[TunnelProfileKeys.redirects] as? Data != value else {
-            return true
-        }
-        if let value {
-            configuration[TunnelProfileKeys.redirects] = value
-        } else {
-            configuration.removeValue(forKey: TunnelProfileKeys.redirects)
-        }
-        tunnelProtocol.providerConfiguration = configuration
-        manager.protocolConfiguration = tunnelProtocol
-        do {
-            self.manager = try await persist(manager)
-        } catch {
-            message = String(localized: "保存重定向到 VPN 配置失败") + Self.errorCode(error)
+        return await profileWrites.run { () async -> Bool in
+            // The rewrites as they are when this write's turn comes, so the last of quick edits is the one saved.
+            let value = try? redirects.profileValue()
+            let outcome: ConfigurationWrite.Outcome<NETunnelProviderManager>
+            do {
+                outcome = try await writeProfile { target in
+                    // Without a profile the next import picks them up.
+                    guard let tunnelProtocol = target.protocolConfiguration as? NETunnelProviderProtocol else {
+                        return false
+                    }
+                    var configuration = tunnelProtocol.providerConfiguration ?? [:]
+                    guard configuration[TunnelProfileKeys.redirects] as? Data != value else {
+                        return false
+                    }
+                    if let value {
+                        configuration[TunnelProfileKeys.redirects] = value
+                    } else {
+                        configuration.removeValue(forKey: TunnelProfileKeys.redirects)
+                    }
+                    tunnelProtocol.providerConfiguration = configuration
+                    target.protocolConfiguration = tunnelProtocol
+                    return true
+                }
+            } catch {
+                message = String(localized: "保存重定向到 VPN 配置失败") + Self.errorCode(error)
+                refresh()
+                return false
+            }
             refresh()
-            return false
+            if outcome.isSaved {
+                restart()
+            }
+            return true
         }
-        refresh()
-        if isConnected {
-            restart()
-        }
-        return true
     }
 
+    /// Connects, or disconnects while the tunnel is up, as the switch shows it now. The connect or disconnect runs in
+    /// `profileWrites`, on the VPN configuration as saved when its turn comes.
     func toggle() {
-        guard let manager = manager else {
+        let connects = !isConnected
+        Task {
+            await writing {
+                if connects {
+                    await connectNow()
+                } else {
+                    await disconnectNow()
+                }
+            }
+        }
+    }
+
+    /// Starts the tunnel unless it is up already; runs in `profileWrites`.
+    private func connectNow() async {
+        guard !isConnected else {
+            return
+        }
+        guard let manager else {
             if usesDirectExit {
                 // Debug mode needs no node: save the direct profile, then connect.
-                Task {
-                    if await saveDirectProfile(), let manager = self.manager {
-                        start(manager)
-                    }
+                if await saveDirectProfile() {
+                    await start()
                 }
             } else if let groups = Self.withSelectedNode(subscriptions) {
                 // Nodes are imported but no VPN profile is saved yet (or it was removed in Settings): save the
                 // profile for the selected node, then connect.
-                Task { await saveProfileAndStart(groups) }
+                await saveProfileAndStart(groups)
             } else {
                 notice = AppNotice(text: String(localized: "请先导入节点"), actions: [.importNode])
             }
-            return
-        }
-        if isConnected {
-            // On Demand would start the tunnel again right away: the user's disconnect turns it off first.
-            Task { await disconnect(manager) }
             return
         }
         guard manager.isEnabled else {
             // Turning on another VPN app in Settings disables this profile. The coordinator then reports the
             // tunnel as unavailable, and the button used to do nothing at all: re-enable the profile first, the
             // same way the widget and Shortcuts paths do.
-            Task { await enableAndStart(manager) }
+            await enableAndStart()
             return
         }
         guard coordinator.canStartTunnel else {
             message = String(localized: "无法启动隧道")
             return
         }
-        start(manager)
+        await start()
     }
 
-    private func disconnect(_ manager: NETunnelProviderManager) async {
-        if manager.isOnDemandEnabled {
-            manager.isOnDemandEnabled = false
-            do {
-                self.manager = try await persist(manager)
-            } catch {
-                message = String(localized: "无法关闭自动重连") + Self.errorCode(error)
+    /// Stops the tunnel; runs in `profileWrites`. On Demand would start it again right away, so the user's
+    /// disconnect turns it off first, whoever turned it on: the app, the widget, Control Center or Shortcuts. A
+    /// restart the app had begun ends here too.
+    private func disconnectNow() async {
+        restartAfterStop = false
+        restartStartQueued = false
+        resumeCapture = false
+        do {
+            try await writeProfile { target in
+                guard target.isOnDemandEnabled else {
+                    return false
+                }
+                target.isOnDemandEnabled = false
+                return true
             }
+        } catch {
+            message = String(localized: "无法关闭自动重连") + Self.errorCode(error)
         }
-        self.manager?.connection.stopVPNTunnel()
+        manager?.connection.stopVPNTunnel()
     }
 
     /// Saves new reconnect and Wi-Fi settings and puts them in the VPN configuration. On Demand stays as it was: on
@@ -1425,41 +1709,47 @@ final class TunnelController {
         }
         onDemand = next
         next.save()
-        guard let manager else {
-            return
+        await profileWrites.run {
+            do {
+                try await writeProfile { target in
+                    next.apply(to: target, active: target.isOnDemandEnabled || isConnected)
+                    return true
+                }
+            } catch {
+                message = String(localized: "保存自动重连设置失败") + Self.errorCode(error)
+            }
+            refresh()
         }
-        next.apply(to: manager, active: manager.isOnDemandEnabled || isConnected)
-        do {
-            self.manager = try await persist(manager)
-        } catch {
-            message = String(localized: "保存自动重连设置失败") + Self.errorCode(error)
-        }
-        refresh()
     }
 
-    private func enableAndStart(_ manager: NETunnelProviderManager) async {
+    /// Turns the profile on again, then starts it; runs in `profileWrites`.
+    private func enableAndStart() async {
         do {
-            manager.isEnabled = true
-            onDemand.apply(to: manager, active: true)
-            let saved = try await persist(manager)
-            self.manager = saved
-            refresh()
-            start(saved)
+            try await writeProfile { target in
+                target.isEnabled = true
+                onDemand.apply(to: target, active: true)
+                return true
+            }
         } catch {
             message = String(localized: "无法启动隧道") + Self.errorCode(error)
+            refresh()
+            return
         }
+        refresh()
+        await start()
     }
 
+    /// Saves the profile for the selected node, then starts it; runs in `profileWrites`.
     private func saveProfileAndStart(_ groups: SubscriptionGroups) async {
         guard await saveActiveProfile(groups) else {
             return
         }
         store(groups)
-        guard let manager = manager else {
+        guard manager != nil else {
             message = String(localized: "无法启动隧道")
             return
         }
-        start(manager)
+        await start()
     }
 
     /// The groups with an active group that has a selected node: the active group's selection, else the first
@@ -1482,38 +1772,56 @@ final class TunnelController {
         return groups
     }
 
-    private func start(_ manager: NETunnelProviderManager) {
+    /// Starts the saved tunnel; runs in `profileWrites`.
+    private func start() async {
         #if os(macOS)
-        // A newer build may carry a newer System Extension; activation replaces the running one first.
-        Task {
-            // When the user still has to allow the extension, the tunnel starts by itself once they do.
-            guard await activateSystemExtension(afterApproval: { [weak self] in
-                self?.startNow(manager)
-            }) else {
+        // A newer build may carry a newer System Extension; activation replaces the running one first. When the user
+        // still has to allow the extension, the tunnel starts by itself once they do.
+        guard await activateSystemExtension(afterApproval: { [weak self] in
+            guard let self else {
                 return
             }
-            startNow(manager)
+            Task {
+                await self.startAfterApproval()
+            }
+        }) else {
+            return
         }
-        #else
-        startNow(manager)
         #endif
+        await startNow()
     }
 
-    private func startNow(_ manager: NETunnelProviderManager) {
-        // The user wants the tunnel up: On Demand keeps it up from here, including after the extension crashes.
-        if onDemand.rules != nil, !manager.isOnDemandEnabled {
-            onDemand.apply(to: manager, active: true)
-            Task {
-                var target = manager
-                do {
-                    target = try await persist(manager)
-                    self.manager = target
-                } catch {
-                    // Connecting still works; only the automatic reconnect is missing.
-                    message = String(localized: "无法开启自动重连") + Self.errorCode(error)
-                }
-                startTunnel(target)
+    #if os(macOS)
+    /// The connect that waited for the user to allow the System Extension, in `profileWrites` like any other.
+    private func startAfterApproval() async {
+        await writing {
+            guard manager != nil, !isConnected else {
+                return
             }
+            await startNow()
+        }
+    }
+    #endif
+
+    /// Starts the tunnel as saved now; runs in `profileWrites`.
+    private func startNow() async {
+        // The user wants the tunnel up: On Demand keeps it up from here, including after the extension crashes.
+        if onDemand.rules != nil, manager?.isOnDemandEnabled == false {
+            do {
+                try await writeProfile { target in
+                    guard !target.isOnDemandEnabled else {
+                        return false
+                    }
+                    onDemand.apply(to: target, active: true)
+                    return true
+                }
+            } catch {
+                // Connecting still works; only the automatic reconnect is missing.
+                message = String(localized: "无法开启自动重连") + Self.errorCode(error)
+            }
+        }
+        guard let manager else {
+            message = String(localized: "无法启动隧道")
             return
         }
         startTunnel(manager)
@@ -1833,14 +2141,20 @@ final class TunnelController {
         if connection != .connected {
             captureOn = false
         }
-        if connection == .disconnected, !restartAfterStop {
+        if connection == .disconnected, !restartAfterStop, !restartStartQueued {
             // A stop the app did not ask for (the user, the system, a failure): capture ends with the tunnel.
             resumeCapture = false
         }
         if restartAfterStop, connection == .disconnected {
-            // The node switch stopped the tunnel on purpose: no error to show, just start it on the new node.
+            // The app stopped the tunnel on purpose (`restart()`): no error to show. It starts again once the writes
+            // queued before are done, on the profile they saved.
             restartAfterStop = false
-            try? manager?.connection.startVPNTunnel(options: manager.flatMap(Self.startOptions(for:)))
+            restartStartQueued = true
+            Task {
+                await profileWrites.run {
+                    startAfterRestart()
+                }
+            }
         } else if connection == .disconnected, previous != .disconnected, previous != .invalid {
             showLastDisconnectError()
         }
@@ -1854,6 +2168,30 @@ final class TunnelController {
         mode = ProxyMode.saved(in: configuration)
         if connection != previous || nodeName != previousNode || mode != previousMode {
             Self.reloadWidgets()
+        }
+    }
+
+    /// The start that ends a restart; runs in `profileWrites`, so `manager` is the profile the writes before it saved.
+    /// Nothing starts when the user disconnected meanwhile (`disconnectNow()`), or when On Demand has started the
+    /// tunnel already.
+    private func startAfterRestart() {
+        guard restartStartQueued else {
+            return
+        }
+        restartStartQueued = false
+        guard let manager else {
+            // The configuration was removed meanwhile.
+            resumeCapture = false
+            return
+        }
+        guard manager.connection.status == .disconnected else {
+            // On Demand started it already; capture comes back once it is connected.
+            return
+        }
+        do {
+            try manager.connection.startVPNTunnel(options: Self.startOptions(for: manager))
+        } catch {
+            resumeCapture = false
         }
     }
 

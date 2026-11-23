@@ -35,6 +35,16 @@ their own gates pass.
   MTU) that the extension turns into `NEPacketTunnelNetworkSettings`. Shadowsocks uses the fixed full-tunnel
   interface; WireGuard uses the config's `Address`, `AllowedIPs`, `DNS` and `MTU`. Both targets list `$(AppIdentifierPrefix)networkcore.shared` first in `keychain-access-groups`, so the
   extension reads the item the app saved. The default team-prefixed profiles already allow this group.
+- Profile writes: the widget, the Control Center switch, the Live Activity, Shortcuts and Settings change the same VPN
+  configuration from other processes. Every change the app makes to it and to the node keys runs one at a time in
+  `TunnelController`'s `SerialAsyncQueue`, on a copy read right before (`ConfigurationWrite`): a write sets only the
+  fields it owns, so a new node keeps the saved mode and On Demand switch, and a save refused as stale is replayed once
+  on a fresh copy. Each saved profile names its own key version (`TunnelProfileKeys.nodeKeyVersion`); after a save the
+  app removes the other versioned keys except those of saves still on their way, and none while a tunnel is starting.
+  The app reads the configuration again on `NEVPNConfigurationChange` and when it comes to the front, and the active
+  subscription's rules switch follows a mode Shortcuts or Control Center saved (`SubscriptionGroups.followingSavedMode`).
+  Tapping a node whose save is pending waits for that save. At launch a profile whose key is missing (left by
+  0.3.0-beta.11) is saved again for the selected node.
 - UI: the app follows AnixOps Design (github.com/AnixOps/anixops-design), the brand and token system shared by every
   AnixOps product (five tabs: 首页, 代理, 规则, 扩展, 设置). The design repository is vendored unmodified into
   `apps/windows-gui/ui/src/design/anixops/` by `python3 .github/scripts/sync_design.py --source <clone> --ref <tag>`

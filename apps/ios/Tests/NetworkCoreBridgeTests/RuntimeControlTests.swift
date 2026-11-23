@@ -164,6 +164,19 @@ final class ProxyModeTests: XCTestCase {
         XCTAssertEqual(ProxyMode.saved(in: [TunnelProfileKeys.mode: "bogus"]), .global)
     }
 
+    func testNewProfileKeepsTheModeSavedElsewhere() {
+        // Shortcuts or Control Center picked direct: another node or a refreshed subscription stays direct.
+        XCTAssertEqual(ProxyMode.forNewProfile(current: .direct, routed: true, direct: false, localRuleList: false), .direct)
+        // The node-less profile always runs direct.
+        XCTAssertEqual(ProxyMode.forNewProfile(current: .rule, routed: false, direct: true, localRuleList: true), .direct)
+        // With subscription rules the rules switch decides; it follows the saved mode (`followingSavedMode`).
+        XCTAssertEqual(ProxyMode.forNewProfile(current: .global, routed: true, direct: false, localRuleList: false), .rule)
+        XCTAssertEqual(ProxyMode.forNewProfile(current: .rule, routed: false, direct: false, localRuleList: false), .global)
+        // A node list without subscription rules keeps the rule mode of its local rules, and only that.
+        XCTAssertEqual(ProxyMode.forNewProfile(current: .rule, routed: false, direct: false, localRuleList: true), .rule)
+        XCTAssertEqual(ProxyMode.forNewProfile(current: .global, routed: false, direct: false, localRuleList: true), .global)
+    }
+
     func testConfigCarriesTheModeAndTheGlobalTarget() throws {
         let profile = try TunnelProfile(
             node: try JSONDecoder().decode(NativeImportReport.Node.self, from: Data(

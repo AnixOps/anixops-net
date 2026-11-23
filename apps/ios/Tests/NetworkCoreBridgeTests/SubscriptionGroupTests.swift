@@ -232,4 +232,23 @@ final class SubscriptionGroupTests: XCTestCase {
         let groups = SubscriptionGroups(groups: [group], activeID: group.id)
         XCTAssertEqual(try SubscriptionGroups.fromKeychainValue(groups.keychainValue()), groups)
     }
+
+    func testRulesSwitchFollowsAModeSavedElsewhere() throws {
+        let routed = SubscriptionGroup(report: try report(routedReport), url: "https://rules.example/s", response: .init(), at: start)
+        let groups = SubscriptionGroups(groups: [routed], activeID: routed.id)
+        XCTAssertEqual(groups.active?.library.followsRules, true)
+        // Shortcuts switched the saved profile to global: the next profile the app saves (another node, a refresh)
+        // must not put the rules back.
+        let global = try XCTUnwrap(groups.followingSavedMode(.global))
+        XCTAssertEqual(global.active?.library.followsRules, false)
+        XCTAssertEqual(global.activeLibrary()?.routesByRules, false)
+        XCTAssertNil(global.followingSavedMode(.global))
+        XCTAssertEqual(global.followingSavedMode(.rule)?.activeLibrary()?.routesByRules, true)
+        XCTAssertNil(groups.followingSavedMode(.rule))
+        // The direct mode leaves the switch as it is, and so do a group without subscription rules and a single node.
+        XCTAssertNil(groups.followingSavedMode(.direct))
+        let plain = SubscriptionGroup(report: try report(plainReport), url: "https://two.example/s", response: .init(), at: start)
+        XCTAssertNil(SubscriptionGroups(groups: [plain], activeID: plain.id).followingSavedMode(.rule))
+        XCTAssertNil(SubscriptionGroups(groups: [routed], activeID: nil).followingSavedMode(.global))
+    }
 }
