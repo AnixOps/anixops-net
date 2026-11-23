@@ -14550,6 +14550,38 @@
           }
         }
       }
+    },
+    "网络扩展保存的节点密钥副本已过期。请打开 App 重新连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The network extension's copy of the node key is out of date. Open the app and connect again."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "網路擴充功能保存的節點金鑰副本已過期。請開啟 App 重新連線。"
+          }
+        }
+      }
+    },
+    "网络扩展保存的节点密钥副本已过期，自动重连没有成功。请重新连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The network extension's copy of the node key is out of date, and reconnecting automatically did not work. Connect again."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "網路擴充功能保存的節點金鑰副本已過期，自動重新連線沒有成功。請重新連線。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

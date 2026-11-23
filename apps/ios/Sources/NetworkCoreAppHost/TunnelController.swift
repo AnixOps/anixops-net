@@ -124,6 +124,12 @@ final class TunnelController {
     /// Set while the start after such a stop waits in `profileWrites`, so it starts on the profile the writes before
     /// it saved. The user's disconnect clears both.
     @ObservationIgnored private var restartStartQueued = false
+    /// macOS: the start secrets last handed to the running System Extension (`handOverStartSecrets()`), encoded; nil
+    /// while the tunnel is not connected, so the next connect hands them over again.
+    @ObservationIgnored private var handedOverStartSecrets: Data?
+    /// macOS: the key version of the profile the app last started again after a start failed on a stale copy of the
+    /// start secrets (`startAfterStaleCopy`), so it tries once for each saved profile.
+    @ObservationIgnored private var staleCopyRetriedVersion: String?
     /// Capture as the app last set it in the running engine (`set_capture`; `load_capture` turns it off).
     @ObservationIgnored private var captureOn = false
     /// Set when the app restarts the tunnel itself (a new node, a decrypted domain) while capture is on: the new
@@ -163,6 +169,17 @@ final class TunnelController {
         ) { [weak self] _ in
             Task { @MainActor in
                 self?.scheduleReload()
+                self?.checkStaleStartSecrets()
+            }
+        })
+        // A new MITM root goes to the running System Extension's copy of the start secrets.
+        reloadObservers.append(NotificationCenter.default.addObserver(
+            forName: MitmCertificateStore.didSaveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.handOverStartSecrets()
             }
         })
         #endif
@@ -241,6 +258,12 @@ final class TunnelController {
         }
         loaded = true
         await repairMissingNodeKey()
+        #if os(macOS)
+        // On Demand may have failed to start the tunnel while the app was not running (`startAfterStaleCopy`).
+        if manager?.connection.status == .disconnected {
+            _ = startAfterStaleCopy(failure: await lastStopDescription(), requiresOnDemand: true)
+        }
+        #endif
     }
 
     /// Reads the VPN configuration again once the writes queued before are done: when the app comes back to the
@@ -325,6 +348,10 @@ final class TunnelController {
                 change: change
             )
             manager = outcome.object
+            if outcome.isSaved {
+                // The System Extension's copy for starts without options follows the saved profile.
+                handOverStartSecrets()
+            }
             return outcome
         } catch {
             if let saved = try? await NETunnelProviderManager.loadAllFromPreferences() {
@@ -1023,6 +1050,8 @@ final class TunnelController {
             let downloaded = try await Self.download(url)
             text = downloaded.0
             response = downloaded.1
+            // The download may have saved a new ANX license.
+            handOverStartSecrets()
         } catch {
             await markFailure(groupID)
             notice = AppNotice(
@@ -1205,6 +1234,7 @@ final class TunnelController {
         } else {
             try? NodeSecretStore.delete(account: NodeLibrary.keychainAccount)
         }
+        handOverStartSecrets()
     }
 
     /// iOS runs `refreshDueSubscriptions` in the background around the next group's update time
@@ -1969,13 +1999,120 @@ final class TunnelController {
     /// Keychain with the extension and passes nothing.
     private static func startOptions(for manager: NETunnelProviderManager) -> [String: NSObject]? {
         #if os(macOS)
-        let version = (manager.protocolConfiguration as? NETunnelProviderProtocol)?
-            .providerConfiguration?[TunnelProfileKeys.nodeKeyVersion] as? String
-        return TunnelStartSecrets.fromKeychain(nodeKeyVersion: version).options
+        return TunnelStartSecrets.fromKeychain(nodeKeyVersion: nodeKeyVersion(of: manager)).options
         #else
         return nil
         #endif
     }
+
+    /// The node key version the saved profile names (`TunnelProfileKeys.nodeKeyVersion`); nil for a profile from
+    /// before key versions.
+    private static func nodeKeyVersion(of manager: NETunnelProviderManager) -> String? {
+        (manager.protocolConfiguration as? NETunnelProviderProtocol)?
+            .providerConfiguration?[TunnelProfileKeys.nodeKeyVersion] as? String
+    }
+
+    /// macOS: hands the start secrets of the profile saved now to the running System Extension
+    /// (`TunnelAppMessage.startSecrets`), which keeps them for the starts the system makes without options (On
+    /// Demand, after a restart or a crash, at login, from System Settings). Without this, a profile saved again
+    /// while the tunnel runs (a node picked by the rules, an import, a subscription update, new plugins) names a
+    /// node key version the kept copy does not have, and the next such start fails, as a root process cannot read
+    /// the Keychain. Called after every saved write, every change of the node library, a new MITM root or license,
+    /// and when the tunnel comes up. Messages go out in call order, so the last one sent is the newest. While the
+    /// tunnel is not running nothing can be sent: a start that then fails on the old copy is started again with
+    /// options (`startAfterStaleCopy`). Nothing here is logged.
+    private func handOverStartSecrets() {
+        #if os(macOS)
+        #if DEBUG
+        if Self.isDemo {
+            return
+        }
+        #endif
+        guard let manager, let session = manager.connection as? NETunnelProviderSession else {
+            handedOverStartSecrets = nil
+            return
+        }
+        switch manager.connection.status {
+        case .connected, .reasserting:
+            break
+        case .connecting:
+            // The start's own options carry the values; `refresh()` hands over once it is connected.
+            return
+        default:
+            handedOverStartSecrets = nil
+            return
+        }
+        let secrets = TunnelStartSecrets.fromKeychain(nodeKeyVersion: Self.nodeKeyVersion(of: manager))
+        guard let data = secrets.encoded(), data != handedOverStartSecrets else {
+            return
+        }
+        handedOverStartSecrets = data
+        do {
+            try session.sendProviderMessage(TunnelAppMessage.startSecrets(data).encoded) { [weak self] answer in
+                guard !TunnelStartSecrets.handOverAccepted(answer) else {
+                    return
+                }
+                // Not kept (an extension older than the message, or the write failed): try again next time.
+                Task { @MainActor in
+                    if self?.handedOverStartSecrets == data {
+                        self?.handedOverStartSecrets = nil
+                    }
+                }
+            }
+        } catch {
+            handedOverStartSecrets = nil
+        }
+        #endif
+    }
+
+    #if os(macOS)
+    /// The system's record of why the tunnel last stopped, with its underlying errors; nil when there is none.
+    private func lastStopDescription() async -> String? {
+        guard let connection = manager?.connection else {
+            return nil
+        }
+        return await withCheckedContinuation { continuation in
+            connection.fetchLastDisconnectError { error in
+                continuation.resume(returning: error.map { Self.describe(disconnectError: $0 as NSError) })
+            }
+        }
+    }
+
+    /// When the app becomes active: a start the system made while the app was in the background may have failed on
+    /// a stale copy of the start secrets (`startAfterStaleCopy`).
+    private func checkStaleStartSecrets() {
+        Task {
+            await writing {
+                guard manager?.connection.status == .disconnected else {
+                    return
+                }
+                _ = startAfterStaleCopy(failure: await lastStopDescription(), requiresOnDemand: true)
+            }
+        }
+    }
+
+    /// Starts the tunnel with options once more after a start failed because the System Extension's copy of the start
+    /// secrets belongs to an older profile (`TunnelStartSecrets.staleCopyReason`): the profile was saved again while
+    /// the tunnel was not running, and the system then started it without the app. Once for each saved profile, so
+    /// a start that fails again does not loop; `requiresOnDemand` (on launch and on becoming active) leaves a tunnel
+    /// the user turned off alone. Runs in `profileWrites`. Returns whether it started the tunnel.
+    private func startAfterStaleCopy(failure: String?, requiresOnDemand: Bool) -> Bool {
+        guard let manager, manager.isEnabled, manager.connection.status == .disconnected,
+              !requiresOnDemand || manager.isOnDemandEnabled
+        else {
+            return false
+        }
+        let version = Self.nodeKeyVersion(of: manager)
+        guard TunnelStartSecrets.retriesStaleCopy(
+            failure: failure, profileVersion: version, retriedVersion: staleCopyRetriedVersion
+        ) else {
+            return false
+        }
+        staleCopyRetriedVersion = version
+        startTunnel(manager)
+        return true
+    }
+    #endif
 
     /// Developer ID builds carry the tunnel as a System Extension, which macOS loads only after the app asks and the
     /// user allows it. Returns false, with the reason in `message`, when it is not active. While the user has not
@@ -2262,6 +2399,14 @@ final class TunnelController {
         let previous = connection
         connection = manager?.connection.status ?? .invalid
         connectedSince = connection == .connected ? manager?.connection.connectedDate : nil
+        if connection == .connected || connection == .reasserting {
+            if previous != .connected, previous != .reasserting {
+                // Whatever the start was handed, the copy it keeps follows the profile saved now.
+                handOverStartSecrets()
+            }
+        } else {
+            handedOverStartSecrets = nil
+        }
         if connection == .connected, previous != .connected {
             lastConnections = nil
             if resumeCapture {
@@ -2347,6 +2492,12 @@ final class TunnelController {
             }
             let text = Self.describe(disconnectError: error as NSError)
             #if os(macOS)
+            if TunnelStartSecrets.isStaleCopyFailure(text) {
+                Task { @MainActor in
+                    await self?.recoverStaleCopy(text)
+                }
+                return
+            }
             // The System Extension cannot post; on iOS the extension posts this itself.
             if AppNotifications.settings.connection {
                 AppNotifications.post(
@@ -2367,6 +2518,34 @@ final class TunnelController {
             }
         }
     }
+
+    #if os(macOS)
+    /// A start failed because the System Extension's copy of the start secrets belongs to an older profile: starts
+    /// the tunnel again with options (`startAfterStaleCopy`); when it already did for this profile, asks the user
+    /// to connect from the app instead of blaming the node.
+    private func recoverStaleCopy(_ text: String) async {
+        let started = await writing {
+            startAfterStaleCopy(failure: text, requiresOnDemand: false)
+        }
+        lastDisconnectError = text
+        guard !started else {
+            return
+        }
+        if AppNotifications.settings.connection {
+            AppNotifications.post(
+                title: String(localized: "AnixOps Net 已断开"),
+                body: String(localized: "网络扩展保存的节点密钥副本已过期。请打开 App 重新连接。"),
+                thread: "connection",
+                id: "connection-stopped"
+            )
+        }
+        notice = AppNotice(
+            text: String(localized: "网络扩展保存的节点密钥副本已过期，自动重连没有成功。请重新连接。"),
+            detail: text,
+            actions: [.retry]
+        )
+    }
+    #endif
 
     /// The error and its underlying errors, which carry the extension's fixed failure reason.
     nonisolated private static func describe(disconnectError: NSError) -> String {

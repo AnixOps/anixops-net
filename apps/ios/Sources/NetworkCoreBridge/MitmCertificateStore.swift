@@ -47,6 +47,10 @@ public enum MitmCertificateStore {
         try decode(data)
     }
 
+    /// Posted in the process that saved a new root (`save(_:)`). The macOS app hands it to a running System Extension
+    /// for its starts without options (`TunnelStartSecrets`).
+    public static let didSaveNotification = Notification.Name("networkcore.mitm-root-saved")
+
     public static func save(_ authority: MitmCertificateAuthority) throws {
         let data = try encode(authority)
         try delete()
@@ -62,6 +66,7 @@ public enum MitmCertificateStore {
         guard status == errSecSuccess else {
             throw Failure(status: status)
         }
+        NotificationCenter.default.post(name: didSaveNotification, object: nil)
     }
 
     public static func delete() throws {

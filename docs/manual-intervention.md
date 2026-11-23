@@ -121,7 +121,8 @@ macOS 客户端改为官网分发（Developer ID 签名 + 公证），隧道从 
 - [ ] 解开 ZIP / 挂载 DMG，把 AnixOps Net 拖进「应用程序」后打开，Gatekeeper 不报「无法验证开发者」；`spctl -a -vv` 显示 `Notarized Developer ID`。
 - [ ] 第一次连接时提示允许网络扩展；在「系统设置 › 通用 › 登录项与扩展 › 网络扩展」允许后，再连接成功。
 - [ ] 不在「应用程序」里直接打开时，连接给出「请先把 AnixOps Net 拖进应用程序文件夹」的提示。
-- [ ] 订阅规则、HTTPS 解密（根证书已信任）、脚本插件在 Mac 上照常生效（隧道读的是 App 启动时交给它的密钥副本）。
+- [ ] 订阅规则、HTTPS 解密（根证书已信任）、脚本插件在 Mac 上照常生效（隧道读的是 App 启动时交给它、并在配置改动后
+  随时更新的密钥副本）。
 - [ ] 睡眠唤醒、从系统设置的 VPN 开关直接连接（不经 App）也能连上。
 - [ ] 安装新版本后再连接，系统扩展被替换为新版本（`systemextensionsctl list` 版本号更新）。
 
@@ -180,6 +181,13 @@ CI 只能跑规则与重建逻辑的单元测试（`OnDemandSettingsTests`、`Ne
   开发者模式的诊断里没有 `node key is unavailable`。
 - [ ] 从 0.3.0-beta.11 升级：在 beta.11 上因快速切换节点出现 `node key is unavailable` 的设备，升级后打开 App 一次即可
   重新连接（App 启动时为当前节点重新保存配置）；单个粘贴的节点需要重新导入。
+- [ ] macOS Developer ID 版（System Extension 读不到钥匙串，只用 App 交给它的密钥副本）：连接后，分别做一次
+  规则模式下在同一订阅里换节点（命令面板或 `anixops://select`）、连接中导入一个节点、订阅更新换了当前节点、修改插件；
+  每次之后 `sudo kill -9` 系统扩展进程、重启 Mac（开机自动连接），以及从系统设置的 VPN 开关直接连接，都能连上，
+  开发者模式的诊断里有 `start secrets updated by the app`，没有 `node key is unavailable`，HTTPS 解密状态不变。
+- [ ] macOS：隧道断开但自动重连仍开着时（例如 Wi-Fi 规则为“断开”的网络里）换一个节点，再离开该网络：系统拉起隧道
+  失败一次（`start secrets are older than the profile`）后，App 在运行或下次回到前台时自动带新密钥重连一次并连上；
+  再次失败时提示“网络扩展保存的节点密钥副本已过期……请重新连接”，不再提示节点没有响应。
 
 ## iOS / macOS HTTPS 解密首次确认真机验收
 

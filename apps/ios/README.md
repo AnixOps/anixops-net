@@ -50,7 +50,10 @@ their own gates pass.
   The app reads the configuration again on `NEVPNConfigurationChange` and when it comes to the front, and the active
   subscription's rules switch follows a mode Shortcuts or Control Center saved (`SubscriptionGroups.followingSavedMode`).
   Tapping a node whose save is pending waits for that save. At launch a profile whose key is missing (left by
-  0.3.0-beta.11) is saved again for the selected node.
+  0.3.0-beta.11) is saved again for the selected node. On macOS every saved write and node library change is also
+  handed to a running System Extension (`TunnelAppMessage.startSecrets`); a start the system made on a copy older
+  than the profile fails with `start secrets are older than the profile` and the app, when it runs or next becomes
+  active, starts the tunnel once more with options for that profile.
 - UI: the app follows AnixOps Design (github.com/AnixOps/anixops-design), the brand and token system shared by every
   AnixOps product (five tabs: 首页, 代理, 规则, 扩展, 设置). The design repository is vendored unmodified into
   `apps/windows-gui/ui/src/design/anixops/` by `python3 .github/scripts/sync_design.py --source <clone> --ref <tag>`
@@ -117,7 +120,11 @@ On macOS the "扩展" page (`MacExtensionsPage`) shows the same plugin and scrip
 "信任证书…" adds the root to the login keychain and sets user trust settings to always trust
 (`SecTrustSettingsSetTrustSettings`, macOS asks for the login password), with "在“钥匙串访问”中打开" as the manual
 fallback. The root and key stay in the data protection keychain under the shared access group, the only macOS
-keychain the tunnel extension can read. Firefox keeps its own certificate list.
+keychain an app-extension tunnel can read. The Developer ID build's System Extension runs as root and reads no
+Keychain at all: the app hands it the root, node key, node library, HTTPS decryption payload and license at start
+(`TunnelStartSecrets`), and again whenever one of them or the saved profile changes while the tunnel runs
+(`TunnelAppMessage.startSecrets`), so the copy the extension keeps for starts without options (On Demand, login,
+System Settings) follows the saved profile. Firefox keeps its own certificate list.
 
 ## Plugins
 

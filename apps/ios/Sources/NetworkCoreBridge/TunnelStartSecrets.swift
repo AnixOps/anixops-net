@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 /// The Keychain values the packet tunnel needs, handed over at start on macOS.
 ///
@@ -6,7 +7,9 @@ import Foundation
 /// Keychain, where the app keeps the node key, the node library, the MITM root and the HTTPS decryption payload.
 /// The app reads them itself and passes them in the `startVPNTunnel(options:)` dictionary. The extension keeps the
 /// last copy in its own container, readable by root only, for the starts the system makes without options (on
-/// demand, after sleep, from System Settings). Nothing here is ever logged.
+/// demand, after sleep, from System Settings). Whenever the app saves the profile, the node library, the HTTPS
+/// decryption payload, the MITM root or the license again while the tunnel runs, it hands the new values over in a
+/// message (`TunnelAppMessage.startSecrets`) so that copy follows the saved profile. Nothing here is ever logged.
 public struct TunnelStartSecrets: Codable, Equatable {
     /// The selected node's key: the saved profile's own (`NodeSecretStore.versionedAccount`), or the fixed account
     /// for a profile saved before keys had versions.
@@ -50,6 +53,62 @@ public struct TunnelStartSecrets: Codable, Equatable {
         nodeKeyVersion == version ? nodeKey : nil
     }
 
+    /// The extension's failure reason when it cannot read the node key of a profile saved with key version
+    /// `version`. A copy handed over for another version means the profile was saved again after the copy was
+    /// written and the app could not hand the new one over (the tunnel was not running): the app has to start the
+    /// tunnel once with options. Anything else is a Keychain failure. Fixed text and codes only, never a key.
+    public static func nodeKeyFailureReason(
+        status: OSStatus,
+        handedOver: TunnelStartSecrets?,
+        version: String?
+    ) -> String {
+        if let handedOver, handedOver.nodeKey != nil, version != nil, handedOver.nodeKeyVersion != version {
+            return staleCopyReason
+        }
+        return "node key is unavailable (keychain status \(status))"
+    }
+
+    /// The fixed reason for a copy older than the profile (`nodeKeyFailureReason`); the app looks for it in the
+    /// system's record of the last stop.
+    public static let staleCopyReason = "start secrets are older than the profile; open the app and connect"
+
+    /// Whether the description of the last stop (`NEVPNConnection.fetchLastDisconnectError`, with its underlying
+    /// errors) is the extension's stale-copy failure.
+    public static func isStaleCopyFailure(_ description: String?) -> Bool {
+        description?.contains(staleCopyReason) == true
+    }
+
+    /// Whether the app starts the tunnel again, with options, after a start failed on a stale copy: once for each
+    /// saved profile (`profileVersion`), so a start that fails again for another reason does not loop.
+    public static func retriesStaleCopy(failure: String?, profileVersion: String?, retriedVersion: String?) -> Bool {
+        guard isStaleCopyFailure(failure), let profileVersion else {
+            return false
+        }
+        return profileVersion != retriedVersion
+    }
+
+    /// The `TunnelAppMessage.startSecrets` payload and the start options' value. Keys are sorted, so the same
+    /// values always encode the same and the app can skip handing over what it handed over already.
+    public func encoded() -> Data? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        return try? encoder.encode(self)
+    }
+
+    /// A `TunnelAppMessage.startSecrets` payload, or nil when it does not parse.
+    public static func decoded(from data: Data) -> TunnelStartSecrets? {
+        try? JSONDecoder().decode(TunnelStartSecrets.self, from: data)
+    }
+
+    /// The extension's answer once it kept a handed-over copy.
+    public static let handOverAnswer = Data("ok".utf8)
+
+    /// Whether the extension kept the copy. An extension older than `TunnelAppMessage.startSecrets` answers the
+    /// runtime status instead (or nothing), which is not this.
+    public static func handOverAccepted(_ answer: Data?) -> Bool {
+        answer == handOverAnswer
+    }
+
     public var isEmpty: Bool {
         nodeKey == nil && nodeLibrary == nil && mitmAuthority == nil && mitmBundleChunks == nil && anxLicense == nil
     }
@@ -71,7 +130,7 @@ public struct TunnelStartSecrets: Codable, Equatable {
 
     /// The `startVPNTunnel(options:)` dictionary.
     public var options: [String: NSObject] {
-        guard let data = try? JSONEncoder().encode(self) else {
+        guard let data = encoded() else {
             return [:]
         }
         return [Self.optionsKey: data as NSData]
@@ -79,9 +138,7 @@ public struct TunnelStartSecrets: Codable, Equatable {
 
     /// The values the app passed to `startVPNTunnel(options:)`, or nil when it passed none.
     public init?(options: [String: NSObject]?) {
-        guard let data = options?[Self.optionsKey] as? Data,
-              let decoded = try? JSONDecoder().decode(TunnelStartSecrets.self, from: data)
-        else {
+        guard let data = options?[Self.optionsKey] as? Data, let decoded = Self.decoded(from: data) else {
             return nil
         }
         self = decoded
@@ -101,6 +158,6 @@ public struct TunnelStartSecrets: Codable, Equatable {
         guard let data = try? Data(contentsOf: url) else {
             return nil
         }
-        return try? JSONDecoder().decode(TunnelStartSecrets.self, from: data)
+        return decoded(from: data)
     }
 }

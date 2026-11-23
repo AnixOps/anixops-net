@@ -139,7 +139,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             interface = try (tunnelProtocol.providerConfiguration?[TunnelProfileKeys.tunnelInterface] as? Data)
                 .map(TunnelInterface.decoded(from:)) ?? .proxy
         } catch let failure as NodeSecretStore.Failure {
-            completionHandler(PacketTunnelFailure(reason: "node key is unavailable (keychain status \(failure.status))"))
+            // On macOS a copy handed over for an older profile says so, so the app knows to start the tunnel once
+            // with options rather than report a Keychain problem.
+            let version = tunnelProtocol.providerConfiguration?[TunnelProfileKeys.nodeKeyVersion] as? String
+            completionHandler(PacketTunnelFailure(reason: TunnelStartSecrets.nodeKeyFailureReason(
+                status: failure.status, handedOver: startSecrets, version: version
+            )))
             return
         } catch {
             completionHandler(PacketTunnelFailure(reason: "tunnel profile is malformed"))
@@ -451,6 +456,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             completionHandler?(Data("ok".utf8))
         case let .reloadLocalRules(value):
             completionHandler?(reloadLocalRules(value))
+        case let .startSecrets(value):
+            completionHandler?(keepStartSecrets(value))
         case .diagnostics:
             let diagnostics = TunnelDiagnostics(
                 runtimeStatus: session?.statusJSON().flatMap { String(data: $0, encoding: .utf8) },
@@ -697,14 +704,43 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         return try MitmCertificateStore.load()
     }
 
-    /// On macOS the tunnel may run as a System Extension, a root process that cannot read the user's Keychain, so
-    /// the app passes the Keychain values in the start options. They are kept in the extension's own container for
-    /// starts without options (on demand, after sleep). iOS shares the Keychain and never passes them.
-    private static func resolveStartSecrets(options: [String: NSObject]?, events: TunnelDiagnosticLog) -> TunnelStartSecrets? {
-        #if os(macOS)
-        let url = try? FileManager.default
+    /// Where the extension keeps the last start secrets, in its own Application Support directory (macOS).
+    private static func startSecretsURL() -> URL? {
+        try? FileManager.default
             .url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             .appendingPathComponent(TunnelStartSecrets.fileName)
+    }
+
+    /// Keeps the start secrets the macOS app handed over after saving the profile again
+    /// (`TunnelAppMessage.startSecrets`), for the next start without options. Only the kept copy changes: the
+    /// running tunnel goes on with what it started with, so its node library still matches its outbound. Answers
+    /// `ok` once the copy is written, else nil. iOS shares the Keychain and keeps no copy.
+    private func keepStartSecrets(_ value: Data) -> Data? {
+        #if os(macOS)
+        guard let secrets = TunnelStartSecrets.decoded(from: value), let url = Self.startSecretsURL() else {
+            events.record("start secrets not kept: unreadable hand-over")
+            return nil
+        }
+        do {
+            try secrets.save(to: url)
+        } catch {
+            events.record("start secrets not kept: could not write them")
+            return nil
+        }
+        events.record("start secrets updated by the app")
+        return TunnelStartSecrets.handOverAnswer
+        #else
+        return nil
+        #endif
+    }
+
+    /// On macOS the tunnel may run as a System Extension, a root process that cannot read the user's Keychain, so
+    /// the app passes the Keychain values in the start options. They are kept in the extension's own container for
+    /// starts without options (on demand, after sleep), and the app replaces that copy whenever it saves the profile
+    /// again while the tunnel runs (`keepStartSecrets`). iOS shares the Keychain and never passes them.
+    private static func resolveStartSecrets(options: [String: NSObject]?, events: TunnelDiagnosticLog) -> TunnelStartSecrets? {
+        #if os(macOS)
+        let url = startSecretsURL()
         if let handed = TunnelStartSecrets(options: options) {
             if let url {
                 do {

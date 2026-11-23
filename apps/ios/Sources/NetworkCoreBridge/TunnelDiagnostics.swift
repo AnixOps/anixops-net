@@ -22,6 +22,11 @@ public enum TunnelAppMessage: Equatable {
     /// Whether the running tunnel decrypts HTTPS (`HttpsDecryptionState`), answered as JSON. An older extension
     /// answers the runtime status instead, which does not decode as one.
     case httpsDecryption
+    /// macOS: the start secrets of the profile saved now (`TunnelStartSecrets.encoded()`), for the copy the System
+    /// Extension keeps for starts without options. The extension only rewrites that copy; the running tunnel keeps
+    /// what it started with. Answered with `ok` (`TunnelStartSecrets.handOverAccepted(_:)`); an older extension
+    /// answers the runtime status instead.
+    case startSecrets(Data)
 
     private static let diagnosticsPayload = Data("diagnostics".utf8)
     private static let trafficStatsPayload = Data("traffic-stats".utf8)
@@ -30,6 +35,7 @@ public enum TunnelAppMessage: Equatable {
     private static let controlPrefix = Data("control:".utf8)
     private static let notificationsPrefix = Data("notifications:".utf8)
     private static let reloadLocalRulesPrefix = Data("local-rules:".utf8)
+    private static let startSecretsPrefix = Data("start-secrets:".utf8)
 
     public var encoded: Data {
         switch self {
@@ -49,6 +55,8 @@ public enum TunnelAppMessage: Equatable {
             return Self.reloadLocalRulesPrefix + value
         case .httpsDecryption:
             return Self.httpsDecryptionPayload
+        case let .startSecrets(value):
+            return Self.startSecretsPrefix + value
         }
     }
 
@@ -70,6 +78,9 @@ public enum TunnelAppMessage: Equatable {
         }
         if data.starts(with: reloadLocalRulesPrefix) {
             return .reloadLocalRules(Data(data.dropFirst(reloadLocalRulesPrefix.count)))
+        }
+        if data.starts(with: startSecretsPrefix) {
+            return .startSecrets(Data(data.dropFirst(startSecretsPrefix.count)))
         }
         if data.starts(with: controlPrefix) {
             return .control(Data(data.dropFirst(controlPrefix.count)))
