@@ -1,7 +1,20 @@
 import { ArrowDown, ArrowUp, Search } from "lucide-react";
 import { forwardRef, type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CaptureRequest, desktop, REQUEST_PAGE } from "../bridge";
-import { combineFilter, engineRestarted, mergeRequests, nextRev, nextSince, QuickFilter, quickFilters, requestKey } from "../capture-filter";
+import {
+  combineFilter,
+  droppedMore,
+  engineRestarted,
+  keepOnly,
+  mergeRequests,
+  nextRev,
+  nextSince,
+  QuickFilter,
+  quickFilters,
+  readAllKept,
+  requestKey,
+  RESYNC_INTERVAL_MS,
+} from "../capture-filter";
 import { durationMs, noteText, streamKind, timeOfDay } from "../capture-format";
 import { compareRequests, requestPath, RequestSort, statusTone } from "../request-table";
 import { usePageVisible } from "../live";
@@ -14,6 +27,23 @@ function filterError(error: { code: string; at?: number; message?: string }): st
     return error.at != null ? t("筛选表达式在第 {at} 个字符处有误", { at: error.at + 1 }) : t("筛选表达式有误");
   }
   return error.message || error.code;
+}
+
+/** What the poll knows between reads. */
+interface FeedState {
+  rows: CaptureRequest[];
+  lastSeq: number;
+  lastRev: number | null;
+  /** The engine's `dropped_before_seq` as last seen. */
+  dropped: number;
+  /** The engine dropped rows since the last full read; the next poll reads everything it holds. */
+  resyncDue: boolean;
+  /** When the last full read was, so a capture at its budget is not read in full every second. */
+  resyncAt: number;
+}
+
+function emptyFeed(): FeedState {
+  return { rows: [], lastSeq: 0, lastRev: null, dropped: 0, resyncDue: false, resyncAt: 0 };
 }
 
 export interface RequestFeed {
@@ -34,10 +64,10 @@ export function useRequestFeed(capturing: boolean, filter: string, paused: boole
   const [generation, setGeneration] = useState(0);
   const visible = usePageVisible();
   // The poll reads the latest list without restarting its timer.
-  const state = useRef<{ rows: CaptureRequest[]; lastSeq: number; lastRev: number | null }>({ rows: [], lastSeq: 0, lastRev: null });
+  const state = useRef<FeedState>(emptyFeed());
 
   useEffect(() => {
-    state.current = { rows: [], lastSeq: 0, lastRev: null };
+    state.current = emptyFeed();
     setRows([]);
     setError(null);
   }, [filter]);
@@ -66,18 +96,24 @@ export function useRequestFeed(capturing: boolean, filter: string, paused: boole
         if (engineRestarted(state.current, answer)) {
           // A new engine (a changed setting, a reconnect): its counters start again, so the list does too. The
           // next read takes everything it holds.
-          state.current = { rows: [], lastSeq: 0, lastRev: null };
+          state.current = emptyFeed();
           setRows([]);
           setGeneration((count) => count + 1);
           return;
         }
+        const fresh = state.current.lastSeq === 0 && state.current.lastRev == null;
         const next = mergeRequests(state.current.rows, answer);
         state.current = {
+          ...state.current,
           rows: next,
           lastSeq: Math.max(state.current.lastSeq, answer.last_seq ?? 0),
           lastRev: nextRev(state.current.lastRev, answer, REQUEST_PAGE),
+          dropped: Math.max(state.current.dropped, answer.dropped_before_seq ?? 0),
+          // The first read of a list takes everything the engine holds, so only a later rise needs a full read.
+          resyncDue: state.current.resyncDue || (!fresh && droppedMore(state.current.dropped, answer)),
         };
         setRows(next);
+        if (state.current.resyncDue && Date.now() - state.current.resyncAt >= RESYNC_INTERVAL_MS) await resync();
       } catch (failure) {
         if (cancelled) return;
         const text = String(failure);
@@ -85,6 +121,28 @@ export function useRequestFeed(capturing: boolean, filter: string, paused: boole
       } finally {
         reading = false;
       }
+    }
+    // The engine dropped something: reads every row it still holds and lets go of the others, whatever their seq.
+    async function resync() {
+      const full = await readAllKept((sinceSeq, sinceRev) => desktop.captureRequests(sinceSeq, sinceRev, filter), REQUEST_PAGE);
+      if (cancelled || !full.complete || full.answers.some((answer) => engineRestarted(state.current, answer))) return;
+      let rows = state.current.rows;
+      const kept = new Set<string>();
+      for (const answer of full.answers) {
+        rows = mergeRequests(rows, answer);
+        for (const request of answer.requests ?? []) kept.add(requestKey(request));
+      }
+      rows = keepOnly(rows, kept);
+      const last = full.answers[full.answers.length - 1];
+      state.current = {
+        ...state.current,
+        rows,
+        lastSeq: Math.max(state.current.lastSeq, last?.last_seq ?? 0),
+        dropped: Math.max(state.current.dropped, last?.dropped_before_seq ?? 0),
+        resyncDue: false,
+        resyncAt: Date.now(),
+      };
+      setRows(rows);
     }
     return () => {
       cancelled = true;

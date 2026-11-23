@@ -327,7 +327,11 @@ export interface CaptureRequestsAnswer {
   last_seq?: number;
   /** The newest change; a kernel that has it also lists requests still under way. */
   last_rev?: number;
-  /** The highest seq the engine dropped (capture budget, cleared, a session loaded); it and older rows are gone. */
+  /**
+   * The highest seq of a connection the engine dropped (capture budget, cleared, a session loaded). Not a cut-off:
+   * connections go oldest first while seqs follow when requests end, so kept rows can have smaller seqs. A rise
+   * means something went; the list then reads all kept rows to learn which (capture-filter.ts `droppedMore`).
+   */
   dropped_before_seq?: number;
   /** `invalid_filter` with the character position of the mistake. */
   error?: { code: string; at?: number; message?: string };
@@ -596,8 +600,16 @@ export interface LanShareStatus {
   pages: number;
 }
 
+/**
+ * What a backend command did. The window words `code` itself, in its own language (operation-text.ts), with `params`
+ * filled in; `message` is the backend's English, shown only for a code this window does not know (an older or newer
+ * backend). `note` is already in the window's language (a note on capture or a reconnect) and follows the text.
+ */
 export interface OperationResult {
   message: string;
+  code?: string;
+  params?: Record<string, string>;
+  note?: string;
 }
 
 export interface SubscriptionSummary {

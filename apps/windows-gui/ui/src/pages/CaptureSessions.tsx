@@ -42,7 +42,12 @@ export function sessionHint(session: CaptureSession): string {
  * Saved capture sessions (debug mode): seal what capture holds into an encrypted file, load one back to look at its
  * requests and export them, delete one. The engine does the sealing; the backend keeps the key.
  */
-export function CaptureSessions({ capture, run }: { capture: CaptureStatus | null; run: Run }) {
+export function CaptureSessions({ capture, run, onLoaded }: {
+  capture: CaptureStatus | null;
+  run: Run;
+  /** A session replaced what capture held: a request selected before it is gone. */
+  onLoaded?: () => void;
+}) {
   const [sessions, setSessions] = useState<CaptureSession[] | null>(null);
   const [protection, setProtection] = useState<SessionProtection | null>(null);
   const [days, setDays] = useState(7);
@@ -78,6 +83,7 @@ export function CaptureSessions({ capture, run }: { capture: CaptureStatus | nul
     setConfirming(null);
     void run("capture session", async () => {
       await desktop.loadCaptureSession(session.session);
+      onLoaded?.();
       return { message: t("已载入会话：{name}。实时抓包已停止。", { name: sessionTitle(session) }) };
     });
   };
