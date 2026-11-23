@@ -397,31 +397,39 @@ public struct DnsSettings: Codable, Equatable {
         var domain: [String] = []
         var suffix: [String] = []
         var keyword: [String] = []
-        for line in text.split(whereSeparator: \.isNewline) {
+        // Empty lines are kept while splitting so that the line a refusal names is the line the user sees.
+        for (index, line) in text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).enumerated() {
             let parts = line.split(separator: ",", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
-            let (kind, value) = parts.count == 2 ? (parts[0].uppercased(), parts[1]) : ("DOMAIN-SUFFIX", parts[0])
+            guard let first = parts.first else {
+                continue
+            }
+            let (kind, value) = parts.count == 2 ? (first.uppercased(), parts[1]) : ("DOMAIN-SUFFIX", first)
             guard !value.isEmpty else {
                 continue
             }
-            switch kind {
-            case "DOMAIN":
-                domain.append(try Self.domainName(value))
-            case "DOMAIN-SUFFIX":
-                suffix.append(try Self.domainName(value.hasPrefix(".") ? String(value.dropFirst()) : value))
-            case "DOMAIN-KEYWORD":
-                keyword.append(value.lowercased())
-            case "RULE-SET":
-                guard rule.ruleSet == nil, Self.isIdentifier(value) else {
+            do {
+                switch kind {
+                case "DOMAIN":
+                    domain.append(try Self.domainName(value))
+                case "DOMAIN-SUFFIX":
+                    suffix.append(try Self.domainName(value.hasPrefix(".") ? String(value.dropFirst()) : value))
+                case "DOMAIN-KEYWORD":
+                    keyword.append(value.lowercased())
+                case "RULE-SET":
+                    guard rule.ruleSet == nil, Self.isIdentifier(value) else {
+                        throw DnsSettingsError.invalidRule
+                    }
+                    rule.ruleSet = value
+                case "GEOSITE":
+                    guard rule.ruleSet == nil else {
+                        throw DnsSettingsError.invalidRule
+                    }
+                    rule.ruleSet = "geosite-" + value.lowercased()
+                default:
                     throw DnsSettingsError.invalidRule
                 }
-                rule.ruleSet = value
-            case "GEOSITE":
-                guard rule.ruleSet == nil else {
-                    throw DnsSettingsError.invalidRule
-                }
-                rule.ruleSet = "geosite-" + value.lowercased()
-            default:
-                throw DnsSettingsError.invalidRule
+            } catch let error as DnsSettingsError {
+                throw DnsSettingsError.atLine(index + 1, error)
             }
         }
         rule.domain = domain.isEmpty ? nil : domain
@@ -656,6 +664,8 @@ public enum DnsSettingsError: Error, Equatable {
     case fakeIPRange
     /// The rules would list more than `DnsSettings.maxRuleDomains` domains, suffixes and keywords.
     case tooManyDomains
+    /// Line `line` (counted from 1, empty lines included) of a multi-line rule was refused for `reason`.
+    indirect case atLine(Int, DnsSettingsError)
 
     public var message: String {
         switch self {
@@ -681,6 +691,8 @@ public enum DnsSettingsError: Error, Equatable {
             return String(localized: "Fake-IP 开启时，Hosts 不能使用 198.18.0.0/15 或 fc00::/18 内的地址")
         case .tooManyDomains:
             return String(localized: "DNS 规则合计最多 \(DnsSettings.maxRuleDomains) 个域名、后缀和关键词。较长的列表请改用 RULE-SET 或 GEOSITE 规则集。")
+        case let .atLine(line, reason):
+            return String(localized: "第 \(line) 行：\(reason.message)")
         }
     }
 }
