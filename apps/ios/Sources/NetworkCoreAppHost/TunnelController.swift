@@ -1470,6 +1470,20 @@ final class TunnelController {
         return bundle
     }
 
+    /// Whether HTTPS decryption as it is set up now (`library`'s enabled plugins under its switch, with the debug
+    /// mappings' plugin as the profile carries it) is too large for the engine config of this version, so the
+    /// tunnel will leave decryption out when it connects (`EngineBudget.decryptionExceedsConfig`). The plugins and
+    /// mappings pages warn with it before connecting rather than only after.
+    func decryptionExceedsConfig(with library: MitmPluginLibrary) -> Bool {
+        let texts = library.activeTexts + [Self.mappingsPlugin(debugMappings)].compactMap { $0 }
+        return EngineBudget.decryptionExceedsConfig(texts)
+    }
+
+    /// The plugins and mappings pages' warning for `decryptionExceedsConfig(with:)`.
+    static var decryptionExceedsConfigWarning: String {
+        String(localized: "已启用的插件和调试映射合计超过 64 KB，超出本版本隧道配置的上限：连接时 HTTPS 解密会被关闭，插件和映射都不会生效。请停用一些插件或减少映射响应体。")
+    }
+
     /// The debug mappings' plugin as the profile may carry it: one that decrypts a domain only after the HTTPS
     /// decryption confirmation (`DecryptionConsent.profilePlugin`).
     private static func mappingsPlugin(_ mappings: DebugMappings) -> String? {
@@ -1572,8 +1586,10 @@ final class TunnelController {
     /// its own limit or, with the enabled plugins, over the engine's decryption budget. An editor sheet calls it
     /// before it closes, so the reason shows in the sheet.
     func checkDebugMappingsBudget(_ next: DebugMappings) throws {
-        let imported = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL))?.enabledBytes ?? 0
-        try next.checkBudget(replacing: debugMappings, importedBytes: imported)
+        // Only the plugins handed over now: with the switch off, turning it on checks the mappings in turn
+        // (`PluginsModel.setMasterEnabled`).
+        let library = (try? MitmPluginLibrary.load(from: MitmPluginLibrary.defaultURL)) ?? MitmPluginLibrary()
+        try next.checkBudget(replacing: debugMappings, importedBytes: EngineBudget.decryptionBytes(library.activeTexts))
     }
 
     /// Saves the Map Local / Map Remote entries and puts their plugin in the saved profile; a running tunnel

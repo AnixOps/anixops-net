@@ -193,6 +193,32 @@ final class TrafficRedirectsTests: XCTestCase {
         XCTAssertNil(redirected.withoutSecret().redirects)
     }
 
+    /// The editor's ports and protocol wrap a typed logical rule in one more `AND`: a rule already at the engine's
+    /// depth is refused with them instead of being saved as an entry the tunnel skips.
+    func testAddingChecksTheWholeLineAsTheEngineReadsIt() throws {
+        var condition = "(DOMAIN,a.com)"
+        for _ in 1..<8 {
+            condition = "(NOT,(\(condition)))"
+        }
+        let deepest = "NOT,(\(condition))"
+        let plain = try TrafficRedirects().adding(source: deepest, ports: "", network: .any, target: "10.8.0.5")
+        XCTAssertEqual(plain.invalidEntries, [])
+        XCTAssertEqual(plain.lines.count, 1)
+        XCTAssertThrowsError(try TrafficRedirects().adding(source: deepest, ports: "443", network: .any, target: "10.8.0.5")) {
+            XCTAssertEqual($0 as? TrafficRedirectsError, .invalidSource)
+        }
+        XCTAssertThrowsError(try TrafficRedirects().adding(source: deepest, ports: "", network: .udp, target: "10.8.0.5")) {
+            XCTAssertEqual($0 as? TrafficRedirectsError, .invalidSource)
+        }
+    }
+
+    /// Spaces before a suffix's leading dot are trimmed first, as the engine does.
+    func testSuffixesAreTrimmedBeforeTheirLeadingDots() throws {
+        XCTAssertTrue(TrafficRedirects.isValidLine("DOMAIN-SUFFIX, .example.com,10.8.0.5"))
+        XCTAssertTrue(TrafficRedirects.isValidLine("AND,((DOMAIN-SUFFIX, .example.com),(DST-PORT,443)),10.8.0.5"))
+        XCTAssertNoThrow(try TrafficRedirects.match(source: "DOMAIN-SUFFIX, .example.com", ports: "", network: .any))
+    }
+
     func testConnectionsShowTheRewrite() throws {
         let json = #"{"id":1,"network":"udp","host":null,"destination":"203.0.113.10:7000","redirect":{"destination":"10.8.0.5:7000","rule":"IP-CIDR,203.0.113.10/32,10.8.0.5"},"rule":"FINAL","chain":["DIRECT"],"outbound":"DIRECT","started_at_ms":1700000000000,"ended_at_ms":null,"upload":0,"download":0,"error":null}"#
         let connection = try JSONDecoder().decode(RuntimeControl.Connection.self, from: Data(json.utf8))

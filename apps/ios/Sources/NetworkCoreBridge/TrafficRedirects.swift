@@ -86,6 +86,11 @@ public struct TrafficRedirects: Codable, Equatable {
     ) throws -> TrafficRedirects {
         let match = try Self.match(source: source, ports: ports, network: network)
         let target = try Self.target(target)
+        // A typed logical rule with ports or a protocol goes one level deeper inside `AND`; the whole line is checked
+        // as the engine reads it, so one over its depth is refused here rather than saved as invalid.
+        guard Self.isValidLine(Entry(match: match, target: target).line) else {
+            throw TrafficRedirectsError.invalidSource
+        }
         var copy = self
         if let old, let index = copy.entries.firstIndex(where: { $0.id == old }) {
             copy.entries[index].match = match
@@ -323,7 +328,8 @@ public struct TrafficRedirects: Codable, Equatable {
         case "DOMAIN", "DOMAIN-KEYWORD":
             valid = isRuleDomain(value)
         case "DOMAIN-SUFFIX":
-            valid = isRuleDomain(String(raw.drop { $0 == "." }).trimmingCharacters(in: .whitespaces))
+            // Trimmed before the leading dots go, as the engine does (`DOMAIN-SUFFIX, .example.com` is taken).
+            valid = isRuleDomain(String(value.drop { $0 == "." }).trimmingCharacters(in: .whitespaces))
         case "DOMAIN-WILDCARD":
             let pattern = normalizedRuleDomain(value)
             valid = pattern.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "-._*?".contains($0)) }

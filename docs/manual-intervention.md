@@ -596,3 +596,32 @@ iOS、macOS 的“向订阅服务商报告连接质量”改为设置开关、�
     `pinned_certificate_sha256`；iOS 会自动更新的订阅组在打开 App 后更新时间变为当前时间。
 - [ ] 内核对“`insecure` 且没有固定”的节点只经 `tracing` 记一条警告，客户端目前没有安装 tracing subscriber，看不到这条警告；
   节点详情里标出“未验证服务器证书”的节点留作后续。
+
+## iOS / macOS 引擎配置 64 KiB 上限（1.0.0 后续，需要改内核）
+
+iOS / macOS 的隧道扩展把整份 JSON 配置一次交给内核 `networkcore_ios_runtime_init`，内核 1c14184 在
+`crates/engine-embedded/src/ffi.rs` 里限定 `MAX_CONFIG_LEN = 64 * 1024`，超出就拒绝整份配置。插件原文、调试映射生成的插件
+（Map Local 响应体按 Base64 内联）和订阅规则都在这份配置里，所以实际可用的远小于 App 允许的 8 MB 解密总量和 4 MB 映射上限：
+
+- 一个常见的去广告插件（约 68–450 KB）单独就超出，HTTPS 解密在连接时被关闭；
+- 一条超过约 46 KB 的 Map Local 响应体同样会让解密关闭；
+- 订阅里超过约 1,500 条内联规则时规则不生效，隧道只用选中的节点。
+
+1.0.0 的客户端已经做到不静默失败：扩展先测量（`EngineBudget`），按脚本、HTTPS 解密、规则的顺序去掉超出的部分，请求页和规则页
+说明原因；插件页和映射页在已启用插件加映射已经放不进 64 KiB 时直接提示“连接时 HTTPS 解密会被关闭”。但功能本身受限，
+需要内核改动后才能解决（客户端不能单方面放宽，`EngineBudget.maxConfigBytes` 必须与内核一致）：
+
+- [ ] 内核（networkcore_anixops，engine-embedded）：二选一，由维护者决定——
+  - 提高 `MAX_CONFIG_LEN`（`networkcore_ios_runtime_init`、`networkcore_ios_measure_delay`、`networkcore_ios_checkup` 三处检查都用它），
+    同时确认 Network Extension 的内存上限（iOS 约 50 MB）下解析数 MB JSON 的峰值内存；或
+  - 像脚本（`script_assets`）一样，把 `mitm.plugins` 和 `routing` 改为由扩展写入文件、配置里只传路径，内核读文件时仍按
+    `MAX_POLICY_BYTES`（8 MB）等各自上限检查。
+- [ ] 内核合并后，本仓库在同一个 commit 里：升级 `Cargo.toml` 固定的内核 rev；按新上限改
+  `apps/ios/Sources/NetworkCoreBridge/EngineBudget.swift` 的 `maxConfigBytes`（改为文件方式时，改为只测量仍内联的部分）；
+  更新 `EngineBudgetTests`、`apps/ios/README.md` 的 “Engine budgets” 一节、插件页 / 映射页的 64 KB 提示文案
+  （`TunnelController.decryptionExceedsConfigWarning`，Localizable.xcstrings 里的英文和繁体同步改）和发布说明。
+- [ ] 真机验收（改内核后）：iOS 与 macOS 各导入一个 100 KB 以上的去广告插件并打开 HTTPS 解密，连接后请求页不再显示
+  “合计超出了隧道配置的上限”，插件的重写生效；保存一条 200 KB 的 Map Local 响应体，命中时返回该内容；导入含 3,000 条以上内联
+  规则的订阅，规则页不再提示“规则没有生效”，开发者诊断的扩展事件里没有 `config too large`。
+- [ ] 改内核前的 1.0.0 真机确认：启用一个 100 KB 的插件，插件页和映射页显示 64 KB 提示；连接后请求页显示
+  “HTTPS 解密没有生效：……超出了隧道配置的上限”，VPN 正常连接、其余规则生效。

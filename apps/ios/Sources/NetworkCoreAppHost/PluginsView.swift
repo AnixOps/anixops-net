@@ -78,7 +78,14 @@ struct PluginsSection: View {
         } header: {
             Text("插件")
         } footer: {
-            Text(model.footer)
+            VStack(alignment: .leading, spacing: 4) {
+                // Within the 8 MB decryption budget but over the engine config this version takes.
+                if tunnel.decryptionExceedsConfig(with: model.library) {
+                    Text(TunnelController.decryptionExceedsConfigWarning)
+                        .foregroundStyle(brand.warning)
+                }
+                Text(model.footer)
+            }
         }
         .fileImporter(isPresented: $importingFile, allowedContentTypes: PluginsModel.contentTypes) { result in
             Task { await model.importFile(result, tunnel: tunnel) }

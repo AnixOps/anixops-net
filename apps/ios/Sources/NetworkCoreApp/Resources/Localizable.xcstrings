@@ -14727,6 +14727,22 @@
         }
       }
     },
+    "已启用的插件和调试映射合计超过 64 KB，超出本版本隧道配置的上限：连接时 HTTPS 解密会被关闭，插件和映射都不会生效。请停用一些插件或减少映射响应体。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enabled plugins and debug mappings exceed 64 KB in total, over this version's tunnel configuration limit: HTTPS decryption will be turned off when you connect, and neither plugins nor mappings will apply. Turn off some plugins or shrink mapping response bodies."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已啟用的外掛和除錯對應合計超過 64 KB，超出本版本隧道設定的上限：連線時 HTTPS 解密會被關閉，外掛和對應都不會生效。請停用一些外掛或減少對應回應內文。"
+          }
+        }
+      }
+    },
     "映射和已启用的插件合计超过 8 MB。请减少映射响应体或停用一些插件。": {
       "localizations": {
         "en": {

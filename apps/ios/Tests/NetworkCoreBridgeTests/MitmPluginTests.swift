@@ -94,9 +94,19 @@ final class MitmPluginTests: XCTestCase {
         try library.setEnabled(true, for: second.id)
         XCTAssertEqual(library.enabledBytes, 2 * body.utf8.count)
 
-        // A library an earlier version left over the budget can still be turned off.
-        var over = library
-        over.plugins.append(try MitmPlugin(text: body))
+        // A library an earlier version left over the budget can still be turned off. `plugins` has a private
+        // setter, so the third enabled plugin goes in through the saved JSON, as such a library would load.
+        var saved = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(library)) as? [String: Any]
+        )
+        let third = try JSONSerialization.jsonObject(with: JSONEncoder().encode(MitmPlugin(text: body)))
+        saved["plugins"] = (saved["plugins"] as? [Any] ?? []) + [third]
+        var over = try JSONDecoder().decode(
+            MitmPluginLibrary.self,
+            from: JSONSerialization.data(withJSONObject: saved)
+        )
+        XCTAssertEqual(over.plugins.count, 3)
+        XCTAssertEqual(over.enabledBytes, 3 * body.utf8.count)
         XCTAssertThrowsError(try over.checkBudget())
         XCTAssertNoThrow(try over.setEnabled(false, for: first.id, reserving: mappings))
         XCTAssertFalse(over.plugins[0].isEnabled)

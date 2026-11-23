@@ -46,6 +46,24 @@ final class EngineBudgetTests: XCTestCase {
         }
     }
 
+    /// Plugins within the 8 MB decryption budget but over the config limit as JSON strings are flagged before
+    /// connecting; escaping counts, since the config carries the texts escaped.
+    func testDecryptionThatCannotFitTheConfigIsFlagged() {
+        XCTAssertFalse(EngineBudget.decryptionExceedsConfig([]))
+        XCTAssertFalse(EngineBudget.decryptionExceedsConfig(["[MITM]\nhostname = a.example\n"]))
+        let half = String(repeating: "a", count: EngineBudget.maxConfigBytes / 2)
+        XCTAssertFalse(EngineBudget.decryptionExceedsConfig([half, String(half.dropLast(8))]))
+        XCTAssertTrue(EngineBudget.decryptionExceedsConfig([half, half, "a"]))
+        // Raw bytes within the limit, but each line break is two bytes in JSON.
+        let lines = String(repeating: "\n", count: EngineBudget.maxConfigBytes / 2 + 1)
+        XCTAssertLessThanOrEqual(EngineBudget.decryptionBytes([lines]), EngineBudget.maxConfigBytes)
+        XCTAssertTrue(EngineBudget.decryptionExceedsConfig([lines]))
+        // A 100 KB ad-block plugin is far within the decryption budget and still cannot fit.
+        let adBlock = "[Rule]\n" + String(repeating: "DOMAIN-SUFFIX,ads.example.com,REJECT\n", count: 2800)
+        XCTAssertNoThrow(try EngineBudget.checkDecryption([adBlock]))
+        XCTAssertTrue(EngineBudget.decryptionExceedsConfig([adBlock]))
+    }
+
     func testHttpsDecryptionStateSaysTooLargeAndToleratesUnknownReasons() throws {
         let tooLarge = HttpsDecryptionState(status: .off, reason: .tooLarge, plugins: 3, bytes: 70_000)
         XCTAssertEqual(HttpsDecryptionState.decoded(from: tooLarge.encoded()), tooLarge)

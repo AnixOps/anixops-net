@@ -135,8 +135,10 @@ System Settings) follows the saved profile. Firefox keeps its own certificate li
 The same tab imports Loon plugins from a file, the clipboard or an `https` address the user types (D4: remote
 import only on the user's request; downloads are capped and a redirect to plain HTTP is refused).
 `MitmPluginLibrary` keeps them in the app's Application Support folder with a master "HTTPS 解密" switch, which
-turns on only once the root is trusted. The enabled plugin texts (up to 8 MiB each and 8 MiB together, the debug
-mappings' generated plugin included; see "Engine budgets") go into the tunnel profile under
+turns on only once the root is trusted. The enabled plugin texts go into the tunnel profile (the app accepts up to
+8 MiB each and 8 MiB together, the debug mappings' generated plugin included, but with the kernel this version pins
+the whole engine config, plugins included, must fit in 64 KiB, so in practice decryption works only while the enabled
+plugins and mappings stay well under 64 KiB; see "Engine budgets") under
 `TunnelProfileKeys.mitmPlugins`, zlib-compressed like the scripts (`ProfileCompression`); the extension adds the root from the Keychain and passes both to the runtime as
 the config's `mitm` section, where `mitm_policy::loon_plugin` translates and merges them (see
 `crates/engine-embedded/README.md`). The root key never enters the profile. If the root is missing or the runtime
@@ -170,6 +172,22 @@ order (the user's rule lists, the user's GEOIP / IP-ASN data lists, lists only t
 then the subscription's own), and the rules page names what was left out. The app checks the 8 MiB decryption budget
 when a plugin is added or enabled and when debug mappings grow (the mappings' plugin, with its Base64 bodies, at most
 4 MiB); turning things off or removing them is always allowed.
+
+**The 64 KiB config limit is the one that applies on iOS / macOS for now.** The plugin texts, the debug mappings'
+Base64 bodies and the routing section's rules all travel inline in the one JSON config, so a single common ad-block
+plugin (roughly 68–450 KB), one captured Map Local body over about 46 KB, or a subscription with more than about
+1,500 inline rules is over it, although each is far within the 8 MiB and 4 MiB budgets above. The plugins and mappings
+pages warn as soon as the enabled plugins and the mappings' plugin cannot fit
+(`EngineBudget.decryptionExceedsConfig`, measured as the JSON strings the config carries); a set just under 64 KiB can
+still miss once the node, the rules and the root are added, which the requests page reports after connecting. Raising
+the limit needs a kernel change (raise `MAX_CONFIG_LEN` in engine-embedded `ffi.rs`, or pass the decryption and
+routing sections as files like the scripts); it is tracked in `docs/manual-intervention.md` ("iOS / macOS 引擎配置
+64 KiB 上限"), and `EngineBudget.maxConfigBytes` changes in the same commit as the kernel rev.
+
+A local-rules change on a running tunnel is checked against 64 KiB without the decryption section
+(`next.withoutMitm()`), because the rules are swapped in place and the decryption section is not handed over again.
+A decrypting tunnel can therefore keep running with rules and decryption that together are over the limit; the next
+start measures the whole config again and leaves decryption out, with the reason on the requests page.
 
 ## URL scheme
 

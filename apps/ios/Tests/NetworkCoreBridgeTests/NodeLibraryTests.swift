@@ -268,7 +268,12 @@ final class NodeLibraryTests: XCTestCase {
         XCTAssertEqual(home.displayMembers, ["Auto", "DIRECT", "b"])
         XCTAssertEqual(report.routing?.groups.last?.evaluateBeforeUse, true)
 
-        let library = NodeLibrary(report: report, subscriptionURL: "https://s.example/x", keeping: nil)
+        let library = NodeLibrary(
+            report: report,
+            subscriptionURL: "https://s.example/x",
+            keeping: nil,
+            at: Date(timeIntervalSince1970: 1_700_000_000)
+        )
         XCTAssertEqual(library.selection(in: home), "Auto")
         XCTAssertFalse(library.predatesNetworkRules)
         // Named only by the subnet group's rules: deleting it would leave a rule pointing at nothing.
@@ -295,7 +300,12 @@ final class NodeLibraryTests: XCTestCase {
     /// subscription is imported again, and a library without such a group is not.
     func testLibrariesSavedBeforeNetworkRulesLoadAndAreFlagged() throws {
         let report = try NativeImportReport.decoded(from: Data(networkGroupsReport.utf8))
-        let library = NodeLibrary(report: report, subscriptionURL: "https://s.example/x", keeping: nil)
+        let library = NodeLibrary(
+            report: report,
+            subscriptionURL: "https://s.example/x",
+            keeping: nil,
+            at: Date(timeIntervalSince1970: 1_700_000_000)
+        )
         var saved = try XCTUnwrap(
             JSONSerialization.jsonObject(with: Data(library.keychainValue().utf8)) as? [String: Any]
         )
