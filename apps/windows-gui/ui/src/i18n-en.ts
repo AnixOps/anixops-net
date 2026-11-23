@@ -342,6 +342,8 @@ export const english: Record<string, string> = {
   "关于": "About",
   "用户协议、禁止用途与免责声明，版本 {version}": "User agreement, prohibited uses and disclaimer, version {version}",
   "查看": "View",
+  "查看用户协议": "View User Agreement",
+  "查看隐私政策": "View Privacy Policy",
   "已关闭手机抓包。记得把手机的 Wi-Fi 代理改回关闭。": "Phone debugging is off. Remember to turn the Wi-Fi proxy off on the phone.",
   "端口要在 1024 到 65535 之间。": "The port must be between 1024 and 65535.",
   "手机抓包已开启。用手机扫码打开设置页。": "Phone debugging is on. Scan the code with the phone to open the setup page.",

@@ -129,10 +129,10 @@ function AboutCard() {
   return (
     <Card title={t("关于")}>
       <Row icon={ScrollText} color="gray" label={t("用户协议")} hint={t("用户协议、禁止用途与免责声明，版本 {version}", { version: termsVersion })}>
-        <button className="secondary compact" onClick={() => setReading(true)}>{t("查看")}</button>
+        <button className="secondary compact" aria-label={t("查看用户协议")} onClick={() => setReading(true)}>{t("查看")}</button>
       </Row>
       <Row icon={ShieldCheck} color="green" label={t("隐私政策")} hint={t("我们收集什么、数据保存在哪里、如何删除")}>
-        <button className="secondary compact" onClick={() => setReadingPrivacy(true)}>{t("查看")}</button>
+        <button className="secondary compact" aria-label={t("查看隐私政策")} onClick={() => setReadingPrivacy(true)}>{t("查看")}</button>
       </Row>
       {reading && <TermsViewer onClose={() => setReading(false)} />}
       {readingPrivacy && <PrivacyViewer onClose={() => setReadingPrivacy(false)} />}

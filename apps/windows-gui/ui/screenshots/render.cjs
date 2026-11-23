@@ -73,8 +73,8 @@ const shots = [
   // Dialogs, menus and pop-up lists, in both themes: an overlay has to stand apart from the window under it.
   { name: "terms-first-light", mode: "proxy", theme: "light", storage: { "anixops.terms-accepted": null }, dialog: true, size: LAPTOP },
   { name: "terms-first-dark", mode: "proxy", theme: "dark", storage: { "anixops.terms-accepted": null }, dialog: true, size: LAPTOP },
-  { name: "terms-viewer-light", mode: "proxy", theme: "light", nav: "设置", size: LAPTOP, steps: async (page) => { await page.getByRole("button", { name: "查看", exact: true }).click(); } },
-  { name: "terms-viewer-dark", mode: "proxy", theme: "dark", nav: "设置", size: LAPTOP, steps: async (page) => { await page.getByRole("button", { name: "查看", exact: true }).click(); } },
+  { name: "terms-viewer-light", mode: "proxy", theme: "light", nav: "设置", size: LAPTOP, steps: async (page) => { await page.getByRole("button", { name: "查看用户协议", exact: true }).click(); } },
+  { name: "terms-viewer-dark", mode: "proxy", theme: "dark", nav: "设置", size: LAPTOP, steps: async (page) => { await page.getByRole("button", { name: "查看用户协议", exact: true }).click(); } },
   { name: "decryption-consent-light", mode: "proxy", theme: "light", nav: "扩展", size: LAPTOP, storage: { "anixops.https-decryption-consent": null }, steps: async (page) => { await toggle(page, "解密 HTTPS 流量").click(); } },
   { name: "decryption-consent-dark", mode: "proxy", theme: "dark", nav: "扩展", size: LAPTOP, storage: { "anixops.https-decryption-consent": null }, steps: async (page) => { await toggle(page, "解密 HTTPS 流量").click(); } },
   { name: "debug-menu-capture-light", mode: "debug", theme: "light", nav: "请求", size: LAPTOP, steps: async (page) => { await open(page, page.getByRole("button", { name: "更多抓包操作" }), '[role="menu"]'); } },
