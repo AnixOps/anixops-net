@@ -6,8 +6,12 @@
 //! `PROXY` is the selected node, or with subscription rules the subscription's first policy group. Without any node
 //! (debug mode's direct egress) `PROXY` lines go direct.
 //!
+//! In the direct routing mode the engine runs in its own direct mode and follows no rules, these lines included
+//! (debug mode's node-less direct egress is not that mode: its lines still apply).
+//!
 //! Rule lists the user imports are `RULE-SET,<https URL>,<policy>` lines: the engine downloads each list itself,
-//! through `PROXY`, once a day. `GEOSITE,cn` and `GEOIP,CN` use the built-in public lists ([`crate::catalog`]) unless
+//! through `PROXY`, once a day, and keeps the last good download in the client's cache folder
+//! ([`with_rule_set_cache`]) so a restart starts with it. `GEOSITE,cn` and `GEOIP,CN` use the built-in public lists ([`crate::catalog`]) unless
 //! the profile has its own set of that name; other categories need a set of that name in the subscription.
 
 use std::fs;
@@ -396,6 +400,36 @@ pub fn save(path: &Path, text: &str) -> Result<Vec<String>, String> {
     Ok(lines)
 }
 
+/// The folder name, under a client's own data folder, the engine keeps the remote rule sets' downloads in
+/// ([`with_rule_set_cache`]).
+pub const RULE_SET_CACHE_DIR: &str = "rule-sets";
+
+/// Longest cache folder path the engine takes (`routing.rule_set_cache_dir`), in bytes.
+const MAX_CACHE_DIR_BYTES: usize = 4096;
+
+/// `envelope` with `routing.rule_set_cache_dir` set to `dir`, so the engine starts each remote rule set with its
+/// last good download instead of empty and keeps it while downloads fail. An envelope without routing has no rule
+/// sets and stays as it is. So does any envelope when `dir` is not an absolute UTF-8 path within the engine's
+/// limit: the engine refuses the whole configuration for such a path, and running without the cache only means
+/// downloading the lists again.
+pub fn with_rule_set_cache(envelope: &str, dir: &Path) -> Result<String, String> {
+    let Some(dir) = dir
+        .to_str()
+        .filter(|text| dir.is_absolute() && text.len() <= MAX_CACHE_DIR_BYTES)
+    else {
+        return Ok(envelope.to_string());
+    };
+    let mut value: Value = serde_json::from_str(envelope).map_err(|error| error.to_string())?;
+    let Some(routing) = value.get_mut("routing").and_then(Value::as_object_mut) else {
+        return Ok(envelope.to_string());
+    };
+    routing.insert(
+        "rule_set_cache_dir".to_string(),
+        Value::String(dir.to_string()),
+    );
+    serde_json::to_string(&value).map_err(|error| error.to_string())
+}
+
 /// The routing rules of `envelope`, for the engine's `reload_rules` while it runs.
 pub fn rules_of(envelope: &str) -> Option<Vec<String>> {
     let value: Value = serde_json::from_str(envelope).ok()?;
@@ -410,6 +444,33 @@ pub fn rules_of(envelope: &str) -> Option<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_rule_set_cache_goes_into_routing_only() {
+        // Only an absolute path is needed: the folder is written into the envelope, never created here.
+        let dir = std::env::temp_dir().join(RULE_SET_CACHE_DIR);
+        let routed = r#"{"mode":"direct","routing":{"outbounds":{"proxy":{"type":"trojan"}},"rules":["FINAL,DIRECT"]}}"#;
+        let value: Value =
+            serde_json::from_str(&with_rule_set_cache(routed, &dir).unwrap()).unwrap();
+        assert_eq!(
+            value["routing"]["rule_set_cache_dir"],
+            json!(dir.to_str().unwrap())
+        );
+        // Everything else stays, the direct mode among it.
+        assert_eq!(value["mode"], "direct");
+        assert_eq!(value["routing"]["rules"], json!(["FINAL,DIRECT"]));
+
+        // A single-node envelope has no rule sets to keep.
+        let single = r#"{"outbound":{"type":"trojan"}}"#;
+        assert_eq!(with_rule_set_cache(single, &dir).unwrap(), single);
+
+        // The engine refuses a relative folder for the whole configuration, so none is written.
+        assert_eq!(
+            with_rule_set_cache(routed, Path::new("rule-sets")).unwrap(),
+            routed
+        );
+        assert!(with_rule_set_cache("not json", &dir).is_err());
+    }
 
     #[test]
     fn parses_lines_and_skips_comments() {

@@ -47,7 +47,7 @@
 | 手动添加 / 编辑节点 | ✅ | ✅ | ✅ | ✅ | ✅ | 添加 = 粘贴分享链接导入；编辑名称、服务器、端口和删除节点只改本机，更新订阅后恢复，与 iOS 相同（`crates/node-edits`，T5）。策略组或规则用到的节点和最后一个节点不能删；iOS / macOS 还不能删其他节点经它连接的前置节点（`via`），桌面与 Android 的 `crates/node-edits` 暂未检查这一项 |
 | 扫码导入 | ✅ | — | — | — | ✅ | Android：订阅页“扫码”用相机读订阅或分享链接二维码，填进链接框后点“导入”（CameraX + ZXing，T5） |
 | 分流模式（规则 / 全局 / 直连；不带预设分流模式，见 [no-presets.md](no-presets.md)） | ✅ | ✅ | ✅ | ✅ | ✅ | |
-| 我的规则（规则文本编辑、连接中原地换规则） | ✅ | ✅ | ◐ | ◐ | ◐ | 内核 `reload_rules`（T2）。桌面与 Android 用 `RULE-SET,https://…,策略` 导入规则集（经 PROXY 每天下载），GEOSITE,cn / GEOIP,CN 用内置公开列表，其他 GEOSITE 分类要订阅自带同名规则集；Windows TUN 模式下次连接生效 |
+| 我的规则（规则文本编辑、连接中原地换规则） | ✅ | ✅ | ◐ | ◐ | ◐ | 内核 `reload_rules`（T2）。桌面与 Android 用 `RULE-SET,https://…,策略` 导入规则集（经 PROXY 每天下载，上次成功下载的内容保存在本机，重启后直接使用），GEOSITE,cn / GEOIP,CN 用内置公开列表，其他 GEOSITE 分类要订阅自带同名规则集；Windows TUN 模式下次连接生效 |
 | 规则测试、规则命中次数、GeoIP / ASN 数据（按 URL 添加，缺数据逐条显示） | ✅ | ✅ | ✅ | ✅ | ✅ | 内核 `test_route`、`rule_hits`、`rule_sets.missing`。PROCESS-NAME 只在 Windows 和 Linux 的 TUN 生效，iOS、macOS、Android 在规则页提示不生效 |
 | SRC-PORT、HOSTNAME-TYPE、SUBNET、PROTOCOL STUN / DOH / DOQ 规则，FINAL dns-failed | ✅ | ✅ | ✅ | ✅ | ✅ | 内核 networkcore #259。SUBNET 按客户端上报的网络（`set_network`）匹配，iOS / macOS 读不到 Wi-Fi 名 |
 | CELLULAR-RADIO 规则 | ✅ | — | — | — | — | iOS 隧道上报蜂窝制式（Core Telephony）；macOS、Android 在规则页提示不生效 |

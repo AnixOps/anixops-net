@@ -625,6 +625,11 @@ export interface SubscriptionSummary {
   updateIntervalHours: number;
   /** A link that can be downloaded again, not a file or pasted links. */
   refreshable: boolean;
+  /**
+   * Its saved nodes were imported by an earlier version, which left the subscription's certificate pins out;
+   * they apply once it is updated or imported again. Absent where every start imports the saved content again.
+   */
+  needsReimport?: boolean;
 }
 
 /** Crash reports, the local metrics endpoint, the install check and the cold start (`health_status`). */

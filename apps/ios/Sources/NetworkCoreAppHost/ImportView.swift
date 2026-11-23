@@ -22,7 +22,7 @@ struct ImportView: View {
 
     /// CI screenshots open this sheet with `-AnixOpsImport YES` (mac-screenshots.sh). macOS makes the empty editor
     /// first responder, and its caret fades in and out, so the picture differed from run to run (mac-import-*:
-    /// 26 px). There the editor is left out of focus, as the command palette's search field is.
+    /// 26 px). There the editor is not shown at all (only its placeholder), so nothing can take focus.
     private static var shownForScreenshot: Bool {
         #if DEBUG && os(macOS)
         UserDefaults.standard.bool(forKey: "AnixOpsImport")
@@ -176,16 +176,20 @@ struct ImportView: View {
                                 .padding(.vertical, 16)
                                 .accessibilityHidden(true)
                         }
-                        TextEditor(text: $text)
-                            .font(.footnote.monospaced())
-                            #if os(iOS)
-                            .textInputAutocapitalization(.never)
-                            #endif
-                            .autocorrectionDisabled()
-                            .scrollContentBackground(.hidden)
-                            .padding(8)
-                            .accessibilityLabel("节点链接或配置")
-                            .disabled(Self.shownForScreenshot)
+                        if Self.shownForScreenshot {
+                            // A disabled TextEditor still became first responder on macOS and drew its caret.
+                            Color.clear
+                        } else {
+                            TextEditor(text: $text)
+                                .font(.footnote.monospaced())
+                                #if os(iOS)
+                                .textInputAutocapitalization(.never)
+                                #endif
+                                .autocorrectionDisabled()
+                                .scrollContentBackground(.hidden)
+                                .padding(8)
+                                .accessibilityLabel("节点链接或配置")
+                        }
                     }
                     .frame(height: 140)
                     .background(brand.surface, in: RoundedRectangle(cornerRadius: BrandRadius.card, style: .continuous))

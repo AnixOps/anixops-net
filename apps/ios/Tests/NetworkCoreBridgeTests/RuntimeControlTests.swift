@@ -194,5 +194,32 @@ final class ProxyModeTests: XCTestCase {
         let routing = EmbeddedRuntimeConfig.Routing(outbounds: ["a": [:]], rules: ["FINAL,a"], groups: [], global: "a")
         let routed = try XCTUnwrap(JSONSerialization.jsonObject(with: profile.config.withRouting(routing).encoded()) as? [String: Any])
         XCTAssertEqual((routed["routing"] as? [String: Any])?["global"] as? String, "a")
+        XCTAssertNil((routed["routing"] as? [String: Any])?["rule_set_cache_dir"])
+    }
+
+    func testRuleSetCacheGoesIntoRoutingAsAnAbsolutePath() throws {
+        let profile = try TunnelProfile(
+            node: try JSONDecoder().decode(NativeImportReport.Node.self, from: Data(
+                #"{"id":"a","name":"A","protocol":"trojan","server":"a.example","port":443,"outbound":{"type":"trojan","server":"a.example","port":443,"password":"p"}}"#.utf8
+            )),
+            profileID: "default"
+        )
+        let routing = EmbeddedRuntimeConfig.Routing(outbounds: ["a": [:]], rules: ["FINAL,a"], groups: [], global: "a")
+        let cached = profile.config.withRouting(routing).withRuleSetCache("/var/mobile/Library/Application Support/rule-sets")
+        let routed = try XCTUnwrap(JSONSerialization.jsonObject(with: cached.encoded()) as? [String: Any])
+        XCTAssertEqual(
+            (routed["routing"] as? [String: Any])?["rule_set_cache_dir"] as? String,
+            "/var/mobile/Library/Application Support/rule-sets"
+        )
+        // A rule line change still reloads in place: both configs carry the same folder.
+        var edited = routing
+        edited.rules = ["DOMAIN,a.example,DIRECT", "FINAL,a"]
+        let next = profile.config.withRouting(edited).withRuleSetCache("/var/mobile/Library/Application Support/rule-sets")
+        XCTAssertEqual(cached.reloadableRules(to: next), edited.rules)
+
+        // The engine refuses the whole config for a relative folder, so none is written; nor without routing.
+        XCTAssertNil(profile.config.withRouting(routing).withRuleSetCache("rule-sets").routing?.ruleSetCacheDir)
+        XCTAssertNil(profile.config.withRouting(routing).withRuleSetCache(nil).routing?.ruleSetCacheDir)
+        XCTAssertNil(profile.config.withRuleSetCache("/tmp/rule-sets").routing)
     }
 }

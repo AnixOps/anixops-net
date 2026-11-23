@@ -45,14 +45,35 @@ impl OtherSource {
     }
 }
 
+/// The importer revision a cache is written with. Revision 1 is the first whose outbounds carry the
+/// subscription's certificate pins (`pinned_certificate_sha256` / `pinned_public_key_sha256`); a cache an
+/// earlier version wrote has no revision file, and its nodes run without the pins until the subscription is
+/// imported again.
+pub const IMPORT_REVISION: &str = "1";
+
 fn cache_path(directory: &Path, source_id: &str) -> PathBuf {
     directory.join(format!("{source_id}.json"))
+}
+
+fn revision_path(directory: &Path, source_id: &str) -> PathBuf {
+    directory.join(format!("{source_id}.revision"))
 }
 
 pub fn write_cache(directory: &Path, source_id: &str, nodes: &[CachedNode]) -> Result<(), String> {
     fs::create_dir_all(directory).map_err(|error| error.to_string())?;
     let content = serde_json::to_string(nodes).map_err(|error| error.to_string())?;
-    fs::write(cache_path(directory, source_id), content).map_err(|error| error.to_string())
+    fs::write(cache_path(directory, source_id), content).map_err(|error| error.to_string())?;
+    fs::write(revision_path(directory, source_id), IMPORT_REVISION)
+        .map_err(|error| error.to_string())
+}
+
+/// Whether the cached nodes of `source_id` were imported by a version that left the subscription's certificate
+/// pins out, so the subscription needs updating (or importing again) before they apply. No cache is nothing to
+/// update.
+pub fn predates_certificate_pins(directory: &Path, source_id: &str) -> bool {
+    cache_path(directory, source_id).is_file()
+        && !fs::read_to_string(revision_path(directory, source_id))
+            .is_ok_and(|revision| revision.trim() == IMPORT_REVISION)
 }
 
 pub fn read_cache(directory: &Path, source_id: &str) -> Option<Vec<CachedNode>> {
@@ -62,6 +83,7 @@ pub fn read_cache(directory: &Path, source_id: &str) -> Option<Vec<CachedNode>> 
 
 pub fn remove_cache(directory: &Path, source_id: &str) {
     let _ = fs::remove_file(cache_path(directory, source_id));
+    let _ = fs::remove_file(revision_path(directory, source_id));
 }
 
 /// A profile that runs one cached node, for delay tests.
@@ -286,17 +308,25 @@ mod tests {
     fn caches_round_trip_and_build_delay_profiles() {
         let directory = std::env::temp_dir().join(format!("anixops-linked-{}", std::process::id()));
         let source = other("source-1", "One", &["fr"]);
+        assert!(!predates_certificate_pins(&directory, "source-1"));
         write_cache(&directory, "source-1", &source.nodes).unwrap();
         assert_eq!(
             read_cache(&directory, "source-1"),
             Some(source.nodes.clone())
         );
+        assert!(!predates_certificate_pins(&directory, "source-1"));
+        // A cache an earlier version wrote has no revision: its outbounds lack the certificate pins.
+        fs::remove_file(revision_path(&directory, "source-1")).unwrap();
+        assert!(predates_certificate_pins(&directory, "source-1"));
+        write_cache(&directory, "source-1", &source.nodes).unwrap();
+        assert!(!predates_certificate_pins(&directory, "source-1"));
         let profile: Value =
             serde_json::from_str(&node_profile("windows-tauri-profile", 1, &source.nodes[0]))
                 .unwrap();
         assert_eq!(profile["outbound"]["server"], "fr.example");
         remove_cache(&directory, "source-1");
         assert_eq!(read_cache(&directory, "source-1"), None);
+        assert!(!revision_path(&directory, "source-1").exists());
         let _ = fs::remove_dir_all(directory);
     }
 }

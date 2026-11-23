@@ -551,3 +551,34 @@ iOS、macOS 的“向订阅服务商报告连接质量”改为设置开关、�
   “走哪条路”一致，不一致时改文档。
 - [ ] 通知面板（anix-control）一侧：上报现在只在用户打开开关后才有，大多数客户端不再上报；macOS 客户端的 `platform`
   从原来误报的 `ios` 改为 `macos`，面板的字段校验需要接受 `macos`。
+
+## 内核 1c14184：直连模式 DNS、规则集本机缓存、证书固定、局域网共享防护（1.0.0）
+
+客户端固定的内核从 cce9d63 升到 1c14184（networkcore_anixops #265、#266）。CI 只跑单元测试，以下需要人工或真机：
+
+- [ ] anx 仓库的 Cargo.lock 内核与本仓库 `Cargo.toml` 固定的内核（1c14184）一致后，再触发 anx 的 ANX 构建和
+  `publish-client.yml`。本仓库的 `Cargo.lock` 是按内核 1c14184 的 `Cargo.toml` 手工改的（依赖与 443aea4 相同）（只有 `transport-tls` 新增
+  `ring`、`tracing` 两条依赖边，两者已在锁文件里）；CI 的 `--locked` 构建如果报锁文件需要更新，运行一次
+  `Refresh Cargo Lock` workflow。
+- [ ] 直连模式（五个平台）：选一个已失效的节点（例如改错端口），切到“直连”，DNS 保持默认，打开 TUN（Windows / Linux）
+  或连接 VPN（iOS / macOS / 安卓）：网页能正常打开，诊断或抓包里 DNS 查询直接发往 DNS 服务器，不经节点；开启 Fake-IP
+  （安卓、Windows TUN）后同样能打开。直连模式下“我的规则”（含拒绝规则）不再生效，与规则测试页“当前是直连模式，实际连接
+  不按规则分流”的提示一致。Windows 从旧版本升级后不需要重新切换模式：启动时按当前模式重写引擎配置。
+- [ ] 规则集本机缓存：添加一份 `RULE-SET,https://…,REJECT` 规则集并连接一次，等规则集页显示已更新；断开，断网或让列表
+  地址不可达（例如 hosts 指向 127.0.0.1），重新连接：规则立即生效，规则集页的条目数不是 0（下载失败照样显示）。缓存目录：
+  iOS / macOS 为隧道扩展自己的 Application Support 下的 `rule-sets`（macOS 系统扩展以 root 运行，在 root 的目录下），
+  安卓为 App 数据目录下的 `rule-sets`，Linux 为 `~/.config/anixops-net/rule-sets`，Windows 为
+  `%ProgramData%\AnixOps\NetworkCore\rule-sets`（数据目录的访问限制随之继承，普通用户不能写入）。目录里只有以摘要命名的文件，不含列表地址。
+- [ ] 证书固定：订阅里带 `pinSHA256`（Hysteria2）或 `pcs` 等固定的自签节点，`insecure=1`，在新版本重新导入后能连接；把固定
+  改成别的值后连接失败（握手被拒，服务端收不到密码）。
+- [ ] 证书固定升级迁移：旧版本导入的节点在出站里没有固定。
+  - 安卓、Linux、原生桌面：每次启动都由保存的订阅原文重新生成出站，升级后自动带上固定，无需操作。
+  - Windows：启动时用保存的订阅原文（`embedded\source.txt`）连同节点编辑重新导入当前订阅一次，之后写入
+    `embedded\import-revision`。其他订阅（作为“订阅·名称”策略组链接）的节点缓存没有原文，订阅列表里显示“由旧版本导入：更新后
+    证书固定才会生效”，切换到该订阅（会重新下载导入）或更新一次后消失；本地文件导入的显示“重新导入”。
+  - iOS / macOS：没有保存订阅原文。会自动更新的订阅组升级后立即更新一次；手动更新和粘贴导入的组在订阅列表里显示同样的提示，
+    需要用户更新或重新导入。单个粘贴的节点（不在任何订阅组里）无法识别，需要用户重新导入，发布说明里写明。
+  - 真机确认：从 0.3.0-beta.11 升级后，Windows 当前订阅的 `embedded\nodes.json` 里带固定的节点有
+    `pinned_certificate_sha256`；iOS 会自动更新的订阅组在打开 App 后更新时间变为当前时间。
+- [ ] 内核对“`insecure` 且没有固定”的节点只经 `tracing` 记一条警告，客户端目前没有安装 tracing subscriber，看不到这条警告；
+  节点详情里标出“未验证服务器证书”的节点留作后续。

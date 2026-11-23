@@ -21,6 +21,13 @@ public struct NodeLibrary: Codable, Equatable {
     /// What importing the subscription's rules left out (`NativeImportReport.routingWarnings`), shown on the rules
     /// page so a skipped rule never fails silently.
     public var routingWarnings: [String]
+    /// The importer revision the nodes come from (`currentImportRevision`); 0 for a library saved before revisions,
+    /// whose outbounds lack the subscription's certificate pins until it is updated or imported again.
+    public var importRevision: Int
+
+    /// Revision 1: outbounds carry the subscription's certificate pins (`pinned_certificate_sha256`,
+    /// `pinned_public_key_sha256`).
+    public static let currentImportRevision = 1
 
     enum CodingKeys: String, CodingKey {
         case subscriptionURL
@@ -31,6 +38,7 @@ public struct NodeLibrary: Codable, Equatable {
         case followsRules
         case groupSelections
         case routingWarnings
+        case importRevision
     }
 
     public init(
@@ -41,7 +49,8 @@ public struct NodeLibrary: Codable, Equatable {
         routing: NativeImportReport.Routing? = nil,
         followsRules: Bool = false,
         groupSelections: [String: String] = [:],
-        routingWarnings: [String] = []
+        routingWarnings: [String] = [],
+        importRevision: Int = NodeLibrary.currentImportRevision
     ) {
         self.subscriptionURL = subscriptionURL
         self.nodes = nodes
@@ -51,6 +60,7 @@ public struct NodeLibrary: Codable, Equatable {
         self.followsRules = followsRules
         self.groupSelections = groupSelections
         self.routingWarnings = routingWarnings
+        self.importRevision = importRevision
     }
 
     /// A library from a fresh report. The previous selection survives a refresh when that node is still listed;
@@ -69,7 +79,8 @@ public struct NodeLibrary: Codable, Equatable {
         )
     }
 
-    /// Libraries saved before rules existed have no routing fields.
+    /// Libraries saved before rules existed have no routing fields; those saved before import revisions are
+    /// revision 0.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
@@ -80,8 +91,14 @@ public struct NodeLibrary: Codable, Equatable {
             routing: try container.decodeIfPresent(NativeImportReport.Routing.self, forKey: .routing),
             followsRules: try container.decodeIfPresent(Bool.self, forKey: .followsRules) ?? false,
             groupSelections: try container.decodeIfPresent([String: String].self, forKey: .groupSelections) ?? [:],
-            routingWarnings: try container.decodeIfPresent([String].self, forKey: .routingWarnings) ?? []
+            routingWarnings: try container.decodeIfPresent([String].self, forKey: .routingWarnings) ?? [],
+            importRevision: try container.decodeIfPresent(Int.self, forKey: .importRevision) ?? 0
         )
+    }
+
+    /// Whether the nodes were imported by an earlier version that left the subscription's certificate pins out.
+    public var predatesCertificatePins: Bool {
+        importRevision < Self.currentImportRevision
     }
 
     /// The same subscription after a refresh to `report`: the selected node, the rules switch and the group picks

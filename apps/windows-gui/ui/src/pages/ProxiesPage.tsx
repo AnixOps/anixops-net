@@ -549,6 +549,7 @@ function SubscriptionRow({ source, canUpdate, busy, run, changed }: {
         )}
         <small>{status}</small>
         {traffic && <small className={expired || (fraction ?? 0) > 0.9 ? "danger-text" : undefined}>{traffic}</small>}
+        {source.needsReimport && <small className="warning-text">{!source.refreshable ? t("由旧版本导入：重新导入后证书固定才会生效") : canUpdate ? t("由旧版本导入：更新后证书固定才会生效") : t("由旧版本导入：使用此订阅后证书固定才会生效")}</small>}
         {fraction != null && (
           <span className="usage-bar" role="progressbar" aria-label={t("已用流量")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fraction * 100)}>
             <span className={fraction > 0.9 ? "danger" : undefined} style={{ width: `${fraction * 100}%` }} />

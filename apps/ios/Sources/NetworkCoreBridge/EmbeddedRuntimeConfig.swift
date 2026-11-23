@@ -122,6 +122,10 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         public var ruleSets: [String: RuleSet]?
         /// Device names by address, for `DEVICE-NAME` rules.
         public var devices: [String: String]?
+        /// The folder (an absolute path the extension owns) where the engine keeps each remote rule set's last good
+        /// download between runs, so a list is in force from the start and while downloads fail
+        /// (`withRuleSetCache(_:)`). Nil downloads every list again at each start.
+        public var ruleSetCacheDir: String?
 
         enum CodingKeys: String, CodingKey {
             case outbounds
@@ -130,6 +134,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
             case global
             case ruleSets = "rule_sets"
             case devices
+            case ruleSetCacheDir = "rule_set_cache_dir"
         }
 
         public init(
@@ -138,7 +143,8 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
             groups: [NativeImportReport.Routing.Group],
             global: String? = nil,
             ruleSets: [String: RuleSet]? = nil,
-            devices: [String: String]? = nil
+            devices: [String: String]? = nil,
+            ruleSetCacheDir: String? = nil
         ) {
             self.outbounds = outbounds
             self.rules = rules
@@ -146,6 +152,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
             self.global = global
             self.ruleSets = ruleSets
             self.devices = devices
+            self.ruleSetCacheDir = ruleSetCacheDir
         }
     }
 
@@ -364,6 +371,20 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
             return nil
         }
         return target.rules
+    }
+
+    /// The same config keeping the remote rule sets' downloads in `directory` between runs. The engine refuses the
+    /// whole config for a folder that is not an absolute path, so such a folder (or nil) leaves the key out. A config
+    /// without routing has no rule sets and stays as it is.
+    public func withRuleSetCache(_ directory: String?) -> EmbeddedRuntimeConfig {
+        var copy = self
+        guard copy.routing != nil else {
+            return copy
+        }
+        copy.routing?.ruleSetCacheDir = directory.flatMap { path in
+            path.hasPrefix("/") && path.utf8.count <= 4096 ? path : nil
+        }
+        return copy
     }
 
     /// The same config routing by a subscription's rules and groups; nil goes back to the selected node alone.
