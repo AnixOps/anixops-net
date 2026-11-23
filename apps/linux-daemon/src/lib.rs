@@ -112,6 +112,8 @@ impl Daemon {
                 // Only used for the login entry, which belongs to the window, not to the daemon.
                 executable: std::env::current_exe()
                     .unwrap_or_else(|_| PathBuf::from("anixops-netd")),
+                // Root, driven by the windows of every user signed in.
+                shared_service: true,
             },
             windows.platform(),
             windows.session(),

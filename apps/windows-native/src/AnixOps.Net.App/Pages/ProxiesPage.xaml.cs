@@ -301,7 +301,18 @@ public sealed partial class ProxiesPage : Page
         string? problem = null;
         try
         {
-            await core.AskAsync(action.Command, action.Args(), action.Kind == ProxyActionKind.Test ? TestPatience : ActPatience);
+            var link = core;
+            var patience = action.Kind == ProxyActionKind.Test ? TestPatience : ActPatience;
+            if (action.Kind == ProxyActionKind.Import && SubscriptionFile.IsPath(action.Value) && strings is { } wording)
+            {
+                // The core service opens no path a window names: the file is read here, as this user.
+                var args = await Task.Run(() => SubscriptionFile.Args(action.Value, wording));
+                await link.AskAsync(SubscriptionFile.Command, args, patience);
+            }
+            else
+            {
+                await link.AskAsync(action.Command, action.Args(), patience);
+            }
         }
         catch (Exception error) when (error is RefusedException or IOException or TimeoutException or OperationCanceledException or ObjectDisposedException)
         {

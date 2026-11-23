@@ -119,6 +119,8 @@ impl Service {
                 // Only used for the login entry, which belongs to the window, not to the service.
                 executable: std::env::current_exe()
                     .unwrap_or_else(|_| PathBuf::from("anixops-net-service.exe")),
+                // LocalSystem, driven by the windows of every user signed in.
+                shared_service: true,
             },
             windows.platform(),
             windows.session(),

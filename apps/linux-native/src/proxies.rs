@@ -137,6 +137,81 @@ impl Action {
             Action::Switch(id) => ("switch_node", json!({ "nodeId": id })),
         }
     }
+
+    /// What to send for this action. A file path to import is read here, as the user, and its content sent
+    /// (`import_subscription_text`): the daemon runs as root and opens no path a window names. Why the file
+    /// could not be read is in `language`.
+    pub fn request(&self, language: Language) -> Result<(&'static str, Value), String> {
+        match self {
+            Action::Import(location) if is_file_path(location) => {
+                let (name, content) = read_subscription_file(location.trim(), language)?;
+                Ok((
+                    "import_subscription_text",
+                    json!({ "name": name, "content": content }),
+                ))
+            }
+            _ => Ok(self.ask()),
+        }
+    }
+}
+
+/// The largest subscription file the window reads, as the core allows.
+pub const MAX_SUBSCRIPTION_FILE_BYTES: u64 = 16 * 1024 * 1024;
+
+/// Whether an import location is a file path: neither a link nor share links, which all carry `://`.
+pub fn is_file_path(location: &str) -> bool {
+    let location = location.trim();
+    !location.is_empty() && !location.contains("://")
+}
+
+/// The file's name and content: only a regular file, at most [`MAX_SUBSCRIPTION_FILE_BYTES`]. `~/` is this
+/// user's home.
+pub fn read_subscription_file(
+    location: &str,
+    language: Language,
+) -> Result<(String, String), String> {
+    use std::io::Read;
+
+    let path = match location.strip_prefix("~/") {
+        Some(rest) => std::env::var_os("HOME").map_or_else(
+            || std::path::PathBuf::from(location),
+            |home| std::path::PathBuf::from(home).join(rest),
+        ),
+        None => std::path::PathBuf::from(location),
+    };
+    let shown = path.display().to_string();
+    let unreadable = |error: std::io::Error| {
+        client_strings::format(
+            language,
+            "proxies.import.unreadable",
+            &[&shown, &error.to_string()],
+        )
+    };
+    let not_a_file = || client_strings::format(language, "proxies.import.not_file", &[&shown]);
+    // Checked before opening: opening a FIFO would wait for a writer.
+    if !std::fs::metadata(&path).map_err(unreadable)?.is_file() {
+        return Err(not_a_file());
+    }
+    let file = std::fs::File::open(&path).map_err(unreadable)?;
+    if !file.metadata().map_err(unreadable)?.is_file() {
+        return Err(not_a_file());
+    }
+    let mut content = String::new();
+    file.take(MAX_SUBSCRIPTION_FILE_BYTES + 1)
+        .read_to_string(&mut content)
+        .map_err(unreadable)?;
+    if content.len() as u64 > MAX_SUBSCRIPTION_FILE_BYTES {
+        return Err(client_strings::format(
+            language,
+            "proxies.import.too_large",
+            &[&shown],
+        ));
+    }
+    let name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| shown.clone());
+    Ok((name, content))
 }
 
 /// What the core has not finished yet. The three do not wait for each other: a node can be chosen while a
@@ -620,5 +695,52 @@ mod tests {
             Action::Switch("a".to_owned()).ask(),
             ("switch_node", json!({ "nodeId": "a" }))
         );
+    }
+
+    /// The daemon opens no path a window names: the window reads the file as the user and sends what is in it.
+    #[test]
+    fn a_file_is_read_here_and_its_content_sent() {
+        let dir =
+            std::env::temp_dir().join(format!("anixops-net-preview-import-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("nodes.txt");
+        std::fs::write(&file, "ss://x").unwrap();
+        let location = file.display().to_string();
+        assert_eq!(
+            Action::Import(format!("  {location} ")).request(Language::English),
+            Ok((
+                "import_subscription_text",
+                json!({ "name": "nodes.txt", "content": "ss://x" })
+            ))
+        );
+        // Links and share links still go as they are.
+        assert_eq!(
+            Action::Import("https://panel.test/s".to_owned()).request(Language::English),
+            Ok((
+                "import_subscription",
+                json!({ "location": "https://panel.test/s" })
+            ))
+        );
+        // A folder, a missing file and one past the limit say why, in the window's language.
+        let folder = dir.display().to_string();
+        assert_eq!(
+            Action::Import(folder.clone()).request(Language::English),
+            Err(format!("{folder} is not a file."))
+        );
+        assert!(Action::Import(dir.join("missing").display().to_string())
+            .request(Language::English)
+            .unwrap_err()
+            .contains("could not be read"));
+        let big = dir.join("big.txt");
+        std::fs::File::create(&big)
+            .unwrap()
+            .set_len(MAX_SUBSCRIPTION_FILE_BYTES + 1)
+            .unwrap();
+        assert!(Action::Import(big.display().to_string())
+            .request(Language::English)
+            .unwrap_err()
+            .contains("larger than 16 MiB"));
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

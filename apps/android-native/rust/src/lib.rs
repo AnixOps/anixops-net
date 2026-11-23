@@ -186,6 +186,7 @@ pub fn init(data_dir: PathBuf, platform: Arc<dyn Platform>) {
             Config {
                 dir: data_dir,
                 executable,
+                shared_service: false,
             },
             platform,
         );

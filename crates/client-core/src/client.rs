@@ -159,6 +159,10 @@ pub trait Platform: Send + Sync + 'static {
 pub struct Config {
     pub dir: PathBuf,
     pub executable: PathBuf,
+    /// The client runs in a system service or daemon (as SYSTEM or root) that windows of other users drive,
+    /// not in the user's own process. It then opens no path a window names (`import_subscription`): the
+    /// window reads the file as the user and sends its content (`import_subscription_text`).
+    pub shared_service: bool,
 }
 
 /// The backend, its health record and what the commands keep between calls.
@@ -173,6 +177,8 @@ pub struct Client {
     /// What each node's last delay test said (`None`: no answer), by node id. Kept for as long as the core
     /// runs, so that every window shows the same delays and a window that is opened again still has them.
     delays: Mutex<HashMap<String, Option<u64>>>,
+    /// See [`Config::shared_service`].
+    shared_service: bool,
 }
 
 fn lock<T>(value: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -204,7 +210,11 @@ impl Client {
         platform: Arc<dyn Platform>,
         session: Box<dyn UserSession>,
     ) -> Arc<Self> {
-        let Config { dir, executable } = config;
+        let Config {
+            dir,
+            executable,
+            shared_service,
+        } = config;
         let health = Health::start(
             &dir,
             crate::backend::PLATFORM,
@@ -238,6 +248,7 @@ impl Client {
             session_key: Mutex::new(None),
             links: Mutex::new(Vec::new()),
             delays: Mutex::new(HashMap::new()),
+            shared_service,
         });
         if auto_connect && !client.platform.has_system_vpn() {
             let starting = client.clone();
@@ -584,16 +595,31 @@ impl Client {
         } else {
             location.to_string()
         };
-        let (content, meta) = fetch(location)?;
+        let (content, meta) = fetch(location, !self.shared_service)?;
         let mut backend = self.backend();
         let result = backend.import(&label, &content)?;
         backend.record_response(None, meta)?;
         Ok(result)
     }
 
+    /// Imports a file the window read as the user (`import_subscription_text`): a core in a system service
+    /// never opens a path a window names. `name` is the file's name, kept as the source's label; the source
+    /// cannot be updated, as one imported from a path could not.
+    fn import_subscription_text(
+        &self,
+        name: &str,
+        content: &str,
+    ) -> Result<OperationResult, String> {
+        if content.len() as u64 > MAX_SUBSCRIPTION_FILE_BYTES {
+            return Err(too_large());
+        }
+        self.backend().import(&file_label(name), content)
+    }
+
     /// Downloads source `id` again outside the lock and records the result.
     fn refresh_source(&self, id: &str, location: &str) -> Result<OperationResult, String> {
-        let (content, meta) = match fetch(location) {
+        // Only links are updated: a source from a file or pasted links has no location to read again.
+        let (content, meta) = match fetch(location, false) {
             Ok((content, meta)) => (Ok(content), Some(meta)),
             Err(error) => (Err(error), None),
         };
@@ -871,7 +897,7 @@ impl Client {
             thread::sleep(Duration::from_secs(60));
             let due = client.backend().due_sources();
             for (id, location) in due {
-                let fetched = fetch(&location);
+                let fetched = fetch(&location, false);
                 let mut backend = client.backend();
                 let (content, meta) = match fetched {
                     Ok((content, meta)) => (Ok(content), Some(meta)),
@@ -1288,6 +1314,11 @@ fn handler(name: &str) -> Option<Handler> {
         "import_subscription" => |client, args| {
             let Location { location } = parse(args)?;
             json(client.import_subscription(&location)?)
+        },
+        // A subscription file the window read as the user, for a core that opens no path a window names.
+        "import_subscription_text" => |client, args| {
+            let SubscriptionText { name, content } = parse(args)?;
+            json(client.import_subscription_text(&name, &content)?)
         },
         "update_subscription" => |client, _| {
             let (id, location) = client
@@ -1707,6 +1738,12 @@ struct Location {
 }
 
 #[derive(Deserialize)]
+struct SubscriptionText {
+    name: String,
+    content: String,
+}
+
+#[derive(Deserialize)]
 struct Rename {
     id: String,
     name: String,
@@ -1911,14 +1948,64 @@ fn http_get_once(
     Ok((response.text()?, meta, offered))
 }
 
-/// A URL's body with its headers' meta, a local file, or the pasted share links themselves.
-fn fetch(location: &str) -> Result<(String, ResponseMeta), String> {
+/// The largest subscription file read: far above any real one, and what keeps `/dev/zero` or a huge file from
+/// filling memory.
+const MAX_SUBSCRIPTION_FILE_BYTES: u64 = 16 * 1024 * 1024;
+
+fn too_large() -> String {
+    format!(
+        "the file is larger than {} MiB, which no subscription is",
+        MAX_SUBSCRIPTION_FILE_BYTES / (1024 * 1024)
+    )
+}
+
+/// What a core in a system service answers for a path: it reads no file for a window.
+const NO_PATHS_IN_SERVICE: &str =
+    "the core service does not open files: import the file from the window, which reads it as you";
+
+/// The label of a source imported from a file's content: the file's name without its folder, never one that
+/// reads as a link (which would make the source updatable) or as pasted links.
+fn file_label(name: &str) -> String {
+    let name = name
+        .rsplit(|c| c == '/' || c == '\\')
+        .next()
+        .unwrap_or_default()
+        .trim();
+    if name.is_empty() || name.contains("://") || name == PASTED_LOCATION {
+        "subscription file".to_string()
+    } else {
+        name.chars().take(128).collect()
+    }
+}
+
+/// A URL's body with its headers' meta, the pasted share links themselves, or, with `read_files`, a local file.
+/// Without `read_files` (a core in a system service, and the updates, which only fetch links) a path is refused
+/// before anything on disk is touched, so a window cannot learn whether a file exists either.
+fn fetch(location: &str, read_files: bool) -> Result<(String, ResponseMeta), String> {
     if location.starts_with("https://") || location.starts_with("http://") {
         return http_get_with_meta(location)
             .map_err(|error| format!("the subscription could not be downloaded: {error}"));
     }
     if location.contains("://") {
         return Ok((location.to_string(), ResponseMeta::default()));
+    }
+    if !read_files {
+        return Err(NO_PATHS_IN_SERVICE.to_string());
+    }
+    read_subscription_file(location).map(|content| (content, ResponseMeta::default()))
+}
+
+/// A local subscription file, in the user's own process (the Tauri app, Android): only a regular file, at most
+/// [`MAX_SUBSCRIPTION_FILE_BYTES`]. Network and device paths (`\\server\share`, `\\.\`) are not opened on
+/// Windows.
+fn read_subscription_file(location: &str) -> Result<String, String> {
+    use std::io::Read;
+
+    if cfg!(windows) && (location.starts_with("\\\\") || location.starts_with("//")) {
+        return Err(
+            "network and device paths are not opened: copy the file to this computer first"
+                .to_string(),
+        );
     }
     let path = match location.strip_prefix("~/") {
         Some(rest) => std::env::var_os("HOME").map_or_else(
@@ -1927,9 +2014,25 @@ fn fetch(location: &str) -> Result<(String, ResponseMeta), String> {
         ),
         None => PathBuf::from(location),
     };
-    fs::read_to_string(&path)
-        .map(|content| (content, ResponseMeta::default()))
-        .map_err(|error| format!("{} could not be read: {error}", path.display()))
+    let unreadable =
+        |error: std::io::Error| format!("{} could not be read: {error}", path.display());
+    let not_a_file = || format!("{} is not a file", path.display());
+    // Checked before opening: opening a FIFO would wait for a writer.
+    if !fs::metadata(&path).map_err(unreadable)?.is_file() {
+        return Err(not_a_file());
+    }
+    let file = fs::File::open(&path).map_err(unreadable)?;
+    if !file.metadata().map_err(unreadable)?.is_file() {
+        return Err(not_a_file());
+    }
+    let mut content = String::new();
+    file.take(MAX_SUBSCRIPTION_FILE_BYTES + 1)
+        .read_to_string(&mut content)
+        .map_err(unreadable)?;
+    if content.len() as u64 > MAX_SUBSCRIPTION_FILE_BYTES {
+        return Err(too_large());
+    }
+    Ok(content)
 }
 
 #[cfg(test)]
@@ -2074,6 +2177,7 @@ mod tests {
             Config {
                 dir: dir.clone(),
                 executable: dir.join("anixops-net"),
+                shared_service: false,
             },
             Arc::new(NoPlatform),
         );
@@ -2192,6 +2296,124 @@ mod tests {
             serde_json::json!([])
         );
         client.shutdown();
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    const LINK: &str = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@82.47.34.99:11111#HK";
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "anixops-net-client-{name}-{}-{}",
+            std::process::id(),
+            unix_seconds()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// A core in a system service reads no path a window names, as SYSTEM or root (client-core-ipc-02): the
+    /// window sends the file's content instead.
+    #[test]
+    fn a_shared_service_opens_no_path_a_window_names() {
+        let dir = scratch("shared");
+        let file = dir.join("nodes.txt");
+        fs::write(&file, LINK).unwrap();
+        let client = Client::open(
+            Config {
+                dir: dir.join("data"),
+                executable: dir.join("anixops-net"),
+                shared_service: true,
+            },
+            Arc::new(NoPlatform),
+        );
+        let import = |location: &str| {
+            client.invoke(
+                "import_subscription",
+                serde_json::json!({ "location": location }),
+            )
+        };
+        // A file that exists and one that does not get the same answer: nothing is learnt about either.
+        let readable = import(&file.display().to_string()).unwrap_err();
+        let missing = import(&dir.join("missing.txt").display().to_string()).unwrap_err();
+        assert_eq!(readable, NO_PATHS_IN_SERVICE);
+        assert_eq!(missing, NO_PATHS_IN_SERVICE);
+        assert_eq!(
+            import("\\\\host\\share\\x.yaml").unwrap_err(),
+            NO_PATHS_IN_SERVICE
+        );
+        assert_eq!(import("~/nodes.txt").unwrap_err(), NO_PATHS_IN_SERVICE);
+        assert!(client.backend().subscriptions().is_empty());
+        // Pasted share links still work.
+        import(LINK).unwrap();
+        assert_eq!(client.backend().subscriptions().len(), 1);
+
+        // The window read the file as the user: its name labels the source, which cannot be updated.
+        client
+            .invoke(
+                "import_subscription_text",
+                serde_json::json!({ "name": "/home/someone/nodes.txt", "content": LINK.replace("#HK", "#JP") }),
+            )
+            .unwrap();
+        let subscriptions = client.backend().subscriptions();
+        let from_file = subscriptions
+            .iter()
+            .find(|subscription| subscription.location == "nodes.txt")
+            .expect("the file's source");
+        assert!(!from_file.refreshable);
+        let oversized = "x".repeat(usize::try_from(MAX_SUBSCRIPTION_FILE_BYTES).unwrap() + 1);
+        assert!(client
+            .invoke(
+                "import_subscription_text",
+                serde_json::json!({ "name": "big.txt", "content": oversized }),
+            )
+            .unwrap_err()
+            .contains("larger than"));
+        client.shutdown();
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_file_label_never_reads_as_a_link() {
+        assert_eq!(file_label("C:\\Users\\a\\nodes.yaml"), "nodes.yaml");
+        assert_eq!(file_label("/home/a/nodes.yaml"), "nodes.yaml");
+        assert_eq!(file_label("https://panel.example/s"), "s");
+        assert_eq!(file_label("https://"), "subscription file");
+        assert_eq!(file_label("  "), "subscription file");
+        assert_eq!(file_label(PASTED_LOCATION), "subscription file");
+    }
+
+    /// In the user's own process a path is still read, but only a regular file and not without limit.
+    #[test]
+    fn only_regular_files_of_a_sane_size_are_read() {
+        let dir = scratch("files");
+        let file = dir.join("nodes.txt");
+        fs::write(&file, LINK).unwrap();
+        let (content, _) = fetch(&file.display().to_string(), true).unwrap();
+        assert_eq!(content, LINK);
+        // The same path is refused when files are not read, before the disk is touched.
+        assert_eq!(
+            fetch(&file.display().to_string(), false).unwrap_err(),
+            NO_PATHS_IN_SERVICE
+        );
+        // A folder is not a file.
+        assert!(fetch(&dir.display().to_string(), true)
+            .unwrap_err()
+            .contains("is not a file"));
+        // A device would never end.
+        #[cfg(unix)]
+        assert!(fetch("/dev/zero", true)
+            .unwrap_err()
+            .contains("is not a file"));
+        // A file past the limit is refused; a sparse one costs no disk.
+        let big = dir.join("big.txt");
+        fs::File::create(&big)
+            .unwrap()
+            .set_len(MAX_SUBSCRIPTION_FILE_BYTES + 1)
+            .unwrap();
+        assert!(fetch(&big.display().to_string(), true)
+            .unwrap_err()
+            .contains("larger than"));
         let _ = fs::remove_dir_all(dir);
     }
 }

@@ -225,7 +225,14 @@ pub fn run(context: Context<Wry>, host: Host) -> Result<(), String> {
         app: OnceLock::new(),
         tunnel,
     });
-    let client = Client::open(client::Config { dir, executable }, platform.clone());
+    let client = Client::open(
+        client::Config {
+            dir,
+            executable,
+            shared_service: false,
+        },
+        platform.clone(),
+    );
 
     let mut builder = tauri::Builder::default();
     // One window per user: a second start (an `anixops://` link) hands over to the running one.
