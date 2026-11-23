@@ -307,6 +307,9 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
   目录外文件（如 `C:\Windows\win.ini`）的硬链接 `mklink /H x.json C:\Windows\win.ini`（Windows 拒绝建立时记下即可，说明这条路径本就不通），再升级到 1.0 并启动：`gui.log` 的
   `data folder closed` 记录里 `removed` 含该链接，`icacls C:\Windows\win.ini` 与升级前一致。CI 的单元测试覆盖同样情形
   （`crates/windows-data` 的硬链接测试），真机只复核实际权限。
+- [ ] 数据目录被其他程序占用时仍能启动：开一个命令提示符 `cd /d C:\ProgramData\AnixOps\NetworkCore`（再开一个停在
+  `C:\ProgramData\AnixOps`），保持窗口打开，分别在首次升级到 1.0 和之后的普通启动时打开客户端：都能正常启动，
+  `icacls` 结果同上。CI 的单元测试覆盖同样情形（`crates/windows-data` 中占用目录和文件的测试）。
 - [ ] 数据目录无法收回时的启动失败提示目前只有英文（`apps/windows-gui/src/main.rs` 的 `secure_data_directory`）：这时数据目录
   不可用，界面语言设置读不到，提示在界面目录加载前弹出。1.0 接受这一例外；后续把这条提示放进 `crates/client-strings`，
   按系统界面语言选择简体中文、繁体中文或英文。

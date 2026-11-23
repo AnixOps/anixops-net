@@ -11,16 +11,17 @@ use std::path::Path;
 use std::ptr::{null, null_mut};
 
 use windows_sys::Win32::Foundation::{
-    CloseHandle, ERROR_ACCESS_DENIED, HANDLE, INVALID_HANDLE_VALUE,
+    CloseHandle, ERROR_ACCESS_DENIED, ERROR_SHARING_VIOLATION, HANDLE, INVALID_HANDLE_VALUE,
 };
 use windows_sys::Win32::Security::{
     DACL_SECURITY_INFORMATION, OBJECT_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
     PROTECTED_DACL_SECURITY_INFORMATION,
 };
 use windows_sys::Win32::Storage::FileSystem::{
-    CreateFileW, FileDispositionInfo, FileDispositionInfoEx, GetFileInformationByHandle,
-    GetFinalPathNameByHandleW, SetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION, DELETE,
-    FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_REPARSE_POINT, FILE_DISPOSITION_FLAG_DELETE,
+    CreateFileW, FileAttributeTagInfo, FileDispositionInfo, FileDispositionInfoEx,
+    GetFileInformationByHandle, GetFileInformationByHandleEx, GetFinalPathNameByHandleW,
+    SetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION, DELETE, FILE_ATTRIBUTE_DIRECTORY,
+    FILE_ATTRIBUTE_REPARSE_POINT, FILE_ATTRIBUTE_TAG_INFO, FILE_DISPOSITION_FLAG_DELETE,
     FILE_DISPOSITION_FLAG_IGNORE_READONLY_ATTRIBUTE, FILE_DISPOSITION_FLAG_POSIX_SEMANTICS,
     FILE_DISPOSITION_INFO, FILE_DISPOSITION_INFO_EX, FILE_FLAG_BACKUP_SEMANTICS,
     FILE_FLAG_OPEN_REPARSE_POINT, FILE_NAME_NORMALIZED, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE,
@@ -33,16 +34,32 @@ use crate::descriptor::{describe_handle, last_error, owner, set_handle, wide};
 /// What every open asks for: reading the attributes and the link count.
 const BASE: u32 = FILE_READ_ATTRIBUTES | SYNCHRONIZE;
 
-/// The access asked for, most first. The first is what an elevated administrator gets for anything once the
-/// backup and restore rights are on (see `account::enable_ownership_privileges`); the later ones are for
-/// a process without them, which can then still read or remove what it may.
-const ATTEMPTS: [u32; 5] = [
-    BASE | READ_CONTROL | WRITE_DAC | WRITE_OWNER | DELETE,
+/// Reading and changing its owner and access list. None of these is checked against how others share an
+/// open file, so another program holding it open never makes asking for them fail.
+const SECURITY: u32 = READ_CONTROL | WRITE_DAC | WRITE_OWNER;
+
+/// The access asked for, most first, for an entry that may have to be removed. The first is what an
+/// elevated administrator gets for anything once the backup and restore rights are on (see
+/// `account::enable_ownership_privileges`). The second is the same without `DELETE`, for an entry another
+/// program holds open without letting it be removed (a console whose current folder it is, a backup or a
+/// virus scan): it can still be checked and taken back, and only removing it then fails. The later ones are
+/// for a process without those rights, which can then still read or remove what it may.
+const REMOVABLE: [u32; 6] = [
+    BASE | SECURITY | DELETE,
+    BASE | SECURITY,
     BASE | READ_CONTROL | DELETE,
     BASE | DELETE,
     BASE | READ_CONTROL,
     BASE,
 ];
+
+/// The access asked for, most first, for an entry that is never removed (the data folder and the folder
+/// above it): no `DELETE`, so another program holding it open cannot make the open fail.
+const KEPT: [u32; 3] = [BASE | SECURITY, BASE | READ_CONTROL, BASE];
+
+/// Reparse tags with this bit set name another file or folder (symbolic links, junctions and the like).
+/// Others (compressed, deduplicated or cloud files) only change how the data is stored.
+const NAME_SURROGATE: u32 = 0x2000_0000;
 
 /// A file or folder opened as itself, closed when dropped.
 pub(crate) struct Entry {
@@ -50,6 +67,8 @@ pub(crate) struct Entry {
     access: u32,
     attributes: u32,
     links: u32,
+    /// Whether it is a reparse point that names another file or folder.
+    surrogate: bool,
 }
 
 impl Drop for Entry {
@@ -62,12 +81,25 @@ impl Drop for Entry {
 }
 
 impl Entry {
-    /// Opens `path` itself: a symbolic link or junction is opened as the link, never followed. Others may
-    /// keep reading, writing and removing it meanwhile, as they could before.
+    /// Opens `path` itself, with `DELETE` when it can be had, so that it may be removed: a symbolic link
+    /// or junction is opened as the link, never followed. Others may keep reading, writing and removing it
+    /// meanwhile, as they could before.
     pub(crate) fn open(path: &Path) -> io::Result<Self> {
+        Self::open_with(path, &REMOVABLE)
+    }
+
+    /// Opens `path` itself as [`Entry::open`] does, but never asks to remove it, so another program holding
+    /// it open, even without letting it be removed, does not make this fail. [`Entry::remove`] then fails.
+    pub(crate) fn open_kept(path: &Path) -> io::Result<Self> {
+        Self::open_with(path, &KEPT)
+    }
+
+    /// Tries each access in `attempts` in turn. A refusal (access denied, or a sharing conflict with how
+    /// another program holds it open) moves to the next; any other error is returned at once.
+    fn open_with(path: &Path, attempts: &[u32]) -> io::Result<Self> {
         let name = wide(path);
-        let mut denied = None;
-        for access in ATTEMPTS {
+        let mut refusal = None;
+        for &access in attempts {
             // SAFETY: `name` is NUL-terminated; no security attributes or template are passed.
             let handle = unsafe {
                 CreateFileW(
@@ -82,8 +114,14 @@ impl Entry {
             };
             if handle == INVALID_HANDLE_VALUE {
                 let error = last_error();
-                if error.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32) {
-                    denied = Some(error);
+                let code = error.raw_os_error();
+                if code == Some(ERROR_ACCESS_DENIED as i32)
+                    || code == Some(ERROR_SHARING_VIOLATION as i32)
+                {
+                    // The first refusal says most about why the fullest access was not had.
+                    if refusal.is_none() {
+                        refusal = Some(error);
+                    }
                     continue;
                 }
                 return Err(error);
@@ -93,6 +131,7 @@ impl Entry {
                 access,
                 attributes: 0,
                 links: 0,
+                surrogate: false,
             };
             let mut information = BY_HANDLE_FILE_INFORMATION::default();
             // SAFETY: the handle is open and `information` is valid for the structure written.
@@ -101,14 +140,32 @@ impl Entry {
             }
             entry.attributes = information.dwFileAttributes;
             entry.links = information.nNumberOfLinks;
+            if entry.attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+                let mut tag = FILE_ATTRIBUTE_TAG_INFO::default();
+                // SAFETY: the handle is open and `tag` is the structure this class takes, of the size passed.
+                if unsafe {
+                    GetFileInformationByHandleEx(
+                        handle,
+                        FileAttributeTagInfo,
+                        (&mut tag as *mut FILE_ATTRIBUTE_TAG_INFO).cast(),
+                        std::mem::size_of::<FILE_ATTRIBUTE_TAG_INFO>() as u32,
+                    )
+                } == 0
+                {
+                    return Err(last_error());
+                }
+                entry.surrogate = tag.ReparseTag & NAME_SURROGATE != 0;
+            }
             return Ok(entry);
         }
-        Err(denied.unwrap_or_else(|| io::Error::from(io::ErrorKind::PermissionDenied)))
+        Err(refusal.unwrap_or_else(|| io::Error::from(io::ErrorKind::PermissionDenied)))
     }
 
-    /// Whether it is a symbolic link, junction or other reparse point.
+    /// Whether it is a symbolic link, junction or other reparse point that leads to another file or
+    /// folder. A compressed, deduplicated or cloud file is a reparse point too, but holds its own data and
+    /// is not a link.
     pub(crate) fn is_link(&self) -> bool {
-        self.attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
+        self.surrogate
     }
 
     pub(crate) fn is_folder(&self) -> bool {
@@ -199,6 +256,13 @@ impl Entry {
     /// Removes this name: a link goes, never what it leads to; a file with other names keeps them, with
     /// its security unchanged; a folder must be empty. The name is gone once the handle is closed, here.
     pub(crate) fn remove(self) -> io::Result<()> {
+        if self.access & DELETE == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "it may not be removed by this account, or another program holds it open \
+                 without letting it be removed",
+            ));
+        }
         let posix = FILE_DISPOSITION_INFO_EX {
             Flags: FILE_DISPOSITION_FLAG_DELETE
                 | FILE_DISPOSITION_FLAG_POSIX_SEMANTICS
@@ -268,6 +332,37 @@ mod tests {
         assert_eq!(entry.links(), 1);
         assert!(entry.final_path().unwrap().starts_with(r"\\?\"));
         entry.remove().unwrap();
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn a_file_another_program_holds_open_is_still_opened_and_taken_back() {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        let path = std::env::temp_dir().join(format!(
+            "anixops-windows-data-entry-held-{}",
+            std::process::id()
+        ));
+        std::fs::write(&path, "x").unwrap();
+        let _privileges = crate::account::enable_ownership_privileges();
+        // As a console, backup or virus scan holds it: others may read and write it, not remove it.
+        let held = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .open(&path)
+            .unwrap();
+        let entry = Entry::open(&path).unwrap();
+        assert_eq!(entry.access & DELETE, 0);
+        assert!(!entry.is_link());
+        entry.take_over("O:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)").unwrap();
+        // Removing it needs what the other program refuses, and fails rather than leaving it half done.
+        assert!(entry.remove().is_err());
+        assert!(path.exists());
+        let kept = Entry::open_kept(&path).unwrap();
+        assert_eq!(kept.access & DELETE, 0);
+        drop(kept);
+        drop(held);
+        Entry::open(&path).unwrap().remove().unwrap();
         assert!(!path.exists());
     }
 }

@@ -87,7 +87,8 @@ fn final_path_inside_parent(path: &Path) -> io::Result<String> {
     };
     // The folders above are shared with other programs and keep the access the system gives them.
     fs::create_dir_all(parent)?;
-    let above = Entry::open(parent)?;
+    // Never removed, so opened without asking to: a console whose current folder it is must not stop this.
+    let above = Entry::open_kept(parent)?;
     if above.is_link() || !above.is_folder() {
         return Err(refused(format!(
             "{} is a link or not a folder and is not used",
@@ -99,8 +100,10 @@ fn final_path_inside_parent(path: &Path) -> io::Result<String> {
 
 /// Opens the folder `path` as itself, and only when it is where `expected` says: not a link, and not
 /// reached through a folder above that was swapped for a link since `expected` was read.
+/// Opened without asking to remove it, since it never is, so that another program holding it open (a
+/// console whose current folder it is, a backup) does not stop the client from starting.
 fn open_folder(path: &Path, expected: &str) -> io::Result<Entry> {
-    let folder = Entry::open(path)?;
+    let folder = Entry::open_kept(path)?;
     if folder.is_link() || !folder.is_folder() {
         return Err(refused(format!(
             "{} is not a folder and is not used",
@@ -175,7 +178,7 @@ fn not_found(error: &io::Error) -> bool {
 /// Whether the marker in the folder was left there by the client: a file of its own with no other name.
 /// A link, or a second name of a file elsewhere that the system owns, does not count.
 fn marker_is_ours(marker: &Path, owners: &[String]) -> bool {
-    Entry::open(marker).is_ok_and(|entry| {
+    Entry::open_kept(marker).is_ok_and(|entry| {
         !entry.is_link() && !entry.is_folder() && entry.links() == 1 && entry.owned_by(owners)
     })
 }
@@ -455,7 +458,7 @@ mod tests {
         fs::write(dir.join(CLOSED_MARKER), b"").unwrap();
         let _privileges = account::enable_ownership_privileges();
         // Closing only the folder (as the installer does) leaves the files as they were.
-        Entry::open(&dir).unwrap().take_over(ACCESS).unwrap();
+        Entry::open_kept(&dir).unwrap().take_over(ACCESS).unwrap();
         if set(&dir.join(CLOSED_MARKER), OWNER_SECURITY_INFORMATION, "O:BU").is_ok() {
             let outcome = close_with_contents(&dir).unwrap();
             assert!(outcome.walked);
@@ -575,13 +578,63 @@ mod tests {
         fs::hard_link(&elsewhere, dir.join(CLOSED_MARKER)).unwrap();
         {
             let _privileges = account::enable_ownership_privileges();
-            Entry::open(&dir).unwrap().take_over(ACCESS).unwrap();
+            Entry::open_kept(&dir).unwrap().take_over(ACCESS).unwrap();
         }
         let outcome = close_with_contents(&dir).unwrap();
         assert!(outcome.walked);
         assert!(!open_to_users(&describe(&state).unwrap()));
         // The marker written afterwards is a file of its own.
         assert!(marker_is_ours(&dir.join(CLOSED_MARKER), &trusted_owners()));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// Opens `path` as a console does its current folder, or a backup or virus scan what it reads: others
+    /// may read and write it, but not remove it.
+    fn hold_open(path: &Path) -> fs::File {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::{
+            FILE_FLAG_BACKUP_SEMANTICS, FILE_SHARE_READ, FILE_SHARE_WRITE,
+        };
+        fs::OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(path)
+            .unwrap()
+    }
+
+    #[test]
+    fn a_folder_another_program_holds_open_is_still_checked_and_closed() {
+        let root = scratch("held");
+        let parent = root.join("AnixOps");
+        let dir = parent.join("NetworkCore");
+        close_with_contents(&dir).unwrap();
+        {
+            let _parent = hold_open(&parent);
+            let _folder = hold_open(&dir);
+            // Already closed: the next start only checks it, and the service's check passes too.
+            assert!(!close_with_contents(&dir).unwrap().walked);
+            secure(&dir).unwrap();
+            assert!(closed(&describe(&dir).unwrap()));
+        }
+
+        // Left open by an earlier version, with a file of the client's that is also held open: both are
+        // taken back and kept rather than the start failing.
+        let state = dir.join("desktop-state.json");
+        fs::write(&state, "{}").unwrap();
+        let open = "D:(A;;FA;;;BA)(A;;FA;;;SY)(A;;FR;;;BU)";
+        set(&dir, DACL_SECURITY_INFORMATION, open).unwrap();
+        set(&state, DACL_SECURITY_INFORMATION, open).unwrap();
+        {
+            let _folder = hold_open(&dir);
+            let _state = hold_open(&state);
+            let outcome = close_with_contents(&dir).unwrap();
+            assert!(outcome.walked);
+            assert!(outcome.removed.is_empty(), "{:?}", outcome.removed);
+            assert!(closed(&describe(&dir).unwrap()));
+            assert!(!open_to_users(&describe(&state).unwrap()));
+        }
+        assert_eq!(fs::read_to_string(&state).unwrap(), "{}");
         fs::remove_dir_all(&root).unwrap();
     }
 

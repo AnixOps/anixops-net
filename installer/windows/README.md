@@ -84,8 +84,13 @@ opened once as itself (never through a link) and checked, reset or removed
 through that handle: symbolic links, junctions and files with more than one
 name (hard links, whose other name may be outside the folder) are removed by
 that name only, and what is removed keeps its owner and access list, so nothing
-outside the folder is changed. The folder must also be where its path says,
-with no link on the way. If the folder
+outside the folder is changed. Compressed, deduplicated and cloud files are
+reparse points too but hold their own data, so they are kept like any other
+file. The folder must also be where its path says, with no link on the way.
+The folder and the one above it are never removed and are opened without
+asking to, so a console whose current folder is one of them, or a backup or
+virus scan reading them, does not stop the GUI from starting; a file the
+client keeps that such a program holds open is still reset. If the folder
 cannot be closed, the GUI shows the error and does not start. Device keys and
 the decryption key are also written closed to everyone but their owner,
 SYSTEM and Administrators.
