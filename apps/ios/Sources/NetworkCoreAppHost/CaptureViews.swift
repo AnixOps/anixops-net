@@ -14,16 +14,28 @@ struct CaptureExportFile: Transferable {
     let tunnel: TunnelController
     let command: RuntimeControl
     let title: String
+    /// One zip with everything, rather than one file.
+    var isArchive: Bool {
+        if case .exportCapture(.zip, _, _) = command {
+            return true
+        }
+        return false
+    }
 
-    /// Everything captured, or one connection, as pcapng or HAR.
-    init(tunnel: TunnelController, format: PacketCapture.ExportFormat, connection: UInt64?) {
+    /// Everything captured, or one connection, as pcapng, HAR or one zip of both with a connection list; `redact`
+    /// masks passwords, tokens and cookies.
+    init(tunnel: TunnelController, format: PacketCapture.ExportFormat, connection: UInt64?, redact: Bool = true) {
         self.tunnel = tunnel
-        command = .exportCapture(format, id: connection)
+        command = .exportCapture(format, id: connection, redact: redact)
         switch format {
         case .pcapng:
             title = String(localized: "导出 pcapng（Wireshark）")
         case .har:
             title = String(localized: "导出 HAR（HTTP 请求）")
+        case .zip:
+            title = redact
+                ? String(localized: "打包导出 zip（遮盖密码和 Cookie）")
+                : String(localized: "打包导出 zip（完整，不遮盖）")
         }
     }
 
@@ -105,7 +117,8 @@ struct CaptureBodyFile: Transferable {
     #endif
 }
 
-/// The "抓包" items of the request list's "more" menu: start or stop, export everything, clear.
+/// The "抓包" items of the request list's "more" menu: start or stop, export everything, clear. While a saved session
+/// is shown (`TunnelController.viewedCapture`) only its exports: live capture goes on unseen.
 struct CaptureMenuItems: View {
     var tunnel: TunnelController
     let status: PacketCapture.Status?
@@ -113,21 +126,21 @@ struct CaptureMenuItems: View {
 
     var body: some View {
         if let status {
-            Button {
-                Task {
-                    _ = await tunnel.control(.setCapture(!status.enabled))
-                    await onChange()
+            let live = tunnel.viewedCapture == nil
+            if live {
+                Button {
+                    Task {
+                        _ = await tunnel.control(.setCapture(!status.enabled))
+                        await onChange()
+                    }
+                } label: {
+                    Label(status.enabled ? LocalizedStringKey("停止抓包") : LocalizedStringKey("开始抓包"), systemImage: status.enabled ? "stop.circle" : "record.circle")
                 }
-            } label: {
-                Label(status.enabled ? LocalizedStringKey("停止抓包") : LocalizedStringKey("开始抓包"), systemImage: status.enabled ? "stop.circle" : "record.circle")
             }
             if status.connections > 0 {
-                ForEach(PacketCapture.ExportFormat.allCases) { format in
-                    let file = CaptureExportFile(tunnel: tunnel, format: format, connection: nil)
-                    ShareLink(item: file, preview: SharePreview(file.title)) {
-                        Label(file.title, systemImage: "square.and.arrow.up")
-                    }
-                }
+                CaptureExportItems(tunnel: tunnel, connection: nil, hasRequests: true)
+            }
+            if live, status.connections > 0 {
                 Button(role: .destructive) {
                     Task {
                         _ = await tunnel.control(.clearCapture)
@@ -136,6 +149,34 @@ struct CaptureMenuItems: View {
                 } label: {
                     Label("清空抓包", systemImage: "trash")
                 }
+            }
+        }
+    }
+}
+
+/// Share sheet exports of everything captured or one connection: one zip with everything (masked, or complete), then
+/// pcapng and, when there are decrypted requests, HAR.
+struct CaptureExportItems: View {
+    var tunnel: TunnelController
+    let connection: UInt64?
+    let hasRequests: Bool
+
+    private var files: [CaptureExportFile] {
+        var files = [
+            CaptureExportFile(tunnel: tunnel, format: .zip, connection: connection),
+            CaptureExportFile(tunnel: tunnel, format: .zip, connection: connection, redact: false),
+            CaptureExportFile(tunnel: tunnel, format: .pcapng, connection: connection),
+        ]
+        if hasRequests {
+            files.append(CaptureExportFile(tunnel: tunnel, format: .har, connection: connection))
+        }
+        return files
+    }
+
+    var body: some View {
+        ForEach(files, id: \.title) { file in
+            ShareLink(item: file, preview: SharePreview(file.title)) {
+                Label(file.title, systemImage: file.isArchive ? "doc.zipper" : "square.and.arrow.up")
             }
         }
     }
@@ -284,16 +325,9 @@ struct CaptureDetailView: View {
                         .listRowBackground(brand.surface)
                 }
                 Section {
-                    ForEach(PacketCapture.ExportFormat.allCases) { format in
-                        if format == .pcapng || !capture.http.isEmpty {
-                            let file = CaptureExportFile(tunnel: tunnel, format: format, connection: connection.id)
-                            ShareLink(item: file, preview: SharePreview(file.title)) {
-                                Label(file.title, systemImage: "square.and.arrow.up")
-                            }
-                        }
-                    }
+                    CaptureExportItems(tunnel: tunnel, connection: connection.id, hasRequests: !capture.http.isEmpty)
                 } footer: {
-                    Text("pcapng 可用 Wireshark 打开，HAR 可导入浏览器开发者工具、Charles 或 Proxyman。导出内容可能包含账号、Cookie 等敏感信息，请只发给信任的人。")
+                    Text("zip 里有连接清单、HAR 和 pcapng；pcapng 可用 Wireshark 打开，HAR 可导入浏览器开发者工具或其他抓包工具。“完整”不遮盖账号、Cookie 等敏感信息，请只发给信任的人。")
                 }
                 .listRowBackground(brand.surface)
             } else {
@@ -306,10 +340,13 @@ struct CaptureDetailView: View {
         .background(brand.bg.ignoresSafeArea())
         .navigationTitle("抓包内容")
         .inlineNavigationTitle()
-        .task {
+        // When the tunnel goes down the app switches to its saved copy of the run (`viewedCapture`), which keeps
+        // this connection's id: read it again from there.
+        .task(id: tunnel.viewedCapture?.id) {
+            unreachable = false
             while !Task.isCancelled {
                 await load()
-                guard connection.isActive, !unreachable else {
+                guard connection.isActive, !unreachable, tunnel.viewedCapture == nil else {
                     return
                 }
                 try? await Task.sleep(for: .seconds(2))
@@ -319,10 +356,13 @@ struct CaptureDetailView: View {
 
     private var emptyText: LocalizedStringKey {
         if unreachable {
-            return "隧道已断开，抓包内容随隧道一起清空。"
+            return "隧道已断开。断开前的抓包会自动保存，可以在请求页右上角 ⋯ › 已保存的会话 查看和导出。"
         }
         if !loaded {
             return "正在读取…"
+        }
+        if tunnel.viewedCapture != nil {
+            return "已保存的抓包里没有这个连接：它出现在最后一次保存之后，或已被更新的连接挤出（抓包内存有上限）。"
         }
         return "这个连接的抓包内容已被更新的连接挤出（抓包内存有上限），或抓包已清空。"
     }

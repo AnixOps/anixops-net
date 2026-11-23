@@ -2,7 +2,7 @@ import Foundation
 import NetworkCoreBridge
 
 /// Runs an `anixops://` link (`AppURLCommand`) against the tunnel. Connect, disconnect, mode and node picks run at
-/// once, as in Surge and Loon; an import link only fills the import sheet, which still asks the user to confirm.
+/// once; an import link only fills the import sheet, which still asks the user to confirm.
 extension TunnelController {
     /// What to show after a link ran: nil when the change is visible on its own.
     @discardableResult

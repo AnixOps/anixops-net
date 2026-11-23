@@ -43,8 +43,10 @@ export function sessionHint(session: CaptureSession): string {
  * Saved capture sessions (debug mode): seal what capture holds into an encrypted file, load one back to look at its
  * requests and export them, delete one. The engine does the sealing; the backend keeps the key.
  */
-export function CaptureSessions({ capture, run, onLoaded }: {
+export function CaptureSessions({ capture, live = true, run, onLoaded }: {
   capture: CaptureStatus | null;
+  /** The tunnel is on: what capture holds can be saved. Off, sessions still list, open and delete. */
+  live?: boolean;
   run: Run;
   /** A session replaced what capture held: a request selected before it is gone. */
   onLoaded?: () => void;
@@ -85,7 +87,11 @@ export function CaptureSessions({ capture, run, onLoaded }: {
     void run("capture session", async () => {
       await desktop.loadCaptureSession(session.session);
       onLoaded?.();
-      return { message: t("已载入会话：{name}。实时抓包已停止。", { name: sessionTitle(session) }) };
+      return {
+        message: live
+          ? t("已载入会话：{name}。实时抓包已停止。", { name: sessionTitle(session) })
+          : t("已打开会话：{name}，在“请求”里查看。", { name: sessionTitle(session) }),
+      };
     });
   };
   const remove = (session: CaptureSession) => void run("capture session", async () => {
@@ -96,7 +102,7 @@ export function CaptureSessions({ capture, run, onLoaded }: {
 
   return (
     <Card title={t("已保存的会话")} description={protectionText(protection, days)}>
-      <Row icon={Save} color="indigo" label={t("保存当前抓包")} hint={captured > 0 ? t("{count} 个连接", { count: captured }) : t("还没有抓到内容")}>
+      {live && <Row icon={Save} color="indigo" label={t("保存当前抓包")} hint={captured > 0 ? t("{count} 个连接", { count: captured }) : t("还没有抓到内容")}>
         <input
           className="inline-input"
           aria-label={t("会话名称（可选）")}
@@ -106,7 +112,7 @@ export function CaptureSessions({ capture, run, onLoaded }: {
           onChange={(event) => setName(event.target.value)}
         />
         <button className="secondary compact" disabled={captured === 0} onClick={save}>{t("保存")}</button>
-      </Row>
+      </Row>}
       {failure && <p className="muted danger-text">{failure}</p>}
       {sessions && sessions.length === 0 && (
         <EmptyState icon={Archive} title={t("还没有保存的会话")} message={t("保存后可以在这里载入，查看当时的请求并导出。")} />

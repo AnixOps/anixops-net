@@ -7,7 +7,7 @@ import NetworkExtension
 ///
 /// With it on, the system starts the tunnel again when the extension ended without the user asking: a crash, the
 /// memory limit, an update. A disconnect from the app, the widget or Control Center turns On Demand off first, so the
-/// system does not undo it; connecting turns it back on. The Wi-Fi rules (Surge's and Loon's SSID policies) become On
+/// system does not undo it; connecting turns it back on. The Wi-Fi rules (per-SSID policies) become On
 /// Demand rules, so the system applies them as soon as the device joins the network, without the app running.
 public struct OnDemandSettings: Codable, Equatable, Sendable {
     /// What the tunnel does on one kind of network.

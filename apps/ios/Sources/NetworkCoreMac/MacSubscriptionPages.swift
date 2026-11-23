@@ -456,7 +456,7 @@ struct MacRulesPage: View {
                         dnsLink
                     }
                     myRulesCard(hasSubscriptionRules: false)
-                    Text("导入带规则和策略组的订阅（Clash、Surge、Loon 配置）后，可以按订阅规则分流和切换策略组。")
+                    Text("导入带规则和策略组的订阅后，可以按订阅规则分流和切换策略组。")
                         .font(.caption)
                         .foregroundStyle(brand.text2)
                         .padding(.horizontal, 4)
@@ -469,7 +469,7 @@ struct MacRulesPage: View {
             MacPlaceholderPage(
                 systemImage: "arrow.triangle.branch",
                 title: "规则与分流",
-                message: "导入带规则和策略组的订阅（Clash、Surge、Loon 配置）后，可以在这里按订阅规则分流和切换策略组。现在全部流量走所选节点。"
+                message: "导入带规则和策略组的订阅后，可以在这里按订阅规则分流和切换策略组。现在全部流量走所选节点。"
             )
         }
     }

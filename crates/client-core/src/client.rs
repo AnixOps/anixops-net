@@ -525,7 +525,7 @@ impl Client {
         crate::backend::session_key::load(dir)
     }
 
-    /// Exports the packet capture (`format` pcapng or har; one connection with `id`, else all) to Downloads
+    /// Exports the packet capture (`format` zip, pcapng or har; one connection with `id`, else all) to Downloads
     /// without replacing an older file, and answers where it went.
     fn export_capture(
         &self,

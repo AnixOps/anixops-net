@@ -89,7 +89,7 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含调试模式的 `deb
 
 调试模式的“请求”按 HTTP 请求逐条列出，最新在上。右上角可以切到全部连接。
 
-- **macOS 和宽屏 iPad**（仿 Proxyman）：可排序的表格（时间、方法、状态、主机、路径、类型、大小、耗时）加右侧常驻检查器，选中一行就在检查器里看请求和响应，可以重放、生成映射、导出；工具栏按钮可以收起检查器。方向键切换行，右键可以拷贝网址。状态码按颜色区分：2xx 绿、3xx 黄、4xx/5xx 和没有响应红、等待中灰。macOS 的隧道诊断（复制诊断信息、扩展日志、导出日志）放在工具栏的“诊断”菜单里。
+- **macOS 和宽屏 iPad**：可排序的表格（时间、方法、状态、主机、路径、类型、大小、耗时）加右侧常驻检查器，选中一行就在检查器里看请求和响应，可以重放、生成映射、导出；工具栏按钮可以收起检查器。方向键切换行，右键可以拷贝网址。状态码按颜色区分：2xx 绿、3xx 黄、4xx/5xx 和没有响应红、等待中灰。macOS 的隧道诊断（复制诊断信息、扩展日志、导出日志）放在工具栏的“诊断”菜单里。
 - **iPhone 和窄屏 iPad**：列表，点开一条进入请求详情。
 - **请求详情 / 检查器**（`ExchangeInspector.swift`，三个平台同一个视图）：顶行是方法、状态和网址，下面四个标签：概览（基本信息、重放、导出、映射）、请求、响应、时间线，选中的标签会记住。请求和响应各自在“头 / 查询 / 正文”之间切换。正文按内容显示：JSON 是可折叠的树（点一行选中并折叠；接键盘时方向键移动和折叠，Return 或空格折叠，Mac 上 ⌘C 拷贝选中的值；下方显示 JSONPath，点一下拷贝）或格式化文本，图片直接预览，表单是名值对，其余是原文，任何内容都能切到十六进制。JSON 用自己的解析器（`JsonDocument.swift`），数字按服务器发来的原样显示，64 位 id 不会经过浮点数取整，键的顺序和重复的键也保留。正文的解压、解码、JSON 解析和格式化都在后台完成，界面先显示进度；没有完整抓到的正文不按 JSON 解析，直接显示原文。格式化、原文和十六进制分段懒加载显示，最多 20 万个字符。时间线把同一连接上的请求画在一条时间轴上；内核只记录每个请求的开始和结束，没有 DNS、建连、TLS 的分段。
 - Mac 的检查器在窗口里不设导航标题（否则窗口标题会从“请求”变成“GET 200”）；有检查器时快捷筛选放在表格这一栏、请求计数的上方。
@@ -108,21 +108,25 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含调试模式的 `deb
   - macOS 由系统发起、不带 App 值的启动（On Demand、系统设置的 VPN 开关、重启后）用的是上次 App 交给扩展的副本；配置在解密而副本里的根证书指纹与 VPN 配置记下的不一致时（断开期间换了根），和解密包摘要不一致一样，启动以 `start secrets are older than the profile` 失败，App 在运行或下次回到前台时带新值重连一次（同一配置、同一根只重连一次），不会用旧根签发。旧配置没有指纹时照旧使用副本。
   - 隧道 `on` 时同时报告正在使用的根证书指纹；与钥匙串里的不一致时（换根后还没重连），请求页标红提示重新连接。
   - macOS 换根后撤销这台 Mac 对旧根的信任：先删用户域信任设置（`SecTrustSettingsRemoveTrustSettings`，要登录密码），再删登录钥匙串里的证书，最后用旧根签一张探测证书核对系统已不再信任（`MitmRootRevocation`）。取消授权或删不掉时保留钥匙串条目并说明到“钥匙串访问”手动删除；信任设置在系统级（管理员域、“系统”钥匙串）时 App 无权更改，同样提示手动删除。iOS 上旧描述文件只能由用户在设置里删除，证书页写明。
-- 抓包跟隧道同生命周期：
-  - 用户或系统断开隧道，抓包随之停止；扩展在 `stopTunnel` 里先把仍在进行且有内容的抓包加密保存成会话（名称“断开时自动保存”），请求页清掉“抓包中”状态并提示到“已保存的会话”查看。正在查看的已保存会话（`load_capture` 会关掉抓包）不会再存一次。
-  - 断开提示按实际情况说（`CaptureStopNotice`）：App 在连接时问一次 `capture_sessions`，有应答说明扩展的会话存储可用，断开后提示“已加密保存”；没有应答时提示“这台设备上无法保存会话，断开前抓到的内容没有保存”（红字）；还没来得及问就断开时，提示“会尝试加密保存，连接后查看是否保存成功”。
+- 抓包跟隧道同生命周期，断开后照样能看（`TunnelController+CaptureCopies.swift`、`CaptureViewer.swift`）：
+  - 抓包在隧道扩展的引擎里，会话密钥只有扩展有，App 读不到扩展的会话（没有 App Group，也不打算为此改 Apple 开发者后台）。所以连接时 App 让扩展把抓包用 App 自己的密钥重新加密后交过来（内核 `copy_capture`，App 密钥是钥匙串里的另一项 `app-viewer`），存在 App 自己的 Application Support/AnixOps-Captures，由 App 进程里的内核抓包查看器（`networkcore_ios_capture_viewer`，不需要引擎）打开。
+  - 连接期间 App 每 5 秒看一次 `capture`，有变化就拷一份当前抓包，会话 id 是这次运行的 `run_session`；连接时还把扩展保存过、App 没有或只有旧版本的会话拷过来（App 里删掉的会话记在 `networkcore.capture.deleted-sessions`，不会再拷回来）。
+  - 用户或系统断开隧道，抓包随之停止；扩展在 `stopTunnel` 里把有内容的抓包用同一个 `run_session` 加密保存（`save_capture` 的 `run: true`，名称“断开时自动保存”），下次连接时它替换 App 里同一 id 的副本，所以不会出现两份。从 App 断开时先等最多 3 秒拷最后一份。
+  - 断开后请求页和连接页自动改为显示 App 里这次运行的副本，顶部横幅写明“正在查看已保存的会话”，可以照常筛选、看详情和导出；“回到实时抓包”或“关闭会话”回到实时状态，重新连接时自动回到实时抓包。查看已保存会话期间，读抓包和连接列表的请求都发给查看器，实时抓包在扩展里照常进行。
+  - 查看器载入会话时保留原来的连接 id（`load_capture` 在查看器里不重新编号），连接页的“抓包内容”与请求一一对应。
   - App 自己发起的重连（换节点、点“解密此域名”、改插件或映射）开始前抓包是开着的，重连后 App 自动重新开启抓包。
 
 ## 导出单条请求与加密会话（计划 F1 / F5 / E11）
 
 - 请求详情的“导出这条请求”：cURL、代码（Python requests / JavaScript fetch / Swift URLSession / Kotlin OkHttp / Go net/http）、Postman、Insomnia、HAR，经内核 `export_capture` 的 `id` + `exchange` 生成。
 - “遮盖 Cookie、令牌和密码”默认打开（内核 `redact`）；整份 pcapng / HAR 导出也按内核默认脱敏。
+- 打包导出 zip（内核 `export_capture` 的 `format: "zip"`）：一个文件里有 README.txt、connections.json（每个连接的目标、时间、流量和请求清单）、capture.har（有解密的请求时）和 capture.pcapng。请求页 ⋯、抓包内容页和已保存会话的长按菜单里有“遮盖密码和 Cookie”和“完整，不遮盖”两项，经系统分享面板发出。
 - 请求列表“更多”里可以“保存当前抓包”和查看“已保存的会话”。
   - 隧道扩展在引擎启动后自己调用 `set_capture_storage`：目录是扩展自己的 Application Support/AnixOps-Captures，密钥是仅本机可用的 32 字节随机数（`CaptureSessionStorage`），不经过 App。
     - iOS：密钥在钥匙串里（`AfterFirstUnlockThisDeviceOnly`）。
     - macOS：Developer ID 版的隧道是以 root 运行的 System Extension，不在用户登录上下文里，用不了数据保护钥匙串（Apple TN3137），所以密钥是扩展容器里的文件 Application Support/`capture-session.key`（不在会话目录里），权限 0600，只有 root 能读，与 `start-secrets.json` 同一保护级别（`CaptureSessionKeyFile`）。新密钥先写进私有临时文件，再用 `link` 放到位，已有文件永不覆盖；文件读不出来或长度不是 32 字节时报错，不换新密钥，免得已保存的会话全部打不开（与 Tauri 端规则相同）。之前能读到的钥匙串密钥（只有非系统扩展的构建才可能有）在第一次创建文件时沿用。
     - 设置失败时扩展事件里记固定原因（钥匙串状态码、密钥文件不可读 / 长度不对 / 写不进去的 errno），不记密钥。macOS 的“已保存的会话”页在这种情况下写“隧道扩展读不到会话密钥”。
-  - 会话用 ChaCha20-Poly1305 加密，保留 7 天。打开会话会替换当前抓包并停止实时抓包，之后照常筛选、查看和导出。
+  - 会话用 ChaCha20-Poly1305 加密，保留 7 天。“已保存的会话”列的是 App 里的副本，连接与否都能打开；打开后请求列表显示它，实时抓包不受影响。删除会同时删 App 里的副本和（已连接时）扩展里的会话。
 
 ## Tauri 客户端（Windows / Linux / Android）
 
@@ -131,7 +135,7 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含调试模式的 `deb
 - **模式**：存储键为 `anixops.app-mode`（`proxy` / `debug`）和 `anixops.debug-exit`（`direct` / `node`），保存在 WebView 的 localStorage（`ui/src/mode.ts`）。首次选择、老用户直接用代理模式、导入节点后自动切到“经过节点”，都与 Apple 端一致。
 - **侧栏**：调试网络下是“请求 · 改写”，下方是“出口 · 设置”，打开就在请求页，没有概览。“改写”就是扩展页（插件、Map Local / Remote、解密证书）；订阅、节点和分流规则（含 DNS）都在“出口”里。Android 窄屏下侧栏变成底栏。
 - **直连出口**：后端命令 `set_direct_egress` 让引擎使用不含节点的 `{"outbound":{"type":"direct"}}` 配置。Linux、Android 和 Windows 都支持。
-- **请求页**（`pages/RequestsPage.tsx`，仿 Proxyman）：左边是请求表格，右边常驻检查器（选中即看请求和响应，可重放、映射、导出）。窗口窄于 1100 px 时两者轮流显示，Android 上点一行打开详情。
+- **请求页**（`pages/RequestsPage.tsx`）：左边是请求表格，右边常驻检查器（选中即看请求和响应，可重放、映射、导出）。窗口窄于 1100 px 时两者轮流显示，Android 上点一行打开详情。
 - **进行中的请求与流**：请求表按 `since_rev` 增量读取（`capture-filter.ts` 的 `mergeRequests` / `nextRev`），请求头读到就出现，响应到来时原位更新；行以 `连接 id:序号`（`requestKey`）标识。类型列附 `SSE n` / `WS n` 和“改写未生效”。检查器在进行中时每两秒重读；选中的请求暂时不在列表中（换了筛选条件正在重读、超出列表上限或被内核淘汰）时，检查器保留选中时的内容并注明“已不在列表中”，打开的重放和映射编辑器不会被关掉，只有选另一条请求、清空抓包或载入会话才换掉它；流结束后，检查器最后一次读到的事件 / 消息（如 SSE 的 `[DONE]`、WebSocket 的 Close）和总数也会并入列表；有事件或 WebSocket 消息时多一个“事件” / “WebSocket”标签（`capture_exchange` + `since_message`，进行中每秒追加，只读）；HTTP/2 连接多一个“HTTP/2 帧”标签（`capture_h2_frames`，可按链路、只看 RST_STREAM / GOAWAY / 错误筛选）。概览里写明改写未生效的原因。
 - **正文解压**：后端命令 `decode_body`（`desktop_mitm::capture::decode_body`，调内核 `capture::decode::decode_body`）解 gzip、deflate、br、zstd，可叠加，最多 16 MiB，只抓到开头的正文也解出能解的部分；内核解不开时退回 WebView 的 DecompressionStream（只限完整的 gzip / deflate）。
 - **检查器**（`pages/Inspector.tsx`、`pages/BodyViewer.tsx`）：顶行是方法、状态和网址，下面四个标签：概览、请求、响应、时间线。请求和响应各自在“头 / 查询 / 正文”之间切换，选择会记住。正文按内容显示：JSON 是可折叠的树（方向键移动和折叠，Ctrl+C 拷贝选中的值，下方显示并可拷贝 JSONPath）或带颜色的格式化文本，图片直接预览，表单是名值对，其余是原文，任何内容都能切到十六进制。JSON 用自己的解析器（`json-view.ts`），数字按服务器发来的原样显示，不会像 `JSON.parse` 那样把 64 位 id 取整。时间线把同一连接上的请求画在一条时间轴上；内核目前只记录每个请求的开始和结束，没有 DNS、建连、TLS 的分段。
@@ -140,7 +144,7 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含调试模式的 `deb
   - 表格（`pages/RequestList.tsx`）列出时间、方法、状态、主机、路径、类型、大小、耗时，点列头排序（`ui/src/request-table.ts`），默认最新在上。状态码按颜色区分：2xx 绿、3xx 黄、4xx/5xx 和没有响应红、等待中灰。只画可见的行，最多保留 2000 条。
   - 键盘：表格获得焦点后用 ↑ ↓、j / k、PageUp / PageDown、Home / End 切换，Enter 打开；Ctrl+F 跳到筛选框，Ctrl+R 重放选中的请求。
   - 用 `capture_requests` 每秒增量读取，筛选框写的就是内核的过滤表达式。快速筛选（出错、JSON、图片、HTTP/2、大于 100 KB）会拼进表达式（`ui/src/capture-filter.ts`）。
-- **导出**：连接可以导出 pcapng / HAR，单条请求可以导出 cURL、五种语言的代码、Postman、Insomnia 或 HAR，都保存到“下载”文件夹。“遮盖 Cookie、令牌和密码”默认打开。
+- **导出**：整份抓包可以“打包导出 zip”（遮盖 / 完整两项，内含连接清单、HAR 和 pcapng），连接可以导出 pcapng / HAR，单条请求可以导出 cURL、五种语言的代码、Postman、Insomnia 或 HAR，都保存到“下载”文件夹。“遮盖 Cookie、令牌和密码”默认打开。
 - **重放**（`desktop_mitm::replay`）：
   - 桌面经引擎的本机代理发出，Android 经内核的本机重放代理发出（`start_replay_proxy`，只监听 127.0.0.1，一次性 Basic 凭据，凭据只留在后端）。
   - 不跟随重定向，不保存 Cookie，响应最多保留 1 MiB；开着 HTTPS 解密时会信任解密根证书。
@@ -151,7 +155,8 @@ CI 的 macOS 截图（`mac-screenshots-<sha>`）额外包含调试模式的 `deb
     Linux 存进 Secret Service（`secret-tool`），没有钥匙环时存成只有本人可读（0600）的文件，界面会写明。
     已有的密钥读不出来（例如钥匙环没解锁）时报错，不会换新密钥，免得已保存的会话全部打不开。
   - 7 天后删除：内核在设置存储、保存和列出时清理；客户端启动时也按文件名里的时间清理一次，不连接也会过期。
-  - 载入会替换当前抓到的内容并停止实时抓包；当前有内容时“载入”要再点一次确认。会话要在连接时才能列出和载入（内核在运行时才应答）。
+  - 载入会替换当前抓到的内容并停止实时抓包；当前有内容时“载入”要再点一次确认。
+  - 断开时也能列出、打开、导出和删除会话：引擎没在运行时，后端把抓包命令交给内核的抓包查看器（`desktop_mitm::sessions::viewer_control`，内核 `capture_viewer`，同一个目录和密钥）。用户断开（Android 上 VPN 被收回）时自动保存的会话随即在查看器里打开（`open_in_viewer`），请求页继续显示断开前的请求，顶部写明已断开、已加密保存，“更多”里可以打包导出或关闭会话；重新连接时查看器清空（`close_viewer`），列表回到实时抓包。
 - **抓包跟引擎同生命周期，重启和断开不丢**（`desktop_mitm::sessions::preserve`）：
   - 内核目前只有 `reload_rules` 能在运行中替换规则，没有替换解密域名、映射和插件的命令，所以改这些（含“解密此域名”、“映射到本地/远程”）、开关 HTTPS 解密或 TUN、改 DNS 重定向、换节点都会重启引擎。
   - 重启前，如果实时抓包开着且有内容，后端先把它加密保存成会话“重连前自动保存”；用户断开、退出程序（Android 上 VPN 被系统收回）时保存成“断开时自动保存”，名称跟随界面语言。正在查看的已保存会话（`load_capture` 会关掉抓包）不会再存一次。保存失败只记日志并在提示里说明，不会挡住重启或断开。

@@ -1,4 +1,4 @@
-//! What a subscription server reports besides the node list, as Loon, Clash and Shadowrocket read it:
+//! What a subscription server reports besides the node list, in the commonly used headers:
 //! traffic and expiry (`subscription-userinfo`), a title (`profile-title` or the `content-disposition` file
 //! name) and the update interval it suggests (`profile-update-interval`). The desktop clients keep this per
 //! subscription; the iOS app has the same rules in Swift (`SubscriptionGroup.swift`).

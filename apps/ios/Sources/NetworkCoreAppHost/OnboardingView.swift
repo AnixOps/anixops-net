@@ -24,7 +24,7 @@ struct OnboardingView: View {
                 .foregroundStyle(brand.text2)
                 .fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: 14) {
-                point("link", "支持订阅链接、节点链接、二维码，以及 Clash / Surge / Loon 配置。")
+                point("link", "支持订阅链接、节点链接、二维码，以及常见格式的配置文件。")
                 point("lock.shield", "第一次连接时，iOS 会请求添加 VPN 配置。它只用来把流量交给本 App 分流，不收集你的浏览记录。")
                 point("key", "节点密码只保存在本机钥匙串里。")
             }

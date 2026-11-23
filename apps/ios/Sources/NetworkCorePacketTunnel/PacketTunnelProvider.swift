@@ -426,8 +426,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     /// Lets the engine seal saved capture sessions: a folder in this extension's container and a key that never
     /// leaves this device (`CaptureSessionStorage.key()`: the Keychain on iOS, a root-only file on macOS, where the
-    /// System Extension cannot use the data protection keychain). Without either, saving sessions is unavailable and
-    /// the app says so (`CaptureStopNotice`). Only fixed reasons and codes are logged, never the key.
+    /// System Extension cannot use the data protection keychain). Without either the tunnel saves nothing on stop; the
+    /// app's own copies of the live capture (`copy_capture`) need no storage here. Only fixed reasons and codes are
+    /// logged, never the key.
     private func setUpCaptureStorage(_ session: EmbeddedRuntimeSession) {
         do {
             if session.control(try CaptureSessionStorage.setupRequest().request) == nil {
@@ -449,18 +450,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
     }
 
-    /// Capture lives in the engine's memory and ends with the tunnel. When it is still on and holds something, it is
-    /// sealed into a saved session first (`save_capture`, 7 days), so disconnecting stops capture without losing
-    /// what it caught. A session being viewed (`load_capture` turns capture off) is not saved again.
+    /// Capture lives in the engine's memory and ends with the tunnel. When it holds something, it is sealed into this
+    /// run's session first (`save_capture` with `run`, 7 days), so disconnecting stops capture without losing what it
+    /// caught. The app keeps copies of the run under the same session id while connected (`copyLiveCapture`); this
+    /// seal is the complete one, and the app copies it at the next connect.
     private func saveCaptureOnStop(_ session: EmbeddedRuntimeSession) {
         guard let status = RuntimeControl.decode(PacketCapture.Status.self, from: session.control(RuntimeControl.captureStatus.request)),
-              status.enabled, status.connections > 0
+              status.connections > 0
         else {
             return
         }
         let answer = RuntimeControl.decode(
             PacketCapture.SavedAnswer.self,
-            from: session.control(RuntimeControl.saveCapture(name: String(localized: "断开时自动保存")).request)
+            from: session.control(RuntimeControl.saveCapture(name: String(localized: "断开时自动保存"), run: true).request)
         )
         events.record(answer != nil ? "capture saved on stop, \(status.connections) connections" : "capture not saved on stop")
     }

@@ -2,11 +2,11 @@ import Foundation
 import NetworkCoreBridge
 import NetworkCoreRuntimeC
 
-/// The delay test, like Loon's and Surge's: an HTTP request to a test URL through the node's own protocol, timed to the
+/// The delay test: an HTTP request to a test URL through the node's own protocol, timed to the
 /// first line of the response (crates/engine-embedded `networkcore_ios_measure_delay`). It runs in the app, so it works
 /// while the tunnel is down and never goes through the tunnel.
 enum NodeDelayFFI {
-    /// Same URL as Loon's default delay test.
+    /// A widely used delay-test URL that answers 204 with no body.
     static let testURL = "http://www.gstatic.com/generate_204"
     static let timeoutMillis: UInt32 = 5000
 

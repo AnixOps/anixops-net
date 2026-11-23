@@ -49,7 +49,7 @@ export interface ExchangePlace {
 }
 
 /**
- * One request and its response in tabs, after Proxyman's inspector: an overview, the request, the response and
+ * One request and its response in tabs: an overview, the request, the response and
  * where the request sits in time on its connection. The top line and the overview come from the table row, so they
  * are there at once; headers and bodies fill in when the content has been read. The tab and the headers/body choice
  * stay as the user moves through the table.

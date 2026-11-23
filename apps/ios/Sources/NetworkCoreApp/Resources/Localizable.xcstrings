@@ -2147,18 +2147,18 @@
         }
       }
     },
-    "导入带规则和策略组的订阅（Clash、Surge、Loon 配置）后，可以在这里按订阅规则分流和切换策略组。现在全部流量走所选节点。": {
+    "导入带规则和策略组的订阅后，可以在这里按订阅规则分流和切换策略组。现在全部流量走所选节点。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "After you import a subscription with rules and policy groups (a Clash, Surge or Loon profile), you can route by its rules and switch its policy groups here. Right now all traffic goes through the selected node."
+            "value": "After you import a subscription with rules and policy groups, you can route by its rules and switch its policy groups here. Right now all traffic goes through the selected node."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "匯入帶規則和策略組的訂閱（Clash、Surge、Loon 設定）後，可以在這裡按訂閱規則分流和切換策略組。現在全部流量走所選節點。"
+            "value": "匯入帶規則和策略組的訂閱後，可以在這裡按訂閱規則分流和切換策略組。現在全部流量走所選節點。"
           }
         }
       }
@@ -3251,34 +3251,34 @@
         }
       }
     },
-    "支持订阅链接、节点链接、二维码，以及 Clash / Surge / Loon 配置。": {
+    "支持订阅链接、节点链接、二维码，以及常见格式的配置文件。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Works with subscription links, node links, QR codes, and Clash / Surge / Loon configs."
+            "value": "Works with subscription links, node links, QR codes, and configs in common formats."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "支援訂閱連結、節點連結、QR Code，以及 Clash / Surge / Loon 設定。"
+            "value": "支援訂閱連結、節點連結、QR Code，以及常見格式的設定檔。"
           }
         }
       }
     },
-    "支持订阅链接，Clash / Surge / Loon / Quantumult X 订阅内容，Trojan、VMess、VLESS、Shadowsocks、Hysteria2、TUIC 链接，以及单个 Peer 的 WireGuard 配置。": {
+    "支持订阅链接、常见格式的订阅内容，Trojan、VMess、VLESS、Shadowsocks、Hysteria2、TUIC 链接，以及单个 Peer 的 WireGuard 配置。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Supports subscription links; Clash / Surge / Loon / Quantumult X subscription content; Trojan, VMess, VLESS, Shadowsocks, Hysteria2 and TUIC links; and WireGuard configs with one peer."
+            "value": "Supports subscription links; subscription content in common formats; Trojan, VMess, VLESS, Shadowsocks, Hysteria2 and TUIC links; and WireGuard configs with one peer."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "支援訂閱連結，Clash / Surge / Loon / Quantumult X 訂閱內容，Trojan、VMess、VLESS、Shadowsocks、Hysteria2、TUIC 連結，以及單個 Peer 的 WireGuard 設定。"
+            "value": "支援訂閱連結、常見格式的訂閱內容，Trojan、VMess、VLESS、Shadowsocks、Hysteria2、TUIC 連結，以及單個 Peer 的 WireGuard 設定。"
           }
         }
       }
@@ -7971,18 +7971,18 @@
         }
       }
     },
-    "导入带规则和策略组的订阅（Clash、Surge、Loon 配置）后，可以按订阅规则分流和切换策略组。": {
+    "导入带规则和策略组的订阅后，可以按订阅规则分流和切换策略组。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Import a subscription with rules and policy groups (Clash, Surge or Loon profiles) to route by its rules and switch policy groups."
+            "value": "Import a subscription with rules and policy groups to route by its rules and switch policy groups."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "匯入帶規則和策略組的訂閱（Clash、Surge、Loon 設定）後，可以按訂閱規則分流和切換策略組。"
+            "value": "匯入帶規則和策略組的訂閱後，可以按訂閱規則分流和切換策略組。"
           }
         }
       }
@@ -8851,18 +8851,18 @@
         }
       }
     },
-    "一行一条，写法同 Surge / Loon：类型,值,策略[,no-resolve]。策略写 DIRECT、REJECT，其他名字都当作代理。以 # 开头的整条规则表示停用，其余注释保存时不保留。连接中保存会直接在隧道里换上新规则，已有连接不断开；新增规则列表 URL 时会重新连接。": {
+    "一行一条，兼容常见规则语法：类型,值,策略[,no-resolve]。策略写 DIRECT、REJECT，其他名字都当作代理。以 # 开头的整条规则表示停用，其余注释保存时不保留。连接中保存会直接在隧道里换上新规则，已有连接不断开；新增规则列表 URL 时会重新连接。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "One rule a line, written as in Surge / Loon: type,value,policy[,no-resolve]. DIRECT and REJECT are kept; any other policy name means the proxy. A whole rule after # is switched off; other comments are not kept. Saving while connected swaps the rules in the running tunnel without dropping connections; adding a rule list URL reconnects."
+            "value": "One rule a line, in common rule syntax: type,value,policy[,no-resolve]. DIRECT and REJECT are kept; any other policy name means the proxy. A whole rule after # is switched off; other comments are not kept. Saving while connected swaps the rules in the running tunnel without dropping connections; adding a rule list URL reconnects."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "一行一條，寫法同 Surge / Loon：類型,值,策略[,no-resolve]。策略寫 DIRECT、REJECT，其他名稱都當作代理。以 # 開頭的整條規則表示停用，其餘註解儲存時不保留。連線中儲存會直接在隧道裡換上新規則，現有連線不中斷；新增規則列表 URL 時會重新連線。"
+            "value": "一行一條，相容常見規則語法：類型,值,策略[,no-resolve]。策略寫 DIRECT、REJECT，其他名稱都當作代理。以 # 開頭的整條規則表示停用，其餘註解儲存時不保留。連線中儲存會直接在隧道裡換上新規則，現有連線不中斷；新增規則列表 URL 時會重新連線。"
           }
         }
       }
@@ -16467,18 +16467,18 @@
         }
       }
     },
-    "pcapng 可用 Wireshark 打开，HAR 可导入浏览器开发者工具、Charles 或 Proxyman。导出内容可能包含账号、Cookie 等敏感信息，请只发给信任的人。": {
+    "pcapng 可用 Wireshark 打开，HAR 可导入浏览器开发者工具或其他抓包工具。导出内容可能包含账号、Cookie 等敏感信息，请只发给信任的人。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Open pcapng with Wireshark; import HAR into browser developer tools, Charles or Proxyman. Exports may contain accounts, cookies and other sensitive data, so send them only to people you trust."
+            "value": "Open pcapng with Wireshark; import HAR into browser developer tools or other capture tools. Exports may contain accounts, cookies and other sensitive data, so send them only to people you trust."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "pcapng 可用 Wireshark 開啟，HAR 可匯入瀏覽器開發者工具、Charles 或 Proxyman。匯出內容可能包含帳號、Cookie 等敏感資訊，請只傳給信任的人。"
+            "value": "pcapng 可用 Wireshark 開啟，HAR 可匯入瀏覽器開發者工具或其他抓包工具。匯出內容可能包含帳號、Cookie 等敏感資訊，請只傳給信任的人。"
           }
         }
       }
@@ -17075,18 +17075,18 @@
         }
       }
     },
-    "从 Loon / Surge 配置导入规则": {
+    "从配置文件导入规则": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Import Rules from a Loon / Surge Config"
+            "value": "Import Rules from a Config File"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "從 Loon / Surge 設定匯入規則"
+            "value": "從設定檔匯入規則"
           }
         }
       }
@@ -17203,18 +17203,18 @@
         }
       }
     },
-    "按域名、IP、端口等写规则，写法和 Surge、Loon 一样。": {
+    "按域名、IP、端口等写规则，兼容常见规则语法。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Write rules by domain, IP, port and more, the same way as in Surge and Loon."
+            "value": "Write rules by domain, IP, port and more, compatible with common rule syntax."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "按網域、IP、連接埠等寫規則，寫法和 Surge、Loon 一樣。"
+            "value": "按網域、IP、連接埠等寫規則，相容常見規則語法。"
           }
         }
       }
@@ -17235,18 +17235,18 @@
         }
       }
     },
-    "填任意 Surge、Loon、Clash 规则列表的 https 链接，由内核经代理下载，每天自动更新。": {
+    "填任意常见格式规则列表的 https 链接，由内核经代理下载，每天自动更新。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enter the https link of any Surge, Loon or Clash rule list. The engine downloads it through the proxy and updates it daily."
+            "value": "Enter the https link of a rule list in any common format. The engine downloads it through the proxy and updates it daily."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "填任意 Surge、Loon、Clash 規則列表的 https 連結，由核心經代理下載，每天自動更新。"
+            "value": "填任意常見格式規則列表的 https 連結，由核心經代理下載，每天自動更新。"
           }
         }
       }
@@ -17331,18 +17331,18 @@
         }
       }
     },
-    "支持 Surge、Loon 的 .list 和 Clash 的 classical / domain 列表（https）。": {
+    "支持常见的 .list 规则列表和 classical / domain 列表（https）。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Supports Surge and Loon .list files and Clash classical / domain lists (https)."
+            "value": "Supports common .list rule lists and classical / domain lists (https)."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "支援 Surge、Loon 的 .list 和 Clash 的 classical / domain 列表（https）。"
+            "value": "支援常見的 .list 規則列表和 classical / domain 列表（https）。"
           }
         }
       }
@@ -17523,34 +17523,34 @@
         }
       }
     },
-    "Surge / Loon 格式的规则列表 https 地址，经代理每天下载一次。": {
+    "常见规则语法的规则列表 https 地址，经代理每天下载一次。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The https address of a rule list in Surge / Loon format, downloaded once a day through the proxy."
+            "value": "The https address of a rule list in common rule syntax, downloaded once a day through the proxy."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "Surge / Loon 格式的規則列表 https 位址，經代理每天下載一次。"
+            "value": "常見規則語法的規則列表 https 位址，經代理每天下載一次。"
           }
         }
       }
     },
-    "与 Surge、Loon 的同名规则写法相同。": {
+    "兼容常见规则语法中的同名规则。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Written the same way as the rule of the same name in Surge and Loon."
+            "value": "Compatible with the rule of the same name in common rule syntax."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "與 Surge、Loon 的同名規則寫法相同。"
+            "value": "相容常見規則語法中的同名規則。"
           }
         }
       }
@@ -17587,18 +17587,18 @@
         }
       }
     },
-    "可以粘贴整份 Loon / Surge 配置（只读 [Rule] 段）或每行一条规则。DIRECT、REJECT 保留，其他策略名都当作代理；FINAL 和不支持的类型会跳过。": {
+    "可以粘贴整份配置（只读 [Rule] 段）或每行一条规则。DIRECT、REJECT 保留，其他策略名都当作代理；FINAL 和不支持的类型会跳过。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Paste a whole Loon / Surge config (only its [Rule] section is read) or one rule per line. DIRECT and REJECT are kept and every other policy name counts as the proxy; FINAL and unsupported types are skipped."
+            "value": "Paste a whole config (only its [Rule] section is read) or one rule per line. DIRECT and REJECT are kept and every other policy name counts as the proxy; FINAL and unsupported types are skipped."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "可以貼上整份 Loon / Surge 設定（只讀 [Rule] 段）或每行一條規則。DIRECT、REJECT 保留，其他策略名稱都當作代理；FINAL 和不支援的類型會略過。"
+            "value": "可以貼上整份設定（只讀 [Rule] 段）或每行一條規則。DIRECT、REJECT 保留，其他策略名稱都當作代理；FINAL 和不支援的類型會略過。"
           }
         }
       }
@@ -18707,18 +18707,18 @@
         }
       }
     },
-    "导入订阅或节点后，可以在这里选择规则、全局或直连模式。规则模式按你自己的规则分流；带规则和策略组的订阅（Clash、Surge、Loon 配置）按订阅规则分流。": {
+    "导入订阅或节点后，可以在这里选择规则、全局或直连模式。规则模式按你自己的规则分流；带规则和策略组的订阅按订阅规则分流。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Once you import a subscription or nodes, choose rule, global or direct mode here. Rule mode routes by your own rules; subscriptions with rules and policy groups (Clash, Surge, Loon configs) route by the subscription's rules."
+            "value": "Once you import a subscription or nodes, choose rule, global or direct mode here. Rule mode routes by your own rules; subscriptions with rules and policy groups route by the subscription's rules."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "匯入訂閱或節點後，可以在這裡選擇規則、全域或直連模式。規則模式按你自己的規則分流；帶規則和策略組的訂閱（Clash、Surge、Loon 設定）按訂閱規則分流。"
+            "value": "匯入訂閱或節點後，可以在這裡選擇規則、全域或直連模式。規則模式按你自己的規則分流；帶規則和策略組的訂閱按訂閱規則分流。"
           }
         }
       }
@@ -20239,6 +20239,294 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld 行不支援"
+          }
+        }
+      }
+    },
+    "查看已保存的抓包": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View Saved Captures"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查看已儲存的抓包"
+          }
+        }
+      }
+    },
+    "隧道没有连接。断开前抓到的内容已加密保存，可以打开查看和导出。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The tunnel is not connected. What was captured before it disconnected is saved encrypted; open it to view and export."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隧道沒有連線。中斷前抓到的內容已加密儲存，可以開啟檢視和匯出。"
+          }
+        }
+      }
+    },
+    "这个会话里没有解密出的请求。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This session has no decrypted requests."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這個工作階段裡沒有解密出的請求。"
+          }
+        }
+      }
+    },
+    "打包导出 zip": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export as zip"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打包匯出 zip"
+          }
+        }
+      }
+    },
+    "请求列表改为显示这个会话，实时抓包照常进行，随时可以回到实时抓包。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The request list shows this session instead. Live capture keeps running, and you can go back to it at any time."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請求列表改為顯示這個工作階段，即時抓包照常進行，隨時可以回到即時抓包。"
+          }
+        }
+      }
+    },
+    "请求列表改为显示这个会话。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The request list shows this session instead."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請求列表改為顯示這個工作階段。"
+          }
+        }
+      }
+    },
+    "会话用只保存在本机钥匙串里的密钥加密，保留 7 天后自动删除。隧道断开时会自动保存当次的抓包，断开后也能打开。打开会话后请求列表显示它的内容，可以照常查看、筛选和导出；长按会话可以直接打包导出。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessions are encrypted with a key kept only in this device's keychain and are deleted after 7 days. The capture of each tunnel run is saved automatically when the tunnel disconnects and can be opened afterwards. An open session shows in the request list, where you can view, filter and export it as usual; touch and hold a session to export it as a zip."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作階段用只儲存在本機鑰匙圈裡的密鑰加密，保留 7 天後自動刪除。隧道中斷時會自動儲存當次的抓包，中斷後也能開啟。開啟工作階段後請求列表顯示它的內容，可以照常檢視、篩選和匯出；長按工作階段可以直接打包匯出。"
+          }
+        }
+      }
+    },
+    "这台设备上无法打开会话（钥匙串不可用）。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessions cannot be opened on this device (the keychain is unavailable)."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這台裝置上無法開啟工作階段（鑰匙圈無法使用）。"
+          }
+        }
+      }
+    },
+    "还没有保存的会话。隧道断开时会自动保存当次的抓包，也可以在请求列表右上角“更多”中保存当前抓包。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No saved sessions yet. The capture is saved automatically when the tunnel disconnects; you can also save the current capture from More at the top right of the request list."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "還沒有儲存的工作階段。隧道中斷時會自動儲存當次的抓包，也可以在請求列表右上角「更多」中儲存目前抓包。"
+          }
+        }
+      }
+    },
+    "打包导出 zip（遮盖密码和 Cookie）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export as zip (passwords and cookies masked)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打包匯出 zip（遮蓋密碼和 Cookie）"
+          }
+        }
+      }
+    },
+    "隧道已断开，下面是断开前抓到的内容，已加密保存 7 天，可以在 ⋯ 里打包导出。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The tunnel disconnected. Below is what was captured before that, saved encrypted for 7 days; export it as a zip from ⋯."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隧道已中斷，下面是中斷前抓到的內容，已加密儲存 7 天，可以在 ⋯ 裡打包匯出。"
+          }
+        }
+      }
+    },
+    "正在查看已保存的会话：%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Viewing saved session: %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在檢視已儲存的工作階段：%@"
+          }
+        }
+      }
+    },
+    "回到实时抓包": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to Live Capture"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "回到即時抓包"
+          }
+        }
+      }
+    },
+    "关闭会话": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close Session"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉工作階段"
+          }
+        }
+      }
+    },
+    "打包导出 zip（完整，不遮盖）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export as zip (complete, unmasked)"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打包匯出 zip（完整，不遮蓋）"
+          }
+        }
+      }
+    },
+    "zip 里有连接清单、HAR 和 pcapng；pcapng 可用 Wireshark 打开，HAR 可导入浏览器开发者工具或其他抓包工具。“完整”不遮盖账号、Cookie 等敏感信息，请只发给信任的人。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The zip holds a connection list, HAR and pcapng. Open the pcapng in Wireshark; import the HAR into browser developer tools or other capture tools. “Complete” does not mask accounts, cookies or other sensitive data, so share it only with people you trust."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "zip 裡有連線清單、HAR 和 pcapng；pcapng 可用 Wireshark 開啟，HAR 可匯入瀏覽器開發者工具或其他抓包工具。「完整」不遮蓋帳號、Cookie 等敏感資訊，請只傳給信任的人。"
+          }
+        }
+      }
+    },
+    "隧道已断开。断开前的抓包会自动保存，可以在请求页右上角 ⋯ › 已保存的会话 查看和导出。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The tunnel disconnected. The capture from before that is saved automatically; view and export it from ⋯ › Saved Sessions at the top right of the Requests page."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隧道已中斷。中斷前的抓包會自動儲存，可以在請求頁右上角 ⋯ › 已儲存的工作階段 檢視和匯出。"
+          }
+        }
+      }
+    },
+    "已保存的抓包里没有这个连接：它出现在最后一次保存之后，或已被更新的连接挤出（抓包内存有上限）。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This connection is not in the saved capture: it appeared after the last save, or newer connections pushed it out (capture memory is limited)."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已儲存的抓包裡沒有這個連線：它出現在最後一次儲存之後，或已被更新的連線擠出（抓包記憶體有上限）。"
           }
         }
       }

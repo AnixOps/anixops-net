@@ -1,6 +1,6 @@
 //! Subscriptions other than the one in use. Windows runs one imported profile at a time, so each subscription's
 //! nodes are cached when it is imported; the node list shows them after the active profile's, and a routed
-//! profile gets each of them as a `订阅·<name>` select policy group, as Loon does with subscription groups.
+//! profile gets each of them as a `订阅·<name>` select policy group.
 
 use engine_embedded::config::RuntimeConfig;
 use serde::{Deserialize, Serialize};

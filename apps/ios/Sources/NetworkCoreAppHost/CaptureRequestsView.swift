@@ -7,7 +7,7 @@ import SwiftUI
 /// toolbar's "连接" button.
 ///
 /// On the Mac and in a regular-width iPad window the requests are a sortable table beside an inspector that shows
-/// the selected one (after Proxyman); on an iPhone they are a list that opens each request on its own page.
+/// the selected one; on an iPhone they are a list that opens each request on its own page.
 struct CaptureRequestsView: View {
     var tunnel: TunnelController
     @Environment(\.brand) private var brand
@@ -41,11 +41,8 @@ struct CaptureRequestsView: View {
     @State private var decryption: HttpsDecryptionState?
     /// The enabled plugins, for which domains are decrypted; read when the list appears.
     @State private var pluginLibrary = MitmPluginLibrary()
-    /// The tunnel went down while capture was on and held something: capture stopped with it, and whether the
-    /// extension could seal what it caught into a saved session (`CaptureStopNotice`).
-    @State private var stopNotice: CaptureStopNotice?
-    /// Whether the running tunnel can save sessions (`capture_sessions` answers); nil until asked.
-    @State private var storageAvailable: Bool?
+    /// The app keeps saved sessions it can open while disconnected (`CaptureViewer`).
+    @State private var hasSavedCaptures = false
     /// The running tunnel issues certificates from another root than the one in the Keychain now: it was generated
     /// or replaced after the tunnel started.
     @State private var rootOutdated = false
@@ -57,6 +54,13 @@ struct CaptureRequestsView: View {
     private struct LoadKey: Equatable {
         let connected: Bool
         let filter: String
+        /// The saved session shown instead of live capture.
+        let viewed: String?
+    }
+
+    /// Live capture of the running tunnel, or a saved session: something to read.
+    private var readable: Bool {
+        tunnel.connection == .connected || tunnel.viewedCapture != nil
     }
 
     /// A table with an inspector, or a list that pushes each request.
@@ -121,7 +125,7 @@ struct CaptureRequestsView: View {
         .navigationDestination(isPresented: $showsSessions) {
             CaptureSessionsView(tunnel: tunnel) {
                 log.reset()
-                notice = String(localized: "正在查看已保存的会话，抓包已停止")
+                notice = nil
             }
         }
         #if DEBUG
@@ -132,34 +136,23 @@ struct CaptureRequestsView: View {
             }
         }
         #endif
-        .task(id: LoadKey(connected: tunnel.connection == .connected, filter: filter)) {
+        .task(id: LoadKey(connected: tunnel.connection == .connected, filter: filter, viewed: tunnel.viewedCapture?.id)) {
             // A new filter starts over; the short wait lets typing settle before asking the engine.
             try? await Task.sleep(for: .milliseconds(300))
             log.reset()
             invalidFilter = nil
             hostGroups = []
             pluginLibrary = MitmPluginLibrary.loadInspected()
+            capture = nil
             if tunnel.connection == .connected {
-                stopNotice = nil
                 decryption = await tunnel.httpsDecryptionState()
                 rootOutdated = decryption?.usesOtherRoot(than: TunnelController.currentMitmRootFingerprint()) ?? false
-                // The extension sets session storage up before it reports connected; without it nothing is saved
-                // when the tunnel goes down.
-                storageAvailable = RuntimeControl.decode(
-                    PacketCapture.SessionsAnswer.self, from: await tunnel.control(.captureSessions)
-                ) != nil
             } else {
-                // Capture lives in the tunnel's engine: it ends when the tunnel does (`saveCaptureOnStop`).
-                if let notice = CaptureStopNotice.afterStop(
-                    captured: capture.map { $0.enabled && $0.connections > 0 } ?? false,
-                    storageAvailable: storageAvailable
-                ) {
-                    stopNotice = notice
-                }
-                capture = nil
+                // Capture lives in the tunnel's engine and ends with it; the app shows its saved copy of the run
+                // instead (`TunnelController.captureStopped`), or offers the saved sessions.
                 decryption = nil
                 rootOutdated = false
-                storageAvailable = nil
+                hasSavedCaptures = await !tunnel.savedCaptures().isEmpty
             }
             while !Task.isCancelled {
                 if !paused {
@@ -219,7 +212,7 @@ struct CaptureRequestsView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(summary)
                 .monospacedDigit()
-            if let capture, capture.enabled {
+            if let capture, capture.enabled, tunnel.viewedCapture == nil {
                 CaptureStatusLine(status: capture)
             }
             if let decryptionOffText {
@@ -239,17 +232,7 @@ struct CaptureRequestsView: View {
                 Text("HTTPS 解密证书已更换，隧道仍在用旧证书签发。请断开再连接。")
                     .foregroundStyle(brand.danger)
             }
-            if let stopNotice, tunnel.connection != .connected {
-                switch stopNotice {
-                case .saved:
-                    Text("连接已断开，抓包随之停止。断开前抓到的内容已加密保存，连接后在 ⋯ › 已保存的会话 查看。")
-                case .notSaved:
-                    Text("连接已断开，抓包随之停止。这台设备上无法保存会话，断开前抓到的内容没有保存。")
-                        .foregroundStyle(brand.danger)
-                case .unknown:
-                    Text("连接已断开，抓包随之停止。断开时会尝试加密保存抓到的内容，连接后在 ⋯ › 已保存的会话 查看是否保存成功。")
-                }
-            }
+            SavedCaptureBanner(tunnel: tunnel)
             if let notice {
                 Text(notice)
             }
@@ -372,12 +355,14 @@ struct CaptureRequestsView: View {
         .accessibilityLabel("全部连接")
         .help("全部连接")
         Menu {
-            if tunnel.connection == .connected {
+            if readable {
                 CaptureMenuItems(tunnel: tunnel, status: capture) {
                     log.reset()
                     await load()
                 }
                 Divider()
+            }
+            if tunnel.connection == .connected, tunnel.viewedCapture == nil {
                 Button {
                     Task {
                         await saveSession()
@@ -386,17 +371,16 @@ struct CaptureRequestsView: View {
                     Label("保存当前抓包", systemImage: "lock.doc")
                 }
                 .disabled((capture?.connections ?? 0) == 0)
-                Button {
-                    showsSessions = true
-                } label: {
-                    Label("已保存的会话", systemImage: "clock.arrow.circlepath")
-                }
+            }
+            Button {
+                showsSessions = true
+            } label: {
+                Label("已保存的会话", systemImage: "clock.arrow.circlepath")
             }
         } label: {
             Image(systemName: "ellipsis.circle")
         }
         .accessibilityLabel("更多")
-        .disabled(tunnel.connection != .connected)
     }
 
     private var chipBar: some View {
@@ -458,7 +442,7 @@ struct CaptureRequestsView: View {
                 .font(.subheadline)
                 .foregroundStyle(brand.text2)
                 .multilineTextAlignment(.center)
-            if tunnel.connection == .connected, let capture, !capture.enabled {
+            if tunnel.connection == .connected, tunnel.viewedCapture == nil, let capture, !capture.enabled {
                 Button {
                     Task {
                         _ = await tunnel.control(.setCapture(true))
@@ -472,7 +456,17 @@ struct CaptureRequestsView: View {
                 .buttonStyle(.brandPrimary)
             }
             // What is still missing before HTTPS requests can show up; hidden once nothing is.
-            if tunnel.appMode == .debug, filter.isEmpty, invalidFilter == nil {
+            if tunnel.connection != .connected, tunnel.viewedCapture == nil, hasSavedCaptures {
+                Button {
+                    showsSessions = true
+                } label: {
+                    Text("查看已保存的抓包")
+                        .font(.headline)
+                        .frame(minWidth: 160, minHeight: 44)
+                }
+                .buttonStyle(.brandPrimary)
+            }
+            if tunnel.appMode == .debug, tunnel.viewedCapture == nil, filter.isEmpty, invalidFilter == nil {
                 DebugSetupChecklist(tunnel: tunnel, capturing: capture?.enabled == true)
                     .padding(.top, 8)
             }
@@ -483,8 +477,10 @@ struct CaptureRequestsView: View {
     }
 
     private var emptyText: LocalizedStringKey {
-        if tunnel.connection != .connected {
-            return "连接后，经过隧道的 HTTP 请求会逐条列在这里。"
+        if !readable {
+            return hasSavedCaptures
+                ? "隧道没有连接。断开前抓到的内容已加密保存，可以打开查看和导出。"
+                : "连接后，经过隧道的 HTTP 请求会逐条列在这里。"
         }
         if unsupported {
             return "当前内核不支持请求列表，请在右上角查看全部连接。"
@@ -492,7 +488,10 @@ struct CaptureRequestsView: View {
         if !loaded {
             return "正在读取…"
         }
-        if let capture, !capture.enabled {
+        if tunnel.viewedCapture != nil, filter.isEmpty, hostGroups.isEmpty, invalidFilter == nil {
+            return "这个会话里没有解密出的请求。"
+        }
+        if tunnel.viewedCapture == nil, let capture, !capture.enabled {
             return "抓包未开启。开始抓包后，新的请求会出现在这里。"
         }
         if !hostGroups.isEmpty {
@@ -525,8 +524,7 @@ struct CaptureRequestsView: View {
     }
 
     private func saveSession() async {
-        let answer = RuntimeControl.decode(PacketCapture.SavedAnswer.self, from: await tunnel.control(.saveCapture(name: nil)))
-        if let session = answer?.session {
+        if let session = await tunnel.saveLiveCapture() {
             notice = String(localized: "已加密保存：\(CaptureSessionsView.title(session))，7 天后自动删除")
         } else {
             notice = String(localized: "无法保存会话")
@@ -534,7 +532,7 @@ struct CaptureRequestsView: View {
     }
 
     private func load() async {
-        guard tunnel.connection == .connected else {
+        guard readable else {
             loaded = false
             return
         }

@@ -322,7 +322,7 @@
     <string name="plugin_file_unreadable">讀不了這個檔案</string>
     <string name="plugins_empty">還沒有外掛</string>
     <string name="plugins_empty_body">匯入一個外掛的 https 網址，開啟 HTTPS 解密後生效。</string>
-    <string name="plugins_note">支援 Loon、Surge 和 Quantumult X 的外掛。匯入後先保持關閉：查看它解密的網域、改寫規則和腳本，確認後再開啟，腳本才會執行。</string>
+    <string name="plugins_note">相容常見外掛格式。匯入後先保持關閉：查看它解密的網域、改寫規則和腳本，確認後再開啟，腳本才會執行。</string>
     <string name="plugin_partial">部分支援</string>
     <string name="plugin_unsupported">不支援</string>
     <string name="plugin_view">檢視內容</string>
@@ -512,6 +512,10 @@
     <string name="export_note">儲存到「下載」資料夾。匯出內容可能包含帳號等敏感資訊，請只傳給信任的人。</string>
     <string name="requests_export_har">全部匯出為 HAR</string>
     <string name="requests_export_pcapng">全部匯出為 pcapng</string>
+    <string name="requests_export_zip">打包匯出 zip（遮蓋密碼和 Cookie）</string>
+    <string name="requests_export_zip_full">打包匯出 zip（完整，不遮蓋）</string>
+    <string name="requests_close_session">關閉工作階段</string>
+    <string name="requests_saved_hint">隧道已中斷，下面是中斷前擷取到的內容，已加密儲存 7 天，可以在「更多」裡打包匯出。</string>
     <string name="sessions">封包擷取工作階段</string>
     <string name="sessions_save">儲存目前擷取的封包</string>
     <string name="sessions_nothing">還沒有擷取到內容</string>
@@ -577,7 +581,7 @@
     <string name="connection_export">匯出這個連線</string>
     <string name="connection_export_pcapng">匯出 pcapng</string>
     <string name="connection_export_har">匯出 HAR</string>
-    <string name="connection_export_note">儲存到「下載」資料夾。pcapng 可用 Wireshark 開啟，HAR 可匯入瀏覽器開發者工具、Charles 或 Proxyman。匯出內容可能包含帳號、Cookie 等敏感資訊，請只傳給信任的人。</string>
+    <string name="connection_export_note">儲存到「下載」資料夾。pcapng 可用 Wireshark 開啟，HAR 可匯入瀏覽器開發者工具或其他抓包工具。匯出內容可能包含帳號、Cookie 等敏感資訊，請只傳給信任的人。</string>
     <string name="bytes_text">顯示為文字</string>
     <string name="bytes_hex">顯示為十六進位</string>
     <string name="link_refused">無法開啟連結：%1$s</string>

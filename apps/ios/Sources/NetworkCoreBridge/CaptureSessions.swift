@@ -116,6 +116,18 @@ extension PacketCapture {
         public let sessions: [Session]
     }
 
+    /// The `copy_capture` answer: a session file sealed with the app's key, as base64 to hand to `importCapture`.
+    public struct CopyAnswer: Decodable, Equatable, Sendable {
+        public let session: String
+        public let size: UInt64
+        public let dataBase64: String
+
+        enum CodingKeys: String, CodingKey {
+            case session, size
+            case dataBase64 = "data_base64"
+        }
+    }
+
     /// `{"session": {...}}`, the `save_capture` answer.
     public struct SavedAnswer: Decodable, Equatable, Sendable {
         public let session: Session
@@ -195,8 +207,17 @@ public enum CaptureSessionStorage {
     }
     #endif
 
+    /// The key of the app's own copies of saved sessions (`CaptureViewer`), apart from the tunnel's: in the Keychain
+    /// on this device only, on the Mac too (the app runs in the user's login, unlike the System Extension). The
+    /// tunnel seals copies for the app with it (`copy_capture`), so the app can open them while the tunnel is off.
+    public static func appKey() throws -> Data {
+        try keychainKey(account: appAccount)
+    }
+
+    static let appAccount = "app-viewer"
+
     /// The key in the Keychain on this device only, made on first use.
-    private static func keychainKey() throws -> Data {
+    private static func keychainKey(account: String = CaptureSessionStorage.account) throws -> Data {
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -320,33 +341,6 @@ public enum CaptureSessionKeyFile {
         guard written == data.count, synced else {
             unlink(url.path)
             throw Failure.notWritten(written < 0 ? code : EIO)
-        }
-    }
-}
-
-/// What the request list says about the capture a disconnect ended. The extension seals it into a saved session on
-/// stop (`saveCaptureOnStop`), which needs the session storage it set up at start; the app learns whether that
-/// worked while still connected (`capture_sessions` answers only with storage set up).
-public enum CaptureStopNotice: Equatable, Sendable {
-    /// Saving sessions worked while connected: the extension sealed what was caught.
-    case saved
-    /// The tunnel could not save sessions: what was caught is gone with it.
-    case notSaved
-    /// The tunnel went down before the app knew.
-    case unknown
-
-    /// The notice after the tunnel went down; nil when the disconnect ended no capture with anything in it.
-    public static func afterStop(captured: Bool, storageAvailable: Bool?) -> CaptureStopNotice? {
-        guard captured else {
-            return nil
-        }
-        switch storageAvailable {
-        case true?:
-            return .saved
-        case false?:
-            return .notSaved
-        case nil:
-            return .unknown
         }
     }
 }
