@@ -121,12 +121,13 @@
     return { upload_total: 82.4e6 + t * 2e5, download_total: 1.8e9 + t * 3e6, upload_rate: Math.round(150e3 + 60e3 * Math.sin(t / 3)), download_rate: Math.round(2.6e6 + 1.4e6 * Math.sin(t / 5)), active: 27 };
   };
   const stamp = "2026-01-15 08:30";
+  // `anixops.mock-decryption` = "off": decryption starts off, so turning it on asks for consent (decryption-consent-* shots).
   const snapshot = {
     platform: "windows", connection: "Connected", connectionLabel: "已连接", core: { label: "运行中", tone: "success" }, proxy: { label: "已启用", tone: "success" },
     selectedNode: "香港 01", subscription: "AnixOps", subscriptionLastUpdated: stamp, subscriptionRefreshResult: "success",
     subscriptionAddedNodeCount: 0, subscriptionRemovedNodeCount: 0, subscriptionChangedNodeCount: 0,
     startAfterLogin: true, autoConnect: true, autoRecoverCore: true, autoSubscriptionRefresh: true, autoSelectFastestNode: false,
-    tunModeEnabled: false, scriptRuntimeConfigured: true, httpsDecryptionEnabled: true, darkTheme: false, routingMode: "rule", dnsPreset: "encrypted", blockQuic: false, directEgress: false, embeddedEngine: true,
+    tunModeEnabled: false, scriptRuntimeConfigured: true, httpsDecryptionEnabled: window.localStorage.getItem("anixops.mock-decryption") !== "off", darkTheme: false, routingMode: "rule", dnsPreset: "encrypted", blockQuic: false, directEgress: false, embeddedEngine: true,
   };
   const hours = Array.from({ length: 24 }, (_, i) => ({
     start: Math.floor(start / 3600e3) * 3600 - (23 - i) * 3600, upload: 2e6 * (1 + (i % 5)), download: 60e6 * (1 + ((i * 3) % 7)),
