@@ -135,10 +135,26 @@ pub fn is_trunk(node: &NodeDescriptor) -> bool {
         .any(|entry| entry.key == NODE_METADATA_PATH && entry.value.trim() == NODE_PATH_TRUNK)
 }
 
-/// This device's ANX license directory (`anx_license`), beside the saved state.
+/// The data directory whose `anx-license` folder holds this device's ANX keys and licenses ([`use_license_dir`]).
+static LICENSE_DATA_DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+
+/// The ANX license directory (`anx_license`) of the client whose data directory is `dir`.
+pub fn license_dir(dir: &std::path::Path) -> std::path::PathBuf {
+    dir.join("anx-license")
+}
+
+/// Keeps the ANX licenses in the data directory `dir` (the backend's `Config.dir`), set when the backend opens.
+/// Never `$HOME` or `$XDG_CONFIG_HOME`: a system service, the Linux daemon and the Android app have neither,
+/// or one they cannot write. The first directory set stays, as with the other files the backend names.
+pub fn use_license_dir(dir: &std::path::Path) {
+    let _ = LICENSE_DATA_DIR.set(dir.to_path_buf());
+}
+
+/// This device's ANX license directory (`anx_license`), beside the saved state; none before the backend opened.
 pub fn license_store() -> Option<anx_license::LicenseStore> {
-    super::state::Store::default_dir()
-        .map(|dir| anx_license::LicenseStore::new(dir.join("anx-license")))
+    LICENSE_DATA_DIR
+        .get()
+        .map(|dir| anx_license::LicenseStore::new(license_dir(dir)))
 }
 
 /// Hands each subscription origin's device key and license file to the ANX outbounds of that origin's
@@ -754,6 +770,15 @@ mod tests {
     #[test]
     fn no_licenses_without_a_store() {
         assert!(anx_licenses(None).is_empty());
+    }
+
+    #[test]
+    fn licenses_live_in_the_data_directory() {
+        let dir = std::path::Path::new("/var/lib/anixops-net");
+        assert_eq!(
+            license_dir(dir),
+            std::path::PathBuf::from("/var/lib/anixops-net/anx-license")
+        );
     }
 
     const LINK: &str = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@82.47.34.99:11111#HK";

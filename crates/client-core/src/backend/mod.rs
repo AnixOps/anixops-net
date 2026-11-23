@@ -340,6 +340,8 @@ impl Backend {
         desktop_dns::redirects::use_file(store.dir().join("redirects.json"));
         desktop_dns::data_sources::use_file(store.dir().join("data-sources.json"));
         desktop_dns::devices::use_file(store.dir().join("devices.json"));
+        // ANX device keys and licenses live with the rest of this client's data, wherever the client runs.
+        engine::use_license_dir(store.dir());
         // The removed 国内外分流 DNS choice becomes the user's own settings (docs/no-presets.md). Until that
         // works it is applied as "自定义", never as a preset.
         if let Ok(adopted) = desktop_dns::adopt_legacy_split(state.dns_preset) {
@@ -2416,6 +2418,22 @@ mod tests {
         assert!(asked["hosts"].is_array(), "{asked}");
 
         backend.engine.stop();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// The ANX licenses follow the backend's data directory, not `$HOME` (client-core-ipc-07): a system
+    /// service, the Linux daemon and the Android app have no usable home.
+    #[test]
+    fn anx_licenses_live_in_the_data_directory() {
+        let (_backend, dir) = backend("anx-license");
+        let store = engine::license_store().expect("the backend names the license directory");
+        // Whichever test's backend opened first, its directory is a temporary one, never the user's config.
+        assert!(
+            store.dir().starts_with(std::env::temp_dir()),
+            "{}",
+            store.dir().display()
+        );
+        assert!(store.dir().ends_with("anx-license"));
         let _ = std::fs::remove_dir_all(dir);
     }
 
