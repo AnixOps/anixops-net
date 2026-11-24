@@ -6115,6 +6115,86 @@
         }
       }
     },
+    "AnixOps Net 未能连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AnixOps Net could not connect"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AnixOps Net 未能連線"
+          }
+        }
+      }
+    },
+    "这个问题重试也无法解决，已停止自动重连。打开 App 查看原因。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retrying cannot fix this, so automatic reconnecting has stopped. Open the app to see why."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這個問題重試也無法解決，已停止自動重新連線。打開 App 查看原因。"
+          }
+        }
+      }
+    },
+    "连续 5 次没有连上，已停止自动重连。打开 App 重试或换一个节点。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 connection attempts in a row failed, so automatic reconnecting has stopped. Open the app to retry or switch to another node."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連續 5 次沒有連上，已停止自動重新連線。打開 App 重試或換一個節點。"
+          }
+        }
+      }
+    },
+    "连接失败，重试也无法解决这个问题，已停止自动重连。请查看下面的原因，或换一个节点。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not connect. Retrying cannot fix this, so automatic reconnecting has stopped. See the reason below, or switch to another node."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連線失敗，重試也無法解決這個問題，已停止自動重新連線。請查看下面的原因，或換一個節點。"
+          }
+        }
+      }
+    },
+    "连续 5 次没有连上，已停止自动重连。可以重试，或换一个节点。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 connection attempts in a row failed, so automatic reconnecting has stopped. Retry, or switch to another node."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連續 5 次沒有連上，已停止自動重新連線。可以重試，或換一個節點。"
+          }
+        }
+      }
+    },
     "连接或断开 AnixOps Net": {
       "localizations": {
         "en": {

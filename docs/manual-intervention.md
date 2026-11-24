@@ -41,7 +41,7 @@ ios-upload-external-testflight=blocked
 ios-upload-beta-app-review=blocked-not-required-for-internal
 ios-upload-bundle-id-storage=github-variables-only
 ios-upload-api-key-status=team-key-added-to-environment
-ios-export-compliance-answer=pending-reanswer-standard-algorithms-non-exempt
+ios-export-compliance-answer=per-build-standard-algorithms-not-france-2026-11-23
 ios-upload-internal-confirmation-status=confirmed
 ios-upload-internal-confirmation-items=app-record,export-compliance,internal-testing-group,app-privacy-determination,privacy-policy-determination,environment-secrets-and-variables
 ios-upload-internal-workflow=.github/workflows/ios-testflight.yml
@@ -623,6 +623,15 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 secret 值的 job output（安卓 artifact 名和 APK 名都含 `anixops`）丢弃，发布步骤拿不到安卓包。修复后 release.yml 由版本号直接推出这两个名字。
 tag 当时指向的 d225b10 还是旧 workflow，需要把 tag 移到包含修复的 commit 再推（Release 没有发出，移动 tag 不影响用户）。
 
+## v1.0.1 发布前后的人工事项
+
+1.0.0 的 iOS / macOS 构建因内核接口版本不一致无法连接（#285），开源版 v1.0.0（Windows、Linux、安卓）已于 2026-11-24 发布，
+维护者决定保留 1.0.0，iOS 和 macOS 随 1.0.1 发出。1.0.1 含 #285（握手修复）、#286（新图标）、#288（自动重连降速）。版本号由 `version.py set 1.0.1` 设置，安卓 versionCode 3009。
+发布说明在 `docs/release-notes/v1.0.1.md`，tag 由 “Release tag”（`release-tag.yml`）打。
+
+- [ ] anx 的 ANX 构建（含 iOS 上传 TestFlight）和 `publish-client.yml` 需要维护者批准 `apple-anx` / `anx-release`。
+- [ ] TestFlight 构建页回答加密问题：使用标准算法，不在法国销售。
+
 ## v1.0.0 发布前后的人工事项
 
 发布说明在 `docs/release-notes/v1.0.0.md`，版本号由 `version.py set 1.0.0` 统一设置，安卓 versionCode 3008（beta.11 是 3007）。
@@ -630,7 +639,10 @@ tag 由 Actions 的 “Release tag”（`release-tag.yml`）打，流程同 beta
 
 - [ ] anx 的 ANX 构建和 `publish-client.yml` 进 Environment `apple-anx` / `anx-release`，需要维护者在 Actions 页面批准。
 - [ ] Linux 的 ANX 构建只能在带 WebKitGTK 的自托管 runner（标签 `9700x`）上跑，发布时需要它在线。
-- [ ] App Store Connect 的出口合规按“使用非豁免加密”重新回答（plist 已是 `ITSAppUsesNonExemptEncryption = true`）。
+- [x] 出口合规：iOS 构建 5036（anx run 45282214166）上传时去掉了 `ITSAppUsesNonExemptEncryption`（anx #295），
+  2026-11-23 在 TestFlight 里按构建回答：「代替或补充 Apple 系统加密使用标准算法」，「不在法国分发」，构建进入「准备测试」。
+  以后每个 TestFlight 构建都要这样回答一次，直到有合规码（见下文「出口合规」）。
+- [x] App Store 正式上架暂缓（规则 5.4 要求 VPN 类 App 用组织账号，当前是个人账号）；价格免费、173 个地区（不含法国和中国大陆）已设好。
 
 ## v0.3.0-beta.11 发布前后的人工事项
 
@@ -895,16 +907,23 @@ WireGuard、QUIC 类传输等加密实现，用来保护用户流量的机密性
   4. 是否在 Apple 系统加密之外或之上实现标准算法：是。
   美国 EAR 侧通常按大众市场（5A992 / 5D992，§740.17(b)(1)）处理。2021 年 BIS 规则之后，大多数大众市场终端产品已不再需要年度
   自分类报告，是否仍需提交请法务确认后再写入本文件，不要照抄旧做法。
-- [ ] 法国区：在法国上架需要先向 ANSSI 完成加密产品申报，再把申报文件上传到上面的加密文稿；Apple 审核通过后给出合规码。
+- [x] 法国区：在法国上架需要先向 ANSSI 完成加密产品申报，再把申报文件上传到上面的加密文稿；Apple 审核通过后给出合规码。
   不在法国上架就在「价格与销售范围」里排除法国，并把这个决定记在这里。
-- [ ] 拿到合规码后，在 `project.yml` 的 `NetworkCoreApp` 和 `NetworkCorePacketTunnel`（及 macOS 两个目标）加
-  `ITSEncryptionExportComplianceCode`，或在 workflow 里从 Variables 注入。没有合规码之前，每个 TestFlight 构建都会显示
-  「缺少出口合规信息」，需要在该构建页面回答一次后内部测试者才能安装（`ios-testflight.yml` 的 summary 也会提示）。
-  不要用删除 `ITSAppUsesNonExemptEncryption` 来绕过，删掉的效果相同，只是不显眼。
+  决定（维护者，2026-11-23）：ANSSI 申报完成前不在法国分发；中国大陆暂不分发。App Store Connect 已设为免费、173 个国家或地区
+  （排除法国和中国大陆）。TestFlight 每个构建的加密问题按「使用标准算法、不在法国销售」回答。正式上架 App Store 暂缓：
+  VPN 类 App 需要组织开发者账号（审核指南 5.4），当前是个人账号。要在法国分发时，先完成 ANSSI 申报再改销售范围。
+- [ ] 拿到合规码后，把它设为仓库 Variable `IOS_EXPORT_COMPLIANCE_CODE`（本仓库 `ios-testflight.yml` 与 anx 的 `release-ios.yml`
+  都会写入 `ITSEncryptionExportComplianceCode`）。没有合规码时，App Store Connect 会拒收声明了 `true` 却不带合规码的包，
+  所以两个 workflow 上传前去掉 `ITSAppUsesNonExemptEncryption`，每个 TestFlight 构建都会显示「缺少出口合规证明」，需要在该构建
+  页面回答一次后内部测试者才能安装：「代替或补充 Apple 系统加密使用标准算法」，「不在法国分发」（2026-11-23 起的答案；
+  App Store Connect 对这一组答案的提示是不需要上传文稿）。`project.yml` 里仍保持 `true`，CI 检查不变。
+  不要在 `project.yml` 里删除这个键或改成 false 来绕过：源码里的声明保持真实，只在上传用的副本里按有无合规码处理。
 - [ ] 完成后把第 44 行的标记改成实际答案与日期，例如 `ios-export-compliance-answer=standard-algorithms-non-exempt-YYYY-MM-DD`，
   并按 `docs/architecture/ios-app-review-manual-confirmation-source-contract.md` 记录 `ios-app-review-export-compliance`。
 - [ ] ANX 版（anx 仓库 `release-ios.yml` 复用本仓库的 `project.yml`）含未公开的专有协议，属于「专有或非标准算法」，
   需要单独回答问卷（通常需要 CCATS 和法国申报），并在该 workflow 里显式写 ANX 版自己的 ITS 键和合规码，不能继承开源版的答案。
+  2026-11-23 的 1.0.0 ANX 构建按「标准算法」回答：协议私有，但用到的原语都是公开标准（X25519、ML-KEM-768、HKDF-SHA256、
+  ChaCha20-Poly1305、AES-GCM、Ed25519、ECDSA P-256）。是否需要按「专有」重新申报，由维护者（必要时与法务）确认。
 
 ### 第三方许可声明（release-readiness-10）
 
@@ -928,3 +947,13 @@ CI 的 `Third-party notices` job 在每次相关改动时跑同一套生成，�
 - [ ] 应用内「关于 › 开源许可」页面（Android、iOS / macOS、Tauri）尚未实现：目前声明文件随包附带但不在界面里显示。
 - [ ] WiX 安装界面（`WixUI_InstallDir`）的许可协议页仍是 WiX 默认的占位文本，建议设置 `WixUILicenseRtf` 为本项目许可证，
   或换用不带许可协议页的对话框集。
+
+## 自动重连降速与 5 次上限（docs/auto-reconnect.md）
+
+CI 只能验证计数与等待的逻辑（`AutoReconnectTests`、`on_demand::retry`），系统 On Demand 的实际行为要真机确认：
+
+- [ ] iOS 真机：选一个必然失败的节点（或改坏端口）连接，确认重试间隔逐次变长（开发者模式的隧道事件里有 “reconnecting in N s”），
+  第 5 次失败后不再重试、On Demand 被关闭、App 显示“连续 5 次没有连上，已停止自动重连”并收到通知；点“重试”能立即再试。
+- [ ] 确认扩展内 `NETunnelProviderManager.loadAllFromPreferences` / `saveToPreferences` 能关闭 On Demand（iOS 与 Mac App Store 版）；
+  若不能，拒绝会每 30 秒循环一次，直到 App 打开后关闭它。
+- [ ] macOS Developer ID 版（System Extension）：同上，确认 App 在前台或后台运行时会关闭 On Demand。
