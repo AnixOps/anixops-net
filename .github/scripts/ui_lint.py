@@ -7,7 +7,9 @@
 Colours reach the interface only through the generated token files (.github/scripts/design_tokens.py): the
 Swift `brand.*` / `Brand.*` palette, the desktop CSS variables, BrandTokens.kt, BrandTokens.xaml and the GTK
 brand-*.css. Every pair of those tokens is checked for contrast in AnixOps Design (guidelines/color.md), so a
-colour written anywhere else is a colour nobody checked, in one theme at least. Three rules:
+colour written anywhere else is a colour nobody checked, in one theme at least. Six rules, the first three about
+colour on every platform, the last three about the structure of the SwiftUI screens (Apple has no cheap runtime
+harness, so what the other platforms measure by running the page is read from the source here):
 
   U1 colour-literal   a colour written in the code: hex, rgb(), Color(red:), Color.orange, Color(0xFF...), "#AARRGGBB"
   U2 derived-colour   a token made lighter or mixed: `.opacity()` on a colour, color-mix(), .copy(alpha = ...).
@@ -15,6 +17,14 @@ colour written anywhere else is a colour nobody checked, in one theme at least. 
                       danger-soft, fill-1/2/3, label-2/3, separator.
   U3 disabled-opacity a disabled control drawn by fading it. Faded accent reads as a grey-blue block in dark mode
                       and the text drops below 3:1. Disabled is fill-1 behind label-3 text (actions.md H10).
+  U4 settings-budget  the first screen of SettingsView (iOS) and MacSettingsPage (macOS), the `Form` only, has more
+                      than 8 sections or 16 rows (density.md N25). Advanced and privacy items live on sub-pages.
+                      A section view the composite table below does not know fails, so none is left uncounted.
+  U5 fold-user-lists  a ForEach over a list the user adds (plugins, scripts, Wi-Fi rules, rules, hosts, mappings,
+                      redirects) inside a Form / List / Section shows every row. Fold it with .prefix(n) or a
+                      shown / visible slice, or put it on a pushed page that is the list (N26).
+  U6 master-switch    a Toggle in the same Section as such a ForEach: the master switch is a row among the items
+                      instead of its own section above them (N27). A Toggle inside the ForEach rows is per item.
 
 There is no allow list and no inline marker: a colour the tokens do not have is added to AnixOps Design and
 apps/ios/Design/tokens.json first, then used by name.
@@ -160,6 +170,317 @@ def css_disabled_fades(text: str) -> list[tuple[int, str]]:
     return found
 
 
+# ---------------------------------------------------------------------------------------------------------------
+# SwiftUI structure rules (U4-U6). The source is masked first (comments and string contents blanked, same length,
+# so offsets and line numbers still match), then read by brace matching; no Swift parser is needed for this.
+
+SETTINGS_SECTION_BUDGET = 8
+SETTINGS_ROW_BUDGET = 16
+
+# (file, struct) of every settings first screen. A missing file or struct is a finding, so a rename cannot switch
+# the check off.
+SETTINGS_PAGES = (
+    ("apps/ios/Sources/NetworkCoreAppHost/SettingsView.swift", "SettingsView"),
+    ("apps/ios/Sources/NetworkCoreMac/MacPages.swift", "MacSettingsPage"),
+)
+
+# Views a settings Form may use as a whole section, as (sections, rows) in their worst case on the first screen,
+# read from the views themselves. OnDemandSections says "Sections" but draws a single Section. A view ending in
+# Section / Sections that is not here fails U4: read it, add it, so new sections are never left uncounted.
+SETTINGS_COMPOSITES = {
+    "AppModeSection": (1, 1),     # AppModeViews.swift: the mode picker
+    "OnDemandSections": (1, 2),   # OnDemandSettingsView.swift: auto reconnect switch, Wi-Fi rules link
+    "AboutSection": (1, 4),       # DeveloperView.swift: version, 用户协议, 隐私政策, 开发者模式 once unlocked
+    "MacUpdateSection": (1, 3),   # MacPages.swift: auto-check switch, check row, download / install button
+}
+
+# A row is one of these used directly in the Form or in a Section of it. What sits inside one (a Label in a
+# NavigationLink, a Link in a LabeledContent) belongs to that row. SettingsSubpageRow is the macOS push row.
+SETTINGS_ROW_VIEWS = ("Toggle", "Picker", "NavigationLink", "Button", "Link", "LabeledContent", "Label", "TextField",
+                      "SettingsSubpageRow")
+
+# What counts as a list the user adds (U5 / U6): any identifier in the collection expression that is one of these
+# words. The one place to extend when a new kind of user list appears.
+USER_LIST_WORD = re.compile(r"plugins?|scripts?|scriptReferences|wifi|rules?|hosts?|mappings?|redirects?", re.I)
+# A slice that shows only the first rows: .prefix(n), or a name that says so (visible(...), shown, shownNodes(...)).
+# The fold row ("显示全部 N 个" / "收起") is the author's job; the lint only knows the list is not shown whole.
+FOLDED_NAME = re.compile(r"(?:visible|shown|folded|collapsed|capped|limited)\w*")
+
+PAIRS = {"(": ")", "{": "}", "[": "]"}
+
+
+def mask_swift(text: str) -> str:
+    """Blank comments and string contents (keeping quotes and newlines) so braces in them never count."""
+    out = list(text)
+    n = len(text)
+    i = 0
+    stack: list[list] = []  # ["str", triple] or ["interp", paren depth]
+    comment = 0
+
+    def blank(a: int, b: int) -> None:
+        for k in range(a, min(b, n)):
+            if out[k] != "\n":
+                out[k] = " "
+
+    while i < n:
+        top = stack[-1] if stack else None
+        if comment:
+            if text.startswith("/*", i):
+                comment += 1
+                blank(i, i + 2)
+                i += 2
+            elif text.startswith("*/", i):
+                comment -= 1
+                blank(i, i + 2)
+                i += 2
+            else:
+                blank(i, i + 1)
+                i += 1
+        elif top and top[0] == "str":
+            if text.startswith("\\(", i):
+                stack.append(["interp", 1])
+                blank(i, i + 2)
+                i += 2
+            elif text[i] == "\\":
+                blank(i, i + 2)
+                i += 2
+            elif (top[1] and text.startswith('"""', i)) or (not top[1] and text[i] == '"'):
+                i += 3 if top[1] else 1
+                stack.pop()
+            else:
+                blank(i, i + 1)
+                i += 1
+        elif text.startswith("//", i):
+            end = text.find("\n", i)
+            end = n if end < 0 else end
+            blank(i, end)
+            i = end
+        elif text.startswith("/*", i):
+            comment = 1
+            blank(i, i + 2)
+            i += 2
+        elif text.startswith('"""', i):
+            stack.append(["str", True])
+            i += 3
+        elif text[i] == '"':
+            stack.append(["str", False])
+            i += 1
+        elif top and top[0] == "interp" and text[i] in "()":
+            top[1] += 1 if text[i] == "(" else -1
+            if top[1] == 0:
+                stack.pop()
+                blank(i, i + 1)
+            i += 1
+        else:
+            i += 1
+    return "".join(out)
+
+
+def close_of(masked: str, i: int) -> int:
+    """Index just after the bracket group opening at masked[i]; the end of the text when it never closes."""
+    opener = masked[i]
+    closer = PAIRS[opener]
+    depth = 0
+    for k in range(i, len(masked)):
+        if masked[k] == opener:
+            depth += 1
+        elif masked[k] == closer:
+            depth -= 1
+            if depth == 0:
+                return k + 1
+    return len(masked)
+
+
+TRAILING_CLOSURE = re.compile(r"\s*(?:\w+\s*:\s*)?(?=\{)")
+
+
+def call_end(masked: str, i: int) -> int:
+    """End of a call whose arguments or first closure open at masked[i]: the (...) group, then every trailing
+    closure, `label: { ... }` ones included (Section { } header: { } footer: { }, NavigationLink { } label: { })."""
+    k = close_of(masked, i) if masked[i] == "(" else i
+    while True:
+        if masked[k:k + 1] == "{" and k == i:
+            k = close_of(masked, k)
+            continue
+        m = TRAILING_CLOSURE.match(masked, k)
+        if not m:
+            return k
+        k = close_of(masked, m.end())
+
+
+def bracket_after(masked: str, pos: int) -> int | None:
+    """Index of the ( or { that follows masked[pos:] after blanks, if any."""
+    m = re.compile(r"[ \t]*(?=[({])").match(masked, pos)
+    return m.end() if m else None
+
+
+def line_of(text: str, pos: int) -> int:
+    return text.count("\n", 0, pos) + 1
+
+
+def struct_body(masked: str, name: str) -> tuple[int, int] | None:
+    """Span of `var body: some View { ... }` inside `struct name`."""
+    m = re.search(rf"\bstruct\s+{re.escape(name)}\b[^{{]*\{{", masked)
+    if not m:
+        return None
+    end = close_of(masked, m.end() - 1)
+    b = re.compile(r"\bvar\s+body\s*:\s*some\s+View\s*\{").search(masked, m.end(), end)
+    if not b:
+        return None
+    return b.end() - 1, close_of(masked, b.end() - 1)
+
+
+def settings_budget(masked: str, name: str) -> tuple[int, int, list[str]] | None:
+    """(sections, rows, section views missing from SETTINGS_COMPOSITES) of the first `Form` in `struct name`."""
+    body = struct_body(masked, name)
+    if not body:
+        return None
+    form = re.compile(r"(?<![\w.])Form\s*\{").search(masked, body[0], body[1])
+    if not form:
+        return None
+    start = form.end() - 1
+    end = close_of(masked, start)
+    token = re.compile(
+        r"(?<![\w.])(?:(Section)(?=\s*[({])|(\w*Sections?)\b|(" + "|".join(SETTINGS_ROW_VIEWS) + r")(?=\s*[({]))"
+    )
+    sections = rows = 0
+    unknown: list[str] = []
+    k = start + 1
+    while True:
+        m = token.search(masked, k, end)
+        if not m:
+            break
+        k = m.end()
+        if m.group(1):
+            sections += 1  # its rows are counted as the scan goes on inside it
+            continue
+        if m.group(2):
+            known = SETTINGS_COMPOSITES.get(m.group(2))
+            if known:
+                sections += known[0]
+                rows += known[1]
+            else:
+                unknown.append(m.group(2))
+        else:
+            rows += 1
+        opening = bracket_after(masked, k)
+        if opening is not None:
+            k = call_end(masked, opening)
+    return sections, rows, unknown
+
+
+def check_settings(path: str, text: str, name: str) -> list[str]:
+    result = settings_budget(mask_swift(text), name)
+    if result is None:
+        return [f"{path}:1: U4 settings-budget: no `Form` found in the body of {name}; update SETTINGS_PAGES in ui_lint.py"]
+    sections, rows, unknown = result
+    found = []
+    for view in dict.fromkeys(unknown):
+        found.append(f"{path}:1: U4 settings-budget: {name} uses {view}, which is not in SETTINGS_COMPOSITES; read it, "
+                     "count its sections and rows, and add it to the table in ui_lint.py")
+    if sections > SETTINGS_SECTION_BUDGET:
+        found.append(f"{path}:1: U4 settings-budget: {name} first screen has {sections} sections, over "
+                     f"{SETTINGS_SECTION_BUDGET}; move the rarely used ones to a sub-page (N25)")
+    if rows > SETTINGS_ROW_BUDGET:
+        found.append(f"{path}:1: U4 settings-budget: {name} first screen has {rows} rows, over "
+                     f"{SETTINGS_ROW_BUDGET}; move the rarely used ones to a sub-page (N25)")
+    return found
+
+
+def pushed_pages(masked: str) -> set[str]:
+    """Names of views built inside the destination of a NavigationLink or a navigationDestination."""
+    names: set[str] = set()
+    for m in re.finditer(r"(?<![\w.])NavigationLink\b|\.navigationDestination\b", masked):
+        opening = bracket_after(masked, m.end())
+        if opening is None:
+            continue
+        dest = None
+        if masked[opening] == "(":
+            args_end = close_of(masked, opening)
+            args = masked[opening:args_end]
+            following = bracket_after(masked, args_end)
+            trailing = following if following is not None and masked[following] == "{" else None
+            if "destination:" in args:
+                dest = (opening, args_end)
+            elif trailing is not None and (m.group(0).startswith(".") or not re.search(r"\bvalue\s*:", args)):
+                dest = (trailing, close_of(masked, trailing))
+        else:
+            dest = (opening, close_of(masked, opening))
+        if dest:
+            names.update(re.findall(r"(?<![\w.])([A-Z]\w*)\s*\(", masked[dest[0]:dest[1]]))
+    return names
+
+
+def is_list_page(masked: str, name: str) -> bool:
+    """A page that is the list: the root of its body is a List or a Form."""
+    body = struct_body(masked, name)
+    return bool(body and re.compile(r"\s*(?:List|Form)\s*[({]").match(masked, body[0] + 1))
+
+
+def user_list_foreach(masked: str) -> list[tuple[int, int, str]]:
+    """(start, end, collection expression) of every ForEach over a list the user adds."""
+    found = []
+    for m in re.finditer(r"(?<![\w.])ForEach\s*\(", masked):
+        opening = m.end() - 1
+        close = close_of(masked, opening)
+        depth = 0
+        arg_end = close - 1
+        for k in range(opening + 1, close - 1):
+            c = masked[k]
+            if c in "([{":
+                depth += 1
+            elif c in ")]}":
+                depth -= 1
+            elif c == "," and depth == 0:
+                arg_end = k
+                break
+        expr = masked[opening + 1:arg_end].strip()
+        if any(USER_LIST_WORD.fullmatch(w) for w in re.findall(r"[A-Za-z_]\w*", expr)):
+            found.append((m.start(), call_end(masked, opening), expr))
+    return found
+
+
+def containers(masked: str, names: str) -> list[tuple[int, int]]:
+    spans = []
+    for m in re.finditer(rf"(?<![\w.])(?:{names})(?=\s*[({{])", masked):
+        opening = bracket_after(masked, m.end())
+        if opening is not None:
+            spans.append((m.start(), call_end(masked, opening)))
+    return spans
+
+
+def check_lists(path: str, text: str, pages: set[str]) -> list[str]:
+    """U5 and U6 for one Swift file; `pages` is every view in the tree that a NavigationLink pushes."""
+    masked = mask_swift(text)
+    lists = user_list_foreach(masked)
+    if not lists:
+        return []
+    structs = [(m.start(), close_of(masked, m.end() - 1), m.group(1))
+               for m in re.finditer(r"\bstruct\s+(\w+)\b[^{]*\{", masked)]
+    holders = containers(masked, "Form|List|Section")
+    sections = containers(masked, "Section")
+    every_foreach = [(m.start(), call_end(masked, m.end() - 1)) for m in re.finditer(r"(?<![\w.])ForEach\s*\(", masked)]
+    found = []
+    for start, _, expr in lists:
+        words = re.findall(r"[A-Za-z_]\w*", expr)
+        folded = ".prefix(" in expr or any(FOLDED_NAME.fullmatch(w) for w in words)
+        owner = min((s for s in structs if s[0] < start < s[1]), key=lambda s: s[1] - s[0], default=None)
+        page = owner is not None and owner[2] in pages and is_list_page(masked, owner[2])
+        if any(s[0] < start < s[1] for s in holders) and not folded and not page:
+            found.append(f"{path}:{line_of(text, start)}: U5 fold-user-lists: ForEach over `{expr}` shows every row; "
+                         "fold it with .prefix(n) or a shown / visible slice plus 显示全部, or move it to a pushed "
+                         "page that is the list (N26)")
+        mine = [s for s in sections if s[0] < start < s[1]]
+        if mine:
+            section = min(mine, key=lambda s: s[1] - s[0])
+            for t in re.finditer(r"(?<![\w.])Toggle\s*[({]", masked[section[0]:section[1]]):
+                at = section[0] + t.start()
+                if not any(a < at < b for a, b in every_foreach):  # a switch inside the rows is per item
+                    found.append(f"{path}:{line_of(text, at)}: U6 master-switch-section: a Toggle in the same Section "
+                                 f"as the list `{expr}`; give the switch its own section above the list (N27)")
+    return found
+
+
 def tracked(root: Path) -> list[str]:
     out = subprocess.run(["git", "-C", str(root), "ls-files", "-z"], check=True, capture_output=True).stdout
     return [p for p in out.decode("utf-8").split("\0") if p]
@@ -183,6 +504,24 @@ def check_file(path: str, text: str, scope: Scope) -> list[str]:
     return findings
 
 
+def check_structure(root: Path, files: list[str]) -> list[str]:
+    """U4 on the settings pages, U5 and U6 on every Apple Swift file."""
+    swift = [p for p in files if p.startswith("apps/ios/Sources/") and p.endswith(".swift")]
+    texts = {p: (root / p).read_text(encoding="utf-8") for p in swift}
+    pages: set[str] = set()
+    for text in texts.values():
+        pages |= pushed_pages(mask_swift(text))
+    findings = []
+    for path, name in SETTINGS_PAGES:
+        if path not in texts:
+            findings.append(f"{path}:1: U4 settings-budget: file not found; update SETTINGS_PAGES in ui_lint.py")
+            continue
+        findings.extend(check_settings(path, texts[path], name))
+    for path, text in texts.items():
+        findings.extend(check_lists(path, text, pages))
+    return findings
+
+
 def run(root: Path) -> int:
     findings: list[str] = []
     files = tracked(root)
@@ -196,6 +535,7 @@ def run(root: Path) -> int:
                 continue
             text = (root / path).read_text(encoding="utf-8")
             findings.extend(check_file(path, text, scope))
+    findings.extend(check_structure(root, files))
     for finding in findings:
         print(finding)
     if findings:
@@ -203,6 +543,12 @@ def run(root: Path) -> int:
         return 1
     print("ui_lint: no findings")
     return 0
+
+
+def settings_form(sections: int = 1, rows: int = 1, extra: str = "") -> str:
+    """A SettingsView whose first Form has `sections` empty sections and `rows` Toggle rows in the first one."""
+    body = "Section {\n" + "Toggle(\"a\", isOn: $a)\n" * rows + "}\n" + "Section { }\n" * (sections - 1)
+    return f"struct SettingsView: View {{\n var body: some View {{\n NavigationStack {{\n Form {{\n{body}{extra}\n}}\n}}\n}}\n}}\n"
 
 
 def self_test() -> int:
@@ -243,7 +589,63 @@ def self_test() -> int:
         if rule != expected:
             failed += 1
             print(f"self-test: {line!r} gave {rule}, expected {expected}")
-    print(f"ui_lint self-test: {len(cases) - failed}/{len(cases)} passed")
+    structure = [
+        ("U4", settings_form(sections=9), True),
+        ("U4", settings_form(sections=8), False),
+        ("U4", settings_form(rows=17), True),
+        ("U4", settings_form(rows=16), False),
+        ("U4", settings_form(extra="NewThingSection(tunnel: tunnel)"), True),
+        ("U4", settings_form(extra="AppModeSection(tunnel: tunnel)"), False),
+        # Braces and brackets in strings and comments are not structure.
+        ("U4", settings_form(extra='Text("}} { \\(a ? "}" : "{") ")\n// Section {\nSection { Toggle("a", isOn: $a) }'), False),
+        # Rows inside a row belong to it; rows in the sub-page function are not the first screen.
+        ("U4", settings_form(rows=16, extra='NavigationLink { Toggle("x", isOn: $x) } label: { Label("y", systemImage: "z") }'),
+         True),
+    ]
+    for rule, source, expect in structure:
+        got = [f for f in check_settings("S.swift", source, "SettingsView") if " U4 " in f]
+        if bool(got) != expect:
+            failed += 1
+            print(f"self-test: U4 settings page gave {got or 'no finding'}, expected {'a finding' if expect else 'none'}")
+    lists = [
+        ("U5", "struct P: View { var body: some View { Form { Section { ForEach(model.library.plugins) { p in Text(p) } } } } }", set(), True),
+        ("U5", "struct P: View { var body: some View { Form { Section { ForEach(model.scriptReferences, id: \\.path) { r in Text(r) } } } } }", set(), True),
+        ("U5", "struct P: View { var body: some View { Form { Section { ForEach($settings.wifi) { $r in Text(r) } } } } }", set(), True),
+        ("U5", "struct P: View { var body: some View { Form { Section { ForEach(model.plugins.prefix(5)) { p in Text(p) } } } } }", set(), False),
+        ("U5", "struct P: View { var body: some View { Form { Section { ForEach(visible(model.plugins, showsAll: a)) { p in Text(p) } } } } }", set(), False),
+        ("U5", "struct P: View { var body: some View { Form { Section { ForEach(shown) { p in Text(p) } } } } }", set(), False),
+        # The page that is the list, pushed by a NavigationLink: every row shows. Not pushed, or not a List root: fold.
+        ("U5", "struct RulesPage: View { var body: some View { List { Section { ForEach(rules.rules) { r in Text(r) } } } } }", {"RulesPage"}, False),
+        ("U5", "struct RulesPage: View { var body: some View { List { Section { ForEach(rules.rules) { r in Text(r) } } } } }", set(), True),
+        ("U5", "struct RulesPage: View { var body: some View { VStack { Section { ForEach(rules.rules) { r in Text(r) } } } } }", {"RulesPage"}, True),
+        # Not a user list, or not in a Form / List / Section.
+        ("U5", "struct P: View { var body: some View { Form { Section { ForEach(Appearance.choices) { p in Text(p) } } } } }", set(), False),
+        ("U5", "struct P: View { var body: some View { VStack { ForEach(hosts) { h in Text(h) } } } }", set(), False),
+        ("U5", "struct P: View { var body: some View { Form { Section { ForEach(LocalRules.Policy.allCases) { p in Text(p) } } } } }", set(), False),
+        ("U6", "struct P: View { var body: some View { List { Section { Toggle(\"all\", isOn: $on)\nForEach(rules.prefix(5)) { r in Text(r) } } } } }", set(), True),
+        ("U6", "struct P: View { var body: some View { List { Section { Toggle(\"all\", isOn: $on) }\nSection { ForEach(rules.prefix(5)) { r in Text(r) } } } } }", set(), False),
+        ("U6", "struct P: View { var body: some View { List { Section { ForEach(rules.prefix(5)) { r in Toggle(r.name, isOn: $r.on) } } } } }", set(), False),
+        ("U6", "struct P: View { var body: some View { List { Section { Toggle(\"x\", isOn: $on)\nForEach(Mode.allCases) { r in Text(r) } } } } }", set(), False),
+    ]
+    for rule, source, pages, expect in lists:
+        got = [f for f in check_lists("P.swift", source, pages) if f" {rule} " in f]
+        if bool(got) != expect:
+            failed += 1
+            print(f"self-test: {rule} {source[:90]!r} gave {got or 'no finding'}, expected {'a finding' if expect else 'none'}")
+    pushes = [
+        ("NavigationLink { RulesPage(a: 1) } label: { Text(\"r\") }", {"RulesPage"}),
+        ("NavigationLink(destination: RulesPage()) { Text(\"r\") }", {"RulesPage"}),
+        ("NavigationLink(\"r\") { RulesPage() }", {"RulesPage"}),
+        (".navigationDestination(item: $x) { page in RulesPage(page) }", {"RulesPage"}),
+        ("NavigationLink(value: Page.rules) { Label(\"r\", systemImage: \"x\") }", set()),
+        ("NavigationLink { Text(\"d\") } label: { RulesRow() }", set()),
+    ]
+    for source, expect in pushes:
+        if pushed_pages(mask_swift(source)) - {"Text", "Label"} != expect:
+            failed += 1
+            print(f"self-test: pushed_pages({source!r}) gave {pushed_pages(mask_swift(source))}, expected {expect}")
+    total = len(cases) + len(structure) + len(lists) + len(pushes)
+    print(f"ui_lint self-test: {total - failed}/{total} passed")
     return 1 if failed else 0
 
 

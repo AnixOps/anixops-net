@@ -106,6 +106,8 @@ fun RulesScreen(
             RuleHitsSection(it, enabled, actions.clearRuleHits)
         }
         DataListsSection(state.missingData, state.dataSources, enabled, actions.saveDataSource, actions.removeDataSource)
+        // 规则 is a page of its own: its lists (rule sets, groups, hits) are the page's content, not items the user
+        // adds to another page, so they are listed in full (N26 allows a dedicated full-page list).
         if (state.ruleSets.isNotEmpty()) RuleSetsSection(state.ruleSets, enabled, actions.updateRuleSets)
         if (state.routingWarnings.isNotEmpty()) RoutingWarningsSection(state.routingWarnings)
         DnsSection(snapshot, state.dns, enabled, actions)

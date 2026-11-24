@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CaptureExchange, DebugMapping, desktop, ReplayResponse } from "../bridge";
 import { asText, decodedBody, fromBase64, header, headerLines, parseHeaderLines, toBase64, withoutQuery } from "../capture-format";
 import { formatBytes } from "../subscription-format";
-import { Card, EmptyState, Field, MoreMenu, Row, Run, Segmented, Switch } from "../ui";
+import { Card, EmptyState, Field, FoldedRows, MoreMenu, Row, Run, Segmented, Switch } from "../ui";
 import { t } from "../i18n";
 import { BackBar, BytesView } from "./CaptureViews";
 
@@ -251,8 +251,10 @@ export function MappingsCard({ busy, run, onEdit }: { busy: string | null; run: 
       {entries.length === 0 ? (
         <EmptyState icon={Shuffle} title={t("还没有映射")} message={t("在请求详情里选择“映射到本地”或“映射到远程”，或在这里新建。")} />
       ) : (
-        <div className="rows">
-          {entries.map((entry) => (
+        <FoldedRows
+          items={entries}
+          label={(count) => t("显示全部 {count} 条映射", { count })}
+          render={(entry) => (
             <Row
               key={entry.id}
               icon={entry.kind === "local" ? FileInput : Shuffle}
@@ -284,8 +286,8 @@ export function MappingsCard({ busy, run, onEdit }: { busy: string | null; run: 
                 onChange={() => change(() => desktop.saveDebugMapping({ ...entry, enabled: !entry.enabled }))}
               />
             </Row>
-          ))}
-        </div>
+          )}
+        />
       )}
     </Card>
   );

@@ -15,6 +15,9 @@ struct MacExtensionsPage: View {
 
     var body: some View {
         Form {
+            Section("HTTPS 解密") {
+                DecryptionToggle(tunnel: tunnel, model: plugins)
+            }
             certificateSection
             DecryptHostsSection(tunnel: tunnel)
             MacPhoneCaptureSection(tunnel: tunnel)

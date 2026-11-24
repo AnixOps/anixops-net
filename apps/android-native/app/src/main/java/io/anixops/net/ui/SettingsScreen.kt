@@ -40,6 +40,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -81,22 +83,27 @@ data class SettingsActions(
     val openPrivacy: () -> Unit = {},
     val openLogs: () -> Unit = {},
     val openTraffic: () -> Unit = {},
+    /** The sub-pages of the first screen; each is a [SettingsPage]. */
+    val openNotifications: () -> Unit = {},
+    val openWifiRules: () -> Unit = {},
+    val openPrivacyPage: () -> Unit = {},
+    val openAdvanced: () -> Unit = {},
 )
 
 /** The Wi-Fi rule actions, in the order every client offers them. */
 private val OnDemandActions = listOf("connect", "disconnect", "ignore")
 
 /**
- * 设置: 使用方式 and language, notifications, the Wi-Fi rules, the proxy core, diagnostics and privacy, and about.
- * Android has no start-after-login or auto-connect (the VPN consent is asked in the window), as on the other
- * clients' Android column.
+ * 设置: only the everyday items (使用方式 and language, 连接, 通知, about); the rest sits one level down, in
+ * [NotificationsScreen], [WifiRulesScreen], [PrivacyScreen] and [AdvancedScreen], so the page stays short for most
+ * people (docs/ui-ux.md: rarely used settings go behind 更多). Android has no start-after-login or auto-connect
+ * (the VPN consent is asked in the window), as on the other clients' Android column.
  */
 @Composable
 fun SettingsScreen(
     mode: AppMode,
     version: String,
     termsVersion: String,
-    snapshot: RuntimeSnapshot?,
     state: SettingsState,
     actions: SettingsActions,
     modifier: Modifier = Modifier,
@@ -104,9 +111,63 @@ fun SettingsScreen(
     val enabled = !state.busy
     Page(stringResource(R.string.nav_settings), modifier) {
         GeneralSection(mode, actions)
+        state.onDemand?.let { settings ->
+            Section(stringResource(R.string.settings_connection)) {
+                SwitchRow(
+                    stringResource(R.string.wifi_rules_enabled),
+                    hint = null,
+                    checked = settings.enabled,
+                    enabled = enabled,
+                    onChange = actions.setOnDemandEnabled,
+                )
+                if (settings.enabled) {
+                    NavRow(
+                        stringResource(R.string.wifi_rules),
+                        pluralStringResource(R.plurals.wifi_rule_count, settings.wifi.size, settings.wifi.size),
+                        actions.openWifiRules,
+                        divider = true,
+                    )
+                }
+            }
+        }
+        Section(null) {
+            val hasNotifications = state.notifications != null
+            if (hasNotifications) NavRow(stringResource(R.string.notifications), null, actions.openNotifications)
+            NavRow(stringResource(R.string.settings_privacy_page), null, actions.openPrivacyPage, divider = hasNotifications)
+            NavRow(stringResource(R.string.settings_advanced), null, actions.openAdvanced, divider = true)
+        }
+        Section(stringResource(R.string.settings_about)) {
+            InfoRow(stringResource(R.string.settings_version), version)
+            InfoRow(
+                stringResource(R.string.terms),
+                stringResource(R.string.terms_version, termsVersion),
+                divider = true,
+                onClick = actions.openTerms,
+            )
+            InfoRow(
+                stringResource(R.string.privacy_policy),
+                stringResource(R.string.action_view),
+                divider = true,
+                onClick = actions.openPrivacy,
+            )
+        }
+    }
+}
+
+/** A row that opens a sub-page: [summary] (if any) and a chevron at the end. */
+@Composable
+private fun NavRow(label: String, summary: String?, onClick: () -> Unit, divider: Boolean = false) {
+    InfoRow(label, if (summary == null) "›" else "$summary ›", divider = divider, onClick = onClick)
+}
+
+/** 通知: the switches, what they mean, and the system permission when it is off. */
+@Composable
+fun NotificationsScreen(state: SettingsState, actions: SettingsActions, onBack: () -> Unit, modifier: Modifier = Modifier) {
+    val enabled = !state.busy
+    Page(stringResource(R.string.notifications), modifier, onBack = onBack) {
         state.notifications?.let { notifications ->
             Column {
-                Section(stringResource(R.string.notifications)) {
+                Section(null) {
                     NotificationKind.entries.forEachIndexed { index, kind ->
                         if (index > 0) RowDivider()
                         SwitchRow(
@@ -132,7 +193,36 @@ fun SettingsScreen(
                 }
             }
         }
-        state.onDemand?.let { WifiRulesSection(it, state.currentSsid, state.system, enabled, actions) }
+    }
+}
+
+/** Wi-Fi 规则: the rule list, the editor and the location permissions the names need. The on/off switch stays on 设置. */
+@Composable
+fun WifiRulesScreen(state: SettingsState, actions: SettingsActions, onBack: () -> Unit, modifier: Modifier = Modifier) {
+    Page(stringResource(R.string.wifi_rules), modifier, onBack = onBack) {
+        state.onDemand?.let { WifiRulesSection(it, state.currentSsid, state.system, !state.busy, actions) }
+    }
+}
+
+/** 高级: the proxy core's status and its maintenance actions. */
+@Composable
+fun AdvancedScreen(
+    snapshot: RuntimeSnapshot?,
+    state: SettingsState,
+    actions: SettingsActions,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Page(stringResource(R.string.settings_advanced), modifier, onBack = onBack) {
+        CoreSection(snapshot?.core, !state.busy, actions)
+    }
+}
+
+/** 隐私与诊断: crash reports, the diagnostics report, and the logs and traffic pages. */
+@Composable
+fun PrivacyScreen(state: SettingsState, actions: SettingsActions, onBack: () -> Unit, modifier: Modifier = Modifier) {
+    Page(stringResource(R.string.settings_privacy_page), modifier, onBack = onBack) {
+        DiagnosticsSection(state, !state.busy, actions)
         Section(stringResource(R.string.activity)) {
             InfoRow(stringResource(R.string.logs), stringResource(R.string.action_view), onClick = actions.openLogs)
             InfoRow(
@@ -142,30 +232,16 @@ fun SettingsScreen(
                 onClick = actions.openTraffic,
             )
         }
-        CoreSection(snapshot?.core, enabled, actions)
-        DiagnosticsSection(state, enabled, actions)
-        Section(stringResource(R.string.settings_about)) {
-            InfoRow(stringResource(R.string.settings_version), version)
-            InfoRow(
-                stringResource(R.string.terms),
-                stringResource(R.string.terms_version, termsVersion),
-                divider = true,
-                onClick = actions.openTerms,
-            )
-            InfoRow(
-                stringResource(R.string.privacy_policy),
-                stringResource(R.string.action_view),
-                divider = true,
-                onClick = actions.openPrivacy,
-            )
-        }
     }
 }
 
 @Composable
 private fun GeneralSection(mode: AppMode, actions: SettingsActions) {
     Section(stringResource(R.string.settings_general)) {
-        Column(Modifier.padding(BrandSpacing.md), verticalArrangement = Arrangement.spacedBy(BrandSpacing.xs)) {
+        Column(
+            Modifier.testTag(ROW_TAG).padding(BrandSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(BrandSpacing.xs),
+        ) {
             Text(stringResource(R.string.settings_usage), style = MaterialTheme.typography.bodyLarge)
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                 AppMode.entries.forEachIndexed { index, option ->
@@ -225,52 +301,42 @@ private fun WifiRulesSection(
     }
     Column {
         Section(stringResource(R.string.wifi_rules)) {
-            SwitchRow(
-                stringResource(R.string.wifi_rules_enabled),
-                hint = null,
-                checked = settings.enabled,
-                enabled = enabled,
-                onChange = actions.setOnDemandEnabled,
-            )
-            if (settings.enabled) {
-                settings.wifi.forEach { rule ->
-                    RowDivider()
-                    ActionRow(rule.ssid, rule.action, enabled, { actions.setWifiRule(rule.ssid, it) }) {
-                        IconButton(onClick = { actions.removeWifiRule(rule.ssid) }, enabled = enabled) {
-                            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.wifi_rule_remove, rule.ssid))
-                        }
+            FoldedList(settings.wifi) { rule ->
+                ActionRow(rule.ssid, rule.action, enabled, { actions.setWifiRule(rule.ssid, it) }) {
+                    IconButton(onClick = { actions.removeWifiRule(rule.ssid) }, enabled = enabled) {
+                        Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.wifi_rule_remove, rule.ssid))
                     }
                 }
-                RowDivider()
-                Column(
-                    modifier = Modifier.padding(BrandSpacing.md),
-                    verticalArrangement = Arrangement.spacedBy(BrandSpacing.xs),
-                ) {
-                    OutlinedTextField(
-                        value = draft,
-                        onValueChange = { draft = it },
-                        singleLine = true,
-                        label = { Text(stringResource(R.string.wifi_name)) },
-                        keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { add() }),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(BrandSpacing.xs)) {
-                        OutlinedButton(onClick = actions.fillCurrentNetwork, enabled = enabled) {
-                            Text(stringResource(R.string.wifi_current_network))
-                        }
-                        OutlinedButton(onClick = add, enabled = enabled && canAdd) {
-                            Text(stringResource(R.string.wifi_add))
-                        }
-                    }
-                }
-                RowDivider()
-                ActionRow(stringResource(R.string.wifi_other), settings.otherWifi, enabled, actions.setOtherWifi)
-                RowDivider()
-                ActionRow(stringResource(R.string.wifi_cellular), settings.cellular, enabled, actions.setCellular)
-                RowDivider()
-                ActionRow(stringResource(R.string.wifi_wired_other), settings.other, enabled, actions.setOther)
             }
+            if (settings.wifi.isNotEmpty()) RowDivider()
+            Column(
+                modifier = Modifier.padding(BrandSpacing.md),
+                verticalArrangement = Arrangement.spacedBy(BrandSpacing.xs),
+            ) {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.wifi_name)) },
+                    keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { add() }),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(BrandSpacing.xs)) {
+                    OutlinedButton(onClick = actions.fillCurrentNetwork, enabled = enabled) {
+                        Text(stringResource(R.string.wifi_current_network))
+                    }
+                    OutlinedButton(onClick = add, enabled = enabled && canAdd) {
+                        Text(stringResource(R.string.wifi_add))
+                    }
+                }
+            }
+            RowDivider()
+            ActionRow(stringResource(R.string.wifi_other), settings.otherWifi, enabled, actions.setOtherWifi)
+            RowDivider()
+            ActionRow(stringResource(R.string.wifi_cellular), settings.cellular, enabled, actions.setCellular)
+            RowDivider()
+            ActionRow(stringResource(R.string.wifi_wired_other), settings.other, enabled, actions.setOther)
         }
         Note(stringResource(R.string.wifi_rules_note))
         if (settings.enabled) {
@@ -334,6 +400,7 @@ private fun ActionRow(
     var open by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
+            .testTag(ROW_TAG)
             .fillMaxWidth()
             .heightIn(min = RowMinHeight)
             .padding(start = BrandSpacing.md),
@@ -380,6 +447,7 @@ private fun CoreSection(core: StatusFact?, enabled: Boolean, actions: SettingsAc
         Section(stringResource(R.string.core)) {
             Row(
                 modifier = Modifier
+                    .testTag(ROW_TAG)
                     .fillMaxWidth()
                     .heightIn(min = RowMinHeight)
                     .padding(horizontal = BrandSpacing.md, vertical = BrandSpacing.sm),

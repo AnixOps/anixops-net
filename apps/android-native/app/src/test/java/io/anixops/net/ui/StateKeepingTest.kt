@@ -80,6 +80,7 @@ class StateKeepingTest {
     fun theUnsavedStateOfAPageOpenedFromAnotherHasItsOwnKey() {
         assertEquals("Settings", pageKey(Destination.Settings, null, egressRules = false))
         assertEquals("Settings/Logs", pageKey(Destination.Settings, SettingsPage.Logs, egressRules = false))
+        assertEquals("Settings/Advanced", pageKey(Destination.Settings, SettingsPage.Advanced, egressRules = false))
         assertEquals("Egress/rules", pageKey(Destination.Egress, null, egressRules = true))
         assertEquals("Rules", pageKey(Destination.Rules, SettingsPage.Logs, egressRules = true))
     }

@@ -8,7 +8,7 @@ import UIKit
 import AppKit
 #endif
 
-/// The plugin part of the "扩展" tab: the HTTPS decryption switch, Loon plugin import (file, clipboard or
+/// The plugin part of the "扩展" tab: Loon plugin import (file, clipboard or
 /// address), the list, and the scripts those plugins name, each run only after the user allows it. The macOS
 /// extensions page shows the same section.
 struct PluginsSection: View {
@@ -20,6 +20,12 @@ struct PluginsSection: View {
     @State private var enteringAddress = false
     @State private var address = ""
     @State private var pendingScript: MitmScriptReference?
+    /// Per view session; a long list shows its first `collapsedCount` rows until the user asks for all of them.
+    @State private var showsAllPlugins = false
+    @State private var showsAllScripts = false
+
+    /// How many plugins or scripts show before the rest fold behind "显示全部".
+    static let collapsedCount = 5
 
     var body: some View {
         pluginSection
@@ -30,13 +36,8 @@ struct PluginsSection: View {
 
     private var pluginSection: some View {
         Section {
-            Toggle("HTTPS 解密", isOn: Binding(
-                get: { model.library.isEnabled },
-                set: { enabled in Task { await model.setMasterEnabled(enabled, tunnel: tunnel) } }
-            ))
-            .listRowBackground(brand.surface)
-
-            ForEach(model.library.plugins) { plugin in
+            // A prefix of the list, so the offsets of `onDelete` below still index the full array.
+            ForEach(visible(model.library.plugins, showsAll: showsAllPlugins)) { plugin in
                 PluginRow(plugin: plugin) { enabled in
                     Task { await model.setEnabled(enabled, for: plugin.id, tunnel: tunnel) }
                 }
@@ -52,6 +53,7 @@ struct PluginsSection: View {
                 let ids = offsets.map { model.library.plugins[$0].id }
                 Task { await model.remove(ids, tunnel: tunnel) }
             }
+            foldRow(count: model.library.plugins.count, noun: .plugins, showsAll: $showsAllPlugins)
 
             Menu {
                 Button {
@@ -121,7 +123,7 @@ struct PluginsSection: View {
 
     private var scriptSection: some View {
         Section {
-            ForEach(model.scriptReferences, id: \.path) { reference in
+            ForEach(visible(model.scriptReferences, showsAll: showsAllScripts), id: \.path) { reference in
                 ScriptRow(reference: reference, allowed: model.scripts.scripts[reference.path]) {
                     pendingScript = reference
                 }
@@ -142,6 +144,7 @@ struct PluginsSection: View {
                 }
                 .listRowBackground(brand.surface)
             }
+            foldRow(count: model.scriptReferences.count, noun: .scripts, showsAll: $showsAllScripts)
         } header: {
             Text("脚本")
         } footer: {
@@ -164,6 +167,39 @@ struct PluginsSection: View {
 }
 
 extension PluginsSection {
+    fileprivate enum FoldNoun {
+        case plugins
+        case scripts
+    }
+
+    /// The first `collapsedCount` rows, or all of them.
+    fileprivate func visible<Row>(_ rows: [Row], showsAll: Bool) -> [Row] {
+        showsAll ? rows : Array(rows.prefix(Self.collapsedCount))
+    }
+
+    /// The row that expands a folded list in place and folds it again; nothing for a short list.
+    @ViewBuilder
+    fileprivate func foldRow(count: Int, noun: FoldNoun, showsAll: Binding<Bool>) -> some View {
+        if count > Self.collapsedCount {
+            Button {
+                showsAll.wrappedValue.toggle()
+            } label: {
+                if showsAll.wrappedValue {
+                    Text("收起")
+                } else {
+                    switch noun {
+                    case .plugins:
+                        Text("显示全部 \(count) 个插件")
+                    case .scripts:
+                        Text("显示全部 \(count) 个脚本")
+                    }
+                }
+            }
+            .buttonStyle(.borderless)
+            .listRowBackground(brand.surface)
+        }
+    }
+
     fileprivate static var clipboardText: String? {
         #if os(iOS)
         UIPasteboard.general.string
@@ -178,6 +214,23 @@ extension PluginsSection {
         #else
         String(localized: "右键撤销。")
         #endif
+    }
+}
+
+/// The HTTPS decryption master switch, its own row on the extensions page beside the certificate (it used to sit
+/// inside the plugin list). The first-use confirmation is the root view's alert (`decryptionConsentAlert`), which
+/// `setMasterEnabled` asks through `tunnel.requireDecryptionConsent()`, so it fires wherever the switch sits.
+struct DecryptionToggle: View {
+    var tunnel: TunnelController
+    @ObservedObject var model: PluginsModel
+    @Environment(\.brand) private var brand
+
+    var body: some View {
+        Toggle("HTTPS 解密", isOn: Binding(
+            get: { model.library.isEnabled },
+            set: { enabled in Task { await model.setMasterEnabled(enabled, tunnel: tunnel) } }
+        ))
+        .listRowBackground(brand.surface)
     }
 }
 

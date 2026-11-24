@@ -60,14 +60,18 @@ look() {
 }
 
 shoot() {
-    local section="$1" appearance="$2" mode="${3:-proxy}"
+    # A fourth argument opens a settings sub-page (`advanced`, `privacy`) and names the picture after it.
+    local section="$1" appearance="$2" mode="${3:-proxy}" subpage="${4:-}"
     local file="${out}/${section}-${appearance}.png"
     if [ "${mode}" != proxy ]; then
         file="${out}/${mode}-${section}-${appearance}.png"
     fi
+    if [ -n "${subpage}" ]; then
+        file="${out}/${section}-${subpage}-${appearance}.png"
+    fi
     look "${appearance}"
     xcrun simctl launch "${device}" "${bundle}" -AnixOpsDemo YES -AnixOpsMode "${mode}" -AnixOpsSection "${section}" \
-        -AppleLanguages "(${language})" -terms-accepted-version "${terms}" > /dev/null
+        -AnixOpsSettingsPage "${subpage}" -AppleLanguages "(${language})" -terms-accepted-version "${terms}" > /dev/null
     # The app is up; give the page time to lay out, load its demo data and finish its first transitions. A fixed
     # wait alone sometimes caught the white launch screen or a passing system banner, so the picture is taken again
     # every 4 seconds until three in a row are the same and it is not the blank launch screen (which compresses to
@@ -106,6 +110,9 @@ shoot proxies light
 shoot rules light
 shoot extensions light
 shoot settings light
+# The sub-pages one level below the settings (docs/ui-ux.md).
+shoot settings light proxy advanced
+shoot settings light proxy privacy
 # Debug mode: requests · rewrite · exit · settings.
 shoot requests light debug
 shoot exit light debug

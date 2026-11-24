@@ -1,7 +1,7 @@
 import { ArrowRightLeft, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { desktop, RedirectDraft, RedirectNetwork, TrafficRedirect } from "../bridge";
-import { Card, EmptyState, Field, MoreMenu, Row, Run, Segmented, Switch } from "../ui";
+import { Card, EmptyState, Field, FoldedRows, MoreMenu, Row, Run, Segmented, Switch } from "../ui";
 import { t } from "../i18n";
 
 const emptyDraft: RedirectDraft = { source: "", ports: "", network: "any", target: "" };
@@ -83,8 +83,10 @@ export function TrafficRedirectsCard({ busy, run, platform }: { busy: string | n
         <EmptyState icon={ArrowRightLeft} title={t("还没有重定向")} message={t("新建一条，把某个地址或域名的流量改发到开发服务器。")} />
       )}
       {!editing && entries.length > 0 && (
-        <div className="rows">
-          {entries.map((entry) => (
+        <FoldedRows
+          items={entries}
+          label={(count) => t("显示全部 {count} 条重定向", { count })}
+          render={(entry) => (
             <Row
               key={entry.id}
               icon={ArrowRightLeft}
@@ -116,8 +118,8 @@ export function TrafficRedirectsCard({ busy, run, platform }: { busy: string | n
                 onChange={() => saveList(entries.map((other) => (other.id === entry.id ? { ...other, enabled: !other.enabled } : other)))}
               />
             </Row>
-          ))}
-        </div>
+          )}
+        />
       )}
     </Card>
   );

@@ -121,12 +121,15 @@
     return { upload_total: 82.4e6 + t * 2e5, download_total: 1.8e9 + t * 3e6, upload_rate: Math.round(150e3 + 60e3 * Math.sin(t / 3)), download_rate: Math.round(2.6e6 + 1.4e6 * Math.sin(t / 5)), active: 27 };
   };
   const stamp = "2026-01-15 08:30";
+  // `anixops.mock-decryption` = "off": decryption starts off, so turning it on asks for consent (decryption-consent-* shots).
   const snapshot = {
     platform: "windows", connection: "Connected", connectionLabel: "已连接", core: { label: "运行中", tone: "success" }, proxy: { label: "已启用", tone: "success" },
     selectedNode: "香港 01", subscription: "AnixOps", subscriptionLastUpdated: stamp, subscriptionRefreshResult: "success",
     subscriptionAddedNodeCount: 0, subscriptionRemovedNodeCount: 0, subscriptionChangedNodeCount: 0,
     startAfterLogin: true, autoConnect: true, autoRecoverCore: true, autoSubscriptionRefresh: true, autoSelectFastestNode: false,
-    tunModeEnabled: false, scriptRuntimeConfigured: true, httpsDecryptionEnabled: true, darkTheme: false, routingMode: "rule", dnsPreset: "encrypted", blockQuic: false, directEgress: false, embeddedEngine: true,
+    tunModeEnabled: false, scriptRuntimeConfigured: true, darkTheme: false, routingMode: "rule", dnsPreset: "encrypted", blockQuic: false, directEgress: false, embeddedEngine: true,
+    // Read when the page asks, not when this file loads: render.cjs stores the shot's values after it.
+    get httpsDecryptionEnabled() { return window.localStorage.getItem("anixops.mock-decryption") !== "off"; },
   };
   const hours = Array.from({ length: 24 }, (_, i) => ({
     start: Math.floor(start / 3600e3) * 3600 - (23 - i) * 3600, upload: 2e6 * (1 + (i % 5)), download: 60e6 * (1 + ((i * 3) % 7)),
@@ -184,16 +187,24 @@
     }))),
     take_app_links: () => [],
     notification_settings: () => ({ scripts: true, connection: true, subscriptions: true, language: "zh-Hans" }),
+    on_demand_settings: () => ({ enabled: true, wifi: [{ ssid: "Home", action: "disconnect" }, { ssid: "Office", action: "disconnect" }, { ssid: "Cafe", action: "connect" }, { ssid: "Library", action: "connect" }, { ssid: "Station", action: "disconnect" }, { ssid: "Hotel", action: "connect" }], otherWifi: "connect", cellular: "connect", other: "ignore" }),
     health_status: () => ({ crashReports: false, crashReportsKept: 0, crashUploadConfigured: false, integrity: "verified", coldStartMs: 412 }),
     list_debug_mappings: () => [
       { id: "m1", name: "订单接口返回 500", enabled: true, kind: "local", match: "prefix", pattern: "https://api.example.com/v2/orders", status: 500, headers: [], body: utf8('{"error":"boom"}'), target: "" },
       { id: "m2", name: "API 指到本机", enabled: false, kind: "remote", match: "prefix", pattern: "https://api.example.com/", status: 200, headers: [], body: "", target: "http://127.0.0.1:3000/" },
+      { id: "m3", name: "用户接口超时", enabled: true, kind: "local", match: "prefix", pattern: "https://api.example.com/v2/users", status: 504, headers: [], body: "", target: "" },
+      { id: "m4", name: "图片指到测试库", enabled: false, kind: "remote", match: "prefix", pattern: "https://img.example.com/", status: 200, headers: [], body: "", target: "http://127.0.0.1:3100/" },
+      { id: "m5", name: "配置接口返回旧版", enabled: true, kind: "local", match: "prefix", pattern: "https://api.example.com/config", status: 200, headers: [], body: utf8('{"version":1}'), target: "" },
+      { id: "m6", name: "支付回调指到本机", enabled: false, kind: "remote", match: "prefix", pattern: "https://pay.example.com/callback", status: 200, headers: [], body: "", target: "http://127.0.0.1:3200/" },
     ],
     list_decrypt_hosts: () => ["api.example.com", "*.example.net", "auth.example.com"],
     list_decrypt_domains: () => [
       { pattern: "api.example.com", exclude: false, enabled: true },
       { pattern: "*.example.net", exclude: false, enabled: true },
       { pattern: "auth.example.com", exclude: false, enabled: true },
+      { pattern: "cdn.example.net", exclude: false, enabled: true },
+      { pattern: "*.example.org", exclude: false, enabled: true },
+      { pattern: "static.example.com", exclude: false, enabled: false },
       { pattern: "pay.example.net", exclude: true, enabled: true },
     ],
     capture_session: () => ({ protection: "dpapi", retention_days: 7, sessions: [{ session: "a1", name: "登录流程", saved_at_ms: start - 3600e3, expires_at_ms: start + 6 * 86400e3, size: 4.2e6, connections: 23, requests: COUNT }] }),
@@ -202,6 +213,12 @@
     list_mitm_plugins: () => [
       { id: "p1", name: "Bilibili 去广告", url: "https://example.com/bili.plugin", enabled: true, level: "full", hostnames: ["api.bilibili.com", "app.bilibili.com"], scriptCount: 3 },
       { id: "p2", name: "YouTube 去广告", url: "https://example.com/yt.plugin", enabled: true, level: "partial", hostnames: ["*.googlevideo.com"], scriptCount: 1 },
+      // More than five, so the list shows folded with its "显示全部" row.
+      { id: "p3", name: "微博 去广告", url: "https://example.com/weibo.plugin", enabled: true, level: "full", hostnames: ["api.weibo.cn"], scriptCount: 2 },
+      { id: "p4", name: "知乎 净化", url: "https://example.com/zhihu.plugin", enabled: false, level: "full", hostnames: ["api.zhihu.com"], scriptCount: 1 },
+      { id: "p5", name: "京东 比价", url: "https://example.com/jd.plugin", enabled: false, level: "partial", hostnames: ["api.m.jd.com"], scriptCount: 2 },
+      { id: "p6", name: "网页 去重定向", url: "https://example.com/redirect.plugin", enabled: true, level: "full", hostnames: ["*.example.org"], scriptCount: 0 },
+      { id: "p7", name: "天气 小组件", url: "https://example.com/weather.plugin", enabled: false, level: "full", hostnames: ["weather.example.com"], scriptCount: 1 },
     ],
     custom_dns: () => ({ servers: "", rules: "", hosts: "", fake_ip: false }),
     routing_warnings: () => ["2 rules of type SCRIPT were not imported: the client does not support them yet"],

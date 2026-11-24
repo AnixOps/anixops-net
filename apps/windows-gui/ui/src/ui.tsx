@@ -228,6 +228,31 @@ export function ConfirmButton({ label, confirm, onConfirm, disabled = false }: {
   );
 }
 
+/** How many rows of a list of things the user adds show before the rest fold behind "显示全部". */
+export const collapsedRowCount = 5;
+
+/**
+ * A list of things the user adds (plugins, mappings, hosts, rules): the first few rows, then a link that shows all of
+ * them and folds them back. `data-user-list` tells the screenshot audit (N26) the list folds. `label` is the
+ * translated "显示全部 N …" text; the choice to expand is for this visit only.
+ */
+export function FoldedRows<T>({ items, render, label }: { items: T[]; render: (item: T) => ReactNode; label: (count: number) => string }) {
+  const [all, setAll] = useState(false);
+  const folds = items.length > collapsedRowCount;
+  return (
+    <div className="rows" data-user-list={all ? "expanded" : folds ? "folded" : "short"}>
+      {(all ? items : items.slice(0, collapsedRowCount)).map(render)}
+      {folds && (
+        <div className="button-row">
+          <button className="link-button more" aria-expanded={all} onClick={() => setAll(!all)}>
+            {all ? t("收起") : label(items.length)}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ToggleRow({ label, hint, checked, onChange, disabled = false, icon, color }: {
   label: string;
   hint?: string;

@@ -188,6 +188,16 @@
     <string name="wifi_rules">Wi-Fi 规则</string>
     <string name="wifi_rules_note">加入网络时自动连接或断开。规则打开时，应用会以一条通知等待网络，因此在后台也生效。读取 Wi-Fi 名称需要精确位置，在后台还需要“始终允许”位置；没有这些权限时，指定的网络按“其他 Wi-Fi”处理，或等到打开应用时再判断。手动连接或断开会保持到下次换网络。</string>
     <string name="wifi_rules_enabled">按网络自动连接</string>
+    <string name="settings_connection">连接</string>
+    <string name="settings_privacy_page">隐私与诊断</string>
+    <string name="settings_advanced">高级</string>
+    <plurals name="plugins_show_all">
+        <item quantity="other">显示全部 %1$d 个插件</item>
+    </plurals>
+    <string name="plugins_show_less">收起</string>
+    <plurals name="wifi_rule_count">
+        <item quantity="other">%d 条</item>
+    </plurals>
     <string name="wifi_name">Wi-Fi 名称</string>
     <string name="wifi_current_network">当前网络</string>
     <string name="wifi_add">添加</string>
@@ -352,6 +362,9 @@
     <string name="decryption_consent_confirm">我确认，开启</string>
     <plurals name="decrypt_host_count">
         <item quantity="other">%1$d 个域名</item>
+    </plurals>
+    <plurals name="list_show_all">
+        <item quantity="other">显示全部 %1$d 项</item>
     </plurals>
     <plurals name="plugin_count">
         <item quantity="other">%1$d 个插件</item>

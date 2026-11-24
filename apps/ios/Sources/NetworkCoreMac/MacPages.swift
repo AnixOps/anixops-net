@@ -598,7 +598,8 @@ struct MacExitPage: View {
     }
 }
 
-/// Settings: appearance, login item, reconnecting and Wi-Fi rules, notifications, privacy and the version.
+/// Settings: the everyday items (appearance, login item, reconnecting, updates, the version) on the first screen;
+/// notifications, privacy and diagnostics, and the advanced items are pages one level down.
 struct MacSettingsPage: View {
     var tunnel: TunnelController
     @ObservedObject var state: MacAppState
@@ -606,8 +607,8 @@ struct MacSettingsPage: View {
     @Environment(\.brand) private var brand
     @State private var opensAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
-    @State private var crashReports = ClientHealthMonitor.shared.crashReports.isEnabled
-    @State private var panelReport = ClientReportStore().isEnabled
+    /// The pushed page; set at launch by `-AnixOpsSettingsPage` in debug builds (CI screenshots).
+    @State private var subpage = SettingsSubpage.launch
 
     var body: some View {
         Form {
@@ -638,47 +639,16 @@ struct MacSettingsPage: View {
             }
 
             OnDemandSections(tunnel: tunnel)
-            TakeoverSection(tunnel: tunnel)
-            MacGatewaySection(tunnel: tunnel)
-            BlockQuicSection(tunnel: tunnel)
-            NotificationSettingsSection(tunnel: tunnel)
 
             Section {
-                Label("不收集你的流量和浏览记录", systemImage: "hand.raised")
-                Label("节点密码和密钥只保存在本机钥匙串", systemImage: "key")
-                Toggle("崩溃报告", isOn: $crashReports)
-                    .onChange(of: crashReports) { _, enabled in
-                        ClientHealthMonitor.shared.crashReports.isEnabled = enabled
-                    }
-                Toggle("向订阅服务商报告连接质量", isOn: $panelReport)
-                    .onChange(of: panelReport) { _, enabled in
-                        tunnel.setPanelReport(enabled: enabled)
-                    }
-            } header: {
-                Text("隐私")
-            } footer: {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("崩溃时记录脱敏后的信息（不含网址、账号和节点地址），只保存在本机，复制诊断信息时附上。关闭会删除已保存的报告。")
-                    Text("开启后，App 打开且已连接时，约每小时把 ANX 节点的连接计数发给提供这些节点的订阅服务商：发往订阅链接去掉参数和扩展名后加 /report 的地址，链接里的令牌随之发出，服务商能据此对应到你的账号。内容为 App 版本、平台、网络类型（Wi-Fi、蜂窝、有线）、统计时长，以及每个节点的名称、服务器地址和端口、协议、成功和各类失败次数、是否因被拒而暂停、时间偏差；不含你访问的网址。默认关闭，关闭时删除保存的计数。")
-                }
+                SettingsSubpageRow(page: .notifications, title: "通知", systemImage: "bell", color: MacTileColor.red, selection: $subpage)
             }
 
-            // Proxy mode reaches the usage history from the overview's usage card; debug mode has no overview.
-            if tunnel.appMode == .debug {
-                Section("诊断") {
-                    NavigationLink {
-                        TrafficStatsView(tunnel: tunnel)
-                    } label: {
-                        MacTileLabel(title: "流量统计", systemImage: "chart.bar", color: MacTileColor.teal)
-                    }
-                }
-            }
             MacUpdateSection()
 
-            MacCommandLineSection()
-
-            if let metrics = state.metrics {
-                MacMetricsSection(metrics: metrics)
+            Section {
+                SettingsSubpageRow(page: .privacy, title: "隐私与诊断", systemImage: "hand.raised", color: MacTileColor.indigo, selection: $subpage)
+                SettingsSubpageRow(page: .advanced, title: "高级", systemImage: "gearshape.2", color: MacTileColor.gray, selection: $subpage)
             }
 
             Section("关于") {
@@ -695,6 +665,49 @@ struct MacSettingsPage: View {
         .scrollContentBackground(.hidden)
         .frame(maxWidth: 720)
         .frame(maxWidth: .infinity)
+        .navigationDestination(item: $subpage) { page in
+            subpageContent(page)
+                .formStyle(.grouped)
+                .scrollContentBackground(.hidden)
+                .frame(maxWidth: 720)
+                .frame(maxWidth: .infinity)
+                .navigationTitle(page.title)
+        }
+    }
+
+    @ViewBuilder
+    private func subpageContent(_ page: SettingsSubpage) -> some View {
+        switch page {
+        case .notifications:
+            Form {
+                NotificationSettingsSection(tunnel: tunnel)
+            }
+        case .privacy:
+            Form {
+                PrivacySettingsSection(tunnel: tunnel)
+
+                // Proxy mode reaches the usage history from the overview's usage card; debug mode has no overview.
+                if tunnel.appMode == .debug {
+                    Section("诊断") {
+                        NavigationLink {
+                            TrafficStatsView(tunnel: tunnel)
+                        } label: {
+                            MacTileLabel(title: "流量统计", systemImage: "chart.bar", color: MacTileColor.teal)
+                        }
+                    }
+                }
+            }
+        case .advanced:
+            Form {
+                TakeoverSection(tunnel: tunnel)
+                MacGatewaySection(tunnel: tunnel)
+                BlockQuicSection(tunnel: tunnel)
+                MacCommandLineSection()
+                if let metrics = state.metrics {
+                    MacMetricsSection(metrics: metrics)
+                }
+            }
+        }
     }
 
     private func setOpensAtLogin(_ enabled: Bool) {
@@ -722,9 +735,35 @@ struct MacSettingsPage: View {
     }
 }
 
+/// A settings row that pushes a sub-page. A button with a chevron, not a `NavigationLink(value:)`, so the page can
+/// also be opened from a launch argument (the settings page owns the selection).
+private struct SettingsSubpageRow: View {
+    let page: SettingsSubpage
+    let title: LocalizedStringKey
+    let systemImage: String
+    let color: Color
+    @Binding var selection: SettingsSubpage?
+
+    var body: some View {
+        Button {
+            selection = page
+        } label: {
+            HStack {
+                MacTileLabel(title: title, systemImage: systemImage, color: color)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 /// Settings > Command Line: how to put the bundled `anixops` tool on the PATH (docs/macos-cli.md). The app is
 /// sandboxed and cannot write /usr/local/bin itself, so it shows the command to copy.
-private struct MacCommandLineSection: View {
+struct MacCommandLineSection: View {
     @State private var copied = false
 
     private var command: String {
@@ -753,7 +792,7 @@ private struct MacCommandLineSection: View {
 }
 
 /// Settings > Prometheus metrics: the loopback endpoint (MacMetricsService), as on Windows and Linux.
-private struct MacMetricsSection: View {
+struct MacMetricsSection: View {
     @ObservedObject var metrics: MacMetricsService
     @State private var enabled = UserDefaults.standard.bool(forKey: MacMetricsService.enabledKey)
 

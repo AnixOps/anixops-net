@@ -1,7 +1,7 @@
 import { ClipboardPaste, Download, Eye, FileUp, KeyRound, LockKeyhole, Puzzle, ShieldCheck, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DebugMapping, desktop, inProcessEngine, MitmPlugin, MitmPluginDetails, MitmRootStatus, OperationResult, RuntimeSnapshot } from "../bridge";
-import { Card, EmptyState, MoreMenu, Row, Run, StatusPill, Switch, ToggleRow } from "../ui";
+import { Card, EmptyState, FoldedRows, MoreMenu, Row, Run, StatusPill, Switch, ToggleRow } from "../ui";
 import { t } from "../i18n";
 import { PhoneCaptureCards } from "./PhoneCaptureCards";
 import { useDecryptionConsent } from "../decryption-consent";
@@ -194,8 +194,10 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
         {plugins.length === 0 ? (
           <EmptyState icon={Puzzle} title={t("还没有插件")} message={t("粘贴一个插件的 https 网址并导入，开启 HTTPS 解密后生效。")} />
         ) : (
-          <div className="rows">
-            {plugins.map((plugin) => (
+          <FoldedRows
+            items={plugins}
+            label={(count) => t("显示全部 {count} 个插件", { count })}
+            render={(plugin) => (
               <Row
                 key={plugin.id}
                 icon={Puzzle}
@@ -229,8 +231,8 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
                   onChange={() => togglePlugin(plugin)}
                 />
               </Row>
-            ))}
-          </div>
+            )}
+          />
         )}
       </Card>
 

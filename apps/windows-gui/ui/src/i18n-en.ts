@@ -2,6 +2,15 @@
 // string the UI shows has an entry here.
 export const english: Record<string, string> = {
   "诊断与隐私": "Diagnostics and privacy",
+  // The settings sub-pages and the folded plugin list.
+  "高级": "Advanced",
+  "隐私与诊断": "Privacy & Diagnostics",
+  "自动化": "Automation",
+  "显示全部 {count} 个插件": "Show all {count} plugins",
+  "显示全部 {count} 条映射": "Show all {count} mappings",
+  "显示全部 {count} 条重定向": "Show all {count} redirects",
+  "显示全部 {count} 个域名": "Show all {count} domains",
+  "显示全部 {count} 条 Wi-Fi 规则": "Show all {count} Wi-Fi rules",
   "崩溃报告": "Crash reports",
   "崩溃时记录脱敏后的信息（不含网址、账号和节点地址），下次启动时发送。关闭会删除已保存的报告。": "Keeps a redacted record when the app crashes (no URLs, accounts or node addresses) and sends it at the next start. Turning this off deletes saved reports.",
   "崩溃时记录脱敏后的信息（不含网址、账号和节点地址），只保存在本机，生成诊断报告时附上。关闭会删除已保存的报告。": "Keeps a redacted record when the app crashes (no URLs, accounts or node addresses) on this computer only and adds it to diagnostics reports. Turning this off deletes saved reports.",

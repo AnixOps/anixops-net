@@ -353,8 +353,7 @@ private fun HostsSection(state: ExtensionsState, enabled: Boolean, actions: Exte
                 onChange = { exclude = it },
                 modifier = Modifier.padding(start = BrandSpacing.md, end = BrandSpacing.md, bottom = BrandSpacing.sm),
             )
-            (state.domains.filter { !it.exclude } + state.domains.filter { it.exclude }).forEach { domain ->
-                RowDivider()
+            FoldedList(state.domains.filter { !it.exclude } + state.domains.filter { it.exclude }, leadingDivider = true) { domain ->
                 DomainRow(
                     domain = domain,
                     status = domainStatus(domain, state.outcomes),
@@ -595,8 +594,8 @@ private fun PluginsSection(
                     )
                 }
             }
-            plugins.forEachIndexed { index, plugin ->
-                if (index > 0) RowDivider()
+            // A long list folds to its first few plugins, so the sections below stay in reach.
+            FoldedList(plugins, showAll = { pluralStringResource(R.plurals.plugins_show_all, it, it) }) { plugin ->
                 PluginLine(
                     plugin,
                     enabled = enabled,
