@@ -35,6 +35,8 @@ kernel="$(bash "${root}/.github/scripts/kernel-root.sh")"
 # artifacts of unchanged-looking kernel crates next to the new checkout.
 target_dir="${root}/target/kernel-$(basename "${kernel}")"
 echo "Kernel checkout: ${kernel}"
+# The app refuses a runtime whose handshake differs from its own constants; fail here, not on a device.
+bash "${root}/.github/scripts/ios-runtime-handshake.sh" "${kernel}"
 
 device_target=aarch64-apple-ios
 sim_targets=(aarch64-apple-ios-sim x86_64-apple-ios)
