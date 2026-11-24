@@ -150,6 +150,7 @@ private fun RoutingSection(current: String?, enabled: Boolean, actions: RulesAct
 private fun routingHint(mode: String): String = stringResource(
     when (mode) {
         "direct" -> R.string.routing_direct_hint
+        "global" -> R.string.routing_global_hint
         else -> R.string.routing_rule_hint
     },
 )

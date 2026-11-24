@@ -106,6 +106,7 @@ class CodeTexts(private val context: Context) : CoreTexts {
             "root.trusted_system" to R.string.code_root_trusted_system,
             "root.trusted_user" to R.string.code_root_trusted_user,
             "routing.set_direct" to R.string.code_routing_set_direct,
+            "routing.set_global" to R.string.code_routing_set_global,
             "routing.set_rule" to R.string.code_routing_set_rule,
             "rules.applied" to R.string.code_rules_applied,
             "rules.saved_next" to R.string.code_rules_saved_next,

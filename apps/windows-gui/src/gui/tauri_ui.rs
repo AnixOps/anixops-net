@@ -4436,12 +4436,14 @@ fn embedded_envelope_with_rules(
 
 /// The imported envelope in `mode`, as the engine builds it (`engine_embedded::profile::envelope_for_mode`, the
 /// same as Linux and Android). Rule mode keeps the profile's own rules and groups (or sends everything through its
-/// one node); direct mode starts the engine in its direct mode (`"mode": "direct"`), where every connection and
+/// one node); global mode starts the engine in its global mode (`"mode": "global"`), everything through the group or
+/// node FINAL takes; direct mode starts the engine in its direct mode (`"mode": "direct"`), where every connection and
 /// every DNS query goes direct and no rule applies, with the rules replaced by `FINAL,DIRECT`. Public builds ship
 /// no preset list modes (docs/no-presets.md).
 fn mode_envelope(profile: &str, mode: DesktopRoutingMode) -> Result<String, String> {
     let mode = match mode {
         DesktopRoutingMode::Rule => RoutingMode::Rule,
+        DesktopRoutingMode::Global => RoutingMode::Global,
         DesktopRoutingMode::Direct => RoutingMode::Direct,
     };
     envelope_for_mode(profile, mode).map_err(|error| {
@@ -4644,6 +4646,7 @@ fn set_routing_mode_blocking(
     Ok(OperationResult::coded(
         match mode {
             DesktopRoutingMode::Direct => "routing.saved_direct",
+            DesktopRoutingMode::Global => "routing.saved_global",
             DesktopRoutingMode::Rule => "routing.saved_rule",
         },
         format!(
@@ -5259,19 +5262,22 @@ fn ensure_routing_configuration_stopped(state: &DesktopAppState) -> Result<(), S
 fn parse_routing_mode(value: &str) -> Result<DesktopRoutingMode, String> {
     match value {
         "direct" => Ok(DesktopRoutingMode::Direct),
+        "global" => Ok(DesktopRoutingMode::Global),
         "rule" => Ok(DesktopRoutingMode::Rule),
-        _ => Err("routing mode must be rule or direct".to_string()),
+        _ => Err("routing mode must be rule, global or direct".to_string()),
     }
 }
 fn routing_mode_name(mode: DesktopRoutingMode) -> &'static str {
     match mode {
         DesktopRoutingMode::Direct => "direct",
+        DesktopRoutingMode::Global => "global",
         DesktopRoutingMode::Rule => "rule",
     }
 }
 fn routing_mode_label(mode: DesktopRoutingMode) -> &'static str {
     match mode {
         DesktopRoutingMode::Direct => "Direct",
+        DesktopRoutingMode::Global => "Global",
         DesktopRoutingMode::Rule => "Rules",
     }
 }
@@ -6590,6 +6596,20 @@ mod tests {
         assert_eq!(parse_routing_mode("rule"), Ok(DesktopRoutingMode::Rule));
         assert_eq!(routing_mode_name(DesktopRoutingMode::Rule), "rule");
         assert_eq!(parse_routing_mode("direct"), Ok(DesktopRoutingMode::Direct));
+        // Rule, global and direct are all offered (docs/platform-parity.md, 分流模式); losing one fails here.
+        for (mode, name) in [
+            (DesktopRoutingMode::Rule, "rule"),
+            (DesktopRoutingMode::Global, "global"),
+            (DesktopRoutingMode::Direct, "direct"),
+        ] {
+            assert_eq!(parse_routing_mode(name), Ok(mode));
+            assert_eq!(routing_mode_name(mode), name);
+            assert_eq!(DesktopRoutingMode::from(name.to_string()), mode);
+            assert_eq!(
+                serde_json::to_value(mode).unwrap(),
+                Value::String(name.to_string())
+            );
+        }
         // No preset list modes in public builds (docs/no-presets.md).
         let presets = ["bypass_china", "gfw_list", "return_china"]; // neutral-terms: allow (values saved by earlier versions)
         for preset in presets {
@@ -6629,6 +6649,22 @@ mod tests {
         assert_eq!(direct["routing"]["rules"], json!(["FINAL,DIRECT"]));
         assert_eq!(direct["routing"]["groups"][0]["id"], "Proxy");
         assert!(mode_envelope("{}", DesktopRoutingMode::Direct).is_err());
+
+        // 全局: everything through the group FINAL takes; the rules stay for switching back.
+        let global: Value =
+            serde_json::from_str(&mode_envelope(routed, DesktopRoutingMode::Global).unwrap())
+                .unwrap();
+        assert_eq!(global["mode"], "global");
+        assert_eq!(global["routing"]["global"], "Proxy");
+        assert_eq!(
+            global["routing"]["rules"],
+            json!(["DOMAIN,a.test,DIRECT", "FINAL,Proxy"])
+        );
+        let single_global: Value =
+            serde_json::from_str(&mode_envelope(single, DesktopRoutingMode::Global).unwrap())
+                .unwrap();
+        assert_eq!(single_global["mode"], "global");
+        assert_eq!(single_global["outbound"], json!({ "type": "direct" }));
     }
 
     fn node(id: &str, label: &str) -> DesktopProfileNode {

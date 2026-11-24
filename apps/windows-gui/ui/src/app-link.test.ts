@@ -12,7 +12,8 @@ describe("anixops:// links", () => {
 
   it("reads modes, selections and imports", () => {
     expect(parseAppLink("anixops://mode?set=Rule")).toEqual({ action: "mode", mode: "rule" });
-    expect(parseAppLink("anixops://mode?set=global")).toEqual({ error: "这个客户端没有该分流模式", detail: "global" });
+    expect(parseAppLink("anixops://mode?set=global")).toEqual({ action: "mode", mode: "global" });
+    expect(parseAppLink("anixops://mode?set=direct")).toEqual({ action: "mode", mode: "direct" });
     // No preset list modes in public builds (docs/no-presets.md).
     expect(parseAppLink("anixops://mode?set=bypass_china")).toEqual({ error: "这个客户端没有该分流模式", detail: "bypass_china" }); // neutral-terms: allow (value saved by an earlier version)
     expect(parseAppLink("anixops://select?node=%E9%A6%99%E6%B8%AF&group=Main")).toEqual({ action: "select", node: "香港", group: "Main" });

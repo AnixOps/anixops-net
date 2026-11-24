@@ -7,14 +7,18 @@ use std::io::{self, Read, Write};
 /// allocated for it.
 pub const MAX_LENGTH: usize = 64 * 1024 * 1024;
 
-/// Writes `payload` as one frame and flushes it.
+/// Writes `payload` as one frame and flushes it. The length and the bytes go out in one write, so a side
+/// that closes the channel while a frame is being sent (a window quitting while its answer goes out) does
+/// not leave the other side a length with nothing after it: the frame is either all sent or not begun.
 pub fn write(writer: &mut impl Write, payload: &[u8]) -> io::Result<()> {
     if payload.len() > MAX_LENGTH {
         return Err(too_long(payload.len()));
     }
     let length = u32::try_from(payload.len()).map_err(|_| too_long(payload.len()))?;
-    writer.write_all(&length.to_be_bytes())?;
-    writer.write_all(payload)?;
+    let mut frame = Vec::with_capacity(4 + payload.len());
+    frame.extend_from_slice(&length.to_be_bytes());
+    frame.extend_from_slice(payload);
+    writer.write_all(&frame)?;
     writer.flush()
 }
 
@@ -81,6 +85,30 @@ mod tests {
         let mut bytes = Vec::new();
         write(&mut bytes, b"{}").unwrap();
         assert_eq!(bytes, [0, 0, 0, 2, b'{', b'}']);
+    }
+
+    /// Counts the writes it is handed.
+    #[derive(Default)]
+    struct Writes(Vec<Vec<u8>>);
+
+    impl Write for Writes {
+        fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+            self.0.push(buffer.to_vec());
+            Ok(buffer.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_frame_goes_out_in_one_write() {
+        // Two writes let a close in between cut the frame after its length (the other side then reads
+        // "the channel closed inside a frame").
+        let mut writes = Writes::default();
+        write(&mut writes, b"answer").unwrap();
+        assert_eq!(writes.0, [b"\0\0\0\x06answer".to_vec()]);
     }
 
     #[test]

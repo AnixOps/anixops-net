@@ -1169,6 +1169,7 @@ impl Backend {
         done(
             match mode {
                 RoutingMode::Rule => "routing.set_rule",
+                RoutingMode::Global => "routing.set_global",
                 RoutingMode::Direct => "routing.set_direct",
             },
             format!("Routing mode set to {}", mode.as_str()),
@@ -3088,8 +3089,22 @@ rules:
         let routed: serde_json::Value = serde_json::from_str(&backend.envelope().unwrap()).unwrap();
         assert_eq!(routed["routing"]["groups"][0]["default"], "DIRECT");
 
-        // Rule and direct modes only: public builds ship no preset list modes (docs/no-presets.md).
+        // Rule, global and direct; public builds ship no preset list modes (docs/no-presets.md).
         assert_eq!(backend.snapshot().routing_mode, "rule");
+        assert_eq!(
+            RoutingMode::ALL.map(RoutingMode::as_str),
+            ["rule", "global", "direct"]
+        );
+        for mode in RoutingMode::ALL {
+            assert_eq!(RoutingMode::parse(mode.as_str()), Some(mode));
+            assert_eq!(RoutingMode::from(mode.as_str().to_string()), mode);
+        }
+        backend.set_routing_mode(RoutingMode::Global).unwrap();
+        assert_eq!(backend.snapshot().routing_mode, "global");
+        let global: serde_json::Value = serde_json::from_str(&backend.envelope().unwrap()).unwrap();
+        // Everything through the group FINAL takes; the rules stay for switching back.
+        assert_eq!(global["mode"], "global");
+        assert_eq!(global["routing"]["global"], "Proxy");
         assert_eq!(RoutingMode::parse("bypass_china"), None); // neutral-terms: allow (value saved by an earlier version)
         assert_eq!(RoutingMode::parse("gfw_list"), None); // neutral-terms: allow (value saved by an earlier version)
         assert_eq!(RoutingMode::parse("return_china"), None); // neutral-terms: allow (value saved by an earlier version)
