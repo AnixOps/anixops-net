@@ -12,8 +12,8 @@ import org.junit.runner.RunWith
 /**
  * CI's emulator smoke test (x86_64): the app starts, asks for the user agreement and the way it is used, loads
  * libanixops_net.so, opens the Rust client and shows what it answers on the overview, proxies, rules and settings
- * pages. A fresh install has no subscription, so each page shows its empty state, which only appears once the client
- * has answered.
+ * pages and the settings' 通知 sub-page. A fresh install has no subscription, so each page shows its empty state,
+ * which only appears once the client has answered.
  */
 @RunWith(AndroidJUnit4::class)
 class SmokeTest {
@@ -56,11 +56,14 @@ class SmokeTest {
         compose.onNodeWithText(text(R.string.nav_extensions)).performClick()
         waitFor(R.string.plugins_empty)
 
-        // The notification switches show once `notification_settings` has answered.
         compose.onNodeWithText(text(R.string.nav_settings)).performClick()
-        waitFor(R.string.notifications_scripts)
         waitFor(R.string.settings_version)
         compose.onNodeWithText(BuildConfig.VERSION_NAME).assertExists()
+
+        // The 通知 row appears once `notification_settings` has answered; its switches live on the sub-page.
+        waitFor(R.string.notifications)
+        compose.onNodeWithText(text(R.string.notifications)).performClick()
+        waitFor(R.string.notifications_scripts)
     }
 
     private companion object {
