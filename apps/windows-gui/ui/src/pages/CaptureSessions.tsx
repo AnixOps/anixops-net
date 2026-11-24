@@ -17,7 +17,7 @@ export function protectionText(protection: SessionProtection | null, days: numbe
     case "secret-service":
       return [kept, t("密钥保存在系统钥匙环（Secret Service）里。")].join(" ");
     case "file":
-      return [kept, t("没有找到系统钥匙环（Secret Service），密钥保存在只有你能读取的文件里。")].join(" ");
+      return [kept, t("未找到系统钥匙环（Secret Service），密钥保存在仅当前用户可读取的文件中。")].join(" ");
     default:
       return kept;
   }
@@ -30,7 +30,7 @@ export function sessionTitle(session: CaptureSession): string {
 
 /** What is in a session and when it goes. */
 export function sessionHint(session: CaptureSession): string {
-  if (session.unreadable) return t("本机的密钥打不开这个会话（可能是重装前保存的），到期后自动删除");
+  if (session.unreadable) return t("本机密钥无法打开此会话，到期后自动删除");
   return [
     t("{count} 个请求", { count: session.requests ?? 0 }),
     t("{count} 个连接", { count: session.connections ?? 0 }),
@@ -102,7 +102,7 @@ export function CaptureSessions({ capture, live = true, run, onLoaded }: {
 
   return (
     <Card title={t("已保存的会话")} description={protectionText(protection, days)}>
-      {live && <Row icon={Save} color="indigo" label={t("保存当前抓包")} hint={captured > 0 ? t("{count} 个连接", { count: captured }) : t("还没有抓到内容")}>
+      {live && <Row icon={Save} color="indigo" label={t("保存当前抓包")} hint={captured > 0 ? t("{count} 个连接", { count: captured }) : t("暂无抓取内容")}>
         <input
           className="inline-input"
           aria-label={t("会话名称（可选）")}
@@ -115,7 +115,7 @@ export function CaptureSessions({ capture, live = true, run, onLoaded }: {
       </Row>}
       {failure && <p className="muted danger-text">{failure}</p>}
       {sessions && sessions.length === 0 && (
-        <EmptyState icon={Archive} title={t("还没有保存的会话")} message={t("保存后可以在这里载入，查看当时的请求并导出。")} />
+        <EmptyState icon={Archive} title={t("暂无已保存的会话")} message={t("保存后可以在这里载入，查看当时的请求并导出。")} />
       )}
       {sessions?.map((session) => (
         <Row key={session.session} icon={FolderOpen} color={session.unreadable ? "gray" : "sky"} label={sessionTitle(session)} hint={sessionHint(session)}>

@@ -89,7 +89,7 @@ export function BodyViewer({ message, lead, side = "response" }: { message: Capt
     const action = open ? desktop.openBody(data, fileType, name) : desktop.saveBody(data, fileType, name);
     void action.then(
       (answer) => setSaved(open ? null : { text: t("已保存到 {location}", { location: answer.location }), failed: false }),
-      (error: unknown) => setSaved({ text: open ? t("没能打开：{error}", { error: String(error) }) : t("没能保存：{error}", { error: String(error) }), failed: true }),
+      (error: unknown) => setSaved({ text: open ? t("打开失败：{error}", { error: String(error) }) : t("保存失败：{error}", { error: String(error) }), failed: true }),
     );
   };
   const menu = [
@@ -143,7 +143,7 @@ export function BodyViewer({ message, lead, side = "response" }: { message: Capt
   } else if (shape.kind === "image" && tooLarge && imageSize) {
     content = (
       <>
-        <p className="muted inspector-note">{t("图片太大（{width} × {height}），不在这里画出；可以保存或用其他应用打开。", { width: imageSize.width, height: imageSize.height })}</p>
+        <p className="muted inspector-note">{t("图片过大（{width} × {height}），不在此显示；可保存后用其他应用打开。", { width: imageSize.width, height: imageSize.height })}</p>
         <pre className="body-text selectable">{hexDump(body.bytes)}</pre>
       </>
     );

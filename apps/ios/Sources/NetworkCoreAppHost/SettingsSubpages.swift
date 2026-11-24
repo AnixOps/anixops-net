@@ -42,7 +42,7 @@ struct PrivacySettingsSection: View {
 
     var body: some View {
         Section {
-            Label("不收集你的流量和浏览记录", systemImage: "hand.raised")
+            Label("不收集流量和浏览记录", systemImage: "hand.raised")
             Label("节点密码和密钥只保存在本机钥匙串", systemImage: "key")
             Toggle("崩溃报告", isOn: $crashReports)
                 .onChange(of: crashReports) { _, enabled in
@@ -57,7 +57,7 @@ struct PrivacySettingsSection: View {
         } footer: {
             VStack(alignment: .leading, spacing: 8) {
                 Text("崩溃时记录脱敏后的信息（不含网址、账号和节点地址），只保存在本机，复制诊断信息时附上。关闭会删除已保存的报告。")
-                Text("开启后，App 打开且已连接时，约每小时把 ANX 节点的连接计数发给提供这些节点的订阅服务商：发往订阅链接去掉参数和扩展名后加 /report 的地址，链接里的令牌随之发出，服务商能据此对应到你的账号。内容为 App 版本、平台、网络类型（Wi-Fi、蜂窝、有线）、统计时长，以及每个节点的名称、服务器地址和端口、协议、成功和各类失败次数、是否因被拒而暂停、时间偏差；不含你访问的网址。默认关闭，关闭时删除保存的计数。")
+                Text("开启后，App 打开且已连接时，约每小时将 ANX 节点的连接计数发给提供这些节点的订阅服务商：发往订阅链接去掉参数和扩展名后加 /report 的地址，链接中的令牌随之发出，服务商可据此对应到本人账号；内容为 App 版本、平台、网络类型（Wi-Fi、蜂窝、有线）、统计时长，以及每个节点的名称、服务器地址和端口、协议、成功和各类失败次数、是否因被拒而暂停、时间偏差，不含所访问的网址。默认关闭，关闭时删除保存的计数。")
             }
         }
         #if os(iOS)

@@ -19,7 +19,7 @@ struct MappingsSection: View {
             }
             .listRowBackground(brand.surface)
         } footer: {
-            Text("用本机内容应答请求，或把请求转到另一个地址。也可以在请求详情里从抓到的请求一键生成。")
+            Text("用本机内容应答请求，或将请求转到另一个地址。")
         }
     }
 
@@ -48,7 +48,7 @@ struct MappingsView: View {
         List {
             Section {
                 if mappings.entries.isEmpty {
-                    Text("还没有映射。在请求详情里选“映射到本地”或“映射到远程”，或点下方添加。")
+                    Text("暂无映射。可在请求详情中选择“映射到本地”或“映射到远程”，或点下方添加。")
                         .font(.subheadline)
                         .foregroundStyle(brand.text2)
                         .listRowBackground(brand.surface)
@@ -85,7 +85,7 @@ struct MappingsView: View {
                         Text(TunnelController.decryptionExceedsConfigWarning)
                             .foregroundStyle(brand.warning)
                     }
-                    Text("从上到下第一条匹配的生效。需要先在 扩展 › HTTPS 解密证书 中安装并信任根证书，HTTPS 请求才能被映射。Map Remote 用 307 重定向发往新地址，方法和请求体保持不变。")
+                    Text("从上到下第一条匹配的生效；Map Remote 用 307 重定向发往新地址。HTTPS 请求需先在 扩展 › HTTPS 解密证书 中安装并信任根证书。")
                 }
             }
         }
@@ -431,7 +431,7 @@ struct DecryptHostsSection: View {
             }
             .listRowBackground(brand.surface)
         } footer: {
-            Text("只解密这里、插件和映射里列出的域名，其余 HTTPS 原样转发。也可以在加密连接的详情里点“解密此域名”。")
+            Text("仅解密此处、插件和映射中所列域名，其余 HTTPS 原样转发。")
         }
     }
 
@@ -551,7 +551,7 @@ struct DecryptHostsView: View {
                     .foregroundStyle(brand.danger)
             }
         } footer: {
-            Text("* 匹配任意字符（包括点），? 匹配一个字符；*.example.com 匹配所有子域名，不含 example.com 本身。排除的域名永不解密，优先于这里、插件和映射里的所有解密规则；也可以直接写 -example.com。")
+            Text("* 匹配任意字符（含点），? 匹配一个字符；*.example.com 匹配所有子域名，不含 example.com 本身。排除的域名永不解密，优先于其他解密规则。")
         }
         .listRowBackground(brand.surface)
     }
@@ -597,7 +597,7 @@ struct DecryptHostsView: View {
         } header: {
             Text("解密失败")
         } footer: {
-            Text("根据本机这次连接以来的解密结果自动标出，只记录域名、次数和原因，断开后清空。App 拒绝证书多半是证书固定：它只信任自己的证书，无法解密。排除后它的连接原样转发，App 会照常联网。")
+            Text("根据本次连接以来的解密结果自动标出，只记录域名、次数和原因，断开后清空。排除后连接原样转发。")
         }
         .listRowBackground(brand.surface)
     }
@@ -607,7 +607,7 @@ struct DecryptHostsView: View {
         if !exclude || !domains.isEmpty {
             Section {
                 if domains.isEmpty {
-                    Text("还没有域名。也可以在加密连接的详情里点“解密此域名”。")
+                    Text("暂无域名")
                         .font(.subheadline)
                         .foregroundStyle(brand.text2)
                 }
@@ -712,8 +712,8 @@ struct DecryptHostsView: View {
                 Text("哪些 HTTPS 能解密")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(brand.text)
-                Text("域名在列表里（或插件、映射里）、没有被排除，并且已经信任 HTTPS 解密证书。加入后新建的连接才会解密，之前的连接要等 App 重新连接。")
-                Text("只解密 443 端口的 HTTPS。列表里域名的 HTTP/3（QUIC）连接会被拒绝，让 App 改用可以解密的 HTTPS。")
+                Text("域名在列表中（或在插件、映射中）、未被排除，且已信任 HTTPS 解密证书。加入后新建的连接才会解密。")
+                Text("只解密 443 端口的 HTTPS；列表中域名的 HTTP/3（QUIC）连接会被拒绝，App 改用 HTTPS。")
                 Text("不能解密：固定了证书的 App（常见于银行、支付和系统服务），以及只有 IP 地址、没有域名的连接。")
             }
             .font(.footnote)
@@ -949,7 +949,7 @@ struct DebugSetupChecklist: View {
             ForEach(Step.allCases, id: \.self) { step in
                 row(step, done: !pending.contains(step))
             }
-            Text("明文 HTTP 请求不需要这些步骤，抓包开始后就会列出。")
+            Text("明文 HTTP 请求无需上述步骤，开始抓包后列出。")
                 .font(.footnote)
                 .foregroundStyle(brand.text2)
         }

@@ -99,7 +99,7 @@ struct MacPhoneCaptureSection: View {
                         .foregroundStyle(.secondary)
                 } else {
                     Label(
-                        "任何人都能使用这个代理：同一网络里的任何设备都能通过这台 Mac 和你的节点上网，它们的请求也会进入抓包。只在可信的网络里关闭密码。",
+                        "任何人都能使用此代理：同一网络内的设备均可通过这台 Mac 和所用节点上网，其请求也会进入抓包。仅在可信网络中关闭密码。",
                         systemImage: "exclamationmark.triangle.fill"
                     )
                     .font(.footnote)
@@ -152,11 +152,11 @@ struct MacPhoneCaptureSection: View {
                                 Text(url)
                                     .font(.callout.monospaced())
                                     .textSelection(.enabled)
-                                Text("设置页里有 iPhone 和 Android 的步骤和根证书下载。设好代理后在手机上打开 http://\(share.pageHost) 检查是否生效。")
+                                Text("设置页提供 iPhone 和 Android 的步骤及根证书下载。设好代理后，在手机上打开 http://\(share.pageHost) 检查。")
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
                                 if share.credentials == true {
-                                    Text("iPhone：在 Wi-Fi 代理设置里打开认证，填上面的用户名和密码。Android 的 Wi-Fi 代理没有密码栏，浏览器会在第一次访问时询问，其他应用可能连不上。")
+                                    Text("iPhone：在 Wi-Fi 代理设置中开启认证并填写上方用户名和密码。Android 的 Wi-Fi 代理无密码栏，浏览器首次访问时询问，其他应用可能无法连接。")
                                         .font(.footnote)
                                         .foregroundStyle(.secondary)
                                 }
@@ -185,7 +185,7 @@ struct MacPhoneCaptureSection: View {
         } header: {
             Text("手机抓包")
         } footer: {
-            Text("手机和 Mac 连同一个 Wi-Fi，把手机的 Wi-Fi 代理设成 Mac，手机的请求就会出现在请求页。只接受局域网里的设备，默认还要填用户名和密码；断开连接时一并关闭。")
+            Text("将手机的 Wi-Fi 代理设为这台 Mac（同一 Wi-Fi）后，手机请求出现在请求页。仅接受局域网设备，默认需用户名和密码；断开连接时关闭。")
         }
         .task {
             loadAuth()
@@ -243,8 +243,8 @@ struct MacPhoneCaptureSection: View {
         }
         guard let answer = RuntimeControl.decode(RuntimeControl.LanShare.self, from: await tunnel.control(request)) else {
             error = on
-                ? String(localized: "手机抓包没有开启：端口可能被占用，或者网络扩展版本太旧。")
-                : String(localized: "手机抓包没有关闭，请重试。")
+                ? String(localized: "手机抓包未开启：端口可能被占用，或网络扩展版本过旧。")
+                : String(localized: "手机抓包未关闭，请重试。")
             return
         }
         error = nil

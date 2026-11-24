@@ -155,7 +155,7 @@ public sealed class ProxiesTests
     {
         var page = Proxies.Show(English, true, new Proxies(0, 0, []), Idle, null);
         Assert.Equal("0 nodes", page.Count);
-        Assert.Equal("No nodes yet. Import a subscription and its nodes appear here.", page.Notice);
+        Assert.Equal("No nodes. Nodes appear after a subscription is imported.", page.Notice);
         Assert.True(page.CanImport);
         Assert.False(page.CanTest);
 

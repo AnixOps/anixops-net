@@ -96,14 +96,14 @@ public sealed class GroupsTests
         Assert.Equal(2, rows[0].Chosen);
         Assert.True(rows[0].Enabled);
         // A group that chooses by itself offers nothing, and says so when it has not chosen yet.
-        Assert.Equal("Fastest · Not chosen yet", rows[1].Details);
+        Assert.Equal("Fastest · Not chosen", rows[1].Details);
         Assert.Empty(rows[1].Options);
         Assert.Null(rows[1].Chosen);
         Assert.False(rows[1].Enabled);
         Assert.Equal("Fallback · Using Tokyo", rows[2].Details);
         Assert.False(rows[2].Enabled);
         // A kind this window does not know is not named.
-        Assert.Equal("Not chosen yet", Groups.Show(English, Sample(1), [])[0].Details);
+        Assert.Equal("Not chosen", Groups.Show(English, Sample(1), [])[0].Details);
         Assert.Equal("手动选择 · 正在用 Osaka", Groups.Show(Chinese, groups, [])[0].Details);
     }
 

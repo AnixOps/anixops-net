@@ -20,11 +20,11 @@ struct TermsConsentView: View {
                     .foregroundStyle(brand.text)
                     .fixedSize(horizontal: false, vertical: true)
                 VStack(alignment: .leading, spacing: 14) {
-                    point("iphone", "只在你自己的设备上使用，不替别人在其不知情时安装或开启代理、HTTPS 解密和脚本。")
-                    point("lock.shield", "HTTPS 解密只用于你自己的流量。根证书由你本人在系统设置里手动信任，只解密你列出的域名。")
+                    point("iphone", "仅在本人设备上使用；不得在他人不知情时为其安装或开启代理、HTTPS 解密和脚本。")
+                    point("lock.shield", "HTTPS 解密仅用于本人的流量。根证书由本人在系统设置中手动信任，仅解密所列域名。")
                     point("hand.raised", "不得用于入侵他人系统、窃取数据，或绕过游戏、支付、登录等服务的安全机制。")
                     point("shippingbox", "本 App 不提供节点或订阅，导入的内容由提供方负责。软件按现状提供，不作担保。")
-                    point("network", "流量只在本机按你的规则转发到你配置的服务器，我们看不到也不收集。App 不含统计、广告或崩溃上报 SDK，数据只保存在你的设备上。")
+                    point("network", "流量仅在本机按规则转发到所配置的服务器，开发者无法查看也不收集。App 不含统计、广告或崩溃上报 SDK，数据只保存在本机。")
                 }
                 Link(destination: TermsConsent.url) {
                     Label("阅读完整协议", systemImage: "doc.text")
@@ -37,7 +37,7 @@ struct TermsConsentView: View {
                 }
                 .foregroundStyle(brand.primary)
                 if declined {
-                    Text("不同意就不能使用 AnixOps Net。你可以重新阅读后同意，或删除本 App。")
+                    Text("不同意则无法使用 AnixOps Net。可重新阅读后同意，或删除本 App。")
                         .font(.subheadline)
                         .foregroundStyle(brand.danger)
                         .fixedSize(horizontal: false, vertical: true)

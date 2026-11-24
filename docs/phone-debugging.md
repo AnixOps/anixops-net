@@ -34,6 +34,6 @@
 
 ## 根证书
 
-默认每台电脑生成自己的根证书（计划 F2）。Windows 和 Linux 可以在「扩展」页的「自己的根证书」里换成团队已有的 CA，需要 PEM 格式的证书和 PKCS#8 私钥（`BEGIN PRIVATE KEY`）。换完后，手机和其他设备上的根证书都要重新安装。macOS 暂时还不能导入自有 CA，仍使用钥匙串里生成的根证书。
+默认每台电脑生成自己的根证书（计划 F2）。Windows 和 Linux 可以在「扩展」页的「自定义根证书」里换成团队已有的 CA，需要 PEM 格式的证书和 PKCS#8 私钥（`BEGIN PRIVATE KEY`）。换完后，手机和其他设备上的根证书都要重新安装。macOS 暂时还不能导入自有 CA，仍使用钥匙串里生成的根证书。
 
 内核接口见 networkcore 的 `crates/engine-embedded/src/lan_share.rs`，包括控制命令 `lan_share`、`start_lan_share` 和 `stop_lan_share`。

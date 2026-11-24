@@ -227,7 +227,7 @@ struct CaptureDetailView: View {
             return "这是加密的 TLS 数据。这个域名在解密列表里被排除，不会解密。"
         }
         if tunnel.debugMappings.decrypts(host) {
-            return "这是加密的 TLS 数据。这个域名已在解密列表里，新的连接会被解密；请确认已信任 HTTPS 解密证书。"
+            return "这是加密的 TLS 数据。该域名已在解密列表中，新连接将被解密（需已信任 HTTPS 解密证书）。"
         }
         return "这是加密的 TLS 数据。点“解密此域名”后，新的连接会被解密（需要先信任 HTTPS 解密证书）。"
     }
@@ -287,7 +287,7 @@ struct CaptureDetailView: View {
                             LabeledContent("HTTP/2 帧", value: String(frames.seen))
                         }
                     } footer: {
-                        Text("App 与 AnixOps、AnixOps 与服务器两段的帧头，用来看流控、RST_STREAM 和 GOAWAY。")
+                        Text("App 与 AnixOps、AnixOps 与服务器两段的帧头。")
                     }
                     .listRowBackground(brand.surface)
                 }
@@ -320,14 +320,14 @@ struct CaptureDetailView: View {
                     .listRowBackground(brand.surface)
                 }
                 if capture.http.isEmpty, capture.chunks.isEmpty {
-                    Text("还没有数据")
+                    Text("暂无数据")
                         .foregroundStyle(brand.text2)
                         .listRowBackground(brand.surface)
                 }
                 Section {
                     CaptureExportItems(tunnel: tunnel, connection: connection.id, hasRequests: !capture.http.isEmpty)
                 } footer: {
-                    Text("zip 里有连接清单、HAR 和 pcapng；pcapng 可用 Wireshark 打开，HAR 可导入浏览器开发者工具或其他抓包工具。“完整”不遮盖账号、Cookie 等敏感信息，请只发给信任的人。")
+                    Text("zip 内含连接清单、HAR 和 pcapng。“完整”不遮盖账号、Cookie 等敏感信息，请仅发给信任的人。")
                 }
                 .listRowBackground(brand.surface)
             } else {
@@ -362,7 +362,7 @@ struct CaptureDetailView: View {
             return "正在读取…"
         }
         if tunnel.viewedCapture != nil {
-            return "已保存的抓包里没有这个连接：它出现在最后一次保存之后，或已被更新的连接挤出（抓包内存有上限）。"
+            return "已保存的抓包中没有此连接：它出现在最后一次保存之后，或已被较新的连接挤出。"
         }
         return "这个连接的抓包内容已被更新的连接挤出（抓包内存有上限），或抓包已清空。"
     }
@@ -676,7 +676,7 @@ struct CaptureHostGroupsView: View {
                 }
                 CaptureHostGroupRows(tunnel: tunnel, groups: groups, domains: domains, results: results, decrypt: decrypt)
             } footer: {
-                Text("这些连接没有解密，只抓到了加密的 TLS 数据，点进去可以看原始字节。点“解密”把域名加入解密列表，隧道会重新连接，之后的新连接会被解密并列在请求里。")
+                Text("这些连接未解密，仅抓到加密的 TLS 数据，点进去可看原始字节。点“解密”将域名加入解密列表，隧道重新连接，新连接会被解密并列在请求中。")
             }
         }
         .scrollContentBackground(.hidden)

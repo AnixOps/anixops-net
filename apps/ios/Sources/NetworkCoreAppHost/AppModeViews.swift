@@ -16,7 +16,7 @@ extension AppMode {
     var summary: LocalizedStringKey {
         switch self {
         case .debug:
-            return "抓包、解密 HTTPS、改写和重放请求，给 App 开发和测试用。不需要节点，流量默认直连。"
+            return "抓包、解密 HTTPS、改写和重放请求。无需节点，流量默认直连。"
         case .proxy:
             return "导入订阅或节点，按规则把流量交给代理或直连。"
         }
@@ -54,7 +54,7 @@ struct ModeChoiceView: View {
         VStack(alignment: .leading, spacing: 20) {
             Spacer(minLength: 24)
             BrandMark(size: 72)
-            Text("你想怎么用\nAnixOps Net？")
+            Text("选择使用方式")
                 .font(BrandFont.display)
                 .foregroundStyle(brand.text)
                 .fixedSize(horizontal: false, vertical: true)
@@ -73,7 +73,7 @@ struct ModeChoiceView: View {
                     .frame(maxWidth: .infinity, minHeight: 52)
             }
             .buttonStyle(.brandPrimary)
-            Text("以后可以在设置里切换，切换不会删除订阅、节点和插件。")
+            Text("可在设置中切换，不会删除订阅、节点和插件。")
                 .font(.footnote)
                 .foregroundStyle(brand.text2)
                 .frame(maxWidth: .infinity)
@@ -181,7 +181,7 @@ struct DebugExitPicker: View {
             return "抓到的请求直接发往目标服务器，不经过任何节点。"
         case .node:
             if tunnel.hasNoNodes {
-                return "还没有节点，暂时直连。导入订阅或节点后，请求经过选中的节点发出，可以用来对比不同地区的出口。"
+                return "暂无节点，当前直连。导入后请求经所选节点发出。"
             }
             return "请求经过选中的节点发出，按订阅规则分流；可以切换节点对比不同地区的出口。"
         }

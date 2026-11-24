@@ -495,7 +495,7 @@ def check_lists(path: str, text: str, pages: set[str]) -> list[str]:
 
 COPY_RULES_FILE = Path(__file__).resolve().parent / "formal-copy.json"
 PLACEHOLDER = re.compile(r"%(?:\d+\$)?(?:ll|l|h)?[@dusfxXc%]|\{[A-Za-z_][\w.]*\}|\\[nt'\"@?]")
-SENTENCE_END = re.compile(r"[。！？]+|[.!?]+(?=\s|$)")
+SENTENCE_END = re.compile(r"[。！？]+|(?<=[\w)\]'\"’”%])[.!?]+(?=\s|$)")
 
 
 @dataclass(frozen=True)
@@ -795,7 +795,53 @@ def self_test() -> int:
         if pushed_pages(mask_swift(source)) - {"Text", "Label"} != expect:
             failed += 1
             print(f"self-test: pushed_pages({source!r}) gave {pushed_pages(mask_swift(source))}, expected {expect}")
-    total = len(cases) + len(structure) + len(lists) + len(pushes)
+    copy = [
+        ("zh", "只打开你信任的来源。", "U7"),
+        ("zh", "暂无插件", None),
+        ("zh", "还没有插件", "U7"),
+        ("zh", "粘贴网址导入试试吧", "U7"),
+        ("zh", "连接断开了", "U7"),
+        ("zh", "别关闭窗口", "U7"),
+        ("zh", "按类别分组，识别失败时分别显示别名", None),
+        ("zh", "统一下载", None),
+        ("zh", "开启后生成根证书，这样才能解密 HTTPS。", "U8"),
+        ("zh", "第一句。第二句。第三句。", "U8"),
+        ("zh", "第一句。第二句。", None),
+        ("zh", "已导入 %lld 个节点", None),
+        ("en", "Turn on only plugins you trust.", "U7"),
+        ("en", "Couldn't import the plugin.", "U7"),
+        ("en", "Import failed: the certificate has expired.", None),
+        ("en", "Done!", "U7"),
+        ("en", "Matches 1.1.1.1 and example.com; host != null is not a sentence end.", None),
+        ("en", "Opens YouTube", None),
+        ("en", "The proxy stays on so that requests keep working.", "U8"),
+        ("en", "One. Two. Three.", "U8"),
+        ("en", "Wildcards * and ? are supported. The prefix - excludes a domain.", None),
+        ("en", "Show all {count} plugins", None),
+    ]
+    for lang, text, expected in copy:
+        got = check_copy([CopyEntry("t.json", "k", lang, text)])
+        rule = got[0].split(": ", 2)[1].split(" ")[0] if got else None
+        if rule != expected:
+            failed += 1
+            print(f"self-test: copy {text!r} gave {rule}, expected {expected}")
+    tables = [
+        ('{"strings": {"只打开你信任的来源": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Trusted only"}}}}}}',
+         xcstrings_entries, 2),
+        ('<resources><string name="a">A</string><plurals name="b"><item quantity="one">B</item></plurals>'
+         '<string name="c" translatable="false">C</string></resources>', android_entries, 2),
+        ('{"a": {"zh": "甲", "zh-Hant": "甲", "en": "A"}}', catalogue_entries, 3),
+    ]
+    for source, reader, count in tables:
+        entries = reader("apps/android-native/app/src/main/res/values/strings.xml" if reader is android_entries else "t", source)
+        if len(entries) != count:
+            failed += 1
+            print(f"self-test: {reader.__name__} read {len(entries)} entries, expected {count}")
+    ts = ts_entries("i18n-en.ts", '  "关闭|verb": "Close",\n  "你好": "Hello",\n', "en", keys=True)
+    if [(e.lang, e.text) for e in ts] != [("zh", "关闭"), ("en", "Close"), ("zh", "你好"), ("en", "Hello")]:
+        failed += 1
+        print(f"self-test: ts_entries gave {ts}")
+    total = len(cases) + len(structure) + len(lists) + len(pushes) + len(copy) + len(tables) + 1
     print(f"ui_lint self-test: {total - failed}/{total} passed")
     return 1 if failed else 0
 

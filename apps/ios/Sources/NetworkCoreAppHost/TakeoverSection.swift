@@ -68,11 +68,11 @@ struct TakeoverSection: View {
         let restart = String(localized: "切换时如果已连接，会自动重连一次。")
         switch takeover {
         case .tunnelAndProxy:
-            return String(localized: "VPN 接管全部流量，同时把系统 HTTP / HTTPS 代理指向本机。遵守代理设置的 App（大部分网页和系统网络请求）直接交给代理，不经过 VPN 里的 TCP/IP 协议栈，更省电，规则也能直接看到域名和明文 HTTP 的完整网址；其余流量照常走 VPN。") + restart
+            return String(localized: "VPN 接管全部流量，并将系统 HTTP / HTTPS 代理指向本机。") + restart
         case .tunnel:
-            return String(localized: "只用 VPN 接管全部流量，不设置系统代理。某个 App 用代理时出问题，可以先换成这一项排查。") + restart
+            return String(localized: "仅用 VPN 接管全部流量，不设置系统代理。") + restart
         case .systemProxy:
-            return String(localized: "只设置系统 HTTP / HTTPS 代理，不创建默认路由。遵守代理设置的 App 按规则走；不遵守的 App 和 UDP 流量直接出去，不经过规则、MITM 和抓包。最省资源。") + restart
+            return String(localized: "仅设置系统 HTTP / HTTPS 代理，不创建默认路由；不遵守代理设置的 App 和 UDP 流量直接出去。") + restart
         }
     }
 }
@@ -99,7 +99,7 @@ struct ProxyExceptionsEditor: View {
                             rejected = ProxyExceptions.parse(value).rejected
                         }
                 } footer: {
-                    Text("每行一项：域名（router.lan）、通配符（*.local）、IP 或网段（192.168.0.0/16）。这些地址不走系统代理；VPN 接管时仍按规则走 VPN。# 开头的行是注释。")
+                    Text("每行一项：域名、通配符（*.local）、IP 或网段（192.168.0.0/16）。这些地址不走系统代理。")
                 }
                 .listRowBackground(brand.surface)
                 if !rejected.isEmpty {

@@ -102,14 +102,14 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
       {consent.dialog}
       <Card
         title={t("HTTPS 解密")}
-        description={t("只解密下面“解密域名”、插件和映射里列出的域名，其余网站原样转发。根证书在本机生成，需要你按系统提示手动信任，App 不会自动信任。")}
+        description={t("仅解密下方“解密域名”、插件和映射中列出的域名，其余网站原样转发。根证书在本机生成，须按系统提示手动信任，App 不会自动信任。")}
       >
         {root && (
           <Row
             icon={ShieldCheck}
             color={root.trusted ? "green" : "gray"}
             label={t("根证书")}
-            hint={root.trusted ? (linux ? t("已由你手动信任。关闭解密后仍保留，不再使用时请移除信任") : t("已由你手动信任。关闭解密后仍保留，不再使用时请在 certmgr.msc 的“受信任的根证书颁发机构”里删除")) : linux ? t("点“信任根证书”后，系统会请你授权写入浏览器和系统证书库") : t("点“信任根证书”会打开 Windows 证书窗口：选“安装证书”→“当前用户”→“将所有的证书都放入下列存储”→“受信任的根证书颁发机构”，再确认安全警告")}
+            hint={root.trusted ? (linux ? t("已手动信任。关闭解密后仍保留，不再使用时请移除信任") : t("已手动信任。关闭解密后仍保留，不再使用时请在 certmgr.msc 的“受信任的根证书颁发机构”中删除")) : linux ? t("选择“信任根证书”后，系统将请求授权写入浏览器和系统证书库") : t("“信任根证书”将打开 Windows 证书窗口：选“安装证书”→“当前用户”→“将所有的证书都放入下列存储”→“受信任的根证书颁发机构”，并确认安全警告")}
           >
             <StatusPill label={root.trusted ? t("已信任") : t("未信任")} tone={root.trusted ? "success" : "warning"} />
             {!root.trusted && (
@@ -141,7 +141,7 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
 
       <Card
         title={t("插件")}
-        description={t("兼容常见插件格式。导入后先关着：查看它解密的域名、改写规则和脚本，确认后再打开，脚本才会运行。")}
+        description={t("兼容常见插件格式。导入后默认关闭，确认域名、改写规则和脚本后再开启。")}
         actions={<>
           {plugins.length > 0 && <span className="count">{t("{count} 个插件", { count: plugins.length })}</span>}
           <MoreMenu
@@ -192,7 +192,7 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
           </div>
         )}
         {plugins.length === 0 ? (
-          <EmptyState icon={Puzzle} title={t("还没有插件")} message={t("粘贴一个插件的 https 网址并导入，开启 HTTPS 解密后生效。")} />
+          <EmptyState icon={Puzzle} title={t("暂无插件")} message={t("粘贴一个插件的 https 网址并导入，开启 HTTPS 解密后生效。")} />
         ) : (
           <FoldedRows
             items={plugins}
@@ -252,7 +252,7 @@ export function ExtensionsPage({ snapshot, busy, run }: { snapshot: RuntimeSnaps
       <TrafficRedirectsCard busy={busy} run={run} platform={snapshot?.platform} />
 
       {!linux && (
-        <Card title={t("自定义证书")} description={t("要让 Windows 信任你自己的证书时填写路径。证书会在 Windows 证书窗口中打开，由你手动安装。")}>
+        <Card title={t("自定义证书")} description={t("填写证书路径，在 Windows 证书窗口中打开并手动安装。")}>
           <Row icon={KeyRound} color="gray" label={t("证书 PEM 路径")}>
             <input className="inline-input" aria-label={t("证书 PEM 路径")} placeholder={"C:\\certs\\ca.pem"} value={certificatePath} onChange={(event) => setCertificatePath(event.target.value)} />
             <button className="secondary compact" disabled={Boolean(busy) || !certificatePath.trim()} onClick={() => void run("certificate", () => desktop.installCertificate(certificatePath.trim()))}>{t("打开证书")}</button>
@@ -297,7 +297,7 @@ function PluginInspector({ plugin, details, review, busy, enable, close }: {
     <Card title={plugin.name} description={plugin.url || t("本地导入")} actions={<button className="link-button" onClick={close}>{review ? t("暂不打开") : t("收起")}</button>}>
       {review && (
         <p className="card-note" role="note">
-          {t("打开后，这个插件会解密下面的域名、按规则改写请求和响应，并运行下面的脚本。脚本可以查看和改写解密后的流量，也可以自行联网。只打开你信任的来源。")}
+          {t("开启后，该插件解密下列域名、改写请求和响应并运行下列脚本，脚本可读取、改写解密后的流量并自行联网。仅开启可信来源的插件。")}
         </p>
       )}
       {review && decryptsBroadly(plugin.hostnames) && (

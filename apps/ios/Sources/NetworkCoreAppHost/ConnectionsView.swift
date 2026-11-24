@@ -164,7 +164,7 @@ struct ConnectionsView: View {
                     }
                 }
             } footer: {
-                Text("站点标识是本机按主机名生成的字母，不联网取图标。HTTPS、QUIC 等标签按端口推断。上传、下载为该连接经隧道的字节数。目标域名来自请求本身或 TLS SNI / HTTP Host，只保存在内存里，下次连接或退出 App 时清空。在右上角“更多”中开始抓包后，新的连接可在详情里查看和导出内容（每个方向前 64 KiB，HTTPS 需启用解密才是明文）。")
+                Text("站点标识为本机按主机名生成的字母，不联网获取图标。上传、下载为该连接经隧道的字节数；目标域名只保存在内存中，下次连接或退出 App 时清空。")
             }
         }
         .scrollContentBackground(.hidden)
@@ -345,9 +345,9 @@ struct ConnectionsView: View {
         case .active:
             return "暂无活跃连接"
         case .closed:
-            return "还没有结束的连接"
+            return "暂无已结束的连接"
         case .hosts:
-            return "还没有流量"
+            return "暂无流量"
         }
     }
 
@@ -602,7 +602,7 @@ private struct ConnectionDetail: View {
                 .listRowBackground(brand.surface)
             } else if captureSupported {
                 Section {
-                    Text("这个连接建立时没有在抓包。在请求列表右上角“更多”中开始抓包后，新的连接可以查看和导出内容。")
+                    Text("此连接建立时未抓包。在请求列表右上角“更多”中开始抓包后，新连接可查看和导出内容。")
                         .font(.footnote)
                         .foregroundStyle(brand.text2)
                 }

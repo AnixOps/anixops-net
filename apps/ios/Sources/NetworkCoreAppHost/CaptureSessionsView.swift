@@ -88,7 +88,7 @@ struct CaptureSessionsView: View {
         } message: {
             Text(
                 tunnel.connection == .connected
-                    ? LocalizedStringKey("请求列表改为显示这个会话，实时抓包照常进行，随时可以回到实时抓包。")
+                    ? LocalizedStringKey("请求列表改为显示此会话，实时抓包继续进行，可随时返回。")
                     : LocalizedStringKey("请求列表改为显示这个会话。")
             )
         }
@@ -154,14 +154,14 @@ struct CaptureSessionsView: View {
     }
 
     private var footerText: LocalizedStringKey {
-        "会话用只保存在本机钥匙串里的密钥加密，保留 7 天后自动删除。隧道断开时会自动保存当次的抓包，断开后也能打开。打开会话后请求列表显示它的内容，可以照常查看、筛选和导出；长按会话可以直接打包导出。"
+        "会话用仅保存在本机钥匙串中的密钥加密，保留 7 天后自动删除。隧道断开时自动保存当次抓包；打开会话后请求列表显示其内容，长按可打包导出。"
     }
 
     private var emptyText: LocalizedStringKey {
         if unavailable {
             return "这台设备上无法打开会话（钥匙串不可用）。"
         }
-        return loaded ? "还没有保存的会话。隧道断开时会自动保存当次的抓包，也可以在请求列表右上角“更多”中保存当前抓包。" : "正在读取…"
+        return loaded ? "暂无已保存的会话。隧道断开时自动保存当次抓包，也可在请求列表右上角“更多”中保存。" : "正在读取…"
     }
 
     private func load() async {

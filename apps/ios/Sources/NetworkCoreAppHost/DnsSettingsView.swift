@@ -187,7 +187,7 @@ struct DnsSettingsView: View {
         } header: {
             Text("服务器")
         } footer: {
-            Text("没有规则命中的域名由默认服务器解析。长按服务器可设为默认、加入默认竞速（最多 4 个同时查询，取最先的应答）或设为备用（默认或规则的服务器失败时再查，适合公司 VPN 的内部域名）。经代理的服务器在直连模式下也直连，系统 DNS 总是直连。")
+            Text("未命中规则的域名由默认服务器解析。长按服务器可设为默认、加入默认竞速（最多 4 个同时查询）或设为备用。")
         }
     }
 
@@ -264,7 +264,7 @@ struct DnsSettingsView: View {
             Text("按域名选择服务器")
         } footer: {
             VStack(alignment: .leading, spacing: 4) {
-                Text("从上到下第一条命中的规则生效。RULE-SET 使用规则页的规则集，例如 geosite-cn；只有单个节点、没有订阅规则时它不会命中。")
+                Text("从上到下第一条命中的规则生效。RULE-SET 使用规则页的规则集，如 geosite-cn。")
                 if !dns.rules.isEmpty {
                     Text("已用 \(dns.ruleDomainCount) / \(DnsSettings.maxRuleDomains) 个域名、后缀和关键词")
                 }
@@ -288,7 +288,7 @@ struct DnsSettingsView: View {
             )
             .listRowBackground(brand.surface)
         } footer: {
-            Text("开启后，应用查询域名时立即拿到 198.18.0.0/15（IPv6 为 fc00::/18）内的临时地址，连接时再还原成域名按规则分流、由代理解析，首次连接更快，非 HTTP/TLS 协议也能按域名分流。局域网、NTP、STUN、Apple 推送和联网检测等域名仍返回真实地址。关闭或更改后，个别应用可能需要重新打开。")
+            Text("开启后，应用查询域名时立即获得 198.18.0.0/15（IPv6 为 fc00::/18）内的临时地址，连接时还原为域名并按规则分流；局域网、NTP、STUN、Apple 推送和联网检测等域名仍返回真实地址。更改后个别应用需重新打开。")
         }
     }
 
@@ -377,7 +377,7 @@ private struct DnsServerSheet: View {
                     TextField("TLS 名称（可选）", text: $serverName, prompt: Text(verbatim: "cloudflare-dns.com"))
                         .plainTextEntry()
                 } footer: {
-                    Text("地址可写 1.1.1.1、udp://、tcp://、tls://（DoT）、https://（DoH）、quic://（DoQ），或 system（本机网络的 DNS）。用 IP 地址写 DoT/DoH/DoQ 时填写证书上的 TLS 名称。")
+                    Text("地址可写 1.1.1.1、udp://、tcp://、tls://（DoT）、https://（DoH）、quic://（DoQ）或 system（本机网络的 DNS）。IP 地址形式的 DoT/DoH/DoQ 需填写证书上的 TLS 名称。")
                 }
                 .listRowBackground(brand.surface)
                 Section {

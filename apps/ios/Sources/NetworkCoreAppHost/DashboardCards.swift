@@ -507,7 +507,7 @@ private struct TopHostsTile: View {
                         TilePlaceholder(text: "连接后按主机统计流量")
                     }
                 } else if model.topHosts.isEmpty {
-                    TilePlaceholder(text: "还没有流量")
+                    TilePlaceholder(text: "暂无流量")
                 } else {
                     bars(model.topHosts)
                 }
@@ -621,7 +621,7 @@ private struct ExitAddressTile: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(brand.warning)
                 }
-                Text("只在你点按时查询，按当前模式和规则发出")
+                Text("点按时查询，按当前模式和规则发出")
                     .font(.caption2)
                     .foregroundStyle(brand.text2)
                     .fixedSize(horizontal: false, vertical: true)

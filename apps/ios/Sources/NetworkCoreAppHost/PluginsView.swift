@@ -161,7 +161,7 @@ struct PluginsSection: View {
             }
             Button("取消", role: .cancel) {}
         } message: { reference in
-            Text("将从 \(reference.url?.absoluteString ?? reference.path) 下载。脚本可以查看和改写解密后的流量，请只允许你信任的来源。地址上的内容之后变了，需要重新允许。")
+            Text("将从 \(reference.url?.absoluteString ?? reference.path) 下载。脚本可查看和改写解密后的流量，请只允许信任的来源；地址内容变更后需重新允许。")
         }
     }
 }
@@ -362,7 +362,7 @@ final class PluginsModel: ObservableObject {
         }
         switch trustState {
         case .trusted:
-            return String(localized: "插件只解密自己 [MITM] 列出的主机，解密域名和映射不受这个开关影响、另外生效；明文 HTTP 全部交给插件处理，仅支持 HTTP/1.1。使用前需要先连上 VPN。")
+            return String(localized: "插件只解密自己 [MITM] 列出的主机，解密域名和映射另行生效；明文 HTTP 全部交给插件处理，仅支持 HTTP/1.1。使用前需先连接 VPN。")
         case .notTrusted, .notGenerated:
             return String(localized: "开启前请先在上面生成并信任 HTTPS 解密证书。")
         }
@@ -532,7 +532,7 @@ final class PluginsModel: ObservableObject {
         } catch MitmDownload.Failure.tooLarge {
             note = String(localized: "\(kind)超过 \(maxBytes / 1024) KB")
         } catch MitmDownload.Failure.notHTTPS {
-            note = String(localized: "\(kind)地址不是 https，或被重定向到了非 https 地址")
+            note = String(localized: "\(kind)地址不是 https，或被重定向到非 https 地址")
         } catch let MitmDownload.Failure.status(code) {
             note = String(localized: "下载\(kind)失败（HTTP \(code)）")
         } catch {
@@ -648,7 +648,7 @@ private struct DecryptionConsentAlert: ViewModifier {
                     tunnel.answerDecryptionConsent(true)
                 }
             } message: {
-                Text("只解密你自己设备上的流量，或你有权调试的应用、设备和网络的流量；不抓取、不解密别人的流量。解密后的内容可能含有密码和个人信息，只保存在本机，导出或分享前请先脱敏。详见用户协议第 4 节。")
+                Text("只解密本人设备上的流量，或有权调试的应用、设备和网络的流量；不抓取、不解密他人的流量；解密后的内容可能含有密码和个人信息，只保存在本机，导出或分享前请先脱敏。详见用户协议第 4 节。")
             }
     }
 }

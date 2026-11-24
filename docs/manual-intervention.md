@@ -90,7 +90,7 @@ CI 只能编译和跑单元测试，以下需在 TestFlight 真机上确认：
 - 后台刷新换了当前节点时不断开连接；下次打开 App 回到前台时重连一次，之后首页节点与实际出口一致。
 - 重启手机后、首次输入锁屏密码前让系统触发后台刷新（上面的 `_simulateLaunchForTaskWithIdentifier`，此时钥匙串还读不到订阅）；
   输入锁屏密码后打开 App：首页和代理页照常列出全部订阅分组，不出现欢迎页；此时导入一个新订阅，原有分组都还在，没有被新分组替换。
-  读不到时导入或更新会提示“还没读到已保存的订阅，请先输入锁屏密码，再重试。”，不改动已保存的分组。
+  读不到时导入或更新会提示“尚未读取已保存的订阅，请先输入锁屏密码，再重试。”，不改动已保存的分组。
 - 同一进程内的后台重试：重启手机后、首次输入锁屏密码前触发一次后台刷新（同上），不让系统回收进程（不打开别的大量 App）；输入锁屏密码但不打开
   AnixOps Net，再用同一条 `_simulateLaunchForTaskWithIdentifier` 触发一次（模拟系统安排的重试）。这次后台运行读到已保存的订阅并更新
   到期的分组：之后打开 App，更新时间已变化，分组都在。
@@ -180,7 +180,7 @@ macOS 客户端改为官网分发（Developer ID 签名 + 公证），隧道从 
   `sudo ls -l` 扩展容器的 `Application Support/capture-session.key` 为 `-rw-------  root`，32 字节。
 - [ ] 换根证书（ios-bridge-features-07、apple-extensions-mac-06）：已连接并在解密时，扩展页“重新生成…”确认后隧道自动重连，
   系统要求登录密码撤销旧证书信任；信任新证书后 Safari 打开解密的站点证书链指向新根。`security dump-trust-settings` 里不再有旧根，
-  用导出的旧 `.cer` 签发的证书链不被信任；取消登录密码时页面说明旧证书仍受信任并保留在“钥匙串访问”里。“使用自己的根证书…”同样核对一遍。
+  用导出的旧 `.cer` 签发的证书链不被信任；取消登录密码时页面说明旧证书仍受信任并保留在“钥匙串访问”里。“使用自定义根证书…”同样核对一遍。
 - [ ] 换根后从系统设置的 VPN 开关、控制中心，或重启后由 On Demand 连接：Safari 证书链仍指向新根。断开但自动重连仍开着时换根，
   再让系统拉起隧道：第一次启动失败（`root certificate in the kept start secrets is older than the profile`，原因为
   `start secrets are older than the profile`），App 在运行或下次回到前台时带新副本重连一次并连上，证书链指向新根；同一根不会反复重连。
@@ -590,7 +590,7 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 
 ## macOS 自有根证书与指标端口真机验收（A2、A3）
 
-- [ ] 用 `openssl ecparam -name prime256v1 -genkey -noout -out ca.key && openssl req -x509 -new -key ca.key -subj /CN=Team -days 365 -addext basicConstraints=critical,CA:true -out ca.pem` 生成团队 CA；扩展页“使用自己的根证书…”粘贴两段 PEM，替换后名称变为 Team，信任后重新连接，Safari 打开解密的站点证书链指向 Team。
+- [ ] 用 `openssl ecparam -name prime256v1 -genkey -noout -out ca.key && openssl req -x509 -new -key ca.key -subj /CN=Team -days 365 -addext basicConstraints=critical,CA:true -out ca.pem` 生成团队 CA；扩展页“使用自定义根证书…”粘贴两段 PEM，替换后名称变为 Team，信任后重新连接，Safari 打开解密的站点证书链指向 Team。
 - [ ] 粘贴 RSA 私钥、别的证书的私钥、非 CA 证书时分别给出对应提示，原证书不变。
 - [ ] 设置页打开“Prometheus 指标”，`curl http://127.0.0.1:9477/metrics` 断开时只有 `anixops_client_*`，连接后加上内核指标；`curl -X POST` 返回 405；关掉开关后端口关闭。
 

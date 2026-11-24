@@ -29,7 +29,7 @@ struct LocalRulesSection: View {
             .listRowBackground(brand.surface)
         } footer: {
             if !hasSubscriptionRules {
-                Text("订阅没有自带规则时，规则模式按这里你自己的规则和规则集分流，其余走代理。")
+                Text("订阅不含规则时，规则模式按此处的规则和规则集分流，其余走代理。")
             }
         }
     }
@@ -136,7 +136,7 @@ struct LocalRulesView: View {
             } footer: {
                 Text(hasSubscriptionRules
                     ? "从上到下匹配，先匹配先生效，全部排在订阅规则前面。“代理”指订阅的第一个策略组。"
-                    : "从上到下匹配，先匹配先生效：你的规则、规则集，其余走代理。“代理”指当前选中的节点。")
+                    : "从上到下匹配，先匹配先生效：自定规则、规则集，其余走代理。“代理”指当前选中的节点。")
             }
             .listRowBackground(brand.surface)
         }
@@ -210,7 +210,7 @@ struct LocalRulesView: View {
             .formSheetFrame()
             .brandSheet()
         }
-        .confirmationDialog("清空你添加的全部规则？", isPresented: $confirmingClear, titleVisibility: .visible) {
+        .confirmationDialog("清空已添加的全部规则？", isPresented: $confirmingClear, titleVisibility: .visible) {
             Button("清空", role: .destructive) {
                 var next = rules
                 next.rules = []
@@ -666,9 +666,9 @@ private struct LocalRuleSheet: View {
         case "GEOSITE":
             return String(localized: "内置 cn 列表；订阅自带同名规则集时用订阅的。")
         case "GEOIP":
-            return String(localized: "两位国家或地区代码，例如 CN。CN 以外的国家需要在下面的 GeoIP 与 ASN 数据里添加列表。")
+            return String(localized: "两位国家或地区代码，如 CN。CN 以外需在下方 GeoIP 与 ASN 数据中添加列表。")
         case "IP-ASN":
-            return String(localized: "AS 号，例如 AS13335。需要在下面的 GeoIP 与 ASN 数据里添加这个 AS 的列表。")
+            return String(localized: "AS 号，如 AS13335。需在下方 GeoIP 与 ASN 数据中添加该 AS 的列表。")
         case "DST-PORT":
             return String(localized: "一个端口或 起-止 范围，例如 6000-6100。")
         case "SRC-PORT":
@@ -706,7 +706,7 @@ private struct LocalRuleSheet: View {
         } catch LocalRules.Failure.tooMany {
             failure = String(localized: "最多 \(LocalRules.maxRules) 条规则")
         } catch {
-            failure = String(localized: "这条规则的值不对，内核不会接受。")
+            failure = String(localized: "规则值无效，内核不予接受。")
         }
     }
 }
@@ -740,7 +740,7 @@ private struct LocalRulesImportSheet: View {
                 Section {
                     EmptyView()
                 } footer: {
-                    Text("可以粘贴整份配置（只读 [Rule] 段）或每行一条规则。DIRECT、REJECT 保留，其他策略名都当作代理；FINAL 和不支持的类型会跳过。")
+                    Text("粘贴整份配置（仅读取 [Rule] 段）或每行一条规则。DIRECT、REJECT 保留，其他策略名视为代理；FINAL 和不支持的类型跳过。")
                 }
             }
             .scrollContentBackground(.hidden)

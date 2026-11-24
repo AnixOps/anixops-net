@@ -65,18 +65,18 @@
         }
       }
     },
-    "把诊断信息存成 .log 文件，用系统分享发出去：含版本、扩展内存与事件、运行状态、发热和电量。地址、网址、账号和密钥已去掉。": {
+    "将诊断信息保存为 .log 文件，经系统分享发送；地址、网址、账号和密钥已去除。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Saves the diagnostics as a .log file and shares it with the system share sheet: versions, extension memory and events, runtime status, heat and battery. Addresses, URLs, accounts and keys are removed."
+            "value": "Saves diagnostics as a .log file to share via the system share sheet; addresses, URLs, accounts and keys are removed."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "把診斷資訊存成 .log 檔，用系統分享傳出去：含版本、延伸功能記憶體與事件、執行狀態、發熱和電量。位址、網址、帳號和金鑰已去除。"
+            "value": "將診斷資訊儲存為 .log 檔，經系統分享傳送；位址、網址、帳號和金鑰已去除。"
           }
         }
       }
@@ -465,18 +465,18 @@
         }
       }
     },
-    "GEOIP,CN 和 GEOSITE,cn 没有订阅自带的规则集时，使用公开列表（gaoyifan/china-operator-ip、Loyalsoldier/v2ray-rules-dat），由内核每天直连下载一次。": {
+    "订阅无对应规则集时，GEOIP,CN 和 GEOSITE,cn 使用公开列表，由内核每天直连下载一次。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "When the subscription has no rule set for GEOIP,CN or GEOSITE,cn, public lists (gaoyifan/china-operator-ip, Loyalsoldier/v2ray-rules-dat) are used; the engine downloads them directly once a day."
+            "value": "Without a subscription rule set, GEOIP,CN and GEOSITE,cn use public lists, downloaded directly by the engine once a day."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "GEOIP,CN 和 GEOSITE,cn 沒有訂閱自帶的規則集時，使用公開清單（gaoyifan/china-operator-ip、Loyalsoldier/v2ray-rules-dat），由核心每天直連下載一次。"
+            "value": "訂閱無對應規則集時，GEOIP,CN 和 GEOSITE,cn 使用公開清單，由核心每天直連下載一次。"
           }
         }
       }
@@ -630,7 +630,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The REALITY parameters (sni, pbk, sid) aren't valid"
+            "value": "The REALITY parameters (sni, pbk, sid) are invalid"
           }
         },
         "zh-Hant": {
@@ -694,7 +694,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The VLESS user ID isn't valid"
+            "value": "The VLESS user ID is invalid"
           }
         },
         "zh-Hant": {
@@ -710,7 +710,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The WireGuard Endpoint isn't valid"
+            "value": "The WireGuard Endpoint is invalid"
           }
         },
         "zh-Hant": {
@@ -726,7 +726,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A WireGuard address or AllowedIPs entry isn't valid"
+            "value": "A WireGuard address or AllowedIPs entry is invalid"
           }
         },
         "zh-Hant": {
@@ -742,7 +742,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A WireGuard key isn't valid"
+            "value": "A WireGuard key is invalid"
           }
         },
         "zh-Hant": {
@@ -758,7 +758,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The WireGuard config isn't valid"
+            "value": "The WireGuard config is invalid"
           }
         },
         "zh-Hant": {
@@ -899,18 +899,18 @@
         }
       }
     },
-    "上传、下载为该连接经隧道的字节数。目标域名来自请求本身或 TLS SNI / HTTP Host，只保存在内存里，断开隧道即清空。": {
+    "上传、下载为该连接经隧道的字节数；目标域名仅保存在内存，断开隧道即清空。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Upload and download are the bytes this connection moved through the tunnel. Host names come from the request or the TLS SNI / HTTP Host, are kept in memory only and are cleared when the tunnel stops."
+            "value": "Upload and download are the bytes this connection moved through the tunnel; host names are kept in memory only and cleared when the tunnel stops."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "上傳、下載為該連線經隧道的位元組數。目標網域來自請求本身或 TLS SNI / HTTP Host，只儲存在記憶體裡，斷開隧道即清空。"
+            "value": "上傳、下載為該連線經隧道的位元組數；目標網域僅儲存在記憶體，斷開隧道即清空。"
           }
         }
       }
@@ -963,18 +963,18 @@
         }
       }
     },
-    "下拉更新全部订阅。延迟为经该节点请求 `http://www.gstatic.com/generate_204` 的 HTTP 真连接时间，5 秒无响应显示超时。连接中切换节点会自动重连。": {
+    "下拉更新全部订阅。延迟为经该节点访问 `http://www.gstatic.com/generate_204` 的耗时，超过 5 秒显示超时。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pull down to update every subscription. Delay is the time of a real HTTP request to `http://www.gstatic.com/generate_204` through the node; no answer in 5 seconds shows Timeout. Switching nodes while connected reconnects automatically."
+            "value": "Pull down to update all subscriptions. Delay is the time of a request to `http://www.gstatic.com/generate_204` through the node; over 5 seconds shows Timeout."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "下拉更新全部訂閱。延遲為經該節點請求 `http://www.gstatic.com/generate_204` 的 HTTP 真連線時間，5 秒無回應顯示逾時。連線中切換節點會自動重連。"
+            "value": "下拉更新全部訂閱。延遲為經該節點存取 `http://www.gstatic.com/generate_204` 的耗時，超過 5 秒顯示逾時。"
           }
         }
       }
@@ -1027,18 +1027,18 @@
         }
       }
     },
-    "不收集你的流量和浏览记录": {
+    "不收集流量和浏览记录": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your traffic and browsing aren't collected"
+            "value": "Traffic and browsing are not collected"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "不收集你的流量和瀏覽記錄"
+            "value": "不收集流量和瀏覽記錄"
           }
         }
       }
@@ -1091,18 +1091,18 @@
         }
       }
     },
-    "从上到下第一条命中的规则生效。RULE-SET 使用规则页的规则集，例如 geosite-cn；只有单个节点、没有订阅规则时它不会命中。": {
+    "从上到下第一条命中的规则生效。RULE-SET 使用规则页的规则集，如 geosite-cn。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The first matching rule from the top wins. RULE-SET uses the rule sets on the rules page, such as geosite-cn; it never matches with a single node and no subscription rules."
+            "value": "The first matching rule from the top wins. RULE-SET uses the rule sets on the rules page, such as geosite-cn."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "從上到下第一條命中的規則生效。RULE-SET 使用規則頁的規則集，例如 geosite-cn；只有單個節點、沒有訂閱規則時它不會命中。"
+            "value": "從上到下第一條命中的規則生效。RULE-SET 使用規則頁的規則集，如 geosite-cn。"
           }
         }
       }
@@ -1256,7 +1256,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't save the DNS settings to the VPN configuration"
+            "value": "Could not save the DNS settings to the VPN configuration"
           }
         },
         "zh-Hant": {
@@ -1272,7 +1272,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Saving the VPN configuration failed or wasn't allowed"
+            "value": "Saving the VPN configuration failed or was not allowed"
           }
         },
         "zh-Hant": {
@@ -1288,7 +1288,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't save the plugin list"
+            "value": "Could not save the plugin list"
           }
         },
         "zh-Hant": {
@@ -1304,7 +1304,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't save plugins to the VPN configuration"
+            "value": "Could not save plugins to the VPN configuration"
           }
         },
         "zh-Hant": {
@@ -1736,7 +1736,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "There's no text on the clipboard"
+            "value": "There is no text on the clipboard"
           }
         },
         "zh-Hant": {
@@ -1811,18 +1811,18 @@
         }
       }
     },
-    "只在你点按时查询，按当前模式和规则发出": {
+    "点按时查询，按当前模式和规则发出": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Looked up only when you tap, sent by the current mode and rules"
+            "value": "Looked up on tap, sent by the current mode and rules"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "只在你點按時查詢，按目前模式和規則發出"
+            "value": "點按時查詢，按目前模式和規則發出"
           }
         }
       }
@@ -2099,18 +2099,18 @@
         }
       }
     },
-    "导入你的订阅，就能按规则把需要的流量走代理，其余直连。": {
+    "导入订阅后按规则分流：所需流量走代理，其余直连。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Import your subscription to send the traffic you choose through a proxy by rules, and everything else direct."
+            "value": "Import a subscription to route by rules: selected traffic through a proxy, the rest direct."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "匯入你的訂閱，就能按規則把需要的流量走代理，其餘直連。"
+            "value": "匯入訂閱後按規則分流：所需流量走代理，其餘直連。"
           }
         }
       }
@@ -2147,18 +2147,18 @@
         }
       }
     },
-    "导入带规则和策略组的订阅后，可以在这里按订阅规则分流和切换策略组。现在全部流量走所选节点。": {
+    "导入带规则和策略组的订阅后，可在此按订阅规则分流并切换策略组。当前全部流量走所选节点。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "After you import a subscription with rules and policy groups, you can route by its rules and switch its policy groups here. Right now all traffic goes through the selected node."
+            "value": "After importing a subscription with rules and policy groups, route by its rules and switch policy groups here. All traffic currently goes through the selected node."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "匯入帶規則和策略組的訂閱後，可以在這裡按訂閱規則分流和切換策略組。現在全部流量走所選節點。"
+            "value": "匯入帶規則和策略組的訂閱後，可在此按訂閱規則分流並切換策略組。目前全部流量走所選節點。"
           }
         }
       }
@@ -2216,7 +2216,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Import your first node to connect"
+            "value": "Import the first node to connect"
           }
         },
         "zh-Hant": {
@@ -2323,34 +2323,34 @@
         }
       }
     },
-    "导入订阅链接后，每个订阅是一个订阅组，可以测延迟、切换节点、手动或自动更新。": {
+    "导入订阅链接后，每个订阅成为一个订阅组，支持测延迟、切换节点和更新。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Import a subscription link and each subscription becomes a group you can test, switch, and update by hand or automatically."
+            "value": "After a subscription link is imported, each subscription becomes a group that supports delay tests, node switching and updates."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "匯入訂閱連結後，每個訂閱是一個訂閱組，可以測延遲、切換節點、手動或自動更新。"
+            "value": "匯入訂閱連結後，每個訂閱成為一個訂閱組，支援測延遲、切換節點和更新。"
           }
         }
       }
     },
-    "导入订阅链接或多个节点后，这里会列出全部节点，可以测延迟和切换。": {
+    "导入订阅链接或多个节点后，在此列出全部节点，支持测延迟和切换。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "After you import a subscription link or several nodes, all of them are listed here for delay tests and switching."
+            "value": "After a subscription link or several nodes are imported, all nodes are listed here for delay tests and switching."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "匯入訂閱連結或多個節點後，這裡會列出全部節點，可以測延遲和切換。"
+            "value": "匯入訂閱連結或多個節點後，在此列出全部節點，支援測延遲和切換。"
           }
         }
       }
@@ -2627,18 +2627,18 @@
         }
       }
     },
-    "延迟为经该节点请求 `http://www.gstatic.com/generate_204` 的 HTTP 真连接时间，5 秒无响应显示超时。连接中切换节点会自动重连。": {
+    "延迟为经该节点请求 `http://www.gstatic.com/generate_204` 的耗时，5 秒无响应显示超时。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Delay is the time for a real HTTP request to `http://www.gstatic.com/generate_204` through the node; no answer in 5 seconds shows Timeout. Switching nodes while connected reconnects automatically."
+            "value": "Delay is the time of a request to `http://www.gstatic.com/generate_204` through the node; no answer in 5 seconds shows Timeout."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "延遲為經該節點請求 `http://www.gstatic.com/generate_204` 的 HTTP 真連線時間，5 秒無回應顯示逾時。連線中切換節點會自動重連。"
+            "value": "延遲為經該節點請求 `http://www.gstatic.com/generate_204` 的耗時，5 秒無回應顯示逾時。"
           }
         }
       }
@@ -2904,7 +2904,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The extension isn't responding"
+            "value": "The extension is not responding"
           }
         },
         "zh-Hant": {
@@ -2936,7 +2936,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The tunnel extension wasn't found"
+            "value": "The tunnel extension was not found"
           }
         },
         "zh-Hant": {
@@ -3032,7 +3032,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Drag the handles to reorder. Cards switched off don't show on Home."
+            "value": "Drag the handles to reorder. Cards switched off do not show on Home."
           }
         },
         "zh-Hant": {
@@ -3320,7 +3320,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The file isn't UTF-8 text or is larger than 8 MB"
+            "value": "The file is not UTF-8 text or is larger than 8 MB"
           }
         },
         "zh-Hant": {
@@ -3336,7 +3336,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The file isn't a text config this app recognizes"
+            "value": "The file is not a text config this app recognizes"
           }
         },
         "zh-Hant": {
@@ -3464,7 +3464,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't start the tunnel"
+            "value": "Could not start the tunnel"
           }
         },
         "zh-Hant": {
@@ -3480,7 +3480,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't save the node key to the keychain"
+            "value": "Could not save the node key to the keychain"
           }
         },
         "zh-Hant": {
@@ -3496,7 +3496,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't serve the profile (%@)"
+            "value": "Could not serve the profile (%@)"
           }
         },
         "zh-Hant": {
@@ -3512,7 +3512,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't change the login item. Adjust it in System Settings > General > Login Items."
+            "value": "Could not change the login item. Adjust it in System Settings > General > Login Items."
           }
         },
         "zh-Hant": {
@@ -3528,7 +3528,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't build the plugin configuration"
+            "value": "Could not build the plugin configuration"
           }
         },
         "zh-Hant": {
@@ -3544,7 +3544,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't build the tunnel configuration"
+            "value": "Could not build the tunnel configuration"
           }
         },
         "zh-Hant": {
@@ -3560,7 +3560,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't parse the node"
+            "value": "Could not parse the node"
           }
         },
         "zh-Hant": {
@@ -3587,18 +3587,18 @@
         }
       }
     },
-    "还没读到已保存的订阅，请先输入锁屏密码，再重试。": {
+    "尚未读取已保存的订阅，请先输入锁屏密码，再重试。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your saved subscriptions haven't been read yet. Enter your passcode, then try again."
+            "value": "Saved subscriptions have not been read yet. Enter the passcode, then retry."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "還沒讀到已儲存的訂閱，請先輸入鎖定畫面密碼，再重試。"
+            "value": "尚未讀取已儲存的訂閱，請先輸入鎖定畫面密碼，再重試。"
           }
         }
       }
@@ -3608,7 +3608,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't read the VPN configuration"
+            "value": "Could not read the VPN configuration"
           }
         },
         "zh-Hant": {
@@ -3624,7 +3624,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't read the file"
+            "value": "Could not read the file"
           }
         },
         "zh-Hant": {
@@ -3640,7 +3640,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't read this picture"
+            "value": "Could not read this picture"
           }
         },
         "zh-Hant": {
@@ -3752,7 +3752,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nodes with plugins aren't supported yet"
+            "value": "Nodes with plugins are not supported yet"
           }
         },
         "zh-Hant": {
@@ -4067,18 +4067,18 @@
         }
       }
     },
-    "查看是否已连接，轻点即可连接或断开。": {
+    "查看连接状态；点按可连接或断开。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "See whether you're connected and tap to connect or disconnect."
+            "value": "Shows connection status; tap to connect or disconnect."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "查看是否已連線，點一下即可連線或斷開。"
+            "value": "查看連線狀態；點按可連線或斷開。"
           }
         }
       }
@@ -4110,7 +4110,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "查詢失敗，點一下重試"
+            "value": "查詢失敗，輕點重試"
           }
         }
       }
@@ -4179,18 +4179,18 @@
         }
       }
     },
-    "正在按订阅规则分流，节点由策略组决定；可以在“规则”页切换策略组或关闭规则。其他订阅组会作为“订阅·名称”策略组出现在规则的选择组里。": {
+    "按订阅规则分流，节点由策略组决定。可在“规则”页切换策略组或关闭规则。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Routing by the subscription's rules; policy groups pick the nodes. Switch groups or turn the rules off on the Rules tab. Other subscriptions appear as “订阅·name” policy groups in the rules' select groups."
+            "value": "Routing by the subscription rules; policy groups choose the nodes. Switch groups or turn rules off on the Rules tab."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "正在按訂閱規則分流，節點由策略組決定；可以在“規則”頁切換策略組或關閉規則。其他訂閱組會作為“訂閱·名稱”策略組出現在規則的選擇組裡。"
+            "value": "按訂閱規則分流，節點由策略組決定。可在「規則」頁切換策略組或關閉規則。"
           }
         }
       }
@@ -4680,7 +4680,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't create the certificate (%@)"
+            "value": "Could not create the certificate (%@)"
           }
         },
         "zh-Hant": {
@@ -4712,7 +4712,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Open AnixOps Net when you log in"
+            "value": "Open AnixOps Net at Mac login"
           }
         },
         "zh-Hant": {
@@ -4835,18 +4835,18 @@
         }
       }
     },
-    "稍后再说": {
+    "稍后": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Not Now"
+            "value": "Later"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "稍後再說"
+            "value": "稍後"
           }
         }
       }
@@ -4899,18 +4899,18 @@
         }
       }
     },
-    "第一次连接时，iOS 会请求添加 VPN 配置。它只用来把流量交给本 App 分流，不收集你的浏览记录。": {
+    "首次连接时，iOS 会请求添加 VPN 配置，仅用于将流量交给本 App 分流，不收集浏览记录。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The first time you connect, iOS asks to add a VPN configuration. It only hands traffic to this app for routing; your browsing is not collected."
+            "value": "On first connection, iOS requests to add a VPN configuration, used only to hand traffic to this app for routing; browsing is not collected."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "第一次連線時，iOS 會請求新增 VPN 設定。它只用來把流量交給本 App 分流，不收集你的瀏覽記錄。"
+            "value": "首次連線時，iOS 會請求新增 VPN 設定，僅用於將流量交給本 App 分流，不收集瀏覽記錄。"
           }
         }
       }
@@ -5187,50 +5187,50 @@
         }
       }
     },
-    "节点「%@」连不上：手机时间快了约 %lld 分钟。请在设置里打开「自动设置」时间后重试。": {
+    "节点「%@」无法连接：设备时间快约 %lld 分钟。请在设置中开启“自动设置”时间后重试。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "“%1$@” can't connect: this device's clock is about %2$lld minutes fast. Turn on Set Automatically in Settings › General › Date & Time, then retry."
+            "value": "“%1$@” cannot connect: the device clock is about %2$lld minutes fast. Turn on Set Automatically in Settings › General › Date & Time, then retry."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "節點「%@」連不上：手機時間快了約 %lld 分鐘。請在設定裡開啟「自動設定」時間後重試。"
+            "value": "節點「%@」無法連線：裝置時間快約 %lld 分鐘。請在設定中開啟「自動設定」時間後重試。"
           }
         }
       }
     },
-    "节点「%@」连不上：手机时间慢了约 %lld 分钟。请在设置里打开「自动设置」时间后重试。": {
+    "节点「%@」无法连接：设备时间慢约 %lld 分钟。请在设置中开启“自动设置”时间后重试。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "“%1$@” can't connect: this device's clock is about %2$lld minutes slow. Turn on Set Automatically in Settings › General › Date & Time, then retry."
+            "value": "“%1$@” cannot connect: the device clock is about %2$lld minutes slow. Turn on Set Automatically in Settings › General › Date & Time, then retry."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "節點「%@」連不上：手機時間慢了約 %lld 分鐘。請在設定裡開啟「自動設定」時間後重試。"
+            "value": "節點「%@」無法連線：裝置時間慢約 %lld 分鐘。請在設定中開啟「自動設定」時間後重試。"
           }
         }
       }
     },
-    "节点「%@」被服务器拒绝：订阅可能已到期或被重置，也可能是手机时间不准。请更新订阅，或检查时间后重试。": {
+    "节点「%@」被服务器拒绝：订阅可能已到期或被重置，或设备时间不准。请更新订阅或校准时间后重试。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The server rejected “%@”: the subscription may have expired or been reset, or this device's clock is off. Update the subscription, or check the time and retry."
+            "value": "The server rejected “%@”: the subscription may have expired or been reset, or the device clock is off. Update the subscription or correct the time, then retry."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "節點「%@」被伺服器拒絕：訂閱可能已到期或被重設，也可能是手機時間不準。請更新訂閱，或檢查時間後重試。"
+            "value": "節點「%@」被伺服器拒絕：訂閱可能已到期或被重設，或裝置時間不準。請更新訂閱或校準時間後重試。"
           }
         }
       }
@@ -5304,7 +5304,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The node link isn't valid"
+            "value": "The node link is not valid"
           }
         },
         "zh-Hant": {
@@ -5432,7 +5432,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't download the subscription: the link may have expired, or this network can't reach the server. Your current nodes still work."
+            "value": "Subscription download failed: the link may have expired, or this network cannot reach the server. Current nodes still work."
           }
         },
         "zh-Hant": {
@@ -5544,7 +5544,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The certificate isn't trusted yet. Finish the certificate setup first."
+            "value": "The certificate is not trusted yet. Finish the certificate setup first."
           }
         },
         "zh-Hant": {
@@ -5667,7 +5667,7 @@
         }
       }
     },
-    "请求记录还没开放": {
+    "请求记录暂未开放": {
       "localizations": {
         "en": {
           "stringUnit": {
@@ -5678,7 +5678,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "請求記錄還沒開放"
+            "value": "請求記錄暫未開放"
           }
         }
       }
@@ -5704,7 +5704,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't read the plugin list"
+            "value": "Could not read the plugin list"
           }
         },
         "zh-Hant": {
@@ -5720,7 +5720,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't read the certificate (%@)"
+            "value": "Could not read the certificate (%@)"
           }
         },
         "zh-Hant": {
@@ -5768,13 +5768,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tap to import your first node"
+            "value": "Tap to import the first node"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "點一下匯入第一個節點"
+            "value": "輕點匯入第一個節點"
           }
         }
       }
@@ -5790,7 +5790,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "點一下查看 7 天統計"
+            "value": "輕點查看 7 天統計"
           }
         }
       }
@@ -5806,7 +5806,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "點一下查詢"
+            "value": "輕點查詢"
           }
         }
       }
@@ -5822,7 +5822,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "點一下連線"
+            "value": "輕點連線"
           }
         }
       }
@@ -5891,34 +5891,34 @@
         }
       }
     },
-    "还没有流量": {
+    "暂无流量": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No traffic yet"
+            "value": "No traffic"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "還沒有流量"
+            "value": "暫無流量"
           }
         }
       }
     },
-    "还没有节点": {
+    "暂无节点": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No nodes yet"
+            "value": "No nodes"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "還沒有節點"
+            "value": "暫無節點"
           }
         }
       }
@@ -6099,18 +6099,18 @@
         }
       }
     },
-    "连接已断开：节点没有响应、被干扰，或网络刚切换。可以重试，或换一个节点。": {
+    "连接已断开：节点无响应、被干扰，或网络已切换。请重试或更换节点。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Disconnected: the node stopped answering, was interfered with, or the network just changed. Retry, or switch to another node."
+            "value": "Disconnected: the node stopped answering, was interfered with, or the network changed. Retry or switch to another node."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "連線已斷開：節點沒有回應、被干擾，或網路剛切換。可以重試，或換一個節點。"
+            "value": "連線已斷開：節點無回應、受到干擾，或網路已切換。請重試或更換節點。"
           }
         }
       }
@@ -6163,18 +6163,18 @@
         }
       }
     },
-    "连接失败，重试也无法解决这个问题，已停止自动重连。请查看下面的原因，或换一个节点。": {
+    "连接失败：重试无法解决，已停止自动重连。请查看下方原因或更换节点。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Could not connect. Retrying cannot fix this, so automatic reconnecting has stopped. See the reason below, or switch to another node."
+            "value": "Could not connect: retrying cannot fix this and automatic reconnecting has stopped. See the reason below or switch to another node."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "連線失敗，重試也無法解決這個問題，已停止自動重新連線。請查看下面的原因，或換一個節點。"
+            "value": "連線失敗：重試無法解決，已停止自動重新連線。請查看下方原因或更換節點。"
           }
         }
       }
@@ -6499,18 +6499,18 @@
         }
       }
     },
-    "链接里含有节点密码，只分享给信任的人。": {
+    "链接含节点密码，请仅分享给可信任的人。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The link contains the node's password. Share it only with people you trust."
+            "value": "The link contains the node password; share it only with trusted people."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "連結裡含有節點密碼，只分享給信任的人。"
+            "value": "連結含節點密碼，請僅分享給可信任的人。"
           }
         }
       }
@@ -6627,18 +6627,18 @@
         }
       }
     },
-    "还没有结束的连接": {
+    "暂无已结束的连接": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No closed connections yet"
+            "value": "No closed connections"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "還沒有結束的連線"
+            "value": "暫無已結束的連線"
           }
         }
       }
@@ -6840,7 +6840,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The tunnel isn't running"
+            "value": "The tunnel is not running"
           }
         },
         "zh-Hant": {
@@ -7080,7 +7080,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't save the mode to the VPN configuration"
+            "value": "Could not save the mode to the VPN configuration"
           }
         },
         "zh-Hant": {
@@ -7352,7 +7352,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The subscription doesn't provide this rule set, so its rules are skipped"
+            "value": "The subscription does not provide this rule set; its rules are skipped"
           }
         },
         "zh-Hant": {
@@ -7448,7 +7448,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't save"
+            "value": "Could not save"
           }
         },
         "zh-Hant": {
@@ -7736,7 +7736,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't save the DNS settings"
+            "value": "Could not save the DNS settings"
           }
         },
         "zh-Hant": {
@@ -7928,7 +7928,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This protocol has no common share link format, so it can't be exported"
+            "value": "This protocol has no common share link format and cannot be exported"
           }
         },
         "zh-Hant": {
@@ -7944,7 +7944,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't create a share link"
+            "value": "Could not create a share link"
           }
         },
         "zh-Hant": {
@@ -7960,7 +7960,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't share"
+            "value": "Could not share"
           }
         },
         "zh-Hant": {
@@ -8099,18 +8099,18 @@
         }
       }
     },
-    "已复制分享链接。链接里含有节点密码，只分享给信任的人。": {
+    "已复制分享链接。链接含节点密码，请仅分享给可信任的人。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Share link copied. It contains the node password, so share it only with people you trust."
+            "value": "Share link copied. It contains the node password; share it only with trusted people."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "已複製分享連結。連結裡含有節點密碼，只分享給信任的人。"
+            "value": "已複製分享連結。連結含節點密碼，請僅分享給可信任的人。"
           }
         }
       }
@@ -8120,7 +8120,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't save"
+            "value": "Could not save"
           }
         },
         "zh-Hant": {
@@ -8168,7 +8168,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The server address can't contain spaces or /"
+            "value": "The server address cannot contain spaces or /"
           }
         },
         "zh-Hant": {
@@ -8259,18 +8259,18 @@
         }
       }
     },
-    "色条是每个成员最近一次测得的延迟：绿色低于 120 ms，琥珀色低于 250 ms，橙色更慢，灰色没有数据。自动选择和故障转移的组由内核按延迟和可用性挑选节点。": {
+    "色条为每个成员最近一次测得的延迟：绿色低于 120 ms，琥珀色低于 250 ms，橙色更慢，灰色无数据。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The strip shows each member's last measured delay: green under 120 ms, amber under 250 ms, orange slower, gray no data. Auto-select and fallback groups are picked by the engine by delay and availability."
+            "value": "The strip shows each member's last measured delay: green under 120 ms, amber under 250 ms, orange slower, gray no data."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "色條是每個成員最近一次測得的延遲：綠色低於 120 ms，琥珀色低於 250 ms，橙色更慢，灰色沒有資料。自動選擇和容錯移轉的組由核心按延遲和可用性挑選節點。"
+            "value": "色條為每個成員最近一次測得的延遲：綠色低於 120 ms，琥珀色低於 250 ms，橙色更慢，灰色無資料。"
           }
         }
       }
@@ -8371,18 +8371,18 @@
         }
       }
     },
-    "还没有订阅。导入后节点会出现在“代理”里。": {
+    "暂无订阅。导入后节点显示在“代理”页。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No subscription yet. Imported nodes appear under Proxies."
+            "value": "No subscriptions. Imported nodes appear under Proxies."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "還沒有訂閱。匯入後節點會出現在“代理”裡。"
+            "value": "暫無訂閱。匯入後節點顯示在「代理」頁。"
           }
         }
       }
@@ -8424,7 +8424,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The network extension takes effect after you restart your Mac"
+            "value": "The network extension takes effect after the Mac restarts"
           }
         },
         "zh-Hant": {
@@ -8488,7 +8488,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Can't handle this link"
+            "value": "Cannot handle this link"
           }
         },
         "zh-Hant": {
@@ -8547,18 +8547,18 @@
         }
       }
     },
-    "节点没有响应、被干扰，或网络刚切换。打开 App 重试或换一个节点。": {
+    "节点无响应、被干扰，或网络已切换。请打开 App 重试或更换节点。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The node stopped responding, was interfered with, or the network just changed. Open the app to retry or pick another node."
+            "value": "The node stopped responding, was interfered with, or the network changed. Open the app to retry or pick another node."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "節點沒有回應、受到干擾，或網路剛切換。開啟 App 重試或換一個節點。"
+            "value": "節點無回應、受到干擾，或網路已切換。請開啟 App 重試或更換節點。"
           }
         }
       }
@@ -8659,18 +8659,18 @@
         }
       }
     },
-    "关掉后不再发出这类系统通知；也可以在系统设置里关闭 AnixOps Net 的全部通知。": {
+    "关闭后不再发出此类系统通知。全部通知可在系统设置中关闭。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Turned off, the app posts no system notifications of that kind. You can also turn off all AnixOps Net notifications in System Settings."
+            "value": "Turned off, the app posts no system notifications of this kind. All notifications can be turned off in System Settings."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "關閉後不再發出這類系統通知；也可以在系統設定裡關閉 AnixOps Net 的全部通知。"
+            "value": "關閉後不再發出此類系統通知。全部通知可在系統設定中關閉。"
           }
         }
       }
@@ -8931,18 +8931,18 @@
         }
       }
     },
-    "一行一条，兼容常见规则语法：类型,值,策略[,no-resolve]。策略写 DIRECT、REJECT，其他名字都当作代理。以 # 开头的整条规则表示停用，其余注释保存时不保留。连接中保存会直接在隧道里换上新规则，已有连接不断开；新增规则列表 URL 时会重新连接。": {
+    "一行一条，兼容常见规则语法：类型,值,策略[,no-resolve]。策略为 DIRECT、REJECT 或代理名称；以 # 开头表示停用。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "One rule a line, in common rule syntax: type,value,policy[,no-resolve]. DIRECT and REJECT are kept; any other policy name means the proxy. A whole rule after # is switched off; other comments are not kept. Saving while connected swaps the rules in the running tunnel without dropping connections; adding a rule list URL reconnects."
+            "value": "One rule per line, in common rule syntax: type,value,policy[,no-resolve]. Policy is DIRECT, REJECT or a proxy name; a leading # switches the rule off."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "一行一條，相容常見規則語法：類型,值,策略[,no-resolve]。策略寫 DIRECT、REJECT，其他名稱都當作代理。以 # 開頭的整條規則表示停用，其餘註解儲存時不保留。連線中儲存會直接在隧道裡換上新規則，現有連線不中斷；新增規則列表 URL 時會重新連線。"
+            "value": "一行一條，相容常見規則語法：類型,值,策略[,no-resolve]。策略為 DIRECT、REJECT 或代理名稱；以 # 開頭表示停用。"
           }
         }
       }
@@ -9171,18 +9171,18 @@
         }
       }
     },
-    "隧道意外退出（崩溃、内存超限、系统更新）后由系统几秒内重新连接。手动断开时会一并关闭，下次连接再打开。": {
+    "隧道意外退出后由系统在数秒内重新连接。手动断开时一并关闭，下次连接再开启。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "If the tunnel quits unexpectedly (a crash, the memory limit, a system update), the system reconnects within seconds. Disconnecting by hand turns this off until you connect again."
+            "value": "The system reconnects within seconds after an unexpected tunnel exit. Disconnecting manually turns this off until the next connection."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "隧道意外結束（當機、記憶體超出上限、系統更新）後由系統在幾秒內重新連線。手動斷開時會一併關閉，下次連線再開啟。"
+            "value": "隧道意外結束後由系統在數秒內重新連線。手動斷開時一併關閉，下次連線再開啟。"
           }
         }
       }
@@ -9235,18 +9235,18 @@
         }
       }
     },
-    "加入网络时由系统立即执行，不需要打开 App。设为“断开”的网络下，手动连接也会被断开。": {
+    "加入网络时由系统立即执行，无需打开 App。设为“断开”的网络下，手动连接也会被断开。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The system applies these as soon as you join a network, without opening the app. On a network set to Disconnect, a manual connection is disconnected too."
+            "value": "The system applies these when joining a network, without opening the app. On a network set to Disconnect, a manual connection is disconnected too."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "加入網路時由系統立即執行，不需要開啟 App。設為「斷開」的網路下，手動連線也會被斷開。"
+            "value": "加入網路時由系統立即執行，無需開啟 App。設為「斷開」的網路下，手動連線也會被斷開。"
           }
         }
       }
@@ -9272,7 +9272,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't turn off automatic reconnect"
+            "value": "Could not turn off automatic reconnect"
           }
         },
         "zh-Hant": {
@@ -9288,7 +9288,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't turn on automatic reconnect"
+            "value": "Could not turn on automatic reconnect"
           }
         },
         "zh-Hant": {
@@ -9304,7 +9304,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't save the reconnect settings"
+            "value": "Could not save the reconnect settings"
           }
         },
         "zh-Hant": {
@@ -9336,7 +9336,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Keeps a redacted record when the app crashes (no URLs, accounts or node addresses) on this device only and adds it to the diagnostics you copy. Turning this off deletes saved reports."
+            "value": "Keeps a redacted record when the app crashes (no URLs, accounts or node addresses), on this device only, and adds it to the copied diagnostics. Turning this off deletes saved reports."
           }
         },
         "zh-Hant": {
@@ -9459,18 +9459,18 @@
         }
       }
     },
-    "安装包已下载并通过签名校验。安装程序打开后 AnixOps Net 会退出，安装完成后重新打开即可。": {
+    "安装包已下载并通过签名校验。安装程序打开后 AnixOps Net 退出，完成后重新打开。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The package is downloaded and its signature checked. AnixOps Net quits when Installer opens; open it again once the installation finishes."
+            "value": "The package is downloaded and its signature verified. AnixOps Net quits when Installer opens; reopen it after installation."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "安裝包已下載並通過簽章驗證。安裝程式開啟後 AnixOps Net 會結束，安裝完成後重新開啟即可。"
+            "value": "安裝包已下載並通過簽章驗證。安裝程式開啟後 AnixOps Net 結束，完成後重新開啟。"
           }
         }
       }
@@ -9651,18 +9651,18 @@
         }
       }
     },
-    "在终端用 anixops 查看状态、连接、切换节点、测速和导入。在终端运行下面的命令后即可使用：": {
+    "在终端用 anixops 查看状态、连接、切换节点、测速和导入。运行下方命令后可用：": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Use anixops in Terminal to check status, connect, switch nodes, test delays and import. Run this command in Terminal to set it up:"
+            "value": "Use anixops in Terminal to check status, connect, switch nodes, test delays and import. Available after running the command below:"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "在終端機用 anixops 查看狀態、連線、切換節點、測速和匯入。在終端機執行下面的命令後即可使用："
+            "value": "在終端機用 anixops 查看狀態、連線、切換節點、測速和匯入。執行下方指令後可用："
           }
         }
       }
@@ -9688,7 +9688,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Read the User Agreement Before You Start"
+            "value": "Read the User Agreement Before Use"
           }
         },
         "zh-Hant": {
@@ -9699,34 +9699,34 @@
         }
       }
     },
-    "只在你自己的设备上使用，不替别人在其不知情时安装或开启代理、HTTPS 解密和脚本。": {
+    "仅在本人设备上使用；不得在他人不知情时为其安装或开启代理、HTTPS 解密和脚本。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Use it on your own devices only. Never install or turn on a proxy, HTTPS decryption or scripts for someone without their knowledge."
+            "value": "Use only on the user's own devices. Never install or turn on a proxy, HTTPS decryption or scripts for someone without their knowledge."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "只在你自己的裝置上使用，不替別人在其不知情時安裝或開啟代理、HTTPS 解密和腳本。"
+            "value": "僅在本人裝置上使用；不得在他人不知情時為其安裝或開啟代理、HTTPS 解密和腳本。"
           }
         }
       }
     },
-    "HTTPS 解密只用于你自己的流量。根证书由你本人在系统设置里手动信任，只解密你列出的域名。": {
+    "HTTPS 解密仅用于本人的流量。根证书由本人在系统设置中手动信任，仅解密所列域名。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "HTTPS decryption is for your own traffic only. You trust the root certificate yourself in Settings, and only the domains you list are decrypted."
+            "value": "HTTPS decryption is for the device owner's own traffic only. The owner trusts the root certificate manually in Settings, and only the listed domains are decrypted."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "HTTPS 解密只用於你自己的流量。根憑證由你本人在系統設定裡手動信任，只解密你列出的網域。"
+            "value": "HTTPS 解密僅用於本人的流量。根憑證由本人在系統設定中手動信任，僅解密所列網域。"
           }
         }
       }
@@ -9752,7 +9752,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This app provides no nodes or subscriptions; whoever provides what you import is responsible for it. The software is provided as is, without warranty."
+            "value": "This app provides no nodes or subscriptions; the provider of imported content is responsible for it. The software is provided as is, without warranty."
           }
         },
         "zh-Hant": {
@@ -9779,18 +9779,18 @@
         }
       }
     },
-    "不同意就不能使用 AnixOps Net。你可以重新阅读后同意，或删除本 App。": {
+    "不同意则无法使用 AnixOps Net。可重新阅读后同意，或删除本 App。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "AnixOps Net can't be used without agreeing. You can read it again and agree, or delete the app."
+            "value": "AnixOps Net cannot be used without agreement. Read the agreement again and agree, or delete the app."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "不同意就不能使用 AnixOps Net。你可以重新閱讀後同意，或刪除本 App。"
+            "value": "不同意則無法使用 AnixOps Net。可重新閱讀後同意，或刪除本 App。"
           }
         }
       }
@@ -9848,7 +9848,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Before You Turn On HTTPS Decryption"
+            "value": "Before Turning On HTTPS Decryption"
           }
         },
         "zh-Hant": {
@@ -9875,18 +9875,18 @@
         }
       }
     },
-    "只解密你自己设备上的流量，或你有权调试的应用、设备和网络的流量；不抓取、不解密别人的流量。解密后的内容可能含有密码和个人信息，只保存在本机，导出或分享前请先脱敏。详见用户协议第 4 节。": {
+    "只解密本人设备上的流量，或有权调试的应用、设备和网络的流量；不抓取、不解密他人的流量；解密后的内容可能含有密码和个人信息，只保存在本机，导出或分享前请先脱敏。详见用户协议第 4 节。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Decrypt only traffic on your own devices, or of apps, devices and networks you are authorised to debug. Never capture or decrypt other people's traffic. Decrypted content can hold passwords and personal data; it stays on this device, so redact it before you export or share it. See section 4 of the user agreement."
+            "value": "Decrypt only traffic on the user's own devices, or of apps, devices and networks the user is authorised to debug; never capture or decrypt other people's traffic; decrypted content can hold passwords and personal data, stays on this device and should be redacted before export or sharing. See section 4 of the user agreement."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "只解密你自己裝置上的流量，或你有權除錯的應用程式、裝置和網路的流量；不擷取、不解密別人的流量。解密後的內容可能含有密碼和個人資訊，只儲存在本機，匯出或分享前請先去識別化。詳見用戶協議第 4 節。"
+            "value": "只解密本人裝置上的流量，或有權除錯的應用程式、裝置和網路的流量；不擷取、不解密他人的流量；解密後的內容可能含有密碼和個人資訊，只儲存在本機，匯出或分享前請先去識別化。詳見用戶協議第 4 節。"
           }
         }
       }
@@ -10179,18 +10179,18 @@
         }
       }
     },
-    "只解密这里、插件和映射里列出的域名，其余 HTTPS 原样转发。也可以在加密连接的详情里点“解密此域名”。": {
+    "仅解密此处、插件和映射中所列域名，其余 HTTPS 原样转发。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Only domains listed here, in plugins and in mappings are decrypted; other HTTPS passes through untouched. You can also tap “Decrypt This Domain” in an encrypted connection's details."
+            "value": "Only domains listed here, in plugins and in mappings are decrypted; other HTTPS passes through untouched."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "只解密這裡、外掛和對應裡列出的網域，其餘 HTTPS 原樣轉發。也可以在加密連線的詳情裡點「解密此網域」。"
+            "value": "僅解密此處、外掛和對應中所列網域，其餘 HTTPS 原樣轉發。"
           }
         }
       }
@@ -10227,18 +10227,18 @@
         }
       }
     },
-    "还没有域名。也可以在加密连接的详情里点“解密此域名”。": {
+    "暂无域名": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No domains yet. You can also tap “Decrypt This Domain” in an encrypted connection's details."
+            "value": "No domains"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "還沒有網域。也可以在加密連線的詳情裡點「解密此網域」。"
+            "value": "暫無網域"
           }
         }
       }
@@ -10264,7 +10264,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't save mappings"
+            "value": "Could not save mappings"
           }
         },
         "zh-Hant": {
@@ -10291,18 +10291,18 @@
         }
       }
     },
-    "明文 HTTP 请求不需要这些步骤，抓包开始后就会列出。": {
+    "明文 HTTP 请求无需上述步骤，开始抓包后列出。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Plain HTTP requests don't need these steps; they're listed once capture starts."
+            "value": "Plain HTTP requests need no steps; they are listed once capture starts."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "明文 HTTP 請求不需要這些步驟，開始擷取後就會列出。"
+            "value": "明文 HTTP 請求無需上述步驟，開始擷取後列出。"
           }
         }
       }
@@ -10451,18 +10451,18 @@
         }
       }
     },
-    "这是加密的 TLS 数据。这个域名已在解密列表里，新的连接会被解密；请确认已信任 HTTPS 解密证书。": {
+    "这是加密的 TLS 数据。该域名已在解密列表中，新连接将被解密（需已信任 HTTPS 解密证书）。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This is encrypted TLS data. The domain is already on the decrypt list, so new connections are decrypted; make sure the HTTPS decryption certificate is trusted."
+            "value": "This is encrypted TLS data. The domain is on the decrypt list; new connections are decrypted (the HTTPS decryption certificate must be trusted)."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "這是加密的 TLS 資料。這個網域已在解密清單裡，新的連線會被解密；請確認已信任 HTTPS 解密憑證。"
+            "value": "這是加密的 TLS 資料。該網域已在解密清單中，新連線將被解密（需已信任 HTTPS 解密憑證）。"
           }
         }
       }
@@ -10472,7 +10472,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This is encrypted TLS data. After you tap “Decrypt This Domain”, new connections are decrypted (the HTTPS decryption certificate must be trusted first)."
+            "value": "This is encrypted TLS data. After tapping “Decrypt This Domain”, new connections are decrypted (the HTTPS decryption certificate must be trusted first)."
           }
         },
         "zh-Hant": {
@@ -10483,18 +10483,18 @@
         }
       }
     },
-    "还没有请求。": {
+    "暂无请求": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No requests yet."
+            "value": "No requests"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "還沒有請求。"
+            "value": "暫無請求"
           }
         }
       }
@@ -10515,50 +10515,50 @@
         }
       }
     },
-    "使用自己的根证书…": {
+    "使用自定义根证书…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Use Your Own Root Certificate…"
+            "value": "Use a Custom Root Certificate…"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "使用自己的根憑證…"
+            "value": "使用自訂根憑證…"
           }
         }
       }
     },
-    "使用自己的根证书": {
+    "使用自定义根证书": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Use Your Own Root Certificate"
+            "value": "Use a Custom Root Certificate"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "使用自己的根憑證"
+            "value": "使用自訂根憑證"
           }
         }
       }
     },
-    "团队已有 CA 时换成它，Mac 和其他设备信任同一张根证书。": {
+    "替换为团队已有的 CA，各设备信任同一根证书。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "If your team already has a CA, switch to it so this Mac and your other devices trust one root."
+            "value": "Replaces the root with the team's existing CA; all devices trust the same root."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "團隊已有 CA 時換成它，Mac 和其他裝置信任同一張根憑證。"
+            "value": "替換為團隊已有的 CA，各裝置信任同一根憑證。"
           }
         }
       }
@@ -10755,18 +10755,18 @@
         }
       }
     },
-    "只监听本机回环地址，连接时包含内核的连接、流量和节点健康指标，与 Windows、Linux 客户端相同。": {
+    "仅监听本机回环地址；连接时包含内核的连接、流量和节点健康指标。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Listens on the loopback address only. While connected it includes the engine's connection, traffic and node health metrics, the same as the Windows and Linux clients."
+            "value": "Listens on the loopback address only; while connected it includes the engine's connection, traffic and node health metrics."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "只監聽本機迴路位址，連線時包含核心的連線、流量和節點健康指標，與 Windows、Linux 用戶端相同。"
+            "value": "僅監聽本機迴路位址；連線時包含核心的連線、流量和節點健康指標。"
           }
         }
       }
@@ -11763,66 +11763,66 @@
         }
       }
     },
-    "VPN 接管全部流量，同时把系统 HTTP / HTTPS 代理指向本机。遵守代理设置的 App（大部分网页和系统网络请求）直接交给代理，不经过 VPN 里的 TCP/IP 协议栈，更省电，规则也能直接看到域名和明文 HTTP 的完整网址；其余流量照常走 VPN。": {
+    "VPN 接管全部流量，并将系统 HTTP / HTTPS 代理指向本机。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The VPN takes all traffic, and the system HTTP / HTTPS proxy points to this device too. Apps that honor the proxy (most web pages and system network requests) hand their connections to the proxy instead of the TCP/IP stack inside the VPN, which saves battery, and rules see the domain and the full URL of plain HTTP directly. Everything else still goes through the VPN."
+            "value": "The VPN takes all traffic and points the system HTTP / HTTPS proxy to this device."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "VPN 接管全部流量，同時把系統 HTTP / HTTPS 代理指向本機。遵守代理設定的 App（大部分網頁和系統網路請求）直接交給代理，不經過 VPN 裡的 TCP/IP 協定堆疊，更省電，規則也能直接看到網域和明文 HTTP 的完整網址；其餘流量照常走 VPN。"
+            "value": "VPN 接管全部流量，並將系統 HTTP / HTTPS 代理指向本機。"
           }
         }
       }
     },
-    "只用 VPN 接管全部流量，不设置系统代理。某个 App 用代理时出问题，可以先换成这一项排查。": {
+    "仅用 VPN 接管全部流量，不设置系统代理。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The VPN alone takes all traffic, with no system proxy. If an app misbehaves behind the proxy, switch to this to rule it out."
+            "value": "The VPN alone takes all traffic, with no system proxy."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "只用 VPN 接管全部流量，不設定系統代理。某個 App 用代理時出問題，可以先換成這一項排查。"
+            "value": "僅用 VPN 接管全部流量，不設定系統代理。"
           }
         }
       }
     },
-    "只设置系统 HTTP / HTTPS 代理，不创建默认路由。遵守代理设置的 App 按规则走；不遵守的 App 和 UDP 流量直接出去，不经过规则、MITM 和抓包。最省资源。": {
+    "仅设置系统 HTTP / HTTPS 代理，不创建默认路由；不遵守代理设置的 App 和 UDP 流量直接出去。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Only the system HTTP / HTTPS proxy is set, with no default route. Apps that honor the proxy follow the rules; apps that ignore it and UDP traffic go out directly, without rules, MITM or capture. Uses the fewest resources."
+            "value": "Sets only the system HTTP / HTTPS proxy, with no default route; apps that ignore the proxy and UDP traffic go out directly."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "只設定系統 HTTP / HTTPS 代理，不建立預設路由。遵守代理設定的 App 按規則走；不遵守的 App 和 UDP 流量直接出去，不經過規則、MITM 和封包擷取。最省資源。"
+            "value": "僅設定系統 HTTP / HTTPS 代理，不建立預設路由；不遵守代理設定的 App 和 UDP 流量直接出去。"
           }
         }
       }
     },
-    "每行一项：域名（router.lan）、通配符（*.local）、IP 或网段（192.168.0.0/16）。这些地址不走系统代理；VPN 接管时仍按规则走 VPN。# 开头的行是注释。": {
+    "每行一项：域名、通配符（*.local）、IP 或网段（192.168.0.0/16）。这些地址不走系统代理。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "One per line: a domain (router.lan), a wildcard (*.local), an IP or a network (192.168.0.0/16). These skip the system proxy; while the VPN takes traffic they still follow the rules through the VPN. Lines starting with # are comments."
+            "value": "One per line: a domain, a wildcard (*.local), an IP or a network (192.168.0.0/16). These addresses skip the system proxy."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "每行一項：網域（router.lan）、萬用字元（*.local）、IP 或網段（192.168.0.0/16）。這些位址不走系統代理；VPN 接管時仍按規則走 VPN。# 開頭的行是註解。"
+            "value": "每行一項：網域、萬用字元（*.local）、IP 或網段（192.168.0.0/16）。這些位址不走系統代理。"
           }
         }
       }
@@ -12067,50 +12067,50 @@
         }
       }
     },
-    "开启后，同一局域网的设备（游戏机、电视、手机）把路由器和 DNS 改成上面的地址，它们的流量就经过这台 Mac 按规则走，MITM、抓包和连接列表同样生效。需要 IPv4 转发：连接时会尝试自动开启、断开时关闭；系统不允许时，在“终端”里运行一次上面的命令（重启 Mac 后失效）。只支持 IPv4；单个 WireGuard 节点不支持。切换时如果已连接，会自动重连一次。": {
+    "开启后，局域网设备将路由器和 DNS 设为上方地址，其流量经这台 Mac 按规则转发。连接时开启 IPv4 转发，断开时关闭；仅支持 IPv4。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "When on, devices on the same local network (consoles, TVs, phones) that set their router and DNS to the addresses above send their traffic through this Mac by the rules, with MITM, capture and the connection list. It needs IPv4 forwarding: connecting tries to turn it on and disconnecting turns it off; if the system does not allow that, run the command above once in Terminal (it lasts until the Mac restarts). IPv4 only; a single WireGuard node is not supported. If connected, switching reconnects once."
+            "value": "When on, local network devices that set their router and DNS to the addresses above send traffic through this Mac by the rules. IPv4 forwarding is turned on when connecting and off when disconnecting; IPv4 only."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "開啟後，同一區域網路的裝置（遊戲機、電視、手機）把路由器和 DNS 改成上面的位址，它們的流量就經過這台 Mac 按規則走，MITM、封包擷取和連線列表同樣生效。需要 IPv4 轉送：連線時會嘗試自動開啟、中斷時關閉；系統不允許時，在「終端機」裡執行一次上面的指令（重新啟動 Mac 後失效）。只支援 IPv4；單個 WireGuard 節點不支援。切換時如果已連線，會自動重新連線一次。"
+            "value": "開啟後，區域網路裝置將路由器和 DNS 設為上方位址，其流量經這台 Mac 按規則轉送。連線時開啟 IPv4 轉送，中斷時關閉；僅支援 IPv4。"
           }
         }
       }
     },
-    "没有规则命中的域名由默认服务器解析。长按服务器可设为默认、加入默认竞速（最多 4 个同时查询，取最先的应答）或设为备用（默认或规则的服务器失败时再查，适合公司 VPN 的内部域名）。经代理的服务器在直连模式下也直连，系统 DNS 总是直连。": {
+    "未命中规则的域名由默认服务器解析。长按服务器可设为默认、加入默认竞速（最多 4 个同时查询）或设为备用。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Names no rule picks go to the default servers. Long-press a server to make it the default, add it to the default race (up to 4 asked at once, the first answer wins) or make it the fallback (asked when the default or a rule's servers fail, as for a company VPN's internal names). Servers set to go through the proxy go directly in direct mode; the system DNS always goes directly."
+            "value": "Domains no rule picks go to the default servers. Long-press a server to set it as default, add it to the default race (up to 4 queried at once) or set it as fallback."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "沒有規則命中的網域由預設伺服器解析。長按伺服器可設為預設、加入預設競速（最多 4 個同時查詢，取最先的回應）或設為備用（預設或規則的伺服器失敗時再查，適合公司 VPN 的內部網域）。經代理的伺服器在直連模式下也直連，系統 DNS 一律直連。"
+            "value": "未命中規則的網域由預設伺服器解析。長按伺服器可設為預設、加入預設競速（最多 4 個同時查詢）或設為備用。"
           }
         }
       }
     },
-    "地址可写 1.1.1.1、udp://、tcp://、tls://（DoT）、https://（DoH）、quic://（DoQ），或 system（本机网络的 DNS）。用 IP 地址写 DoT/DoH/DoQ 时填写证书上的 TLS 名称。": {
+    "地址可写 1.1.1.1、udp://、tcp://、tls://（DoT）、https://（DoH）、quic://（DoQ）或 system（本机网络的 DNS）。IP 地址形式的 DoT/DoH/DoQ 需填写证书上的 TLS 名称。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enter 1.1.1.1, udp://, tcp://, tls:// (DoT), https:// (DoH), quic:// (DoQ), or system (the local network's DNS). For DoT/DoH/DoQ by IP address, enter the TLS name on the certificate."
+            "value": "Enter 1.1.1.1, udp://, tcp://, tls:// (DoT), https:// (DoH), quic:// (DoQ) or system (the local network's DNS). DoT/DoH/DoQ by IP address needs the TLS name on the certificate."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "位址可寫 1.1.1.1、udp://、tcp://、tls://（DoT）、https://（DoH）、quic://（DoQ），或 system（本機網路的 DNS）。用 IP 位址寫 DoT/DoH/DoQ 時填寫憑證上的 TLS 名稱。"
+            "value": "位址可寫 1.1.1.1、udp://、tcp://、tls://（DoT）、https://（DoH）、quic://（DoQ）或 system（本機網路的 DNS）。IP 位址形式的 DoT/DoH/DoQ 需填寫憑證上的 TLS 名稱。"
           }
         }
       }
@@ -12323,18 +12323,18 @@
         }
       }
     },
-    "连接已断开，抓包随之停止。断开前抓到的内容已加密保存，连接后在 ⋯ › 已保存的会话 查看。": {
+    "连接已断开，抓包停止。断开前抓到的内容已加密保存，可在 ⋯ › 已保存的会话 查看。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Disconnected, so capture stopped. What it caught was saved encrypted; after connecting, open ⋯ › Saved Sessions to view it."
+            "value": "Disconnected; capture stopped. What was captured is saved encrypted and available in ⋯ › Saved Sessions."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "連線已斷開，抓包隨之停止。斷開前抓到的內容已加密儲存，連線後在 ⋯ › 已儲存的工作階段 查看。"
+            "value": "連線已斷開，擷取停止。斷開前擷取的內容已加密儲存，可在 ⋯ › 已儲存的工作階段 查看。"
           }
         }
       }
@@ -12355,34 +12355,34 @@
         }
       }
     },
-    "这些连接没有解密，只抓到了加密的 TLS 数据，点进去可以看原始字节。点“解密”把域名加入解密列表，隧道会重新连接，之后的新连接会被解密并列在上面。": {
+    "这些连接未解密，仅抓到加密的 TLS 数据，点进去可看原始字节。点“解密”将域名加入解密列表，隧道重新连接，新连接会被解密并列在上方。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "These connections were not decrypted, so only encrypted TLS data was captured; open one to see the raw bytes. Tap “Decrypt” to add the domain to the decryption list: the tunnel reconnects and new connections are decrypted and listed above."
+            "value": "These connections were not decrypted; only encrypted TLS data was captured, and the raw bytes can be opened. Tap “Decrypt” to add the domain to the decryption list; the tunnel reconnects and new connections are decrypted and listed above."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "這些連線沒有解密，只抓到了加密的 TLS 資料，點進去可以看原始位元組。點「解密」把網域加入解密列表，隧道會重新連線，之後的新連線會被解密並列在上面。"
+            "value": "這些連線未解密，僅擷取到加密的 TLS 資料，點進去可看原始位元組。點「解密」將網域加入解密列表，隧道重新連線，新連線會被解密並列在上方。"
           }
         }
       }
     },
-    "这些连接没有解密，只抓到了加密的 TLS 数据，点进去可以看原始字节。点“解密”把域名加入解密列表，隧道会重新连接，之后的新连接会被解密并列在请求里。": {
+    "这些连接未解密，仅抓到加密的 TLS 数据，点进去可看原始字节。点“解密”将域名加入解密列表，隧道重新连接，新连接会被解密并列在请求中。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "These connections were not decrypted, so only encrypted TLS data was captured; open one to see the raw bytes. Tap “Decrypt” to add the domain to the decryption list: the tunnel reconnects and new connections are decrypted and listed with the requests."
+            "value": "These connections were not decrypted; only encrypted TLS data was captured, and the raw bytes can be opened. Tap “Decrypt” to add the domain to the decryption list; the tunnel reconnects and new connections are decrypted and listed with the requests."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "這些連線沒有解密，只抓到了加密的 TLS 資料，點進去可以看原始位元組。點「解密」把網域加入解密列表，隧道會重新連線，之後的新連線會被解密並列在請求裡。"
+            "value": "這些連線未解密，僅擷取到加密的 TLS 資料，點進去可看原始位元組。點「解密」將網域加入解密列表，隧道重新連線，新連線會被解密並列在請求中。"
           }
         }
       }
@@ -12451,18 +12451,18 @@
         }
       }
     },
-    "已抓到 %lld 个连接，但没有一个解密出请求，所以这里还是空的。下面按域名列出了这些连接。": {
+    "已抓到 %lld 个连接，均未解密出请求。下方按域名列出这些连接。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Captured %lld connections, but none were decrypted into requests, so this list is empty. They are listed by domain below."
+            "value": "Captured %lld connections, none decrypted into requests. They are listed by domain below."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "已抓到 %lld 個連線，但沒有一個解密出請求，所以這裡還是空的。下面按網域列出了這些連線。"
+            "value": "已擷取 %lld 個連線，均未解密出請求。下方按網域列出這些連線。"
           }
         }
       }
@@ -12627,18 +12627,18 @@
         }
       }
     },
-    "* 匹配任意字符（包括点），? 匹配一个字符；*.example.com 匹配所有子域名，不含 example.com 本身。排除的域名永不解密，优先于这里、插件和映射里的所有解密规则；也可以直接写 -example.com。": {
+    "* 匹配任意字符（含点），? 匹配一个字符；*.example.com 匹配所有子域名，不含 example.com 本身。排除的域名永不解密，优先于其他解密规则。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "* matches any characters (dots included) and ? one character; *.example.com matches every subdomain but not example.com itself. Excluded domains are never decrypted and win over every decryption rule here, in plugins and in mappings; you can also type -example.com."
+            "value": "* matches any characters (dots included), ? one character; *.example.com matches every subdomain but not example.com itself. Excluded domains are never decrypted and take precedence over all decryption rules."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "* 符合任意字元（包括點），? 符合一個字元；*.example.com 符合所有子網域，不含 example.com 本身。排除的網域永不解密，優先於這裡、外掛和對應裡的所有解密規則；也可以直接寫 -example.com。"
+            "value": "* 符合任意字元（含點），? 符合一個字元；*.example.com 符合所有子網域，不含 example.com 本身。排除的網域永不解密，優先於其他解密規則。"
           }
         }
       }
@@ -12723,18 +12723,18 @@
         }
       }
     },
-    "根据本机这次连接以来的解密结果自动标出，只记录域名、次数和原因，断开后清空。App 拒绝证书多半是证书固定：它只信任自己的证书，无法解密。排除后它的连接原样转发，App 会照常联网。": {
+    "根据本次连接以来的解密结果自动标出，只记录域名、次数和原因，断开后清空。排除后连接原样转发。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Marked automatically from this device's decryption results since it connected. Only domains, counts and reasons are kept, and they are cleared on disconnect. An app that refuses the certificate usually pins its certificate: it trusts only its own, so it cannot be decrypted. Once excluded, its connections pass through untouched and the app works normally."
+            "value": "Marked automatically from decryption results since this connection; only domains, counts and reasons are kept, cleared on disconnect. Excluded domains pass through untouched."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "根據本機這次連線以來的解密結果自動標出，只記錄網域、次數和原因，中斷後清空。App 拒絕憑證多半是憑證固定：它只信任自己的憑證，無法解密。排除後它的連線原樣轉送，App 會照常連網。"
+            "value": "根據本次連線以來的解密結果自動標出，只記錄網域、次數和原因，中斷後清空。排除後連線原樣轉送。"
           }
         }
       }
@@ -12851,34 +12851,34 @@
         }
       }
     },
-    "域名在列表里（或插件、映射里）、没有被排除，并且已经信任 HTTPS 解密证书。加入后新建的连接才会解密，之前的连接要等 App 重新连接。": {
+    "域名在列表中（或在插件、映射中）、未被排除，且已信任 HTTPS 解密证书。加入后新建的连接才会解密。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A domain in this list (or in a plugin or mapping) that is not excluded, once the HTTPS decryption certificate is trusted. Only connections made after it is added are decrypted; earlier ones wait until the app reconnects."
+            "value": "A domain in this list (or in a plugin or mapping) that is not excluded, once the HTTPS decryption certificate is trusted. Only connections made after it is added are decrypted."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "網域在列表裡（或外掛、對應裡）、沒有被排除，並且已經信任 HTTPS 解密憑證。加入後新建的連線才會解密，之前的連線要等 App 重新連線。"
+            "value": "網域在列表中（或在外掛、對應中）、未被排除，且已信任 HTTPS 解密憑證。加入後新建的連線才會解密。"
           }
         }
       }
     },
-    "只解密 443 端口的 HTTPS。列表里域名的 HTTP/3（QUIC）连接会被拒绝，让 App 改用可以解密的 HTTPS。": {
+    "只解密 443 端口的 HTTPS；列表中域名的 HTTP/3（QUIC）连接会被拒绝，App 改用 HTTPS。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Only HTTPS on port 443 is decrypted. HTTP/3 (QUIC) connections to listed domains are refused so the app falls back to HTTPS, which can be decrypted."
+            "value": "Only HTTPS on port 443 is decrypted; HTTP/3 (QUIC) connections to listed domains are refused and the app falls back to HTTPS."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "只解密 443 連接埠的 HTTPS。列表裡網域的 HTTP/3（QUIC）連線會被拒絕，讓 App 改用可以解密的 HTTPS。"
+            "value": "只解密 443 連接埠的 HTTPS；列表中網域的 HTTP/3（QUIC）連線會被拒絕，App 改用 HTTPS。"
           }
         }
       }
@@ -13192,7 +13192,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld rules in the list aren't supported and were skipped: %@"
+            "value": "%lld rules in the list are not supported and were skipped: %@"
           }
         },
         "zh-Hant": {
@@ -13315,18 +13315,18 @@
         }
       }
     },
-    "客户端只内置中国大陆的 GeoIP 列表。GEOIP 的其他国家和 IP-ASN 规则需要你按 URL 添加开源列表（每行一个网段，或 IP-CIDR 规则），经代理每天下载一次，并替换同名的内置或订阅列表。": {
+    "客户端仅内置中国大陆的 GeoIP 列表。其他国家的 GEOIP 和 IP-ASN 规则需按 URL 添加开源列表，经代理每天下载一次。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The app builds in only the mainland China GeoIP list. GEOIP rules for other countries and IP-ASN rules need an open-source list you add by URL (one network per line, or IP-CIDR rules). It is downloaded through the proxy once a day and replaces a built-in or subscription list of the same name."
+            "value": "The app builds in only the mainland China GeoIP list. GEOIP rules for other countries and IP-ASN rules need an open-source list added by URL, downloaded through the proxy once a day."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "App 只內建中國大陸的 GeoIP 清單。GEOIP 的其他國家和 IP-ASN 規則需要你按網址新增開源清單（每行一個網段，或 IP-CIDR 規則），經代理每天下載一次，並取代同名的內建或訂閱清單。"
+            "value": "App 只內建中國大陸的 GeoIP 清單。其他國家的 GEOIP 和 IP-ASN 規則需按網址新增開源清單，經代理每天下載一次。"
           }
         }
       }
@@ -13411,18 +13411,18 @@
         }
       }
     },
-    "内核没有回答，请确认已连接。": {
+    "内核无响应，请确认已连接。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The engine did not answer. Make sure you are connected."
+            "value": "The engine did not answer. Confirm the connection."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "核心沒有回應，請確認已連線。"
+            "value": "核心無回應，請確認已連線。"
           }
         }
       }
@@ -13507,50 +13507,50 @@
         }
       }
     },
-    "查看当前规则会把这样的连接交给哪条规则、走哪个出口。不会真的发起连接，也不计入命中次数。": {
+    "查看当前规则对此类连接的匹配结果与出口，不发起连接，不计入命中次数。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Shows which rule the current rules give such a connection to and where it goes. No connection is opened and nothing is counted as a hit."
+            "value": "Shows the rule and exit the current rules give such a connection; no connection is opened and no hit is counted."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "查看目前的規則會把這樣的連線交給哪條規則、走哪個出口。不會真的發起連線，也不計入命中次數。"
+            "value": "查看目前規則對此類連線的比對結果與出口，不發起連線，不計入命中次數。"
           }
         }
       }
     },
-    "还没有连接经过规则。": {
+    "暂无连接经过规则": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No connection has gone through the rules yet."
+            "value": "No connections have gone through the rules"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "還沒有連線經過規則。"
+            "value": "暫無連線經過規則"
           }
         }
       }
     },
-    "另有 %lld 条规则还没有命中。": {
+    "另有 %lld 条规则尚未命中。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld more rules have no hits yet."
+            "value": "%lld more rules have no hits"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "另有 %lld 條規則還沒有命中。"
+            "value": "另有 %lld 條規則尚未命中。"
           }
         }
       }
@@ -13603,18 +13603,18 @@
         }
       }
     },
-    "订阅里有 PROCESS-NAME 规则。iOS 和 macOS 的隧道分不出连接来自哪个 App，这些规则不会生效。": {
+    "订阅含 PROCESS-NAME 规则，iOS 和 macOS 不支持，规则不生效。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The subscription has PROCESS-NAME rules. The tunnel on iOS and macOS cannot tell which app opened a connection, so these rules have no effect."
+            "value": "The subscription has PROCESS-NAME rules; iOS and macOS do not support them, so they have no effect."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "訂閱裡有 PROCESS-NAME 規則。iOS 和 macOS 的通道分不出連線來自哪個 App，這些規則不會生效。"
+            "value": "訂閱含 PROCESS-NAME 規則，iOS 和 macOS 不支援，規則不生效。"
           }
         }
       }
@@ -13667,7 +13667,7 @@
         }
       }
     },
-    "两位国家或地区代码，例如 CN。CN 以外的国家需要在下面的 GeoIP 与 ASN 数据里添加列表。": {
+    "两位国家或地区代码，如 CN。CN 以外需在下方 GeoIP 与 ASN 数据中添加列表。": {
       "localizations": {
         "en": {
           "stringUnit": {
@@ -13678,12 +13678,12 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "兩位國家或地區代碼，例如 CN。CN 以外的國家需要在下方的 GeoIP 與 ASN 資料裡新增清單。"
+            "value": "兩位國家或地區代碼，如 CN。CN 以外需在下方 GeoIP 與 ASN 資料中新增清單。"
           }
         }
       }
     },
-    "AS 号，例如 AS13335。需要在下面的 GeoIP 与 ASN 数据里添加这个 AS 的列表。": {
+    "AS 号，如 AS13335。需在下方 GeoIP 与 ASN 数据中添加该 AS 的列表。": {
       "localizations": {
         "en": {
           "stringUnit": {
@@ -13694,7 +13694,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "AS 號，例如 AS13335。需要在下方的 GeoIP 與 ASN 資料裡新增這個 AS 的清單。"
+            "value": "AS 號，如 AS13335。需在下方 GeoIP 與 ASN 資料中新增該 AS 的清單。"
           }
         }
       }
@@ -13827,18 +13827,18 @@
         }
       }
     },
-    "给把 Mac 当作网关的设备起名字，DEVICE-NAME 规则按名字匹配（不区分大小写）。设备按连接来源的 IP 认出，最好在路由器里给它固定地址。右键可删除。": {
+    "为将这台 Mac 用作网关的设备命名，DEVICE-NAME 规则按名称匹配（不区分大小写）。设备按来源 IP 识别，建议在路由器中固定其地址。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Name the devices that use this Mac as their gateway; DEVICE-NAME rules match these names, ignoring case. A device is known by the IP its connections come from, so give it a fixed address in your router. Right-click to delete."
+            "value": "Names devices that use this Mac as their gateway; DEVICE-NAME rules match these names, ignoring case. Devices are identified by source IP; a fixed address in the router is recommended."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "為把 Mac 當作閘道的裝置取名，DEVICE-NAME 規則依名稱比對（不分大小寫）。裝置依連線來源的 IP 辨認，最好在路由器裡為它固定位址。按右鍵可刪除。"
+            "value": "為將這台 Mac 用作閘道的裝置取名，DEVICE-NAME 規則依名稱比對（不分大小寫）。裝置依來源 IP 辨認，建議在路由器中固定其位址。"
           }
         }
       }
@@ -13859,34 +13859,34 @@
         }
       }
     },
-    "订阅里有 CELLULAR-RADIO 规则。Mac 读不到蜂窝网络制式，这些规则不会生效。": {
+    "订阅含 CELLULAR-RADIO 规则，Mac 不支持，规则不生效。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The subscription has CELLULAR-RADIO rules. A Mac cannot read the cellular radio technology, so these rules have no effect."
+            "value": "The subscription has CELLULAR-RADIO rules; a Mac does not support them, so they have no effect."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "訂閱裡有 CELLULAR-RADIO 規則。Mac 讀不到行動網路制式，這些規則不會生效。"
+            "value": "訂閱含 CELLULAR-RADIO 規則，Mac 不支援，規則不生效。"
           }
         }
       }
     },
-    "订阅里有 DEVICE-NAME 规则。iPhone 和 iPad 不给局域网设备起名，这些规则不会生效。": {
+    "订阅含 DEVICE-NAME 规则，iPhone 和 iPad 不支持，规则不生效。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The subscription has DEVICE-NAME rules. iPhone and iPad name no LAN devices, so these rules have no effect."
+            "value": "The subscription has DEVICE-NAME rules; iPhone and iPad do not support them, so they have no effect."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "訂閱裡有 DEVICE-NAME 規則。iPhone 和 iPad 不為區域網路裝置取名，這些規則不會生效。"
+            "value": "訂閱含 DEVICE-NAME 規則，iPhone 和 iPad 不支援，規則不生效。"
           }
         }
       }
@@ -14227,34 +14227,34 @@
         }
       }
     },
-    "经该节点访问 1.1.1.1 和 www.gstatic.com 各 5 次，测握手、请求延迟、抖动和丢包。只在你点开始时运行，不经过隧道。": {
+    "经该节点访问 1.1.1.1 和 www.gstatic.com 各 5 次，测握手、请求延迟、抖动和丢包。仅在点击开始时运行，不经过隧道。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Reaches 1.1.1.1 and www.gstatic.com through this node 5 times each to measure handshake, request latency, jitter and loss. Runs only when you start it, outside the tunnel."
+            "value": "Reaches 1.1.1.1 and www.gstatic.com through this node 5 times each to measure handshake, request latency, jitter and loss. Runs only on start, outside the tunnel."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "經該節點訪問 1.1.1.1 和 www.gstatic.com 各 5 次，測握手、請求延遲、抖動和丟包。只在你點開始時運行，不經過隧道。"
+            "value": "經該節點存取 1.1.1.1 和 www.gstatic.com 各 5 次，測握手、請求延遲、抖動和封包遺失。僅在點選開始時執行，不經過隧道。"
           }
         }
       }
     },
-    "经该节点访问 1.1.1.1 和 www.gstatic.com 测延迟，并从 speed.cloudflare.com 下载约 8 秒测速度（最多 200 MB，会消耗节点流量）。只在你点开始时运行，不经过隧道。": {
+    "经该节点访问 1.1.1.1 和 www.gstatic.com 测延迟，并从 speed.cloudflare.com 下载约 8 秒测速度（最多 200 MB，会消耗节点流量）。仅在点击开始时运行，不经过隧道。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Measures latency to 1.1.1.1 and www.gstatic.com through this node, then downloads from speed.cloudflare.com for about 8 seconds (at most 200 MB, counted against the node's traffic). Runs only when you start it, outside the tunnel."
+            "value": "Measures latency to 1.1.1.1 and www.gstatic.com through this node, then downloads from speed.cloudflare.com for about 8 seconds (at most 200 MB, counted against the node's traffic). Runs only on start, outside the tunnel."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "經該節點訪問 1.1.1.1 和 www.gstatic.com 測延遲，並從 speed.cloudflare.com 下載約 8 秒測速度（最多 200 MB，會消耗節點流量）。只在你點開始時運行，不經過隧道。"
+            "value": "經該節點存取 1.1.1.1 和 www.gstatic.com 測延遲，並從 speed.cloudflare.com 下載約 8 秒測速度（最多 200 MB，會消耗節點流量）。僅在點選開始時執行，不經過隧道。"
           }
         }
       }
@@ -14344,7 +14344,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This kind of node can't be checked"
+            "value": "This kind of node cannot be checked"
           }
         },
         "zh-Hant": {
@@ -14387,18 +14387,18 @@
         }
       }
     },
-    "开启后，App 打开且已连接时，约每小时把 ANX 节点的连接计数发给提供这些节点的订阅服务商：发往订阅链接去掉参数和扩展名后加 /report 的地址，链接里的令牌随之发出，服务商能据此对应到你的账号。内容为 App 版本、平台、网络类型（Wi-Fi、蜂窝、有线）、统计时长，以及每个节点的名称、服务器地址和端口、协议、成功和各类失败次数、是否因被拒而暂停、时间偏差；不含你访问的网址。默认关闭，关闭时删除保存的计数。": {
+    "开启后，App 打开且已连接时，约每小时将 ANX 节点的连接计数发给提供这些节点的订阅服务商：发往订阅链接去掉参数和扩展名后加 /report 的地址，链接中的令牌随之发出，服务商可据此对应到本人账号；内容为 App 版本、平台、网络类型（Wi-Fi、蜂窝、有线）、统计时长，以及每个节点的名称、服务器地址和端口、协议、成功和各类失败次数、是否因被拒而暂停、时间偏差，不含所访问的网址。默认关闭，关闭时删除保存的计数。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "When on, while the app is open and connected, about once an hour the app sends the connection counts of ANX nodes to the subscription provider that supplied them: to the subscription link without its query and extension, plus /report. The token in the link goes with it, so the provider can match the report to your account. It contains the app version, platform, network type (Wi-Fi, cellular, wired), the period covered, and for each node its name, server address and port, protocol, success and failure counts, whether it was paused after rejections, and clock offset; never the sites you visit. Off by default; turning it off deletes the saved counts."
+            "value": "When on, while the app is open and connected, about once an hour the app sends the connection counts of ANX nodes to the subscription provider that supplied them, at the subscription link without its query and extension plus /report; the token in the link is sent with it and the provider can match the report to the account. The report contains the app version, platform, network type (Wi-Fi, cellular, wired), the period covered, and for each node its name, server address and port, protocol, success and failure counts, whether it was paused after rejections, and clock offset, never the sites visited; it is off by default, and turning it off deletes the saved counts."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "開啟後，App 開啟且已連線時，約每小時把 ANX 節點的連線計數傳給提供這些節點的訂閱服務商：傳往訂閱連結去掉參數和副檔名後加 /report 的位址，連結裡的權杖隨之送出，服務商能據此對應到你的帳號。內容為 App 版本、平台、網路類型（Wi-Fi、行動網路、有線）、統計時長，以及每個節點的名稱、伺服器位址和連接埠、協定、成功和各類失敗次數、是否因被拒而暫停、時間偏差；不含你造訪的網址。預設關閉，關閉時刪除儲存的計數。"
+            "value": "開啟後，App 開啟且已連線時，約每小時把 ANX 節點的連線計數傳給提供這些節點的訂閱服務商：傳往訂閱連結去掉參數和副檔名後加 /report 的位址，連結中的權杖隨之送出，服務商可據此對應到本人帳號；內容為 App 版本、平台、網路類型（Wi-Fi、行動網路、有線）、統計時長，以及每個節點的名稱、伺服器位址和連接埠、協定、成功和各類失敗次數、是否因被拒而暫停、時間偏差，不含所造訪的網址。預設關閉，關閉時刪除儲存的計數。"
           }
         }
       }
@@ -14568,7 +14568,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't record the new root certificate in the VPN configuration"
+            "value": "Could not record the new root certificate in the VPN configuration"
           }
         },
         "zh-Hant": {
@@ -14595,98 +14595,98 @@
         }
       }
     },
-    "连接已断开，抓包随之停止。这台设备上无法保存会话，断开前抓到的内容没有保存。": {
+    "连接已断开，抓包随之停止。这台设备上无法保存会话，断开前抓到的内容未保存。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Disconnected, so capture stopped. Sessions can't be saved on this device, so what it caught was not saved."
+            "value": "Disconnected; capture stopped. Sessions cannot be saved on this device; captured content was not saved."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "連線已斷開，抓包隨之停止。這台裝置上無法儲存工作階段，斷開前抓到的內容沒有儲存。"
+            "value": "連線已斷開，擷取隨之停止。這台裝置上無法儲存工作階段，斷開前擷取的內容未儲存。"
           }
         }
       }
     },
-    "连接已断开，抓包随之停止。断开时会尝试加密保存抓到的内容，连接后在 ⋯ › 已保存的会话 查看是否保存成功。": {
+    "连接已断开，抓包停止。抓到的内容已尝试加密保存，可在 ⋯ › 已保存的会话 确认。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Disconnected, so capture stopped. What it caught is saved encrypted if possible; after connecting, check ⋯ › Saved Sessions to see whether it was."
+            "value": "Disconnected; capture stopped. Saving the captured content encrypted was attempted; check ⋯ › Saved Sessions."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "連線已斷開，抓包隨之停止。斷開時會嘗試加密儲存抓到的內容，連線後在 ⋯ › 已儲存的工作階段 查看是否儲存成功。"
+            "value": "連線已斷開，擷取停止。已嘗試加密儲存擷取的內容，可在 ⋯ › 已儲存的工作階段 確認。"
           }
         }
       }
     },
-    "会话用只保存在这台 Mac 上的密钥加密，只有系统级的隧道扩展能读取，保留 7 天后自动删除。打开会话会替换当前的抓包内容并停止抓包，之后可以照常查看、筛选和导出。": {
+    "会话用仅保存在这台 Mac 上的密钥加密，仅系统级隧道扩展可读取，保留 7 天后自动删除。打开会话会替换当前抓包内容并停止抓包。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sessions are encrypted with a key kept only on this Mac, readable only by the system tunnel extension, and deleted after 7 days. Opening a session replaces the current capture and stops capturing; you can then view, filter and export it as usual."
+            "value": "Sessions are encrypted with a key kept only on this Mac, readable only by the system tunnel extension, and deleted after 7 days. Opening a session replaces the current capture and stops capturing."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "工作階段用只保存在這台 Mac 上的金鑰加密，只有系統級的通道延伸功能能讀取，保留 7 天後自動刪除。開啟工作階段會取代目前的抓包內容並停止抓包，之後可以照常查看、篩選和匯出。"
+            "value": "工作階段用僅保存在這台 Mac 上的金鑰加密，僅系統級的通道延伸功能可讀取，保留 7 天後自動刪除。開啟工作階段會取代目前的擷取內容並停止擷取。"
           }
         }
       }
     },
-    "这台 Mac 上无法保存会话（隧道扩展读不到会话密钥，开发者诊断的扩展事件里有原因）。": {
+    "这台 Mac 上无法保存会话（隧道扩展读不到会话密钥）。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sessions can't be saved on this Mac (the tunnel extension can't read the session key; the extension events in developer diagnostics say why)."
+            "value": "Sessions cannot be saved on this Mac (the tunnel extension cannot read the session key)."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "這台 Mac 上無法儲存工作階段（通道延伸功能讀不到工作階段金鑰，開發者診斷的延伸功能事件裡有原因）。"
+            "value": "這台 Mac 上無法儲存工作階段（通道延伸功能讀不到工作階段金鑰）。"
           }
         }
       }
     },
-    "已连接的隧道会自动重新连接并改用新证书。系统会要求输入登录密码，撤销这台 Mac 对旧证书的信任；新证书需要重新加入钥匙串并信任。其他装过旧证书的设备要分别删除它。": {
+    "已连接的隧道自动重新连接并改用新证书。系统要求输入登录密码，撤销这台 Mac 对旧证书的信任；新证书需重新加入钥匙串并信任，其他设备上的旧证书需分别删除。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A connected tunnel reconnects on its own and uses the new certificate. macOS asks for your login password to stop trusting the old certificate on this Mac; the new one must be added to the keychain and trusted again. Remove the old certificate from other devices that have it."
+            "value": "A connected tunnel reconnects automatically with the new certificate. macOS asks for the login password to stop trusting the old certificate on this Mac; the new one must be added to the keychain and trusted again, and the old one removed from other devices."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "已連線的通道會自動重新連線並改用新憑證。系統會要求輸入登入密碼，撤銷這台 Mac 對舊憑證的信任；新憑證需要重新加入鑰匙圈並信任。其他裝過舊憑證的裝置要分別刪除它。"
+            "value": "已連線的通道自動重新連線並改用新憑證。系統要求輸入登入密碼，撤銷這台 Mac 對舊憑證的信任；新憑證需重新加入鑰匙圈並信任，其他裝置上的舊憑證需分別刪除。"
           }
         }
       }
     },
-    "证书和私钥只保存在本机钥匙串。重新生成或换成自己的根证书后，已连接的隧道会自动重新连接，这台 Mac 撤销对旧证书的信任；已安装旧证书的其他设备要改装新证书。如果“信任证书”没有成功：在“钥匙串访问”中双击这张证书，展开“信任”，把“使用此证书时”设为“始终信任”。Firefox 使用自己的证书列表，需要另外导入。": {
+    "证书和私钥只保存在本机钥匙串；重新生成或更换根证书后，已连接的隧道自动重新连接，这台 Mac 撤销对旧证书的信任，其他设备需改装新证书。若“信任证书”未成功，在“钥匙串访问”中将该证书设为“始终信任”；Firefox 使用独立证书列表，需另行导入。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The certificate and its private key stay in this Mac's keychain. After regenerating or switching to your own root, a connected tunnel reconnects on its own and this Mac stops trusting the old certificate; install the new one on other devices that have the old one. If Trust Certificate did not work: double-click the certificate in Keychain Access, expand Trust and set When using this certificate to Always Trust. Firefox keeps its own certificate list and needs a separate import."
+            "value": "The certificate and its private key stay in this Mac's keychain; after regenerating or replacing the root, a connected tunnel reconnects automatically, this Mac stops trusting the old certificate, and other devices need the new one installed. If Trust Certificate did not work, set the certificate to Always Trust in Keychain Access; Firefox keeps its own certificate list and needs a separate import."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "憑證和私鑰只保存在本機鑰匙圈。重新產生或換成自己的根憑證後，已連線的通道會自動重新連線，這台 Mac 撤銷對舊憑證的信任；已安裝舊憑證的其他裝置要改裝新憑證。如果「信任憑證」沒有成功：在「鑰匙圈存取」中按兩下這張憑證，展開「信任」，把「使用此憑證時」設為「永遠信任」。Firefox 使用自己的憑證列表，需要另外匯入。"
+            "value": "憑證和私鑰只保存在本機鑰匙圈；重新產生或更換根憑證後，已連線的通道自動重新連線，這台 Mac 撤銷對舊憑證的信任，其他裝置需改裝新憑證。若「信任憑證」未成功，在「鑰匙圈存取」中將該憑證設為「永遠信任」；Firefox 使用獨立憑證列表，需另行匯入。"
           }
         }
       }
@@ -14712,7 +14712,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't stop trusting the old certificate “%@” (%@). Delete it in Keychain Access."
+            "value": "Could not stop trusting the old certificate “%@” (%@). Delete it in Keychain Access."
           }
         },
         "zh-Hant": {
@@ -14728,7 +14728,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This Mac still trusts the old certificate “%@” through a setting outside your user account that the app can't change. Delete it from the System keychain in Keychain Access."
+            "value": "This Mac still trusts the old certificate “%@” through a setting outside the current user account that the app cannot change. Delete it from the System keychain in Keychain Access."
           }
         },
         "zh-Hant": {
@@ -14744,7 +14744,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This Mac no longer trusts the old certificate “%@”, but it couldn't be removed from the keychain (%@); you can delete it in Keychain Access."
+            "value": "This Mac no longer trusts the old certificate “%@”, but it could not be removed from the keychain (%@); delete it manually in Keychain Access."
           }
         },
         "zh-Hant": {
@@ -14755,18 +14755,18 @@
         }
       }
     },
-    "粘贴 PEM 格式的 CA 证书和它的私钥。私钥需要是 P-256（prime256v1）密钥，只保存在本机钥匙串。替换后已连接的隧道会自动重新连接，这台 Mac 撤销对旧证书的信任（需要登录密码）。": {
+    "粘贴 PEM 格式的 CA 证书和它的私钥。私钥需为 P-256（prime256v1）密钥，只保存在本机钥匙串；替换后已连接的隧道自动重新连接，这台 Mac 撤销对旧证书的信任（需要登录密码）。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Paste the CA certificate and its private key in PEM format. The key must be a P-256 (prime256v1) key and stays in this Mac's keychain. After the switch a connected tunnel reconnects on its own and this Mac stops trusting the old certificate (your login password is needed)."
+            "value": "Paste the CA certificate and its private key in PEM format. The key must be a P-256 (prime256v1) key and stays in this Mac's keychain; after the switch a connected tunnel reconnects on its own and this Mac stops trusting the old certificate (the login password is needed)."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "貼上 PEM 格式的 CA 憑證和它的私鑰。私鑰需要是 P-256（prime256v1）金鑰，只保存在本機鑰匙圈。替換後已連線的通道會自動重新連線，這台 Mac 撤銷對舊憑證的信任（需要登入密碼）。"
+            "value": "貼上 PEM 格式的 CA 憑證和它的私鑰。私鑰需為 P-256（prime256v1）金鑰，只保存在本機鑰匙圈；替換後已連線的通道自動重新連線，這台 Mac 撤銷對舊憑證的信任（需要登入密碼）。"
           }
         }
       }
@@ -14787,34 +14787,34 @@
         }
       }
     },
-    "重新生成后已连接的隧道会自动重新连接，改用新证书签发；新证书需要重新安装并信任。请同时在 设置 > 通用 > VPN与设备管理 删除旧描述文件，否则旧证书仍受这台设备信任。": {
+    "重新生成后，已连接的隧道自动重新连接并改用新证书；新证书需重新安装并信任。请在 设置 > 通用 > VPN与设备管理 中删除旧描述文件。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "After regenerating, a connected tunnel reconnects on its own and issues certificates from the new root; install and trust the new one. Also delete the old profile in Settings > General > VPN & Device Management, or this device keeps trusting the old certificate."
+            "value": "After regenerating, a connected tunnel reconnects automatically with the new root; install and trust the new certificate. Delete the old profile in Settings > General > VPN & Device Management."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "重新產生後已連線的通道會自動重新連線，改用新憑證簽發；新憑證需要重新安裝並信任。請同時在 設定 > 一般 > VPN與裝置管理 刪除舊描述檔，否則舊憑證仍受這台裝置信任。"
+            "value": "重新產生後，已連線的通道自動重新連線並改用新憑證；新憑證需重新安裝並信任。請在 設定 > 一般 > VPN與裝置管理 中刪除舊描述檔。"
           }
         }
       }
     },
-    "插件只解密自己 [MITM] 列出的主机，解密域名和映射不受这个开关影响、另外生效；明文 HTTP 全部交给插件处理，仅支持 HTTP/1.1。使用前需要先连上 VPN。": {
+    "插件只解密自己 [MITM] 列出的主机，解密域名和映射另行生效；明文 HTTP 全部交给插件处理，仅支持 HTTP/1.1。使用前需先连接 VPN。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Plugins decrypt only the hosts under their own [MITM]; decrypted domains and mappings work regardless of this switch. Plain HTTP always goes through plugins. HTTP/1.1 only. Connect the VPN first."
+            "value": "Plugins decrypt only the hosts under their own [MITM]; decrypted domains and mappings apply separately. Plain HTTP always goes through plugins, HTTP/1.1 only; connect the VPN first."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "外掛只解密自己 [MITM] 列出的主機，解密網域和對應不受這個開關影響、另外生效；明文 HTTP 全部交給外掛處理，僅支援 HTTP/1.1。使用前需要先連上 VPN。"
+            "value": "外掛只解密自己 [MITM] 列出的主機，解密網域和對應另行生效；明文 HTTP 全部交給外掛處理，僅支援 HTTP/1.1。使用前需先連線 VPN。"
           }
         }
       }
@@ -14899,18 +14899,18 @@
         }
       }
     },
-    "规则没有生效：节点、规则和已启用的插件合计超出了隧道配置的上限，隧道只用选中的节点。请减少规则或规则集、停用一些插件后重新连接。": {
+    "规则未生效：节点、规则和已启用的插件合计超出隧道配置上限，隧道仅使用所选节点。请减少规则或停用部分插件后重新连接。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rules are not in effect: the nodes, rules and enabled plugins together exceed the tunnel's configuration limit, so the tunnel uses only the selected node. Remove some rules or rule sets, or turn off some plugins, then reconnect."
+            "value": "Rules are not in effect: nodes, rules and enabled plugins together exceed the tunnel configuration limit, and the tunnel uses only the selected node. Remove some rules or turn off some plugins, then reconnect."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "規則沒有生效：節點、規則和已啟用的外掛合計超出了隧道設定的上限，隧道只用選中的節點。請減少規則或規則集、停用一些外掛後重新連線。"
+            "value": "規則未生效：節點、規則和已啟用的外掛合計超出隧道設定上限，隧道僅使用所選節點。請減少規則或停用部分外掛後重新連線。"
           }
         }
       }
@@ -14947,18 +14947,18 @@
         }
       }
     },
-    "HTTPS 解密没有生效：已启用的插件和调试映射合计超出了隧道配置的上限，隧道没有交给内核。请停用一些插件或减少映射正文，再重新连接。": {
+    "HTTPS 解密未生效：已启用的插件和调试映射合计超出隧道配置上限。请停用部分插件或缩短映射内容后重新连接。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "HTTPS decryption is not active: the enabled plugins and debug mappings together exceed the tunnel's configuration limit, so the tunnel did not pass them to the engine. Turn off some plugins or shorten mapping bodies, then reconnect."
+            "value": "HTTPS decryption is not active: enabled plugins and debug mappings together exceed the tunnel configuration limit. Turn off some plugins or shorten mapping bodies, then reconnect."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "HTTPS 解密沒有生效：已啟用的外掛和除錯對應合計超出了隧道設定的上限，隧道沒有交給核心。請停用一些外掛或減少對應內文，再重新連線。"
+            "value": "HTTPS 解密未生效：已啟用的外掛和除錯對應合計超出隧道設定上限。請停用部分外掛或縮短對應內文後重新連線。"
           }
         }
       }
@@ -14968,7 +14968,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld redirects can't be used by the engine and are not in effect. Edit or delete the marked entries."
+            "value": "%lld redirects cannot be used by the engine and are not in effect. Edit or delete the marked entries."
           }
         },
         "zh-Hant": {
@@ -14995,34 +14995,34 @@
         }
       }
     },
-    "映射合计超过 4 MB（响应体按 Base64 计算，约为原大小的 4/3）。请删除或缩小一些 Map Local 响应体。": {
+    "映射合计超过 4 MB（响应体按 Base64 计算）。请删除或缩小部分 Map Local 响应体。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mappings exceed 4 MB in total (response bodies count in Base64, about 4/3 of their size). Delete or shrink some Map Local response bodies."
+            "value": "Mappings exceed 4 MB in total (response bodies count in Base64). Delete or shrink some Map Local response bodies."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "對應合計超過 4 MB（回應內文按 Base64 計算，約為原大小的 4/3）。請刪除或縮小一些 Map Local 回應內文。"
+            "value": "對應合計超過 4 MB（回應內文按 Base64 計算）。請刪除或縮小部分 Map Local 回應內文。"
           }
         }
       }
     },
-    "已启用的插件和调试映射合计超过 64 KB，超出本版本隧道配置的上限：连接时 HTTPS 解密会被关闭，插件和映射都不会生效。请停用一些插件或减少映射响应体。": {
+    "已启用的插件和调试映射合计超过 64 KB，超出隧道配置上限：连接时 HTTPS 解密将关闭，插件和映射均不生效。请停用部分插件或减小映射响应体。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enabled plugins and debug mappings exceed 64 KB in total, over this version's tunnel configuration limit: HTTPS decryption will be turned off when you connect, and neither plugins nor mappings will apply. Turn off some plugins or shrink mapping response bodies."
+            "value": "Enabled plugins and debug mappings exceed 64 KB, the tunnel configuration limit: HTTPS decryption is turned off on connect and neither plugins nor mappings apply. Disable some plugins or shrink mapping response bodies."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "已啟用的外掛和除錯對應合計超過 64 KB，超出本版本隧道設定的上限：連線時 HTTPS 解密會被關閉，外掛和對應都不會生效。請停用一些外掛或減少對應回應內文。"
+            "value": "已啟用的外掛和除錯對應合計超過 64 KB，超出通道設定上限：連線時 HTTPS 解密將關閉，外掛和對應均不生效。請停用部分外掛或縮小對應回應內文。"
           }
         }
       }
@@ -15128,7 +15128,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Only HTTPS subscription links are supported: the system does not let apps download a subscription over unencrypted http://. Ask your provider for an https:// link."
+            "value": "Only HTTPS subscription links are supported: the system does not allow apps to download a subscription over unencrypted http://. Ask the provider for an https:// link."
           }
         },
         "zh-Hant": {
@@ -15363,18 +15363,18 @@
         }
       }
     },
-    "抓包、解密 HTTPS、改写和重放请求，给 App 开发和测试用。不需要节点，流量默认直连。": {
+    "抓包、解密 HTTPS、改写和重放请求。无需节点，流量默认直连。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Capture, decrypt HTTPS, rewrite and replay requests, for app development and testing. No node needed; traffic goes direct by default."
+            "value": "Capture, decrypt HTTPS, rewrite and replay requests. No node needed; traffic goes direct by default."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "擷取、解密 HTTPS、改寫和重送請求，給 App 開發和測試用。不需要節點，流量預設直連。"
+            "value": "擷取、解密 HTTPS、改寫和重送請求。無需節點，流量預設直連。"
           }
         }
       }
@@ -15411,18 +15411,18 @@
         }
       }
     },
-    "你想怎么用\nAnixOps Net？": {
+    "选择使用方式": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "How do you want\nto use AnixOps Net?"
+            "value": "Choose a usage mode"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "你想怎麼用\nAnixOps Net？"
+            "value": "選擇使用方式"
           }
         }
       }
@@ -15443,18 +15443,18 @@
         }
       }
     },
-    "以后可以在设置里切换，切换不会删除订阅、节点和插件。": {
+    "可在设置中切换，不会删除订阅、节点和插件。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "You can switch later in Settings. Switching doesn't delete subscriptions, nodes or plugins."
+            "value": "Can be changed later in Settings; subscriptions, nodes and plugins are kept."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "以後可以在設定裡切換，切換不會刪除訂閱、節點和外掛。"
+            "value": "可在設定中切換，不會刪除訂閱、節點和外掛。"
           }
         }
       }
@@ -15523,18 +15523,18 @@
         }
       }
     },
-    "还没有节点，暂时直连。导入订阅或节点后，请求经过选中的节点发出，可以用来对比不同地区的出口。": {
+    "暂无节点，当前直连。导入后请求经所选节点发出。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No nodes yet, so traffic goes direct for now. Once you import a subscription or nodes, requests leave through the selected node, so you can compare exits in different regions."
+            "value": "No nodes yet; traffic goes direct. After import, requests leave through the selected node."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "還沒有節點，暫時直連。匯入訂閱或節點後，請求經過選中的節點發出，可以用來比較不同地區的出口。"
+            "value": "暫無節點，目前直連。匯入後請求經所選節點發出。"
           }
         }
       }
@@ -15571,18 +15571,18 @@
         }
       }
     },
-    "开启后拒绝发往 UDP 443 端口的 QUIC（HTTP/3）流量，浏览器和应用会立即改用 TCP，这样 MITM 插件和按域名分流的规则都能生效。直连和全局模式下同样生效。代价是部分视频和网页在弱网下可能稍慢。": {
+    "开启后拒绝 UDP 443 端口的 QUIC（HTTP/3）流量，浏览器和应用改用 TCP；直连和全局模式下同样生效。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "When on, QUIC (HTTP/3) traffic to UDP port 443 is refused, so browsers and apps switch to TCP at once and MITM plugins and domain rules can apply. This also applies in Direct and Global mode. Some videos and pages may load a little slower on a weak network."
+            "value": "When on, QUIC (HTTP/3) traffic to UDP port 443 is refused and browsers and apps switch to TCP; this also applies in Direct and Global mode."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "開啟後拒絕發往 UDP 443 連接埠的 QUIC（HTTP/3）流量，瀏覽器和應用程式會立即改用 TCP，這樣 MITM 外掛和按網域分流的規則都能生效。直連和全域模式下同樣生效。代價是部分影片和網頁在弱網路下可能稍慢。"
+            "value": "開啟後拒絕 UDP 443 連接埠的 QUIC（HTTP/3）流量，瀏覽器和應用程式改用 TCP；直連和全域模式下同樣生效。"
           }
         }
       }
@@ -15619,18 +15619,18 @@
         }
       }
     },
-    "只列出 HTTPS 解密（MITM）后的请求和明文 HTTP 请求。搜索框可以直接写表达式：host:api.example.com status:>=400 type:json -method:GET，空格表示同时满足，OR 表示或者。": {
+    "只列出 HTTPS 解密（MITM）后的请求和明文 HTTP 请求。搜索支持表达式，如 host:api.example.com status:>=400 -method:GET。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Lists only requests decrypted from HTTPS (MITM) and plain HTTP requests. The search field takes expressions: host:api.example.com status:>=400 type:json -method:GET. A space means both must match; OR means either."
+            "value": "Lists only requests decrypted from HTTPS (MITM) and plain HTTP requests. Search supports expressions such as host:api.example.com status:>=400 -method:GET."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "只列出 HTTPS 解密（MITM）後的請求和明文 HTTP 請求。搜尋框可以直接寫運算式：host:api.example.com status:>=400 type:json -method:GET，空格表示同時符合，OR 表示或者。"
+            "value": "只列出 HTTPS 解密（MITM）後的請求和明文 HTTP 請求。搜尋支援運算式，如 host:api.example.com status:>=400 -method:GET。"
           }
         }
       }
@@ -15768,7 +15768,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Capture is off. Once you start capturing, new requests appear here."
+            "value": "Capture is off. New requests appear here once capture starts."
           }
         },
         "zh-Hant": {
@@ -15811,18 +15811,18 @@
         }
       }
     },
-    "还没有请求。要看到 HTTPS 请求，请在 扩展 › HTTPS 解密证书 中安装并信任根证书，再为域名启用解密。": {
+    "暂无请求。HTTPS 请求需先在 扩展 › HTTPS 解密证书 中安装并信任根证书，再为域名启用解密。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No requests yet. To see HTTPS requests, install and trust the root certificate in Extensions › HTTPS Decryption Certificate, then turn on decryption for the domains."
+            "value": "No requests. HTTPS requests need the root certificate installed and trusted in Extensions › HTTPS Decryption Certificate, then decryption turned on for the domains."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "還沒有請求。要看到 HTTPS 請求，請在 擴充功能 › HTTPS 解密憑證 中安裝並信任根憑證，再為網域啟用解密。"
+            "value": "暫無請求。HTTPS 請求需先在 擴充功能 › HTTPS 解密憑證 中安裝並信任根憑證，再為網域啟用解密。"
           }
         }
       }
@@ -15848,7 +15848,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't save the session"
+            "value": "Could not save the session"
           }
         },
         "zh-Hant": {
@@ -15928,7 +15928,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This can't be undone."
+            "value": "This cannot be undone."
           }
         },
         "zh-Hant": {
@@ -15944,7 +15944,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Can't be read (wrong key or damaged file)"
+            "value": "Cannot be read (wrong key or damaged file)"
           }
         },
         "zh-Hant": {
@@ -15955,18 +15955,18 @@
         }
       }
     },
-    "会话用只保存在本机钥匙串里的密钥加密，保留 7 天后自动删除。打开会话会替换当前的抓包内容并停止抓包，之后可以照常查看、筛选和导出。": {
+    "会话用仅保存在本机钥匙串中的密钥加密，保留 7 天后自动删除。打开会话会替换当前抓包内容并停止抓包。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sessions are encrypted with a key kept only in this device's keychain and are deleted automatically after 7 days. Opening a session replaces the current capture and stops capturing; you can then view, filter and export it as usual."
+            "value": "Sessions are encrypted with a key kept only in this device's keychain and deleted automatically after 7 days. Opening a session replaces the current capture and stops capturing."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "工作階段用只保存在本機鑰匙圈裡的金鑰加密，保留 7 天後自動刪除。開啟工作階段會取代目前的擷取內容並停止擷取，之後可以照常檢視、篩選和匯出。"
+            "value": "工作階段用僅保存在本機鑰匙圈中的金鑰加密，保留 7 天後自動刪除。開啟工作階段會取代目前的擷取內容並停止擷取。"
           }
         }
       }
@@ -15992,7 +15992,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sessions can't be saved on this device (the keychain is unavailable)."
+            "value": "Sessions cannot be saved on this device (the keychain is unavailable)."
           }
         },
         "zh-Hant": {
@@ -16003,18 +16003,18 @@
         }
       }
     },
-    "还没有保存的会话。在请求列表右上角“更多”中保存当前抓包。": {
+    "暂无已保存的会话。可在请求列表右上角“更多”中保存当前抓包。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No saved sessions yet. Save the current capture from “More” at the top right of the request list."
+            "value": "No saved sessions. Save the current capture from “More” at the top right of the request list."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "還沒有儲存的工作階段。在請求列表右上角「更多」中儲存目前擷取。"
+            "value": "暫無已儲存的工作階段。可在請求列表右上角「更多」中儲存目前擷取。"
           }
         }
       }
@@ -16024,7 +16024,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't open this session"
+            "value": "Could not open this session"
           }
         },
         "zh-Hant": {
@@ -16040,7 +16040,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't delete this session"
+            "value": "Could not delete this session"
           }
         },
         "zh-Hant": {
@@ -16104,7 +16104,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Read-only: messages are forwarded as they are and can't be rewritten. Each request keeps the latest 512 messages, the first 4 KiB of each."
+            "value": "Read-only: messages are forwarded as they are and cannot be rewritten. Each request keeps the latest 512 messages, the first 4 KiB of each."
           }
         },
         "zh-Hant": {
@@ -16200,7 +16200,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A compressed message couldn't be decompressed"
+            "value": "A compressed message could not be decompressed"
           }
         },
         "zh-Hant": {
@@ -16483,18 +16483,18 @@
         }
       }
     },
-    "App 与 AnixOps、AnixOps 与服务器两段的帧头，用来看流控、RST_STREAM 和 GOAWAY。": {
+    "App 与 AnixOps、AnixOps 与服务器两段的帧头。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Frame headers on both links, app to AnixOps and AnixOps to server, for flow control, RST_STREAM and GOAWAY."
+            "value": "Frame headers on both links, app to AnixOps and AnixOps to server."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "App 與 AnixOps、AnixOps 與伺服器兩段的訊框標頭，用來看流量控制、RST_STREAM 和 GOAWAY。"
+            "value": "App 與 AnixOps、AnixOps 與伺服器兩段的訊框標頭。"
           }
         }
       }
@@ -16531,18 +16531,18 @@
         }
       }
     },
-    "还没有数据": {
+    "暂无数据": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No data yet"
+            "value": "No data"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "還沒有資料"
+            "value": "暫無資料"
           }
         }
       }
@@ -16552,7 +16552,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Open pcapng with Wireshark; import HAR into browser developer tools or other capture tools. Exports may contain accounts, cookies and other sensitive data, so send them only to people you trust."
+            "value": "Open pcapng with Wireshark; import HAR into browser developer tools or other capture tools. Exports may contain accounts, cookies and other sensitive data; send them only to trusted people."
           }
         },
         "zh-Hant": {
@@ -16696,7 +16696,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "In Settings > General > About > Certificate Trust Settings, turn on the switch for this certificate. Its name must match the one below; an old certificate's switch doesn't count."
+            "value": "In Settings > General > About > Certificate Trust Settings, turn on the switch for this certificate. Its name must match the one below; an old certificate's switch does not count."
           }
         },
         "zh-Hant": {
@@ -16707,18 +16707,18 @@
         }
       }
     },
-    "站点标识是本机按主机名生成的字母，不联网取图标。HTTPS、QUIC 等标签按端口推断。上传、下载为该连接经隧道的字节数。目标域名来自请求本身或 TLS SNI / HTTP Host，只保存在内存里，下次连接或退出 App 时清空。在右上角“更多”中开始抓包后，新的连接可在详情里查看和导出内容（每个方向前 64 KiB，HTTPS 需启用解密才是明文）。": {
+    "站点标识为本机按主机名生成的字母，不联网获取图标。上传、下载为该连接经隧道的字节数；目标域名只保存在内存中，下次连接或退出 App 时清空。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Site badges are letters made on this device from the host name; no icons are fetched. Tags such as HTTPS and QUIC are inferred from the port. Upload and download are the bytes each connection moved through the tunnel. Target names come from the request itself or its TLS SNI / HTTP Host, are kept only in memory and are cleared on the next connection or when the app quits. After you start capturing from “More” at the top right, new connections' content can be viewed and exported in their details (the first 64 KiB in each direction; HTTPS is plain text only with decryption on)."
+            "value": "Site badges are letters generated on this device from the host name; no icons are fetched. Upload and download are the bytes each connection moved through the tunnel; target names are kept only in memory and cleared on the next connection or when the app quits."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "站點標識是本機按主機名稱產生的字母，不連網取圖示。HTTPS、QUIC 等標籤按連接埠推斷。上傳、下載為該連線經隧道的位元組數。目標網域來自請求本身或 TLS SNI / HTTP Host，只儲存在記憶體裡，下次連線或結束 App 時清空。在右上角「更多」中開始擷取後，新的連線可在詳細資訊裡檢視和匯出內容（每個方向前 64 KiB，HTTPS 需啟用解密才是明文）。"
+            "value": "站點標識為本機按主機名稱產生的字母，不連網取得圖示。上傳、下載為該連線經隧道的位元組數；目標網域只儲存在記憶體中，下次連線或結束 App 時清空。"
           }
         }
       }
@@ -16755,34 +16755,34 @@
         }
       }
     },
-    "这个连接建立时没有在抓包。在请求列表右上角“更多”中开始抓包后，新的连接可以查看和导出内容。": {
+    "此连接建立时未抓包。在请求列表右上角“更多”中开始抓包后，新连接可查看和导出内容。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Capture was off when this connection opened. After you start capturing from “More” at the top right of the request list, new connections' content can be viewed and exported."
+            "value": "Capture was off when this connection opened. After capture starts from “More” at the top right of the request list, new connections' content can be viewed and exported."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "這個連線建立時沒有在擷取。在請求列表右上角「更多」中開始擷取後，新的連線可以檢視和匯出內容。"
+            "value": "此連線建立時未擷取。在請求列表右上角「更多」中開始擷取後，新連線可檢視和匯出內容。"
           }
         }
       }
     },
-    "开启后，应用查询域名时立即拿到 198.18.0.0/15（IPv6 为 fc00::/18）内的临时地址，连接时再还原成域名按规则分流、由代理解析，首次连接更快，非 HTTP/TLS 协议也能按域名分流。局域网、NTP、STUN、Apple 推送和联网检测等域名仍返回真实地址。关闭或更改后，个别应用可能需要重新打开。": {
+    "开启后，应用查询域名时立即获得 198.18.0.0/15（IPv6 为 fc00::/18）内的临时地址，连接时还原为域名并按规则分流；局域网、NTP、STUN、Apple 推送和联网检测等域名仍返回真实地址。更改后个别应用需重新打开。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "When on, apps that look up a domain get a temporary address in 198.18.0.0/15 (fc00::/18 for IPv6) at once; on connecting it is turned back into the domain, routed by the rules and resolved by the proxy. First connections are faster, and protocols other than HTTP/TLS can be routed by domain too. Local network, NTP, STUN, Apple push and connectivity-check domains still get their real addresses. After you turn this off or change it, some apps may need to be reopened."
+            "value": "When on, apps that look up a domain get a temporary address in 198.18.0.0/15 (fc00::/18 for IPv6), turned back into the domain on connecting and routed by the rules; local network, NTP, STUN, Apple push and connectivity-check domains still get real addresses. After a change, some apps may need to be reopened."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "開啟後，應用程式查詢網域時立即拿到 198.18.0.0/15（IPv6 為 fc00::/18）內的臨時位址，連線時再還原成網域按規則分流、由代理解析，首次連線更快，非 HTTP/TLS 協定也能按網域分流。區域網路、NTP、STUN、Apple 推播和連網偵測等網域仍回傳真實位址。關閉或變更後，個別應用程式可能需要重新開啟。"
+            "value": "開啟後，應用程式查詢網域時立即取得 198.18.0.0/15（IPv6 為 fc00::/18）內的臨時位址，連線時還原為網域並按規則分流；區域網路、NTP、STUN、Apple 推播和連網偵測等網域仍回傳真實位址。變更後個別應用程式需重新開啟。"
           }
         }
       }
@@ -16856,7 +16856,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The request body wasn't fully captured, so it can only be replayed after editing."
+            "value": "The request body was not fully captured, so it can only be replayed after editing."
           }
         },
         "zh-Hant": {
@@ -16936,7 +16936,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The export contains full cookies and tokens, so send it only to people you trust."
+            "value": "The export contains full cookies and tokens; send it only to trusted people."
           }
         },
         "zh-Hant": {
@@ -16979,18 +16979,18 @@
         }
       }
     },
-    "用这次的响应生成 Map Local，或把这个 URL 转到另一个地址。保存后在 扩展 › Map Local / Map Remote 里管理。": {
+    "用这次的响应生成 Map Local，或将此 URL 转到另一个地址。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Make a Map Local from this response, or send this URL to another address. Manage them afterwards in Extensions › Map Local / Map Remote."
+            "value": "Make a Map Local from this response, or send this URL to another address."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "用這次的回應產生 Map Local，或把這個 URL 轉到另一個位址。儲存後在 擴充功能 › Map Local / Map Remote 裡管理。"
+            "value": "用這次的回應產生 Map Local，或將此 URL 轉到另一個位址。"
           }
         }
       }
@@ -17080,7 +17080,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Only the beginning was decompressed (the body wasn't fully captured, or it is over 16 MiB decompressed)"
+            "value": "Only the beginning was decompressed (the body was not fully captured, or it is over 16 MiB decompressed)"
           }
         },
         "zh-Hant": {
@@ -17139,18 +17139,18 @@
         }
       }
     },
-    "订阅没有自带规则时，规则模式按这里你自己的规则和规则集分流，其余走代理。": {
+    "订阅不含规则时，规则模式按此处的规则和规则集分流，其余走代理。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "When a subscription has no rules of its own, rule mode routes by your rules and rule sets here; everything else goes through the proxy."
+            "value": "When a subscription has no rules of its own, rule mode routes by the rules and rule sets here; everything else goes through the proxy."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "訂閱沒有自帶規則時，規則模式按這裡你自己的規則和規則集分流，其餘走代理。"
+            "value": "訂閱不含規則時，規則模式按此處的規則和規則集分流，其餘走代理。"
           }
         }
       }
@@ -17192,7 +17192,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Matched top to bottom; the first match wins. All of them come before the subscription's rules. “Proxy” means the subscription's first policy group."
+            "value": "Matched top to bottom; the first match wins, and all come before the subscription's rules. “Proxy” refers to the subscription's first policy group."
           }
         },
         "zh-Hant": {
@@ -17203,18 +17203,18 @@
         }
       }
     },
-    "从上到下匹配，先匹配先生效：你的规则、规则集，其余走代理。“代理”指当前选中的节点。": {
+    "从上到下匹配，先匹配先生效：自定规则、规则集，其余走代理。“代理”指当前选中的节点。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Matched top to bottom; the first match wins: your rules, then rule sets, then everything else through the proxy. “Proxy” means the selected node."
+            "value": "Matched top to bottom; the first match wins: custom rules, rule sets, then everything else through the proxy. “Proxy” refers to the selected node."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "從上到下比對，先符合先生效：你的規則、規則集，其餘走代理。「代理」指目前選中的節點。"
+            "value": "從上到下比對，先符合先生效：自訂規則、規則集，其餘走代理。「代理」指目前選中的節點。"
           }
         }
       }
@@ -17251,18 +17251,18 @@
         }
       }
     },
-    "清空你添加的全部规则？": {
+    "清空已添加的全部规则？": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Clear all the rules you added?"
+            "value": "Clear all added rules?"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "清空你新增的全部規則？"
+            "value": "清空已新增的全部規則？"
           }
         }
       }
@@ -17272,7 +17272,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Add Your First Rule"
+            "value": "Add First Rule"
           }
         },
         "zh-Hant": {
@@ -17528,7 +17528,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Don't Resolve Domains (no-resolve)"
+            "value": "Do Not Resolve Domains (no-resolve)"
           }
         },
         "zh-Hant": {
@@ -17635,18 +17635,18 @@
         }
       }
     },
-    "这条规则的值不对，内核不会接受。": {
+    "规则值无效，内核不予接受。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This rule's value is wrong; the engine won't accept it."
+            "value": "The rule value is invalid and the engine does not accept it."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "這條規則的值不對，核心不會接受。"
+            "value": "規則值無效，核心不予接受。"
           }
         }
       }
@@ -17667,18 +17667,18 @@
         }
       }
     },
-    "可以粘贴整份配置（只读 [Rule] 段）或每行一条规则。DIRECT、REJECT 保留，其他策略名都当作代理；FINAL 和不支持的类型会跳过。": {
+    "粘贴整份配置（仅读取 [Rule] 段）或每行一条规则。DIRECT、REJECT 保留，其他策略名视为代理；FINAL 和不支持的类型跳过。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Paste a whole config (only its [Rule] section is read) or one rule per line. DIRECT and REJECT are kept and every other policy name counts as the proxy; FINAL and unsupported types are skipped."
+            "value": "Paste a whole config (only its [Rule] section is read) or one rule per line. DIRECT and REJECT are kept and any other policy name counts as the proxy; FINAL and unsupported types are skipped."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "可以貼上整份設定（只讀 [Rule] 段）或每行一條規則。DIRECT、REJECT 保留，其他策略名稱都當作代理；FINAL 和不支援的類型會略過。"
+            "value": "貼上整份設定（僅讀取 [Rule] 段）或每行一條規則。DIRECT、REJECT 保留，其他策略名稱視為代理；FINAL 和不支援的類型略過。"
           }
         }
       }
@@ -17699,34 +17699,34 @@
         }
       }
     },
-    "用本机内容应答请求，或把请求转到另一个地址。也可以在请求详情里从抓到的请求一键生成。": {
+    "用本机内容应答请求，或将请求转到另一个地址。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Answer requests with content from this device, or send them to another address. You can also make one from a captured request in its details."
+            "value": "Answer requests with content from this device, or send them to another address."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "用本機內容回應請求，或把請求轉到另一個位址。也可以在請求詳細資訊裡從擷取的請求一鍵產生。"
+            "value": "用本機內容回應請求，或將請求轉到另一個位址。"
           }
         }
       }
     },
-    "还没有映射。在请求详情里选“映射到本地”或“映射到远程”，或点下方添加。": {
+    "暂无映射。可在请求详情中选择“映射到本地”或“映射到远程”，或点下方添加。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No mappings yet. Choose “Map Local” or “Map Remote” in a request's details, or add one below."
+            "value": "No mappings. Choose “Map Local” or “Map Remote” in a request's details, or add one below."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "還沒有對應。在請求詳細資訊裡選「對應到本機」或「對應到遠端」，或點下方新增。"
+            "value": "暫無對應。可在請求詳細資訊中選擇「對應到本機」或「對應到遠端」，或點下方新增。"
           }
         }
       }
@@ -17779,18 +17779,18 @@
         }
       }
     },
-    "从上到下第一条匹配的生效。需要先在 扩展 › HTTPS 解密证书 中安装并信任根证书，HTTPS 请求才能被映射。Map Remote 用 307 重定向发往新地址，方法和请求体保持不变。": {
+    "从上到下第一条匹配的生效；Map Remote 用 307 重定向发往新地址。HTTPS 请求需先在 扩展 › HTTPS 解密证书 中安装并信任根证书。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The first match from the top applies. HTTPS requests can be mapped only after you install and trust the root certificate in Extensions › HTTPS Decryption Certificate. Map Remote sends a 307 redirect to the new address, keeping the method and body."
+            "value": "The first match from the top applies; Map Remote sends a 307 redirect to the new address. HTTPS requests need the root certificate installed and trusted in Extensions › HTTPS Decryption Certificate."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "從上到下第一條符合的生效。需要先在 擴充功能 › HTTPS 解密憑證 中安裝並信任根憑證，HTTPS 請求才能被對應。Map Remote 用 307 重新導向發往新位址，方法和請求內文保持不變。"
+            "value": "從上到下第一條符合的生效；Map Remote 用 307 重新導向發往新位址。HTTPS 請求需先在 擴充功能 › HTTPS 解密憑證 中安裝並信任根憑證。"
           }
         }
       }
@@ -18184,7 +18184,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A regex matching the whole URL, e.g. ^https://api\\.example\\.com/v1/.*. When the host name is written with \\., decryption is turned on for it automatically."
+            "value": "A regex matching the whole URL, e.g. ^https://api\\.example\\.com/v1/.*. Decryption is turned on automatically for a host name written with \\."
           }
         },
         "zh-Hant": {
@@ -18264,7 +18264,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Only https addresses are supported. Scripts in a plugin don't run automatically; you allow each one."
+            "value": "Only https addresses are supported. Scripts in a plugin do not run automatically and must be allowed one by one."
           }
         },
         "zh-Hant": {
@@ -18376,7 +18376,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Won't run: the script address isn't https"
+            "value": "Will not run: the script address is not https"
           }
         },
         "zh-Hant": {
@@ -18424,7 +18424,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The plugin isn't UTF-8 text"
+            "value": "The plugin is not UTF-8 text"
           }
         },
         "zh-Hant": {
@@ -18440,7 +18440,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The script address isn't https, so it can't be downloaded"
+            "value": "The script address is not https, so it cannot be downloaded"
           }
         },
         "zh-Hant": {
@@ -18472,7 +18472,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "What was downloaded isn't script text"
+            "value": "What was downloaded is not script text"
           }
         },
         "zh-Hant": {
@@ -18499,18 +18499,18 @@
         }
       }
     },
-    "按订阅规则和策略组分流；订阅没有规则时按下方的分流规则。连接中切换立即生效，已有连接会重新建立。": {
+    "按订阅规则和策略组分流；订阅无规则时按下方分流规则。切换立即生效，已有连接重新建立。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Routes by the subscription's rules and policy groups; when the subscription has no rules, by the routing rules below. Switching while connected takes effect at once; open connections reconnect."
+            "value": "Routes by the subscription's rules and policy groups, or by the routing rules below when it has none. Switching takes effect at once and open connections reconnect."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "按訂閱規則和策略組分流；訂閱沒有規則時按下方的分流規則。連線中切換立即生效，已有連線會重新建立。"
+            "value": "按訂閱規則和策略組分流；訂閱無規則時按下方分流規則。切換立即生效，已有連線重新建立。"
           }
         }
       }
@@ -18547,18 +18547,18 @@
         }
       }
     },
-    "命中的 TCP 连接和 UDP 流改发到新地址，App 看到的仍是原地址，不需要改 App。从上到下第一条命中的生效。改写后按新地址走规则：开发服务器在内网时，再在订阅规则里让内网网段走能到达它的节点。域名只能匹配 TCP（按 TLS 名称或 HTTP Host）；按域名连接的 App 也可以直接用 DNS 页的 Hosts。": {
+    "命中的 TCP 连接和 UDP 流改发到新地址，App 看到的仍是原地址。从上到下第一条命中的生效；域名只能匹配 TCP（按 TLS 名称或 HTTP Host）。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Matching TCP connections and UDP flows are sent to the new address while the app still sees the original one, so the app needs no change. The first match from the top applies. After the change, rules apply to the new address: if a development server is on an internal network, also route that network through a node that can reach it in the subscription's rules. Domains match TCP only (by TLS name or HTTP Host); for apps that connect by domain you can also use Hosts on the DNS page."
+            "value": "Matching TCP connections and UDP flows are sent to the new address while the app still sees the original one. The first match from the top applies; domains match TCP only (by TLS name or HTTP Host)."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "符合的 TCP 連線和 UDP 流改發到新位址，App 看到的仍是原位址，不需要改 App。從上到下第一條符合的生效。改寫後按新位址走規則：開發伺服器在內網時，再在訂閱規則裡讓內網網段走能到達它的節點。網域只能比對 TCP（按 TLS 名稱或 HTTP Host）；按網域連線的 App 也可以直接用 DNS 頁的 Hosts。"
+            "value": "符合的 TCP 連線和 UDP 流改發到新位址，App 看到的仍是原位址。從上到下第一條符合的生效；網域只能比對 TCP（按 TLS 名稱或 HTTP Host）。"
           }
         }
       }
@@ -18643,18 +18643,18 @@
         }
       }
     },
-    "IP 或域名，可带 :端口；不写端口沿用原端口，只改端口写 :端口。IPv6 带端口写 [地址]:端口。": {
+    "IP 或域名，可带 :端口；不写端口沿用原端口。IPv6 带端口写 [地址]:端口。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "An IP or domain, optionally with :port. Without a port the original port is kept; to change only the port, write :port. Write IPv6 with a port as [address]:port."
+            "value": "An IP or domain, optionally with :port; without a port the original port is kept. Write IPv6 with a port as [address]:port."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "IP 或網域，可帶 :連接埠；不寫連接埠沿用原連接埠，只改連接埠寫 :連接埠。IPv6 帶連接埠寫 [位址]:連接埠。"
+            "value": "IP 或網域，可帶 :連接埠；不寫連接埠沿用原連接埠。IPv6 帶連接埠寫 [位址]:連接埠。"
           }
         }
       }
@@ -18680,7 +18680,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't save redirects"
+            "value": "Could not save redirects"
           }
         },
         "zh-Hant": {
@@ -18691,18 +18691,18 @@
         }
       }
     },
-    "抓到的请求体不完整，没有带上。需要的话在下面补全。": {
+    "抓到的请求体不完整，未带上；可在下方补全。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The captured request body is incomplete and was left out. Fill it in below if you need it."
+            "value": "The captured request body is incomplete and was left out; complete it below if needed."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "擷取的請求內文不完整，沒有帶上。需要的話在下面補全。"
+            "value": "擷取的請求內文不完整，未帶上；可在下方補全。"
           }
         }
       }
@@ -18776,7 +18776,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "While connected, this request also shows up in the capture. Redirects aren't followed."
+            "value": "While connected, this request also shows up in the capture. Redirects are not followed."
           }
         },
         "zh-Hant": {
@@ -18787,18 +18787,18 @@
         }
       }
     },
-    "导入订阅或节点后，可以在这里选择规则、全局或直连模式。规则模式按你自己的规则分流；带规则和策略组的订阅按订阅规则分流。": {
+    "导入订阅或节点后，可在此选择规则、全局或直连模式。规则模式按自定义规则分流；带规则和策略组的订阅按订阅规则分流。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Once you import a subscription or nodes, choose rule, global or direct mode here. Rule mode routes by your own rules; subscriptions with rules and policy groups route by the subscription's rules."
+            "value": "After a subscription or nodes are imported, choose rule, global or direct mode here. Rule mode routes by custom rules; subscriptions with rules and policy groups route by their own rules."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "匯入訂閱或節點後，可以在這裡選擇規則、全域或直連模式。規則模式按你自己的規則分流；帶規則和策略組的訂閱按訂閱規則分流。"
+            "value": "匯入訂閱或節點後，可在此選擇規則、全域或直連模式。規則模式按自訂規則分流；帶規則和策略組的訂閱按訂閱規則分流。"
           }
         }
       }
@@ -18808,7 +18808,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A single node has no node list, so traffic can't be routed by rules. Available after you import a subscription or several nodes"
+            "value": "A single node has no node list and cannot be routed by rules. Available after a subscription or several nodes are imported"
           }
         },
         "zh-Hant": {
@@ -18824,7 +18824,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't save the QUIC setting to the VPN configuration"
+            "value": "Could not save the QUIC setting to the VPN configuration"
           }
         },
         "zh-Hant": {
@@ -18840,7 +18840,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't save local rules"
+            "value": "Could not save local rules"
           }
         },
         "zh-Hant": {
@@ -18856,7 +18856,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't save local rules to the VPN configuration"
+            "value": "Could not save local rules to the VPN configuration"
           }
         },
         "zh-Hant": {
@@ -18872,7 +18872,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't save redirects to the VPN configuration"
+            "value": "Could not save redirects to the VPN configuration"
           }
         },
         "zh-Hant": {
@@ -18952,7 +18952,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Write each response header as “Name: value” on its own line; values can't contain |"
+            "value": "Write each response header as “Name: value” on its own line; values cannot contain |"
           }
         },
         "zh-Hant": {
@@ -18968,7 +18968,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The response body can't exceed 256 KB"
+            "value": "The response body cannot exceed 256 KB"
           }
         },
         "zh-Hant": {
@@ -19032,7 +19032,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The request body can't exceed 1 MB."
+            "value": "The request body cannot exceed 1 MB."
           }
         },
         "zh-Hant": {
@@ -19048,7 +19048,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The server didn't return an HTTP response."
+            "value": "The server did not return an HTTP response."
           }
         },
         "zh-Hant": {
@@ -19075,18 +19075,18 @@
         }
       }
     },
-    "端口应为 1–65535，或 7000-7100 这样的范围": {
+    "端口应为 1–65535，或范围（如 7000-7100）": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The port should be 1–65535, or a range like 7000-7100"
+            "value": "The port should be 1–65535, or a range such as 7000-7100"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "連接埠應為 1–65535，或 7000-7100 這樣的範圍"
+            "value": "連接埠應為 1–65535，或範圍（如 7000-7100）"
           }
         }
       }
@@ -19144,7 +19144,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Adds the root certificate to the login keychain and sets it to Always Trust. macOS asks for your login password."
+            "value": "Adds the root certificate to the login keychain and sets it to Always Trust. macOS asks for the login password."
           }
         },
         "zh-Hant": {
@@ -19203,7 +19203,7 @@
         }
       }
     },
-    "已取消。证书已加入钥匙串，但还没有设为始终信任。": {
+    "已取消。证书已加入钥匙串，但尚未设为始终信任。": {
       "localizations": {
         "en": {
           "stringUnit": {
@@ -19214,7 +19214,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "已取消。憑證已加入鑰匙圈，但還沒有設為永遠信任。"
+            "value": "已取消。憑證已加入鑰匙圈，但尚未設為永遠信任。"
           }
         }
       }
@@ -19224,7 +19224,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't export the certificate file"
+            "value": "Could not export the certificate file"
           }
         },
         "zh-Hant": {
@@ -19240,7 +19240,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't open Keychain Access. Export the certificate and double-click it."
+            "value": "Could not open Keychain Access. Export the certificate and double-click it."
           }
         },
         "zh-Hant": {
@@ -19427,34 +19427,34 @@
         }
       }
     },
-    "手机抓包没有开启：端口可能被占用，或者网络扩展版本太旧。": {
+    "手机抓包未开启：端口可能被占用，或网络扩展版本过旧。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Phone capture didn't turn on: the port may be in use, or the network extension is too old."
+            "value": "Phone capture did not turn on: the port may be in use, or the network extension is too old."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "手機擷取沒有開啟：連接埠可能被佔用，或者網路延伸功能版本太舊。"
+            "value": "手機擷取未開啟：連接埠可能被佔用，或網路延伸功能版本過舊。"
           }
         }
       }
     },
-    "手机抓包没有关闭，请重试。": {
+    "手机抓包未关闭，请重试。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Phone capture didn't turn off. Try again."
+            "value": "Phone capture did not turn off. Try again."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "手機擷取沒有關閉，請重試。"
+            "value": "手機擷取未關閉，請重試。"
           }
         }
       }
@@ -19832,7 +19832,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Scripts run in QuickJS inside the tunnel. They can read and change requests and responses for their plugin's [MITM] hosts and can't go online by themselves. Only the copy downloaded when you allowed it runs. %@"
+            "value": "Scripts run in QuickJS inside the tunnel; they can read and change requests and responses for their plugin's [MITM] hosts and cannot go online by themselves. Only the copy downloaded when allowed runs; %@"
           }
         },
         "zh-Hant": {
@@ -19843,18 +19843,18 @@
         }
       }
     },
-    "将从 %@ 下载。脚本可以查看和改写解密后的流量，请只允许你信任的来源。地址上的内容之后变了，需要重新允许。": {
+    "将从 %@ 下载。脚本可查看和改写解密后的流量，请只允许信任的来源；地址内容变更后需重新允许。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "It will be downloaded from %@. Scripts can view and rewrite decrypted traffic, so allow only sources you trust. If the content at the address changes later, you need to allow it again."
+            "value": "It will be downloaded from %@. Scripts can view and rewrite decrypted traffic; allow only trusted sources, and allow again if the content at the address changes."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "將從 %@ 下載。腳本可以檢視和改寫解密後的流量，請只允許你信任的來源。位址上的內容之後變了，需要重新允許。"
+            "value": "將從 %@ 下載。腳本可檢視和改寫解密後的流量，請只允許信任的來源；位址內容變更後需重新允許。"
           }
         }
       }
@@ -19880,7 +19880,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Not allowed, won't run · %@"
+            "value": "Not allowed, will not run · %@"
           }
         },
         "zh-Hant": {
@@ -19923,18 +19923,18 @@
         }
       }
     },
-    "%@地址不是 https，或被重定向到了非 https 地址": {
+    "%@地址不是 https，或被重定向到非 https 地址": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@: the address isn't https, or it redirected to a non-https address"
+            "value": "%@: the address is not https, or it redirected to a non-https address"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@位址不是 https，或被重新導向到了非 https 位址"
+            "value": "%@位址不是 https，或被重新導向到非 https 位址"
           }
         }
       }
@@ -20056,7 +20056,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't add the certificate to the keychain (OSStatus %d). Trust it manually in Keychain Access."
+            "value": "Could not add the certificate to the keychain (OSStatus %d). Trust it manually in Keychain Access."
           }
         },
         "zh-Hant": {
@@ -20072,7 +20072,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't set trust (OSStatus %d). Trust it manually in Keychain Access."
+            "value": "Could not set trust (OSStatus %d). Trust it manually in Keychain Access."
           }
         },
         "zh-Hant": {
@@ -20083,18 +20083,18 @@
         }
       }
     },
-    "设置页里有 iPhone 和 Android 的步骤和根证书下载。设好代理后在手机上打开 http://%@ 检查是否生效。": {
+    "设置页提供 iPhone 和 Android 的步骤及根证书下载。设好代理后，在手机上打开 http://%@ 检查。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The setup page has the steps for iPhone and Android and the root certificate download. After setting the proxy, open http://%@ on the phone to check that it works."
+            "value": "The setup page has the steps for iPhone and Android and the root certificate download. After setting the proxy, open http://%@ on the phone to check."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "設定頁裡有 iPhone 和 Android 的步驟和根憑證下載。設好代理後在手機上開啟 http://%@ 檢查是否生效。"
+            "value": "設定頁提供 iPhone 和 Android 的步驟及根憑證下載。設好代理後，在手機上開啟 http://%@ 檢查。"
           }
         }
       }
@@ -20115,18 +20115,18 @@
         }
       }
     },
-    "流量只在本机按你的规则转发到你配置的服务器，我们看不到也不收集。App 不含统计、广告或崩溃上报 SDK，数据只保存在你的设备上。": {
+    "流量仅在本机按规则转发到所配置的服务器，开发者无法查看也不收集。App 不含统计、广告或崩溃上报 SDK，数据只保存在本机。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Traffic is forwarded on this device to the servers you configure, following your rules; we cannot see it and collect nothing. The app has no analytics, advertising or crash-reporting SDK, and your data stays on your device."
+            "value": "Traffic is forwarded on this device to the configured servers by the rules; the developer cannot see or collect it. The app has no analytics, advertising or crash-reporting SDK, and data stays on this device."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "流量只在本機按你的規則轉發到你設定的伺服器，我們看不到也不收集。App 不含統計、廣告或當機回報 SDK，資料只儲存在你的裝置上。"
+            "value": "流量僅在本機按規則轉發到所設定的伺服器，開發者無法檢視也不收集。App 不含統計、廣告或當機回報 SDK，資料只儲存在本機。"
           }
         }
       }
@@ -20232,7 +20232,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Save your changes to the rules?"
+            "value": "Save changes to the rules?"
           }
         },
         "zh-Hant": {
@@ -20248,7 +20248,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Unsaved changes are lost when you leave."
+            "value": "Unsaved changes are lost on leaving."
           }
         },
         "zh-Hant": {
@@ -20259,18 +20259,18 @@
         }
       }
     },
-    "还有错误没有改好，现在不能保存。离开后，未保存的修改会丢失。": {
+    "仍有错误，暂无法保存。离开后，未保存的修改将丢失。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Some lines still have errors, so the rules can't be saved yet. Unsaved changes are lost when you leave."
+            "value": "Errors remain; the rules cannot be saved yet. Unsaved changes are lost on leaving."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "還有錯誤沒有改好，現在不能儲存。離開後，未儲存的修改會遺失。"
+            "value": "仍有錯誤，暫無法儲存。離開後，未儲存的修改將遺失。"
           }
         }
       }
@@ -20280,7 +20280,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Restored your unsaved changes"
+            "value": "Restored unsaved changes"
           }
         },
         "zh-Hant": {
@@ -20387,18 +20387,18 @@
         }
       }
     },
-    "请求列表改为显示这个会话，实时抓包照常进行，随时可以回到实时抓包。": {
+    "请求列表改为显示此会话，实时抓包继续进行，可随时返回。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The request list shows this session instead. Live capture keeps running, and you can go back to it at any time."
+            "value": "The request list shows this session instead. Live capture keeps running; return to it at any time."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "請求列表改為顯示這個工作階段，即時抓包照常進行，隨時可以回到即時抓包。"
+            "value": "請求列表改為顯示此工作階段，即時擷取繼續進行，可隨時返回。"
           }
         }
       }
@@ -20419,18 +20419,18 @@
         }
       }
     },
-    "会话用只保存在本机钥匙串里的密钥加密，保留 7 天后自动删除。隧道断开时会自动保存当次的抓包，断开后也能打开。打开会话后请求列表显示它的内容，可以照常查看、筛选和导出；长按会话可以直接打包导出。": {
+    "会话用仅保存在本机钥匙串中的密钥加密，保留 7 天后自动删除。隧道断开时自动保存当次抓包；打开会话后请求列表显示其内容，长按可打包导出。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sessions are encrypted with a key kept only in this device's keychain and are deleted after 7 days. The capture of each tunnel run is saved automatically when the tunnel disconnects and can be opened afterwards. An open session shows in the request list, where you can view, filter and export it as usual; touch and hold a session to export it as a zip."
+            "value": "Sessions are encrypted with a key kept only in this device's keychain and deleted after 7 days. The capture of each tunnel run is saved automatically on disconnect; an open session shows in the request list, and touch and hold exports it as a zip."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "工作階段用只儲存在本機鑰匙圈裡的密鑰加密，保留 7 天後自動刪除。隧道中斷時會自動儲存當次的抓包，中斷後也能開啟。開啟工作階段後請求列表顯示它的內容，可以照常檢視、篩選和匯出；長按工作階段可以直接打包匯出。"
+            "value": "工作階段用僅保存在本機鑰匙圈中的金鑰加密，保留 7 天後自動刪除。通道中斷時自動儲存當次擷取；開啟工作階段後請求列表顯示其內容，長按可打包匯出。"
           }
         }
       }
@@ -20451,18 +20451,18 @@
         }
       }
     },
-    "还没有保存的会话。隧道断开时会自动保存当次的抓包，也可以在请求列表右上角“更多”中保存当前抓包。": {
+    "暂无已保存的会话。隧道断开时自动保存当次抓包，也可在请求列表右上角“更多”中保存。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No saved sessions yet. The capture is saved automatically when the tunnel disconnects; you can also save the current capture from More at the top right of the request list."
+            "value": "No saved sessions. The capture is saved automatically when the tunnel disconnects, and can also be saved from More at the top right of the request list."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "還沒有儲存的工作階段。隧道中斷時會自動儲存當次的抓包，也可以在請求列表右上角「更多」中儲存目前抓包。"
+            "value": "暫無已儲存的工作階段。通道中斷時自動儲存當次擷取，也可在請求列表右上角「更多」中儲存。"
           }
         }
       }
@@ -20563,18 +20563,18 @@
         }
       }
     },
-    "zip 里有连接清单、HAR 和 pcapng；pcapng 可用 Wireshark 打开，HAR 可导入浏览器开发者工具或其他抓包工具。“完整”不遮盖账号、Cookie 等敏感信息，请只发给信任的人。": {
+    "zip 内含连接清单、HAR 和 pcapng。“完整”不遮盖账号、Cookie 等敏感信息，请仅发给信任的人。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The zip holds a connection list, HAR and pcapng. Open the pcapng in Wireshark; import the HAR into browser developer tools or other capture tools. “Complete” does not mask accounts, cookies or other sensitive data, so share it only with people you trust."
+            "value": "The zip holds a connection list, HAR and pcapng. “Complete” does not mask accounts, cookies or other sensitive data; share it only with trusted people."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "zip 裡有連線清單、HAR 和 pcapng；pcapng 可用 Wireshark 開啟，HAR 可匯入瀏覽器開發者工具或其他抓包工具。「完整」不遮蓋帳號、Cookie 等敏感資訊，請只傳給信任的人。"
+            "value": "zip 內含連線清單、HAR 和 pcapng。「完整」不遮蓋帳號、Cookie 等敏感資訊，請僅傳給信任的人。"
           }
         }
       }
@@ -20595,34 +20595,34 @@
         }
       }
     },
-    "已保存的抓包里没有这个连接：它出现在最后一次保存之后，或已被更新的连接挤出（抓包内存有上限）。": {
+    "已保存的抓包中没有此连接：它出现在最后一次保存之后，或已被较新的连接挤出。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This connection is not in the saved capture: it appeared after the last save, or newer connections pushed it out (capture memory is limited)."
+            "value": "This connection is not in the saved capture: it appeared after the last save, or newer connections pushed it out."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "已儲存的抓包裡沒有這個連線：它出現在最後一次儲存之後，或已被更新的連線擠出（抓包記憶體有上限）。"
+            "value": "已儲存的擷取中沒有此連線：它出現在最後一次儲存之後，或已被較新的連線擠出。"
           }
         }
       }
     },
-    "手机和 Mac 连同一个 Wi-Fi，把手机的 Wi-Fi 代理设成 Mac，手机的请求就会出现在请求页。只接受局域网里的设备，默认还要填用户名和密码；断开连接时一并关闭。": {
+    "将手机的 Wi-Fi 代理设为这台 Mac（同一 Wi-Fi）后，手机请求出现在请求页。仅接受局域网设备，默认需用户名和密码；断开连接时关闭。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Put the phone and the Mac on the same Wi-Fi and set the phone's Wi-Fi proxy to the Mac; the phone's requests then appear on the Requests page. Only devices on the local network are accepted, by default they must enter a username and password, and it turns off when you disconnect."
+            "value": "With the phone's Wi-Fi proxy set to this Mac on the same Wi-Fi, the phone's requests appear on the Requests page. Only local network devices are accepted, a username and password are required by default, and it turns off on disconnect."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "手機和 Mac 連同一個 Wi-Fi，把手機的 Wi-Fi 代理設成 Mac，手機的請求就會出現在請求頁。只接受區域網路裡的裝置，預設還要填使用者名稱和密碼；斷開連線時一併關閉。"
+            "value": "將手機的 Wi-Fi 代理設為這台 Mac（同一 Wi-Fi）後，手機請求出現在請求頁。僅接受區域網路裝置，預設需使用者名稱和密碼；中斷連線時關閉。"
           }
         }
       }
@@ -20787,34 +20787,34 @@
         }
       }
     },
-    "任何人都能使用这个代理：同一网络里的任何设备都能通过这台 Mac 和你的节点上网，它们的请求也会进入抓包。只在可信的网络里关闭密码。": {
+    "任何人都能使用此代理：同一网络内的设备均可通过这台 Mac 和所用节点上网，其请求也会进入抓包。仅在可信网络中关闭密码。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Anyone can use this proxy: any device on the same network can go online through this Mac and your nodes, and its requests end up in the capture. Turn the password off only on a network you trust."
+            "value": "Anyone can use this proxy: any device on the same network can go online through this Mac and its nodes, and its requests end up in the capture. Turn the password off only on a trusted network."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "任何人都能使用這個代理：同一網路裡的任何裝置都能透過這台 Mac 和你的節點上網，它們的請求也會進入抓包。只在可信的網路裡關閉密碼。"
+            "value": "任何人都能使用此代理：同一網路內的裝置均可透過這台 Mac 和所用節點上網，其請求也會進入擷取。僅在可信網路中關閉密碼。"
           }
         }
       }
     },
-    "iPhone：在 Wi-Fi 代理设置里打开认证，填上面的用户名和密码。Android 的 Wi-Fi 代理没有密码栏，浏览器会在第一次访问时询问，其他应用可能连不上。": {
+    "iPhone：在 Wi-Fi 代理设置中开启认证并填写上方用户名和密码。Android 的 Wi-Fi 代理无密码栏，浏览器首次访问时询问，其他应用可能无法连接。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "iPhone: turn on Authentication in the Wi-Fi proxy settings and enter the username and password above. Android's Wi-Fi proxy has no password field: the browser asks on the first visit, other apps may not connect."
+            "value": "iPhone: turn on Authentication in the Wi-Fi proxy settings and enter the username and password above. Android's Wi-Fi proxy has no password field; the browser asks on first visit and other apps may not connect."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "iPhone：在 Wi-Fi 代理設定裡開啟認證，填上面的使用者名稱和密碼。Android 的 Wi-Fi 代理沒有密碼欄，瀏覽器會在第一次造訪時詢問，其他 App 可能連不上。"
+            "value": "iPhone：在 Wi-Fi 代理設定中開啟認證並填寫上方使用者名稱和密碼。Android 的 Wi-Fi 代理無密碼欄，瀏覽器首次造訪時詢問，其他 App 可能無法連線。"
           }
         }
       }

@@ -309,10 +309,10 @@ public enum ClientReport {
         if health.hint == "clock", let skew = health.clockSkewSecs {
             let minutes = max(1, Int((Double(abs(skew)) / 60).rounded()))
             return skew > 0
-                ? String(localized: "节点「\(node)」连不上：手机时间慢了约 \(minutes) 分钟。请在设置里打开「自动设置」时间后重试。")
-                : String(localized: "节点「\(node)」连不上：手机时间快了约 \(minutes) 分钟。请在设置里打开「自动设置」时间后重试。")
+                ? String(localized: "节点「\(node)」无法连接：设备时间慢约 \(minutes) 分钟。请在设置中开启“自动设置”时间后重试。")
+                : String(localized: "节点「\(node)」无法连接：设备时间快约 \(minutes) 分钟。请在设置中开启“自动设置”时间后重试。")
         }
-        return String(localized: "节点「\(node)」被服务器拒绝：订阅可能已到期或被重置，也可能是手机时间不准。请更新订阅，或检查时间后重试。")
+        return String(localized: "节点「\(node)」被服务器拒绝：订阅可能已到期或被重置，或设备时间不准。请更新订阅或校准时间后重试。")
     }
 }
 

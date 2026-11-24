@@ -34,7 +34,7 @@ struct MacExtensionsPage: View {
                 plugins.refreshTrust()
             }
         } message: {
-            Text("已连接的隧道会自动重新连接并改用新证书。系统会要求输入登录密码，撤销这台 Mac 对旧证书的信任；新证书需要重新加入钥匙串并信任。其他装过旧证书的设备要分别删除它。")
+            Text("已连接的隧道自动重新连接并改用新证书。系统要求输入登录密码，撤销这台 Mac 对旧证书的信任；新证书需重新加入钥匙串并信任，其他设备上的旧证书需分别删除。")
         }
         .sheet(isPresented: $importingRoot) {
             MacImportRootSheet { certificatePEM, privateKeyPEM in
@@ -134,10 +134,10 @@ struct MacExtensionsPage: View {
                 }
             }
 
-            Button("使用自己的根证书…") {
+            Button("使用自定义根证书…") {
                 importingRoot = true
             }
-            .help("团队已有 CA 时换成它，Mac 和其他设备信任同一张根证书。")
+            .help("替换为团队已有的 CA，各设备信任同一根证书。")
 
             if let error = certificate.error {
                 Text(error)
@@ -148,7 +148,7 @@ struct MacExtensionsPage: View {
         } header: {
             Text("HTTPS 解密证书")
         } footer: {
-            Text("证书和私钥只保存在本机钥匙串。重新生成或换成自己的根证书后，已连接的隧道会自动重新连接，这台 Mac 撤销对旧证书的信任；已安装旧证书的其他设备要改装新证书。如果“信任证书”没有成功：在“钥匙串访问”中双击这张证书，展开“信任”，把“使用此证书时”设为“始终信任”。Firefox 使用自己的证书列表，需要另外导入。")
+            Text("证书和私钥只保存在本机钥匙串；重新生成或更换根证书后，已连接的隧道自动重新连接，这台 Mac 撤销对旧证书的信任，其他设备需改装新证书。若“信任证书”未成功，在“钥匙串访问”中将该证书设为“始终信任”；Firefox 使用独立证书列表，需另行导入。")
         }
     }
 }
@@ -284,7 +284,7 @@ final class MacCertificateModel: ObservableObject {
         if trusted == errSecSuccess {
             error = nil
         } else if trusted == errSecAuthFailed || trusted == errAuthorizationCanceled {
-            error = String(localized: "已取消。证书已加入钥匙串，但还没有设为始终信任。")
+            error = String(localized: "已取消。证书已加入钥匙串，但尚未设为始终信任。")
         } else {
             error = String(localized: "无法设置信任（OSStatus \(trusted)），请用“钥匙串访问”手动信任。")
         }
@@ -350,9 +350,9 @@ private struct MacImportRootSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("使用自己的根证书")
+            Text("使用自定义根证书")
                 .font(.headline)
-            Text("粘贴 PEM 格式的 CA 证书和它的私钥。私钥需要是 P-256（prime256v1）密钥，只保存在本机钥匙串。替换后已连接的隧道会自动重新连接，这台 Mac 撤销对旧证书的信任（需要登录密码）。")
+            Text("粘贴 PEM 格式的 CA 证书和它的私钥。私钥需为 P-256（prime256v1）密钥，只保存在本机钥匙串；替换后已连接的隧道自动重新连接，这台 Mac 撤销对旧证书的信任（需要登录密码）。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

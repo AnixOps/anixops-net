@@ -99,7 +99,7 @@ export function ExchangeInspector({ request, exchange, siblings, place, waiting,
   } else if (shown === "response") {
     panel = answered
       ? <MessagePanel side="response" message={exchange.response} part={responsePart} onPart={setResponsePart} />
-      : <div className="inspector-wait"><EmptyState icon={FileSearch} title={t("还没有响应")} message={noteText(exchange.note) ?? t("响应到达后显示在这里。")} /></div>;
+      : <div className="inspector-wait"><EmptyState icon={FileSearch} title={t("暂无响应")} message={noteText(exchange.note) ?? t("响应到达后显示在这里。")} /></div>;
   } else {
     panel = <Timeline exchange={exchange} siblings={siblings ?? [exchange]} />;
   }
@@ -395,7 +395,7 @@ function FramesPanel({ connectionId }: { connectionId: number }) {
         {[t("共 {count} 帧", { count: seen }), dropped > 0 ? t("较早的 {count} 帧未保留", { count: dropped }) : null].filter(Boolean).join(" · ")}
       </p>
       {shown.length === 0
-        ? <p className="muted inspector-note">{gone ? t("这个连接的抓包内容已被更新的连接挤出（抓包内存有上限），或抓包已清空。") : t("没有符合条件的帧")}</p>
+        ? <p className="muted inspector-note">{gone ? t("该连接的抓包内容已被新内容替换，或抓包已清空。") : t("没有符合条件的帧")}</p>
         : (
           <table className="h2-frames">
             <thead>

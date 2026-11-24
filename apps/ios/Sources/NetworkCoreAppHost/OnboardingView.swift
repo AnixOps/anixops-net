@@ -2,7 +2,7 @@ import NetworkCoreBridge
 import SwiftUI
 
 /// First run: what the app does in one sentence, why iOS will ask to add a VPN configuration, and one way forward,
-/// importing a subscription. Shown once, only while nothing has been imported; 稍后再说 or an import ends it.
+/// importing a subscription. Shown once, only while nothing has been imported; 稍后 or an import ends it.
 struct OnboardingView: View {
     static let storageKey = AppMode.onboardingDoneKey
 
@@ -19,13 +19,13 @@ struct OnboardingView: View {
                 .font(BrandFont.display)
                 .foregroundStyle(brand.text)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("导入你的订阅，就能按规则把需要的流量走代理，其余直连。")
+            Text("导入订阅后按规则分流：所需流量走代理，其余直连。")
                 .font(.title3)
                 .foregroundStyle(brand.text2)
                 .fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: 14) {
                 point("link", "支持订阅链接、节点链接、二维码，以及常见格式的配置文件。")
-                point("lock.shield", "第一次连接时，iOS 会请求添加 VPN 配置。它只用来把流量交给本 App 分流，不收集你的浏览记录。")
+                point("lock.shield", "首次连接时，iOS 会请求添加 VPN 配置，仅用于将流量交给本 App 分流，不收集浏览记录。")
                 point("key", "节点密码只保存在本机钥匙串里。")
             }
             .padding(.top, 8)
@@ -37,7 +37,7 @@ struct OnboardingView: View {
             }
             .buttonStyle(.brandPrimary)
             Button(action: later) {
-                Text("稍后再说")
+                Text("稍后")
                     .font(.body.weight(.semibold))
                     .frame(maxWidth: .infinity, minHeight: 44)
             }

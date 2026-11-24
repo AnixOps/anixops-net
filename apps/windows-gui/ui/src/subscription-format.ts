@@ -42,7 +42,7 @@ export function usedFraction(used: number | undefined, total: number | undefined
 
 const errorReasons: Record<string, string> = {
   fetch_timeout: "下载订阅超时",
-  fetch_unreachable: "连不上订阅服务器",
+  fetch_unreachable: "无法访问订阅服务器",
   fetch_failed: "下载订阅失败",
   invalid_payload: "订阅内容里没有可用的节点",
   runtime_active: "先断开连接再使用这份订阅",

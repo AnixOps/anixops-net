@@ -165,7 +165,7 @@ private struct MacHeroCard: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "globe")
-                        Text(tunnel.nodeName ?? String(localized: "还没有节点"))
+                        Text(tunnel.nodeName ?? String(localized: "暂无节点"))
                             .lineLimit(1)
                         Image(systemName: "chevron.up.chevron.down")
                             .font(.caption2.weight(.semibold))
@@ -299,7 +299,7 @@ private struct MacSubscriptionCard: View {
                     }
                 }
             } else {
-                Text("还没有订阅。导入后节点会出现在“代理”里。")
+                Text("暂无订阅。导入后节点显示在“代理”页。")
                     .font(.callout)
                     .foregroundStyle(brand.text2)
                 Spacer(minLength: 0)
@@ -773,7 +773,7 @@ struct MacCommandLineSection: View {
 
     var body: some View {
         Section("命令行") {
-            Text("在终端用 anixops 查看状态、连接、切换节点、测速和导入。在终端运行下面的命令后即可使用：")
+            Text("在终端用 anixops 查看状态、连接、切换节点、测速和导入。运行下方命令后可用：")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             HStack(alignment: .top) {
@@ -817,7 +817,7 @@ struct MacMetricsSection: View {
         } header: {
             Text("指标")
         } footer: {
-            Text("只监听本机回环地址，连接时包含内核的连接、流量和节点健康指标，与 Windows、Linux 客户端相同。")
+            Text("仅监听本机回环地址；连接时包含内核的连接、流量和节点健康指标。")
         }
     }
 }
@@ -876,7 +876,7 @@ private struct MacUpdateSection: View {
             }
         case let .ready(item, _):
             available(item)
-            Text("安装包已下载并通过签名校验。安装程序打开后 AnixOps Net 会退出，安装完成后重新打开即可。")
+            Text("安装包已下载并通过签名校验。安装程序打开后 AnixOps Net 退出，完成后重新打开。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             HStack {

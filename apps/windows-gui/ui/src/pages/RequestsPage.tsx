@@ -262,7 +262,7 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
         {tools}
         <div className="page-placeholder">
           <div className="setup-stack">
-            <EmptyState icon={PlugZap} title={t("还没有连接")} message={t("用连接开关连接后，经过本机的 HTTP 请求会逐条列在这里。调试模式默认直连，不需要节点。断开前抓到的内容会自动保存，可以在“已保存”里打开。")} />
+            <EmptyState icon={PlugZap} title={t("暂无连接")} message={t("连接后，经过本机的 HTTP 请求逐条列在此处。中断前抓到的内容自动保存在“已保存”中。")} />
             {setupCard(true)}
           </div>
         </div>
@@ -272,7 +272,7 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
 
   const savedBanner = saved && (
     <p className="muted saved-capture-note" role="status">
-      {t("隧道已断开，下面是断开前抓到的内容，已加密保存 7 天，可以在“更多”里打包导出。")}
+      {t("隧道已断开。断开前抓到的内容已加密保存 7 天，可在“更多”中导出。")}
     </p>
   );
   if (view === "connections") return <>{tools}{savedBanner}<ConnectionsView snapshot={snapshot} busy={busy} run={run} debug saved={saved} /></>;
@@ -284,7 +284,7 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
         {tools}
         <div className="page-placeholder">
           <div className="setup-stack">
-            <EmptyState icon={FileSearch} title={t("还没有开始抓包")} message={t("开始抓包后，新的请求会逐条出现在这里。要看到 HTTPS 明文，还要在“改写”里信任解密证书，并为要看的域名开启解密。")}>
+            <EmptyState icon={FileSearch} title={t("未开始抓包")} message={t("开始抓包后，新请求显示在此处。查看 HTTPS 明文需在“改写”中信任解密证书并开启域名解密。")}>
               <button className="primary" onClick={() => change(() => desktop.setCapture(true))}>{t("开始抓包")}</button>
             </EmptyState>
             {setupCard(false)}
@@ -300,7 +300,7 @@ export function RequestsPage({ snapshot, busy, run, onOpenRewrite }: {
       {paused && <p className="muted request-paused">{t("已暂停刷新，新的请求仍在记录。")}</p>}
       {feed.rows.length === 0 ? (
         <div className="request-empty">
-          <p className="muted">{filter ? t("没有匹配的请求。") : t("还没有解密的请求。HTTPS 请求要先在“改写”里为域名开启解密。")}</p>
+          <p className="muted">{filter ? t("没有匹配的请求。") : t("暂无解密请求，HTTPS 请求需先在“改写”中为域名开启解密")}</p>
         </div>
       ) : (
         <RequestTable

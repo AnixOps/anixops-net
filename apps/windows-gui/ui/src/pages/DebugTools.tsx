@@ -171,7 +171,7 @@ export function MappingEditor({ initial, busy, run, onDone }: { initial: DebugMa
       <BackBar label={t("返回")} onBack={onDone} />
       <Card
         title={initial.id ? t("编辑映射") : t("新建映射")}
-        description={t("映射只对已解密的域名生效：保存后会把这个域名加入 HTTPS 解密，需要先开启 HTTPS 解密。")}
+        description={t("保存后该域名加入 HTTPS 解密，需先开启 HTTPS 解密。")}
       >
         <Row label={t("方式")}>
           <Segmented
@@ -245,11 +245,11 @@ export function MappingsCard({ busy, run, onEdit }: { busy: string | null; run: 
   return (
     <Card
       title={t("映射")}
-      description={t("Map Local 用本地内容应答请求，Map Remote 把请求转到其他网址。也可以在抓包的请求详情里一键生成。需要开启 HTTPS 解密。")}
+      description={t("Map Local 以本地内容应答请求，Map Remote 将请求转到其他网址。需开启 HTTPS 解密。")}
       actions={<button className="secondary compact" disabled={Boolean(busy)} onClick={() => onEdit(emptyMapping)}><Plus size={14} />{t("新建映射")}</button>}
     >
       {entries.length === 0 ? (
-        <EmptyState icon={Shuffle} title={t("还没有映射")} message={t("在请求详情里选择“映射到本地”或“映射到远程”，或在这里新建。")} />
+        <EmptyState icon={Shuffle} title={t("暂无映射")} message={t("可从请求详情创建，或在此新建。")} />
       ) : (
         <FoldedRows
           items={entries}
