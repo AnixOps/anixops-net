@@ -77,6 +77,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private let physicalNetwork = PhysicalNetworkMonitor()
     /// When the device went to sleep, to decide on wake whether open connections are still worth keeping.
     private var sleptAt: Date?
+    /// Set when the tunnel is stopped while a start waits to reconnect (`AutoReconnect`).
+    private let startGate = StartGate()
+    /// The start whose stable connection resets the reconnect count; cleared when the tunnel stops.
+    private let stableToken = Locked<UUID?>(nil)
 
     #if os(macOS)
     /// Pins the engine's sockets to the physical interface (see `BoundInterfaceMonitor`).
@@ -86,6 +90,187 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     #endif
 
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
+        let user = AutoReconnect.isUserStart(options)
+        var state = AutoReconnect.load()
+        let decision = AutoReconnect.begin(&state, user: user, unit: Double.random(in: 0..<1))
+        AutoReconnect.save(state)
+        switch decision {
+        case .refuse:
+            refuseStart(options: options, completionHandler: completionHandler)
+        case let .attempt(attempt, delay):
+            events.record("start \(attempt) of at most \(AutoReconnect.maxAttempts)\(user ? ", asked by the user" : "")")
+            let counted = countedCompletion(completionHandler)
+            guard delay > 0 else {
+                launchTunnel(options: options, completionHandler: counted)
+                return
+            }
+            // The system starts a failed tunnel again at once; each start after the first waits longer.
+            events.record("reconnecting in \(Int(delay.rounded())) s")
+            startGate.arm()
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self else {
+                    completionHandler(PacketTunnelFailure(reason: "tunnel provider was released"))
+                    return
+                }
+                guard !self.startGate.cancelled else {
+                    // Stopped while waiting (the user disconnected): not a failure of the start.
+                    self.events.record("reconnect cancelled while waiting")
+                    completionHandler(PacketTunnelFailure(reason: "start cancelled"))
+                    return
+                }
+                self.launchTunnel(options: options, completionHandler: counted)
+            }
+        }
+    }
+
+    /// Counts the end of a start (`AutoReconnect`): a failure makes the next start wait longer, and the last one
+    /// allowed, or one no retry can fix, turns reconnecting off before the system hears of it, so it does not start
+    /// the tunnel again. A start that worked counts from one again once the tunnel stayed up `stableAfter`.
+    private func countedCompletion(_ completionHandler: @escaping (Error?) -> Void) -> (Error?) -> Void {
+        { [weak self] error in
+            guard let error else {
+                self?.watchStable()
+                completionHandler(nil)
+                return
+            }
+            var state = AutoReconnect.load()
+            let failure = error as? PacketTunnelFailure
+            let outcome = AutoReconnect.failed(&state, fatal: failure?.fatal == true)
+            AutoReconnect.save(state)
+            guard case let .stopped(fatal) = outcome, let self else {
+                completionHandler(error)
+                return
+            }
+            let reason = failure?.reason ?? error.localizedDescription
+            self.events.record(fatal
+                ? "auto-reconnect stopped: cannot be fixed by retrying"
+                : "auto-reconnect stopped after \(AutoReconnect.maxAttempts) failed starts")
+            self.postReconnectStopped(fatal: fatal)
+            self.turnOffOnDemand { _ in
+                completionHandler(PacketTunnelFailure(
+                    reason: AutoReconnect.stoppedReason(reason, fatal: fatal), fatal: fatal
+                ))
+            }
+        }
+    }
+
+    /// A start while reconnecting is stopped. With On Demand already off it cannot be the system's own start: the user
+    /// switched the VPN on in Settings or Control Center, so it goes ahead as theirs. Otherwise it fails, after
+    /// turning On Demand off; when that is not possible here (the macOS System Extension), it fails only after
+    /// `refusalHold`, so the system's restarts stay slow until the app turns it off.
+    private func refuseStart(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
+        events.record("start refused: auto-reconnect stopped")
+        ownManager { [weak self] manager in
+            guard let self else {
+                completionHandler(PacketTunnelFailure(reason: "tunnel provider was released"))
+                return
+            }
+            if let manager, !manager.isOnDemandEnabled {
+                var state = AutoReconnect.load()
+                _ = AutoReconnect.begin(&state, user: true, unit: 0)
+                AutoReconnect.save(state)
+                self.events.record("start 1 of at most \(AutoReconnect.maxAttempts), from the system settings")
+                self.launchTunnel(options: options, completionHandler: self.countedCompletion(completionHandler))
+                return
+            }
+            let refused = PacketTunnelFailure(
+                reason: AutoReconnect.stoppedReason("auto-reconnect is stopped; connect from the app", fatal: false)
+            )
+            self.turnOffOnDemand(manager: manager) { turnedOff in
+                guard !turnedOff else {
+                    completionHandler(refused)
+                    return
+                }
+                DispatchQueue.global().asyncAfter(deadline: .now() + AutoReconnect.refusalHold) {
+                    completionHandler(refused)
+                }
+            }
+        }
+    }
+
+    /// Resets the count once the tunnel that just started has stayed up `stableAfter`.
+    private func watchStable() {
+        let token = UUID()
+        stableToken.set(token)
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + AutoReconnect.stableAfter) { [weak self] in
+            guard let self, self.stableToken.get() == token else {
+                return
+            }
+            var state = AutoReconnect.load()
+            AutoReconnect.stable(&state)
+            AutoReconnect.save(state)
+            self.events.record("connection stable: reconnect count reset")
+        }
+    }
+
+    /// This tunnel's own VPN configuration, or nil when the extension cannot read it (the macOS System Extension, a
+    /// root process, has none). Answers within five seconds whatever the system does.
+    private func ownManager(_ completion: @escaping (NETunnelProviderManager?) -> Void) {
+        let once = Once(completion)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
+            once.call(nil)
+        }
+        let bundle = Bundle.main.bundleIdentifier
+        NETunnelProviderManager.loadAllFromPreferences { managers, _ in
+            let own = managers?.first {
+                ($0.protocolConfiguration as? NETunnelProviderProtocol)?.providerBundleIdentifier == bundle
+            }
+            once.call(own ?? (managers?.count == 1 ? managers?.first : nil))
+        }
+    }
+
+    /// Turns On Demand off so the system stops starting the tunnel; the app turns it on again with the user's next
+    /// connect. Answers whether it is off now.
+    private func turnOffOnDemand(manager known: NETunnelProviderManager? = nil, _ completion: @escaping (Bool) -> Void) {
+        let save: (NETunnelProviderManager?) -> Void = { [events] manager in
+            guard let manager else {
+                completion(false)
+                return
+            }
+            guard manager.isOnDemandEnabled else {
+                completion(true)
+                return
+            }
+            let once = Once(completion)
+            DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
+                once.call(false)
+            }
+            manager.isOnDemandEnabled = false
+            manager.saveToPreferences { error in
+                events.record(error == nil ? "auto-reconnect turned off" : "auto-reconnect could not be turned off")
+                once.call(error == nil)
+            }
+        }
+        if let known {
+            save(known)
+        } else {
+            ownManager(save)
+        }
+    }
+
+    /// Tells the user the tunnel stopped reconnecting by itself (iOS only, as `postStopNotification`).
+    private func postReconnectStopped(fatal: Bool) {
+        #if os(iOS)
+        let settings = NotificationSettings.fromProfileValue(
+            (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration?[TunnelProfileKeys.notifications] as? Data
+        )
+        guard settings.connection else {
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "AnixOps Net 未能连接")
+        content.body = fatal
+            ? String(localized: "这个问题重试也无法解决，已停止自动重连。打开 App 查看原因。")
+            : String(localized: "连续 5 次没有连上，已停止自动重连。打开 App 重试或换一个节点。")
+        content.threadIdentifier = "connection"
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: "connection-stopped", content: content, trigger: nil)
+        )
+        #endif
+    }
+
+    /// The start itself, after any wait.
+    private func launchTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         #if os(macOS)
         // A macOS packet tunnel's own sockets follow the routing table, so with the default route in the tunnel
         // the engine's connections would loop back into it. Pin them to the physical interface first.
@@ -124,23 +309,27 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             embeddedRuntime: runtimeFact
         )
         if !status.tunnel.available {
-            completionHandler(PacketTunnelFailure(reason: status.tunnel.unavailableReason ?? "iOS tunnel is unavailable"))
+            completionHandler(PacketTunnelFailure(
+                reason: status.tunnel.unavailableReason ?? "iOS tunnel is unavailable", fatal: true
+            ))
             return
         }
         if !status.embeddedRuntime.available {
             completionHandler(
-                PacketTunnelFailure(reason: status.embeddedRuntime.unavailableReason ?? "iOS embedded runtime is unavailable")
+                PacketTunnelFailure(
+                    reason: status.embeddedRuntime.unavailableReason ?? "iOS embedded runtime is unavailable", fatal: true
+                )
             )
             return
         }
         guard let tunnelProtocol = protocolConfiguration as? NETunnelProviderProtocol,
               let template = tunnelProtocol.providerConfiguration?[TunnelProfileKeys.runtimeConfig] as? Data
         else {
-            completionHandler(PacketTunnelFailure(reason: "tunnel profile is missing"))
+            completionHandler(PacketTunnelFailure(reason: "tunnel profile is missing", fatal: true))
             return
         }
         guard let keyReference = tunnelProtocol.passwordReference else {
-            completionHandler(PacketTunnelFailure(reason: "tunnel profile has no node key; import the node again"))
+            completionHandler(PacketTunnelFailure(reason: "tunnel profile has no node key; import the node again", fatal: true))
             return
         }
         var config: EmbeddedRuntimeConfig
@@ -160,7 +349,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             )))
             return
         } catch {
-            completionHandler(PacketTunnelFailure(reason: "tunnel profile is malformed"))
+            completionHandler(PacketTunnelFailure(reason: "tunnel profile is malformed", fatal: true))
             return
         }
         // The subscription's rules and groups go in whatever the mode, so the app can switch modes without a restart.
@@ -258,14 +447,17 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             events.record("runtime initialized")
         } catch let tooLarge as EngineBudget.TooLarge {
             completionHandler(PacketTunnelFailure(
-                reason: "tunnel config is too large for the engine (\(tooLarge.bytes) of \(tooLarge.limit) bytes); remove DNS rules or redirects"
+                reason: "tunnel config is too large for the engine (\(tooLarge.bytes) of \(tooLarge.limit) bytes); remove DNS rules or redirects",
+                fatal: true
             ))
             return
         } catch let failure as EmbeddedRuntimeSession.Failure {
-            completionHandler(PacketTunnelFailure(reason: "embedded runtime rejected the tunnel profile (code \(failure.code))"))
+            completionHandler(PacketTunnelFailure(
+                reason: "embedded runtime rejected the tunnel profile (code \(failure.code))", fatal: true
+            ))
             return
         } catch {
-            completionHandler(PacketTunnelFailure(reason: "embedded runtime rejected the tunnel profile"))
+            completionHandler(PacketTunnelFailure(reason: "embedded runtime rejected the tunnel profile", fatal: true))
             return
         }
 
@@ -282,7 +474,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             routesTraffic: routesTraffic,
             proxy: proxy
         ) else {
-            completionHandler(PacketTunnelFailure(reason: "tunnel profile has invalid interface addresses"))
+            completionHandler(PacketTunnelFailure(reason: "tunnel profile has invalid interface addresses", fatal: true))
             return
         }
         setTunnelNetworkSettings(settings) { [weak self] error in
@@ -328,6 +520,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
         Self.log.notice("stopTunnel reason \(reason.rawValue, privacy: .public)")
         events.record("stopTunnel reason \(reason.rawValue)")
+        startGate.cancel()
+        stableToken.set(nil)
         postStopNotification(reason)
         trafficStats.stop()
         scriptEvents.stop()
@@ -1102,6 +1296,14 @@ struct PacketTunnelFailure: LocalizedError, CustomNSError {
     static let errorDomain = "networkcore.packet-tunnel"
 
     let reason: String
+    /// No retry can fix it (an engine this build cannot run, a profile the engine refuses): the tunnel stops
+    /// reconnecting by itself at once (`AutoReconnect`).
+    var fatal = false
+
+    init(reason: String, fatal: Bool = false) {
+        self.reason = reason
+        self.fatal = fatal
+    }
 
     var errorDescription: String? {
         reason
@@ -1113,5 +1315,69 @@ struct PacketTunnelFailure: LocalizedError, CustomNSError {
 
     var errorUserInfo: [String: Any] {
         [NSLocalizedDescriptionKey: reason]
+    }
+}
+
+/// Whether the tunnel was stopped while a start waited (`AutoReconnect`).
+final class StartGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stopped = false
+
+    func arm() {
+        lock.lock()
+        stopped = false
+        lock.unlock()
+    }
+
+    func cancel() {
+        lock.lock()
+        stopped = true
+        lock.unlock()
+    }
+
+    var cancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return stopped
+    }
+}
+
+/// A value behind a lock.
+final class Locked<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Value
+
+    init(_ value: Value) {
+        self.value = value
+    }
+
+    func get() -> Value {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+
+    func set(_ next: Value) {
+        lock.lock()
+        value = next
+        lock.unlock()
+    }
+}
+
+/// Calls a completion once, whichever answer comes first.
+final class Once<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var completion: ((Value) -> Void)?
+
+    init(_ completion: @escaping (Value) -> Void) {
+        self.completion = completion
+    }
+
+    func call(_ value: Value) {
+        lock.lock()
+        let pending = completion
+        completion = nil
+        lock.unlock()
+        pending?(value)
     }
 }

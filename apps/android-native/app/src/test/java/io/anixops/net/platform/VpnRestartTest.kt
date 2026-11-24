@@ -17,6 +17,7 @@ class VpnRestartTest {
     fun anEngineThatKeepsDyingIsNotRestartedForever() {
         assertEquals(Restart.Reconnect, restartAction(VpnWant.Connected, MAX_RESTARTS - 1))
         assertEquals(Restart.GiveUp, restartAction(VpnWant.Connected, MAX_RESTARTS))
+        assertEquals(5, MAX_RESTARTS)
         // Waiting for the network starts no engine, so it never gives up.
         assertEquals(Restart.Wait, restartAction(VpnWant.Waiting, MAX_RESTARTS + 5))
     }

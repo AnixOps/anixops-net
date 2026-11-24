@@ -69,7 +69,8 @@ enum TunnelSwitch {
             try await manager.loadFromPreferences()
         }
         do {
-            try manager.connection.startVPNTunnel()
+            // The user's own start: it counts from one again, also after reconnecting stopped (`AutoReconnect`).
+            try manager.connection.startVPNTunnel(options: AutoReconnect.userStart())
         } catch {
             throw Failure.startFailed
         }

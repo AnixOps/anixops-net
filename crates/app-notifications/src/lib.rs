@@ -115,6 +115,34 @@ impl Settings {
         ))
     }
 
+    /// The Wi-Fi rules stopped trying to connect on this network after `failures` failed connects in a row, the
+    /// last with `error`; a new network, or a connect by hand, starts over.
+    pub fn on_demand_stopped(&self, error: &str, failures: u32) -> Option<Notice> {
+        if !self.connection {
+            return None;
+        }
+        let (title, lead) = match self.language() {
+            Language::English => (
+                "Stopped reconnecting".to_string(),
+                format!("{failures} connection attempts in a row failed. Open AnixOps Net to retry or switch to another node"),
+            ),
+            Language::Traditional => (
+                "已停止自動重新連線".to_string(),
+                format!("連續 {failures} 次沒有連上。打開 AnixOps Net 重試或換一個節點"),
+            ),
+            Language::Simplified => (
+                "已停止自动重连".to_string(),
+                format!("连续 {failures} 次没有连上。打开 AnixOps Net 重试或换一个节点"),
+            ),
+        };
+        let error: String = error.chars().take(200).collect();
+        Some(Notice::new(
+            NoticeKind::Connection,
+            &title,
+            &format!("{lead} ({error})"),
+        ))
+    }
+
     /// The notice when the window found, as it started, the system proxy of a session that did not end properly
     /// (a crash, the process ended, a sign-out or shutdown while connected) and put the user's own settings back.
     /// Shown whatever the switches: the user's network settings changed.
@@ -356,6 +384,11 @@ mod tests {
         assert_eq!(failed.title, "Wi-Fi 規則未能連線");
         assert!(failed.body.ends_with("(timed out)"));
         assert_eq!(failed.kind, NoticeKind::Connection);
+        let stopped = settings.on_demand_stopped("timed out", 5).unwrap();
+        assert_eq!(stopped.title, "已停止自動重新連線");
+        assert!(stopped.body.starts_with("連續 5 次沒有連上"));
+        assert!(stopped.body.ends_with("(timed out)"));
+        assert_eq!(stopped.kind, NoticeKind::Connection);
         assert_eq!(
             settings.subscription_failed("HK", "x").unwrap().kind,
             NoticeKind::Subscription
@@ -364,6 +397,7 @@ mod tests {
         settings.subscriptions = false;
         assert!(settings.disconnected(false).is_none());
         assert!(settings.on_demand_failed("x").is_none());
+        assert!(settings.on_demand_stopped("x", 5).is_none());
         assert!(settings.subscription_failed("HK", "x").is_none());
     }
 
