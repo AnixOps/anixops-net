@@ -230,7 +230,7 @@ public struct RoutingState: Codable, Equatable {
     public var notice: String? {
         switch (status, reason) {
         case (.off, .tooLarge):
-            return String(localized: "规则没有生效：节点、规则和已启用的插件合计超出了隧道配置的上限，隧道只用选中的节点。请减少规则或规则集、停用一些插件后重新连接。")
+            return String(localized: "规则未生效：节点、规则和已启用的插件合计超出隧道配置上限，隧道仅使用所选节点。请减少规则或停用部分插件后重新连接。")
         case (.off, _):
             return String(localized: "规则没有生效：内核没有接受分流设置，隧道只用选中的节点。开发者诊断的扩展事件里有原因。")
         case (.on, _) where !droppedRuleSets.isEmpty:

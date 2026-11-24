@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "doc": "guidelines/voice-and-tone.md",
+  "rules": [
+    {"id": "W1", "lang": "zh", "pattern": "[你您妳]", "use": "name the object or action, no second person"},
+    {"id": "W1", "lang": "en", "pattern": "(?i)\\byou(?:r|rs|rself|'re|'ll|'ve|'d)?\\b", "use": "name the object or action, no second person"},
+    {"id": "W2", "lang": "zh", "pattern": "[吧呢啊哦啦呀嘛噢嗯哇]|(?<![统統唯同])一下|咱|啥|咋|搞|弄|就行|就好|再说|再說|记得|記得|放心|赶紧|趕緊|随便|隨便|还没|還沒|了(?=[。，；！？]|$)", "use": "暂无 / 尚未 / 稍后; no particles or spoken words"},
+    {"id": "W2", "lang": "zh", "pattern": "(?<![类類识識区區分特级級个個告差性派组組辨鉴鑑])[别別](?![名称稱])", "use": "勿 / 不"},
+    {"id": "W2", "lang": "en", "pattern": "(?i)\\b\\w+n['’]t\\b|\\b(?:it|that|there|here|what|who|let|we|they|i)['’](?:s|re|ll|ve|d|m)\\b", "use": "no contractions"},
+    {"id": "W2", "lang": "en", "pattern": "(?i)\\b(?:oops|whoops|uh-oh|hmm+|hey|yay|wow|okay|gonna|wanna|stuff|just|simply|easily|basically|actually)\\b", "use": "no interjections or fillers"},
+    {"id": "W3", "lang": "any", "pattern": "[！]|!(?![=\\w])", "use": "no exclamation marks"},
+    {"id": "W5", "lang": "zh", "pattern": "因为|因為|所以|因此|由于|由於|这样|這樣|以便|从而|從而|为了|為了|也就是说|也就是說|换句话说|換句話說|意思是", "use": "cut the explanation (W4)"},
+    {"id": "W5", "lang": "en", "pattern": "(?i)\\bbecause\\b|\\bso that\\b|\\bin order to\\b|\\bthat way\\b|\\bwhich means\\b|\\bthis means\\b|\\bin other words\\b", "use": "cut the explanation (W4)"}
+  ],
+  "max_sentences": 2
+}

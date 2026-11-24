@@ -98,7 +98,7 @@ struct SettingsView: View {
                 } header: {
                     Text("诊断")
                 } footer: {
-                    Text("把诊断信息存成 .log 文件，用系统分享发出去：含版本、扩展内存与事件、运行状态、发热和电量。地址、网址、账号和密钥已去掉。")
+                    Text("将诊断信息保存为 .log 文件，经系统分享发送；地址、网址、账号和密钥已去除。")
                 }
                 .listRowBackground(brand.surface)
             }

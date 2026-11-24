@@ -92,7 +92,7 @@ struct RuleTextEditorView: View {
             if issues.isEmpty {
                 Text("离开后，未保存的修改会丢失。")
             } else {
-                Text("还有错误没有改好，现在不能保存。离开后，未保存的修改会丢失。")
+                Text("仍有错误，暂无法保存。离开后，未保存的修改将丢失。")
             }
         }
         .onAppear {
@@ -159,7 +159,7 @@ struct RuleTextEditorView: View {
                 Label(statusTitle, systemImage: "checkmark.circle")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(brand.text2)
-                Text("一行一条，兼容常见规则语法：类型,值,策略[,no-resolve]。策略写 DIRECT、REJECT，其他名字都当作代理。以 # 开头的整条规则表示停用，其余注释保存时不保留。连接中保存会直接在隧道里换上新规则，已有连接不断开；新增规则列表 URL 时会重新连接。")
+                Text("一行一条，兼容常见规则语法：类型,值,策略[,no-resolve]。策略为 DIRECT、REJECT 或代理名称；以 # 开头表示停用。")
                     .font(.caption)
                     .foregroundStyle(brand.text2)
                     .fixedSize(horizontal: false, vertical: true)

@@ -136,7 +136,7 @@ export function DecryptHostsCard({ busy, run }: { busy: string | null; run: Run 
   return (
     <Card
       title={t("解密域名")}
-      description={t("只解密这里、插件和映射里列出的域名，其余 HTTPS 原样转发。* 匹配任意字符（包括点），? 匹配一个字符；*.example.com 匹配所有子域名，不含 example.com 本身。排除的域名永不解密，优先于所有解密规则；也可以直接写 -example.com。")}
+      description={t("仅解密此处、插件和映射中列出的域名，其余 HTTPS 原样转发。支持 * 与 ? 通配，*.example.com 不含 example.com 本身；排除的域名永不解密。")}
       actions={count > 0 ? <span className="count">{t("{count} 个域名", { count })}</span> : undefined}
     >
       <div className="row import-row">
@@ -153,7 +153,7 @@ export function DecryptHostsCard({ busy, run }: { busy: string | null; run: Run 
       </div>
       {failing.length > 0 && (
         <>
-          <p className="muted">{t("解密失败：根据这次连接以来的解密结果自动标出，只记录域名、次数和原因。App 拒绝证书多半是证书固定，无法解密；排除后它的连接原样转发，App 会照常联网。")}</p>
+          <p className="muted">{t("解密失败：按本次连接以来的解密结果自动标出，仅记录域名、次数和原因。App 拒绝证书多半是证书固定，排除该域名后其连接原样转发。")}</p>
           {failing.map((outcome) => (
             <Row
               key={`failing-${outcome.host}`}
@@ -210,9 +210,9 @@ function useDecryptedDomainCount(hosts: string[]): number {
 }
 
 const steps: Record<SetupStep, { icon: LucideIcon; color: TileColor; label: string; hint: string }> = {
-  connect: { icon: Plug, color: "green", label: "连接|verb", hint: "用连接开关连接。调试模式默认直连，不需要节点。" },
-  certificate: { icon: ShieldCheck, color: "orange", label: "信任根证书", hint: "根证书在本机生成，要你按系统提示手动信任一次。" },
-  decryption: { icon: LockKeyhole, color: "pink", label: "开启 HTTPS 解密", hint: "开启后只解密你列出的域名。" },
+  connect: { icon: Plug, color: "green", label: "连接|verb", hint: "调试模式默认直连，无需节点。" },
+  certificate: { icon: ShieldCheck, color: "orange", label: "信任根证书", hint: "根证书在本机生成，须按系统提示手动信任一次。" },
+  decryption: { icon: LockKeyhole, color: "pink", label: "开启 HTTPS 解密", hint: "开启后仅解密所列域名。" },
   domains: { icon: Globe, color: "sky", label: "添加要解密的域名", hint: "在“改写”里添加，或在加密连接的详情里点“解密此域名”。" },
   capture: { icon: Radio, color: "indigo", label: "开始抓包", hint: "开始后，新的请求会逐条出现在这里。" },
 };

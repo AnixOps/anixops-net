@@ -38,7 +38,7 @@ export function LogsCard({ live, busy, run }: { live: boolean; busy: string | nu
   return (
     <Card
       title={t("日志")}
-      description={t("应用自己的运行记录：连接、断开、订阅更新和出错原因，网址只保留域名。内核不单独记日志。")}
+      description={t("应用的运行记录：连接、断开、订阅更新和出错原因，网址仅保留域名。")}
       actions={<>
         <IconButton label={t("刷新日志")} onClick={load}><RefreshCw size={14} /></IconButton>
         <MoreMenu
@@ -73,7 +73,7 @@ export function LogsCard({ live, busy, run }: { live: boolean; busy: string | nu
         <span className="count">{shown.length}</span>
       </div>
       {shown.length === 0 ? (
-        <EmptyState icon={ScrollText} title={t("日志")} message={all.length === 0 ? t("还没有日志") : t("没有匹配的日志")} />
+        <EmptyState icon={ScrollText} title={t("日志")} message={all.length === 0 ? t("暂无日志") : t("没有匹配的日志")} />
       ) : (
         <>
           <ul className="log-lines">

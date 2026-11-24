@@ -16,8 +16,8 @@ export function ModeChoice({ onChoose }: { onChoose: (mode: AppMode) => void }) 
     <ModalDialog className="mode-dialog">
       <header className="terms-head">
         <div>
-          <Heading slot="title" level={2}>{t("你主要用 AnixOps Net 做什么？")}</Heading>
-          <p>{t("两种模式用同一个内核，只是界面不同。之后可以随时在设置里切换。")}</p>
+          <Heading slot="title" level={2}>{t("主要用途")}</Heading>
+          <p>{t("两种模式使用同一内核，仅界面不同，可随时在设置中切换。")}</p>
         </div>
       </header>
       <div className="mode-options">

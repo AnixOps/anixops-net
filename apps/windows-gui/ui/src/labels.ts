@@ -116,7 +116,7 @@ export function sidebarDetail(input: {
 }
 
 export const routingModes: Array<{ value: RuntimeSnapshot["routingMode"]; label: string; hint: string }> = [
-  { value: "rule", label: "规则", hint: "按订阅自带的规则和你的规则分流，其余走代理" },
+  { value: "rule", label: "规则", hint: "按订阅规则和自定义规则分流，其余走代理" },
   { value: "global", label: "全局", hint: "所有流量都走当前节点，不看规则" },
   { value: "direct", label: "直连", hint: "所有流量直连，不经过节点" },
 ];

@@ -38,9 +38,9 @@ struct NodeCheckupSheet: View {
                     Text(verbatim: node.displayName)
                 } footer: {
                     if throughput {
-                        Text("经该节点访问 1.1.1.1 和 www.gstatic.com 测延迟，并从 speed.cloudflare.com 下载约 8 秒测速度（最多 200 MB，会消耗节点流量）。只在你点开始时运行，不经过隧道。")
+                        Text("经该节点访问 1.1.1.1 和 www.gstatic.com 测延迟，并从 speed.cloudflare.com 下载约 8 秒测速度（最多 200 MB，会消耗节点流量）。仅在点击开始时运行，不经过隧道。")
                     } else {
-                        Text("经该节点访问 1.1.1.1 和 www.gstatic.com 各 5 次，测握手、请求延迟、抖动和丢包。只在你点开始时运行，不经过隧道。")
+                        Text("经该节点访问 1.1.1.1 和 www.gstatic.com 各 5 次，测握手、请求延迟、抖动和丢包。仅在点击开始时运行，不经过隧道。")
                     }
                 }
                 .listRowBackground(brand.surface)

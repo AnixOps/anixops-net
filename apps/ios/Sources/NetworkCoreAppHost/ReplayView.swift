@@ -46,7 +46,7 @@ struct ReplayView: View {
                 Text("请求")
             } footer: {
                 if !complete {
-                    Text("抓到的请求体不完整，没有带上。需要的话在下面补全。")
+                    Text("抓到的请求体不完整，未带上；可在下方补全。")
                 }
             }
             .listRowBackground(brand.surface)

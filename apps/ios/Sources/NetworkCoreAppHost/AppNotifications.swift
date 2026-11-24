@@ -215,7 +215,7 @@ struct NotificationSettingsSection: View {
             if permission == .denied, settings.anyOn {
                 Text("系统设置里关闭了 AnixOps Net 的通知，上面的开关目前不会发出任何通知。")
             } else {
-                Text("关掉后不再发出这类系统通知；也可以在系统设置里关闭 AnixOps Net 的全部通知。")
+                Text("关闭后不再发出此类系统通知。全部通知可在系统设置中关闭。")
             }
         }
         .task {

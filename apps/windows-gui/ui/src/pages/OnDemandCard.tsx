@@ -72,9 +72,9 @@ export function OnDemandCard({ busy, run, android }: { busy: string | null; run:
   const addCurrent = () => void run("Wi-Fi rules", async () => {
     const network = await desktop.currentNetwork(true);
     if (network.kind !== "wifi") return { message: t("现在没有连接 Wi-Fi") };
-    if (!network.ssid) return { message: android ? t("读不到 Wi-Fi 名称，请在系统设置里允许本应用使用位置信息") : t("读不到 Wi-Fi 名称，请在 Windows 设置的“隐私和安全性 > 位置”里允许桌面应用访问位置") };
+    if (!network.ssid) return { message: android ? t("无法读取 Wi-Fi 名称，请在系统设置中允许本应用使用位置信息") : t("无法读取 Wi-Fi 名称，请在 Windows 设置的“隐私和安全性 > 位置”中允许桌面应用访问位置") };
     setDraft(network.ssid);
-    if (!ssidFits(network.ssid)) return { message: t("这个 Wi-Fi 名称超过 32 字节，不能添加规则") };
+    if (!ssidFits(network.ssid)) return { message: t("Wi-Fi 名称超过 32 字节，无法添加规则") };
     return { message: t("已填入当前 Wi-Fi 名称") };
   });
   const setRule = (ssid: string, action: OnDemandAction) =>
@@ -88,8 +88,8 @@ export function OnDemandCard({ busy, run, android }: { busy: string | null; run:
       <Card
         title={t("Wi-Fi 规则")}
         description={android
-          ? t("加入网络时自动连接或断开，应用在后台运行时生效。读取 Wi-Fi 名称需要位置权限，打开时会询问一次。手动连接或断开会保持到下次换网络。")
-          : t("加入网络时自动连接或断开，应用运行时生效。Windows 11 需要在系统设置里允许桌面应用访问位置，才能读到 Wi-Fi 名称。手动连接或断开会保持到下次换网络。")}
+          ? t("加入网络时自动连接或断开，应用在后台运行时生效。读取 Wi-Fi 名称需要位置权限。")
+          : t("加入网络时自动连接或断开，应用运行时生效。读取 Wi-Fi 名称需在系统设置中允许桌面应用访问位置。")}
       >
         <ToggleRow icon={Wifi} color="sky" label={t("按网络自动连接")} checked={settings.enabled} disabled={disabled} onChange={toggle} />
       </Card>

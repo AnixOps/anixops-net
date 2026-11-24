@@ -198,7 +198,7 @@ private struct MacSidebarStatus: View {
         if tunnel.appMode == .debug {
             return tunnel.debugExitSummary
         }
-        return tunnel.nodeName ?? String(localized: "还没有节点")
+        return tunnel.nodeName ?? String(localized: "暂无节点")
     }
 
     var body: some View {

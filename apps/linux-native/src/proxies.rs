@@ -617,7 +617,7 @@ mod tests {
         assert_eq!(page.count, "0 nodes");
         assert_eq!(
             page.notice.as_deref(),
-            Some("No nodes yet. Import a subscription and its nodes appear here.")
+            Some("No nodes. Nodes appear after a subscription is imported.")
         );
         assert!(page.can_import);
         assert!(!page.can_test);

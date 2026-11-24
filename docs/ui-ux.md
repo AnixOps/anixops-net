@@ -6,6 +6,8 @@
 规范本身只在 anixops-design 修改，这里不重复条文。
 界面文字、文档、代码和测试数据的用词遵守 [`guidelines/terminology.md`](https://github.com/AnixOps/AnixOps-design/blob/main/guidelines/terminology.md)
 （中性用语，T1–T8），CI 的 “Neutral terminology” 步骤检查。
+界面文案的语体遵守 [`guidelines/voice-and-tone.md`](https://github.com/AnixOps/AnixOps-design/blob/main/guidelines/voice-and-tone.md)
+的「Formal register」（W1–W7）：正式、简洁的书面用语，见下文「界面文案」，CI 的 “UI lint” 步骤（U7、U8）检查。
 
 ## 一句话原则
 
@@ -90,6 +92,27 @@
   `"代理|mode"`，竖线后的含义只用于查表，中文界面显示竖线前的部分，见 `apps/windows-gui/ui/src/i18n.ts`），Apple 端用
   `action.connect`、`mode.proxy`、`policy.proxy`，Android 用各自独立的资源名。`i18n.test.ts` 检查单独的“连接”“代理”只出现在允许的位置。
 - 开关的无障碍名称写它控制的对象（“连接”），不随状态改成“断开”；开和关只由开关状态（`aria-checked`）表达。
+
+## 界面文案
+
+所有平台、三种语言的界面文字（标签、按钮、标题、提示、脚注、空状态、Toast、错误、对话框、同意和权限说明）都用正式、简洁的书面语，
+条文在 AnixOps Design 的 `voice-and-tone.md`（W1–W7），这里只列客户端最常遇到的改法：
+
+| 不写 | 写成 |
+|---|---|
+| 「你」「您」、"you / your"（W1） | 写对象或动作：「只打开可信来源的插件」/ "Turn on only plugins from trusted sources" |
+| 语气词和口语：吧、呢、啊、了、一下、别、还没有、稍后再说、别人（W2） | 「暂无」「尚未」「勿」「不」「稍后」「他人」「其他」 |
+| 英文缩写和口头词：can't、isn't、it's、just、simply（W2） | "cannot"、"is not"，或换个说法；失败写 "Import failed: …" 而不是 "Couldn't import" |
+| 感叹号（W3） | 句号，或不加标点 |
+| 解释原因、原理和步骤；「因为」「这样」「以便」「为了」、"because"、"so that"（W4、W5） | 只写这个控件做什么、会改变什么；原理和步骤写进文档 |
+| 一条文字三句以上（W6） | 最多两句，尽量一句；标签、按钮、标题、列名不加句号 |
+
+- 必须保留的只有用户做决定需要的信息：数据会不会离开设备、会改动系统的什么（根证书、VPN、驱动、系统代理）、能不能撤销、需要什么权限。
+- 错误保留原因和下一步，各一句。用户协议、隐私和权限说明同样改成书面语，但每一项事实、义务和列出的数据都不删。
+- 三种语言说同一件事；繁体中文用台湾用语。不用竞品对比措辞，写「兼容常见规则语法」。
+- 检查读的是各平台的文案表：`Localizable.xcstrings`、`InfoPlist.xcstrings`（Apple），`i18n-en.ts`、`i18n-zh-hant.ts` 及其中文键（桌面），
+  `values*/strings.xml`（Android），`crates/client-strings/catalogue.json`（Windows、Linux 原生）。词表是 `.github/scripts/formal-copy.json`，
+  与 AnixOps Design 的 `guidelines/formal-copy.json` 逐字节相同，改词表先改设计仓库再复制过来。
 
 ## 提交前自查
 
@@ -203,6 +226,8 @@ CI 的 “UI lint” 步骤运行 `.github/scripts/ui_lint.py`（几秒钟，在
 | U4 设置首屏超预算（Apple） | `SettingsView`、`MacSettingsPage` 首屏的 `Form` 超过 8 个分区或 16 行（AnixOps Design N25）；首屏用了脚本组成表 `SETTINGS_COMPOSITES` 里没有的 `*Section` | 把不常用的项移到「高级」或「隐私与诊断」二级页；新的组成分区在表里登记它占几个分区、几行 |
 | U5 用户列表不折叠（Apple） | 表单或列表里对插件、脚本、Wi‑Fi、规则、主机、映射、重定向的 `ForEach` 直接列出全部（N26） | 只列前 5 条（`.prefix(` 或 `shown` / `visible` 这类变量）加「显示全部 N 个 / 收起」，或放到专门的列表页 |
 | U6 总开关混在条目里（Apple） | 和用户列表 `ForEach` 同一个 `Section` 里的 `Toggle`（N27） | 总开关单独一个分区，放在列表上方 |
+| U7 口语化文案（所有平台的文案表） | 第二人称、语气词和口语词、英文缩写和口头词、感叹号（W1–W3，词表 `formal-copy.json`；占位符 `%@`、`{name}` 先去掉再匹配） | 按上文「界面文案」改写，三种语言一起改 |
+| U8 解释性文案（所有平台的文案表） | 解释性连接词（「因为」「这样」「以便」、"because"、"so that"，W5），或一条文字超过两句（W6） | 删掉原因和原理，只留做什么、改变什么（W4） |
 
 常用对照：
 

@@ -111,7 +111,7 @@ export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, l
               icon={Network}
               color="purple"
               label={t("TUN 模式")}
-              hint={t("用虚拟网卡接管全部流量，不走系统代理的游戏和命令行程序也会经过代理。")}
+              hint={t("通过虚拟网卡接管全部流量，包括不使用系统代理的应用。")}
               checked={Boolean(snapshot.tunModeEnabled)}
               disabled={Boolean(busy)}
               onChange={() => void run("TUN", () => desktop.setTunMode(!snapshot.tunModeEnabled))}
@@ -125,7 +125,7 @@ export function SettingsPage({ snapshot, busy, run, appearance, setAppearance, l
             icon={Ban}
             color="red"
             label={t("屏蔽 QUIC")}
-            hint={t("拒绝发往 UDP 443 端口的 QUIC（HTTP/3）流量，浏览器和应用会改用 TCP，这样 MITM 插件和按域名分流的规则都能生效。")}
+            hint={t("拒绝发往 UDP 443 端口的 QUIC（HTTP/3）流量，浏览器和应用改用 TCP。")}
             checked={Boolean(snapshot.blockQuic)}
             disabled={Boolean(busy) || snapshot.blockQuic === undefined}
             onChange={() => void run("QUIC", () => desktop.setBlockQuic(!snapshot.blockQuic))}
@@ -319,13 +319,13 @@ function LinuxProxyCard({ busy, run, snapshot }: { busy: string | null; run: Run
       title={t("运行方式")}
       description={tun
         ? t("连接时请求一次管理员授权，创建虚拟网卡并接管全部流量；应用本身不以管理员身份运行。")
-        : t("连接时把 GNOME 或 KDE 的系统代理指向本地端口，断开或退出时改回原来的设置。")}
+        : t("连接时修改 GNOME 或 KDE 的系统代理，断开或退出时恢复。")}
     >
       <ToggleRow
         icon={Network}
         color="purple"
         label={t("TUN 模式")}
-        hint={t("用虚拟网卡接管全部流量，不走系统代理的游戏和命令行程序也会经过代理。需要先断开连接才能切换。")}
+        hint={t("通过虚拟网卡接管全部流量。切换前需断开连接。")}
         checked={tun}
         disabled={Boolean(busy)}
         onChange={() => void run("TUN", () => desktop.setTunMode(!tun))}
@@ -340,7 +340,7 @@ function LinuxProxyCard({ busy, run, snapshot }: { busy: string | null; run: Run
 function SystemCard({ busy, run }: { busy: string | null; run: Run }) {
   const [driverPath, setDriverPath] = useState("");
   return (
-    <Card title={t("系统与网络")} description={t("这些操作会改动系统设置，只填写你确认过的本地文件。")}>
+    <Card title={t("系统与网络")} description={t("这些操作会改动系统设置，仅填写已确认的本地文件。")}>
       <Row icon={LifeBuoy} color="gray" label={t("恢复网络设置")} hint={t("只恢复本应用这次改过、且仍归它管理的代理设置。")}>
         <button className="secondary compact" disabled={Boolean(busy)} onClick={() => void run("network recovery", desktop.restoreNetworkSettings)}>{t("恢复")}</button>
       </Row>
@@ -361,8 +361,8 @@ type NotificationKey = "scripts" | "connection" | "subscriptions";
 
 const notificationOptions: Array<{ key: NotificationKey; label: string; hint: string; icon: LucideIcon; color: TileColor }> = [
   { key: "scripts", label: "脚本通知", hint: "插件脚本发出的通知，例如签到结果。", icon: BellRing, color: "orange" },
-  { key: "connection", label: "连接意外断开", hint: "内核意外退出或 VPN 被别的应用占用时提醒。", icon: Bell, color: "red" },
-  { key: "subscriptions", label: "订阅自动更新失败", hint: "按间隔自动更新订阅失败时提醒，手动更新的结果直接显示在窗口里。", icon: CloudOff, color: "sky" },
+  { key: "connection", label: "连接意外断开", hint: "内核意外退出或 VPN 被其他应用占用时提醒。", icon: Bell, color: "red" },
+  { key: "subscriptions", label: "订阅自动更新失败", hint: "自动更新订阅失败时提醒。", icon: CloudOff, color: "sky" },
 ];
 
 /** The system notification switches, as in the iOS settings. */
@@ -378,7 +378,7 @@ function NotificationsCard({ busy, run }: { busy: string | null; run: Run }) {
     return { message: next[key] ? t("已打开这类通知") : t("已关闭这类通知") };
   });
   return (
-    <Card title={t("通知")} description={t("通过系统通知提醒，系统里关掉本应用的通知后不会显示。")}>
+    <Card title={t("通知")} description={t("通过系统通知提醒。")}>
       {notificationOptions.map((option) => (
         <ToggleRow
           key={option.key}

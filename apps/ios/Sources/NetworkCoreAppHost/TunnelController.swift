@@ -1731,7 +1731,7 @@ final class TunnelController {
 
     /// The plugins and mappings pages' warning for `decryptionExceedsConfig(with:)`.
     static var decryptionExceedsConfigWarning: String {
-        String(localized: "已启用的插件和调试映射合计超过 64 KB，超出本版本隧道配置的上限：连接时 HTTPS 解密会被关闭，插件和映射都不会生效。请停用一些插件或减少映射响应体。")
+        String(localized: "已启用的插件和调试映射合计超过 64 KB，超出隧道配置上限：连接时 HTTPS 解密将关闭，插件和映射均不生效。请停用部分插件或减小映射响应体。")
     }
 
     /// The debug mappings' plugin as the profile may carry it: one that decrypts a domain only after the HTTPS
@@ -2993,11 +2993,11 @@ final class TunnelController {
     private static func stopNoticeText(_ stopped: AutoReconnect.Outcome?) -> String {
         switch stopped {
         case .stopped(fatal: true):
-            return String(localized: "连接失败，重试也无法解决这个问题，已停止自动重连。请查看下面的原因，或换一个节点。")
+            return String(localized: "连接失败：重试无法解决，已停止自动重连。请查看下方原因或更换节点。")
         case .stopped(fatal: false):
             return String(localized: "连续 5 次没有连上，已停止自动重连。可以重试，或换一个节点。")
         case .retry, nil:
-            return String(localized: "连接已断开：节点没有响应、被干扰，或网络刚切换。可以重试，或换一个节点。")
+            return String(localized: "连接已断开：节点无响应、被干扰，或网络已切换。请重试或更换节点。")
         }
     }
 
@@ -3009,7 +3009,7 @@ final class TunnelController {
         case .stopped(fatal: false):
             return String(localized: "连续 5 次没有连上，已停止自动重连。打开 App 重试或换一个节点。")
         case .retry, nil:
-            return String(localized: "节点没有响应、被干扰，或网络刚切换。打开 App 重试或换一个节点。")
+            return String(localized: "节点无响应、被干扰，或网络已切换。请打开 App 重试或更换节点。")
         }
     }
     #endif
@@ -3137,7 +3137,7 @@ final class TunnelController {
     /// Shown when a change to the subscription groups waits for them to be read: the Keychain cannot be read before
     /// the device is first unlocked after a restart.
     static let subscriptionsUnreadText = String(
-        localized: "还没读到已保存的订阅，请先输入锁屏密码，再重试。"
+        localized: "尚未读取已保存的订阅，请先输入锁屏密码，再重试。"
     )
 
     /// Shown for an `http://` subscription link: iOS and macOS refuse plain HTTP downloads (App Transport Security).

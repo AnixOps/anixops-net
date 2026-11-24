@@ -24,8 +24,8 @@ function loadStored(): string | null {
 
 /** The four points the confirmation shows, in the order they are read. */
 export const decryptionConsentPoints = [
-  "只解密你自己设备上的流量，或你有权调试的应用、设备和网络的流量。",
-  "不抓取、不解密别人的流量。把其他设备接入抓包前，先取得设备所有者的同意。",
+  "仅解密本人设备上的流量，或已获授权调试的应用、设备和网络的流量。",
+  "不抓取、不解密他人的流量。将其他设备接入抓包前，须取得设备所有者的同意。",
   "解密后的内容可能含有密码、令牌和个人信息，只保存在本机；导出或分享前请先脱敏。",
   "不得用于入侵、窃取数据或绕过他人的安全机制。详见用户协议第 4 节。",
 ];
@@ -61,7 +61,7 @@ function DecryptionConsentDialog({ onConfirm, onCancel }: { onConfirm: () => voi
         <ShieldAlert size={22} aria-hidden />
         <div>
           <Heading slot="title" level={2}>{t("开启 HTTPS 解密前请确认")}</Heading>
-          <p>{t("HTTPS 解密能看到加密连接里的明文。只在下面的范围内使用：")}</p>
+          <p>{t("HTTPS 解密可查看加密连接中的明文，仅限下列范围使用：")}</p>
         </div>
       </header>
       <div className="terms-text">

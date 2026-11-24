@@ -34,7 +34,7 @@ enum ConnectPhase: Equatable {
     var title: String {
         switch self {
         case .unconfigured:
-            return String(localized: "还没有节点")
+            return String(localized: "暂无节点")
         case .off:
             return String(localized: "未连接")
         case .connecting:

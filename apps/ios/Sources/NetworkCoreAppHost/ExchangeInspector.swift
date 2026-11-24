@@ -287,7 +287,7 @@ struct HttpExchangeView: View {
                     Label("映射到远程", systemImage: "arrow.uturn.right")
                 }
             } footer: {
-                Text("用这次的响应生成 Map Local，或把这个 URL 转到另一个地址。保存后在 扩展 › Map Local / Map Remote 里管理。")
+                Text("用这次的响应生成 Map Local，或将此 URL 转到另一个地址。")
             }
             .listRowBackground(brand.surface)
         }

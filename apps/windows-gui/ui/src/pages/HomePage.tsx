@@ -199,7 +199,7 @@ function SubscriptionPanel({ snapshot, source, nodeCount, busy, run, goTo }: {
     return (
       <Panel className="span-4" icon={CloudDownload} title={t("订阅")}>
         <div className="panel-empty">
-          <p>{t("还没有订阅。导入后节点会出现在“代理”里。")}</p>
+          <p>{t("暂无订阅。导入后节点显示在“代理”中。")}</p>
           <button className="secondary compact" onClick={() => goTo("proxies")}>{t("导入订阅")}</button>
         </div>
       </Panel>
@@ -444,7 +444,7 @@ function UsagePanel({ icon, title, rows, detail, waiting, live }: {
   return (
     <Panel className="span-4 list-panel" icon={icon} title={title}>
       {rows.length === 0
-        ? <p className="panel-empty">{live ? t("还没有连接") : waiting}</p>
+        ? <p className="panel-empty">{live ? t("暂无连接") : waiting}</p>
         : rows.map((row) => (
           <div className="usage-row" key={row.key}>
             <LetterTile name={row.key} color={colorFor(row.key)} />
@@ -508,7 +508,7 @@ function RecentPanel({ connections, waiting, live, goTo }: { connections: Connec
       action={<button className="link-button" onClick={() => goTo("activity")}>{t("全部")}<ChevronRight size={12} /></button>}
     >
       {connections.length === 0
-        ? <p className="panel-empty">{live ? t("还没有连接") : waiting}</p>
+        ? <p className="panel-empty">{live ? t("暂无连接") : waiting}</p>
         : connections.slice(0, 5).map((connection) => (
           <div className="usage-row" key={connection.id}>
             <span className="usage-text"><strong>{connectionName(connection)}</strong><small>{[connection.rule, connection.chain[connection.chain.length - 1] ?? connection.outbound].filter(Boolean).join(" · ")}</small></span>

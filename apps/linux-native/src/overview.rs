@@ -387,7 +387,7 @@ mod tests {
         none.node = None;
         none.can_connect = false;
         let page = shown(Language::English, true, Some(&none), Pending::Nothing, None);
-        assert_eq!(page.node, "No node chosen yet");
+        assert_eq!(page.node, "No node chosen");
         assert!(!page.enabled);
 
         none.direct = true;

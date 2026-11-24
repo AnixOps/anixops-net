@@ -261,7 +261,7 @@ struct CaptureRequestsView: View {
             } header: {
                 statusLines
             } footer: {
-                Text("只列出 HTTPS 解密（MITM）后的请求和明文 HTTP 请求。搜索框可以直接写表达式：host:api.example.com status:>=400 type:json -method:GET，空格表示同时满足，OR 表示或者。")
+                Text("只列出 HTTPS 解密（MITM）后的请求和明文 HTTP 请求。搜索支持表达式，如 host:api.example.com status:>=400 -method:GET。")
             }
             if log.rows.isEmpty {
                 hostGroupSection
@@ -285,7 +285,7 @@ struct CaptureRequestsView: View {
             } header: {
                 Text("抓到的连接 · \(hostGroups.count) 个域名或地址")
             } footer: {
-                Text("这些连接没有解密，只抓到了加密的 TLS 数据，点进去可以看原始字节。点“解密”把域名加入解密列表，隧道会重新连接，之后的新连接会被解密并列在上面。")
+                Text("这些连接未解密，仅抓到加密的 TLS 数据，点进去可看原始字节。点“解密”将域名加入解密列表，隧道重新连接，新连接会被解密并列在上方。")
             }
         }
     }
@@ -306,7 +306,7 @@ struct CaptureRequestsView: View {
         case .rootUnavailable:
             return "HTTPS 解密没有生效：隧道读不到钥匙串里的根证书。请重新连接；仍不行就在 改写 › HTTPS 解密证书 重新生成。"
         case .tooLarge:
-            return "HTTPS 解密没有生效：已启用的插件和调试映射合计超出了隧道配置的上限，隧道没有交给内核。请停用一些插件或减少映射正文，再重新连接。"
+            return "HTTPS 解密未生效：已启用的插件和调试映射合计超出隧道配置上限。请停用部分插件或缩短映射内容后重新连接。"
         case .refused, .setupFailed, nil:
             return "HTTPS 解密没有生效：内核没有接受解密设置。请检查已启用的插件，开发者诊断的扩展事件里有原因。"
         }
@@ -496,7 +496,7 @@ struct CaptureRequestsView: View {
         }
         if !hostGroups.isEmpty {
             let count = hostGroups.reduce(0) { $0 + $1.connections.count }
-            return "已抓到 \(count) 个连接，但没有一个解密出请求，所以这里还是空的。下面按域名列出了这些连接。"
+            return "已抓到 \(count) 个连接，均未解密出请求。下方按域名列出这些连接。"
         }
         if invalidFilter != nil {
             return "表达式有误，改正后再筛选。"
@@ -506,9 +506,9 @@ struct CaptureRequestsView: View {
         }
         if tunnel.appMode == .debug {
             // The setup checklist under this line says what is missing for HTTPS.
-            return "还没有请求。"
+            return "暂无请求"
         }
-        return "还没有请求。要看到 HTTPS 请求，请在 扩展 › HTTPS 解密证书 中安装并信任根证书，再为域名启用解密。"
+        return "暂无请求。HTTPS 请求需先在 扩展 › HTTPS 解密证书 中安装并信任根证书，再为域名启用解密。"
     }
 
     private var summary: String {

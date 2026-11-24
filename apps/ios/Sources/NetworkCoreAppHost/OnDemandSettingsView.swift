@@ -109,7 +109,7 @@ struct OnDemandWiFiRulesPage: View {
                 }
                 #endif
             } footer: {
-                Text("加入网络时由系统立即执行，不需要打开 App。设为“断开”的网络下，手动连接也会被断开。")
+                Text("加入网络时由系统立即执行，无需打开 App。设为“断开”的网络下，手动连接也会被断开。")
             }
             #if os(iOS)
             .listRowBackground(brand.surface)

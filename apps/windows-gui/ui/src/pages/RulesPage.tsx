@@ -19,7 +19,7 @@ export function RulesPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot |
     <div className="page-stack">
       <Card
         title={t("分流模式")}
-        description={t("客户端不带预设规则：规则模式只按订阅自带的规则和你的规则分流。")}
+        description={t("无预设规则：规则模式仅按订阅规则和自定义规则分流。")}
       >
         <div role="radiogroup" aria-label={t("分流模式")}>
         {availableRoutingModes().map((mode) => {

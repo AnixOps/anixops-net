@@ -65,7 +65,7 @@ struct RedirectsView: View {
                     .listRowBackground(brand.surface)
                 }
             } footer: {
-                Text("命中的 TCP 连接和 UDP 流改发到新地址，App 看到的仍是原地址，不需要改 App。从上到下第一条命中的生效。改写后按新地址走规则：开发服务器在内网时，再在订阅规则里让内网网段走能到达它的节点。域名只能匹配 TCP（按 TLS 名称或 HTTP Host）；按域名连接的 App 也可以直接用 DNS 页的 Hosts。")
+                Text("命中的 TCP 连接和 UDP 流改发到新地址，App 看到的仍是原地址。从上到下第一条命中的生效；域名只能匹配 TCP（按 TLS 名称或 HTTP Host）。")
             }
         }
         .scrollContentBackground(.hidden)
@@ -190,7 +190,7 @@ private struct RedirectSheet: View {
                 } header: {
                     Text("改发到")
                 } footer: {
-                    Text("IP 或域名，可带 :端口；不写端口沿用原端口，只改端口写 :端口。IPv6 带端口写 [地址]:端口。")
+                    Text("IP 或域名，可带 :端口；不写端口沿用原端口。IPv6 带端口写 [地址]:端口。")
                 }
                 .listRowBackground(brand.surface)
                 if let failure {

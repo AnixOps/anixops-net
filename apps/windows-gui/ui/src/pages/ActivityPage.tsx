@@ -36,7 +36,7 @@ export function ConnectionsView({ snapshot, busy, run, debug = false, saved = fa
     : subscriptionErrorText(snapshot?.subscriptionRefreshErrorCode);
   const refresh = snapshot?.subscriptionLastAttempt
     ? [refreshResultText(snapshot.subscriptionRefreshResult), snapshot.subscriptionLastAttempt, refreshFailure].filter(Boolean).join(" · ")
-    : refreshFailure ?? t("还没有自动更新记录");
+    : refreshFailure ?? t("暂无自动更新记录");
 
   const [detail, setDetail] = useState<ConnectionSnapshot | null>(null);
   const live = liveEngine(snapshot);
@@ -154,7 +154,7 @@ function Connections({ snapshot, busy, run, onOpen, captureControls, saved }: {
       </div>
       {failure && <p className="muted danger-text">{failure}</p>}
       {connections.length === 0
-        ? <p className="muted">{query ? t("没有匹配的连接。") : shown === "active" ? t("现在没有活跃连接。") : t("还没有关闭的连接。")}</p>
+        ? <p className="muted">{query ? t("没有匹配的连接。") : shown === "active" ? t("现在没有活跃连接。") : t("暂无已关闭的连接")}</p>
         : <>
           <ul className="list connections">
             {connections.slice(0, limit).map((connection) => (

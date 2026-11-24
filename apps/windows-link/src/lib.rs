@@ -335,7 +335,7 @@ mod tests {
     fn the_user_is_told_why_and_whether_the_link_waits() {
         assert_eq!(
             start_failure_message(Language::English, DECLINED, true),
-            "AnixOps Net did not start because administrator rights were not granted.\nThe link is kept and opens if you start AnixOps Net within the hour."
+            "AnixOps Net not started: administrator rights not granted.\nLink kept: it is handled when AnixOps Net starts within the hour."
         );
         assert_eq!(
             start_failure_message(Language::Chinese, 2, false),

@@ -138,12 +138,12 @@ export function TermsConsent({ onAccept }: { onAccept: () => void }) {
         <ScrollText size={22} aria-hidden />
         <div>
           <Heading slot="title" level={2}>{t("使用前请阅读用户协议")}</Heading>
-          <p>{t("只在自己的设备上使用；HTTPS 解密只用于你自己的流量，根证书由你手动信任；不得用于入侵、窃取数据或绕过他人的安全机制。")}</p>
-          <p>{t("流量只在本机按你的规则转发到你配置的服务器，我们看不到也不收集。App 不含统计、广告或崩溃上报 SDK，数据只保存在你的设备上。")}</p>
+          <p>{t("仅在本人设备上使用；HTTPS 解密仅用于本人流量，根证书由本人手动信任；不得用于入侵、窃取数据或绕过他人的安全机制。")}</p>
+          <p>{t("流量仅在本机按规则转发到所配置的服务器，我们不查看也不收集。App 不含统计、广告或崩溃上报 SDK，数据仅保存在本设备上。")}</p>
         </div>
       </header>
       {privacy ? <PrivacyText /> : <TermsText />}
-      {declined && <p className="terms-declined" role="status">{t("不同意就不能使用 AnixOps Net。你可以关闭窗口并卸载，或重新阅读后同意。")}</p>}
+      {declined && <p className="terms-declined" role="status">{t("未同意则无法使用 AnixOps Net。可关闭窗口并卸载，或重新阅读后同意。")}</p>}
       <footer className="terms-actions">
         <button className="secondary" onClick={() => setPrivacy(!privacy)}>{privacy ? t("阅读用户协议") : t("阅读隐私政策")}</button>
         <button className="secondary" onClick={() => setDeclined(true)}>{t("不同意")}</button>
@@ -180,7 +180,7 @@ export function PrivacyViewer({ onClose }: { onClose: () => void }) {
         <ShieldCheck size={22} aria-hidden />
         <div>
           <Heading slot="title" level={2}>{t("隐私政策")}</Heading>
-          <p>{t("不收集数据：没有统计、广告或崩溃上报 SDK，数据只保存在你的设备上。")}</p>
+          <p>{t("不收集数据：无统计、广告或崩溃上报 SDK，数据仅保存在本设备上。")}</p>
         </div>
       </header>
       <PrivacyText />

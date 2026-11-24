@@ -518,7 +518,7 @@ public enum TrafficRedirectsError: Error, Equatable {
         case .invalidSource:
             return String(localized: "原地址应为 IP、网段、域名，或以 DOMAIN、IP-CIDR、AND 等开头的规则")
         case .invalidPort:
-            return String(localized: "端口应为 1–65535，或 7000-7100 这样的范围")
+            return String(localized: "端口应为 1–65535，或范围（如 7000-7100）")
         case .invalidTarget:
             return String(localized: "新地址应为 IP 或域名，可带 :端口；只改端口写 :端口")
         case .emptyMatch:

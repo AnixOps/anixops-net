@@ -5,8 +5,8 @@ import { Card, Run, ToggleRow } from "../ui";
 import { t } from "../i18n";
 
 const dnsChoices: Array<{ value: DnsPreset; label: string; hint: string }> = [
-  { value: "system", label: "系统 DNS", hint: "内置引擎用系统 DNS 解析规则里需要 IP 的域名；经节点的连接由节点服务器解析域名。" },
-  { value: "encrypted", label: "加密 DNS", hint: "所有域名经节点用 Cloudflare DNS over HTTPS 解析，本地网络看不到查询内容。" },
+  { value: "system", label: "系统 DNS", hint: "需要 IP 的规则使用系统 DNS 解析；经节点的连接由节点解析域名。" },
+  { value: "encrypted", label: "加密 DNS", hint: "所有域名经节点通过 Cloudflare DNS over HTTPS 解析。" },
   { value: "custom", label: "自定义 DNS", hint: "用下面填写的服务器、分域规则和 Hosts。" },
 ];
 
@@ -35,8 +35,8 @@ export function DnsCards({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | 
     return result;
   });
   const fakeIpHint = snapshot?.platform === "windows"
-    ? t("TUN 模式下生效。应用查询域名时立刻拿到 198.18.0.0/15（IPv6 为 fc00::/18）里的地址，连接时还原成域名按规则分流，由节点解析。局域网、对时、STUN 和推送等域名仍拿真实地址。")
-    : t("应用查询域名时立刻拿到 198.18.0.0/15（IPv6 为 fc00::/18）里的地址，连接时还原成域名按规则分流，由节点解析。局域网、对时、STUN 和推送等域名仍拿真实地址。");
+    ? t("TUN 模式下生效。域名查询返回 198.18.0.0/15（IPv6 为 fc00::/18）内的地址，按域名分流并由节点解析；局域网、对时、STUN 和推送域名使用真实地址。")
+    : t("域名查询返回 198.18.0.0/15（IPv6 为 fc00::/18）内的地址，按域名分流并由节点解析；局域网、对时、STUN 和推送域名使用真实地址。");
 
   return (
     <>
@@ -91,12 +91,12 @@ function CustomDnsCard({ saved, locked, busy, save }: {
   return (
     <Card
       title={t("自定义 DNS")}
-      description={t("每行一条，# 开头的行是注释。没有填服务器时，引擎经节点用 TCP 查询默认服务器。")}
+      description={t("每行一条，# 开头为注释。未填写服务器时，经节点用 TCP 查询默认服务器。")}
     >
       <div className="rule-editor">
-        <span className="editor-label">{t("服务器")}<small>{t("名称 = 地址。地址可以是 IP、tcp://、udp://、tls://、https://、quic://（DoQ），或 system（本机网络的 DNS，总是直连）；加 direct 表示直连，不加经节点。加 default 的服务器（最多 4 个）同时查询、取最先的应答，都不加时第一个是默认服务器；加 fallback 的服务器在默认服务器失败时再查。")}</small></span>
+        <span className="editor-label">{t("服务器")}<small>{t("名称 = 地址。地址支持 IP、tcp://、udp://、tls://、https://、quic://（DoQ）和 system；可加 direct、default（最多 4 个）、fallback 标记。")}</small></span>
         <textarea aria-label={t("服务器")} spellCheck={false} placeholder={SERVERS_PLACEHOLDER} value={draft.servers} onChange={edit("servers")} />
-        <span className="editor-label">{t("分域服务器")}<small>{t("类型,域名,服务器名称，从上到下匹配。类型是 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD 或 RULE-SET（分流模式里有的规则集）。")}</small></span>
+        <span className="editor-label">{t("分域服务器")}<small>{t("类型,域名,服务器名称，自上而下匹配。类型为 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD 或 RULE-SET。")}</small></span>
         <textarea aria-label={t("分域服务器")} spellCheck={false} placeholder={RULES_PLACEHOLDER} value={draft.rules} onChange={edit("rules")} />
         <span className="editor-label">Hosts<small>{t("域名 = 地址，最多 8 个地址；*.域名 匹配它的子域名。")}</small></span>
         <textarea aria-label="Hosts" spellCheck={false} placeholder={HOSTS_PLACEHOLDER} value={draft.hosts} onChange={edit("hosts")} />

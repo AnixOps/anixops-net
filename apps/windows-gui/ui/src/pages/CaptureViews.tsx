@@ -114,7 +114,7 @@ export function CaptureDetail({ connection, busy, run, onBack, initialExchange }
   if (!capture) {
     const message = state === "unreachable"
       ? t("引擎已停止，抓包内容随之清空。")
-      : state === "loading" ? t("正在读取…") : t("这个连接的抓包内容已被更新的连接挤出（抓包内存有上限），或抓包已清空。");
+      : state === "loading" ? t("正在读取…") : t("该连接的抓包内容已被新内容替换，或抓包已清空。");
     return (
       <div className="page-stack">
         <BackBar label={t("连接")} onBack={onBack} />
@@ -165,10 +165,10 @@ export function CaptureDetail({ connection, busy, run, onBack, initialExchange }
       )}
 
       {capture.http.length === 0 && capture.chunks.length === 0 && (
-        <Card><p className="muted">{t("还没有数据")}</p></Card>
+        <Card><p className="muted">{t("暂无数据")}</p></Card>
       )}
 
-      <Card title={t("导出")} description={t("pcapng 可用 Wireshark 打开，HAR 可导入浏览器开发者工具或其他抓包工具。导出内容可能包含账号、Cookie 等敏感信息，请只发给信任的人。")}>
+      <Card title={t("导出")} description={t("pcapng 可用 Wireshark 打开，HAR 可导入开发者工具。导出内容可能含账号、Cookie 等敏感信息，仅发送给可信对象。")}>
         <Row icon={Download} color="indigo" label={t("导出 pcapng")} hint={t("保存到“下载”文件夹")}>
           <button className="secondary compact" disabled={Boolean(busy)} onClick={() => exportCapture(run, "pcapng", connection.id, { redact })}>{t("导出")}</button>
         </Row>
@@ -185,12 +185,12 @@ export function CaptureDetail({ connection, busy, run, onBack, initialExchange }
 
 /** What to do about an encrypted connection: add its domain, or wait for a new connection once it is added. */
 function encryptedNote(host: string | null | undefined, decrypted: string[], excluded: string[]): string {
-  if (!isDecryptableHost(host)) return t("这是加密的 TLS 数据。目标只有 IP 地址，没有域名，无法按域名解密。");
-  if (excludedBy(host, excluded)) return t("这是加密的 TLS 数据。这个域名在解密列表里被排除，不会解密。");
+  if (!isDecryptableHost(host)) return t("加密的 TLS 数据。目标无域名，无法按域名解密。");
+  if (excludedBy(host, excluded)) return t("加密的 TLS 数据。该域名已在解密列表中排除。");
   if (coveredBy(host, decrypted)) {
-    return t("这个域名已在解密列表里。解密只对新连接生效；如果仍看不到明文，请确认 HTTPS 解密已开启、根证书已信任，或者这个 App 固定了证书。");
+    return t("该域名已在解密列表中，仅对新连接生效。仍无明文时，请检查根证书信任状态或 App 是否固定证书。");
   }
-  return t("这是加密的 TLS 数据。点“解密此域名”后，这个域名的新连接会被解密（需要开启 HTTPS 解密并信任根证书）。");
+  return t("加密的 TLS 数据。选择“解密此域名”解密其新连接（需开启 HTTPS 解密并信任根证书）。");
 }
 
 function exchangeHint(exchange: CaptureExchange): string {
@@ -331,7 +331,7 @@ export function RequestInspector({ request, missing = false, busy, run, onBack, 
   if (!request) {
     return (
       <div className="inspector-empty">
-        <EmptyState icon={MousePointerClick} title={t("选择一条请求")} message={t("在列表里选一条，这里显示它的请求和响应。方向键或 j / k 切换，Ctrl+R 重放。")} />
+        <EmptyState icon={MousePointerClick} title={t("选择一条请求")} message={t("显示所选条目的请求和响应；方向键或 j / k 切换，Ctrl+R 重放。")} />
       </div>
     );
   }
@@ -356,7 +356,7 @@ export function RequestInspector({ request, missing = false, busy, run, onBack, 
       exchange={exchange}
       siblings={siblings}
       place={{ connectionId: request.connection_id, index: request.index, frames }}
-      waiting={state === "gone" ? t("这个请求的内容已被更新的连接挤出（抓包内存有上限），或抓包已清空。") : undefined}
+      waiting={state === "gone" ? t("该请求的内容已被新内容替换，或抓包已清空。") : undefined}
       onBack={onBack}
       backLabel={t("请求")}
       exportCard={exchange && <ExchangeExport busy={busy} run={run} id={request.connection_id} index={request.index} redact={redact} onRedact={setRedact} />}
@@ -415,7 +415,7 @@ function ExchangeExport({ busy, run, id, index, redact, onRedact }: {
     }
   };
   return (
-    <Card title={t("导出这条请求")} description={t("保存到“下载”文件夹。导出内容可能包含账号等敏感信息，请只发给信任的人。")}>
+    <Card title={t("导出这条请求")} description={t("保存到“下载”文件夹。导出内容可能含账号等敏感信息，仅发送给可信对象。")}>
       <Row icon={FileCode} color="purple" label={t("格式")}>
         <Select label={t("导出格式")} value={format} onChange={setFormat} choices={exchangeFormats.map((item) => ({ value: item.value, label: item.label }))} />
         <button className="secondary compact" disabled={Boolean(busy)} onClick={save}>{t("导出")}</button>

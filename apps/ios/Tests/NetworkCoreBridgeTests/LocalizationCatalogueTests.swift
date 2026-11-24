@@ -74,13 +74,13 @@ final class LocalizationCatalogueTests: XCTestCase {
     /// The first screen after the terms: every word of it is looked up (AppModeViews.swift).
     func testFirstLaunchModeChoiceIsTranslated() throws {
         try assertTranslated([
-            "你想怎么用\nAnixOps Net？",
+            "选择使用方式",
             "调试网络",
-            "抓包、解密 HTTPS、改写和重放请求，给 App 开发和测试用。不需要节点，流量默认直连。",
+            "抓包、解密 HTTPS、改写和重放请求。无需节点，流量默认直连。",
             "代理",
             "导入订阅或节点，按规则把流量交给代理或直连。",
             "继续",
-            "以后可以在设置里切换，切换不会删除订阅、节点和插件。",
+            "可在设置中切换，不会删除订阅、节点和插件。",
         ])
     }
 

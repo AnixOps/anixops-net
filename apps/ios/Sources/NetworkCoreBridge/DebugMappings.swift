@@ -672,7 +672,7 @@ public enum DebugMappingsError: Error, Equatable {
         case .tooMany:
             return String(localized: "已达到数量上限")
         case .totalTooLarge:
-            return String(localized: "映射合计超过 4 MB（响应体按 Base64 计算，约为原大小的 4/3）。请删除或缩小一些 Map Local 响应体。")
+            return String(localized: "映射合计超过 4 MB（响应体按 Base64 计算）。请删除或缩小部分 Map Local 响应体。")
         case .decryptionBudgetFull:
             return String(localized: "映射和已启用的插件合计超过 8 MB。请减少映射响应体或停用一些插件。")
         }

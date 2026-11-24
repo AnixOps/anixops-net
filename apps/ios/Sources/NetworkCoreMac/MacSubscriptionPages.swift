@@ -32,7 +32,7 @@ struct MacProxiesPage: View {
                         MacCard(title: "节点") {
                             singleNodeRow(name)
                         }
-                        Text("导入订阅链接后，每个订阅是一个订阅组，可以测延迟、切换节点、手动或自动更新。")
+                        Text("导入订阅链接后，每个订阅成为一个订阅组，支持测延迟、切换节点和更新。")
                             .font(.caption)
                             .foregroundStyle(brand.text2)
                             .padding(.horizontal, 4)
@@ -44,7 +44,7 @@ struct MacProxiesPage: View {
             } else {
                 BrandEmptyState(
                     systemImage: "globe",
-                    title: "还没有节点",
+                    title: "暂无节点",
                     message: "粘贴订阅链接，或 ss://、vless://、trojan://、vmess://、hysteria2://、tuic:// 等链接和订阅内容，或导入 WireGuard 配置。"
                 ) {
                     Button("导入节点") {
@@ -170,9 +170,9 @@ struct MacProxiesPage: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     if tunnel.library?.routesByRules == true {
-                        Text("正在按订阅规则分流，节点由策略组决定；可以在“规则”页切换策略组或关闭规则。其他订阅组会作为“订阅·名称”策略组出现在规则的选择组里。")
+                        Text("按订阅规则分流，节点由策略组决定。可在“规则”页切换策略组或关闭规则。")
                     }
-                    Text("延迟为经该节点请求 `http://www.gstatic.com/generate_204` 的 HTTP 真连接时间，5 秒无响应显示超时。连接中切换节点会自动重连。")
+                    Text("延迟为经该节点请求 `http://www.gstatic.com/generate_204` 的耗时，5 秒无响应显示超时。")
                 }
                 .font(.caption)
                 .foregroundStyle(brand.text2)
@@ -297,7 +297,7 @@ struct MacProxiesPage: View {
                 let link = try NativeNodeImporterFFI.shareLink(for: node)
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(link, forType: .string)
-                notice = String(localized: "已复制分享链接。链接里含有节点密码，只分享给信任的人。")
+                notice = String(localized: "已复制分享链接。链接含节点密码，请仅分享给可信任的人。")
             } catch let failure as NodeShareFailure {
                 notice = failure.message
             } catch {
@@ -430,12 +430,12 @@ struct MacRulesPage: View {
                         Divider()
                         dnsLink
                         if RuleSetCatalog.hasProcessRules(routing.rules) {
-                            Text("订阅里有 PROCESS-NAME 规则。iOS 和 macOS 的隧道分不出连接来自哪个 App，这些规则不会生效。")
+                            Text("订阅含 PROCESS-NAME 规则，iOS 和 macOS 不支持，规则不生效。")
                                 .font(.caption)
                                 .foregroundStyle(brand.warning)
                         }
                         if RuleSetCatalog.hasRules(of: "CELLULAR-RADIO", in: routing.rules) {
-                            Text("订阅里有 CELLULAR-RADIO 规则。Mac 读不到蜂窝网络制式，这些规则不会生效。")
+                            Text("订阅含 CELLULAR-RADIO 规则，Mac 不支持，规则不生效。")
                                 .font(.caption)
                                 .foregroundStyle(brand.warning)
                         }
@@ -469,7 +469,7 @@ struct MacRulesPage: View {
             MacPlaceholderPage(
                 systemImage: "arrow.triangle.branch",
                 title: "规则与分流",
-                message: "导入带规则和策略组的订阅后，可以在这里按订阅规则分流和切换策略组。现在全部流量走所选节点。"
+                message: "导入带规则和策略组的订阅后，可在此按订阅规则分流并切换策略组。当前全部流量走所选节点。"
             )
         }
     }

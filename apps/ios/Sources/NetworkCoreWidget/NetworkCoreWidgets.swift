@@ -23,7 +23,7 @@ struct StatusWidget: Widget {
             StatusWidgetView(entry: entry)
         }
         .configurationDisplayName("连接状态")
-        .description("查看是否已连接，轻点即可连接或断开。")
+        .description("查看连接状态；点按可连接或断开。")
         .supportedFamilies([.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }

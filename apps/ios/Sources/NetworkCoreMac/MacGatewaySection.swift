@@ -68,7 +68,7 @@ struct MacGatewaySection: View {
         guard tunnel.takeover.routesTraffic else {
             return String(localized: "网关模式要用 VPN 接管流量，“仅系统代理”下不能开启。")
         }
-        return String(localized: "开启后，同一局域网的设备（游戏机、电视、手机）把路由器和 DNS 改成上面的地址，它们的流量就经过这台 Mac 按规则走，MITM、抓包和连接列表同样生效。需要 IPv4 转发：连接时会尝试自动开启、断开时关闭；系统不允许时，在“终端”里运行一次上面的命令（重启 Mac 后失效）。只支持 IPv4；单个 WireGuard 节点不支持。切换时如果已连接，会自动重连一次。")
+        return String(localized: "开启后，局域网设备将路由器和 DNS 设为上方地址，其流量经这台 Mac 按规则转发。连接时开启 IPv4 转发，断开时关闭；仅支持 IPv4。")
     }
 
     private func refreshLoop() async {

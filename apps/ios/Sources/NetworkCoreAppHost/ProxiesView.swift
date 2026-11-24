@@ -180,9 +180,9 @@ struct ProxiesView: View {
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {
                     if tunnel.library?.routesByRules == true {
-                        Text("正在按订阅规则分流，节点由策略组决定；可以在“规则”页切换策略组或关闭规则。其他订阅组会作为“订阅·名称”策略组出现在规则的选择组里。")
+                        Text("按订阅规则分流，节点由策略组决定。可在“规则”页切换策略组或关闭规则。")
                     }
-                    Text("下拉更新全部订阅。延迟为经该节点请求 `http://www.gstatic.com/generate_204` 的 HTTP 真连接时间，5 秒无响应显示超时。连接中切换节点会自动重连。")
+                    Text("下拉更新全部订阅。延迟为经该节点访问 `http://www.gstatic.com/generate_204` 的耗时，超过 5 秒显示超时。")
                 }
             }
         }
@@ -379,7 +379,7 @@ struct ProxiesView: View {
             } header: {
                 Text("节点")
             } footer: {
-                Text("导入订阅链接后，每个订阅是一个订阅组，可以测延迟、切换节点、手动或自动更新。")
+                Text("导入订阅链接后，每个订阅成为一个订阅组，支持测延迟、切换节点和更新。")
             }
         }
         .scrollContentBackground(.hidden)
@@ -409,7 +409,7 @@ struct ProxiesView: View {
         ScrollView {
             BrandEmptyState(
                 systemImage: "globe",
-                title: "还没有节点",
+                title: "暂无节点",
                 message: "粘贴订阅链接，或 ss://、vless://、trojan://、vmess://、hysteria2://、tuic:// 等链接和订阅内容，或导入 WireGuard 配置。"
             ) {
                 Button {

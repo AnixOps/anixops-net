@@ -700,7 +700,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
         let content = UNMutableNotificationContent()
         content.title = String(localized: "AnixOps Net 已断开")
-        content.body = String(localized: "节点没有响应、被干扰，或网络刚切换。打开 App 重试或换一个节点。")
+        content.body = String(localized: "节点无响应、被干扰，或网络已切换。请打开 App 重试或更换节点。")
         content.threadIdentifier = "connection"
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: "connection-stopped", content: content, trigger: nil)

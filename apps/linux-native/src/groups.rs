@@ -245,7 +245,7 @@ mod tests {
         assert_eq!(rows[0].chosen, Some(2));
         assert!(rows[0].enabled);
         // A group that chooses by itself offers nothing, and says so when it has not chosen yet.
-        assert_eq!(rows[1].details, "Fastest · Not chosen yet");
+        assert_eq!(rows[1].details, "Fastest · Not chosen");
         assert!(rows[1].options.is_empty());
         assert_eq!(rows[1].chosen, None);
         assert!(!rows[1].enabled);
@@ -255,7 +255,7 @@ mod tests {
         let other = read(&cases()[1]["answer"]);
         assert_eq!(
             shown(Language::English, &other, &[])[0].details,
-            "Not chosen yet"
+            "Not chosen"
         );
         assert_eq!(
             shown(Language::Chinese, &groups, &[])[0].details,

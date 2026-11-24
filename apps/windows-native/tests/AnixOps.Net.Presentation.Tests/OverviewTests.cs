@@ -125,7 +125,7 @@ public sealed class OverviewTests
     {
         var none = Node(ConnectionState.Disconnected) with { NodeLabel = null, NodeProtocol = "", CanConnect = false };
         var page = Overview.Show(English, true, none, Pending.Nothing, null);
-        Assert.Equal("No node chosen yet", page.Node);
+        Assert.Equal("No node chosen", page.Node);
         Assert.False(page.Enabled);
 
         page = Overview.Show(English, true, none with { Direct = true, CanConnect = true }, Pending.Nothing, null);

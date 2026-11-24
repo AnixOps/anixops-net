@@ -59,10 +59,10 @@ function EgressCard({ egress, nodes }: { egress: Egress; nodes: NodeSummary[] })
     return <Card title={t("出口")} description={t("这个客户端不能直连出口，调试网络经过选中的节点发出流量。")} />;
   }
   const description = egress.exit === "direct"
-    ? t("抓到的流量直接从这台设备发出，不需要任何节点。选节点和更新订阅不影响它。")
+    ? t("抓到的流量直接从本设备发出，无需节点。")
     : nodes.length === 0
-      ? t("还没有节点，暂时直连。导入订阅或节点后按下面的节点和规则发出。")
-      : t("按下面选中的节点和订阅规则发出，可以切换节点对比不同地区的出口。");
+      ? t("暂无节点，当前直连。导入后按下方节点和规则转发。")
+      : t("按所选节点和订阅规则发出。");
   return (
     <Card title={t("出口")} description={description}>
       <Row icon={Route} color="sky" label={t("抓到的流量从哪里发出")}>
@@ -458,7 +458,7 @@ function Subscriptions({ snapshot, sources, refreshSources, empty, busy, run, pe
   if (empty && sources.length === 0) {
     return (
       <Card>
-        <EmptyState icon={Globe} title={t("还没有节点")} message={t("粘贴订阅链接，或填写本地配置文件的路径。导入后可以在这里切换节点和测速。")}>
+        <EmptyState icon={Globe} title={t("暂无节点")} message={t("粘贴订阅链接，或填写本地配置文件的路径。")}>
           {form}
         </EmptyState>
       </Card>

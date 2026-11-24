@@ -93,7 +93,7 @@ struct DataListsSection: View {
         } header: {
             Text("GeoIP 与 ASN 数据")
         } footer: {
-            Text("客户端只内置中国大陆的 GeoIP 列表。GEOIP 的其他国家和 IP-ASN 规则需要你按 URL 添加开源列表（每行一个网段，或 IP-CIDR 规则），经代理每天下载一次，并替换同名的内置或订阅列表。")
+            Text("客户端仅内置中国大陆的 GeoIP 列表。其他国家的 GEOIP 和 IP-ASN 规则需按 URL 添加开源列表，经代理每天下载一次。")
         }
         .task(id: tunnel.connection) {
             await load()
@@ -178,7 +178,7 @@ struct DeviceNamesSection: View {
         } header: {
             Text("设备名")
         } footer: {
-            Text("给把 Mac 当作网关的设备起名字，DEVICE-NAME 规则按名字匹配（不区分大小写）。设备按连接来源的 IP 认出，最好在路由器里给它固定地址。右键可删除。")
+            Text("为将这台 Mac 用作网关的设备命名，DEVICE-NAME 规则按名称匹配（不区分大小写）。设备按来源 IP 识别，建议在路由器中固定其地址。")
         }
     }
 
@@ -237,7 +237,7 @@ struct RuleTestSection: View {
             .disabled(testing || host.trimmingCharacters(in: .whitespaces).isEmpty)
             .listRowBackground(brand.surface)
             if failed {
-                Text("内核没有回答，请确认已连接。")
+                Text("内核无响应，请确认已连接。")
                     .font(.caption)
                     .foregroundStyle(brand.danger)
                     .listRowBackground(brand.surface)
@@ -269,7 +269,7 @@ struct RuleTestSection: View {
         } header: {
             Text("规则测试")
         } footer: {
-            Text("查看当前规则会把这样的连接交给哪条规则、走哪个出口。不会真的发起连接，也不计入命中次数。")
+            Text("查看当前规则对此类连接的匹配结果与出口，不发起连接，不计入命中次数。")
         }
     }
 
@@ -301,7 +301,7 @@ struct RuleHitsSection: View {
                 if let hits {
                     let busiest = hits.busiest()
                     if busiest.isEmpty, hits.finalRule.hits == 0 {
-                        Text("还没有连接经过规则。")
+                        Text("暂无连接经过规则")
                             .foregroundStyle(brand.text2)
                             .listRowBackground(brand.surface)
                     }
@@ -310,7 +310,7 @@ struct RuleHitsSection: View {
                     }
                     row(hits.finalRule)
                     if hits.unused > 0 {
-                        Text("另有 \(hits.unused) 条规则还没有命中。")
+                        Text("另有 \(hits.unused) 条规则尚未命中。")
                             .font(.caption)
                             .foregroundStyle(brand.text2)
                             .listRowBackground(brand.surface)
@@ -383,7 +383,7 @@ struct ProcessRulesNote: View {
 
     var body: some View {
         Section {
-            Text("订阅里有 PROCESS-NAME 规则。iOS 和 macOS 的隧道分不出连接来自哪个 App，这些规则不会生效。")
+            Text("订阅含 PROCESS-NAME 规则，iOS 和 macOS 不支持，规则不生效。")
                 .font(.caption)
                 .foregroundStyle(brand.warning)
                 .listRowBackground(brand.surface)

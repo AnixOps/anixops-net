@@ -275,7 +275,7 @@ struct QRShareSheet: View {
                     Text(title)
                         .font(.headline)
                         .foregroundStyle(brand.text)
-                    Label("链接里含有节点密码，只分享给信任的人。", systemImage: "lock")
+                    Label("链接含节点密码，请仅分享给可信任的人。", systemImage: "lock")
                         .font(.footnote)
                         .foregroundStyle(brand.text2)
                     HStack(spacing: 12) {

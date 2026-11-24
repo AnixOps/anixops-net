@@ -36,7 +36,7 @@ struct RulesView: View {
                         BrandEmptyState(
                             systemImage: "arrow.triangle.branch",
                             title: "规则与分流",
-                            message: "导入订阅或节点后，可以在这里选择规则、全局或直连模式。规则模式按你自己的规则分流；带规则和策略组的订阅按订阅规则分流。"
+                            message: "导入订阅或节点后，可在此选择规则、全局或直连模式。规则模式按自定义规则分流；带规则和策略组的订阅按订阅规则分流。"
                         )
                         .padding(.top, 80)
                     }
@@ -77,7 +77,7 @@ struct RulesView: View {
             } header: {
                 Text("策略组 · \(routing.rules.count) 条规则")
             } footer: {
-                Text("色条是每个成员最近一次测得的延迟：绿色低于 120 ms，琥珀色低于 250 ms，橙色更慢，灰色没有数据。自动选择和故障转移的组由内核按延迟和可用性挑选节点。")
+                Text("色条为每个成员最近一次测得的延迟：绿色低于 120 ms，琥珀色低于 250 ms，橙色更慢，灰色无数据。")
             }
             .disabled(tunnel.mode != .rule)
 
@@ -91,7 +91,7 @@ struct RulesView: View {
             }
             #if os(iOS)
             if RuleSetCatalog.hasRules(of: "DEVICE-NAME", in: routing.rules) {
-                RuleNote(text: String(localized: "订阅里有 DEVICE-NAME 规则。iPhone 和 iPad 不给局域网设备起名，这些规则不会生效。"))
+                RuleNote(text: String(localized: "订阅含 DEVICE-NAME 规则，iPhone 和 iPad 不支持，规则不生效。"))
             }
             #endif
 

@@ -34,7 +34,7 @@ export function DataLists({ missing, busy, run }: { missing: string[]; busy: str
   return (
     <Card
       title={t("GeoIP 与 ASN 数据")}
-      description={t("客户端只内置中国大陆的 GeoIP 列表。GEOIP 的其他国家和 IP-ASN 规则需要你按 URL 添加开源列表（每行一个网段，或 IP-CIDR 规则），经 PROXY 每天下载一次，并替换同名的内置或订阅列表。")}
+      description={t("仅内置中国大陆的 GeoIP 列表。其他国家的 GEOIP 和 IP-ASN 规则需按 URL 添加开源列表，经 PROXY 每天下载一次。")}
     >
       {lacking.map((item) => (
         <Row
@@ -103,7 +103,7 @@ export function DeviceNames({ busy, run }: { busy: string | null; run: Run }) {
   return (
     <Card
       title={t("设备名")}
-      description={t("给通过局域网共享上网的设备起名字，DEVICE-NAME 规则按名字匹配（不区分大小写）。设备按连接来源的 IP 认出，最好在路由器里给它固定地址。")}
+      description={t("为经局域网共享上网的设备命名，DEVICE-NAME 规则按名称匹配（不区分大小写）。")}
     >
       {devices.map((device) => (
         <Row key={device.address} icon={Smartphone} color="indigo" label={device.name} hint={device.address}>
@@ -163,7 +163,7 @@ export function RuleTester({ snapshot, busy }: { snapshot: RuntimeSnapshot | nul
   };
 
   return (
-    <Card title={t("规则测试")} description={t("输入域名或 IP，查看当前规则会把这样的连接交给哪条规则、走哪个出口。不会真的发起连接，也不计入命中次数。")}>
+    <Card title={t("规则测试")} description={t("输入域名或 IP，查看匹配的规则和出口。不发起真实连接，不计入命中次数。")}>
       <div className="data-list-form">
         <Field label={t("域名或 IP")}>
           <input value={host} spellCheck={false} placeholder="example.com" onChange={(event) => setHost(event.target.value)} />
@@ -193,7 +193,7 @@ export function RuleTester({ snapshot, busy }: { snapshot: RuntimeSnapshot | nul
           <Row icon={Route} color="indigo" label={answer.test.rule} hint={t("匹配的规则")} />
           <Row label={t("出口")} value={[...answer.test.chain, answer.test.outbound].filter((step, index, all) => all.indexOf(step) === index).join(" → ")} />
           {answer.test.needs_address && (
-            <Row icon={TriangleAlert} color="orange" label={t("这条规则要看目标 IP。填上域名解析到的 IP 再测；解析失败时连接会被拒绝。")} />
+            <Row icon={TriangleAlert} color="orange" label={t("该规则按目标 IP 匹配，需填写域名解析到的 IP；解析失败时连接被拒绝。")} />
           )}
           {answer.mode !== "rule" && (
             <Row icon={TriangleAlert} color="orange" label={answer.mode === "global" ? t("当前是全局模式，实际连接不按规则分流。") : t("当前是直连模式，实际连接不按规则分流。")} />
@@ -214,19 +214,19 @@ export function RuleHits({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | 
   return (
     <Card
       title={t("规则命中")}
-      description={t("规则加载以来每条规则决定了多少个连接。修改规则后重新计数。")}
+      description={t("自规则加载以来各规则处理的连接数，修改规则后重新计数。")}
       actions={<button className="link-button" disabled={Boolean(busy)} onClick={() => void run("rule hits", async () => {
         await desktop.clearRuleHits();
         reload();
         return { message: t("已清零命中次数") };
       })}>{t("清零")}</button>}
     >
-      {busiest.length === 0 && view.final.hits === 0 && <p className="muted">{t("还没有连接经过规则。")}</p>}
+      {busiest.length === 0 && view.final.hits === 0 && <p className="muted">{t("暂无连接经过规则")}</p>}
       {busiest.map((rule, index) => (
         <Row key={String(index) + "-" + rule.rule} icon={Gauge} color="teal" label={rule.rule} hint={rule.target} value={t("{count} 次", { count: rule.hits })} />
       ))}
       <Row icon={Gauge} color="gray" label="FINAL" hint={view.final.target} value={t("{count} 次", { count: view.final.hits })} />
-      {unused > 0 && <p className="muted">{t("另有 {count} 条规则还没有命中。", { count: unused })}</p>}
+      {unused > 0 && <p className="muted">{t("另有 {count} 条规则暂无命中。", { count: unused })}</p>}
     </Card>
   );
 }
