@@ -623,6 +623,13 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 secret 值的 job output（安卓 artifact 名和 APK 名都含 `anixops`）丢弃，发布步骤拿不到安卓包。修复后 release.yml 由版本号直接推出这两个名字。
 tag 当时指向的 d225b10 还是旧 workflow，需要把 tag 移到包含修复的 commit 再推（Release 没有发出，移动 tag 不影响用户）。
 
+## v1.0.2 发布前后的人工事项
+
+版本号由 `version.py set 1.0.2` 设置，安卓 versionCode 3010。发布说明在 `docs/release-notes/v1.0.2.md`，tag 由 “Release tag”（`release-tag.yml`）打。
+
+- [ ] 发布流程中维护者批准 `android-release`、`apple-anx`、`anx-release`。
+- [ ] TestFlight 构建页回答加密问题：使用标准算法，不在法国销售。
+
 ## v1.0.1 发布前后的人工事项
 
 1.0.0 的 iOS / macOS 构建因内核接口版本不一致无法连接（#285），开源版 v1.0.0（Windows、Linux、安卓）已于 2026-11-24 发布，
