@@ -24,6 +24,7 @@
 
     <string name="routing_direct">直連</string>
     <string name="routing_rule">規則</string>
+    <string name="routing_global">全域</string>
 
 
     <string name="settings_usage">使用方式</string>
@@ -120,6 +121,7 @@
     <string name="rules_routing_note">用戶端不帶預設規則：規則模式只按訂閱自帶的規則和你的規則分流。</string>
     <string name="routing_direct_hint">所有流量直連，不經過節點</string>
     <string name="routing_rule_hint">按訂閱自帶的規則和你的規則分流，其餘走代理</string>
+    <string name="routing_global_hint">所有流量都走目前節點，不看規則</string>
     <string name="rules_mine">我的規則</string>
     <string name="rules_mine_note">每行一條，從上到下比對，排在分流模式和訂閱規則前面。策略寫 PROXY（目前節點或訂閱的第一個策略群組）、DIRECT 或 REJECT（REJECT-DROP 不回應，REJECT-TINYGIF 對網頁請求回透明圖片，REJECT-NO-DROP 不會因頻繁重試改成靜默）。支援 DOMAIN、DOMAIN-SUFFIX、DOMAIN-KEYWORD、DOMAIN-WILDCARD、IP-CIDR、IP-CIDR6、DST-PORT、SRC-IP、IN-PORT、SRC-PORT、PROCESS-NAME、USER-AGENT、URL-REGEX、PROTOCOL、GEOIP、IP-ASN、GEOSITE、HOSTNAME-TYPE、SUBNET、DEVICE-NAME、CELLULAR-RADIO；# 開頭的行是註解。匯入規則集寫 RULE-SET,https://規則清單網址,策略，經 PROXY 每天下載一次；GEOSITE,cn 和 GEOIP,CN 使用內建的公開清單（gaoyifan/china-operator-ip、Loyalsoldier/v2ray-rules-dat），其他國家的 GEOIP 和 IP-ASN 在下方按網址新增資料清單。</string>
     <string name="action_revert">還原</string>
@@ -764,6 +766,7 @@
     <string name="code_root_trusted_user">已為目前使用者信任根憑證</string>
     <string name="code_routing_set_direct">已改為「直連」模式</string>
     <string name="code_routing_set_rule">已改為「規則」模式</string>
+    <string name="code_routing_set_global">已改為「全域」模式</string>
     <string name="code_rules_applied">已儲存並套用 {count} 條規則，現有連線不受影響</string>
     <string name="code_rules_saved_next">已儲存 {count} 條規則，下次連線時生效</string>
     <string name="code_rules_saved_restarted">已儲存 {count} 條規則，核心已用它們重新啟動</string>

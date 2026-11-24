@@ -52,7 +52,7 @@ import java.net.URI
 private val StatusDot = 10.dp
 
 /** The routing modes, in the order the other clients offer them. Public builds ship no preset list modes. */
-internal val RoutingModes = listOf("rule", "direct")
+internal val RoutingModes = listOf("rule", "global", "direct")
 
 /** How many open connections the page lists; the rest are counted in the traffic card. */
 private const val ConnectionRows = 20
@@ -338,6 +338,7 @@ internal fun statusLabel(state: String): String = stringResource(
 internal fun routingLabel(mode: String?): String = when (mode) {
     "direct" -> stringResource(R.string.routing_direct)
     "rule" -> stringResource(R.string.routing_rule)
+    "global" -> stringResource(R.string.routing_global)
     else -> mode.orEmpty()
 }
 

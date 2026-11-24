@@ -45,7 +45,7 @@ export interface RuntimeSnapshot {
   httpsDecryptionEnabled?: boolean;
   darkTheme: boolean;
   /** No preset list modes in public builds (docs/no-presets.md). */
-  routingMode: "direct" | "rule";
+  routingMode: "rule" | "global" | "direct";
   /** How the engine resolves names; older backends leave it out. */
   dnsPreset?: DnsPreset;
   /** UDP to port 443 is refused so apps fall back from QUIC to TCP; older backends leave it out. */

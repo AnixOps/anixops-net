@@ -70,8 +70,8 @@
    "link": "anixops://mode?set=global"
   },
   "answer": {
-   "error": "unknown_mode",
-   "detail": "global"
+   "action": "mode",
+   "mode": "global"
   }
  },
  {

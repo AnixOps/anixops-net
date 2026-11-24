@@ -3,7 +3,7 @@
 //! The same actions on every platform:
 //!
 //! - `anixops://connect`, `anixops://disconnect`, `anixops://toggle`
-//! - `anixops://mode?set=rule|direct` (public builds have no preset list modes, docs/no-presets.md)
+//! - `anixops://mode?set=rule|global|direct` (public builds have no preset list modes, docs/no-presets.md)
 //! - `anixops://select?node=<name>[&group=<subscription>]`, or
 //!   `anixops://select?policy=<group>&node=<member>`
 //! - `anixops://import?url=<subscription or node link>` fills in the import form; nothing is saved until
@@ -22,7 +22,7 @@ pub const SCHEME: &str = "anixops";
 /// interface counts it, in UTF-16 units.
 pub const MAX_IMPORT_LENGTH: usize = 8 * 1024;
 
-const MODES: [&str; 2] = ["rule", "direct"];
+const MODES: [&str; 3] = ["rule", "global", "direct"];
 
 fn length(text: &str) -> usize {
     text.encode_utf16().count()
