@@ -25,17 +25,15 @@ pub enum RoutingMode {
     /// everything through its node.
     #[default]
     Rule,
+    /// Everything through the node the rule mode's `FINAL` takes (the engine's global mode).
+    Global,
     /// Everything direct.
     Direct,
 }
 
 impl From<String> for RoutingMode {
     fn from(value: String) -> Self {
-        if value == "direct" {
-            Self::Direct
-        } else {
-            Self::Rule
-        }
+        Self::parse(&value).unwrap_or_default()
     }
 }
 
@@ -43,14 +41,19 @@ impl RoutingMode {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Rule => "rule",
+            Self::Global => "global",
             Self::Direct => "direct",
         }
     }
+
+    /// Every mode, in the order clients list them.
+    pub const ALL: [Self; 3] = [Self::Rule, Self::Global, Self::Direct];
 
     /// A mode a client asks for; the removed preset modes are refused.
     pub fn parse(value: &str) -> Option<Self> {
         match value {
             "rule" => Some(Self::Rule),
+            "global" => Some(Self::Global),
             "direct" => Some(Self::Direct),
             _ => None,
         }
@@ -60,6 +63,7 @@ impl RoutingMode {
     pub fn profile_mode(self) -> profile::RoutingMode {
         match self {
             Self::Rule => profile::RoutingMode::Rule,
+            Self::Global => profile::RoutingMode::Global,
             Self::Direct => profile::RoutingMode::Direct,
         }
     }

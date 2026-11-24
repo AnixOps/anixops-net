@@ -83,9 +83,11 @@ describe("labels", () => {
     expect(routingLabel(undefined)).toBe("规则");
   });
 
-  it("offers rules and direct and no preset list modes", () => {
-    expect(availableRoutingModes().map((mode) => mode.value)).toEqual(["rule", "direct"]);
+  it("offers rule, global and direct and no preset list modes", () => {
+    // All three stay offered (docs/platform-parity.md, 分流模式); losing one fails here.
+    expect(availableRoutingModes().map((mode) => mode.value)).toEqual(["rule", "global", "direct"]);
     expect(routingLabel("rule")).toBe("规则");
+    expect(routingLabel("global")).toBe("全局");
   });
 
   it("labels group members by node name", () => {

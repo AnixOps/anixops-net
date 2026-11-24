@@ -30,6 +30,7 @@ export const maxImportLength = 8 * 1024;
 
 const modes: Record<string, RuntimeSnapshot["routingMode"]> = {
   rule: "rule",
+  global: "global",
   direct: "direct",
 };
 

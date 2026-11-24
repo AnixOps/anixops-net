@@ -21,15 +21,17 @@ pub enum DesktopRoutingMode {
     /// everything through its node.
     #[default]
     Rule,
+    /// Everything through the node the rule mode's `FINAL` takes (the engine's global mode).
+    Global,
     Direct,
 }
 
 impl From<String> for DesktopRoutingMode {
     fn from(value: String) -> Self {
-        if value == "direct" {
-            Self::Direct
-        } else {
-            Self::Rule
+        match value.as_str() {
+            "direct" => Self::Direct,
+            "global" => Self::Global,
+            _ => Self::Rule,
         }
     }
 }
