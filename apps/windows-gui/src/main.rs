@@ -69,7 +69,6 @@ mod gui {
     mod backdrop;
     mod capture_sessions;
     mod linked_sources;
-    mod managed_config;
     mod mitm_plugins;
     mod owned_proxy;
     mod reconnect;
@@ -84,7 +83,7 @@ mod gui {
     use self::startup::{DesktopProfileNode, DesktopState};
     use control_domain::{NodeDescriptor, NODE_METADATA_PATH, NODE_PATH_TRUNK};
     use platform_windows::managed::{
-        append_managed_log, read_managed_state, windows_managed_config_path,
+        append_managed_log, read_managed_config, read_managed_state, windows_managed_config_path,
         windows_managed_data_directory, windows_managed_log_directory, windows_managed_state_path,
         write_managed_state, write_managed_text_atomic, WindowsManagedConfig, WindowsManagedState,
         WindowsSystemProxyOwner, WINDOWS_MANAGED_CONFIG_SCHEMA_VERSION,
@@ -533,7 +532,7 @@ mod gui {
     pub(super) fn load_validated_managed_configuration(
         path: &Path,
     ) -> Result<WindowsManagedConfig, String> {
-        managed_config::read(path).map_err(|error| error.to_string())
+        read_managed_config(path).map_err(|error| error.to_string())
     }
 
     /// `health` is the client health section (integrity, cold start, redacted crash reports), appended as it is.
@@ -552,7 +551,7 @@ mod gui {
             )),
         }
 
-        let config = match managed_config::read(config_path) {
+        let config = match read_managed_config(config_path) {
             Ok(config) => {
                 report.push_str(&format!(
                     "managed_config_schema_version={} embedded_enabled={} native_mitm_enabled={}\n",
@@ -772,7 +771,7 @@ mod gui {
     fn managed_config_or_default() -> Result<WindowsManagedConfig, String> {
         let path = windows_managed_config_path();
         if path.exists() {
-            return managed_config::read(&path).map_err(|error| error.to_string());
+            return read_managed_config(&path).map_err(|error| error.to_string());
         }
         Ok(WindowsManagedConfig {
             schema_version: WINDOWS_MANAGED_CONFIG_SCHEMA_VERSION,

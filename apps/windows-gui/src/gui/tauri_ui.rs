@@ -1,7 +1,6 @@
 use super::actions::connection;
 use super::capture_sessions;
 use super::linked_sources::{self, CachedNode, OtherSource};
-use super::managed_config;
 use super::mitm_plugins::{self, PluginSummary};
 use super::owned_proxy;
 use super::reconnect;
@@ -38,9 +37,10 @@ use on_demand::{
 };
 use platform_windows::managed::{
     read_managed_state, windows_managed_config_path, windows_managed_data_directory,
-    windows_managed_log_directory, windows_managed_state_path, write_managed_state,
-    write_managed_text_atomic, WindowsManagedConfig, WindowsManagedEmbeddedConfig,
-    WindowsManagedNativeMitmConfig, WindowsProxySettings, WindowsSystemProxyOwner,
+    windows_managed_log_directory, windows_managed_state_path, write_managed_config,
+    write_managed_state, write_managed_text_atomic, WindowsManagedConfig,
+    WindowsManagedEmbeddedConfig, WindowsManagedNativeMitmConfig, WindowsProxySettings,
+    WindowsSystemProxyOwner,
 };
 use platform_windows::mitm_security::{
     protect_windows_managed_mitm_private_key, remove_windows_managed_mitm_private_key,
@@ -3433,7 +3433,7 @@ fn repair_managed_config(desktop: &DesktopState) {
         return;
     }
     set_embedded_listener(&mut managed, envelope_path, false);
-    let outcome = match managed_config::write(&windows_managed_config_path(), &managed) {
+    let outcome = match write_managed_config(&windows_managed_config_path(), &managed) {
         Ok(()) => "managed configuration repaired: the imported profile runs again".to_string(),
         Err(error) => format!("managed configuration repair failed: {error}"),
     };
@@ -4300,7 +4300,7 @@ fn import_embedded_subscription(
         .as_ref()
         .is_some_and(|native_mitm| native_mitm.enabled);
     set_embedded_listener(&mut managed, envelope_path, mitm);
-    managed_config::write(&windows_managed_config_path(), &managed)
+    write_managed_config(&windows_managed_config_path(), &managed)
         .map_err(|error| format!("Managed configuration update failed: {error}"))?;
     desktop.profile_source_path = source_path;
     desktop.profile_source_url = source_url;
@@ -5545,7 +5545,7 @@ fn clear_script_runtime_blocking() -> Result<OperationResult, String> {
         .as_mut()
         .ok_or_else(|| "HTTPS MITM is not configured.".to_string())?;
     native_mitm.script_runtime = None;
-    managed_config::write(&windows_managed_config_path(), &managed)
+    write_managed_config(&windows_managed_config_path(), &managed)
         .map_err(|error| error.to_string())?;
     Ok(OperationResult::coded(
         "script_runtime.cleared",
@@ -5594,7 +5594,7 @@ fn enable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult,
         script_runtime: None,
     });
     set_embedded_listener(&mut managed, embedded.envelope_path, true);
-    managed_config::write(&windows_managed_config_path(), &managed)
+    write_managed_config(&windows_managed_config_path(), &managed)
         .map_err(|error| format!("Managed configuration update failed: {error}"))?;
     reconnect_running_direct_core(&state, Some(managed_rollback(&state, previous)?))?.result(
         OperationResult::coded(
@@ -5619,7 +5619,7 @@ fn managed_rollback(
         .map_err(|_| "desktop state lock failed")?
         .clone();
     Ok(Rollback::files(desktop, move || {
-        managed_config::write(&windows_managed_config_path(), &previous)
+        write_managed_config(&windows_managed_config_path(), &previous)
             .map_err(|error| error.to_string())
     }))
 }
@@ -5985,7 +5985,7 @@ fn disable_https_mitm_blocking(state: DesktopAppState) -> Result<OperationResult
     } else {
         managed.system_proxy = None;
     }
-    managed_config::write(&windows_managed_config_path(), &managed)
+    write_managed_config(&windows_managed_config_path(), &managed)
         .map_err(|error| error.to_string())?;
     let result = reconnect_running_direct_core(&state, Some(managed_rollback(&state, previous)?))?
         .result(OperationResult::coded(
@@ -6432,8 +6432,9 @@ mod tests {
     }
 
     /// What `enable_https_mitm_blocking` and a later profile import write: the window owns the proxy and
-    /// decryption is on. The kernel's own check refuses that combination, so turning decryption on always
-    /// failed with "enabled native HTTPS MITM requires service-owned system proxy lifecycle".
+    /// decryption is on. Earlier kernels refused that combination ("enabled native HTTPS MITM requires
+    /// service-owned system proxy lifecycle"); the kernel now accepts it when the embedded engine is on, so the
+    /// client reads and writes the file with the kernel's own checks.
     #[test]
     fn turning_https_decryption_on_writes_a_valid_configuration() {
         let mut managed = default_managed_config();
@@ -6460,15 +6461,29 @@ mod tests {
             true,
         );
         assert_eq!(managed.system_proxy_owner, WindowsSystemProxyOwner::Desktop);
-        assert!(
-            managed.validate().is_err(),
-            "the kernel check the client works around"
-        );
-        managed_config::validate(&managed).expect("desktop-owned decryption is valid");
+        managed
+            .validate()
+            .expect("the kernel accepts desktop-owned decryption");
+        // Without the embedded engine nothing decrypts or puts the proxy back.
+        let mut no_engine = managed.clone();
+        no_engine.embedded = None;
+        assert!(no_engine.validate().is_err());
         assert_eq!(
             managed.embedded.as_ref().unwrap().listen_port,
             EMBEDDED_MITM_UPSTREAM_PORT
         );
+
+        // Saved and read back through the kernel's reader and writer, as connect, plugins and snapshots do.
+        let path = std::env::temp_dir().join(format!(
+            "anixops-managed-config-decrypting-{}.json",
+            std::process::id()
+        ));
+        write_managed_config(&path, &managed).expect("turning decryption on saves");
+        assert_eq!(
+            platform_windows::managed::read_managed_config(&path).expect("and reads back"),
+            managed
+        );
+        let _ = fs::remove_file(path);
     }
 
     #[test]
