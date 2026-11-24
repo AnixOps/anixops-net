@@ -126,7 +126,8 @@ extension TunnelSwitch {
             try await Task.sleep(nanoseconds: 100_000_000)
         }
         do {
-            try manager.connection.startVPNTunnel()
+            // The user's own start: it counts from one again (`AutoReconnect`).
+            try manager.connection.startVPNTunnel(options: AutoReconnect.userStart())
         } catch {
             throw Failure.startFailed
         }

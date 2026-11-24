@@ -61,8 +61,12 @@ fun restartAction(want: VpnWant, recentRestarts: Int): Restart = when (want) {
 fun recentStamps(stamps: List<Long>, now: Long, windowMillis: Long): List<Long> =
     stamps.filter { it in (now - windowMillis)..now }
 
-/** Reconnects after the process died, within [RESTART_WINDOW_MILLIS], before the service gives up. */
-const val MAX_RESTARTS = 3
+/**
+ * Reconnects after the process died, within [RESTART_WINDOW_MILLIS], before the service gives up: the same five as
+ * the iOS and macOS tunnel and the Wi-Fi rules (docs/auto-reconnect.md). Android itself waits longer before each
+ * restart of a sticky service that keeps dying, so these do not come in a burst.
+ */
+const val MAX_RESTARTS = 5
 const val RESTART_WINDOW_MILLIS = 10 * 60 * 1000L
 
 /** The interface the client asks for (`openTunnel`); addresses and routes in CIDR form. */
