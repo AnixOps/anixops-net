@@ -97,7 +97,7 @@ class DensityTest {
         showExtensions()
         val shown = compose.onAllNodes(pluginItems, useUnmergedTree = true).fetchSemanticsNodes().size
         assertTrue("$shown of $PLUGINS plugins shown, at most $MAX_FOLDED_ITEMS before \"show all\"", shown in 1..MAX_FOLDED_ITEMS)
-        compose.onNodeWithText(text(R.string.plugins_show_all, PLUGINS)).performScrollTo().performClick()
+        compose.onNodeWithText(RuntimeEnvironment.getApplication().resources.getQuantityString(R.plurals.plugins_show_all, PLUGINS, PLUGINS)).performScrollTo().performClick()
         compose.waitForIdle()
         compose.onAllNodes(pluginItems, useUnmergedTree = true).assertCountEquals(PLUGINS)
     }

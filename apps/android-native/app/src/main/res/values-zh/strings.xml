@@ -191,7 +191,9 @@
     <string name="settings_connection">连接</string>
     <string name="settings_privacy_page">隐私与诊断</string>
     <string name="settings_advanced">高级</string>
-    <string name="plugins_show_all">显示全部 %1$d 个插件</string>
+    <plurals name="plugins_show_all">
+        <item quantity="other">显示全部 %1$d 个插件</item>
+    </plurals>
     <string name="plugins_show_less">收起</string>
     <plurals name="wifi_rule_count">
         <item quantity="other">%d 条</item>

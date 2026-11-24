@@ -595,7 +595,7 @@ private fun PluginsSection(
                 }
             }
             // A long list folds to its first few plugins, so the sections below stay in reach.
-            FoldedList(plugins, showAll = { stringResource(R.string.plugins_show_all, it) }) { plugin ->
+            FoldedList(plugins, showAll = { pluralStringResource(R.plurals.plugins_show_all, it, it) }) { plugin ->
                 PluginLine(
                     plugin,
                     enabled = enabled,

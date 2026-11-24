@@ -187,7 +187,9 @@
     <string name="settings_connection">連線</string>
     <string name="settings_privacy_page">隱私與診斷</string>
     <string name="settings_advanced">進階</string>
-    <string name="plugins_show_all">顯示全部 %1$d 個外掛</string>
+    <plurals name="plugins_show_all">
+        <item quantity="other">顯示全部 %1$d 個外掛</item>
+    </plurals>
     <string name="plugins_show_less">收起</string>
     <plurals name="wifi_rule_count">
         <item quantity="other">%d 條</item>
