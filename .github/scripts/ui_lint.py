@@ -8,8 +8,9 @@ Colours reach the interface only through the generated token files (.github/scri
 Swift `brand.*` / `Brand.*` palette, the desktop CSS variables, BrandTokens.kt, BrandTokens.xaml and the GTK
 brand-*.css. Every pair of those tokens is checked for contrast in AnixOps Design (guidelines/color.md), so a
 colour written anywhere else is a colour nobody checked, in one theme at least. Six rules, the first three about
-colour on every platform, the last three about the structure of the SwiftUI screens (Apple has no cheap runtime
-harness, so what the other platforms measure by running the page is read from the source here):
+colour on every platform, the next three about the structure of the SwiftUI screens (Apple has no cheap runtime
+harness, so what the other platforms measure by running the page is read from the source here), the last two about
+the words in every platform's string tables:
 
   U1 colour-literal   a colour written in the code: hex, rgb(), Color(red:), Color.orange, Color(0xFF...), "#AARRGGBB"
   U2 derived-colour   a token made lighter or mixed: `.opacity()` on a colour, color-mix(), .copy(alpha = ...).
@@ -25,8 +26,17 @@ harness, so what the other platforms measure by running the page is read from th
                       shown / visible slice, or put it on a pushed page that is the list (N26).
   U6 master-switch    a Toggle in the same Section as such a ForEach: the master switch is a row among the items
                       instead of its own section above them (N27). A Toggle inside the ForEach rows is per item.
+  U7 formal-copy      a string a user sees, in any of the three languages, uses second person, a colloquial word or
+                      particle, a contraction, a filler or an exclamation mark (voice-and-tone.md W1-W3). The word
+                      list is formal-copy.json, a byte-identical copy of AnixOps Design guidelines/formal-copy.json.
+  U8 no-explanation   such a string explains instead of stating: an explanatory connective (because, so that,
+                      这样, 以便 ... W5) or more than two sentences (W6). Cut the reason and the mechanism (W4).
 
-There is no allow list and no inline marker: a colour the tokens do not have is added to AnixOps Design and
+U7 and U8 read the string tables, not the code: Localizable.xcstrings and InfoPlist.xcstrings (Apple), i18n-en.ts and
+i18n-zh-hant.ts with their Chinese keys (desktop), values*/strings.xml (Android) and client-strings catalogue.json
+(Windows and Linux native). Placeholders (%@, %1$s, {name}) are removed before the words are matched.
+
+There is no allow list and no inline marker: a string that needs an exception is rewritten; a colour the tokens do not have is added to AnixOps Design and
 apps/ios/Design/tokens.json first, then used by name.
 
 Standard library only.
@@ -481,6 +491,146 @@ def check_lists(path: str, text: str, pages: set[str]) -> list[str]:
     return found
 
 
+# --- U7 / U8: the words in the string tables (AnixOps Design voice-and-tone.md, W1-W7) ---------------------------
+
+COPY_RULES_FILE = Path(__file__).resolve().parent / "formal-copy.json"
+PLACEHOLDER = re.compile(r"%(?:\d+\$)?(?:ll|l|h)?[@dusfxXc%]|\{[A-Za-z_][\w.]*\}|\\[nt'\"@?]")
+SENTENCE_END = re.compile(r"[。！？]+|[.!?]+(?=\s|$)")
+
+
+@dataclass(frozen=True)
+class CopyEntry:
+    path: str
+    key: str
+    lang: str  # "zh" (Simplified or Traditional) or "en"
+    text: str
+
+
+def copy_rules() -> list[tuple[str, str, re.Pattern[str], str]]:
+    import json
+
+    data = json.loads(COPY_RULES_FILE.read_text(encoding="utf-8"))
+    out = []
+    for rule in data["rules"]:
+        lint = "U8" if rule["id"] in ("W4", "W5", "W6") else "U7"
+        out.append((lint, rule["lang"], re.compile(rule["pattern"]), f'{rule["id"]} {rule["use"]}'))
+    return out
+
+
+def max_sentences() -> int:
+    import json
+
+    return int(json.loads(COPY_RULES_FILE.read_text(encoding="utf-8"))["max_sentences"])
+
+
+def sentences(text: str) -> int:
+    parts = [p for p in SENTENCE_END.split(text) if p.strip(" \n\t\"'”’）)】」…")]
+    return len(parts)
+
+
+def xcstrings_entries(path: str, text: str) -> list[CopyEntry]:
+    import json
+
+    out = []
+    for key, entry in json.loads(text).get("strings", {}).items():
+        if entry.get("shouldTranslate") is False:
+            continue
+        locs = entry.get("localizations", {})
+        if "zh-Hans" not in locs and re.search(r"[一-鿿]", key):
+            out.append(CopyEntry(path, key, "zh", key))
+        for lang, loc in locs.items():
+
+            def values(node: object) -> list[str]:
+                if isinstance(node, dict):
+                    if "stringUnit" in node:
+                        return [node["stringUnit"].get("value", "")]
+                    return [v for child in node.values() for v in values(child)]
+                return []
+
+            for value in values(loc):
+                out.append(CopyEntry(path, key, "en" if lang == "en" else "zh", value))
+    return out
+
+
+TS_PAIR = re.compile(r'^\s*("(?:[^"\\]|\\.)*")\s*:\s*("(?:[^"\\]|\\.)*")\s*,?\s*$', re.M)
+
+
+def ts_entries(path: str, text: str, lang: str, keys: bool) -> list[CopyEntry]:
+    """Desktop tables map the Chinese source text (the key) to English or Traditional Chinese."""
+    import json
+
+    out = []
+    for m in TS_PAIR.finditer(text):
+        key, value = json.loads(m.group(1)), json.loads(m.group(2))
+        if keys:
+            out.append(CopyEntry(path, key, "zh", key.split("|")[0]))
+        out.append(CopyEntry(path, key, lang, value))
+    return out
+
+
+def android_entries(path: str, text: str) -> list[CopyEntry]:
+    import xml.etree.ElementTree as ET
+
+    lang = "zh" if "/values-zh" in path else "en"
+    out = []
+    for node in ET.fromstring(text):
+        if node.get("translatable") == "false":
+            continue
+        if node.tag == "string":
+            out.append(CopyEntry(path, node.get("name", ""), lang, "".join(node.itertext())))
+        elif node.tag in ("plurals", "string-array"):
+            for item in node:
+                out.append(CopyEntry(path, node.get("name", ""), lang, "".join(item.itertext())))
+    return out
+
+
+def catalogue_entries(path: str, text: str) -> list[CopyEntry]:
+    import json
+
+    out = []
+    for key, langs in json.loads(text).items():
+        for lang, value in langs.items():
+            out.append(CopyEntry(path, key, "en" if lang == "en" else "zh", value))
+    return out
+
+
+def copy_entries(root: Path, files: list[str]) -> list[CopyEntry]:
+    out: list[CopyEntry] = []
+    for path in files:
+        if path.startswith("apps/ios/Sources/") and path.endswith(".xcstrings"):
+            out.extend(xcstrings_entries(path, (root / path).read_text(encoding="utf-8")))
+        elif path == "apps/windows-gui/ui/src/i18n-en.ts":
+            out.extend(ts_entries(path, (root / path).read_text(encoding="utf-8"), "en", keys=True))
+        elif path == "apps/windows-gui/ui/src/i18n-zh-hant.ts":
+            out.extend(ts_entries(path, (root / path).read_text(encoding="utf-8"), "zh", keys=False))
+        elif re.fullmatch(r"apps/android-native/app/src/main/res/values(?:-zh(?:-r\w+)?)?/strings\.xml", path):
+            out.extend(android_entries(path, (root / path).read_text(encoding="utf-8")))
+        elif path == "crates/client-strings/catalogue.json":
+            out.extend(catalogue_entries(path, (root / path).read_text(encoding="utf-8")))
+    return out
+
+
+def check_copy(entries: list[CopyEntry]) -> list[str]:
+    rules = copy_rules()
+    limit = max_sentences()
+    findings = []
+    seen: set[tuple[str, str, str]] = set()
+    for entry in entries:
+        text = PLACEHOLDER.sub(" ", entry.text)
+        if (entry.path, entry.lang, text) in seen:
+            continue
+        seen.add((entry.path, entry.lang, text))
+        problems = [message for lint, lang, pattern, message in rules
+                    if lang in (entry.lang, "any") and pattern.search(text)]
+        lints = ["U8" if message.startswith(("W4", "W5", "W6")) else "U7" for message in problems]
+        if sentences(text) > limit:
+            problems.append(f"W6 more than {limit} sentences; keep what the control does and cut the explanation (W4)")
+            lints.append("U8")
+        if problems:
+            findings.append(f"{entry.path}: {lints[0]} [{entry.key[:60]}] {'; '.join(problems)}\n    {entry.text[:160]}")
+    return findings
+
+
 def tracked(root: Path) -> list[str]:
     out = subprocess.run(["git", "-C", str(root), "ls-files", "-z"], check=True, capture_output=True).stdout
     return [p for p in out.decode("utf-8").split("\0") if p]
@@ -536,6 +686,7 @@ def run(root: Path) -> int:
             text = (root / path).read_text(encoding="utf-8")
             findings.extend(check_file(path, text, scope))
     findings.extend(check_structure(root, files))
+    findings.extend(check_copy(copy_entries(root, files)))
     for finding in findings:
         print(finding)
     if findings:
