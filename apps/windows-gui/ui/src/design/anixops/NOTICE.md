@@ -1,7 +1,7 @@
 # AnixOps Design 1.2.0 (vendored)
 
 The files in this directory are copied unmodified from
-https://github.com/AnixOps/anixops-design at `9712b1d7e26254c6aaf449a4eef3cbabfdc22a06` by `.github/scripts/sync_design.py`.
+https://github.com/AnixOps/anixops-design at `c345b8ee0f35d1ffd09ddd529688756d40dbe8c1` by `.github/scripts/sync_design.py`.
 Do not edit them here: change the design repository, then sync again.
 CI (`sync_design.py --check`) verifies them against `manifest.json`.
 

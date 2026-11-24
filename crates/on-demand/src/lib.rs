@@ -12,6 +12,26 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+/// How the Wi-Fi rules try again a connect they started that failed: later each time, and not after
+/// [`retry::MAX_FAILURES`] failures in a row on the same network. The same limit as the iOS and macOS tunnel
+/// (`AutoReconnect.swift`) and Android's restarts (`MAX_RESTARTS`); see docs/auto-reconnect.md.
+pub mod retry {
+    use std::time::Duration;
+
+    /// Failed connects in a row on one network before the rules stop trying there. A new network starts over.
+    pub const MAX_FAILURES: u32 = 5;
+
+    /// What follows the `failures`-th failed connect in a row on the same network: the wait before the next try
+    /// (half a minute, doubling), or `None` once the rules stop trying.
+    pub fn after(failures: u32) -> Option<Duration> {
+        if failures >= MAX_FAILURES {
+            return None;
+        }
+        let doublings = failures.saturating_sub(1);
+        Some(Duration::from_secs(30 << doublings))
+    }
+}
+
 /// What the client does on one kind of network.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -357,6 +377,21 @@ mod wlan {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retries_slow_down_and_stop_after_five_failures() {
+        let waits: Vec<_> = (1..=4)
+            .map(|failures| retry::after(failures).unwrap())
+            .collect();
+        assert_eq!(
+            waits,
+            [30, 60, 120, 240].map(std::time::Duration::from_secs)
+        );
+        assert_eq!(retry::after(retry::MAX_FAILURES), None);
+        assert_eq!(retry::after(u32::MAX), None);
+        // The first failure waits like any other.
+        assert_eq!(retry::after(0), Some(std::time::Duration::from_secs(30)));
+    }
 
     fn rules() -> Settings {
         Settings {

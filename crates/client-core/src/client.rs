@@ -998,9 +998,10 @@ impl Client {
         }
         let client = self.clone();
         thread::spawn(move || {
-            // A connect the rules started that failed: when to try again on the same network, and how many
-            // failures in a row. The first failure is notified, the retries are not.
-            let mut retry: Option<(Instant, u32)> = None;
+            // A connect the rules started that failed: when to try again on the same network (`None` once they
+            // stopped trying there, `on_demand::retry`), and how many failures in a row. The first failure is
+            // notified, and so is the stop; the retries in between are not. A new network starts over.
+            let mut retry: Option<(Option<Instant>, u32)> = None;
             loop {
                 thread::sleep(Duration::from_secs(10));
                 if !client.backend().on_demand_enabled() {
@@ -1010,7 +1011,7 @@ impl Client {
                 let Some(network) = client.platform.current_network(false) else {
                     continue;
                 };
-                let due = retry.is_some_and(|(at, _)| Instant::now() >= at);
+                let due = retry.is_some_and(|(at, _)| at.is_some_and(|at| Instant::now() >= at));
                 if due {
                     client.backend().retry_on_demand();
                 }
@@ -1019,12 +1020,22 @@ impl Client {
                     Some(OnDemandAction::Connect) => match client.connect_through_tunnel() {
                         Ok(_) => retry = None,
                         Err(error) => {
-                            let failures = retry.map_or(0, |(_, failures)| failures) + 1;
-                            retry =
-                                Some((Instant::now() + on_demand_retry_after(failures), failures));
-                            let notice = (failures == 1)
-                                .then(|| client.backend().on_demand_failed_notice(&error))
-                                .flatten();
+                            // A try the wait made counts on; a connect for a new network counts from one.
+                            let earlier = if due {
+                                retry.map_or(0, |(_, failures)| failures)
+                            } else {
+                                0
+                            };
+                            let failures = earlier + 1;
+                            let next = on_demand::retry::after(failures);
+                            retry = Some((next.map(|wait| Instant::now() + wait), failures));
+                            let notice = if next.is_none() {
+                                client.backend().on_demand_stopped_notice(&error, failures)
+                            } else if failures == 1 {
+                                client.backend().on_demand_failed_notice(&error)
+                            } else {
+                                None
+                            };
                             if let Some(notice) = notice {
                                 client.platform.post_notice(&notice);
                             }
@@ -1634,13 +1645,6 @@ fn handler(name: &str) -> Option<Handler> {
         _ => return None,
     };
     Some(handler)
-}
-
-/// How long the Wi-Fi rules wait before trying again a connect that failed `failures` times in a row on the
-/// same network: half a minute, doubling, at most ten minutes.
-fn on_demand_retry_after(failures: u32) -> Duration {
-    let doublings = failures.saturating_sub(1).min(5);
-    Duration::from_secs(30 * (1u64 << doublings)).min(Duration::from_secs(600))
 }
 
 /// The name the decryption root gets in Downloads: the first eight hex digits of its SHA-256 fingerprint
@@ -2323,15 +2327,6 @@ mod tests {
             located,
             serde_json::json!({"message": "Saved", "location": "Download/a.log", "saveError": "denied"})
         );
-    }
-
-    #[test]
-    fn wifi_rule_retries_back_off() {
-        assert_eq!(on_demand_retry_after(1), Duration::from_secs(30));
-        assert_eq!(on_demand_retry_after(2), Duration::from_secs(60));
-        assert_eq!(on_demand_retry_after(5), Duration::from_secs(480));
-        assert_eq!(on_demand_retry_after(6), Duration::from_secs(600));
-        assert_eq!(on_demand_retry_after(u32::MAX), Duration::from_secs(600));
     }
 
     #[test]

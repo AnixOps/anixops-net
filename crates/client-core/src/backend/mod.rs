@@ -1740,6 +1740,18 @@ impl Backend {
         self.notifications.on_demand_failed(error)
     }
 
+    /// The notice when the Wi-Fi rules stopped trying to connect on this network after `failures` failed connects
+    /// in a row (`on_demand::retry`), the last with `error`; logged too.
+    pub fn on_demand_stopped_notice(&self, error: &str, failures: u32) -> Option<Notice> {
+        self.log(
+            LogLevel::Error,
+            &format!(
+                "Wi-Fi rules: connecting failed {failures} times in a row, stopped trying on this network: {error}"
+            ),
+        );
+        self.notifications.on_demand_stopped(error, failures)
+    }
+
     /// What the rules want on `network` when it is new and the connection is not already that way.
     pub fn on_demand_action(&mut self, network: Network) -> Option<OnDemandAction> {
         let running = self.engine.is_running();

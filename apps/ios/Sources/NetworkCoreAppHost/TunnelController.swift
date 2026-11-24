@@ -154,6 +154,9 @@ final class TunnelController {
     /// engine starts with capture off, so the app turns it back on once connected. A disconnect by the user, or by
     /// the system, ends capture with the tunnel.
     @ObservationIgnored private var resumeCapture = false
+    /// When the app last started the tunnel itself, so a stop that ended reconnecting and was read after it does not
+    /// turn reconnecting off for the new connection (`turnOffReconnectAfterStop`).
+    @ObservationIgnored private var userStartedAt: Date?
     /// The saved capture session the request and connection lists show instead of the live capture, opened in the
     /// app's own capture viewer (`CaptureViewer`); nil shows the live capture of the running tunnel.
     var viewedCapture: PacketCapture.Session?
@@ -2358,6 +2361,7 @@ final class TunnelController {
     }
 
     private func startTunnel(_ manager: NETunnelProviderManager) {
+        userStartedAt = Date()
         do {
             try manager.connection.startVPNTunnel(options: Self.startOptions(for: manager))
             message = nil
@@ -2380,12 +2384,14 @@ final class TunnelController {
 
     /// On macOS the tunnel may be a System Extension, which runs as root and cannot read the user's Keychain, so
     /// the app hands over the node key, node library and MITM root at start (`TunnelStartSecrets`). iOS shares the
-    /// Keychain with the extension and passes nothing.
-    private static func startOptions(for manager: NETunnelProviderManager) -> [String: NSObject]? {
+    /// Keychain with the extension and passes no secrets.
+    /// Every start from the app is the user's own (`AutoReconnect.userStart`): it goes ahead even after reconnecting
+    /// stopped, and counts failed starts from one again.
+    private static func startOptions(for manager: NETunnelProviderManager) -> [String: NSObject] {
         #if os(macOS)
-        return TunnelStartSecrets.fromKeychain(nodeKeyVersion: nodeKeyVersion(of: manager)).options
+        return AutoReconnect.userStart(TunnelStartSecrets.fromKeychain(nodeKeyVersion: nodeKeyVersion(of: manager)).options)
         #else
-        return nil
+        return AutoReconnect.userStart()
         #endif
     }
 
@@ -2910,6 +2916,7 @@ final class TunnelController {
             // On Demand started it already; capture comes back once it is connected.
             return
         }
+        userStartedAt = Date()
         do {
             try manager.connection.startVPNTunnel(options: Self.startOptions(for: manager))
         } catch {
@@ -2930,13 +2937,17 @@ final class TunnelController {
 
     /// Shows why the tunnel stopped, such as the extension's start failure, which iOS otherwise hides.
     private func showLastDisconnectError() {
+        let asked = Date()
         manager?.connection.fetchLastDisconnectError { [weak self] error in
             guard let error = error else {
                 return
             }
             let text = Self.describe(disconnectError: error as NSError)
+            // The extension stopped reconnecting by itself (`AutoReconnect`): nothing starts the tunnel again until
+            // the user does.
+            let stopped = AutoReconnect.stop(in: text)
             #if os(macOS)
-            if TunnelStartSecrets.isStaleCopyFailure(text) {
+            if stopped == nil, TunnelStartSecrets.isStaleCopyFailure(text) {
                 Task { @MainActor in
                     await self?.recoverStaleCopy(text)
                 }
@@ -2945,8 +2956,10 @@ final class TunnelController {
             // The System Extension cannot post; on iOS the extension posts this itself.
             if AppNotifications.settings.connection {
                 AppNotifications.post(
-                    title: String(localized: "AnixOps Net 已断开"),
-                    body: String(localized: "节点没有响应、被干扰，或网络刚切换。打开 App 重试或换一个节点。"),
+                    title: stopped == nil
+                        ? String(localized: "AnixOps Net 已断开")
+                        : String(localized: "AnixOps Net 未能连接"),
+                    body: Self.stopNotificationBody(stopped),
                     thread: "connection",
                     id: "connection-stopped"
                 )
@@ -2957,16 +2970,68 @@ final class TunnelController {
                     return
                 }
                 self.lastDisconnectError = text
+                if stopped != nil {
+                    Task {
+                        await self.turnOffReconnectAfterStop(since: asked)
+                    }
+                }
                 // The answer can arrive after On Demand already brought the tunnel back: no stop card then.
                 guard NoticeOrigin.tunnelStopped.applies(whileConnected: self.isConnected) else {
                     return
                 }
                 self.notice = AppNotice(
-                    text: String(localized: "连接已断开：节点没有响应、被干扰，或网络刚切换。可以重试，或换一个节点。"),
+                    text: Self.stopNoticeText(stopped),
                     detail: text,
                     actions: [.retry, .chooseNode],
                     origin: .tunnelStopped
                 )
+            }
+        }
+    }
+
+    /// The home screen's sentence for a stop: the tunnel stopped, or it stopped reconnecting by itself.
+    private static func stopNoticeText(_ stopped: AutoReconnect.Outcome?) -> String {
+        switch stopped {
+        case .stopped(fatal: true):
+            return String(localized: "连接失败，重试也无法解决这个问题，已停止自动重连。请查看下面的原因，或换一个节点。")
+        case .stopped(fatal: false):
+            return String(localized: "连续 5 次没有连上，已停止自动重连。可以重试，或换一个节点。")
+        case .retry, nil:
+            return String(localized: "连接已断开：节点没有响应、被干扰，或网络刚切换。可以重试，或换一个节点。")
+        }
+    }
+
+    #if os(macOS)
+    private static func stopNotificationBody(_ stopped: AutoReconnect.Outcome?) -> String {
+        switch stopped {
+        case .stopped(fatal: true):
+            return String(localized: "这个问题重试也无法解决，已停止自动重连。打开 App 查看原因。")
+        case .stopped(fatal: false):
+            return String(localized: "连续 5 次没有连上，已停止自动重连。打开 App 重试或换一个节点。")
+        case .retry, nil:
+            return String(localized: "节点没有响应、被干扰，或网络刚切换。打开 App 重试或换一个节点。")
+        }
+    }
+    #endif
+
+    /// Turns On Demand off after the extension stopped reconnecting, in case it could not do so itself (the macOS
+    /// System Extension cannot): the system would otherwise keep starting a tunnel the extension refuses. The user's
+    /// next connect turns it on again (`startNow`). Leaves it alone when the user started the tunnel after `since`.
+    private func turnOffReconnectAfterStop(since: Date) async {
+        await profileWrites.run {
+            if let userStartedAt, userStartedAt >= since {
+                return
+            }
+            do {
+                try await writeProfile { target in
+                    guard target.isOnDemandEnabled else {
+                        return false
+                    }
+                    target.isOnDemandEnabled = false
+                    return true
+                }
+            } catch {
+                message = String(localized: "无法关闭自动重连") + Self.errorCode(error)
             }
         }
     }

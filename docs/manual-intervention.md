@@ -947,3 +947,13 @@ CI 的 `Third-party notices` job 在每次相关改动时跑同一套生成，�
 - [ ] 应用内「关于 › 开源许可」页面（Android、iOS / macOS、Tauri）尚未实现：目前声明文件随包附带但不在界面里显示。
 - [ ] WiX 安装界面（`WixUI_InstallDir`）的许可协议页仍是 WiX 默认的占位文本，建议设置 `WixUILicenseRtf` 为本项目许可证，
   或换用不带许可协议页的对话框集。
+
+## 自动重连降速与 5 次上限（docs/auto-reconnect.md）
+
+CI 只能验证计数与等待的逻辑（`AutoReconnectTests`、`on_demand::retry`），系统 On Demand 的实际行为要真机确认：
+
+- [ ] iOS 真机：选一个必然失败的节点（或改坏端口）连接，确认重试间隔逐次变长（开发者模式的隧道事件里有 “reconnecting in N s”），
+  第 5 次失败后不再重试、On Demand 被关闭、App 显示“连续 5 次没有连上，已停止自动重连”并收到通知；点“重试”能立即再试。
+- [ ] 确认扩展内 `NETunnelProviderManager.loadAllFromPreferences` / `saveToPreferences` 能关闭 On Demand（iOS 与 Mac App Store 版）；
+  若不能，拒绝会每 30 秒循环一次，直到 App 打开后关闭它。
+- [ ] macOS Developer ID 版（System Extension）：同上，确认 App 在前台或后台运行时会关闭 On Demand。

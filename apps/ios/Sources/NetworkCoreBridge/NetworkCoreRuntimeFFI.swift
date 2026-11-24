@@ -3,13 +3,14 @@
 // No C symbol, header, staticlib or XCFramework is linked here: only NetworkCorePacketTunnel links the
 // runtime XCFramework, and it reports the handshake and C ABI codes through this type. The FFI boundary
 // design fixes the ABI and schema versions. A reported runtime that disagrees with them maps to abi_mismatch,
-// and initialization failure maps to initialization_failed. Neither case may fall back to an external
+// and initialization failure maps to initialization_failed. .github/scripts/ios-runtime-handshake.sh fails every
+// Apple build whose pinned kernel disagrees with these constants. Neither case may fall back to an external
 // process, daemon, CLI or unaudited helper.
 
 public enum NetworkCoreRuntimeFFI {
     public static let abiVersion: UInt32 = 1
     public static let dtoSchemaVersion: UInt32 = 1
-    public static let featureSetVersion: UInt32 = 5
+    public static let featureSetVersion: UInt32 = 6
 
     public struct Handshake: Sendable, Equatable {
         public let abiVersion: UInt32
