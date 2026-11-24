@@ -120,7 +120,7 @@ GUI 清单改为 `requireAdministrator`，登录后启动从 HKCU Run 改为按�
 桌面模式下 HTTPS 解密改由客户端进程自己运行（客户端已固定以管理员运行），不再需要 Windows 服务：
 
 - [ ] 扩展页开启 HTTPS 解密，连接成功；浏览器访问 HTTPS 站点证书颁发者为 NetworkCore 根证书，插件改写生效。
-      （客户端用自己的 managed-config 校验，跳过内核里“解密必须由服务持有代理”这条服务时代的规则，见 `apps/windows-gui/src/gui/managed_config.rs`；内核放宽后可去掉。）
+      （内核接受“窗口持有代理 + 嵌入式引擎开启”时开启解密，客户端直接用内核的 `read_managed_config` / `write_managed_config`，含受信文件打开与托管目录文件引用检查。用户 2026-11-24 曾在此处看到 `enabled native HTTPS MITM requires service-owned system proxy lifecycle`，真机验收时确认不再出现。）
 - [ ] 便携版留下的服务时代配置（`system_proxy_owner: service` 且解密已开）在导入或更新订阅后能写入，解密保持开启。
 - [ ] 已连接时开启/关闭 HTTPS 解密，客户端自动重连，系统代理保持在 127.0.0.1:7890。
 - [ ] 抓包中添加解密域名、保存映射或启停插件：引擎重启后抓包自动重新开启，“已保存的会话”里多一条“重连前自动保存”；提示写明已保存。
