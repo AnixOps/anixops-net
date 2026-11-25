@@ -68,6 +68,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// The joined mesh networks' outbounds with their secrets, read at start (`readMeshOutbounds(_:)`). The engine
     /// keeps them across rule swaps, and the app joins, leaves and saves networks in the running engine directly.
     private var meshOutbounds: [String: [String: JSONValue]] = [:]
+    /// Reads `mesh_status` while the tunnel runs for the mesh alone and applies its routes (`watchMeshRoutes`).
+    private var meshRoutesTimer: DispatchSourceTimer?
     /// Hourly traffic by host and policy for the app's statistics page.
     private let trafficStats = TrafficStatsRecorder()
     /// Network changes in, script notifications out.
@@ -325,6 +327,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             )
             return
         }
+        if let tunnelProtocol = protocolConfiguration as? NETunnelProviderProtocol,
+           tunnelProtocol.providerConfiguration?[TunnelProfileKeys.meshOnly] as? Bool == true
+        {
+            beginMeshOnly(tunnelProtocol, completionHandler: completionHandler)
+            return
+        }
         guard let tunnelProtocol = protocolConfiguration as? NETunnelProviderProtocol,
               let template = tunnelProtocol.providerConfiguration?[TunnelProfileKeys.runtimeConfig] as? Data
         else {
@@ -523,6 +531,119 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
     }
 
+    /// Starts the tunnel for the mesh alone (`TunnelProfileKeys.meshOnly`): the joined networks and nothing else, no
+    /// node key, and only the networks the engine names routed into the tunnel (mesh-status.md, 只开组网). The routes
+    /// follow the engine from then on (`watchMeshRoutes`).
+    private func beginMeshOnly(
+        _ tunnelProtocol: NETunnelProviderProtocol,
+        completionHandler: @escaping (Error?) -> Void
+    ) {
+        meshOutbounds = readMeshOutbounds(tunnelProtocol.providerConfiguration?[TunnelProfileKeys.meshNetworks] as? Data)
+        guard !meshOutbounds.isEmpty else {
+            completionHandler(PacketTunnelFailure(reason: "no mesh network to join", fatal: true))
+            return
+        }
+        events.record("mesh only, \(meshOutbounds.count) networks")
+        let session: EmbeddedRuntimeSession
+        do {
+            let config = EmbeddedRuntimeConfig.meshOnly(meshOutbounds, profileID: Self.meshOnlyProfileID)
+            session = try EmbeddedRuntimeSession(config: EngineBudget.encoded(config), packetFlow: packetFlow)
+        } catch let failure as EmbeddedRuntimeSession.Failure {
+            completionHandler(PacketTunnelFailure(
+                reason: "embedded runtime rejected the mesh networks (code \(failure.code))", fatal: true
+            ))
+            return
+        } catch {
+            completionHandler(PacketTunnelFailure(reason: "embedded runtime rejected the mesh networks", fatal: true))
+            return
+        }
+        guard let settings = Self.networkSettings(
+            MeshTunnel.interface(nil),
+            remoteAddress: IPAddressText.tunnelRemoteAddress(for: tunnelProtocol.serverAddress)
+        ) else {
+            completionHandler(PacketTunnelFailure(reason: "tunnel profile has invalid interface addresses", fatal: true))
+            return
+        }
+        setTunnelNetworkSettings(settings) { [weak self] error in
+            guard let self else {
+                completionHandler(PacketTunnelFailure(reason: "tunnel provider was released"))
+                return
+            }
+            if let error {
+                completionHandler(error)
+                return
+            }
+            do {
+                try session.start()
+            } catch let failure as EmbeddedRuntimeSession.Failure {
+                completionHandler(PacketTunnelFailure(reason: "embedded runtime could not start (code \(failure.code))"))
+                return
+            } catch {
+                completionHandler(PacketTunnelFailure(reason: "embedded runtime could not start"))
+                return
+            }
+            self.session = session
+            self.startedAt = Date()
+            self.watchNetworkPath()
+            self.watchPhysicalNetwork(session)
+            self.watchMeshRoutes(session, remoteAddress: tunnelProtocol.serverAddress)
+            completionHandler(nil)
+        }
+    }
+
+    /// The profile id of a mesh-only config; nothing else reads it.
+    static let meshOnlyProfileID = "mesh-only"
+
+    /// How often a mesh-only tunnel reads the engine's routes, and the least time between two applications of them
+    /// (mesh-status.md, R23: 2 s, at least 1 s apart).
+    static let meshRoutesInterval: DispatchTimeInterval = .seconds(2)
+    static let meshRoutesSpacing: TimeInterval = 1
+
+    /// Reads `mesh_status` every `meshRoutesInterval` and, when `tunnel.routesVersion` changed, applies the routes and
+    /// the internal domain names' DNS as the tunnel's network settings, at least `meshRoutesSpacing` apart.
+    private func watchMeshRoutes(_ session: EmbeddedRuntimeSession, remoteAddress: String?) {
+        meshRoutesTimer?.cancel()
+        var applied: MeshTunnel?
+        var appliedAt = Date.distantPast
+        var applying = false
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + Self.meshRoutesInterval, repeating: Self.meshRoutesInterval)
+        timer.setEventHandler { [weak self, weak session] in
+            guard let self, let session, !applying,
+                  Date().timeIntervalSince(appliedAt) >= Self.meshRoutesSpacing,
+                  let tunnel = MeshTunnel(status: session.control(RuntimeControl.meshStatus.request)),
+                  tunnel != applied
+            else {
+                return
+            }
+            let settings = Self.networkSettings(
+                MeshTunnel.interface(tunnel),
+                remoteAddress: IPAddressText.tunnelRemoteAddress(for: remoteAddress),
+                matchDomains: tunnel.matchDomains
+            )
+            guard let settings else {
+                self.events.record("mesh routes skipped: invalid route")
+                applied = tunnel
+                return
+            }
+            applying = true
+            appliedAt = Date()
+            self.setTunnelNetworkSettings(settings) { error in
+                DispatchQueue.main.async {
+                    applying = false
+                    if error == nil {
+                        applied = tunnel
+                        self.events.record("mesh routes \(tunnel.routes.count), version \(tunnel.routesVersion)")
+                    } else {
+                        self.events.record("mesh routes could not be applied")
+                    }
+                }
+            }
+        }
+        meshRoutesTimer = timer
+        timer.resume()
+    }
+
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
         Self.log.notice("stopTunnel reason \(reason.rawValue, privacy: .public)")
         events.record("stopTunnel reason \(reason.rawValue)")
@@ -535,6 +656,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         pathObservation = nil
         lastPath = nil
         physicalNetwork.stop()
+        meshRoutesTimer?.cancel()
+        meshRoutesTimer = nil
         if let session {
             saveCaptureOnStop(session)
         }
@@ -1290,7 +1413,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         _ interface: TunnelInterface,
         remoteAddress: String,
         routesTraffic: Bool = true,
-        proxy: SystemProxyEndpoint? = nil
+        proxy: SystemProxyEndpoint? = nil,
+        matchDomains: [String] = [""]
     ) -> NEPacketTunnelNetworkSettings? {
         let addresses = interface.addresses.map(CIDR.parse)
         let routes = interface.includedRoutes.map(CIDR.parse)
@@ -1329,7 +1453,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
         if routesTraffic, !interface.dnsServers.isEmpty {
             let dns = NEDNSSettings(servers: interface.dnsServers)
-            dns.matchDomains = [""]
+            dns.matchDomains = matchDomains
             settings.dnsSettings = dns
         }
         if let proxy {

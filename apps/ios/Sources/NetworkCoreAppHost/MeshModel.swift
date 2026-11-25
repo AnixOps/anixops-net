@@ -65,16 +65,40 @@ final class MeshModel {
     /// The networks saved on this device (`MeshNetworkLibrary`).
     private(set) var saved = MeshNetworkLibrary.load()
 
+    /// The snapshot the entry and page show: the engine's while it runs; otherwise, with an engine that runs mesh
+    /// networks, one made from the saved networks (the joined one, else the first), without members.
+    private var shown: [String: Any]? {
+        if let status {
+            return status
+        }
+        guard MeshSupport.available else {
+            return nil
+        }
+        guard let network = saved.first(where: \.joined) ?? saved.first else {
+            return [:]
+        }
+        var shown: [String: Any] = [
+            "id": network.name,
+            "name": network.name,
+            // Joined while the engine is down: the VPN is on its way up for it.
+            "state": network.joined ? "joining" : "not_joined",
+        ]
+        if let security = network.security {
+            shown["security"] = security
+        }
+        return ["network": shown]
+    }
+
     var entry: MeshObject {
-        MeshObject(MeshView.entry(status: status))
+        MeshObject(MeshView.entry(status: shown))
     }
 
     var available: Bool {
-        status != nil && entry.bool("available")
+        shown != nil && entry.bool("available")
     }
 
     var network: MeshObject? {
-        status.flatMap { MeshObject($0).object("network") }
+        shown.flatMap { MeshObject($0).object("network") }
     }
 
     var own: MeshObject? {
@@ -85,12 +109,14 @@ final class MeshModel {
         MeshView.notices(status: status).map { MeshObject($0) }
     }
 
+    /// Reads the snapshot while the VPN runs, for the proxy or for the mesh alone.
     func poll(_ tunnel: TunnelController) async {
-        while !Task.isCancelled, tunnel.connection == .connected {
+        saved = MeshNetworkLibrary.load()
+        while !Task.isCancelled, tunnel.vpnConnection == .connected {
             await refresh(tunnel)
             try? await Task.sleep(for: Self.interval)
         }
-        if tunnel.connection != .connected {
+        if tunnel.vpnConnection != .connected {
             status = nil
         }
     }
@@ -112,13 +138,20 @@ final class MeshModel {
         guard let id = network?.string("id") else {
             return
         }
-        await send(joined ? .meshJoin(network: id) : .meshLeave(network: id), tunnel: tunnel)
-        guard refusal == nil, saved.contains(where: { $0.name == id }) else {
+        if status != nil {
+            await send(joined ? .meshJoin(network: id) : .meshLeave(network: id), tunnel: tunnel)
+            guard refusal == nil else {
+                return
+            }
+        }
+        guard saved.contains(where: { $0.name == id }) else {
             return
         }
         MeshNetworkLibrary.setJoined(id, joined)
         saved = MeshNetworkLibrary.load()
         _ = await tunnel.applyMeshNetworks()
+        // The VPN is up while the proxy or the mesh is on.
+        await tunnel.meshJoinedChanged()
     }
 
     /// Saves a network from 添加网络 with its secret and joins it: in the running engine at once (`mesh_save_network`,
@@ -131,7 +164,7 @@ final class MeshModel {
             return false
         }
         saved = MeshNetworkLibrary.load()
-        if tunnel.connection == .connected, let config = added.runtimeConfigJSON(secret: secret) {
+        if tunnel.vpnConnection == .connected, let config = added.runtimeConfigJSON(secret: secret) {
             if let current = network, let id = current.string("id"), id != added.name,
                ["joined", "joining", "partial"].contains(current.string("state") ?? "")
             {
@@ -143,6 +176,7 @@ final class MeshModel {
             }
         }
         _ = await tunnel.applyMeshNetworks()
+        await tunnel.meshJoinedChanged()
         return true
     }
 
@@ -152,10 +186,13 @@ final class MeshModel {
         guard let id = network?.string("id") else {
             return
         }
-        await send(.meshRemoveNetwork(network: id), tunnel: tunnel)
+        if status != nil {
+            await send(.meshRemoveNetwork(network: id), tunnel: tunnel)
+        }
         MeshNetworkLibrary.remove(id)
         saved = MeshNetworkLibrary.load()
         _ = await tunnel.applyMeshNetworks()
+        await tunnel.meshJoinedChanged()
     }
 
     /// Whether a subnet that overlaps this device's network goes through the mesh (`mesh`) or stays local (`local`).

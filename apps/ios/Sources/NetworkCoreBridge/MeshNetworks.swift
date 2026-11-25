@@ -43,6 +43,19 @@ public struct MeshNetwork: Codable, Equatable, Identifiable {
         return String(data: data, encoding: .utf8)
     }
 
+    /// The encryption mode as the status snapshot words it: `forward_secrecy`, `standard` or `none`; nil when the
+    /// saved text is not a JSON object.
+    public var security: String? {
+        guard let object = (try? JSONSerialization.jsonObject(with: Data(config.utf8))) as? [String: Any] else {
+            return nil
+        }
+        let network = object["network"] as? [String: Any]
+        if network?["cipher"] as? String == "none" {
+            return "none"
+        }
+        return network?["secure_mode"] as? Bool == false ? "standard" : "forward_secrecy"
+    }
+
     /// The network's key in the profile's `routing.outbounds` (`[A-Za-z0-9._-]` only): `mesh-` and the name, or
     /// `mesh-x` and the name's UTF-8 bytes in hex when the name has other characters, so two names never share a key.
     public var outboundKey: String {

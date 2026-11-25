@@ -89,7 +89,7 @@ struct HomeView: View {
             .task(id: tunnel.connection) {
                 await dashboard.poll(tunnel)
             }
-            .task(id: tunnel.connection) {
+            .task(id: tunnel.vpnConnection) {
                 await mesh.poll(tunnel)
             }
             .onAppear {

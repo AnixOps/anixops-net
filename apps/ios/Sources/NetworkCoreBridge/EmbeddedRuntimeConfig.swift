@@ -815,6 +815,10 @@ public enum TunnelProfileKeys {
     /// extension adds each network's secret from the shared Keychain (`MeshNetworkLibrary.secretAccount`) or the
     /// start secrets. Absent joins none.
     public static let meshNetworks = "networkcore.mesh-networks"
+    /// `true` when the tunnel runs for the mesh alone: the proxy is off and the joined networks are on
+    /// (docs/mesh-ui.md, 入口与导航). The extension then needs no node key, runs `EmbeddedRuntimeConfig.meshOnly` and
+    /// routes only the networks the engine names (`MeshTunnel`). Absent is a proxy tunnel.
+    public static let meshOnly = "networkcore.mesh-only"
     /// `Data` holding the encoded `NotificationSettings`. Absent posts every kind of notification.
     public static let notifications = "networkcore.notifications"
     /// The `TrafficTakeover` raw value: the tunnel interface, the system proxy, or both. Absent is
