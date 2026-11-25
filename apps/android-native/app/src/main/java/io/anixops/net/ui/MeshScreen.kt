@@ -929,6 +929,7 @@ private fun failureText(code: String?): String = stringResource(
         "identity_online" -> R.string.mesh_failure_identity
         "existing_program" -> R.string.mesh_failure_existing
         "unreachable_peers" -> R.string.mesh_failure_peers
+        "peer_not_native" -> R.string.mesh_failure_not_native
         "unsupported" -> R.string.mesh_failure_unsupported
         "invalid_argument" -> R.string.mesh_failure_invalid
         "not_found" -> R.string.mesh_failure_not_found

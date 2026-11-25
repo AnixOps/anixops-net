@@ -1145,6 +1145,7 @@ export const english: Record<string, string> = {
   "无法加入：本机身份已在其他设备上线。": "Cannot join: this device identity is online on another device.",
   "无法启动组网：本机正在运行现有组网程序。": "Mesh cannot start: an existing mesh program is running on this device.",
   "无法加入：对端均不可达。": "Cannot join: no peer is reachable.",
+  "无法加入：对端非本系统节点，已拒绝。": "Cannot join: the peer is not a node of this system and was refused.",
   "当前内核不支持此操作。": "The current engine does not support this operation.",
   "操作未完成：参数无效。": "Operation not completed: invalid argument.",
   "操作未完成：网络不存在。": "Operation not completed: the network does not exist.",

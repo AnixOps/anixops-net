@@ -410,6 +410,8 @@ enum MeshText {
             return String(localized: "无法启动组网：本机正在运行现有组网程序。")
         case "unreachable_peers":
             return String(localized: "无法加入：对端均不可达。")
+        case "peer_not_native":
+            return String(localized: "无法加入：对端非本系统节点，已拒绝。")
         case "unsupported":
             return String(localized: "当前内核不支持此操作。")
         case "invalid_argument":
