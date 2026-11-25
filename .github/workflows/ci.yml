@@ -121,6 +121,10 @@ jobs:
           python3 -I .github/scripts/workflow_policy.py
           bash .github/scripts/android-signing-gate.test.sh
 
+      # 组网 stays closed in every release build (release.yml runs the same check before packaging).
+      - name: Mesh release gate stays closed
+        run: bash .github/scripts/mesh-release-gate.sh
+
       # The download page and latest.json point to the newest stable release; a later beta never replaces it.
       - name: Download page picks the stable release
         run: python3 -I .github/scripts/download_page_test.py
@@ -323,6 +327,14 @@ jobs:
       - name: Test
         shell: bash
         run: cargo test --locked --workspace --all-targets
+
+      # The 组网 release gate is closed in the run above (its tests check that); client-core's mesh tests run again
+      # with it open, as a test build only (mesh-release-gate.sh keeps it out of releases).
+      - name: Test with the mesh preview open
+        shell: bash
+        env:
+          ANIXOPS_MESH_PREVIEW: "1"
+        run: cargo test --locked -p client-core --lib
 
       # Audit 2026-11-25 NET-01: a body the capture inspector hands to another app must be unreadable by another
       # local account the moment it is written, under the usual 022 umask. A second account reads it via sudo.
@@ -932,6 +944,12 @@ jobs:
         shell: bash
         working-directory: apps/ios
         run: swift test
+
+      # The same with the 组网 release gate open (test build only): the mesh tests that need it run here.
+      - name: Test with the mesh preview open
+        shell: bash
+        working-directory: apps/ios
+        run: swift test -Xswiftc -DMESH_PREVIEW --scratch-path .build-mesh-preview --filter 'Mesh'
 
       - name: Build
         shell: bash

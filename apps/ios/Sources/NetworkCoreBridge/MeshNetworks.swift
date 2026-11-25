@@ -286,6 +286,18 @@ public enum MeshNetworkLibrary {
         return try? JSONEncoder().encode(joined)
     }
 
+    /// `profileValue(_:)` behind the release gate (`MeshSupport.enabled`): nil while it is closed, so no joined network
+    /// reaches a tunnel profile in a release build.
+    public static func gatedProfileValue(_ networks: [MeshNetwork], enabled: Bool = MeshSupport.enabled) -> Data? {
+        enabled ? profileValue(networks) : nil
+    }
+
+    /// `fromProfileValue(_:)` behind the release gate: none while it is closed, whatever an older profile names, so
+    /// the extension of a release build never joins a network.
+    public static func gatedNetworks(fromProfileValue value: Data?, enabled: Bool = MeshSupport.enabled) -> [MeshNetwork] {
+        enabled ? fromProfileValue(value) : []
+    }
+
     /// The joined networks a profile names; empty when it names none or the value is malformed.
     public static func fromProfileValue(_ value: Data?) -> [MeshNetwork] {
         guard let value, let networks = try? JSONDecoder().decode([MeshNetwork].self, from: value) else {
@@ -314,6 +326,9 @@ public enum MeshNetworkLibrary {
 
     /// The secrets of the joined networks by name, for `TunnelStartSecrets.meshSecrets`; nil when there are none.
     public static func joinedSecrets(_ defaults: UserDefaults = .standard) -> [String: String]? {
+        guard MeshSupport.enabled else {
+            return nil
+        }
         var secrets: [String: String] = [:]
         for network in load(defaults) where network.joined {
             secrets[network.name] = secret(network.name)

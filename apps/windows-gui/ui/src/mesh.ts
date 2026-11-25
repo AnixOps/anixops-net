@@ -673,7 +673,9 @@ export function failureText(code: string | null | undefined): string {
     case "unreachable_peers":
       return t("无法加入：对端均不可达。");
     case "peer_not_native":
-      return t("无法加入：对端非本系统节点，已拒绝。");
+      return t("已拒绝对端连接：对端非本系统节点。");
+    case "native_keys_pending":
+      return t("暂未加入：本机公钥尚未列入网络名单。");
     case "unsupported":
       return t("当前内核不支持此操作。");
     case "invalid_argument":

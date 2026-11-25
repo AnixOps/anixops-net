@@ -558,8 +558,11 @@ public enum MeshView {
         func push(_ id: String, _ key: String, _ values: [Any], _ action: String?, _ notify: Bool) {
             notices.append(["id": id, "key": key, "values": values, "action": orNull(action), "notify": notify])
         }
-        if text(network, "state") == "failed" {
-            let failure = (network as? [String: Any])?["failure"]
+        // `network.failure` stands on its own (mesh-status.md): `unreachable_peers` and `peer_not_native` leave the
+        // state as it is, `native_keys_pending` comes with `not_joined`. A failed network without one is `other`.
+        let reported = (network as? [String: Any])?["failure"]
+        let failure: Any? = reported is NSNull ? nil : reported
+        if failure != nil || text(network, "state") == "failed" {
             let code = optText(failure, "code") ?? "other"
             let detail = (failure as? [String: Any])?["detail"]
             let mapping: [String: (String, String?)] = [
@@ -575,10 +578,13 @@ public enum MeshView {
                 // Put in by the desktop client or the installer, never by the kernel.
                 "existing_program": ("mesh.notice.existing_program", "take_over"),
                 "unreachable_peers": ("mesh.notice.unreachable_peers", nil),
+                // `detail` is the refused peer's node ID.
                 "peer_not_native": ("mesh.notice.peer_not_native", nil),
+                // `detail` (`empty`, `self_missing`) is for the log, not the page.
+                "native_keys_pending": ("mesh.notice.native_keys_pending", nil),
             ]
             let (id, action) = mapping[code] ?? ("mesh.notice.join_failed", nil)
-            let values: [Any] = (detail == nil || detail is NSNull) ? [] : [detail!]
+            let values: [Any] = (detail == nil || detail is NSNull || code == "native_keys_pending") ? [] : [detail!]
             push(id, "failure:\(code)", values, action, false)
         }
         for path in list(status, "paths") where text(path, "state") == "fallback" {

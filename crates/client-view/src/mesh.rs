@@ -681,8 +681,15 @@ pub fn notices(status: &Value) -> Value {
                 "notify": notify,
             }));
         };
-    if text(network, "state") == "failed" {
-        let failure = network.get("failure").unwrap_or(&Value::Null);
+    // `network.failure` stands on its own (mesh-status.md): a network that runs carries
+    // `unreachable_peers` or `peer_not_native` with its state unchanged, and a paused managed
+    // network `native_keys_pending` while `not_joined`. A failed network without a code is
+    // `other`.
+    let failure = network
+        .get("failure")
+        .filter(|failure| !failure.is_null())
+        .or_else(|| (text(network, "state") == "failed").then_some(&Value::Null));
+    if let Some(failure) = failure {
         let code = opt_text(failure, "code").unwrap_or("other");
         let detail = failure.get("detail").cloned().unwrap_or(Value::Null);
         let (id, action) = match code {
@@ -700,10 +707,14 @@ pub fn notices(status: &Value) -> Value {
             "existing_program" => ("mesh.notice.existing_program", Some("take_over")),
             "unreachable_peers" => ("mesh.notice.unreachable_peers", None),
             // A managed network accepts only its own nodes' static keys (`network.native_keys`).
+            // `detail` is the refused peer's node ID.
             "peer_not_native" => ("mesh.notice.peer_not_native", None),
+            // Paused until the panel lists this device's key; `detail` (`empty`, `self_missing`)
+            // is for the log, not the page.
+            "native_keys_pending" => ("mesh.notice.native_keys_pending", None),
             _ => ("mesh.notice.join_failed", None),
         };
-        let values = if detail.is_null() {
+        let values = if detail.is_null() || code == "native_keys_pending" {
             vec![]
         } else {
             vec![detail]
@@ -818,13 +829,42 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_peer_that_is_not_a_native_node_is_named_as_such() {
+    fn a_refused_peer_is_named_while_the_network_keeps_running() {
+        // mesh-status.md: `peer_not_native` leaves `network.state` as it is; `detail` is the
+        // refused peer's node ID.
         let status = json!({
-            "network": { "state": "failed", "failure": { "code": "peer_not_native", "detail": null } },
+            "network": {
+                "state": "joined",
+                "failure": { "code": "peer_not_native", "detail": "node-7f3a" },
+            },
         });
         let notices = notices(&status);
+        assert_eq!(notices.as_array().map(Vec::len), Some(1));
         assert_eq!(notices[0]["id"], "mesh.notice.peer_not_native");
         assert_eq!(notices[0]["key"], "failure:peer_not_native");
+        assert_eq!(notices[0]["values"], json!(["node-7f3a"]));
+        assert_eq!(entry(&status)["attention"], true);
+    }
+
+    #[test]
+    fn a_paused_managed_network_waits_for_its_key_without_naming_the_reason_code() {
+        let status = json!({
+            "network": {
+                "state": "not_joined",
+                "failure": { "code": "native_keys_pending", "detail": "self_missing" },
+            },
+        });
+        let notices = notices(&status);
+        assert_eq!(notices[0]["id"], "mesh.notice.native_keys_pending");
+        assert_eq!(notices[0]["values"], json!([]));
+    }
+
+    #[test]
+    fn a_network_without_a_failure_has_no_failure_notice() {
+        let status = json!({ "network": { "state": "joined", "failure": null } });
+        assert_eq!(notices(&status), json!([]));
+        let failed = json!({ "network": { "state": "failed" } });
+        assert_eq!(notices(&failed)[0]["id"], "mesh.notice.join_failed");
     }
 
     #[test]

@@ -50,6 +50,12 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
+      # 组网 stays out of every release until kernel 0.3 is complete and audited: nothing a release build reads may
+      # open its gate (client-core ANIXOPS_MESH_PREVIEW, Apple MESH_PREVIEW).
+      - name: Mesh release gate stays closed
+        shell: bash
+        run: bash .github/scripts/mesh-release-gate.sh
+
       - name: Verify release source
         id: policy
         shell: bash

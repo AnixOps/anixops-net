@@ -135,6 +135,9 @@ final class MeshModel {
     /// Joins or leaves the network the snapshot names. Joining and leaving do not touch the proxy (R23); the saved
     /// network and the profile follow once the engine took it.
     func setJoined(_ joined: Bool, tunnel: TunnelController) async {
+        guard !joined || MeshSupport.enabled else {
+            return
+        }
         guard let id = network?.string("id") else {
             return
         }
@@ -158,6 +161,10 @@ final class MeshModel {
     /// then `mesh_join`, leaving the network joined before, since a phone joins one at a time), and in the profile
     /// for the next start. False when the secret could not be saved; the engine's refusal shows on the page.
     func addNetwork(_ added: MeshNetwork, secret: String, tunnel: TunnelController) async -> Bool {
+        // The release gate holds here too, not only at the entry (`MeshSupport.enabled`).
+        guard MeshSupport.enabled else {
+            return false
+        }
         do {
             try MeshNetworkLibrary.save(added, secret: secret)
         } catch {
@@ -411,7 +418,9 @@ enum MeshText {
         case "unreachable_peers":
             return String(localized: "无法加入：对端均不可达。")
         case "peer_not_native":
-            return String(localized: "无法加入：对端非本系统节点，已拒绝。")
+            return String(localized: "已拒绝对端连接：对端非本系统节点。")
+        case "native_keys_pending":
+            return String(localized: "暂未加入：本机公钥尚未列入网络名单。")
         case "unsupported":
             return String(localized: "当前内核不支持此操作。")
         case "invalid_argument":
