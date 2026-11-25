@@ -11,9 +11,10 @@ permissions:
   contents: read
 
 # Superseded pull request runs are cancelled. Runs on main and manual dispatch
-# always finish so every merged commit has a complete result.
+# always finish so every merged commit has a complete result; each main commit
+# has its own group, so a merge does not wait for the previous merge's run.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Kernel tests (protocols, engine, MITM, scripts, interop, fuzz) run in AnixOps/networkcore_anixops.
