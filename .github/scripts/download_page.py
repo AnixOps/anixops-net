@@ -30,7 +30,7 @@ import sys
 
 # key, asset name suffix, platform, label, note
 ASSETS = [
-    ("windows", "-windows-x64.msi", "Windows 10/11", "安装版（推荐）", "MSI 安装包，未做代码签名，SmartScreen 提示时选「仍要运行」。"),
+    ("windows", "-windows-x64.msi", "Windows 10/11", "安装版（推荐）", "MSI 安装包，未做代码签名。安装前先核对 SHA256SUMS 与来源证明，通过后再在 SmartScreen 提示中选择「仍要运行」。"),
     ("windows-portable", "-windows-x64-portable.zip", "Windows 10/11", "便携版", "解压即用。"),
     ("linux-deb", "-linux-amd64.deb", "Debian / Ubuntu", ".deb 安装包", "sudo apt install ./<文件名>，需要 WebKitGTK 4.1。"),
     ("linux", "-linux-x64.tar.gz", "其他 Linux", "tar.gz", "解压后运行 bin/anixops-net，需要 WebKitGTK 4.1。"),
@@ -155,7 +155,8 @@ def page(release, found, sums, repo, beta=None, beta_found=None):
     if sums:
         sums_line = (
             f"校验：<a href=\"{html.escape(sums['browser_download_url'], quote=True)}\">SHA256SUMS</a>，"
-            "<code>sha256sum -c SHA256SUMS</code>；来源证明：<code>gh attestation verify &lt;文件&gt; --repo "
+            "<code>sha256sum -c SHA256SUMS</code>（Windows：<code>Get-FileHash &lt;文件&gt; -Algorithm SHA256</code>）；"
+            "来源证明：<code>gh attestation verify &lt;文件&gt; --repo "
             f"{html.escape(repo)}</code>。"
         )
     beta_json = "，测试版：<a href=\"latest-beta.json\">latest-beta.json</a>" if beta_section else ""
