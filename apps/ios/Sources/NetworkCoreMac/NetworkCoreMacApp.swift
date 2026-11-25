@@ -44,7 +44,8 @@ struct NetworkCoreMacApp: App {
                 .task {
                     #if DEBUG
                     // Screenshots: made-up data instead of the saved configuration (`-AnixOpsDemo YES`).
-                    if TunnelController.isDemo {
+                    // `TunnelController.isDemo`, read directly: the sidebar's sections are not on the main actor.
+        if UserDefaults.standard.bool(forKey: "AnixOpsDemo") {
                         tunnel.loadDemo()
                         return
                     }
@@ -110,7 +111,8 @@ final class MacAppState: ObservableObject {
     /// from the main window and the menu bar item; it starts once. The screenshots' demo starts none of it.
     func startApp(_ tunnel: TunnelController, updater: AppUpdater) {
         #if DEBUG
-        if TunnelController.isDemo {
+        // `TunnelController.isDemo`, read directly: the sidebar's sections are not on the main actor.
+        if UserDefaults.standard.bool(forKey: "AnixOpsDemo") {
             return
         }
         #endif
@@ -211,7 +213,8 @@ enum MacSection: String, CaseIterable, Identifiable, Hashable {
     /// screenshots), which answers with a made-up network whatever the release gate says.
     private static var meshShown: Bool {
         #if DEBUG
-        if TunnelController.isDemo {
+        // `TunnelController.isDemo`, read directly: the sidebar's sections are not on the main actor.
+        if UserDefaults.standard.bool(forKey: "AnixOpsDemo") {
             return true
         }
         #endif
