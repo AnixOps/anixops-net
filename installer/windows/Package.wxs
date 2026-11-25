@@ -25,6 +25,15 @@
     <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
 
     <!--
+      The app icon (AnixOps Design's AnixOps Net icon, copied by .github/scripts/sync_design.py). An advertised
+      shortcut does not take the icon of the program it opens: without Icon it shows the blank file icon in the
+      Start menu and in search. ARPPRODUCTICON is the icon of the entry in Installed apps.
+      .github/scripts/windows_icons.py checks both here and in the built MSI.
+    -->
+    <Icon Id="AnixOpsNet.ico" SourceFile="$(sys.SOURCEFILEDIR)..\..\apps\windows-gui\icons\icon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AnixOpsNet.ico" />
+
+    <!--
       Where an earlier version was installed, so that an upgrade installs over it: with the removal
       after the installation, a different folder would leave the earlier files behind.
     -->
@@ -53,6 +62,7 @@
                   Name="AnixOps NetworkCore"
                   Description="Open the NetworkCore Windows client"
                   WorkingDirectory="INSTALLFOLDER"
+                  Icon="AnixOpsNet.ico"
                   Advertise="yes" />
             </File>
           </Component>

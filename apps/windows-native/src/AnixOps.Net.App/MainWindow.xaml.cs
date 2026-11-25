@@ -34,6 +34,8 @@ public sealed partial class MainWindow : Window
         AppStage.Text = strings["app.preview"];
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
+        // An unpackaged window does not take the program's icon on its own (title bar, Alt+Tab).
+        AppWindow.SetIcon(System.IO.Path.Combine(AppContext.BaseDirectory, "AnixOpsNet.ico"));
 
         Root.RequestedTheme = launch.Appearance switch
         {

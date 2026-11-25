@@ -21,6 +21,13 @@
     <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
+    <!-- The app icon (AnixOps Design's AnixOps Net icon, copied by .github/scripts/sync_design.py). An advertised
+         shortcut does not take the icon of the program it opens: without Icon it shows the blank file icon in
+         the Start menu and in search. ARPPRODUCTICON is the icon of the entry in Installed apps.
+         .github/scripts/windows_icons.py checks both here and in the built MSI. -->
+    <Icon Id="AnixOpsNet.ico" SourceFile="$(sys.SOURCEFILEDIR)..\..\apps\windows-native\src\AnixOps.Net.App\Assets\AnixOpsNet.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AnixOpsNet.ico" />
+
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="ManufacturerFolder" Name="AnixOps">
         <Directory Id="INSTALLFOLDER" Name="Net">
@@ -37,6 +44,7 @@
                   Name="AnixOps Net"
                   Description="AnixOps Net"
                   WorkingDirectory="INSTALLFOLDER"
+                  Icon="AnixOpsNet.ico"
                   Advertise="yes" />
             </File>
           </Component>

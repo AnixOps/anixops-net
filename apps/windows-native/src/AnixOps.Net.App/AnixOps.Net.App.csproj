@@ -16,7 +16,15 @@
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
     <SelfContained>false</SelfContained>
     <Description>AnixOps Net for Windows.</Description>
+    <!-- The icon of AnixOpsNet.exe (Explorer, the taskbar, Task Manager). The same file is copied beside it for
+         the window's title bar and Alt+Tab (MainWindow). Copied from AnixOps Design by
+         .github/scripts/sync_design.py; .github/scripts/windows_icons.py checks it is set. -->
+    <ApplicationIcon>Assets\AnixOpsNet.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\AnixOpsNet.ico" Link="AnixOpsNet.ico" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.250907003" />
