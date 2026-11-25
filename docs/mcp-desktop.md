@@ -159,7 +159,7 @@ sequenceDiagram
     H->>M: tools/call select_node
     M->>G: agent 请求
     G->>G: 检查开关与白名单
-    G->>W: 确认请求（session.confirm）
+    G->>W: 确认请求（session.confirm_action）
     W-->>G: 用户选择 允许 / 拒绝 / 超时
     G-->>M: 结果或拒绝原因
     M-->>H: 工具结果
@@ -167,7 +167,7 @@ sequenceDiagram
 
 - 确认框由客户端自己显示，AI 宿主无法代为确认。拟定文案：标题「AI 工具请求操作」，正文「切换到节点“香港 01”」，
   按钮「允许」「拒绝」，可选「15 分钟内允许此类操作」。60 秒无响应视为拒绝。
-- Windows 与 Linux 由后台进程向窗口发 `session.confirm` 请求（`client-ipc` 已支持核心向窗口发请求）；没有窗口连着时直接拒绝。
+- Windows 与 Linux 由后台进程向窗口发 `session.confirm_action` 请求（`client-ipc` 已支持核心向窗口发请求）；没有窗口连着时直接拒绝。
   macOS 由 App 显示。
 - 不使用 MCP 的 elicitation 做确认：确认结果由宿主转达，客户端无法核实是否出自用户本人。
 - 同一时间只显示一个确认框；确认框打开时到达的操作立即拒绝（“Another action is waiting …”），不排队。
@@ -175,6 +175,14 @@ sequenceDiagram
 - 「15 分钟内允许此类操作」按操作名（`Action::kind`）授权，只保存在内存中；App 重启或关闭执行开关即全部失效。
 - 拒绝原因对 AI 工具使用固定英文句子（`ACT_OFF`、`DENIED`、`NO_ANSWER`），控制通道错误码分别为 `actOff`、`denied`、
   `noAnswer`。需要引擎的操作（抓包、关闭连接）在未连接时直接返回「未连接」，不弹确认框。
+- Windows 与 Linux 实现：核心的闸门（`crates/client-core/src/client/agent.rs`，`agent.act`）检查执行开关与操作，
+  需要引擎的操作在未连接时直接拒绝，不存在的节点在询问前拒绝；再经 `Platform::confirm_action` 向最近打开的窗口发
+  `session.confirm_action`（`crates/client-window/src/lib.rs`，样例见 `crates/client-service/fixtures/confirm-action-*.json`），
+  询问期间不占用核心的锁。窗口回答 `allowed` / `denied` / `no_answer` 与 `for_kind`；没有窗口或窗口不会询问
+  （`WindowEnd::with_confirm` 未设置、Windows 原生版尚无确认框）时一律拒绝（“could not ask the user to confirm”）。
+  授权与访问记录（窗口命令 `agent_access_log`、`clear_agent_access_log`，最多 200 条）保存在核心内存中，服务重启即清空；
+  执行开关保存在 `SavedState.agent_access.act`，`set_agent_access` 不带 `act` 时保留原值，关闭读取同时关闭执行并结束授权。
+  适配程序对 `agent.act` 只发一次（连接中断时不重试，避免重复询问或重复执行），最多等 150 秒。
 - macOS 实现：`apps/ios/Sources/NetworkCoreMac/MacAgentConfirmation.swift`（确认框），`MacControlService.act`（开关、解析、
   确认后调用与命令行和窗口相同的代码）。适配程序等待操作结果最多 150 秒（确认 60 秒加连接）。
 
@@ -239,7 +247,7 @@ sequenceDiagram
 | P1 | 内核 `redact` 参数；`client-mcp` 协议与只读工具、假后端测试、隐私金丝雀 | networkcore 与本仓库 PR 合并，CI 全绿。工具定义见 `crates/client-mcp/tools.json` |
 | P2 | macOS 只读：控制通道 `agent` 命令、Swift 闸门、设置页、App 内附带适配程序 | macOS CI 端到端通过，真机验收项登记。执行开关与访问记录随 P4 提供 |
 | P3 | Windows 与 Linux 只读：`Role::Agent`、核心闸门、原生安装包附带适配程序 | 两平台端到端通过。只做原生版（2026-11-25 用户决定）：现行 Tauri 版不接入，设置页随原生版设置页提供 |
-| P4 | 操作工具与确认框（三平台） | 闸门与确认测试通过，真机验收项登记。macOS 先行：执行开关、确认框、访问记录；Windows 与 Linux 随原生版设置页提供（核心经 `session.confirm` 请窗口确认） |
+| P4 | 操作工具与确认框（三平台） | 闸门与确认测试通过，真机验收项登记。macOS 已完成（#311）；Windows 与 Linux 的核心闸门、`session.confirm_action` 与访问记录已完成，确认框与执行开关随原生版设置页提供，此前没有窗口能确认，操作一律拒绝 |
 | P5 | 视使用情况评估：请求正文级别的默认值、更多诊断工具 | 用户决定 |
 
 ### 10.1 macOS 使用方法（P2）

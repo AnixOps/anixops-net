@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::backend::{BackendError, ACCESS_OFF, ACT_OFF, DENIED, NOT_CONNECTED, NO_ANSWER};
+use crate::backend::{Action, BackendError, ACCESS_OFF, ACT_OFF, DENIED, NOT_CONNECTED, NO_ANSWER};
 
 /// The user's access settings ([`crate::Access`]); answered whatever they are.
 pub const ACCESS: &str = "agent.access";
@@ -20,13 +20,46 @@ pub const NODES: &str = "agent.nodes";
 pub const LOGS: &str = "agent.logs";
 /// One engine request ([`EngineArgs`] in, the engine's answer out).
 pub const ENGINE: &str = "agent.engine";
+/// One action ([`ActArgs`] in, an empty object out once it is done). The core asks a window to confirm it first
+/// ([`Confirmation`]), unless the user allowed actions of its kind for 15 minutes.
+pub const ACT: &str = "agent.act";
 
 /// Every request of an AI tool.
-pub const CALLS: [&str; 5] = [ACCESS, STATUS, NODES, LOGS, ENGINE];
+pub const CALLS: [&str; 6] = [ACCESS, STATUS, NODES, LOGS, ENGINE, ACT];
+
+/// How long a grant of 「15 分钟内允许此类操作」 lasts.
+pub const GRANT: std::time::Duration = std::time::Duration::from_secs(15 * 60);
+
+/// How long a window's confirmation waits for the user before it counts as no answer.
+pub const CONFIRMATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LogsArgs {
     pub limit: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActArgs {
+    pub action: Action,
+}
+
+/// What the user answered in a window's confirmation of an action.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Answer {
+    Allowed,
+    Denied,
+    /// The confirmation closed itself after [`CONFIRMATION_TIMEOUT`].
+    NoAnswer,
+}
+
+/// A window's answer to the core's `session.confirm_action` (`{ "action": … }`, an [`Action`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Confirmation {
+    pub answer: Answer,
+    /// With [`Answer::Allowed`]: the user also allowed actions of this kind ([`Action::kind`]) for [`GRANT`].
+    #[serde(default)]
+    pub for_kind: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -65,12 +98,18 @@ mod channel {
     use serde::de::DeserializeOwned;
     use serde_json::{json, Value};
 
-    use super::{error_from_core, EngineArgs, LogsArgs, ACCESS, ENGINE, LOGS, NODES, STATUS};
-    use crate::backend::{Access, Backend, BackendError, LogLine, NodeGroup, Status};
+    use super::{
+        error_from_core, ActArgs, EngineArgs, LogsArgs, ACCESS, ACT, ENGINE, LOGS, NODES, STATUS,
+    };
+    use crate::backend::{Access, Action, Backend, BackendError, LogLine, NodeGroup, Status};
 
     /// How long the core gets to answer: an engine request that waits on a busy engine still answers in
     /// seconds, and a core that takes longer is not answering.
     const PATIENCE: Duration = Duration::from_secs(30);
+
+    /// How long an action may take: the window's confirmation waits a minute for the user, and connecting may
+    /// take a while after.
+    const ACT_PATIENCE: Duration = Duration::from_secs(150);
 
     /// The desktop core's channel as a [`Backend`]. One connection is kept open and made again when the core
     /// has gone away (a restart, an update).
@@ -143,19 +182,30 @@ mod channel {
         }
 
         fn ask<T: DeserializeOwned>(&self, call: &str, args: Value) -> Result<T, BackendError> {
-            // A connection the core closed since the last call is only noticed when asking on it: then the
-            // question is asked once more on a new one.
-            let mut tries = 0;
+            self.ask_with(call, args, PATIENCE, 2)
+        }
+
+        /// `call` on the open connection, waiting `patience` for the answer. A connection the core closed since
+        /// the last call is only noticed when asking on it: then the question is asked again on a new one, up to
+        /// `tries` times in all.
+        fn ask_with<T: DeserializeOwned>(
+            &self,
+            call: &str,
+            args: Value,
+            patience: Duration,
+            tries: u32,
+        ) -> Result<T, BackendError> {
+            let mut tried = 0;
             let answer = loop {
-                tries += 1;
+                tried += 1;
                 let peer = self.peer()?;
-                match peer.ask(call, args.clone(), PATIENCE) {
+                match peer.ask(call, args.clone(), patience) {
                     Ok(answer) => break answer,
                     Err(message)
                         if peer.is_closed() || message.starts_with(client_ipc::peer::CLOSED) =>
                     {
                         self.forget(&peer);
-                        if tries >= 2 {
+                        if tried >= tries {
                             return Err(BackendError::Unavailable);
                         }
                     }
@@ -200,6 +250,20 @@ mod channel {
                     request: request.clone()
                 }),
             )
+        }
+
+        fn act(&self, action: &Action) -> Result<(), BackendError> {
+            // Asked once: on a connection that closed while the core worked on it, the action may have been
+            // taken, and asking again would ask the user, or take it, a second time.
+            let _: Value = self.ask_with(
+                ACT,
+                json!(ActArgs {
+                    action: action.clone()
+                }),
+                ACT_PATIENCE,
+                1,
+            )?;
+            Ok(())
         }
     }
 }

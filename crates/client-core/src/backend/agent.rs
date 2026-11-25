@@ -10,11 +10,11 @@ use super::state::AgentAccess;
 use super::Backend;
 
 impl AgentAccess {
-    /// The settings as the tool reads them. Actions are not offered yet (§10, P4), so `act` stays off.
+    /// The settings as the tool reads them. Actions only together with reading.
     pub fn access(&self) -> Access {
         Access {
             read: self.read,
-            act: false,
+            act: self.read && self.act,
             content: content_level(&self.content),
         }
     }
@@ -44,13 +44,22 @@ impl Backend {
         self.state.agent_access.access()
     }
 
-    /// Saves the user's access settings and answers them as they now are.
-    pub fn set_agent_access(&mut self, read: bool, content: &str) -> Result<Access, String> {
+    /// Saves the user's access settings and answers them as they now are. `act` unset keeps what was saved;
+    /// turning reading off turns actions off with it.
+    pub fn set_agent_access(
+        &mut self,
+        read: bool,
+        act: Option<bool>,
+        content: &str,
+    ) -> Result<Access, String> {
         let content = content_name(content)
             .ok_or_else(|| format!("unknown content level {content}"))?
             .to_string();
-        let previous =
-            std::mem::replace(&mut self.state.agent_access, AgentAccess { read, content });
+        let act = read && act.unwrap_or(self.state.agent_access.act);
+        let previous = std::mem::replace(
+            &mut self.state.agent_access,
+            AgentAccess { read, act, content },
+        );
         if let Err(error) = self.save() {
             self.state.agent_access = previous;
             return Err(error);
@@ -135,6 +144,40 @@ impl Backend {
             }
         }
         groups
+    }
+}
+
+impl Backend {
+    /// The id of the node an AI tool names for `select_node`: by its name, in the subscription `group` names when
+    /// given. Of several with that name, the one in the subscription in use; more than one left is an error.
+    pub fn agent_find_node(&self, name: &str, group: Option<&str>) -> Result<String, String> {
+        let own_source = self.state.selected_source().map(|source| source.id.clone());
+        let mut found: Vec<_> = self
+            .nodes()
+            .into_iter()
+            .filter(|node| node.label == name)
+            .filter(|node| group.is_none_or(|group| node.group.as_deref() == Some(group)))
+            .collect();
+        if found.len() > 1 && own_source.is_some() {
+            let own: Vec<_> = found
+                .iter()
+                .filter(|node| node.source == own_source)
+                .cloned()
+                .collect();
+            if own.len() == 1 {
+                found = own;
+            }
+        }
+        match found.as_slice() {
+            [node] => Ok(node.id.clone()),
+            [] => Err(match group {
+                Some(group) => format!("No node named \"{name}\" is in the subscription \"{group}\"."),
+                None => format!("No node is named \"{name}\"."),
+            }),
+            _ => Err(format!(
+                "Several subscriptions have a node named \"{name}\". Name the subscription with group."
+            )),
+        }
     }
 }
 

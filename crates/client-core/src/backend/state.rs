@@ -102,6 +102,8 @@ pub struct SavedState {
 pub struct AgentAccess {
     /// AI tools may read the client's state.
     pub read: bool,
+    /// AI tools may ask for actions, each confirmed by the user in a window. Only together with `read`.
+    pub act: bool,
     /// How much of a captured request they see: `summary`, `headers` or `bodies`, always masked. Kept as text so
     /// a level a later version adds reads back as the narrowest here instead of losing the saved state.
     pub content: String,
@@ -111,6 +113,7 @@ impl Default for AgentAccess {
     fn default() -> Self {
         Self {
             read: false,
+            act: false,
             content: "summary".to_string(),
         }
     }
