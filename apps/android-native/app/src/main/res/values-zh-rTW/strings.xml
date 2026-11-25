@@ -926,6 +926,7 @@
     <string name="mesh_failure_identity">無法加入：本機身分已在其他裝置上線。</string>
     <string name="mesh_failure_existing">無法啟動組網：本機正在執行現有組網程式。</string>
     <string name="mesh_failure_peers">無法加入：對端均無法連線。</string>
+    <string name="mesh_failure_not_native">無法加入：對端非本系統節點，已拒絕。</string>
     <string name="mesh_failure_unsupported">目前核心不支援此操作。</string>
     <string name="mesh_failure_invalid">操作未完成：參數無效。</string>
     <string name="mesh_failure_not_found">操作未完成：網路不存在。</string>

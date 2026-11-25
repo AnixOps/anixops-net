@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -153,13 +154,20 @@ private fun JoinSwitch(state: String, busy: Boolean, setJoined: (Boolean) -> Uni
     )
 }
 
-private enum class MeshTab { Members, Subnets, Paths }
+/** The views of the mesh page. */
+enum class MeshTab { Members, Subnets, Paths }
 
-/** The mesh page: the status section, the notices, then 成员 · 子网 · 路径. */
+/** The mesh page: the status section, the notices, then 成员 · 子网 · 路径, opening on [initialTab]. */
 @Composable
-fun MeshScreen(state: MeshState, actions: MeshActions, onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun MeshScreen(
+    state: MeshState,
+    actions: MeshActions,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    initialTab: MeshTab = MeshTab.Members,
+) {
     val page = state.page
-    var tab by rememberSaveable { mutableStateOf(MeshTab.Members) }
+    var tab by rememberSaveable { mutableStateOf(initialTab) }
     var adding by rememberSaveable { mutableStateOf(false) }
     var removing by rememberSaveable { mutableStateOf<String?>(null) }
     var addingPath by rememberSaveable { mutableStateOf(false) }
@@ -703,7 +711,7 @@ private fun LinkRow(link: MeshLink) {
         "down" -> stringResource(R.string.mesh_link_down)
         else -> stringResource(R.string.mesh_connection_direct)
     }
-    if (link.borders.isNotEmpty()) parts += ListFormatter.getInstance().format(link.borders)
+    if (link.borders.isNotEmpty()) parts += ListFormatter.getInstance(LocalConfiguration.current.locales[0]).format(link.borders)
     link.loss?.let { parts += stringResource(R.string.mesh_loss, Math.round(it * 100).toString()) }
     Column(
         Modifier
@@ -929,6 +937,7 @@ private fun failureText(code: String?): String = stringResource(
         "identity_online" -> R.string.mesh_failure_identity
         "existing_program" -> R.string.mesh_failure_existing
         "unreachable_peers" -> R.string.mesh_failure_peers
+        "peer_not_native" -> R.string.mesh_failure_not_native
         "unsupported" -> R.string.mesh_failure_unsupported
         "invalid_argument" -> R.string.mesh_failure_invalid
         "not_found" -> R.string.mesh_failure_not_found

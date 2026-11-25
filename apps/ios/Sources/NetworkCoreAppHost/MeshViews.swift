@@ -222,16 +222,26 @@ struct MeshLatency: View {
 
 /// The mesh page: the status section, the notices, and the segments 成员 · 子网 · 路径.
 struct MeshPage: View {
-    enum Segment: Hashable {
+    enum Segment: String, Hashable {
         case members
         case subnets
         case paths
+
+        /// The view the mesh page opens on. CI screenshots open a given one: `-AnixOpsMesh subnets` (debug builds
+        /// only); on the iPhone the page is then pushed at launch.
+        static var launch: Segment? {
+            #if DEBUG
+            UserDefaults.standard.string(forKey: "AnixOpsMesh").flatMap(Segment.init(rawValue:))
+            #else
+            nil
+            #endif
+        }
     }
 
     var tunnel: TunnelController
     var model: MeshModel
     @Environment(\.brand) private var brand
-    @State private var segment = Segment.members
+    @State private var segment = Segment.launch ?? .members
     @State private var query = ""
     @State private var groupBy = "region"
     @State private var filter = "all"

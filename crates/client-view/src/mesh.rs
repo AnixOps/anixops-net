@@ -699,6 +699,8 @@ pub fn notices(status: &Value) -> Value {
             // program and puts this code in before asking.
             "existing_program" => ("mesh.notice.existing_program", Some("take_over")),
             "unreachable_peers" => ("mesh.notice.unreachable_peers", None),
+            // A managed network accepts only its own nodes' static keys (`network.native_keys`).
+            "peer_not_native" => ("mesh.notice.peer_not_native", None),
             _ => ("mesh.notice.join_failed", None),
         };
         let values = if detail.is_null() {
@@ -814,6 +816,16 @@ pub fn entry(status: &Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_peer_that_is_not_a_native_node_is_named_as_such() {
+        let status = json!({
+            "network": { "state": "failed", "failure": { "code": "peer_not_native", "detail": null } },
+        });
+        let notices = notices(&status);
+        assert_eq!(notices[0]["id"], "mesh.notice.peer_not_native");
+        assert_eq!(notices[0]["key"], "failure:peer_not_native");
+    }
 
     #[test]
     fn addresses_fall_inside_their_networks() {

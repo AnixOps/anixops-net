@@ -575,6 +575,7 @@ public enum MeshView {
                 // Put in by the desktop client or the installer, never by the kernel.
                 "existing_program": ("mesh.notice.existing_program", "take_over"),
                 "unreachable_peers": ("mesh.notice.unreachable_peers", nil),
+                "peer_not_native": ("mesh.notice.peer_not_native", nil),
             ]
             let (id, action) = mapping[code] ?? ("mesh.notice.join_failed", nil)
             let values: [Any] = (detail == nil || detail is NSNull) ? [] : [detail!]

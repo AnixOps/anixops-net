@@ -66,7 +66,11 @@ final class MeshTunnelTests: XCTestCase {
         XCTAssertNil(MeshNetwork(name: "a", config: "[]", joined: true).security)
     }
 
-    func testMeshNeedsFeatureSetSeven() {
-        XCTAssertEqual(MeshSupport.available, NetworkCoreRuntimeFFI.featureSetVersion >= 7)
+    func testMeshNeedsTheReleaseGateAndFeatureSetSeven() {
+        XCTAssertEqual(MeshSupport.available, MeshSupport.enabled && NetworkCoreRuntimeFFI.featureSetVersion >= 7)
+        #if !MESH_PREVIEW
+        // Until kernel 0.3 is complete and audited, no engine turns 组网 on by itself.
+        XCTAssertFalse(MeshSupport.available)
+        #endif
     }
 }

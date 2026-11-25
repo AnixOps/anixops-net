@@ -106,7 +106,7 @@
 |---|---|
 | `network.state` | `joined`、`joining`、`partial`（部分不可达）、`not_joined`、`failed` |
 | `network.security` | `forward_secrecy`、`standard`（未启用前向保密）、`none`（未加密） |
-| `network.failure` | `{ "code": …, "detail": "…" }`；`code` 为 `secret_mismatch`、`security_mismatch`、`unencrypted_refused`、`port_in_use`（`detail` 为端口）、`tun_in_use`、`route_overlap`（`detail` 为网段）、`address_in_use`、`identity_online`、`permission_denied`、`unreachable_peers`，与安装器的冲突码一致。`existing_program` 不由内核给出，桌面客户端或安装器检测到现有组网程序时自行填入 |
+| `network.failure` | `{ "code": …, "detail": "…" }`；`code` 为 `secret_mismatch`、`security_mismatch`、`unencrypted_refused`、`port_in_use`（`detail` 为端口）、`tun_in_use`、`route_overlap`（`detail` 为网段）、`address_in_use`、`identity_online`、`permission_denied`、`unreachable_peers`、`peer_not_native`（managed 网络只接受 `network.native_keys` 中的静态公钥，对端非本系统节点时拒绝），与安装器的冲突码一致。`existing_program` 不由内核给出，桌面客户端或安装器检测到现有组网程序时自行填入 |
 | `network.joining` | `{ "stage": "connecting" \| "assigning_address" \| "measuring_regions", "peersConnected": 2 }` |
 | `routingPolicy` | `latency`、`hops` |
 | `role` | `border`（边界）、`gateway`（网关）、`host`（宿主）、`server`（主机）、`client`（接入端）；内核 0.3 只有 `server`（完整节点）和 `client`（接入节点） |

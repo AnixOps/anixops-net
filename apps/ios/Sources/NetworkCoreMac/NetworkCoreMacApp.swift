@@ -44,7 +44,8 @@ struct NetworkCoreMacApp: App {
                 .task {
                     #if DEBUG
                     // Screenshots: made-up data instead of the saved configuration (`-AnixOpsDemo YES`).
-                    if TunnelController.isDemo {
+                    // `TunnelController.isDemo`, read directly: the sidebar's sections are not on the main actor.
+        if UserDefaults.standard.bool(forKey: "AnixOpsDemo") {
                         tunnel.loadDemo()
                         return
                     }
@@ -110,7 +111,8 @@ final class MacAppState: ObservableObject {
     /// from the main window and the menu bar item; it starts once. The screenshots' demo starts none of it.
     func startApp(_ tunnel: TunnelController, updater: AppUpdater) {
         #if DEBUG
-        if TunnelController.isDemo {
+        // `TunnelController.isDemo`, read directly: the sidebar's sections are not on the main actor.
+        if UserDefaults.standard.bool(forKey: "AnixOpsDemo") {
             return
         }
         #endif
@@ -204,7 +206,19 @@ enum MacSection: String, CaseIterable, Identifiable, Hashable {
         if mode == .debug {
             return [.activity, .extensions, .exit, .settings]
         }
-        return [.home, .proxies] + (MeshSupport.available ? [.mesh] : []) + [.rules, .extensions, .activity, .settings]
+        return [.home, .proxies] + (meshShown ? [.mesh] : []) + [.rules, .extensions, .activity, .settings]
+    }
+
+    /// Whether the sidebar has 组网: on an engine that runs mesh networks, and in the demo of debug builds (CI
+    /// screenshots), which answers with a made-up network whatever the release gate says.
+    private static var meshShown: Bool {
+        #if DEBUG
+        // `TunnelController.isDemo`, read directly: the sidebar's sections are not on the main actor.
+        if UserDefaults.standard.bool(forKey: "AnixOpsDemo") {
+            return true
+        }
+        #endif
+        return MeshSupport.available
     }
 
     /// The section's name in a mode: in debug mode Activity is the requests and Extensions are "Rewrite".
