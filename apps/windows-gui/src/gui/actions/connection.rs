@@ -71,7 +71,10 @@ impl DesktopCore {
 
     /// Starts the engine for the mesh alone on `envelope` (`mesh::only_profile`): an adapter that routes nothing
     /// until the engine names the mesh's routes ([`Self::apply_mesh_routes`]), and leaves DNS to the device.
-    pub fn start_mesh_only(&mut self, envelope: &[u8]) -> Result<(), String> {
+    pub fn start_mesh_only(
+        &mut self,
+        envelope: &[u8],
+    ) -> Result<(), crate::gui::tun_mode::TunStartError> {
         self.stop_mesh_only();
         let settings = WindowsTunSettings {
             routes: Some(Vec::new()),

@@ -16,6 +16,7 @@ use serde_json::{json, Value};
 
 use super::actions::connection::DesktopCore;
 use super::capture_sessions;
+use super::tun_mode::TunStartError;
 
 /// `%LOCALAPPDATA%\AnixOps Net`, beside the LAN share's sealed password.
 pub fn dir() -> Result<PathBuf, String> {
@@ -110,6 +111,10 @@ fn settle_attempt(core: &Arc<Mutex<DesktopCore>>, attempt: u32) {
             mesh::only_profile(&mesh::outbounds(&networks))
                 .ok_or_else(|| "no mesh network is joined".to_string())
         })
+        .map_err(|message| TunStartError {
+            code: "other",
+            message,
+        })
         .and_then(|profile| guard.start_mesh_only(profile.to_string().as_bytes()));
     drop(guard);
     match started {
@@ -120,7 +125,7 @@ fn settle_attempt(core: &Arc<Mutex<DesktopCore>>, attempt: u32) {
         }
         Err(error) => {
             log(&format!("mesh only: the engine did not start: {error}"));
-            set_failure(Some(start_failure(&error)));
+            set_failure(Some(json!({ "code": error.code, "detail": null })));
             retry_later(core.clone(), attempt);
         }
     }
@@ -150,24 +155,6 @@ fn retry_wait(attempt: u32) -> Duration {
     RETRY_FIRST
         .checked_mul(1u32.checked_shl(attempt.min(16)).unwrap_or(u32::MAX))
         .map_or(RETRY_MAX, |wait| wait.min(RETRY_MAX))
-}
-
-/// The `network.failure` of a start that failed: the codes of mesh-status.md the page words (`permission_denied`,
-/// `tun_in_use`), else `other`. The engine's own text goes to the log, not the page.
-fn start_failure(error: &str) -> Value {
-    let lower = error.to_ascii_lowercase();
-    let code = if lower.contains("access is denied")
-        || lower.contains("os error 5)")
-        || lower.contains("permission")
-        || lower.contains("privilege")
-    {
-        "permission_denied"
-    } else if lower.contains("in use") || lower.contains("already exists") {
-        "tun_in_use"
-    } else {
-        "other"
-    };
-    json!({ "code": code, "detail": null })
 }
 
 fn set_failure(failure: Option<Value>) {
@@ -320,15 +307,8 @@ mod tests {
     }
 
     #[test]
-    fn a_failed_start_is_worded_by_its_code_and_shown_on_a_joined_network() {
-        assert_eq!(
-            start_failure("could not create the adapter: Access is denied. (os error 5)")["code"],
-            "permission_denied"
-        );
-        assert_eq!(start_failure("the adapter is in use")["code"], "tun_in_use");
-        let other = start_failure("no network connection to route around the TUN adapter");
-        assert_eq!(other, json!({ "code": "other", "detail": null }));
-
+    fn a_failed_start_is_shown_on_a_joined_network() {
+        let other = json!({ "code": "other", "detail": null });
         let joining = json!({ "network": { "id": "office", "state": "joining" } });
         let failed = with_failure(joining.clone(), Some(other.clone()));
         assert_eq!(failed["network"]["state"], "failed");

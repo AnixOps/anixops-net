@@ -714,15 +714,20 @@ pub fn notices(status: &Value) -> Value {
             "native_keys_pending" => ("mesh.notice.native_keys_pending", None),
             _ => ("mesh.notice.join_failed", None),
         };
-        // A refused peer is named by its member name where the snapshot lists it, and each peer
-        // has a notice key of its own, so that one closed notice does not hide the next peer's.
+        // A refused peer is named by its node ID, with the member name where the snapshot lists that
+        // ID (a refused peer may claim a member's ID, so the name alone would point at the member).
+        // Each peer has a notice key of its own, so that one closed notice does not hide the next
+        // peer's.
         let peer = (code == "peer_not_native")
             .then(|| detail.as_str())
             .flatten();
         let (key, values) = if let Some(peer) = peer {
             (
                 format!("failure:{code}:{peer}"),
-                vec![json!(member_name(&members, peer))],
+                vec![json!(match member_name(&members, peer) {
+                    name if name == peer => peer.to_string(),
+                    name => format!("{name} ({peer})"),
+                })],
             )
         } else if detail.is_null() || code == "native_keys_pending" {
             (format!("failure:{code}"), vec![])
@@ -865,7 +870,7 @@ mod tests {
         });
         let named = super::notices(&listed);
         assert_eq!(named[0]["key"], "failure:peer_not_native:node-9b1c");
-        assert_eq!(named[0]["values"], json!(["lon-host"]));
+        assert_eq!(named[0]["values"], json!(["lon-host (node-9b1c)"]));
     }
 
     #[test]
