@@ -863,9 +863,9 @@ mod tests {
             },
             "members": [{ "id": "node-9b1c", "name": "lon-host" }],
         });
-        let notices = notices(&listed);
-        assert_eq!(notices[0]["key"], "failure:peer_not_native:node-9b1c");
-        assert_eq!(notices[0]["values"], json!(["lon-host"]));
+        let named = super::notices(&listed);
+        assert_eq!(named[0]["key"], "failure:peer_not_native:node-9b1c");
+        assert_eq!(named[0]["values"], json!(["lon-host"]));
     }
 
     #[test]
