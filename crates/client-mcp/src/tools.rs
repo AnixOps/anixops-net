@@ -11,7 +11,9 @@ use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
-use crate::backend::{Backend, BackendError, ContentLevel, LogLevel, ACCESS_OFF};
+use crate::backend::{
+    Access, Action, Backend, BackendError, ContentLevel, LogLevel, Mode, ACCESS_OFF, ACT_OFF,
+};
 use crate::text::{cut, scrub_text, split_url, MASK};
 
 /// The tools as `tools/list` gives them.
@@ -22,8 +24,8 @@ pub fn definitions() -> &'static [Value] {
     })
 }
 
-/// The tools this crate implements, in the order of `tools.json`.
-pub const NAMES: [&str; 12] = [
+/// The tools this crate implements, in the order of `tools.json`: the read-only tools, then [`ACTIONS`].
+pub const NAMES: [&str; 19] = [
     "get_status",
     "list_nodes",
     "list_connections",
@@ -36,6 +38,25 @@ pub const NAMES: [&str; 12] = [
     "list_requests",
     "get_request",
     "get_logs",
+    "connect",
+    "disconnect",
+    "set_mode",
+    "select_node",
+    "test_node_delays",
+    "set_capture",
+    "close_connection",
+];
+
+/// The tools that change something (docs/mcp-desktop.md §5.2). Each needs the user's switch for actions and the
+/// user's confirmation in the app, which [`Backend::act`] waits for.
+pub const ACTIONS: [&str; 7] = [
+    "connect",
+    "disconnect",
+    "set_mode",
+    "select_node",
+    "test_node_delays",
+    "set_capture",
+    "close_connection",
 ];
 
 /// Longest body text [`get_request`] shows.
@@ -80,24 +101,115 @@ fn run(backend: &dyn Backend, name: &str, arguments: &Value) -> Result<Value, St
         "get_decrypt_status" => get_decrypt_status(backend, parse(arguments)?),
         "get_capture_status" => {
             no_arguments(&arguments)?;
-            let status = engine(backend, json!({ "cmd": "capture" }))?;
-            Ok(pick(
-                &status,
-                &[
-                    "enabled",
-                    "max_total_bytes",
-                    "used_bytes",
-                    "connections",
-                    "dropped_exchanges",
-                    "dropped_bodies",
-                ],
-            ))
+            get_capture_status(backend)
         }
         "list_requests" => list_requests(backend, parse(arguments)?),
         "get_request" => get_request(backend, access.content, parse(arguments)?),
         "get_logs" => get_logs(backend, parse(arguments)?),
+        _ if ACTIONS.contains(&name) => act(backend, access, name, arguments),
         _ => Err(format!("There is no tool named {name}.")),
     }
+}
+
+/// An action tool: the user's switch, the arguments, the action itself (confirmed by the user in the app), and
+/// then what changed, read the way the read-only tools read it.
+fn act(
+    backend: &dyn Backend,
+    access: Access,
+    name: &str,
+    arguments: Value,
+) -> Result<Value, String> {
+    if !access.act {
+        return Err(ACT_OFF.to_string());
+    }
+    let take = |action: Action| backend.act(&action).map_err(|error| error.message());
+    match name {
+        "connect" | "disconnect" => {
+            no_arguments(&arguments)?;
+            take(if name == "connect" {
+                Action::Connect
+            } else {
+                Action::Disconnect
+            })?;
+            get_status(backend)
+        }
+        "set_mode" => {
+            let SetMode { mode } = parse::<SetMode>(arguments)?;
+            take(Action::SetMode { mode })?;
+            get_status(backend)
+        }
+        "select_node" => {
+            let SelectNode { node, group } = parse::<SelectNode>(arguments)?;
+            if node.trim().is_empty() {
+                return Err("Invalid arguments: node is empty.".to_string());
+            }
+            take(Action::SelectNode { node, group })?;
+            get_status(backend)
+        }
+        "test_node_delays" => {
+            let arguments: ListNodes = parse(arguments)?;
+            // A subscription that does not exist is an error before anything is measured.
+            if let Some(name) = &arguments.group {
+                let groups = backend.nodes().map_err(|error| error.message())?;
+                if !groups.iter().any(|group| &group.name == name) {
+                    return Err(format!("No subscription is named \"{name}\"."));
+                }
+            }
+            take(Action::TestNodeDelays)?;
+            list_nodes(backend, arguments)
+        }
+        "set_capture" => {
+            let action = match parse::<SetCapture>(arguments)? {
+                SetCapture {
+                    enabled: Some(enabled),
+                    clear: None,
+                } => Action::SetCapture { enabled },
+                SetCapture {
+                    enabled: None,
+                    clear: Some(true),
+                } => Action::ClearCapture,
+                _ => {
+                    return Err(
+                        "Invalid arguments: give either enabled, or clear set to true.".to_string(),
+                    )
+                }
+            };
+            take(action)?;
+            get_capture_status(backend)
+        }
+        "close_connection" => {
+            let CloseConnection { id } = parse::<CloseConnection>(arguments)?;
+            take(Action::CloseConnection { id })?;
+            Ok(json!({ "closed": id }))
+        }
+        _ => Err(format!("There is no tool named {name}.")),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SetMode {
+    mode: Mode,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SelectNode {
+    node: String,
+    group: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SetCapture {
+    enabled: Option<bool>,
+    clear: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CloseConnection {
+    id: u64,
 }
 
 fn parse<T: DeserializeOwned>(arguments: Value) -> Result<T, String> {
@@ -169,6 +281,21 @@ fn no_arguments(arguments: &Value) -> Result<(), String> {
         Some(fields) if fields.is_empty() => Ok(()),
         _ => Err("Invalid arguments: this tool takes none.".to_string()),
     }
+}
+
+fn get_capture_status(backend: &dyn Backend) -> Result<Value, String> {
+    let status = engine(backend, json!({ "cmd": "capture" }))?;
+    Ok(pick(
+        &status,
+        &[
+            "enabled",
+            "max_total_bytes",
+            "used_bytes",
+            "connections",
+            "dropped_exchanges",
+            "dropped_bodies",
+        ],
+    ))
 }
 
 fn get_status(backend: &dyn Backend) -> Result<Value, String> {
@@ -795,7 +922,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_defined_tool_is_implemented_and_read_only() {
+    fn every_defined_tool_is_implemented_and_only_actions_change_anything() {
         let names: Vec<&str> = definitions()
             .iter()
             .map(|tool| tool["name"].as_str().unwrap())
@@ -812,10 +939,23 @@ mod tests {
             );
             assert_eq!(tool["inputSchema"]["type"], "object", "{name}");
             assert_eq!(tool["inputSchema"]["additionalProperties"], false, "{name}");
-            assert_eq!(tool["annotations"]["readOnlyHint"], true, "{name}");
-            assert_eq!(tool["annotations"]["destructiveHint"], false, "{name}");
-            assert_eq!(tool["annotations"]["openWorldHint"], false, "{name}");
+            let action = ACTIONS.contains(&name);
+            assert_eq!(tool["annotations"]["readOnlyHint"], !action, "{name}");
+            if action {
+                assert!(
+                    tool["description"]
+                        .as_str()
+                        .unwrap()
+                        .contains("The user confirms it in AnixOps Net first"),
+                    "{name}"
+                );
+            } else {
+                assert_eq!(tool["annotations"]["destructiveHint"], false, "{name}");
+                assert_eq!(tool["annotations"]["openWorldHint"], false, "{name}");
+            }
         }
+        // Actions come after the read-only tools.
+        assert_eq!(&NAMES[NAMES.len() - ACTIONS.len()..], ACTIONS);
     }
 
     #[test]

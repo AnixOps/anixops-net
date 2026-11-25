@@ -7,7 +7,7 @@
 
 use std::process::ExitCode;
 
-const HELP: &str = "anixops-mcp: lets an AI tool on this computer read the state of AnixOps Net (MCP over standard input and output).
+const HELP: &str = "anixops-mcp: lets an AI tool on this computer read the state of AnixOps Net and, each time the user confirms it, act on it (MCP over standard input and output).
 
 Usage: anixops-mcp [--socket PATH]
        anixops-mcp --version | --help

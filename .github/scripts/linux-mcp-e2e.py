@@ -5,7 +5,7 @@ Usage: linux-mcp-e2e.py <anixops-netd> <anixops-mcp>
 
 Starts the daemon on a socket and a data folder of its own and speaks MCP with anixops-mcp as an AI tool would:
 access is off until a window turns it on; then the state and the nodes are read, without the node's address or
-credentials; an engine request waits for a connection; a window's command is never reached; and once the daemon
+credentials; an engine request waits for a connection; an action is refused while only reading is allowed; a window's command is never reached; and once the daemon
 stops, every tool says it is not running.
 """
 
@@ -125,11 +125,12 @@ def main() -> None:
 
         window_ask(endpoint, "import_subscription_text", {"name": "Home", "content": NODE})
         window_ask(endpoint, "set_agent_access", {"read": True, "content": "summary"})
-        status, nodes, rules, logs = mcp(program, endpoint, [
+        status, nodes, rules, logs, connect = mcp(program, endpoint, [
             ("get_status", {}),
             ("list_nodes", {}),
             ("check_rules", {"rules": ["FINAL,DIRECT"]}),
             ("get_logs", {"limit": 20}),
+            ("connect", {}),
         ])
         status = expect_ok(status, "get_status")
         if status.get("connection") != "disconnected" or status.get("node") != "Test":
@@ -142,6 +143,8 @@ def main() -> None:
                 fail(f"the node's {secret} reached the AI tool")
         expect_error(rules, "not connected", "check_rules while not connected")
         expect_ok(logs, "get_logs")
+        # Reading does not allow actions; the daemon offers no switch for them yet.
+        expect_error(connect, "has not allowed actions by AI tools", "connect with only reading allowed")
 
         # Turned off again: refused at once, in the daemon.
         window_ask(endpoint, "set_agent_access", {"read": False, "content": "summary"})

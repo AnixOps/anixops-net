@@ -130,7 +130,8 @@ AnixOps Net 各平台客户端（iOS、macOS、Android、Windows、Linux，开�
 
 - `anixops-mcp` 由本机的 AI 工具启动，只经标准输入输出和本机通道与客户端通信：macOS 为 App 组容器里的 `cli.sock`，
   Windows 与 Linux 原生版为窗口所用的命名管道或守护进程套接字。它不发起任何网络连接，也不监听端口（docs/mcp-desktop.md）。
-  默认关闭，需在设置 › 高级 › 外部工具访问中打开。
+  默认关闭，需在设置 › 高级 › 外部工具访问中打开。操作工具中只有 `connect`（连接当前节点）与 `test_node_delays`
+  （测速）会产生对外连接，与窗口中同名操作相同，且每次都需用户在客户端内确认。访问记录只保存在本机。
 
 ## 只在用户点开时打开的链接
 

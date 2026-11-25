@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::backend::{BackendError, ACCESS_OFF, NOT_CONNECTED};
+use crate::backend::{BackendError, ACCESS_OFF, ACT_OFF, DENIED, NOT_CONNECTED, NO_ANSWER};
 
 /// The user's access settings ([`crate::Access`]); answered whatever they are.
 pub const ACCESS: &str = "agent.access";
@@ -41,6 +41,12 @@ pub fn error_from_core(message: String) -> BackendError {
         BackendError::AccessOff
     } else if message == NOT_CONNECTED {
         BackendError::NotConnected
+    } else if message == ACT_OFF {
+        BackendError::ActOff
+    } else if message == DENIED {
+        BackendError::Denied
+    } else if message == NO_ANSWER {
+        BackendError::NoAnswer
     } else {
         BackendError::Failed(message)
     }

@@ -51,11 +51,11 @@ public enum CommandLineExit: Int32, Equatable, Sendable {
             self = .usage
         case .notFound, .invalidData:
             self = .dataError
-        case .failed:
+        case .failed, .denied:
             self = .failure
-        case .timeout:
+        case .timeout, .noAnswer:
             self = .timeout
-        case .unavailable, .accessOff, .notConnected:
+        case .unavailable, .accessOff, .notConnected, .actOff:
             self = .unavailable
         case .unsupportedVersion:
             self = .protocolError

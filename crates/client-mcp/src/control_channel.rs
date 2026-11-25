@@ -4,7 +4,8 @@
 //! The app listens on a Unix socket in its app group container and answers only processes of the same user. One
 //! connection carries one request and one answer, each one line of JSON. Status and nodes are the commands the
 //! `anixops` tool uses; the rest goes through the `agent` command, which the app answers only while the user allows
-//! AI tools, and whose engine requests the app's gate (`AgentGate`) checks against `policy.json` again.
+//! AI tools, and whose engine requests the app's gate (`AgentGate`) checks against `policy.json` again. An action
+//! (`agent` `act`) waits for the user's answer to the app's confirmation, so its connection waits longer.
 
 use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
 use std::os::unix::net::UnixStream;
@@ -15,12 +16,16 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::backend::{
-    Access, Backend, BackendError, ConnectionState, ContentLevel, LogLevel, LogLine, Node,
+    Access, Action, Backend, BackendError, ConnectionState, ContentLevel, LogLevel, LogLine, Node,
     NodeGroup, Status,
 };
 
 /// `ControlProtocol.version` of the app.
 pub const PROTOCOL_VERSION: u32 = 1;
+
+/// How long an action may take: the app's confirmation waits 60 seconds for the user, and a connection that comes
+/// up after that may take 40 more.
+const ACT_TIMEOUT: Duration = Duration::from_secs(150);
 
 /// Largest answer read: a capture exchange with its bodies, as the engine sends it.
 const MAX_ANSWER_BYTES: u64 = 8 << 20;
@@ -43,13 +48,17 @@ impl ControlChannel {
         self
     }
 
-    fn ask(&self, mut request: Value) -> Result<Answer, BackendError> {
+    fn ask(&self, request: Value) -> Result<Answer, BackendError> {
+        self.ask_within(request, self.timeout)
+    }
+
+    fn ask_within(&self, mut request: Value, timeout: Duration) -> Result<Answer, BackendError> {
         request["version"] = json!(PROTOCOL_VERSION);
         let mut stream = UnixStream::connect(&self.path).map_err(|_| BackendError::Unavailable)?;
         // Without timeouts a stuck app would hold the AI tool's call for ever.
         stream
-            .set_read_timeout(Some(self.timeout))
-            .and_then(|()| stream.set_write_timeout(Some(self.timeout)))
+            .set_read_timeout(Some(timeout))
+            .and_then(|()| stream.set_write_timeout(Some(timeout)))
             .map_err(|_| BackendError::Unavailable)?;
         let mut line = request.to_string().into_bytes();
         line.push(b'\n');
@@ -85,6 +94,9 @@ impl ControlChannel {
         Err(match answer.error.as_deref() {
             Some("accessOff") => BackendError::AccessOff,
             Some("notConnected") => BackendError::NotConnected,
+            Some("actOff") => BackendError::ActOff,
+            Some("denied") => BackendError::Denied,
+            Some("noAnswer") => BackendError::NoAnswer,
             Some("unsupportedVersion") => BackendError::Failed(
                 "This program and AnixOps Net are different versions. Use the program inside the app.".to_string(),
             ),
@@ -245,6 +257,17 @@ impl Backend for ControlChannel {
         }))?;
         Self::payload(answer)
     }
+
+    fn act(&self, action: &Action) -> Result<(), BackendError> {
+        let action = serde_json::to_string(action)
+            .map_err(|_| BackendError::Failed("The action could not be written.".to_string()))?;
+        let timeout = self.timeout.max(ACT_TIMEOUT);
+        self.ask_within(
+            json!({ "command": "agent", "agent": "act", "payload": action }),
+            timeout,
+        )?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -379,6 +402,33 @@ mod tests {
             ))
         );
         assert!(matches!(channel.status(), Err(BackendError::Failed(_))));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn actions_travel_as_json_text_and_refusals_keep_their_meaning() {
+        let (path, requests) = app(vec![
+            json!({ "ok": true }),
+            json!({ "ok": false, "error": "actOff", "message": "off" }),
+            json!({ "ok": false, "error": "denied", "message": "denied" }),
+            json!({ "ok": false, "error": "noAnswer", "message": "no answer" }),
+        ]);
+        let channel = ControlChannel::new(&path);
+        let select = Action::SelectNode {
+            node: "Node A".to_string(),
+            group: None,
+        };
+        assert_eq!(channel.act(&select), Ok(()));
+        let request = requests.recv().unwrap();
+        assert_eq!(request["command"], "agent");
+        assert_eq!(request["agent"], "act");
+        assert_eq!(
+            serde_json::from_str::<Value>(request["payload"].as_str().unwrap()).unwrap(),
+            json!({ "action": "select_node", "node": "Node A" })
+        );
+        assert_eq!(channel.act(&Action::Connect), Err(BackendError::ActOff));
+        assert_eq!(channel.act(&Action::Connect), Err(BackendError::Denied));
+        assert_eq!(channel.act(&Action::Connect), Err(BackendError::NoAnswer));
         let _ = std::fs::remove_file(&path);
     }
 

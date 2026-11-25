@@ -158,5 +158,89 @@
       "additionalProperties": false
     },
     "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false }
+  },
+  {
+    "name": "connect",
+    "title": "Connect",
+    "description": "Connects the client with the current node and returns the status once connected. The user confirms it in AnixOps Net first, unless they allowed actions of this kind in the last 15 minutes. It fails when the user denies it or does not answer within 60 seconds.",
+    "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+    "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true }
+  },
+  {
+    "name": "disconnect",
+    "title": "Disconnect",
+    "description": "Disconnects the client and returns the status once disconnected; traffic then no longer goes through the client. The user confirms it in AnixOps Net first, unless they allowed actions of this kind in the last 15 minutes. It fails when the user denies it or does not answer within 60 seconds.",
+    "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+    "annotations": { "readOnlyHint": false, "destructiveHint": true, "idempotentHint": true, "openWorldHint": false }
+  },
+  {
+    "name": "set_mode",
+    "title": "Set routing mode",
+    "description": "Switches the routing mode: rule follows the rules, global sends all traffic through the current node, direct sends all traffic directly. Returns the status. The user confirms it in AnixOps Net first, unless they allowed actions of this kind in the last 15 minutes. It fails when the user denies it or does not answer within 60 seconds.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "mode": { "type": "string", "enum": ["rule", "global", "direct"], "description": "The routing mode." }
+      },
+      "required": ["mode"],
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false }
+  },
+  {
+    "name": "select_node",
+    "title": "Select node",
+    "description": "Makes a node the current one, by the name list_nodes shows. When several subscriptions have a node of that name, group names the subscription. Returns the status. The user confirms it in AnixOps Net first, unless they allowed actions of this kind in the last 15 minutes. It fails when the user denies it or does not answer within 60 seconds.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "node": { "type": "string", "description": "The node's name." },
+        "group": { "type": "string", "description": "The subscription's name." }
+      },
+      "required": ["node"],
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false }
+  },
+  {
+    "name": "test_node_delays",
+    "title": "Test node latency",
+    "description": "Measures the latency of every subscription's nodes, as the client's test button does; each node is connected to once. Returns the nodes as list_nodes does, only the subscription named group when one is given. The user confirms it in AnixOps Net first, unless they allowed actions of this kind in the last 15 minutes. It fails when the user denies it or does not answer within 60 seconds.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "group": { "type": "string", "description": "Only this subscription in the result, by name." }
+      },
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true }
+  },
+  {
+    "name": "set_capture",
+    "title": "Turn capture on or off",
+    "description": "Turns packet capture on or off (enabled), or clears what has been captured (clear: true); give exactly one of the two. Requires the client to be connected. Returns the capture status. The user confirms it in AnixOps Net first, unless they allowed actions of this kind in the last 15 minutes. It fails when the user denies it or does not answer within 60 seconds.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "description": "Capture on or off." },
+        "clear": { "type": "boolean", "enum": [true], "description": "Clear the captured connections and requests." }
+      },
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": false, "destructiveHint": true, "idempotentHint": true, "openWorldHint": false }
+  },
+  {
+    "name": "close_connection",
+    "title": "Close connection",
+    "description": "Closes one active connection, by the id list_connections shows. Requires the client to be connected. The user confirms it in AnixOps Net first, unless they allowed actions of this kind in the last 15 minutes. It fails when the user denies it or does not answer within 60 seconds.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer", "minimum": 0, "description": "The connection's id." }
+      },
+      "required": ["id"],
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": false, "destructiveHint": true, "idempotentHint": true, "openWorldHint": false }
   }
 ]

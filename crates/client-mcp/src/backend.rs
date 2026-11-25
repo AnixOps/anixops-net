@@ -47,6 +47,12 @@ pub enum BackendError {
     AccessOff,
     /// The command needs the engine, which runs only while the client is connected.
     NotConnected,
+    /// The user has not turned on actions by AI tools.
+    ActOff,
+    /// The user refused the action in the app's confirmation.
+    Denied,
+    /// The user did not answer the app's confirmation in time; the action was not taken.
+    NoAnswer,
     /// Anything else: a sentence that may be shown as it is.
     Failed(String),
 }
@@ -60,6 +66,9 @@ impl BackendError {
             }
             Self::AccessOff => ACCESS_OFF.to_string(),
             Self::NotConnected => NOT_CONNECTED.to_string(),
+            Self::ActOff => ACT_OFF.to_string(),
+            Self::Denied => DENIED.to_string(),
+            Self::NoAnswer => NO_ANSWER.to_string(),
             Self::Failed(message) => message.clone(),
         }
     }
@@ -72,6 +81,70 @@ pub const NOT_CONNECTED: &str =
 /// What every tool answers while the user has not turned access on.
 pub const ACCESS_OFF: &str =
     "AnixOps Net has not allowed access by AI tools. The user can turn it on in Settings, Advanced, External tool access.";
+
+/// What every action tool answers while the user has not turned actions on.
+pub const ACT_OFF: &str =
+    "AnixOps Net has not allowed actions by AI tools. The user can turn it on in Settings, Advanced, External tool access.";
+
+/// What an action tool answers when the user refused it.
+pub const DENIED: &str = "The user denied this action in AnixOps Net. It was not taken.";
+
+/// What an action tool answers when the user did not answer the confirmation.
+pub const NO_ANSWER: &str =
+    "The user did not confirm this action in AnixOps Net within 60 seconds. It was not taken.";
+
+/// An action an AI tool asks for (docs/mcp-desktop.md §5.2). The app takes it only after the user confirms it in
+/// the app's own window, or allowed actions of its kind for 15 minutes.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum Action {
+    Connect,
+    Disconnect,
+    SetMode {
+        mode: Mode,
+    },
+    /// A node of a subscription, by name; `group` names the subscription when several have the node.
+    SelectNode {
+        node: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        group: Option<String>,
+    },
+    /// A delay test of every subscription's nodes, as the window's test button runs it.
+    TestNodeDelays,
+    SetCapture {
+        enabled: bool,
+    },
+    ClearCapture,
+    /// One connection, by the id `list_connections` shows.
+    CloseConnection {
+        id: u64,
+    },
+}
+
+impl Action {
+    /// The action's name: the kind the user may allow for 15 minutes at once.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::Connect => "connect",
+            Self::Disconnect => "disconnect",
+            Self::SetMode { .. } => "set_mode",
+            Self::SelectNode { .. } => "select_node",
+            Self::TestNodeDelays => "test_node_delays",
+            Self::SetCapture { .. } => "set_capture",
+            Self::ClearCapture => "clear_capture",
+            Self::CloseConnection { .. } => "close_connection",
+        }
+    }
+}
+
+/// The routing mode.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Mode {
+    Rule,
+    Global,
+    Direct,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -148,4 +221,12 @@ pub trait Backend {
     /// `engine-embedded/src/control.rs` lists them) and its answer. [`BackendError::NotConnected`] while
     /// the engine is not running.
     fn engine(&self, request: &Value) -> Result<Value, BackendError>;
+
+    /// Takes `action` once the user has confirmed it in the app, and answers when it is done. The app checks the
+    /// user's settings again and shows the confirmation itself; this program cannot confirm anything.
+    fn act(&self, _action: &Action) -> Result<(), BackendError> {
+        Err(BackendError::Failed(
+            "This version of AnixOps Net does not take actions from AI tools.".to_string(),
+        ))
+    }
 }
