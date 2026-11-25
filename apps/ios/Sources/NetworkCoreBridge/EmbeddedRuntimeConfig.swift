@@ -428,6 +428,44 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         return copy
     }
 
+    /// The key of the selected node in the routing section `withMesh(_:)` builds for a config without one.
+    static let meshNodeKey = "node"
+
+    /// The same config with the joined mesh networks' outbounds (`MeshNetworkLibrary.outbounds`). The engine sends
+    /// each network's routes to its outbound ahead of the rules (mesh-module.md, R23), so no rule names them. A
+    /// routing section gets them beside its nodes (a node of the same key stays); a config without one gets a section
+    /// with the selected node as `node`, everything else through it, as when it runs alone. A whole-device WireGuard
+    /// tunnel (`.wireguard`) has no outbound to put beside them and is returned unchanged, as is any config when
+    /// there are none.
+    public func withMesh(_ outbounds: [String: [String: JSONValue]]) -> EmbeddedRuntimeConfig {
+        guard !outbounds.isEmpty else {
+            return self
+        }
+        var copy = self
+        if var routing {
+            routing.outbounds.merge(outbounds) { node, _ in node }
+            copy.routing = routing
+            return copy
+        }
+        if case .wireguard = outbound {
+            return self
+        }
+        guard let data = try? JSONEncoder().encode(outbound),
+              let node = try? JSONDecoder().decode([String: JSONValue].self, from: data)
+        else {
+            return self
+        }
+        var all = outbounds
+        all[Self.meshNodeKey] = node
+        copy.routing = Routing(
+            outbounds: all,
+            rules: ["FINAL,\(Self.meshNodeKey)"],
+            groups: [],
+            global: Self.meshNodeKey
+        )
+        return copy
+    }
+
     /// The same config decrypting HTTPS for the plugins' hosts with `authority`, running the allowed scripts in
     /// `scriptAssets`. No plugins removes the section.
     public func withMitm(
@@ -773,6 +811,10 @@ public enum TunnelProfileKeys {
     /// `Data` holding the encoded `LocalRules`: the rule mode of a node list without subscription rules, and the
     /// user's rules in front of a subscription's. Absent is no rules of the user's.
     public static let localRules = "networkcore.local-rules"
+    /// `Data` holding the joined mesh networks without their secrets (`MeshNetworkLibrary.profileValue`); the
+    /// extension adds each network's secret from the shared Keychain (`MeshNetworkLibrary.secretAccount`) or the
+    /// start secrets. Absent joins none.
+    public static let meshNetworks = "networkcore.mesh-networks"
     /// `Data` holding the encoded `NotificationSettings`. Absent posts every kind of notification.
     public static let notifications = "networkcore.notifications"
     /// The `TrafficTakeover` raw value: the tunnel interface, the system proxy, or both. Absent is

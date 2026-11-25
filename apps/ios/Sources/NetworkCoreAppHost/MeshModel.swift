@@ -62,6 +62,8 @@ final class MeshModel {
     /// Why the last join, leave or route change did not take effect; nil once it did.
     private(set) var refusal: RuntimeControl.Refusal?
     private(set) var busy = false
+    /// The networks saved on this device (`MeshNetworkLibrary`).
+    private(set) var saved = MeshNetworkLibrary.load()
 
     var entry: MeshObject {
         MeshObject(MeshView.entry(status: status))
@@ -104,12 +106,56 @@ final class MeshModel {
         status = object
     }
 
-    /// Joins or leaves the network the snapshot names. Joining and leaving do not touch the proxy (R23).
+    /// Joins or leaves the network the snapshot names. Joining and leaving do not touch the proxy (R23); the saved
+    /// network and the profile follow once the engine took it.
     func setJoined(_ joined: Bool, tunnel: TunnelController) async {
         guard let id = network?.string("id") else {
             return
         }
         await send(joined ? .meshJoin(network: id) : .meshLeave(network: id), tunnel: tunnel)
+        guard refusal == nil, saved.contains(where: { $0.name == id }) else {
+            return
+        }
+        MeshNetworkLibrary.setJoined(id, joined)
+        saved = MeshNetworkLibrary.load()
+        _ = await tunnel.applyMeshNetworks()
+    }
+
+    /// Saves a network from 添加网络 with its secret and joins it: in the running engine at once (`mesh_save_network`,
+    /// then `mesh_join`, leaving the network joined before, since a phone joins one at a time), and in the profile
+    /// for the next start. False when the secret could not be saved; the engine's refusal shows on the page.
+    func addNetwork(_ added: MeshNetwork, secret: String, tunnel: TunnelController) async -> Bool {
+        do {
+            try MeshNetworkLibrary.save(added, secret: secret)
+        } catch {
+            return false
+        }
+        saved = MeshNetworkLibrary.load()
+        if tunnel.connection == .connected, let config = added.runtimeConfigJSON(secret: secret) {
+            if let current = network, let id = current.string("id"), id != added.name,
+               ["joined", "joining", "partial"].contains(current.string("state") ?? "")
+            {
+                await send(.meshLeave(network: id), tunnel: tunnel)
+            }
+            await send(.meshSaveNetwork(configJSON: config), tunnel: tunnel)
+            if refusal == nil {
+                await send(.meshJoin(network: added.name), tunnel: tunnel)
+            }
+        }
+        _ = await tunnel.applyMeshNetworks()
+        return true
+    }
+
+    /// Removes the network the snapshot names: from the running engine, the saved networks, the Keychain and the
+    /// profile.
+    func removeNetwork(tunnel: TunnelController) async {
+        guard let id = network?.string("id") else {
+            return
+        }
+        await send(.meshRemoveNetwork(network: id), tunnel: tunnel)
+        MeshNetworkLibrary.remove(id)
+        saved = MeshNetworkLibrary.load()
+        _ = await tunnel.applyMeshNetworks()
     }
 
     /// Whether a subnet that overlaps this device's network goes through the mesh (`mesh`) or stays local (`local`).
