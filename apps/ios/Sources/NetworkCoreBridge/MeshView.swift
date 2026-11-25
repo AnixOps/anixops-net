@@ -115,7 +115,7 @@ public enum MeshView {
             guard let address = Address(String(parts[0])) else { return nil }
             let width = address.v6 ? 128 : 32
             if parts.count == 2 {
-                guard let prefix = Int(parts[1]), parts[1].allSatisfy { $0.isASCII && $0.isNumber }, prefix <= width else { return nil }
+                guard let prefix = Int(parts[1]), parts[1].allSatisfy({ $0.isASCII && $0.isNumber }), prefix <= width else { return nil }
                 self.prefix = prefix
             } else {
                 prefix = width
