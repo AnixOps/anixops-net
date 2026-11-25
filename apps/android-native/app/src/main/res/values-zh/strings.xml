@@ -925,6 +925,23 @@
     <string name="mesh_notice_detour_loss">%1$s至%2$s已改经%3$s：直连链路丢包 %4$s%%。</string>
     <string name="mesh_notice_detour_latency">%1$s至%2$s已改经%3$s：直连链路延迟 %4$s ms。</string>
     <string name="mesh_notice_detour_slow">%1$s至%2$s已改经%3$s：直连链路延迟过高。</string>
+    <string name="mesh_add_network">添加网络</string>
+    <string name="mesh_add_name">名称</string>
+    <string name="mesh_add_secret">密钥</string>
+    <string name="mesh_add_peers">对端地址</string>
+    <string name="mesh_add_peers_hint">每行一个地址，可带 tcp:// 或 udp://，默认端口 11010。</string>
+    <string name="mesh_add_address_auto">自动分配</string>
+    <string name="mesh_add_standard">标准</string>
+    <string name="mesh_add_standard_note">标准模式未启用前向保密。</string>
+    <string name="mesh_add_duplicate">已存在同名网络。</string>
+    <string name="mesh_add_problem_name">名称须为 1–64 个字符，不含斜杠。</string>
+    <string name="mesh_add_problem_secret">缺少密钥。</string>
+    <string name="mesh_add_problem_peers">缺少对端地址。</string>
+    <string name="mesh_add_problem_peer">对端地址无效：%1$s</string>
+    <string name="mesh_add_problem_address">虚拟地址无效，格式如 10.144.144.5/24。</string>
+    <string name="mesh_remove_network">移除网络</string>
+    <string name="mesh_remove_confirm">移除网络“%1$s”？</string>
+    <string name="mesh_remove_message">本机退出该网络并删除其密钥。</string>
     <plurals name="mesh_members_count">
         <item quantity="other">%1$d 台</item>
     </plurals>

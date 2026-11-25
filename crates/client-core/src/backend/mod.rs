@@ -7,6 +7,7 @@ pub mod engine;
 #[cfg(not(target_os = "android"))]
 pub mod lan_share_auth;
 pub mod legacy_windows;
+pub mod mesh;
 #[cfg(not(any(target_os = "android", windows)))]
 pub mod session_key;
 #[cfg(windows)]
@@ -581,6 +582,7 @@ impl Backend {
         let envelope = desktop_dns::apply(&envelope, self.state.dns_preset)?;
         let envelope = desktop_dns::apply_block_quic(&envelope, self.state.block_quic)?;
         let envelope = desktop_dns::redirects::apply(&envelope)?;
+        let envelope = self.with_mesh(envelope);
         let envelope =
             desktop_dns::rules::with_rule_set_cache(&envelope, &self.rule_set_cache_dir())?;
         if !self.state.preferences.https_decryption {
@@ -591,6 +593,138 @@ impl Backend {
             self.mitm_root()
                 .envelope(envelope.as_bytes(), "", Some(&self.plugins_dir()))?;
         String::from_utf8(envelope).map_err(|error| error.to_string())
+    }
+
+    /// `envelope` with the joined mesh networks' outbounds ([`mesh::with_outbounds`]). Mesh is an extra, as HTTPS
+    /// decryption is: an engine that would refuse the result (one without the mesh module) runs without them, and the
+    /// log says why.
+    fn with_mesh(&self, envelope: String) -> String {
+        let networks = match mesh::load(self.store.dir()) {
+            Ok(networks) => networks,
+            Err(error) => {
+                self.log(LogLevel::Error, &error);
+                return envelope;
+            }
+        };
+        let outbounds = mesh::outbounds(&networks);
+        let Some(meshed) = serde_json::from_str::<Value>(&envelope)
+            .ok()
+            .and_then(|profile| mesh::with_outbounds(&profile, &outbounds))
+        else {
+            return envelope;
+        };
+        let meshed = meshed.to_string();
+        match RuntimeConfig::from_json(meshed.as_bytes()) {
+            Ok(_) => meshed,
+            Err(error) => {
+                self.log(
+                    LogLevel::Warn,
+                    &format!(
+                        "mesh networks left out: the engine refused them: {}",
+                        error.message
+                    ),
+                );
+                envelope
+            }
+        }
+    }
+
+    /// The saved mesh networks, without their secrets.
+    pub fn mesh_networks(&self) -> Result<Vec<mesh::NetworkSummary>, String> {
+        mesh::load(self.store.dir()).map(|networks| mesh::summaries(&networks))
+    }
+
+    fn save_mesh_networks(&self, networks: &[mesh::SavedNetwork]) -> Result<(), String> {
+        let bytes = serde_json::to_vec_pretty(networks).map_err(|error| error.to_string())?;
+        self.store
+            .write_file(mesh::FILE, &bytes)
+            .map_err(|error| format!("the mesh networks could not be saved: {error}"))
+    }
+
+    /// One mesh request to a running engine; `None` while none runs, else the engine's answer (`{"ok":true}` or its
+    /// refusal, `{"ok":false,"error":{code,detail}}`).
+    fn mesh_request(&self, request: Value) -> Option<Value> {
+        if !self.engine.is_running() {
+            return None;
+        }
+        Some(self.engine.request(&request).unwrap_or_else(|error| {
+            serde_json::json!({ "ok": false, "error": { "code": "other", "detail": error } })
+        }))
+    }
+
+    /// Saves a network (`config`, the kernel's `config_version: 1` structure with its secret) and joins it, leaving
+    /// the network joined before: a device joins one at a time. A running engine takes it at once
+    /// (`mesh_save_network`, then `mesh_join`); the saved profile carries it from the next start. Answers the
+    /// engine's refusal when it refused, else `{"ok":true}`.
+    pub fn save_mesh_network(&mut self, config: Value) -> Result<Value, String> {
+        let name = mesh::validate(&config)?;
+        let networks = mesh::load(self.store.dir())?;
+        let before = networks
+            .iter()
+            .find(|network| network.joined && network.name != name)
+            .map(|network| network.name.clone());
+        self.save_mesh_networks(&mesh::saved(&networks, &name, config.clone()))?;
+        if let Some(before) = before {
+            self.mesh_request(serde_json::json!({ "cmd": "mesh_leave", "network": before }));
+        }
+        let saved =
+            self.mesh_request(serde_json::json!({ "cmd": "mesh_save_network", "config": config }));
+        if let Some(refused) = saved.filter(|answer| answer.get("ok") != Some(&Value::Bool(true))) {
+            return Ok(refused);
+        }
+        Ok(self
+            .mesh_request(serde_json::json!({ "cmd": "mesh_join", "network": name }))
+            .unwrap_or_else(|| serde_json::json!({ "ok": true })))
+    }
+
+    /// Joins (leaving the network joined before) or leaves a saved network, in a running engine at once and in the
+    /// saved profile. The engine's refusal is answered and nothing is saved; with no engine running only the saved
+    /// choice changes.
+    pub fn set_mesh_joined(&mut self, name: &str, joined: bool) -> Result<Value, String> {
+        let networks = mesh::load(self.store.dir())?;
+        let next = mesh::joined(&networks, name, joined).ok_or_else(|| {
+            refusal::coded(
+                "mesh.not_found",
+                format!("no saved network is named {name}"),
+            )
+        })?;
+        if joined {
+            for other in networks
+                .iter()
+                .filter(|network| network.joined && network.name != name)
+            {
+                self.mesh_request(
+                    serde_json::json!({ "cmd": "mesh_leave", "network": other.name }),
+                );
+            }
+        }
+        let cmd = if joined { "mesh_join" } else { "mesh_leave" };
+        let answer = self
+            .mesh_request(serde_json::json!({ "cmd": cmd, "network": name }))
+            .unwrap_or_else(|| serde_json::json!({ "ok": true }));
+        if answer.get("ok") == Some(&Value::Bool(true)) {
+            self.save_mesh_networks(&next)?;
+        }
+        Ok(answer)
+    }
+
+    /// Removes a saved network and its secret, from a running engine too.
+    pub fn remove_mesh_network(&mut self, name: &str) -> Result<Value, String> {
+        let networks = mesh::load(self.store.dir())?;
+        if !networks.iter().any(|network| network.name == name) {
+            return Err(refusal::coded(
+                "mesh.not_found",
+                format!("no saved network is named {name}"),
+            ));
+        }
+        let answer =
+            self.mesh_request(serde_json::json!({ "cmd": "mesh_remove_network", "network": name }));
+        let next: Vec<_> = networks
+            .into_iter()
+            .filter(|network| network.name != name)
+            .collect();
+        self.save_mesh_networks(&next)?;
+        Ok(answer.unwrap_or_else(|| serde_json::json!({ "ok": true })))
     }
 
     /// The profile, or debug mode's node-less one, with the user's own rule lines first.

@@ -125,13 +125,38 @@ class Core(
         return MeshPage(status, head, entry, members, subnets, paths, notices)
     }
 
-    /** Joins or leaves a saved network, by its id; join and leave leave the proxy as it is. Null when it took effect. */
-    suspend fun setMeshJoined(network: String, joined: Boolean): MeshRefusal? = meshCommand(
-        buildJsonObject {
-            put("cmd", if (joined) "mesh_join" else "mesh_leave")
-            put("network", network)
-        },
+    /** The networks saved on this device, without their secrets. */
+    suspend fun meshNetworks(): List<MeshSavedNetwork> =
+        call("mesh_networks", ListSerializer(MeshSavedNetwork.serializer()))
+
+    /**
+     * Saves a network from 添加网络, secret included, and joins it (leaving the network joined before): in a running
+     * engine at once, and in the profile from the next start. Null when it took effect.
+     */
+    suspend fun saveMeshNetwork(config: JsonObject): MeshRefusal? =
+        meshInvoke("save_mesh_network", args("config" to config))
+
+    /**
+     * Joins or leaves a saved network, by its id; join and leave leave the proxy as it is. The backend keeps the
+     * choice for the next start. Null when it took effect.
+     */
+    suspend fun setMeshJoined(network: String, joined: Boolean): MeshRefusal? = meshInvoke(
+        "set_mesh_joined",
+        args("network" to JsonPrimitive(network), "joined" to JsonPrimitive(joined)),
     )
+
+    /** Removes a saved network and its secret, from a running engine too. Null when it took effect. */
+    suspend fun removeMeshNetwork(network: String): MeshRefusal? =
+        meshInvoke("remove_mesh_network", args("network" to JsonPrimitive(network)))
+
+    private suspend fun meshInvoke(command: String, arguments: JsonObject): MeshRefusal? {
+        val answer = try {
+            raw(command, arguments)
+        } catch (error: CoreException) {
+            return MeshRefusal("other", error.message)
+        }
+        return refusalOf(answer)
+    }
 
     /** Whether a subnet that overlaps this device's network goes through the mesh (`mesh`) or stays `local`. */
     suspend fun setMeshSubnetRoute(network: String, cidr: String, route: String): MeshRefusal? = meshCommand(

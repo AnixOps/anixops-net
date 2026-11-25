@@ -156,6 +156,28 @@
 - Android：JNI 桥转到 `client-core` 的同名命令。
 - Windows、Linux：窗口经 `client-ipc` 帧发同名命令到后台服务。
 
+## 保存的网络与配置
+
+网络配置（含 `network.secret`）由客户端保存，引擎每次启动时随配置下发；运行中的增删与加入退出同时直接发给引擎，不重启。
+同一设备同时只加入一个网络，加入一个即退出其他网络。
+
+- 配置写法：每个已加入的网络是 `routing.outbounds` 的一项，值为 `{"type":"mesh", …config_version 1 配置}`。
+  键只含 `[A-Za-z0-9._-]`：名称本身合规时为 `mesh-<名称>`，否则为 `mesh-x` 加名称 UTF-8 字节的十六进制，
+  各平台相同。规则不必提到它们：引擎把各网络的 `tunnel.routes` 先于规则送入对应出站（R23）。
+  配置只有单个出站时，改写为路由表：该出站为 `node`，`rules` 为 `["FINAL,node"]`，`global` 为 `node`。
+  引擎不接受带组网出站的配置时（未编进组网），照常不带组网启动，并记入日志或诊断。
+- iOS、macOS：App 设置保存不含密钥的配置，密钥在共享钥匙串（账户 `mesh-network.<名称>`）；
+  隧道配置的 `networkcore.mesh-networks` 只带已加入的网络，扩展启动时补上密钥；macOS 系统扩展经启动密钥取得。
+- Android、Windows、Linux：`client-core` 把配置连同密钥存在数据目录的 `mesh-networks.json`（仅所有者可读），
+  窗口经以下命令管理，任何回答都不含密钥：
+
+| 命令 | 参数 | 回答 |
+|---|---|---|
+| `mesh_networks` | 无 | `[{name, joined, security, peers, address?}]` |
+| `save_mesh_network` | `config`（含密钥） | 引擎的回答；引擎未运行时 `{"ok":true}` |
+| `set_mesh_joined` | `network`、`joined` | 同上；引擎拒绝时不改保存的状态 |
+| `remove_mesh_network` | `network` | 同上 |
+
 ## 共用的界面逻辑
 
 成员、子网、路径和入口分区的取舍规则只写一次，在 `crates/client-view/src/mesh.rs`，以 `view.mesh_*` 命令提供：

@@ -18,6 +18,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -76,6 +78,8 @@ import kotlinx.serialization.json.intOrNull
 
 internal const val MESH_ENTRY_TAG = "mesh-entry"
 internal const val MESH_JOIN_TAG = "mesh-join"
+internal const val MESH_ADD_TAG = "mesh-add"
+internal const val MESH_REMOVE_TAG = "mesh-remove"
 
 private val Dot = 8.dp
 
@@ -155,6 +159,20 @@ private enum class MeshTab { Members, Subnets, Paths }
 fun MeshScreen(state: MeshState, actions: MeshActions, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val page = state.page
     var tab by rememberSaveable { mutableStateOf(MeshTab.Members) }
+    var adding by rememberSaveable { mutableStateOf(false) }
+    var removing by rememberSaveable { mutableStateOf<String?>(null) }
+    if (adding) {
+        MeshNetworkScreen(
+            taken = state.saved.map { it.name }.toSet(),
+            join = { draft ->
+                actions.addNetwork(draft)
+                adding = false
+            },
+            onBack = { adding = false },
+            modifier = modifier,
+        )
+        return
+    }
     Page(stringResource(R.string.mesh_title), modifier, onBack = onBack) {
         if (page == null) {
             Note(stringResource(R.string.mesh_unavailable))
@@ -162,7 +180,17 @@ fun MeshScreen(state: MeshState, actions: MeshActions, onBack: () -> Unit, modif
         }
         StatusSection(page, state, actions)
         Notices(page.notices)
-        if (page.head.network == null) return@Page
+        val network = page.head.network
+        if (network == null) {
+            Button(
+                onClick = { adding = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag(MESH_ADD_TAG),
+            ) { Text(stringResource(R.string.mesh_add_network)) }
+            return@Page
+        }
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
             val tabs = listOf(
                 MeshTab.Members to stringResource(R.string.mesh_members),
@@ -191,6 +219,46 @@ fun MeshScreen(state: MeshState, actions: MeshActions, onBack: () -> Unit, modif
             MeshTab.Subnets -> Subnets(page, state, actions)
             MeshTab.Paths -> Paths(page)
         }
+        // 添加网络, then 移除网络 after a divider (docs/mesh-ui.md, 入口与导航).
+        Section(null) {
+            ActionRow(stringResource(R.string.mesh_add_network), LocalBrandPalette.current.primary, MESH_ADD_TAG) {
+                adding = true
+            }
+            RowDivider()
+            ActionRow(stringResource(R.string.mesh_remove_network), LocalBrandPalette.current.danger, MESH_REMOVE_TAG) {
+                removing = network.name ?: network.id
+            }
+        }
+    }
+    removing?.let { name ->
+        AlertDialog(
+            onDismissRequest = { removing = null },
+            title = { Text(stringResource(R.string.mesh_remove_confirm, name)) },
+            text = { Text(stringResource(R.string.mesh_remove_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    removing = null
+                    actions.removeNetwork()
+                }) { Text(stringResource(R.string.mesh_remove_network), color = LocalBrandPalette.current.danger) }
+            },
+            dismissButton = { TextButton(onClick = { removing = null }) { Text(stringResource(R.string.action_cancel)) } },
+        )
+    }
+}
+
+/** A row of a [Section] that is one action, in [color]. */
+@Composable
+private fun ActionRow(label: String, color: Color, tag: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .heightIn(min = 48.dp)
+            .padding(horizontal = BrandSpacing.md, vertical = BrandSpacing.sm)
+            .testTag(tag),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = color)
     }
 }
 
