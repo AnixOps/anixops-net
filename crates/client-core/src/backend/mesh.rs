@@ -391,7 +391,10 @@ pub fn only_profile(outbounds: &Map<String, Value>) -> Option<Value> {
 /// the release gate (requirements, 2026-11-25), not a capability. A build made with `ANIXOPS_MESH_PREVIEW=1` in the
 /// environment turns it on for testing. While off, no window sees `mesh_*` ([`super::engine::activity_request`]),
 /// no engine runs for the mesh alone and no saved network joins a profile.
-pub const ENABLED: bool = matches!(option_env!("ANIXOPS_MESH_PREVIEW"), Some("1"));
+pub const ENABLED: bool = match option_env!("ANIXOPS_MESH_PREVIEW") {
+    Some(value) => matches!(value.as_bytes(), [b'1']),
+    None => false,
+};
 
 /// Whether this build runs mesh networks: [`ENABLED`], and its engine accepts a mesh-only profile. Known without an
 /// engine running, so the 组网 entry shows while disconnected.
