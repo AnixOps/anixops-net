@@ -543,9 +543,23 @@ impl Client {
                     if watch.load(Ordering::Acquire) != generation || !guard.mesh_only_running() {
                         return;
                     }
-                    let next = TunnelInterface::mesh(guard.mesh_only_tunnel().as_ref());
+                    let tunnel = guard.mesh_only_tunnel();
+                    let next = TunnelInterface::mesh(tunnel.as_ref());
                     if next == applied || since.elapsed() < MESH_ROUTES_GAP {
                         continue;
+                    }
+                    if let Some(refused) = tunnel
+                        .as_ref()
+                        .map(|tunnel| &tunnel.refused)
+                        .filter(|refused| !refused.is_empty())
+                    {
+                        guard.log(
+                            app_log::Level::Error,
+                            &format!(
+                                "mesh only: routes wider than a mesh refused: {}",
+                                refused.join(", ")
+                            ),
+                        );
                     }
                     engine::expect_tunnel_replacement();
                     match platform.open_tunnel(&next) {
@@ -2537,6 +2551,7 @@ mod tests {
             routes_version: 1,
             dns_servers: vec!["198.18.0.2".to_string()],
             match_domains: vec!["office.internal".to_string()],
+            refused: Vec::new(),
         };
         let interface = TunnelInterface::mesh(Some(&tunnel));
         let proxy = TunnelInterface::proxy();

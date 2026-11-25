@@ -476,6 +476,30 @@ pub struct Tunnel {
     pub dns_servers: Vec<String>,
     /// The suffixes those servers answer.
     pub match_domains: Vec<String>,
+    /// The engine's routes the tunnel does not carry because they are wider than a mesh's ([`too_wide`]).
+    pub refused: Vec<String>,
+}
+
+/// The widest IPv4 and IPv6 prefixes a mesh route may have (intranet-mesh §15.4, U2): /8 and /7.
+pub const ROUTE_MIN_PREFIX_V4: u8 = 8;
+pub const ROUTE_MIN_PREFIX_V6: u8 = 7;
+
+/// Whether `route` (CIDR text, or a bare address for one host) is wider than any mesh network: a default route, one
+/// of its halves, or any other IPv4 range wider than /8 or IPv6 range wider than /7. The tunnel never carries such a
+/// route whatever the engine names, so a fault or a tampered configuration cannot take the device's traffic into the
+/// mesh. What does not read as a route is not judged here.
+pub fn too_wide(route: &str) -> bool {
+    let Some((address, length)) = route.trim().split_once('/') else {
+        return false;
+    };
+    let Ok(length) = length.trim().parse::<u8>() else {
+        return false;
+    };
+    match address.trim().parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(_)) => length < ROUTE_MIN_PREFIX_V4,
+        Ok(std::net::IpAddr::V6(_)) => length < ROUTE_MIN_PREFIX_V6,
+        Err(_) => false,
+    }
 }
 
 impl Tunnel {
@@ -495,8 +519,12 @@ impl Tunnel {
                 .unwrap_or_default()
         };
         let dns = tunnel.get("dns");
+        let (refused, routes) = strings(tunnel.get("routes"))
+            .into_iter()
+            .partition(|route| too_wide(route));
         Some(Self {
-            routes: strings(tunnel.get("routes")),
+            routes,
+            refused,
             routes_version: tunnel
                 .get("routesVersion")
                 .and_then(Value::as_u64)
@@ -921,5 +949,37 @@ mod tests {
         );
         // Before the engine answers, nothing is routed.
         assert_eq!(Tunnel::routes_and_dns(None), (Vec::new(), Vec::new()));
+    }
+
+    #[test]
+    fn the_tunnel_never_carries_a_route_wider_than_a_mesh() {
+        let wide = [
+            "0.0.0.0/0",
+            "0.0.0.0/1",
+            "128.0.0.0/1",
+            "0.0.0.0/7",
+            "::/0",
+            "::/1",
+            "8000::/1",
+            "2000::/3",
+            "fc00::/6",
+        ];
+        let narrow = [
+            "10.0.0.0/8",
+            "fc00::/7",
+            "10.144.144.0/24",
+            "198.18.0.2",
+            "fd00::1",
+        ];
+        let routes: Vec<&str> = wide.iter().chain(narrow.iter()).copied().collect();
+        let tunnel =
+            Tunnel::from_status(&json!({ "tunnel": { "routes": routes, "routesVersion": 1 } }))
+                .unwrap();
+        assert_eq!(tunnel.routes, narrow);
+        assert_eq!(tunnel.refused, wide);
+        let (carried, _) = Tunnel::routes_and_dns(Some(&tunnel));
+        assert!(!carried.iter().any(|route| too_wide(route)), "{carried:?}");
+        assert!(!too_wide("not a route"));
+        assert!(!too_wide("10.0.0.0/x"));
     }
 }

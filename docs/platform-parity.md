@@ -106,6 +106,19 @@ MSI 升级时旧服务随旧版本一起卸载；便携版注册过的服务由�
 升级时不执行；升级保留托管配置、登录后启动任务和信任过的根证书（`installer/windows/README.md`）。数据目录
 `%ProgramData%\AnixOps\NetworkCore` 只有 SYSTEM 和 Administrators 可以访问。
 
+
+## 组网（预览，发布版关闭）
+
+发布版不显示组网，直到内核 0.3 完成并通过审计（发布闸门见 [`architecture/mesh-client.md`](architecture/mesh-client.md)「发布闸门」）。
+
+| 功能 | iOS | macOS | Windows | Linux | Android | 备注 |
+|---|---|---|---|---|---|---|
+| 组网页：成员、子网、路径、本机 | ✅ | ✅ | ✅ | ✅ | ✅ | 共用 `view.mesh_*` 规则 |
+| 添加、加入、退出、移除网络 | ✅ | ✅ | ✅ | ✅ | ✅ | |
+| 只开组网（代理断开时组网照常运行） | ✅ | ✅ | ✅ | ❌ | ✅ | Linux 断开代理后，已加入的网络在下次连接时生效 |
+| 只开组网时解析内网域名 | ✅ | ✅ | ❌ | ❌ | ✅ | Windows 只开组网不向系统登记组网 DNS，内网成员用地址访问；代理连接时由引擎解析 |
+| 拒绝宽于 IPv4 /8、IPv6 /7 的组网路由 | ✅ | ✅ | ✅ | ✅ | ✅ | `client-core` `mesh::too_wide`，Apple `MeshTunnel.tooWide` |
+
 ## 系统限制
 
 - **iOS 导入自有根证书**：iOS 只信任用户通过描述文件安装、并在“证书信任设置”里打开的根证书。App 可以用团队 CA 签发，但要让

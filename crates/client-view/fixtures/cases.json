@@ -7294,15 +7294,21 @@
       "code": "peer_not_native",
       "detail": "node-7f3a"
      }
-    }
+    },
+    "members": [
+     {
+      "id": "node-7f3a",
+      "name": "lon-host"
+     }
+    ]
    }
   },
   "answer": [
    {
     "id": "mesh.notice.peer_not_native",
-    "key": "failure:peer_not_native",
+    "key": "failure:peer_not_native:node-7f3a",
     "values": [
-     "node-7f3a"
+     "lon-host"
     ],
     "action": null,
     "notify": false

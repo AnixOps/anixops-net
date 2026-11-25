@@ -466,7 +466,10 @@ enum MeshText {
             let list = names.formatted(.list(type: .and))
             return String(localized: "\(names.count) 台成员不可达：\(list)。")
         default:
-            let code = notice.string("key").flatMap { $0.hasPrefix("failure:") ? String($0.dropFirst(8)) : nil }
+            // `failure:<code>`, or `failure:<code>:<peer>` for a refused peer.
+            let code = notice.string("key").flatMap {
+                $0.hasPrefix("failure:") ? $0.dropFirst(8).split(separator: ":", maxSplits: 1).first.map(String.init) : nil
+            }
             return failure(code)
         }
     }

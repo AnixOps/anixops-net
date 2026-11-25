@@ -50,11 +50,36 @@ public struct MeshTunnel: Equatable {
         }
         let dns = tunnel["dns"] as? [String: Any]
         self.init(
-            routes: tunnel["routes"] as? [String] ?? [],
+            routes: (tunnel["routes"] as? [String] ?? []).filter { !Self.tooWide($0) },
             routesVersion: (tunnel["routesVersion"] as? NSNumber)?.intValue ?? 0,
             dnsServers: dns?["servers"] as? [String] ?? [],
             matchDomains: dns?["matchDomains"] as? [String] ?? []
         )
+    }
+
+    /// The widest IPv4 and IPv6 prefixes a mesh route may have (intranet-mesh §15.4, U2), as client-core's
+    /// `mesh::too_wide`.
+    static let minimumPrefixV4 = 8
+    static let minimumPrefixV6 = 7
+
+    /// Whether `route` (CIDR text, or a bare address for one host) is wider than any mesh network: a default route,
+    /// one of its halves, or any other IPv4 range wider than /8 or IPv6 range wider than /7. The tunnel never carries
+    /// such a route whatever the engine names. What does not read as a route is not judged here.
+    public static func tooWide(_ route: String) -> Bool {
+        let parts = route.trimmingCharacters(in: .whitespaces).split(separator: "/", maxSplits: 1)
+        guard parts.count == 2, let length = UInt8(parts[1].trimmingCharacters(in: .whitespaces)) else {
+            return false
+        }
+        let address = parts[0].trimmingCharacters(in: .whitespaces)
+        var v4 = in_addr()
+        var v6 = in6_addr()
+        if inet_pton(AF_INET, address, &v4) == 1 {
+            return Int(length) < minimumPrefixV4
+        }
+        if inet_pton(AF_INET6, address, &v6) == 1 {
+            return Int(length) < minimumPrefixV6
+        }
+        return false
     }
 
     /// The interface of a mesh-only tunnel: `base`'s addresses and MTU, these routes, and each DNS server as a host
@@ -62,7 +87,7 @@ public struct MeshTunnel: Equatable {
     /// own DNS. Nil (`tunnel` unknown yet, as right after the start) routes nothing.
     public static func interface(_ tunnel: MeshTunnel?, base: TunnelInterface = .proxy) -> TunnelInterface {
         let servers = tunnel.map { $0.matchDomains.isEmpty ? [] : $0.dnsServers } ?? []
-        var routes = tunnel?.routes ?? []
+        var routes = (tunnel?.routes ?? []).filter { !tooWide($0) }
         for server in servers where !routes.contains(server) {
             routes.append(server)
         }

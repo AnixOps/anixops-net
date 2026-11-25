@@ -960,7 +960,7 @@ private fun noticeText(notice: MeshNotice): String {
             val names = (notice.values.getOrNull(1) as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.orEmpty()
             pluralStringResource(R.plurals.mesh_notice_partial, names.size, names.size, ListFormatter.getInstance().format(names))
         }
-        else -> failureText(notice.key.removePrefix("failure:").takeIf { notice.key.startsWith("failure:") })
+        else -> failureText(notice.key.removePrefix("failure:").substringBefore(':').takeIf { notice.key.startsWith("failure:") })
     }
 }
 
