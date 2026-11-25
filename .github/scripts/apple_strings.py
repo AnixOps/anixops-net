@@ -68,6 +68,8 @@ DATA = (
     ("apps/ios/Sources/NetworkCoreAppHost/TunnelController.swift", "德国 01", "demonstration node name (screenshots)"),
     ("apps/ios/Sources/NetworkCoreAppHost/TunnelController.swift", "节点选择",
      "demonstration policy group name (screenshots)"),
+    ("apps/ios/Sources/NetworkCoreAppHost/MeshModel.swift", "{\"statusVersion\"",
+     "demonstration mesh status (screenshots); region names come from the network, not the catalogue"),
     ("apps/ios/Sources/NetworkCoreBridge/DebugMappings.swift", "AnixOps 调试映射",
      "name inside the generated plugin file; existing installs find their plugin by it"),
     ("apps/ios/Sources/NetworkCoreBridge/DebugMappings.swift", "#!desc=", "header line of the generated plugin file"),

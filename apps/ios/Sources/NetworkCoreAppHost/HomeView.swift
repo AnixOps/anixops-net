@@ -11,6 +11,7 @@ struct HomeView: View {
     @Binding var importing: Bool
     @Environment(\.brand) private var brand
     @State private var dashboard = DashboardModel()
+    @State private var mesh = MeshModel()
     @AppStorage(DashboardLayout.storageKey) private var layoutStorage = ""
     @State private var heroVisible = true
     @State private var editing = false
@@ -43,6 +44,10 @@ struct HomeView: View {
                         NoticeCard(notice: notice, perform: perform) {
                             tunnel.clearMessage()
                         }
+                    }
+                    // 组网: only when the engine has the mesh module (docs/mesh-ui.md, 入口与导航).
+                    if mesh.available {
+                        MeshEntryCard(tunnel: tunnel, model: mesh)
                     }
                     DashboardGrid(
                         tunnel: tunnel,
@@ -83,6 +88,9 @@ struct HomeView: View {
             }
             .task(id: tunnel.connection) {
                 await dashboard.poll(tunnel)
+            }
+            .task(id: tunnel.connection) {
+                await mesh.poll(tunnel)
             }
             .onAppear {
                 dashboard.startNetworkMonitor()
