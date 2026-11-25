@@ -4,9 +4,7 @@
 # Usage: ios-ui-tests.sh <path to NetworkCoreApp.app> <products directory> <result bundle path> [test ...]
 #   The products directory is the one `xcodebuild build-for-testing` filled (it holds the .xctestrun file); the tests
 #   run from it without building. Each [test] is an -only-testing filter, e.g.
-#   NetworkCoreAppUITests/AccessibilityAuditTests/testDarkTheme, so CI can run parts side by side. A [test] that
-#   starts with `!` is a -skip-testing filter instead: a part can take a whole class except the tests another part
-#   runs, so a test added to the class later still runs in one of the parts.
+#   NetworkCoreAppUITests/AccessibilityAuditTests/testDarkTheme, so CI can run parts side by side.
 set -euo pipefail
 
 app="$1"
@@ -15,10 +13,7 @@ result="$3"
 shift 3
 only=()
 for test in "$@"; do
-    case "${test}" in
-        '!'*) only+=("-skip-testing:${test#!}") ;;
-        *) only+=("-only-testing:${test}") ;;
-    esac
+    only+=("-only-testing:${test}")
 done
 xctestrun="$(find "${products}" -maxdepth 1 -name 'NetworkCoreApp_iphonesimulator*.xctestrun' | head -n 1)"
 if [ -z "${xctestrun}" ]; then
