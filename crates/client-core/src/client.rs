@@ -1412,6 +1412,21 @@ fn handler(name: &str) -> Option<Handler> {
             let DataSourceName { name } = parse(args)?;
             json(client.backend().remove_data_source(&name)?)
         },
+        // 组网 networks (`backend::mesh`): the saved ones without secrets, saving one with its secret, joining,
+        // leaving and removing. They change a running engine at once and the saved profile for the next start.
+        "mesh_networks" => |client, _| json(client.backend().mesh_networks()?),
+        "save_mesh_network" => |client, args| {
+            let MeshConfig { config } = parse(args)?;
+            client.backend().save_mesh_network(config)
+        },
+        "set_mesh_joined" => |client, args| {
+            let MeshJoined { network, joined } = parse(args)?;
+            client.backend().set_mesh_joined(&network, joined)
+        },
+        "remove_mesh_network" => |client, args| {
+            let MeshNetworkName { network } = parse(args)?;
+            client.backend().remove_mesh_network(&network)
+        },
         "devices" => |client, _| json(client.backend().devices()),
         "save_device" => |client, args| {
             let Device { address, name } = parse(args)?;
@@ -1923,6 +1938,22 @@ struct DataSource {
 #[derive(Deserialize)]
 struct DataSourceName {
     name: String,
+}
+
+#[derive(Deserialize)]
+struct MeshConfig {
+    config: Value,
+}
+
+#[derive(Deserialize)]
+struct MeshJoined {
+    network: String,
+    joined: bool,
+}
+
+#[derive(Deserialize)]
+struct MeshNetworkName {
+    network: String,
 }
 
 #[derive(Deserialize)]

@@ -583,6 +583,33 @@ class CoreTest {
     }
 
     @Test
+    fun meshNetworksGoThroughTheBackendAndAnswerRefusals() = runTest {
+        val transport = Recording("""{"ok":{"ok":false,"error":{"code":"secret_mismatch","detail":"x"}}}""")
+        val core = Core(transport, StandardTestDispatcher(testScheduler))
+        val draft = MeshNetworkDraft(name = "office", secret = "k", peers = "203.0.113.10")
+        assertEquals(MeshRefusal("secret_mismatch", "x"), core.saveMeshNetwork(draft.config()!!))
+        core.setMeshJoined("office", false)
+        core.removeMeshNetwork("office")
+        assertEquals(
+            listOf("save_mesh_network", "set_mesh_joined", "remove_mesh_network"),
+            transport.calls.map { it.first },
+        )
+        assertEquals("""{"network":"office","joined":false}""", transport.calls[1].second)
+        assertEquals("""{"network":"office"}""", transport.calls[2].second)
+        val joined = Recording("""{"ok":{"ok":true}}""")
+        assertNull(Core(joined, StandardTestDispatcher(testScheduler)).setMeshJoined("office", true))
+    }
+
+    @Test
+    fun savedMeshNetworksDecode() = runTest {
+        val transport = Recording(
+            """{"ok":[{"name":"office","joined":true,"security":"forward_secrecy","peers":1,"address":"10.144.144.5/24"}]}""",
+        )
+        val networks = Core(transport, StandardTestDispatcher(testScheduler)).meshNetworks()
+        assertEquals(listOf(MeshSavedNetwork("office", true, "forward_secrecy", 1, "10.144.144.5/24")), networks)
+    }
+
+    @Test
     fun dataSourcesKeepTheSharedFieldNames() = runTest {
         val transport = Recording("""{"ok":{"message":"saved"}}""")
         val core = Core(transport, StandardTestDispatcher(testScheduler))

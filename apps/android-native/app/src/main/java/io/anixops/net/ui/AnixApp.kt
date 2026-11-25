@@ -448,6 +448,8 @@ fun AnixApp(
             setQuery = mesh::setQuery,
             setSubnetRoute = mesh::setSubnetRoute,
             dismissRefusal = mesh::dismissRefusal,
+            addNetwork = mesh::addNetwork,
+            removeNetwork = mesh::removeNetwork,
         ),
         pollMesh = {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { mesh.poll() }

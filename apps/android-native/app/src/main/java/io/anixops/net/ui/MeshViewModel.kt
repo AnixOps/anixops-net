@@ -4,8 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.anixops.net.core.Core
 import io.anixops.net.core.CoreException
+import io.anixops.net.core.MeshNetworkDraft
 import io.anixops.net.core.MeshPage
 import io.anixops.net.core.MeshRefusal
+import io.anixops.net.core.MeshSavedNetwork
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +32,8 @@ data class MeshState(
     /** Why the last join, leave or route change did not take effect. */
     val refusal: MeshRefusal? = null,
     val busy: Boolean = false,
+    /** The networks saved on this device, without secrets. */
+    val saved: List<MeshSavedNetwork> = emptyList(),
 )
 
 /** What the mesh entry and page can ask for. */
@@ -41,6 +45,10 @@ data class MeshActions(
     val setQuery: (String) -> Unit = {},
     val setSubnetRoute: (cidr: String, route: String) -> Unit = { _, _ -> },
     val dismissRefusal: () -> Unit = {},
+    /** Saves the 添加网络 form and joins the network; the answer comes back as [MeshState.refusal]. */
+    val addNetwork: (MeshNetworkDraft) -> Unit = {},
+    /** Removes the network the page shows, after the name was confirmed. */
+    val removeNetwork: () -> Unit = {},
 )
 
 class MeshViewModel(private val core: Core) : ViewModel() {
@@ -58,6 +66,16 @@ class MeshViewModel(private val core: Core) : ViewModel() {
     fun setJoined(joined: Boolean) {
         val network = networkId() ?: return
         perform { core.setMeshJoined(network, joined) }
+    }
+
+    fun addNetwork(draft: MeshNetworkDraft) {
+        val config = draft.config() ?: return
+        perform { core.saveMeshNetwork(config) }
+    }
+
+    fun removeNetwork() {
+        val network = networkId() ?: return
+        perform { core.removeMeshNetwork(network) }
     }
 
     fun setSubnetRoute(cidr: String, route: String) {
@@ -83,7 +101,12 @@ class MeshViewModel(private val core: Core) : ViewModel() {
         } catch (error: CoreException) {
             null
         }
-        _state.update { it.copy(page = page) }
+        val saved = try {
+            core.meshNetworks()
+        } catch (error: CoreException) {
+            _state.value.saved
+        }
+        _state.update { it.copy(page = page, saved = saved) }
     }
 
     private fun networkId(): String? = _state.value.page?.head?.network?.id
