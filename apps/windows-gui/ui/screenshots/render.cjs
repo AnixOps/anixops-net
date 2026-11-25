@@ -88,6 +88,12 @@ const shots = [
   { name: "debug-menu-capture-dark", mode: "debug", theme: "dark", nav: "请求", size: LAPTOP, steps: async (page) => { await open(page, page.getByRole("button", { name: "更多抓包操作" }), '[role="menu"]'); } },
   { name: "select-rules-light", mode: "proxy", theme: "light", nav: "规则", size: LAPTOP, steps: async (page) => { await open(page, page.locator(".select-trigger"), '[role="listbox"]'); } },
   { name: "select-rules-dark", mode: "proxy", theme: "dark", nav: "规则", size: LAPTOP, steps: async (page) => { await open(page, page.locator(".select-trigger"), '[role="listbox"]'); } },
+  // 组网: the member list with a member's details, the subnets and the cross-region links, in both themes and in English.
+  { name: "mesh-members-light", mode: "proxy", theme: "light", nav: "组网", size: WIDE, storage: { "anixops.mock-mesh": "on" }, steps: async (page) => { await page.getByRole("row", { name: /nas/ }).first().click(); } },
+  { name: "mesh-members-dark", mode: "proxy", theme: "dark", nav: "组网", size: WIDE, storage: { "anixops.mock-mesh": "on" }, steps: async (page) => { await page.getByRole("row", { name: /nas/ }).first().click(); } },
+  { name: "mesh-subnets-light", mode: "proxy", theme: "light", nav: "组网", size: LAPTOP, storage: { "anixops.mock-mesh": "on" }, steps: async (page) => { await radio(page, "子网").click(); } },
+  { name: "mesh-paths-dark", mode: "proxy", theme: "dark", nav: "组网", size: LAPTOP, storage: { "anixops.mock-mesh": "on" }, steps: async (page) => { await radio(page, "路径").click(); } },
+  { name: "mesh-members-en-light", mode: "proxy", theme: "light", language: "en", nav: "Mesh", size: SMALL, storage: { "anixops.mock-mesh": "on" } },
 ];
 
 const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon" };

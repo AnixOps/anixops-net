@@ -797,3 +797,50 @@ html.qr-scanning #root { visibility: hidden; }
 
 /* A settings sub-page (pages/SettingsPage.tsx): its title sits under the back bar, which already pulls the stack up. */
 .subpage-title { margin: 0; font-size: 20px; font-weight: 600; outline: none; }
+
+/* 组网 (docs/mesh-ui.md): status bar, notices, member and subnet tables with a detail column, the add dialog. */
+.status-dot.info { background: var(--accent); }
+.mesh-page { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.mesh-status { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 14px; background: var(--group); border-radius: var(--radius-card); box-shadow: 0 0 0 .5px var(--hairline); }
+.mesh-network { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; min-width: 0; }
+.mesh-network-name { font-size: 15px; font-weight: 600; }
+.mesh-state { display: inline-flex; gap: 6px; align-items: center; color: var(--text2); font-size: 12px; }
+.mesh-tag { display: inline-flex; flex: 0 0 auto; align-items: center; height: 18px; padding: 0 6px; color: var(--text2); font-size: 11px; font-weight: 600; white-space: nowrap; background: var(--fill-1); border-radius: 4px; }
+.mesh-tag.accent { color: var(--accent); background: var(--accent-soft, var(--fill-1)); }
+/* On a selected row the accent text is too faint against the selection: the tag keeps its shape in the text colour. */
+.mesh-row.selected .mesh-tag.accent { color: var(--text); }
+.mesh-tag.warning { color: var(--warning); background: var(--warning-soft); }
+.mesh-tag.danger { color: var(--danger); background: var(--danger-soft); }
+.mesh-notice { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; font-size: 12px; line-height: 1.5; background: var(--warning-soft); border-radius: var(--radius-card); }
+.mesh-notice > svg { flex: 0 0 auto; margin-top: 2px; color: var(--warning); }
+.mesh-notice > div { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 0; }
+.mesh-notice code { color: var(--text2); font-family: var(--font-mono); font-size: 11px; }
+.mesh-tools, .mesh-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.mesh-tools .search { flex: 1; min-width: 200px; max-width: 360px; }
+.mesh-tools .search input { width: 100%; }
+.mesh-empty { margin: 8px 2px; color: var(--text2); font-size: 12px; }
+.mesh-split { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 12px; align-items: start; }
+@media (max-width: 900px) { .mesh-split { grid-template-columns: minmax(0, 1fr); } }
+.mesh-table { display: flex; flex-direction: column; min-width: 0; overflow: hidden; background: var(--group); border-radius: var(--radius-card); box-shadow: 0 0 0 .5px var(--hairline); }
+.mesh-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); grid-template-columns: minmax(0, 2.2fr); gap: 10px; align-items: center; width: 100%; min-height: 36px; padding: 6px 12px; color: inherit; font: inherit; font-size: 12px; text-align: left; background: none; border: 0; border-top: .5px solid var(--hairline); }
+.mesh-row.mesh-head { min-height: 28px; color: var(--text2); font-size: 11px; font-weight: 600; border-top: 0; }
+.mesh-row.selectable { cursor: default; }
+.mesh-row.selectable:hover { background: var(--fill-1); }
+.mesh-row.selected { background: var(--fill-2); box-shadow: inset 3px 0 0 var(--accent); }
+.mesh-member-name { min-width: 0; padding: 0; color: inherit; font: inherit; font-weight: 600; text-align: left; background: none; border: 0; }
+.mesh-row .number { justify-self: end; }
+.mesh-member { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.mesh-member small { color: var(--text2); white-space: nowrap; }
+.mesh-group-row { display: block; }
+.mesh-group-row > span { display: block; }
+.mesh-group { display: flex; gap: 10px; align-items: baseline; width: 100%; padding: 8px 12px; color: inherit; font: inherit; font-size: 12px; text-align: left; background: var(--fill-1); border: 0; border-top: .5px solid var(--hairline); }
+.mesh-group small { color: var(--text2); }
+.mesh-child { display: flex; gap: 12px; padding: 4px 12px 4px 34px; color: var(--text2); font-size: 12px; }
+.mesh-child.match { color: inherit; font-weight: 600; }
+.mesh-child.warning { color: var(--warning); }
+.mesh-detail { min-width: 0; }
+.mesh-latency { display: inline-flex; gap: 5px; align-items: center; color: var(--text2); white-space: nowrap; }
+.mesh-latency > .status-dot { width: 6px; height: 6px; box-shadow: none; }
+.mesh-dialog .mesh-form { display: flex; flex-direction: column; gap: 10px; padding: 4px 0 12px; }
+.mesh-form input, .mesh-form textarea { width: 100%; }
+.mesh-form .field-hint { margin: -4px 0 0; color: var(--text2); font-size: 11px; }

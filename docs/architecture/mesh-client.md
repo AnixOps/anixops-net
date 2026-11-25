@@ -202,5 +202,10 @@
 | `view.mesh_notices` | `status` | 页面提示条，按 `mesh-ui.md`「提示」表的顺序 |
 | `view.mesh_latency_tone` | `latencyMs` | `fast`（< 120 ms）、`medium`（< 250 ms）、`slow`、`timeout` |
 
+Windows、Linux 的组网页在共用界面里（`apps/windows-gui/ui/src/pages/MeshPage.tsx`，文案与表单规则在 `mesh.ts`）：
+侧栏「组网」在「代理」之后，引擎回答 `mesh_status` 时显示；页面顶部是网络选择、状态条与加入开关，分段「成员 · 子网 · 路径 · 本机」，
+成员表右侧是详情栏；「更多」菜单有「添加网络」和「移除网络」（按名称确认）。桌面是完整节点，添加网络时 `node.role` 为 `full`，
+`node.listen` 为所填监听端口（默认 11010）的 TCP 与 UDP。Linux 窗口经 `client-core` 取得这些命令；Windows 窗口在后台服务接上前不显示入口。
+
 样例在 `crates/client-view/fixtures/cases.json`，Rust、Kotlin、C# 的测试读同一份文件。Apple 端用 Swift 实现同样的规则，
 测试读同一份样例。
