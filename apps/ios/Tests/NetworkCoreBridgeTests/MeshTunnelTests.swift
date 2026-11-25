@@ -20,6 +20,19 @@ final class MeshTunnelTests: XCTestCase {
         XCTAssertNil(MeshTunnel(status: nil))
     }
 
+    func testTheTunnelNeverCarriesARouteWiderThanAMesh() throws {
+        let wide = ["0.0.0.0/0", "0.0.0.0/1", "128.0.0.0/1", "0.0.0.0/7", "::/0", "::/1", "8000::/1", "2000::/3", "fc00::/6"]
+        let narrow = ["10.0.0.0/8", "fc00::/7", "10.144.144.0/24", "198.18.0.2", "fd00::1"]
+        let routes = (wide + narrow).map { "\"\($0)\"" }.joined(separator: ",")
+        let json = #"{"tunnel":{"routes":["# + routes + #"],"routesVersion":1}}"#
+        let tunnel = try XCTUnwrap(MeshTunnel(status: Data(json.utf8)))
+        XCTAssertEqual(tunnel.routes, narrow)
+        let built = MeshTunnel(routes: wide + narrow, routesVersion: 1)
+        XCTAssertEqual(MeshTunnel.interface(built).includedRoutes, narrow)
+        XCTAssertFalse(MeshTunnel.tooWide("not a route"))
+        XCTAssertFalse(MeshTunnel.tooWide("10.0.0.0/x"))
+    }
+
     func testTheInterfaceRoutesOnlyTheMesh() {
         let tunnel = MeshTunnel(
             routes: ["10.144.144.0/24"],

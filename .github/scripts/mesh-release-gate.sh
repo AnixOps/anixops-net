@@ -12,13 +12,17 @@ if [ -n "${ANIXOPS_MESH_PREVIEW:-}" ]; then
     exit 1
 fi
 
-# Everything that configures a release build: the workflows other than ci.yml, the composite actions, cargo's
-# configuration, the Apple project and package, and the Android build scripts.
+# Everything that configures a release build: the workflows other than ci.yml, the composite actions, the scripts
+# the workflows run, cargo's configuration and every build script, the desktop Tauri configuration, the Apple project
+# and package, and the Android build scripts.
 mapfile -t files < <(
     {
         find .github/workflows -name '*.yml' ! -name ci.yml
         find .github/actions -type f
+        find .github/scripts -type f ! -name mesh-release-gate.sh
         find .cargo -type f
+        find . -name build.rs -not -path './target/*' -not -path '*/node_modules/*' -not -path './.git/*'
+        find apps -name 'tauri.conf*.json' -not -path '*/node_modules/*'
         echo apps/ios/project.yml
         echo apps/ios/Package.swift
         find apps/android-native -name '*.gradle.kts' -not -path '*/build/*'

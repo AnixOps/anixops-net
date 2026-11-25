@@ -9,6 +9,10 @@
 //! and the engine still runs, applies the proxy again. A console control handler does the same when the process
 //! has a console that is closed. The next start (`owned_proxy::recover_at_start`) covers what these miss, such
 //! as a crash or a forced shutdown.
+//!
+//! The same events stop the engine for the 组网 mesh alone, so that its adapter and routes are taken down rather
+//! than left to the end of the process; a cancelled end lets it run again. A crash leaves nothing behind either: the
+//! adapter goes with the process, and the next start replaces one of the same fixed GUID.
 
 use super::owned_proxy::{self, OwnedProxy};
 use platform_windows::managed::append_managed_log;
@@ -25,16 +29,33 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 
 const LOG_SCOPE: &str = "tauri-gui";
 
-type StillConnected = Box<dyn Fn() -> bool + Send + Sync>;
+/// What the guard asks of the window.
+struct Hooks {
+    /// Whether the engine still runs, for a cancelled session end.
+    still_connected: Box<dyn Fn() -> bool + Send + Sync>,
+    /// Stops the engine for the mesh alone as the session ends; the reason goes to the log.
+    mesh_end: Box<dyn Fn(&str) + Send + Sync>,
+    /// Lets it run again after a cancelled end.
+    mesh_resume: Box<dyn Fn() + Send + Sync>,
+}
 
-/// Whether the engine still runs, for a cancelled session end.
-static STILL_CONNECTED: OnceLock<StillConnected> = OnceLock::new();
+static HOOKS: OnceLock<Hooks> = OnceLock::new();
 /// The record put back for a session end that may yet be cancelled.
 static RELEASED: Mutex<Option<OwnedProxy>> = Mutex::new(None);
 
-/// Starts the guard once; `still_connected` tells whether the engine still runs.
-pub fn install(still_connected: impl Fn() -> bool + Send + Sync + 'static) {
-    if STILL_CONNECTED.set(Box::new(still_connected)).is_err() {
+/// Starts the guard once; `still_connected` tells whether the engine still runs, `mesh_end` stops the engine for
+/// the mesh alone and `mesh_resume` lets it run again.
+pub fn install(
+    still_connected: impl Fn() -> bool + Send + Sync + 'static,
+    mesh_end: impl Fn(&str) + Send + Sync + 'static,
+    mesh_resume: impl Fn() + Send + Sync + 'static,
+) {
+    let hooks = Hooks {
+        still_connected: Box::new(still_connected),
+        mesh_end: Box::new(mesh_end),
+        mesh_resume: Box::new(mesh_resume),
+    };
+    if HOOKS.set(hooks).is_err() {
         return;
     }
     // SAFETY: the handler is a plain function that lives as long as the process.
@@ -52,8 +73,12 @@ pub fn install(still_connected: impl Fn() -> bool + Send + Sync + 'static) {
     }
 }
 
-/// Puts the proxy back, keeping the record in case the session end is cancelled.
+/// Stops the engine for the mesh alone and puts the proxy back, keeping the record in case the session end is
+/// cancelled.
 fn release(reason: &str) {
+    if let Some(hooks) = HOOKS.get() {
+        (hooks.mesh_end)(&format!("session end, {reason}"));
+    }
     let Some(record) = owned_proxy::release_for_session_end() else {
         return;
     };
@@ -66,8 +91,12 @@ fn release(reason: &str) {
     }
 }
 
-/// The session goes on after all: the proxy comes back while the engine still runs.
+/// The session goes on after all: the proxy comes back while the engine still runs, and the engine for the mesh
+/// alone may run again.
 fn resume() {
+    if let Some(hooks) = HOOKS.get() {
+        (hooks.mesh_resume)();
+    }
     let record = RELEASED
         .lock()
         .ok()
@@ -75,10 +104,7 @@ fn resume() {
     let Some(record) = record else {
         return;
     };
-    if !STILL_CONNECTED
-        .get()
-        .is_some_and(|still_connected| still_connected())
-    {
+    if !HOOKS.get().is_some_and(|hooks| (hooks.still_connected)()) {
         return;
     }
     let line = match owned_proxy::resume_after_cancelled_session_end(record) {

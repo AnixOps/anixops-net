@@ -714,12 +714,22 @@ pub fn notices(status: &Value) -> Value {
             "native_keys_pending" => ("mesh.notice.native_keys_pending", None),
             _ => ("mesh.notice.join_failed", None),
         };
-        let values = if detail.is_null() || code == "native_keys_pending" {
-            vec![]
+        // A refused peer is named by its member name where the snapshot lists it, and each peer
+        // has a notice key of its own, so that one closed notice does not hide the next peer's.
+        let peer = (code == "peer_not_native")
+            .then(|| detail.as_str())
+            .flatten();
+        let (key, values) = if let Some(peer) = peer {
+            (
+                format!("failure:{code}:{peer}"),
+                vec![json!(member_name(&members, peer))],
+            )
+        } else if detail.is_null() || code == "native_keys_pending" {
+            (format!("failure:{code}"), vec![])
         } else {
-            vec![detail]
+            (format!("failure:{code}"), vec![detail])
         };
-        push(id, format!("failure:{code}"), values, action, false);
+        push(id, key, values, action, false);
     }
     for path in list(status, "paths") {
         if text(path, "state") != "fallback" {
@@ -841,9 +851,21 @@ mod tests {
         let notices = notices(&status);
         assert_eq!(notices.as_array().map(Vec::len), Some(1));
         assert_eq!(notices[0]["id"], "mesh.notice.peer_not_native");
-        assert_eq!(notices[0]["key"], "failure:peer_not_native");
+        assert_eq!(notices[0]["key"], "failure:peer_not_native:node-7f3a");
         assert_eq!(notices[0]["values"], json!(["node-7f3a"]));
         assert_eq!(entry(&status)["attention"], true);
+
+        // A listed member is named; another refused peer is a notice of its own.
+        let listed = json!({
+            "network": {
+                "state": "joined",
+                "failure": { "code": "peer_not_native", "detail": "node-9b1c" },
+            },
+            "members": [{ "id": "node-9b1c", "name": "lon-host" }],
+        });
+        let notices = notices(&listed);
+        assert_eq!(notices[0]["key"], "failure:peer_not_native:node-9b1c");
+        assert_eq!(notices[0]["values"], json!(["lon-host"]));
     }
 
     #[test]

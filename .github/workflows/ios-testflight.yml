@@ -102,6 +102,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Mesh release gate stays closed
+        run: bash .github/scripts/mesh-release-gate.sh
+
       - name: Check secrets and variables are present
         shell: bash
         env:

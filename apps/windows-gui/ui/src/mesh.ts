@@ -715,7 +715,7 @@ export function noticeText(notice: MeshNotice): string {
       return t("{count} 台成员不可达：{names}。", { count: names.length, names: list(names) });
     }
     default:
-      return failureText(notice.key.startsWith("failure:") ? notice.key.slice("failure:".length) : null);
+      return failureText(notice.key.startsWith("failure:") ? notice.key.slice("failure:".length).split(":")[0] : null);
   }
 }
 

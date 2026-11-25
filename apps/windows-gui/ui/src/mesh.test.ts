@@ -87,6 +87,9 @@ describe("words", () => {
     const port = { id: "mesh.notice.failure", key: "failure:port_in_use", values: ["11010"] };
     expect(noticeText(port)).toBe("无法启动组网：监听端口已被占用。");
     expect(noticeDetail(port)).toBe("11010");
+    const refused = { id: "mesh.notice.peer_not_native", key: "failure:peer_not_native:node-7f3a", values: ["lon-host"] };
+    expect(noticeText(refused)).toBe("已拒绝对端连接：对端非本系统节点。");
+    expect(noticeDetail(refused)).toBe("lon-host");
     setLanguage("en");
     expect(noticeText({ id: "mesh.notice.partial", key: "partial", values: [2, ["a", "b"]] })).toBe("2 members unreachable: a, b.");
   });

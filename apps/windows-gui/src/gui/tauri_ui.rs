@@ -666,12 +666,18 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
                 );
             }
             let core = state.direct_core.clone();
-            super::session_end::install(move || {
-                core.lock()
-                    .ok()
-                    .and_then(|mut core| core.is_running().ok())
-                    .unwrap_or(false)
-            });
+            let mesh_core = state.direct_core.clone();
+            let resume_core = state.direct_core.clone();
+            super::session_end::install(
+                move || {
+                    core.lock()
+                        .ok()
+                        .and_then(|mut core| core.is_running().ok())
+                        .unwrap_or(false)
+                },
+                move |reason| mesh::end(&mesh_core, reason),
+                move || mesh::resume(&resume_core),
+            );
             start_automatic_connection(state.clone());
             start_network_watch(state.clone());
             start_core_recovery_monitor(app.handle().clone(), state);
@@ -1126,7 +1132,8 @@ fn start_network_watch(state: DesktopAppState) {
         loop {
             let path = network_watch::current_path();
             let due = wifi_read_at.is_none_or(|at| at.elapsed() >= ON_DEMAND_POLL);
-            if path != last_path || due {
+            let changed = path != last_path;
+            if changed || due {
                 last_path = path.clone();
                 wifi_read_at = Some(Instant::now());
                 match on_demand_action(&state, path.as_ref()) {
@@ -1141,6 +1148,10 @@ fn start_network_watch(state: DesktopAppState) {
                         log_operation("Wi-Fi rules disconnect", &result);
                     }
                     _ => {}
+                }
+                // A network came or went: the engine for the mesh alone that could not start tries again now.
+                if changed {
+                    mesh::settle(&state.direct_core);
                 }
             }
             if let Some(reset) = watch.observe(std::time::SystemTime::now(), path) {
@@ -2275,6 +2286,8 @@ fn stop_desktop_core_for_exit(state: DesktopAppState) {
     // The engine is stopped whatever happened to the proxy: keep the recovery monitor from restarting it while
     // the process exits.
     mark_gui_connection_stopped(&state);
+    // The engine for the mesh alone too, with its adapter and routes, and nothing starts it again.
+    mesh::end(&state.direct_core, "exit");
     match result {
         Ok(_) => {
             if let Ok(mut persisted) = state.desktop.lock() {

@@ -45,6 +45,8 @@ pub struct DesktopCore {
     /// The engine for the 组网 mesh alone while the proxy is off (mesh-status.md, 只开组网): its own adapter, which
     /// carries only the mesh's routes. Never runs beside the proxy's engine.
     mesh_only: Option<DesktopTun>,
+    /// The engine's mesh routes the adapter does not carry ([`mesh_routes`]), so that each change is logged once.
+    mesh_left_out: Vec<String>,
 }
 
 impl DesktopCore {
@@ -83,6 +85,7 @@ impl DesktopCore {
 
     /// Stops the engine for the mesh alone; answers whether it ran.
     pub fn stop_mesh_only(&mut self) -> bool {
+        self.mesh_left_out.clear();
         match self.mesh_only.take() {
             Some(tun) => {
                 tun.stop();
@@ -94,6 +97,11 @@ impl DesktopCore {
 
     pub fn mesh_only_running(&self) -> bool {
         self.mesh_only.as_ref().is_some_and(DesktopTun::is_running)
+    }
+
+    /// Whether the engine for the mesh alone was started and has since ended by itself.
+    pub fn mesh_only_ended(&self) -> bool {
+        self.mesh_only.as_ref().is_some_and(|tun| !tun.is_running())
     }
 
     /// One control request to the engine for the mesh alone; `None` while it does not run.
@@ -114,7 +122,22 @@ impl DesktopCore {
             serde_json::from_slice(&answer?).map_err(|error| error.to_string())?;
         let tunnel = client_core::backend::mesh::Tunnel::from_status(&status);
         let (routes, _) = client_core::backend::mesh::Tunnel::routes_and_dns(tunnel.as_ref());
-        let routes = mesh_routes(&routes);
+        let (routes, mut left_out) = mesh_routes(&routes);
+        if let Some(tunnel) = &tunnel {
+            left_out.extend(tunnel.refused.iter().cloned());
+        }
+        if left_out != self.mesh_left_out {
+            if !left_out.is_empty() {
+                let _ = append_managed_log(
+                    "tauri-gui",
+                    &format!(
+                        "mesh: routes left out (unreadable, or wider than IPv4 /8 or IPv6 /7): {}",
+                        left_out.join(", ")
+                    ),
+                );
+            }
+            self.mesh_left_out = left_out;
+        }
         let Some(tun) = self.mesh_only.as_mut() else {
             return Ok(None);
         };
@@ -198,13 +221,19 @@ impl DesktopCore {
     }
 }
 
-/// The engine's mesh routes (CIDR text, or a bare address for one host) as adapter routes; what cannot be read is
-/// left out.
-pub fn mesh_routes(routes: &[String]) -> Vec<CaptureRoute> {
-    routes
-        .iter()
-        .filter_map(|route| CaptureRoute::parse(route))
-        .collect()
+/// The engine's mesh routes (CIDR text, or a bare address for one host) as adapter routes, and those left out: what
+/// cannot be read, and any range wider than a mesh carries (`mesh::too_wide`; `mesh::Tunnel` already leaves those
+/// out, and the adapter for the mesh alone, the device's only tunnel, checks again).
+pub fn mesh_routes(routes: &[String]) -> (Vec<CaptureRoute>, Vec<String>) {
+    let mut carried = Vec::new();
+    let mut left_out = Vec::new();
+    for route in routes {
+        match CaptureRoute::parse(route) {
+            Some(parsed) if !client_core::backend::mesh::too_wide(route) => carried.push(parsed),
+            _ => left_out.push(route.clone()),
+        }
+    }
+    (carried, left_out)
 }
 
 /// The request bytes for an activity page command, or why it is refused: the
@@ -688,23 +717,47 @@ mod tests {
 
     #[test]
     fn the_engine_names_the_mesh_routes_the_adapter_carries() {
-        let routes = mesh_routes(&[
+        let (routes, left_out) = mesh_routes(&[
             "10.144.144.0/24".to_string(),
             "198.18.0.2".to_string(),
             "not a route".to_string(),
+            "10.0.0.0/8".to_string(),
+            "fc00::/7".to_string(),
         ]);
         assert_eq!(
             routes,
             [
                 CaptureRoute::V4("10.144.144.0".parse().unwrap(), 24),
                 CaptureRoute::V4("198.18.0.2".parse().unwrap(), 32),
+                CaptureRoute::V4("10.0.0.0".parse().unwrap(), 8),
+                CaptureRoute::V6("fc00::".parse().unwrap(), 7),
             ]
         );
+        assert_eq!(left_out, ["not a route"]);
         let mut core = DesktopCore::default();
         assert!(!core.mesh_only_running());
         assert!(core.mesh_only_control(b"{}").is_none());
         assert_eq!(core.apply_mesh_routes(), Ok(None));
         assert!(!core.stop_mesh_only());
+    }
+
+    #[test]
+    fn the_adapter_for_the_mesh_alone_never_carries_a_default_route_or_its_halves() {
+        let wide = [
+            "0.0.0.0/0",
+            "0.0.0.0/1",
+            "128.0.0.0/1",
+            "0.0.0.0/7",
+            "::/0",
+            "::/1",
+            "8000::/1",
+            "2000::/3",
+            "fc00::/6",
+        ]
+        .map(String::from);
+        let (routes, left_out) = mesh_routes(&wide);
+        assert!(routes.is_empty(), "{routes:?}");
+        assert_eq!(left_out, wide);
     }
 
     #[test]

@@ -179,6 +179,15 @@
   没有按后缀的 DNS，此时所有域名由引擎解析，内网后缀走组网。代理连上时停掉只开组网的引擎，接口按代理重新打开；
   退出最后一个网络时关闭 VPN。未运行引擎时 `mesh_status` 由保存的网络作答（加入的网络，否则第一个，无成员），
   入口照常显示；引擎是否支持组网由能否接受只开组网的配置判断。断开时加入网络先取得 VPN 授权。
+- Windows 只开组网：代理断开而有网络已加入时，窗口在自己的虚拟网卡上启动只带组网出站的引擎（与代理共用固定 GUID，
+  两者不同时运行）。网卡起初没有路由，每 2 秒读一次 `mesh_status`，只在 `tunnel.routes` 变化时差量替换；不向系统登记 DNS，
+  也不拦截外部 DNS，所以内网域名此时不经系统解析（只能用地址访问）。启动失败时组网页按失败码给出提示
+  （`permission_denied`、`tun_in_use`，其余为通用失败），并按 5、10、20、40 秒、之后每 60 秒重试；网络变化时立即重试；
+  引擎自行退出也按此重试。窗口退出、注销、关机或重启时显式停止该引擎并撤下网卡与路由；注销被取消时恢复。崩溃时网卡随进程
+  移除，下次启动按同一 GUID 替换。
+- 组网路由的范围（所有平台，`client-core` `mesh::too_wide`，Apple `MeshTunnel.tooWide`）：隧道不承载宽于 IPv4 /8、
+  IPv6 /7 的组网路由，包括默认路由及其两半（`0.0.0.0/1`、`128.0.0.0/1`、`::/1`、`8000::/1`），无论引擎给出什么，
+  与内核规范 intranet-mesh §15.4（U2）一致。被拒的路由写入日志。
 - Android、Windows、Linux：`client-core` 把配置连同密钥存在数据目录的 `mesh-networks.json`（仅所有者可读），
   窗口经以下命令管理，任何回答都不含密钥：
 
@@ -188,6 +197,18 @@
 | `save_mesh_network` | `config`（含密钥） | 引擎的回答；引擎未运行时 `{"ok":true}` |
 | `set_mesh_joined` | `network`、`joined` | 同上；引擎拒绝时不改保存的状态 |
 | `remove_mesh_network` | `network` | 同上 |
+
+## 发布闸门
+
+组网在内核 0.3 完成并通过审计之前不进入发布版：
+
+- `client-core`：`mesh::ENABLED` 由构建变量 `ANIXOPS_MESH_PREVIEW=1` 打开。关闭时 `mesh::supported()` 为假（入口不显示），
+  `mesh_*` 控制命令被拒绝，保存或加入网络返回 `mesh.disabled`，配置不带组网出站；退出和移除网络不受限制。
+- Apple：`MeshSupport.enabled` 由编译条件 `MESH_PREVIEW` 打开；关闭时入口不显示，隧道配置不带已加入的网络，也不取密钥。
+- CI 只在测试步骤里打开（`ci.yml`）。`.github/scripts/mesh-release-gate.sh` 在 `release.yml`、`ios-testflight.yml`、
+  `play-bundle.yml` 与 `ci.yml` 中运行：运行环境设了该变量，或发布构建读取的文件（其余 workflow、composite action、
+  `.github/scripts`、`.cargo`、各 `build.rs`、Tauri 配置、Apple 工程与 Package、Android 构建脚本）在非注释行打开闸门时失败。
+- 解除闸门：内核线程确认内核 0.3 完成并通过审计后，随下一次内核固定一起修改。
 
 ## 共用的界面逻辑
 
