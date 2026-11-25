@@ -143,7 +143,7 @@ fn all_members(status: &Value) -> Vec<Value> {
     members
 }
 
-fn member_name<'a>(members: &'a [Value], id: &str) -> &'a str {
+fn member_name<'a>(members: &'a [Value], id: &'a str) -> &'a str {
     members
         .iter()
         .find(|member| text(member, "id") == id)
