@@ -47,6 +47,13 @@ jobs:
       - name: Design tokens are up to date
         run: python3 .github/scripts/design_tokens.py --check
 
+      # Every Windows Start menu shortcut, Installed apps entry and window executable carries the AnixOps Net
+      # icon (an advertised shortcut without one shows the blank file icon). The self-test checks the rules first.
+      - name: Windows shortcuts and programs have the app icon
+        run: |
+          python3 .github/scripts/windows_icons.py --self-test
+          python3 .github/scripts/windows_icons.py
+
       # Public builds ship no preset scripts or preset routing rules (docs/no-presets.md).
       - name: No preset scripts or routing rules
         run: python3 .github/scripts/no_presets.py
@@ -646,6 +653,7 @@ jobs:
             if ((Get-Item $msiPath).Length -le 0) {
               throw "Windows managed client MSI $msiPath is empty."
             }
+            & .github/scripts/check-windows-icons.ps1 -Msi $msiPath -Exe @($package.Gui)
           }
           Remove-Item -Force $previousWxsPath
 
@@ -1667,6 +1675,7 @@ jobs:
           # and Windows App SDK libraries, which are Microsoft's files and installed as they are.
           wix msi validate -sice ICE03 (Join-Path $out "anixops-net-0.3.0.msi")
           if ($LASTEXITCODE -ne 0) { throw "the installer did not pass validation" }
+          & .github/scripts/check-windows-icons.ps1 -Msi (Join-Path $out "anixops-net-0.3.0.msi") -Exe @((Join-Path $app "AnixOpsNet.exe"))
           $size = (Get-Item (Join-Path $out "anixops-net-0.3.0.msi")).Length
           Write-Host ("installer size: {0:N1} MB" -f ($size / 1MB))
 

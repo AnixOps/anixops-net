@@ -941,6 +941,8 @@ jobs:
             -d "WintunLicense=$wintunLicensePath" `
             -o $archivePath
           wix msi validate $archivePath
+          if ($LASTEXITCODE -ne 0) { throw "$archivePath did not validate." }
+          & .github/scripts/check-windows-icons.ps1 -Msi $archivePath -Exe @($guiPath)
           # The MSI carries the license notices: an administrative image lists the files it installs.
           $msiImage = Join-Path $env:RUNNER_TEMP "msi-image"
           Remove-Item -Recurse -Force $msiImage -ErrorAction SilentlyContinue
