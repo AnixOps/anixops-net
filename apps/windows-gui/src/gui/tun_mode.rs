@@ -10,7 +10,7 @@ use engine_embedded::config::RuntimeConfig;
 use engine_embedded::protect::{set_socket_protector, RawSocketHandle};
 use engine_embedded::{EmbeddedRuntime, RuntimeState};
 use platform_windows::tun::{
-    bind_socket_to_interface, default_wintun_dll_path, WindowsTun, WindowsTunSettings,
+    bind_socket_to_interface, default_wintun_dll_path, CaptureRoute, WindowsTun, WindowsTunSettings,
 };
 use std::io;
 use std::net::SocketAddr;
@@ -25,11 +25,18 @@ impl DesktopTun {
     /// Creates the adapter, pins the engine's sockets to the physical
     /// interface and starts the packet engine on `envelope`.
     pub fn start(envelope: &[u8]) -> Result<Self, String> {
+        Self::start_with(envelope, WindowsTunSettings::default())
+    }
+
+    /// The same with the adapter's own `settings` (the MTU is the
+    /// envelope's): for the mesh alone, an adapter that carries only the
+    /// mesh's routes ([`Self::set_routes`]).
+    pub fn start_with(envelope: &[u8], settings: WindowsTunSettings) -> Result<Self, String> {
         let config = RuntimeConfig::from_json(envelope)
             .map_err(|error| format!("TUN mode configuration was rejected: {}", error.message))?;
         let settings = WindowsTunSettings {
             mtu: u32::from(config.mtu),
-            ..WindowsTunSettings::default()
+            ..settings
         };
         let dll = default_wintun_dll_path()
             .map_err(|error| format!("TUN mode could not find wintun.dll: {error}"))?;
@@ -99,6 +106,23 @@ impl DesktopTun {
             .map_err(|_| "TUN engine lock failed".to_string())?
             .control_json(request)
             .map_err(|error| error.message.to_string())
+    }
+
+    /// Replaces the routes the adapter carries, keeping the ones that stay.
+    pub fn set_routes(&mut self, routes: &[CaptureRoute]) -> Result<(), String> {
+        self.tun
+            .as_mut()
+            .ok_or_else(|| "the TUN adapter is closed".to_string())?
+            .set_routes(routes)
+            .map_err(|error| format!("the TUN routes could not be applied: {error}"))
+    }
+
+    /// The routes the adapter carries now.
+    pub fn routes(&self) -> Vec<CaptureRoute> {
+        self.tun
+            .as_ref()
+            .map(|tun| tun.routes().to_vec())
+            .unwrap_or_default()
     }
 
     /// Removes the adapter (and its routes) first, then stops the engine and
