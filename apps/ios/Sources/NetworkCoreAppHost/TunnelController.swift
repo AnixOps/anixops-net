@@ -28,6 +28,11 @@ final class TunnelController {
     private(set) var coordinator: AppCoordinator
     private(set) var nodeName: String?
     private(set) var connection: NEVPNStatus = .invalid
+    /// The VPN's own status. It is `connection` but while the tunnel runs for the mesh alone (`meshOnly`), when the
+    /// proxy reads as disconnected and only the mesh uses the VPN (docs/mesh-ui.md, 入口与导航).
+    private(set) var vpnConnection: NEVPNStatus = .invalid
+    /// Whether the saved profile runs the tunnel for the mesh alone (`TunnelProfileKeys.meshOnly`).
+    private(set) var meshOnly = false
     /// The VPN configuration as the disconnected status line explains it (`TunnelProfileState`). Stored, since
     /// `manager` is not observed.
     private(set) var profileState = TunnelProfileState.missing
@@ -1581,6 +1586,10 @@ final class TunnelController {
         }
         if let value = MeshNetworkLibrary.profileValue(MeshNetworkLibrary.load()) {
             providerConfiguration[TunnelProfileKeys.meshNetworks] = value
+            // A tunnel running for the mesh alone keeps doing so with the new node, until the user connects.
+            if meshOnly {
+                providerConfiguration[TunnelProfileKeys.meshOnly] = true
+            }
         }
         Self.applyTakeover(takeover, exceptions: proxyExceptions, gateway: gateway, to: &providerConfiguration)
         if let value = try? localRules.profileValue() {
@@ -2162,6 +2171,76 @@ final class TunnelController {
         }
     }
 
+    /// What the proxy's switch shows while the tunnel runs for the mesh alone: off, but while the VPN stops.
+    static func proxyStatus(whileMeshOnly status: NEVPNStatus) -> NEVPNStatus {
+        status == .invalid ? .invalid : .disconnected
+    }
+
+    /// Whether a saved mesh network is joined and this build's engine runs mesh networks.
+    var meshJoined: Bool {
+        MeshSupport.available && MeshNetworkLibrary.load().contains(where: \.joined)
+    }
+
+    /// Marks the profile as running for the mesh alone, or for the proxy too, and restarts a running tunnel with it
+    /// when `restarting`; runs in `profileWrites`. False when the profile could not be saved.
+    @discardableResult
+    private func setMeshOnly(_ on: Bool, restarting: Bool) async -> Bool {
+        do {
+            _ = try await writeProfile { target in
+                guard let tunnelProtocol = target.protocolConfiguration as? NETunnelProviderProtocol else {
+                    return false
+                }
+                var configuration = tunnelProtocol.providerConfiguration ?? [:]
+                guard (configuration[TunnelProfileKeys.meshOnly] as? Bool == true) != on else {
+                    return false
+                }
+                if on {
+                    configuration[TunnelProfileKeys.meshOnly] = true
+                } else {
+                    configuration.removeValue(forKey: TunnelProfileKeys.meshOnly)
+                }
+                tunnelProtocol.providerConfiguration = configuration
+                target.protocolConfiguration = tunnelProtocol
+                return true
+            }
+        } catch {
+            message = String(localized: "保存组网网络到 VPN 配置失败") + Self.errorCode(error)
+            refresh()
+            return false
+        }
+        refresh()
+        if restarting {
+            restart()
+        }
+        return true
+    }
+
+    /// Joining a network while the VPN is off starts it for the mesh alone; leaving the last joined network while it
+    /// runs for the mesh alone stops it (docs/mesh-ui.md, 入口与导航: the VPN is up while either is on). The running
+    /// engine takes joins and leaves itself (`MeshModel`); this only starts or stops the VPN around them.
+    func meshJoinedChanged() async {
+        await writing {
+            if meshJoined {
+                guard vpnConnection == .disconnected || vpnConnection == .invalid else {
+                    return
+                }
+                if manager == nil {
+                    // Nothing saved yet: the node-less profile carries the mesh, as debug mode's direct exit does.
+                    guard await saveDirectProfile() else {
+                        return
+                    }
+                }
+                guard await setMeshOnly(true, restarting: false) else {
+                    return
+                }
+                await start()
+            } else if meshOnly, vpnConnection != .disconnected, vpnConnection != .invalid {
+                // As the user's disconnect: On Demand would start it again.
+                await disconnectNow()
+            }
+        }
+    }
+
     /// Writes the joined mesh networks (`MeshNetworkLibrary`) into the profile for the next start, without a
     /// restart: the running engine already took the change (`mesh_save_network`, `mesh_join`, R23). On macOS the
     /// running extension gets their secrets with the start secrets. False when the profile could not be saved.
@@ -2228,6 +2307,15 @@ final class TunnelController {
         guard !isConnected else {
             return
         }
+        if meshOnly, vpnConnection != .disconnected, vpnConnection != .invalid {
+            // The VPN runs for the mesh: it goes on with the proxy added (R23).
+            await setMeshOnly(false, restarting: true)
+            return
+        }
+        if meshOnly {
+            // A profile left marked while the VPN is down connects the proxy as usual.
+            await setMeshOnly(false, restarting: false)
+        }
         guard let manager else {
             if usesDirectExit {
                 // Debug mode needs no node: save the direct profile, then connect.
@@ -2261,6 +2349,12 @@ final class TunnelController {
     /// disconnect turns it off first, whoever turned it on: the app, the widget, Control Center or Shortcuts. A
     /// restart the app had begun ends here too.
     private func disconnectNow() async {
+        if !meshOnly, meshJoined {
+            // The mesh stays on: the VPN goes on without the proxy (R23).
+            await copyLiveCaptureBeforeStop()
+            await setMeshOnly(true, restarting: true)
+            return
+        }
         restartAfterStop = false
         restartStartQueued = false
         resumeCapture = false
@@ -2699,7 +2793,7 @@ final class TunnelController {
             return Self.demoControl(command)
         }
         #endif
-        guard let session = manager?.connection as? NETunnelProviderSession, connection == .connected else {
+        guard let session = manager?.connection as? NETunnelProviderSession, vpnConnection == .connected else {
             return nil
         }
         let answer: Data? = await withCheckedContinuation { continuation in
@@ -2915,7 +3009,10 @@ final class TunnelController {
             hasConfiguration: manager?.protocolConfiguration != nil, isEnabled: manager?.isEnabled == true
         )
         let previous = connection
-        connection = manager?.connection.status ?? .invalid
+        meshOnly = (manager?.protocolConfiguration as? NETunnelProviderProtocol)?
+            .providerConfiguration?[TunnelProfileKeys.meshOnly] as? Bool == true
+        vpnConnection = manager?.connection.status ?? .invalid
+        connection = meshOnly ? Self.proxyStatus(whileMeshOnly: vpnConnection) : vpnConnection
         connectedSince = connection == .connected ? manager?.connection.connectedDate : nil
         if isConnected, let notice, !notice.origin.applies(whileConnected: true) {
             // The tunnel is back (On Demand, the widget, Control Center): the stop card and its Retry are out of date.
@@ -3419,6 +3516,7 @@ extension TunnelController {
         // The made-up subscription has no rules, so the mode switch offers global and direct.
         mode = .global
         connection = .connected
+        vpnConnection = .connected
         connectedSince = Date().addingTimeInterval(-4521)
         lastConnections = Self.demoConnections()
         runtimeStatus = Self.demoRuntimeStatus

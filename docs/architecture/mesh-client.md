@@ -168,6 +168,10 @@
   引擎不接受带组网出站的配置时（未编进组网），照常不带组网启动，并记入日志或诊断。
 - iOS、macOS：App 设置保存不含密钥的配置，密钥在共享钥匙串（账户 `mesh-network.<名称>`）；
   隧道配置的 `networkcore.mesh-networks` 只带已加入的网络，扩展启动时补上密钥；macOS 系统扩展经启动密钥取得。
+- iOS、macOS 只开组网：代理断开而有网络已加入时，隧道配置标记 `networkcore.mesh-only`，VPN 重启为只带组网出站的配置
+  （`rules` 为 `["FINAL,DIRECT"]`，`mode` 为 `rule`，不需要节点密钥）；`includedRoutes` 只放 `tunnel.routes`，
+  内网域名开启时 DNS 只对 `tunnel.dns.matchDomains` 生效。扩展每 2 秒读一次 `mesh_status`，`routesVersion` 变化时重新应用，
+  间隔至少 1 秒。代理连上时去掉标记并重启；退出最后一个网络时关闭 VPN。入口在 `feature_set_version` ≥ 7 时显示。
 - Android、Windows、Linux：`client-core` 把配置连同密钥存在数据目录的 `mesh-networks.json`（仅所有者可读），
   窗口经以下命令管理，任何回答都不含密钥：
 

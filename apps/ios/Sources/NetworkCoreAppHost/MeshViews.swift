@@ -309,7 +309,7 @@ struct MeshPage: View {
         .navigationDestination(item: $detail) { id in
             MeshMemberDetail(id: id, tunnel: tunnel, model: model)
         }
-        .task(id: tunnel.connection) {
+        .task(id: tunnel.vpnConnection) {
             await model.poll(tunnel)
         }
     }
@@ -969,7 +969,7 @@ struct MeshMemberDetail: View {
         .background(brand.bg.ignoresSafeArea())
         .navigationTitle(member?.string("name") ?? "")
         .inlineNavigationTitle()
-        .task(id: tunnel.connection) {
+        .task(id: tunnel.vpnConnection) {
             await model.poll(tunnel)
         }
     }
