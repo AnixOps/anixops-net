@@ -385,23 +385,6 @@ fn notifications_go_to_the_window() {
         next(&events),
         (event::NOTICE.to_string(), fixture!("notice-event"))
     );
-
-    // An AI tool's action is confirmed by the user in the window (docs/mcp-desktop.md §6).
-    let action = client_mcp::Action::SelectNode {
-        node: "HK".to_string(),
-        group: Some("Home".to_string()),
-    };
-    assert_eq!(
-        platform.confirm_action(&action),
-        Ok(client_mcp::agent::Confirmation {
-            answer: client_mcp::agent::Answer::Allowed,
-            for_kind: true,
-        })
-    );
-    assert_eq!(
-        confirmations.recv_timeout(SOON).unwrap(),
-        fixture!("confirm-action-request")["action"]
-    );
 }
 
 /// The session a window runs in, written down instead of changed.
@@ -486,6 +469,22 @@ fn a_rust_window_does_what_the_core_asks_in_its_own_session() {
     assert_eq!(
         next(&events),
         (event::NOTICE.to_string(), fixture!("notice-event"))
+    );
+    // An AI tool's action is confirmed by the user in the window (docs/mcp-desktop.md §6).
+    let action = client_mcp::Action::SelectNode {
+        node: "HK".to_string(),
+        group: Some("Home".to_string()),
+    };
+    assert_eq!(
+        platform.confirm_action(&action),
+        Ok(client_mcp::agent::Confirmation {
+            answer: client_mcp::agent::Answer::Allowed,
+            for_kind: true,
+        })
+    );
+    assert_eq!(
+        confirmations.recv_timeout(SOON).unwrap(),
+        fixture!("confirm-action-request")["action"]
     );
 }
 
