@@ -5,15 +5,18 @@ import { MoreMenu, ModalDialog, Select } from "../controls";
 import { t } from "../i18n";
 import { keepIfUnchanged, usePageVisible } from "../live";
 import {
+  advertisedCidr,
   connectionLabel,
   draftConfig,
   draftProblem,
   draftProblemText,
   emptyDraft,
   failureText,
+  forwardingLabel,
   joinedState,
   joiningText,
   latencyText,
+  listenText,
   markLabel,
   meshApi,
   noticeDetail,
@@ -202,8 +205,8 @@ export function MeshPage({ mesh }: { mesh: ReturnType<typeof useMesh> }) {
       {tab === "subnets" && (
         <Subnets view={view} query={query.query} busy={busy} setRoute={(cidr, route) => perform(() => meshApi.setSubnetRoute(networkId ?? "", cidr, route))} />
       )}
-      {tab === "paths" && <Paths view={view} />}
-      {tab === "self" && <Self view={view} />}
+      {tab === "paths" && <Paths view={view} busy={busy} setPolicy={(policy) => perform(() => meshApi.setPolicy(networkId ?? "", policy))} />}
+      {tab === "self" && <Self view={view} network={networkId ?? ""} busy={busy} perform={perform} />}
       {dialog}
     </div>
   );
@@ -459,12 +462,25 @@ function SubnetRow({ row, busy, setRoute }: { row: MeshSubnetRow; busy: boolean;
 
 // Paths.
 
-function Paths({ view }: { view: MeshView }) {
+function Paths({ view, busy, setPolicy }: { view: MeshView; busy: boolean; setPolicy: (policy: "latency" | "hops") => void }) {
   const paths = view.paths;
   return (
     <>
       <Card title={t("默认选路")}>
-        <Row label={t("路径策略")} value={paths.policy === "hops" ? t("跳数最低") : t("延迟最低")} />
+        <Row label={t("路径策略")}>
+          <Segmented<"latency" | "hops">
+            label={t("路径策略")}
+            value={paths.policy === "hops" ? "hops" : "latency"}
+            onChange={(policy) => {
+              if (policy !== paths.policy) setPolicy(policy);
+            }}
+            disabled={busy}
+            options={[
+              { value: "latency", label: t("延迟最低") },
+              { value: "hops", label: t("跳数最低") },
+            ]}
+          />
+        </Row>
       </Card>
       {paths.links && (
         <Card title={t("跨区链路")}>
@@ -501,29 +517,100 @@ function Paths({ view }: { view: MeshView }) {
   );
 }
 
-// This device (desktop only): identity. Relay, host mode and advertising come with kernel 0.4.
+// This device (desktop only, docs/mesh-ui.md, 本机): identity with the region change request, the node's roles, the
+// subnets it advertises with the local networks it found as suggestions, and how it runs. The roles and subnets come
+// with kernel 0.4: without them in the snapshot those cards are left out.
 
-function Self({ view }: { view: MeshView }) {
+function Self({ view, network, busy, perform }: {
+  view: MeshView;
+  network: string;
+  busy: boolean;
+  perform: (task: () => Promise<MeshRefusal | null>) => void;
+}) {
   const own = view.head.self;
+  const [region, setRegion] = useState("");
   if (!own) return <p className="mesh-empty">{t("加入网络后显示本机身份。")}</p>;
-  const region = regionName(view.head, own.region);
+  const current = regionName(view.head, own.region);
   const basis = own.regionBasis?.border;
   const regionText = !own.region
     ? ""
     : own.regionState === "pending"
-      ? t("{name} · 待批准", { name: region })
+      ? t("{name} · 待批准", { name: current })
       : own.regionState === "pinned"
-        ? t("{name} · 已固定", { name: region })
+        ? t("{name} · 已固定", { name: current })
         : basis
-          ? t("{name} · 到 {border} 延迟最低", { name: region, border: basis })
-          : region;
+          ? t("{name} · 到 {border} 延迟最低", { name: current, border: basis })
+          : current;
+  const others = (view.head.regions ?? []).filter((item) => item.code !== own.region);
+  const chosen = others.some((item) => item.code === region) ? region : others[0]?.code ?? "";
+  const advertised = (own.advertised ?? []).map(advertisedCidr);
+  const suggested = (own.suggestedSubnets ?? []).filter((item) => !advertised.includes(item.cidr));
+  const roles = typeof own.relay === "boolean" || typeof own.hostMode === "boolean";
+  const subnets = own.advertised !== undefined || own.suggestedSubnets !== undefined;
+  const forwarding = forwardingLabel(own.ipForwarding);
+  const listen = listenText(own.listen);
   return (
-    <Card title={t("身份")}>
-      <Row label={t("名称")} value={own.name} />
-      {own.address && <Row label={t("虚拟地址")} value={<span className="mono">{own.address}</span>}><CopyButton label={t("拷贝")} text={own.address} /></Row>}
-      {own.domain && <Row label={t("内网域名")} value={<span className="mono">{own.domain}</span>}><CopyButton label={t("拷贝")} text={own.domain} /></Row>}
-      {regionText && <Row label={t("地区")} value={regionText} />}
-    </Card>
+    <>
+      <Card title={t("身份")}>
+        <Row label={t("名称")} value={own.name} />
+        {own.address && <Row label={t("虚拟地址")} value={<span className="mono">{own.address}</span>}><CopyButton label={t("拷贝")} text={own.address} /></Row>}
+        {own.domain && <Row label={t("内网域名")} value={<span className="mono">{own.domain}</span>}><CopyButton label={t("拷贝")} text={own.domain} /></Row>}
+        {regionText && <Row label={t("地区")} value={regionText} />}
+        {own.region && others.length > 0 && own.regionState !== "pending" && (
+          <Row label={t("变更地区")} hint={t("变更需网络管理者批准。")}>
+            <Select label={t("地区")} value={chosen} onChange={setRegion} choices={others.map((item) => ({ value: item.code, label: item.name }))} disabled={busy} />
+            <button className="secondary" disabled={busy || !chosen} onClick={() => perform(() => meshApi.requestRegion(network, chosen))}>{t("申请变更")}</button>
+          </Row>
+        )}
+      </Card>
+      {roles && (
+        <Card title={t("角色")}>
+          {typeof own.relay === "boolean" && (
+            <Row label={t("为其他成员中转")}>
+              <Switch label={t("为其他成员中转")} checked={own.relay} disabled={busy} onChange={() => perform(() => meshApi.setRelay(network, !own.relay))} />
+            </Row>
+          )}
+          {typeof own.hostMode === "boolean" && (
+            <Row label={t("宿主模式")} hint={t("本机上的虚拟机经本机加入网络。")}>
+              <Switch label={t("宿主模式")} checked={own.hostMode} disabled={busy} onChange={() => perform(() => meshApi.setHostMode(network, !own.hostMode))} />
+            </Row>
+          )}
+        </Card>
+      )}
+      {subnets && (
+        <Card title={t("通告子网")}>
+          {advertised.length === 0 && suggested.length === 0 && <Row label={t("暂无通告子网")} />}
+          {advertised.map((cidr) => (
+            <Row key={cidr} label={<span className="mono">{cidr}</span>} hint={t("已通告")}>
+              <button
+                className="secondary"
+                disabled={busy}
+                onClick={() => perform(() => meshApi.withdraw(network, cidr))}
+              >
+                {t("停止通告")}
+              </button>
+            </Row>
+          ))}
+          {suggested.map((item) => (
+            <Row
+              key={item.cidr}
+              label={<span className="mono">{item.cidr}</span>}
+              hint={item.public ? t("公网网段，不可通告") : item.interface ? t("建议 · {name}", { name: item.interface }) : t("建议")}
+            >
+              {!item.public && (
+                <button className="secondary" disabled={busy} onClick={() => perform(() => meshApi.advertise(network, item.cidr))}>{t("通告")}</button>
+              )}
+            </Row>
+          ))}
+        </Card>
+      )}
+      {(listen || forwarding) && (
+        <Card title={t("运行")}>
+          {listen && <Row label={t("监听端口")} value={<span className="mono">{listen}</span>} />}
+          {forwarding && <Row label={t("系统 IP 转发")} value={forwarding} />}
+        </Card>
+      )}
+    </>
   );
 }
 

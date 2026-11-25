@@ -1240,4 +1240,23 @@ export const english: Record<string, string> = {
   "标准模式未启用前向保密。": "Standard mode does not use forward secrecy.",
   // The separator of a list of names.
   "、": ", ",
+  // 组网, this device (kernel 0.4).
+  "未开启": "Off",
+  "无需开启": "Not needed",
+  "变更地区": "Change region",
+  "变更需网络管理者批准。": "A change needs the network manager's approval.",
+  "申请变更": "Request change",
+  "为其他成员中转": "Relay for other members",
+  "宿主模式": "Host mode",
+  "本机上的虚拟机经本机加入网络。": "Virtual machines on this device join the network through it.",
+  "通告子网": "Advertised subnets",
+  "暂无通告子网": "No advertised subnets",
+  "已通告": "Advertised",
+  "停止通告": "Stop advertising",
+  "公网网段，不可通告": "Public range, cannot be advertised",
+  "建议 · {name}": "Suggested · {name}",
+  "建议": "Suggested",
+  "通告": "Advertise",
+  "运行": "Operation",
+  "系统 IP 转发": "System IP forwarding",
 };

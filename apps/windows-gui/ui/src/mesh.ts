@@ -146,6 +146,14 @@ export interface MeshHead {
     region?: string | null;
     regionBasis?: { border?: string | null; latencyMs?: number | null } | null;
     regionState?: string;
+    /** Kernel 0.4, full nodes: relaying for other members, host mode, the advertised and suggested subnets. */
+    relay?: boolean;
+    hostMode?: boolean;
+    listen?: Array<{ transport: string; port: number }>;
+    advertised?: Array<string | { cidr: string }>;
+    suggestedSubnets?: Array<{ cidr: string; interface?: string | null; public?: boolean }>;
+    /** `on`, `off` or `not_needed`. */
+    ipForwarding?: string | null;
   } | null;
   regions?: Array<{ code: string; name: string; local?: boolean }>;
 }
@@ -230,14 +238,50 @@ export const meshApi = {
   save: (config: Record<string, unknown>) => command("save_mesh_network", { config }),
   setJoined: (network: string, joined: boolean) => command("set_mesh_joined", { network, joined }),
   remove: (network: string) => command("remove_mesh_network", { network }),
-  async setSubnetRoute(network: string, cidr: string, route: "local" | "mesh"): Promise<MeshRefusal | null> {
-    try {
-      return refusalOf(await control({ cmd: "mesh_set_subnet_route", network, cidr, route }));
-    } catch (error) {
-      return { code: "other", detail: String(error) };
-    }
-  },
+  setSubnetRoute: (network: string, cidr: string, route: "local" | "mesh") =>
+    engine({ cmd: "mesh_set_subnet_route", network, cidr, route }),
+  /** Kernel 0.4, full nodes (docs/architecture/mesh-client.md, 控制). */
+  setRelay: (network: string, enabled: boolean) => engine({ cmd: "mesh_set_relay", network, enabled }),
+  setHostMode: (network: string, enabled: boolean) => engine({ cmd: "mesh_set_host_mode", network, enabled }),
+  advertise: (network: string, cidr: string) => engine({ cmd: "mesh_advertise", network, cidr }),
+  withdraw: (network: string, cidr: string) => engine({ cmd: "mesh_withdraw", network, cidr }),
+  requestRegion: (network: string, region: string) => engine({ cmd: "mesh_request_region", network, region }),
+  /** Kernel 0.5. */
+  setPolicy: (network: string, policy: "latency" | "hops") => engine({ cmd: "mesh_set_policy", network, policy }),
 };
+
+/** A mesh command for the engine; its refusal, or null once it took effect. */
+async function engine(request: Record<string, unknown>): Promise<MeshRefusal | null> {
+  try {
+    return refusalOf(await control(request));
+  } catch (error) {
+    return { code: "other", detail: String(error) };
+  }
+}
+
+/** The CIDR of an `advertised` entry, which the kernel may give as a string or as `{ cidr }`. */
+export function advertisedCidr(entry: string | { cidr: string }): string {
+  return typeof entry === "string" ? entry : entry.cidr;
+}
+
+/** The words for `self.ipForwarding`; null when the kernel does not say. */
+export function forwardingLabel(state: string | null | undefined): string | null {
+  switch (state) {
+    case "on":
+      return t("已开启");
+    case "off":
+      return t("未开启");
+    case "not_needed":
+      return t("无需开启");
+    default:
+      return null;
+  }
+}
+
+/** `self.listen` as one line: `TCP 11010 · UDP 11010`. */
+export function listenText(listen: Array<{ transport: string; port: number }> | undefined): string {
+  return (listen ?? []).map((entry) => `${entry.transport.toUpperCase()} ${entry.port}`).join(" · ");
+}
 
 // The 添加网络 form (docs/mesh-ui.md, 添加网络). The desktop is a full node: it listens, on TCP and UDP, at its port.
 

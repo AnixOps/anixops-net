@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { setLanguage } from "./i18n";
 import {
+  advertisedCidr,
   connectionLabel,
+  forwardingLabel,
+  listenText,
   draftConfig,
   draftProblem,
   emptyDraft,
@@ -92,5 +95,17 @@ describe("words", () => {
     expect(refusalOf({ ok: true })).toBeNull();
     expect(regionName({ regions: [{ code: "eu", name: "欧洲" }] }, "eu")).toBe("欧洲");
     expect(regionName({}, "ap")).toBe("ap");
+  });
+});
+
+describe("this device", () => {
+  it("words how the node runs and reads either form of an advertised subnet", () => {
+    expect(listenText([{ transport: "tcp", port: 11010 }, { transport: "udp", port: 11010 }])).toBe("TCP 11010 · UDP 11010");
+    expect(listenText(undefined)).toBe("");
+    expect(forwardingLabel("on")).toBe("已开启");
+    expect(forwardingLabel("not_needed")).toBe("无需开启");
+    expect(forwardingLabel(undefined)).toBeNull();
+    expect(advertisedCidr("192.168.1.0/24")).toBe("192.168.1.0/24");
+    expect(advertisedCidr({ cidr: "10.0.0.0/8" })).toBe("10.0.0.0/8");
   });
 });
