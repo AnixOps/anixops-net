@@ -27,6 +27,18 @@ final class RuntimeControlTests: XCTestCase {
             #"{"cidr":"192.168.1.0\/24","cmd":"mesh_set_subnet_route","network":"office","route":"mesh"}"#
         )
         XCTAssertEqual(
+            text(.meshSetPolicy(network: "office", policy: "hops")),
+            #"{"cmd":"mesh_set_policy","network":"office","policy":"hops"}"#
+        )
+        XCTAssertEqual(
+            text(.meshSetPaths(network: "office", paths: [
+                MeshRoutingPath(target: .subnet("192.168.20.0/24"), via: ["10.144.0.1"]),
+                MeshRoutingPath(target: .peer("10.144.1.1"), via: []),
+            ])),
+            #"{"cmd":"mesh_set_paths","network":"office","paths":[{"to_subnet":"192.168.20.0\/24","via":["10.144.0.1"]},"#
+                + #"{"to_peer":"10.144.1.1","via":[]}]}"#
+        )
+        XCTAssertEqual(
             text(.meshSaveNetwork(configJSON: #"{"config_version":1}"#)),
             #"{"cmd":"mesh_save_network","config":{"config_version":1}}"#
         )
