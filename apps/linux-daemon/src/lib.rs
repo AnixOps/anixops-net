@@ -302,11 +302,15 @@ impl Daemon {
         stream.set_read_timeout(Some(self.limits.greeting))?;
         let reader = stream.try_clone()?;
         let mut connection = Connection::new(reader, stream);
-        connection.greet(Role::Core, VERSION, Role::Window)?;
+        let hello = connection.greet_one_of(Role::Core, VERSION, &client_service::PROGRAMS)?;
         let (reader, writer) = connection.into_parts();
         if self.access.allows(uid) {
-            // A window may stay quiet for as long as it is open.
+            // A window may stay quiet for as long as it is open, and so may an AI tool between its questions.
             writer.set_read_timeout(None)?;
+            if hello.role == Role::Agent {
+                // Never one of the windows the core asks for this user's settings (docs/mcp-desktop.md).
+                return client_service::serve_agent(self.client.clone(), reader, writer);
+            }
             return self
                 .windows
                 .serve_greeted(self.client.clone(), reader, writer);

@@ -1547,6 +1547,12 @@ jobs:
           $exe = Join-Path $env:GITHUB_WORKSPACE "target\x86_64-pc-windows-gnu\release\anixops-net-service.exe"
           if (-not (Test-Path $exe)) { throw "$exe was not built" }
           "ANIXOPS_NET_SERVICE_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          # The MCP program for AI tools (docs/mcp-desktop.md), installed beside the service.
+          cargo build --locked --release -p client-mcp --bin anixops-mcp
+          if ($LASTEXITCODE -ne 0) { throw "anixops-mcp did not build" }
+          $mcp = Join-Path $env:GITHUB_WORKSPACE "target\x86_64-pc-windows-gnu\release\anixops-mcp.exe"
+          if (-not (Test-Path $mcp)) { throw "$mcp was not built" }
+          "ANIXOPS_NET_MCP_EXE=$mcp" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           # TUN mode: the service loads wintun.dll from its own folder, here as in the installation.
           $wintunDir = Join-Path $env:RUNNER_TEMP "native-wintun"
           $wintun = & .github/scripts/fetch-wintun.ps1 -Destination $wintunDir
@@ -1652,6 +1658,7 @@ jobs:
               -d "ProductVersion=$version" `
               -d "AppDir=$app" `
               -d "ServiceExe=$env:ANIXOPS_NET_SERVICE_EXE" `
+              -d "McpExe=$env:ANIXOPS_NET_MCP_EXE" `
               -d "WintunDir=$env:ANIXOPS_NET_WINTUN_DIR" `
               -o (Join-Path $out "anixops-net-$version.msi")
             if ($LASTEXITCODE -ne 0) { throw "the installer $version was not built" }
@@ -1781,6 +1788,15 @@ jobs:
             python3 .github/scripts/linux-native-a11y.py target/release/anixops-net-preview \
             crates/client-strings/catalogue.json target/release/anixops-netd \
             "${RUNNER_TEMP}/linux-native-screenshots"
+
+      # The MCP program for AI tools against the same daemon (docs/mcp-desktop.md §9): off until a window turns
+      # it on, the state and nodes without addresses, no window command reached, "not running" once it stops.
+      - name: anixops-mcp against the daemon
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked -p client-mcp --bin anixops-mcp --release
+          python3 .github/scripts/linux-mcp-e2e.py target/release/anixops-netd target/release/anixops-mcp
 
       - name: Upload screenshots
         if: ${{ always() }}

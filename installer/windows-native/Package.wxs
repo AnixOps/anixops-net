@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- The installer of the native Windows client (apps/windows-native and apps/windows-service). WiX 5.
-     Built in CI with: ProductVersion, AppDir (the published window, self-contained), ServiceExe and WintunDir
-     (wintun.dll and its licence, from .github/scripts/fetch-wintun.ps1). -->
+     Built in CI with: ProductVersion, AppDir (the published window, self-contained), ServiceExe, McpExe and
+     WintunDir (wintun.dll and its licence, from .github/scripts/fetch-wintun.ps1). -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
   <!-- Its own upgrade code and folder: it installs beside the web client (AnixOps NetworkCore) until the
@@ -84,6 +84,12 @@
                 Wait="yes" />
           </Component>
 
+          <!-- anixops-mcp, the MCP program an AI tool on this computer starts (docs/mcp-desktop.md). It talks to the
+               service over the window's pipe and reads only what the user allows in the window. -->
+          <Component Id="McpComponent" Guid="*">
+            <File Id="McpExe" Source="$(McpExe)" Name="anixops-mcp.exe" KeyPath="yes" />
+          </Component>
+
           <!-- TUN mode: the service loads Wintun from its own folder, by path. The library is WireGuard's
                signed build, unchanged, with its licence beside it. The driver inside it is installed by
                Wintun the first time TUN mode is used and removed again when the client is removed (the PurgeUserSettings action). -->
@@ -112,6 +118,7 @@
     <Feature Id="Complete" Title="AnixOps Net" Level="1">
       <ComponentRef Id="WindowComponent" />
       <ComponentRef Id="ServiceComponent" />
+      <ComponentRef Id="McpComponent" />
       <ComponentRef Id="WintunComponent" />
       <ComponentRef Id="WintunLicenceComponent" />
       <ComponentGroupRef Id="WindowFiles" />

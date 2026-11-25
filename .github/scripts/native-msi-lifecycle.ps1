@@ -14,6 +14,7 @@ $installDir = Join-Path $env:ProgramFiles "AnixOps\Net"
 $dataDir = Join-Path $env:ProgramData "AnixOps\Net"
 $window = Join-Path $installDir "AnixOpsNet.exe"
 $service = Join-Path $installDir "anixops-net-service.exe"
+$mcp = Join-Path $installDir "anixops-mcp.exe"
 $shortcut = Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs\AnixOps Net.lnk"
 $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 $runValue = "AnixOpsNet"
@@ -63,7 +64,7 @@ function Assert-Installed {
   if ($failure -notmatch "RESTART") { throw "The service is not restarted when it fails: $failure" }
   $failureFlag = (& sc.exe qfailureflag $serviceName) -join "`n"
   if ($failureFlag -notmatch "FAILURE_ACTIONS_ON_NONCRASH_FAILURES\s*:\s*TRUE") { throw "The service is not restarted after a non-crash failure: $failureFlag" }
-  foreach ($file in @($window, $service, $shortcut, (Join-Path $installDir "wintun.dll"), (Join-Path $installDir "wintun-LICENSE.txt"))) {
+  foreach ($file in @($window, $service, $mcp, $shortcut, (Join-Path $installDir "wintun.dll"), (Join-Path $installDir "wintun-LICENSE.txt"))) {
     if (-not (Test-Path $file -PathType Leaf)) { throw "$file is not there." }
   }
   $products = Get-Products
@@ -83,6 +84,24 @@ function Assert-WindowReachesService {
     Remove-Item Env:ANIXOPS_NET_APP_EXE
     Remove-Item Env:ANIXOPS_NET_INSTALLED
   }
+}
+
+function Assert-McpReachesService {
+  # The installed MCP program for AI tools (docs/mcp-desktop.md) on the installed service's pipe: it is greeted
+  # and refused, since a new installation has access for AI tools off.
+  $lines = @(
+    '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}',
+    '{"jsonrpc":"2.0","method":"notifications/initialized"}',
+    '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_status","arguments":{}}}'
+  )
+  $answers = ($lines -join "`n") + "`n" | & $mcp
+  if ($LASTEXITCODE -ne 0) { throw "anixops-mcp ended with exit code $LASTEXITCODE." }
+  $status = $answers | ForEach-Object { $_ | ConvertFrom-Json } | Where-Object { $_.id -eq 2 }
+  if ($null -eq $status) { throw "anixops-mcp did not answer the tool call: $answers" }
+  if ($status.result.isError -ne $true -or $status.result.content[0].text -notmatch "has not allowed access by AI tools") {
+    throw "anixops-mcp did not report access as off through the service: $answers"
+  }
+  Write-Host "anixops-mcp: reached the installed service, access off"
 }
 
 function Assert-TunModeWorks {
@@ -137,6 +156,7 @@ Invoke-Msi -Arguments @("/i", "`"$First`"") -Operation "install"
 Assert-Installed -Version "0.3.0"
 if (-not (Test-Path $dataDir -PathType Container)) { throw "The service did not create its data folder." }
 Assert-WindowReachesService
+Assert-McpReachesService
 
 # What a user of this installation has: a window open, the login entry, and data.
 Start-Window

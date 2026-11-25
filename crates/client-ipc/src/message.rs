@@ -67,6 +67,9 @@ pub enum Role {
     Window,
     /// The background service or daemon that runs the engine.
     Core,
+    /// An AI tool's program (`anixops-mcp`, docs/mcp-desktop.md): the core answers only its `agent.` requests,
+    /// within what the user allows, and never asks it anything.
+    Agent,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -122,8 +125,9 @@ mod tests {
     use serde_json::json;
 
     /// The samples every implementation of the channel reads and writes the same way.
-    const SAMPLES: [(&str, &str); 7] = [
+    const SAMPLES: [(&str, &str); 8] = [
         ("hello", include_str!("../fixtures/hello.json")),
+        ("hello-agent", include_str!("../fixtures/hello-agent.json")),
         ("request", include_str!("../fixtures/request.json")),
         (
             "request-without-args",
@@ -158,6 +162,14 @@ mod tests {
                 protocol: 1,
                 role: Role::Window,
                 version: "0.3.0".to_string(),
+            })
+        );
+        assert_eq!(
+            sample("hello-agent"),
+            Message::Hello(Hello {
+                protocol: 1,
+                role: Role::Agent,
+                version: "1.0.4".to_string(),
             })
         );
         assert_eq!(

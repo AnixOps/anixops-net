@@ -12,8 +12,10 @@
 //! - [`backend`]: what a tool may ask the app, and the user's access settings the app reports.
 //! - [`text`]: masking of URLs and log lines.
 //! - `control_channel` (Unix): the Mac app's command-line channel as a backend.
-//!
-//! `policy.json` lists the engine requests the tools make; the app's own gate allows the same and nothing else.
+//! - [`agent`]: the requests an AI tool makes of the Windows and Linux core over `client-ipc`, and
+//!   `IpcChannel`, the backend that makes them.
+//! - [`policy`]: `policy.json`, the engine requests the tools make. The core's gate ([`policy::engine_request`])
+//!   and the Mac app's allow the same and nothing else.
 //!
 //! What a tool returns is built field by field from what the backend answers: a field the tool does not
 //! name is left out, so a field added to the engine later never reaches the AI tool by accident. Requests
@@ -21,16 +23,18 @@
 //! gate checks the same again on its side; this crate never relies on the backend alone, and the app never
 //! relies on this crate.
 
+pub mod agent;
 pub mod backend;
 #[cfg(unix)]
 pub mod control_channel;
+pub mod policy;
 pub mod server;
 pub mod text;
 pub mod tools;
 
 pub use backend::{
     Access, Backend, BackendError, ConnectionState, ContentLevel, LogLevel, LogLine, Node,
-    NodeGroup, Status,
+    NodeGroup, Status, ACCESS_OFF, NOT_CONNECTED,
 };
 pub use server::Server;
 

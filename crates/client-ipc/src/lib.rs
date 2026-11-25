@@ -66,6 +66,17 @@ impl<R: Read, W: Write> Connection<R, W> {
     /// `expected`, speaks the same protocol. Both sides call this first; neither waits for the other to
     /// speak, so the order does not matter.
     pub fn greet(&mut self, role: Role, version: &str, expected: Role) -> io::Result<Hello> {
+        self.greet_one_of(role, version, &[expected])
+    }
+
+    /// [`Connection::greet`] for the side that serves more than one kind of program (the core serves windows
+    /// and AI tools): the other side must be one of `expected`, and the greeting says which it is.
+    pub fn greet_one_of(
+        &mut self,
+        role: Role,
+        version: &str,
+        expected: &[Role],
+    ) -> io::Result<Hello> {
         self.send(&Message::Hello(Hello {
             protocol: PROTOCOL,
             role,
@@ -76,7 +87,7 @@ impl<R: Read, W: Write> Connection<R, W> {
                 "the other side speaks protocol {}, this side {PROTOCOL}",
                 hello.protocol
             ))),
-            Some(Message::Hello(hello)) if hello.role != expected => Err(invalid(
+            Some(Message::Hello(hello)) if !expected.contains(&hello.role) => Err(invalid(
                 "the other side is not the program expected on this channel",
             )),
             Some(Message::Hello(hello)) => Ok(hello),
@@ -156,6 +167,18 @@ mod tests {
         // Another window on the core's end of the channel.
         let mut window = Connection::new(written(&[hello(Role::Window, PROTOCOL)]), Vec::new());
         assert!(window.greet(Role::Window, "0.3.0", Role::Core).is_err());
+    }
+
+    #[test]
+    fn the_core_learns_which_program_it_serves() {
+        let mut core = Connection::new(written(&[hello(Role::Agent, PROTOCOL)]), Vec::new());
+        let agent = core
+            .greet_one_of(Role::Core, "0.3.0", &[Role::Window, Role::Agent])
+            .unwrap();
+        assert_eq!(agent.role, Role::Agent);
+        // A core that serves only windows refuses an AI tool.
+        let mut core = Connection::new(written(&[hello(Role::Agent, PROTOCOL)]), Vec::new());
+        assert!(core.greet(Role::Core, "0.3.0", Role::Window).is_err());
     }
 
     #[test]

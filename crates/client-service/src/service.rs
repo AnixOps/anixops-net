@@ -31,6 +31,13 @@ const NO_WINDOW: &str =
 pub trait Commands: Send + Sync + 'static {
     fn invoke(&self, command: &str, args: Value) -> Result<Value, String>;
 
+    /// Answers a request of an AI tool (`client_mcp::agent`), which checks the user's settings itself. A stand-in
+    /// without AI tool access refuses them all.
+    fn agent(&self, call: &str, args: Value) -> Result<Value, String> {
+        let _ = args;
+        Err(format!("{call} is not available"))
+    }
+
     /// A window in a user's session has connected and can be asked from now on.
     fn session_arrived(&self) {}
 }
@@ -42,6 +49,10 @@ impl Commands for Client {
 
     fn session_arrived(&self) {
         Client::session_arrived(self);
+    }
+
+    fn agent(&self, call: &str, args: Value) -> Result<Value, String> {
+        Client::agent(self, call, args)
     }
 }
 
@@ -89,6 +100,9 @@ impl Windows {
     /// Talks to one window until it leaves: greets it, answers its commands with `commands`, and asks it
     /// for the user's settings while it is there. `version` is this program's, told to the window. Returns
     /// when the channel has closed (`Ok`) or broken.
+    ///
+    /// An AI tool's program ([`Role::Agent`]) is served too, but only with [`serve_agent`]: it is never
+    /// asked anything and never reaches a window's commands.
     pub fn serve(
         self: &Arc<Self>,
         commands: Arc<dyn Commands>,
@@ -97,8 +111,11 @@ impl Windows {
         version: &str,
     ) -> io::Result<()> {
         let mut connection = Connection::new(reader, writer);
-        connection.greet(Role::Core, version, Role::Window)?;
+        let hello = connection.greet_one_of(Role::Core, version, &PROGRAMS)?;
         let (reader, writer) = connection.into_parts();
+        if hello.role == Role::Agent {
+            return serve_agent(commands, reader, writer);
+        }
         self.serve_greeted(commands, reader, writer)
     }
 
@@ -170,6 +187,34 @@ impl Windows {
         serde_json::from_value(answer).map_err(|error| {
             format!("the window's answer to {command} was not understood: {error}")
         })
+    }
+}
+
+/// Who the core serves on its channel: windows, and AI tools within what the user allows.
+pub const PROGRAMS: [Role; 2] = [Role::Window, Role::Agent];
+
+/// Answers an AI tool's program (`anixops-mcp`, docs/mcp-desktop.md) until it leaves, for a caller that has greeted
+/// it already. Only the requests of `client_mcp::agent` reach the core, through [`Commands::agent`], which
+/// checks the user's settings and the engine policy; nothing else is answered.
+pub fn serve_agent(
+    commands: Arc<dyn Commands>,
+    reader: impl Read,
+    writer: impl Write + Send + 'static,
+) -> io::Result<()> {
+    Peer::new(writer).run(reader, Arc::new(AgentEnd { commands }))
+}
+
+/// Answers an AI tool with the core's gate.
+struct AgentEnd {
+    commands: Arc<dyn Commands>,
+}
+
+impl Handler for AgentEnd {
+    fn request(&self, command: &str, args: Value) -> Result<Value, String> {
+        if !client_mcp::agent::CALLS.contains(&command) {
+            return Err(format!("{command} is not a request of an AI tool"));
+        }
+        self.commands.agent(command, args)
     }
 }
 

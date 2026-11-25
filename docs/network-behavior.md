@@ -126,10 +126,11 @@ AnixOps Net 各平台客户端（iOS、macOS、Android、Windows、Linux，开�
 - 默认需要代理用户名和密码，由客户端随机生成并保存在系统密钥库里，不发给任何服务器；可以关闭，关闭时同一网络里的任何设备
   都能使用这个代理（docs/phone-debugging.md「安全边界」）。
 
-## AI 工具访问（macOS 的 anixops-mcp）
+## AI 工具访问（anixops-mcp）
 
-- `anixops-mcp` 由本机的 AI 工具启动，只经标准输入输出和 App 组容器里的 `cli.sock` 与 App 通信，不发起任何网络连接，
-  也不监听端口（docs/mcp-desktop.md）。默认关闭，需在设置 › 高级 › 外部工具访问中打开。
+- `anixops-mcp` 由本机的 AI 工具启动，只经标准输入输出和本机通道与客户端通信：macOS 为 App 组容器里的 `cli.sock`，
+  Windows 与 Linux 原生版为窗口所用的命名管道或守护进程套接字。它不发起任何网络连接，也不监听端口（docs/mcp-desktop.md）。
+  默认关闭，需在设置 › 高级 › 外部工具访问中打开。
 
 ## 只在用户点开时打开的链接
 
