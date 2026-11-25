@@ -408,8 +408,10 @@ pub fn activity_request(request: &serde_json::Value) -> Result<Vec<u8>, String> 
         .get("cmd")
         .and_then(serde_json::Value::as_str)
         .unwrap_or_default();
-    if !ACTIVITY_COMMANDS.contains(&command)
-        && !desktop_mitm::phone::CONTROL_COMMANDS.contains(&command)
+    let gated = command.starts_with("mesh_") && !crate::backend::mesh::ENABLED;
+    if gated
+        || !ACTIVITY_COMMANDS.contains(&command)
+            && !desktop_mitm::phone::CONTROL_COMMANDS.contains(&command)
     {
         return Err(format!(
             "runtime control command {command:?} is not available"
@@ -931,9 +933,14 @@ mod tests {
                 .is_ok()
         );
         assert!(activity_request(&serde_json::json!({"cmd": "select", "group": "a"})).is_err());
-        assert!(activity_request(&serde_json::json!({"cmd": "mesh_status"})).is_ok());
-        assert!(
-            activity_request(&serde_json::json!({"cmd": "mesh_join", "network": "office"})).is_ok()
+        // 组网 only in a build that turns it on (`mesh::ENABLED`).
+        assert_eq!(
+            activity_request(&serde_json::json!({"cmd": "mesh_status"})).is_ok(),
+            crate::backend::mesh::ENABLED
+        );
+        assert_eq!(
+            activity_request(&serde_json::json!({"cmd": "mesh_join", "network": "office"})).is_ok(),
+            crate::backend::mesh::ENABLED
         );
         // The secret is the backend's: a window never saves a network itself.
         assert!(activity_request(&serde_json::json!({"cmd": "mesh_save_network"})).is_err());

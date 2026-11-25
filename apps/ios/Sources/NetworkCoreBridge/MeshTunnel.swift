@@ -1,12 +1,21 @@
 import Foundation
 
-/// Whether this build's engine runs mesh networks: feature set 7 and later (mesh-status.md). The app shows the
-/// 组网 entry from it, whether the tunnel runs or not.
+/// Whether this build runs mesh networks: `enabled`, and an engine of feature set 7 or later (mesh-status.md).
+/// The app shows the 组网 entry from it, whether the tunnel runs or not.
 public enum MeshSupport {
     public static let minimumFeatureSet: UInt32 = 7
 
+    /// Whether this build offers 组网 at all. Off until kernel 0.3 is complete and audited, whatever the engine
+    /// runs: the release gate, not a capability (the same as client-core's `mesh::ENABLED`). A build with the
+    /// `MESH_PREVIEW` compilation condition turns it on for testing.
+    #if MESH_PREVIEW
+    public static let enabled = true
+    #else
+    public static let enabled = false
+    #endif
+
     public static var available: Bool {
-        NetworkCoreRuntimeFFI.featureSetVersion >= minimumFeatureSet
+        enabled && NetworkCoreRuntimeFFI.featureSetVersion >= minimumFeatureSet
     }
 }
 

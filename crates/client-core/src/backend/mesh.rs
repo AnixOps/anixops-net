@@ -168,6 +168,9 @@ pub fn remove_network(
 /// ones were left out (the file could not be read, or the engine would refuse the result: one without the mesh
 /// module).
 pub fn with_joined(dir: &Path, envelope: String) -> (String, Option<String>) {
+    if !ENABLED {
+        return (envelope, None);
+    }
     let networks = match load(dir) {
         Ok(networks) => networks,
         Err(error) => return (envelope, Some(error)),
@@ -384,9 +387,19 @@ pub fn only_profile(outbounds: &Map<String, Value>) -> Option<Value> {
     }))
 }
 
-/// Whether this build's engine runs mesh networks: it accepts a mesh-only profile. Known without an engine
-/// running, so the 组网 entry shows while disconnected.
+/// Whether this build offers 组网 at all. Off until kernel 0.3 is complete and audited, whatever the engine runs:
+/// the release gate (requirements, 2026-11-25), not a capability. A build made with `ANIXOPS_MESH_PREVIEW=1` in the
+/// environment turns it on for testing. While off, no window sees `mesh_*` ([`super::engine::activity_request`]),
+/// no engine runs for the mesh alone and no saved network joins a profile.
+pub const ENABLED: bool = matches!(option_env!("ANIXOPS_MESH_PREVIEW"), Some("1"));
+
+/// Whether this build runs mesh networks: [`ENABLED`], and its engine accepts a mesh-only profile. Known without an
+/// engine running, so the 组网 entry shows while disconnected.
 pub fn supported() -> bool {
+    ENABLED && engine_runs_mesh()
+}
+
+fn engine_runs_mesh() -> bool {
     static SUPPORTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *SUPPORTED.get_or_init(|| {
         let probe = json!({
@@ -726,7 +739,32 @@ mod tests {
     }
 
     #[test]
+    fn the_release_gate_keeps_mesh_out_unless_the_build_turns_it_on() {
+        if ENABLED {
+            return;
+        }
+        assert!(!supported());
+        let dir = std::env::temp_dir().join(format!("mesh-gate-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        store(
+            &dir,
+            &[SavedNetwork {
+                name: "a".into(),
+                joined: true,
+                config: config("a", "s"),
+            }],
+        )
+        .unwrap();
+        let envelope = json!({ "schema_version": 1, "outbound": { "type": "direct" } }).to_string();
+        assert_eq!(with_joined(&dir, envelope.clone()), (envelope, None));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn joined_networks_join_the_envelope() {
+        if !ENABLED {
+            return;
+        }
         let dir = std::env::temp_dir().join(format!("mesh-envelope-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let envelope = json!({ "schema_version": 1, "outbound": { "type": "direct" } }).to_string();
