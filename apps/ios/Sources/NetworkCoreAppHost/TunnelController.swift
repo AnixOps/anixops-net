@@ -3428,6 +3428,9 @@ extension TunnelController {
         else {
             return nil
         }
+        if cmd == "mesh_status" {
+            return Data(MeshDemo.status.utf8)
+        }
         let requests = demoRequests()
         let answer: [String: Any]
         switch cmd {
