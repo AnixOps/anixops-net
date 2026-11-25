@@ -146,6 +146,14 @@ export interface MeshHead {
     region?: string | null;
     regionBasis?: { border?: string | null; latencyMs?: number | null } | null;
     regionState?: string;
+    /** Kernel 0.4, full nodes: relaying for other members, host mode, the advertised and suggested subnets. */
+    relay?: boolean;
+    hostMode?: boolean;
+    listen?: Array<{ transport: string; port: number }>;
+    advertised?: Array<string | { cidr: string }>;
+    suggestedSubnets?: Array<{ cidr: string; interface?: string | null; public?: boolean }>;
+    /** `on`, `off` or `not_needed`. */
+    ipForwarding?: string | null;
   } | null;
   regions?: Array<{ code: string; name: string; local?: boolean }>;
 }
@@ -230,14 +238,124 @@ export const meshApi = {
   save: (config: Record<string, unknown>) => command("save_mesh_network", { config }),
   setJoined: (network: string, joined: boolean) => command("set_mesh_joined", { network, joined }),
   remove: (network: string) => command("remove_mesh_network", { network }),
-  async setSubnetRoute(network: string, cidr: string, route: "local" | "mesh"): Promise<MeshRefusal | null> {
-    try {
-      return refusalOf(await control({ cmd: "mesh_set_subnet_route", network, cidr, route }));
-    } catch (error) {
-      return { code: "other", detail: String(error) };
-    }
-  },
+  setSubnetRoute: (network: string, cidr: string, route: "local" | "mesh") =>
+    engine({ cmd: "mesh_set_subnet_route", network, cidr, route }),
+  /** Kernel 0.4, full nodes (docs/architecture/mesh-client.md, 控制). */
+  setRelay: (network: string, enabled: boolean) => engine({ cmd: "mesh_set_relay", network, enabled }),
+  setHostMode: (network: string, enabled: boolean) => engine({ cmd: "mesh_set_host_mode", network, enabled }),
+  advertise: (network: string, cidr: string) => engine({ cmd: "mesh_advertise", network, cidr }),
+  withdraw: (network: string, cidr: string) => engine({ cmd: "mesh_withdraw", network, cidr }),
+  requestRegion: (network: string, region: string) => engine({ cmd: "mesh_request_region", network, region }),
+  /** Kernel 0.5. */
+  setPolicy: (network: string, policy: "latency" | "hops") => engine({ cmd: "mesh_set_policy", network, policy }),
+  setPaths: (network: string, paths: Record<string, unknown>[]) => engine({ cmd: "mesh_set_paths", network, paths }),
+  /** A one-time join credential (个人电脑用入网凭据加入). */
+  joinCredential: (credential: string) => engine({ cmd: "mesh_join_credential", credential: credential.trim() }),
 };
+
+/** A mesh command for the engine; its refusal, or null once it took effect. */
+async function engine(request: Record<string, unknown>): Promise<MeshRefusal | null> {
+  try {
+    return refusalOf(await control(request));
+  } catch (error) {
+    return { code: "other", detail: String(error) };
+  }
+}
+
+// Custom paths (docs/mesh-ui.md, 路径; kernel 0.5). The snapshot names members by id; `mesh_set_paths` takes the
+// kernel's `routing.paths`, which names them by virtual address. The whole list is sent each time.
+
+/** A custom path as the editor holds it: a member id or a subnet, and the members to pass, by id, in order. */
+export interface PathDraft {
+  kind: "member" | "subnet";
+  target: string;
+  via: string[];
+}
+
+/** The most waypoints a path may name (mesh-module.md, `routing.paths`). */
+export const maxWaypoints = 6;
+
+type Json = Record<string, unknown>;
+const record = (value: unknown): Json => (value && typeof value === "object" && !Array.isArray(value) ? value as Json : {});
+const array = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
+const bare = (address: unknown) => (typeof address === "string" ? address.split("/")[0] : "");
+
+/** Member id to virtual address (without its prefix), this device included. */
+function addresses(status: MeshStatus): Map<string, string> {
+  const known = new Map<string, string>();
+  const self = record(status.self);
+  if (typeof self.id === "string" && bare(self.address)) known.set(self.id, bare(self.address));
+  for (const member of array(status.members)) {
+    const row = record(member);
+    if (typeof row.id === "string" && bare(row.address)) known.set(row.id, bare(row.address));
+  }
+  return known;
+}
+
+/** The paths of the snapshot as the editor holds them. */
+export function currentPaths(status: MeshStatus): Array<PathDraft & { id: string }> {
+  return array(status.paths).map((entry) => {
+    const path = record(entry);
+    const target = record(path.target);
+    const via = array(path.via).filter((id): id is string => typeof id === "string");
+    const id = typeof path.id === "string" ? path.id : "";
+    return typeof target.peer === "string"
+      ? { id, kind: "member" as const, target: target.peer, via }
+      : { id, kind: "subnet" as const, target: typeof target.subnet === "string" ? target.subnet : "", via };
+  });
+}
+
+/**
+ * `mesh_set_paths`' `paths` after removing the path `remove` (an id) and adding `add`, which replaces a path to the
+ * same target. Null when a member has no virtual address in the snapshot, or `add` names no waypoint or too many.
+ */
+export function routingPaths(status: MeshStatus, change: { remove?: string; add?: PathDraft }): Json[] | null {
+  const known = addresses(status);
+  let paths: PathDraft[] = currentPaths(status).filter((path) => path.id !== change.remove);
+  if (change.add) {
+    const add = change.add;
+    if (add.target === "" || add.via.length === 0 || add.via.length > maxWaypoints) return null;
+    paths = paths.filter((path) => !(path.kind === add.kind && path.target === add.target));
+    paths.push(add);
+  }
+  const result: Json[] = [];
+  for (const path of paths) {
+    const via = path.via.map((id) => known.get(id));
+    if (via.some((address) => !address)) return null;
+    if (path.kind === "member") {
+      const address = known.get(path.target);
+      if (!address) return null;
+      result.push({ to_peer: address, via });
+    } else {
+      result.push({ to_subnet: path.target, via });
+    }
+  }
+  return result;
+}
+
+/** The CIDR of an `advertised` entry, which the kernel may give as a string or as `{ cidr }`. */
+export function advertisedCidr(entry: string | { cidr: string }): string {
+  return typeof entry === "string" ? entry : entry.cidr;
+}
+
+/** The words for `self.ipForwarding`; null when the kernel does not say. */
+export function forwardingLabel(state: string | null | undefined): string | null {
+  switch (state) {
+    case "on":
+      return t("已开启");
+    case "off":
+      return t("未开启");
+    case "not_needed":
+      return t("无需开启");
+    default:
+      return null;
+  }
+}
+
+/** `self.listen` as one line: `TCP 11010 · UDP 11010`. */
+export function listenText(listen: Array<{ transport: string; port: number }> | undefined): string {
+  return (listen ?? []).map((entry) => `${entry.transport.toUpperCase()} ${entry.port}`).join(" · ");
+}
 
 // The 添加网络 form (docs/mesh-ui.md, 添加网络). The desktop is a full node: it listens, on TCP and UDP, at its port.
 

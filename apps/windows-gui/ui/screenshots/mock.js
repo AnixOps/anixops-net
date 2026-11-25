@@ -140,8 +140,13 @@
   const meshOn = () => window.localStorage.getItem("anixops.mock-mesh") === "on";
   const meshStatus = {
     network: { id: "office", name: "office", state: "partial", security: "forward_secrecy", routingPolicy: "latency" },
-    self: { id: "n0", name: "workstation", address: "10.144.0.2", domain: "workstation.office.mesh", region: "uk", regionState: "decided", regionBasis: { border: "lon-border", latencyMs: 4 } },
+    self: { id: "n0", name: "workstation", address: "10.144.0.2", domain: "workstation.office.mesh", region: "uk", regionState: "auto", regionBasis: { border: "lon-border", latencyMs: 4 },
+      relay: true, hostMode: false, listen: [{ transport: "tcp", port: 11010 }, { transport: "udp", port: 11010 }],
+      advertised: ["192.168.50.0/24"], suggestedSubnets: [{ cidr: "192.168.50.0/24", interface: "Ethernet" }, { cidr: "10.20.0.0/16", interface: "Wi-Fi" }, { cidr: "203.0.113.0/24", interface: "Ethernet 2", public: true }],
+      ipForwarding: "on" },
     regions: [{ code: "uk", name: "伦敦", local: true }, { code: "hk", name: "香港" }],
+    members: [["n1", "10.144.0.1"], ["n2", "10.144.0.5"], ["n3", "10.144.0.9"], ["n4", "10.144.1.1"], ["n5", "10.144.1.7"]].map(([id, address]) => ({ id, address: `${address}/16` })),
+    paths: [{ id: "p1", target: { subnet: "172.20.0.0/16" }, via: ["n1", "n4"], state: "active" }],
   };
   const member = (id, name, region, extra) => ({ id, name, region, state: "online", connection: "direct", transport: "udp", hops: 0, ...extra });
   const meshViews = {
@@ -149,21 +154,22 @@
     "view.mesh_members": () => ({ groupBy: "region", total: 6, matched: 6, groups: [
       { key: "uk", count: 4, matched: 4, open: true, rows: [
         member("n0", "workstation", "uk", { self: true, role: "server", connection: "self", address: "10.144.0.2", domain: "workstation.office.mesh" }),
-        member("n1", "lon-border", "uk", { role: "border", address: "10.144.0.1", domain: "lon-border.office.mesh", latencyMs: 4, tone: "good" }),
-        member("n2", "nas", "uk", { role: "host", address: "10.144.0.5", domain: "nas.office.mesh", latencyMs: 6, tone: "good", contains: { noun: "vms", count: 3 } }),
-        member("n3", "laptop", "uk", { role: "client", address: "10.144.0.9", domain: "laptop.office.mesh", connection: "relay", hops: 1, transport: "tcp", latencyMs: 38, tone: "fair" }),
+        member("n1", "lon-border", "uk", { role: "border", address: "10.144.0.1", domain: "lon-border.office.mesh", latencyMs: 4, tone: "fast" }),
+        member("n2", "nas", "uk", { role: "host", address: "10.144.0.5", domain: "nas.office.mesh", latencyMs: 6, tone: "fast", contains: { noun: "vms", count: 3 } }),
+        member("n3", "laptop", "uk", { role: "client", address: "10.144.0.9", domain: "laptop.office.mesh", connection: "relay", hops: 1, transport: "tcp", latencyMs: 38, tone: "fast" }),
       ] },
       { key: "hk", count: 2, matched: 2, open: true, link: { latencyMs: 182, via: "lon-border", state: "ok" }, worst: { state: "unreachable", count: 1 }, rows: [
-        member("n4", "hk-gateway", "hk", { role: "gateway", address: "10.144.1.1", domain: "hk-gateway.office.mesh", connection: "cross_region", hops: 2, latencyMs: 186, tone: "poor", contains: { noun: "subnets", count: 2 } }),
+        member("n4", "hk-gateway", "hk", { role: "gateway", address: "10.144.1.1", domain: "hk-gateway.office.mesh", connection: "cross_region", hops: 2, latencyMs: 186, tone: "medium", contains: { noun: "subnets", count: 2 } }),
         member("n5", "hk-build", "hk", { role: "server", state: "unreachable", connection: "unreachable", address: "10.144.1.7", domain: "hk-build.office.mesh", transport: null, latencyMs: null }),
       ] },
     ] }),
     "view.mesh_subnets": () => ({ refused: 1, rows: [
-      { cidr: "192.168.10.0/24", region: "uk", regionName: "伦敦", advertiser: "nas", path: ["workstation", "nas"], latencyMs: 6, tone: "good", state: "ok", route: "mesh" },
-      { cidr: "172.20.0.0/16", region: "hk", regionName: "香港", advertiser: "hk-gateway", path: ["workstation", "lon-border", "hk-gateway"], latencyMs: 186, tone: "poor", state: "ok", route: "mesh" },
-      { cidr: "192.168.1.0/24", region: "hk", regionName: "香港", advertiser: "hk-gateway", path: ["workstation", "lon-border", "hk-gateway"], latencyMs: 186, tone: "poor", state: "ok", route: "local", marks: ["local_overlap"] },
+      { cidr: "192.168.10.0/24", region: "uk", regionName: "伦敦", advertiser: "nas", path: ["workstation", "nas"], latencyMs: 6, tone: "fast", state: "ok", route: "mesh" },
+      { cidr: "172.20.0.0/16", region: "hk", regionName: "香港", advertiser: "hk-gateway", path: ["workstation", "lon-border", "hk-gateway"], latencyMs: 186, tone: "medium", state: "ok", route: "mesh" },
+      { cidr: "192.168.1.0/24", region: "hk", regionName: "香港", advertiser: "hk-gateway", path: ["workstation", "lon-border", "hk-gateway"], latencyMs: 186, tone: "medium", state: "ok", route: "local", marks: ["local_overlap"] },
     ] }),
-    "view.mesh_paths": () => ({ policy: "latency", links: [{ from: "uk", fromName: "伦敦", to: "hk", toName: "香港", borders: ["lon-border", "hk-gateway"], latencyMs: 182, tone: "poor", loss: 0.01, state: "ok" }], custom: [] }),
+    "view.mesh_paths": () => ({ policy: "latency", links: [{ from: "uk", fromName: "伦敦", to: "hk", toName: "香港", borders: ["lon-border", "hk-gateway"], latencyMs: 182, tone: "medium", loss: 0.01, state: "ok" }],
+      custom: [{ id: "p1", targetKind: "subnet", target: "172.20.0.0/16", targetLabel: "172.20.0.0/16", advertiser: "hk-gateway", via: ["lon-border", "hk-gateway"], state: "active" }] }),
     "view.mesh_notices": () => [],
   };
   const control = (request) => {

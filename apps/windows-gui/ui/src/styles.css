@@ -839,6 +839,10 @@ html.qr-scanning #root { visibility: hidden; }
 .mesh-child.match { color: inherit; font-weight: 600; }
 .mesh-child.warning { color: var(--warning); }
 .mesh-detail { min-width: 0; }
+.mesh-cards { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.mesh-waypoints { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.mesh-waypoint { display: flex; gap: 4px; align-items: center; width: 100%; }
+.mesh-waypoint > :first-child { flex: 1; min-width: 0; }
 .mesh-latency { display: inline-flex; gap: 5px; align-items: center; color: var(--text2); white-space: nowrap; }
 .mesh-latency > .status-dot { width: 6px; height: 6px; box-shadow: none; }
 .mesh-dialog .mesh-form { display: flex; flex-direction: column; gap: 10px; padding: 4px 0 12px; }

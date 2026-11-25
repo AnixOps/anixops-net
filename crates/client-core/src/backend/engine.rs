@@ -359,7 +359,7 @@ fn linked(profile: &Value, other: &OtherSource) -> Option<Value> {
 /// sends (the capture session storage and key, saved sessions, `reload_rules`, saving a mesh network) is not here:
 /// it goes through [`Engine::request`]. The
 /// Windows/Linux Tauri app checks its window's requests with the same list ([`activity_request`]).
-pub const ACTIVITY_COMMANDS: [&str; 24] = [
+pub const ACTIVITY_COMMANDS: [&str; 32] = [
     "traffic",
     "connections",
     "close_connection",
@@ -389,6 +389,17 @@ pub const ACTIVITY_COMMANDS: [&str; 24] = [
     "mesh_leave",
     "mesh_set_dns",
     "mesh_set_subnet_route",
+    // Kernel 0.4, full nodes: relaying, host mode, advertising a subnet and asking for another region; kernel 0.5:
+    // the default path policy and the custom paths. An engine without them answers `unsupported`.
+    "mesh_set_relay",
+    "mesh_set_host_mode",
+    "mesh_advertise",
+    "mesh_withdraw",
+    "mesh_request_region",
+    "mesh_set_policy",
+    "mesh_set_paths",
+    // A one-time credential from the panel that joins this computer (个人电脑用入网凭据加入).
+    "mesh_join_credential",
 ];
 
 /// The request bytes for an activity page command, or why it is refused.
