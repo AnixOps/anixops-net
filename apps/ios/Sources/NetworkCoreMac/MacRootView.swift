@@ -128,6 +128,8 @@ struct MacRootView: View {
             MacHomePage(tunnel: tunnel, state: state)
         case .proxies:
             MacProxiesPage(tunnel: tunnel, state: state)
+        case .mesh:
+            MacMeshPage(tunnel: tunnel)
         case .rules:
             MacRulesPage(tunnel: tunnel)
         case .extensions:

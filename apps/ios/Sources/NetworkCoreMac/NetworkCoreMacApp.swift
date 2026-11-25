@@ -187,6 +187,8 @@ final class MacAppState: ObservableObject {
 enum MacSection: String, CaseIterable, Identifiable, Hashable {
     case home
     case proxies
+    /// 组网 (docs/mesh-ui.md), after 代理, on an engine that runs mesh networks (`MeshSupport`).
+    case mesh
     case rules
     case extensions
     case activity
@@ -199,7 +201,10 @@ enum MacSection: String, CaseIterable, Identifiable, Hashable {
     /// The sidebar for a mode. Debug mode is the same on every platform (docs/debug-mode.md): Requests · Rewrite ·
     /// Exit · Settings, opening on the requests, with proxies and rules under Exit.
     static func sections(for mode: AppMode?) -> [MacSection] {
-        mode == .debug ? [.activity, .extensions, .exit, .settings] : [.home, .proxies, .rules, .extensions, .activity, .settings]
+        if mode == .debug {
+            return [.activity, .extensions, .exit, .settings]
+        }
+        return [.home, .proxies] + (MeshSupport.available ? [.mesh] : []) + [.rules, .extensions, .activity, .settings]
     }
 
     /// The section's name in a mode: in debug mode Activity is the requests and Extensions are "Rewrite".
@@ -223,6 +228,8 @@ enum MacSection: String, CaseIterable, Identifiable, Hashable {
             return "概览"
         case .proxies:
             return "代理"
+        case .mesh:
+            return "组网"
         case .rules:
             return "规则"
         case .extensions:
@@ -242,6 +249,8 @@ enum MacSection: String, CaseIterable, Identifiable, Hashable {
             return "house.fill"
         case .proxies:
             return "globe"
+        case .mesh:
+            return "point.3.connected.trianglepath.dotted"
         case .rules:
             return "arrow.triangle.branch"
         case .extensions:
@@ -262,6 +271,8 @@ enum MacSection: String, CaseIterable, Identifiable, Hashable {
             return MacTileColor.indigo
         case .proxies:
             return MacTileColor.sky
+        case .mesh:
+            return MacTileColor.teal
         case .rules:
             return MacTileColor.orange
         case .extensions:
