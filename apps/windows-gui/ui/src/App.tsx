@@ -1,4 +1,4 @@
-import { Activity, ArrowDown, ArrowUp, CheckCircle2, CircleAlert, Globe, House, Puzzle, Route, Settings, X } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, CheckCircle2, CircleAlert, Globe, House, Network, Puzzle, Route, Settings, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -11,6 +11,7 @@ import { ActivityPage } from "./pages/ActivityPage";
 import { RequestsPage } from "./pages/RequestsPage";
 import { ExtensionsPage } from "./pages/ExtensionsPage";
 import { HomePage } from "./pages/HomePage";
+import { MeshPage, useMesh } from "./pages/MeshPage";
 import { ProxiesPage } from "./pages/ProxiesPage";
 import { RulesPage } from "./pages/RulesPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -27,7 +28,7 @@ import { errorText } from "./error-text";
 import { operationText } from "./operation-text";
 import { busyOperation, connectionOperation, finishOperation, startOperation, toggleAction } from "./operations";
 
-export type Page = "home" | "proxies" | "rules" | "extensions" | "activity" | "settings";
+export type Page = "home" | "proxies" | "mesh" | "rules" | "extensions" | "activity" | "settings";
 
 type NavItem = { page: Page; label: string; icon: LucideIcon; color: TileColor };
 
@@ -47,17 +48,22 @@ const debugNavigation: NavItem[] = [
   { page: "extensions", label: "改写", icon: Puzzle, color: "purple" },
 ];
 
+// 组网 sits after 代理 (docs/mesh-ui.md, 入口与导航), shown while the engine runs mesh networks.
+const meshItem: NavItem = { page: "mesh", label: "组网", icon: Network, color: "teal" };
+
 const egressItem: NavItem = { page: "proxies", label: "出口", icon: Globe, color: "sky" };
 
 const settingsItem: NavItem = { page: "settings", label: "设置", icon: Settings, color: "gray" };
 
 /** The sidebar of a mode: the main pages, then the ones below the gap. */
-function sidebarOf(mode: AppMode): { main: NavItem[]; foot: NavItem[] } {
-  return mode === "debug" ? { main: debugNavigation, foot: [egressItem, settingsItem] } : { main: navigation, foot: [settingsItem] };
+function sidebarOf(mode: AppMode, mesh = false): { main: NavItem[]; foot: NavItem[] } {
+  if (mode === "debug") return { main: debugNavigation, foot: [egressItem, settingsItem] };
+  const main = mesh ? navigation.flatMap((item) => (item.page === "proxies" ? [item, meshItem] : [item])) : navigation;
+  return { main, foot: [settingsItem] };
 }
 
 // The dashboards use the whole window, lists read better wider, and settings-style pages keep a narrow column.
-const pageWidths: Partial<Record<Page, "full" | "wide">> = { home: "full", proxies: "full", activity: "wide" };
+const pageWidths: Partial<Record<Page, "full" | "wide">> = { home: "full", proxies: "full", mesh: "full", activity: "wide" };
 
 interface Notice {
   text: string;
@@ -250,7 +256,8 @@ export function App() {
   useEffect(() => {
     if (storedMode === null && resolved === "proxy") chooseMode("proxy");
   }, [storedMode, resolved, chooseMode]);
-  const sidebar = sidebarOf(mode);
+  const mesh = useMesh();
+  const sidebar = sidebarOf(mode, mesh.view !== null);
   const pages = [...sidebar.main, ...sidebar.foot];
   // A page the mode has no entry for (the overview in debug mode) gives way to the mode's first page.
   useEffect(() => {
@@ -382,6 +389,7 @@ export function App() {
           <ToolbarSlot.Provider value={toolbar}>
             {page === "home" && <HomePage snapshot={snapshot} nodes={nodes} phase={phase} busy={busy} run={run} toggle={toggleConnection} goTo={setPage} delays={delays} setDelays={setDelays} />}
             {page === "proxies" && <ProxiesPage snapshot={snapshot} nodes={nodes} busy={busy} run={run} delays={delays} setDelays={setDelays} egress={egress} pendingImport={pendingImport} takePendingImport={() => setPendingImport(null)} />}
+            {page === "mesh" && <MeshPage mesh={mesh} />}
             {page === "proxies" && mode === "debug" && <div className="egress-rules"><RulesPage snapshot={snapshot} busy={busy} run={run} /></div>}
             {page === "rules" && mode === "proxy" && <RulesPage snapshot={snapshot} busy={busy} run={run} />}
             {page === "extensions" && <ExtensionsPage snapshot={snapshot} busy={busy} run={run} />}
