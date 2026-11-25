@@ -1067,7 +1067,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// each with its secret from the start secrets or the shared Keychain. A network without a readable secret is
     /// left out, and the diagnostics say how many.
     private func readMeshOutbounds(_ value: Data?) -> [String: [String: JSONValue]] {
-        let networks = MeshNetworkLibrary.fromProfileValue(value)
+        let networks = MeshNetworkLibrary.gatedNetworks(fromProfileValue: value)
         guard !networks.isEmpty else {
             return [:]
         }

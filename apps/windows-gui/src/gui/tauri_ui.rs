@@ -1077,6 +1077,7 @@ fn start_automatic_connection(state: DesktopAppState) {
             }
         };
         if !connection::should_auto_connect(desktop.auto_connect, false, connected) {
+            mesh::settle(&state.direct_core);
             return;
         }
         match connect_window_core(&state, desktop) {
@@ -1670,15 +1671,26 @@ async fn runtime_control(
         } else {
             request
         };
-        let mesh_status = request.get("cmd").and_then(Value::as_str) == Some("mesh_status");
+        let command = request
+            .get("cmd")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let mesh_status = command == "mesh_status";
+        let mesh_command = command.starts_with("mesh_");
         let request = connection::activity_request(&request)?;
         let mut core = state
             .direct_core
             .lock()
             .map_err(|_| "desktop core lock failed")?;
-        // With no engine running the 组网 page shows the saved networks (`mesh::offline_status`).
-        if mesh_status && !core.is_running()? {
-            return Ok(mesh::offline_status());
+        // With the proxy off, 组网 goes to the engine for the mesh alone, or the page shows the saved networks
+        // (`mesh::offline_status`).
+        if mesh_command && !core.is_running()? {
+            if mesh_status {
+                return Ok(mesh::offline_status(&core, &request));
+            }
+            if let Some(answer) = core.mesh_only_control(&request) {
+                return serde_json::from_slice(&answer?).map_err(|error| error.to_string());
+            }
         }
         let answer = core.control(&request)?;
         serde_json::from_slice(&answer).map_err(|error| error.to_string())
@@ -1704,9 +1716,11 @@ async fn save_mesh_network(
 ) -> Result<Value, String> {
     let core = state.inner().direct_core.clone();
     run_blocking(move || {
-        client_core::backend::mesh::save_network(&mesh::dir()?, config, |request| {
+        let answer = client_core::backend::mesh::save_network(&mesh::dir()?, config, |request| {
             mesh::engine_request(&core, request)
-        })
+        });
+        mesh::settle(&core);
+        answer
     })
     .await
 }
@@ -1720,9 +1734,12 @@ async fn set_mesh_joined(
 ) -> Result<Value, String> {
     let core = state.inner().direct_core.clone();
     run_blocking(move || {
-        client_core::backend::mesh::set_joined(&mesh::dir()?, &network, joined, |request| {
-            mesh::engine_request(&core, request)
-        })
+        let answer =
+            client_core::backend::mesh::set_joined(&mesh::dir()?, &network, joined, |request| {
+                mesh::engine_request(&core, request)
+            });
+        mesh::settle(&core);
+        answer
     })
     .await
 }
@@ -1735,9 +1752,12 @@ async fn remove_mesh_network(
 ) -> Result<Value, String> {
     let core = state.inner().direct_core.clone();
     run_blocking(move || {
-        client_core::backend::mesh::remove_network(&mesh::dir()?, &network, |request| {
-            mesh::engine_request(&core, request)
-        })
+        let answer =
+            client_core::backend::mesh::remove_network(&mesh::dir()?, &network, |request| {
+                mesh::engine_request(&core, request)
+            });
+        mesh::settle(&core);
+        answer
     })
     .await
 }
@@ -2124,14 +2144,17 @@ fn connect_window_core(
     state: &DesktopAppState,
     desktop: DesktopState,
 ) -> Result<connection::ConnectedProxy, String> {
-    connection::connect_direct(
+    let connected = connection::connect_direct(
         windows_managed_config_path(),
         desktop,
         &mut *state
             .direct_core
             .lock()
             .map_err(|_| "desktop core lock failed")?,
-    )
+    );
+    // The proxy's engine carries 组网 now; after a failed start the mesh runs alone again.
+    mesh::settle(&state.direct_core);
+    connected
 }
 
 /// Removes the Windows service earlier versions could run the engine in
@@ -2196,6 +2219,8 @@ fn disconnect_blocking(state: DesktopAppState) -> Result<OperationResult, String
         view_saved_capture(&capture);
         (result, capture)
     };
+    // With the proxy off, 组网 runs alone while a network is joined.
+    mesh::settle(&state.direct_core);
     // `disconnect_direct` stops the engine even when the proxy could not be put back, so the connection is
     // over either way: left marked as this window's, the recovery monitor would take the stop for a lost
     // connection and reconnect against the user's wish. A failed restore keeps the snapshot and the owner

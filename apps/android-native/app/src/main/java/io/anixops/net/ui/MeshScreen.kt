@@ -938,6 +938,7 @@ private fun failureText(code: String?): String = stringResource(
         "existing_program" -> R.string.mesh_failure_existing
         "unreachable_peers" -> R.string.mesh_failure_peers
         "peer_not_native" -> R.string.mesh_failure_not_native
+        "native_keys_pending" -> R.string.mesh_failure_keys_pending
         "unsupported" -> R.string.mesh_failure_unsupported
         "invalid_argument" -> R.string.mesh_failure_invalid
         "not_found" -> R.string.mesh_failure_not_found

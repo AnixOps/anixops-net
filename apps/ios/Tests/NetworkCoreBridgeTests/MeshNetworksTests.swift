@@ -123,6 +123,18 @@ final class MeshNetworksTests: XCTestCase {
         XCTAssertTrue(chinese.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "._-".contains($0)) })
     }
 
+    func testTheReleaseGateKeepsJoinedNetworksOutOfTheTunnel() throws {
+        let joined = MeshNetwork(name: "a", config: #"{"config_version":1}"#, joined: true)
+        XCTAssertNil(MeshNetworkLibrary.gatedProfileValue([joined], enabled: false))
+        let value = try XCTUnwrap(MeshNetworkLibrary.gatedProfileValue([joined], enabled: true))
+        XCTAssertEqual(MeshNetworkLibrary.gatedNetworks(fromProfileValue: value, enabled: false), [])
+        XCTAssertEqual(MeshNetworkLibrary.gatedNetworks(fromProfileValue: value, enabled: true), [joined])
+        #if !MESH_PREVIEW
+        XCTAssertNil(MeshNetworkLibrary.gatedProfileValue([joined]))
+        XCTAssertEqual(MeshNetworkLibrary.gatedNetworks(fromProfileValue: value), [])
+        #endif
+    }
+
     func testProfileValueKeepsJoinedNetworksOnly() throws {
         let joined = MeshNetwork(name: "a", config: #"{"config_version":1}"#, joined: true)
         let saved = MeshNetwork(name: "b", config: #"{"config_version":1}"#, joined: false)

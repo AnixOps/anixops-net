@@ -7283,5 +7283,53 @@
     "notify": false
    }
   ]
+ },
+ {
+  "command": "view.mesh_notices",
+  "args": {
+   "status": {
+    "network": {
+     "state": "joined",
+     "failure": {
+      "code": "peer_not_native",
+      "detail": "node-7f3a"
+     }
+    }
+   }
+  },
+  "answer": [
+   {
+    "id": "mesh.notice.peer_not_native",
+    "key": "failure:peer_not_native",
+    "values": [
+     "node-7f3a"
+    ],
+    "action": null,
+    "notify": false
+   }
+  ]
+ },
+ {
+  "command": "view.mesh_notices",
+  "args": {
+   "status": {
+    "network": {
+     "state": "not_joined",
+     "failure": {
+      "code": "native_keys_pending",
+      "detail": "empty"
+     }
+    }
+   }
+  },
+  "answer": [
+   {
+    "id": "mesh.notice.native_keys_pending",
+    "key": "failure:native_keys_pending",
+    "values": [],
+    "action": null,
+    "notify": false
+   }
+  ]
  }
 ]

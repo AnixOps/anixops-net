@@ -17,6 +17,7 @@ use platform_windows::system_integration::{
     read_current_user_system_proxy, NativeWindowsSystemIntegration, WindowsServiceState,
     WindowsSystemIntegration,
 };
+use platform_windows::tun::{CaptureRoute, WindowsTunSettings};
 use std::fs;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -41,6 +42,9 @@ struct DesktopConnectionPlan {
 pub struct DesktopCore {
     embedded: Option<LocalProxy>,
     tun: Option<DesktopTun>,
+    /// The engine for the 组网 mesh alone while the proxy is off (mesh-status.md, 只开组网): its own adapter, which
+    /// carries only the mesh's routes. Never runs beside the proxy's engine.
+    mesh_only: Option<DesktopTun>,
 }
 
 impl DesktopCore {
@@ -61,6 +65,64 @@ impl DesktopCore {
         self.stop_tun();
         self.tun = Some(DesktopTun::start(envelope)?);
         Ok(())
+    }
+
+    /// Starts the engine for the mesh alone on `envelope` (`mesh::only_profile`): an adapter that routes nothing
+    /// until the engine names the mesh's routes ([`Self::apply_mesh_routes`]), and leaves DNS to the device.
+    pub fn start_mesh_only(&mut self, envelope: &[u8]) -> Result<(), String> {
+        self.stop_mesh_only();
+        let settings = WindowsTunSettings {
+            routes: Some(Vec::new()),
+            announce_dns: false,
+            block_outside_dns: false,
+            ..WindowsTunSettings::default()
+        };
+        self.mesh_only = Some(DesktopTun::start_with(envelope, settings)?);
+        Ok(())
+    }
+
+    /// Stops the engine for the mesh alone; answers whether it ran.
+    pub fn stop_mesh_only(&mut self) -> bool {
+        match self.mesh_only.take() {
+            Some(tun) => {
+                tun.stop();
+                true
+            }
+            None => false,
+        }
+    }
+
+    pub fn mesh_only_running(&self) -> bool {
+        self.mesh_only.as_ref().is_some_and(DesktopTun::is_running)
+    }
+
+    /// One control request to the engine for the mesh alone; `None` while it does not run.
+    pub fn mesh_only_control(&self, request: &[u8]) -> Option<Result<Vec<u8>, String>> {
+        self.mesh_only
+            .as_ref()
+            .filter(|tun| tun.is_running())
+            .map(|tun| tun.control(request))
+    }
+
+    /// Reads the mesh's routes from the engine for the mesh alone (`mesh_status`'s `tunnel`) and puts them on its
+    /// adapter when they changed. Answers how many it carries after a change, `None` when nothing changed.
+    pub fn apply_mesh_routes(&mut self) -> Result<Option<usize>, String> {
+        let Some(answer) = self.mesh_only_control(br#"{"cmd":"mesh_status"}"#) else {
+            return Ok(None);
+        };
+        let status: serde_json::Value =
+            serde_json::from_slice(&answer?).map_err(|error| error.to_string())?;
+        let tunnel = client_core::backend::mesh::Tunnel::from_status(&status);
+        let (routes, _) = client_core::backend::mesh::Tunnel::routes_and_dns(tunnel.as_ref());
+        let routes = mesh_routes(&routes);
+        let Some(tun) = self.mesh_only.as_mut() else {
+            return Ok(None);
+        };
+        if tun.routes() == routes {
+            return Ok(None);
+        }
+        tun.set_routes(&routes)?;
+        Ok(Some(routes.len()))
     }
 
     fn stop_tun(&mut self) {
@@ -136,6 +198,15 @@ impl DesktopCore {
     }
 }
 
+/// The engine's mesh routes (CIDR text, or a bare address for one host) as adapter routes; what cannot be read is
+/// left out.
+pub fn mesh_routes(routes: &[String]) -> Vec<CaptureRoute> {
+    routes
+        .iter()
+        .filter_map(|route| CaptureRoute::parse(route))
+        .collect()
+}
+
 /// The request bytes for an activity page command, or why it is refused: the
 /// same window command list as the client-core backends, so the two cannot
 /// drift apart again.
@@ -173,6 +244,8 @@ pub fn connect_direct(
     desktop: DesktopState,
     core: &mut DesktopCore,
 ) -> Result<ConnectedProxy, String> {
+    // The proxy's engine carries the mesh itself (`mesh::with_joined`); the one for the mesh alone gives way.
+    core.stop_mesh_only();
     if desktop.direct_egress {
         return connect_direct_egress(&config_path, desktop, core);
     }
@@ -611,6 +684,27 @@ mod tests {
             engine_embedded::config::RuntimeConfig::from_json(envelope.as_bytes()).is_ok(),
             "{envelope}"
         );
+    }
+
+    #[test]
+    fn the_engine_names_the_mesh_routes_the_adapter_carries() {
+        let routes = mesh_routes(&[
+            "10.144.144.0/24".to_string(),
+            "198.18.0.2".to_string(),
+            "not a route".to_string(),
+        ]);
+        assert_eq!(
+            routes,
+            [
+                CaptureRoute::V4("10.144.144.0".parse().unwrap(), 24),
+                CaptureRoute::V4("198.18.0.2".parse().unwrap(), 32),
+            ]
+        );
+        let mut core = DesktopCore::default();
+        assert!(!core.mesh_only_running());
+        assert!(core.mesh_only_control(b"{}").is_none());
+        assert_eq!(core.apply_mesh_routes(), Ok(None));
+        assert!(!core.stop_mesh_only());
     }
 
     #[test]

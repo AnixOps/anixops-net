@@ -82,6 +82,20 @@ fn took_effect(answer: &Value) -> bool {
     answer.get("ok") == Some(&Value::Bool(true))
 }
 
+/// Refuses saving and joining while the release gate is closed ([`ENABLED`]), for every caller (the windows'
+/// commands, the engine requests and the platform shells alike); leaving and removing stay open so a device can always
+/// clean up.
+fn gate() -> Result<(), String> {
+    if ENABLED {
+        Ok(())
+    } else {
+        Err(crate::refusal::coded(
+            "mesh.disabled",
+            "this build does not offer mesh networks",
+        ))
+    }
+}
+
 fn not_found(name: &str) -> String {
     crate::refusal::coded(
         "mesh.not_found",
@@ -98,6 +112,7 @@ pub fn save_network(
     config: Value,
     mut request: impl FnMut(Value) -> Option<Value>,
 ) -> Result<Value, String> {
+    gate()?;
     let name = validate(&config)?;
     let networks = load(dir)?;
     let before = networks
@@ -125,6 +140,9 @@ pub fn set_joined(
     joined: bool,
     mut request: impl FnMut(Value) -> Option<Value>,
 ) -> Result<Value, String> {
+    if joined {
+        gate()?;
+    }
     let networks = load(dir)?;
     let next = self::joined(&networks, name, joined).ok_or_else(|| not_found(name))?;
     if joined {
@@ -675,6 +693,9 @@ mod tests {
 
     #[test]
     fn saving_joining_and_removing_keep_the_file_and_tell_a_running_engine() {
+        if !ENABLED {
+            return;
+        }
         let dir = std::env::temp_dir().join(format!("mesh-change-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let mut sent = Vec::new();
@@ -760,6 +781,30 @@ mod tests {
         .unwrap();
         let envelope = json!({ "schema_version": 1, "outbound": { "type": "direct" } }).to_string();
         assert_eq!(with_joined(&dir, envelope.clone()), (envelope, None));
+        // Saving and joining are refused for every caller, without asking an engine; leaving and removing stay
+        // open.
+        let mut asked = false;
+        assert!(save_network(&dir, config("b", "s"), |_| {
+            asked = true;
+            None
+        })
+        .unwrap_err()
+        .starts_with("mesh.disabled"));
+        assert!(set_joined(&dir, "a", true, |_| {
+            asked = true;
+            None
+        })
+        .unwrap_err()
+        .starts_with("mesh.disabled"));
+        assert!(!asked);
+        assert_eq!(
+            set_joined(&dir, "a", false, |_| None).unwrap(),
+            json!({ "ok": true })
+        );
+        assert_eq!(
+            remove_network(&dir, "a", |_| None).unwrap(),
+            json!({ "ok": true })
+        );
         fs::remove_dir_all(&dir).unwrap();
     }
 

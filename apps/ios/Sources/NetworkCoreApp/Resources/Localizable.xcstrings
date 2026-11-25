@@ -23861,18 +23861,34 @@
         }
       }
     },
-    "无法加入：对端非本系统节点，已拒绝。": {
+    "已拒绝对端连接：对端非本系统节点。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cannot join: the peer is not a node of this system and was refused."
+            "value": "Peer connection refused: the peer is not a node of this system."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "無法加入：對端非本系統節點，已拒絕。"
+            "value": "已拒絕對端連線：對端非本系統節點。"
+          }
+        }
+      }
+    },
+    "暂未加入：本机公钥尚未列入网络名单。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not joined: this device's key is not yet on the network's list."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暫未加入：本機公鑰尚未列入網路名單。"
           }
         }
       }

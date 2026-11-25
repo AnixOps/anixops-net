@@ -965,7 +965,8 @@
     <string name="mesh_failure_identity">Cannot join: this device identity is online on another device.</string>
     <string name="mesh_failure_existing">Mesh cannot start: an existing mesh program is running on this device.</string>
     <string name="mesh_failure_peers">Cannot join: no peer is reachable.</string>
-    <string name="mesh_failure_not_native">Cannot join: the peer is not a node of this system and was refused.</string>
+    <string name="mesh_failure_not_native">Peer connection refused: the peer is not a node of this system.</string>
+    <string name="mesh_failure_keys_pending">Not joined: this device\'s key is not yet on the network\'s list.</string>
     <string name="mesh_failure_unsupported">The current engine does not support this operation.</string>
     <string name="mesh_failure_invalid">Operation not completed: invalid argument.</string>
     <string name="mesh_failure_not_found">Operation not completed: the network does not exist.</string>
