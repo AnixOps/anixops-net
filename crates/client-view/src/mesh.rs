@@ -650,6 +650,7 @@ pub fn paths(status: &Value) -> Value {
                     "advertiser": advertiser,
                     "via": names(list(path, "via")),
                     "state": opt_text(path, "state").unwrap_or("active"),
+                    "reason": opt_text(path, "reason"),
                     "unreachable": unreachable.map(|id| member_name(&members, id)),
                 })
             })
@@ -746,10 +747,28 @@ pub fn notices(status: &Value) -> Value {
             .map(str::to_owned)
             .or_else(|| opt_text(target, "peer").map(|peer| member_name(&members, peer).to_owned()))
             .unwrap_or_default();
+        // mesh-status.md `paths[].reason`: a node that does not forward on this path is not an
+        // unreachable one; `unreachable` names it either way (for `unsupported`, maybe the target).
+        let (id, values) = match text(path, "reason") {
+            "unsupported" | "not_relay" => (
+                "mesh.notice.path_unsupported",
+                vec![json!(member_name(&members, unreachable)), json!(target)],
+            ),
+            "hop_limit" => ("mesh.notice.path_hop_limit", vec![json!(target)]),
+            // Probes through it got no echo although the topology still reaches it.
+            "no_echo" => (
+                "mesh.notice.path_no_echo",
+                vec![json!(member_name(&members, unreachable)), json!(target)],
+            ),
+            _ => (
+                "mesh.notice.path_fallback",
+                vec![json!(member_name(&members, unreachable)), json!(target)],
+            ),
+        };
         push(
-            "mesh.notice.path_fallback",
+            id,
             format!("fallback:{}:{unreachable}", text(path, "id")),
-            vec![json!(member_name(&members, unreachable)), json!(target)],
+            values,
             None,
             true,
         );
@@ -884,6 +903,60 @@ mod tests {
         let notices = notices(&status);
         assert_eq!(notices[0]["id"], "mesh.notice.native_keys_pending");
         assert_eq!(notices[0]["values"], json!([]));
+    }
+
+    #[test]
+    fn a_path_that_fell_back_names_why() {
+        // mesh-status.md: `pending` (capability check) is no notice; `reason` picks the sentence.
+        let path = |state: &str, reason: Option<&str>| {
+            json!({
+                "id": "subnet:192.168.30.0/24",
+                "target": { "subnet": "192.168.30.0/24" },
+                "via": ["m-1"],
+                "state": state,
+                "reason": reason,
+                "unreachable": "m-4",
+            })
+        };
+        let status = |path: Value| {
+            json!({
+                "members": [{ "id": "m-4", "name": "tyo-border" }],
+                "paths": [path],
+            })
+        };
+        assert_eq!(notices(&status(path("pending", None))), json!([]));
+        let unsupported = notices(&status(path("fallback", Some("unsupported"))));
+        assert_eq!(unsupported[0]["id"], "mesh.notice.path_unsupported");
+        assert_eq!(
+            unsupported[0]["values"],
+            json!(["tyo-border", "192.168.30.0/24"])
+        );
+        let not_relay = notices(&status(path("fallback", Some("not_relay"))));
+        assert_eq!(not_relay[0]["id"], "mesh.notice.path_unsupported");
+        let hops = notices(&status(path("fallback", Some("hop_limit"))));
+        assert_eq!(hops[0]["id"], "mesh.notice.path_hop_limit");
+        assert_eq!(hops[0]["values"], json!(["192.168.30.0/24"]));
+        let silent = notices(&status(path("fallback", Some("no_echo"))));
+        assert_eq!(silent[0]["id"], "mesh.notice.path_no_echo");
+        assert_eq!(
+            silent[0]["values"],
+            json!(["tyo-border", "192.168.30.0/24"])
+        );
+        // An unknown reason reads as unreachable.
+        let unknown = notices(&status(path("fallback", Some("later_reason"))));
+        assert_eq!(unknown[0]["id"], "mesh.notice.path_fallback");
+        let gone = notices(&status(path("fallback", Some("unreachable"))));
+        assert_eq!(gone[0]["id"], "mesh.notice.path_fallback");
+        // An engine before `reason` still says unreachable.
+        let older = notices(&status(path("fallback", None)));
+        assert_eq!(older[0]["id"], "mesh.notice.path_fallback");
+        let row = &paths(&status(path("fallback", Some("not_relay"))))["custom"][0];
+        assert_eq!(row["reason"], "not_relay");
+        assert_eq!(row["unreachable"], "tyo-border");
+        assert_eq!(
+            paths(&status(path("pending", None)))["custom"][0]["state"],
+            "pending"
+        );
     }
 
     #[test]

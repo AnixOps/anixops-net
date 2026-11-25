@@ -21897,6 +21897,118 @@
         }
       }
     },
+    "自定义路径已回落：%@ 不支持按此路径转发。%@ 使用默认路径。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom path fell back: %@ does not forward on this path. %@ uses the default path."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自訂路徑已回落：%@ 不支援依此路徑轉送。%@ 使用預設路徑。"
+          }
+        }
+      }
+    },
+    "自定义路径已回落：跳数超出上限。%@ 使用默认路径。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom path fell back: hop limit exceeded. %@ uses the default path."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自訂路徑已回落：跳數超出上限。%@ 使用預設路徑。"
+          }
+        }
+      }
+    },
+    "%@ 不支持按此路径转发": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ does not forward on this path"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 不支援依此路徑轉送"
+          }
+        }
+      }
+    },
+    "自定义路径已回落：%@ 探测无响应。%@ 使用默认路径。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom path fell back: probes through %@ got no response. %@ uses the default path."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自訂路徑已回落：%@ 探測無回應。%@ 使用預設路徑。"
+          }
+        }
+      }
+    },
+    "%@ 探测无响应": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No probe response from %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 探測無回應"
+          }
+        }
+      }
+    },
+    "跳数超出上限": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hop limit exceeded"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "跳數超出上限"
+          }
+        }
+      }
+    },
+    "待确认": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pending"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "待確認"
+          }
+        }
+      }
+    },
     "%@至%@已改经%@：直连链路丢包 %lld%%。": {
       "localizations": {
         "en": {

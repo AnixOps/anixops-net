@@ -453,6 +453,12 @@ enum MeshText {
         switch id {
         case "mesh.notice.path_fallback":
             return String(localized: "自定义路径已回落：\(text(0)) 不可达。\(text(1)) 使用默认路径。")
+        case "mesh.notice.path_unsupported":
+            return String(localized: "自定义路径已回落：\(text(0)) 不支持按此路径转发。\(text(1)) 使用默认路径。")
+        case "mesh.notice.path_no_echo":
+            return String(localized: "自定义路径已回落：\(text(0)) 探测无响应。\(text(1)) 使用默认路径。")
+        case "mesh.notice.path_hop_limit":
+            return String(localized: "自定义路径已回落：跳数超出上限。\(text(0)) 使用默认路径。")
         case "mesh.notice.detour_loss":
             let loss = number(3) ?? 0
             return String(localized: "\(text(0))至\(text(1))已改经\(text(2))：直连链路丢包 \(loss)%。")

@@ -22,6 +22,8 @@ import {
   meshApi,
   noticeDetail,
   noticeText,
+  pathFallbackText,
+  pathStateText,
   regionName,
   roleLabel,
   routingPaths,
@@ -538,8 +540,9 @@ function Paths({ view, network, busy, perform }: {
             const parts: string[] = [];
             if ((path.via ?? []).length > 0) parts.push(t("经 {name}", { name: (path.via ?? []).join(" → ") }));
             if (path.advertiser) parts.push(t("由 {name} 通告", { name: path.advertiser }));
-            if (path.state === "fallback" && path.unreachable) parts.push(t("{name} 不可达", { name: path.unreachable }));
-            const state = path.state === "fallback" ? t("已回落") : path.state === "first_hop_only" ? t("仅首跳生效") : t("生效");
+            const fallback = pathFallbackText(path);
+            if (fallback) parts.push(fallback);
+            const state = pathStateText(path.state);
             return (
               <Row key={path.id} label={path.targetLabel} hint={parts.join(" · ")} value={state}>
                 <button className="icon-button" aria-label={t("移除路径 {name}", { name: path.targetLabel })} disabled={busy} onClick={() => remove(path.id)}><X size={14} /></button>

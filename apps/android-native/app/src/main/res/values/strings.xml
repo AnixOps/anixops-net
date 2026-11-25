@@ -923,7 +923,11 @@
     <string name="mesh_loss">%1$s%% loss</string>
     <string name="mesh_advertised_by">Advertised by %1$s</string>
     <string name="mesh_member_unreachable">%1$s unreachable</string>
+    <string name="mesh_member_no_forward">%1$s does not forward on this path</string>
+    <string name="mesh_hop_limit">Hop limit exceeded</string>
+    <string name="mesh_member_no_echo">No probe response from %1$s</string>
     <string name="mesh_path_active">Active</string>
+    <string name="mesh_path_pending">Pending</string>
     <string name="mesh_fallen_back">Fallen back</string>
     <string name="mesh_first_hop_only">First hop only</string>
     <string name="mesh_latency_ms">%1$s ms</string>
@@ -973,6 +977,9 @@
     <string name="mesh_failure_not_allowed">Operation not completed: the network does not allow it.</string>
     <string name="mesh_failure_other">Operation not completed.</string>
     <string name="mesh_notice_path_fallback">Custom path fell back: %1$s is unreachable. %2$s uses the default path.</string>
+    <string name="mesh_notice_path_unsupported">Custom path fell back: %1$s does not forward on this path. %2$s uses the default path.</string>
+    <string name="mesh_notice_path_hop_limit">Custom path fell back: hop limit exceeded. %1$s uses the default path.</string>
+    <string name="mesh_notice_path_no_echo">Custom path fell back: probes through %1$s got no response. %2$s uses the default path.</string>
     <string name="mesh_notice_detour_loss">%1$s to %2$s now routed via %3$s: %4$s%% packet loss on the direct link.</string>
     <string name="mesh_notice_detour_latency">%1$s to %2$s now routed via %3$s: direct link latency %4$s ms.</string>
     <string name="mesh_notice_detour_slow">%1$s to %2$s now routed via %3$s: direct link latency too high.</string>

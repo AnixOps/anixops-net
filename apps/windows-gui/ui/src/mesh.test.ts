@@ -12,6 +12,8 @@ import {
   emptyDraft,
   joinedState,
   noticeDetail,
+  pathFallbackText,
+  pathStateText,
   noticeText,
   parsePeer,
   refusalOf,
@@ -87,6 +89,19 @@ describe("words", () => {
     const port = { id: "mesh.notice.failure", key: "failure:port_in_use", values: ["11010"] };
     expect(noticeText(port)).toBe("无法启动组网：监听端口已被占用。");
     expect(noticeDetail(port)).toBe("11010");
+    const noForward = { id: "mesh.notice.path_unsupported", key: "fallback:p:m", values: ["tyo-border", "192.168.30.0/24"] };
+    expect(noticeText(noForward)).toBe("自定义路径已回落：tyo-border 不支持按此路径转发。192.168.30.0/24 使用默认路径。");
+    expect(noticeText({ id: "mesh.notice.path_hop_limit", key: "fallback:p:m", values: ["192.168.30.0/24"] })).toBe("自定义路径已回落：跳数超出上限。192.168.30.0/24 使用默认路径。");
+    const path = { id: "p", targetKind: "subnet", target: "192.168.30.0/24", targetLabel: "192.168.30.0/24", state: "fallback", unreachable: "tyo-border" };
+    expect(pathFallbackText({ ...path, reason: "not_relay" })).toBe("tyo-border 不支持按此路径转发");
+    expect(pathFallbackText({ ...path, reason: "hop_limit" })).toBe("跳数超出上限");
+    expect(pathFallbackText({ ...path, reason: "unreachable" })).toBe("tyo-border 不可达");
+    expect(pathFallbackText({ ...path, state: "pending" })).toBeNull();
+    expect(pathFallbackText({ ...path, reason: "no_echo" })).toBe("tyo-border 探测无响应");
+    expect(pathFallbackText({ ...path, reason: "later_reason" })).toBe("tyo-border 不可达");
+    expect(pathFallbackText({ ...path, state: "first_hop_only", reason: "not_relay" })).toBe("tyo-border 不支持按此路径转发");
+    expect(pathFallbackText({ ...path, state: "first_hop_only" })).toBeNull();
+    expect(pathStateText("pending")).toBe("待确认");
     const refused = { id: "mesh.notice.peer_not_native", key: "failure:peer_not_native:node-7f3a", values: ["lon-host"] };
     expect(noticeText(refused)).toBe("已拒绝对端连接：对端非本系统节点。");
     expect(noticeDetail(refused)).toBe("lon-host");

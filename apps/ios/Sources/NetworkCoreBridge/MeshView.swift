@@ -537,6 +537,7 @@ public enum MeshView {
                     "advertiser": advertiser,
                     "via": names(list(path, "via")),
                     "state": optText(path, "state") ?? "active",
+                    "reason": orNull(optText(path, "reason")),
                     "unreachable": orNull(optText(path, "unreachable").map { memberName(members, $0) }),
                 ]
             }
@@ -599,13 +600,20 @@ public enum MeshView {
             let unreachable = text(path, "unreachable")
             let target = (path as? [String: Any])?["target"]
             let label = optText(target, "subnet") ?? optText(target, "peer").map { memberName(members, $0) } ?? ""
-            push(
-                "mesh.notice.path_fallback",
-                "fallback:\(text(path, "id")):\(unreachable)",
-                [memberName(members, unreachable), label],
-                nil,
-                true
-            )
+            // `reason`: a node that does not forward on this path is not an unreachable one.
+            let reason = text(path, "reason")
+            let (id, values): (String, [Any])
+            switch reason {
+            case "unsupported", "not_relay":
+                (id, values) = ("mesh.notice.path_unsupported", [memberName(members, unreachable), label])
+            case "hop_limit":
+                (id, values) = ("mesh.notice.path_hop_limit", [label])
+            case "no_echo":
+                (id, values) = ("mesh.notice.path_no_echo", [memberName(members, unreachable), label])
+            default:
+                (id, values) = ("mesh.notice.path_fallback", [memberName(members, unreachable), label])
+            }
+            push(id, "fallback:\(text(path, "id")):\(unreachable)", values, nil, true)
         }
         for link in list(status, "links") where text(link, "state") == "detour" {
             let reason = (link as? [String: Any])?["reason"]

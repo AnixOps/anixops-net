@@ -884,7 +884,11 @@
     <string name="mesh_loss">遺失封包 %1$s%%</string>
     <string name="mesh_advertised_by">由 %1$s 通告</string>
     <string name="mesh_member_unreachable">%1$s 無法連線</string>
+    <string name="mesh_member_no_forward">%1$s 不支援依此路徑轉送</string>
+    <string name="mesh_hop_limit">跳數超出上限</string>
+    <string name="mesh_member_no_echo">%1$s 探測無回應</string>
     <string name="mesh_path_active">生效</string>
+    <string name="mesh_path_pending">待確認</string>
     <string name="mesh_fallen_back">已回落</string>
     <string name="mesh_first_hop_only">僅首跳生效</string>
     <string name="mesh_latency_ms">%1$s ms</string>
@@ -934,6 +938,9 @@
     <string name="mesh_failure_not_allowed">操作未完成：網路不允許此操作。</string>
     <string name="mesh_failure_other">操作未完成。</string>
     <string name="mesh_notice_path_fallback">自訂路徑已回落：%1$s 無法連線。%2$s 使用預設路徑。</string>
+    <string name="mesh_notice_path_unsupported">自訂路徑已回落：%1$s 不支援依此路徑轉送。%2$s 使用預設路徑。</string>
+    <string name="mesh_notice_path_hop_limit">自訂路徑已回落：跳數超出上限。%1$s 使用預設路徑。</string>
+    <string name="mesh_notice_path_no_echo">自訂路徑已回落：%1$s 探測無回應。%2$s 使用預設路徑。</string>
     <string name="mesh_notice_detour_loss">%1$s至%2$s已改經%3$s：直連鏈路遺失封包 %4$s%%。</string>
     <string name="mesh_notice_detour_latency">%1$s至%2$s已改經%3$s：直連鏈路延遲 %4$s ms。</string>
     <string name="mesh_notice_detour_slow">%1$s至%2$s已改經%3$s：直連鏈路延遲過高。</string>

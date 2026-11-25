@@ -173,8 +173,10 @@ data class MeshCustomPath(
     val targetLabel: String = "",
     val advertiser: String? = null,
     val via: List<String> = emptyList(),
-    /** `active`, `fallback` or `first_hop_only`. */
+    /** `active`, `pending` (the path's nodes are being asked whether they forward on it), `fallback` or `first_hop_only`. */
     val state: String = "active",
+    /** Why a path fell back: `unreachable`, `unsupported`, `not_relay`, `hop_limit` or `no_echo` (mesh-status.md); on `fallback` and `first_hop_only`. */
+    val reason: String? = null,
     val unreachable: String? = null,
 )
 
