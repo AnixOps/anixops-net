@@ -38,6 +38,8 @@ extension MacSection {
             return String(localized: "概览")
         case .proxies:
             return String(localized: "代理")
+        case .mesh:
+            return String(localized: "组网")
         case .rules:
             return String(localized: "规则")
         case .extensions:
