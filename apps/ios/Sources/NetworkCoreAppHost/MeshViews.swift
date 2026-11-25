@@ -240,6 +240,9 @@ struct MeshPage: View {
     @State private var groupOpen: [String: Bool] = [:]
     /// The member whose detail is shown.
     @State private var detail: String?
+    @State private var adding = false
+    /// The network whose removal waits for confirmation (T1), by name.
+    @State private var removing: String?
 
     var body: some View {
         List {
@@ -280,6 +283,28 @@ struct MeshPage: View {
                     memberMenu
                 }
             }
+            ToolbarItem(placement: .primaryAction) {
+                moreMenu
+            }
+        }
+        .sheet(isPresented: $adding) {
+            MeshNetworkSheet(taken: Set(model.saved.map(\.name))) { network, secret in
+                await model.addNetwork(network, secret: secret, tunnel: tunnel)
+            }
+        }
+        .confirmationDialog(
+            "移除网络“\(removing ?? "")”？",
+            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("移除网络", role: .destructive) {
+                removing = nil
+                Task {
+                    await model.removeNetwork(tunnel: tunnel)
+                }
+            }
+        } message: {
+            Text("本机退出该网络并删除其密钥。")
         }
         .navigationDestination(item: $detail) { id in
             MeshMemberDetail(id: id, tunnel: tunnel, model: model)
@@ -287,6 +312,28 @@ struct MeshPage: View {
         .task(id: tunnel.connection) {
             await model.poll(tunnel)
         }
+    }
+
+    /// 更多: 添加网络, then 移除网络 after a divider (docs/mesh-ui.md, 入口与导航).
+    private var moreMenu: some View {
+        Menu {
+            Button {
+                adding = true
+            } label: {
+                Label("添加网络", systemImage: "plus")
+            }
+            if let network = model.network {
+                Divider()
+                Button(role: .destructive) {
+                    removing = network.string("name") ?? network.string("id")
+                } label: {
+                    Label("移除网络", systemImage: "trash")
+                }
+            }
+        } label: {
+            Label("更多", systemImage: "ellipsis.circle")
+        }
+        .accessibilityIdentifier("mesh-more")
     }
 
     // MARK: Status
@@ -342,8 +389,14 @@ struct MeshPage: View {
             }
         } else {
             Section {
-                BrandEmptyState(systemImage: "point.3.connected.trianglepath.dotted", title: "暂无网络", message: "加入网络后显示成员与子网。")
-                    .listRowBackground(brand.surface)
+                BrandEmptyState(systemImage: "point.3.connected.trianglepath.dotted", title: "暂无网络", message: "加入网络后显示成员与子网。") {
+                    Button("添加网络") {
+                        adding = true
+                    }
+                    .buttonStyle(BrandButtonStyle())
+                    .accessibilityIdentifier("mesh-add")
+                }
+                .listRowBackground(brand.surface)
             }
         }
     }

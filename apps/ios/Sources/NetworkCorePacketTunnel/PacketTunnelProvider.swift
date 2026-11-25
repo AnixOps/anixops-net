@@ -65,6 +65,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var routingState = RoutingState(status: .unused)
     /// The rule sets the last routing section built left out (`NodeLibrary.RoutingBuild.droppedRuleSets`).
     private var droppedRuleSets: [String] = []
+    /// The joined mesh networks' outbounds with their secrets, read at start (`readMeshOutbounds(_:)`). The engine
+    /// keeps them across rule swaps, and the app joins, leaves and saves networks in the running engine directly.
+    private var meshOutbounds: [String: [String: JSONValue]] = [:]
     /// Hourly traffic by host and policy for the app's statistics page.
     private let trafficStats = TrafficStatsRecorder()
     /// Network changes in, script notifications out.
@@ -386,6 +389,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let nodeLibrary = Result<String?, Error> {
             try startSecrets?.nodeLibrary ?? NodeSecretStore.value(account: NodeLibrary.keychainAccount)
         }
+        meshOutbounds = readMeshOutbounds(
+            tunnelProtocol.providerConfiguration?[TunnelProfileKeys.meshNetworks] as? Data
+        )
         let base = ReloadBase(
             config: config, mode: mode, dns: dns, redirects: redirects, blockQuic: blockQuic,
             anxLicense: anxLicenseFields(library: nodeLibrary), nodeLibrary: nodeLibrary
@@ -903,7 +909,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         guard config.routing != nil else {
             routingState = RoutingState(status: .unused)
             let alone = config.selectedNodeAlone()
-            let session = try makeRuntimeSession(
+            let session = try makeMeshedSession(
                 alone, mitmPlugins: mitmPlugins, mitmScripts: mitmScripts, resourceAssets: resourceAssets
             )
             return (session, alone)
@@ -912,7 +918,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             // Measured without decryption first: the rules go before the plugins, which `makeRuntimeSession`
             // leaves out when only they do not fit.
             _ = try EngineBudget.encoded(config.withoutMitm())
-            let session = try makeRuntimeSession(
+            let session = try makeMeshedSession(
                 config, mitmPlugins: mitmPlugins, mitmScripts: mitmScripts, resourceAssets: resourceAssets
             )
             routingState = RoutingState(status: .on, droppedRuleSets: droppedRuleSets)
@@ -928,10 +934,56 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             routingState = RoutingState(status: .off, reason: .refused)
         }
         let alone = config.selectedNodeAlone()
-        let session = try makeRuntimeSession(
+        let session = try makeMeshedSession(
             alone, mitmPlugins: mitmPlugins, mitmScripts: mitmScripts, resourceAssets: resourceAssets
         )
         return (session, alone)
+    }
+
+    /// The joined mesh networks the profile names (`TunnelProfileKeys.meshNetworks`) as `routing.outbounds` entries,
+    /// each with its secret from the start secrets or the shared Keychain. A network without a readable secret is
+    /// left out, and the diagnostics say how many.
+    private func readMeshOutbounds(_ value: Data?) -> [String: [String: JSONValue]] {
+        let networks = MeshNetworkLibrary.fromProfileValue(value)
+        guard !networks.isEmpty else {
+            return [:]
+        }
+        let handed = startSecrets?.meshSecrets
+        let built = MeshNetworkLibrary.outbounds(networks) { name in
+            handed?[name] ?? MeshNetworkLibrary.secret(name)
+        }
+        if !built.missing.isEmpty {
+            events.record("mesh: \(built.missing.count) networks without a secret left out")
+        }
+        return built.outbounds
+    }
+
+    /// Creates the runtime for `config` with the joined mesh networks (`EmbeddedRuntimeConfig.withMesh`), or without
+    /// them when the engine refuses them: mesh is an extra, as HTTPS decryption is. The running config the caller
+    /// keeps is `config` alone, since the app changes mesh networks in the engine directly.
+    private func makeMeshedSession(
+        _ config: EmbeddedRuntimeConfig,
+        mitmPlugins: [String],
+        mitmScripts: [String: String],
+        resourceAssets: [String: String]
+    ) throws -> EmbeddedRuntimeSession {
+        let meshed = config.withMesh(meshOutbounds)
+        if meshed != config {
+            do {
+                let session = try makeRuntimeSession(
+                    meshed, mitmPlugins: mitmPlugins, mitmScripts: mitmScripts, resourceAssets: resourceAssets
+                )
+                events.record("mesh on, \(meshOutbounds.count) networks")
+                return session
+            } catch let failure as EmbeddedRuntimeSession.Failure {
+                events.record("mesh off: runtime refused it (code \(failure.code))")
+            }
+        } else if !meshOutbounds.isEmpty {
+            events.record("mesh off: whole-device tunnel")
+        }
+        return try makeRuntimeSession(
+            config, mitmPlugins: mitmPlugins, mitmScripts: mitmScripts, resourceAssets: resourceAssets
+        )
     }
 
     /// Creates the runtime, decrypting HTTPS for the enabled plugins when the device root is in the Keychain and

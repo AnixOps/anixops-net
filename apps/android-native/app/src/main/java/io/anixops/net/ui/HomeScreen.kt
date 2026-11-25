@@ -72,13 +72,22 @@ data class HomeActions(
 
 /** 首页: the connection switch on the brand hero card, live traffic, what the connection uses, open connections. */
 @Composable
-fun HomeScreen(state: UiState, actions: HomeActions, modifier: Modifier = Modifier) {
+fun HomeScreen(
+    state: UiState,
+    actions: HomeActions,
+    modifier: Modifier = Modifier,
+    mesh: MeshState = MeshState(),
+    meshActions: MeshActions = MeshActions(),
+    openMesh: () -> Unit = {},
+) {
     val snapshot = state.snapshot
     val overview = state.overview
     Page(stringResource(R.string.nav_home), modifier) {
         ConnectionCard(overview, state.busy, state.nodeCount, actions)
         val error = state.problem()
         if (error != null) ErrorCard(error)
+        // 组网, only while the engine has the mesh module (docs/mesh-ui.md, 入口与导航).
+        mesh.page?.entry?.takeIf { it.available }?.let { entry -> MeshEntrySection(entry, mesh.busy, meshActions, openMesh) }
         TrafficSection(overview?.traffic)
         Section(title = null) {
             InfoRow(

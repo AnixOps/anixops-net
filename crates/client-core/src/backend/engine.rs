@@ -349,11 +349,12 @@ fn linked(profile: &Value, other: &OtherSource) -> Option<Value> {
 }
 
 /// Kernel control commands a window may send (`runtime_control`): reading traffic, connections and rule sets,
-/// closing connections, refreshing remote rule sets, packet capture and the per-domain decryption results. Mode
-/// and group changes go through the saved profile instead. What only the backend sends (the capture session
-/// storage and key, saved sessions, `reload_rules`) is not here: it goes through [`Engine::request`]. The
+/// closing connections, refreshing remote rule sets, packet capture, the per-domain decryption results and the mesh
+/// status, join and leave. Mode and group changes go through the saved profile instead. What only the backend
+/// sends (the capture session storage and key, saved sessions, `reload_rules`, saving a mesh network) is not here:
+/// it goes through [`Engine::request`]. The
 /// Windows/Linux Tauri app checks its window's requests with the same list ([`activity_request`]).
-pub const ACTIVITY_COMMANDS: [&str; 19] = [
+pub const ACTIVITY_COMMANDS: [&str; 24] = [
     "traffic",
     "connections",
     "close_connection",
@@ -375,6 +376,14 @@ pub const ACTIVITY_COMMANDS: [&str; 19] = [
     // Per-domain decryption results for the decryption list; they only read or clear counters.
     "mitm_hosts",
     "clear_mitm_hosts",
+    // 组网 (docs/architecture/mesh-client.md): the status snapshot, joining and leaving a saved network, the
+    // internal domain names and a subnet's local or mesh route. Saving and removing a network go through the backend,
+    // which holds the secret.
+    "mesh_status",
+    "mesh_join",
+    "mesh_leave",
+    "mesh_set_dns",
+    "mesh_set_subnet_route",
 ];
 
 /// The request bytes for an activity page command, or why it is refused.
@@ -851,6 +860,13 @@ mod tests {
                 .is_ok()
         );
         assert!(activity_request(&serde_json::json!({"cmd": "select", "group": "a"})).is_err());
+        assert!(activity_request(&serde_json::json!({"cmd": "mesh_status"})).is_ok());
+        assert!(
+            activity_request(&serde_json::json!({"cmd": "mesh_join", "network": "office"})).is_ok()
+        );
+        // The secret is the backend's: a window never saves a network itself.
+        assert!(activity_request(&serde_json::json!({"cmd": "mesh_save_network"})).is_err());
+        assert!(activity_request(&serde_json::json!({"cmd": "mesh_remove_network"})).is_err());
         assert!(Engine::default()
             .control(&serde_json::json!({"cmd": "traffic"}))
             .is_err());

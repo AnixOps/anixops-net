@@ -11,6 +11,7 @@ import io.anixops.net.ui.AnixApp
 import io.anixops.net.ui.AppViewModel
 import io.anixops.net.ui.ExtensionsViewModel
 import io.anixops.net.ui.ProxiesViewModel
+import io.anixops.net.ui.MeshViewModel
 import io.anixops.net.ui.RequestsViewModel
 import io.anixops.net.ui.RulesViewModel
 import io.anixops.net.ui.SettingsViewModel
@@ -39,6 +40,7 @@ class MainActivity : ComponentActivity() {
                     activity = viewModel { ActivityViewModel(app.core) },
                     extensions = viewModel { ExtensionsViewModel(app.core, preferences) },
                     requests = viewModel { RequestsViewModel(app.core) },
+                    mesh = viewModel { MeshViewModel(app.core) },
                     version = BuildConfig.VERSION_NAME,
                     links = links.receiveAsFlow(),
                     preferences = preferences,
