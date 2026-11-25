@@ -224,7 +224,8 @@ pub fn decode_body(request: &DecodeRequest) -> Result<Value, String> {
     }))
 }
 
-/// Writes `data` as `name` in `dir`, adding " (2)", " (3)"... before the extension instead of replacing a file.
+/// Writes `data` as `name` in `dir`, adding " (2)", " (3)"... before the extension instead of replacing a file. On
+/// Unix the file is created 0600 (only this user can read it), whatever the process umask.
 pub fn save_new_file(dir: &Path, name: &str, data: &[u8]) -> Result<PathBuf, String> {
     fs::create_dir_all(dir).map_err(|error| format!("{}: {error}", dir.display()))?;
     let name = safe_file_name(name);
@@ -238,11 +239,15 @@ pub fn save_new_file(dir: &Path, name: &str, data: &[u8]) -> Result<PathBuf, Str
         } else {
             dir.join(format!("{stem} ({attempt}){extension}"))
         };
-        match fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&candidate)
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        // Captured bodies and exports can hold credentials: readable by this user only, whatever the umask.
+        #[cfg(unix)]
         {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        match options.open(&candidate) {
             Ok(mut file) => {
                 file.write_all(data)
                     .map_err(|error| format!("{}: {error}", candidate.display()))?;
@@ -332,18 +337,115 @@ pub fn save_body(file: &BodyFile, dir: &Path) -> Result<PathBuf, String> {
     save_new_file(dir, &body_file_name(&file.name, &file.content_type), &data)
 }
 
-/// Where bodies handed to other apps are written: a folder of the system's temporary directory, emptied of files
-/// older than a day each time one is added.
-fn open_dir() -> PathBuf {
-    std::env::temp_dir().join("anixops-net-bodies")
+/// How long a body handed to another app stays in [`open_dir`]: older files are removed each time one is added.
+pub const OPENED_BODY_RETENTION: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
+
+/// The folder name under the per-user base of [`open_dir`].
+const OPEN_DIR_NAME: &str = "anixops-net-bodies";
+
+/// Where bodies handed to other apps are written: a folder only this user can open.
+///
+/// - Linux and other Unix: `$XDG_RUNTIME_DIR/anixops-net-bodies` when the runtime directory is this user's and
+///   private (systemd makes it 0700 on a tmpfs, so nothing outlives the session), otherwise
+///   `<temp>/anixops-net-bodies-<uid>`. Either way the folder is made 0700, and an existing one must be a real
+///   directory (not a link) owned by this user ([`ensure_private_dir`]); another account that created it first
+///   makes opening fail instead of receiving the bodies.
+/// - Windows: `%TEMP%\anixops-net-bodies`, inside the user's profile, which other standard accounts cannot read.
+fn open_dir() -> Result<PathBuf, String> {
+    #[cfg(unix)]
+    {
+        let runtime = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .filter(|dir| dir.is_absolute() && unix_private::is_private_dir(dir));
+        let dir = match runtime {
+            Some(runtime) => runtime.join(OPEN_DIR_NAME),
+            None => std::env::temp_dir().join(format!("{OPEN_DIR_NAME}-{}", unix_private::uid())),
+        };
+        ensure_private_dir(&dir)?;
+        remove_legacy_open_dir();
+        Ok(dir)
+    }
+    #[cfg(not(unix))]
+    {
+        let dir = std::env::temp_dir().join(OPEN_DIR_NAME);
+        fs::create_dir_all(&dir).map_err(|error| format!("{}: {error}", dir.display()))?;
+        Ok(dir)
+    }
 }
 
-/// Removes files older than a day from `dir`; failures are left for the next time.
+/// Makes `dir` (its parent must exist) a directory only this user can open: created 0700, or, when it exists,
+/// checked to be a directory that is not a link and is owned by this user, and tightened to 0700. Anything else is
+/// refused, so a folder another account prepared never receives a body.
+#[cfg(unix)]
+pub fn ensure_private_dir(dir: &Path) -> Result<(), String> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
+
+    let fail = |what: &str| format!("{} {what}; nothing was written", dir.display());
+    match fs::DirBuilder::new().mode(0o700).create(dir) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(format!("{}: {error}", dir.display())),
+    }
+    let meta = fs::symlink_metadata(dir).map_err(|error| format!("{}: {error}", dir.display()))?;
+    if !meta.file_type().is_dir() {
+        return Err(fail("is not a folder"));
+    }
+    if meta.uid() != unix_private::uid() {
+        return Err(fail("belongs to another account"));
+    }
+    if meta.mode() & 0o777 != 0o700 {
+        fs::set_permissions(dir, fs::Permissions::from_mode(0o700))
+            .map_err(|error| format!("{}: {error}", dir.display()))?;
+        let mode = fs::symlink_metadata(dir)
+            .map_err(|error| format!("{}: {error}", dir.display()))?
+            .mode();
+        if mode & 0o077 != 0 {
+            return Err(fail("cannot be made private"));
+        }
+    }
+    Ok(())
+}
+
+/// Earlier versions wrote opened bodies to `<temp>/anixops-net-bodies` with the umask's permissions (often 0755 and
+/// 0644). That folder is emptied and removed when it is this user's; a link or another account's folder is left
+/// alone.
+#[cfg(unix)]
+fn remove_legacy_open_dir() {
+    use std::os::unix::fs::MetadataExt;
+
+    let legacy = std::env::temp_dir().join(OPEN_DIR_NAME);
+    let Ok(meta) = fs::symlink_metadata(&legacy) else {
+        return;
+    };
+    if meta.file_type().is_dir() && meta.uid() == unix_private::uid() {
+        let _ = fs::remove_dir_all(&legacy);
+    }
+}
+
+#[cfg(unix)]
+mod unix_private {
+    use std::os::unix::fs::MetadataExt;
+    use std::path::Path;
+
+    /// This process's effective user id.
+    pub fn uid() -> u32 {
+        // SAFETY: geteuid takes no arguments, cannot fail and touches no memory of ours.
+        unsafe { libc::geteuid() }
+    }
+
+    /// Whether `dir` is a directory (not a link) owned by this user that no other account can open.
+    pub fn is_private_dir(dir: &Path) -> bool {
+        std::fs::symlink_metadata(dir).is_ok_and(|meta| {
+            meta.file_type().is_dir() && meta.uid() == uid() && meta.mode() & 0o077 == 0
+        })
+    }
+}
+
+/// Removes files older than [`OPENED_BODY_RETENTION`] from `dir`; failures are left for the next time.
 fn prune_old_files(dir: &Path) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
-    let day = std::time::Duration::from_secs(24 * 60 * 60);
     for entry in entries.flatten() {
         let old = entry
             .metadata()
@@ -351,11 +453,18 @@ fn prune_old_files(dir: &Path) {
             .filter(fs::Metadata::is_file)
             .and_then(|meta| meta.modified().ok())
             .and_then(|modified| modified.elapsed().ok())
-            .is_some_and(|age| age > day);
+            .is_some_and(|age| age > OPENED_BODY_RETENTION);
         if old {
             let _ = fs::remove_file(entry.path());
         }
     }
+}
+
+/// Writes the body that [`open_body`] hands on into `dir`, after removing files past the retention.
+fn write_body_for_opening(file: &BodyFile, dir: &Path) -> Result<PathBuf, String> {
+    let data = decode_base64(&file.data_base64)?;
+    prune_old_files(dir);
+    save_new_file(dir, &body_file_name(&file.name, &file.content_type), &data)
 }
 
 /// Writes the body to a temporary file and opens it with the app the system uses for its type. Refuses types
@@ -367,10 +476,8 @@ pub fn open_body(file: &BodyFile) -> Result<PathBuf, String> {
             file.content_type
         ));
     }
-    let data = decode_base64(&file.data_base64)?;
-    let dir = open_dir();
-    prune_old_files(&dir);
-    let path = save_new_file(&dir, &body_file_name(&file.name, &file.content_type), &data)?;
+    let dir = open_dir()?;
+    let path = write_body_for_opening(file, &dir)?;
     open_with_system(&path)?;
     Ok(path)
 }
@@ -474,6 +581,152 @@ mod tests {
         assert_eq!(second.file_name().unwrap(), "response-body (2).png");
         assert_eq!(fs::read(&first).unwrap(), [0x89, b'P', b'N', b'G']);
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    fn mode(path: &Path) -> u32 {
+        use std::os::unix::fs::MetadataExt;
+        fs::symlink_metadata(path).unwrap().mode() & 0o777
+    }
+
+    #[cfg(unix)]
+    fn png_body() -> BodyFile {
+        BodyFile {
+            data_base64: encode_base64(b"synthetic secret body"),
+            content_type: "image/png".to_string(),
+            name: "response-body".to_string(),
+        }
+    }
+
+    /// Audit 2026-11-25 NET-01: with the common 022 umask the folder must still be 0700 and the body 0600 the moment
+    /// they exist.
+    #[cfg(unix)]
+    #[test]
+    fn opened_bodies_are_private_whatever_the_umask() {
+        let base = std::env::temp_dir().join(format!("body-open-private-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        // SAFETY: umask only swaps the process mask; 022 is the usual default, so other tests see no change.
+        let previous = unsafe { libc::umask(0o022) };
+        let dir = base.join("bodies");
+        ensure_private_dir(&dir).unwrap();
+        let path = write_body_for_opening(&png_body(), &dir).unwrap();
+        unsafe { libc::umask(previous) };
+        assert_eq!(mode(&dir), 0o700);
+        assert_eq!(mode(&path), 0o600);
+        assert_eq!(fs::read(&path).unwrap(), b"synthetic secret body");
+        fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn saved_files_are_private() {
+        let dir = std::env::temp_dir().join(format!("body-save-private-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let previous = unsafe { libc::umask(0o022) };
+        let path = save_new_file(&dir, "a.har", b"{}").unwrap();
+        unsafe { libc::umask(previous) };
+        assert_eq!(mode(&path), 0o600);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_existing_open_folder_is_tightened() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = std::env::temp_dir().join(format!("body-open-tighten-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        let dir = base.join("bodies");
+        fs::create_dir_all(&dir).unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o755)).unwrap();
+        ensure_private_dir(&dir).unwrap();
+        assert_eq!(mode(&dir), 0o700);
+        fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_open_folder_that_is_a_link_or_a_file_is_refused() {
+        let base = std::env::temp_dir().join(format!("body-open-link-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        let target = base.join("elsewhere");
+        fs::create_dir_all(&target).unwrap();
+        let link = base.join("bodies");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        let error = ensure_private_dir(&link).unwrap_err();
+        assert!(error.contains("is not a folder"), "{error}");
+        let file = base.join("plain");
+        fs::write(&file, b"").unwrap();
+        assert!(ensure_private_dir(&file).is_err());
+        fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_open_folder_is_private_and_this_users() {
+        let dir = open_dir().unwrap();
+        assert_eq!(mode(&dir), 0o700);
+        assert!(unix_private::is_private_dir(&dir));
+        assert!(dir
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with(OPEN_DIR_NAME));
+    }
+
+    /// Audit 2026-11-25 NET-01 acceptance with two local accounts: CI (rust-linux) creates a second account and runs
+    /// this with `ANIXOPS_OTHER_USER` set; it reads the files through `sudo -n -u`.
+    #[cfg(unix)]
+    #[test]
+    #[ignore = "needs a second local account and passwordless sudo (CI rust-linux)"]
+    fn another_account_cannot_read_opened_bodies() {
+        use std::process::Command;
+
+        let other = std::env::var("ANIXOPS_OTHER_USER").expect("ANIXOPS_OTHER_USER");
+        let as_other = |args: &[&str]| {
+            Command::new("sudo")
+                .args(["-n", "-u", other.as_str(), "--"])
+                .args(args)
+                .output()
+                .unwrap()
+        };
+        let base = std::env::temp_dir().join(format!("body-two-accounts-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        {
+            use std::os::unix::fs::PermissionsExt;
+            // The base stays traversable, as /tmp is, so only the folder and file modes protect the body.
+            fs::set_permissions(&base, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        // Control: the other account can read an ordinary 0644 file here, so a refusal below is the modes' doing.
+        let control = base.join("control.txt");
+        fs::write(&control, b"public").unwrap();
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&control, fs::Permissions::from_mode(0o644)).unwrap();
+        }
+        let read = as_other(&["cat", control.to_str().unwrap()]);
+        assert!(read.status.success(), "control read failed: {read:?}");
+
+        let previous = unsafe { libc::umask(0o022) };
+        let dir = base.join("bodies");
+        ensure_private_dir(&dir).unwrap();
+        let path = write_body_for_opening(&png_body(), &dir).unwrap();
+        unsafe { libc::umask(previous) };
+        let read = as_other(&["cat", path.to_str().unwrap()]);
+        assert!(!read.status.success(), "another account read the body");
+        assert!(!String::from_utf8_lossy(&read.stdout).contains("synthetic"));
+        let list = as_other(&["ls", dir.to_str().unwrap()]);
+        assert!(!list.status.success(), "another account listed the folder");
+        // And the folder the client really uses.
+        let real = open_dir().unwrap();
+        let list = as_other(&["ls", real.to_str().unwrap()]);
+        assert!(
+            !list.status.success(),
+            "another account listed {}",
+            real.display()
+        );
+        fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]

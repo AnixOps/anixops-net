@@ -324,6 +324,17 @@ jobs:
         shell: bash
         run: cargo test --locked --workspace --all-targets
 
+      # Audit 2026-11-25 NET-01: a body the capture inspector hands to another app must be unreadable by another
+      # local account the moment it is written, under the usual 022 umask. A second account reads it via sudo.
+      - name: Capture bodies are private to the account
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo useradd --no-create-home --shell /usr/sbin/nologin anixops-other
+          umask 022
+          ANIXOPS_OTHER_USER=anixops-other cargo test --locked -p desktop-mitm --lib -- \
+            --ignored --exact capture::tests::another_account_cannot_read_opened_bodies
+
   linux-gui:
     name: Linux GUI build
     runs-on: ubuntu-latest

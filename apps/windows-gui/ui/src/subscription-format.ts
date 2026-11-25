@@ -44,6 +44,7 @@ const errorReasons: Record<string, string> = {
   fetch_timeout: "下载订阅超时",
   fetch_unreachable: "无法访问订阅服务器",
   fetch_failed: "下载订阅失败",
+  payload_too_large: "订阅内容超过 16 MiB 上限",
   invalid_payload: "订阅内容里没有可用的节点",
   runtime_active: "先断开连接再使用这份订阅",
   // The kernel's own parse refusals (`subscription.core.<kind>`, config-core).

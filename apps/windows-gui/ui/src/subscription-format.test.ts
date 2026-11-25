@@ -27,6 +27,7 @@ describe("subscription format", () => {
   it("says what a failed update's code means and keeps the code", () => {
     expect(subscriptionErrorText(undefined)).toBeUndefined();
     expect(subscriptionErrorText("windows.subscription.fetch_timeout")).toBe("下载订阅超时 (windows.subscription.fetch_timeout)");
+    expect(subscriptionErrorText("windows.subscription.payload_too_large")).toBe("订阅内容超过 16 MiB 上限 (windows.subscription.payload_too_large)");
     expect(subscriptionErrorText("windows.subscription.http_status_403")).toBe("订阅服务器拒绝了请求（HTTP 403），订阅可能已过期或链接已失效 (windows.subscription.http_status_403)");
     expect(subscriptionErrorText("windows.subscription.http_status_502")).toBe("订阅服务器返回了错误（HTTP 502） (windows.subscription.http_status_502)");
     expect(subscriptionErrorText("windows.subscription.something_new")).toBe("更新订阅失败 (windows.subscription.something_new)");
