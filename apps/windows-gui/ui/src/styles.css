@@ -807,6 +807,8 @@ html.qr-scanning #root { visibility: hidden; }
 .mesh-state { display: inline-flex; gap: 6px; align-items: center; color: var(--text2); font-size: 12px; }
 .mesh-tag { display: inline-flex; flex: 0 0 auto; align-items: center; height: 18px; padding: 0 6px; color: var(--text2); font-size: 11px; font-weight: 600; white-space: nowrap; background: var(--fill-1); border-radius: 4px; }
 .mesh-tag.accent { color: var(--accent); background: var(--accent-soft, var(--fill-1)); }
+/* On a selected row the accent text is too faint against the selection: the tag keeps its shape in the text colour. */
+.mesh-row.selected .mesh-tag.accent { color: var(--text); }
 .mesh-tag.warning { color: var(--warning); background: var(--warning-soft); }
 .mesh-tag.danger { color: var(--danger); background: var(--danger-soft); }
 .mesh-notice { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; font-size: 12px; line-height: 1.5; background: var(--warning-soft); border-radius: var(--radius-card); }
