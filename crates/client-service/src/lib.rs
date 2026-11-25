@@ -15,5 +15,5 @@
 
 pub mod service;
 
-pub use crate::service::{Commands, Windows};
+pub use crate::service::{serve_agent, Commands, Windows, PROGRAMS};
 pub use client_window::{ask, event, window, WindowEnd};

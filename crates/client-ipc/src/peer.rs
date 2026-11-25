@@ -19,8 +19,10 @@ use serde_json::Value;
 use crate::frame;
 use crate::message::Message;
 
-const CLOSED: &str = "the channel to the other program closed";
-const NO_ANSWER: &str = "the other program did not answer in time";
+/// What [`Peer::ask`] answers once the channel has closed; a closing that broke a write adds the error after it.
+pub const CLOSED: &str = "the channel to the other program closed";
+/// What [`Peer::ask`] answers when the other side took longer than it was given.
+pub const NO_ANSWER: &str = "the other program did not answer in time";
 const FAILED: &str = "the command stopped unexpectedly";
 
 /// What this side does with what the other side sends.
@@ -104,6 +106,11 @@ impl Peer {
         if let Some(waiter) = waiter {
             let _ = waiter.send(result);
         }
+    }
+
+    /// The channel has closed: every ask fails at once.
+    pub fn is_closed(&self) -> bool {
+        lock(&self.waiting).is_none()
     }
 
     /// Ends every wait for an answer; later asks fail at once.

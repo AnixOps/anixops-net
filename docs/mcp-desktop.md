@@ -69,8 +69,12 @@ flowchart LR
 | Linux | `/run/anixops-net/core.sock` | 内核给出的对端 uid，`apps/linux-daemon/src/access.rs` 的 `SignedIn` | root 与在本机登录的用户 |
 | macOS | App 组容器内 `cli.sock`，权限 0600 | `LOCAL_PEERCRED` 核对同一用户 | 只有同一用户的进程 |
 
-- **新增角色**：`client-ipc` 的 `Role` 增加 `agent`，打招呼时适配程序声明 `agent`；`PROTOCOL` 升为 2，并补
-  `fixtures/hello-agent.json`，C# 窗口一侧的样例测试同步更新。服务端按角色把请求交给闸门，而不是直接交给 `Client::invoke`。
+- **新增角色**：`client-ipc` 的 `Role` 增加 `agent`，打招呼时适配程序声明 `agent`，样例为 `fixtures/hello-agent.json`。
+  窗口与核心之间的格式不变，`PROTOCOL` 保持 1，现有窗口无需改动；旧版核心不认识 `agent`，打招呼即失败，适配程序报告
+  「未运行」。核心以 `greet_one_of` 同时接受窗口与 AI 工具：AI 工具的连接由 `client_service::serve_agent` 处理，只接受
+  `client_mcp::agent` 列出的五个请求（`agent.access`、`agent.status`、`agent.nodes`、`agent.logs`、`agent.engine`），
+  由 `Client::agent`（`crates/client-core/src/client/agent.rs`）检查读取开关并按 `policy.json` 放行引擎请求
+  （`client_mcp::policy::engine_request`），从不进入 `Client::invoke`，也不会被当作用户会话询问系统代理等设置。
 - **macOS**：`ControlProtocol.version` 保持 1，新增 `agent` 命令，现有命令行命令与 `anixops` 工具不受影响。
   请求带 `agent` 字段：`access`（读取开关与内容级别，始终应答）、`engine`（`payload` 为一条引擎运行时控制请求的 JSON 文本）、
   `logs`（最近的隧道事件）。状态与节点复用已有的 `status`、`nodes` 命令。App 内的闸门
@@ -95,7 +99,8 @@ flowchart LR
 
 - 读取开关关闭时，所有工具返回同一错误（`crates/client-mcp/src/backend.rs` 的 `ACCESS_OFF`），客户端不弹窗、不通知。
   工具说明与错误是给 AI 工具读的，统一用英文；客户端界面文案仍按系统语言显示。
-- 关闭读取开关会同时关闭执行开关；开关状态保存在后台进程一侧，适配程序无法修改。
+- 关闭读取开关会同时关闭执行开关；开关状态保存在后台进程一侧，适配程序无法修改。Windows 与 Linux 保存在核心的状态文件
+  （`SavedState.agent_access`），窗口用 `agent_access` / `set_agent_access` 命令读写；macOS 保存在 App 的偏好设置。
 - 开源版与 ANX 版行为一致。
 
 ## 5. 工具清单
@@ -184,12 +189,12 @@ sequenceDiagram
 |---|---|
 | networkcore `engine-embedded` | `capture_exchange`、`capture_requests` 的 `redact` 参数及测试；先在内核合并，再升级本仓库 `rev` |
 | `crates/client-mcp`（新） | MCP 协议、工具定义与 Schema、结果整形、两种后端（`client-ipc` 与 macOS 控制通道）；纯 Rust，三平台共用 |
-| `apps/mcp`（新） | `anixops-mcp` 可执行程序，只做标准输入输出与后端选择 |
-| `crates/client-ipc` | `Role::Agent`、`PROTOCOL = 2`、新样例 |
-| `crates/client-service` | 接受 `agent` 角色连接；闸门：开关、白名单、确认、结果字段过滤、访问记录 |
-| `crates/client-core` | 外部访问设置的保存与读取；闸门用到的只读命令无需改动 |
-| `apps/windows-native` | 设置页「外部工具访问」、确认对话框、访问记录；安装包附带 `anixops-mcp.exe` |
-| `apps/linux-native` | 同上（GTK 4）；安装包附带 `anixops-mcp` |
+| `crates/client-mcp` 的 `anixops-mcp` | 可执行程序（`src/main.rs`），只做标准输入输出与后端选择：macOS 为控制通道，Windows / Linux 为 `agent::IpcChannel` |
+| `crates/client-ipc` | `Role::Agent`、`greet_one_of`、新样例；`PROTOCOL` 保持 1 |
+| `crates/client-service`、`apps/linux-daemon` | 接受 `agent` 角色连接，交给 `serve_agent`；Linux 守护进程仍按登录用户放行 |
+| `crates/client-core` | 外部访问设置的保存与读取，闸门 `Client::agent`（开关、请求名单、引擎白名单）；状态与节点只给名称、协议和延迟 |
+| `apps/windows-native` | 设置页「外部工具访问」、确认对话框、访问记录（随原生版设置页）；安装包已附带 `anixops-mcp.exe` |
+| `apps/linux-native` | 同上（GTK 4，随原生版设置页）；安装包随原生版打包时附带 `anixops-mcp` |
 | `apps/ios`（macOS 目标） | `ControlChannel` 的 `agent` 命令、Swift 闸门、设置与确认界面；App 内附带 `anixops-mcp`（`Contents/MacOS/anixops-mcp`，由 `.github/scripts/build-macos-mcp.sh` 构建、`apps/ios/Tools/embed-mcp.sh` 拷入并签名），Developer ID 签名并带 App 组权限 |
 | 共用白名单 `crates/client-mcp/policy.json` | 引擎命令、允许的字段与强制取值；Rust 测试（`tests/privacy.rs`）与 Swift 测试（`AgentGateTests`）都读取，防止两份闸门不一致 |
 
@@ -202,8 +207,10 @@ sequenceDiagram
 3. **闸门**：开关关闭时全部拒绝；只读模式拒绝写工具；写工具无窗口、用户拒绝、超时三种情况均拒绝；字段白名单丢弃未知字段。
 4. **隐私金丝雀**：假后端数据中植入节点密码、订阅令牌、Cookie、`Authorization`、查询参数令牌等标记字符串，
    对所有工具在各内容级别下的输出做扫描，出现任一标记即失败。
-5. **端到端**：Linux 与 Windows runner 上启动真实的后台进程（测试模式）和 `anixops-mcp`，经真实套接字 / 命名管道完成一次
-   握手、读取状态和一次被拒绝的写操作。macOS 在构建好的 App 内运行 `anixops-mcp`，检查握手与「未开启」错误。
+5. **端到端**：`crates/client-service/tests/mcp.rs` 在 Linux 与 Windows 上经真实套接字 / 命名管道让 `IpcChannel` 与服务
+   对话；Linux 原生任务用 `.github/scripts/linux-mcp-e2e.py` 让 `anixops-mcp` 对真实守护进程走一遍「未开启、开启后读取、
+   未连接、关闭、未运行」；Windows 原生任务在安装后让安装好的 `anixops-mcp.exe` 经服务的管道得到「未开启」错误
+   （`native-msi-lifecycle.ps1`）。macOS 在构建好的 App 内运行 `anixops-mcp`，检查握手与「未运行」错误。
 6. **双实现一致**：Swift 测试读取 `crates/client-mcp/policy.json`，与 Swift 闸门的白名单比对；Rust 测试确认每个工具发出的引擎请求都在这张表内。
 7. **范围选择**：`crates/client-mcp`、`client-ipc`、`client-service` 属共享代码，触发完整矩阵。
 
@@ -218,7 +225,7 @@ sequenceDiagram
 | P0 | 本设计定稿，第 11 节决定落实 | 已完成（本文件合并） |
 | P1 | 内核 `redact` 参数；`client-mcp` 协议与只读工具、假后端测试、隐私金丝雀 | networkcore 与本仓库 PR 合并，CI 全绿。工具定义见 `crates/client-mcp/tools.json` |
 | P2 | macOS 只读：控制通道 `agent` 命令、Swift 闸门、设置页、App 内附带适配程序 | macOS CI 端到端通过，真机验收项登记。执行开关与访问记录随 P4 提供 |
-| P3 | Windows 与 Linux 只读：`Role::Agent`、`client-service` 闸门、两端设置页与安装包 | 两平台端到端通过 |
+| P3 | Windows 与 Linux 只读：`Role::Agent`、核心闸门、原生安装包附带适配程序 | 两平台端到端通过。只做原生版（2026-11-25 用户决定）：现行 Tauri 版不接入，设置页随原生版设置页提供 |
 | P4 | 操作工具与确认框（三平台） | 闸门与确认测试通过，真机验收项登记 |
 | P5 | 视使用情况评估：请求正文级别的默认值、更多诊断工具 | 用户决定 |
 

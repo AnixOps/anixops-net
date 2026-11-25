@@ -2,6 +2,7 @@
 //! the desktop's proxy settings and the autostart entry. The window layer (`app.rs`) only moves values in and
 //! out and does network fetches and delay tests outside the lock.
 
+pub mod agent;
 pub mod engine;
 #[cfg(not(target_os = "android"))]
 pub mod lan_share_auth;

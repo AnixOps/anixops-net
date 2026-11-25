@@ -883,6 +883,7 @@ dependencies = [
  "app-log",
  "app-notifications",
  "client-health",
+ "client-mcp",
  "client-session",
  "client-view",
  "config-core",
@@ -928,6 +929,7 @@ name = "client-mcp"
 version = "1.0.4"
 dependencies = [
  "base64 0.22.1",
+ "client-ipc",
  "serde",
  "serde_json",
 ]
@@ -939,6 +941,7 @@ dependencies = [
  "app-notifications",
  "client-core",
  "client-ipc",
+ "client-mcp",
  "client-window",
  "serde",
  "serde_json",

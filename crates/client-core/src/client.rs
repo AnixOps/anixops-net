@@ -7,6 +7,8 @@
 //! What the platform does itself (the system VPN, the shared Downloads folder, the key store, the current
 //! network, system notifications) sits behind [`Platform`].
 
+mod agent;
+
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -1564,6 +1566,13 @@ fn handler(name: &str) -> Option<Handler> {
             }
             json(client.backend().set_tun_mode(enabled)?)
         },
+        // What AI tools may read (设置 › 高级 › 外部工具访问): only a window reads and changes it here; an AI tool
+        // reads it through `Client::agent`.
+        "agent_access" => |client, _| json(client.backend().agent_access()),
+        "set_agent_access" => |client, args| {
+            let AgentAccessArgs { read, content } = parse(args)?;
+            json(client.backend().set_agent_access(read, &content)?)
+        },
         "set_block_quic" => |client, args| {
             let Enabled { enabled } = parse(args)?;
             json(client.backend().set_block_quic(enabled)?)
@@ -1968,6 +1977,13 @@ struct Query {
 #[derive(Deserialize)]
 struct Enabled {
     enabled: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentAccessArgs {
+    read: bool,
+    content: String,
 }
 
 #[derive(Deserialize)]
@@ -2615,6 +2631,124 @@ mod tests {
     }
 
     const LINK: &str = "ss://YWVzLTI1Ni1nY206ZjQzYzBlZWUtMTNiOS00ZjA3LWJlYzktZDRiNzQ0MTQxNTAz@82.47.34.99:11111#HK";
+
+    /// AI tools (docs/mcp-desktop.md): nothing but the settings while reading is off, only the policy's engine
+    /// requests, never a window's command, and nodes without their addresses or credentials.
+    #[test]
+    fn ai_tools_read_only_what_the_user_allows() {
+        use client_mcp::agent as wire;
+
+        let dir = scratch("agent");
+        let open = || {
+            Client::open(
+                Config {
+                    dir: dir.clone(),
+                    executable: dir.join("anixops-net"),
+                    shared_service: false,
+                },
+                Arc::new(NoPlatform),
+            )
+        };
+        let client = open();
+        client
+            .invoke(
+                "import_subscription_text",
+                serde_json::json!({ "name": "Home", "content": LINK }),
+            )
+            .unwrap();
+
+        // Off by default: the settings are answered, nothing else is.
+        let access = client.agent(wire::ACCESS, serde_json::json!({})).unwrap();
+        assert_eq!(
+            access,
+            serde_json::json!({ "read": false, "act": false, "content": "summary" })
+        );
+        for call in [wire::STATUS, wire::NODES, wire::LOGS, wire::ENGINE] {
+            assert_eq!(
+                client.agent(call, serde_json::json!({})),
+                Err(client_mcp::ACCESS_OFF.to_string()),
+                "{call}"
+            );
+        }
+
+        // Only a window turns it on; a level that does not exist is refused.
+        assert!(client
+            .invoke(
+                "set_agent_access",
+                serde_json::json!({ "read": true, "content": "everything" })
+            )
+            .is_err());
+        let set = client
+            .invoke(
+                "set_agent_access",
+                serde_json::json!({ "read": true, "content": "headers" }),
+            )
+            .unwrap();
+        assert_eq!(
+            set,
+            serde_json::json!({ "read": true, "act": false, "content": "headers" })
+        );
+        assert_eq!(client.invoke("agent_access", Value::Null).unwrap(), set);
+
+        let status = client.agent(wire::STATUS, serde_json::json!({})).unwrap();
+        assert_eq!(status["connection"], "disconnected");
+        assert_eq!(status["mode"], "rule");
+        assert_eq!(status["subscription"], "Home");
+        assert_eq!(status["node"], "HK");
+        let nodes = client.agent(wire::NODES, serde_json::json!({})).unwrap();
+        assert_eq!(
+            nodes,
+            serde_json::json!([{
+                "name": "Home",
+                "current": true,
+                "nodes": [{ "name": "HK", "protocol": "shadowsocks", "latency_ms": null, "selected": true }]
+            }])
+        );
+        let text = format!("{status}{nodes}");
+        assert!(
+            !text.contains("82.47.34.99") && !text.contains("YWVz"),
+            "{text}"
+        );
+
+        // Engine requests: the policy first, then the engine, which does not run.
+        assert_eq!(
+            client.agent(
+                wire::ENGINE,
+                serde_json::json!({ "request": { "cmd": "set_capture", "enabled": true } })
+            ),
+            Err("set_capture is not available to AI tools.".to_string())
+        );
+        assert_eq!(
+            client.agent(
+                wire::ENGINE,
+                serde_json::json!({ "request": { "cmd": "traffic" } })
+            ),
+            Err(client_mcp::NOT_CONNECTED.to_string())
+        );
+        // A window's command is not a request of an AI tool, whatever it is called.
+        for call in [
+            "set_agent_access",
+            "agent.set_agent_access",
+            "connect",
+            "agent.",
+        ] {
+            assert!(client.agent(call, serde_json::json!({})).is_err(), "{call}");
+        }
+        let lines = client
+            .agent(wire::LOGS, serde_json::json!({ "limit": 1 }))
+            .unwrap();
+        assert!(lines.as_array().is_some_and(|lines| lines.len() <= 1));
+
+        // The settings are kept across runs.
+        drop(client);
+        let reopened = open();
+        assert_eq!(
+            reopened.agent(wire::ACCESS, serde_json::json!({})).unwrap(),
+            set
+        );
+        drop(reopened);
+        let _ = fs::remove_dir_all(dir);
+    }
 
     fn scratch(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(

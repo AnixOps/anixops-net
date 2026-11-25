@@ -90,7 +90,30 @@ pub struct SavedState {
     pub group_choices: BTreeMap<String, String>,
     /// Set while the client has changed the desktop's proxy settings; cleared once they are restored.
     pub proxy_backup: Option<ProxyBackup>,
+    /// What AI tools on this computer may read (设置 › 高级 › 外部工具访问, docs/mcp-desktop.md); off until the
+    /// user turns it on.
+    pub agent_access: AgentAccess,
     next_source: u32,
+}
+
+/// The user's settings for AI tools. Only a window changes them; an AI tool can read but never change them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AgentAccess {
+    /// AI tools may read the client's state.
+    pub read: bool,
+    /// How much of a captured request they see: `summary`, `headers` or `bodies`, always masked. Kept as text so
+    /// a level a later version adds reads back as the narrowest here instead of losing the saved state.
+    pub content: String,
+}
+
+impl Default for AgentAccess {
+    fn default() -> Self {
+        Self {
+            read: false,
+            content: "summary".to_string(),
+        }
+    }
 }
 
 impl Default for SavedState {
@@ -107,6 +130,7 @@ impl Default for SavedState {
             tun_mode: false,
             group_choices: BTreeMap::new(),
             proxy_backup: None,
+            agent_access: AgentAccess::default(),
             next_source: 1,
         }
     }

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// How much of a captured request the user lets AI tools see (设置 › 高级 › 外部工具访问 › 请求内容).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ContentLevel {
     /// Method, host, path, status, sizes and timing.
@@ -20,7 +20,7 @@ pub enum ContentLevel {
 }
 
 /// The user's access settings, as the app reports them. The app's gate enforces them too.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Access {
     /// AI tools may read the client's state.
     pub read: bool,
@@ -55,22 +55,25 @@ impl BackendError {
     /// The sentence the AI tool is given.
     pub fn message(&self) -> String {
         match self {
-            Self::Unavailable => "AnixOps Net is not running, or it refused this connection.".to_string(),
-            Self::AccessOff => ACCESS_OFF.to_string(),
-            Self::NotConnected => {
-                "AnixOps Net is not connected. This information is only available while it is connected."
-                    .to_string()
+            Self::Unavailable => {
+                "AnixOps Net is not running, or it refused this connection.".to_string()
             }
+            Self::AccessOff => ACCESS_OFF.to_string(),
+            Self::NotConnected => NOT_CONNECTED.to_string(),
             Self::Failed(message) => message.clone(),
         }
     }
 }
 
+/// What the desktop core answers on its channel when the engine is not running; [`BackendError::NotConnected`].
+pub const NOT_CONNECTED: &str =
+    "AnixOps Net is not connected. This information is only available while it is connected.";
+
 /// What every tool answers while the user has not turned access on.
 pub const ACCESS_OFF: &str =
     "AnixOps Net has not allowed access by AI tools. The user can turn it on in Settings, Advanced, External tool access.";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConnectionState {
     Disconnected,
@@ -80,7 +83,7 @@ pub enum ConnectionState {
 }
 
 /// The client's state, as the main window shows it.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Status {
     pub connection: ConnectionState,
     /// `rule`, `global` or `direct`.
@@ -94,7 +97,7 @@ pub struct Status {
 }
 
 /// One subscription and its nodes.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeGroup {
     pub name: String,
     /// The subscription in use.
@@ -102,7 +105,7 @@ pub struct NodeGroup {
     pub nodes: Vec<Node>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Node {
     pub name: String,
     pub protocol: String,
@@ -121,7 +124,7 @@ pub enum LogLevel {
     Debug,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LogLine {
     /// Unix time in milliseconds.
     pub at_ms: u64,

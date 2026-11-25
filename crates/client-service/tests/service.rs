@@ -77,6 +77,10 @@ impl Commands for Echo {
     fn session_arrived(&self) {
         let _ = self.arrived.lock().unwrap().send(());
     }
+
+    fn agent(&self, call: &str, args: Value) -> Result<Value, String> {
+        Ok(json!({ "agent": call, "args": args }))
+    }
 }
 
 /// The service's side of a test: the windows, what the core is handed, and when a session arrives.
@@ -485,4 +489,55 @@ fn a_window_refuses_what_it_does_not_know_and_arguments_that_are_wrong() {
     assert!(end
         .request(ask::SET_START_AFTER_LOGIN, json!({ "enabled": "yes" }))
         .is_err());
+}
+
+/// An AI tool's program (docs/mcp-desktop.md) is served on the same channel, but only with its own requests: it is
+/// never taken for the user's session and never reaches a window's commands.
+#[test]
+fn an_ai_tool_reaches_only_its_own_requests() {
+    let service = Service::new();
+    let (near, far) = pipe();
+    let serving = service.serve(far);
+
+    let mut connection = Connection::new(near.try_clone().unwrap(), near.try_clone().unwrap());
+    let core = connection.greet(Role::Agent, "1.0.4", Role::Core).unwrap();
+    assert_eq!(core.role, Role::Core);
+    let (reader, writer) = connection.into_parts();
+    let agent = Peer::new(writer);
+    let reading = Arc::clone(&agent);
+    struct Asked;
+    impl Handler for Asked {
+        fn request(&self, command: &str, _args: Value) -> Result<Value, String> {
+            panic!("the core asked an AI tool for {command}");
+        }
+    }
+    thread::spawn(move || reading.run(reader, Arc::new(Asked)));
+
+    assert_eq!(
+        agent
+            .ask(client_mcp::agent::LOGS, json!({ "limit": 5 }), SOON)
+            .unwrap(),
+        json!({ "agent": "agent.logs", "args": { "limit": 5 } })
+    );
+    for command in [
+        "connect",
+        "runtime_snapshot",
+        "set_agent_access",
+        "agent.connect",
+        "session.describe",
+    ] {
+        assert!(
+            agent.ask(command, json!({}), SOON).is_err(),
+            "{command} reached the core"
+        );
+    }
+    // It never becomes the session the core asks for the user's settings.
+    assert!(service
+        .arrived
+        .recv_timeout(Duration::from_millis(300))
+        .is_err());
+    assert!(service.session.proxy_settings().is_none());
+
+    near.shutdown(Shutdown::Both).unwrap();
+    serving.join().unwrap().unwrap();
 }
