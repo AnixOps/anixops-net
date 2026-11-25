@@ -443,7 +443,7 @@ pub fn members(
         .filter_map(|key| {
             let in_group: Vec<&Value> = everyone
                 .iter()
-                .filter(|member| key_of(*member) == key)
+                .filter(|member| key_of(member) == key)
                 .collect();
             let rows: Vec<Value> = in_group
                 .iter()
