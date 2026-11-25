@@ -120,7 +120,7 @@ fn an_ai_tool_reads_the_core_over_its_channel() {
         .all(|(call, _)| client_mcp::agent::CALLS.contains(&call.as_str())));
     assert!(asked
         .iter()
-        .any(|(call, args)| call == "agent.logs" && args["limit"] == 10));
+        .any(|(call, args)| call == "agent.logs" && args["limit"] == 500));
 
     // Through the MCP server, as the AI tool sees it.
     let server = Server::new(channel);
