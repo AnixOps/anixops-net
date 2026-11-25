@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { setLanguage } from "./i18n";
 import {
   advertisedCidr,
+  currentPaths,
+  routingPaths,
   connectionLabel,
   forwardingLabel,
   listenText,
@@ -107,5 +109,46 @@ describe("this device", () => {
     expect(forwardingLabel(undefined)).toBeNull();
     expect(advertisedCidr("192.168.1.0/24")).toBe("192.168.1.0/24");
     expect(advertisedCidr({ cidr: "10.0.0.0/8" })).toBe("10.0.0.0/8");
+  });
+});
+
+describe("custom paths", () => {
+  const status = {
+    self: { id: "me", address: "10.144.0.2/16" },
+    members: [
+      { id: "a", address: "10.144.0.1/16" },
+      { id: "b", address: "10.144.1.1/16" },
+      { id: "c" },
+    ],
+    paths: [
+      { id: "p1", target: { subnet: "172.20.0.0/16" }, via: ["a", "b"], state: "active" },
+      { id: "p2", target: { peer: "b" }, via: ["a"], state: "fallback" },
+    ],
+  };
+
+  it("reads the snapshot's paths by member id", () => {
+    expect(currentPaths(status)).toEqual([
+      { id: "p1", kind: "subnet", target: "172.20.0.0/16", via: ["a", "b"] },
+      { id: "p2", kind: "member", target: "b", via: ["a"] },
+    ]);
+  });
+
+  it("sends the whole list by virtual address, without one removed or with one added", () => {
+    expect(routingPaths(status, { remove: "p1" })).toEqual([{ to_peer: "10.144.1.1", via: ["10.144.0.1"] }]);
+    expect(routingPaths(status, { add: { kind: "subnet", target: "192.168.9.0/24", via: ["b"] } })).toEqual([
+      { to_subnet: "172.20.0.0/16", via: ["10.144.0.1", "10.144.1.1"] },
+      { to_peer: "10.144.1.1", via: ["10.144.0.1"] },
+      { to_subnet: "192.168.9.0/24", via: ["10.144.1.1"] },
+    ]);
+  });
+
+  it("replaces a path to the same target and refuses what cannot be sent", () => {
+    expect(routingPaths(status, { add: { kind: "member", target: "b", via: ["me"] } })).toEqual([
+      { to_subnet: "172.20.0.0/16", via: ["10.144.0.1", "10.144.1.1"] },
+      { to_peer: "10.144.1.1", via: ["10.144.0.2"] },
+    ]);
+    expect(routingPaths(status, { add: { kind: "member", target: "c", via: ["a"] } })).toBeNull();
+    expect(routingPaths(status, { add: { kind: "subnet", target: "10.9.0.0/16", via: [] } })).toBeNull();
+    expect(routingPaths(status, { add: { kind: "subnet", target: "10.9.0.0/16", via: ["a", "a", "a", "a", "a", "a", "a"] } })).toBeNull();
   });
 });

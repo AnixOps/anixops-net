@@ -95,6 +95,8 @@ const shots = [
   { name: "mesh-paths-dark", mode: "proxy", theme: "dark", nav: "组网", size: LAPTOP, storage: { "anixops.mock-mesh": "on" }, steps: async (page) => { await radio(page, "路径").click(); } },
   { name: "mesh-self-light", mode: "proxy", theme: "light", nav: "组网", size: LAPTOP, storage: { "anixops.mock-mesh": "on" }, steps: async (page) => { await radio(page, "本机").click(); } },
   { name: "mesh-self-dark", mode: "proxy", theme: "dark", nav: "组网", size: LAPTOP, storage: { "anixops.mock-mesh": "on" }, steps: async (page) => { await radio(page, "本机").click(); } },
+  { name: "mesh-path-editor-light", mode: "proxy", theme: "light", nav: "组网", size: WIDE, storage: { "anixops.mock-mesh": "on" }, steps: async (page) => { await radio(page, "路径").click(); await page.getByRole("button", { name: "添加路径" }).click(); } },
+  { name: "mesh-add-credential-light", mode: "proxy", theme: "light", nav: "组网", size: LAPTOP, storage: { "anixops.mock-mesh": "on" }, steps: async (page) => { await open(page, page.getByRole("button", { name: "更多" }), '[role="menu"]'); await page.getByRole("menuitem", { name: "添加网络" }).click(); await radio(page, "入网凭据").click(); } },
   { name: "mesh-members-en-light", mode: "proxy", theme: "light", language: "en", nav: "Mesh", size: SMALL, storage: { "anixops.mock-mesh": "on" } },
 ];
 

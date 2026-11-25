@@ -1,4 +1,4 @@
-import { Network, Plus, Search, TriangleAlert, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Network, Plus, Search, TriangleAlert, X } from "lucide-react";
 import { Heading } from "react-aria-components";
 import { useCallback, useEffect, useState } from "react";
 import { MoreMenu, ModalDialog, Select } from "../controls";
@@ -18,17 +18,20 @@ import {
   latencyText,
   listenText,
   markLabel,
+  maxWaypoints,
   meshApi,
   noticeDetail,
   noticeText,
   regionName,
   roleLabel,
+  routingPaths,
   securityLabel,
   securityTone,
   stateLabel,
   stateTone,
   type MemberQuery,
   type MeshDraft,
+  type PathDraft,
   type MeshGroup,
   type MeshMemberRow,
   type MeshRefusal,
@@ -110,6 +113,10 @@ export function MeshPage({ mesh }: { mesh: ReturnType<typeof useMesh> }) {
       onJoin={(config) => {
         setAdding(false);
         perform(() => meshApi.save(config));
+      }}
+      onCredential={(credential) => {
+        setAdding(false);
+        perform(() => meshApi.joinCredential(credential));
       }}
     />
   );
@@ -205,7 +212,7 @@ export function MeshPage({ mesh }: { mesh: ReturnType<typeof useMesh> }) {
       {tab === "subnets" && (
         <Subnets view={view} query={query.query} busy={busy} setRoute={(cidr, route) => perform(() => meshApi.setSubnetRoute(networkId ?? "", cidr, route))} />
       )}
-      {tab === "paths" && <Paths view={view} busy={busy} setPolicy={(policy) => perform(() => meshApi.setPolicy(networkId ?? "", policy))} />}
+      {tab === "paths" && <Paths view={view} network={networkId ?? ""} busy={busy} perform={perform} />}
       {tab === "self" && <Self view={view} network={networkId ?? ""} busy={busy} perform={perform} />}
       {dialog}
     </div>
@@ -462,10 +469,26 @@ function SubnetRow({ row, busy, setRoute }: { row: MeshSubnetRow; busy: boolean;
 
 // Paths.
 
-function Paths({ view, busy, setPolicy }: { view: MeshView; busy: boolean; setPolicy: (policy: "latency" | "hops") => void }) {
+function Paths({ view, network, busy, perform }: {
+  view: MeshView;
+  network: string;
+  busy: boolean;
+  perform: (task: () => Promise<MeshRefusal | null>) => void;
+}) {
   const paths = view.paths;
-  return (
-    <>
+  const [editing, setEditing] = useState(false);
+  // What the paths were before the last removal, for 撤销 (T0).
+  const [undo, setUndo] = useState<Record<string, unknown>[] | null>(null);
+  const setPolicy = (policy: "latency" | "hops") => perform(() => meshApi.setPolicy(network, policy));
+  const remove = (id: string) => {
+    const before = routingPaths(view.status, {});
+    const after = routingPaths(view.status, { remove: id });
+    if (!after) return;
+    setUndo(before);
+    perform(() => meshApi.setPaths(network, after));
+  };
+  const cards = (
+    <div className="mesh-cards">
       <Card title={t("默认选路")}>
         <Row label={t("路径策略")}>
           <Segmented<"latency" | "hops">
@@ -501,7 +524,15 @@ function Paths({ view, busy, setPolicy }: { view: MeshView; busy: boolean; setPo
         </Card>
       )}
       {paths.custom && (
-        <Card title={t("自定义路径")}>
+        <Card
+          title={t("自定义路径")}
+          actions={<button className="link-button" disabled={busy || editing} onClick={() => setEditing(true)}><Plus size={14} />{t("添加路径")}</button>}
+        >
+          {undo && (
+            <Row label={t("已移除路径。")}>
+              <button className="secondary" disabled={busy} onClick={() => { const previous = undo; setUndo(null); perform(() => meshApi.setPaths(network, previous)); }}>{t("撤销")}</button>
+            </Row>
+          )}
           {paths.custom.length === 0 && <Row label={t("暂无自定义路径")} />}
           {paths.custom.map((path) => {
             const parts: string[] = [];
@@ -509,11 +540,121 @@ function Paths({ view, busy, setPolicy }: { view: MeshView; busy: boolean; setPo
             if (path.advertiser) parts.push(t("由 {name} 通告", { name: path.advertiser }));
             if (path.state === "fallback" && path.unreachable) parts.push(t("{name} 不可达", { name: path.unreachable }));
             const state = path.state === "fallback" ? t("已回落") : path.state === "first_hop_only" ? t("仅首跳生效") : t("生效");
-            return <Row key={path.id} label={path.targetLabel} hint={parts.join(" · ")} value={state} />;
+            return (
+              <Row key={path.id} label={path.targetLabel} hint={parts.join(" · ")} value={state}>
+                <button className="icon-button" aria-label={t("移除路径 {name}", { name: path.targetLabel })} disabled={busy} onClick={() => remove(path.id)}><X size={14} /></button>
+              </Row>
+            );
           })}
         </Card>
       )}
-    </>
+    </div>
+  );
+  if (!editing || !paths.custom) return cards;
+  return (
+    <div className="mesh-split">
+      {cards}
+      <aside className="mesh-detail" aria-label={t("添加路径")}>
+        <PathEditor
+          view={view}
+          onCancel={() => setEditing(false)}
+          onSave={(draft) => {
+            const next = routingPaths(view.status, { add: draft });
+            if (!next) return false;
+            setEditing(false);
+            setUndo(null);
+            perform(() => meshApi.setPaths(network, next));
+            return true;
+          }}
+        />
+      </aside>
+    </div>
+  );
+}
+
+/** 添加路径 (desktop: a side column): target kind, target, waypoints in order, and the path it gives. */
+function PathEditor({ view, onCancel, onSave }: {
+  view: MeshView;
+  onCancel: () => void;
+  onSave: (draft: PathDraft) => boolean;
+}) {
+  const members = view.members.groups.flatMap((group) => group.rows).filter((row) => !row.self);
+  const subnets = view.subnets.rows.filter((row) => row.state !== "refused");
+  const [draft, setDraft] = useState<PathDraft>({ kind: "member", target: "", via: [] });
+  const [problem, setProblem] = useState<string | null>(null);
+  const name = (id: string) => members.find((row) => row.id === id)?.name ?? id;
+  const targets = draft.kind === "member"
+    ? members.map((row) => ({ value: row.id, label: row.name }))
+    : subnets.map((row) => ({ value: row.cidr, label: row.cidr }));
+  const advertiser = draft.kind === "subnet" ? subnets.find((row) => row.cidr === draft.target)?.advertiser : null;
+  const waypoints = members.filter((row) => row.id !== draft.target).map((row) => ({ value: row.id, label: row.name }));
+  const setVia = (via: string[]) => setDraft({ ...draft, via });
+  const move = (index: number, by: number) => {
+    const via = [...draft.via];
+    const [item] = via.splice(index, 1);
+    via.splice(index + by, 0, item);
+    setVia(via);
+  };
+  const preview = [t("本机"), ...draft.via.map(name), draft.kind === "member" ? name(draft.target) : draft.target].filter(Boolean).join(" → ");
+  return (
+    <Card title={t("添加路径")}>
+      <div className="mesh-form">
+        <Field label={t("目标类型")}>
+          <Segmented<"member" | "subnet">
+            label={t("目标类型")}
+            value={draft.kind}
+            onChange={(kind) => setDraft({ kind, target: "", via: draft.via })}
+            options={[
+              { value: "member", label: t("成员") },
+              { value: "subnet", label: t("子网") },
+            ]}
+          />
+        </Field>
+        <Field label={t("目标")}>
+          <Select label={t("目标")} value={draft.target} placeholder={t("选择目标")} choices={targets} onChange={(target) => setDraft({ ...draft, target, via: draft.via.filter((id) => id !== target) })} />
+        </Field>
+        {advertiser && <p className="field-hint">{t("由 {name} 通告", { name: advertiser })}</p>}
+        <Field label={t("途经点")}>
+          <div className="mesh-waypoints">
+            {draft.via.map((id, index) => (
+              <div key={`${id}-${index}`} className="mesh-waypoint">
+                <Select
+                  label={t("途经点 {count}", { count: index + 1 })}
+                  value={id}
+                  choices={waypoints}
+                  onChange={(next) => setVia(draft.via.map((item, at) => (at === index ? next : item)))}
+                />
+                <button className="icon-button" aria-label={t("上移")} disabled={index === 0} onClick={() => move(index, -1)}><ArrowUp size={14} /></button>
+                <button className="icon-button" aria-label={t("下移")} disabled={index === draft.via.length - 1} onClick={() => move(index, 1)}><ArrowDown size={14} /></button>
+                <button className="icon-button" aria-label={t("移除途经点")} onClick={() => setVia(draft.via.filter((_, at) => at !== index))}><X size={14} /></button>
+              </div>
+            ))}
+            <button
+              className="link-button"
+              disabled={draft.via.length >= maxWaypoints || waypoints.length === 0}
+              onClick={() => setVia([...draft.via, waypoints[0]?.value ?? ""])}
+            >
+              <Plus size={14} />{t("添加途经点")}
+            </button>
+          </div>
+        </Field>
+        <Row label={t("预览")} value={<span className="truncate">{preview}</span>} />
+        {problem && <p className="danger-text" role="alert">{problem}</p>}
+      </div>
+      <footer className="terms-actions">
+        <button className="secondary" onClick={onCancel}>{t("取消")}</button>
+        <button
+          className="primary"
+          onClick={() => {
+            if (draft.target === "") setProblem(t("选择目标。"));
+            else if (draft.via.length === 0) setProblem(t("至少选择一个途经点。"));
+            else if (!onSave(draft)) setProblem(t("路径中的成员缺少虚拟地址。"));
+          }}
+        >
+          {t("保存")}
+        </button>
+      </footer>
+    </Card>
   );
 }
 
@@ -621,11 +762,15 @@ function Latency({ milliseconds, tone }: { milliseconds?: number | null; tone?: 
 
 // 添加网络.
 
-function AddNetworkDialog({ taken, onClose, onJoin }: {
+function AddNetworkDialog({ taken, onClose, onJoin, onCredential }: {
   taken: string[];
   onClose: () => void;
   onJoin: (config: Record<string, unknown>) => void;
+  /** 入网凭据 (kernel 0.5): a one-time credential from the panel joins this computer without typing the network. */
+  onCredential: (credential: string) => void;
 }) {
+  const [method, setMethod] = useState<"manual" | "credential">("manual");
+  const [credential, setCredential] = useState("");
   const [draft, setDraft] = useState<MeshDraft>(emptyDraft);
   const [shown, setShown] = useState(false);
   const problem = draftProblem(draft, taken);
@@ -638,33 +783,62 @@ function AddNetworkDialog({ taken, onClose, onJoin }: {
         </div>
       </header>
       <div className="mesh-form">
-        <Field label={t("名称")}><input value={draft.name} onChange={(event) => set({ name: event.target.value })} /></Field>
-        <Field label={t("密钥")}><input type="password" value={draft.secret} onChange={(event) => set({ secret: event.target.value })} /></Field>
-        <Field label={t("对端地址")}>
-          <textarea rows={3} placeholder="203.0.113.10:11010" value={draft.peers} onChange={(event) => set({ peers: event.target.value })} />
-        </Field>
-        <p className="field-hint">{t("每行一个地址，可带 tcp:// 或 udp://，默认端口 11010。")}</p>
-        <Field label={t("虚拟地址")}><input placeholder={t("自动分配")} value={draft.address} onChange={(event) => set({ address: event.target.value })} /></Field>
-        <Field label={t("监听端口")}><input inputMode="numeric" placeholder="11010" value={draft.port} onChange={(event) => set({ port: event.target.value })} /></Field>
-        <Field label={t("加密模式")}>
-          <Segmented<"forward" | "standard">
-            label={t("加密模式")}
-            value={draft.forwardSecrecy ? "forward" : "standard"}
-            onChange={(value) => set({ forwardSecrecy: value === "forward" })}
-            options={[
-              { value: "forward", label: t("前向保密") },
-              { value: "standard", label: t("标准") },
-            ]}
-          />
-        </Field>
-        {!draft.forwardSecrecy && <p className="field-hint">{t("标准模式未启用前向保密。")}</p>}
-        {shown && problem && <p className="danger-text" role="alert">{draftProblemText(problem)}</p>}
+        <Segmented<"manual" | "credential">
+          label={t("加入方式")}
+          value={method}
+          onChange={(next) => {
+            setMethod(next);
+            setShown(false);
+          }}
+          options={[
+            { value: "manual", label: t("手动填写") },
+            { value: "credential", label: t("入网凭据") },
+          ]}
+        />
       </div>
+      {method === "credential" ? (
+        <div className="mesh-form">
+          <Field label={t("入网凭据")}>
+            <textarea rows={4} value={credential} onChange={(event) => setCredential(event.target.value)} />
+          </Field>
+          <p className="field-hint">{t("入网凭据由面板生成，仅可使用一次。")}</p>
+          {shown && credential.trim() === "" && <p className="danger-text" role="alert">{t("填写入网凭据。")}</p>}
+        </div>
+      ) : (
+        <div className="mesh-form">
+          <Field label={t("名称")}><input value={draft.name} onChange={(event) => set({ name: event.target.value })} /></Field>
+          <Field label={t("密钥")}><input type="password" value={draft.secret} onChange={(event) => set({ secret: event.target.value })} /></Field>
+          <Field label={t("对端地址")}>
+            <textarea rows={3} placeholder="203.0.113.10:11010" value={draft.peers} onChange={(event) => set({ peers: event.target.value })} />
+          </Field>
+          <p className="field-hint">{t("每行一个地址，可带 tcp:// 或 udp://，默认端口 11010。")}</p>
+          <Field label={t("虚拟地址")}><input placeholder={t("自动分配")} value={draft.address} onChange={(event) => set({ address: event.target.value })} /></Field>
+          <Field label={t("监听端口")}><input inputMode="numeric" placeholder="11010" value={draft.port} onChange={(event) => set({ port: event.target.value })} /></Field>
+          <Field label={t("加密模式")}>
+            <Segmented<"forward" | "standard">
+              label={t("加密模式")}
+              value={draft.forwardSecrecy ? "forward" : "standard"}
+              onChange={(value) => set({ forwardSecrecy: value === "forward" })}
+              options={[
+                { value: "forward", label: t("前向保密") },
+                { value: "standard", label: t("标准") },
+              ]}
+            />
+          </Field>
+          {!draft.forwardSecrecy && <p className="field-hint">{t("标准模式未启用前向保密。")}</p>}
+          {shown && problem && <p className="danger-text" role="alert">{draftProblemText(problem)}</p>}
+        </div>
+      )}
       <footer className="terms-actions">
         <button className="secondary" onClick={onClose}>{t("取消")}</button>
         <button
           className="primary"
           onClick={() => {
+            if (method === "credential") {
+              if (credential.trim() !== "") onCredential(credential);
+              else setShown(true);
+              return;
+            }
             const config = draftConfig(draft, taken);
             if (config) onJoin(config);
             else setShown(true);

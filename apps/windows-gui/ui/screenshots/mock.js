@@ -145,6 +145,8 @@
       advertised: ["192.168.50.0/24"], suggestedSubnets: [{ cidr: "192.168.50.0/24", interface: "Ethernet" }, { cidr: "10.20.0.0/16", interface: "Wi-Fi" }, { cidr: "203.0.113.0/24", interface: "Ethernet 2", public: true }],
       ipForwarding: "on" },
     regions: [{ code: "uk", name: "伦敦", local: true }, { code: "hk", name: "香港" }],
+    members: [["n1", "10.144.0.1"], ["n2", "10.144.0.5"], ["n3", "10.144.0.9"], ["n4", "10.144.1.1"], ["n5", "10.144.1.7"]].map(([id, address]) => ({ id, address: `${address}/16` })),
+    paths: [{ id: "p1", target: { subnet: "172.20.0.0/16" }, via: ["n1", "n4"], state: "active" }],
   };
   const member = (id, name, region, extra) => ({ id, name, region, state: "online", connection: "direct", transport: "udp", hops: 0, ...extra });
   const meshViews = {
@@ -166,7 +168,8 @@
       { cidr: "172.20.0.0/16", region: "hk", regionName: "香港", advertiser: "hk-gateway", path: ["workstation", "lon-border", "hk-gateway"], latencyMs: 186, tone: "medium", state: "ok", route: "mesh" },
       { cidr: "192.168.1.0/24", region: "hk", regionName: "香港", advertiser: "hk-gateway", path: ["workstation", "lon-border", "hk-gateway"], latencyMs: 186, tone: "medium", state: "ok", route: "local", marks: ["local_overlap"] },
     ] }),
-    "view.mesh_paths": () => ({ policy: "latency", links: [{ from: "uk", fromName: "伦敦", to: "hk", toName: "香港", borders: ["lon-border", "hk-gateway"], latencyMs: 182, tone: "medium", loss: 0.01, state: "ok" }], custom: [] }),
+    "view.mesh_paths": () => ({ policy: "latency", links: [{ from: "uk", fromName: "伦敦", to: "hk", toName: "香港", borders: ["lon-border", "hk-gateway"], latencyMs: 182, tone: "medium", loss: 0.01, state: "ok" }],
+      custom: [{ id: "p1", targetKind: "subnet", target: "172.20.0.0/16", targetLabel: "172.20.0.0/16", advertiser: "hk-gateway", via: ["lon-border", "hk-gateway"], state: "active" }] }),
     "view.mesh_notices": () => [],
   };
   const control = (request) => {

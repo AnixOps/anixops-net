@@ -248,6 +248,9 @@ export const meshApi = {
   requestRegion: (network: string, region: string) => engine({ cmd: "mesh_request_region", network, region }),
   /** Kernel 0.5. */
   setPolicy: (network: string, policy: "latency" | "hops") => engine({ cmd: "mesh_set_policy", network, policy }),
+  setPaths: (network: string, paths: Record<string, unknown>[]) => engine({ cmd: "mesh_set_paths", network, paths }),
+  /** A one-time join credential (个人电脑用入网凭据加入). */
+  joinCredential: (credential: string) => engine({ cmd: "mesh_join_credential", credential: credential.trim() }),
 };
 
 /** A mesh command for the engine; its refusal, or null once it took effect. */
@@ -257,6 +260,77 @@ async function engine(request: Record<string, unknown>): Promise<MeshRefusal | n
   } catch (error) {
     return { code: "other", detail: String(error) };
   }
+}
+
+// Custom paths (docs/mesh-ui.md, 路径; kernel 0.5). The snapshot names members by id; `mesh_set_paths` takes the
+// kernel's `routing.paths`, which names them by virtual address. The whole list is sent each time.
+
+/** A custom path as the editor holds it: a member id or a subnet, and the members to pass, by id, in order. */
+export interface PathDraft {
+  kind: "member" | "subnet";
+  target: string;
+  via: string[];
+}
+
+/** The most waypoints a path may name (mesh-module.md, `routing.paths`). */
+export const maxWaypoints = 6;
+
+type Json = Record<string, unknown>;
+const record = (value: unknown): Json => (value && typeof value === "object" && !Array.isArray(value) ? value as Json : {});
+const array = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
+const bare = (address: unknown) => (typeof address === "string" ? address.split("/")[0] : "");
+
+/** Member id to virtual address (without its prefix), this device included. */
+function addresses(status: MeshStatus): Map<string, string> {
+  const known = new Map<string, string>();
+  const self = record(status.self);
+  if (typeof self.id === "string" && bare(self.address)) known.set(self.id, bare(self.address));
+  for (const member of array(status.members)) {
+    const row = record(member);
+    if (typeof row.id === "string" && bare(row.address)) known.set(row.id, bare(row.address));
+  }
+  return known;
+}
+
+/** The paths of the snapshot as the editor holds them. */
+export function currentPaths(status: MeshStatus): Array<PathDraft & { id: string }> {
+  return array(status.paths).map((entry) => {
+    const path = record(entry);
+    const target = record(path.target);
+    const via = array(path.via).filter((id): id is string => typeof id === "string");
+    const id = typeof path.id === "string" ? path.id : "";
+    return typeof target.peer === "string"
+      ? { id, kind: "member" as const, target: target.peer, via }
+      : { id, kind: "subnet" as const, target: typeof target.subnet === "string" ? target.subnet : "", via };
+  });
+}
+
+/**
+ * `mesh_set_paths`' `paths` after removing the path `remove` (an id) and adding `add`, which replaces a path to the
+ * same target. Null when a member has no virtual address in the snapshot, or `add` names no waypoint or too many.
+ */
+export function routingPaths(status: MeshStatus, change: { remove?: string; add?: PathDraft }): Json[] | null {
+  const known = addresses(status);
+  let paths: PathDraft[] = currentPaths(status).filter((path) => path.id !== change.remove);
+  if (change.add) {
+    const add = change.add;
+    if (add.target === "" || add.via.length === 0 || add.via.length > maxWaypoints) return null;
+    paths = paths.filter((path) => !(path.kind === add.kind && path.target === add.target));
+    paths.push(add);
+  }
+  const result: Json[] = [];
+  for (const path of paths) {
+    const via = path.via.map((id) => known.get(id));
+    if (via.some((address) => !address)) return null;
+    if (path.kind === "member") {
+      const address = known.get(path.target);
+      if (!address) return null;
+      result.push({ to_peer: address, via });
+    } else {
+      result.push({ to_subnet: path.target, via });
+    }
+  }
+  return result;
 }
 
 /** The CIDR of an `advertised` entry, which the kernel may give as a string or as `{ cidr }`. */

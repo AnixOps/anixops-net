@@ -390,13 +390,16 @@ pub const ACTIVITY_COMMANDS: [&str; 24] = [
     "mesh_set_dns",
     "mesh_set_subnet_route",
     // Kernel 0.4, full nodes: relaying, host mode, advertising a subnet and asking for another region; kernel 0.5:
-    // the default path policy. An engine without them answers `unsupported`.
+    // the default path policy and the custom paths. An engine without them answers `unsupported`.
     "mesh_set_relay",
     "mesh_set_host_mode",
     "mesh_advertise",
     "mesh_withdraw",
     "mesh_request_region",
     "mesh_set_policy",
+    "mesh_set_paths",
+    // A one-time credential from the panel that joins this computer (个人电脑用入网凭据加入).
+    "mesh_join_credential",
 ];
 
 /// The request bytes for an activity page command, or why it is refused.
