@@ -116,6 +116,10 @@ public enum RuntimeControl {
     /// Whether an advertised subnet that overlaps this device's network goes through the mesh (`mesh`) or stays
     /// on the local network (`local`). Saved on this device only.
     case meshSetSubnetRoute(network: String, cidr: String, route: String)
+    /// The default path policy of a network: `latency` or `hops` (kernel 0.5).
+    case meshSetPolicy(network: String, policy: String)
+    /// A network's custom paths, the whole list, by virtual address (`MeshPaths.routing`, kernel 0.5).
+    case meshSetPaths(network: String, paths: [MeshRoutingPath])
 
     /// The port the system proxy listener asks for first.
     public static let systemProxyPort: UInt16 = 8890
@@ -282,6 +286,10 @@ public enum RuntimeControl {
             object = ["cmd": "mesh_set_dns", "enabled": enabled, "suffix": suffix]
         case let .meshSetSubnetRoute(network, cidr, route):
             object = ["cmd": "mesh_set_subnet_route", "network": network, "cidr": cidr, "route": route]
+        case let .meshSetPolicy(network, policy):
+            object = ["cmd": "mesh_set_policy", "network": network, "policy": policy]
+        case let .meshSetPaths(network, paths):
+            object = ["cmd": "mesh_set_paths", "network": network, "paths": paths.map(\.json)]
         }
         return (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
     }

@@ -80,6 +80,7 @@ internal const val MESH_ENTRY_TAG = "mesh-entry"
 internal const val MESH_JOIN_TAG = "mesh-join"
 internal const val MESH_ADD_TAG = "mesh-add"
 internal const val MESH_REMOVE_TAG = "mesh-remove"
+internal const val MESH_ADD_PATH_TAG = "mesh-add-path"
 
 private val Dot = 8.dp
 
@@ -161,6 +162,16 @@ fun MeshScreen(state: MeshState, actions: MeshActions, onBack: () -> Unit, modif
     var tab by rememberSaveable { mutableStateOf(MeshTab.Members) }
     var adding by rememberSaveable { mutableStateOf(false) }
     var removing by rememberSaveable { mutableStateOf<String?>(null) }
+    var addingPath by rememberSaveable { mutableStateOf(false) }
+    if (addingPath && page != null) {
+        MeshPathScreen(
+            page = page,
+            save = { draft -> actions.addPath(draft).also { saved -> if (saved) addingPath = false } },
+            onBack = { addingPath = false },
+            modifier = modifier,
+        )
+        return
+    }
     if (adding) {
         MeshNetworkScreen(
             taken = state.saved.map { it.name }.toSet(),
@@ -217,7 +228,7 @@ fun MeshScreen(state: MeshState, actions: MeshActions, onBack: () -> Unit, modif
         when (tab) {
             MeshTab.Members -> Members(page, state, actions)
             MeshTab.Subnets -> Subnets(page, state, actions)
-            MeshTab.Paths -> Paths(page)
+            MeshTab.Paths -> Paths(page, state, actions) { addingPath = true }
         }
         // 添加网络, then 移除网络 after a divider (docs/mesh-ui.md, 入口与导航).
         Section(null) {
@@ -617,13 +628,31 @@ private fun SubnetRow(row: MeshSubnetRow, busy: Boolean, actions: MeshActions) {
 // Paths.
 
 @Composable
-private fun Paths(page: MeshPage) {
+private fun Paths(page: MeshPage, state: MeshState, actions: MeshActions, addPath: () -> Unit) {
     val paths = page.paths
     Section(stringResource(R.string.mesh_default_routing)) {
-        InfoRow(
-            stringResource(R.string.mesh_policy),
-            stringResource(if (paths.policy == "hops") R.string.mesh_policy_hops else R.string.mesh_policy_latency),
-        )
+        Column(Modifier.padding(horizontal = BrandSpacing.md, vertical = BrandSpacing.sm)) {
+            Text(stringResource(R.string.mesh_policy), style = MaterialTheme.typography.bodyLarge)
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = BrandSpacing.xs),
+            ) {
+                val options = listOf(
+                    "latency" to stringResource(R.string.mesh_policy_latency),
+                    "hops" to stringResource(R.string.mesh_policy_hops),
+                )
+                val selected = if (paths.policy == "hops") "hops" else "latency"
+                options.forEachIndexed { index, (value, label) ->
+                    SegmentedButton(
+                        selected = value == selected,
+                        onClick = { if (value != selected) actions.setPolicy(value) },
+                        enabled = !state.busy,
+                        shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                    ) { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                }
+            }
+        }
     }
     paths.links?.let { links ->
         Section(stringResource(R.string.mesh_links)) {
@@ -639,8 +668,29 @@ private fun Paths(page: MeshPage) {
             if (custom.isEmpty()) Note(stringResource(R.string.mesh_no_custom_paths))
             custom.forEachIndexed { index, path ->
                 if (index > 0) RowDivider()
-                CustomPathRow(path)
+                CustomPathRow(path, !state.busy) { actions.removePath(path.id) }
             }
+            if (state.removedPaths != null) {
+                RowDivider()
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(start = BrandSpacing.md, end = BrandSpacing.xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(R.string.mesh_path_removed),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = LocalBrandPalette.current.text2,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = actions.undoPathRemoval, enabled = !state.busy) {
+                        Text(stringResource(R.string.mesh_undo))
+                    }
+                }
+            }
+            RowDivider()
+            ActionRow(stringResource(R.string.mesh_add_path), LocalBrandPalette.current.primary, MESH_ADD_PATH_TAG, addPath)
         }
     }
 }
@@ -677,7 +727,7 @@ private fun LinkRow(link: MeshLink) {
 }
 
 @Composable
-private fun CustomPathRow(path: MeshCustomPath) {
+private fun CustomPathRow(path: MeshCustomPath, enabled: Boolean, remove: () -> Unit) {
     val palette = LocalBrandPalette.current
     val parts = mutableListOf<String>()
     if (path.via.isNotEmpty()) parts += stringResource(R.string.mesh_via, path.via.joinToString(" → "))
@@ -689,7 +739,7 @@ private fun CustomPathRow(path: MeshCustomPath) {
             .padding(horizontal = BrandSpacing.md, vertical = BrandSpacing.sm),
         verticalArrangement = Arrangement.spacedBy(BrandSpacing.xxs),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(BrandSpacing.xs)) {
             Text(path.targetLabel, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
             Text(
                 stringResource(
@@ -702,6 +752,10 @@ private fun CustomPathRow(path: MeshCustomPath) {
                 style = MaterialTheme.typography.labelMedium,
                 color = if (path.state == "active") palette.text2 else palette.amberText,
             )
+            val removeLabel = stringResource(R.string.mesh_remove_path, path.targetLabel)
+            IconButton(onClick = remove, enabled = enabled, modifier = Modifier.semantics { contentDescription = removeLabel }) {
+                Icon(Icons.Filled.Close, contentDescription = null, tint = palette.text2)
+            }
         }
         Text(parts.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = palette.text2)
     }

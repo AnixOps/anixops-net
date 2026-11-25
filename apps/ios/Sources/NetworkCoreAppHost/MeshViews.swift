@@ -243,6 +243,8 @@ struct MeshPage: View {
     @State private var adding = false
     /// The network whose removal waits for confirmation (T1), by name.
     @State private var removing: String?
+    /// 添加路径 (a panel on phones).
+    @State private var addingPath = false
 
     var body: some View {
         List {
@@ -285,6 +287,11 @@ struct MeshPage: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 moreMenu
+            }
+        }
+        .sheet(isPresented: $addingPath) {
+            MeshPathSheet(status: model.status) { draft in
+                await model.addPath(draft, tunnel: tunnel)
             }
         }
         .sheet(isPresented: $adding) {
@@ -593,10 +600,22 @@ struct MeshPage: View {
     private var pathSections: some View {
         let answer = MeshObject(MeshView.paths(status: model.status))
         Section("默认选路") {
-            LabeledContent("路径策略") {
-                Text(MeshText.policy(answer.string("policy")))
-                    .foregroundStyle(brand.text2)
+            Picker("路径策略", selection: Binding(
+                get: { answer.string("policy") == "hops" ? "hops" : "latency" },
+                set: { policy in
+                    guard policy != answer.string("policy") else {
+                        return
+                    }
+                    Task {
+                        await model.setPolicy(policy, tunnel: tunnel)
+                    }
+                }
+            )) {
+                Text("延迟最低").tag("latency")
+                Text("跳数最低").tag("hops")
             }
+            .pickerStyle(.segmented)
+            .disabled(model.busy)
             .listRowBackground(brand.surface)
         }
         if answer.raw["links"] is [Any] {
@@ -626,7 +645,36 @@ struct MeshPage: View {
                 ForEach(Array(paths.enumerated()), id: \.offset) { _, path in
                     MeshCustomPathRow(path: path)
                         .listRowBackground(brand.surface)
+                        .swipeActions {
+                            Button("移除", role: .destructive) {
+                                Task {
+                                    await model.removePath(path.string("id") ?? "", tunnel: tunnel)
+                                }
+                            }
+                        }
                 }
+                if model.removedPaths != nil {
+                    HStack {
+                        Text("已移除路径。")
+                            .font(.subheadline)
+                            .foregroundStyle(brand.text2)
+                        Spacer()
+                        Button("撤销") {
+                            Task {
+                                await model.undoPathRemoval(tunnel: tunnel)
+                            }
+                        }
+                        .disabled(model.busy)
+                    }
+                    .listRowBackground(brand.surface)
+                }
+                Button {
+                    addingPath = true
+                } label: {
+                    Label("添加路径", systemImage: "plus")
+                }
+                .disabled(model.busy)
+                .listRowBackground(brand.surface)
             }
         }
     }

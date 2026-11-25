@@ -203,6 +203,47 @@ final class MeshModel {
         await send(.meshSetSubnetRoute(network: id, cidr: cidr, route: route), tunnel: tunnel)
     }
 
+    /// The network's default path policy: `latency` or `hops` (kernel 0.5).
+    func setPolicy(_ policy: String, tunnel: TunnelController) async {
+        guard let id = network?.string("id") else {
+            return
+        }
+        await send(.meshSetPolicy(network: id, policy: policy), tunnel: tunnel)
+    }
+
+    /// The custom paths before the last removal, for 撤销 (T0); nil when there is nothing to undo.
+    private(set) var removedPaths: [MeshRoutingPath]?
+
+    /// Removes a custom path, by id; the list before it can be put back with `undoPathRemoval`.
+    func removePath(_ pathID: String, tunnel: TunnelController) async {
+        guard let id = network?.string("id"),
+              let before = MeshPaths.routing(status: status),
+              let after = MeshPaths.routing(status: status, remove: pathID)
+        else {
+            return
+        }
+        await send(.meshSetPaths(network: id, paths: after), tunnel: tunnel)
+        removedPaths = refusal == nil ? before : nil
+    }
+
+    func undoPathRemoval(tunnel: TunnelController) async {
+        guard let id = network?.string("id"), let paths = removedPaths else {
+            return
+        }
+        removedPaths = nil
+        await send(.meshSetPaths(network: id, paths: paths), tunnel: tunnel)
+    }
+
+    /// Adds a custom path, replacing one to the same target. False when a member on it has no virtual address.
+    func addPath(_ draft: MeshPaths.Draft, tunnel: TunnelController) async -> Bool {
+        guard let id = network?.string("id"), let paths = MeshPaths.routing(status: status, add: draft) else {
+            return false
+        }
+        removedPaths = nil
+        await send(.meshSetPaths(network: id, paths: paths), tunnel: tunnel)
+        return true
+    }
+
     func clearRefusal() {
         refusal = nil
     }

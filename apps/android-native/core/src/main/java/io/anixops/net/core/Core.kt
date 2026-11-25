@@ -168,6 +168,24 @@ class Core(
         },
     )
 
+    /** The network's default path policy: `latency` or `hops` (kernel 0.5). */
+    suspend fun setMeshPolicy(network: String, policy: String): MeshRefusal? = meshCommand(
+        buildJsonObject {
+            put("cmd", "mesh_set_policy")
+            put("network", network)
+            put("policy", policy)
+        },
+    )
+
+    /** A network's custom paths, the whole list in the kernel's `routing.paths` form ([MeshRouting.paths]). */
+    suspend fun setMeshPaths(network: String, paths: JsonArray): MeshRefusal? = meshCommand(
+        buildJsonObject {
+            put("cmd", "mesh_set_paths")
+            put("network", network)
+            put("paths", paths)
+        },
+    )
+
     private suspend fun meshCommand(request: JsonObject): MeshRefusal? {
         val answer = try {
             controlRequest(request)
