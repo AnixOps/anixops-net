@@ -17,7 +17,7 @@ use std::fmt;
 use std::fs::{self, File, OpenOptions};
 use std::io;
 use std::net::SocketAddr;
-use std::os::windows::fs::OpenOptionsExt;
+use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -134,17 +134,32 @@ impl Drop for AdapterLease {
     }
 }
 
+/// FILE_FLAG_OPEN_REPARSE_POINT: open a link itself rather than what it points to.
+const OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+/// FILE_ATTRIBUTE_REPARSE_POINT.
+const REPARSE_POINT: u32 = 0x0400;
+
+/// Opens the lock file without sharing. A link planted in its place is opened as the link itself and refused, so the
+/// lock never opens, creates or holds a file elsewhere.
 fn open_exclusive(path: &Path) -> io::Result<File> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    OpenOptions::new()
+    let file = OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
         .truncate(false)
         .share_mode(0)
-        .open(path)
+        .custom_flags(OPEN_REPARSE_POINT)
+        .open(path)?;
+    if file.metadata()?.file_attributes() & REPARSE_POINT != 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "the TUN adapter lock is a link, not a file",
+        ));
+    }
+    Ok(file)
 }
 
 static ADAPTER: ProcessLock = ProcessLock::new();
@@ -317,6 +332,33 @@ mod tests {
         );
         drop(second);
         drop(open_exclusive(&path).expect("free once the last lease is gone"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_link_in_place_of_the_lock_is_refused() {
+        let dir = std::env::temp_dir().join(format!("anixops-tun-link-{}", std::process::id()));
+        let target = dir.join("elsewhere");
+        let link = dir.join("tun-adapter.lock");
+        fs::create_dir_all(&target).unwrap();
+        // A directory junction needs no privilege, unlike a symbolic link.
+        let made = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(&link)
+            .arg(&target)
+            .status()
+            .expect("cmd runs");
+        assert!(made.success(), "the junction was made");
+        let refused = open_exclusive(&link).unwrap_err();
+        assert!(
+            refused.kind() == io::ErrorKind::InvalidInput || refused.raw_os_error().is_some(),
+            "{refused:?}"
+        );
+        assert!(
+            fs::read_dir(&target).unwrap().next().is_none(),
+            "nothing was created behind the link"
+        );
+        let _ = fs::remove_dir(&link);
         let _ = fs::remove_dir_all(dir);
     }
 
