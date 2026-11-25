@@ -822,12 +822,15 @@ html.qr-scanning #root { visibility: hidden; }
 .mesh-table { display: flex; flex-direction: column; min-width: 0; overflow: hidden; background: var(--group); border-radius: var(--radius-card); box-shadow: 0 0 0 .5px var(--hairline); }
 .mesh-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); grid-template-columns: minmax(0, 2.2fr); gap: 10px; align-items: center; width: 100%; min-height: 36px; padding: 6px 12px; color: inherit; font: inherit; font-size: 12px; text-align: left; background: none; border: 0; border-top: .5px solid var(--hairline); }
 .mesh-row.mesh-head { min-height: 28px; color: var(--text2); font-size: 11px; font-weight: 600; border-top: 0; }
-button.mesh-row { cursor: default; }
-button.mesh-row:hover { background: var(--fill-1); }
-.mesh-row.selected { background: var(--accent-soft, var(--fill-1)); }
+.mesh-row.selectable { cursor: default; }
+.mesh-row.selectable:hover { background: var(--fill-1); }
+.mesh-row.selected { background: var(--fill-2); box-shadow: inset 3px 0 0 var(--accent); }
+.mesh-member-name { min-width: 0; padding: 0; color: inherit; font: inherit; font-weight: 600; text-align: left; background: none; border: 0; }
 .mesh-row .number { justify-self: end; }
 .mesh-member { display: flex; gap: 6px; align-items: center; min-width: 0; }
 .mesh-member small { color: var(--text2); white-space: nowrap; }
+.mesh-group-row { display: block; }
+.mesh-group-row > span { display: block; }
 .mesh-group { display: flex; gap: 10px; align-items: baseline; width: 100%; padding: 8px 12px; color: inherit; font: inherit; font-size: 12px; text-align: left; background: var(--fill-1); border: 0; border-top: .5px solid var(--hairline); }
 .mesh-group small { color: var(--text2); }
 .mesh-child { display: flex; gap: 12px; padding: 4px 12px 4px 34px; color: var(--text2); font-size: 12px; }

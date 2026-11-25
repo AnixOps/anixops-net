@@ -278,10 +278,14 @@ function Members({ view, query, setQuery, selected, setSelected }: {
               return (
                 <div key={key || "all"} role="rowgroup">
                   {grouped && (
-                    <button className="mesh-group" aria-expanded={open} onClick={() => setFolded({ ...folded, [key]: open })}>
-                      <strong>{groupTitle(view, members.groupBy, group)}</strong>
-                      {!open && <small>{groupSummary(group)}</small>}
-                    </button>
+                    <div className="mesh-group-row" role="row">
+                      <span role="rowheader">
+                        <button className="mesh-group" aria-expanded={open} onClick={() => setFolded({ ...folded, [key]: open })}>
+                          <strong>{groupTitle(view, members.groupBy, group)}</strong>
+                          {!open && <small>{groupSummary(group)}</small>}
+                        </button>
+                      </span>
+                    </div>
                   )}
                   {open && group.rows.map((row) => (
                     <MemberRow key={row.id} view={view} row={row} showRegion={!grouped || members.groupBy === "role"} selected={row.id === selected} onSelect={() => setSelected(row.id === selected ? null : row.id)} />
@@ -331,10 +335,20 @@ function MemberRow({ view, row, showRegion, selected, onSelect }: {
   const role = roleLabel(row.role);
   return (
     <>
-      <button className={`mesh-row ${selected ? "selected" : ""}`} role="row" aria-selected={selected} onClick={onSelect}>
+      {/* The row is a table row; its name is the button that selects it, so the keyboard reaches every member. */}
+      <div className={`mesh-row selectable ${selected ? "selected" : ""}`} role="row" onClick={onSelect}>
         <span role="cell" className="mesh-member">
           <StatusDot tone={stateTone(row.state)} />
-          <strong className="truncate">{row.name}</strong>
+          <button
+            className="mesh-member-name truncate"
+            aria-pressed={selected}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelect();
+            }}
+          >
+            {row.name}
+          </button>
           {role && <span className="mesh-tag accent">{role}</span>}
           {row.self && <span className="mesh-tag">{t("本机")}</span>}
           {(row.marks ?? []).map((mark) => markLabel(mark) && <span key={mark} className="mesh-tag warning">{markLabel(mark)}</span>)}
@@ -347,7 +361,7 @@ function MemberRow({ view, row, showRegion, selected, onSelect }: {
         <span role="cell">{row.transport?.toUpperCase() ?? ""}</span>
         <span role="cell" className="mono">{row.address ?? ""}</span>
         <span role="cell" className="number">{row.self ? "" : <Latency milliseconds={row.latencyMs} tone={row.tone} />}</span>
-      </button>
+      </div>
       {(row.open || selected) && shown.map((child) => (
         <div key={`${child.kind}:${child.name}`} className={`mesh-child ${child.match ? "match" : ""}`} role="row">
           <span role="cell" className={child.kind === "subnet" ? "mono" : ""}>{child.name}</span>
@@ -355,8 +369,10 @@ function MemberRow({ view, row, showRegion, selected, onSelect }: {
         </div>
       ))}
       {(row.open || selected) && shown.length < children.length && (
-        <div className="mesh-child">
-          <button className="link-button more" onClick={() => setAll(true)}>{t("显示全部 {count} 项", { count: children.length })}</button>
+        <div className="mesh-child" role="row">
+          <span role="cell">
+            <button className="link-button more" onClick={() => setAll(true)}>{t("显示全部 {count} 项", { count: children.length })}</button>
+          </span>
         </div>
       )}
     </>
