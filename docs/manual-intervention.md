@@ -991,3 +991,18 @@ CI 只能在未签名、未运行的 App 上检查 `anixops-mcp` 的握手、工
 - [ ] 打开读取开关并连接后，`get_status`、`list_nodes`、`list_requests`、`get_request` 返回正常；`get_request` 的
   Cookie、Authorization 与查询参数中的令牌均为脱敏后的形式；内容级别改为「仅摘要」后不再返回请求头与正文。
 - [ ] macOS 15 及以上：适配程序访问 App 组容器时系统不弹出「访问其他 App 的数据」提示（依赖 App 组权限与同一团队签名）。
+
+### 操作工具与确认框（P4）
+
+CI 检查工具清单、执行开关、操作的解析与拒绝、授权时长与访问记录，不能显示确认框。以下在真机上确认：
+
+- [ ] 只打开读取开关时，`connect` 等操作工具返回 “has not allowed actions by AI tools”，App 不弹窗。
+- [ ] 打开「允许 AI 工具执行操作」后调用 `select_node`：App 弹出「AI 工具请求操作」，正文为「切换到节点“…”」；
+  点「拒绝」时工具返回 “The user denied this action”，节点未变；点「允许」后节点切换，工具返回新状态。
+- [ ] 60 秒内不作选择，确认框自动关闭，工具返回 “did not confirm this action … within 60 seconds”；关闭确认框窗口等同拒绝。
+- [ ] 勾选「15 分钟内允许此类操作」后允许，15 分钟内同类操作不再弹窗（访问记录显示「允许（15 分钟内）」），其他类操作仍弹窗；
+  关闭执行开关后授权立即失效。
+- [ ] 确认框打开时再请求一次操作，立即返回 “Another action is waiting for the user's confirmation”。
+- [ ] `connect`、`disconnect`、`set_mode`、`test_node_delays`、`set_capture`（开启、关闭、`clear`）、`close_connection`
+  各执行一次，结果与窗口中的同名按钮一致；抓包页的开关状态随之更新。
+- [ ] 设置 › 高级 › 外部工具访问 › 访问记录：显示时间、请求与结果，最多 200 条，「清除记录」后为空。

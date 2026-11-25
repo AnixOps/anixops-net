@@ -12,8 +12,8 @@ use std::cell::RefCell;
 use base64::Engine as _;
 use client_mcp::backend::ACCESS_OFF;
 use client_mcp::{
-    Access, Backend, BackendError, ConnectionState, ContentLevel, LogLevel, LogLine, Node,
-    NodeGroup, Server, Status,
+    Access, Action, Backend, BackendError, ConnectionState, ContentLevel, LogLevel, LogLine, Mode,
+    Node, NodeGroup, Server, Status, ACT_OFF, DENIED, NO_ANSWER,
 };
 use serde_json::{json, Value};
 
@@ -24,6 +24,9 @@ struct Fake {
     /// Answer `capture_exchange` as an engine that does not know `redact`.
     old_engine: bool,
     asked: RefCell<Vec<Value>>,
+    /// What the user answers in the app's confirmation; `Ok` takes the action.
+    confirm: Result<(), BackendError>,
+    acted: RefCell<Vec<Action>>,
 }
 
 impl Fake {
@@ -36,6 +39,8 @@ impl Fake {
             },
             old_engine: false,
             asked: RefCell::new(Vec::new()),
+            confirm: Ok(()),
+            acted: RefCell::new(Vec::new()),
         }
     }
 }
@@ -215,6 +220,12 @@ impl Backend for Fake {
         };
         Ok(answer)
     }
+
+    fn act(&self, action: &Action) -> Result<(), BackendError> {
+        self.confirm.clone()?;
+        self.acted.borrow_mut().push(action.clone());
+        Ok(())
+    }
 }
 
 /// Every tool with arguments that reach every branch above.
@@ -240,6 +251,53 @@ fn calls() -> Vec<(&'static str, Value)> {
         ("get_request", json!({ "connection_id": 1, "index": 0 })),
         ("get_logs", json!({ "level": "debug" })),
     ]
+}
+
+/// Every action tool, and the action the app is asked to take for it.
+fn actions() -> Vec<(&'static str, Value, Action)> {
+    vec![
+        ("connect", json!({}), Action::Connect),
+        ("disconnect", json!({}), Action::Disconnect),
+        (
+            "set_mode",
+            json!({ "mode": "global" }),
+            Action::SetMode { mode: Mode::Global },
+        ),
+        (
+            "select_node",
+            json!({ "node": "Node A", "group": "Provider" }),
+            Action::SelectNode {
+                node: "Node A".to_string(),
+                group: Some("Provider".to_string()),
+            },
+        ),
+        (
+            "test_node_delays",
+            json!({ "group": "Provider" }),
+            Action::TestNodeDelays,
+        ),
+        (
+            "set_capture",
+            json!({ "enabled": false }),
+            Action::SetCapture { enabled: false },
+        ),
+        (
+            "set_capture",
+            json!({ "clear": true }),
+            Action::ClearCapture,
+        ),
+        (
+            "close_connection",
+            json!({ "id": 1 }),
+            Action::CloseConnection { id: 1 },
+        ),
+    ]
+}
+
+fn acting(content: ContentLevel) -> Fake {
+    let mut fake = Fake::new(content);
+    fake.access.act = true;
+    fake
 }
 
 fn call(server: &Server<Fake>, name: &str, arguments: Value) -> Value {
@@ -277,7 +335,10 @@ fn every_tool_is_refused_while_access_is_off() {
     let mut fake = Fake::new(ContentLevel::Bodies);
     fake.access = Access::OFF;
     let server = Server::new(fake);
-    for (name, arguments) in calls() {
+    let actions = actions()
+        .into_iter()
+        .map(|(name, arguments, _)| (name, arguments));
+    for (name, arguments) in calls().into_iter().chain(actions) {
         let result = call(&server, name, arguments);
         assert_eq!(result["isError"], true, "{name}");
         assert_eq!(result["content"][0]["text"], ACCESS_OFF, "{name}");
@@ -286,6 +347,96 @@ fn every_tool_is_refused_while_access_is_off() {
         server.backend().asked.borrow().is_empty(),
         "nothing reached the engine"
     );
+    assert!(
+        server.backend().acted.borrow().is_empty(),
+        "nothing was done"
+    );
+}
+
+#[test]
+fn reading_alone_takes_no_action() {
+    let mut fake = acting(ContentLevel::Bodies);
+    fake.access.act = false;
+    let server = Server::new(fake);
+    for (name, arguments, _) in actions() {
+        let result = call(&server, name, arguments);
+        assert_eq!(result["isError"], true, "{name}");
+        assert_eq!(result["content"][0]["text"], ACT_OFF, "{name}");
+    }
+    assert!(server.backend().acted.borrow().is_empty());
+    assert!(server.backend().asked.borrow().is_empty());
+}
+
+#[test]
+fn each_action_is_asked_of_the_app_and_answers_without_a_canary() {
+    let server = Server::new(acting(ContentLevel::Bodies));
+    for (name, arguments, action) in actions() {
+        let result = call(&server, name, arguments);
+        let text = result.to_string();
+        assert_eq!(result["isError"], false, "{name}: {text}");
+        assert!(!text.contains(CANARY), "{name}: {text}");
+        assert_eq!(
+            server.backend().acted.borrow_mut().pop(),
+            Some(action),
+            "{name}"
+        );
+    }
+    let status = call(&server, "set_mode", json!({ "mode": "rule" }));
+    assert_eq!(content(&status)["mode"], "rule");
+    let capture = call(&server, "set_capture", json!({ "enabled": true }));
+    assert_eq!(content(&capture)["enabled"], true);
+    let nodes = call(&server, "test_node_delays", json!({}));
+    assert_eq!(
+        content(&nodes)["subscriptions"][0]["nodes"][0]["latency_ms"],
+        42
+    );
+    let closed = call(&server, "close_connection", json!({ "id": 7 }));
+    assert_eq!(content(&closed), &json!({ "closed": 7 }));
+}
+
+#[test]
+fn an_action_the_user_does_not_allow_is_not_taken() {
+    for (refusal, sentence) in [
+        (BackendError::Denied, DENIED),
+        (BackendError::NoAnswer, NO_ANSWER),
+    ] {
+        let mut fake = acting(ContentLevel::Summary);
+        fake.confirm = Err(refusal);
+        let server = Server::new(fake);
+        for (name, arguments, _) in actions() {
+            let result = call(&server, name, arguments);
+            assert_eq!(result["isError"], true, "{name}");
+            assert_eq!(result["content"][0]["text"], sentence, "{name}");
+        }
+        assert!(server.backend().acted.borrow().is_empty());
+        // Nothing reaches the engine for an action that was not taken.
+        assert!(server.backend().asked.borrow().is_empty());
+    }
+}
+
+#[test]
+fn action_arguments_are_checked_before_the_app_is_asked() {
+    let server = Server::new(acting(ContentLevel::Summary));
+    for (name, arguments) in [
+        ("connect", json!({ "node": "Node A" })),
+        ("set_mode", json!({ "mode": "fast" })),
+        ("set_mode", json!({})),
+        ("select_node", json!({ "node": " " })),
+        (
+            "select_node",
+            json!({ "node": "Node A", "server": "a.test" }),
+        ),
+        ("test_node_delays", json!({ "group": "Nobody" })),
+        ("set_capture", json!({})),
+        ("set_capture", json!({ "enabled": true, "clear": true })),
+        ("set_capture", json!({ "clear": false })),
+        ("close_connection", json!({ "id": -1 })),
+        ("close_connection", json!({})),
+    ] {
+        let result = call(&server, name, arguments.clone());
+        assert_eq!(result["isError"], true, "{name} {arguments}");
+    }
+    assert!(server.backend().acted.borrow().is_empty());
 }
 
 #[test]

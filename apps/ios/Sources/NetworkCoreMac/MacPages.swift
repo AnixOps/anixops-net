@@ -798,6 +798,7 @@ struct MacCommandLineSection: View {
 struct MacAgentAccessSection: View {
     @State private var access = AgentAccess.load()
     @State private var copied = false
+    @State private var showsLog = false
 
     private var configuration: String {
         let tool = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/anixops-mcp").path
@@ -808,6 +809,10 @@ struct MacAgentAccessSection: View {
         Section {
             Toggle("允许 AI 工具读取状态", isOn: $access.read)
             if access.read {
+                Toggle(isOn: $access.act) {
+                    Text("允许 AI 工具执行操作")
+                    Text("每次操作均需在本应用中确认。")
+                }
                 Picker("请求内容", selection: $access.content) {
                     Text("仅摘要").tag(AgentContentLevel.summary)
                     Text("摘要和请求头").tag(AgentContentLevel.headers)
@@ -824,6 +829,11 @@ struct MacAgentAccessSection: View {
                         copied = true
                     }
                 }
+                LabeledContent("访问记录") {
+                    Button("查看") {
+                        showsLog = true
+                    }
+                }
             }
         } header: {
             Text("外部工具访问")
@@ -831,7 +841,81 @@ struct MacAgentAccessSection: View {
             Text("允许本机的 AI 工具读取连接状态、节点、规则和请求摘要。请求内容均已脱敏。")
         }
         .onChange(of: access) { _, new in
+            if !new.read, new.act {
+                access.act = false
+                return
+            }
+            if !new.act {
+                MacAgentConfirmation.shared.revokeAll()
+            }
             new.save()
+        }
+        .sheet(isPresented: $showsLog) {
+            MacAgentAccessLogView()
+        }
+    }
+}
+
+/// The last calls of AI tools (`AgentAccessLog`): time, request and outcome, newest first. Kept on this Mac only.
+struct MacAgentAccessLogView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var log = AgentAccessLog.load()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("访问记录")
+                .font(.headline)
+            if log.entries.isEmpty {
+                Text("暂无访问记录")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                Table(Array(log.entries.reversed())) {
+                    TableColumn("时间") { entry in
+                        Text(entry.at, format: .dateTime.month().day().hour().minute().second())
+                            .monospacedDigit()
+                    }
+                    TableColumn("请求") { entry in
+                        Text(verbatim: entry.call)
+                            .font(.system(.body, design: .monospaced))
+                    }
+                    TableColumn("结果") { entry in
+                        Text(Self.outcome(entry.outcome))
+                    }
+                }
+            }
+            HStack {
+                Text("仅保存在本机，最多 200 条。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("清除记录") {
+                    AgentAccessLog.clear()
+                    log = AgentAccessLog()
+                }
+                .disabled(log.entries.isEmpty)
+                Button("完成") {
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 520, height: 420)
+    }
+
+    private static func outcome(_ outcome: AgentAccessLog.Outcome) -> LocalizedStringKey {
+        switch outcome {
+        case .allowed:
+            return "允许"
+        case .granted:
+            return "允许（15 分钟内）"
+        case .denied:
+            return "拒绝"
+        case .noAnswer:
+            return "超时"
+        case .refused:
+            return "未授权"
         }
     }
 }

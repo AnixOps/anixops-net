@@ -4,13 +4,16 @@ import XCTest
 
 /// AI tools' access through the MCP program (docs/mcp-desktop.md): the gate the app applies to every engine request.
 final class AgentGateTests: XCTestCase {
+    private static var root: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+    }
+
     private static func policy() throws -> [String: Any] {
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
         let url = root.appendingPathComponent("crates/client-mcp/policy.json")
         let object = try JSONSerialization.jsonObject(with: Data(contentsOf: url))
         let policy = try XCTUnwrap(object as? [String: Any])
@@ -77,6 +80,84 @@ final class AgentGateTests: XCTestCase {
         XCTAssertEqual(AgentAccess.load(from: defaults).content, .summary)
     }
 
+    /// Actions only together with reading: turning reading off turns actions off, and a saved switch for actions
+    /// without reading counts for nothing.
+    func testActionsNeedReading() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "AgentGateTests-\(UUID().uuidString)"))
+        XCTAssertFalse(AgentAccess(read: false, act: true).act)
+        AgentAccess(read: true, act: true).save(to: defaults)
+        XCTAssertTrue(AgentAccess.load(from: defaults).act)
+        var access = AgentAccess.load(from: defaults)
+        access.read = false
+        access.save(to: defaults)
+        XCTAssertEqual(AgentAccess.load(from: defaults), .off)
+        defaults.set(true, forKey: AgentAccess.actKey)
+        XCTAssertFalse(AgentAccess.load(from: defaults).act)
+    }
+
+    /// Every action the MCP program sends (crates/client-mcp/tests/fixtures/actions.json) is one the app reads.
+    func testEveryActionTheProgramSendsIsRead() throws {
+        let url = Self.root.appendingPathComponent("crates/client-mcp/tests/fixtures/actions.json")
+        let fixture = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [[String: Any]])
+        var kinds = Set<String>()
+        var actions: [AgentAction] = []
+        for object in fixture {
+            let text = String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
+            let action = try AgentAction.parse(text).get()
+            XCTAssertEqual(action.kind, object["action"] as? String, text)
+            kinds.insert(action.kind)
+            actions.append(action)
+        }
+        XCTAssertEqual(kinds, AgentAction.kinds)
+        XCTAssertEqual(actions, [
+            .connect, .disconnect, .setMode(.global), .selectNode(node: "Node A", group: nil),
+            .selectNode(node: "Node A", group: "Provider"), .testNodeDelays, .setCapture(true), .clearCapture,
+            .closeConnection(7),
+        ])
+    }
+
+    func testOnlyKnownActionsWithTheirOwnFieldsAreRead() {
+        XCTAssertEqual(AgentAction.parse(#"{"action":"import_subscription","url":"x"}"#), .failure(.notAllowed("import_subscription")))
+        XCTAssertEqual(AgentAction.parse(#"{"action":"connect","node":"a"}"#), .failure(.notAllowed("node")))
+        XCTAssertEqual(AgentAction.parse(#"{"action":"set_mode","mode":"fast"}"#), .failure(.malformed))
+        XCTAssertEqual(AgentAction.parse(#"{"action":"set_mode"}"#), .failure(.malformed))
+        XCTAssertEqual(AgentAction.parse(#"{"action":"select_node","node":" "}"#), .failure(.malformed))
+        XCTAssertEqual(AgentAction.parse(#"{"action":"select_node","node":"a","group":1}"#), .failure(.malformed))
+        XCTAssertEqual(AgentAction.parse(#"{"action":"set_capture","enabled":1}"#), .failure(.malformed))
+        XCTAssertEqual(AgentAction.parse(#"{"action":"close_connection","id":-1}"#), .failure(.malformed))
+        XCTAssertEqual(AgentAction.parse(#"{"action":"close_connection","id":1.5}"#), .failure(.malformed))
+        XCTAssertEqual(AgentAction.parse(#"{"action":"close_connection","id":true}"#), .failure(.malformed))
+        XCTAssertEqual(AgentAction.parse(#"{"cmd":"set_capture"}"#), .failure(.malformed))
+        XCTAssertEqual(AgentAction.parse("{"), .failure(.malformed))
+    }
+
+    func testAGrantCoversItsKindForFifteenMinutes() {
+        let start = Date(timeIntervalSince1970: 1000)
+        var grants = AgentGrants()
+        XCTAssertFalse(grants.allows("select_node", at: start))
+        grants.grant("select_node", at: start)
+        XCTAssertTrue(grants.allows("select_node", at: start.addingTimeInterval(14 * 60)))
+        XCTAssertFalse(grants.allows("select_node", at: start.addingTimeInterval(15 * 60)))
+        XCTAssertFalse(grants.allows("disconnect", at: start), "only its own kind")
+        grants.revokeAll()
+        XCTAssertFalse(grants.allows("select_node", at: start))
+    }
+
+    func testTheAccessLogKeepsTheLast200() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "AgentGateTests-\(UUID().uuidString)"))
+        XCTAssertTrue(AgentAccessLog.load(from: defaults).entries.isEmpty)
+        for index in 0 ..< 205 {
+            AgentAccessLog.record("call-\(index)", index.isMultiple(of: 2) ? .allowed : .denied, defaults: defaults)
+        }
+        let log = AgentAccessLog.load(from: defaults)
+        XCTAssertEqual(log.entries.count, AgentAccessLog.limit)
+        XCTAssertEqual(log.entries.first?.call, "call-5")
+        XCTAssertEqual(log.entries.last?.call, "call-204")
+        XCTAssertEqual(log.entries.last?.outcome, .allowed)
+        AgentAccessLog.clear(in: defaults)
+        XCTAssertTrue(AgentAccessLog.load(from: defaults).entries.isEmpty)
+    }
+
     #if os(macOS)
     /// The wire format the MCP program (crates/client-mcp/src/control_channel.rs) writes and reads.
     func testAgentRequestsAndAnswersOnTheWire() throws {
@@ -97,6 +178,19 @@ final class AgentGateTests: XCTestCase {
             JSONSerialization.jsonObject(with: JSONEncoder().encode(ControlResponse.failure(.accessOff, "off"))) as? [String: Any]
         )
         XCTAssertEqual(failure["error"] as? String, "accessOff")
+
+        // The refusals of an action, as control_channel.rs maps them.
+        for (code, wire) in [(ControlErrorCode.actOff, "actOff"), (.denied, "denied"), (.noAnswer, "noAnswer")] {
+            let refusal = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: JSONEncoder().encode(ControlResponse.failure(code, "x"))) as? [String: Any]
+            )
+            XCTAssertEqual(refusal["error"] as? String, wire)
+        }
+        let act = #"{"agent":"act","command":"agent","payload":"{\"action\":\"connect\"}","version":1}"#
+        XCTAssertEqual(
+            try JSONDecoder().decode(ControlRequest.self, from: Data(act.utf8)),
+            ControlRequest(command: .agent, agent: .act, payload: #"{"action":"connect"}"#)
+        )
     }
     #endif
 

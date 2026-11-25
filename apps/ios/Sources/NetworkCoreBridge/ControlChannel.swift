@@ -53,7 +53,7 @@ public struct ControlRequest: Codable, Equatable, Sendable {
     public var text: String?
     /// `agent`: what the MCP program asks.
     public var agent: AgentCall?
-    /// `agent` `engine`: the engine request, JSON text.
+    /// `agent` `engine`: the engine request; `agent` `act`: the action (`AgentAction`). JSON text.
     public var payload: String?
 
     public init(
@@ -97,6 +97,12 @@ public enum ControlErrorCode: String, Codable, Equatable, Sendable {
     case accessOff
     /// `agent`: the request needs the engine, which runs only while connected.
     case notConnected
+    /// `agent` `act`: the user has not allowed actions by AI tools.
+    case actOff
+    /// `agent` `act`: the user refused the action.
+    case denied
+    /// `agent` `act`: the user did not answer the confirmation in time.
+    case noAnswer
 }
 
 public struct ControlStatus: Codable, Equatable, Sendable {

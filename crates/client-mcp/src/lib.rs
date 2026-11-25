@@ -33,8 +33,8 @@ pub mod text;
 pub mod tools;
 
 pub use backend::{
-    Access, Backend, BackendError, ConnectionState, ContentLevel, LogLevel, LogLine, Node,
-    NodeGroup, Status, ACCESS_OFF, NOT_CONNECTED,
+    Access, Action, Backend, BackendError, ConnectionState, ContentLevel, LogLevel, LogLine, Mode,
+    Node, NodeGroup, Status, ACCESS_OFF, ACT_OFF, DENIED, NOT_CONNECTED, NO_ANSWER,
 };
 pub use server::Server;
 

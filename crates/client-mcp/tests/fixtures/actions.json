@@ -1,0 +1,11 @@
+[
+  { "action": "connect" },
+  { "action": "disconnect" },
+  { "action": "set_mode", "mode": "global" },
+  { "action": "select_node", "node": "Node A" },
+  { "action": "select_node", "node": "Node A", "group": "Provider" },
+  { "action": "test_node_delays" },
+  { "action": "set_capture", "enabled": true },
+  { "action": "clear_capture" },
+  { "action": "close_connection", "id": 7 }
+]

@@ -83,7 +83,8 @@ final class MacControlService {
     // MARK: AI tools (docs/mcp-desktop.md)
 
     /// The MCP program's requests. Its answers go to an AI tool, so they are English and carry no node address or
-    /// credential; the engine sees only what `AgentGate` lets through.
+    /// credential; the engine sees only what `AgentGate` lets through, and an action happens only once the user has
+    /// confirmed it (`MacAgentConfirmation`). Every request but `access` goes into the access log.
     private func agent(_ request: ControlRequest) async -> ControlResponse {
         let access = AgentAccess.load()
         guard let call = request.agent else {
@@ -92,7 +93,9 @@ final class MacControlService {
         if call == .access {
             return ControlResponse(access: access)
         }
+        let name = Self.logName(call, payload: request.payload)
         guard access.read else {
+            AgentAccessLog.record(name, .refused)
             return .failure(.accessOff, "AnixOps Net has not allowed access by AI tools.")
         }
         switch call {
@@ -104,8 +107,10 @@ final class MacControlService {
             case let .success(data):
                 gated = data
             case let .failure(refusal):
+                AgentAccessLog.record(name, .refused)
                 return .failure(.usage, refusal.message)
             }
+            AgentAccessLog.record(name, .allowed)
             guard tunnel.connection == .connected else {
                 return .failure(.notConnected, "AnixOps Net is not connected.")
             }
@@ -114,6 +119,7 @@ final class MacControlService {
             }
             return ControlResponse(payload: String(decoding: answer, as: UTF8.self))
         case .logs:
+            AgentAccessLog.record(name, .allowed)
             guard tunnel.connection == .connected else {
                 return .failure(.notConnected, "AnixOps Net is not connected.")
             }
@@ -125,6 +131,124 @@ final class MacControlService {
                 return .failure(.failed, "The log could not be read.")
             }
             return ControlResponse(payload: String(decoding: data, as: UTF8.self))
+        case .act:
+            return await act(request.payload ?? "", access: access, name: name)
+        }
+    }
+
+    /// An action of an AI tool: the user's switch, the action itself, the user's confirmation, and then the same code
+    /// as the window's own button or the `anixops` command.
+    private func act(_ payload: String, access: AgentAccess, name: String) async -> ControlResponse {
+        guard access.act else {
+            AgentAccessLog.record(name, .refused)
+            return .failure(.actOff, "AnixOps Net has not allowed actions by AI tools.")
+        }
+        let action: AgentAction
+        switch AgentAction.parse(payload) {
+        case let .success(parsed):
+            action = parsed
+        case let .failure(refusal):
+            AgentAccessLog.record(name, .refused)
+            return .failure(.usage, refusal.message)
+        }
+        // What needs the engine is refused before the user is asked about it.
+        switch action {
+        case .setCapture, .clearCapture, .closeConnection:
+            guard tunnel.connection == .connected else {
+                return .failure(.notConnected, "AnixOps Net is not connected.")
+            }
+        default:
+            break
+        }
+        let answer = await MacAgentConfirmation.shared.confirm(action)
+        switch answer {
+        case .allowed:
+            AgentAccessLog.record(name, .allowed)
+        case .granted:
+            AgentAccessLog.record(name, .granted)
+        case .denied:
+            AgentAccessLog.record(name, .denied)
+            return .failure(.denied, "The user denied this action.")
+        case .noAnswer:
+            AgentAccessLog.record(name, .noAnswer)
+            return .failure(.noAnswer, "The user did not answer in time.")
+        case .busy:
+            AgentAccessLog.record(name, .refused)
+            return .failure(.unavailable, "Another action is waiting for the user's confirmation. Try again later.")
+        }
+        // The user may have turned actions off while the confirmation was open.
+        guard AgentAccess.load().act else {
+            return .failure(.actOff, "AnixOps Net has not allowed actions by AI tools.")
+        }
+        let done: ControlResponse
+        switch action {
+        case .connect:
+            done = await connect()
+        case .disconnect:
+            done = await disconnect()
+        case let .setMode(mode):
+            done = await self.mode(mode)
+        case let .selectNode(node, group):
+            done = await select(node: node, group: group)
+        case .testNodeDelays:
+            await tunnel.testLatency()
+            done = ControlResponse()
+        case let .setCapture(on):
+            done = await engineAction(.setCapture(on))
+        case .clearCapture:
+            done = await engineAction(.clearCapture)
+        case let .closeConnection(id):
+            done = await engineAction(.closeConnection(id))
+        }
+        // The window's answers are for people; the AI tool gets English.
+        guard done.ok else {
+            return .failure(done.error ?? .failed, Self.agentFailure(done.error))
+        }
+        return ControlResponse()
+    }
+
+    /// An engine request of an action, sent as the window sends it, so the app's own view of capture stays right.
+    private func engineAction(_ command: RuntimeControl) async -> ControlResponse {
+        guard tunnel.connection == .connected else {
+            return .failure(.notConnected, "")
+        }
+        guard await tunnel.tunnelControl(command) != nil else {
+            return .failure(.failed, "")
+        }
+        return ControlResponse()
+    }
+
+    private static func agentFailure(_ error: ControlErrorCode?) -> String {
+        switch error {
+        case .notFound:
+            return "No subscription or node has that name."
+        case .usage:
+            return "The action is not possible now: several subscriptions have that node, or the mode needs rules this subscription does not have."
+        case .unavailable:
+            return "The action is not possible now: nothing is imported yet."
+        case .timeout:
+            return "AnixOps Net did not finish the action in time."
+        case .notConnected:
+            return "AnixOps Net is not connected."
+        default:
+            return "AnixOps Net could not take the action."
+        }
+    }
+
+    /// The request as the access log shows it: an engine command, `logs`, or an action's kind.
+    private static func logName(_ call: AgentCall, payload: String?) -> String {
+        let object = payload
+            .flatMap { $0.data(using: .utf8) }
+            .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        switch call {
+        case .access:
+            return "access"
+        case .logs:
+            return "logs"
+        case .engine:
+            return (object?["cmd"] as? String).map { String($0.prefix(40)) } ?? "engine"
+        case .act:
+            return (object?["action"] as? String).map { String($0.prefix(40)) } ?? "act"
         }
     }
 

@@ -95,7 +95,7 @@ flowchart LR
 | 允许 AI 工具执行操作 | 关，且需先打开上一项 | 每次操作均需在本应用中确认。 |
 | 请求内容 | 仅摘要 | 选项：仅摘要 / 摘要和请求头 / 摘要、请求头和正文。所有内容均已脱敏。 |
 | 配置 | — | 显示 `anixops-mcp` 的完整路径和宿主配置片段，提供「拷贝」。 |
-| 访问记录 | — | 最近 200 次调用：时间、工具、结果（允许 / 拒绝 / 超时）。仅保存在本机。 |
+| 访问记录 | — | 最近 200 次调用：时间、请求（引擎命令、日志或操作名）、结果（允许 / 允许（15 分钟内）/ 拒绝 / 超时 / 未授权）。仅保存在本机。 |
 
 - 读取开关关闭时，所有工具返回同一错误（`crates/client-mcp/src/backend.rs` 的 `ACCESS_OFF`），客户端不弹窗、不通知。
   工具说明与错误是给 AI 工具读的，统一用英文；客户端界面文案仍按系统语言显示。
@@ -132,9 +132,15 @@ flowchart LR
 | `connect` / `disconnect` | 连接或断开 | `runtime_control` / 命令行通道 `connect`、`disconnect` |
 | `set_mode` | 切换规则 / 全局 / 直连 | `set_routing_mode` / `mode` |
 | `select_node` | 切换当前节点或策略组成员 | `switch_node`、`select_native_group_outbound` / `select` |
-| `test_node_delays` | 对指定订阅组测速（会向节点发起连接） | `test_node_delays` / `test` |
-| `set_capture` | 开启或关闭抓包、清空抓包 | 引擎 `set_capture`、`clear_capture` |
+| `test_node_delays` | 对全部节点测速（会向节点发起连接），可只返回指定订阅 | `test_node_delays` / `test` |
+| `set_capture` | 开启或关闭抓包（`enabled`），或清空抓包（`clear: true`） | 引擎 `set_capture`、`clear_capture` |
 | `close_connection` | 关闭一条连接 | `close_connection` |
+
+操作在适配程序与客户端之间是一个 `Action`（`crates/client-mcp/src/backend.rs`，JSON 形如
+`{"action": "select_node", "node": "…"}`，样例见 `crates/client-mcp/tests/fixtures/actions.json`）；`set_capture` 的清空是
+单独的 `clear_capture`，以便「此类操作」的授权按开关与清空分开。客户端只认这八种操作，字段多一个即拒绝
+（macOS：`AgentAction.parse`）。操作完成后，工具按只读工具的方式读回结果：连接、断开、模式、节点返回 `get_status`，
+测速返回 `list_nodes`，抓包返回 `get_capture_status`，关闭连接返回 `{"closed": id}`。
 
 ### 5.3 明确不提供
 
@@ -164,6 +170,13 @@ sequenceDiagram
 - Windows 与 Linux 由后台进程向窗口发 `session.confirm` 请求（`client-ipc` 已支持核心向窗口发请求）；没有窗口连着时直接拒绝。
   macOS 由 App 显示。
 - 不使用 MCP 的 elicitation 做确认：确认结果由宿主转达，客户端无法核实是否出自用户本人。
+- 同一时间只显示一个确认框；确认框打开时到达的操作立即拒绝（“Another action is waiting …”），不排队。
+- 「允许」不响应回车键，避免在其他应用中的按键误触；关闭确认框窗口等同拒绝。
+- 「15 分钟内允许此类操作」按操作名（`Action::kind`）授权，只保存在内存中；App 重启或关闭执行开关即全部失效。
+- 拒绝原因对 AI 工具使用固定英文句子（`ACT_OFF`、`DENIED`、`NO_ANSWER`），控制通道错误码分别为 `actOff`、`denied`、
+  `noAnswer`。需要引擎的操作（抓包、关闭连接）在未连接时直接返回「未连接」，不弹确认框。
+- macOS 实现：`apps/ios/Sources/NetworkCoreMac/MacAgentConfirmation.swift`（确认框），`MacControlService.act`（开关、解析、
+  确认后调用与命令行和窗口相同的代码）。适配程序等待操作结果最多 150 秒（确认 60 秒加连接）。
 
 ## 7. 隐私与脱敏
 
@@ -226,7 +239,7 @@ sequenceDiagram
 | P1 | 内核 `redact` 参数；`client-mcp` 协议与只读工具、假后端测试、隐私金丝雀 | networkcore 与本仓库 PR 合并，CI 全绿。工具定义见 `crates/client-mcp/tools.json` |
 | P2 | macOS 只读：控制通道 `agent` 命令、Swift 闸门、设置页、App 内附带适配程序 | macOS CI 端到端通过，真机验收项登记。执行开关与访问记录随 P4 提供 |
 | P3 | Windows 与 Linux 只读：`Role::Agent`、核心闸门、原生安装包附带适配程序 | 两平台端到端通过。只做原生版（2026-11-25 用户决定）：现行 Tauri 版不接入，设置页随原生版设置页提供 |
-| P4 | 操作工具与确认框（三平台） | 闸门与确认测试通过，真机验收项登记 |
+| P4 | 操作工具与确认框（三平台） | 闸门与确认测试通过，真机验收项登记。macOS 先行：执行开关、确认框、访问记录；Windows 与 Linux 随原生版设置页提供（核心经 `session.confirm` 请窗口确认） |
 | P5 | 视使用情况评估：请求正文级别的默认值、更多诊断工具 | 用户决定 |
 
 ### 10.1 macOS 使用方法（P2）
@@ -241,6 +254,7 @@ sequenceDiagram
 3. 适配程序从所在 App 的 `Info.plist` 读出 App 组，连接 `~/Library/Group Containers/<App 组>/cli.sock`；
    测试时可用 `--socket PATH` 指定。App 未运行时每个工具返回「未运行」错误，不会启动 App。
 4. 适配程序不发起任何网络连接，只经本机套接字与 App 通信。
+5. 操作（P4）：在同一处再打开「允许 AI 工具执行操作」。AI 工具每次请求操作时 App 弹出确认框；「访问记录」列出最近 200 次调用。
 
 ## 11. 已定决定（2026-11-25 用户确认）
 
