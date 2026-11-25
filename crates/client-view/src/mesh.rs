@@ -690,8 +690,13 @@ pub fn notices(status: &Value) -> Value {
             "secret_mismatch" => ("mesh.notice.secret_mismatch", None),
             "security_mismatch" => ("mesh.notice.security_mismatch", Some("network_settings")),
             "port_in_use" => ("mesh.notice.port_in_use", None),
-            "route_conflict" => ("mesh.notice.route_conflict", None),
+            "tun_in_use" => ("mesh.notice.tun_in_use", None),
+            "route_overlap" => ("mesh.notice.route_overlap", None),
+            "address_in_use" => ("mesh.notice.address_in_use", None),
+            "permission_denied" => ("mesh.notice.permission_denied", None),
             "identity_online" => ("mesh.notice.identity_online", None),
+            // Not in the kernel's snapshot: the desktop client or the installer finds the existing
+            // program and puts this code in before asking.
             "existing_program" => ("mesh.notice.existing_program", Some("take_over")),
             "unreachable_peers" => ("mesh.notice.unreachable_peers", None),
             _ => ("mesh.notice.join_failed", None),

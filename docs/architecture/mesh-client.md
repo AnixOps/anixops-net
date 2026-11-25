@@ -2,7 +2,7 @@
 
 状态：草案（2026-11-25）。界面说明见 [`../mesh-ui.md`](../mesh-ui.md)，内核模块见 networkcore_anixops
 `docs/architecture/mesh-module.md`。本页约定客户端从内核读什么、对内核做什么，以及各平台共用的界面逻辑放在哪里。
-内核接口以内核仓库合并的版本为准；两边不一致时先改本页再改代码。
+内核接口的正本是内核仓库的 `docs/architecture/mesh-status.md`（撰写中），字段以那份为准；本页只记客户端怎么用。
 
 ## 分版本
 
@@ -106,10 +106,10 @@
 |---|---|
 | `network.state` | `joined`、`joining`、`partial`（部分不可达）、`not_joined`、`failed` |
 | `network.security` | `forward_secrecy`、`standard`（未启用前向保密）、`none`（未加密） |
-| `network.failure` | `{ "code": …, "detail": "…" }`；`code` 为 `secret_mismatch`、`security_mismatch`、`unencrypted_refused`、`port_in_use`（`detail` 为端口）、`route_conflict`（`detail` 为网段）、`identity_online`、`existing_program`、`unreachable_peers` |
+| `network.failure` | `{ "code": …, "detail": "…" }`；`code` 为 `secret_mismatch`、`security_mismatch`、`unencrypted_refused`、`port_in_use`（`detail` 为端口）、`tun_in_use`、`route_overlap`（`detail` 为网段）、`address_in_use`、`identity_online`、`permission_denied`、`unreachable_peers`，与安装器的冲突码一致。`existing_program` 不由内核给出，桌面客户端或安装器检测到现有组网程序时自行填入 |
 | `network.joining` | `{ "stage": "connecting" \| "assigning_address" \| "measuring_regions", "peersConnected": 2 }` |
 | `routingPolicy` | `latency`、`hops` |
-| `role` | `border`（边界）、`gateway`（网关）、`host`（宿主）、`server`（主机）、`client`（接入端） |
+| `role` | `border`（边界）、`gateway`（网关）、`host`（宿主）、`server`（主机）、`client`（接入端）；内核 0.3 只有 `server`（完整节点）和 `client`（接入节点） |
 | `member.state` | `online`、`unreachable` |
 | `connection` | `self`、`direct`（直连）、`relay`（中转，`hops` 为跳数）、`cross_region`（跨区，`hops`）、`via_host`、`via_gateway`、`unreachable` |
 | `transport` | `tcp`、`udp` |
@@ -123,8 +123,9 @@
 | `link.state` | `ok`、`detour`（已自动切换，`via` 为绕行地区，`reason` 为 `{ "loss": 0.12 }` 或 `{ "latencyMs": 400 }`）、`down` |
 | `path.state` | `active`、`fallback`（`unreachable` 为不可达成员）、`first_hop_only` |
 | `regionState` | `auto`、`pinned`、`pending`（变更申请待批准） |
-| `ipForwarding` | `on`、`off`、`not_needed` |
-| `self.suggestedSubnets` | 完整节点自动发现的本机局域网网段，作为建议列出，用户确认后经 `mesh.advertise` 通告；`public` 为 `true` 的不可通告（R17） |
+| `member.id` | 不透明字符串（对端实例 UUID，重启不变）；不得用数字对端编号 |
+| `ipForwarding` | `on`、`off`、`not_needed`；仅桌面与服务器的完整节点给出 |
+| `self.suggestedSubnets` | 完整节点自动发现的本机局域网网段，作为建议列出，用户确认后经 `mesh_advertise` 通告；`public` 为 `true` 的不可通告（R17）；仅完整节点给出 |
 
 多源子网用 `advertisers` 的多项表示，`inUse` 标出使用中的一项。子网内手动命名的设备只存在客户端本机，不经内核。
 
@@ -132,22 +133,23 @@
 
 | 命令 | 参数 | 版本 |
 |---|---|---|
-| `mesh.status` | 无 | 1.1 |
-| `mesh.join` / `mesh.leave` | `network` | 1.1 |
-| `mesh.save_network` | 网络配置（内核 `type: mesh` 的 `config_version: 1` 结构，密钥由钥匙串注入） | 1.1 |
-| `mesh.remove_network` | `network` | 1.1 |
-| `mesh.set_dns` | `enabled`、`suffix` | 1.1 |
-| `mesh.set_subnet_route` | `cidr`、`route`（`local` \| `mesh`） | 1.1 |
-| `mesh.set_relay` / `mesh.set_host_mode` | `enabled`（仅完整节点） | 1.2 |
-| `mesh.advertise` / `mesh.withdraw` | `cidr`（仅完整节点） | 1.2 |
-| `mesh.request_region` | `region`（交由网络管理者批准） | 1.2 |
-| `mesh.set_policy` | `policy` | 1.3 |
-| `mesh.set_paths` | `paths`（与内核 `routing.paths` 同结构） | 1.3 |
-| `mesh.join_credential` | 一次性入网凭据（个人电脑） | 1.3 |
+| `mesh_status` | 无 | 1.1 |
+| `mesh_join` / `mesh_leave` | `network` | 1.1 |
+| `mesh_save_network` | 网络配置（内核 `type: mesh` 的 `config_version: 1` 结构，`network.name` 即网络 id；可选 `node.hostname`、`node.mtu`、`node.relay`、`routing.system_routes`；密钥由钥匙串注入） | 1.1 |
+| `mesh_remove_network` | `network` | 1.1 |
+| `mesh_set_dns` | `enabled`、`suffix` | 1.1 |
+| `mesh_set_subnet_route` | `cidr`、`route`（`local` \| `mesh`）；写入本机覆盖设置，不改网络配置 | 1.1 |
+| `mesh_set_relay` / `mesh_set_host_mode` | `enabled`（仅完整节点） | 1.2 |
+| `mesh_advertise` / `mesh_withdraw` | `cidr`（仅完整节点） | 1.2 |
+| `mesh_request_region` | `region`（交由网络管理者批准） | 1.2 |
+| `mesh_set_policy` | `policy` | 1.3 |
+| `mesh_set_paths` | `paths`（与内核 `routing.paths` 同结构） | 1.3 |
+| `mesh_join_credential` | 一次性入网凭据（个人电脑） | 1.3 |
 
-各平台的通道：
+各平台的通道（命令名在三条通道上相同，未编进组网时返回 `unsupported`）：
 
-- iOS、macOS：Packet Tunnel 与 System Extension 内调用引擎 C ABI（`networkcore_ios_mesh_status` 等，名称以内核为准），
+- iOS、macOS：组网与代理共用一个 VPN 和一个引擎实例，命令走现有的 `networkcore_ios_runtime_control`，
+  请求体 `{ "cmd": "mesh_status", … }`；引擎带组网时 `networkcore_ios_feature_set_version` 为 7。
   App 经 NetworkExtension 消息转发。
 - Android：JNI 桥转到 `client-core` 的同名命令。
 - Windows、Linux：窗口经 `client-ipc` 帧发同名命令到后台服务。
