@@ -11,9 +11,10 @@ permissions:
   contents: read
 
 # Superseded pull request runs are cancelled. Runs on main and manual dispatch
-# always finish so every merged commit has a complete result.
+# always finish so every merged commit has a complete result; each main commit
+# has its own group, so a merge does not wait for the previous merge's run.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Kernel tests (protocols, engine, MITM, scripts, interop, fuzz) run in AnixOps/networkcore_anixops.
@@ -1380,8 +1381,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - part: entry
-            tests: NetworkCoreAppUITests/EntryInvariantTests
+          # The entry checks in two parts of about the same length (each launches the app about ten times). The
+          # second part takes the whole class except the first part's test, so a test added later still runs.
+          - part: entry-notice
+            tests: NetworkCoreAppUITests/EntryInvariantTests/testAFailureShowsOnEveryPage
+          - part: entry-switch
+            tests: NetworkCoreAppUITests/EntryInvariantTests !NetworkCoreAppUITests/EntryInvariantTests/testAFailureShowsOnEveryPage
     needs: [changes, ios-xcode-build]
     if: ${{ needs.changes.outputs.apple == 'true' }}
     steps:
@@ -1406,7 +1411,10 @@ jobs:
       # A failure here fails the build.
       - name: Run the iOS UI tests
         shell: bash
-        run: .github/scripts/ios-ui-tests.sh apps/ios/build/Build/Products/Debug-iphonesimulator/NetworkCoreApp.app apps/ios/build/Build/Products "${RUNNER_TEMP}/ios-ui-tests.xcresult" ${{ matrix.tests }}
+        env:
+          TESTS: ${{ matrix.tests }}
+        # TESTS is split on spaces on purpose: each word is one filter.
+        run: .github/scripts/ios-ui-tests.sh apps/ios/build/Build/Products/Debug-iphonesimulator/NetworkCoreApp.app apps/ios/build/Build/Products "${RUNNER_TEMP}/ios-ui-tests.xcresult" ${TESTS}
 
       - name: Upload the iOS UI test results
         if: ${{ failure() }}
