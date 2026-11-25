@@ -7,6 +7,7 @@ import io.anixops.net.core.CoreException
 import io.anixops.net.core.MeshNetworkDraft
 import io.anixops.net.core.MeshPage
 import io.anixops.net.core.MeshRefusal
+import io.anixops.net.core.MeshRouting
 import io.anixops.net.core.MeshSavedNetwork
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonArray
 
 /**
  * The 组网 (mesh) entry and page: the engine's status as the shared views show it, and how the member list is
@@ -34,6 +36,8 @@ data class MeshState(
     val busy: Boolean = false,
     /** The networks saved on this device, without secrets. */
     val saved: List<MeshSavedNetwork> = emptyList(),
+    /** The custom paths before the last removal, for 撤销 (T0); null when there is nothing to undo. */
+    val removedPaths: JsonArray? = null,
 )
 
 /** What the mesh entry and page can ask for. */
@@ -49,6 +53,13 @@ data class MeshActions(
     val addNetwork: (MeshNetworkDraft) -> Unit = {},
     /** Removes the network the page shows, after the name was confirmed. */
     val removeNetwork: () -> Unit = {},
+    /** The default path policy: `latency` or `hops`. */
+    val setPolicy: (String) -> Unit = {},
+    /** Removes a custom path, by id; [undoPathRemoval] puts the list back. */
+    val removePath: (String) -> Unit = {},
+    val undoPathRemoval: () -> Unit = {},
+    /** Adds a custom path; false when a member on it has no virtual address. */
+    val addPath: (MeshRouting.Draft) -> Boolean = { false },
 )
 
 class MeshViewModel(private val core: Core) : ViewModel() {
@@ -81,6 +92,38 @@ class MeshViewModel(private val core: Core) : ViewModel() {
     fun setSubnetRoute(cidr: String, route: String) {
         val network = networkId() ?: return
         perform { core.setMeshSubnetRoute(network, cidr, route) }
+    }
+
+    fun setPolicy(policy: String) {
+        val network = networkId() ?: return
+        perform { core.setMeshPolicy(network, policy) }
+    }
+
+    fun removePath(id: String) {
+        val network = networkId() ?: return
+        val status = _state.value.page?.status
+        val before = MeshRouting.paths(status) ?: return
+        val after = MeshRouting.paths(status, remove = id) ?: return
+        perform {
+            core.setMeshPaths(network, after).also { refusal ->
+                _state.update { it.copy(removedPaths = if (refusal == null) before else null) }
+            }
+        }
+    }
+
+    fun undoPathRemoval() {
+        val network = networkId() ?: return
+        val paths = _state.value.removedPaths ?: return
+        _state.update { it.copy(removedPaths = null) }
+        perform { core.setMeshPaths(network, paths) }
+    }
+
+    fun addPath(draft: MeshRouting.Draft): Boolean {
+        val network = networkId() ?: return false
+        val paths = MeshRouting.paths(_state.value.page?.status, add = draft) ?: return false
+        _state.update { it.copy(removedPaths = null) }
+        perform { core.setMeshPaths(network, paths) }
+        return true
     }
 
     fun setGroupBy(value: String) = reread { it.copy(groupBy = value) }

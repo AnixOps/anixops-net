@@ -466,6 +466,10 @@ fun AnixApp(
             dismissRefusal = mesh::dismissRefusal,
             addNetwork = { draft -> withVpn { mesh.addNetwork(draft) } },
             removeNetwork = mesh::removeNetwork,
+            setPolicy = mesh::setPolicy,
+            removePath = mesh::removePath,
+            undoPathRemoval = mesh::undoPathRemoval,
+            addPath = mesh::addPath,
         ),
         pollMesh = {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { mesh.poll() }
