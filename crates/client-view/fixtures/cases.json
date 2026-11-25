@@ -6991,6 +6991,7 @@
       "sha-host"
      ],
      "state": "fallback",
+     "reason": null,
      "unreachable": "sha-host"
     }
    ]
@@ -7337,5 +7338,109 @@
     "notify": false
    }
   ]
+ },
+ {
+  "command": "view.mesh_notices",
+  "args": {
+   "status": {
+    "members": [
+     {
+      "id": "m-4",
+      "name": "tyo-border"
+     }
+    ],
+    "paths": [
+     {
+      "id": "subnet:192.168.30.0/24",
+      "target": {
+       "subnet": "192.168.30.0/24"
+      },
+      "via": [
+       "m-1"
+      ],
+      "state": "fallback",
+      "reason": "not_relay",
+      "unreachable": "m-4"
+     }
+    ]
+   }
+  },
+  "answer": [
+   {
+    "id": "mesh.notice.path_unsupported",
+    "key": "fallback:subnet:192.168.30.0/24:m-4",
+    "values": [
+     "tyo-border",
+     "192.168.30.0/24"
+    ],
+    "action": null,
+    "notify": true
+   }
+  ]
+ },
+ {
+  "command": "view.mesh_notices",
+  "args": {
+   "status": {
+    "members": [
+     {
+      "id": "m-4",
+      "name": "tyo-border"
+     }
+    ],
+    "paths": [
+     {
+      "id": "subnet:192.168.30.0/24",
+      "target": {
+       "subnet": "192.168.30.0/24"
+      },
+      "via": [
+       "m-1"
+      ],
+      "state": "fallback",
+      "reason": "hop_limit",
+      "unreachable": "m-4"
+     }
+    ]
+   }
+  },
+  "answer": [
+   {
+    "id": "mesh.notice.path_hop_limit",
+    "key": "fallback:subnet:192.168.30.0/24:m-4",
+    "values": [
+     "192.168.30.0/24"
+    ],
+    "action": null,
+    "notify": true
+   }
+  ]
+ },
+ {
+  "command": "view.mesh_notices",
+  "args": {
+   "status": {
+    "members": [
+     {
+      "id": "m-4",
+      "name": "tyo-border"
+     }
+    ],
+    "paths": [
+     {
+      "id": "subnet:192.168.30.0/24",
+      "target": {
+       "subnet": "192.168.30.0/24"
+      },
+      "via": [
+       "m-1"
+      ],
+      "state": "pending",
+      "unreachable": "m-4"
+     }
+    ]
+   }
+  },
+  "answer": []
  }
 ]

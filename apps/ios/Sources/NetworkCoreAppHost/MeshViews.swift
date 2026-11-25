@@ -1215,7 +1215,7 @@ struct MeshCustomPathRow: View {
                 Spacer(minLength: 4)
                 Text(stateText)
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(path.string("state") == "active" ? brand.text2 : brand.amberText)
+                    .foregroundStyle(["active", "pending"].contains(path.string("state")) ? brand.text2 : brand.amberText)
             }
             Text(detailLine)
                 .font(.caption)
@@ -1231,6 +1231,8 @@ struct MeshCustomPathRow: View {
             return String(localized: "已回落")
         case "first_hop_only":
             return String(localized: "仅首跳生效")
+        case "pending":
+            return String(localized: "待确认")
         default:
             return String(localized: "生效")
         }
@@ -1245,8 +1247,20 @@ struct MeshCustomPathRow: View {
         if let advertiser = path.string("advertiser") {
             parts.append(String(localized: "由 \(advertiser) 通告"))
         }
-        if path.string("state") == "fallback", let unreachable = path.string("unreachable") {
-            parts.append(String(localized: "\(unreachable) 不可达"))
+        // `reason` (mesh-status.md): a node that does not forward on this path is not an unreachable one.
+        if path.string("state") == "fallback" {
+            switch path.string("reason") {
+            case "unsupported", "not_relay":
+                if let node = path.string("unreachable") {
+                    parts.append(String(localized: "\(node) 不支持按此路径转发"))
+                }
+            case "hop_limit":
+                parts.append(String(localized: "跳数超出上限"))
+            default:
+                if let unreachable = path.string("unreachable") {
+                    parts.append(String(localized: "\(unreachable) 不可达"))
+                }
+            }
         }
         return parts.joined(separator: " · ")
     }

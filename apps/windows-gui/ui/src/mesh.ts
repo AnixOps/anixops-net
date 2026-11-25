@@ -117,6 +117,7 @@ export interface MeshCustomPath {
   advertiser?: string | null;
   via?: string[];
   state: string;
+  reason?: string | null;
   unreachable?: string | null;
 }
 
@@ -704,6 +705,10 @@ export function noticeText(notice: MeshNotice): string {
   switch (notice.id) {
     case "mesh.notice.path_fallback":
       return t("自定义路径已回落：{member} 不可达。{target} 使用默认路径。", { member: value(values, 0), target: value(values, 1) });
+    case "mesh.notice.path_unsupported":
+      return t("自定义路径已回落：{member} 不支持按此路径转发。{target} 使用默认路径。", { member: value(values, 0), target: value(values, 1) });
+    case "mesh.notice.path_hop_limit":
+      return t("自定义路径已回落：跳数超出上限。{target} 使用默认路径。", { target: value(values, 0) });
     case "mesh.notice.detour_loss":
       return t("{from}至{to}已改经{via}：直连链路丢包 {loss}%。", { from: value(values, 0), to: value(values, 1), via: value(values, 2), loss: value(values, 3) || "0" });
     case "mesh.notice.detour_latency":
@@ -747,4 +752,32 @@ export function draftProblemText(problem: DraftProblem): string {
 export function regionName(head: MeshHead, code: string | null | undefined): string {
   if (!code) return "";
   return head.regions?.find((region) => region.code === code)?.name || code;
+}
+
+/** Why a custom path fell back, for its row (mesh-status.md `paths[].reason`); null while it has not. */
+export function pathFallbackText(path: MeshCustomPath): string | null {
+  if (path.state !== "fallback") return null;
+  switch (path.reason) {
+    case "unsupported":
+    case "not_relay":
+      return path.unreachable ? t("{name} 不支持按此路径转发", { name: path.unreachable }) : null;
+    case "hop_limit":
+      return t("跳数超出上限");
+    default:
+      return path.unreachable ? t("{name} 不可达", { name: path.unreachable }) : null;
+  }
+}
+
+/** A custom path's state, for its row. */
+export function pathStateText(state: string): string {
+  switch (state) {
+    case "fallback":
+      return t("已回落");
+    case "first_hop_only":
+      return t("仅首跳生效");
+    case "pending":
+      return t("待确认");
+    default:
+      return t("生效");
+  }
 }

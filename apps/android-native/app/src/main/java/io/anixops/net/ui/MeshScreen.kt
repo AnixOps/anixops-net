@@ -740,7 +740,13 @@ private fun CustomPathRow(path: MeshCustomPath, enabled: Boolean, remove: () -> 
     val parts = mutableListOf<String>()
     if (path.via.isNotEmpty()) parts += stringResource(R.string.mesh_via, path.via.joinToString(" → "))
     path.advertiser?.let { parts += stringResource(R.string.mesh_advertised_by, it) }
-    if (path.state == "fallback") path.unreachable?.let { parts += stringResource(R.string.mesh_member_unreachable, it) }
+    if (path.state == "fallback") {
+        when (path.reason) {
+            "unsupported", "not_relay" -> path.unreachable?.let { parts += stringResource(R.string.mesh_member_no_forward, it) }
+            "hop_limit" -> parts += stringResource(R.string.mesh_hop_limit)
+            else -> path.unreachable?.let { parts += stringResource(R.string.mesh_member_unreachable, it) }
+        }
+    }
     Column(
         Modifier
             .fillMaxWidth()
@@ -754,11 +760,12 @@ private fun CustomPathRow(path: MeshCustomPath, enabled: Boolean, remove: () -> 
                     when (path.state) {
                         "fallback" -> R.string.mesh_fallen_back
                         "first_hop_only" -> R.string.mesh_first_hop_only
+                        "pending" -> R.string.mesh_path_pending
                         else -> R.string.mesh_path_active
                     },
                 ),
                 style = MaterialTheme.typography.labelMedium,
-                color = if (path.state == "active") palette.text2 else palette.amberText,
+                color = if (path.state == "active" || path.state == "pending") palette.text2 else palette.amberText,
             )
             val removeLabel = stringResource(R.string.mesh_remove_path, path.targetLabel)
             IconButton(onClick = remove, enabled = enabled, modifier = Modifier.semantics { contentDescription = removeLabel }) {
@@ -953,6 +960,8 @@ private fun noticeText(notice: MeshNotice): String {
     fun number(index: Int): Int? = (notice.values.getOrNull(index) as? JsonPrimitive)?.intOrNull
     return when (notice.id) {
         "mesh.notice.path_fallback" -> stringResource(R.string.mesh_notice_path_fallback, text(0), text(1))
+        "mesh.notice.path_unsupported" -> stringResource(R.string.mesh_notice_path_unsupported, text(0), text(1))
+        "mesh.notice.path_hop_limit" -> stringResource(R.string.mesh_notice_path_hop_limit, text(0))
         "mesh.notice.detour_loss" -> stringResource(R.string.mesh_notice_detour_loss, text(0), text(1), text(2), (number(3) ?: 0).toString())
         "mesh.notice.detour_latency" -> number(3)?.let { stringResource(R.string.mesh_notice_detour_latency, text(0), text(1), text(2), it.toString()) }
             ?: stringResource(R.string.mesh_notice_detour_slow, text(0), text(1), text(2))
