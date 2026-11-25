@@ -38,3 +38,7 @@ apps/android-native/app/src/main/jniLibs/
 # Native Windows app: .NET build output
 apps/windows-native/**/bin/
 apps/windows-native/**/obj/
+
+# Python bytecode
+__pycache__/
+*.pyc
