@@ -24,6 +24,11 @@ use inbound_mixed::MixedSettings;
 use super::tun::{self, TunEngine};
 #[cfg(any(target_os = "android", target_os = "linux", windows))]
 pub use super::tun::{attach as attach_tunnel, attached as tunnel_attached};
+#[cfg(any(target_os = "android", target_os = "linux"))]
+pub use super::tun::{
+    expect_replacement as expect_tunnel_replacement,
+    replacement_failed as tunnel_replacement_failed,
+};
 use serde_json::{json, Value};
 
 /// The network the engine runs on, as its `set_network` command takes it, for `subnet` policy groups.
@@ -400,6 +405,61 @@ pub fn activity_request(request: &serde_json::Value) -> Result<Vec<u8>, String> 
         ));
     }
     serde_json::to_vec(request).map_err(|error| error.to_string())
+}
+
+/// The engine that runs for the mesh alone on the kept TUN descriptor while the proxy is off (Android's VPN,
+/// mesh-status.md, 只开组网). Apart from [`Engine`], so that nothing that asks whether the proxy is connected sees it.
+#[derive(Default)]
+pub struct MeshOnly {
+    #[cfg(any(target_os = "android", target_os = "linux", windows))]
+    tunnel: Option<TunEngine>,
+}
+
+impl MeshOnly {
+    /// Starts `envelope` (`mesh::only_profile`) on the kept descriptor, after stopping one that runs.
+    #[cfg(any(target_os = "android", target_os = "linux", windows))]
+    pub fn start(&mut self, envelope: &str) -> Result<(), String> {
+        self.stop();
+        self.tunnel = Some(TunEngine::start(envelope)?);
+        Ok(())
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "linux", windows)))]
+    pub fn start(&mut self, _envelope: &str) -> Result<(), String> {
+        Err("this platform has no tunnel for the mesh alone".to_string())
+    }
+
+    /// Stops it; the descriptor stays. Answers whether it ran.
+    pub fn stop(&mut self) -> bool {
+        #[cfg(any(target_os = "android", target_os = "linux", windows))]
+        if let Some(mut tunnel) = self.tunnel.take() {
+            tunnel.stop();
+            return true;
+        }
+        false
+    }
+
+    #[cfg(any(target_os = "android", target_os = "linux", windows))]
+    pub fn is_running(&self) -> bool {
+        self.tunnel.as_ref().is_some_and(TunEngine::is_running)
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "linux", windows)))]
+    pub fn is_running(&self) -> bool {
+        false
+    }
+
+    /// One control request while it runs.
+    pub fn request(&self, request: &serde_json::Value) -> Result<serde_json::Value, String> {
+        #[cfg(any(target_os = "android", target_os = "linux", windows))]
+        if let Some(tunnel) = self.tunnel.as_ref().filter(|tunnel| tunnel.is_running()) {
+            let request = serde_json::to_vec(request).map_err(|error| error.to_string())?;
+            let answer = tunnel.control_json(&request)?;
+            return serde_json::from_slice(&answer).map_err(|error| error.to_string());
+        }
+        let _ = request;
+        Err("the engine is not running".to_string())
+    }
 }
 
 /// The running engine, if any: a local proxy on the desktop, the VPN's TUN interface on Android, and on the Linux

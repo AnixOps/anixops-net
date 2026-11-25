@@ -229,6 +229,143 @@ pub fn with_outbounds(profile: &Value, outbounds: &Map<String, Value>) -> Option
     Some(profile)
 }
 
+/// The profile id of the engine that runs for the mesh alone.
+pub const ONLY_PROFILE_ID: &str = "mesh-only";
+
+/// The profile of the engine that runs for the mesh alone while the proxy is off (mesh-status.md, 只开组网): the
+/// joined networks' outbounds and nothing else, in the rule mode, everything that is not a mesh route direct. The
+/// tunnel carries only the mesh routes ([`Tunnel`]), so the final rule only matters for what reaches it anyway.
+/// `None` without outbounds.
+pub fn only_profile(outbounds: &Map<String, Value>) -> Option<Value> {
+    if outbounds.is_empty() {
+        return None;
+    }
+    Some(json!({
+        "schema_version": 1,
+        "profile_id": ONLY_PROFILE_ID,
+        "routing": {
+            "outbounds": outbounds,
+            "rules": ["FINAL,DIRECT"],
+            "groups": [],
+        },
+    }))
+}
+
+/// Whether this build's engine runs mesh networks: it accepts a mesh-only profile. Known without an engine
+/// running, so the 组网 entry shows while disconnected.
+pub fn supported() -> bool {
+    static SUPPORTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *SUPPORTED.get_or_init(|| {
+        let probe = json!({
+            "config_version": 1,
+            "network": { "name": "probe", "secret": "probe", "kind": "managed", "secure_mode": true },
+            "node": { "role": "access" },
+            "peers": [{ "server": "192.0.2.1", "port": 11010, "transport": "tcp" }],
+        });
+        let networks = [SavedNetwork {
+            name: "probe".to_string(),
+            joined: true,
+            config: probe,
+        }];
+        only_profile(&outbounds(&networks)).is_some_and(|profile| {
+            engine_embedded::config::RuntimeConfig::from_json(profile.to_string().as_bytes()).is_ok()
+        })
+    })
+}
+
+/// The snapshot a window shows while no engine runs, on a build whose engine runs mesh networks: the joined
+/// network, else the first saved one, without members; `{}` with none saved. As the Apple clients' (`MeshModel`).
+pub fn offline_status(networks: &[SavedNetwork]) -> Value {
+    let Some(network) = networks
+        .iter()
+        .find(|network| network.joined)
+        .or_else(|| networks.first())
+    else {
+        return json!({});
+    };
+    let security = summaries(std::slice::from_ref(network))
+        .first()
+        .map(|summary| summary.security);
+    json!({
+        "network": {
+            "id": network.name,
+            "name": network.name,
+            // Joined while the engine is down: the VPN is on its way up for it.
+            "state": if network.joined { "joining" } else { "not_joined" },
+            "security": security,
+        }
+    })
+}
+
+/// The `tunnel` section of a `mesh_status` answer (mesh-status.md, 隧道生命周期): the networks the tunnel carries
+/// and the DNS for the internal domain names.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Tunnel {
+    /// CIDR ranges, in the engine's order.
+    pub routes: Vec<String>,
+    /// Goes up by one each time `routes` change; 1 after the engine starts.
+    pub routes_version: u64,
+    /// The tunnel's DNS address for the internal domain names; empty without them.
+    pub dns_servers: Vec<String>,
+    /// The suffixes those servers answer.
+    pub match_domains: Vec<String>,
+}
+
+impl Tunnel {
+    /// The section of an answer; `None` for a refusal or an answer without one.
+    pub fn from_status(status: &Value) -> Option<Self> {
+        let tunnel = status.get("tunnel")?.as_object()?;
+        let strings = |value: Option<&Value>| -> Vec<String> {
+            value
+                .and_then(Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let dns = tunnel.get("dns");
+        Some(Self {
+            routes: strings(tunnel.get("routes")),
+            routes_version: tunnel
+                .get("routesVersion")
+                .and_then(Value::as_u64)
+                .unwrap_or(0),
+            dns_servers: strings(dns.and_then(|dns| dns.get("servers"))),
+            match_domains: strings(dns.and_then(|dns| dns.get("matchDomains"))),
+        })
+    }
+
+    /// The routes and DNS servers of the interface that carries the mesh alone: these routes, and, while internal
+    /// domain names are on, each DNS server, as a host route so its queries reach the tunnel. A phone's VPN has
+    /// no per-suffix DNS, so the engine then answers every name, the internal ones from the mesh.
+    pub fn routes_and_dns(tunnel: Option<&Self>) -> (Vec<String>, Vec<String>) {
+        let Some(tunnel) = tunnel else {
+            return (Vec::new(), Vec::new());
+        };
+        let servers = if tunnel.match_domains.is_empty() {
+            Vec::new()
+        } else {
+            tunnel.dns_servers.clone()
+        };
+        let mut routes = tunnel.routes.clone();
+        for server in &servers {
+            let host = if server.contains(':') {
+                format!("{server}/128")
+            } else {
+                format!("{server}/32")
+            };
+            if !routes.contains(&host) && !routes.contains(server) {
+                routes.push(host);
+            }
+        }
+        (routes, servers)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -385,5 +522,100 @@ mod tests {
         fs::write(path(&dir), b"{").unwrap();
         assert!(load(&dir).is_err());
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_mesh_only_profile_has_only_the_mesh_and_direct() {
+        let networks = [SavedNetwork {
+            name: "office".to_string(),
+            joined: true,
+            config: config("office", "s"),
+        }];
+        let profile = only_profile(&outbounds(&networks)).unwrap();
+        assert!(profile.get("outbound").is_none());
+        assert!(
+            profile.get("mode").is_none(),
+            "the rule mode is the default"
+        );
+        assert_eq!(profile["profile_id"], ONLY_PROFILE_ID);
+        let routing = &profile["routing"];
+        assert_eq!(
+            routing["outbounds"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .collect::<Vec<_>>(),
+            ["mesh-office"]
+        );
+        assert_eq!(routing["rules"], json!(["FINAL,DIRECT"]));
+        assert!(only_profile(&Map::new()).is_none());
+    }
+
+    #[test]
+    fn the_offline_status_names_the_joined_network() {
+        assert_eq!(offline_status(&[]), json!({}));
+        let networks = [
+            SavedNetwork {
+                name: "a".to_string(),
+                joined: false,
+                config: config("a", "s"),
+            },
+            SavedNetwork {
+                name: "b".to_string(),
+                joined: true,
+                config: config("b", "s"),
+            },
+        ];
+        let status = offline_status(&networks);
+        assert_eq!(status["network"]["id"], "b");
+        assert_eq!(status["network"]["state"], "joining");
+        assert_eq!(status["network"]["security"], "forward_secrecy");
+        assert!(status.get("members").is_none());
+        assert_eq!(
+            offline_status(&networks[..1])["network"]["state"],
+            "not_joined"
+        );
+    }
+
+    #[test]
+    fn reads_the_tunnel_section_and_routes_only_the_mesh() {
+        let status = json!({
+            "statusVersion": 1,
+            "tunnel": {
+                "routes": ["10.144.144.0/24", "192.168.20.0/24"],
+                "routesVersion": 3,
+                "dns": { "servers": ["198.18.0.2"], "matchDomains": ["office.internal"] },
+            },
+        });
+        let tunnel = Tunnel::from_status(&status).unwrap();
+        assert_eq!(tunnel.routes_version, 3);
+        assert_eq!(tunnel.match_domains, ["office.internal"]);
+        let (routes, dns) = Tunnel::routes_and_dns(Some(&tunnel));
+        assert_eq!(
+            routes,
+            ["10.144.144.0/24", "192.168.20.0/24", "198.18.0.2/32"]
+        );
+        assert_eq!(dns, ["198.18.0.2"]);
+        assert!(!routes.iter().any(|route| route == "0.0.0.0/0"));
+
+        // Without suffixes the device keeps its own DNS.
+        let bare = Tunnel {
+            match_domains: Vec::new(),
+            ..tunnel
+        };
+        assert_eq!(
+            Tunnel::routes_and_dns(Some(&bare)),
+            (bare.routes.clone(), Vec::new())
+        );
+
+        let no_dns = Tunnel::from_status(
+            &json!({"tunnel": {"routes": [], "routesVersion": 1, "dns": null}}),
+        );
+        assert_eq!(no_dns.unwrap().dns_servers, Vec::<String>::new());
+        assert!(
+            Tunnel::from_status(&json!({"ok": false, "error": {"code": "unsupported"}})).is_none()
+        );
+        // Before the engine answers, nothing is routed.
+        assert_eq!(Tunnel::routes_and_dns(None), (Vec::new(), Vec::new()));
     }
 }
