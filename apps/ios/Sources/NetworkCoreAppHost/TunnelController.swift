@@ -1579,6 +1579,9 @@ final class TunnelController {
         if blockQuic {
             providerConfiguration[TunnelProfileKeys.blockQuic] = true
         }
+        if let value = MeshNetworkLibrary.profileValue(MeshNetworkLibrary.load()) {
+            providerConfiguration[TunnelProfileKeys.meshNetworks] = value
+        }
         Self.applyTakeover(takeover, exceptions: proxyExceptions, gateway: gateway, to: &providerConfiguration)
         if let value = try? localRules.profileValue() {
             providerConfiguration[TunnelProfileKeys.localRules] = value
@@ -2155,6 +2158,42 @@ final class TunnelController {
             if outcome.isSaved {
                 restart()
             }
+            return true
+        }
+    }
+
+    /// Writes the joined mesh networks (`MeshNetworkLibrary`) into the profile for the next start, without a
+    /// restart: the running engine already took the change (`mesh_save_network`, `mesh_join`, R23). On macOS the
+    /// running extension gets their secrets with the start secrets. False when the profile could not be saved.
+    func applyMeshNetworks() async -> Bool {
+        await profileWrites.run { () async -> Bool in
+            let value = MeshNetworkLibrary.profileValue(MeshNetworkLibrary.load())
+            do {
+                _ = try await writeProfile { target in
+                    // Without a profile the next import picks them up.
+                    guard let tunnelProtocol = target.protocolConfiguration as? NETunnelProviderProtocol else {
+                        return false
+                    }
+                    var configuration = tunnelProtocol.providerConfiguration ?? [:]
+                    guard configuration[TunnelProfileKeys.meshNetworks] as? Data != value else {
+                        return false
+                    }
+                    if let value {
+                        configuration[TunnelProfileKeys.meshNetworks] = value
+                    } else {
+                        configuration.removeValue(forKey: TunnelProfileKeys.meshNetworks)
+                    }
+                    tunnelProtocol.providerConfiguration = configuration
+                    target.protocolConfiguration = tunnelProtocol
+                    return true
+                }
+            } catch {
+                message = String(localized: "保存组网网络到 VPN 配置失败") + Self.errorCode(error)
+                refresh()
+                return false
+            }
+            refresh()
+            handOverStartSecrets()
             return true
         }
     }
