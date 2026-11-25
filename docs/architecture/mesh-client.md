@@ -2,7 +2,7 @@
 
 状态：草案（2026-11-25）。界面说明见 [`../mesh-ui.md`](../mesh-ui.md)，内核模块见 networkcore_anixops
 `docs/architecture/mesh-module.md`。本页约定客户端从内核读什么、对内核做什么，以及各平台共用的界面逻辑放在哪里。
-内核接口的正本是内核仓库的 `docs/architecture/mesh-status.md`（撰写中），字段以那份为准；本页只记客户端怎么用。
+内核接口的正本是内核仓库的 [`docs/architecture/mesh-status.md`](https://github.com/AnixOps/AnixOps-core/blob/main/docs/architecture/mesh-status.md)（AnixOps-core #296），字段以那份为准；本页只记客户端怎么用。
 
 ## 分版本
 
@@ -145,6 +145,8 @@
 | `mesh_set_policy` | `policy` | 1.3 |
 | `mesh_set_paths` | `paths`（与内核 `routing.paths` 同结构） | 1.3 |
 | `mesh_join_credential` | 一次性入网凭据（个人电脑） | 1.3 |
+
+命令失败时返回 `{ "ok": false, "error": { "code": …, "detail": … } }`，`code` 为 `unsupported`、`invalid_argument`、`not_found`、`not_allowed` 或上文的某个失败原因；界面按「错误」状态写明原因和下一步。
 
 各平台的通道（命令名在三条通道上相同，未编进组网时返回 `unsupported`）：
 
