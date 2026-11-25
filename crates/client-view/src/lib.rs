@@ -22,6 +22,7 @@ pub mod connections;
 pub mod decrypt;
 pub mod groups;
 pub mod logs;
+pub mod mesh;
 pub mod nodes;
 pub mod overview;
 pub mod proxies;
@@ -172,6 +173,24 @@ pub fn invoke(command: &str, args: &Value) -> Option<Result<Value, String>> {
         ),
         "decrypt_setup" => decrypt::decrypt_setup(args),
         "checkup" => checkup::checkup(args.get("answer").unwrap_or(&Value::Null)),
+        "mesh_entry" => mesh::entry(args.get("status").unwrap_or(&Value::Null)),
+        "mesh_members" => mesh::members(
+            args.get("status").unwrap_or(&Value::Null),
+            text(args, "groupBy"),
+            text(args, "filter"),
+            text(args, "sort"),
+            text(args, "query"),
+            rows(args, "devices"),
+        ),
+        "mesh_subnets" => mesh::subnets(
+            args.get("status").unwrap_or(&Value::Null),
+            text(args, "query"),
+        ),
+        "mesh_paths" => mesh::paths(args.get("status").unwrap_or(&Value::Null)),
+        "mesh_notices" => mesh::notices(args.get("status").unwrap_or(&Value::Null)),
+        "mesh_latency_tone" => json!(mesh::latency_tone(
+            args.get("latencyMs").and_then(Value::as_u64)
+        )),
         _ => return Some(Err(format!("unknown command {command}"))),
     };
     Some(Ok(answer))
@@ -226,6 +245,12 @@ mod tests {
             "decrypt_hosts",
             "decrypt_setup",
             "checkup",
+            "mesh_entry",
+            "mesh_members",
+            "mesh_subnets",
+            "mesh_paths",
+            "mesh_notices",
+            "mesh_latency_tone",
         ] {
             let command = format!("{PREFIX}{name}");
             assert!(
