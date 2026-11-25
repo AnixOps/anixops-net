@@ -13,6 +13,7 @@ members = [
     "crates/client-core",
     "crates/client-health",
     "crates/client-ipc",
+    "crates/client-mcp",
     "crates/client-service",
     "crates/client-session",
     "crates/client-strings",
