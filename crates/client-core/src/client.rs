@@ -12,6 +12,7 @@ mod agent;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+#[cfg(any(target_os = "android", target_os = "linux"))]
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
@@ -61,8 +62,10 @@ const NOT_UPDATABLE: &str = "error.not_updatable";
 const NO_DOWNLOADS: &str = "this platform has no shared Downloads folder";
 
 /// How often the engine for the mesh alone is asked for its routes (R23: 2 s).
+#[cfg(any(target_os = "android", target_os = "linux"))]
 const MESH_ROUTES_POLL: Duration = Duration::from_secs(2);
 /// The least time between two applications of new routes.
+#[cfg(any(target_os = "android", target_os = "linux"))]
 const MESH_ROUTES_GAP: Duration = Duration::from_secs(1);
 
 /// What the LAN share commands answer where there is no share (Android).
@@ -210,6 +213,7 @@ pub struct Client {
     shared_service: bool,
     /// Counts the starts of the engine for the mesh alone; a route watch ends once a newer start began
     /// ([`Client::watch_mesh_routes`]).
+    #[cfg(any(target_os = "android", target_os = "linux"))]
     mesh_watch: Arc<AtomicU64>,
 }
 
@@ -281,6 +285,7 @@ impl Client {
             links: Mutex::new(Vec::new()),
             delays: Mutex::new(HashMap::new()),
             shared_service,
+            #[cfg(any(target_os = "android", target_os = "linux"))]
             mesh_watch: Arc::new(AtomicU64::new(0)),
         });
         if auto_connect && !client.platform.has_system_vpn() {
@@ -555,10 +560,6 @@ impl Client {
             );
         }
     }
-
-    /// Windows has no system VPN ([`Platform::has_system_vpn`]), so nothing runs for the mesh alone yet.
-    #[cfg(not(any(target_os = "android", target_os = "linux")))]
-    fn watch_mesh_routes(&self, _applied: TunnelInterface) {}
 
     /// Connects, through the system VPN where the platform has one; a failed start closes that VPN again.
     fn connect_through_tunnel(&self) -> Result<OperationResult, String> {
