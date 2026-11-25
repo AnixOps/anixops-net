@@ -45,7 +45,8 @@ SWIFT
 shoot() {
     # A fourth argument opens the command palette (`palette`) or the import sheet (`import`) over the page and
     # names the picture after it.
-    # A fifth argument opens a settings sub-page (`advanced`, `privacy`) and names the picture after it.
+    # A fifth argument opens a settings sub-page (`advanced`, `privacy`), or a view of the 组网 page (`members`,
+    # `subnets`, `paths`), and names the picture after it.
     local section="$1" appearance="$2" mode="${3:-proxy}" overlay="${4:-}" subpage="${5:-}"
     local file="${out}/${section}-${appearance}.png"
     if [ "${mode}" != proxy ]; then
@@ -67,7 +68,7 @@ shoot() {
         accepted="none"
     fi
     open -n "${app}" --args -AnixOpsDemo YES -AnixOpsMode "${mode}" -AnixOpsSection "${section}" -appearance "${appearance}" \
-        -AnixOpsPalette "${show_palette}" -AnixOpsImport "${show_import}" -AnixOpsSettingsPage "${subpage}" -AppleLanguages "(${language})" -terms-accepted-version "${accepted}"
+        -AnixOpsPalette "${show_palette}" -AnixOpsImport "${show_import}" -AnixOpsSettingsPage "${subpage}" -AnixOpsMesh "${subpage}" -AppleLanguages "(${language})" -terms-accepted-version "${accepted}"
     local id=""
     for _ in 1 2 3 4 5 6 7 8 9 10; do
         sleep 2
@@ -108,6 +109,11 @@ shoot settings light
 shoot settings light proxy "" advanced
 shoot settings light proxy "" privacy
 shoot terms light
+# 组网: members · subnets · paths (docs/mesh-ui.md).
+shoot mesh light proxy "" members
+shoot mesh light proxy "" subnets
+shoot mesh light proxy "" paths
+shoot mesh dark proxy "" members
 # Debug mode (requests · rewrite · exit · settings, opening on the requests table) and the first-launch mode choice.
 shoot activity light debug
 shoot activity dark debug

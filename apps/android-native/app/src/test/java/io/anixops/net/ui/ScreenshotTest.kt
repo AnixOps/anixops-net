@@ -541,6 +541,30 @@ class ScreenshotTest {
         egressRules = true,
     )
 
+    @Test
+    fun homeMeshPhoneLightZh() = capture("home-mesh-phone-light-zh", PHONE, "zh-rCN", dark = false, mesh = MeshFixtures.state)
+
+    @Test
+    fun meshMembersPhoneLightZh() = captureMesh("mesh-members-phone-light-zh", PHONE, "zh-rCN", dark = false, MeshTab.Members)
+
+    @Test
+    fun meshMembersPhoneDarkZh() = captureMesh("mesh-members-phone-dark-zh", PHONE, "zh-rCN", dark = true, MeshTab.Members)
+
+    @Test
+    fun meshMembersPhoneLightEn() = captureMesh("mesh-members-phone-light-en", PHONE, "en", dark = false, MeshTab.Members)
+
+    @Test
+    fun meshSubnetsPhoneLightZh() = captureMesh("mesh-subnets-phone-light-zh", PHONE, "zh-rCN", dark = false, MeshTab.Subnets)
+
+    @Test
+    fun meshPathsPhoneDarkZh() = captureMesh("mesh-paths-phone-dark-zh", PHONE, "zh-rCN", dark = true, MeshTab.Paths)
+
+    @Test
+    fun meshMembersTabletLightZh() = captureMesh("mesh-members-tablet-light-zh", TABLET, "zh-rCN", dark = false, MeshTab.Members)
+
+    private fun captureMesh(name: String, device: String, locale: String, dark: Boolean, tab: MeshTab) =
+        capture(name, device, locale, dark, mesh = MeshFixtures.state, meshTab = tab)
+
     private fun capture(
         name: String,
         device: String,
@@ -557,6 +581,8 @@ class ScreenshotTest {
         debugExit: DebugExit = DebugExit.Direct,
         egressRules: Boolean = false,
         requests: RequestsState = requestsState,
+        mesh: MeshState = MeshState(),
+        meshTab: MeshTab? = null,
     ) {
         TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
         RuntimeEnvironment.setQualifiers("$locale-$device-${if (dark) "night" else "notnight"}-xhdpi")
@@ -580,6 +606,8 @@ class ScreenshotTest {
                     initialSettingsPage = settingsPage,
                     initialEgressRules = egressRules,
                     initial = destination,
+                    meshState = mesh,
+                    initialMesh = meshTab,
                 )
             }
         }

@@ -153,13 +153,20 @@ private fun JoinSwitch(state: String, busy: Boolean, setJoined: (Boolean) -> Uni
     )
 }
 
-private enum class MeshTab { Members, Subnets, Paths }
+/** The views of the mesh page. */
+enum class MeshTab { Members, Subnets, Paths }
 
-/** The mesh page: the status section, the notices, then 成员 · 子网 · 路径. */
+/** The mesh page: the status section, the notices, then 成员 · 子网 · 路径, opening on [initialTab]. */
 @Composable
-fun MeshScreen(state: MeshState, actions: MeshActions, onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun MeshScreen(
+    state: MeshState,
+    actions: MeshActions,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    initialTab: MeshTab = MeshTab.Members,
+) {
     val page = state.page
-    var tab by rememberSaveable { mutableStateOf(MeshTab.Members) }
+    var tab by rememberSaveable { mutableStateOf(initialTab) }
     var adding by rememberSaveable { mutableStateOf(false) }
     var removing by rememberSaveable { mutableStateOf<String?>(null) }
     var addingPath by rememberSaveable { mutableStateOf(false) }

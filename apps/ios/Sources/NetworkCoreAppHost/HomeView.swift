@@ -16,6 +16,8 @@ struct HomeView: View {
     @State private var heroVisible = true
     @State private var editing = false
     @State private var picking = false
+    /// The mesh page, pushed at launch for CI screenshots (`-AnixOpsMesh`, debug builds only).
+    @State private var showsMesh = MeshPage.Segment.launch != nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The top bar's round buttons grow with Dynamic Type.
     @ScaledMetric(relativeTo: .body) private var headerButton: CGFloat = 40
@@ -76,6 +78,9 @@ struct HomeView: View {
             .background(brand.bg.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
             .brandBars(brand)
+            .navigationDestination(isPresented: $showsMesh) {
+                MeshPage(tunnel: tunnel, model: mesh)
+            }
             .sheet(isPresented: $editing) {
                 DashboardEditSheet(layoutStorage: $layoutStorage)
                     .brandSheet()

@@ -60,8 +60,9 @@ look() {
 }
 
 shoot() {
-    # A fourth argument opens a settings sub-page (`advanced`, `privacy`) and names the picture after it.
-    local section="$1" appearance="$2" mode="${3:-proxy}" subpage="${4:-}"
+    # A fourth argument opens a settings sub-page (`advanced`, `privacy`) and names the picture after it; a fifth
+    # pushes the 组网 page from the overview on one of its views (`members`, `subnets`, `paths`).
+    local section="$1" appearance="$2" mode="${3:-proxy}" subpage="${4:-}" mesh="${5:-}"
     local file="${out}/${section}-${appearance}.png"
     if [ "${mode}" != proxy ]; then
         file="${out}/${mode}-${section}-${appearance}.png"
@@ -69,9 +70,12 @@ shoot() {
     if [ -n "${subpage}" ]; then
         file="${out}/${section}-${subpage}-${appearance}.png"
     fi
+    if [ -n "${mesh}" ]; then
+        file="${out}/mesh-${mesh}-${appearance}.png"
+    fi
     look "${appearance}"
     xcrun simctl launch "${device}" "${bundle}" -AnixOpsDemo YES -AnixOpsMode "${mode}" -AnixOpsSection "${section}" \
-        -AnixOpsSettingsPage "${subpage}" -AppleLanguages "(${language})" -terms-accepted-version "${terms}" > /dev/null
+        -AnixOpsSettingsPage "${subpage}" -AnixOpsMesh "${mesh}" -AppleLanguages "(${language})" -terms-accepted-version "${terms}" > /dev/null
     # The app is up; give the page time to lay out, load its demo data and finish its first transitions. A fixed
     # wait alone sometimes caught the white launch screen or a passing system banner, so the picture is taken again
     # every 4 seconds until three in a row are the same and it is not the blank launch screen (which compresses to
@@ -113,8 +117,13 @@ shoot settings light
 # The sub-pages one level below the settings (docs/ui-ux.md).
 shoot settings light proxy advanced
 shoot settings light proxy privacy
+# 组网, pushed from the overview: members · subnets · paths (docs/mesh-ui.md).
+shoot home light proxy "" members
+shoot home light proxy "" subnets
+shoot home light proxy "" paths
 # Debug mode: requests · rewrite · exit · settings.
 shoot requests light debug
 shoot exit light debug
 shoot home dark
+shoot home dark proxy "" members
 shoot requests dark debug

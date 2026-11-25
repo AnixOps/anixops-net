@@ -204,7 +204,18 @@ enum MacSection: String, CaseIterable, Identifiable, Hashable {
         if mode == .debug {
             return [.activity, .extensions, .exit, .settings]
         }
-        return [.home, .proxies] + (MeshSupport.available ? [.mesh] : []) + [.rules, .extensions, .activity, .settings]
+        return [.home, .proxies] + (meshShown ? [.mesh] : []) + [.rules, .extensions, .activity, .settings]
+    }
+
+    /// Whether the sidebar has 组网: on an engine that runs mesh networks, and in the demo of debug builds (CI
+    /// screenshots), which answers with a made-up network whatever the release gate says.
+    private static var meshShown: Bool {
+        #if DEBUG
+        if TunnelController.isDemo {
+            return true
+        }
+        #endif
+        return MeshSupport.available
     }
 
     /// The section's name in a mode: in debug mode Activity is the requests and Extensions are "Rewrite".

@@ -793,6 +793,8 @@ fun AnixScaffold(
     initial: Destination? = null,
     initialSettingsPage: SettingsPage? = null,
     initialEgressRules: Boolean = false,
+    /** Opens 首页's 组网 page on this view (screenshots). */
+    initialMesh: MeshTab? = null,
 ) {
     var settingsPage by rememberSaveable { mutableStateOf(initialSettingsPage) }
     val closePage = {
@@ -800,7 +802,7 @@ fun AnixScaffold(
     }
     var egressRules by rememberSaveable { mutableStateOf(initialEgressRules) }
     // 组网 opens from 首页's section, and goes back to it.
-    var meshOpen by rememberSaveable { mutableStateOf(false) }
+    var meshOpen by rememberSaveable { mutableStateOf(initialMesh != null) }
     val closeRules = { egressRules = false }
     val destinations = Destination.of(mode)
     var selected by rememberSaveable(mode) { mutableStateOf(initial?.takeIf { it in destinations } ?: destinations.first()) }
@@ -847,7 +849,7 @@ fun AnixScaffold(
                             if (meshOpen) {
                                 val closeMesh = { meshOpen = false }
                                 BackTo(closeMesh)
-                                MeshScreen(meshState, mesh, onBack = closeMesh)
+                                MeshScreen(meshState, mesh, onBack = closeMesh, initialTab = initialMesh ?: MeshTab.Members)
                             } else {
                                 HomeScreen(state, home, mesh = meshState, meshActions = mesh, openMesh = { meshOpen = true })
                             }
