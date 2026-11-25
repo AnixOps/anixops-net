@@ -5062,5 +5062,2226 @@
     }
    ]
   }
+ },
+ {
+  "command": "view.mesh_entry",
+  "args": {
+   "status": {
+    "statusVersion": 1,
+    "network": {
+     "id": "office",
+     "name": "office",
+     "state": "partial",
+     "security": "standard",
+     "routingPolicy": "latency",
+     "dnsSuffix": "mesh.internal",
+     "dnsEnabled": true
+    },
+    "self": {
+     "id": "m-self",
+     "name": "par-laptop",
+     "role": "client",
+     "address": "10.144.144.5/24",
+     "domain": "par-laptop.eu.mesh.internal",
+     "region": "eu",
+     "addressManaged": true
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true
+     },
+     {
+      "code": "cn",
+      "name": "中国大陆",
+      "local": false
+     },
+     {
+      "code": "ap",
+      "name": "亚太",
+      "local": false
+     }
+    ],
+    "members": [
+     {
+      "id": "m-1",
+      "name": "fra-border",
+      "role": "border",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.1/24",
+      "domain": "fra-border.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "direct",
+      "hops": 0,
+      "transport": "udp",
+      "latencyMs": 11,
+      "pathState": "auto"
+     },
+     {
+      "id": "m-3",
+      "name": "ams-gw",
+      "role": "gateway",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.3/24",
+      "domain": "ams-gw.eu.mesh.internal",
+      "addressManaged": false,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "tcp",
+      "latencyMs": 130,
+      "pathState": "fallback",
+      "subnets": [
+       "192.168.20.0/24"
+      ]
+     },
+     {
+      "id": "m-9",
+      "name": "sha-host",
+      "role": "host",
+      "region": "cn",
+      "state": "unreachable",
+      "address": "10.144.145.9/24",
+      "domain": "sha-host.cn.mesh.internal",
+      "addressManaged": true,
+      "connection": "unreachable",
+      "hops": 0,
+      "transport": "tcp",
+      "latencyMs": null,
+      "pathState": "auto",
+      "vms": [
+       {
+        "name": "db-1",
+        "domain": "db-1.cn.mesh.internal",
+        "address": "10.144.146.2"
+       }
+      ]
+     }
+    ],
+    "subnets": [
+     {
+      "cidr": "192.168.20.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       },
+       {
+        "member": "m-1",
+        "inUse": false
+       }
+      ],
+      "latencyMs": 140,
+      "path": [
+       "m-1",
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "8.8.8.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "refused",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "192.168.1.0/24",
+      "region": "cn",
+      "advertisers": [
+       {
+        "member": "m-9",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 300,
+      "path": [
+       "m-1",
+       "m-9"
+      ],
+      "state": "ok",
+      "overlaps": [
+       "192.168.0.0/16"
+      ],
+      "route": "local",
+      "localOverlap": true
+     }
+    ],
+    "links": [
+     {
+      "from": "eu",
+      "to": "cn",
+      "via": "ap",
+      "borders": [
+       "m-1"
+      ],
+      "latencyMs": 210,
+      "loss": 0.12,
+      "state": "detour",
+      "reason": {
+       "loss": 0.12
+      }
+     }
+    ],
+    "paths": [
+     {
+      "id": "p-1",
+      "target": {
+       "subnet": "192.168.20.0/24"
+      },
+      "via": [
+       "m-9"
+      ],
+      "state": "fallback",
+      "unreachable": "m-9"
+     }
+    ],
+    "refusedAdvertisements": 1
+   }
+  },
+  "answer": {
+   "available": true,
+   "network": "office",
+   "state": "partial",
+   "security": "standard",
+   "online": 2,
+   "total": 3,
+   "attention": true
+  }
+ },
+ {
+  "command": "view.mesh_entry",
+  "args": {},
+  "answer": {
+   "available": false
+  }
+ },
+ {
+  "command": "view.mesh_entry",
+  "args": {
+   "status": {
+    "available": true
+   }
+  },
+  "answer": {
+   "available": true,
+   "network": null,
+   "state": "not_joined"
+  }
+ },
+ {
+  "command": "view.mesh_latency_tone",
+  "args": {
+   "latencyMs": 119
+  },
+  "answer": "fast"
+ },
+ {
+  "command": "view.mesh_latency_tone",
+  "args": {
+   "latencyMs": 250
+  },
+  "answer": "slow"
+ },
+ {
+  "command": "view.mesh_latency_tone",
+  "args": {},
+  "answer": "timeout"
+ },
+ {
+  "command": "view.mesh_members",
+  "args": {
+   "status": {
+    "statusVersion": 1,
+    "network": {
+     "id": "office",
+     "name": "office",
+     "state": "partial",
+     "security": "standard",
+     "routingPolicy": "latency",
+     "dnsSuffix": "mesh.internal",
+     "dnsEnabled": true
+    },
+    "self": {
+     "id": "m-self",
+     "name": "par-laptop",
+     "role": "client",
+     "address": "10.144.144.5/24",
+     "domain": "par-laptop.eu.mesh.internal",
+     "region": "eu",
+     "addressManaged": true
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true
+     },
+     {
+      "code": "cn",
+      "name": "中国大陆",
+      "local": false
+     },
+     {
+      "code": "ap",
+      "name": "亚太",
+      "local": false
+     }
+    ],
+    "members": [
+     {
+      "id": "m-1",
+      "name": "fra-border",
+      "role": "border",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.1/24",
+      "domain": "fra-border.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "direct",
+      "hops": 0,
+      "transport": "udp",
+      "latencyMs": 11,
+      "pathState": "auto"
+     },
+     {
+      "id": "m-3",
+      "name": "ams-gw",
+      "role": "gateway",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.3/24",
+      "domain": "ams-gw.eu.mesh.internal",
+      "addressManaged": false,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "tcp",
+      "latencyMs": 130,
+      "pathState": "fallback",
+      "subnets": [
+       "192.168.20.0/24"
+      ]
+     },
+     {
+      "id": "m-9",
+      "name": "sha-host",
+      "role": "host",
+      "region": "cn",
+      "state": "unreachable",
+      "address": "10.144.145.9/24",
+      "domain": "sha-host.cn.mesh.internal",
+      "addressManaged": true,
+      "connection": "unreachable",
+      "hops": 0,
+      "transport": "tcp",
+      "latencyMs": null,
+      "pathState": "auto",
+      "vms": [
+       {
+        "name": "db-1",
+        "domain": "db-1.cn.mesh.internal",
+        "address": "10.144.146.2"
+       }
+      ]
+     }
+    ],
+    "subnets": [
+     {
+      "cidr": "192.168.20.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       },
+       {
+        "member": "m-1",
+        "inUse": false
+       }
+      ],
+      "latencyMs": 140,
+      "path": [
+       "m-1",
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "8.8.8.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "refused",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "192.168.1.0/24",
+      "region": "cn",
+      "advertisers": [
+       {
+        "member": "m-9",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 300,
+      "path": [
+       "m-1",
+       "m-9"
+      ],
+      "state": "ok",
+      "overlaps": [
+       "192.168.0.0/16"
+      ],
+      "route": "local",
+      "localOverlap": true
+     }
+    ],
+    "links": [
+     {
+      "from": "eu",
+      "to": "cn",
+      "via": "ap",
+      "borders": [
+       "m-1"
+      ],
+      "latencyMs": 210,
+      "loss": 0.12,
+      "state": "detour",
+      "reason": {
+       "loss": 0.12
+      }
+     }
+    ],
+    "paths": [
+     {
+      "id": "p-1",
+      "target": {
+       "subnet": "192.168.20.0/24"
+      },
+      "via": [
+       "m-9"
+      ],
+      "state": "fallback",
+      "unreachable": "m-9"
+     }
+    ],
+    "refusedAdvertisements": 1
+   },
+   "groupBy": "region",
+   "filter": "all",
+   "sort": "name",
+   "query": "",
+   "devices": [
+    {
+     "name": "printer",
+     "address": "192.168.20.9"
+    },
+    {
+     "name": "nas",
+     "address": "192.168.30.2"
+    }
+   ]
+  },
+  "answer": {
+   "groupBy": "region",
+   "total": 4,
+   "matched": 4,
+   "groups": [
+    {
+     "key": "eu",
+     "count": 3,
+     "matched": 3,
+     "open": true,
+     "worst": {
+      "state": "fallback",
+      "count": 1
+     },
+     "link": null,
+     "rows": [
+      {
+       "id": "m-self",
+       "name": "par-laptop",
+       "self": true,
+       "role": "client",
+       "region": "eu",
+       "state": "online",
+       "address": "10.144.144.5/24",
+       "domain": "par-laptop.eu.mesh.internal",
+       "regionDomain": "eu.mesh.internal",
+       "connection": "self",
+       "hops": 0,
+       "transport": null,
+       "latencyMs": null,
+       "tone": null,
+       "contains": null,
+       "children": [],
+       "visibleChildren": 0,
+       "open": false,
+       "marks": []
+      },
+      {
+       "id": "m-3",
+       "name": "ams-gw",
+       "self": false,
+       "role": "gateway",
+       "region": "eu",
+       "state": "online",
+       "address": "10.144.144.3/24",
+       "domain": "ams-gw.eu.mesh.internal",
+       "regionDomain": "eu.mesh.internal",
+       "connection": "relay",
+       "hops": 1,
+       "transport": "tcp",
+       "latencyMs": 130,
+       "tone": "medium",
+       "contains": {
+        "noun": "subnets",
+        "count": 1
+       },
+       "children": [
+        {
+         "kind": "subnet",
+         "name": "192.168.20.0/24",
+         "match": false
+        },
+        {
+         "kind": "device",
+         "name": "printer",
+         "address": "192.168.20.9",
+         "match": false
+        }
+       ],
+       "visibleChildren": 2,
+       "open": false,
+       "marks": [
+        "unmanaged",
+        "fallback"
+       ]
+      },
+      {
+       "id": "m-1",
+       "name": "fra-border",
+       "self": false,
+       "role": "border",
+       "region": "eu",
+       "state": "online",
+       "address": "10.144.144.1/24",
+       "domain": "fra-border.eu.mesh.internal",
+       "regionDomain": "eu.mesh.internal",
+       "connection": "direct",
+       "hops": 0,
+       "transport": "udp",
+       "latencyMs": 11,
+       "tone": "fast",
+       "contains": null,
+       "children": [],
+       "visibleChildren": 0,
+       "open": false,
+       "marks": []
+      }
+     ]
+    },
+    {
+     "key": "cn",
+     "count": 1,
+     "matched": 1,
+     "open": true,
+     "worst": {
+      "state": "unreachable",
+      "count": 1
+     },
+     "link": {
+      "latencyMs": 210,
+      "via": "ap",
+      "state": "detour"
+     },
+     "rows": [
+      {
+       "id": "m-9",
+       "name": "sha-host",
+       "self": false,
+       "role": "host",
+       "region": "cn",
+       "state": "unreachable",
+       "address": "10.144.145.9/24",
+       "domain": "sha-host.cn.mesh.internal",
+       "regionDomain": "cn.mesh.internal",
+       "connection": "unreachable",
+       "hops": 0,
+       "transport": "tcp",
+       "latencyMs": null,
+       "tone": "timeout",
+       "contains": {
+        "noun": "vms",
+        "count": 1
+       },
+       "children": [
+        {
+         "kind": "vm",
+         "name": "db-1",
+         "address": "10.144.146.2",
+         "domain": "db-1.cn.mesh.internal",
+         "match": false
+        }
+       ],
+       "visibleChildren": 1,
+       "open": false,
+       "marks": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "command": "view.mesh_members",
+  "args": {
+   "status": {
+    "statusVersion": 1,
+    "network": {
+     "id": "office",
+     "name": "office",
+     "state": "partial",
+     "security": "standard",
+     "routingPolicy": "latency",
+     "dnsSuffix": "mesh.internal",
+     "dnsEnabled": true
+    },
+    "self": {
+     "id": "m-self",
+     "name": "par-laptop",
+     "role": "client",
+     "address": "10.144.144.5/24",
+     "domain": "par-laptop.eu.mesh.internal",
+     "region": "eu",
+     "addressManaged": true
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true
+     },
+     {
+      "code": "cn",
+      "name": "中国大陆",
+      "local": false
+     },
+     {
+      "code": "ap",
+      "name": "亚太",
+      "local": false
+     }
+    ],
+    "members": [
+     {
+      "id": "m-1",
+      "name": "fra-border",
+      "role": "border",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.1/24",
+      "domain": "fra-border.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "direct",
+      "hops": 0,
+      "transport": "udp",
+      "latencyMs": 11,
+      "pathState": "auto"
+     },
+     {
+      "id": "m-3",
+      "name": "ams-gw",
+      "role": "gateway",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.3/24",
+      "domain": "ams-gw.eu.mesh.internal",
+      "addressManaged": false,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "tcp",
+      "latencyMs": 130,
+      "pathState": "fallback",
+      "subnets": [
+       "192.168.20.0/24"
+      ]
+     },
+     {
+      "id": "m-9",
+      "name": "sha-host",
+      "role": "host",
+      "region": "cn",
+      "state": "unreachable",
+      "address": "10.144.145.9/24",
+      "domain": "sha-host.cn.mesh.internal",
+      "addressManaged": true,
+      "connection": "unreachable",
+      "hops": 0,
+      "transport": "tcp",
+      "latencyMs": null,
+      "pathState": "auto",
+      "vms": [
+       {
+        "name": "db-1",
+        "domain": "db-1.cn.mesh.internal",
+        "address": "10.144.146.2"
+       }
+      ]
+     }
+    ],
+    "subnets": [
+     {
+      "cidr": "192.168.20.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       },
+       {
+        "member": "m-1",
+        "inUse": false
+       }
+      ],
+      "latencyMs": 140,
+      "path": [
+       "m-1",
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "8.8.8.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "refused",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "192.168.1.0/24",
+      "region": "cn",
+      "advertisers": [
+       {
+        "member": "m-9",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 300,
+      "path": [
+       "m-1",
+       "m-9"
+      ],
+      "state": "ok",
+      "overlaps": [
+       "192.168.0.0/16"
+      ],
+      "route": "local",
+      "localOverlap": true
+     }
+    ],
+    "links": [
+     {
+      "from": "eu",
+      "to": "cn",
+      "via": "ap",
+      "borders": [
+       "m-1"
+      ],
+      "latencyMs": 210,
+      "loss": 0.12,
+      "state": "detour",
+      "reason": {
+       "loss": 0.12
+      }
+     }
+    ],
+    "paths": [
+     {
+      "id": "p-1",
+      "target": {
+       "subnet": "192.168.20.0/24"
+      },
+      "via": [
+       "m-9"
+      ],
+      "state": "fallback",
+      "unreachable": "m-9"
+     }
+    ],
+    "refusedAdvertisements": 1
+   },
+   "groupBy": "region",
+   "filter": "all",
+   "sort": "name",
+   "query": "192.168.20.9",
+   "devices": [
+    {
+     "name": "printer",
+     "address": "192.168.20.9"
+    },
+    {
+     "name": "nas",
+     "address": "192.168.30.2"
+    }
+   ]
+  },
+  "answer": {
+   "groupBy": "region",
+   "total": 4,
+   "matched": 1,
+   "groups": [
+    {
+     "key": "eu",
+     "count": 3,
+     "matched": 1,
+     "open": true,
+     "worst": {
+      "state": "fallback",
+      "count": 1
+     },
+     "link": null,
+     "rows": [
+      {
+       "id": "m-3",
+       "name": "ams-gw",
+       "self": false,
+       "role": "gateway",
+       "region": "eu",
+       "state": "online",
+       "address": "10.144.144.3/24",
+       "domain": "ams-gw.eu.mesh.internal",
+       "regionDomain": "eu.mesh.internal",
+       "connection": "relay",
+       "hops": 1,
+       "transport": "tcp",
+       "latencyMs": 130,
+       "tone": "medium",
+       "contains": {
+        "noun": "subnets",
+        "count": 1
+       },
+       "children": [
+        {
+         "kind": "subnet",
+         "name": "192.168.20.0/24",
+         "match": true
+        },
+        {
+         "kind": "device",
+         "name": "printer",
+         "address": "192.168.20.9",
+         "match": true
+        }
+       ],
+       "visibleChildren": 2,
+       "open": true,
+       "marks": [
+        "unmanaged",
+        "fallback"
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "command": "view.mesh_members",
+  "args": {
+   "status": {
+    "statusVersion": 1,
+    "network": {
+     "id": "office",
+     "name": "office",
+     "state": "partial",
+     "security": "standard",
+     "routingPolicy": "latency",
+     "dnsSuffix": "mesh.internal",
+     "dnsEnabled": true
+    },
+    "self": {
+     "id": "m-self",
+     "name": "par-laptop",
+     "role": "client",
+     "address": "10.144.144.5/24",
+     "domain": "par-laptop.eu.mesh.internal",
+     "region": "eu",
+     "addressManaged": true
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true
+     },
+     {
+      "code": "cn",
+      "name": "中国大陆",
+      "local": false
+     },
+     {
+      "code": "ap",
+      "name": "亚太",
+      "local": false
+     }
+    ],
+    "members": [
+     {
+      "id": "m-1",
+      "name": "fra-border",
+      "role": "border",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.1/24",
+      "domain": "fra-border.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "direct",
+      "hops": 0,
+      "transport": "udp",
+      "latencyMs": 11,
+      "pathState": "auto"
+     },
+     {
+      "id": "m-3",
+      "name": "ams-gw",
+      "role": "gateway",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.3/24",
+      "domain": "ams-gw.eu.mesh.internal",
+      "addressManaged": false,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "tcp",
+      "latencyMs": 130,
+      "pathState": "fallback",
+      "subnets": [
+       "192.168.20.0/24"
+      ]
+     },
+     {
+      "id": "m-9",
+      "name": "sha-host",
+      "role": "host",
+      "region": "cn",
+      "state": "unreachable",
+      "address": "10.144.145.9/24",
+      "domain": "sha-host.cn.mesh.internal",
+      "addressManaged": true,
+      "connection": "unreachable",
+      "hops": 0,
+      "transport": "tcp",
+      "latencyMs": null,
+      "pathState": "auto",
+      "vms": [
+       {
+        "name": "db-1",
+        "domain": "db-1.cn.mesh.internal",
+        "address": "10.144.146.2"
+       }
+      ]
+     }
+    ],
+    "subnets": [
+     {
+      "cidr": "192.168.20.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       },
+       {
+        "member": "m-1",
+        "inUse": false
+       }
+      ],
+      "latencyMs": 140,
+      "path": [
+       "m-1",
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "8.8.8.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "refused",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "192.168.1.0/24",
+      "region": "cn",
+      "advertisers": [
+       {
+        "member": "m-9",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 300,
+      "path": [
+       "m-1",
+       "m-9"
+      ],
+      "state": "ok",
+      "overlaps": [
+       "192.168.0.0/16"
+      ],
+      "route": "local",
+      "localOverlap": true
+     }
+    ],
+    "links": [
+     {
+      "from": "eu",
+      "to": "cn",
+      "via": "ap",
+      "borders": [
+       "m-1"
+      ],
+      "latencyMs": 210,
+      "loss": 0.12,
+      "state": "detour",
+      "reason": {
+       "loss": 0.12
+      }
+     }
+    ],
+    "paths": [
+     {
+      "id": "p-1",
+      "target": {
+       "subnet": "192.168.20.0/24"
+      },
+      "via": [
+       "m-9"
+      ],
+      "state": "fallback",
+      "unreachable": "m-9"
+     }
+    ],
+    "refusedAdvertisements": 1
+   },
+   "groupBy": "role",
+   "filter": "unreachable",
+   "sort": "name",
+   "query": ""
+  },
+  "answer": {
+   "groupBy": "role",
+   "total": 4,
+   "matched": 1,
+   "groups": [
+    {
+     "key": "host",
+     "count": 1,
+     "matched": 1,
+     "open": true,
+     "worst": {
+      "state": "unreachable",
+      "count": 1
+     },
+     "link": null,
+     "rows": [
+      {
+       "id": "m-9",
+       "name": "sha-host",
+       "self": false,
+       "role": "host",
+       "region": "cn",
+       "state": "unreachable",
+       "address": "10.144.145.9/24",
+       "domain": "sha-host.cn.mesh.internal",
+       "regionDomain": "cn.mesh.internal",
+       "connection": "unreachable",
+       "hops": 0,
+       "transport": "tcp",
+       "latencyMs": null,
+       "tone": "timeout",
+       "contains": {
+        "noun": "vms",
+        "count": 1
+       },
+       "children": [
+        {
+         "kind": "vm",
+         "name": "db-1",
+         "address": "10.144.146.2",
+         "domain": "db-1.cn.mesh.internal",
+         "match": false
+        }
+       ],
+       "visibleChildren": 1,
+       "open": false,
+       "marks": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "command": "view.mesh_members",
+  "args": {
+   "status": {
+    "members": [
+     {
+      "id": "a",
+      "name": "a",
+      "state": "online",
+      "latencyMs": 50
+     },
+     {
+      "id": "b",
+      "name": "b",
+      "state": "online"
+     },
+     {
+      "id": "c",
+      "name": "c",
+      "state": "online",
+      "latencyMs": 20
+     }
+    ]
+   },
+   "groupBy": "region",
+   "sort": "latency"
+  },
+  "answer": {
+   "groupBy": "none",
+   "total": 3,
+   "matched": 3,
+   "groups": [
+    {
+     "key": null,
+     "count": 3,
+     "matched": 3,
+     "open": true,
+     "worst": null,
+     "link": null,
+     "rows": [
+      {
+       "id": "c",
+       "name": "c",
+       "self": false,
+       "role": null,
+       "region": null,
+       "state": "online",
+       "address": null,
+       "domain": null,
+       "regionDomain": null,
+       "connection": "unreachable",
+       "hops": 0,
+       "transport": null,
+       "latencyMs": 20,
+       "tone": "fast",
+       "contains": null,
+       "children": [],
+       "visibleChildren": 0,
+       "open": false,
+       "marks": []
+      },
+      {
+       "id": "a",
+       "name": "a",
+       "self": false,
+       "role": null,
+       "region": null,
+       "state": "online",
+       "address": null,
+       "domain": null,
+       "regionDomain": null,
+       "connection": "unreachable",
+       "hops": 0,
+       "transport": null,
+       "latencyMs": 50,
+       "tone": "fast",
+       "contains": null,
+       "children": [],
+       "visibleChildren": 0,
+       "open": false,
+       "marks": []
+      },
+      {
+       "id": "b",
+       "name": "b",
+       "self": false,
+       "role": null,
+       "region": null,
+       "state": "online",
+       "address": null,
+       "domain": null,
+       "regionDomain": null,
+       "connection": "unreachable",
+       "hops": 0,
+       "transport": null,
+       "latencyMs": null,
+       "tone": "timeout",
+       "contains": null,
+       "children": [],
+       "visibleChildren": 0,
+       "open": false,
+       "marks": []
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "command": "view.mesh_subnets",
+  "args": {
+   "status": {
+    "statusVersion": 1,
+    "network": {
+     "id": "office",
+     "name": "office",
+     "state": "partial",
+     "security": "standard",
+     "routingPolicy": "latency",
+     "dnsSuffix": "mesh.internal",
+     "dnsEnabled": true
+    },
+    "self": {
+     "id": "m-self",
+     "name": "par-laptop",
+     "role": "client",
+     "address": "10.144.144.5/24",
+     "domain": "par-laptop.eu.mesh.internal",
+     "region": "eu",
+     "addressManaged": true
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true
+     },
+     {
+      "code": "cn",
+      "name": "中国大陆",
+      "local": false
+     },
+     {
+      "code": "ap",
+      "name": "亚太",
+      "local": false
+     }
+    ],
+    "members": [
+     {
+      "id": "m-1",
+      "name": "fra-border",
+      "role": "border",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.1/24",
+      "domain": "fra-border.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "direct",
+      "hops": 0,
+      "transport": "udp",
+      "latencyMs": 11,
+      "pathState": "auto"
+     },
+     {
+      "id": "m-3",
+      "name": "ams-gw",
+      "role": "gateway",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.3/24",
+      "domain": "ams-gw.eu.mesh.internal",
+      "addressManaged": false,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "tcp",
+      "latencyMs": 130,
+      "pathState": "fallback",
+      "subnets": [
+       "192.168.20.0/24"
+      ]
+     },
+     {
+      "id": "m-9",
+      "name": "sha-host",
+      "role": "host",
+      "region": "cn",
+      "state": "unreachable",
+      "address": "10.144.145.9/24",
+      "domain": "sha-host.cn.mesh.internal",
+      "addressManaged": true,
+      "connection": "unreachable",
+      "hops": 0,
+      "transport": "tcp",
+      "latencyMs": null,
+      "pathState": "auto",
+      "vms": [
+       {
+        "name": "db-1",
+        "domain": "db-1.cn.mesh.internal",
+        "address": "10.144.146.2"
+       }
+      ]
+     }
+    ],
+    "subnets": [
+     {
+      "cidr": "192.168.20.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       },
+       {
+        "member": "m-1",
+        "inUse": false
+       }
+      ],
+      "latencyMs": 140,
+      "path": [
+       "m-1",
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "8.8.8.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "refused",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "192.168.1.0/24",
+      "region": "cn",
+      "advertisers": [
+       {
+        "member": "m-9",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 300,
+      "path": [
+       "m-1",
+       "m-9"
+      ],
+      "state": "ok",
+      "overlaps": [
+       "192.168.0.0/16"
+      ],
+      "route": "local",
+      "localOverlap": true
+     }
+    ],
+    "links": [
+     {
+      "from": "eu",
+      "to": "cn",
+      "via": "ap",
+      "borders": [
+       "m-1"
+      ],
+      "latencyMs": 210,
+      "loss": 0.12,
+      "state": "detour",
+      "reason": {
+       "loss": 0.12
+      }
+     }
+    ],
+    "paths": [
+     {
+      "id": "p-1",
+      "target": {
+       "subnet": "192.168.20.0/24"
+      },
+      "via": [
+       "m-9"
+      ],
+      "state": "fallback",
+      "unreachable": "m-9"
+     }
+    ],
+    "refusedAdvertisements": 1
+   },
+   "query": ""
+  },
+  "answer": {
+   "rows": [
+    {
+     "cidr": "192.168.20.0/24",
+     "region": "eu",
+     "regionName": "欧洲",
+     "advertiser": "ams-gw",
+     "advertisers": [
+      {
+       "id": "m-3",
+       "name": "ams-gw",
+       "inUse": true
+      },
+      {
+       "id": "m-1",
+       "name": "fra-border",
+       "inUse": false
+      }
+     ],
+     "path": [
+      "fra-border",
+      "ams-gw"
+     ],
+     "latencyMs": 140,
+     "tone": "medium",
+     "state": "ok",
+     "route": "mesh",
+     "overlaps": [],
+     "marks": [
+      "multi_source"
+     ]
+    },
+    {
+     "cidr": "192.168.1.0/24",
+     "region": "cn",
+     "regionName": "中国大陆",
+     "advertiser": "sha-host",
+     "advertisers": [
+      {
+       "id": "m-9",
+       "name": "sha-host",
+       "inUse": true
+      }
+     ],
+     "path": [
+      "fra-border",
+      "sha-host"
+     ],
+     "latencyMs": 300,
+     "tone": "slow",
+     "state": "ok",
+     "route": "local",
+     "overlaps": [
+      "192.168.0.0/16"
+     ],
+     "marks": [
+      "overlap",
+      "local_overlap"
+     ]
+    },
+    {
+     "cidr": "8.8.8.0/24",
+     "region": "eu",
+     "regionName": "欧洲",
+     "advertiser": "fra-border",
+     "advertisers": [
+      {
+       "id": "m-1",
+       "name": "fra-border",
+       "inUse": true
+      }
+     ],
+     "path": [],
+     "latencyMs": null,
+     "tone": null,
+     "state": "refused",
+     "route": "mesh",
+     "overlaps": [],
+     "marks": [
+      "refused"
+     ]
+    }
+   ],
+   "refused": 1
+  }
+ },
+ {
+  "command": "view.mesh_subnets",
+  "args": {
+   "status": {
+    "statusVersion": 1,
+    "network": {
+     "id": "office",
+     "name": "office",
+     "state": "partial",
+     "security": "standard",
+     "routingPolicy": "latency",
+     "dnsSuffix": "mesh.internal",
+     "dnsEnabled": true
+    },
+    "self": {
+     "id": "m-self",
+     "name": "par-laptop",
+     "role": "client",
+     "address": "10.144.144.5/24",
+     "domain": "par-laptop.eu.mesh.internal",
+     "region": "eu",
+     "addressManaged": true
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true
+     },
+     {
+      "code": "cn",
+      "name": "中国大陆",
+      "local": false
+     },
+     {
+      "code": "ap",
+      "name": "亚太",
+      "local": false
+     }
+    ],
+    "members": [
+     {
+      "id": "m-1",
+      "name": "fra-border",
+      "role": "border",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.1/24",
+      "domain": "fra-border.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "direct",
+      "hops": 0,
+      "transport": "udp",
+      "latencyMs": 11,
+      "pathState": "auto"
+     },
+     {
+      "id": "m-3",
+      "name": "ams-gw",
+      "role": "gateway",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.3/24",
+      "domain": "ams-gw.eu.mesh.internal",
+      "addressManaged": false,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "tcp",
+      "latencyMs": 130,
+      "pathState": "fallback",
+      "subnets": [
+       "192.168.20.0/24"
+      ]
+     },
+     {
+      "id": "m-9",
+      "name": "sha-host",
+      "role": "host",
+      "region": "cn",
+      "state": "unreachable",
+      "address": "10.144.145.9/24",
+      "domain": "sha-host.cn.mesh.internal",
+      "addressManaged": true,
+      "connection": "unreachable",
+      "hops": 0,
+      "transport": "tcp",
+      "latencyMs": null,
+      "pathState": "auto",
+      "vms": [
+       {
+        "name": "db-1",
+        "domain": "db-1.cn.mesh.internal",
+        "address": "10.144.146.2"
+       }
+      ]
+     }
+    ],
+    "subnets": [
+     {
+      "cidr": "192.168.20.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       },
+       {
+        "member": "m-1",
+        "inUse": false
+       }
+      ],
+      "latencyMs": 140,
+      "path": [
+       "m-1",
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "8.8.8.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "refused",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "192.168.1.0/24",
+      "region": "cn",
+      "advertisers": [
+       {
+        "member": "m-9",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 300,
+      "path": [
+       "m-1",
+       "m-9"
+      ],
+      "state": "ok",
+      "overlaps": [
+       "192.168.0.0/16"
+      ],
+      "route": "local",
+      "localOverlap": true
+     }
+    ],
+    "links": [
+     {
+      "from": "eu",
+      "to": "cn",
+      "via": "ap",
+      "borders": [
+       "m-1"
+      ],
+      "latencyMs": 210,
+      "loss": 0.12,
+      "state": "detour",
+      "reason": {
+       "loss": 0.12
+      }
+     }
+    ],
+    "paths": [
+     {
+      "id": "p-1",
+      "target": {
+       "subnet": "192.168.20.0/24"
+      },
+      "via": [
+       "m-9"
+      ],
+      "state": "fallback",
+      "unreachable": "m-9"
+     }
+    ],
+    "refusedAdvertisements": 1
+   },
+   "query": "192.168.1.7"
+  },
+  "answer": {
+   "rows": [
+    {
+     "cidr": "192.168.1.0/24",
+     "region": "cn",
+     "regionName": "中国大陆",
+     "advertiser": "sha-host",
+     "advertisers": [
+      {
+       "id": "m-9",
+       "name": "sha-host",
+       "inUse": true
+      }
+     ],
+     "path": [
+      "fra-border",
+      "sha-host"
+     ],
+     "latencyMs": 300,
+     "tone": "slow",
+     "state": "ok",
+     "route": "local",
+     "overlaps": [
+      "192.168.0.0/16"
+     ],
+     "marks": [
+      "overlap",
+      "local_overlap"
+     ]
+    }
+   ],
+   "refused": 1
+  }
+ },
+ {
+  "command": "view.mesh_paths",
+  "args": {
+   "status": {
+    "statusVersion": 1,
+    "network": {
+     "id": "office",
+     "name": "office",
+     "state": "partial",
+     "security": "standard",
+     "routingPolicy": "latency",
+     "dnsSuffix": "mesh.internal",
+     "dnsEnabled": true
+    },
+    "self": {
+     "id": "m-self",
+     "name": "par-laptop",
+     "role": "client",
+     "address": "10.144.144.5/24",
+     "domain": "par-laptop.eu.mesh.internal",
+     "region": "eu",
+     "addressManaged": true
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true
+     },
+     {
+      "code": "cn",
+      "name": "中国大陆",
+      "local": false
+     },
+     {
+      "code": "ap",
+      "name": "亚太",
+      "local": false
+     }
+    ],
+    "members": [
+     {
+      "id": "m-1",
+      "name": "fra-border",
+      "role": "border",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.1/24",
+      "domain": "fra-border.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "direct",
+      "hops": 0,
+      "transport": "udp",
+      "latencyMs": 11,
+      "pathState": "auto"
+     },
+     {
+      "id": "m-3",
+      "name": "ams-gw",
+      "role": "gateway",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.3/24",
+      "domain": "ams-gw.eu.mesh.internal",
+      "addressManaged": false,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "tcp",
+      "latencyMs": 130,
+      "pathState": "fallback",
+      "subnets": [
+       "192.168.20.0/24"
+      ]
+     },
+     {
+      "id": "m-9",
+      "name": "sha-host",
+      "role": "host",
+      "region": "cn",
+      "state": "unreachable",
+      "address": "10.144.145.9/24",
+      "domain": "sha-host.cn.mesh.internal",
+      "addressManaged": true,
+      "connection": "unreachable",
+      "hops": 0,
+      "transport": "tcp",
+      "latencyMs": null,
+      "pathState": "auto",
+      "vms": [
+       {
+        "name": "db-1",
+        "domain": "db-1.cn.mesh.internal",
+        "address": "10.144.146.2"
+       }
+      ]
+     }
+    ],
+    "subnets": [
+     {
+      "cidr": "192.168.20.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       },
+       {
+        "member": "m-1",
+        "inUse": false
+       }
+      ],
+      "latencyMs": 140,
+      "path": [
+       "m-1",
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "8.8.8.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "refused",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "192.168.1.0/24",
+      "region": "cn",
+      "advertisers": [
+       {
+        "member": "m-9",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 300,
+      "path": [
+       "m-1",
+       "m-9"
+      ],
+      "state": "ok",
+      "overlaps": [
+       "192.168.0.0/16"
+      ],
+      "route": "local",
+      "localOverlap": true
+     }
+    ],
+    "links": [
+     {
+      "from": "eu",
+      "to": "cn",
+      "via": "ap",
+      "borders": [
+       "m-1"
+      ],
+      "latencyMs": 210,
+      "loss": 0.12,
+      "state": "detour",
+      "reason": {
+       "loss": 0.12
+      }
+     }
+    ],
+    "paths": [
+     {
+      "id": "p-1",
+      "target": {
+       "subnet": "192.168.20.0/24"
+      },
+      "via": [
+       "m-9"
+      ],
+      "state": "fallback",
+      "unreachable": "m-9"
+     }
+    ],
+    "refusedAdvertisements": 1
+   }
+  },
+  "answer": {
+   "policy": "latency",
+   "links": [
+    {
+     "from": "eu",
+     "fromName": "欧洲",
+     "to": "cn",
+     "toName": "中国大陆",
+     "via": "ap",
+     "viaName": "亚太",
+     "borders": [
+      "fra-border"
+     ],
+     "latencyMs": 210,
+     "tone": "medium",
+     "loss": 0.12,
+     "state": "detour"
+    }
+   ],
+   "custom": [
+    {
+     "id": "p-1",
+     "targetKind": "subnet",
+     "target": "192.168.20.0/24",
+     "targetLabel": "192.168.20.0/24",
+     "advertiser": "ams-gw",
+     "via": [
+      "sha-host"
+     ],
+     "state": "fallback",
+     "unreachable": "sha-host"
+    }
+   ]
+  }
+ },
+ {
+  "command": "view.mesh_paths",
+  "args": {
+   "status": {
+    "network": {
+     "routingPolicy": "hops"
+    }
+   }
+  },
+  "answer": {
+   "policy": "hops",
+   "links": null,
+   "custom": null
+  }
+ },
+ {
+  "command": "view.mesh_notices",
+  "args": {
+   "status": {
+    "statusVersion": 1,
+    "network": {
+     "id": "office",
+     "name": "office",
+     "state": "partial",
+     "security": "standard",
+     "routingPolicy": "latency",
+     "dnsSuffix": "mesh.internal",
+     "dnsEnabled": true
+    },
+    "self": {
+     "id": "m-self",
+     "name": "par-laptop",
+     "role": "client",
+     "address": "10.144.144.5/24",
+     "domain": "par-laptop.eu.mesh.internal",
+     "region": "eu",
+     "addressManaged": true
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true
+     },
+     {
+      "code": "cn",
+      "name": "中国大陆",
+      "local": false
+     },
+     {
+      "code": "ap",
+      "name": "亚太",
+      "local": false
+     }
+    ],
+    "members": [
+     {
+      "id": "m-1",
+      "name": "fra-border",
+      "role": "border",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.1/24",
+      "domain": "fra-border.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "direct",
+      "hops": 0,
+      "transport": "udp",
+      "latencyMs": 11,
+      "pathState": "auto"
+     },
+     {
+      "id": "m-3",
+      "name": "ams-gw",
+      "role": "gateway",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.3/24",
+      "domain": "ams-gw.eu.mesh.internal",
+      "addressManaged": false,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "tcp",
+      "latencyMs": 130,
+      "pathState": "fallback",
+      "subnets": [
+       "192.168.20.0/24"
+      ]
+     },
+     {
+      "id": "m-9",
+      "name": "sha-host",
+      "role": "host",
+      "region": "cn",
+      "state": "unreachable",
+      "address": "10.144.145.9/24",
+      "domain": "sha-host.cn.mesh.internal",
+      "addressManaged": true,
+      "connection": "unreachable",
+      "hops": 0,
+      "transport": "tcp",
+      "latencyMs": null,
+      "pathState": "auto",
+      "vms": [
+       {
+        "name": "db-1",
+        "domain": "db-1.cn.mesh.internal",
+        "address": "10.144.146.2"
+       }
+      ]
+     }
+    ],
+    "subnets": [
+     {
+      "cidr": "192.168.20.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       },
+       {
+        "member": "m-1",
+        "inUse": false
+       }
+      ],
+      "latencyMs": 140,
+      "path": [
+       "m-1",
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "8.8.8.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "refused",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "192.168.1.0/24",
+      "region": "cn",
+      "advertisers": [
+       {
+        "member": "m-9",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 300,
+      "path": [
+       "m-1",
+       "m-9"
+      ],
+      "state": "ok",
+      "overlaps": [
+       "192.168.0.0/16"
+      ],
+      "route": "local",
+      "localOverlap": true
+     }
+    ],
+    "links": [
+     {
+      "from": "eu",
+      "to": "cn",
+      "via": "ap",
+      "borders": [
+       "m-1"
+      ],
+      "latencyMs": 210,
+      "loss": 0.12,
+      "state": "detour",
+      "reason": {
+       "loss": 0.12
+      }
+     }
+    ],
+    "paths": [
+     {
+      "id": "p-1",
+      "target": {
+       "subnet": "192.168.20.0/24"
+      },
+      "via": [
+       "m-9"
+      ],
+      "state": "fallback",
+      "unreachable": "m-9"
+     }
+    ],
+    "refusedAdvertisements": 1
+   }
+  },
+  "answer": [
+   {
+    "id": "mesh.notice.path_fallback",
+    "key": "fallback:p-1:m-9",
+    "values": [
+     "sha-host",
+     "192.168.20.0/24"
+    ],
+    "action": null,
+    "notify": true
+   },
+   {
+    "id": "mesh.notice.detour_loss",
+    "key": "detour:eu:cn:ap",
+    "values": [
+     "欧洲",
+     "中国大陆",
+     "亚太",
+     12
+    ],
+    "action": null,
+    "notify": false
+   },
+   {
+    "id": "mesh.notice.partial",
+    "key": "partial",
+    "values": [
+     1,
+     [
+      "sha-host"
+     ]
+    ],
+    "action": null,
+    "notify": false
+   }
+  ]
+ },
+ {
+  "command": "view.mesh_notices",
+  "args": {
+   "status": {
+    "network": {
+     "state": "failed",
+     "failure": {
+      "code": "port_in_use",
+      "detail": "11010"
+     }
+    }
+   }
+  },
+  "answer": [
+   {
+    "id": "mesh.notice.port_in_use",
+    "key": "failure:port_in_use",
+    "values": [
+     "11010"
+    ],
+    "action": null,
+    "notify": false
+   }
+  ]
+ },
+ {
+  "command": "view.mesh_notices",
+  "args": {
+   "status": {
+    "network": {
+     "state": "failed",
+     "failure": {
+      "code": "unencrypted_refused"
+     }
+    }
+   }
+  },
+  "answer": [
+   {
+    "id": "mesh.notice.unencrypted_refused",
+    "key": "failure:unencrypted_refused",
+    "values": [],
+    "action": "network_settings",
+    "notify": false
+   }
+  ]
  }
 ]
