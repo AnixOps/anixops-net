@@ -172,6 +172,13 @@
   （`rules` 为 `["FINAL,DIRECT"]`，`mode` 为 `rule`，不需要节点密钥）；`includedRoutes` 只放 `tunnel.routes`，
   内网域名开启时 DNS 只对 `tunnel.dns.matchDomains` 生效。扩展每 2 秒读一次 `mesh_status`，`routesVersion` 变化时重新应用，
   间隔至少 1 秒。代理连上时去掉标记并重启；退出最后一个网络时关闭 VPN。入口在 `feature_set_version` ≥ 7 时显示。
+- Android 只开组网：代理断开（或连接失败、Wi-Fi 规则断开）而有网络已加入时，`client-core` 不关 VPN，改为以只带组网的接口
+  重新打开（地址与 MTU 同代理，起初没有路由），再在该描述符上启动只带组网出站的引擎（`rules` 为 `["FINAL,DIRECT"]`），
+  与代理引擎分开，连接状态仍为未连接。每 2 秒读一次 `mesh_status`，接口所需的路由或 DNS 变化时重新打开接口，间隔至少 1 秒；
+  新描述符在运行中的引擎下替换旧的，组网连接不断。内网域名开启时 DNS 服务器为隧道地址并加主机路由；Android 的 VPN
+  没有按后缀的 DNS，此时所有域名由引擎解析，内网后缀走组网。代理连上时停掉只开组网的引擎，接口按代理重新打开；
+  退出最后一个网络时关闭 VPN。未运行引擎时 `mesh_status` 由保存的网络作答（加入的网络，否则第一个，无成员），
+  入口照常显示；引擎是否支持组网由能否接受只开组网的配置判断。断开时加入网络先取得 VPN 授权。
 - Android、Windows、Linux：`client-core` 把配置连同密钥存在数据目录的 `mesh-networks.json`（仅所有者可读），
   窗口经以下命令管理，任何回答都不含密钥：
 

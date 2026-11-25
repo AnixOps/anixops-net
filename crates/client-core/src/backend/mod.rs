@@ -360,6 +360,8 @@ pub struct Backend {
     store: Store,
     state: SavedState,
     engine: Engine,
+    /// The engine for the mesh alone, while the proxy is off (Android, `Client::close_tunnel`).
+    mesh_only: engine::MeshOnly,
     /// Nodes of the selected source.
     nodes: Vec<NodeDescriptor>,
     /// The selected source's envelope with every node, rules and policy groups, when it has them, with the
@@ -447,6 +449,7 @@ impl Backend {
             store,
             state,
             engine: Engine::default(),
+            mesh_only: engine::MeshOnly::default(),
             nodes: Vec::new(),
             routed_profile: None,
             others: Vec::new(),
@@ -644,12 +647,64 @@ impl Backend {
     /// One mesh request to a running engine; `None` while none runs, else the engine's answer (`{"ok":true}` or its
     /// refusal, `{"ok":false,"error":{code,detail}}`).
     fn mesh_request(&self, request: Value) -> Option<Value> {
-        if !self.engine.is_running() {
+        let answer = if self.engine.is_running() {
+            self.engine.request(&request)
+        } else if self.mesh_only.is_running() {
+            self.mesh_only.request(&request)
+        } else {
             return None;
-        }
-        Some(self.engine.request(&request).unwrap_or_else(|error| {
+        };
+        Some(answer.unwrap_or_else(|error| {
             serde_json::json!({ "ok": false, "error": { "code": "other", "detail": error } })
         }))
+    }
+
+    /// Whether the engine should run for the mesh alone (mesh-status.md, 只开组网): the proxy is off, a saved
+    /// network is joined and this build's engine runs mesh networks.
+    pub fn wants_mesh_only(&self) -> bool {
+        !self.engine.is_running()
+            && mesh::supported()
+            && mesh::load(self.store.dir())
+                .is_ok_and(|networks| networks.iter().any(|network| network.joined))
+    }
+
+    pub fn mesh_only_running(&self) -> bool {
+        self.mesh_only.is_running()
+    }
+
+    /// Starts the engine for the mesh alone on the kept TUN descriptor, which the caller opened: the joined
+    /// networks' outbounds, everything else direct ([`mesh::only_profile`]), with the chosen DNS.
+    pub fn start_mesh_only(&mut self) -> Result<(), String> {
+        let networks = mesh::load(self.store.dir())?;
+        let profile = mesh::only_profile(&mesh::outbounds(&networks))
+            .ok_or_else(|| "no mesh network is joined".to_string())?;
+        let envelope = desktop_dns::apply(&profile.to_string(), self.state.dns_preset)?;
+        let started = self.mesh_only.start(&envelope);
+        match &started {
+            Ok(()) => self.log(LogLevel::Info, "mesh only: started"),
+            Err(error) => self.log(
+                LogLevel::Error,
+                &format!("mesh only: the engine did not start: {error}"),
+            ),
+        }
+        started
+    }
+
+    /// Stops the engine for the mesh alone; the descriptor stays. Answers whether it ran.
+    pub fn stop_mesh_only(&mut self) -> bool {
+        let ran = self.mesh_only.stop();
+        if ran {
+            self.log(LogLevel::Info, "mesh only: stopped");
+        }
+        ran
+    }
+
+    /// The `tunnel` section of the engine for the mesh alone; `None` while it does not answer one.
+    pub fn mesh_only_tunnel(&self) -> Option<mesh::Tunnel> {
+        self.mesh_only
+            .request(&serde_json::json!({ "cmd": "mesh_status" }))
+            .ok()
+            .and_then(|status| mesh::Tunnel::from_status(&status))
     }
 
     /// Saves a network (`config`, the kernel's `config_version: 1` structure with its secret) and joins it, leaving
@@ -2095,7 +2150,36 @@ impl Backend {
         &self,
         request: &serde_json::Value,
     ) -> Result<serde_json::Value, String> {
+        if !self.engine.is_running() {
+            if let Some(answer) = self.mesh_control(request) {
+                return answer;
+            }
+        }
         self.engine.control(request)
+    }
+
+    /// A window's `mesh_*` request while the proxy is off: to the engine for the mesh alone while it runs; else
+    /// `mesh_status` is answered from the saved networks ([`mesh::offline_status`]) on a build whose engine runs
+    /// mesh networks, so the 组网 entry shows and a network can be joined. `None` for any other request.
+    fn mesh_control(
+        &self,
+        request: &serde_json::Value,
+    ) -> Option<Result<serde_json::Value, String>> {
+        let command = request.get("cmd").and_then(serde_json::Value::as_str)?;
+        if !command.starts_with("mesh_") {
+            return None;
+        }
+        if self.mesh_only.is_running() {
+            return Some(
+                engine::activity_request(request).and_then(|_| self.mesh_only.request(request)),
+            );
+        }
+        if command == "mesh_status" && mesh::supported() {
+            return Some(
+                mesh::load(self.store.dir()).map(|networks| mesh::offline_status(&networks)),
+            );
+        }
+        None
     }
 
     /// One request the backend itself makes of the running engine, past the window's command list

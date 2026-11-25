@@ -297,6 +297,22 @@ fun AnixApp(
         val ask = VpnService.prepare(context)
         if (ask == null) app.connect() else consent.launch(ask)
     }
+    // Joining a network while disconnected opens the VPN for the mesh alone, which needs the same consent.
+    var pendingMesh by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val meshConsent = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val action = pendingMesh
+        pendingMesh = null
+        if (result.resultCode == Activity.RESULT_OK) action?.invoke() else app.showNotice(denied)
+    }
+    val withVpn = { action: () -> Unit ->
+        val ask = VpnService.prepare(context)
+        if (ask == null) {
+            action()
+        } else {
+            pendingMesh = action
+            meshConsent.launch(ask)
+        }
+    }
     val following by rememberUpdatedState(connect)
     LaunchedEffect(links) {
         links.collect { link -> app.followLink(link, connect = { following() }, offerImport = proxies::offerImport) }
@@ -441,14 +457,14 @@ fun AnixApp(
         },
         meshState = meshState,
         mesh = MeshActions(
-            setJoined = mesh::setJoined,
+            setJoined = { joined -> if (joined) withVpn { mesh.setJoined(true) } else mesh.setJoined(false) },
             setGroupBy = mesh::setGroupBy,
             setFilter = mesh::setFilter,
             setSort = mesh::setSort,
             setQuery = mesh::setQuery,
             setSubnetRoute = mesh::setSubnetRoute,
             dismissRefusal = mesh::dismissRefusal,
-            addNetwork = mesh::addNetwork,
+            addNetwork = { draft -> withVpn { mesh.addNetwork(draft) } },
             removeNetwork = mesh::removeNetwork,
         ),
         pollMesh = {

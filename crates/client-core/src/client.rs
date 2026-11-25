@@ -12,6 +12,7 @@ mod agent;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -29,6 +30,7 @@ use subscription_meta::ResponseMeta;
 
 use crate::backend::engine;
 use crate::backend::engine::NetworkFacts;
+use crate::backend::mesh;
 use crate::backend::session::{LocalSession, UserSession};
 use crate::backend::state::{RoutingMode, Store};
 use crate::backend::system_proxy::Desktop;
@@ -57,6 +59,11 @@ const UNAVAILABLE: &str = if cfg!(target_os = "android") {
 const NOT_UPDATABLE: &str = "error.not_updatable";
 
 const NO_DOWNLOADS: &str = "this platform has no shared Downloads folder";
+
+/// How often the engine for the mesh alone is asked for its routes (R23: 2 s).
+const MESH_ROUTES_POLL: Duration = Duration::from_secs(2);
+/// The least time between two applications of new routes.
+const MESH_ROUTES_GAP: Duration = Duration::from_secs(1);
 
 /// What the LAN share commands answer where there is no share (Android).
 #[cfg(target_os = "android")]
@@ -91,6 +98,18 @@ impl TunnelInterface {
             routes: owned(&["0.0.0.0/0", "::/0"]),
             dns_servers: owned(&["198.18.0.2"]),
             mtu: 1500,
+        }
+    }
+
+    /// The interface while the engine runs for the mesh alone (mesh-status.md, 只开组网): the proxy's addresses and
+    /// MTU, only the mesh routes, and the tunnel's DNS while internal domain names are on
+    /// ([`mesh::Tunnel::routes_and_dns`]). `None` (no answer yet, as right after the start) routes nothing.
+    pub fn mesh(tunnel: Option<&mesh::Tunnel>) -> Self {
+        let (routes, dns_servers) = mesh::Tunnel::routes_and_dns(tunnel);
+        Self {
+            routes,
+            dns_servers,
+            ..Self::proxy()
         }
     }
 }
@@ -189,6 +208,9 @@ pub struct Client {
     delays: Mutex<HashMap<String, Option<u64>>>,
     /// See [`Config::shared_service`].
     shared_service: bool,
+    /// Counts the starts of the engine for the mesh alone; a route watch ends once a newer start began
+    /// ([`Client::watch_mesh_routes`]).
+    mesh_watch: Arc<AtomicU64>,
 }
 
 fn lock<T>(value: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -259,6 +281,7 @@ impl Client {
             links: Mutex::new(Vec::new()),
             delays: Mutex::new(HashMap::new()),
             shared_service,
+            mesh_watch: Arc::new(AtomicU64::new(0)),
         });
         if auto_connect && !client.platform.has_system_vpn() {
             let starting = client.clone();
@@ -372,9 +395,12 @@ impl Client {
 
     /// Keeps a live descriptor; one whose VPN was taken away (another VPN, or the system settings) is dropped
     /// and the VPN opened again.
+    /// The interface the engine ran for the mesh alone on carries only the mesh routes: it is opened again for
+    /// the proxy.
     #[cfg(target_os = "android")]
     fn open_system_tunnel(&self) -> Result<(), String> {
-        if engine::tunnel_attached() {
+        let was_mesh_only = self.backend().stop_mesh_only();
+        if engine::tunnel_attached() && !was_mesh_only {
             return Ok(());
         }
         self.backend().stop_engine();
@@ -388,23 +414,151 @@ impl Client {
         Err("this platform has no system VPN".to_string())
     }
 
-    /// Stops the engine and closes the system VPN, if the platform has one, or the desktop's TUN mode device.
+    /// Stops the engine and closes the system VPN, if the platform has one, or the desktop's TUN mode device. With
+    /// a mesh network joined, the system VPN stays for the mesh alone instead ([`Client::open_mesh_only`]).
     fn close_tunnel(&self) {
         if self.platform.has_system_vpn() {
-            let rules_on = {
+            let mesh_only = {
                 let mut backend = self.backend();
                 backend.stop_engine();
-                backend.on_demand_enabled()
+                backend.stop_mesh_only();
+                backend.wants_mesh_only()
             };
-            if rules_on {
-                self.platform.close_tunnel_for_rules();
-            } else {
-                self.platform.close_tunnel();
+            if mesh_only && self.open_mesh_only().is_ok() {
+                return;
             }
+            self.release_system_tunnel();
         } else if self.backend().tun_mode() {
             self.backend().stop_engine();
         }
     }
+
+    /// Lets go of the system VPN's descriptor and closes the VPN; while the Wi-Fi rules are on, the platform keeps
+    /// what lets them connect again ([`Platform::close_tunnel_for_rules`]).
+    fn release_system_tunnel(&self) {
+        let rules_on = {
+            let mut backend = self.backend();
+            backend.stop_engine();
+            backend.on_demand_enabled()
+        };
+        if rules_on {
+            self.platform.close_tunnel_for_rules();
+        } else {
+            self.platform.close_tunnel();
+        }
+    }
+
+    /// Opens the system VPN for the mesh alone, with no routes until the engine names them, and starts the engine
+    /// for it; the routes then follow the engine ([`Client::watch_mesh_routes`]). A failure is logged.
+    #[cfg(any(target_os = "android", target_os = "linux"))]
+    fn open_mesh_only(&self) -> Result<(), String> {
+        let interface = TunnelInterface::mesh(None);
+        let started = self.platform.open_tunnel(&interface).and_then(|fd| {
+            engine::attach_tunnel(fd);
+            self.backend().start_mesh_only()
+        });
+        match &started {
+            Ok(()) => self.watch_mesh_routes(interface),
+            Err(error) => self.backend().log(
+                app_log::Level::Error,
+                &format!("mesh only: the VPN did not open: {error}"),
+            ),
+        }
+        started
+    }
+
+    /// Windows has no system VPN ([`Platform::has_system_vpn`]): nothing runs for the mesh alone there yet.
+    #[cfg(not(any(target_os = "android", target_os = "linux")))]
+    fn open_mesh_only(&self) -> Result<(), String> {
+        Err("this platform has no system VPN".to_string())
+    }
+
+    /// After a network was saved, joined, left or removed: where the platform has a system VPN, the engine for
+    /// the mesh alone starts when the proxy is off and a network is now joined, and stops, closing the VPN, when
+    /// none is. A start that failed is answered as the engine's refusal, in place of `answer`.
+    fn mesh_changed(&self, answer: Value) -> Value {
+        if !self.platform.has_system_vpn() {
+            return answer;
+        }
+        let (wants, running) = {
+            let backend = self.backend();
+            (backend.wants_mesh_only(), backend.mesh_only_running())
+        };
+        if wants == running {
+            return answer;
+        }
+        if !wants {
+            self.close_tunnel();
+            return answer;
+        }
+        match self.open_mesh_only() {
+            Ok(()) => answer,
+            Err(error) => {
+                self.release_system_tunnel();
+                serde_json::json!({ "ok": false, "error": { "code": "other", "detail": error } })
+            }
+        }
+    }
+
+    /// Re-applies the VPN's routes and DNS while the engine runs for the mesh alone: reads the engine's `tunnel`
+    /// section every [`MESH_ROUTES_POLL`] and, when what the interface needs changed, opens the interface again
+    /// with it, at most once per [`MESH_ROUTES_GAP`] (mesh-status.md, 隧道生命周期). The new descriptor replaces the
+    /// old one under the running engine, so the mesh keeps its connections. Ends with the engine, or when a newer
+    /// start began.
+    #[cfg(any(target_os = "android", target_os = "linux"))]
+    fn watch_mesh_routes(&self, applied: TunnelInterface) {
+        let generation = self.mesh_watch.fetch_add(1, Ordering::AcqRel) + 1;
+        let watch = self.mesh_watch.clone();
+        let backend = self.backend.clone();
+        let platform = self.platform.clone();
+        let spawned = thread::Builder::new()
+            .name("mesh-routes".into())
+            .spawn(move || {
+                let mut applied = applied;
+                let mut since = Instant::now();
+                loop {
+                    thread::sleep(MESH_ROUTES_POLL);
+                    // Held while the interface is replaced, so a connect waits for it rather than cross it.
+                    let guard = lock(backend.as_ref());
+                    if watch.load(Ordering::Acquire) != generation || !guard.mesh_only_running() {
+                        return;
+                    }
+                    let next = TunnelInterface::mesh(guard.mesh_only_tunnel().as_ref());
+                    if next == applied || since.elapsed() < MESH_ROUTES_GAP {
+                        continue;
+                    }
+                    engine::expect_tunnel_replacement();
+                    match platform.open_tunnel(&next) {
+                        Ok(fd) => {
+                            engine::attach_tunnel(fd);
+                            guard.log(
+                                app_log::Level::Info,
+                                &format!("mesh only: {} routes applied", next.routes.len()),
+                            );
+                            applied = next;
+                        }
+                        Err(error) => {
+                            engine::tunnel_replacement_failed();
+                            guard.log(
+                                app_log::Level::Error,
+                                &format!("mesh only: the routes could not be applied: {error}"),
+                            );
+                        }
+                    }
+                    since = Instant::now();
+                }
+            });
+        if let Err(error) = spawned {
+            self.backend().log(
+                app_log::Level::Error,
+                &format!("mesh only: the route watch did not start: {error}"),
+            );
+        }
+    }
+
+    /// Windows has no system VPN ([`Platform::has_system_vpn`]), so nothing runs for the mesh alone yet.
+    #[cfg(not(any(target_os = "android", target_os = "linux")))]
+    fn watch_mesh_routes(&self, _applied: TunnelInterface) {}
 
     /// Connects, through the system VPN where the platform has one; a failed start closes that VPN again.
     fn connect_through_tunnel(&self) -> Result<OperationResult, String> {
@@ -1417,15 +1571,18 @@ fn handler(name: &str) -> Option<Handler> {
         "mesh_networks" => |client, _| json(client.backend().mesh_networks()?),
         "save_mesh_network" => |client, args| {
             let MeshConfig { config } = parse(args)?;
-            client.backend().save_mesh_network(config)
+            let answer = client.backend().save_mesh_network(config)?;
+            Ok(client.mesh_changed(answer))
         },
         "set_mesh_joined" => |client, args| {
             let MeshJoined { network, joined } = parse(args)?;
-            client.backend().set_mesh_joined(&network, joined)
+            let answer = client.backend().set_mesh_joined(&network, joined)?;
+            Ok(client.mesh_changed(answer))
         },
         "remove_mesh_network" => |client, args| {
             let MeshNetworkName { network } = parse(args)?;
-            client.backend().remove_mesh_network(&network)
+            let answer = client.backend().remove_mesh_network(&network)?;
+            Ok(client.mesh_changed(answer))
         },
         "devices" => |client, _| json(client.backend().devices()),
         "save_device" => |client, args| {
@@ -2344,6 +2501,25 @@ fn read_subscription_file(location: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_mesh_alone_routes_only_the_mesh() {
+        let tunnel = mesh::Tunnel {
+            routes: vec!["10.144.144.0/24".to_string()],
+            routes_version: 1,
+            dns_servers: vec!["198.18.0.2".to_string()],
+            match_domains: vec!["office.internal".to_string()],
+        };
+        let interface = TunnelInterface::mesh(Some(&tunnel));
+        let proxy = TunnelInterface::proxy();
+        assert_eq!(interface.addresses, proxy.addresses);
+        assert_eq!(interface.mtu, proxy.mtu);
+        assert_eq!(interface.routes, ["10.144.144.0/24", "198.18.0.2/32"]);
+        assert_eq!(interface.dns_servers, ["198.18.0.2"]);
+        // Before the engine answers, nothing is routed and the device keeps its DNS.
+        let empty = TunnelInterface::mesh(None);
+        assert!(empty.routes.is_empty() && empty.dns_servers.is_empty());
+    }
 
     #[test]
     fn the_root_file_is_named_after_its_fingerprint() {
