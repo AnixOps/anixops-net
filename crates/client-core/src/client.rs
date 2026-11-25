@@ -7,7 +7,7 @@
 //! What the platform does itself (the system VPN, the shared Downloads folder, the key store, the current
 //! network, system notifications) sits behind [`Platform`].
 
-mod agent;
+pub mod agent;
 
 use std::collections::HashMap;
 use std::fs;
@@ -185,6 +185,17 @@ pub trait Platform: Send + Sync + 'static {
     fn post_notice(&self, notice: &Notice) {
         let _ = notice;
     }
+
+    /// Asks the user, in a window of the client, to confirm an action an AI tool asked for
+    /// (docs/mcp-desktop.md §6). The window shows the confirmation and answers once the user chose, or after
+    /// `client_mcp::agent::CONFIRMATION_TIMEOUT` without a choice. An error: no window can ask the user.
+    fn confirm_action(
+        &self,
+        action: &client_mcp::Action,
+    ) -> Result<client_mcp::agent::Confirmation, String> {
+        let _ = action;
+        Err("no window of AnixOps Net is open to confirm it".to_string())
+    }
 }
 
 /// Where the client keeps its data and which program autostart starts.
@@ -209,6 +220,9 @@ pub struct Client {
     /// What each node's last delay test said (`None`: no answer), by node id. Kept for as long as the core
     /// runs, so that every window shows the same delays and a window that is opened again still has them.
     delays: Mutex<HashMap<String, Option<u64>>>,
+    /// AI tools: until when each kind of action is allowed without asking (「15 分钟内允许此类操作」), and the
+    /// last requests with their outcome (`agent_access_log`). Kept while the core runs, never saved or sent.
+    agent: Mutex<agent::AgentMemory>,
     /// See [`Config::shared_service`].
     shared_service: bool,
     /// Counts the starts of the engine for the mesh alone; a route watch ends once a newer start began
@@ -284,6 +298,7 @@ impl Client {
             session_key: Mutex::new(None),
             links: Mutex::new(Vec::new()),
             delays: Mutex::new(HashMap::new()),
+            agent: Mutex::new(agent::AgentMemory::default()),
             shared_service,
             #[cfg(any(target_os = "android", target_os = "linux"))]
             mesh_watch: Arc::new(AtomicU64::new(0)),
@@ -1742,9 +1757,18 @@ fn handler(name: &str) -> Option<Handler> {
         // What AI tools may read (设置 › 高级 › 外部工具访问): only a window reads and changes it here; an AI tool
         // reads it through `Client::agent`.
         "agent_access" => |client, _| json(client.backend().agent_access()),
+        "agent_access_log" => |client, _| json(client.agent_access_log()),
+        "clear_agent_access_log" => |client, _| {
+            client.clear_agent_access_log();
+            Ok(Value::Null)
+        },
         "set_agent_access" => |client, args| {
-            let AgentAccessArgs { read, content } = parse(args)?;
-            json(client.backend().set_agent_access(read, &content)?)
+            let AgentAccessArgs { read, act, content } = parse(args)?;
+            let access = client.backend().set_agent_access(read, act, &content)?;
+            if !access.act {
+                client.end_agent_grants();
+            }
+            json(access)
         },
         "set_block_quic" => |client, args| {
             let Enabled { enabled } = parse(args)?;
@@ -2172,6 +2196,9 @@ struct Enabled {
 #[serde(deny_unknown_fields)]
 struct AgentAccessArgs {
     read: bool,
+    /// Unset keeps the saved switch (a window that does not show it yet).
+    #[serde(default)]
+    act: Option<bool>,
     content: String,
 }
 
@@ -2955,6 +2982,197 @@ mod tests {
             set
         );
         drop(reopened);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// A window that answers each confirmation with the next of `answers` (`None`: no window to ask).
+    struct Confirming {
+        answers: Mutex<std::collections::VecDeque<Option<client_mcp::agent::Confirmation>>>,
+        asked: Mutex<Vec<client_mcp::Action>>,
+    }
+
+    impl Platform for Confirming {
+        fn confirm_action(
+            &self,
+            action: &client_mcp::Action,
+        ) -> Result<client_mcp::agent::Confirmation, String> {
+            lock(&self.asked).push(action.clone());
+            lock(&self.answers)
+                .pop_front()
+                .flatten()
+                .ok_or_else(|| "no window".to_string())
+        }
+    }
+
+    /// AI tools' actions (docs/mcp-desktop.md §6): only with the switch for actions, only once a window asked the
+    /// user, never without a window, and of the kinds the user allowed for 15 minutes without asking again.
+    #[test]
+    fn ai_tools_act_only_with_the_users_confirmation() {
+        use client_mcp::agent::{self as wire, Answer, Confirmation};
+        use client_mcp::Action;
+
+        let dir = scratch("agent-act");
+        let window = Arc::new(Confirming {
+            answers: Mutex::new(std::collections::VecDeque::new()),
+            asked: Mutex::new(Vec::new()),
+        });
+        let client = Client::open(
+            Config {
+                dir: dir.clone(),
+                executable: dir.join("anixops-net"),
+                shared_service: false,
+            },
+            window.clone(),
+        );
+        client
+            .invoke(
+                "import_subscription_text",
+                serde_json::json!({ "name": "Home", "content": LINK }),
+            )
+            .unwrap();
+        let act = |action: serde_json::Value| {
+            client.agent(wire::ACT, serde_json::json!({ "action": action }))
+        };
+        let answer = |answer: Option<(Answer, bool)>| {
+            lock(&window.answers)
+                .push_back(answer.map(|(answer, for_kind)| Confirmation { answer, for_kind }));
+        };
+        let mode = || client.agent(wire::STATUS, serde_json::json!({})).unwrap()["mode"].clone();
+
+        // Reading does not allow actions, and nothing reached the window.
+        client
+            .invoke(
+                "set_agent_access",
+                serde_json::json!({ "read": true, "content": "summary" }),
+            )
+            .unwrap();
+        assert_eq!(
+            act(serde_json::json!({ "action": "set_mode", "mode": "global" })),
+            Err(client_mcp::ACT_OFF.to_string())
+        );
+        let set = client
+            .invoke(
+                "set_agent_access",
+                serde_json::json!({ "read": true, "act": true, "content": "summary" }),
+            )
+            .unwrap();
+        assert_eq!(set["act"], true);
+        assert!(lock(&window.asked).is_empty());
+
+        // No window, a refusal and no answer: nothing changes.
+        answer(None);
+        let refused =
+            act(serde_json::json!({ "action": "set_mode", "mode": "global" })).unwrap_err();
+        assert!(refused.contains("could not ask the user"), "{refused}");
+        answer(Some((Answer::Denied, true)));
+        assert_eq!(
+            act(serde_json::json!({ "action": "set_mode", "mode": "global" })),
+            Err(client_mcp::DENIED.to_string())
+        );
+        answer(Some((Answer::NoAnswer, false)));
+        assert_eq!(
+            act(serde_json::json!({ "action": "set_mode", "mode": "global" })),
+            Err(client_mcp::NO_ANSWER.to_string())
+        );
+        assert_eq!(mode(), "rule");
+
+        // Allowed for 15 minutes: the next action of that kind is not asked about, another kind is.
+        answer(Some((Answer::Allowed, true)));
+        assert_eq!(
+            act(serde_json::json!({ "action": "set_mode", "mode": "global" })),
+            Ok(serde_json::json!({}))
+        );
+        assert_eq!(mode(), "global");
+        let asked = lock(&window.asked).len();
+        act(serde_json::json!({ "action": "set_mode", "mode": "direct" })).unwrap();
+        assert_eq!(mode(), "direct");
+        assert_eq!(lock(&window.asked).len(), asked, "granted, not asked");
+        answer(Some((Answer::Allowed, false)));
+        act(serde_json::json!({ "action": "select_node", "node": "HK", "group": "Home" })).unwrap();
+        assert_eq!(
+            lock(&window.asked).last(),
+            Some(&Action::SelectNode {
+                node: "HK".to_string(),
+                group: Some("Home".to_string())
+            })
+        );
+
+        // A node that does not exist and what needs the engine are refused before the user is asked; nonsense
+        // is refused too.
+        let asked = lock(&window.asked).len();
+        let missing =
+            act(serde_json::json!({ "action": "select_node", "node": "JP" })).unwrap_err();
+        assert!(missing.contains("No node is named"), "{missing}");
+        assert_eq!(
+            act(serde_json::json!({ "action": "close_connection", "id": 1 })),
+            Err(client_mcp::NOT_CONNECTED.to_string())
+        );
+        assert!(act(serde_json::json!({ "action": "import_subscription", "url": "x" })).is_err());
+        assert!(act(serde_json::json!({ "action": "select_node", "node": " " })).is_err());
+        assert_eq!(lock(&window.asked).len(), asked);
+
+        // Turning reading off turns actions off and ends the grants; reading on again keeps actions off.
+        client
+            .invoke(
+                "set_agent_access",
+                serde_json::json!({ "read": false, "content": "summary" }),
+            )
+            .unwrap();
+        let access = client
+            .invoke(
+                "set_agent_access",
+                serde_json::json!({ "read": true, "content": "summary" }),
+            )
+            .unwrap();
+        assert_eq!(access["act"], false);
+        client
+            .invoke(
+                "set_agent_access",
+                serde_json::json!({ "read": true, "act": true, "content": "summary" }),
+            )
+            .unwrap();
+        answer(Some((Answer::Denied, false)));
+        assert_eq!(
+            act(serde_json::json!({ "action": "set_mode", "mode": "rule" })),
+            Err(client_mcp::DENIED.to_string()),
+            "the grant ended with the switch"
+        );
+
+        // The access log: each request and what came of it, the newest last, at most 200.
+        let log = client.invoke("agent_access_log", Value::Null).unwrap();
+        let entries = log.as_array().unwrap();
+        let outcomes: Vec<(&str, &str)> = entries
+            .iter()
+            .map(|entry| {
+                (
+                    entry["call"].as_str().unwrap(),
+                    entry["outcome"].as_str().unwrap(),
+                )
+            })
+            .collect();
+        assert!(outcomes.contains(&("set_mode", "granted")), "{outcomes:?}");
+        assert!(
+            outcomes.contains(&("set_mode", "no_answer")),
+            "{outcomes:?}"
+        );
+        assert!(
+            outcomes.contains(&("select_node", "allowed")),
+            "{outcomes:?}"
+        );
+        assert_eq!(outcomes.last(), Some(&("set_mode", "denied")));
+        for _ in 0..250 {
+            let _ = client.agent(wire::STATUS, serde_json::json!({}));
+        }
+        let log = client.invoke("agent_access_log", Value::Null).unwrap();
+        assert_eq!(log.as_array().unwrap().len(), agent::ACCESS_LOG_LIMIT);
+        client
+            .invoke("clear_agent_access_log", Value::Null)
+            .unwrap();
+        assert_eq!(
+            client.invoke("agent_access_log", Value::Null).unwrap(),
+            serde_json::json!([])
+        );
+        drop(client);
         let _ = fs::remove_dir_all(dir);
     }
 

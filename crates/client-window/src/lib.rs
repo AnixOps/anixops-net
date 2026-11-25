@@ -43,6 +43,12 @@ pub mod ask {
     pub const TRUST_ROOT: &str = "session.trust_root";
     /// `{ "certificate": … }`. Takes the root out of the user's own certificate store.
     pub const UNTRUST_ROOT: &str = "session.untrust_root";
+    /// `{ "action": { "action": "select_node", "node": … } }`, an action an AI tool asked for
+    /// (`client_mcp::Action`, docs/mcp-desktop.md §6). The window asks the user to allow or deny it, with the
+    /// choice to allow actions of the same kind for 15 minutes, and closes the question itself after 60 seconds.
+    /// Answer: `{ "answer": "allowed" | "denied" | "no_answer", "for_kind": false }`. An error (a window that
+    /// cannot ask) refuses the action.
+    pub const CONFIRM_ACTION: &str = "session.confirm_action";
 }
 
 /// What the core tells a window without being asked.

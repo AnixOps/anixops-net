@@ -11,12 +11,16 @@ use crate::ask;
 /// What takes the core's events: the event's name and what it carries.
 type Events = Box<dyn Fn(&str, Value) + Send + Sync>;
 
+/// What asks the user to confirm an AI tool's action ([`ask::CONFIRM_ACTION`]): the action in, the answer out.
+type Confirm = Box<dyn Fn(Value) -> Result<Value, String> + Send + Sync>;
+
 /// Answers the core's questions about the session the window runs in, and passes the core's events on.
 /// Give it to [`client_ipc::Peer::run`] after greeting the core as the window.
 pub struct WindowEnd {
     desktop: Option<Desktop>,
     session: Box<dyn UserSession>,
     events: Events,
+    confirm: Option<Confirm>,
 }
 
 impl WindowEnd {
@@ -33,7 +37,20 @@ impl WindowEnd {
             desktop,
             session,
             events: Box::new(events),
+            confirm: None,
         }
+    }
+
+    /// Lets the window answer [`ask::CONFIRM_ACTION`]: `confirm` gets the action, asks the user, and answers
+    /// `{ "answer": …, "for_kind": … }`. It is called on the thread that reads the channel and may block until the
+    /// user chose, for at most 60 seconds. Without it every action is refused.
+    #[must_use]
+    pub fn with_confirm(
+        mut self,
+        confirm: impl Fn(Value) -> Result<Value, String> + Send + Sync + 'static,
+    ) -> Self {
+        self.confirm = Some(Box::new(confirm));
+        self
     }
 }
 
@@ -75,6 +92,10 @@ impl Handler for WindowEnd {
                 self.session.untrust_root(&certificate)?;
                 Ok(Value::Null)
             }
+            ask::CONFIRM_ACTION => match &self.confirm {
+                Some(confirm) => confirm(argument(&args, "action")?),
+                None => Err("this window cannot ask the user to confirm actions".to_string()),
+            },
             _ => Err(format!("{command} is not something a window does")),
         }
     }

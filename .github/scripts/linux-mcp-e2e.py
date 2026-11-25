@@ -5,7 +5,7 @@ Usage: linux-mcp-e2e.py <anixops-netd> <anixops-mcp>
 
 Starts the daemon on a socket and a data folder of its own and speaks MCP with anixops-mcp as an AI tool would:
 access is off until a window turns it on; then the state and the nodes are read, without the node's address or
-credentials; an engine request waits for a connection; an action is refused while only reading is allowed; a window's command is never reached; and once the daemon
+credentials; an engine request waits for a connection; an action is refused while only reading is allowed, and without a window to confirm it; a window's command is never reached; and once the daemon
 stops, every tool says it is not running.
 """
 
@@ -143,8 +143,15 @@ def main() -> None:
                 fail(f"the node's {secret} reached the AI tool")
         expect_error(rules, "not connected", "check_rules while not connected")
         expect_ok(logs, "get_logs")
-        # Reading does not allow actions; the daemon offers no switch for them yet.
+        # Reading does not allow actions.
         expect_error(connect, "has not allowed actions by AI tools", "connect with only reading allowed")
+
+        # Actions allowed, but no window is open to ask the user: refused, and nothing changes.
+        window_ask(endpoint, "set_agent_access", {"read": True, "act": True, "content": "summary"})
+        mode, status = mcp(program, endpoint, [("set_mode", {"mode": "direct"}), ("get_status", {})])
+        expect_error(mode, "could not ask the user to confirm", "set_mode without a window")
+        if expect_ok(status, "get_status after a refused action").get("mode") != "rule":
+            fail(f"a refused action changed the mode: {status}")
 
         # Turned off again: refused at once, in the daemon.
         window_ask(endpoint, "set_agent_access", {"read": False, "content": "summary"})

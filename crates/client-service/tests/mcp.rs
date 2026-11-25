@@ -61,6 +61,10 @@ impl Commands for Core {
                 "upload_rate": 1, "download_rate": 2, "upload_total": 3, "download_total": 4, "active": 5,
             })),
             "agent.engine" => Err(client_mcp::NOT_CONNECTED.to_string()),
+            "agent.act" if args["action"]["action"] == "disconnect" => {
+                Err(client_mcp::DENIED.to_string())
+            }
+            "agent.act" => Ok(json!({})),
             _ => Err(format!("{call} is not a request of an AI tool")),
         }
     }
@@ -93,6 +97,9 @@ fn an_ai_tool_reads_the_core_over_its_channel() {
 
     let access = channel.access().unwrap();
     assert!(access.read && !access.act);
+    // Reading does not allow actions: the tool refuses before asking the core.
+    let refused = client_mcp::tools::call(&channel, "connect", &json!({})).unwrap();
+    assert_eq!(refused, Err(client_mcp::ACT_OFF.to_string()));
     let status = client_mcp::tools::call(&channel, "get_status", &json!({}))
         .unwrap()
         .unwrap();
@@ -113,6 +120,13 @@ fn an_ai_tool_reads_the_core_over_its_channel() {
         Err(BackendError::NotConnected)
     );
 
+    // An action, and the user's refusal of one, as the core answers them.
+    assert_eq!(channel.act(&client_mcp::Action::Connect), Ok(()));
+    assert_eq!(
+        channel.act(&client_mcp::Action::Disconnect),
+        Err(BackendError::Denied)
+    );
+
     // One connection carried every question, each one of the AI tool's own requests.
     let asked = core.asked.lock().unwrap().clone();
     assert!(asked
@@ -121,6 +135,10 @@ fn an_ai_tool_reads_the_core_over_its_channel() {
     assert!(asked
         .iter()
         .any(|(call, args)| call == "agent.logs" && args["limit"] == 500));
+    assert!(asked
+        .iter()
+        .any(|(call, args)| call == "agent.act"
+            && args == &json!({ "action": { "action": "connect" } })));
 
     // Through the MCP server, as the AI tool sees it.
     let server = Server::new(channel);

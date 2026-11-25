@@ -24,6 +24,9 @@ const PATIENCE: Duration = Duration::from_secs(15);
 /// as a person may take to read a warning.
 const USER_PATIENCE: Duration = Duration::from_secs(300);
 
+/// How long a window gets to answer an AI tool's action: its confirmation waits a minute for the user.
+const CONFIRM_PATIENCE: Duration = Duration::from_secs(75);
+
 const NO_WINDOW: &str =
     "the AnixOps Net window is not open, and only it can change this user's settings";
 
@@ -295,6 +298,25 @@ impl UserSession for WindowSession {
 struct WindowPlatform(Arc<Windows>);
 
 impl Platform for WindowPlatform {
+    fn confirm_action(
+        &self,
+        action: &client_mcp::Action,
+    ) -> Result<client_mcp::agent::Confirmation, String> {
+        match self.0.ask_within(
+            ask::CONFIRM_ACTION,
+            json!({ "action": action }),
+            CONFIRM_PATIENCE,
+        ) {
+            Err(message) if message == client_ipc::peer::NO_ANSWER => {
+                Ok(client_mcp::agent::Confirmation {
+                    answer: client_mcp::agent::Answer::NoAnswer,
+                    for_kind: false,
+                })
+            }
+            answer => answer,
+        }
+    }
+
     fn post_notice(&self, notice: &Notice) {
         let peers: Vec<Arc<Peer>> = lock(&self.0.sessions)
             .iter()
