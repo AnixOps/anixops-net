@@ -2144,7 +2144,7 @@ fn probe_network(proxy_port: Option<u16>) -> NetworkProbe {
 
 /// The body and what the subscription headers say about it. A panel that licenses ANX gets this device's
 /// key and answers with its license (`anx_license`); the first time it says so, the request goes once more.
-fn http_get_with_meta(url: &str) -> Result<(String, ResponseMeta), reqwest::Error> {
+fn http_get_with_meta(url: &str) -> Result<(String, ResponseMeta), String> {
     let licenses = engine::license_store();
     let (body, meta, offered) = http_get_once(url, licenses.as_ref())?;
     if offered {
@@ -2155,22 +2155,27 @@ fn http_get_with_meta(url: &str) -> Result<(String, ResponseMeta), reqwest::Erro
     Ok((body, meta))
 }
 
+/// One download. Errors are [`download_failure`]'s or [`crate::download::LimitedReadError::describe`]'s text,
+/// without the URL. The body is read at most [`MAX_SUBSCRIPTION_FILE_BYTES`] (audit 2026-11-25 NET-02): a larger
+/// answer fails the download, and the caller keeps the last good subscription.
 fn http_get_once(
     url: &str,
     licenses: Option<&anx_license::LicenseStore>,
-) -> Result<(String, ResponseMeta, bool), reqwest::Error> {
+) -> Result<(String, ResponseMeta, bool), String> {
     // The panel picks the subscription format by User-Agent (same token as the iOS app).
     let mut request = reqwest::blocking::Client::builder()
         .timeout(FETCH_TIMEOUT)
         .user_agent(concat!("AnixOpsNet/", env!("CARGO_PKG_VERSION")))
-        .build()?
+        .build()
+        .map_err(|error| download_failure(&error))?
         .get(url);
     if let Some(device) = licenses.and_then(|store| store.request_header(url).ok().flatten()) {
         request = request.header(anx_license::HEADER_DEVICE, device);
     }
     let response = request
         .send()
-        .and_then(reqwest::blocking::Response::error_for_status)?;
+        .and_then(reqwest::blocking::Response::error_for_status)
+        .map_err(|error| download_failure(&error))?;
     let header = |name: &str| {
         response
             .headers()
@@ -2183,12 +2188,15 @@ fn http_get_once(
     let offered = licenses
         .and_then(|store| store.record(url, header).ok())
         .unwrap_or(false);
-    Ok((response.text()?, meta, offered))
+    let declared = response.content_length();
+    let body = crate::download::read_subscription_text(response, declared)
+        .map_err(|error| error.describe())?;
+    Ok((body, meta, offered))
 }
 
-/// The largest subscription file read: far above any real one, and what keeps `/dev/zero` or a huge file from
-/// filling memory.
-const MAX_SUBSCRIPTION_FILE_BYTES: u64 = 16 * 1024 * 1024;
+/// The largest subscription read, from a file or a download: far above any real one, and what keeps `/dev/zero`,
+/// a huge file or an endless answer from filling memory.
+const MAX_SUBSCRIPTION_FILE_BYTES: u64 = crate::download::MAX_SUBSCRIPTION_BYTES;
 
 fn too_large() -> String {
     format!(
@@ -2217,12 +2225,8 @@ fn file_label(name: &str) -> String {
 /// before anything on disk is touched, so a window cannot learn whether a file exists either.
 fn fetch(location: &str, read_files: bool) -> Result<(String, ResponseMeta), String> {
     if location.starts_with("https://") || location.starts_with("http://") {
-        return http_get_with_meta(location).map_err(|error| {
-            format!(
-                "the subscription could not be downloaded: {}",
-                download_failure(&error)
-            )
-        });
+        return http_get_with_meta(location)
+            .map_err(|reason| format!("the subscription could not be downloaded: {reason}"));
     }
     if location.contains("://") {
         return Ok((location.to_string(), ResponseMeta::default()));
@@ -2621,6 +2625,120 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    /// A loopback HTTP server for subscription downloads; what it answers is set through the returned mode
+    /// (0: [`LINK`] with a length, 1: one byte over the limit without a length, 2: a `Content-Length` over the limit,
+    /// 3: exactly the limit without a length).
+    fn subscription_server() -> (String, Arc<std::sync::atomic::AtomicU8>) {
+        use std::io::{BufRead, BufReader, Write};
+        use std::sync::atomic::Ordering;
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!(
+            "http://{}/sub?token=s3cret-token",
+            listener.local_addr().unwrap()
+        );
+        let mode = Arc::new(std::sync::atomic::AtomicU8::new(0));
+        let serving = mode.clone();
+        thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { continue };
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let mut line = String::new();
+                while reader.read_line(&mut line).is_ok_and(|read| read > 0) && line != "\r\n" {
+                    line.clear();
+                }
+                let limit = usize::try_from(MAX_SUBSCRIPTION_FILE_BYTES).unwrap();
+                let _ = match serving.load(Ordering::SeqCst) {
+                    0 => write!(
+                        stream,
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{LINK}",
+                        LINK.len()
+                    ),
+                    1 | 3 => {
+                        let size = if serving.load(Ordering::SeqCst) == 1 {
+                            limit + 1
+                        } else {
+                            limit
+                        };
+                        let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n");
+                        let chunk = vec![b'#'; 64 * 1024];
+                        let mut left = size;
+                        while left > 0 {
+                            let take = left.min(chunk.len());
+                            if stream.write_all(&chunk[..take]).is_err() {
+                                break;
+                            }
+                            left -= take;
+                        }
+                        Ok(())
+                    }
+                    _ => write!(
+                        stream,
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{LINK}",
+                        MAX_SUBSCRIPTION_FILE_BYTES * 4
+                    ),
+                };
+            }
+        });
+        (url, mode)
+    }
+
+    /// Audit 2026-11-25 NET-02: a download is read at most 16 MiB, with or without a `Content-Length`; a larger
+    /// answer fails the manual and the scheduled update without the URL in the error, and the last good
+    /// subscription stays.
+    #[test]
+    fn subscription_downloads_are_bounded_and_keep_the_last_good_one() {
+        use std::sync::atomic::Ordering;
+
+        let (url, mode) = subscription_server();
+        // The boundary: exactly the limit, without a length, is downloaded whole.
+        mode.store(3, Ordering::SeqCst);
+        let (body, _) = fetch(&url, false).unwrap();
+        assert_eq!(body.len() as u64, MAX_SUBSCRIPTION_FILE_BYTES);
+
+        let dir = scratch("download-limit");
+        let client = Client::open(
+            Config {
+                dir: dir.join("data"),
+                executable: dir.join("anixops-net"),
+                shared_service: false,
+            },
+            Arc::new(NoPlatform),
+        );
+        mode.store(0, Ordering::SeqCst);
+        client
+            .invoke(
+                "import_subscription",
+                serde_json::json!({ "location": url }),
+            )
+            .unwrap();
+        let nodes = |client: &Client| client.backend().nodes().len();
+        assert_eq!(nodes(&client), 1);
+
+        for oversized in [1, 2] {
+            mode.store(oversized, Ordering::SeqCst);
+            // Manual update.
+            let error = client
+                .invoke("update_subscription", Value::Null)
+                .unwrap_err();
+            assert!(error.contains("larger than 16 MiB"), "{error}");
+            assert!(
+                !error.contains("s3cret") && !error.contains("127.0.0.1"),
+                "{error}"
+            );
+            // The scheduled update takes the same download and the same refusal.
+            let (id, location) = client.backend().refreshable_location().unwrap();
+            let fetched = fetch(&location, false).map(|(content, _)| content);
+            let error = fetched.clone().unwrap_err();
+            assert!(error.contains("larger than 16 MiB"), "{error}");
+            assert!(!error.contains("s3cret"), "{error}");
+            assert!(client.backend().finish_refresh(&id, fetched).is_err());
+            assert_eq!(nodes(&client), 1, "the last good subscription stays");
+        }
+        client.shutdown();
+        let _ = fs::remove_dir_all(dir);
     }
 
     /// A core in a system service reads no path a window names, as SYSTEM or root (client-core-ipc-02): the

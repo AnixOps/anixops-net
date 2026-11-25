@@ -63,7 +63,8 @@ Windows、Linux 原生端（WinUI 3、GTK4）还没有请求详情页，做的�
 
 导出的是解压后的字节，文件名为 `request-body` / `response-body` 加按类型推断的扩展名，未知类型用 `.bin`。
 
-- 桌面：“更多”菜单里的“保存到‘下载’”（不覆盖已有文件）和“用其他应用打开”（写到系统临时目录的 `anixops-net-bodies`，超过一天的文件下次清理）。
+- 桌面：“更多”菜单里的“保存到‘下载’”（不覆盖已有文件）和“用其他应用打开”。写出的文件在 Linux/macOS 上一律 `0600`，与 umask 无关。
+  “用其他应用打开”写到只有本账号能进入的目录：Linux 优先 `$XDG_RUNTIME_DIR/anixops-net-bodies`（运行时目录属于本账号且为私有时），否则 `<临时目录>/anixops-net-bodies-<uid>`；目录为 `0700`，已存在的目录必须是本账号所有的真实目录（不是链接），否则拒绝写入。Windows 为 `%TEMP%\anixops-net-bodies`（在用户配置目录内）。保留期一天（`OPENED_BODY_RETENTION`），每次打开时清理更早的文件；旧版本留在共享临时目录 `anixops-net-bodies` 的文件在第一次打开时整体删除。（第三方审计 2026-11-25 NET-01；CI `rust-linux` 用第二个本机账号验证读不到。）
 - iOS：“更多”菜单里的“导出正文”，走系统分享面板（存到“文件”、发给其他 App）。macOS 另有“用其他应用打开”。
 - Android：正文下方“用其他应用打开”和分享按钮，经 `FileProvider` 只暴露缓存里的 `bodies/` 目录。
 

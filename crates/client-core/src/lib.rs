@@ -5,5 +5,6 @@
 
 pub mod backend;
 pub mod client;
+pub mod download;
 pub mod instance;
 pub mod refusal;

@@ -4083,6 +4083,8 @@ fn redacted_subscription_error_code(error: &str) -> String {
         .and_then(|status| status.parse::<u16>().ok())
     {
         format!("windows.subscription.http_status_{status}")
+    } else if normalized.contains("larger than") {
+        "windows.subscription.payload_too_large".to_string()
     } else if normalized.starts_with("subscription server could not be reached") {
         "windows.subscription.fetch_unreachable".to_string()
     } else if normalized.starts_with("subscription download")
@@ -4506,7 +4508,11 @@ fn download_subscription(
     let meta = subscription_meta::ResponseMeta::from_headers(header);
     // A license problem never fails the subscription.
     let offered = licenses.record(location, header).unwrap_or(false);
-    let payload = response.text().map_err(describe_download_error)?;
+    // At most 16 MiB, read in chunks (audit 2026-11-25 NET-02): a larger answer fails the download and the last
+    // good subscription stays. The message names no URL.
+    let declared = response.content_length();
+    let payload = client_core::download::read_subscription_text(response, declared)
+        .map_err(|error| format!("Subscription download refused: {}", error.describe()))?;
     Ok((payload, meta, offered))
 }
 
@@ -6710,6 +6716,27 @@ mod tests {
         );
         assert_eq!(
             redacted_subscription_error_code("Subscription download failed"),
+            "windows.subscription.fetch_failed"
+        );
+        // Audit 2026-11-25 NET-02: the bounded read's refusals.
+        let too_large = client_core::download::LimitedReadError::TooLarge {
+            limit: client_core::download::MAX_SUBSCRIPTION_BYTES,
+        };
+        assert_eq!(
+            redacted_subscription_error_code(&format!(
+                "Subscription download refused: {}",
+                too_large.describe()
+            )),
+            "windows.subscription.payload_too_large"
+        );
+        let unreadable = client_core::download::LimitedReadError::Read(std::io::Error::other(
+            "https://secret.invalid/?token=redacted",
+        ));
+        assert_eq!(
+            redacted_subscription_error_code(&format!(
+                "Subscription download refused: {}",
+                unreadable.describe()
+            )),
             "windows.subscription.fetch_failed"
         );
         assert_eq!(

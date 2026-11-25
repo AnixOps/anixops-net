@@ -556,7 +556,9 @@ CI 覆盖文本解析、`dns` 段生成和引擎校验；解析结果与 Fake-IP
 
 - [ ] Windows 代码签名证书：发布物现在没有 Authenticode 签名。原生版把内核放进系统服务，未签名的服务更容易被安全软件
   拦截，安装时也有 SmartScreen 警告。正式切换到原生版之前需要维护者申请证书，并把证书或托管签名服务的凭据配置成仓库
-  secrets。不阻塞开发。
+  secrets。不阻塞开发。2026-11-25 第三方审计 REL-01 后维护者决定暂不签名（Azure Artifact Signing 需要公司主体，英国个人
+  不可申请；个人 IV 证书每年约 370 美元起且显示本人姓名），发布说明、下载页和 README 改为先核对 SHA256SUMS 与来源证明。
+  公司主体确定后重新评估。
 - [ ] 原生版键盘浏览（Windows 与 Linux）：代理页节点列表和“策略组”对话框的成员列表里，用方向键、Home / End、Page Up / Page Down
   上下移动，核心的在用节点和策略组的选择都不变（`proxies` / `groups` 命令核对）；在某一行按空格或回车才换到这一行，单击同样。
   CI 的 UI Automation / AT-SPI 测试目前只经选择接口换节点，键盘路径待补自动化（发送 VK_DOWN / `Atspi.generate_keyboard_event`）。

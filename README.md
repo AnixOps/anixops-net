@@ -65,13 +65,14 @@ AnixOps Net 把这两件事放进同一个 App：
 
 | 平台 | 安装包 | 说明 |
 |---|---|---|
-| Windows 10 / 11 | `.msi`（推荐）或便携版 `.zip` | 安装包还没有代码签名，SmartScreen 提示时选“更多信息 → 仍要运行”。 |
+| Windows 10 / 11 | `.msi`（推荐）或便携版 `.zip` | 安装包未做代码签名。安装前先按下方步骤核对摘要和来源证明，通过后再在 SmartScreen 提示中选择“更多信息 → 仍要运行”。 |
 | Debian / Ubuntu | `.deb` | `sudo apt install ./<文件名>`，需要 WebKitGTK 4.1。 |
 | 其他 Linux | `.tar.gz` | 解压后运行 `bin/anixops-net`，需要 WebKitGTK 4.1。 |
 | 安卓 8.0 及以上 | `.apk`（arm64） | 下载后直接安装。 |
 
-每个版本都附 `SHA256SUMS`（`sha256sum -c SHA256SUMS` 校验），并有 GitHub 来源证明：
-`gh attestation verify <文件> --repo AnixOps/anixops-net`。
+每个版本都附 `SHA256SUMS`（`sha256sum -c SHA256SUMS` 校验；Windows 用 `Get-FileHash <文件> -Algorithm SHA256`
+与 `SHA256SUMS` 比对），并有 GitHub 来源证明：`gh attestation verify <文件> --repo AnixOps/anixops-net`。Windows 安装包
+没有发布者签名，镜像、转发或企业重新分发时，应在分发前完成这两项校验。
 
 **ANX 版**多一个 ANX 私有协议，其余功能完全相同。它不在本仓库发布：Windows、Linux、macOS、安卓的安装包由服务商在
 面板里提供，iOS / iPadOS 通过 TestFlight 分发。

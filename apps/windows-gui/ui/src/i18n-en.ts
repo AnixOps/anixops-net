@@ -821,6 +821,7 @@ export const english: Record<string, string> = {
   "链路": "Link",
   "长度": "Length",
   "下载订阅超时": "Subscription download timed out",
+  "订阅内容超过 16 MiB 上限": "Subscription content exceeds the 16 MiB limit",
   "无法访问订阅服务器": "Subscription server unreachable",
   "下载订阅失败": "Subscription download failed",
   "订阅内容里没有可用的节点": "The subscription has no usable nodes",

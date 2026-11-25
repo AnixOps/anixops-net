@@ -1442,13 +1442,20 @@ final class TunnelController {
         if let device {
             request.setValue(device, forHTTPHeaderField: AnxLicense.headerDevice)
         }
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-              data.count <= maxSubscriptionBytes
-        else {
+        // Read as it arrives and never past the limit (audit 2026-11-25 NET-02): an answer over it fails the
+        // download, and the last good subscription stays.
+        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            bytes.task.cancel()
             throw URLError(.badServerResponse)
         }
-        return (data, http)
+        do {
+            let data = try await BoundedBody.collect(bytes, expectedLength: http.expectedContentLength, limit: maxSubscriptionBytes)
+            return (data, http)
+        } catch is BoundedBody.TooLarge {
+            bytes.task.cancel()
+            throw URLError(.dataLengthExceedsMaximum)
+        }
     }
 
     /// Takes in the license headers; the device key is made the first time a server offers licensing. True when

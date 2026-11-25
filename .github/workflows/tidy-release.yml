@@ -87,8 +87,8 @@ jobs:
           iOS 版通过 TestFlight 分发。
 
           - Linux 版需要 WebKitGTK 4.1。
-          - Windows 安装包未做代码签名，首次运行时 SmartScreen 可能提示，选「仍要运行」。
-          - 校验：\`sha256sum -c SHA256SUMS\`；来源证明：\`gh attestation verify <文件> --repo ${GH_REPO}\`。
+          - 校验：\`sha256sum -c SHA256SUMS\`（Windows 用 \`Get-FileHash <文件> -Algorithm SHA256\` 与 SHA256SUMS 比对）；来源证明：\`gh attestation verify <文件> --repo ${GH_REPO}\`。
+          - Windows 安装包未做 Authenticode 代码签名，安装前应先完成上述两项校验。两项均通过后，如出现 SmartScreen 提示，可选择「更多信息 → 仍要运行」。镜像、转发或企业重新分发时，应在分发前完成同样的校验。
 
           <sub>内核 [networkcore_anixops@${kernel_rev:0:7}](https://github.com/AnixOps/networkcore_anixops/commit/${kernel_rev})</sub>
           EOF
