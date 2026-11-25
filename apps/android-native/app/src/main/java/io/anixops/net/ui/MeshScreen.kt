@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -710,7 +711,7 @@ private fun LinkRow(link: MeshLink) {
         "down" -> stringResource(R.string.mesh_link_down)
         else -> stringResource(R.string.mesh_connection_direct)
     }
-    if (link.borders.isNotEmpty()) parts += ListFormatter.getInstance().format(link.borders)
+    if (link.borders.isNotEmpty()) parts += ListFormatter.getInstance(LocalConfiguration.current.locales[0]).format(link.borders)
     link.loss?.let { parts += stringResource(R.string.mesh_loss, Math.round(it * 100).toString()) }
     Column(
         Modifier
