@@ -458,3 +458,52 @@ fn logs_are_filtered_by_level_and_masked() {
         true
     );
 }
+
+/// Every engine request the tools make is one the app's gate allows (`policy.json`, `AgentGate` in the Mac app):
+/// an allowed command, only its fields, and the forced fields set to their values.
+#[test]
+fn every_engine_request_fits_the_shared_policy() {
+    let policy: Value = serde_json::from_str(include_str!("../policy.json")).unwrap();
+    let engine = policy["engine"].as_object().unwrap();
+    let server = Server::new(Fake::new(ContentLevel::Bodies));
+    for (name, arguments) in calls() {
+        call(&server, name, arguments);
+    }
+    let asked = server.backend().asked.borrow();
+    let mut used = std::collections::BTreeSet::new();
+    for request in asked.iter() {
+        let command = request["cmd"].as_str().unwrap();
+        used.insert(command.to_string());
+        let rule = engine
+            .get(command)
+            .unwrap_or_else(|| panic!("{command} is not in policy.json"));
+        let fields: Vec<&str> = rule["fields"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|field| field.as_str().unwrap())
+            .collect();
+        let forced = rule["forced"].as_object().unwrap();
+        for (key, value) in request.as_object().unwrap() {
+            if key == "cmd" {
+                continue;
+            }
+            assert!(
+                fields.contains(&key.as_str()) || forced.contains_key(key),
+                "{command} sends {key}, which policy.json does not allow"
+            );
+            if let Some(want) = forced.get(key) {
+                assert_eq!(value, want, "{command} {key}");
+            }
+        }
+        for key in forced.keys() {
+            assert!(
+                request.get(key).is_some(),
+                "{command} does not send forced {key}"
+            );
+        }
+    }
+    // The policy allows nothing the tools do not use.
+    let allowed: std::collections::BTreeSet<String> = engine.keys().cloned().collect();
+    assert_eq!(used, allowed);
+}

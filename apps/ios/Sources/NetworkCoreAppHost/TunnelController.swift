@@ -2685,6 +2685,41 @@ final class TunnelController {
         return answer
     }
 
+    /// A request from AI tools (`AgentGate.engineRequest`, docs/mcp-desktop.md) sent to the running engine as it is:
+    /// never to the capture viewer or the demo data, and without the side effects `tunnelControl` keeps for the
+    /// window's own requests (the gate lets through none that change anything). Nil while not connected, or when the
+    /// extension gave no answer.
+    func agentControl(_ request: Data) async -> Data? {
+        guard let session = manager?.connection as? NETunnelProviderSession, connection == .connected else {
+            return nil
+        }
+        return await withCheckedContinuation { continuation in
+            do {
+                try session.sendProviderMessage(TunnelAppMessage.control(request).encoded) { data in
+                    continuation.resume(returning: data)
+                }
+            } catch {
+                continuation.resume(returning: nil)
+            }
+        }
+    }
+
+    /// The running extension's diagnostics, for AI tools' `logs`; nil while not connected.
+    func agentDiagnostics() async -> TunnelDiagnostics? {
+        guard let session = manager?.connection as? NETunnelProviderSession, connection == .connected else {
+            return nil
+        }
+        return await withCheckedContinuation { continuation in
+            do {
+                try session.sendProviderMessage(TunnelAppMessage.diagnostics.encoded) { data in
+                    continuation.resume(returning: data.flatMap { try? TunnelDiagnostics.decoded(from: $0) })
+                }
+            } catch {
+                continuation.resume(returning: nil)
+            }
+        }
+    }
+
     /// Whether the running tunnel decrypts HTTPS, as its extension set it up; nil while it is not running or from
     /// an extension older than the question.
     func httpsDecryptionState() async -> HttpsDecryptionState? {

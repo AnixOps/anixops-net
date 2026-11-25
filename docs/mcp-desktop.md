@@ -36,7 +36,7 @@ flowchart LR
 
     HOST -- "stdio · JSON-RPC 2.0" --> MCP
     MCP -- "Windows 命名管道 / Linux Unix 套接字<br/>client-ipc，角色 agent" --> GATE
-    MCP -- "macOS App 组套接字 cli.sock<br/>控制协议 v2" --> GATE
+    MCP -- "macOS App 组套接字 cli.sock<br/>控制协议 agent 命令" --> GATE
     GATE --> WIN
     GATE --> MAC
     WIN --> ENG
@@ -71,8 +71,11 @@ flowchart LR
 
 - **新增角色**：`client-ipc` 的 `Role` 增加 `agent`，打招呼时适配程序声明 `agent`；`PROTOCOL` 升为 2，并补
   `fixtures/hello-agent.json`，C# 窗口一侧的样例测试同步更新。服务端按角色把请求交给闸门，而不是直接交给 `Client::invoke`。
-- **macOS**：`ControlProtocol.version` 升为 2，新增 `agent` 请求类型（`tool`、`arguments`），由 App 内的闸门处理；
-  现有命令行命令不变。
+- **macOS**：`ControlProtocol.version` 保持 1，新增 `agent` 命令，现有命令行命令与 `anixops` 工具不受影响。
+  请求带 `agent` 字段：`access`（读取开关与内容级别，始终应答）、`engine`（`payload` 为一条引擎运行时控制请求的 JSON 文本）、
+  `logs`（最近的隧道事件）。状态与节点复用已有的 `status`、`nodes` 命令。App 内的闸门
+  （`apps/ios/Sources/NetworkCoreBridge/AgentGate.swift`）按 `crates/client-mcp/policy.json` 的同一张表放行命令与字段，
+  并强制 `redact: true` 与 `dry_run: true`；读取开关关闭时答 `accessOff`，未连接时答 `notConnected`。
 - **安全边界说明**：通道的边界是「同一用户」（Linux / Windows 为「在本机登录的用户」），与现有窗口和命令行工具相同。
   能以该用户身份运行代码的程序，本来就能操作窗口和命令行工具；MCP 接口不扩大这一范围，但在此之上增加三道限制：
   默认关闭、写操作逐次由用户在客户端界面确认、内容一律脱敏。
@@ -187,8 +190,8 @@ sequenceDiagram
 | `crates/client-core` | 外部访问设置的保存与读取；闸门用到的只读命令无需改动 |
 | `apps/windows-native` | 设置页「外部工具访问」、确认对话框、访问记录；安装包附带 `anixops-mcp.exe` |
 | `apps/linux-native` | 同上（GTK 4）；安装包附带 `anixops-mcp` |
-| `apps/ios`（macOS 目标） | `ControlChannel` v2 的 `agent` 请求、Swift 闸门、设置与确认界面；App 内附带 `anixops-mcp`，Developer ID 签名并带 App 组权限 |
-| 共用样例 `fixtures/mcp/` | 工具清单与白名单（`policy.json`）、字段白名单；Rust 与 Swift 两侧测试都读取，防止两份闸门不一致 |
+| `apps/ios`（macOS 目标） | `ControlChannel` 的 `agent` 命令、Swift 闸门、设置与确认界面；App 内附带 `anixops-mcp`（`Contents/MacOS/anixops-mcp`，由 `.github/scripts/build-macos-mcp.sh` 构建、`apps/ios/Tools/embed-mcp.sh` 拷入并签名），Developer ID 签名并带 App 组权限 |
+| 共用白名单 `crates/client-mcp/policy.json` | 引擎命令、允许的字段与强制取值；Rust 测试（`tests/privacy.rs`）与 Swift 测试（`AgentGateTests`）都读取，防止两份闸门不一致 |
 
 ## 9. CI 验证
 
@@ -201,7 +204,7 @@ sequenceDiagram
    对所有工具在各内容级别下的输出做扫描，出现任一标记即失败。
 5. **端到端**：Linux 与 Windows runner 上启动真实的后台进程（测试模式）和 `anixops-mcp`，经真实套接字 / 命名管道完成一次
    握手、读取状态和一次被拒绝的写操作。macOS 在构建好的 App 内运行 `anixops-mcp`，检查握手与「未开启」错误。
-6. **双实现一致**：Swift 测试读取 `fixtures/mcp/policy.json`，与 Swift 闸门的白名单比对。
+6. **双实现一致**：Swift 测试读取 `crates/client-mcp/policy.json`，与 Swift 闸门的白名单比对；Rust 测试确认每个工具发出的引擎请求都在这张表内。
 7. **范围选择**：`crates/client-mcp`、`client-ipc`、`client-service` 属共享代码，触发完整矩阵。
 
 真机验收（与实际 AI 宿主联调、确认框交互）写入 `docs/manual-intervention.md`。
@@ -214,10 +217,23 @@ sequenceDiagram
 |---|---|---|
 | P0 | 本设计定稿，第 11 节决定落实 | 已完成（本文件合并） |
 | P1 | 内核 `redact` 参数；`client-mcp` 协议与只读工具、假后端测试、隐私金丝雀 | networkcore 与本仓库 PR 合并，CI 全绿。工具定义见 `crates/client-mcp/tools.json` |
-| P2 | macOS 只读：控制通道 v2、Swift 闸门、设置页、App 内附带适配程序 | macOS CI 端到端通过，真机验收项登记 |
+| P2 | macOS 只读：控制通道 `agent` 命令、Swift 闸门、设置页、App 内附带适配程序 | macOS CI 端到端通过，真机验收项登记。执行开关与访问记录随 P4 提供 |
 | P3 | Windows 与 Linux 只读：`Role::Agent`、`client-service` 闸门、两端设置页与安装包 | 两平台端到端通过 |
 | P4 | 操作工具与确认框（三平台） | 闸门与确认测试通过，真机验收项登记 |
 | P5 | 视使用情况评估：请求正文级别的默认值、更多诊断工具 | 用户决定 |
+
+### 10.1 macOS 使用方法（P2）
+
+1. 设置 › 高级 › 外部工具访问，打开「允许 AI 工具读取状态」，按需选择请求内容级别。
+2. 拷贝同一处显示的配置片段，加入 AI 宿主的 MCP 配置，例如：
+
+   ```json
+   {"mcpServers":{"anixops-net":{"command":"/Applications/AnixOps Net.app/Contents/MacOS/anixops-mcp"}}}
+   ```
+
+3. 适配程序从所在 App 的 `Info.plist` 读出 App 组，连接 `~/Library/Group Containers/<App 组>/cli.sock`；
+   测试时可用 `--socket PATH` 指定。App 未运行时每个工具返回「未运行」错误，不会启动 App。
+4. 适配程序不发起任何网络连接，只经本机套接字与 App 通信。
 
 ## 11. 已定决定（2026-11-25 用户确认）
 

@@ -68,6 +68,8 @@ anixops test --json | jq '.groups[].nodes[] | {name, latencyMs}'
 能连上套接字的只有同一用户的进程，和能直接点 App 窗口的进程是同一个范围；工具不能读出节点密码、私钥或订阅令牌，
 `nodes` 只给名称、协议和测速结果。
 
+同一通道还服务 AI 工具用的 `anixops-mcp`（`agent` 命令，协议版本仍为 1），它的闸门与开关见 `docs/mcp-desktop.md`。
+
 ## 待真机验收
 
 见 `docs/manual-intervention.md`「macOS 命令行工具」。

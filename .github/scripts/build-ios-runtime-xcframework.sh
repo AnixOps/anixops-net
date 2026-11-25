@@ -135,3 +135,8 @@ package() {
 package libengine_embedded.a NetworkCoreRuntime \
   engine-embedded:networkcore_ios_runtime.h:NetworkCoreRuntimeC \
   node-import:networkcore_import.h:NetworkCoreImportC
+
+# The macOS app also bundles the MCP program (docs/mcp-desktop.md).
+if [[ "${slices}" != device ]]; then
+  bash "${root}/.github/scripts/build-macos-mcp.sh"
+fi

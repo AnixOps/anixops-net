@@ -75,6 +75,56 @@ final class MacControlService {
             return groups(filter: request.group)
         case .importNodes:
             return await importNodes(request.text ?? "")
+        case .agent:
+            return await agent(request)
+        }
+    }
+
+    // MARK: AI tools (docs/mcp-desktop.md)
+
+    /// The MCP program's requests. Its answers go to an AI tool, so they are English and carry no node address or
+    /// credential; the engine sees only what `AgentGate` lets through.
+    private func agent(_ request: ControlRequest) async -> ControlResponse {
+        let access = AgentAccess.load()
+        guard let call = request.agent else {
+            return .failure(.usage, "The request names no agent call.")
+        }
+        if call == .access {
+            return ControlResponse(access: access)
+        }
+        guard access.read else {
+            return .failure(.accessOff, "AnixOps Net has not allowed access by AI tools.")
+        }
+        switch call {
+        case .access:
+            return ControlResponse(access: access)
+        case .engine:
+            let gated: Data
+            switch AgentGate.engineRequest(request.payload ?? "") {
+            case let .success(data):
+                gated = data
+            case let .failure(refusal):
+                return .failure(.usage, refusal.message)
+            }
+            guard tunnel.connection == .connected else {
+                return .failure(.notConnected, "AnixOps Net is not connected.")
+            }
+            guard let answer = await tunnel.agentControl(gated) else {
+                return .failure(.failed, "The tunnel gave no answer.")
+            }
+            return ControlResponse(payload: String(decoding: answer, as: UTF8.self))
+        case .logs:
+            guard tunnel.connection == .connected else {
+                return .failure(.notConnected, "AnixOps Net is not connected.")
+            }
+            guard let diagnostics = await tunnel.agentDiagnostics() else {
+                return .failure(.failed, "The tunnel gave no answer.")
+            }
+            let lines = diagnostics.events.map(AgentLogLine.init)
+            guard let data = try? JSONEncoder().encode(lines) else {
+                return .failure(.failed, "The log could not be read.")
+            }
+            return ControlResponse(payload: String(decoding: data, as: UTF8.self))
         }
     }
 

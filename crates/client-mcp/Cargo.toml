@@ -6,6 +6,10 @@ license.workspace = true
 repository.workspace = true
 description = "The client's Model Context Protocol server: lets an AI tool on the same computer read the client's state, through the client's own local channel (docs/mcp-desktop.md)."
 
+[[bin]]
+name = "anixops-mcp"
+path = "src/main.rs"
+
 [dependencies]
 base64 = "0.22"
 serde = { version = "1", features = ["derive"] }

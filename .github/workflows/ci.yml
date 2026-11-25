@@ -1145,6 +1145,47 @@ jobs:
           expect 69 status --socket "${RUNNER_TEMP}/none.sock"
           expect 69 nodes --socket "${RUNNER_TEMP}/none.sock"
 
+      # The MCP program for AI tools ships in the app (docs/mcp-desktop.md). Without the app running it must still
+      # answer the MCP handshake and list its tools, and report the app as not running from every tool call.
+      - name: Check the macOS MCP program
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="apps/ios/build/Build/Products/Debug/AnixOps Net.app"
+          mcp="${app}/Contents/MacOS/anixops-mcp"
+          test -x "${mcp}"
+          lipo -archs "${mcp}" | tee "${RUNNER_TEMP}/mcp-archs.txt"
+          grep -q arm64 "${RUNNER_TEMP}/mcp-archs.txt"
+          grep -q x86_64 "${RUNNER_TEMP}/mcp-archs.txt"
+          "${mcp}" --version | grep -q '^anixops-mcp '
+          set +e
+          "${mcp}" --frobnicate > /dev/null 2>&1
+          code=$?
+          set -e
+          test "${code}" -eq 64
+          # The socket is found through the app's Info.plist, as an AI tool would start it.
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_status","arguments":{}}}' \
+            | "${mcp}" > "${RUNNER_TEMP}/mcp-out.jsonl"
+          python3 - "${RUNNER_TEMP}/mcp-out.jsonl" crates/client-mcp/tools.json <<'PY'
+          import json, sys
+          answers = {}
+          for line in open(sys.argv[1], encoding="utf-8"):
+              message = json.loads(line)
+              answers[message["id"]] = message
+          assert sorted(answers) == [1, 2, 3], answers
+          assert answers[1]["result"]["protocolVersion"] == "2025-06-18", answers[1]
+          listed = {tool["name"] for tool in answers[2]["result"]["tools"]}
+          expected = {tool["name"] for tool in json.load(open(sys.argv[2], encoding="utf-8"))}
+          assert listed == expected, (listed, expected)
+          status = answers[3]["result"]
+          assert status["isError"] is True, status
+          assert "not running" in status["content"][0]["text"], status
+          PY
+
       # The screenshots, UI tests and accessibility audits run in the jobs below, side by side on their own machines,
       # from these products: the apps, the UI test bundles and their .xctestrun files.
       - name: Pack the built products

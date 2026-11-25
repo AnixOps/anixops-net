@@ -20962,6 +20962,118 @@
           }
         }
       }
+    },
+    "允许 AI 工具读取状态": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow AI tools to read status"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允許 AI 工具讀取狀態"
+          }
+        }
+      }
+    },
+    "请求内容": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Request content"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請求內容"
+          }
+        }
+      }
+    },
+    "仅摘要": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Summary only"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "僅摘要"
+          }
+        }
+      }
+    },
+    "摘要和请求头": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Summary and headers"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "摘要和請求標頭"
+          }
+        }
+      }
+    },
+    "摘要、请求头和正文": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Summary, headers and bodies"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "摘要、請求標頭和內文"
+          }
+        }
+      }
+    },
+    "外部工具访问": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "External tool access"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "外部工具存取"
+          }
+        }
+      }
+    },
+    "允许本机的 AI 工具读取连接状态、节点、规则和请求摘要。请求内容均已脱敏。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allows AI tools on this Mac to read the connection status, nodes, rules and request summaries. Request content is always redacted."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允許本機的 AI 工具讀取連線狀態、節點、規則和請求摘要。請求內容均已去識別化。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

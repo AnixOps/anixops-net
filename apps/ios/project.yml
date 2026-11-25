@@ -261,6 +261,18 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         COMBINE_HIDPI_IMAGES: YES
+    # anixops-mcp, the MCP program for AI tools (docs/mcp-desktop.md), at Contents/MacOS/anixops-mcp. It is built by
+    # .github/scripts/build-macos-mcp.sh with Cargo, so a script copies and signs it instead of a target dependency.
+    postBuildScripts:
+      - name: Embed anixops-mcp
+        script: bash "${SRCROOT}/Tools/embed-mcp.sh"
+        basedOnDependencyAnalysis: true
+        inputFiles:
+          - $(SRCROOT)/Generated/anixops-mcp
+          - $(SRCROOT)/Tools/embed-mcp.sh
+          - $(SRCROOT)/Entitlements/NetworkCoreCLI.entitlements
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/anixops-mcp
     dependencies:
       - package: NetworkCoreIOS
         product: NetworkCoreIOS

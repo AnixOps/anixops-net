@@ -973,3 +973,14 @@ CI 只能验证计数与等待的逻辑（`AutoReconnectTests`、`on_demand::ret
 - [ ] 确认扩展内 `NETunnelProviderManager.loadAllFromPreferences` / `saveToPreferences` 能关闭 On Demand（iOS 与 Mac App Store 版）；
   若不能，拒绝会每 30 秒循环一次，直到 App 打开后关闭它。
 - [ ] macOS Developer ID 版（System Extension）：同上，确认 App 在前台或后台运行时会关闭 On Demand。
+
+## macOS 外部工具访问（MCP，docs/mcp-desktop.md P2）
+
+CI 只能在未签名、未运行的 App 上检查 `anixops-mcp` 的握手、工具清单和「未运行」错误，以下需要在真机上用签名版确认：
+
+- [ ] Developer ID 版：`codesign -dvvv "AnixOps Net.app/Contents/MacOS/anixops-mcp"` 显示 Hardened Runtime 与 Developer ID
+  Application 签名，公证通过；anx 仓库 `release-macos.yml` 的签名检查加入这一项。
+- [ ] 读取开关关闭时，在 AI 宿主中调用任一工具返回 “has not allowed access by AI tools” 错误，App 不弹窗。
+- [ ] 打开读取开关并连接后，`get_status`、`list_nodes`、`list_requests`、`get_request` 返回正常；`get_request` 的
+  Cookie、Authorization 与查询参数中的令牌均为脱敏后的形式；内容级别改为「仅摘要」后不再返回请求头与正文。
+- [ ] macOS 15 及以上：适配程序访问 App 组容器时系统不弹出「访问其他 App 的数据」提示（依赖 App 组权限与同一团队签名）。
