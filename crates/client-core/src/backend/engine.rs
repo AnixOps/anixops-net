@@ -359,7 +359,7 @@ fn linked(profile: &Value, other: &OtherSource) -> Option<Value> {
 /// sends (the capture session storage and key, saved sessions, `reload_rules`, saving a mesh network) is not here:
 /// it goes through [`Engine::request`]. The
 /// Windows/Linux Tauri app checks its window's requests with the same list ([`activity_request`]).
-pub const ACTIVITY_COMMANDS: [&str; 24] = [
+pub const ACTIVITY_COMMANDS: [&str; 32] = [
     "traffic",
     "connections",
     "close_connection",
