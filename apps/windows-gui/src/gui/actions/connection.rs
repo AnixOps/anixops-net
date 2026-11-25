@@ -1,5 +1,5 @@
 use crate::gui::{
-    append_managed_log, load_validated_managed_configuration, mitm_plugins, owned_proxy,
+    append_managed_log, load_validated_managed_configuration, mesh, mitm_plugins, owned_proxy,
     startup::{
         my_rules_path, owns_current_proxy, rule_set_cache_dir, save_desktop_state, DesktopState,
     },
@@ -373,8 +373,9 @@ fn desktop_connection_plan(managed: WindowsManagedConfig) -> Result<DesktopConne
 }
 
 /// The envelope the desktop engines run on: the profile's, with the rule
-/// set cache folder, plus a `mitm` section when HTTPS decryption is on. The
-/// root key only joins it in memory; the saved envelope never holds it.
+/// set cache folder and the joined 组网 networks (`mesh::with_joined`), plus a
+/// `mitm` section when HTTPS decryption is on. The root key and the networks'
+/// secrets only join it in memory; the saved envelope never holds them.
 fn desktop_envelope(
     embedded: &WindowsManagedEmbeddedConfig,
     mitm: Option<&WindowsManagedNativeMitmConfig>,
@@ -382,8 +383,8 @@ fn desktop_envelope(
     let envelope = fs::read_to_string(&embedded.envelope_path)
         .map_err(|error| format!("embedded engine configuration could not be read: {error}"))?;
     // Added here rather than in the saved file, so an envelope saved by an earlier version gets it too.
-    let envelope =
-        desktop_dns::rules::with_rule_set_cache(&envelope, &rule_set_cache_dir())?.into_bytes();
+    let envelope = desktop_dns::rules::with_rule_set_cache(&envelope, &rule_set_cache_dir())?;
+    let envelope = mesh::with_joined(envelope).into_bytes();
     match mitm {
         Some(mitm) => with_native_mitm(envelope, mitm),
         None => Ok(envelope),

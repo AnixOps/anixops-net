@@ -69,6 +69,7 @@ mod gui {
     mod backdrop;
     mod capture_sessions;
     mod linked_sources;
+    mod mesh;
     mod mitm_plugins;
     mod owned_proxy;
     mod reconnect;

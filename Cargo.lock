@@ -3648,6 +3648,7 @@ dependencies = [
  "app-notifications",
  "client-core",
  "client-health",
+ "client-view",
  "config-core",
  "control-domain",
  "desktop-dns",
