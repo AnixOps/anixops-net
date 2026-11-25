@@ -703,6 +703,7 @@ struct MacSettingsPage: View {
                 MacGatewaySection(tunnel: tunnel)
                 BlockQuicSection(tunnel: tunnel)
                 MacCommandLineSection()
+                MacAgentAccessSection()
                 if let metrics = state.metrics {
                     MacMetricsSection(metrics: metrics)
                 }
@@ -787,6 +788,50 @@ struct MacCommandLineSection: View {
                     copied = true
                 }
             }
+        }
+    }
+}
+
+/// Settings > Advanced > External tool access (docs/mcp-desktop.md §4): whether AI tools on this Mac may read the
+/// client's state through the bundled `anixops-mcp`, how much of a captured request they see, and the configuration
+/// to give the AI tool. Off by default; the app's gate (`AgentGate`) reads the same settings for every request.
+struct MacAgentAccessSection: View {
+    @State private var access = AgentAccess.load()
+    @State private var copied = false
+
+    private var configuration: String {
+        let tool = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/anixops-mcp").path
+        return "{\n  \"mcpServers\": {\n    \"anixops-net\": {\n      \"command\": \"\(tool)\"\n    }\n  }\n}"
+    }
+
+    var body: some View {
+        Section {
+            Toggle("允许 AI 工具读取状态", isOn: $access.read)
+            if access.read {
+                Picker("请求内容", selection: $access.content) {
+                    Text("仅摘要").tag(AgentContentLevel.summary)
+                    Text("摘要和请求头").tag(AgentContentLevel.headers)
+                    Text("摘要、请求头和正文").tag(AgentContentLevel.bodies)
+                }
+                HStack(alignment: .top) {
+                    Text(configuration)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                    Spacer()
+                    Button(copied ? "已复制" : "复制") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(configuration, forType: .string)
+                        copied = true
+                    }
+                }
+            }
+        } header: {
+            Text("外部工具访问")
+        } footer: {
+            Text("允许本机的 AI 工具读取连接状态、节点、规则和请求摘要。请求内容均已脱敏。")
+        }
+        .onChange(of: access) { _, new in
+            new.save()
         }
     }
 }

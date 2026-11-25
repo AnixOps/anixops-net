@@ -55,7 +55,7 @@ public enum CommandLineExit: Int32, Equatable, Sendable {
             self = .failure
         case .timeout:
             self = .timeout
-        case .unavailable:
+        case .unavailable, .accessOff, .notConnected:
             self = .unavailable
         case .unsupportedVersion:
             self = .protocolError
@@ -126,6 +126,8 @@ public struct CommandLineInvocation: Equatable, Sendable {
                 return 90
             case .status, .nodes:
                 return 10
+            case .agent:
+                return 30
             }
         case .importNodes:
             return 90
@@ -314,7 +316,7 @@ public enum CommandLineOutput {
             if lines.isEmpty {
                 lines.append("还没有导入节点")
             }
-        case .connect, .disconnect, .select, .importNodes:
+        case .connect, .disconnect, .select, .importNodes, .agent:
             if let message = response.message {
                 lines.append(message)
             }

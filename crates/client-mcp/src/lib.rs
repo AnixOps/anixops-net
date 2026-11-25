@@ -11,6 +11,9 @@
 //!   other implementations and the tests read too.
 //! - [`backend`]: what a tool may ask the app, and the user's access settings the app reports.
 //! - [`text`]: masking of URLs and log lines.
+//! - `control_channel` (Unix): the Mac app's command-line channel as a backend.
+//!
+//! `policy.json` lists the engine requests the tools make; the app's own gate allows the same and nothing else.
 //!
 //! What a tool returns is built field by field from what the backend answers: a field the tool does not
 //! name is left out, so a field added to the engine later never reaches the AI tool by accident. Requests
@@ -19,6 +22,8 @@
 //! relies on this crate.
 
 pub mod backend;
+#[cfg(unix)]
+pub mod control_channel;
 pub mod server;
 pub mod text;
 pub mod tools;

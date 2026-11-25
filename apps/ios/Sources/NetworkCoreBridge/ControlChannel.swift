@@ -35,6 +35,10 @@ public struct ControlRequest: Codable, Equatable, Sendable {
         case select
         case test
         case importNodes = "import"
+        /// The MCP program `anixops-mcp` (docs/mcp-desktop.md): `agent` says what it asks, `payload` carries the
+        /// engine request. The app answers only while the user allows AI tools (`AgentAccess`), and the engine only
+        /// the requests `AgentGate` lets through.
+        case agent
     }
 
     public var version: Int
@@ -47,6 +51,10 @@ public struct ControlRequest: Codable, Equatable, Sendable {
     public var node: String?
     /// `import`: a subscription link, a node link or node list text.
     public var text: String?
+    /// `agent`: what the MCP program asks.
+    public var agent: AgentCall?
+    /// `agent` `engine`: the engine request, JSON text.
+    public var payload: String?
 
     public init(
         command: Command,
@@ -54,6 +62,8 @@ public struct ControlRequest: Codable, Equatable, Sendable {
         group: String? = nil,
         node: String? = nil,
         text: String? = nil,
+        agent: AgentCall? = nil,
+        payload: String? = nil,
         version: Int = ControlProtocol.version
     ) {
         self.version = version
@@ -62,6 +72,8 @@ public struct ControlRequest: Codable, Equatable, Sendable {
         self.group = group
         self.node = node
         self.text = text
+        self.agent = agent
+        self.payload = payload
     }
 }
 
@@ -81,6 +93,10 @@ public enum ControlErrorCode: String, Codable, Equatable, Sendable {
     case unavailable
     /// The tool and the app speak different protocol versions.
     case unsupportedVersion
+    /// `agent`: the user has not allowed AI tools.
+    case accessOff
+    /// `agent`: the request needs the engine, which runs only while connected.
+    case notConnected
 }
 
 public struct ControlStatus: Codable, Equatable, Sendable {
@@ -161,19 +177,27 @@ public struct ControlResponse: Codable, Equatable, Sendable {
     public var message: String?
     public var status: ControlStatus?
     public var groups: [ControlGroup]?
+    /// `agent` `access`: the user's settings for AI tools.
+    public var access: AgentAccess?
+    /// `agent` `engine`: the engine's answer; `agent` `logs`: the log lines. JSON text.
+    public var payload: String?
 
     public init(
         ok: Bool = true,
         error: ControlErrorCode? = nil,
         message: String? = nil,
         status: ControlStatus? = nil,
-        groups: [ControlGroup]? = nil
+        groups: [ControlGroup]? = nil,
+        access: AgentAccess? = nil,
+        payload: String? = nil
     ) {
         self.ok = ok
         self.error = error
         self.message = message
         self.status = status
         self.groups = groups
+        self.access = access
+        self.payload = payload
     }
 
     public static func failure(_ error: ControlErrorCode, _ message: String) -> ControlResponse {

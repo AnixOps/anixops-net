@@ -1000,7 +1000,7 @@ dependencies = [
 [[package]]
 name = "config-core"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "base64 0.22.1",
  "control-domain",
@@ -1042,7 +1042,7 @@ checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
 [[package]]
 name = "control-domain"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "serde",
  "serde_json",
@@ -1614,7 +1614,7 @@ checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
 [[package]]
 name = "engine-embedded"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "base64 0.22.1",
  "boringtun",
@@ -1664,7 +1664,7 @@ dependencies = [
 [[package]]
 name = "engine-native"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "bytes",
  "control-domain",
@@ -1684,7 +1684,7 @@ dependencies = [
 [[package]]
 name = "engine-outbound"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "ring",
  "serde",
@@ -2949,7 +2949,7 @@ dependencies = [
 [[package]]
 name = "inbound-mixed"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "engine-outbound",
  "tokio",
@@ -3523,7 +3523,7 @@ dependencies = [
 [[package]]
 name = "mitm-anixops-sys"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "cc",
  "pcre2-sys",
@@ -3532,7 +3532,7 @@ dependencies = [
 [[package]]
 name = "mitm-policy"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "config-core",
  "control-domain",
@@ -3604,7 +3604,7 @@ dependencies = [
 [[package]]
 name = "netstack-smoltcp"
 version = "0.2.4"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "etherparse",
  "futures",
@@ -3701,7 +3701,7 @@ dependencies = [
 [[package]]
 name = "node-import"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "config-core",
  "control-domain",
@@ -4050,7 +4050,7 @@ dependencies = [
 [[package]]
 name = "outbound-http"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "base64 0.22.1",
  "engine-outbound",
@@ -4062,7 +4062,7 @@ dependencies = [
 [[package]]
 name = "outbound-hysteria2"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "bytes",
  "engine-outbound",
@@ -4079,7 +4079,7 @@ dependencies = [
 [[package]]
 name = "outbound-iwan"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "aes",
  "engine-outbound",
@@ -4092,7 +4092,7 @@ dependencies = [
 [[package]]
 name = "outbound-mieru"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "chacha20poly1305",
  "engine-outbound",
@@ -4104,7 +4104,7 @@ dependencies = [
 [[package]]
 name = "outbound-shadowsocks"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "aes",
  "base64 0.22.1",
@@ -4120,7 +4120,7 @@ dependencies = [
 [[package]]
 name = "outbound-snell"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "argon2",
  "base64 0.22.1",
@@ -4134,7 +4134,7 @@ dependencies = [
 [[package]]
 name = "outbound-socks"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "engine-outbound",
  "serde",
@@ -4144,7 +4144,7 @@ dependencies = [
 [[package]]
 name = "outbound-trojan"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "engine-outbound",
  "serde",
@@ -4160,7 +4160,7 @@ dependencies = [
 [[package]]
 name = "outbound-tuic"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "bytes",
  "engine-outbound",
@@ -4174,7 +4174,7 @@ dependencies = [
 [[package]]
 name = "outbound-vless"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "engine-outbound",
  "ring",
@@ -4191,7 +4191,7 @@ dependencies = [
 [[package]]
 name = "outbound-vmess"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "aes",
  "crc32fast",
@@ -4212,7 +4212,7 @@ dependencies = [
 [[package]]
 name = "outbound-wireguard"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "base64 0.22.1",
  "boringtun",
@@ -4417,7 +4417,7 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 [[package]]
 name = "platform-windows"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "config-core",
  "control-domain",
@@ -5213,7 +5213,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 [[package]]
 name = "script-runtime"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "rquickjs",
  "serde",
@@ -6233,7 +6233,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 [[package]]
 name = "tls-mimic"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "ml-kem",
  "rand_core 0.6.4",
@@ -6500,7 +6500,7 @@ dependencies = [
 [[package]]
 name = "transport-grpc"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "bytes",
  "engine-outbound",
@@ -6512,7 +6512,7 @@ dependencies = [
 [[package]]
 name = "transport-quic"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "blake2",
  "engine-outbound",
@@ -6525,7 +6525,7 @@ dependencies = [
 [[package]]
 name = "transport-tls"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "engine-outbound",
  "ring",
@@ -6540,7 +6540,7 @@ dependencies = [
 [[package]]
 name = "transport-ws"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "base64 0.22.1",
  "engine-outbound",
@@ -6551,7 +6551,7 @@ dependencies = [
 [[package]]
 name = "transport-xhttp"
 version = "0.2.0"
-source = "git+https://github.com/AnixOps/networkcore_anixops?rev=8a06911074ac640a2e42afc448edfa7d3344adf7#8a06911074ac640a2e42afc448edfa7d3344adf7"
+source = "git+https://github.com/AnixOps/networkcore_anixops?rev=1ebef29586636b288dc18eb976ad44b474028567#1ebef29586636b288dc18eb976ad44b474028567"
 dependencies = [
  "bytes",
  "engine-outbound",

@@ -1,0 +1,16 @@
+{
+  "engine": {
+    "traffic": { "fields": [], "forced": {} },
+    "connections": { "fields": [], "forced": {} },
+    "groups": { "fields": [], "forced": {} },
+    "test_route": { "fields": ["host", "port", "network", "process", "url"], "forced": {} },
+    "rule_hits": { "fields": [], "forced": {} },
+    "reload_rules": { "fields": ["rules"], "forced": { "dry_run": true } },
+    "outbound_health": { "fields": [], "forced": {} },
+    "rule_sets": { "fields": [], "forced": {} },
+    "mitm_hosts": { "fields": [], "forced": {} },
+    "capture": { "fields": [], "forced": {} },
+    "capture_requests": { "fields": ["since_seq", "limit", "filter"], "forced": { "redact": true } },
+    "capture_exchange": { "fields": ["id", "index"], "forced": { "redact": true } }
+  }
+}
