@@ -3,7 +3,8 @@
 //! owner-only file beside the state. Every saved network that is joined goes into the engine's profile as a
 //! `{"type":"mesh"}` outbound; the engine sends the network's routes to it ahead of the rules (R23), so no rule names
 //! it. Joining, leaving, saving and removing also go to a running engine directly, without a restart. Windows never
-//! see a secret: [`summaries`] leaves it out.
+//! see a secret: [`summaries`] leaves it out. On Windows the file is sealed for the Windows account with Data
+//! Protection, as the LAN share's password is.
 
 use std::fs;
 use std::io;
@@ -13,7 +14,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
 /// The file under the client's data folder.
+#[cfg(not(windows))]
 pub const FILE: &str = "mesh-networks.json";
+/// The file under the client's data folder, sealed for this Windows account.
+#[cfg(windows)]
+pub const FILE: &str = "mesh-networks.dpapi";
+#[cfg(windows)]
+const WHAT: &str = "mesh networks file";
 
 /// The key of the selected node in the routing section [`with_outbounds`] builds for a profile without one.
 pub const NODE_KEY: &str = "node";
@@ -50,11 +57,137 @@ pub fn path(dir: &Path) -> PathBuf {
 /// The saved networks; none when nothing was saved yet. A file that cannot be read or understood is an error, so
 /// that the next save does not replace it with fewer networks.
 pub fn load(dir: &Path) -> Result<Vec<SavedNetwork>, String> {
-    match fs::read(path(dir)) {
-        Ok(bytes) => serde_json::from_slice(&bytes)
-            .map_err(|error| format!("the mesh networks file is not valid: {error}")),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Vec::new()),
-        Err(error) => Err(format!("the mesh networks file could not be read: {error}")),
+    let bytes = match fs::read(path(dir)) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(format!("the mesh networks file could not be read: {error}")),
+    };
+    #[cfg(windows)]
+    let bytes = super::session_key::crypt(&bytes, false, WHAT)?;
+    serde_json::from_slice(&bytes)
+        .map_err(|error| format!("the mesh networks file is not valid: {error}"))
+}
+
+/// Keeps `networks`, through a temporary file and a rename: owner-only, and on Windows sealed for this account.
+pub fn store(dir: &Path, networks: &[SavedNetwork]) -> Result<(), String> {
+    let bytes = serde_json::to_vec_pretty(networks).map_err(|error| error.to_string())?;
+    #[cfg(windows)]
+    let bytes = super::session_key::crypt(&bytes, true, WHAT)?;
+    desktop_mitm::sessions::write_private(&path(dir), &bytes)
+        .map_err(|error| format!("the mesh networks could not be saved: {error}"))
+}
+
+/// Whether `answer`, a running engine's, says the command took effect.
+fn took_effect(answer: &Value) -> bool {
+    answer.get("ok") == Some(&Value::Bool(true))
+}
+
+fn not_found(name: &str) -> String {
+    crate::refusal::coded(
+        "mesh.not_found",
+        format!("no saved network is named {name}"),
+    )
+}
+
+/// Saves a network (`config`, the kernel's `config_version: 1` structure with its secret) under `dir` and joins it,
+/// leaving the network joined before: a device joins one at a time. A running engine ([`request`] answers `None`
+/// while none runs) takes it at once (`mesh_save_network`, then `mesh_join`); the saved profile carries it from the
+/// next start. Answers the engine's refusal when it refused, else `{"ok":true}`.
+pub fn save_network(
+    dir: &Path,
+    config: Value,
+    mut request: impl FnMut(Value) -> Option<Value>,
+) -> Result<Value, String> {
+    let name = validate(&config)?;
+    let networks = load(dir)?;
+    let before = networks
+        .iter()
+        .find(|network| network.joined && network.name != name)
+        .map(|network| network.name.clone());
+    store(dir, &saved(&networks, &name, config.clone()))?;
+    if let Some(before) = before {
+        request(json!({ "cmd": "mesh_leave", "network": before }));
+    }
+    let saved = request(json!({ "cmd": "mesh_save_network", "config": config }));
+    if let Some(refused) = saved.filter(|answer| !took_effect(answer)) {
+        return Ok(refused);
+    }
+    Ok(request(json!({ "cmd": "mesh_join", "network": name }))
+        .unwrap_or_else(|| json!({ "ok": true })))
+}
+
+/// Joins (leaving the network joined before) or leaves a saved network, in a running engine at once and in the
+/// saved profile. The engine's refusal is answered and nothing is saved; with no engine running only the saved
+/// choice changes.
+pub fn set_joined(
+    dir: &Path,
+    name: &str,
+    joined: bool,
+    mut request: impl FnMut(Value) -> Option<Value>,
+) -> Result<Value, String> {
+    let networks = load(dir)?;
+    let next = self::joined(&networks, name, joined).ok_or_else(|| not_found(name))?;
+    if joined {
+        for other in networks
+            .iter()
+            .filter(|network| network.joined && network.name != name)
+        {
+            request(json!({ "cmd": "mesh_leave", "network": other.name }));
+        }
+    }
+    let cmd = if joined { "mesh_join" } else { "mesh_leave" };
+    let answer =
+        request(json!({ "cmd": cmd, "network": name })).unwrap_or_else(|| json!({ "ok": true }));
+    if took_effect(&answer) {
+        store(dir, &next)?;
+    }
+    Ok(answer)
+}
+
+/// Removes a saved network and its secret, from a running engine too.
+pub fn remove_network(
+    dir: &Path,
+    name: &str,
+    mut request: impl FnMut(Value) -> Option<Value>,
+) -> Result<Value, String> {
+    let networks = load(dir)?;
+    if !networks.iter().any(|network| network.name == name) {
+        return Err(not_found(name));
+    }
+    let answer = request(json!({ "cmd": "mesh_remove_network", "network": name }));
+    let next: Vec<_> = networks
+        .into_iter()
+        .filter(|network| network.name != name)
+        .collect();
+    store(dir, &next)?;
+    Ok(answer.unwrap_or_else(|| json!({ "ok": true })))
+}
+
+/// `envelope` with the outbounds of the networks joined under `dir` ([`with_outbounds`]). Mesh is an extra, as
+/// HTTPS decryption is: the envelope stays as it is when none is joined, and the second value says why the joined
+/// ones were left out (the file could not be read, or the engine would refuse the result: one without the mesh
+/// module).
+pub fn with_joined(dir: &Path, envelope: String) -> (String, Option<String>) {
+    let networks = match load(dir) {
+        Ok(networks) => networks,
+        Err(error) => return (envelope, Some(error)),
+    };
+    let Some(meshed) = serde_json::from_str::<Value>(&envelope)
+        .ok()
+        .and_then(|profile| with_outbounds(&profile, &outbounds(&networks)))
+    else {
+        return (envelope, None);
+    };
+    let meshed = meshed.to_string();
+    match engine_embedded::config::RuntimeConfig::from_json(meshed.as_bytes()) {
+        Ok(_) => (meshed, None),
+        Err(error) => (
+            envelope,
+            Some(format!(
+                "mesh networks left out: the engine refused them: {}",
+                error.message
+            )),
+        ),
     }
 }
 
@@ -521,6 +654,91 @@ mod tests {
         assert!(load(&dir).unwrap().is_empty());
         fs::write(path(&dir), b"{").unwrap();
         assert!(load(&dir).is_err());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn saving_joining_and_removing_keep_the_file_and_tell_a_running_engine() {
+        let dir = std::env::temp_dir().join(format!("mesh-change-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let mut sent = Vec::new();
+        let mut engine = |request: Value| {
+            sent.push(request["cmd"].as_str().unwrap().to_string());
+            Some(json!({ "ok": true }))
+        };
+        assert_eq!(
+            save_network(&dir, config("a", "s"), &mut engine).unwrap(),
+            json!({ "ok": true })
+        );
+        assert_eq!(
+            save_network(&dir, config("b", "s"), &mut engine).unwrap(),
+            json!({ "ok": true })
+        );
+        // A device joins one network at a time: saving b left a.
+        let joined: Vec<_> = load(&dir)
+            .unwrap()
+            .into_iter()
+            .map(|network| (network.name, network.joined))
+            .collect();
+        assert_eq!(joined, [("a".to_string(), false), ("b".to_string(), true)]);
+        assert_eq!(
+            sent,
+            [
+                "mesh_save_network",
+                "mesh_join",
+                "mesh_leave",
+                "mesh_save_network",
+                "mesh_join"
+            ]
+        );
+
+        // A refusal changes nothing that was saved.
+        let refused = json!({ "ok": false, "error": { "code": "mesh.join_failed" } });
+        assert_eq!(
+            set_joined(&dir, "a", true, |_| Some(refused.clone())).unwrap(),
+            refused
+        );
+        assert!(load(&dir)
+            .unwrap()
+            .iter()
+            .any(|network| network.name == "b" && network.joined));
+        // With no engine running only the saved choice changes.
+        assert_eq!(
+            set_joined(&dir, "a", true, |_| None).unwrap(),
+            json!({ "ok": true })
+        );
+        assert!(load(&dir)
+            .unwrap()
+            .iter()
+            .all(|network| network.joined == (network.name == "a")));
+        assert!(set_joined(&dir, "c", true, |_| None)
+            .unwrap_err()
+            .starts_with("mesh.not_found"));
+
+        assert_eq!(
+            remove_network(&dir, "a", |_| None).unwrap(),
+            json!({ "ok": true })
+        );
+        assert_eq!(load(&dir).unwrap().len(), 1);
+        assert!(remove_network(&dir, "a", |_| None).is_err());
+        assert!(save_network(&dir, json!({ "config_version": 2 }), |_| None).is_err());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn joined_networks_join_the_envelope() {
+        let dir = std::env::temp_dir().join(format!("mesh-envelope-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let envelope = json!({ "schema_version": 1, "outbound": { "type": "direct" } }).to_string();
+        // None joined: the envelope stays.
+        assert_eq!(
+            with_joined(&dir, envelope.clone()),
+            (envelope.clone(), None)
+        );
+        fs::write(path(&dir), b"{").unwrap();
+        let (kept, why) = with_joined(&dir, envelope.clone());
+        assert_eq!(kept, envelope);
+        assert!(why.is_some(), "an unreadable file is logged");
         fs::remove_dir_all(&dir).unwrap();
     }
 

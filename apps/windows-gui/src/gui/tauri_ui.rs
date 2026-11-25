@@ -1,6 +1,7 @@
 use super::actions::connection;
 use super::capture_sessions;
 use super::linked_sources::{self, CachedNode, OtherSource};
+use super::mesh;
 use super::mitm_plugins::{self, PluginSummary};
 use super::owned_proxy;
 use super::reconnect;
@@ -63,6 +64,7 @@ use std::{
     fs,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+use tauri::ipc::{Invoke, InvokeBody};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
 use tauri::webview::PageLoadEvent;
@@ -709,7 +711,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
                 let _ = window.hide();
             }
         })
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler(with_shared_views(tauri::generate_handler![
             runtime_snapshot,
             list_nodes,
             list_native_groups,
@@ -805,7 +807,11 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             remove_certificate,
             install_driver,
             remove_driver,
-        ])
+            mesh_networks,
+            save_mesh_network,
+            set_mesh_joined,
+            remove_mesh_network,
+        ]))
         .build(tauri::generate_context!())
         .map_err(|error| error.to_string())?
         .run(|app, event| {
@@ -1664,15 +1670,112 @@ async fn runtime_control(
         } else {
             request
         };
+        let mesh_status = request.get("cmd").and_then(Value::as_str) == Some("mesh_status");
         let request = connection::activity_request(&request)?;
-        let answer = state
+        let mut core = state
             .direct_core
             .lock()
-            .map_err(|_| "desktop core lock failed")?
-            .control(&request)?;
+            .map_err(|_| "desktop core lock failed")?;
+        // With no engine running the 组网 page shows the saved networks (`mesh::offline_status`).
+        if mesh_status && !core.is_running()? {
+            return Ok(mesh::offline_status());
+        }
+        let answer = core.control(&request)?;
         serde_json::from_slice(&answer).map_err(|error| error.to_string())
     })
     .await
+}
+
+/// The saved 组网 networks, without their secrets (`client_core::backend::mesh`).
+#[tauri::command]
+async fn mesh_networks() -> Result<Vec<client_core::backend::mesh::NetworkSummary>, String> {
+    run_blocking(|| {
+        client_core::backend::mesh::load(&mesh::dir()?)
+            .map(|networks| client_core::backend::mesh::summaries(&networks))
+    })
+    .await
+}
+
+/// Saves a 组网 network with its secret and joins it, in a running engine at once.
+#[tauri::command]
+async fn save_mesh_network(
+    config: Value,
+    state: State<'_, DesktopAppState>,
+) -> Result<Value, String> {
+    let core = state.inner().direct_core.clone();
+    run_blocking(move || {
+        client_core::backend::mesh::save_network(&mesh::dir()?, config, |request| {
+            mesh::engine_request(&core, request)
+        })
+    })
+    .await
+}
+
+/// Joins or leaves a saved 组网 network, in a running engine at once.
+#[tauri::command]
+async fn set_mesh_joined(
+    network: String,
+    joined: bool,
+    state: State<'_, DesktopAppState>,
+) -> Result<Value, String> {
+    let core = state.inner().direct_core.clone();
+    run_blocking(move || {
+        client_core::backend::mesh::set_joined(&mesh::dir()?, &network, joined, |request| {
+            mesh::engine_request(&core, request)
+        })
+    })
+    .await
+}
+
+/// Removes a saved 组网 network and its secret, from a running engine too.
+#[tauri::command]
+async fn remove_mesh_network(
+    network: String,
+    state: State<'_, DesktopAppState>,
+) -> Result<Value, String> {
+    let core = state.inner().direct_core.clone();
+    run_blocking(move || {
+        client_core::backend::mesh::remove_network(&mesh::dir()?, &network, |request| {
+            mesh::engine_request(&core, request)
+        })
+    })
+    .await
+}
+
+/// `generated`, the window's commands, with the shared views ([`shared_view`]) before them.
+fn with_shared_views<R: Runtime>(
+    generated: impl Fn(Invoke<R>) -> bool + Send + Sync + 'static,
+) -> impl Fn(Invoke<R>) -> bool + Send + Sync + 'static {
+    move |invoke| {
+        if invoke.message.command().starts_with(client_view::PREFIX) {
+            shared_view(invoke)
+        } else {
+            generated(invoke)
+        }
+    }
+}
+
+/// Answers a shared view (`view.*`, crates/client-view) the window asks for by name, as the other desktop clients
+/// do: what every window decides the same way, such as the 组网 page's grouping and notices.
+fn shared_view<R: Runtime>(invoke: Invoke<R>) -> bool {
+    let Invoke {
+        message, resolver, ..
+    } = invoke;
+    let command = message.command().to_string();
+    let args = match message.payload() {
+        InvokeBody::Json(Value::Null) => Value::Object(serde_json::Map::new()),
+        InvokeBody::Json(args) => args.clone(),
+        InvokeBody::Raw(_) => {
+            resolver.reject(format!("{command} takes JSON arguments"));
+            return true;
+        }
+    };
+    match client_view::invoke(&command, &args) {
+        Some(Ok(answer)) => resolver.resolve(answer),
+        Some(Err(error)) => resolver.reject(error),
+        None => resolver.reject(format!("unknown command {command}")),
+    }
+    true
 }
 
 /// `%LOCALAPPDATA%\AnixOps Net`: where the LAN share's credentials are kept, sealed with Windows Data Protection
