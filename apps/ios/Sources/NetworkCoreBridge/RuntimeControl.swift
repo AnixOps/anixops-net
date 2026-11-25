@@ -102,6 +102,20 @@ public enum RuntimeControl {
     case mitmHosts
     /// Forgets those results.
     case clearMitmHosts
+    /// The mesh (组网) status snapshot (`docs/architecture/mesh-client.md`); `MeshView` reads it.
+    case meshStatus
+    /// Joins or leaves a saved mesh network, by its id.
+    case meshJoin(network: String)
+    case meshLeave(network: String)
+    /// Saves a mesh network: the kernel's `config_version: 1` structure, as JSON text, secret included (read
+    /// from the Keychain just before sending; never stored with the rest of the configuration).
+    case meshSaveNetwork(configJSON: String)
+    case meshRemoveNetwork(network: String)
+    /// Internal domain names: resolution on or off, and the suffix.
+    case meshSetDns(enabled: Bool, suffix: String)
+    /// Whether an advertised subnet that overlaps this device's network goes through the mesh (`mesh`) or stays
+    /// on the local network (`local`). Saved on this device only.
+    case meshSetSubnetRoute(network: String, cidr: String, route: String)
 
     /// The port the system proxy listener asks for first.
     public static let systemProxyPort: UInt16 = 8890
@@ -253,6 +267,21 @@ public enum RuntimeControl {
             object = ["cmd": "mitm_hosts"]
         case .clearMitmHosts:
             object = ["cmd": "clear_mitm_hosts"]
+        case .meshStatus:
+            object = ["cmd": "mesh_status"]
+        case let .meshJoin(network):
+            object = ["cmd": "mesh_join", "network": network]
+        case let .meshLeave(network):
+            object = ["cmd": "mesh_leave", "network": network]
+        case let .meshSaveNetwork(configJSON):
+            let config = configJSON.data(using: .utf8).flatMap { try? JSONSerialization.jsonObject(with: $0) }
+            object = ["cmd": "mesh_save_network", "config": config ?? NSNull()]
+        case let .meshRemoveNetwork(network):
+            object = ["cmd": "mesh_remove_network", "network": network]
+        case let .meshSetDns(enabled, suffix):
+            object = ["cmd": "mesh_set_dns", "enabled": enabled, "suffix": suffix]
+        case let .meshSetSubnetRoute(network, cidr, route):
+            object = ["cmd": "mesh_set_subnet_route", "network": network, "cidr": cidr, "route": route]
         }
         return (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
     }
@@ -840,6 +869,30 @@ public enum RuntimeControl {
         }
 
         public let notifications: [Notification]
+    }
+
+    /// A refused command's reason: `{"ok":false,"error":{"code","detail"}}`. `unsupported` means the engine was
+    /// built without the feature.
+    public struct Refusal: Decodable, Equatable {
+        public let code: String
+        public let detail: String?
+
+        public init(code: String, detail: String?) {
+            self.code = code
+            self.detail = detail
+        }
+
+        /// The reason `data` gives, when it is a refusal.
+        public static func from(_ data: Data?) -> Refusal? {
+            struct Envelope: Decodable {
+                let ok: Bool?
+                let error: Refusal?
+            }
+            guard let envelope = RuntimeControl.decode(Envelope.self, from: data), envelope.ok == false else {
+                return nil
+            }
+            return envelope.error ?? Refusal(code: "other", detail: nil)
+        }
     }
 
     public static func decode<Answer: Decodable>(_ type: Answer.Type, from data: Data?) -> Answer? {

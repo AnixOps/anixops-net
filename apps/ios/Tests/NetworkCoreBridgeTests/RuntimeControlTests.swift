@@ -12,6 +12,40 @@ final class RuntimeControlTests: XCTestCase {
         )
     }
 
+    func testMeshCommandsAreTheKernelCommands() throws {
+        let text = { (command: RuntimeControl) in String(decoding: command.request, as: UTF8.self) }
+        XCTAssertEqual(text(.meshStatus), #"{"cmd":"mesh_status"}"#)
+        XCTAssertEqual(text(.meshJoin(network: "office")), #"{"cmd":"mesh_join","network":"office"}"#)
+        XCTAssertEqual(text(.meshLeave(network: "office")), #"{"cmd":"mesh_leave","network":"office"}"#)
+        XCTAssertEqual(text(.meshRemoveNetwork(network: "office")), #"{"cmd":"mesh_remove_network","network":"office"}"#)
+        XCTAssertEqual(
+            text(.meshSetDns(enabled: true, suffix: "mesh.internal")),
+            #"{"cmd":"mesh_set_dns","enabled":true,"suffix":"mesh.internal"}"#
+        )
+        XCTAssertEqual(
+            text(.meshSetSubnetRoute(network: "office", cidr: "192.168.1.0/24", route: "mesh")),
+            #"{"cidr":"192.168.1.0\/24","cmd":"mesh_set_subnet_route","network":"office","route":"mesh"}"#
+        )
+        XCTAssertEqual(
+            text(.meshSaveNetwork(configJSON: #"{"config_version":1}"#)),
+            #"{"cmd":"mesh_save_network","config":{"config_version":1}}"#
+        )
+    }
+
+    func testRefusalsAreRead() {
+        XCTAssertEqual(
+            RuntimeControl.Refusal.from(Data(#"{"ok":false,"error":{"code":"unsupported","detail":null}}"#.utf8)),
+            RuntimeControl.Refusal(code: "unsupported", detail: nil)
+        )
+        XCTAssertEqual(
+            RuntimeControl.Refusal.from(Data(#"{"ok":false}"#.utf8)),
+            RuntimeControl.Refusal(code: "other", detail: nil)
+        )
+        XCTAssertNil(RuntimeControl.Refusal.from(Data(#"{"ok":true}"#.utf8)))
+        XCTAssertNil(RuntimeControl.Refusal.from(Data(#"{"statusVersion":1}"#.utf8)))
+        XCTAssertNil(RuntimeControl.Refusal.from(nil))
+    }
+
     func testLanShareCommandsAndAnswer() throws {
         XCTAssertEqual(String(decoding: RuntimeControl.lanShare.request, as: UTF8.self), #"{"cmd":"lan_share"}"#)
         // The share asks phones for the kept username and password unless the user turned that off.
