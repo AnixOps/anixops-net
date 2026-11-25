@@ -202,7 +202,9 @@ fn read_loop(descriptor: &Descriptor, runtime: &Mutex<EmbeddedRuntime>, stop: &A
     let mut buffer = vec![0u8; READ_BUFFER];
     while !stop.load(Ordering::Acquire) {
         match read_once(descriptor, &mut buffer) {
-            Read::Packet(length) => lock(runtime).input_packet(&buffer[..length]),
+            Read::Packet(length) => {
+                lock(runtime).input_packet(&buffer[..length]);
+            }
             Read::Nothing => {}
             // The old interface goes down before its replacement is attached: the reader waits for it.
             Read::Failed if descriptor.replacing.load(Ordering::Acquire) => {
