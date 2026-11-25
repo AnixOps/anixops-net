@@ -755,6 +755,11 @@ pub fn notices(status: &Value) -> Value {
                 vec![json!(member_name(&members, unreachable)), json!(target)],
             ),
             "hop_limit" => ("mesh.notice.path_hop_limit", vec![json!(target)]),
+            // Its forwarding was not confirmed within 60 s of `pending`.
+            "pending_timeout" => (
+                "mesh.notice.path_pending_timeout",
+                vec![json!(member_name(&members, unreachable)), json!(target)],
+            ),
             // Probes through it got no echo although the topology still reaches it.
             "no_echo" => (
                 "mesh.notice.path_no_echo",
@@ -942,6 +947,9 @@ mod tests {
             silent[0]["values"],
             json!(["tyo-border", "192.168.30.0/24"])
         );
+        let late = notices(&status(path("fallback", Some("pending_timeout"))));
+        assert_eq!(late[0]["id"], "mesh.notice.path_pending_timeout");
+        assert_eq!(late[0]["values"], json!(["tyo-border", "192.168.30.0/24"]));
         // An unknown reason reads as unreachable.
         let unknown = notices(&status(path("fallback", Some("later_reason"))));
         assert_eq!(unknown[0]["id"], "mesh.notice.path_fallback");

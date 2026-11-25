@@ -98,6 +98,8 @@ describe("words", () => {
     expect(pathFallbackText({ ...path, reason: "unreachable" })).toBe("tyo-border 不可达");
     expect(pathFallbackText({ ...path, state: "pending" })).toBeNull();
     expect(pathFallbackText({ ...path, reason: "no_echo" })).toBe("tyo-border 探测无响应");
+    expect(pathFallbackText({ ...path, reason: "pending_timeout" })).toBe("tyo-border 确认超时");
+    expect(noticeText({ id: "mesh.notice.path_pending_timeout", key: "fallback:p:m", values: ["tyo-border", "192.168.30.0/24"] })).toBe("自定义路径已回落：tyo-border 确认超时。192.168.30.0/24 使用默认路径。");
     expect(pathFallbackText({ ...path, reason: "later_reason" })).toBe("tyo-border 不可达");
     expect(pathFallbackText({ ...path, state: "first_hop_only", reason: "not_relay" })).toBe("tyo-border 不支持按此路径转发");
     expect(pathFallbackText({ ...path, state: "first_hop_only" })).toBeNull();

@@ -21977,6 +21977,38 @@
         }
       }
     },
+    "自定义路径已回落：%@ 确认超时。%@ 使用默认路径。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom path fell back: confirmation with %@ timed out. %@ uses the default path."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自訂路徑已回落：%@ 確認逾時。%@ 使用預設路徑。"
+          }
+        }
+      }
+    },
+    "%@ 确认超时": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirmation with %@ timed out"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 確認逾時"
+          }
+        }
+      }
+    },
     "跳数超出上限": {
       "localizations": {
         "en": {

@@ -1255,6 +1255,10 @@ struct MeshCustomPathRow: View {
                 if let node = path.string("unreachable") {
                     parts.append(String(localized: "\(node) 探测无响应"))
                 }
+            case "pending_timeout":
+                if let node = path.string("unreachable") {
+                    parts.append(String(localized: "\(node) 确认超时"))
+                }
             case "unsupported", "not_relay":
                 if let node = path.string("unreachable") {
                     parts.append(String(localized: "\(node) 不支持按此路径转发"))

@@ -175,7 +175,7 @@ data class MeshCustomPath(
     val via: List<String> = emptyList(),
     /** `active`, `pending` (the path's nodes are being asked whether they forward on it), `fallback` or `first_hop_only`. */
     val state: String = "active",
-    /** Why a path fell back: `unreachable`, `unsupported`, `not_relay`, `hop_limit` or `no_echo` (mesh-status.md); on `fallback` and `first_hop_only`. */
+    /** Why a path fell back: `unreachable`, `unsupported`, `not_relay`, `hop_limit`, `no_echo` or `pending_timeout` (mesh-status.md); on `fallback` and `first_hop_only`. */
     val reason: String? = null,
     val unreachable: String? = null,
 )
