@@ -2266,6 +2266,9 @@ fn stop_desktop_core_for_exit(state: DesktopAppState) {
     if DONE.swap(true, std::sync::atomic::Ordering::SeqCst) {
         return;
     }
+    // First the engine for the mesh alone, with its adapter and routes, so that nothing starts it again while the
+    // proxy stops.
+    mesh::end(&state.direct_core, "exit");
     if let Ok(mut recorder) = state.traffic.lock() {
         recorder.save();
     }
@@ -2286,8 +2289,6 @@ fn stop_desktop_core_for_exit(state: DesktopAppState) {
     // The engine is stopped whatever happened to the proxy: keep the recovery monitor from restarting it while
     // the process exits.
     mark_gui_connection_stopped(&state);
-    // The engine for the mesh alone too, with its adapter and routes, and nothing starts it again.
-    mesh::end(&state.direct_core, "exit");
     match result {
         Ok(_) => {
             if let Ok(mut persisted) = state.desktop.lock() {

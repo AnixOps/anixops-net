@@ -584,10 +584,12 @@ public enum MeshView {
                 "native_keys_pending": ("mesh.notice.native_keys_pending", nil),
             ]
             let (id, action) = mapping[code] ?? ("mesh.notice.join_failed", nil)
-            // A refused peer is named by its member name where the snapshot lists it, and each peer has a notice key of
+            // A refused peer is named by its node ID, with the member name where the snapshot lists that ID (a refused
+            // peer may claim a member's ID, so the name alone would point at the member). Each peer has a notice key of
             // its own, so that one closed notice does not hide the next peer's.
             if code == "peer_not_native", let peer = detail as? String {
-                push(id, "failure:\(code):\(peer)", [memberName(members, peer)], action, false)
+                let name = memberName(members, peer)
+                push(id, "failure:\(code):\(peer)", [name == peer ? peer : "\(name) (\(peer))"], action, false)
             } else {
                 let values: [Any] = (detail == nil || detail is NSNull || code == "native_keys_pending") ? [] : [detail!]
                 push(id, "failure:\(code)", values, action, false)

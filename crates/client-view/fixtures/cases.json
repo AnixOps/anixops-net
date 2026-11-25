@@ -7308,7 +7308,7 @@
     "id": "mesh.notice.peer_not_native",
     "key": "failure:peer_not_native:node-7f3a",
     "values": [
-     "lon-host"
+     "lon-host (node-7f3a)"
     ],
     "action": null,
     "notify": false
