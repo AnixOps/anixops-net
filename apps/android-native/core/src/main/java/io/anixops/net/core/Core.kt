@@ -13,7 +13,9 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
@@ -84,6 +86,82 @@ class Core(
 
     suspend fun networkProbe(connected: Boolean): NetworkProbe =
         call("network_probe", NetworkProbe.serializer(), args("connected" to JsonPrimitive(connected)))
+
+    // 组网 (mesh): docs/architecture/mesh-client.md.
+
+    /**
+     * The mesh page in one go: the engine's `mesh_status` snapshot and the shared views of it. Null while the engine
+     * is not running, or has no mesh module (it refuses `mesh_status` as `unsupported`): the entry is then hidden.
+     */
+    suspend fun meshPage(groupBy: String, filter: String, sort: String, query: String): MeshPage? {
+        val status = orNull { controlRequest(buildJsonObject { put("cmd", "mesh_status") }) } ?: return null
+        if (refusalOf(status) != null) return null
+        val withStatus = args("status" to status)
+        val entry = call("view.mesh_entry", MeshEntry.serializer(), withStatus)
+        if (!entry.available) return null
+        val members = call(
+            "view.mesh_members",
+            MeshMembers.serializer(),
+            buildJsonObject {
+                put("status", status)
+                put("groupBy", groupBy)
+                put("filter", filter)
+                put("sort", sort)
+                put("query", query)
+                putJsonArray("devices") {}
+            },
+        )
+        val subnets = call(
+            "view.mesh_subnets",
+            MeshSubnets.serializer(),
+            buildJsonObject {
+                put("status", status)
+                put("query", query)
+            },
+        )
+        val paths = call("view.mesh_paths", MeshPaths.serializer(), withStatus)
+        val notices = call("view.mesh_notices", ListSerializer(MeshNotice.serializer()), withStatus)
+        val head = withContext(dispatcher) { decode(MeshStatusHead.serializer(), status, "mesh_status") }
+        return MeshPage(status, head, entry, members, subnets, paths, notices)
+    }
+
+    /** Joins or leaves a saved network, by its id; join and leave leave the proxy as it is. Null when it took effect. */
+    suspend fun setMeshJoined(network: String, joined: Boolean): MeshRefusal? = meshCommand(
+        buildJsonObject {
+            put("cmd", if (joined) "mesh_join" else "mesh_leave")
+            put("network", network)
+        },
+    )
+
+    /** Whether a subnet that overlaps this device's network goes through the mesh (`mesh`) or stays `local`. */
+    suspend fun setMeshSubnetRoute(network: String, cidr: String, route: String): MeshRefusal? = meshCommand(
+        buildJsonObject {
+            put("cmd", "mesh_set_subnet_route")
+            put("network", network)
+            put("cidr", cidr)
+            put("route", route)
+        },
+    )
+
+    private suspend fun meshCommand(request: JsonObject): MeshRefusal? {
+        val answer = try {
+            controlRequest(request)
+        } catch (error: CoreException) {
+            return MeshRefusal("other", error.detail ?: error.message)
+        }
+        return refusalOf(answer)
+    }
+
+    /** The reason in `{ "ok": false, "error": { "code", "detail" } }`, or null for any other answer. */
+    private fun refusalOf(answer: JsonElement): MeshRefusal? {
+        val envelope = answer as? JsonObject ?: return null
+        if ((envelope["ok"] as? JsonPrimitive)?.booleanOrNull != false) return null
+        val error = envelope["error"] as? JsonObject
+        return MeshRefusal(
+            (error?.get("code") as? JsonPrimitive)?.contentOrNull ?: "other",
+            (error?.get("detail") as? JsonPrimitive)?.contentOrNull,
+        )
+    }
 
     // The proxies page.
 

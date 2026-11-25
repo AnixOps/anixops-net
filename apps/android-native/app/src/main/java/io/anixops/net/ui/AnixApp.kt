@@ -110,6 +110,7 @@ fun AnixApp(
     activity: ActivityViewModel,
     extensions: ExtensionsViewModel,
     requests: RequestsViewModel,
+    mesh: MeshViewModel,
     version: String,
     /** `anixops://` links the activity received, followed once the user agreement is accepted. */
     links: Flow<String> = emptyFlow(),
@@ -127,6 +128,7 @@ fun AnixApp(
     val trafficState by activity.traffic.collectAsStateWithLifecycle()
     val extensionsState by extensions.state.collectAsStateWithLifecycle()
     val requestsState by requests.state.collectAsStateWithLifecycle()
+    val meshState by mesh.state.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { app.poll() }
@@ -436,6 +438,19 @@ fun AnixApp(
         },
         pollRequests = {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { requests.poll() }
+        },
+        meshState = meshState,
+        mesh = MeshActions(
+            setJoined = mesh::setJoined,
+            setGroupBy = mesh::setGroupBy,
+            setFilter = mesh::setFilter,
+            setSort = mesh::setSort,
+            setQuery = mesh::setQuery,
+            setSubnetRoute = mesh::setSubnetRoute,
+            dismissRefusal = mesh::dismissRefusal,
+        ),
+        pollMesh = {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { mesh.poll() }
         },
     )
 }
@@ -750,6 +765,9 @@ fun AnixScaffold(
     pollTraffic: suspend () -> Unit = {},
     pollExtensions: suspend () -> Unit = {},
     pollRequests: suspend () -> Unit = {},
+    meshState: MeshState = MeshState(),
+    mesh: MeshActions = MeshActions(),
+    pollMesh: suspend () -> Unit = {},
     initial: Destination? = null,
     initialSettingsPage: SettingsPage? = null,
     initialEgressRules: Boolean = false,
@@ -759,6 +777,8 @@ fun AnixScaffold(
         settingsPage = if (settingsPage == SettingsPage.Logs || settingsPage == SettingsPage.Traffic) SettingsPage.Privacy else null
     }
     var egressRules by rememberSaveable { mutableStateOf(initialEgressRules) }
+    // 组网 opens from 首页's section, and goes back to it.
+    var meshOpen by rememberSaveable { mutableStateOf(false) }
     val closeRules = { egressRules = false }
     val destinations = Destination.of(mode)
     var selected by rememberSaveable(mode) { mutableStateOf(initial?.takeIf { it in destinations } ?: destinations.first()) }
@@ -797,10 +817,19 @@ fun AnixScaffold(
     ) {
         Column {
             Box(Modifier.weight(1f)) {
-                val page = pageKey(selected, settingsPage, egressRules)
+                val page = if (selected == Destination.Home && meshOpen) "Home/mesh" else pageKey(selected, settingsPage, egressRules)
                 pages.SaveableStateProvider(page) {
                     when (selected) {
-                        Destination.Home -> HomeScreen(state, home)
+                        Destination.Home -> {
+                            LaunchedEffect(Unit) { pollMesh() }
+                            if (meshOpen) {
+                                val closeMesh = { meshOpen = false }
+                                BackTo(closeMesh)
+                                MeshScreen(meshState, mesh, onBack = closeMesh)
+                            } else {
+                                HomeScreen(state, home, mesh = meshState, meshActions = mesh, openMesh = { meshOpen = true })
+                            }
+                        }
                         Destination.Proxies -> {
                             LaunchedEffect(Unit) { pollProxies() }
                             ProxiesScreen(proxiesState, proxies)

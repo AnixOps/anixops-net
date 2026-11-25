@@ -1,6 +1,7 @@
 package io.anixops.net.core
 
 import java.io.File
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -120,5 +121,35 @@ class ViewModelsTest {
         assertFalse(mergeChangesNothing(rows, Envelope.json.parseToJsonElement("""{"requests":[],"dropped_before_seq":3}""")))
         assertFalse(mergeChangesNothing(rows, Envelope.json.parseToJsonElement("""{"requests":[{"seq":4,"connection_id":1,"index":4}]}""")))
         assertFalse(mergeChangesNothing(rows, JsonNull))
+    }
+
+    /** Every `view.mesh_*` answer of the samples decodes into the mesh models, and the status heads decode too. */
+    @Test
+    fun meshAnswersDecode() {
+        val entries = answers("view.mesh_entry").map { Envelope.json.decodeFromJsonElement(MeshEntry.serializer(), it) }
+        assertTrue("no view.mesh_entry samples", entries.isNotEmpty())
+        assertTrue(entries.any { !it.available })
+        assertTrue(entries.any { it.available && it.network != null })
+        val members = answers("view.mesh_members").map { Envelope.json.decodeFromJsonElement(MeshMembers.serializer(), it) }
+        assertTrue("no view.mesh_members samples", members.isNotEmpty())
+        members.forEach { view ->
+            assertEquals(view.matched, view.groups.sumOf { it.rows.size })
+            view.groups.flatMap { it.rows }.forEach { row -> assertTrue(row.visibleChildren <= row.children.size) }
+        }
+        assertTrue(members.flatMap { it.groups }.flatMap { it.rows }.any { it.isSelf })
+        val subnets = answers("view.mesh_subnets").map { Envelope.json.decodeFromJsonElement(MeshSubnets.serializer(), it) }
+        assertTrue("no view.mesh_subnets samples", subnets.isNotEmpty())
+        assertTrue(subnets.flatMap { it.rows }.all { it.state in setOf("ok", "unreachable", "refused") })
+        val paths = answers("view.mesh_paths").map { Envelope.json.decodeFromJsonElement(MeshPaths.serializer(), it) }
+        assertTrue("no view.mesh_paths samples", paths.isNotEmpty())
+        assertTrue(paths.any { it.links != null } && paths.any { it.custom != null })
+        val notices = answers("view.mesh_notices").flatMap {
+            Envelope.json.decodeFromJsonElement(ListSerializer(MeshNotice.serializer()), it)
+        }
+        assertTrue(notices.all { it.id.startsWith("mesh.notice.") })
+        val heads = cases.filter { it["command"]?.jsonPrimitive?.content?.startsWith("view.mesh_") == true }
+            .mapNotNull { it["args"]?.jsonObject?.get("status") as? JsonObject }
+            .map { Envelope.json.decodeFromJsonElement(MeshStatusHead.serializer(), it) }
+        assertTrue(heads.any { it.network != null && it.own != null && it.regions.isNotEmpty() })
     }
 }
