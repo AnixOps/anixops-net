@@ -7442,5 +7442,44 @@
    }
   },
   "answer": []
+ },
+ {
+  "command": "view.mesh_notices",
+  "args": {
+   "status": {
+    "members": [
+     {
+      "id": "m-4",
+      "name": "tyo-border"
+     }
+    ],
+    "paths": [
+     {
+      "id": "subnet:192.168.30.0/24",
+      "target": {
+       "subnet": "192.168.30.0/24"
+      },
+      "via": [
+       "m-1"
+      ],
+      "state": "fallback",
+      "reason": "no_echo",
+      "unreachable": "m-4"
+     }
+    ]
+   }
+  },
+  "answer": [
+   {
+    "id": "mesh.notice.path_no_echo",
+    "key": "fallback:subnet:192.168.30.0/24:m-4",
+    "values": [
+     "tyo-border",
+     "192.168.30.0/24"
+    ],
+    "action": null,
+    "notify": true
+   }
+  ]
  }
 ]

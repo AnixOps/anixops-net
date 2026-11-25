@@ -740,10 +740,12 @@ private fun CustomPathRow(path: MeshCustomPath, enabled: Boolean, remove: () -> 
     val parts = mutableListOf<String>()
     if (path.via.isNotEmpty()) parts += stringResource(R.string.mesh_via, path.via.joinToString(" → "))
     path.advertiser?.let { parts += stringResource(R.string.mesh_advertised_by, it) }
-    if (path.state == "fallback") {
+    if (path.state == "fallback" || path.state == "first_hop_only") {
         when (path.reason) {
+            null -> if (path.state == "fallback") path.unreachable?.let { parts += stringResource(R.string.mesh_member_unreachable, it) }
             "unsupported", "not_relay" -> path.unreachable?.let { parts += stringResource(R.string.mesh_member_no_forward, it) }
             "hop_limit" -> parts += stringResource(R.string.mesh_hop_limit)
+            "no_echo" -> path.unreachable?.let { parts += stringResource(R.string.mesh_member_no_echo, it) }
             else -> path.unreachable?.let { parts += stringResource(R.string.mesh_member_unreachable, it) }
         }
     }
@@ -962,6 +964,7 @@ private fun noticeText(notice: MeshNotice): String {
         "mesh.notice.path_fallback" -> stringResource(R.string.mesh_notice_path_fallback, text(0), text(1))
         "mesh.notice.path_unsupported" -> stringResource(R.string.mesh_notice_path_unsupported, text(0), text(1))
         "mesh.notice.path_hop_limit" -> stringResource(R.string.mesh_notice_path_hop_limit, text(0))
+        "mesh.notice.path_no_echo" -> stringResource(R.string.mesh_notice_path_no_echo, text(0), text(1))
         "mesh.notice.detour_loss" -> stringResource(R.string.mesh_notice_detour_loss, text(0), text(1), text(2), (number(3) ?: 0).toString())
         "mesh.notice.detour_latency" -> number(3)?.let { stringResource(R.string.mesh_notice_detour_latency, text(0), text(1), text(2), it.toString()) }
             ?: stringResource(R.string.mesh_notice_detour_slow, text(0), text(1), text(2))

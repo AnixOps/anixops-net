@@ -707,6 +707,8 @@ export function noticeText(notice: MeshNotice): string {
       return t("自定义路径已回落：{member} 不可达。{target} 使用默认路径。", { member: value(values, 0), target: value(values, 1) });
     case "mesh.notice.path_unsupported":
       return t("自定义路径已回落：{member} 不支持按此路径转发。{target} 使用默认路径。", { member: value(values, 0), target: value(values, 1) });
+    case "mesh.notice.path_no_echo":
+      return t("自定义路径已回落：{member} 探测无响应。{target} 使用默认路径。", { member: value(values, 0), target: value(values, 1) });
     case "mesh.notice.path_hop_limit":
       return t("自定义路径已回落：跳数超出上限。{target} 使用默认路径。", { target: value(values, 0) });
     case "mesh.notice.detour_loss":
@@ -754,10 +756,13 @@ export function regionName(head: MeshHead, code: string | null | undefined): str
   return head.regions?.find((region) => region.code === code)?.name || code;
 }
 
-/** Why a custom path fell back, for its row (mesh-status.md `paths[].reason`); null while it has not. */
+/** Why a custom path fell back or holds only its first hop, for its row (mesh-status.md `paths[].reason`); null otherwise. */
 export function pathFallbackText(path: MeshCustomPath): string | null {
-  if (path.state !== "fallback") return null;
+  if (path.state !== "fallback" && path.state !== "first_hop_only") return null;
+  if (!path.reason && path.state !== "fallback") return null;
   switch (path.reason) {
+    case "no_echo":
+      return path.unreachable ? t("{name} 探测无响应", { name: path.unreachable }) : null;
     case "unsupported":
     case "not_relay":
       return path.unreachable ? t("{name} 不支持按此路径转发", { name: path.unreachable }) : null;

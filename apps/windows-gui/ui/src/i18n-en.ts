@@ -1155,6 +1155,8 @@ export const english: Record<string, string> = {
   "自定义路径已回落：{member} 不可达。{target} 使用默认路径。": "Custom path fell back: {member} is unreachable. {target} uses the default path.",
   "自定义路径已回落：{member} 不支持按此路径转发。{target} 使用默认路径。": "Custom path fell back: {member} does not forward on this path. {target} uses the default path.",
   "自定义路径已回落：跳数超出上限。{target} 使用默认路径。": "Custom path fell back: hop limit exceeded. {target} uses the default path.",
+  "自定义路径已回落：{member} 探测无响应。{target} 使用默认路径。": "Custom path fell back: probes through {member} got no response. {target} uses the default path.",
+  "{name} 探测无响应": "No probe response from {name}",
   "{name} 不支持按此路径转发": "{name} does not forward on this path",
   "跳数超出上限": "Hop limit exceeded",
   "待确认": "Pending",

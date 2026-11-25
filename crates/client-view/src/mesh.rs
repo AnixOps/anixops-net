@@ -750,6 +750,11 @@ pub fn notices(status: &Value) -> Value {
                 vec![json!(member_name(&members, unreachable)), json!(target)],
             ),
             "hop_limit" => ("mesh.notice.path_hop_limit", vec![json!(target)]),
+            // Probes through it got no echo although the topology still reaches it.
+            "no_echo" => (
+                "mesh.notice.path_no_echo",
+                vec![json!(member_name(&members, unreachable)), json!(target)],
+            ),
             _ => (
                 "mesh.notice.path_fallback",
                 vec![json!(member_name(&members, unreachable)), json!(target)],
@@ -926,6 +931,15 @@ mod tests {
         let hops = notices(&status(path("fallback", Some("hop_limit"))));
         assert_eq!(hops[0]["id"], "mesh.notice.path_hop_limit");
         assert_eq!(hops[0]["values"], json!(["192.168.30.0/24"]));
+        let silent = notices(&status(path("fallback", Some("no_echo"))));
+        assert_eq!(silent[0]["id"], "mesh.notice.path_no_echo");
+        assert_eq!(
+            silent[0]["values"],
+            json!(["tyo-border", "192.168.30.0/24"])
+        );
+        // An unknown reason reads as unreachable.
+        let unknown = notices(&status(path("fallback", Some("later_reason"))));
+        assert_eq!(unknown[0]["id"], "mesh.notice.path_fallback");
         let gone = notices(&status(path("fallback", Some("unreachable"))));
         assert_eq!(gone[0]["id"], "mesh.notice.path_fallback");
         // An engine before `reason` still says unreachable.

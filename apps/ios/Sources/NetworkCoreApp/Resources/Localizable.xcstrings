@@ -21945,6 +21945,38 @@
         }
       }
     },
+    "自定义路径已回落：%@ 探测无响应。%@ 使用默认路径。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom path fell back: probes through %@ got no response. %@ uses the default path."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自訂路徑已回落：%@ 探測無回應。%@ 使用預設路徑。"
+          }
+        }
+      }
+    },
+    "%@ 探测无响应": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No probe response from %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 探測無回應"
+          }
+        }
+      }
+    },
     "跳数超出上限": {
       "localizations": {
         "en": {

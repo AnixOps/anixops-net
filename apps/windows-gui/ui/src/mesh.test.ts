@@ -97,6 +97,10 @@ describe("words", () => {
     expect(pathFallbackText({ ...path, reason: "hop_limit" })).toBe("跳数超出上限");
     expect(pathFallbackText({ ...path, reason: "unreachable" })).toBe("tyo-border 不可达");
     expect(pathFallbackText({ ...path, state: "pending" })).toBeNull();
+    expect(pathFallbackText({ ...path, reason: "no_echo" })).toBe("tyo-border 探测无响应");
+    expect(pathFallbackText({ ...path, reason: "later_reason" })).toBe("tyo-border 不可达");
+    expect(pathFallbackText({ ...path, state: "first_hop_only", reason: "not_relay" })).toBe("tyo-border 不支持按此路径转发");
+    expect(pathFallbackText({ ...path, state: "first_hop_only" })).toBeNull();
     expect(pathStateText("pending")).toBe("待确认");
     const refused = { id: "mesh.notice.peer_not_native", key: "failure:peer_not_native:node-7f3a", values: ["lon-host"] };
     expect(noticeText(refused)).toBe("已拒绝对端连接：对端非本系统节点。");

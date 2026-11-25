@@ -1248,8 +1248,13 @@ struct MeshCustomPathRow: View {
             parts.append(String(localized: "由 \(advertiser) 通告"))
         }
         // `reason` (mesh-status.md): a node that does not forward on this path is not an unreachable one.
-        if path.string("state") == "fallback" {
+        let state = path.string("state")
+        if state == "fallback" || (state == "first_hop_only" && path.string("reason") != nil) {
             switch path.string("reason") {
+            case "no_echo":
+                if let node = path.string("unreachable") {
+                    parts.append(String(localized: "\(node) 探测无响应"))
+                }
             case "unsupported", "not_relay":
                 if let node = path.string("unreachable") {
                     parts.append(String(localized: "\(node) 不支持按此路径转发"))
