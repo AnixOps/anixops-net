@@ -645,7 +645,7 @@ impl Backend {
     /// Starts the engine for the mesh alone on the kept TUN descriptor, which the caller opened: the joined
     /// networks' outbounds, everything else direct ([`mesh::only_profile`]), with the chosen DNS.
     pub fn start_mesh_only(&mut self) -> Result<(), String> {
-        let networks = mesh::load(self.store.dir())?;
+        let networks = mesh::with_instance_ids(self.store.dir(), mesh::load(self.store.dir())?)?;
         let profile = mesh::only_profile(&mesh::outbounds(&networks))
             .ok_or_else(|| "no mesh network is joined".to_string())?;
         let envelope = desktop_dns::apply(&profile.to_string(), self.state.dns_preset)?;
