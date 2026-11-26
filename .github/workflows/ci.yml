@@ -342,6 +342,7 @@ jobs:
         shell: bash
         env:
           ANIXOPS_MESH_PREVIEW: "1"
+          ANIXOPS_MESH04_PREVIEW: "1"
         run: cargo test --locked -p client-core --lib
 
       # Audit 2026-11-25 NET-01: a body the capture inspector hands to another app must be unreadable by another
@@ -962,11 +963,11 @@ jobs:
         working-directory: apps/ios
         run: swift test
 
-      # The same with the 组网 release gate open (test build only): the mesh tests that need it run here.
+      # The same with the 组网 release gates open (test build only; kernel 0.3 and 0.4): the mesh tests that need it run here.
       - name: Test with the mesh preview open
         shell: bash
         working-directory: apps/ios
-        run: swift test -Xswiftc -DMESH_PREVIEW --scratch-path .build-mesh-preview --filter 'Mesh'
+        run: swift test -Xswiftc -DMESH_PREVIEW -Xswiftc -DMESH04_PREVIEW --scratch-path .build-mesh-preview --filter 'Mesh'
 
       - name: Build
         shell: bash

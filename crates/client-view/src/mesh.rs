@@ -168,10 +168,19 @@ fn local_region(status: &Value) -> Option<&str> {
         .or_else(|| status.get("self").and_then(|own| opt_text(own, "region")))
 }
 
-/// What a member row unfolds into: a gateway's subnets and the devices named inside them, a host's
-/// virtual machines. `devices` are the ones named on this device: `[{ "name", "address" }]`.
+/// What a member row unfolds into: a host's virtual machines first, then a gateway's or host's subnets and
+/// the devices named inside them (`mesh-ui.md`, 宿主组). `devices` are the ones named on this device:
+/// `[{ "name", "address" }]`.
 fn children(member: &Value, devices: &[Value]) -> Vec<Value> {
     let mut children = Vec::new();
+    for vm in list(member, "vms") {
+        children.push(json!({
+            "kind": "vm",
+            "name": text(vm, "name"),
+            "address": vm.get("address").cloned().unwrap_or(Value::Null),
+            "domain": vm.get("domain").cloned().unwrap_or(Value::Null),
+        }));
+    }
     let subnets: Vec<&str> = list(member, "subnets")
         .iter()
         .filter_map(Value::as_str)
@@ -196,14 +205,6 @@ fn children(member: &Value, devices: &[Value]) -> Vec<Value> {
                 }));
             }
         }
-    }
-    for vm in list(member, "vms") {
-        children.push(json!({
-            "kind": "vm",
-            "name": text(vm, "name"),
-            "address": vm.get("address").cloned().unwrap_or(Value::Null),
-            "domain": vm.get("domain").cloned().unwrap_or(Value::Null),
-        }));
     }
     children
 }
@@ -244,8 +245,8 @@ fn passes(member: &Value, filter: &str) -> bool {
 }
 
 /// The pills a row carries besides its role: `duplicate` (N34 rows sharing a host name in one region),
-/// `unmanaged` (an infrastructure member whose address is not fixed), `fallback` (its custom path fell
-/// back), `first_hop_only`.
+/// `unmanaged` (an infrastructure member whose address is not fixed), `external_bridge` (it imports
+/// addresses of an external network), `fallback` (its custom path fell back), `first_hop_only`.
 fn marks(member: &Value) -> Vec<&'static str> {
     let mut marks = Vec::new();
     if !list(member, "duplicateOf").is_empty() {
@@ -257,6 +258,9 @@ fn marks(member: &Value) -> Vec<&'static str> {
     );
     if infrastructure && member.get("addressManaged").and_then(Value::as_bool) == Some(false) {
         marks.push("unmanaged");
+    }
+    if member.get("bridgesExternal").and_then(Value::as_bool) == Some(true) {
+        marks.push("external_bridge");
     }
     match text(member, "pathState") {
         "fallback" => marks.push("fallback"),
@@ -371,6 +375,268 @@ fn worst(rows: &[&Value]) -> Value {
     Value::Null
 }
 
+/// The kind of a subnet: `lan` (the default, and what an unknown kind is read as), `host_group`,
+/// `external` or `summary`.
+fn subnet_kind(subnet: &Value) -> &'static str {
+    match text(subnet, "kind") {
+        "host_group" => "host_group",
+        "external" => "external",
+        "summary" => "summary",
+        _ => "lan",
+    }
+}
+
+/// `{ id, name }` of a member, or `null` for an empty id.
+fn named(members: &[Value], id: &str) -> Value {
+    if id.is_empty() {
+        Value::Null
+    } else {
+        json!({ "id": id, "name": member_name(members, id) })
+    }
+}
+
+/// The member a subnet is in use through: its `inUse` advertiser.
+fn in_use_member(subnet: &Value) -> Option<&str> {
+    list(subnet, "advertisers")
+        .iter()
+        .find(|advertiser| advertiser.get("inUse").and_then(Value::as_bool) == Some(true))
+        .and_then(|advertiser| opt_text(advertiser, "member"))
+}
+
+/// A host group's gateway and backup, `null` for other kinds. The gateway shown is the member that
+/// advertises the range now (the backup gateway advertises only while the main one is offline), the
+/// configured one when none does.
+fn host_group(members: &[Value], subnet: &Value) -> Value {
+    if subnet_kind(subnet) != "host_group" {
+        return Value::Null;
+    }
+    let config = subnet.get("hostGroup").unwrap_or(&Value::Null);
+    let gateway = in_use_member(subnet).or_else(|| opt_text(config, "gateway"));
+    json!({
+        "gateway": gateway.map_or(Value::Null, |id| named(members, id)),
+        "backup": opt_text(config, "backupGateway").map_or(Value::Null, |id| named(members, id)),
+    })
+}
+
+/// The subnet as it is listed: an external one-address network without its prefix, others as given.
+fn subnet_display(subnet: &Value) -> String {
+    let cidr = text(subnet, "cidr");
+    let single = Cidr::parse(cidr).is_some_and(|network| {
+        let width = if network.address.is_ipv4() { 32 } else { 128 };
+        network.prefix == width
+    });
+    if subnet_kind(subnet) == "external" && single && cidr.contains('/') {
+        bare_address(cidr).to_owned()
+    } else {
+        cidr.to_owned()
+    }
+}
+
+/// One subnet row; see `subnets`.
+fn subnet_row(status: &Value, members: &[Value], subnet: &Value) -> Value {
+    let cidr = text(subnet, "cidr");
+    let kind = subnet_kind(subnet);
+    let advertisers: Vec<Value> = list(subnet, "advertisers")
+        .iter()
+        .map(|advertiser| {
+            let id = text(advertiser, "member");
+            json!({
+                "id": id,
+                "name": member_name(members, id),
+                "inUse": advertiser.get("inUse").and_then(Value::as_bool).unwrap_or(false),
+            })
+        })
+        .collect();
+    let in_use = advertisers
+        .iter()
+        .find(|advertiser| advertiser["inUse"] == json!(true))
+        .or_else(|| advertisers.first())
+        .map(|advertiser| advertiser["name"].clone())
+        .unwrap_or(Value::Null);
+    let state = opt_text(subnet, "state").unwrap_or("ok");
+    let route = opt_text(subnet, "route").unwrap_or("mesh");
+    let overlaps = list(subnet, "overlaps").to_vec();
+    let mut marks = Vec::new();
+    if advertisers.len() > 1 {
+        marks.push("multi_source");
+    }
+    if !overlaps.is_empty() {
+        marks.push("overlap");
+    }
+    if subnet.get("localOverlap").and_then(Value::as_bool) == Some(true) {
+        marks.push("local_overlap");
+    }
+    if state == "refused" {
+        marks.push("refused");
+    }
+    let path: Vec<&str> = list(subnet, "path")
+        .iter()
+        .filter_map(Value::as_str)
+        .map(|id| member_name(members, id))
+        .collect();
+    let region = opt_text(subnet, "region");
+    let tone = if state == "refused" {
+        Value::Null
+    } else {
+        json!(latency_tone(latency(subnet)))
+    };
+    let bridge = if kind == "external" {
+        opt_text(subnet, "bridge").map_or(Value::Null, |id| named(members, id))
+    } else {
+        Value::Null
+    };
+    // The virtual machines of a host group's range, from the members that list them.
+    let vms: Vec<Value> = if kind == "host_group" {
+        members
+            .iter()
+            .flat_map(|member| list(member, "vms"))
+            .filter(|vm| text(vm, "cidr") == cidr)
+            .map(|vm| {
+                json!({
+                    "name": text(vm, "name"),
+                    "domain": vm.get("domain").cloned().unwrap_or(Value::Null),
+                    "address": vm.get("address").cloned().unwrap_or(Value::Null),
+                })
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    json!({
+        "cidr": cidr,
+        "display": subnet_display(subnet),
+        "kind": kind,
+        "label": opt_text(subnet, "name"),
+        "hostGroup": host_group(members, subnet),
+        "bridge": bridge,
+        "vms": vms,
+        "region": region,
+        "regionName": region.map(|code| region_name(status, code)),
+        "advertiser": in_use,
+        "advertisers": advertisers,
+        "path": path,
+        "latencyMs": latency(subnet),
+        "tone": tone,
+        "state": state,
+        "route": route,
+        "overlaps": overlaps,
+        "marks": marks,
+    })
+}
+
+/// Whether a subnet row matches a lower-cased query: the subnet, its panel name, an advertiser's name,
+/// or an address inside it.
+fn subnet_matches(row: &Value, query: &str, address: Option<IpAddr>) -> bool {
+    let cidr = text(row, "cidr");
+    query.is_empty()
+        || cidr.to_lowercase().contains(query)
+        || text(row, "label").to_lowercase().contains(query)
+        || address.is_some_and(|address| {
+            Cidr::parse(cidr).is_some_and(|network| network.contains(address))
+        })
+        || list(row, "advertisers")
+            .iter()
+            .any(|advertiser| text(advertiser, "name").to_lowercase().contains(query))
+}
+
+/// The cross-region link between the local region and `code`, in either direction.
+fn link_between<'a>(status: &'a Value, local: &str, code: &str) -> Option<&'a Value> {
+    list(status, "links").iter().find(|link| {
+        (text(link, "from") == local && text(link, "to") == code)
+            || (text(link, "from") == code && text(link, "to") == local)
+    })
+}
+
+/// What the member list and the notices know of another region (`mesh-ui.md`, 其他地区): `{ state,
+/// exitBorder, via, viaName, latencyMs, loss, subnets }`, or `null` when the snapshot has no link to it,
+/// no verdict on its reachability and no summary range of it.
+///
+/// With a link (only border nodes get them) the link gives the state (`ok`, `detour`, `down`), the exit
+/// border (`localBorder`, else the first of `borders` in the local region, else the member a summary range
+/// is in use through), the detour and the loss. Without one: `regions[].reachable` decides `ok` or `down`,
+/// else the summary ranges do (`down` when all are unreachable); latency is the lowest of theirs.
+fn region_summary(status: &Value, members: &[Value], local: &str, code: &str) -> Value {
+    let link = link_between(status, local, code);
+    let reachable = list(status, "regions")
+        .iter()
+        .find(|region| text(region, "code") == code)
+        .and_then(|region| region.get("reachable").and_then(Value::as_bool));
+    let ranges: Vec<&Value> = list(status, "subnets")
+        .iter()
+        .filter(|subnet| subnet_kind(subnet) == "summary" && text(subnet, "region") == code)
+        .collect();
+    if link.is_none() && reachable.is_none() && ranges.is_empty() {
+        return Value::Null;
+    }
+    let state = match (link, reachable) {
+        (Some(link), _) => json!(opt_text(link, "state").unwrap_or("ok")),
+        (None, Some(true)) => json!("ok"),
+        (None, Some(false)) => json!("down"),
+        (None, None) => {
+            if ranges
+                .iter()
+                .all(|range| text(range, "state") == "unreachable")
+            {
+                json!("down")
+            } else {
+                json!("ok")
+            }
+        }
+    };
+    let in_local_region = |id: &str| {
+        members
+            .iter()
+            .any(|member| text(member, "id") == id && text(member, "region") == local)
+    };
+    let exit = link
+        .and_then(|link| opt_text(link, "localBorder"))
+        .or_else(|| {
+            link.and_then(|link| {
+                list(link, "borders")
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .find(|id| in_local_region(id))
+            })
+        })
+        .or_else(|| ranges.iter().find_map(|range| in_use_member(range)));
+    let via = link.and_then(|link| opt_text(link, "via"));
+    let latency_ms = match link {
+        Some(link) => latency(link),
+        None => ranges.iter().filter_map(|range| latency(range)).min(),
+    };
+    json!({
+        "state": state,
+        "exitBorder": exit.map_or(Value::Null, |id| named(members, id)),
+        "via": via,
+        "viaName": via.map(|code| region_name(status, code)),
+        "latencyMs": latency_ms,
+        "loss": link.and_then(|link| link.get("loss").and_then(Value::as_f64)),
+        "subnets": ranges
+            .iter()
+            .map(|range| subnet_row(status, members, range))
+            .collect::<Vec<_>>(),
+    })
+}
+
+/// The summaries of every region but the local one that has one, in the order of `regions`.
+fn region_summaries(status: &Value, members: &[Value]) -> Vec<(String, Value)> {
+    let Some(local) = local_region(status) else {
+        return Vec::new();
+    };
+    list(status, "regions")
+        .iter()
+        .map(|region| text(region, "code"))
+        .filter(|code| !code.is_empty() && *code != local)
+        .map(|code| {
+            (
+                code.to_owned(),
+                region_summary(status, members, local, code),
+            )
+        })
+        .filter(|(_, summary)| !summary.is_null())
+        .collect()
+}
+
 /// The member list, grouped (N28, N29):
 ///
 /// - `groupBy`: `region` (the default; `none` when the snapshot has no regions), `role` or `none`.
@@ -380,10 +646,13 @@ fn worst(rows: &[&Value]) -> Value {
 ///   address inside an advertised subnet finds its gateway.
 /// - `devices`: the subnet devices named on this device.
 ///
-/// Answer: `{ groupBy, groups: [{ key, count, matched, open, worst, link, rows }], total, matched }`.
-/// `key` is a region code, a role, or `null` for the single group of `none`. `link` is the
-/// cross-region link from the local region, for the folded summary. A group opens unfolded when it is
-/// the local one, when it needs attention, or when a query or filter is in force.
+/// Answer: `{ groupBy, groups: [{ key, count, matched, open, worst, link, summary, rows }], total,
+/// matched }`. `key` is a region code, a role, or `null` for the single group of `none`. `link` is the
+/// cross-region link from the local region, for the folded summary. `summary` (region groups of other
+/// regions only, else `null`) is `region_summary`: other regions are listed from their link and summary
+/// ranges even when the snapshot names no member in them, and their rows are only the members the
+/// snapshot does list. A group opens unfolded when it is the local one, when it needs attention (an
+/// unreachable member, a region that is `down`), or when a query or filter is in force.
 pub fn members(
     status: &Value,
     group_by: &str,
@@ -405,6 +674,11 @@ pub fn members(
 
     let mut everyone = all_members(status);
     everyone.sort_by(|a, b| compare_members(a, b, sort));
+    let summaries = if group_by == "region" {
+        region_summaries(status, &everyone)
+    } else {
+        Vec::new()
+    };
 
     let key_of = |member: &Value| -> Option<String> {
         match group_by {
@@ -416,6 +690,12 @@ pub fn members(
     let mut keys: Vec<Option<String>> = Vec::new();
     for member in &everyone {
         let key = key_of(member);
+        if !keys.contains(&key) {
+            keys.push(key);
+        }
+    }
+    for (code, _) in &summaries {
+        let key = Some(code.clone());
         if !keys.contains(&key) {
             keys.push(key);
         }
@@ -450,30 +730,38 @@ pub fn members(
                 .filter(|member| passes(member, filter))
                 .filter_map(|member| member_row(member, devices, &query, address))
                 .collect();
-            if narrowed && rows.is_empty() {
+            let summary = summaries
+                .iter()
+                .find(|(code, _)| Some(code.as_str()) == key.as_deref())
+                .map_or(Value::Null, |(_, summary)| summary.clone());
+            // A region without listed members stays under a query that finds one of its ranges.
+            let range_found = !query.is_empty()
+                && matches!(filter, "" | "all")
+                && list(&summary, "subnets")
+                    .iter()
+                    .any(|row| subnet_matches(row, &query, address));
+            if narrowed && rows.is_empty() && !range_found {
                 return None;
             }
             matched_total += rows.len();
             let attention = worst(&in_group);
             let is_local = group_by == "region" && key.as_deref() == local;
             let link = match (group_by, key.as_deref(), local) {
-                ("region", Some(code), Some(local)) if code != local => list(status, "links")
-                    .iter()
-                    .find(|link| {
-                        (text(link, "from") == local && text(link, "to") == code)
-                            || (text(link, "from") == code && text(link, "to") == local)
-                    })
-                    .map(|link| {
-                        json!({
-                            "latencyMs": latency(link),
-                            "via": link.get("via").cloned().unwrap_or(Value::Null),
-                            "state": text(link, "state"),
+                ("region", Some(code), Some(local)) if code != local => {
+                    link_between(status, local, code)
+                        .map(|link| {
+                            json!({
+                                "latencyMs": latency(link),
+                                "via": link.get("via").cloned().unwrap_or(Value::Null),
+                                "state": text(link, "state"),
+                            })
                         })
-                    })
-                    .unwrap_or(Value::Null),
+                        .unwrap_or(Value::Null)
+                }
                 _ => Value::Null,
             };
-            let open = group_by == "none" || is_local || !attention.is_null() || narrowed;
+            let down = text(&summary, "state") == "down";
+            let open = group_by == "none" || is_local || !attention.is_null() || down || narrowed;
             Some(json!({
                 "key": key,
                 "count": in_group.len(),
@@ -481,6 +769,7 @@ pub fn members(
                 "open": open,
                 "worst": attention,
                 "link": link,
+                "summary": summary,
                 "rows": rows,
             }))
         })
@@ -493,91 +782,122 @@ pub fn members(
     })
 }
 
-/// The subnet list. Each row: `{ cidr, region, advertiser, advertisers: [{ id, name, inUse }], path:
-/// [names], latencyMs, tone, state, route, overlaps, marks }`. `marks` are `multi_source`, `overlap`,
-/// `local_overlap` and `refused`; refused subnets come last. `query` matches the subnet, an advertiser's
-/// name, or an address inside the subnet.
+/// The subnet list. Each row: `{ cidr, display, kind, label, hostGroup, bridge, vms, region, regionName,
+/// advertiser, advertisers: [{ id, name, inUse }], path: [names], latencyMs, tone, state, route,
+/// overlaps, marks }`.
+///
+/// - `kind` is `lan`, `host_group`, `external` or `summary` (`mesh-ui.md`, 子网类型); `display` is the
+///   address alone for an external one-address network, else `cidr`; `label` is the panel's name for it.
+/// - `hostGroup` is `{ gateway, backup }` (each `{ id, name }` or `null`) for a host group, whose `vms`
+///   list its virtual machines; `bridge` is the `{ id, name }` an external network is imported through.
+/// - `marks` are `multi_source`, `overlap`, `local_overlap` and `refused`; refused subnets come last.
+///
+/// `query` matches the subnet, its name, an advertiser's name, or an address inside the subnet.
 pub fn subnets(status: &Value, query: &str) -> Value {
     let query = query.trim().to_lowercase();
     let address = query_address(&query);
     let members = all_members(status);
     let mut rows: Vec<Value> = list(status, "subnets")
         .iter()
-        .filter_map(|subnet| {
-            let cidr = text(subnet, "cidr");
-            let advertisers: Vec<Value> = list(subnet, "advertisers")
-                .iter()
-                .map(|advertiser| {
-                    let id = text(advertiser, "member");
-                    json!({
-                        "id": id,
-                        "name": member_name(&members, id),
-                        "inUse": advertiser.get("inUse").and_then(Value::as_bool).unwrap_or(false),
-                    })
-                })
-                .collect();
-            let matches = query.is_empty()
-                || cidr.to_lowercase().contains(&query)
-                || address.is_some_and(|address| {
-                    Cidr::parse(cidr).is_some_and(|network| network.contains(address))
-                })
-                || advertisers
-                    .iter()
-                    .any(|advertiser| text(advertiser, "name").to_lowercase().contains(&query));
-            if !matches {
-                return None;
-            }
-            let in_use = advertisers
-                .iter()
-                .find(|advertiser| advertiser["inUse"] == json!(true))
-                .or_else(|| advertisers.first())
-                .map(|advertiser| advertiser["name"].clone())
-                .unwrap_or(Value::Null);
-            let state = opt_text(subnet, "state").unwrap_or("ok");
-            let route = opt_text(subnet, "route").unwrap_or("mesh");
-            let overlaps = list(subnet, "overlaps").to_vec();
-            let mut marks = Vec::new();
-            if advertisers.len() > 1 {
-                marks.push("multi_source");
-            }
-            if !overlaps.is_empty() {
-                marks.push("overlap");
-            }
-            if subnet.get("localOverlap").and_then(Value::as_bool) == Some(true) {
-                marks.push("local_overlap");
-            }
-            if state == "refused" {
-                marks.push("refused");
-            }
-            let path: Vec<&str> = list(subnet, "path")
-                .iter()
-                .filter_map(Value::as_str)
-                .map(|id| member_name(&members, id))
-                .collect();
-            let region = opt_text(subnet, "region");
-            let tone = if state == "refused" {
-                Value::Null
-            } else {
-                json!(latency_tone(latency(subnet)))
-            };
-            Some(json!({
-                "cidr": cidr,
-                "region": region,
-                "regionName": region.map(|code| region_name(status, code)),
-                "advertiser": in_use,
-                "advertisers": advertisers,
-                "path": path,
-                "latencyMs": latency(subnet),
-                "tone": tone,
-                "state": state,
-                "route": route,
-                "overlaps": overlaps,
-                "marks": marks,
-            }))
-        })
+        .map(|subnet| subnet_row(status, &members, subnet))
+        .filter(|row| subnet_matches(row, &query, address))
         .collect();
     rows.sort_by_key(|row| row["state"] == json!("refused"));
     json!({ "rows": rows, "refused": status.get("refusedAdvertisements").and_then(Value::as_u64).unwrap_or(0) })
+}
+
+/// The region panel (`mesh-ui.md`, 地区): `{ code, name, basis, state, request, suggestion, targets,
+/// canRequest, canWithdraw, backbone }`.
+///
+/// - `basis` is `{ border, latencyMs, kind }` (what the region was assigned by) or `null`; `state` is
+///   `auto`, `pinned`, `pending` or `other` (any other kernel value; `auto` when absent).
+/// - `request` is `{ id, region, regionName, state, reason, rejectReason }` (`state` `pending` or
+///   `rejected`) or `null`. `suggestion` is `{ region, regionName, currentMedianMs, suggestedMedianMs }`,
+///   `null` while a request is pending.
+/// - `targets` lists the other regions with the median latency of the link to them, when there is one.
+/// - `canRequest` is whether a change can be asked for now (the network is joined, the region is known);
+///   `canWithdraw` whether there is a request to withdraw. A window also checks the kernel's feature list.
+/// - `backbone` is the kernel's `{ state, linksUp, linksTotal, failure }` of a border node, else `null`.
+pub fn region(status: &Value) -> Value {
+    let own = status.get("self").unwrap_or(&Value::Null);
+    let network = status.get("network").unwrap_or(&Value::Null);
+    let local = local_region(status);
+    let basis = own
+        .get("regionBasis")
+        .filter(|basis| basis.is_object())
+        .map(|basis| {
+            json!({
+                "border": basis.get("border").cloned().unwrap_or(Value::Null),
+                "latencyMs": latency(basis),
+                "kind": basis.get("kind").cloned().unwrap_or(Value::Null),
+            })
+        });
+    let state = match opt_text(own, "regionState") {
+        None | Some("auto") => "auto",
+        Some("pinned") => "pinned",
+        Some("pending") => "pending",
+        Some(_) => "other",
+    };
+    let request = own
+        .get("regionRequest")
+        .filter(|request| request.is_object())
+        .map(|request| {
+            json!({
+                "id": request.get("id").cloned().unwrap_or(Value::Null),
+                "region": text(request, "region"),
+                "regionName": region_name(status, text(request, "region")),
+                "state": text(request, "state"),
+                "reason": opt_text(request, "reason"),
+                "rejectReason": opt_text(request, "rejectReason"),
+            })
+        });
+    let pending = request
+        .as_ref()
+        .is_some_and(|request| request["state"] == json!("pending"));
+    let suggestion = own
+        .get("regionSuggestion")
+        .filter(|suggestion| suggestion.is_object() && !pending)
+        .map(|suggestion| {
+            let code = text(suggestion, "region");
+            json!({
+                "region": code,
+                "regionName": region_name(status, code),
+                "currentMedianMs": suggestion.get("currentMedianMs").and_then(Value::as_u64),
+                "suggestedMedianMs": suggestion.get("suggestedMedianMs").and_then(Value::as_u64),
+            })
+        });
+    let targets: Vec<Value> = list(status, "regions")
+        .iter()
+        .map(|region| text(region, "code"))
+        .filter(|code| !code.is_empty() && Some(*code) != local)
+        .map(|code| {
+            let toward = local.and_then(|local| {
+                list(status, "links")
+                    .iter()
+                    .find(|link| text(link, "from") == local && text(link, "to") == code)
+            });
+            json!({
+                "code": code,
+                "name": region_name(status, code),
+                "latencyMs": toward.and_then(latency),
+            })
+        })
+        .collect();
+    let can_request = matches!(text(network, "state"), "joined" | "partial")
+        && opt_text(own, "region").is_some()
+        && !list(status, "regions").is_empty();
+    json!({
+        "code": local,
+        "name": local.map(|code| region_name(status, code)),
+        "basis": basis,
+        "state": state,
+        "canWithdraw": request.is_some(),
+        "request": request,
+        "suggestion": suggestion,
+        "targets": targets,
+        "canRequest": can_request,
+        "backbone": own.get("backbone").filter(|backbone| backbone.is_object()),
+    })
 }
 
 /// The path view (`mesh-ui.md`, 路径): `{ policy, links, custom }`. `links` is `null` when the kernel
@@ -665,7 +985,10 @@ pub fn paths(status: &Value) -> Value {
 }
 
 /// The banners of the page, in the order of `mesh-ui.md` (提示): a join failure, fallen-back custom
-/// paths, cross-region detours, then unreachable members. Each: `{ id, key, values, action, notify }`.
+/// paths, cross-region detours, unreachable members, then the region ones: a refused change request
+/// (`mesh.notice.region_rejected`, the only one of them with `notify`), a suggested move
+/// (`mesh.notice.region_suggestion`, action `request_region`, not while a request is pending), a region that
+/// is down (`mesh.notice.link_down`) and an unreachable host group (`mesh.notice.host_group_unreachable`). Each: `{ id, key, values, action, notify }`.
 /// `id` names the sentence; `values` fill it in order; `action` is the one button (`network_settings`,
 /// `take_over`) or `null`; `notify` asks for one system notification, which a window sends once per `key`.
 pub fn notices(status: &Value) -> Value {
@@ -822,6 +1145,65 @@ pub fn notices(status: &Value) -> Value {
             );
         }
     }
+    // Region notices (`mesh-ui.md`, 提示): a refused change request, a suggested move, then another
+    // region that cannot be reached.
+    let own = status.get("self").unwrap_or(&Value::Null);
+    let request = own
+        .get("regionRequest")
+        .filter(|request| request.is_object());
+    if let Some(request) = request.filter(|request| text(request, "state") == "rejected") {
+        let region = text(request, "region");
+        let mut values = vec![json!(region_name(status, region))];
+        if let Some(reason) = opt_text(request, "rejectReason") {
+            values.push(json!(reason));
+        }
+        let which = opt_text(request, "id").unwrap_or(region);
+        push(
+            "mesh.notice.region_rejected",
+            format!("region_rejected:{which}"),
+            values,
+            None,
+            true,
+        );
+    }
+    let pending = request.is_some_and(|request| text(request, "state") == "pending");
+    if let Some(suggestion) = own
+        .get("regionSuggestion")
+        .filter(|suggestion| suggestion.is_object() && !pending)
+    {
+        let region = text(suggestion, "region");
+        push(
+            "mesh.notice.region_suggestion",
+            format!("region_suggestion:{region}"),
+            vec![json!(region_name(status, region))],
+            Some("request_region"),
+            false,
+        );
+    }
+    for (code, summary) in region_summaries(status, &members) {
+        if text(&summary, "state") == "down" {
+            push(
+                "mesh.notice.link_down",
+                format!("link_down:{code}"),
+                vec![json!(region_name(status, &code))],
+                None,
+                false,
+            );
+        }
+    }
+    for subnet in list(status, "subnets") {
+        if subnet_kind(subnet) == "host_group" && text(subnet, "state") == "unreachable" {
+            let group = host_group(&members, subnet);
+            let cidr = text(subnet, "cidr");
+            push(
+                "mesh.notice.host_group_unreachable",
+                format!("host_group:{cidr}"),
+                vec![json!(cidr), group["gateway"]["name"].clone()],
+                None,
+                false,
+            );
+        }
+    }
     Value::Array(notices)
 }
 
@@ -856,9 +1238,18 @@ pub fn entry(status: &Value) -> Value {
     answer.insert("security".into(), json!(opt_text(network, "security")));
     answer.insert("online".into(), json!(online));
     answer.insert("total".into(), json!(others.len()));
-    let attention = notices(status)
-        .as_array()
-        .is_some_and(|notices| !notices.is_empty());
+    // The suggestion, a refused request and an unreachable host group show where they belong, not on
+    // the entry's dot.
+    let attention = notices(status).as_array().is_some_and(|notices| {
+        notices.iter().any(|notice| {
+            !matches!(
+                text(notice, "id"),
+                "mesh.notice.region_rejected"
+                    | "mesh.notice.region_suggestion"
+                    | "mesh.notice.host_group_unreachable"
+            )
+        })
+    });
     answer.insert("attention".into(), json!(attention));
     Value::Object(answer)
 }

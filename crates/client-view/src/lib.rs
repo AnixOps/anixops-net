@@ -188,6 +188,7 @@ pub fn invoke(command: &str, args: &Value) -> Option<Result<Value, String>> {
         ),
         "mesh_paths" => mesh::paths(args.get("status").unwrap_or(&Value::Null)),
         "mesh_notices" => mesh::notices(args.get("status").unwrap_or(&Value::Null)),
+        "mesh_region" => mesh::region(args.get("status").unwrap_or(&Value::Null)),
         "mesh_latency_tone" => json!(mesh::latency_tone(
             args.get("latencyMs").and_then(Value::as_u64)
         )),
@@ -250,6 +251,7 @@ mod tests {
             "mesh_subnets",
             "mesh_paths",
             "mesh_notices",
+            "mesh_region",
             "mesh_latency_tone",
         ] {
             let command = format!("{PREFIX}{name}");

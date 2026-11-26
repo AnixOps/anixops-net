@@ -36,7 +36,22 @@ export interface MeshGroup {
   open: boolean;
   worst?: { state: string; count: number } | null;
   link?: { latencyMs?: number | null; via?: string | null; state: string } | null;
+  /** Another region (kernel 0.4): one summary row; `null` for the local region and for roles. */
+  summary?: MeshRegionSummary | null;
   rows: MeshMemberRow[];
+}
+
+/** `view.mesh_members` `groups[].summary`: what the snapshot knows of another region (mesh-ui.md, 其他地区). */
+export interface MeshRegionSummary {
+  /** `ok`, `detour` or `down`; null when the snapshot gives no verdict. */
+  state?: "ok" | "detour" | "down" | null;
+  exitBorder?: { id: string; name: string } | null;
+  via?: string | null;
+  viaName?: string | null;
+  latencyMs?: number | null;
+  loss?: number | null;
+  /** The region's summary ranges (`kind` `summary`), as subnet rows. */
+  subnets: MeshSubnetRow[];
 }
 
 export interface MeshMemberRow {
@@ -58,6 +73,7 @@ export interface MeshMemberRow {
   children?: MeshChild[];
   visibleChildren?: number;
   open?: boolean;
+  /** `duplicate`, `unmanaged`, `external_bridge` (it imports an external network), `fallback`, `first_hop_only`. */
   marks?: string[];
 }
 
@@ -76,6 +92,18 @@ export interface MeshSubnets {
 
 export interface MeshSubnetRow {
   cidr: string;
+  /** The address alone for an external one-address network, else `cidr`. */
+  display?: string;
+  /** `lan`, `host_group`, `external` or `summary` (kernel 0.4). */
+  kind?: "lan" | "host_group" | "external" | "summary";
+  /** The panel's name for an external address. */
+  label?: string | null;
+  /** Host group: the gateway advertising the range now and the backup gateway. */
+  hostGroup?: { gateway: MeshNamed | null; backup: MeshNamed | null } | null;
+  /** External: the member that imports it. */
+  bridge?: MeshNamed | null;
+  /** Host group: its virtual machines. */
+  vms?: Array<{ name: string; domain?: string | null; address?: string | null }>;
   region?: string | null;
   regionName?: string | null;
   advertiser?: string | null;
@@ -87,6 +115,42 @@ export interface MeshSubnetRow {
   route: string;
   overlaps?: string[];
   marks?: string[];
+}
+
+export interface MeshNamed {
+  id: string;
+  name: string;
+}
+
+/** `view.mesh_region`: the region panel (mesh-ui.md, 地区). */
+export interface MeshRegionPanel {
+  code?: string | null;
+  name?: string | null;
+  basis?: { border?: string | null; latencyMs?: number | null; kind?: string | null } | null;
+  /** `auto`, `pinned`, `pending` or `other`. */
+  state: string;
+  request?: {
+    id?: string | null;
+    region: string;
+    regionName: string;
+    state: "pending" | "rejected" | string;
+    reason?: string | null;
+    rejectReason?: string | null;
+  } | null;
+  suggestion?: { region: string; regionName: string; currentMedianMs?: number | null; suggestedMedianMs?: number | null } | null;
+  targets: Array<{ code: string; name: string; latencyMs?: number | null }>;
+  canRequest: boolean;
+  /** A request exists; a window also needs the kernel feature `mesh_region_request_state`. */
+  canWithdraw: boolean;
+  backbone?: MeshBackbone | null;
+}
+
+/** `self.backbone`, border nodes only. */
+export interface MeshBackbone {
+  state: "ok" | "partial" | "down" | "unavailable";
+  linksUp?: number;
+  linksTotal?: number;
+  failure?: unknown;
 }
 
 export interface MeshPaths {
@@ -147,6 +211,10 @@ export interface MeshHead {
     region?: string | null;
     regionBasis?: { border?: string | null; latencyMs?: number | null } | null;
     regionState?: string;
+    /** `null` or a pending or rejected request to change region (kernel 0.4). */
+    regionRequest?: { id?: string; region: string; state: "pending" | "rejected"; reason?: string | null; rejectReason?: string | null } | null;
+    regionSuggestion?: { region: string; currentMedianMs?: number; suggestedMedianMs?: number; since?: string | number } | null;
+    backbone?: MeshBackbone | null;
     /** Kernel 0.4, full nodes: relaying for other members, host mode, the advertised and suggested subnets. */
     relay?: boolean;
     hostMode?: boolean;
@@ -156,7 +224,7 @@ export interface MeshHead {
     /** `on`, `off` or `not_needed`. */
     ipForwarding?: string | null;
   } | null;
-  regions?: Array<{ code: string; name: string; local?: boolean }>;
+  regions?: Array<{ code: string; name: string; local?: boolean; prefixes?: string[]; borders?: string[]; remoteBorders?: string[]; reachable?: boolean }>;
 }
 
 /** A saved network as `mesh_networks` lists it: never its secret. */
@@ -247,6 +315,10 @@ export const meshApi = {
   advertise: (network: string, cidr: string) => engine({ cmd: "mesh_advertise", network, cidr }),
   withdraw: (network: string, cidr: string) => engine({ cmd: "mesh_withdraw", network, cidr }),
   requestRegion: (network: string, region: string) => engine({ cmd: "mesh_request_region", network, region }),
+  /** Withdraws a pending or rejected request; needs the kernel feature `mesh_region_request_state`. */
+  withdrawRegionRequest: (network: string) => engine({ cmd: "mesh_withdraw_region_request", network }),
+  /** `view.mesh_region` of a snapshot. */
+  region: (status: unknown) => invoke<MeshRegionPanel>("view.mesh_region", { status }),
   /** Kernel 0.5. */
   setPolicy: (network: string, policy: "latency" | "hops") => engine({ cmd: "mesh_set_policy", network, policy }),
   setPaths: (network: string, paths: Record<string, unknown>[]) => engine({ cmd: "mesh_set_paths", network, paths }),

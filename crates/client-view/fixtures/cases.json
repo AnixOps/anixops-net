@@ -5601,7 +5601,8 @@
        "open": false,
        "marks": []
       }
-     ]
+     ],
+     "summary": null
     },
     {
      "key": "cn",
@@ -5650,7 +5651,19 @@
        "open": false,
        "marks": []
       }
-     ]
+     ],
+     "summary": {
+      "state": "detour",
+      "exitBorder": {
+       "id": "m-1",
+       "name": "fra-border"
+      },
+      "via": "ap",
+      "viaName": "亚太",
+      "latencyMs": 210,
+      "loss": 0.12,
+      "subnets": []
+     }
     }
    ]
   }
@@ -5913,7 +5926,8 @@
         "fallback"
        ]
       }
-     ]
+     ],
+     "summary": null
     }
    ]
   }
@@ -6159,7 +6173,8 @@
        "open": false,
        "marks": []
       }
-     ]
+     ],
+     "summary": null
     }
    ]
   }
@@ -6267,7 +6282,8 @@
        "open": false,
        "marks": []
       }
-     ]
+     ],
+     "summary": null
     }
    ]
   }
@@ -6492,7 +6508,13 @@
      "overlaps": [],
      "marks": [
       "multi_source"
-     ]
+     ],
+     "display": "192.168.20.0/24",
+     "kind": "lan",
+     "label": null,
+     "hostGroup": null,
+     "bridge": null,
+     "vms": []
     },
     {
      "cidr": "192.168.1.0/24",
@@ -6520,7 +6542,13 @@
      "marks": [
       "overlap",
       "local_overlap"
-     ]
+     ],
+     "display": "192.168.1.0/24",
+     "kind": "lan",
+     "label": null,
+     "hostGroup": null,
+     "bridge": null,
+     "vms": []
     },
     {
      "cidr": "8.8.8.0/24",
@@ -6542,7 +6570,13 @@
      "overlaps": [],
      "marks": [
       "refused"
-     ]
+     ],
+     "display": "8.8.8.0/24",
+     "kind": "lan",
+     "label": null,
+     "hostGroup": null,
+     "bridge": null,
+     "vms": []
     }
    ],
    "refused": 1
@@ -6766,7 +6800,13 @@
      "marks": [
       "overlap",
       "local_overlap"
-     ]
+     ],
+     "display": "192.168.1.0/24",
+     "kind": "lan",
+     "label": null,
+     "hostGroup": null,
+     "bridge": null,
+     "vms": []
     }
    ],
    "refused": 1
@@ -7520,5 +7560,4660 @@
     "notify": true
    }
   ]
+ },
+ {
+  "command": "view.mesh_members",
+  "args": {
+   "status": {
+    "statusVersion": 1,
+    "network": {
+     "id": "office",
+     "name": "office",
+     "state": "joined",
+     "security": "forward_secrecy",
+     "routingPolicy": "latency",
+     "dnsSuffix": "mesh.internal",
+     "dnsEnabled": true
+    },
+    "self": {
+     "id": "m-self",
+     "name": "par-laptop",
+     "role": "client",
+     "address": "10.144.144.5/24",
+     "domain": "par-laptop.eu.mesh.internal",
+     "region": "eu",
+     "addressManaged": true,
+     "regionBasis": {
+      "border": "fra-border",
+      "latencyMs": 12
+     },
+     "regionState": "auto",
+     "regionRequest": {
+      "id": "rq-1",
+      "region": "ap",
+      "state": "rejected",
+      "reason": "closer to the office",
+      "rejectReason": "capacity"
+     },
+     "regionSuggestion": {
+      "region": "ap",
+      "currentMedianMs": 90,
+      "suggestedMedianMs": 40,
+      "since": 1700000000
+     },
+     "backbone": {
+      "state": "partial",
+      "linksUp": 1,
+      "linksTotal": 2,
+      "failure": null
+     }
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true,
+      "borders": [
+       "m-1"
+      ]
+     },
+     {
+      "code": "ap",
+      "name": "亚太",
+      "local": false,
+      "remoteBorders": [
+       "m-4"
+      ]
+     },
+     {
+      "code": "cn",
+      "name": "中国大陆",
+      "local": false
+     },
+     {
+      "code": "na",
+      "name": "北美",
+      "local": false
+     },
+     {
+      "code": "oc",
+      "name": "大洋洲",
+      "local": false,
+      "reachable": true
+     }
+    ],
+    "members": [
+     {
+      "id": "m-1",
+      "name": "fra-border",
+      "role": "border",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.1/24",
+      "domain": "fra-border.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "direct",
+      "hops": 0,
+      "transport": "udp",
+      "latencyMs": 11,
+      "pathState": "auto"
+     },
+     {
+      "id": "m-2",
+      "name": "lon-host",
+      "role": "host",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.3/24",
+      "domain": "lon-host.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "tcp",
+      "latencyMs": 24,
+      "pathState": "auto",
+      "vms": [
+       {
+        "name": "build-1",
+        "domain": "build-1.eu.mesh.internal",
+        "address": "10.127.3.2",
+        "cidr": "10.127.3.0/24"
+       },
+       {
+        "name": "db-1",
+        "domain": "db-1.eu.mesh.internal",
+        "address": "10.127.3.3",
+        "cidr": "10.127.3.0/24"
+       }
+      ],
+      "subnets": [
+       "10.127.3.0/24"
+      ]
+     },
+     {
+      "id": "m-3",
+      "name": "pve-home",
+      "role": "gateway",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.4/24",
+      "domain": "pve-home.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "udp",
+      "latencyMs": 30,
+      "pathState": "auto",
+      "bridgesExternal": true,
+      "subnets": [
+       "192.168.50.0/24"
+      ]
+     },
+     {
+      "id": "m-4",
+      "name": "tyo-border",
+      "role": "border",
+      "region": "ap",
+      "state": "online",
+      "address": "10.144.146.1/24",
+      "domain": "tyo-border.ap.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 2,
+      "transport": "udp",
+      "latencyMs": 228,
+      "pathState": "auto"
+     }
+    ],
+    "subnets": [
+     {
+      "cidr": "10.127.3.0/24",
+      "region": "eu",
+      "kind": "host_group",
+      "hostGroup": {
+       "gateway": "m-2",
+       "backupGateway": "m-1"
+      },
+      "advertisers": [
+       {
+        "member": "m-2",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "100.101.2.3/32",
+      "region": "eu",
+      "kind": "external",
+      "name": "nas",
+      "bridge": "m-3",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 35,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "192.168.50.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 30,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.151.0.0/16",
+      "region": "ap",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 190,
+      "path": [
+       "m-1"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.152.0.0/16",
+      "region": "cn",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     }
+    ],
+    "links": [
+     {
+      "from": "eu",
+      "to": "ap",
+      "via": null,
+      "borders": [
+       "m-1",
+       "m-4"
+      ],
+      "localBorder": "m-1",
+      "remoteBorder": "m-4",
+      "latencyMs": 190,
+      "loss": 0.01,
+      "state": "ok",
+      "reason": null
+     },
+     {
+      "from": "eu",
+      "to": "cn",
+      "via": null,
+      "borders": [
+       "m-1"
+      ],
+      "latencyMs": null,
+      "loss": 1.0,
+      "state": "down",
+      "reason": null
+     }
+    ],
+    "refusedAdvertisements": 0
+   },
+   "groupBy": "region",
+   "filter": "all",
+   "sort": "name",
+   "query": ""
+  },
+  "answer": {
+   "groupBy": "region",
+   "groups": [
+    {
+     "key": "eu",
+     "count": 4,
+     "matched": 4,
+     "open": true,
+     "worst": null,
+     "link": null,
+     "summary": null,
+     "rows": [
+      {
+       "id": "m-self",
+       "name": "par-laptop",
+       "self": true,
+       "role": "client",
+       "region": "eu",
+       "state": "online",
+       "address": "10.144.144.5/24",
+       "domain": "par-laptop.eu.mesh.internal",
+       "regionDomain": "eu.mesh.internal",
+       "connection": "self",
+       "hops": 0,
+       "transport": null,
+       "latencyMs": null,
+       "tone": null,
+       "contains": null,
+       "children": [],
+       "visibleChildren": 0,
+       "open": false,
+       "marks": []
+      },
+      {
+       "id": "m-1",
+       "name": "fra-border",
+       "self": false,
+       "role": "border",
+       "region": "eu",
+       "state": "online",
+       "address": "10.144.144.1/24",
+       "domain": "fra-border.eu.mesh.internal",
+       "regionDomain": "eu.mesh.internal",
+       "connection": "direct",
+       "hops": 0,
+       "transport": "udp",
+       "latencyMs": 11,
+       "tone": "fast",
+       "contains": null,
+       "children": [],
+       "visibleChildren": 0,
+       "open": false,
+       "marks": []
+      },
+      {
+       "id": "m-2",
+       "name": "lon-host",
+       "self": false,
+       "role": "host",
+       "region": "eu",
+       "state": "online",
+       "address": "10.144.144.3/24",
+       "domain": "lon-host.eu.mesh.internal",
+       "regionDomain": "eu.mesh.internal",
+       "connection": "relay",
+       "hops": 1,
+       "transport": "tcp",
+       "latencyMs": 24,
+       "tone": "fast",
+       "contains": {
+        "noun": "vms",
+        "count": 2
+       },
+       "children": [
+        {
+         "kind": "vm",
+         "name": "build-1",
+         "address": "10.127.3.2",
+         "domain": "build-1.eu.mesh.internal",
+         "match": false
+        },
+        {
+         "kind": "vm",
+         "name": "db-1",
+         "address": "10.127.3.3",
+         "domain": "db-1.eu.mesh.internal",
+         "match": false
+        },
+        {
+         "kind": "subnet",
+         "name": "10.127.3.0/24",
+         "match": false
+        }
+       ],
+       "visibleChildren": 3,
+       "open": false,
+       "marks": []
+      },
+      {
+       "id": "m-3",
+       "name": "pve-home",
+       "self": false,
+       "role": "gateway",
+       "region": "eu",
+       "state": "online",
+       "address": "10.144.144.4/24",
+       "domain": "pve-home.eu.mesh.internal",
+       "regionDomain": "eu.mesh.internal",
+       "connection": "relay",
+       "hops": 1,
+       "transport": "udp",
+       "latencyMs": 30,
+       "tone": "fast",
+       "contains": {
+        "noun": "subnets",
+        "count": 1
+       },
+       "children": [
+        {
+         "kind": "subnet",
+         "name": "192.168.50.0/24",
+         "match": false
+        }
+       ],
+       "visibleChildren": 1,
+       "open": false,
+       "marks": [
+        "external_bridge"
+       ]
+      }
+     ]
+    },
+    {
+     "key": "ap",
+     "count": 1,
+     "matched": 1,
+     "open": false,
+     "worst": null,
+     "link": {
+      "latencyMs": 190,
+      "via": null,
+      "state": "ok"
+     },
+     "summary": {
+      "state": "ok",
+      "exitBorder": {
+       "id": "m-1",
+       "name": "fra-border"
+      },
+      "via": null,
+      "viaName": null,
+      "latencyMs": 190,
+      "loss": 0.01,
+      "subnets": [
+       {
+        "cidr": "10.151.0.0/16",
+        "display": "10.151.0.0/16",
+        "kind": "summary",
+        "label": null,
+        "hostGroup": null,
+        "bridge": null,
+        "vms": [],
+        "region": "ap",
+        "regionName": "亚太",
+        "advertiser": "fra-border",
+        "advertisers": [
+         {
+          "id": "m-1",
+          "name": "fra-border",
+          "inUse": true
+         }
+        ],
+        "path": [
+         "fra-border"
+        ],
+        "latencyMs": 190,
+        "tone": "medium",
+        "state": "ok",
+        "route": "mesh",
+        "overlaps": [],
+        "marks": []
+       }
+      ]
+     },
+     "rows": [
+      {
+       "id": "m-4",
+       "name": "tyo-border",
+       "self": false,
+       "role": "border",
+       "region": "ap",
+       "state": "online",
+       "address": "10.144.146.1/24",
+       "domain": "tyo-border.ap.mesh.internal",
+       "regionDomain": "ap.mesh.internal",
+       "connection": "relay",
+       "hops": 2,
+       "transport": "udp",
+       "latencyMs": 228,
+       "tone": "medium",
+       "contains": null,
+       "children": [],
+       "visibleChildren": 0,
+       "open": false,
+       "marks": []
+      }
+     ]
+    },
+    {
+     "key": "cn",
+     "count": 0,
+     "matched": 0,
+     "open": true,
+     "worst": null,
+     "link": {
+      "latencyMs": null,
+      "via": null,
+      "state": "down"
+     },
+     "summary": {
+      "state": "down",
+      "exitBorder": {
+       "id": "m-1",
+       "name": "fra-border"
+      },
+      "via": null,
+      "viaName": null,
+      "latencyMs": null,
+      "loss": 1.0,
+      "subnets": [
+       {
+        "cidr": "10.152.0.0/16",
+        "display": "10.152.0.0/16",
+        "kind": "summary",
+        "label": null,
+        "hostGroup": null,
+        "bridge": null,
+        "vms": [],
+        "region": "cn",
+        "regionName": "中国大陆",
+        "advertiser": "fra-border",
+        "advertisers": [
+         {
+          "id": "m-1",
+          "name": "fra-border",
+          "inUse": true
+         }
+        ],
+        "path": [],
+        "latencyMs": null,
+        "tone": "timeout",
+        "state": "unreachable",
+        "route": "mesh",
+        "overlaps": [],
+        "marks": []
+       }
+      ]
+     },
+     "rows": []
+    },
+    {
+     "key": "oc",
+     "count": 0,
+     "matched": 0,
+     "open": false,
+     "worst": null,
+     "link": null,
+     "summary": {
+      "state": "ok",
+      "exitBorder": null,
+      "via": null,
+      "viaName": null,
+      "latencyMs": null,
+      "loss": null,
+      "subnets": []
+     },
+     "rows": []
+    }
+   ],
+   "total": 5,
+   "matched": 5
+  }
+ },
+ {
+  "command": "view.mesh_members",
+  "args": {
+   "status": {
+    "statusVersion": 1,
+    "network": {
+     "id": "office",
+     "name": "office",
+     "state": "joined",
+     "security": "forward_secrecy",
+     "routingPolicy": "latency",
+     "dnsSuffix": "mesh.internal",
+     "dnsEnabled": true
+    },
+    "self": {
+     "id": "m-self",
+     "name": "par-laptop",
+     "role": "client",
+     "address": "10.144.144.5/24",
+     "domain": "par-laptop.eu.mesh.internal",
+     "region": "eu",
+     "addressManaged": true,
+     "regionBasis": {
+      "border": "fra-border",
+      "latencyMs": 12
+     },
+     "regionState": "auto",
+     "regionRequest": {
+      "id": "rq-1",
+      "region": "ap",
+      "state": "rejected",
+      "reason": "closer to the office",
+      "rejectReason": "capacity"
+     },
+     "regionSuggestion": {
+      "region": "ap",
+      "currentMedianMs": 90,
+      "suggestedMedianMs": 40,
+      "since": 1700000000
+     },
+     "backbone": {
+      "state": "partial",
+      "linksUp": 1,
+      "linksTotal": 2,
+      "failure": null
+     }
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true,
+      "borders": [
+       "m-1"
+      ]
+     },
+     {
+      "code": "ap",
+      "name": "亚太",
+      "local": false,
+      "remoteBorders": [
+       "m-4"
+      ]
+     },
+     {
+      "code": "cn",
+      "name": "中国大陆",
+      "local": false
+     },
+     {
+      "code": "na",
+      "name": "北美",
+      "local": false
+     },
+     {
+      "code": "oc",
+      "name": "大洋洲",
+      "local": false,
+      "reachable": true
+     }
+    ],
+    "members": [
+     {
+      "id": "m-1",
+      "name": "fra-border",
+      "role": "border",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.1/24",
+      "domain": "fra-border.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "direct",
+      "hops": 0,
+      "transport": "udp",
+      "latencyMs": 11,
+      "pathState": "auto"
+     },
+     {
+      "id": "m-2",
+      "name": "lon-host",
+      "role": "host",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.3/24",
+      "domain": "lon-host.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "tcp",
+      "latencyMs": 24,
+      "pathState": "auto",
+      "vms": [
+       {
+        "name": "build-1",
+        "domain": "build-1.eu.mesh.internal",
+        "address": "10.127.3.2",
+        "cidr": "10.127.3.0/24"
+       },
+       {
+        "name": "db-1",
+        "domain": "db-1.eu.mesh.internal",
+        "address": "10.127.3.3",
+        "cidr": "10.127.3.0/24"
+       }
+      ],
+      "subnets": [
+       "10.127.3.0/24"
+      ]
+     },
+     {
+      "id": "m-3",
+      "name": "pve-home",
+      "role": "gateway",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.4/24",
+      "domain": "pve-home.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "udp",
+      "latencyMs": 30,
+      "pathState": "auto",
+      "bridgesExternal": true,
+      "subnets": [
+       "192.168.50.0/24"
+      ]
+     },
+     {
+      "id": "m-4",
+      "name": "tyo-border",
+      "role": "border",
+      "region": "ap",
+      "state": "online",
+      "address": "10.144.146.1/24",
+      "domain": "tyo-border.ap.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 2,
+      "transport": "udp",
+      "latencyMs": 228,
+      "pathState": "auto"
+     }
+    ],
+    "subnets": [
+     {
+      "cidr": "10.127.3.0/24",
+      "region": "eu",
+      "kind": "host_group",
+      "hostGroup": {
+       "gateway": "m-2",
+       "backupGateway": "m-1"
+      },
+      "advertisers": [
+       {
+        "member": "m-2",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "100.101.2.3/32",
+      "region": "eu",
+      "kind": "external",
+      "name": "nas",
+      "bridge": "m-3",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 35,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "192.168.50.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 30,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.151.0.0/16",
+      "region": "ap",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 190,
+      "path": [
+       "m-1"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.152.0.0/16",
+      "region": "cn",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     }
+    ],
+    "links": [
+     {
+      "from": "eu",
+      "to": "ap",
+      "via": null,
+      "borders": [
+       "m-1",
+       "m-4"
+      ],
+      "localBorder": "m-1",
+      "remoteBorder": "m-4",
+      "latencyMs": 190,
+      "loss": 0.01,
+      "state": "ok",
+      "reason": null
+     },
+     {
+      "from": "eu",
+      "to": "cn",
+      "via": null,
+      "borders": [
+       "m-1"
+      ],
+      "latencyMs": null,
+      "loss": 1.0,
+      "state": "down",
+      "reason": null
+     }
+    ],
+    "refusedAdvertisements": 0
+   },
+   "groupBy": "region",
+   "filter": "all",
+   "sort": "name",
+   "query": "10.151.2.1"
+  },
+  "answer": {
+   "groupBy": "region",
+   "groups": [
+    {
+     "key": "ap",
+     "count": 1,
+     "matched": 0,
+     "open": true,
+     "worst": null,
+     "link": {
+      "latencyMs": 190,
+      "via": null,
+      "state": "ok"
+     },
+     "summary": {
+      "state": "ok",
+      "exitBorder": {
+       "id": "m-1",
+       "name": "fra-border"
+      },
+      "via": null,
+      "viaName": null,
+      "latencyMs": 190,
+      "loss": 0.01,
+      "subnets": [
+       {
+        "cidr": "10.151.0.0/16",
+        "display": "10.151.0.0/16",
+        "kind": "summary",
+        "label": null,
+        "hostGroup": null,
+        "bridge": null,
+        "vms": [],
+        "region": "ap",
+        "regionName": "亚太",
+        "advertiser": "fra-border",
+        "advertisers": [
+         {
+          "id": "m-1",
+          "name": "fra-border",
+          "inUse": true
+         }
+        ],
+        "path": [
+         "fra-border"
+        ],
+        "latencyMs": 190,
+        "tone": "medium",
+        "state": "ok",
+        "route": "mesh",
+        "overlaps": [],
+        "marks": []
+       }
+      ]
+     },
+     "rows": []
+    }
+   ],
+   "total": 5,
+   "matched": 0
+  }
+ },
+ {
+  "command": "view.mesh_members",
+  "args": {
+   "status": {
+    "statusVersion": 1,
+    "network": {
+     "id": "office",
+     "name": "office",
+     "state": "joined",
+     "security": "forward_secrecy",
+     "routingPolicy": "latency",
+     "dnsSuffix": "mesh.internal",
+     "dnsEnabled": true
+    },
+    "self": {
+     "id": "m-self",
+     "name": "par-laptop",
+     "role": "client",
+     "address": "10.144.144.5/24",
+     "domain": "par-laptop.eu.mesh.internal",
+     "region": "eu",
+     "addressManaged": true,
+     "regionBasis": {
+      "border": "fra-border",
+      "latencyMs": 12
+     },
+     "regionState": "pending",
+     "regionRequest": {
+      "id": "rq-2",
+      "region": "ap",
+      "state": "pending",
+      "reason": null,
+      "rejectReason": null
+     },
+     "regionSuggestion": {
+      "region": "ap",
+      "currentMedianMs": 90,
+      "suggestedMedianMs": 40,
+      "since": 1700000000
+     }
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true,
+      "borders": [
+       "m-1"
+      ]
+     },
+     {
+      "code": "ap",
+      "name": "亚太",
+      "local": false,
+      "remoteBorders": [
+       "m-4"
+      ]
+     },
+     {
+      "code": "cn",
+      "name": "中国大陆",
+      "local": false,
+      "reachable": false
+     },
+     {
+      "code": "na",
+      "name": "北美",
+      "local": false
+     },
+     {
+      "code": "oc",
+      "name": "大洋洲",
+      "local": false,
+      "reachable": true
+     }
+    ],
+    "members": [
+     {
+      "id": "m-1",
+      "name": "fra-border",
+      "role": "border",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.1/24",
+      "domain": "fra-border.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "direct",
+      "hops": 0,
+      "transport": "udp",
+      "latencyMs": 11,
+      "pathState": "auto"
+     },
+     {
+      "id": "m-2",
+      "name": "lon-host",
+      "role": "host",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.3/24",
+      "domain": "lon-host.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "tcp",
+      "latencyMs": 24,
+      "pathState": "auto",
+      "vms": [
+       {
+        "name": "build-1",
+        "domain": "build-1.eu.mesh.internal",
+        "address": "10.127.3.2",
+        "cidr": "10.127.3.0/24"
+       },
+       {
+        "name": "db-1",
+        "domain": "db-1.eu.mesh.internal",
+        "address": "10.127.3.3",
+        "cidr": "10.127.3.0/24"
+       }
+      ],
+      "subnets": [
+       "10.127.3.0/24"
+      ]
+     },
+     {
+      "id": "m-3",
+      "name": "pve-home",
+      "role": "gateway",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.4/24",
+      "domain": "pve-home.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "udp",
+      "latencyMs": 30,
+      "pathState": "auto",
+      "bridgesExternal": true,
+      "subnets": [
+       "192.168.50.0/24"
+      ]
+     },
+     {
+      "id": "m-4",
+      "name": "tyo-border",
+      "role": "border",
+      "region": "ap",
+      "state": "online",
+      "address": "10.144.146.1/24",
+      "domain": "tyo-border.ap.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 2,
+      "transport": "udp",
+      "latencyMs": 228,
+      "pathState": "auto"
+     }
+    ],
+    "subnets": [
+     {
+      "cidr": "10.127.3.0/24",
+      "region": "eu",
+      "kind": "host_group",
+      "hostGroup": {
+       "gateway": "m-2",
+       "backupGateway": "m-1"
+      },
+      "advertisers": [
+       {
+        "member": "m-2",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "100.101.2.3/32",
+      "region": "eu",
+      "kind": "external",
+      "name": "nas",
+      "bridge": "m-3",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 35,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "192.168.50.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 30,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.151.0.0/16",
+      "region": "ap",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 190,
+      "path": [
+       "m-1"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.152.0.0/16",
+      "region": "cn",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "172.20.0.0/24",
+      "region": "eu",
+      "kind": "mystery",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 20,
+      "path": [
+       "m-1"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     }
+    ],
+    "refusedAdvertisements": 0
+   },
+   "groupBy": "region",
+   "filter": "all",
+   "sort": "name",
+   "query": ""
+  },
+  "answer": {
+   "groupBy": "region",
+   "groups": [
+    {
+     "key": "eu",
+     "count": 4,
+     "matched": 4,
+     "open": true,
+     "worst": null,
+     "link": null,
+     "summary": null,
+     "rows": [
+      {
+       "id": "m-self",
+       "name": "par-laptop",
+       "self": true,
+       "role": "client",
+       "region": "eu",
+       "state": "online",
+       "address": "10.144.144.5/24",
+       "domain": "par-laptop.eu.mesh.internal",
+       "regionDomain": "eu.mesh.internal",
+       "connection": "self",
+       "hops": 0,
+       "transport": null,
+       "latencyMs": null,
+       "tone": null,
+       "contains": null,
+       "children": [],
+       "visibleChildren": 0,
+       "open": false,
+       "marks": []
+      },
+      {
+       "id": "m-1",
+       "name": "fra-border",
+       "self": false,
+       "role": "border",
+       "region": "eu",
+       "state": "online",
+       "address": "10.144.144.1/24",
+       "domain": "fra-border.eu.mesh.internal",
+       "regionDomain": "eu.mesh.internal",
+       "connection": "direct",
+       "hops": 0,
+       "transport": "udp",
+       "latencyMs": 11,
+       "tone": "fast",
+       "contains": null,
+       "children": [],
+       "visibleChildren": 0,
+       "open": false,
+       "marks": []
+      },
+      {
+       "id": "m-2",
+       "name": "lon-host",
+       "self": false,
+       "role": "host",
+       "region": "eu",
+       "state": "online",
+       "address": "10.144.144.3/24",
+       "domain": "lon-host.eu.mesh.internal",
+       "regionDomain": "eu.mesh.internal",
+       "connection": "relay",
+       "hops": 1,
+       "transport": "tcp",
+       "latencyMs": 24,
+       "tone": "fast",
+       "contains": {
+        "noun": "vms",
+        "count": 2
+       },
+       "children": [
+        {
+         "kind": "vm",
+         "name": "build-1",
+         "address": "10.127.3.2",
+         "domain": "build-1.eu.mesh.internal",
+         "match": false
+        },
+        {
+         "kind": "vm",
+         "name": "db-1",
+         "address": "10.127.3.3",
+         "domain": "db-1.eu.mesh.internal",
+         "match": false
+        },
+        {
+         "kind": "subnet",
+         "name": "10.127.3.0/24",
+         "match": false
+        }
+       ],
+       "visibleChildren": 3,
+       "open": false,
+       "marks": []
+      },
+      {
+       "id": "m-3",
+       "name": "pve-home",
+       "self": false,
+       "role": "gateway",
+       "region": "eu",
+       "state": "online",
+       "address": "10.144.144.4/24",
+       "domain": "pve-home.eu.mesh.internal",
+       "regionDomain": "eu.mesh.internal",
+       "connection": "relay",
+       "hops": 1,
+       "transport": "udp",
+       "latencyMs": 30,
+       "tone": "fast",
+       "contains": {
+        "noun": "subnets",
+        "count": 1
+       },
+       "children": [
+        {
+         "kind": "subnet",
+         "name": "192.168.50.0/24",
+         "match": false
+        }
+       ],
+       "visibleChildren": 1,
+       "open": false,
+       "marks": [
+        "external_bridge"
+       ]
+      }
+     ]
+    },
+    {
+     "key": "ap",
+     "count": 1,
+     "matched": 1,
+     "open": false,
+     "worst": null,
+     "link": null,
+     "summary": {
+      "state": "ok",
+      "exitBorder": {
+       "id": "m-1",
+       "name": "fra-border"
+      },
+      "via": null,
+      "viaName": null,
+      "latencyMs": 190,
+      "loss": null,
+      "subnets": [
+       {
+        "cidr": "10.151.0.0/16",
+        "display": "10.151.0.0/16",
+        "kind": "summary",
+        "label": null,
+        "hostGroup": null,
+        "bridge": null,
+        "vms": [],
+        "region": "ap",
+        "regionName": "亚太",
+        "advertiser": "fra-border",
+        "advertisers": [
+         {
+          "id": "m-1",
+          "name": "fra-border",
+          "inUse": true
+         }
+        ],
+        "path": [
+         "fra-border"
+        ],
+        "latencyMs": 190,
+        "tone": "medium",
+        "state": "ok",
+        "route": "mesh",
+        "overlaps": [],
+        "marks": []
+       }
+      ]
+     },
+     "rows": [
+      {
+       "id": "m-4",
+       "name": "tyo-border",
+       "self": false,
+       "role": "border",
+       "region": "ap",
+       "state": "online",
+       "address": "10.144.146.1/24",
+       "domain": "tyo-border.ap.mesh.internal",
+       "regionDomain": "ap.mesh.internal",
+       "connection": "relay",
+       "hops": 2,
+       "transport": "udp",
+       "latencyMs": 228,
+       "tone": "medium",
+       "contains": null,
+       "children": [],
+       "visibleChildren": 0,
+       "open": false,
+       "marks": []
+      }
+     ]
+    },
+    {
+     "key": "cn",
+     "count": 0,
+     "matched": 0,
+     "open": true,
+     "worst": null,
+     "link": null,
+     "summary": {
+      "state": "down",
+      "exitBorder": {
+       "id": "m-1",
+       "name": "fra-border"
+      },
+      "via": null,
+      "viaName": null,
+      "latencyMs": null,
+      "loss": null,
+      "subnets": [
+       {
+        "cidr": "10.152.0.0/16",
+        "display": "10.152.0.0/16",
+        "kind": "summary",
+        "label": null,
+        "hostGroup": null,
+        "bridge": null,
+        "vms": [],
+        "region": "cn",
+        "regionName": "中国大陆",
+        "advertiser": "fra-border",
+        "advertisers": [
+         {
+          "id": "m-1",
+          "name": "fra-border",
+          "inUse": true
+         }
+        ],
+        "path": [],
+        "latencyMs": null,
+        "tone": "timeout",
+        "state": "unreachable",
+        "route": "mesh",
+        "overlaps": [],
+        "marks": []
+       }
+      ]
+     },
+     "rows": []
+    },
+    {
+     "key": "oc",
+     "count": 0,
+     "matched": 0,
+     "open": false,
+     "worst": null,
+     "link": null,
+     "summary": {
+      "state": "ok",
+      "exitBorder": null,
+      "via": null,
+      "viaName": null,
+      "latencyMs": null,
+      "loss": null,
+      "subnets": []
+     },
+     "rows": []
+    }
+   ],
+   "total": 5,
+   "matched": 5
+  }
+ },
+ {
+  "command": "view.mesh_subnets",
+  "args": {
+   "status": {
+    "statusVersion": 1,
+    "network": {
+     "id": "office",
+     "name": "office",
+     "state": "joined",
+     "security": "forward_secrecy",
+     "routingPolicy": "latency",
+     "dnsSuffix": "mesh.internal",
+     "dnsEnabled": true
+    },
+    "self": {
+     "id": "m-self",
+     "name": "par-laptop",
+     "role": "client",
+     "address": "10.144.144.5/24",
+     "domain": "par-laptop.eu.mesh.internal",
+     "region": "eu",
+     "addressManaged": true,
+     "regionBasis": {
+      "border": "fra-border",
+      "latencyMs": 12
+     },
+     "regionState": "auto",
+     "regionRequest": {
+      "id": "rq-1",
+      "region": "ap",
+      "state": "rejected",
+      "reason": "closer to the office",
+      "rejectReason": "capacity"
+     },
+     "regionSuggestion": {
+      "region": "ap",
+      "currentMedianMs": 90,
+      "suggestedMedianMs": 40,
+      "since": 1700000000
+     },
+     "backbone": {
+      "state": "partial",
+      "linksUp": 1,
+      "linksTotal": 2,
+      "failure": null
+     }
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true,
+      "borders": [
+       "m-1"
+      ]
+     },
+     {
+      "code": "ap",
+      "name": "亚太",
+      "local": false,
+      "remoteBorders": [
+       "m-4"
+      ]
+     },
+     {
+      "code": "cn",
+      "name": "中国大陆",
+      "local": false
+     },
+     {
+      "code": "na",
+      "name": "北美",
+      "local": false
+     },
+     {
+      "code": "oc",
+      "name": "大洋洲",
+      "local": false,
+      "reachable": true
+     }
+    ],
+    "members": [
+     {
+      "id": "m-1",
+      "name": "fra-border",
+      "role": "border",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.1/24",
+      "domain": "fra-border.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "direct",
+      "hops": 0,
+      "transport": "udp",
+      "latencyMs": 11,
+      "pathState": "auto"
+     },
+     {
+      "id": "m-2",
+      "name": "lon-host",
+      "role": "host",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.3/24",
+      "domain": "lon-host.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "tcp",
+      "latencyMs": 24,
+      "pathState": "auto",
+      "vms": [
+       {
+        "name": "build-1",
+        "domain": "build-1.eu.mesh.internal",
+        "address": "10.127.3.2",
+        "cidr": "10.127.3.0/24"
+       },
+       {
+        "name": "db-1",
+        "domain": "db-1.eu.mesh.internal",
+        "address": "10.127.3.3",
+        "cidr": "10.127.3.0/24"
+       }
+      ],
+      "subnets": [
+       "10.127.3.0/24"
+      ]
+     },
+     {
+      "id": "m-3",
+      "name": "pve-home",
+      "role": "gateway",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.4/24",
+      "domain": "pve-home.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "udp",
+      "latencyMs": 30,
+      "pathState": "auto",
+      "bridgesExternal": true,
+      "subnets": [
+       "192.168.50.0/24"
+      ]
+     },
+     {
+      "id": "m-4",
+      "name": "tyo-border",
+      "role": "border",
+      "region": "ap",
+      "state": "online",
+      "address": "10.144.146.1/24",
+      "domain": "tyo-border.ap.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 2,
+      "transport": "udp",
+      "latencyMs": 228,
+      "pathState": "auto"
+     }
+    ],
+    "subnets": [
+     {
+      "cidr": "10.127.3.0/24",
+      "region": "eu",
+      "kind": "host_group",
+      "hostGroup": {
+       "gateway": "m-2",
+       "backupGateway": "m-1"
+      },
+      "advertisers": [
+       {
+        "member": "m-2",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "100.101.2.3/32",
+      "region": "eu",
+      "kind": "external",
+      "name": "nas",
+      "bridge": "m-3",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 35,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "192.168.50.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 30,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.151.0.0/16",
+      "region": "ap",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 190,
+      "path": [
+       "m-1"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.152.0.0/16",
+      "region": "cn",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     }
+    ],
+    "links": [
+     {
+      "from": "eu",
+      "to": "ap",
+      "via": null,
+      "borders": [
+       "m-1",
+       "m-4"
+      ],
+      "localBorder": "m-1",
+      "remoteBorder": "m-4",
+      "latencyMs": 190,
+      "loss": 0.01,
+      "state": "ok",
+      "reason": null
+     },
+     {
+      "from": "eu",
+      "to": "cn",
+      "via": null,
+      "borders": [
+       "m-1"
+      ],
+      "latencyMs": null,
+      "loss": 1.0,
+      "state": "down",
+      "reason": null
+     }
+    ],
+    "refusedAdvertisements": 0
+   },
+   "query": ""
+  },
+  "answer": {
+   "rows": [
+    {
+     "cidr": "10.127.3.0/24",
+     "display": "10.127.3.0/24",
+     "kind": "host_group",
+     "label": null,
+     "hostGroup": {
+      "gateway": {
+       "id": "m-2",
+       "name": "lon-host"
+      },
+      "backup": {
+       "id": "m-1",
+       "name": "fra-border"
+      }
+     },
+     "bridge": null,
+     "vms": [
+      {
+       "name": "build-1",
+       "domain": "build-1.eu.mesh.internal",
+       "address": "10.127.3.2"
+      },
+      {
+       "name": "db-1",
+       "domain": "db-1.eu.mesh.internal",
+       "address": "10.127.3.3"
+      }
+     ],
+     "region": "eu",
+     "regionName": "欧洲",
+     "advertiser": "lon-host",
+     "advertisers": [
+      {
+       "id": "m-2",
+       "name": "lon-host",
+       "inUse": true
+      }
+     ],
+     "path": [],
+     "latencyMs": null,
+     "tone": "timeout",
+     "state": "unreachable",
+     "route": "mesh",
+     "overlaps": [],
+     "marks": []
+    },
+    {
+     "cidr": "100.101.2.3/32",
+     "display": "100.101.2.3",
+     "kind": "external",
+     "label": "nas",
+     "hostGroup": null,
+     "bridge": {
+      "id": "m-3",
+      "name": "pve-home"
+     },
+     "vms": [],
+     "region": "eu",
+     "regionName": "欧洲",
+     "advertiser": "pve-home",
+     "advertisers": [
+      {
+       "id": "m-3",
+       "name": "pve-home",
+       "inUse": true
+      }
+     ],
+     "path": [
+      "pve-home"
+     ],
+     "latencyMs": 35,
+     "tone": "fast",
+     "state": "ok",
+     "route": "mesh",
+     "overlaps": [],
+     "marks": []
+    },
+    {
+     "cidr": "192.168.50.0/24",
+     "display": "192.168.50.0/24",
+     "kind": "lan",
+     "label": null,
+     "hostGroup": null,
+     "bridge": null,
+     "vms": [],
+     "region": "eu",
+     "regionName": "欧洲",
+     "advertiser": "pve-home",
+     "advertisers": [
+      {
+       "id": "m-3",
+       "name": "pve-home",
+       "inUse": true
+      }
+     ],
+     "path": [
+      "pve-home"
+     ],
+     "latencyMs": 30,
+     "tone": "fast",
+     "state": "ok",
+     "route": "mesh",
+     "overlaps": [],
+     "marks": []
+    },
+    {
+     "cidr": "10.151.0.0/16",
+     "display": "10.151.0.0/16",
+     "kind": "summary",
+     "label": null,
+     "hostGroup": null,
+     "bridge": null,
+     "vms": [],
+     "region": "ap",
+     "regionName": "亚太",
+     "advertiser": "fra-border",
+     "advertisers": [
+      {
+       "id": "m-1",
+       "name": "fra-border",
+       "inUse": true
+      }
+     ],
+     "path": [
+      "fra-border"
+     ],
+     "latencyMs": 190,
+     "tone": "medium",
+     "state": "ok",
+     "route": "mesh",
+     "overlaps": [],
+     "marks": []
+    },
+    {
+     "cidr": "10.152.0.0/16",
+     "display": "10.152.0.0/16",
+     "kind": "summary",
+     "label": null,
+     "hostGroup": null,
+     "bridge": null,
+     "vms": [],
+     "region": "cn",
+     "regionName": "中国大陆",
+     "advertiser": "fra-border",
+     "advertisers": [
+      {
+       "id": "m-1",
+       "name": "fra-border",
+       "inUse": true
+      }
+     ],
+     "path": [],
+     "latencyMs": null,
+     "tone": "timeout",
+     "state": "unreachable",
+     "route": "mesh",
+     "overlaps": [],
+     "marks": []
+    }
+   ],
+   "refused": 0
+  }
+ },
+ {
+  "command": "view.mesh_subnets",
+  "args": {
+   "status": {
+    "statusVersion": 1,
+    "network": {
+     "id": "office",
+     "name": "office",
+     "state": "joined",
+     "security": "forward_secrecy",
+     "routingPolicy": "latency",
+     "dnsSuffix": "mesh.internal",
+     "dnsEnabled": true
+    },
+    "self": {
+     "id": "m-self",
+     "name": "par-laptop",
+     "role": "client",
+     "address": "10.144.144.5/24",
+     "domain": "par-laptop.eu.mesh.internal",
+     "region": "eu",
+     "addressManaged": true,
+     "regionBasis": {
+      "border": "fra-border",
+      "latencyMs": 12
+     },
+     "regionState": "auto",
+     "regionRequest": {
+      "id": "rq-1",
+      "region": "ap",
+      "state": "rejected",
+      "reason": "closer to the office",
+      "rejectReason": "capacity"
+     },
+     "regionSuggestion": {
+      "region": "ap",
+      "currentMedianMs": 90,
+      "suggestedMedianMs": 40,
+      "since": 1700000000
+     },
+     "backbone": {
+      "state": "partial",
+      "linksUp": 1,
+      "linksTotal": 2,
+      "failure": null
+     }
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true,
+      "borders": [
+       "m-1"
+      ]
+     },
+     {
+      "code": "ap",
+      "name": "亚太",
+      "local": false,
+      "remoteBorders": [
+       "m-4"
+      ]
+     },
+     {
+      "code": "cn",
+      "name": "中国大陆",
+      "local": false
+     },
+     {
+      "code": "na",
+      "name": "北美",
+      "local": false
+     },
+     {
+      "code": "oc",
+      "name": "大洋洲",
+      "local": false,
+      "reachable": true
+     }
+    ],
+    "members": [
+     {
+      "id": "m-1",
+      "name": "fra-border",
+      "role": "border",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.1/24",
+      "domain": "fra-border.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "direct",
+      "hops": 0,
+      "transport": "udp",
+      "latencyMs": 11,
+      "pathState": "auto"
+     },
+     {
+      "id": "m-2",
+      "name": "lon-host",
+      "role": "host",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.3/24",
+      "domain": "lon-host.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "tcp",
+      "latencyMs": 24,
+      "pathState": "auto",
+      "vms": [
+       {
+        "name": "build-1",
+        "domain": "build-1.eu.mesh.internal",
+        "address": "10.127.3.2",
+        "cidr": "10.127.3.0/24"
+       },
+       {
+        "name": "db-1",
+        "domain": "db-1.eu.mesh.internal",
+        "address": "10.127.3.3",
+        "cidr": "10.127.3.0/24"
+       }
+      ],
+      "subnets": [
+       "10.127.3.0/24"
+      ]
+     },
+     {
+      "id": "m-3",
+      "name": "pve-home",
+      "role": "gateway",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.4/24",
+      "domain": "pve-home.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "udp",
+      "latencyMs": 30,
+      "pathState": "auto",
+      "bridgesExternal": true,
+      "subnets": [
+       "192.168.50.0/24"
+      ]
+     },
+     {
+      "id": "m-4",
+      "name": "tyo-border",
+      "role": "border",
+      "region": "ap",
+      "state": "online",
+      "address": "10.144.146.1/24",
+      "domain": "tyo-border.ap.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 2,
+      "transport": "udp",
+      "latencyMs": 228,
+      "pathState": "auto"
+     }
+    ],
+    "subnets": [
+     {
+      "cidr": "10.127.3.0/24",
+      "region": "eu",
+      "kind": "host_group",
+      "hostGroup": {
+       "gateway": "m-2",
+       "backupGateway": "m-1"
+      },
+      "advertisers": [
+       {
+        "member": "m-2",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "100.101.2.3/32",
+      "region": "eu",
+      "kind": "external",
+      "name": "nas",
+      "bridge": "m-3",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 35,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "192.168.50.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 30,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.151.0.0/16",
+      "region": "ap",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 190,
+      "path": [
+       "m-1"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.152.0.0/16",
+      "region": "cn",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     }
+    ],
+    "links": [
+     {
+      "from": "eu",
+      "to": "ap",
+      "via": null,
+      "borders": [
+       "m-1",
+       "m-4"
+      ],
+      "localBorder": "m-1",
+      "remoteBorder": "m-4",
+      "latencyMs": 190,
+      "loss": 0.01,
+      "state": "ok",
+      "reason": null
+     },
+     {
+      "from": "eu",
+      "to": "cn",
+      "via": null,
+      "borders": [
+       "m-1"
+      ],
+      "latencyMs": null,
+      "loss": 1.0,
+      "state": "down",
+      "reason": null
+     }
+    ],
+    "refusedAdvertisements": 0
+   },
+   "query": "nas"
+  },
+  "answer": {
+   "rows": [
+    {
+     "cidr": "100.101.2.3/32",
+     "display": "100.101.2.3",
+     "kind": "external",
+     "label": "nas",
+     "hostGroup": null,
+     "bridge": {
+      "id": "m-3",
+      "name": "pve-home"
+     },
+     "vms": [],
+     "region": "eu",
+     "regionName": "欧洲",
+     "advertiser": "pve-home",
+     "advertisers": [
+      {
+       "id": "m-3",
+       "name": "pve-home",
+       "inUse": true
+      }
+     ],
+     "path": [
+      "pve-home"
+     ],
+     "latencyMs": 35,
+     "tone": "fast",
+     "state": "ok",
+     "route": "mesh",
+     "overlaps": [],
+     "marks": []
+    }
+   ],
+   "refused": 0
+  }
+ },
+ {
+  "command": "view.mesh_subnets",
+  "args": {
+   "status": {
+    "statusVersion": 1,
+    "network": {
+     "id": "office",
+     "name": "office",
+     "state": "joined",
+     "security": "forward_secrecy",
+     "routingPolicy": "latency",
+     "dnsSuffix": "mesh.internal",
+     "dnsEnabled": true
+    },
+    "self": {
+     "id": "m-self",
+     "name": "par-laptop",
+     "role": "client",
+     "address": "10.144.144.5/24",
+     "domain": "par-laptop.eu.mesh.internal",
+     "region": "eu",
+     "addressManaged": true,
+     "regionBasis": {
+      "border": "fra-border",
+      "latencyMs": 12
+     },
+     "regionState": "pending",
+     "regionRequest": {
+      "id": "rq-2",
+      "region": "ap",
+      "state": "pending",
+      "reason": null,
+      "rejectReason": null
+     },
+     "regionSuggestion": {
+      "region": "ap",
+      "currentMedianMs": 90,
+      "suggestedMedianMs": 40,
+      "since": 1700000000
+     }
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true,
+      "borders": [
+       "m-1"
+      ]
+     },
+     {
+      "code": "ap",
+      "name": "亚太",
+      "local": false,
+      "remoteBorders": [
+       "m-4"
+      ]
+     },
+     {
+      "code": "cn",
+      "name": "中国大陆",
+      "local": false,
+      "reachable": false
+     },
+     {
+      "code": "na",
+      "name": "北美",
+      "local": false
+     },
+     {
+      "code": "oc",
+      "name": "大洋洲",
+      "local": false,
+      "reachable": true
+     }
+    ],
+    "members": [
+     {
+      "id": "m-1",
+      "name": "fra-border",
+      "role": "border",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.1/24",
+      "domain": "fra-border.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "direct",
+      "hops": 0,
+      "transport": "udp",
+      "latencyMs": 11,
+      "pathState": "auto"
+     },
+     {
+      "id": "m-2",
+      "name": "lon-host",
+      "role": "host",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.3/24",
+      "domain": "lon-host.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "tcp",
+      "latencyMs": 24,
+      "pathState": "auto",
+      "vms": [
+       {
+        "name": "build-1",
+        "domain": "build-1.eu.mesh.internal",
+        "address": "10.127.3.2",
+        "cidr": "10.127.3.0/24"
+       },
+       {
+        "name": "db-1",
+        "domain": "db-1.eu.mesh.internal",
+        "address": "10.127.3.3",
+        "cidr": "10.127.3.0/24"
+       }
+      ],
+      "subnets": [
+       "10.127.3.0/24"
+      ]
+     },
+     {
+      "id": "m-3",
+      "name": "pve-home",
+      "role": "gateway",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.4/24",
+      "domain": "pve-home.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "udp",
+      "latencyMs": 30,
+      "pathState": "auto",
+      "bridgesExternal": true,
+      "subnets": [
+       "192.168.50.0/24"
+      ]
+     },
+     {
+      "id": "m-4",
+      "name": "tyo-border",
+      "role": "border",
+      "region": "ap",
+      "state": "online",
+      "address": "10.144.146.1/24",
+      "domain": "tyo-border.ap.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 2,
+      "transport": "udp",
+      "latencyMs": 228,
+      "pathState": "auto"
+     }
+    ],
+    "subnets": [
+     {
+      "cidr": "10.127.3.0/24",
+      "region": "eu",
+      "kind": "host_group",
+      "hostGroup": {
+       "gateway": "m-2",
+       "backupGateway": "m-1"
+      },
+      "advertisers": [
+       {
+        "member": "m-2",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "100.101.2.3/32",
+      "region": "eu",
+      "kind": "external",
+      "name": "nas",
+      "bridge": "m-3",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 35,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "192.168.50.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 30,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.151.0.0/16",
+      "region": "ap",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 190,
+      "path": [
+       "m-1"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.152.0.0/16",
+      "region": "cn",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "172.20.0.0/24",
+      "region": "eu",
+      "kind": "mystery",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 20,
+      "path": [
+       "m-1"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     }
+    ],
+    "refusedAdvertisements": 0
+   },
+   "query": ""
+  },
+  "answer": {
+   "rows": [
+    {
+     "cidr": "10.127.3.0/24",
+     "display": "10.127.3.0/24",
+     "kind": "host_group",
+     "label": null,
+     "hostGroup": {
+      "gateway": {
+       "id": "m-2",
+       "name": "lon-host"
+      },
+      "backup": {
+       "id": "m-1",
+       "name": "fra-border"
+      }
+     },
+     "bridge": null,
+     "vms": [
+      {
+       "name": "build-1",
+       "domain": "build-1.eu.mesh.internal",
+       "address": "10.127.3.2"
+      },
+      {
+       "name": "db-1",
+       "domain": "db-1.eu.mesh.internal",
+       "address": "10.127.3.3"
+      }
+     ],
+     "region": "eu",
+     "regionName": "欧洲",
+     "advertiser": "lon-host",
+     "advertisers": [
+      {
+       "id": "m-2",
+       "name": "lon-host",
+       "inUse": true
+      }
+     ],
+     "path": [],
+     "latencyMs": null,
+     "tone": "timeout",
+     "state": "unreachable",
+     "route": "mesh",
+     "overlaps": [],
+     "marks": []
+    },
+    {
+     "cidr": "100.101.2.3/32",
+     "display": "100.101.2.3",
+     "kind": "external",
+     "label": "nas",
+     "hostGroup": null,
+     "bridge": {
+      "id": "m-3",
+      "name": "pve-home"
+     },
+     "vms": [],
+     "region": "eu",
+     "regionName": "欧洲",
+     "advertiser": "pve-home",
+     "advertisers": [
+      {
+       "id": "m-3",
+       "name": "pve-home",
+       "inUse": true
+      }
+     ],
+     "path": [
+      "pve-home"
+     ],
+     "latencyMs": 35,
+     "tone": "fast",
+     "state": "ok",
+     "route": "mesh",
+     "overlaps": [],
+     "marks": []
+    },
+    {
+     "cidr": "192.168.50.0/24",
+     "display": "192.168.50.0/24",
+     "kind": "lan",
+     "label": null,
+     "hostGroup": null,
+     "bridge": null,
+     "vms": [],
+     "region": "eu",
+     "regionName": "欧洲",
+     "advertiser": "pve-home",
+     "advertisers": [
+      {
+       "id": "m-3",
+       "name": "pve-home",
+       "inUse": true
+      }
+     ],
+     "path": [
+      "pve-home"
+     ],
+     "latencyMs": 30,
+     "tone": "fast",
+     "state": "ok",
+     "route": "mesh",
+     "overlaps": [],
+     "marks": []
+    },
+    {
+     "cidr": "10.151.0.0/16",
+     "display": "10.151.0.0/16",
+     "kind": "summary",
+     "label": null,
+     "hostGroup": null,
+     "bridge": null,
+     "vms": [],
+     "region": "ap",
+     "regionName": "亚太",
+     "advertiser": "fra-border",
+     "advertisers": [
+      {
+       "id": "m-1",
+       "name": "fra-border",
+       "inUse": true
+      }
+     ],
+     "path": [
+      "fra-border"
+     ],
+     "latencyMs": 190,
+     "tone": "medium",
+     "state": "ok",
+     "route": "mesh",
+     "overlaps": [],
+     "marks": []
+    },
+    {
+     "cidr": "10.152.0.0/16",
+     "display": "10.152.0.0/16",
+     "kind": "summary",
+     "label": null,
+     "hostGroup": null,
+     "bridge": null,
+     "vms": [],
+     "region": "cn",
+     "regionName": "中国大陆",
+     "advertiser": "fra-border",
+     "advertisers": [
+      {
+       "id": "m-1",
+       "name": "fra-border",
+       "inUse": true
+      }
+     ],
+     "path": [],
+     "latencyMs": null,
+     "tone": "timeout",
+     "state": "unreachable",
+     "route": "mesh",
+     "overlaps": [],
+     "marks": []
+    },
+    {
+     "cidr": "172.20.0.0/24",
+     "display": "172.20.0.0/24",
+     "kind": "lan",
+     "label": null,
+     "hostGroup": null,
+     "bridge": null,
+     "vms": [],
+     "region": "eu",
+     "regionName": "欧洲",
+     "advertiser": "fra-border",
+     "advertisers": [
+      {
+       "id": "m-1",
+       "name": "fra-border",
+       "inUse": true
+      }
+     ],
+     "path": [
+      "fra-border"
+     ],
+     "latencyMs": 20,
+     "tone": "fast",
+     "state": "ok",
+     "route": "mesh",
+     "overlaps": [],
+     "marks": []
+    }
+   ],
+   "refused": 0
+  }
+ },
+ {
+  "command": "view.mesh_region",
+  "args": {
+   "status": {
+    "statusVersion": 1,
+    "network": {
+     "id": "office",
+     "name": "office",
+     "state": "joined",
+     "security": "forward_secrecy",
+     "routingPolicy": "latency",
+     "dnsSuffix": "mesh.internal",
+     "dnsEnabled": true
+    },
+    "self": {
+     "id": "m-self",
+     "name": "par-laptop",
+     "role": "client",
+     "address": "10.144.144.5/24",
+     "domain": "par-laptop.eu.mesh.internal",
+     "region": "eu",
+     "addressManaged": true,
+     "regionBasis": {
+      "border": "fra-border",
+      "latencyMs": 12
+     },
+     "regionState": "auto",
+     "regionRequest": {
+      "id": "rq-1",
+      "region": "ap",
+      "state": "rejected",
+      "reason": "closer to the office",
+      "rejectReason": "capacity"
+     },
+     "regionSuggestion": {
+      "region": "ap",
+      "currentMedianMs": 90,
+      "suggestedMedianMs": 40,
+      "since": 1700000000
+     },
+     "backbone": {
+      "state": "partial",
+      "linksUp": 1,
+      "linksTotal": 2,
+      "failure": null
+     }
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true,
+      "borders": [
+       "m-1"
+      ]
+     },
+     {
+      "code": "ap",
+      "name": "亚太",
+      "local": false,
+      "remoteBorders": [
+       "m-4"
+      ]
+     },
+     {
+      "code": "cn",
+      "name": "中国大陆",
+      "local": false
+     },
+     {
+      "code": "na",
+      "name": "北美",
+      "local": false
+     },
+     {
+      "code": "oc",
+      "name": "大洋洲",
+      "local": false,
+      "reachable": true
+     }
+    ],
+    "members": [
+     {
+      "id": "m-1",
+      "name": "fra-border",
+      "role": "border",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.1/24",
+      "domain": "fra-border.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "direct",
+      "hops": 0,
+      "transport": "udp",
+      "latencyMs": 11,
+      "pathState": "auto"
+     },
+     {
+      "id": "m-2",
+      "name": "lon-host",
+      "role": "host",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.3/24",
+      "domain": "lon-host.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "tcp",
+      "latencyMs": 24,
+      "pathState": "auto",
+      "vms": [
+       {
+        "name": "build-1",
+        "domain": "build-1.eu.mesh.internal",
+        "address": "10.127.3.2",
+        "cidr": "10.127.3.0/24"
+       },
+       {
+        "name": "db-1",
+        "domain": "db-1.eu.mesh.internal",
+        "address": "10.127.3.3",
+        "cidr": "10.127.3.0/24"
+       }
+      ],
+      "subnets": [
+       "10.127.3.0/24"
+      ]
+     },
+     {
+      "id": "m-3",
+      "name": "pve-home",
+      "role": "gateway",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.4/24",
+      "domain": "pve-home.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "udp",
+      "latencyMs": 30,
+      "pathState": "auto",
+      "bridgesExternal": true,
+      "subnets": [
+       "192.168.50.0/24"
+      ]
+     },
+     {
+      "id": "m-4",
+      "name": "tyo-border",
+      "role": "border",
+      "region": "ap",
+      "state": "online",
+      "address": "10.144.146.1/24",
+      "domain": "tyo-border.ap.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 2,
+      "transport": "udp",
+      "latencyMs": 228,
+      "pathState": "auto"
+     }
+    ],
+    "subnets": [
+     {
+      "cidr": "10.127.3.0/24",
+      "region": "eu",
+      "kind": "host_group",
+      "hostGroup": {
+       "gateway": "m-2",
+       "backupGateway": "m-1"
+      },
+      "advertisers": [
+       {
+        "member": "m-2",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "100.101.2.3/32",
+      "region": "eu",
+      "kind": "external",
+      "name": "nas",
+      "bridge": "m-3",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 35,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "192.168.50.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 30,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.151.0.0/16",
+      "region": "ap",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 190,
+      "path": [
+       "m-1"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.152.0.0/16",
+      "region": "cn",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     }
+    ],
+    "links": [
+     {
+      "from": "eu",
+      "to": "ap",
+      "via": null,
+      "borders": [
+       "m-1",
+       "m-4"
+      ],
+      "localBorder": "m-1",
+      "remoteBorder": "m-4",
+      "latencyMs": 190,
+      "loss": 0.01,
+      "state": "ok",
+      "reason": null
+     },
+     {
+      "from": "eu",
+      "to": "cn",
+      "via": null,
+      "borders": [
+       "m-1"
+      ],
+      "latencyMs": null,
+      "loss": 1.0,
+      "state": "down",
+      "reason": null
+     }
+    ],
+    "refusedAdvertisements": 0
+   }
+  },
+  "answer": {
+   "code": "eu",
+   "name": "欧洲",
+   "basis": {
+    "border": "fra-border",
+    "latencyMs": 12,
+    "kind": null
+   },
+   "state": "auto",
+   "canWithdraw": true,
+   "request": {
+    "id": "rq-1",
+    "region": "ap",
+    "regionName": "亚太",
+    "state": "rejected",
+    "reason": "closer to the office",
+    "rejectReason": "capacity"
+   },
+   "suggestion": {
+    "region": "ap",
+    "regionName": "亚太",
+    "currentMedianMs": 90,
+    "suggestedMedianMs": 40
+   },
+   "targets": [
+    {
+     "code": "ap",
+     "name": "亚太",
+     "latencyMs": 190
+    },
+    {
+     "code": "cn",
+     "name": "中国大陆",
+     "latencyMs": null
+    },
+    {
+     "code": "na",
+     "name": "北美",
+     "latencyMs": null
+    },
+    {
+     "code": "oc",
+     "name": "大洋洲",
+     "latencyMs": null
+    }
+   ],
+   "canRequest": true,
+   "backbone": {
+    "state": "partial",
+    "linksUp": 1,
+    "linksTotal": 2,
+    "failure": null
+   }
+  }
+ },
+ {
+  "command": "view.mesh_region",
+  "args": {
+   "status": {
+    "statusVersion": 1,
+    "network": {
+     "id": "office",
+     "name": "office",
+     "state": "joined",
+     "security": "forward_secrecy",
+     "routingPolicy": "latency",
+     "dnsSuffix": "mesh.internal",
+     "dnsEnabled": true
+    },
+    "self": {
+     "id": "m-self",
+     "name": "par-laptop",
+     "role": "client",
+     "address": "10.144.144.5/24",
+     "domain": "par-laptop.eu.mesh.internal",
+     "region": "eu",
+     "addressManaged": true,
+     "regionBasis": {
+      "border": "fra-border",
+      "latencyMs": 12
+     },
+     "regionState": "pending",
+     "regionRequest": {
+      "id": "rq-2",
+      "region": "ap",
+      "state": "pending",
+      "reason": null,
+      "rejectReason": null
+     },
+     "regionSuggestion": {
+      "region": "ap",
+      "currentMedianMs": 90,
+      "suggestedMedianMs": 40,
+      "since": 1700000000
+     }
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true,
+      "borders": [
+       "m-1"
+      ]
+     },
+     {
+      "code": "ap",
+      "name": "亚太",
+      "local": false,
+      "remoteBorders": [
+       "m-4"
+      ]
+     },
+     {
+      "code": "cn",
+      "name": "中国大陆",
+      "local": false,
+      "reachable": false
+     },
+     {
+      "code": "na",
+      "name": "北美",
+      "local": false
+     },
+     {
+      "code": "oc",
+      "name": "大洋洲",
+      "local": false,
+      "reachable": true
+     }
+    ],
+    "members": [
+     {
+      "id": "m-1",
+      "name": "fra-border",
+      "role": "border",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.1/24",
+      "domain": "fra-border.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "direct",
+      "hops": 0,
+      "transport": "udp",
+      "latencyMs": 11,
+      "pathState": "auto"
+     },
+     {
+      "id": "m-2",
+      "name": "lon-host",
+      "role": "host",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.3/24",
+      "domain": "lon-host.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "tcp",
+      "latencyMs": 24,
+      "pathState": "auto",
+      "vms": [
+       {
+        "name": "build-1",
+        "domain": "build-1.eu.mesh.internal",
+        "address": "10.127.3.2",
+        "cidr": "10.127.3.0/24"
+       },
+       {
+        "name": "db-1",
+        "domain": "db-1.eu.mesh.internal",
+        "address": "10.127.3.3",
+        "cidr": "10.127.3.0/24"
+       }
+      ],
+      "subnets": [
+       "10.127.3.0/24"
+      ]
+     },
+     {
+      "id": "m-3",
+      "name": "pve-home",
+      "role": "gateway",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.4/24",
+      "domain": "pve-home.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "udp",
+      "latencyMs": 30,
+      "pathState": "auto",
+      "bridgesExternal": true,
+      "subnets": [
+       "192.168.50.0/24"
+      ]
+     },
+     {
+      "id": "m-4",
+      "name": "tyo-border",
+      "role": "border",
+      "region": "ap",
+      "state": "online",
+      "address": "10.144.146.1/24",
+      "domain": "tyo-border.ap.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 2,
+      "transport": "udp",
+      "latencyMs": 228,
+      "pathState": "auto"
+     }
+    ],
+    "subnets": [
+     {
+      "cidr": "10.127.3.0/24",
+      "region": "eu",
+      "kind": "host_group",
+      "hostGroup": {
+       "gateway": "m-2",
+       "backupGateway": "m-1"
+      },
+      "advertisers": [
+       {
+        "member": "m-2",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "100.101.2.3/32",
+      "region": "eu",
+      "kind": "external",
+      "name": "nas",
+      "bridge": "m-3",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 35,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "192.168.50.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 30,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.151.0.0/16",
+      "region": "ap",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 190,
+      "path": [
+       "m-1"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.152.0.0/16",
+      "region": "cn",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "172.20.0.0/24",
+      "region": "eu",
+      "kind": "mystery",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 20,
+      "path": [
+       "m-1"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     }
+    ],
+    "refusedAdvertisements": 0
+   }
+  },
+  "answer": {
+   "code": "eu",
+   "name": "欧洲",
+   "basis": {
+    "border": "fra-border",
+    "latencyMs": 12,
+    "kind": null
+   },
+   "state": "pending",
+   "canWithdraw": true,
+   "request": {
+    "id": "rq-2",
+    "region": "ap",
+    "regionName": "亚太",
+    "state": "pending",
+    "reason": null,
+    "rejectReason": null
+   },
+   "suggestion": null,
+   "targets": [
+    {
+     "code": "ap",
+     "name": "亚太",
+     "latencyMs": null
+    },
+    {
+     "code": "cn",
+     "name": "中国大陆",
+     "latencyMs": null
+    },
+    {
+     "code": "na",
+     "name": "北美",
+     "latencyMs": null
+    },
+    {
+     "code": "oc",
+     "name": "大洋洲",
+     "latencyMs": null
+    }
+   ],
+   "canRequest": true,
+   "backbone": null
+  }
+ },
+ {
+  "command": "view.mesh_region",
+  "args": {
+   "status": {
+    "network": {
+     "state": "not_joined"
+    },
+    "self": {
+     "id": "s",
+     "name": "phone",
+     "region": "eu",
+     "regionState": "migrating"
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true
+     }
+    ]
+   }
+  },
+  "answer": {
+   "code": "eu",
+   "name": "欧洲",
+   "basis": null,
+   "state": "other",
+   "canWithdraw": false,
+   "request": null,
+   "suggestion": null,
+   "targets": [],
+   "canRequest": false,
+   "backbone": null
+  }
+ },
+ {
+  "command": "view.mesh_region",
+  "args": {
+   "status": {
+    "network": {
+     "state": "joined"
+    },
+    "self": {
+     "id": "s",
+     "name": "phone"
+    }
+   }
+  },
+  "answer": {
+   "code": null,
+   "name": null,
+   "basis": null,
+   "state": "auto",
+   "canWithdraw": false,
+   "request": null,
+   "suggestion": null,
+   "targets": [],
+   "canRequest": false,
+   "backbone": null
+  }
+ },
+ {
+  "command": "view.mesh_notices",
+  "args": {
+   "status": {
+    "statusVersion": 1,
+    "network": {
+     "id": "office",
+     "name": "office",
+     "state": "joined",
+     "security": "forward_secrecy",
+     "routingPolicy": "latency",
+     "dnsSuffix": "mesh.internal",
+     "dnsEnabled": true
+    },
+    "self": {
+     "id": "m-self",
+     "name": "par-laptop",
+     "role": "client",
+     "address": "10.144.144.5/24",
+     "domain": "par-laptop.eu.mesh.internal",
+     "region": "eu",
+     "addressManaged": true,
+     "regionBasis": {
+      "border": "fra-border",
+      "latencyMs": 12
+     },
+     "regionState": "auto",
+     "regionRequest": {
+      "id": "rq-1",
+      "region": "ap",
+      "state": "rejected",
+      "reason": "closer to the office",
+      "rejectReason": "capacity"
+     },
+     "regionSuggestion": {
+      "region": "ap",
+      "currentMedianMs": 90,
+      "suggestedMedianMs": 40,
+      "since": 1700000000
+     },
+     "backbone": {
+      "state": "partial",
+      "linksUp": 1,
+      "linksTotal": 2,
+      "failure": null
+     }
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true,
+      "borders": [
+       "m-1"
+      ]
+     },
+     {
+      "code": "ap",
+      "name": "亚太",
+      "local": false,
+      "remoteBorders": [
+       "m-4"
+      ]
+     },
+     {
+      "code": "cn",
+      "name": "中国大陆",
+      "local": false
+     },
+     {
+      "code": "na",
+      "name": "北美",
+      "local": false
+     },
+     {
+      "code": "oc",
+      "name": "大洋洲",
+      "local": false,
+      "reachable": true
+     }
+    ],
+    "members": [
+     {
+      "id": "m-1",
+      "name": "fra-border",
+      "role": "border",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.1/24",
+      "domain": "fra-border.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "direct",
+      "hops": 0,
+      "transport": "udp",
+      "latencyMs": 11,
+      "pathState": "auto"
+     },
+     {
+      "id": "m-2",
+      "name": "lon-host",
+      "role": "host",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.3/24",
+      "domain": "lon-host.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "tcp",
+      "latencyMs": 24,
+      "pathState": "auto",
+      "vms": [
+       {
+        "name": "build-1",
+        "domain": "build-1.eu.mesh.internal",
+        "address": "10.127.3.2",
+        "cidr": "10.127.3.0/24"
+       },
+       {
+        "name": "db-1",
+        "domain": "db-1.eu.mesh.internal",
+        "address": "10.127.3.3",
+        "cidr": "10.127.3.0/24"
+       }
+      ],
+      "subnets": [
+       "10.127.3.0/24"
+      ]
+     },
+     {
+      "id": "m-3",
+      "name": "pve-home",
+      "role": "gateway",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.4/24",
+      "domain": "pve-home.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "udp",
+      "latencyMs": 30,
+      "pathState": "auto",
+      "bridgesExternal": true,
+      "subnets": [
+       "192.168.50.0/24"
+      ]
+     },
+     {
+      "id": "m-4",
+      "name": "tyo-border",
+      "role": "border",
+      "region": "ap",
+      "state": "online",
+      "address": "10.144.146.1/24",
+      "domain": "tyo-border.ap.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 2,
+      "transport": "udp",
+      "latencyMs": 228,
+      "pathState": "auto"
+     }
+    ],
+    "subnets": [
+     {
+      "cidr": "10.127.3.0/24",
+      "region": "eu",
+      "kind": "host_group",
+      "hostGroup": {
+       "gateway": "m-2",
+       "backupGateway": "m-1"
+      },
+      "advertisers": [
+       {
+        "member": "m-2",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "100.101.2.3/32",
+      "region": "eu",
+      "kind": "external",
+      "name": "nas",
+      "bridge": "m-3",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 35,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "192.168.50.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 30,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.151.0.0/16",
+      "region": "ap",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 190,
+      "path": [
+       "m-1"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.152.0.0/16",
+      "region": "cn",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     }
+    ],
+    "links": [
+     {
+      "from": "eu",
+      "to": "ap",
+      "via": null,
+      "borders": [
+       "m-1",
+       "m-4"
+      ],
+      "localBorder": "m-1",
+      "remoteBorder": "m-4",
+      "latencyMs": 190,
+      "loss": 0.01,
+      "state": "ok",
+      "reason": null
+     },
+     {
+      "from": "eu",
+      "to": "cn",
+      "via": null,
+      "borders": [
+       "m-1"
+      ],
+      "latencyMs": null,
+      "loss": 1.0,
+      "state": "down",
+      "reason": null
+     }
+    ],
+    "refusedAdvertisements": 0
+   }
+  },
+  "answer": [
+   {
+    "id": "mesh.notice.region_rejected",
+    "key": "region_rejected:rq-1",
+    "values": [
+     "亚太",
+     "capacity"
+    ],
+    "action": null,
+    "notify": true
+   },
+   {
+    "id": "mesh.notice.region_suggestion",
+    "key": "region_suggestion:ap",
+    "values": [
+     "亚太"
+    ],
+    "action": "request_region",
+    "notify": false
+   },
+   {
+    "id": "mesh.notice.link_down",
+    "key": "link_down:cn",
+    "values": [
+     "中国大陆"
+    ],
+    "action": null,
+    "notify": false
+   },
+   {
+    "id": "mesh.notice.host_group_unreachable",
+    "key": "host_group:10.127.3.0/24",
+    "values": [
+     "10.127.3.0/24",
+     "lon-host"
+    ],
+    "action": null,
+    "notify": false
+   }
+  ]
+ },
+ {
+  "command": "view.mesh_notices",
+  "args": {
+   "status": {
+    "statusVersion": 1,
+    "network": {
+     "id": "office",
+     "name": "office",
+     "state": "joined",
+     "security": "forward_secrecy",
+     "routingPolicy": "latency",
+     "dnsSuffix": "mesh.internal",
+     "dnsEnabled": true
+    },
+    "self": {
+     "id": "m-self",
+     "name": "par-laptop",
+     "role": "client",
+     "address": "10.144.144.5/24",
+     "domain": "par-laptop.eu.mesh.internal",
+     "region": "eu",
+     "addressManaged": true,
+     "regionBasis": {
+      "border": "fra-border",
+      "latencyMs": 12
+     },
+     "regionState": "pending",
+     "regionRequest": {
+      "id": "rq-2",
+      "region": "ap",
+      "state": "pending",
+      "reason": null,
+      "rejectReason": null
+     },
+     "regionSuggestion": {
+      "region": "ap",
+      "currentMedianMs": 90,
+      "suggestedMedianMs": 40,
+      "since": 1700000000
+     }
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true,
+      "borders": [
+       "m-1"
+      ]
+     },
+     {
+      "code": "ap",
+      "name": "亚太",
+      "local": false,
+      "remoteBorders": [
+       "m-4"
+      ]
+     },
+     {
+      "code": "cn",
+      "name": "中国大陆",
+      "local": false,
+      "reachable": false
+     },
+     {
+      "code": "na",
+      "name": "北美",
+      "local": false
+     },
+     {
+      "code": "oc",
+      "name": "大洋洲",
+      "local": false,
+      "reachable": true
+     }
+    ],
+    "members": [
+     {
+      "id": "m-1",
+      "name": "fra-border",
+      "role": "border",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.1/24",
+      "domain": "fra-border.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "direct",
+      "hops": 0,
+      "transport": "udp",
+      "latencyMs": 11,
+      "pathState": "auto"
+     },
+     {
+      "id": "m-2",
+      "name": "lon-host",
+      "role": "host",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.3/24",
+      "domain": "lon-host.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "tcp",
+      "latencyMs": 24,
+      "pathState": "auto",
+      "vms": [
+       {
+        "name": "build-1",
+        "domain": "build-1.eu.mesh.internal",
+        "address": "10.127.3.2",
+        "cidr": "10.127.3.0/24"
+       },
+       {
+        "name": "db-1",
+        "domain": "db-1.eu.mesh.internal",
+        "address": "10.127.3.3",
+        "cidr": "10.127.3.0/24"
+       }
+      ],
+      "subnets": [
+       "10.127.3.0/24"
+      ]
+     },
+     {
+      "id": "m-3",
+      "name": "pve-home",
+      "role": "gateway",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.4/24",
+      "domain": "pve-home.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "udp",
+      "latencyMs": 30,
+      "pathState": "auto",
+      "bridgesExternal": true,
+      "subnets": [
+       "192.168.50.0/24"
+      ]
+     },
+     {
+      "id": "m-4",
+      "name": "tyo-border",
+      "role": "border",
+      "region": "ap",
+      "state": "online",
+      "address": "10.144.146.1/24",
+      "domain": "tyo-border.ap.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 2,
+      "transport": "udp",
+      "latencyMs": 228,
+      "pathState": "auto"
+     }
+    ],
+    "subnets": [
+     {
+      "cidr": "10.127.3.0/24",
+      "region": "eu",
+      "kind": "host_group",
+      "hostGroup": {
+       "gateway": "m-2",
+       "backupGateway": "m-1"
+      },
+      "advertisers": [
+       {
+        "member": "m-2",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "100.101.2.3/32",
+      "region": "eu",
+      "kind": "external",
+      "name": "nas",
+      "bridge": "m-3",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 35,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "192.168.50.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 30,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.151.0.0/16",
+      "region": "ap",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 190,
+      "path": [
+       "m-1"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.152.0.0/16",
+      "region": "cn",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "172.20.0.0/24",
+      "region": "eu",
+      "kind": "mystery",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 20,
+      "path": [
+       "m-1"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     }
+    ],
+    "refusedAdvertisements": 0
+   }
+  },
+  "answer": [
+   {
+    "id": "mesh.notice.link_down",
+    "key": "link_down:cn",
+    "values": [
+     "中国大陆"
+    ],
+    "action": null,
+    "notify": false
+   },
+   {
+    "id": "mesh.notice.host_group_unreachable",
+    "key": "host_group:10.127.3.0/24",
+    "values": [
+     "10.127.3.0/24",
+     "lon-host"
+    ],
+    "action": null,
+    "notify": false
+   }
+  ]
+ },
+ {
+  "command": "view.mesh_notices",
+  "args": {
+   "status": {
+    "network": {
+     "state": "not_joined"
+    },
+    "self": {
+     "id": "s",
+     "name": "phone",
+     "region": "eu",
+     "regionState": "migrating"
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true
+     }
+    ]
+   }
+  },
+  "answer": []
+ },
+ {
+  "command": "view.mesh_entry",
+  "args": {
+   "status": {
+    "statusVersion": 1,
+    "network": {
+     "id": "office",
+     "name": "office",
+     "state": "joined",
+     "security": "forward_secrecy",
+     "routingPolicy": "latency",
+     "dnsSuffix": "mesh.internal",
+     "dnsEnabled": true
+    },
+    "self": {
+     "id": "m-self",
+     "name": "par-laptop",
+     "role": "client",
+     "address": "10.144.144.5/24",
+     "domain": "par-laptop.eu.mesh.internal",
+     "region": "eu",
+     "addressManaged": true,
+     "regionBasis": {
+      "border": "fra-border",
+      "latencyMs": 12
+     },
+     "regionState": "auto",
+     "regionRequest": {
+      "id": "rq-1",
+      "region": "ap",
+      "state": "rejected",
+      "reason": "closer to the office",
+      "rejectReason": "capacity"
+     },
+     "regionSuggestion": {
+      "region": "ap",
+      "currentMedianMs": 90,
+      "suggestedMedianMs": 40,
+      "since": 1700000000
+     },
+     "backbone": {
+      "state": "partial",
+      "linksUp": 1,
+      "linksTotal": 2,
+      "failure": null
+     }
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true,
+      "borders": [
+       "m-1"
+      ]
+     },
+     {
+      "code": "ap",
+      "name": "亚太",
+      "local": false,
+      "remoteBorders": [
+       "m-4"
+      ]
+     },
+     {
+      "code": "cn",
+      "name": "中国大陆",
+      "local": false
+     },
+     {
+      "code": "na",
+      "name": "北美",
+      "local": false
+     },
+     {
+      "code": "oc",
+      "name": "大洋洲",
+      "local": false,
+      "reachable": true
+     }
+    ],
+    "members": [
+     {
+      "id": "m-1",
+      "name": "fra-border",
+      "role": "border",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.1/24",
+      "domain": "fra-border.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "direct",
+      "hops": 0,
+      "transport": "udp",
+      "latencyMs": 11,
+      "pathState": "auto"
+     },
+     {
+      "id": "m-2",
+      "name": "lon-host",
+      "role": "host",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.3/24",
+      "domain": "lon-host.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "tcp",
+      "latencyMs": 24,
+      "pathState": "auto",
+      "vms": [
+       {
+        "name": "build-1",
+        "domain": "build-1.eu.mesh.internal",
+        "address": "10.127.3.2",
+        "cidr": "10.127.3.0/24"
+       },
+       {
+        "name": "db-1",
+        "domain": "db-1.eu.mesh.internal",
+        "address": "10.127.3.3",
+        "cidr": "10.127.3.0/24"
+       }
+      ],
+      "subnets": [
+       "10.127.3.0/24"
+      ]
+     },
+     {
+      "id": "m-3",
+      "name": "pve-home",
+      "role": "gateway",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.4/24",
+      "domain": "pve-home.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "udp",
+      "latencyMs": 30,
+      "pathState": "auto",
+      "bridgesExternal": true,
+      "subnets": [
+       "192.168.50.0/24"
+      ]
+     },
+     {
+      "id": "m-4",
+      "name": "tyo-border",
+      "role": "border",
+      "region": "ap",
+      "state": "online",
+      "address": "10.144.146.1/24",
+      "domain": "tyo-border.ap.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 2,
+      "transport": "udp",
+      "latencyMs": 228,
+      "pathState": "auto"
+     }
+    ],
+    "subnets": [
+     {
+      "cidr": "10.127.3.0/24",
+      "region": "eu",
+      "kind": "host_group",
+      "hostGroup": {
+       "gateway": "m-2",
+       "backupGateway": "m-1"
+      },
+      "advertisers": [
+       {
+        "member": "m-2",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "100.101.2.3/32",
+      "region": "eu",
+      "kind": "external",
+      "name": "nas",
+      "bridge": "m-3",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 35,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "192.168.50.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 30,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.151.0.0/16",
+      "region": "ap",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 190,
+      "path": [
+       "m-1"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.152.0.0/16",
+      "region": "cn",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": null,
+      "path": [],
+      "state": "unreachable",
+      "overlaps": [],
+      "route": "mesh"
+     }
+    ],
+    "links": [
+     {
+      "from": "eu",
+      "to": "ap",
+      "via": null,
+      "borders": [
+       "m-1",
+       "m-4"
+      ],
+      "localBorder": "m-1",
+      "remoteBorder": "m-4",
+      "latencyMs": 190,
+      "loss": 0.01,
+      "state": "ok",
+      "reason": null
+     },
+     {
+      "from": "eu",
+      "to": "cn",
+      "via": null,
+      "borders": [
+       "m-1"
+      ],
+      "latencyMs": null,
+      "loss": 1.0,
+      "state": "down",
+      "reason": null
+     }
+    ],
+    "refusedAdvertisements": 0
+   }
+  },
+  "answer": {
+   "available": true,
+   "network": "office",
+   "state": "joined",
+   "security": "forward_secrecy",
+   "online": 4,
+   "total": 4,
+   "attention": true
+  }
+ },
+ {
+  "command": "view.mesh_entry",
+  "args": {
+   "status": {
+    "statusVersion": 1,
+    "network": {
+     "id": "office",
+     "name": "office",
+     "state": "joined",
+     "security": "forward_secrecy",
+     "routingPolicy": "latency",
+     "dnsSuffix": "mesh.internal",
+     "dnsEnabled": true
+    },
+    "self": {
+     "id": "m-self",
+     "name": "par-laptop",
+     "role": "client",
+     "address": "10.144.144.5/24",
+     "domain": "par-laptop.eu.mesh.internal",
+     "region": "eu",
+     "addressManaged": true,
+     "regionBasis": {
+      "border": "fra-border",
+      "latencyMs": 12
+     },
+     "regionState": "auto",
+     "regionRequest": {
+      "id": "rq-1",
+      "region": "ap",
+      "state": "rejected",
+      "reason": "closer to the office",
+      "rejectReason": "capacity"
+     },
+     "regionSuggestion": {
+      "region": "ap",
+      "currentMedianMs": 90,
+      "suggestedMedianMs": 40,
+      "since": 1700000000
+     },
+     "backbone": {
+      "state": "partial",
+      "linksUp": 1,
+      "linksTotal": 2,
+      "failure": null
+     }
+    },
+    "regions": [
+     {
+      "code": "eu",
+      "name": "欧洲",
+      "local": true,
+      "borders": [
+       "m-1"
+      ]
+     },
+     {
+      "code": "ap",
+      "name": "亚太",
+      "local": false,
+      "remoteBorders": [
+       "m-4"
+      ]
+     },
+     {
+      "code": "cn",
+      "name": "中国大陆",
+      "local": false,
+      "reachable": true
+     },
+     {
+      "code": "na",
+      "name": "北美",
+      "local": false
+     },
+     {
+      "code": "oc",
+      "name": "大洋洲",
+      "local": false,
+      "reachable": true
+     }
+    ],
+    "members": [
+     {
+      "id": "m-1",
+      "name": "fra-border",
+      "role": "border",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.1/24",
+      "domain": "fra-border.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "direct",
+      "hops": 0,
+      "transport": "udp",
+      "latencyMs": 11,
+      "pathState": "auto"
+     },
+     {
+      "id": "m-2",
+      "name": "lon-host",
+      "role": "host",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.3/24",
+      "domain": "lon-host.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "tcp",
+      "latencyMs": 24,
+      "pathState": "auto",
+      "vms": [
+       {
+        "name": "build-1",
+        "domain": "build-1.eu.mesh.internal",
+        "address": "10.127.3.2",
+        "cidr": "10.127.3.0/24"
+       },
+       {
+        "name": "db-1",
+        "domain": "db-1.eu.mesh.internal",
+        "address": "10.127.3.3",
+        "cidr": "10.127.3.0/24"
+       }
+      ],
+      "subnets": [
+       "10.127.3.0/24"
+      ]
+     },
+     {
+      "id": "m-3",
+      "name": "pve-home",
+      "role": "gateway",
+      "region": "eu",
+      "state": "online",
+      "address": "10.144.144.4/24",
+      "domain": "pve-home.eu.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 1,
+      "transport": "udp",
+      "latencyMs": 30,
+      "pathState": "auto",
+      "bridgesExternal": true,
+      "subnets": [
+       "192.168.50.0/24"
+      ]
+     },
+     {
+      "id": "m-4",
+      "name": "tyo-border",
+      "role": "border",
+      "region": "ap",
+      "state": "online",
+      "address": "10.144.146.1/24",
+      "domain": "tyo-border.ap.mesh.internal",
+      "addressManaged": true,
+      "connection": "relay",
+      "hops": 2,
+      "transport": "udp",
+      "latencyMs": 228,
+      "pathState": "auto"
+     }
+    ],
+    "subnets": [
+     {
+      "cidr": "100.101.2.3/32",
+      "region": "eu",
+      "kind": "external",
+      "name": "nas",
+      "bridge": "m-3",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 35,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "192.168.50.0/24",
+      "region": "eu",
+      "advertisers": [
+       {
+        "member": "m-3",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 30,
+      "path": [
+       "m-3"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     },
+     {
+      "cidr": "10.151.0.0/16",
+      "region": "ap",
+      "kind": "summary",
+      "advertisers": [
+       {
+        "member": "m-1",
+        "inUse": true
+       }
+      ],
+      "latencyMs": 190,
+      "path": [
+       "m-1"
+      ],
+      "state": "ok",
+      "overlaps": [],
+      "route": "mesh"
+     }
+    ],
+    "links": [
+     {
+      "from": "eu",
+      "to": "ap",
+      "via": null,
+      "borders": [
+       "m-1",
+       "m-4"
+      ],
+      "localBorder": "m-1",
+      "remoteBorder": "m-4",
+      "latencyMs": 190,
+      "loss": 0.01,
+      "state": "ok",
+      "reason": null
+     }
+    ],
+    "refusedAdvertisements": 0
+   }
+  },
+  "answer": {
+   "available": true,
+   "network": "office",
+   "state": "joined",
+   "security": "forward_secrecy",
+   "online": 4,
+   "total": 4,
+   "attention": false
+  }
  }
 ]

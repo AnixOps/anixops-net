@@ -359,7 +359,7 @@ fn linked(profile: &Value, other: &OtherSource) -> Option<Value> {
 /// sends (the capture session storage and key, saved sessions, `reload_rules`, saving a mesh network) is not here:
 /// it goes through [`Engine::request`]. The
 /// Windows/Linux Tauri app checks its window's requests with the same list ([`activity_request`]).
-pub const ACTIVITY_COMMANDS: [&str; 32] = [
+pub const ACTIVITY_COMMANDS: [&str; 33] = [
     "traffic",
     "connections",
     "close_connection",
@@ -390,12 +390,14 @@ pub const ACTIVITY_COMMANDS: [&str; 32] = [
     "mesh_set_dns",
     "mesh_set_subnet_route",
     // Kernel 0.4, full nodes: relaying, host mode, advertising a subnet and asking for another region; kernel 0.5:
-    // the default path policy and the custom paths. An engine without them answers `unsupported`.
+    // the default path policy and the custom paths. An engine without them answers `unsupported`. The kernel 0.4
+    // commands are also refused while `mesh::V04_ENABLED` is off.
     "mesh_set_relay",
     "mesh_set_host_mode",
     "mesh_advertise",
     "mesh_withdraw",
     "mesh_request_region",
+    "mesh_withdraw_region_request",
     "mesh_set_policy",
     "mesh_set_paths",
     // A one-time credential from the panel that joins this computer (个人电脑用入网凭据加入).
@@ -408,7 +410,10 @@ pub fn activity_request(request: &serde_json::Value) -> Result<Vec<u8>, String> 
         .get("cmd")
         .and_then(serde_json::Value::as_str)
         .unwrap_or_default();
-    let gated = command.starts_with("mesh_") && !crate::backend::mesh::ENABLED;
+    let gated = command.starts_with("mesh_")
+        && (!crate::backend::mesh::ENABLED
+            || !crate::backend::mesh::V04_ENABLED
+                && crate::backend::mesh::V04_COMMANDS.contains(&command));
     if gated
         || !ACTIVITY_COMMANDS.contains(&command)
             && !desktop_mitm::phone::CONTROL_COMMANDS.contains(&command)
@@ -611,10 +616,18 @@ impl Engine {
     }
 
     /// Answers one activity page request (see [`activity_request`]) while the engine runs.
+    /// A `mesh_status` answer loses the kernel 0.4 fields while that gate is closed
+    /// ([`crate::backend::mesh::gate_status`]).
     pub fn control(&self, request: &serde_json::Value) -> Result<serde_json::Value, String> {
+        let status = request.get("cmd").and_then(serde_json::Value::as_str) == Some("mesh_status");
         let request = activity_request(request)?;
         let answer = self.control_bytes(&request)?;
-        serde_json::from_slice(&answer).map_err(|error| error.to_string())
+        let mut answer: serde_json::Value =
+            serde_json::from_slice(&answer).map_err(|error| error.to_string())?;
+        if status {
+            crate::backend::mesh::gate_status(&mut answer);
+        }
+        Ok(answer)
     }
 
     /// Answers one request the backend itself makes while the engine runs: the capture session storage and
@@ -942,6 +955,15 @@ mod tests {
             activity_request(&serde_json::json!({"cmd": "mesh_join", "network": "office"})).is_ok(),
             crate::backend::mesh::ENABLED
         );
+        // Kernel 0.4 commands need the second gate as well.
+        for command in crate::backend::mesh::V04_COMMANDS {
+            assert!(ACTIVITY_COMMANDS.contains(&command), "{command}");
+            assert_eq!(
+                activity_request(&serde_json::json!({ "cmd": command })).is_ok(),
+                crate::backend::mesh::V04_ENABLED,
+                "{command}"
+            );
+        }
         // The secret is the backend's: a window never saves a network itself.
         assert!(activity_request(&serde_json::json!({"cmd": "mesh_save_network"})).is_err());
         assert!(activity_request(&serde_json::json!({"cmd": "mesh_remove_network"})).is_err());
