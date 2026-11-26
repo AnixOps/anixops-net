@@ -197,8 +197,8 @@ const PRIVATE_RANGES_V4: [(u32, u32); 4] = [
 ];
 
 /// The private IPv6 ranges (intranet-mesh §15.4) a reverse zone must lie wholly inside, as (address, prefix length):
-/// fd00::/8.
-const PRIVATE_RANGES_V6: [(u128, u32); 1] = [(0xfd00_u128 << 112, 8)];
+/// fc00::/7 (unique local addresses, so both `c.f.ip6.arpa` and `d.f.ip6.arpa`).
+const PRIVATE_RANGES_V6: [(u128, u32); 1] = [(0xfc00_u128 << 112, 7)];
 
 /// `domain` as a reverse zone the engine named (core#375): a plain name under `in-addr.arpa` with one to four
 /// decimal labels of 0–255 (an IPv4 prefix of /8 or longer), or under `ip6.arpa` with two to 32 single hexadecimal
@@ -608,6 +608,9 @@ mod tests {
             "d.f.ip6.arpa",
             "0.0.0.0.a.9.8.7.6.5.4.3.2.1.d.f.ip6.arpa",
             "D.F.IP6.ARPA.",
+            "c.f.ip6.arpa",
+            "C.F.IP6.ARPA.",
+            "1.0.c.f.ip6.arpa",
             "16.172.in-addr.arpa",
             "31.172.in-addr.arpa",
             "5.20.172.in-addr.arpa",
@@ -653,8 +656,7 @@ mod tests {
             "11.in-addr.arpa",
             "0.in-addr.arpa",
             "1.1.1.1.in-addr.arpa",
-            "c.f.ip6.arpa",
-            "C.F.IP6.ARPA.",
+            "b.f.ip6.arpa",
             "e.f.ip6.arpa",
             "0.2.ip6.arpa",
             "8.b.d.0.1.0.0.2.ip6.arpa",
