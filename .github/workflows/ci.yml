@@ -1235,6 +1235,28 @@ jobs:
           path: ${{ runner.temp }}/apple-products.tgz
           retention-days: 1
 
+      # The builds above are Debug; TestFlight and notarized releases archive Release, where `#if DEBUG` code (the
+      # screenshot demo, `TunnelController.isDemo`) does not exist. Compile both apps in the Release configuration so
+      # a reference to debug-only code fails here and not in the release workflow. Unoptimized and for the active
+      # architecture only: this checks what compiles, not the optimizer, and keeps the extra time small.
+      - name: Compile the iOS and macOS apps in the Release configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for target in "NetworkCoreApp|generic/platform=iOS Simulator" "NetworkCoreMac|generic/platform=macOS"; do
+            xcodebuild \
+              -project apps/ios/NetworkCore.xcodeproj \
+              -scheme "${target%%|*}" \
+              -configuration Release \
+              -destination "${target#*|}" \
+              -derivedDataPath apps/ios/build-release \
+              CODE_SIGNING_ALLOWED=NO \
+              ONLY_ACTIVE_ARCH=YES \
+              SWIFT_OPTIMIZATION_LEVEL=-Onone \
+              SWIFT_COMPILATION_MODE=incremental \
+              build
+          done
+
   apple-mac:
     name: macOS screenshots, UI tests and accessibility audit
     runs-on: macos-26
