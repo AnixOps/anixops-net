@@ -27,8 +27,6 @@ public struct TunnelStartSecrets: Codable, Equatable {
     public var anxLicense: String?
     /// The joined mesh networks' secrets by network name (`MeshNetworkLibrary.secretAccount`).
     public var meshSecrets: [String: String]?
-    /// The joined mesh networks' static private keys by network name (`MeshNetworkLibrary.privateKeyAccount`).
-    public var meshPrivateKeys: [String: String]?
 
     public init(
         nodeKey: String? = nil,
@@ -37,8 +35,7 @@ public struct TunnelStartSecrets: Codable, Equatable {
         mitmBundleChunks: [String]? = nil,
         anxLicense: String? = nil,
         nodeKeyVersion: String? = nil,
-        meshSecrets: [String: String]? = nil,
-        meshPrivateKeys: [String: String]? = nil
+        meshSecrets: [String: String]? = nil
     ) {
         self.nodeKey = nodeKey
         self.nodeKeyVersion = nodeKeyVersion
@@ -47,7 +44,6 @@ public struct TunnelStartSecrets: Codable, Equatable {
         self.mitmBundleChunks = mitmBundleChunks
         self.anxLicense = anxLicense
         self.meshSecrets = meshSecrets
-        self.meshPrivateKeys = meshPrivateKeys
     }
 
     static let optionsKey = "networkcore.start-secrets"
@@ -190,7 +186,7 @@ public struct TunnelStartSecrets: Codable, Equatable {
 
     public var isEmpty: Bool {
         nodeKey == nil && nodeLibrary == nil && mitmAuthority == nil && mitmBundleChunks == nil && anxLicense == nil
-            && meshSecrets == nil && meshPrivateKeys == nil
+            && meshSecrets == nil
     }
 
     /// Reads the values from the Keychain, the node key of the profile saved with `nodeKeyVersion`; a value that
@@ -205,8 +201,7 @@ public struct TunnelStartSecrets: Codable, Equatable {
             mitmBundleChunks: MitmProfileBundle.storedChunks(),
             anxLicense: try? NodeSecretStore.value(account: AnxLicense.keychainAccount),
             nodeKeyVersion: nodeKeyVersion,
-            meshSecrets: MeshNetworkLibrary.joinedSecrets(),
-            meshPrivateKeys: MeshNetworkLibrary.joinedPrivateKeys()
+            meshSecrets: MeshNetworkLibrary.joinedSecrets()
         )
     }
 

@@ -1584,8 +1584,8 @@ final class TunnelController {
         if blockQuic {
             providerConfiguration[TunnelProfileKeys.blockQuic] = true
         }
-        if MeshSupport.enabled {
-            MeshNetworkLibrary.ensurePrivateKeys()
+        if MeshSupport.enabled, let names = MeshNetworkLibrary.savedNamesValue(MeshNetworkLibrary.load()) {
+            providerConfiguration[TunnelProfileKeys.meshSavedNames] = names
         }
         if let value = MeshNetworkLibrary.gatedProfileValue(MeshNetworkLibrary.load()) {
             providerConfiguration[TunnelProfileKeys.meshNetworks] = value
@@ -2249,10 +2249,8 @@ final class TunnelController {
     /// running extension gets their secrets with the start secrets. False when the profile could not be saved.
     func applyMeshNetworks() async -> Bool {
         await profileWrites.run { () async -> Bool in
-            if MeshSupport.enabled {
-                MeshNetworkLibrary.ensurePrivateKeys()
-            }
             let value = MeshNetworkLibrary.gatedProfileValue(MeshNetworkLibrary.load())
+            let names = MeshSupport.enabled ? MeshNetworkLibrary.savedNamesValue(MeshNetworkLibrary.load()) : nil
             do {
                 _ = try await writeProfile { target in
                     // Without a profile the next import picks them up.
@@ -2260,8 +2258,15 @@ final class TunnelController {
                         return false
                     }
                     var configuration = tunnelProtocol.providerConfiguration ?? [:]
-                    guard configuration[TunnelProfileKeys.meshNetworks] as? Data != value else {
+                    guard configuration[TunnelProfileKeys.meshNetworks] as? Data != value
+                        || configuration[TunnelProfileKeys.meshSavedNames] as? Data != names
+                    else {
                         return false
+                    }
+                    if let names {
+                        configuration[TunnelProfileKeys.meshSavedNames] = names
+                    } else {
+                        configuration.removeValue(forKey: TunnelProfileKeys.meshSavedNames)
                     }
                     if let value {
                         configuration[TunnelProfileKeys.meshNetworks] = value

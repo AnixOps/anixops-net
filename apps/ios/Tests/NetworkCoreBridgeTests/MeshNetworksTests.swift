@@ -137,6 +137,40 @@ final class MeshNetworksTests: XCTestCase {
         XCTAssertEqual(inner["private_key"], .string(key))
     }
 
+    func testRuntimeConfigAddsTheInstanceID() throws {
+        let network = try XCTUnwrap(draft().network())
+        let id = MeshNetworkLibrary.newInstanceID()
+        let key = try MeshNetworkLibrary.newPrivateKey()
+        let config = try object(try XCTUnwrap(network.runtimeConfigJSON(secret: "s", privateKey: key, instanceID: id)))
+        let node = try XCTUnwrap(config["node"] as? [String: Any])
+        XCTAssertEqual(node["instance_id"] as? String, id)
+        XCTAssertEqual(node["private_key"] as? String, key)
+        let entry = try XCTUnwrap(network.outboundEntry(secret: "s", privateKey: key, instanceID: id))
+        guard case let .object(inner)? = entry["node"] else {
+            return XCTFail("node is not an object")
+        }
+        XCTAssertEqual(inner["instance_id"], .string(id))
+
+        let bare = try object(try XCTUnwrap(network.runtimeConfigJSON(secret: "s")))
+        XCTAssertNil((bare["node"] as? [String: Any])?["instance_id"])
+    }
+
+    func testInstanceIDValidation() {
+        XCTAssertTrue(MeshNetworkLibrary.isValidInstanceID(MeshNetworkLibrary.newInstanceID()))
+        let made = MeshNetworkLibrary.newInstanceID()
+        XCTAssertEqual(made, made.lowercased())
+        XCTAssertNotEqual(made, MeshNetworkLibrary.newInstanceID())
+        XCTAssertTrue(MeshNetworkLibrary.isValidInstanceID("a"))
+        XCTAssertTrue(MeshNetworkLibrary.isValidInstanceID("A-1-b"))
+        XCTAssertTrue(MeshNetworkLibrary.isValidInstanceID(String(repeating: "a", count: 64)))
+        XCTAssertFalse(MeshNetworkLibrary.isValidInstanceID(String(repeating: "a", count: 65)))
+        XCTAssertFalse(MeshNetworkLibrary.isValidInstanceID(""))
+        XCTAssertFalse(MeshNetworkLibrary.isValidInstanceID("-a"))
+        XCTAssertFalse(MeshNetworkLibrary.isValidInstanceID("a_b"))
+        XCTAssertFalse(MeshNetworkLibrary.isValidInstanceID("a b"))
+        XCTAssertFalse(MeshNetworkLibrary.isValidInstanceID("é"))
+    }
+
     func testPrivateKeyValidation() throws {
         func base64(_ count: Int) -> String {
             Data(repeating: 7, count: count).base64EncodedString()
@@ -265,8 +299,5 @@ final class MeshNetworksTests: XCTestCase {
         let secrets = TunnelStartSecrets(meshSecrets: ["office": "k"])
         XCTAssertFalse(secrets.isEmpty)
         XCTAssertEqual(TunnelStartSecrets(options: secrets.options)?.meshSecrets, ["office": "k"])
-        let keyed = TunnelStartSecrets(meshPrivateKeys: ["office": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="])
-        XCTAssertFalse(keyed.isEmpty)
-        XCTAssertEqual(TunnelStartSecrets(options: keyed.options)?.meshPrivateKeys, keyed.meshPrivateKeys)
     }
 }

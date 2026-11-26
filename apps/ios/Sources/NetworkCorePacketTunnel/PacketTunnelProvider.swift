@@ -398,7 +398,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             try startSecrets?.nodeLibrary ?? NodeSecretStore.value(account: NodeLibrary.keychainAccount)
         }
         meshOutbounds = readMeshOutbounds(
-            tunnelProtocol.providerConfiguration?[TunnelProfileKeys.meshNetworks] as? Data
+            tunnelProtocol.providerConfiguration?[TunnelProfileKeys.meshNetworks] as? Data,
+            saved: tunnelProtocol.providerConfiguration?[TunnelProfileKeys.meshSavedNames] as? Data
         )
         let base = ReloadBase(
             config: config, mode: mode, dns: dns, redirects: redirects, blockQuic: blockQuic,
@@ -538,7 +539,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         _ tunnelProtocol: NETunnelProviderProtocol,
         completionHandler: @escaping (Error?) -> Void
     ) {
-        meshOutbounds = readMeshOutbounds(tunnelProtocol.providerConfiguration?[TunnelProfileKeys.meshNetworks] as? Data)
+        meshOutbounds = readMeshOutbounds(
+            tunnelProtocol.providerConfiguration?[TunnelProfileKeys.meshNetworks] as? Data,
+            saved: tunnelProtocol.providerConfiguration?[TunnelProfileKeys.meshSavedNames] as? Data
+        )
         guard !meshOutbounds.isEmpty else {
             completionHandler(PacketTunnelFailure(reason: "no mesh network to join", fatal: true))
             return
@@ -847,7 +851,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         case .runtimeStatus:
             completionHandler?(session?.statusJSON())
         case let .control(request):
-            completionHandler?(session?.control(request))
+            completionHandler?(session?.control(withMeshKeys(request)))
         case .trafficStats:
             completionHandler?(trafficStats.snapshot())
         case .clearTrafficStats:
@@ -1063,27 +1067,77 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         return (session, alone)
     }
 
+    /// A control request from the app with the mesh key material added: `mesh_save_network` carries the network's
+    /// configuration without `node.private_key` and `node.instance_id`, which only the extension holds; a
+    /// `mesh_remove_network` also deletes the network's key. Other requests, and a request whose key cannot be made,
+    /// pass through unchanged (the engine then refuses the network without a key).
+    private func withMeshKeys(_ request: Data) -> Data {
+        guard var object = (try? JSONSerialization.jsonObject(with: request)) as? [String: Any],
+              let command = object["cmd"] as? String
+        else {
+            return request
+        }
+        if command == "mesh_remove_network", let name = object["network"] as? String {
+            MeshKeyStore.removeKey(name)
+            return request
+        }
+        guard command == "mesh_save_network", MeshSupport.enabled,
+              var config = object["config"] as? [String: Any],
+              let name = (config["network"] as? [String: Any])?["name"] as? String,
+              let key = try? MeshKeyStore.ensurePrivateKey(name),
+              let instanceID = try? MeshKeyStore.ensureInstanceID()
+        else {
+            return request
+        }
+        var node = config["node"] as? [String: Any] ?? [:]
+        node["private_key"] = key
+        node["instance_id"] = instanceID
+        config["node"] = node
+        object["config"] = config
+        return (try? JSONSerialization.data(withJSONObject: object)) ?? request
+    }
+
     /// The joined mesh networks the profile names (`TunnelProfileKeys.meshNetworks`) as `routing.outbounds` entries,
     /// each with its secret from the start secrets or the shared Keychain. A network without a readable secret is
     /// left out, and the diagnostics say how many.
-    private func readMeshOutbounds(_ value: Data?) -> [String: [String: JSONValue]] {
+    private func readMeshOutbounds(_ value: Data?, saved savedValue: Data?) -> [String: [String: JSONValue]] {
+        if MeshSupport.enabled {
+            // The app cannot reach the extension's key store: keys of networks it removed since are deleted here. A profile
+            // without the list (an older app) prunes nothing.
+            if let saved = MeshNetworkLibrary.savedNames(fromProfileValue: savedValue) {
+                MeshKeyStore.prune(keeping: saved)
+            }
+        }
         let networks = MeshNetworkLibrary.gatedNetworks(fromProfileValue: value)
         guard !networks.isEmpty else {
             return [:]
         }
         let handed = startSecrets?.meshSecrets
-        // The key is only read here (handed over on macOS, else the shared Keychain): an extension that finds none
-        // leaves `node.private_key` out.
-        let handedKeys = startSecrets?.meshPrivateKeys
+        // The extension makes and keeps the keys itself (`MeshKeyStore`, extension-only storage). A key or the
+        // instance id that cannot be read or is not valid leaves that network out: it is never replaced.
+        var keyFailures: [String] = []
         let built = MeshNetworkLibrary.outbounds(networks, secret: { name in
             handed?[name] ?? MeshNetworkLibrary.secret(name)
-        }, privateKey: { name in
-            handedKeys?[name] ?? MeshNetworkLibrary.privateKey(name)
+        }, keys: { name in
+            do {
+                return (try MeshKeyStore.ensurePrivateKey(name), try MeshKeyStore.ensureInstanceID())
+            } catch {
+                keyFailures.append(name)
+                return nil
+            }
         })
-        if !built.missing.isEmpty {
-            events.record("mesh: \(built.missing.count) networks without a secret left out")
+        var outbounds = built.outbounds
+        let missing = built.missing
+        for name in keyFailures {
+            outbounds.removeValue(forKey: MeshNetwork(name: name, config: "", joined: true).outboundKey)
         }
-        return built.outbounds
+        if !keyFailures.isEmpty {
+            events.record("mesh: \(keyFailures.count) networks without a usable key left out")
+        }
+        if !missing.isEmpty {
+            events.record("mesh: \(missing.count) networks without a secret left out")
+        }
+        return outbounds
     }
 
     /// Creates the runtime for `config` with the joined mesh networks (`EmbeddedRuntimeConfig.withMesh`), or without

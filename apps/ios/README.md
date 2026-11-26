@@ -40,7 +40,9 @@ their own gates pass.
   whole-device tunnel. A WireGuard node from a subscription or `wireguard://` link runs in the engine's userspace stack
   with its own `local_address`: as a node of the routing section, and when it runs alone (no node list, or the engine
   refused the rules) as the only node of one (`EmbeddedRuntimeConfig.selectedNodeAlone()`). Both targets list `$(AppIdentifierPrefix)networkcore.shared` first in `keychain-access-groups`, so the
-  extension reads the item the app saved. The default team-prefixed profiles already allow this group.
+  extension reads the item the app saved. The default team-prefixed profiles already allow this group. The iOS packet tunnel target (and only it) also lists
+  `$(AppIdentifierPrefix)networkcore.tunnel-private`, the extension-only group of the mesh static private keys and the
+  device instance id (`MeshKeyStore`, core#406; the macOS system extension uses the System keychain instead); the app never reads them.
 - Profile writes: the widget, the Control Center switch, the Live Activity, Shortcuts and Settings change the same VPN
   configuration from other processes. Every change the app makes to it and to the node keys runs one at a time in
   `TunnelController`'s `SerialAsyncQueue`, on a copy read right before (`ConfigurationWrite`): a write sets only the

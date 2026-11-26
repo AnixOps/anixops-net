@@ -120,6 +120,8 @@ targets:
         # Non-exempt: the bundled runtime implements its own standard encryption (TLS, AEAD ciphers, WireGuard) for
         # the tunnel, beyond Apple's system encryption (docs/manual-intervention.md, 出口合规).
         ITSAppUsesNonExemptEncryption: true
+        # Team prefix of the extension-only keychain group `networkcore.tunnel-private` (MeshKeyStore).
+        AnixOpsKeychainPrefix: $(AppIdentifierPrefix)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
