@@ -573,7 +573,10 @@ fn region_summary(status: &Value, members: &[Value], local: &str, code: &str) ->
         (None, Some(true)) => json!("ok"),
         (None, Some(false)) => json!("down"),
         (None, None) => {
-            if ranges.iter().all(|range| text(range, "state") == "unreachable") {
+            if ranges
+                .iter()
+                .all(|range| text(range, "state") == "unreachable")
+            {
                 json!("down")
             } else {
                 json!("ok")
@@ -624,7 +627,12 @@ fn region_summaries(status: &Value, members: &[Value]) -> Vec<(String, Value)> {
         .iter()
         .map(|region| text(region, "code"))
         .filter(|code| !code.is_empty() && *code != local)
-        .map(|code| (code.to_owned(), region_summary(status, members, local, code)))
+        .map(|code| {
+            (
+                code.to_owned(),
+                region_summary(status, members, local, code),
+            )
+        })
         .filter(|(_, summary)| !summary.is_null())
         .collect()
 }
@@ -739,15 +747,17 @@ pub fn members(
             let attention = worst(&in_group);
             let is_local = group_by == "region" && key.as_deref() == local;
             let link = match (group_by, key.as_deref(), local) {
-                ("region", Some(code), Some(local)) if code != local => link_between(status, local, code)
-                    .map(|link| {
-                        json!({
-                            "latencyMs": latency(link),
-                            "via": link.get("via").cloned().unwrap_or(Value::Null),
-                            "state": text(link, "state"),
+                ("region", Some(code), Some(local)) if code != local => {
+                    link_between(status, local, code)
+                        .map(|link| {
+                            json!({
+                                "latencyMs": latency(link),
+                                "via": link.get("via").cloned().unwrap_or(Value::Null),
+                                "state": text(link, "state"),
+                            })
                         })
-                    })
-                    .unwrap_or(Value::Null),
+                        .unwrap_or(Value::Null)
+                }
                 _ => Value::Null,
             };
             let down = text(&summary, "state") == "down";
@@ -1138,7 +1148,9 @@ pub fn notices(status: &Value) -> Value {
     // Region notices (`mesh-ui.md`, 提示): a refused change request, a suggested move, then another
     // region that cannot be reached.
     let own = status.get("self").unwrap_or(&Value::Null);
-    let request = own.get("regionRequest").filter(|request| request.is_object());
+    let request = own
+        .get("regionRequest")
+        .filter(|request| request.is_object());
     if let Some(request) = request.filter(|request| text(request, "state") == "rejected") {
         let region = text(request, "region");
         let mut values = vec![json!(region_name(status, region))];

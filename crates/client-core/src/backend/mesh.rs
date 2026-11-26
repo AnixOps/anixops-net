@@ -466,8 +466,14 @@ pub fn strip_v04(status: &mut Value) {
         );
     }
     for (list, names) in [
-        ("members", &["region", "vms", "externalBridge", "bridgesExternal"][..]),
-        ("subnets", &["region", "kind", "hostGroup", "bridge", "name"][..]),
+        (
+            "members",
+            &["region", "vms", "externalBridge", "bridgesExternal"][..],
+        ),
+        (
+            "subnets",
+            &["region", "kind", "hostGroup", "bridge", "name"][..],
+        ),
     ] {
         if let Some(items) = status.get_mut(list).and_then(Value::as_array_mut) {
             for item in items {
