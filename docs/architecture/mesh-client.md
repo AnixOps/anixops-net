@@ -184,18 +184,26 @@
   也不拦截外部 DNS；内网域名开启时，每个 `tunnel.dns.matchDomains` 后缀以名称解析策略表（NRPT）规则指向
   `tunnel.dns.servers`（IPv4 地址在前；规则注释固定为 `AnixOps Net mesh`，其余域名仍用本机 DNS），引擎停止时删除。
   规则对整机所有用户和程序生效，因此：
-  - 后缀须至少两段且以 `internal` 结尾（如 `mesh.internal`、`eu.mesh.internal`）；单段名、公共后缀、`local`、`arpa`
-    及根一律不写规则，被拒的后缀写入日志并在组网页提示（与内核侧 F-03 的限制一致）。
-  - 本机组网网段（`self.address`、`self.addressV6`）的反向解析区（`*.in-addr.arpa`、`*.ip6.arpa`）同样指向组网 DNS；
+  - 后缀须至少两段且以 `internal` 结尾（如 `mesh.internal`、`eu.mesh.internal`），并符合 core#370：ASCII 标签
+    （允许 Punycode `xn--`），每段 1–63 字节且不以连字符开头或结尾，全长不超过 172 字节，只去掉末尾一个点，前导点、
+    空标签和多个末尾点均拒绝；单段名、公共后缀、`local`、`arpa` 及根一律不写规则，被拒的后缀写入日志并在组网页提示
+    （与内核侧 F-03 的限制一致）。
+  - 本机组网网段（`self.address`、`self.addressV6`）的反向解析区（`*.in-addr.arpa`、`*.ip6.arpa`）同样指向组网 DNS，
+    只限完全位于内网范围（10/8、172.16/12、192.168/16、100.64/10、fd00::/8）内的网段，其余不写并记入日志；
     前缀不在标签边界时展开为下一级的各区，超过 16 个区的网段不写（写入日志）。
   - 同一地区只写主机名：本机所在地区的后缀（`self.domain` 去掉主机名，如 `eu.mesh.internal`）设为组网网卡的连接后缀，
-    Windows 对单段名称追加该后缀后按规则解析；组策略下发了全局后缀搜索列表时，连接后缀不生效。
+    Windows 对单段名称追加该后缀后按规则解析；组策略下发了全局后缀搜索列表时，连接后缀不生效。连接后缀按网卡 GUID
+    保存，网卡不存在时也保留；删除规则时同时按固定 GUID 清除注册表中的这项设置，崩溃后下次启动即清除，
+    同一 GUID 的代理网卡不会继承。
+  - 解析地址 IPv4 在前；只有 IPv6 解析地址而本机无法经 IPv6 到达时，组网页提示。
   - 每次写入或删除规则后清空 DNS 缓存。写入失败时按 5、10、20、40 秒、之后每 60 秒重试，组网页提示「内网域名暂不可用」。
   - 组策略下发了名称解析策略表规则时（`HKLM\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient\DnsPolicyConfig`
     下有规则），本机规则被系统忽略，组网页提示由组策略管理。
   - 规则只在本进程持有下述网卡锁时改动：只开组网的引擎运行期间持锁；崩溃残留由首次 `settle` 在取得锁后清理，
     另一用户的窗口占用网卡时不清理（规则属于对方），留待下次。卸载（MSI `--purge`）时同样按注释删除。
-  - PowerShell 与 rundll32 以系统目录下的绝对路径启动。
+  - PowerShell 与 rundll32 以系统目录下的绝对路径启动，系统目录由 `GetSystemDirectoryW` 取得，不读环境变量。
+  - CI 的 Windows 任务以管理员身份实际写入并删除规则一次（`the_rules_are_written_and_removed_on_windows`），
+    核对只删除带本程序注释的规则、并清除按 GUID 保存的连接后缀。
   - 同一时间只加入一个网络，所有后缀对应同一组解析地址；以后允许同时加入多个网络时，须改为按网络分别对应。
   网卡 GUID 全机唯一，而每个登录用户各运行一个窗口：
   打开网卡前独占 `%ProgramData%` 数据目录下的 `tun-adapter.lock`，另一用户的窗口已占用时报 `tun_in_use`，不替换对方网卡。

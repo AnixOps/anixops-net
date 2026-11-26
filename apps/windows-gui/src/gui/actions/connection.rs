@@ -62,6 +62,8 @@ struct MeshDns {
     outcome: Option<crate::gui::mesh_dns::Applied>,
     left_out: crate::gui::mesh_dns::LeftOut,
     failure: Option<MeshDnsFailure>,
+    /// The servers are IPv6 only and this device reaches none of them.
+    ipv6_unavailable: bool,
 }
 
 #[derive(Debug)]
@@ -201,6 +203,7 @@ impl DesktopCore {
         }
         crate::gui::mesh_dns::issues(
             self.mesh_dns.failure.is_some(),
+            self.mesh_dns.ipv6_unavailable,
             self.mesh_dns.outcome,
             &self.mesh_dns.left_out,
         )
@@ -254,6 +257,12 @@ impl DesktopCore {
                     dns_left_out.suffixes.join(", ")
                 ));
             }
+            if !dns_left_out.public.is_empty() {
+                log_mesh(&format!(
+                    "reverse lookup left out (outside the private ranges): {}",
+                    dns_left_out.public.join(", ")
+                ));
+            }
             if !dns_left_out.reverse.is_empty() {
                 log_mesh(&format!(
                     "reverse lookup left out (more than 16 zones): {}",
@@ -266,6 +275,13 @@ impl DesktopCore {
             .mesh_only
             .as_ref()
             .and_then(DesktopTun::interface_index);
+        let ipv6_unavailable = dns.as_ref().is_some_and(|plan| {
+            crate::gui::mesh_dns::ipv6_only_unreachable(plan, crate::gui::mesh_dns::reachable)
+        });
+        if ipv6_unavailable && !self.mesh_dns.ipv6_unavailable {
+            log_mesh("the mesh's DNS servers are IPv6 only and this device reaches none of them");
+        }
+        self.mesh_dns.ipv6_unavailable = ipv6_unavailable;
         self.mesh_dns.update(dns, Instant::now(), |plan| {
             crate::gui::mesh_dns::apply(plan, interface)
         });

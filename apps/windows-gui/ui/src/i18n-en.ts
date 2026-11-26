@@ -1140,6 +1140,7 @@ export const english: Record<string, string> = {
   "无法启动组网：监听端口已被占用。": "Mesh cannot start: the listening port is in use.",
   "无法启动组网：虚拟网卡已被占用。": "Mesh cannot start: the virtual network interface is in use.",
   "内网域名暂不可用：无法写入名称解析规则，稍后自动重试。": "Internal domain names are unavailable: the name resolution rules could not be written. Retrying automatically.",
+  "内网域名不可用：组网解析地址仅有 IPv6，本机无法通过 IPv6 访问。": "Internal domain names are unavailable: the mesh resolver has only IPv6 addresses, and this device cannot reach them over IPv6.",
   "内网域名不可用：本机的名称解析规则由组策略管理，本地规则不生效。": "Internal domain names are unavailable: name resolution rules on this device are managed by Group Policy, so local rules do not apply.",
   "已忽略内网域名后缀 {suffixes}：后缀须位于 internal 之下。": "Internal domain suffixes ignored: {suffixes}. A suffix must be under internal.",
   "无法启动组网：虚拟网段与现有路由重叠。": "Mesh cannot start: the virtual network overlaps an existing route.",
