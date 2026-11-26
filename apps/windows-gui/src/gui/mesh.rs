@@ -88,6 +88,8 @@ fn settle_attempt(core: &Arc<Mutex<DesktopCore>>, attempt: u32) {
     if ENDING.load(Ordering::Acquire) {
         return;
     }
+    // Rules for the internal domain names that a crash left behind go before anything else runs.
+    super::mesh_dns::clear_leftovers_once();
     let Ok(mut guard) = core.lock() else {
         return;
     };

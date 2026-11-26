@@ -47,6 +47,9 @@ pub struct DesktopCore {
     mesh_only: Option<DesktopTun>,
     /// The engine's mesh routes the adapter does not carry ([`mesh_routes`]), so that each change is logged once.
     mesh_left_out: Vec<String>,
+    /// The name resolution rules in place for the internal domain names (`mesh_dns`), while the engine for the mesh
+    /// alone runs.
+    mesh_dns: Option<(Vec<String>, Vec<String>)>,
 }
 
 impl DesktopCore {
@@ -89,6 +92,11 @@ impl DesktopCore {
     /// Stops the engine for the mesh alone; answers whether it ran.
     pub fn stop_mesh_only(&mut self) -> bool {
         self.mesh_left_out.clear();
+        if self.mesh_dns.take().is_some() {
+            if let Err(error) = crate::gui::mesh_dns::apply(None) {
+                let _ = append_managed_log("tauri-gui", &format!("mesh: {error}"));
+            }
+        }
         match self.mesh_only.take() {
             Some(tun) => {
                 tun.stop();
@@ -124,7 +132,20 @@ impl DesktopCore {
         let status: serde_json::Value =
             serde_json::from_slice(&answer?).map_err(|error| error.to_string())?;
         let tunnel = client_core::backend::mesh::Tunnel::from_status(&status);
-        let (routes, _) = client_core::backend::mesh::Tunnel::routes_and_dns(tunnel.as_ref());
+        let (routes, servers) = client_core::backend::mesh::Tunnel::routes_and_dns(tunnel.as_ref());
+        // The internal domain names: their suffixes go to the mesh's DNS server, every other name keeps the
+        // device's DNS. A failure goes to the log once; the next change tries again.
+        let domains = tunnel
+            .as_ref()
+            .map(|tunnel| tunnel.match_domains.clone())
+            .unwrap_or_default();
+        let dns = crate::gui::mesh_dns::rules(&domains, &servers);
+        if dns != self.mesh_dns {
+            if let Err(error) = crate::gui::mesh_dns::apply(dns.as_ref()) {
+                let _ = append_managed_log("tauri-gui", &format!("mesh: {error}"));
+            }
+            self.mesh_dns = dns;
+        }
         let (routes, mut left_out) = mesh_routes(&routes);
         if let Some(tunnel) = &tunnel {
             left_out.extend(tunnel.refused.iter().cloned());

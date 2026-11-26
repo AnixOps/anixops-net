@@ -70,6 +70,7 @@ mod gui {
     mod capture_sessions;
     mod linked_sources;
     mod mesh;
+    mod mesh_dns;
     mod mitm_plugins;
     mod owned_proxy;
     mod reconnect;
