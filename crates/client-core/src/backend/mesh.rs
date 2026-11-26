@@ -24,6 +24,9 @@ pub const FILE: &str = "mesh-networks.dpapi";
 #[cfg(windows)]
 const WHAT: &str = "mesh networks file";
 
+/// The device's instance ID file under the client's data folder, beside [`FILE`].
+pub const INSTANCE_FILE: &str = "mesh-instance-id";
+
 /// The key of the selected node in the routing section [`with_outbounds`] builds for a profile without one.
 pub const NODE_KEY: &str = "node";
 
@@ -127,6 +130,7 @@ pub fn save_network(
         .find(|network| network.name == name)
         .map(|network| &network.config);
     let config = with_private_key(config, existing)?;
+    let config = with_instance_id(config, &instance_id(dir)?);
     store(dir, &saved(&networks, &name, config.clone()))?;
     if let Some(before) = before {
         request(json!({ "cmd": "mesh_leave", "network": before }));
@@ -153,12 +157,18 @@ pub fn set_joined(
     }
     let networks = load(dir)?;
     let mut next = self::joined(&networks, name, joined).ok_or_else(|| not_found(name))?;
-    // A network saved before keys existed gets its own when it is joined; the engine is told before it joins.
+    // A network saved before keys or the instance ID existed gets them when it is joined; the engine is told
+    // before it joins.
     let mut keyed_config = None;
     if joined {
+        let id = instance_id(dir)?;
         if let Some(network) = next.iter_mut().find(|network| network.name == name) {
-            if !has_private_key(&network.config) {
-                let config = with_private_key(network.config.clone(), None)?;
+            let mut config = network.config.clone();
+            if !has_private_key(&config) {
+                config = with_private_key(config, None)?;
+            }
+            let config = with_instance_id(config, &id);
+            if config != network.config {
                 network.config = config.clone();
                 keyed_config = Some(config);
             }
@@ -215,6 +225,10 @@ pub fn with_joined(dir: &Path, envelope: String) -> (String, Option<String>) {
         return (envelope, None);
     }
     let networks = match load(dir) {
+        Ok(networks) => networks,
+        Err(error) => return (envelope, Some(error)),
+    };
+    let networks = match with_instance_ids(dir, networks) {
         Ok(networks) => networks,
         Err(error) => return (envelope, Some(error)),
     };
@@ -308,6 +322,91 @@ pub fn with_private_key(mut config: Value, existing: Option<&Value>) -> Result<V
     }
     node["private_key"] = key;
     Ok(config)
+}
+
+/// Whether `id` is a valid `node.instance_id`: `^[0-9A-Za-z][0-9A-Za-z-]{0,63}$`.
+fn is_instance_id(id: &str) -> bool {
+    let bytes = id.as_bytes();
+    (1..=64).contains(&bytes.len())
+        && bytes[0].is_ascii_alphanumeric()
+        && bytes
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'-')
+}
+
+/// A lowercase UUID v4 text from 16 random bytes (version and variant bits set).
+fn uuid_v4(mut bytes: [u8; 16]) -> String {
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    let mut text = String::with_capacity(36);
+    for (index, byte) in bytes.iter().enumerate() {
+        if matches!(index, 4 | 6 | 8 | 10) {
+            text.push('-');
+        }
+        text.push_str(&format!("{byte:02x}"));
+    }
+    text
+}
+
+/// This device's mesh instance ID (`node.instance_id` of every network, and `self.id` of the status snapshot): made
+/// on first use from 16 random bytes as a UUID v4 and kept in [`INSTANCE_FILE`] under `dir`. A file that is there
+/// but holds no valid ID is an error, never replaced: a changing ID would split the device in the panel. Not a
+/// secret, so the file is not sealed.
+pub fn instance_id(dir: &Path) -> Result<String, String> {
+    let file = dir.join(INSTANCE_FILE);
+    match fs::read(&file) {
+        Ok(bytes) => {
+            let text = String::from_utf8_lossy(&bytes);
+            let id = text.trim();
+            if is_instance_id(id) {
+                Ok(id.to_string())
+            } else {
+                Err("the mesh instance ID file is not valid".to_string())
+            }
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            let mut bytes = [0u8; 16];
+            getrandom::getrandom(&mut bytes).map_err(|_| {
+                crate::refusal::coded("mesh.instance_id", "the instance ID could not be generated")
+            })?;
+            let id = uuid_v4(bytes);
+            desktop_mitm::sessions::write_private(&file, id.as_bytes())
+                .map_err(|error| format!("the mesh instance ID could not be saved: {error}"))?;
+            Ok(id)
+        }
+        Err(error) => Err(format!("the mesh instance ID could not be read: {error}")),
+    }
+}
+
+/// `config` with `node.instance_id` set to `id` (created `node` if missing); a different one it brought is replaced,
+/// the rest stays.
+pub fn with_instance_id(mut config: Value, id: &str) -> Value {
+    let Some(root) = config.as_object_mut() else {
+        return config;
+    };
+    let node = root
+        .entry("node")
+        .or_insert_with(|| Value::Object(Map::new()));
+    if !node.is_object() {
+        *node = Value::Object(Map::new());
+    }
+    node["instance_id"] = Value::String(id.to_string());
+    config
+}
+
+/// `networks` whose joined ones carry this device's instance ID, for the engine's profile (saved configs already do;
+/// this covers ones saved before it existed). The ID is made only when a network is joined.
+pub fn with_instance_ids(
+    dir: &Path,
+    mut networks: Vec<SavedNetwork>,
+) -> Result<Vec<SavedNetwork>, String> {
+    if networks.iter().any(|network| network.joined) {
+        let id = instance_id(dir)?;
+        for network in networks.iter_mut().filter(|network| network.joined) {
+            network.config = with_instance_id(network.config.clone(), &id);
+        }
+    }
+    Ok(networks)
 }
 
 /// `networks` with `config` saved under `name` in place of a network of the same name, joined: a device joins one
@@ -793,6 +892,94 @@ mod tests {
             assert!(has_private_key(&fixed));
             assert_ne!(fixed["node"]["private_key"], bad);
         }
+    }
+
+    #[test]
+    fn the_instance_id_is_a_lowercase_uuid_v4() {
+        let first = uuid_v4([0xff; 16]);
+        assert_eq!(first, "ffffffff-ffff-4fff-bfff-ffffffffffff");
+        assert!(is_instance_id(&first));
+        let mut one = [0u8; 16];
+        let mut two = [0u8; 16];
+        getrandom::getrandom(&mut one).unwrap();
+        getrandom::getrandom(&mut two).unwrap();
+        let (one, two) = (uuid_v4(one), uuid_v4(two));
+        assert_ne!(one, two);
+        for id in [&one, &two] {
+            assert!(is_instance_id(id));
+            assert_eq!(id.len(), 36);
+            assert_eq!(id.as_bytes()[14], b'4');
+            assert!(matches!(id.as_bytes()[19], b'8' | b'9' | b'a' | b'b'));
+            assert_eq!(id.to_lowercase(), **id);
+        }
+    }
+
+    #[test]
+    fn the_instance_id_format_is_checked() {
+        assert!(is_instance_id("a"));
+        assert!(is_instance_id("0-A-z"));
+        assert!(is_instance_id(&"a".repeat(64)));
+        assert!(!is_instance_id(""));
+        assert!(!is_instance_id("-abc"));
+        assert!(!is_instance_id(&"a".repeat(65)));
+        assert!(!is_instance_id("abc_def"));
+        assert!(!is_instance_id("abc def"));
+        assert!(!is_instance_id("设备"));
+        assert!(!is_instance_id("abc\u{e9}"));
+    }
+
+    #[test]
+    fn injecting_the_instance_id_overwrites_a_foreign_one_and_keeps_the_rest() {
+        let mut incoming = config("a", "s");
+        incoming["node"] = json!({ "instance_id": "someone-else", "address": "10.0.0.2" });
+        let fixed = with_instance_id(incoming, "mine-1");
+        assert_eq!(fixed["node"]["instance_id"], "mine-1");
+        assert_eq!(fixed["node"]["address"], "10.0.0.2");
+        assert_eq!(fixed["network"]["name"], "a");
+        let bare = with_instance_id(json!({ "config_version": 1 }), "mine-1");
+        assert_eq!(bare["node"]["instance_id"], "mine-1");
+    }
+
+    #[test]
+    fn the_instance_id_file_is_made_once_and_a_bad_one_is_an_error() {
+        let dir = std::env::temp_dir().join(format!("mesh-instance-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let first = instance_id(&dir).unwrap();
+        assert!(is_instance_id(&first));
+        assert_eq!(instance_id(&dir).unwrap(), first);
+        fs::write(dir.join(INSTANCE_FILE), b"-bad").unwrap();
+        assert!(instance_id(&dir).is_err());
+        assert_eq!(fs::read(dir.join(INSTANCE_FILE)).unwrap(), b"-bad");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn saving_keeps_one_instance_id_in_every_network() {
+        if !ENABLED {
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("mesh-iid-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let mut foreign = config("a", "s");
+        foreign["node"] = json!({ "instance_id": "someone-else" });
+        save_network(&dir, foreign, |_| None).unwrap();
+        save_network(&dir, config("b", "s"), |_| None).unwrap();
+        save_network(&dir, config("a", "s2"), |_| None).unwrap();
+        let id = instance_id(&dir).unwrap();
+        for network in load(&dir).unwrap() {
+            assert_eq!(network.config["node"]["instance_id"], id.as_str());
+        }
+        // A network saved before the ID existed gets it when joined and in the engine's profile.
+        let mut old = config("old", "s");
+        old["node"] = json!({ "instance_id": "stale" });
+        let old = SavedNetwork {
+            name: "old".into(),
+            joined: true,
+            config: old,
+        };
+        let carried = with_instance_ids(&dir, vec![old]).unwrap();
+        assert_eq!(carried[0].config["node"]["instance_id"], id.as_str());
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
