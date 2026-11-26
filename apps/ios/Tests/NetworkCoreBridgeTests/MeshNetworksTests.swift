@@ -157,7 +157,9 @@ final class MeshNetworksTests: XCTestCase {
 
     func testInstanceIDValidation() {
         XCTAssertTrue(MeshNetworkLibrary.isValidInstanceID(MeshNetworkLibrary.newInstanceID()))
-        XCTAssertEqual(MeshNetworkLibrary.newInstanceID(), MeshNetworkLibrary.newInstanceID().lowercased())
+        let made = MeshNetworkLibrary.newInstanceID()
+        XCTAssertEqual(made, made.lowercased())
+        XCTAssertNotEqual(made, MeshNetworkLibrary.newInstanceID())
         XCTAssertTrue(MeshNetworkLibrary.isValidInstanceID("a"))
         XCTAssertTrue(MeshNetworkLibrary.isValidInstanceID("A-1-b"))
         XCTAssertTrue(MeshNetworkLibrary.isValidInstanceID(String(repeating: "a", count: 64)))
