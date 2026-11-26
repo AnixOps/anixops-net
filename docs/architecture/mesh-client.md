@@ -191,7 +191,10 @@
   - 反向解析区（`*.in-addr.arpa`、`*.ip6.arpa`）只取 `tunnel.dns.matchDomains` 中由内核给出的（core#375：内核取网络
     地址范围与内网白名单的交集，按标签边界展开），同样指向组网 DNS；客户端不自行推导。客户端只接受 `in-addr.arpa` 下
     1–4 段 0–255 的十进制标签、`ip6.arpa` 下 2–32 段单个十六进制标签，`arpa`、`in-addr.arpa`、`ip6.arpa` 本身及更宽的区
-    一律拒绝并写入日志。
+    一律拒绝并写入日志。此外，区须整个落在内网白名单（intranet-mesh §15.4：IPv4 10.0.0.0/8、172.16.0.0/12、
+    192.168.0.0/16、100.64.0.0/10，IPv6 fd00::/8）之内：标签倒序即前缀，前缀长度不短于白名单范围且前导位一致，
+    如 `16.172.in-addr.arpa`、`d.f.ip6.arpa` 接受，`172.in-addr.arpa`（比 172.16/12 更宽）、`15.172.in-addr.arpa`、
+    `c.f.ip6.arpa` 拒绝，作为纵深防御，防止公网地址的反向查询被指向组网 DNS。
   - 同一地区只写主机名：本机所在地区的后缀（`self.domain` 去掉主机名，如 `eu.mesh.internal`）设为组网网卡的连接后缀，
     Windows 对单段名称追加该后缀后按规则解析；组策略下发了全局后缀搜索列表时，连接后缀不生效。连接后缀按网卡 GUID
     保存，网卡不存在时也保留；删除规则时同时按固定 GUID 清除注册表中的这项设置，崩溃后下次启动即清除，
@@ -205,6 +208,9 @@
   - PowerShell 与 rundll32 以系统目录下的绝对路径启动，系统目录由 `GetSystemDirectoryW` 取得，不读环境变量。
   - CI 的 Windows 任务以管理员身份实际写入并删除规则一次（`the_rules_are_written_and_removed_on_windows`），
     核对只删除带本程序注释的规则、并清除按 GUID 保存的连接后缀。
+  - 网卡 GUID `{4E3C5B8A-7D21-4F0B-9A6E-1C2D3E4F5A6B}` 抄自内核 `platform-windows` 的 `tun::ADAPTER_GUID`（内核未导出）；
+    单元测试 `the_adapter_guid_is_the_kernels` 核对其各段，内核钉版（根 `Cargo.toml` 的 `rev`）每次升级时必须对照新的
+    `tun.rs` 重新核对。
   - 同一时间只加入一个网络，所有后缀对应同一组解析地址；以后允许同时加入多个网络时，须改为按网络分别对应。
   网卡 GUID 全机唯一，而每个登录用户各运行一个窗口：
   打开网卡前独占 `%ProgramData%` 数据目录下的 `tun-adapter.lock`，另一用户的窗口已占用时报 `tun_in_use`，不替换对方网卡。
