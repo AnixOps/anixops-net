@@ -1,9 +1,11 @@
 import Foundation
+import Security
 
 /// A 组网 (mesh) network this device saved: the kernel's `config_version: 1` network configuration without its
 /// secret (docs/architecture/mesh-client.md; networkcore_anixops docs/architecture/mesh-module.md, 配置). The secret
 /// is in the shared Keychain (`MeshNetworkLibrary.secretAccount(_:)`), and goes into the configuration only when
-/// the configuration is handed to the engine (`runtimeConfig(secret:)`). Phones are access nodes: no listening port,
+/// the configuration is handed to the engine (`runtimeConfig(secret:privateKey:)`), as does the network's static
+/// private key (`MeshNetworkLibrary.privateKeyAccount(_:)`, `node.private_key`). Phones are access nodes: no listening port,
 /// no relay, no advertised subnets.
 public struct MeshNetwork: Codable, Equatable, Identifiable {
     /// `network.name`: the network's id in the status snapshot and the mesh outbound's tag.
@@ -21,21 +23,27 @@ public struct MeshNetwork: Codable, Equatable, Identifiable {
         self.joined = joined
     }
 
-    /// The configuration the engine takes: this one with `network.secret` filled in. Nil when the saved text is not
+    /// The configuration the engine takes: this one with `network.secret` filled in, and `node.private_key` when
+    /// `privateKey` is given (the node section is made if the saved text has none). Nil when the saved text is not
     /// a JSON object.
-    public func runtimeConfig(secret: String) -> [String: Any]? {
+    public func runtimeConfig(secret: String, privateKey: String? = nil) -> [String: Any]? {
         guard var object = (try? JSONSerialization.jsonObject(with: Data(config.utf8))) as? [String: Any] else {
             return nil
         }
         var network = object["network"] as? [String: Any] ?? [:]
         network["secret"] = secret
         object["network"] = network
+        if let privateKey {
+            var node = object["node"] as? [String: Any] ?? [:]
+            node["private_key"] = privateKey
+            object["node"] = node
+        }
         return object
     }
 
-    /// `mesh_save_network`'s argument as JSON text, secret included. Nil as for `runtimeConfig(secret:)`.
-    public func runtimeConfigJSON(secret: String) -> String? {
-        guard let object = runtimeConfig(secret: secret),
+    /// `mesh_save_network`'s argument as JSON text, secret and private key included. Nil as for `runtimeConfig`.
+    public func runtimeConfigJSON(secret: String, privateKey: String? = nil) -> String? {
+        guard let object = runtimeConfig(secret: secret, privateKey: privateKey),
               let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
         else {
             return nil
@@ -68,10 +76,10 @@ public struct MeshNetwork: Codable, Equatable, Identifiable {
         return "mesh-x" + name.utf8.map { String(format: "%02x", $0) }.joined()
     }
 
-    /// The `routing.outbounds` entry: `{"type":"mesh"}` with the configuration and its secret. Nil as for
-    /// `runtimeConfig(secret:)`.
-    public func outboundEntry(secret: String) -> [String: JSONValue]? {
-        guard let text = runtimeConfigJSON(secret: secret),
+    /// The `routing.outbounds` entry: `{"type":"mesh"}` with the configuration, its secret and its private key.
+    /// Nil as for `runtimeConfig`.
+    public func outboundEntry(secret: String, privateKey: String? = nil) -> [String: JSONValue]? {
+        guard let text = runtimeConfigJSON(secret: secret, privateKey: privateKey),
               var entry = try? JSONDecoder().decode([String: JSONValue].self, from: Data(text.utf8))
         else {
             return nil
@@ -228,13 +236,67 @@ public struct MeshNetworkDraft: Equatable {
     }
 }
 
-/// The saved mesh networks: the list in the app's settings, each secret in the shared Keychain.
+/// The saved mesh networks: the list in the app's settings, each secret and static private key in the shared Keychain.
 public enum MeshNetworkLibrary {
     static let defaultsKey = "networkcore.mesh-networks"
 
     /// The Keychain account of a network's secret.
     public static func secretAccount(_ name: String) -> String {
         "mesh-network.\(name)"
+    }
+
+    /// The Keychain account of a network's static private key (`node.private_key`, secure mode). The prefix differs
+    /// from `secretAccount(_:)`'s, so no network name can make the two accounts meet.
+    public static func privateKeyAccount(_ name: String) -> String {
+        "mesh-network-key.\(name)"
+    }
+
+    /// Whether `key` is a static private key the kernel takes: standard base64 with padding of exactly 32 bytes.
+    public static func isValidPrivateKey(_ key: String) -> Bool {
+        Data(base64Encoded: key)?.count == 32
+    }
+
+    /// A new static private key: 32 bytes from the system random source, as standard base64 with padding. Throws
+    /// when the random source fails, so no network is saved with a weak or empty key.
+    public static func newPrivateKey() throws -> String {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        guard status == errSecSuccess else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(status))
+        }
+        return Data(bytes).base64EncodedString()
+    }
+
+    /// The network's saved private key; nil when there is none or the saved value is not a valid key. The extension
+    /// reads this and never creates a key: without one it leaves `node.private_key` out.
+    public static func privateKey(_ name: String) -> String? {
+        guard let key = try? NodeSecretStore.value(account: privateKeyAccount(name)), isValidPrivateKey(key) else {
+            return nil
+        }
+        return key
+    }
+
+    /// The network's private key, created and saved when absent or not valid. An existing key is never replaced:
+    /// the panel lists its public key, and a new one would lock the device out.
+    @discardableResult
+    public static func ensurePrivateKey(_ name: String) throws -> String {
+        // A Keychain that cannot be read now (locked, interrupted) throws here instead of reading as "no key": a
+        // new key would replace the one the panel lists. Only a missing or malformed key is replaced.
+        if let key = try NodeSecretStore.value(account: privateKeyAccount(name)), isValidPrivateKey(key) {
+            return key
+        }
+        let key = try newPrivateKey()
+        _ = try NodeSecretStore.save(key, account: privateKeyAccount(name))
+        return key
+    }
+
+    /// Gives every joined network without a key one, for networks saved by earlier versions. The app calls it before
+    /// the networks go to the tunnel profile; a failure leaves that network without a key (it runs without
+    /// `node.private_key`), and the next call tries again.
+    public static func ensurePrivateKeys(_ defaults: UserDefaults = .standard) {
+        for network in load(defaults) where network.joined {
+            _ = try? ensurePrivateKey(network.name)
+        }
     }
 
     public static func load(_ defaults: UserDefaults = .standard) -> [MeshNetwork] {
@@ -251,6 +313,8 @@ public enum MeshNetworkLibrary {
     /// Saves `network` with its secret, in place of a saved network of the same name. Only one network is joined
     /// at a time on a phone (docs/mesh-ui.md, 入口与导航): joining this one marks the others not joined.
     public static func save(_ network: MeshNetwork, secret: String, _ defaults: UserDefaults = .standard) throws {
+        // The key first: when it cannot be made, no network is saved without one. A saved key stays as it is.
+        _ = try ensurePrivateKey(network.name)
         _ = try NodeSecretStore.save(secret, account: secretAccount(network.name))
         var networks = load(defaults).filter { $0.name != network.name }
         if network.joined {
@@ -262,6 +326,7 @@ public enum MeshNetworkLibrary {
 
     public static func remove(_ name: String, _ defaults: UserDefaults = .standard) {
         try? NodeSecretStore.delete(account: secretAccount(name))
+        try? NodeSecretStore.delete(account: privateKeyAccount(name))
         store(load(defaults).filter { $0.name != name }, defaults)
     }
 
@@ -306,16 +371,18 @@ public enum MeshNetworkLibrary {
         return networks.filter(\.joined)
     }
 
-    /// The `routing.outbounds` entries of `networks`, each with the secret `secret` gives for its name, and the
-    /// names left out: no secret, or a configuration that is not a JSON object.
+    /// The `routing.outbounds` entries of `networks`, each with the secret `secret` gives for its name and the
+    /// private key `privateKey` gives (none: no `node.private_key`), and the names left out: no secret, or a
+    /// configuration that is not a JSON object.
     public static func outbounds(
         _ networks: [MeshNetwork],
-        secret: (String) -> String?
+        secret: (String) -> String?,
+        privateKey: (String) -> String? = { _ in nil }
     ) -> (outbounds: [String: [String: JSONValue]], missing: [String]) {
         var outbounds: [String: [String: JSONValue]] = [:]
         var missing: [String] = []
         for network in networks {
-            guard let value = secret(network.name), let entry = network.outboundEntry(secret: value) else {
+            guard let value = secret(network.name), let entry = network.outboundEntry(secret: value, privateKey: privateKey(network.name)) else {
                 missing.append(network.name)
                 continue
             }
@@ -334,5 +401,18 @@ public enum MeshNetworkLibrary {
             secrets[network.name] = secret(network.name)
         }
         return secrets.isEmpty ? nil : secrets
+    }
+
+    /// The static private keys of the joined networks by name, for `TunnelStartSecrets.meshPrivateKeys` (a macOS
+    /// System Extension cannot read the user's Keychain); nil when there are none.
+    public static func joinedPrivateKeys(_ defaults: UserDefaults = .standard) -> [String: String]? {
+        guard MeshSupport.enabled else {
+            return nil
+        }
+        var keys: [String: String] = [:]
+        for network in load(defaults) where network.joined {
+            keys[network.name] = privateKey(network.name)
+        }
+        return keys.isEmpty ? nil : keys
     }
 }
