@@ -232,41 +232,22 @@ impl DesktopCore {
             serde_json::from_slice(&answer?).map_err(|error| error.to_string())?;
         let tunnel = client_core::backend::mesh::Tunnel::from_status(&status);
         let (routes, servers) = client_core::backend::mesh::Tunnel::routes_and_dns(tunnel.as_ref());
-        // The internal domain names: the mesh's suffixes and the reverse zones of the device's own subnets go to
-        // the mesh's DNS server, every other name keeps the device's DNS (`mesh_dns`).
+        // The internal domain names: the mesh's suffixes and the reverse zones the engine names go to the mesh's
+        // DNS server, every other name keeps the device's DNS (`mesh_dns`).
         let domains = tunnel
             .as_ref()
             .map(|tunnel| tunnel.match_domains.clone())
             .unwrap_or_default();
-        let own = status.get("self");
-        let own_text = |key: &str| {
-            own.and_then(|own| own.get(key))
-                .and_then(serde_json::Value::as_str)
-        };
-        let subnets: Vec<String> = ["address", "addressV6"]
-            .into_iter()
-            .filter_map(own_text)
-            .map(str::to_string)
-            .collect();
-        let (dns, dns_left_out) =
-            crate::gui::mesh_dns::plan(&domains, &servers, &subnets, own_text("domain"));
+        let own_domain = status
+            .get("self")
+            .and_then(|own| own.get("domain"))
+            .and_then(serde_json::Value::as_str);
+        let (dns, dns_left_out) = crate::gui::mesh_dns::plan(&domains, &servers, own_domain);
         if dns_left_out != self.mesh_dns.left_out {
             if !dns_left_out.suffixes.is_empty() {
                 log_mesh(&format!(
-                    "internal domain suffixes left out (outside a mesh's namespace under internal): {}",
+                    "internal domain names left out (neither a mesh's namespace under internal nor a reverse zone): {}",
                     dns_left_out.suffixes.join(", ")
-                ));
-            }
-            if !dns_left_out.public.is_empty() {
-                log_mesh(&format!(
-                    "reverse lookup left out (outside the private ranges): {}",
-                    dns_left_out.public.join(", ")
-                ));
-            }
-            if !dns_left_out.reverse.is_empty() {
-                log_mesh(&format!(
-                    "reverse lookup left out (more than 16 zones): {}",
-                    dns_left_out.reverse.join(", ")
                 ));
             }
             self.mesh_dns.left_out = dns_left_out;
