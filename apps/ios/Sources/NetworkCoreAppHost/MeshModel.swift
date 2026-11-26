@@ -129,7 +129,7 @@ final class MeshModel {
             status = nil
             return
         }
-        status = MeshSupport.v04Enabled ? object : MeshView.stripV04(object)
+        status = MeshSupport.showsV04 ? object : MeshView.stripV04(object)
     }
 
     /// Joins or leaves the network the snapshot names. Joining and leaving do not touch the proxy (R23); the saved
@@ -497,3 +497,11 @@ enum MeshDemo {
     static let status = #"{"statusVersion":1,"available":true,"network":{"id":"office","name":"office","state":"joined","security":"forward_secrecy","failure":null,"joining":null,"routingPolicy":"latency","dnsSuffix":"mesh.internal","dnsEnabled":true},"self":{"id":"m-self","name":"par-phone","role":"client","address":"10.144.144.5/24","addressManaged":true,"domain":"par-phone.eu.mesh.internal","region":"eu","regionBasis":{"border":"fra-border","latencyMs":12},"regionState":"auto"},"regions":[{"code":"eu","name":"欧洲","local":true},{"code":"ap","name":"亚太","local":false}],"members":[{"id":"m-1","name":"fra-border","role":"border","region":"eu","state":"online","address":"10.144.144.1/24","domain":"fra-border.eu.mesh.internal","addressManaged":true,"connection":"direct","hops":0,"transport":"udp","latencyMs":11,"path":["m-1"],"pathState":"auto","subnets":[],"vms":[],"duplicateOf":[]},{"id":"m-2","name":"ams-gw","role":"gateway","region":"eu","state":"online","address":"10.144.144.2/24","domain":"ams-gw.eu.mesh.internal","addressManaged":true,"connection":"relay","hops":1,"transport":"udp","latencyMs":24,"path":["m-1","m-2"],"pathState":"auto","subnets":["192.168.20.0/24"],"vms":[],"duplicateOf":[]},{"id":"m-3","name":"lon-host","role":"host","region":"eu","state":"online","address":"10.144.144.3/24","domain":"lon-host.eu.mesh.internal","addressManaged":true,"connection":"direct","hops":0,"transport":"tcp","latencyMs":9,"path":["m-3"],"pathState":"auto","subnets":[],"vms":[{"name":"build-1","domain":"build-1.eu.mesh.internal","address":"10.144.150.2"},{"name":"db-1","domain":"db-1.eu.mesh.internal","address":"10.144.150.3"}],"duplicateOf":[]},{"id":"m-4","name":"tyo-border","role":"border","region":"ap","state":"online","address":"10.144.146.1/24","domain":"tyo-border.ap.mesh.internal","addressManaged":true,"connection":"cross_region","hops":1,"transport":"udp","latencyMs":228,"path":["m-1","m-4"],"pathState":"auto","subnets":["192.168.30.0/24"],"vms":[],"duplicateOf":[]}],"subnets":[{"cidr":"192.168.20.0/24","region":"eu","advertisers":[{"member":"m-2","inUse":true}],"latencyMs":26,"path":["m-1","m-2"],"state":"ok","overlaps":[],"localOverlap":false,"route":"mesh"},{"cidr":"192.168.30.0/24","region":"ap","advertisers":[{"member":"m-4","inUse":true}],"latencyMs":231,"path":["m-1","m-4"],"state":"ok","overlaps":[],"localOverlap":false,"route":"mesh"}],"links":[{"from":"eu","to":"ap","via":null,"borders":["m-1","m-4"],"latencyMs":214,"loss":0.0,"state":"ok","reason":null}],"refusedAdvertisements":0}"#
 }
 #endif
+
+extension MeshSupport {
+    /// Whether the page shows the kernel 0.4 parts: the release gate (`v04Enabled`), or the made-up demo snapshot of
+    /// the screenshots (`-AnixOpsDemo YES`), which has no engine behind it and sends no 0.4 command.
+    static var showsV04: Bool {
+        v04Enabled || TunnelController.isDemo
+    }
+}
