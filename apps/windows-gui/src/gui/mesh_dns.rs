@@ -528,7 +528,7 @@ mod tests {
             None,
         );
         assert_eq!(
-            plan.unwrap().namespaces,
+            rules.unwrap().namespaces,
             [".mesh.internal", ".144.144.10.in-addr.arpa"]
         );
         assert_eq!(left_out.reverse, ["10.128.0.0/9"]);
