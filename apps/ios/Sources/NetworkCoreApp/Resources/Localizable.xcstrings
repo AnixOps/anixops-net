@@ -24085,38 +24085,6 @@
         }
       }
     },
-    "“%@”包含通配符（如 * 或顶级域名），启用后可能解密几乎所有 HTTPS 流量。请确认来源可信。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "“%@” includes a wildcard (such as * or a top-level domain) and may decrypt nearly all HTTPS traffic. Confirm that you trust its source."
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "「%@」包含萬用字元（如 * 或頂級網域），啟用後可能解密幾乎所有 HTTPS 流量。請確認來源可信。"
-          }
-        }
-      }
-    },
-    "“%@”已导入但尚未启用。开启前请确认插件来源可信。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "“%@” was imported disabled. Confirm that you trust its source before enabling it."
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "「%@」已匯入但尚未啟用。開啟前請確認外掛來源可信。"
-          }
-        }
-      }
-    },
     " 等 %lld 个域名": {
       "localizations": {
         "en": {
@@ -24145,6 +24113,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "「%@」將解密以下網域的 HTTPS 流量：%@%@。"
+          }
+        }
+      }
+    },
+    "“%@”包含通配符（如 * 或顶级域名），启用后可能解密几乎所有 HTTPS 流量。仅在信任来源时启用。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” includes a wildcard (such as * or a top-level domain) and may decrypt nearly all HTTPS traffic. Only enable plugins from trusted sources."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%@」包含萬用字元（如 * 或頂級網域），啟用後可能解密幾乎所有 HTTPS 流量。僅在信任來源時啟用。"
+          }
+        }
+      }
+    },
+    "“%@”已导入但尚未启用。仅在信任来源时启用。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” was imported disabled. Only enable plugins from trusted sources."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%@」已匯入但尚未啟用。僅在信任來源時啟用。"
           }
         }
       }

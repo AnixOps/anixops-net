@@ -485,10 +485,10 @@ final class PluginsModel: ObservableObject {
             host == "*" || host == "*.*" || (host.hasPrefix("*.") && host.dropFirst(2).contains(".") == false)
         }
         if isBroad {
-            return String(localized: "“\(plugin.name)”包含通配符（如 * 或顶级域名），启用后可能解密几乎所有 HTTPS 流量。请确认来源可信。")
+            return String(localized: "“\(plugin.name)”包含通配符（如 * 或顶级域名），启用后可能解密几乎所有 HTTPS 流量。仅在信任来源时启用。")
         }
         if hostnames.isEmpty {
-            return String(localized: "“\(plugin.name)”已导入但尚未启用。开启前请确认插件来源可信。")
+            return String(localized: "“\(plugin.name)”已导入但尚未启用。仅在信任来源时启用。")
         }
         let preview = ListFormatter.localizedString(byJoining: Array(hostnames.prefix(5)))
         let suffix = hostnames.count > 5 ? String(localized: " 等 \(hostnames.count) 个域名") : ""
