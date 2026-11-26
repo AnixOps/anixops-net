@@ -57,7 +57,9 @@ const settingsItem: NavItem = { page: "settings", label: "设置", icon: Setting
 
 /** The sidebar of a mode: the main pages, then the ones below the gap. */
 function sidebarOf(mode: AppMode, mesh = false): { main: NavItem[]; foot: NavItem[] } {
-  if (mode === "debug") return { main: debugNavigation, foot: [egressItem, settingsItem] };
+  if (mode === "debug") {
+    return { main: debugNavigation, foot: mesh ? [meshItem, egressItem, settingsItem] : [egressItem, settingsItem] };
+  }
   const main = mesh ? navigation.flatMap((item) => (item.page === "proxies" ? [item, meshItem] : [item])) : navigation;
   return { main, foot: [settingsItem] };
 }

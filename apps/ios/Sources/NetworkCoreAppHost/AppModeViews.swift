@@ -48,7 +48,7 @@ extension DebugExit {
 struct ModeChoiceView: View {
     let choose: (AppMode) -> Void
     @Environment(\.brand) private var brand
-    @State private var selection = AppMode.debug
+    @State private var selection = AppMode.proxy
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -59,7 +59,7 @@ struct ModeChoiceView: View {
                 .foregroundStyle(brand.text)
                 .fixedSize(horizontal: false, vertical: true)
             VStack(spacing: 12) {
-                ForEach([AppMode.debug, .proxy]) { mode in
+                ForEach([AppMode.proxy, .debug]) { mode in
                     option(mode)
                 }
             }
