@@ -9,6 +9,7 @@
 	<key>keychain-access-groups</key>
 	<array>
 		<string>$(AppIdentifierPrefix)networkcore.shared</string>
+		<string>$(AppIdentifierPrefix)networkcore.tunnel-private</string>
 	</array>
 </dict>
 </plist>

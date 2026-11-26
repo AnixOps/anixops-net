@@ -815,6 +815,9 @@ public enum TunnelProfileKeys {
     /// extension adds each network's secret from the shared Keychain (`MeshNetworkLibrary.secretAccount`) or the
     /// start secrets. Absent joins none.
     public static let meshNetworks = "networkcore.mesh-networks"
+    /// `Data` holding the names of every saved mesh network, joined or not (`MeshNetworkLibrary.savedNamesValue`). The
+    /// extension deletes the keys it holds for any other name. Absent deletes none.
+    public static let meshSavedNames = "networkcore.mesh-saved-names"
     /// `true` when the tunnel runs for the mesh alone: the proxy is off and the joined networks are on
     /// (docs/mesh-ui.md, 入口与导航). The extension then needs no node key, runs `EmbeddedRuntimeConfig.meshOnly` and
     /// routes only the networks the engine names (`MeshTunnel`). Absent is a proxy tunnel.

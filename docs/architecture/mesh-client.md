@@ -200,11 +200,16 @@
   配置只有单个出站时，改写为路由表：该出站为 `node`，`rules` 为 `["FINAL,node"]`，`global` 为 `node`。
   引擎不接受带组网出站的配置时（未编进组网），照常不带组网启动，并记入日志或诊断。
 - iOS、macOS：App 设置保存不含密钥的配置，密钥在共享钥匙串（账户 `mesh-network.<名称>`）；
-  每个网络另有各自的安全模式静态私钥：由系统随机数生成 32 字节，以标准 base64（带填充）存入同一共享钥匙串
-  （账户 `mesh-network-key.<名称>`），不进 App 设置、配置文本、日志或界面，在配置交给引擎时作为 `node.private_key` 注入。
-  同名网络再次保存时沿用已存的私钥，网络被移除时一并删除；此前保存、没有私钥的网络在下次保存或加入时补上，
-  最迟在 App 把已加入的网络写入隧道配置时补上；扩展只读取私钥（macOS 系统扩展随启动密钥取得），读不到时不带 `node.private_key`；
-  隧道配置的 `networkcore.mesh-networks` 只带已加入的网络，扩展启动时补上密钥；macOS 系统扩展经启动密钥取得。
+  每个网络另有各自的安全模式静态私钥（`node.private_key`）：由网络扩展用系统随机数生成 32 字节，以标准 base64（带填充）
+  保存在扩展专用的钥匙串访问组 `networkcore.tunnel-private`（账户 `mesh-network-key.<名称>`，不与主 App 共享；macOS 系统扩展使用系统钥匙串，
+  失败时退为扩展数据容器内仅 root 可读的文件，遵循 core#406）。主 App 不生成、不读取、不持有私钥，只读引擎快照里的公钥。
+  扩展在启动组网和处理 `mesh_save_network` 时读取，没有则生成，读取出错或已存的值不合法时报错、不重新生成；
+  App 随 `mesh_save_network` 发出的配置不含 `node.private_key`，由扩展注入。网络被移除时，扩展在收到 `mesh_remove_network` 或下次启动时
+  （隧道配置的 `networkcore.mesh-saved-names` 列出全部已保存网络）删除不再保存的网络的私钥；App 只清理旧版本留在共享钥匙串（账户 `mesh-network-key.<名称>`）的副本。
+  旧版本存入共享钥匙串的私钥，由扩展首次启动时迁入专用访问组并删除共享副本，面板已登记的公钥保持有效。
+  设备实例 id（`node.instance_id`，`^[0-9A-Za-z][0-9A-Za-z-]{0,63}$`）同样由扩展在首次使用组网时生成（小写 UUID v4）、
+  保存在同一专用存储（账户 `mesh-instance-id`），各网络的配置使用同一个值；已存的值不合法时报错、不替换。
+  隧道配置的 `networkcore.mesh-networks` 只带已加入的网络，扩展启动时补上密钥。
 - iOS、macOS 只开组网：代理断开而有网络已加入时，隧道配置标记 `networkcore.mesh-only`，VPN 重启为只带组网出站的配置
   （`rules` 为 `["FINAL,DIRECT"]`，`mode` 为 `rule`，不需要节点密钥）；`includedRoutes` 只放 `tunnel.routes`，
   内网域名开启时 DNS 只对 `tunnel.dns.matchDomains` 生效。扩展每 2 秒读一次 `mesh_status`，`routesVersion` 变化时重新应用，
@@ -278,7 +283,7 @@
   存入该网络的配置，作为 `node.private_key` 注入内核配置；Windows 随配置文件用数据保护（DPAPI）封存，Linux 为仅所有者可读的文件，
   Android 在应用沙盒内。同名网络再次保存时沿用已存的私钥（面板的 `native_keys` 列出对应公钥，私钥变化会使设备失去接入），
   仅在网络被移除后重新添加时才生成新的；此前保存、没有私钥的网络在下次保存或加入时补上。引擎从不写出或输出该私钥，窗口也看不到它
-  （`mesh_networks` 与离线状态都不含配置）。Apple 把它放在钥匙串，由另一项修改完成。
+  （`mesh_networks` 与离线状态都不含配置）。Apple 由网络扩展生成并保存在扩展专用的钥匙串访问组（不与主 App 共享），主 App 只读引擎快照里的公钥；macOS 系统扩展使用系统钥匙串（失败时退为 root 专用文件，遵循 core#406）。设备实例 id 在 Apple 同样由扩展生成并保存。
 
 ## 发布闸门
 
