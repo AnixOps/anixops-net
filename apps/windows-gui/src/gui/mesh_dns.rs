@@ -566,20 +566,11 @@ mod tests {
         assert!(internal_suffix(&format!("{label63}.internal")).is_some());
         assert_eq!(internal_suffix(&format!("{label63}b.internal")), None);
         // 172 bytes in all, not 173.
+        // Two labels of 62 bytes, then one that brings the whole name to `length` bytes.
         let name = |length: usize| {
-            let head = length - ".internal".len();
-            let mut labels: Vec<String> = Vec::new();
-            let mut left = head;
-            while left > 0 {
-                let take = left.min(62);
-                labels.push("a".repeat(take));
-                left -= take;
-                if left > 0 {
-                    // The dot between labels.
-                    left -= 1;
-                }
-            }
-            format!("{}.internal", labels.join("."))
+            let long = "a".repeat(62);
+            let last = length - 2 * 63 - ".internal".len();
+            format!("{long}.{long}.{}.internal", "a".repeat(last))
         };
         assert_eq!(name(172).len(), 172);
         assert_eq!(name(173).len(), 173);
