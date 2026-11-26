@@ -191,12 +191,9 @@ pub fn internal_suffix(domain: &str) -> Option<String> {
 /// (`in-addr.arpa`, `ip6.arpa`, `arpa`) and anything wider are never one.
 pub fn reverse_zone(domain: &str) -> Option<String> {
     let name = plain_name(domain)?;
-    let (labels, ipv4) = if let Some(labels) = name.strip_suffix(".in-addr.arpa") {
-        (labels, true)
-    } else if let Some(labels) = name.strip_suffix(".ip6.arpa") {
-        (labels, false)
-    } else {
-        return None;
+    let (labels, ipv4) = match name.strip_suffix(".in-addr.arpa") {
+        Some(labels) => (labels, true),
+        None => (name.strip_suffix(".ip6.arpa")?, false),
     };
     let labels: Vec<&str> = labels.split('.').collect();
     let fits = if ipv4 {
