@@ -122,20 +122,25 @@ describe("words", () => {
           { code: "ipv6_unavailable", detail: null },
           { code: "policy_override", detail: null },
           { code: "suffix_refused", detail: "com, local" },
+          { code: "inbound_unprotected", detail: null },
+          { code: "inbound_unprotected", detail: "busy" },
           { code: "later_code", detail: null },
         ],
       },
     });
-    expect(notices.map((notice) => notice.key)).toEqual(["local_dns:write_failed", "local_dns:ipv6_unavailable", "local_dns:policy_override", "local_dns:suffix_refused"]);
+    expect(notices.map((notice) => notice.key)).toEqual(["local_dns:write_failed", "local_dns:ipv6_unavailable", "local_dns:policy_override", "local_dns:suffix_refused", "local_dns:inbound_unprotected", "local_dns:inbound_unprotected"]);
     expect(notices.map(noticeText)).toEqual([
       "内网域名暂不可用：无法写入名称解析规则，稍后自动重试。",
       "内网域名不可用：组网解析地址仅有 IPv6，本机无法通过 IPv6 访问。",
       "内网域名不可用：本机的名称解析规则由组策略管理，本地规则不生效。",
       "已忽略内网域名后缀 com, local：后缀须位于 internal 之下。",
+      "入站保护未生效：组网成员可能访问本机其他服务。",
+      "入站保护未生效：另一程序正在管理本机组网设置。",
     ]);
-    expect(notices.map(noticeDetail)).toEqual([null, null, null, null]);
+    expect(notices.map(noticeDetail)).toEqual([null, null, null, null, null, null]);
     setLanguage("en");
     expect(noticeText(notices[3])).toBe("Internal domain suffixes ignored: com, local. A suffix must be under internal.");
+    expect(noticeText(notices[5])).toBe("Inbound protection is not in effect: another program is managing this device's mesh settings.");
   });
 
   it("reads refusals and region names", () => {

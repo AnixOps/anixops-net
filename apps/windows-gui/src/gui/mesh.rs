@@ -183,8 +183,8 @@ pub fn end(core: &Mutex<DesktopCore>, reason: &str) {
     ENDING.store(true, Ordering::Release);
     WATCH.fetch_add(1, Ordering::AcqRel);
     RETRY.fetch_add(1, Ordering::AcqRel);
-    // The firewall rules go with the engine; the caller waits for their removal (`mesh_firewall::finish`).
-    super::mesh_firewall::clear();
+    // The firewall rules stay: the proxy's engine may still run the joined networks in TUN mode, and the caller
+    // drops them (`mesh_firewall::clear`, then `finish`) once every engine has stopped.
     let Ok(mut guard) = core.lock() else {
         return;
     };
@@ -199,12 +199,31 @@ pub fn resume(core: &Arc<Mutex<DesktopCore>>) {
     settle(core);
 }
 
+/// The periodic retry of missing firewall rules while the proxy's engine runs the joined networks in TUN mode:
+/// `polls` counts the calls (the recovery monitor's, every 2 s). The mesh-only engine has its own in [`watch_routes`].
+pub fn retry_firewall(core: &Mutex<DesktopCore>, polls: &mut u32) {
+    if !super::mesh_firewall::retry_due(polls) {
+        return;
+    }
+    let adapter = core
+        .lock()
+        .map(|mut guard| guard.is_running().unwrap_or(false) && guard.tun_running())
+        .unwrap_or(false);
+    if adapter {
+        sync_firewall(true);
+    }
+}
+
 /// Holds the firewall rules of the joined networks while an engine runs them (`running`: the proxy's, or the one for
 /// the mesh alone), and drops them otherwise. Both engines use the adapter named `adapter_name` of the default TUN
 /// settings, which is the alias the kernel's rules block inbound traffic to this program on.
 fn sync_firewall(running: bool) {
     if !running {
         super::mesh_firewall::clear();
+        return;
+    }
+    // The window is ending: the rules are dropped, or left, by whoever ends it.
+    if ENDING.load(Ordering::Acquire) {
         return;
     }
     let wanted = dir()
@@ -249,6 +268,7 @@ fn joined_listen_ports(networks: &[mesh::SavedNetwork]) -> Vec<(String, Vec<u16>
 /// and started again ([`retry_later`]).
 fn watch_routes(core: Arc<Mutex<DesktopCore>>) {
     let generation = WATCH.fetch_add(1, Ordering::AcqRel) + 1;
+    let mut polls = 0;
     let spawned = thread::Builder::new()
         .name("mesh-routes".into())
         .spawn(move || loop {
@@ -284,6 +304,14 @@ fn watch_routes(core: Arc<Mutex<DesktopCore>>) {
                     "mesh only: the routes could not be applied: {error}"
                 )),
             }
+            // Rules that are missing (another process holds the host changes, or adding them failed) are tried
+            // again about every 30 s; the guard on the engine is not held meanwhile, the kernel's calls are slow.
+            drop(guard);
+            if super::mesh_firewall::retry_due(&mut polls)
+                && WATCH.load(Ordering::Acquire) == generation
+            {
+                sync_firewall(true);
+            }
         });
     if let Err(error) = spawned {
         log(&format!(
@@ -300,7 +328,11 @@ pub fn offline_status(core: &DesktopCore, request: &[u8]) -> Value {
     if let Some(answer) = core.mesh_only_control(request) {
         return answer
             .and_then(|answer| serde_json::from_slice(&answer).map_err(|error| error.to_string()))
-            .map(|status| with_local_dns(status, core.mesh_dns_issues()))
+            .map(|status| {
+                let mut issues = core.mesh_dns_issues();
+                issues.extend(super::mesh_firewall::issues());
+                with_local_dns(status, issues)
+            })
             .unwrap_or_else(|error| refusal(&error));
     }
     if !mesh::supported() {
@@ -331,14 +363,20 @@ fn with_failure(mut status: Value, failure: Option<Value>) -> Value {
     status
 }
 
-/// The engine for the mesh alone's status with what keeps the internal domain names from resolving on this device
-/// (`network.local_dns`, `mesh_dns::issues`), when anything does.
-fn with_local_dns(mut status: Value, issues: Vec<Value>) -> Value {
+/// The engine's status with what is wrong on this device (`network.local_dns`), when anything is: what keeps the
+/// internal domain names from resolving (`mesh_dns::issues`) and rules that keep inbound traffic from mesh members
+/// off the window's other services missing (`mesh_firewall::issues`), appended to what the status already lists.
+pub(in crate::gui) fn with_local_dns(mut status: Value, issues: Vec<Value>) -> Value {
     if issues.is_empty() {
         return status;
     }
     if let Some(network) = status.get_mut("network").and_then(Value::as_object_mut) {
-        network.insert("local_dns".into(), Value::Array(issues));
+        let mut all = match network.remove("local_dns") {
+            Some(Value::Array(known)) => known,
+            _ => Vec::new(),
+        };
+        all.extend(issues);
+        network.insert("local_dns".into(), Value::Array(all));
     }
     status
 }
@@ -430,6 +468,10 @@ mod tests {
         let issue = json!({ "code": "write_failed", "detail": null });
         let shown = with_local_dns(running, vec![issue.clone()]);
         assert_eq!(shown["network"]["local_dns"], json!([issue]));
+        // What the engine listed stays, the device's own issues follow.
+        let firewall = json!({ "code": "inbound_unprotected", "detail": "busy" });
+        let both = with_local_dns(shown, vec![firewall.clone()]);
+        assert_eq!(both["network"]["local_dns"], json!([issue, firewall]));
     }
 
     #[test]

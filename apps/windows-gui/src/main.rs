@@ -520,8 +520,9 @@ mod gui {
                 }
             }
         }
-        // The firewall rules of the joined networks that a window left behind (another process that holds the
-        // host changes keeps its own). Last, because the firewall and translation cmdlets can take tens of seconds,
+        // The firewall rules of the joined networks that a window left behind. Another process that holds the host
+        // changes (a window that still runs) is an error line: it may be forced to end, and then its rules stay.
+        // Last, because the firewall and translation cmdlets can take tens of seconds,
         // and the steps above must not wait on them.
         if let Err(error) = mesh_firewall::recover() {
             errors.push(format!("mesh firewall rules: {error}"));

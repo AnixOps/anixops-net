@@ -702,8 +702,10 @@ function list(items: string[]): string {
 /**
  * What keeps the internal domain names from resolving on this device (Windows, `network.local_dns`): the name
  * resolution rules could not be written (tried again), the resolver has only IPv6 addresses this device cannot
- * reach, a group policy's rules take their place, or the engine named
- * suffixes outside a mesh's namespace. Each is a notice of its own, after the shared ones.
+ * reach, a group policy's rules take their place, the engine named suffixes outside a mesh's namespace, or the
+ * firewall rules that keep mesh members off this program's other services are missing (`inbound_unprotected`,
+ * detail `busy` while another process holds the host's mesh changes). Each is a notice of its own, after the
+ * shared ones.
  */
 export function localDnsNotices(status: unknown): MeshNotice[] {
   const raw = (status as { network?: { local_dns?: unknown } } | null)?.network?.local_dns;
@@ -711,7 +713,7 @@ export function localDnsNotices(status: unknown): MeshNotice[] {
   return issues.flatMap((issue): MeshNotice[] => {
     const code = (issue as { code?: unknown })?.code;
     const detail = (issue as { detail?: unknown })?.detail;
-    if (code !== "write_failed" && code !== "ipv6_unavailable" && code !== "policy_override" && code !== "suffix_refused") return [];
+    if (code !== "write_failed" && code !== "ipv6_unavailable" && code !== "policy_override" && code !== "suffix_refused" && code !== "inbound_unprotected") return [];
     return [{ id: `mesh.notice.local_dns_${code}`, key: `local_dns:${code}`, values: typeof detail === "string" ? [detail] : [], action: null, notify: false }];
   });
 }
@@ -744,6 +746,8 @@ export function noticeText(notice: MeshNotice): string {
       return t("内网域名不可用：本机的名称解析规则由组策略管理，本地规则不生效。");
     case "mesh.notice.local_dns_suffix_refused":
       return t("已忽略内网域名后缀 {suffixes}：后缀须位于 internal 之下。", { suffixes: value(values, 0) });
+    case "mesh.notice.local_dns_inbound_unprotected":
+      return value(values, 0) === "busy" ? t("入站保护未生效：另一程序正在管理本机组网设置。") : t("入站保护未生效：组网成员可能访问本机其他服务。");
     case "mesh.notice.partial": {
       const names = Array.isArray(values?.[1]) ? (values?.[1] as unknown[]).filter((name): name is string => typeof name === "string") : [];
       return t("{count} 台成员不可达：{names}。", { count: names.length, names: list(names) });
