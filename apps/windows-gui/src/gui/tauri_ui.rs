@@ -2269,6 +2269,9 @@ fn stop_desktop_core_for_exit(state: DesktopAppState) {
     // First the engine for the mesh alone, with its adapter and routes, so that nothing starts it again while the
     // proxy stops.
     mesh::end(&state.direct_core, "exit");
+    // The rules of the joined networks go with the engine; their removal is awaited for a while only, and what is
+    // left is removed by the next start.
+    super::mesh_firewall::finish(super::mesh_firewall::EXIT_WAIT);
     if let Ok(mut recorder) = state.traffic.lock() {
         recorder.save();
     }

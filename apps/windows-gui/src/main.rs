@@ -71,6 +71,7 @@ mod gui {
     mod linked_sources;
     mod mesh;
     mod mesh_dns;
+    mod mesh_firewall;
     mod mitm_plugins;
     mod owned_proxy;
     mod reconnect;
@@ -460,6 +461,11 @@ mod gui {
         // window the removal ended), with the adapter's connection suffix.
         if let Err(error) = mesh_dns::apply(None, None) {
             errors.push(format!("mesh name resolution rules: {error}"));
+        }
+        // The firewall rules of the joined networks that a window left behind (another process that holds the
+        // host changes keeps its own).
+        if let Err(error) = mesh_firewall::recover() {
+            errors.push(format!("mesh firewall rules: {error}"));
         }
         let mut managed = read_managed_state(&state_path).ok();
         let mut desktop = startup::load_desktop_state().ok();

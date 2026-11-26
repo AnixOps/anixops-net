@@ -12,6 +12,7 @@ use std::thread;
 use std::time::Duration;
 
 use client_core::backend::mesh;
+use platform_windows::tun::WindowsTunSettings;
 use serde_json::{json, Value};
 
 use super::actions::connection::DesktopCore;
@@ -101,9 +102,16 @@ fn settle_attempt(core: &Arc<Mutex<DesktopCore>>, attempt: u32) {
         if guard.stop_mesh_only() {
             log("mesh only: stopped");
         }
+        // The proxy's engine runs the joined networks too; the rules name its adapter, so only in TUN mode (without
+        // an adapter there is nothing to block inbound traffic on, and the kernel refuses an alias that is not there).
+        let adapter = proxy && guard.tun_running();
+        drop(guard);
+        sync_firewall(adapter);
         return;
     }
     if guard.mesh_only_running() {
+        drop(guard);
+        sync_firewall(true);
         return;
     }
     // One that ended by itself lets go of its adapter before the next starts.
@@ -124,10 +132,12 @@ fn settle_attempt(core: &Arc<Mutex<DesktopCore>>, attempt: u32) {
         Ok(()) => {
             set_failure(None);
             log("mesh only: started");
+            sync_firewall(true);
             watch_routes(core.clone());
         }
         Err(error) => {
             log(&format!("mesh only: the engine did not start: {error}"));
+            super::mesh_firewall::clear();
             set_failure(Some(json!({ "code": error.code, "detail": null })));
             retry_later(core.clone(), attempt);
         }
@@ -173,6 +183,8 @@ pub fn end(core: &Mutex<DesktopCore>, reason: &str) {
     ENDING.store(true, Ordering::Release);
     WATCH.fetch_add(1, Ordering::AcqRel);
     RETRY.fetch_add(1, Ordering::AcqRel);
+    // The firewall rules go with the engine; the caller waits for their removal (`mesh_firewall::finish`).
+    super::mesh_firewall::clear();
     let Ok(mut guard) = core.lock() else {
         return;
     };
@@ -185,6 +197,51 @@ pub fn end(core: &Mutex<DesktopCore>, reason: &str) {
 pub fn resume(core: &Arc<Mutex<DesktopCore>>) {
     ENDING.store(false, Ordering::Release);
     settle(core);
+}
+
+/// Holds the firewall rules of the joined networks while an engine runs them (`running`: the proxy's, or the one for
+/// the mesh alone), and drops them otherwise. Both engines use the adapter named `adapter_name` of the default TUN
+/// settings, which is the alias the kernel's rules block inbound traffic to this program on.
+fn sync_firewall(running: bool) {
+    if !running {
+        super::mesh_firewall::clear();
+        return;
+    }
+    let wanted = dir()
+        .and_then(|dir| mesh::load(&dir))
+        .map(|networks| joined_listen_ports(&networks))
+        .unwrap_or_else(|error| {
+            log(&format!(
+                "firewall rules: the networks are unreadable: {error}"
+            ));
+            Vec::new()
+        });
+    super::mesh_firewall::update(&wanted, &WindowsTunSettings::default().adapter_name);
+}
+
+/// The joined networks by name with the TCP and UDP ports they listen on (`node.listen`), sorted and without
+/// duplicates; a joined network that names no port is left out.
+fn joined_listen_ports(networks: &[mesh::SavedNetwork]) -> Vec<(String, Vec<u16>)> {
+    networks
+        .iter()
+        .filter(|network| network.joined)
+        .filter_map(|network| {
+            let mut ports: Vec<u16> = network
+                .config
+                .get("node")
+                .and_then(|node| node.get("listen"))
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(|entry| entry.get("port").and_then(Value::as_u64))
+                .filter_map(|port| u16::try_from(port).ok())
+                .filter(|port| *port != 0)
+                .collect();
+            ports.sort_unstable();
+            ports.dedup();
+            (!ports.is_empty()).then(|| (network.name.clone(), ports))
+        })
+        .collect()
 }
 
 /// Puts the engine's mesh routes on the adapter every [`ROUTES_POLL`] while the engine for the mesh alone runs;
@@ -212,6 +269,7 @@ fn watch_routes(core: Arc<Mutex<DesktopCore>>) {
                     return;
                 }
                 log("mesh only: the engine ended by itself");
+                super::mesh_firewall::clear();
                 set_failure(Some(json!({ "code": "other", "detail": null })));
                 retry_later(core.clone(), 0);
                 return;
@@ -312,6 +370,36 @@ fn log(message: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn listen_ports_come_from_joined_networks_only() {
+        let saved = |name: &str, joined: bool, config: Value| mesh::SavedNetwork {
+            name: name.into(),
+            joined,
+            config,
+        };
+        let networks = [
+            saved(
+                "office",
+                true,
+                json!({ "node": { "listen": [
+                    { "transport": "udp", "port": 11010 },
+                    { "transport": "tcp", "port": 11010 },
+                    { "transport": "tcp", "port": 70000 },
+                ] } }),
+            ),
+            saved(
+                "away",
+                false,
+                json!({ "node": { "listen": [{ "port": 1 }] } }),
+            ),
+            saved("silent", true, json!({ "node": { "role": "access" } })),
+        ];
+        assert_eq!(
+            joined_listen_ports(&networks),
+            [("office".to_string(), vec![11010])]
+        );
+    }
 
     #[test]
     fn a_failed_start_is_tried_again_after_a_growing_wait() {
