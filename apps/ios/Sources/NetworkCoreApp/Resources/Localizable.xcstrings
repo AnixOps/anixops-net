@@ -24036,6 +24036,118 @@
           }
         }
       }
+    },
+    "启用这个插件？": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable this plugin?"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "啟用這個外掛？"
+          }
+        }
+      }
+    },
+    "确认启用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "確認啟用"
+          }
+        }
+      }
+    },
+    "保持关闭": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep disabled"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保持關閉"
+          }
+        }
+      }
+    },
+    "“%@”包含通配符（如 * 或顶级域名），启用后可能解密几乎所有 HTTPS 流量。请确认来源可信。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” includes a wildcard (such as * or a top-level domain) and may decrypt nearly all HTTPS traffic. Confirm that you trust its source."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%@」包含萬用字元（如 * 或頂級網域），啟用後可能解密幾乎所有 HTTPS 流量。請確認來源可信。"
+          }
+        }
+      }
+    },
+    "“%@”已导入但尚未启用。开启前请确认插件来源可信。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” was imported disabled. Confirm that you trust its source before enabling it."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%@」已匯入但尚未啟用。開啟前請確認外掛來源可信。"
+          }
+        }
+      }
+    },
+    " 等 %lld 个域名": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " and %lld domains total"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " 等 %lld 個網域"
+          }
+        }
+      }
+    },
+    "“%@”将解密以下域名的 HTTPS 流量：%@%@。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” will decrypt HTTPS traffic for: %@%@."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%@」將解密以下網域的 HTTPS 流量：%@%@。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -490,7 +490,7 @@ final class PluginsModel: ObservableObject {
         if hostnames.isEmpty {
             return String(localized: "“\(plugin.name)”已导入但尚未启用。开启前请确认插件来源可信。")
         }
-        let preview = hostnames.prefix(5).joined(separator: "、")
+        let preview = ListFormatter.localizedString(byJoining: Array(hostnames.prefix(5)))
         let suffix = hostnames.count > 5 ? String(localized: " 等 \(hostnames.count) 个域名") : ""
         return String(localized: "“\(plugin.name)”将解密以下域名的 HTTPS 流量：\(preview)\(suffix)。")
     }
