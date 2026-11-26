@@ -41,12 +41,12 @@ repository = "https://github.com/AnixOps/anixops-net"
 # CI also builds the iOS runtime and the Windows CLI from this same checkout (.github/scripts/kernel-root.sh).
 # For local kernel work, uncomment the [patch] section at the end and point it at a kernel checkout.
 [workspace.dependencies]
-config-core = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "7b2e638c61b17e4485296a9c4a2d36ca82f8b6ba" }
-control-domain = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "7b2e638c61b17e4485296a9c4a2d36ca82f8b6ba" }
-engine-embedded = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "7b2e638c61b17e4485296a9c4a2d36ca82f8b6ba" }
-inbound-mixed = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "7b2e638c61b17e4485296a9c4a2d36ca82f8b6ba" }
-node-import = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "7b2e638c61b17e4485296a9c4a2d36ca82f8b6ba" }
-platform-windows = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "7b2e638c61b17e4485296a9c4a2d36ca82f8b6ba" }
+config-core = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "bf2e4ba8e5686eeefb96ef6fe5e3e9ac2f0d2138" }
+control-domain = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "bf2e4ba8e5686eeefb96ef6fe5e3e9ac2f0d2138" }
+engine-embedded = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "bf2e4ba8e5686eeefb96ef6fe5e3e9ac2f0d2138" }
+inbound-mixed = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "bf2e4ba8e5686eeefb96ef6fe5e3e9ac2f0d2138" }
+node-import = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "bf2e4ba8e5686eeefb96ef6fe5e3e9ac2f0d2138" }
+platform-windows = { git = "https://github.com/AnixOps/networkcore_anixops", rev = "bf2e4ba8e5686eeefb96ef6fe5e3e9ac2f0d2138" }
 
 # [patch."https://github.com/AnixOps/networkcore_anixops"]
 # config-core = { path = "../networkcore_anixops/crates/config-core" }
