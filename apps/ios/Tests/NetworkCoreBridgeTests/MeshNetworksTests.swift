@@ -113,6 +113,48 @@ final class MeshNetworksTests: XCTestCase {
         XCTAssertNil(MeshNetwork(name: "x", config: "[]", joined: true).outboundEntry(secret: "s"))
     }
 
+    func testRuntimeConfigAddsThePrivateKeyOnlyWhenGiven() throws {
+        let network = try XCTUnwrap(draft(address: "10.144.144.5/24").network())
+        let key = try MeshNetworkLibrary.newPrivateKey()
+        let with = try object(try XCTUnwrap(network.runtimeConfigJSON(secret: "s", privateKey: key)))
+        let node = try XCTUnwrap(with["node"] as? [String: Any])
+        XCTAssertEqual(node["private_key"] as? String, key)
+        XCTAssertEqual(node["role"] as? String, "access")
+        XCTAssertEqual(node["address"] as? String, "10.144.144.5/24")
+        XCTAssertEqual((with["network"] as? [String: Any])?["secret"] as? String, "s")
+
+        let without = try object(try XCTUnwrap(network.runtimeConfigJSON(secret: "s")))
+        XCTAssertNil((without["node"] as? [String: Any])?["private_key"])
+
+        let bare = MeshNetwork(name: "x", config: "{}", joined: true)
+        let made = try XCTUnwrap(bare.runtimeConfig(secret: "s", privateKey: key))
+        XCTAssertEqual((made["node"] as? [String: Any])?["private_key"] as? String, key)
+
+        let entry = try XCTUnwrap(network.outboundEntry(secret: "s", privateKey: key))
+        guard case let .object(inner)? = entry["node"] else {
+            return XCTFail("node is not an object")
+        }
+        XCTAssertEqual(inner["private_key"], .string(key))
+    }
+
+    func testPrivateKeyValidation() throws {
+        func base64(_ count: Int) -> String {
+            Data(repeating: 7, count: count).base64EncodedString()
+        }
+        XCTAssertTrue(MeshNetworkLibrary.isValidPrivateKey(base64(32)))
+        XCTAssertFalse(MeshNetworkLibrary.isValidPrivateKey(base64(31)))
+        XCTAssertFalse(MeshNetworkLibrary.isValidPrivateKey(base64(33)))
+        XCTAssertFalse(MeshNetworkLibrary.isValidPrivateKey(""))
+        XCTAssertFalse(MeshNetworkLibrary.isValidPrivateKey("not base64 !!"))
+
+        let first = try MeshNetworkLibrary.newPrivateKey()
+        let second = try MeshNetworkLibrary.newPrivateKey()
+        XCTAssertTrue(MeshNetworkLibrary.isValidPrivateKey(first))
+        XCTAssertTrue(MeshNetworkLibrary.isValidPrivateKey(second))
+        XCTAssertNotEqual(first, second)
+        XCTAssertNotEqual(MeshNetworkLibrary.privateKeyAccount("a"), MeshNetworkLibrary.secretAccount("a"))
+    }
+
     func testOutboundKeysAreDistinctAndPlain() {
         XCTAssertEqual(MeshNetwork(name: "office-1.lab_a", config: "{}", joined: true).outboundKey, "mesh-office-1.lab_a")
         let spaced = MeshNetwork(name: "a b", config: "{}", joined: true).outboundKey
@@ -223,5 +265,8 @@ final class MeshNetworksTests: XCTestCase {
         let secrets = TunnelStartSecrets(meshSecrets: ["office": "k"])
         XCTAssertFalse(secrets.isEmpty)
         XCTAssertEqual(TunnelStartSecrets(options: secrets.options)?.meshSecrets, ["office": "k"])
+        let keyed = TunnelStartSecrets(meshPrivateKeys: ["office": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="])
+        XCTAssertFalse(keyed.isEmpty)
+        XCTAssertEqual(TunnelStartSecrets(options: keyed.options)?.meshPrivateKeys, keyed.meshPrivateKeys)
     }
 }

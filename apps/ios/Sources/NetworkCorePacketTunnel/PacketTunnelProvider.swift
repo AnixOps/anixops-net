@@ -1072,9 +1072,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             return [:]
         }
         let handed = startSecrets?.meshSecrets
-        let built = MeshNetworkLibrary.outbounds(networks) { name in
+        // The key is only read here (handed over on macOS, else the shared Keychain): an extension that finds none
+        // leaves `node.private_key` out.
+        let handedKeys = startSecrets?.meshPrivateKeys
+        let built = MeshNetworkLibrary.outbounds(networks, secret: { name in
             handed?[name] ?? MeshNetworkLibrary.secret(name)
-        }
+        }, privateKey: { name in
+            handedKeys?[name] ?? MeshNetworkLibrary.privateKey(name)
+        })
         if !built.missing.isEmpty {
             events.record("mesh: \(built.missing.count) networks without a secret left out")
         }

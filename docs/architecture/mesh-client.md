@@ -200,6 +200,10 @@
   配置只有单个出站时，改写为路由表：该出站为 `node`，`rules` 为 `["FINAL,node"]`，`global` 为 `node`。
   引擎不接受带组网出站的配置时（未编进组网），照常不带组网启动，并记入日志或诊断。
 - iOS、macOS：App 设置保存不含密钥的配置，密钥在共享钥匙串（账户 `mesh-network.<名称>`）；
+  每个网络另有各自的安全模式静态私钥：由系统随机数生成 32 字节，以标准 base64（带填充）存入同一共享钥匙串
+  （账户 `mesh-network-key.<名称>`），不进 App 设置、配置文本、日志或界面，在配置交给引擎时作为 `node.private_key` 注入。
+  同名网络再次保存时沿用已存的私钥，网络被移除时一并删除；此前保存、没有私钥的网络在下次保存或加入时补上，
+  最迟在 App 把已加入的网络写入隧道配置时补上；扩展只读取私钥（macOS 系统扩展随启动密钥取得），读不到时不带 `node.private_key`；
   隧道配置的 `networkcore.mesh-networks` 只带已加入的网络，扩展启动时补上密钥；macOS 系统扩展经启动密钥取得。
 - iOS、macOS 只开组网：代理断开而有网络已加入时，隧道配置标记 `networkcore.mesh-only`，VPN 重启为只带组网出站的配置
   （`rules` 为 `["FINAL,DIRECT"]`，`mode` 为 `rule`，不需要节点密钥）；`includedRoutes` 只放 `tunnel.routes`，

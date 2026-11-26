@@ -1584,6 +1584,9 @@ final class TunnelController {
         if blockQuic {
             providerConfiguration[TunnelProfileKeys.blockQuic] = true
         }
+        if MeshSupport.enabled {
+            MeshNetworkLibrary.ensurePrivateKeys()
+        }
         if let value = MeshNetworkLibrary.gatedProfileValue(MeshNetworkLibrary.load()) {
             providerConfiguration[TunnelProfileKeys.meshNetworks] = value
             // A tunnel running for the mesh alone keeps doing so with the new node, until the user connects.
@@ -2246,6 +2249,9 @@ final class TunnelController {
     /// running extension gets their secrets with the start secrets. False when the profile could not be saved.
     func applyMeshNetworks() async -> Bool {
         await profileWrites.run { () async -> Bool in
+            if MeshSupport.enabled {
+                MeshNetworkLibrary.ensurePrivateKeys()
+            }
             let value = MeshNetworkLibrary.gatedProfileValue(MeshNetworkLibrary.load())
             do {
                 _ = try await writeProfile { target in

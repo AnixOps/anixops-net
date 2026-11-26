@@ -151,6 +151,10 @@ final class MeshModel {
             return
         }
         MeshNetworkLibrary.setJoined(id, joined)
+        if joined {
+            // A network saved by an earlier version gets its key when it is joined.
+            MeshNetworkLibrary.ensurePrivateKeys()
+        }
         saved = MeshNetworkLibrary.load()
         _ = await tunnel.applyMeshNetworks()
         // The VPN is up while the proxy or the mesh is on.
@@ -171,7 +175,7 @@ final class MeshModel {
             return false
         }
         saved = MeshNetworkLibrary.load()
-        if tunnel.vpnConnection == .connected, let config = added.runtimeConfigJSON(secret: secret) {
+        if tunnel.vpnConnection == .connected, let config = added.runtimeConfigJSON(secret: secret, privateKey: MeshNetworkLibrary.privateKey(added.name)) {
             if let current = network, let id = current.string("id"), id != added.name,
                ["joined", "joining", "partial"].contains(current.string("state") ?? "")
             {
