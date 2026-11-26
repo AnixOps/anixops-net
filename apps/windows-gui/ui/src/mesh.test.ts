@@ -7,6 +7,7 @@ import {
   connectionLabel,
   forwardingLabel,
   listenText,
+  localDnsNotices,
   draftConfig,
   draftProblem,
   emptyDraft,
@@ -109,6 +110,30 @@ describe("words", () => {
     expect(noticeDetail(refused)).toBe("lon-host");
     setLanguage("en");
     expect(noticeText({ id: "mesh.notice.partial", key: "partial", values: [2, ["a", "b"]] })).toBe("2 members unreachable: a, b.");
+  });
+
+  it("words what keeps the internal domain names from resolving on this device", () => {
+    expect(localDnsNotices({ network: { state: "running" } })).toEqual([]);
+    expect(localDnsNotices(null)).toEqual([]);
+    const notices = localDnsNotices({
+      network: {
+        local_dns: [
+          { code: "write_failed", detail: null },
+          { code: "policy_override", detail: null },
+          { code: "suffix_refused", detail: "com, local" },
+          { code: "later_code", detail: null },
+        ],
+      },
+    });
+    expect(notices.map((notice) => notice.key)).toEqual(["local_dns:write_failed", "local_dns:policy_override", "local_dns:suffix_refused"]);
+    expect(notices.map(noticeText)).toEqual([
+      "内网域名暂不可用：无法写入名称解析规则，稍后自动重试。",
+      "内网域名不可用：本机的名称解析规则由组策略管理，本地规则不生效。",
+      "已忽略内网域名后缀 com, local：后缀须位于 internal 之下。",
+    ]);
+    expect(notices.map(noticeDetail)).toEqual([null, null, null]);
+    setLanguage("en");
+    expect(noticeText(notices[2])).toBe("Internal domain suffixes ignored: com, local. A suffix must be under internal.");
   });
 
   it("reads refusals and region names", () => {

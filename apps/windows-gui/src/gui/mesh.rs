@@ -88,8 +88,9 @@ fn settle_attempt(core: &Arc<Mutex<DesktopCore>>, attempt: u32) {
     if ENDING.load(Ordering::Acquire) {
         return;
     }
-    // Rules for the internal domain names that a crash left behind go before anything else runs.
-    super::mesh_dns::clear_leftovers_once();
+    // Rules for the internal domain names that a crash left behind go before anything else runs, unless another
+    // signed-in user's window holds the adapter and with it the rules now.
+    super::mesh_dns::clear_leftovers();
     let Ok(mut guard) = core.lock() else {
         return;
     };
@@ -153,7 +154,7 @@ fn retry_later(core: Arc<Mutex<DesktopCore>>, attempt: u32) {
 }
 
 /// 5 s, 10 s, 20 s, 40 s, then every 60 s.
-fn retry_wait(attempt: u32) -> Duration {
+pub(in crate::gui) fn retry_wait(attempt: u32) -> Duration {
     RETRY_FIRST
         .checked_mul(1u32.checked_shl(attempt.min(16)).unwrap_or(u32::MAX))
         .map_or(RETRY_MAX, |wait| wait.min(RETRY_MAX))
@@ -241,6 +242,7 @@ pub fn offline_status(core: &DesktopCore, request: &[u8]) -> Value {
     if let Some(answer) = core.mesh_only_control(request) {
         return answer
             .and_then(|answer| serde_json::from_slice(&answer).map_err(|error| error.to_string()))
+            .map(|status| with_local_dns(status, core.mesh_dns_issues()))
             .unwrap_or_else(|error| refusal(&error));
     }
     if !mesh::supported() {
@@ -267,6 +269,18 @@ fn with_failure(mut status: Value, failure: Option<Value>) -> Value {
             network.insert("state".into(), json!("failed"));
             network.insert("failure".into(), failure);
         }
+    }
+    status
+}
+
+/// The engine for the mesh alone's status with what keeps the internal domain names from resolving on this device
+/// (`network.local_dns`, `mesh_dns::issues`), when anything does.
+fn with_local_dns(mut status: Value, issues: Vec<Value>) -> Value {
+    if issues.is_empty() {
+        return status;
+    }
+    if let Some(network) = status.get_mut("network").and_then(Value::as_object_mut) {
+        network.insert("local_dns".into(), Value::Array(issues));
     }
     status
 }
@@ -319,6 +333,15 @@ mod tests {
         // A network that is not joined has nothing to fail.
         let left = json!({ "network": { "id": "office", "state": "not_joined" } });
         assert_eq!(with_failure(left.clone(), Some(other)), left);
+    }
+
+    #[test]
+    fn what_keeps_the_names_from_resolving_is_shown_on_the_network() {
+        let running = json!({ "network": { "id": "office", "state": "running" } });
+        assert_eq!(with_local_dns(running.clone(), Vec::new()), running);
+        let issue = json!({ "code": "write_failed", "detail": null });
+        let shown = with_local_dns(running, vec![issue.clone()]);
+        assert_eq!(shown["network"]["local_dns"], json!([issue]));
     }
 
     #[test]

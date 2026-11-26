@@ -21,6 +21,7 @@ use platform_windows::tun::{CaptureRoute, WindowsTunSettings};
 use std::fs;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 #[derive(Debug, Clone)]
 pub struct ConnectedProxy {
@@ -47,9 +48,86 @@ pub struct DesktopCore {
     mesh_only: Option<DesktopTun>,
     /// The engine's mesh routes the adapter does not carry ([`mesh_routes`]), so that each change is logged once.
     mesh_left_out: Vec<String>,
-    /// The name resolution rules in place for the internal domain names (`mesh_dns`), while the engine for the mesh
-    /// alone runs.
-    mesh_dns: Option<(Vec<String>, Vec<String>)>,
+    /// The name resolution rules for the internal domain names (`mesh_dns`), while the engine for the mesh alone
+    /// runs.
+    mesh_dns: MeshDns,
+}
+
+/// The rules for the internal domain names while the engine for the mesh alone runs: what is in place, what the
+/// engine named that they leave out, and a write that failed, which is tried again after a growing wait (5 s, 10 s,
+/// 20 s, 40 s, then every 60 s) and shown on the 组网 page meanwhile.
+#[derive(Debug, Default)]
+struct MeshDns {
+    applied: Option<crate::gui::mesh_dns::Plan>,
+    outcome: Option<crate::gui::mesh_dns::Applied>,
+    left_out: crate::gui::mesh_dns::LeftOut,
+    failure: Option<MeshDnsFailure>,
+}
+
+#[derive(Debug)]
+struct MeshDnsFailure {
+    plan: Option<crate::gui::mesh_dns::Plan>,
+    attempt: u32,
+    retry_at: Instant,
+}
+
+impl MeshDns {
+    /// Puts `plan` in place with `apply` when it differs from what is, or when a failed write is due again.
+    fn update(
+        &mut self,
+        plan: Option<crate::gui::mesh_dns::Plan>,
+        now: Instant,
+        apply: impl FnOnce(
+            Option<&crate::gui::mesh_dns::Plan>,
+        ) -> Result<crate::gui::mesh_dns::Applied, String>,
+    ) {
+        match &self.failure {
+            None if plan == self.applied => return,
+            Some(failure) if failure.plan == plan && now < failure.retry_at => return,
+            _ => {}
+        }
+        match apply(plan.as_ref()) {
+            Ok(outcome) => {
+                if self.failure.take().is_some() {
+                    log_mesh("the name resolution rules are in place after a retry");
+                }
+                let outcome = plan.as_ref().map(|_| outcome);
+                if outcome.is_some_and(|outcome| outcome.policy_override)
+                    && !self.outcome.is_some_and(|known| known.policy_override)
+                {
+                    log_mesh("a group policy sets the name resolution rules; the device's own are ignored");
+                }
+                self.applied = plan;
+                self.outcome = outcome;
+            }
+            Err(error) => {
+                let attempt = match &self.failure {
+                    Some(failure) if failure.plan == plan => failure.attempt.saturating_add(1),
+                    _ => {
+                        log_mesh(&error);
+                        0
+                    }
+                };
+                // What the failed write left is not known.
+                self.applied = None;
+                self.outcome = None;
+                self.failure = Some(MeshDnsFailure {
+                    plan,
+                    attempt,
+                    retry_at: now + crate::gui::mesh::retry_wait(attempt),
+                });
+            }
+        }
+    }
+
+    /// Whether rules of this program may be in place.
+    fn in_place(&self) -> bool {
+        self.applied.is_some() || self.failure.is_some()
+    }
+}
+
+fn log_mesh(message: &str) {
+    let _ = append_managed_log("tauri-gui", &format!("mesh: {message}"));
 }
 
 impl DesktopCore {
@@ -92,9 +170,14 @@ impl DesktopCore {
     /// Stops the engine for the mesh alone; answers whether it ran.
     pub fn stop_mesh_only(&mut self) -> bool {
         self.mesh_left_out.clear();
-        if self.mesh_dns.take().is_some() {
-            if let Err(error) = crate::gui::mesh_dns::apply(None) {
-                let _ = append_managed_log("tauri-gui", &format!("mesh: {error}"));
+        // Taken away while the adapter is still held, and with its connection suffix.
+        if std::mem::take(&mut self.mesh_dns).in_place() {
+            let interface = self
+                .mesh_only
+                .as_ref()
+                .and_then(DesktopTun::interface_index);
+            if let Err(error) = crate::gui::mesh_dns::apply(None, interface) {
+                log_mesh(&error);
             }
         }
         match self.mesh_only.take() {
@@ -108,6 +191,19 @@ impl DesktopCore {
 
     pub fn mesh_only_running(&self) -> bool {
         self.mesh_only.as_ref().is_some_and(DesktopTun::is_running)
+    }
+
+    /// What keeps the internal domain names from resolving while the engine for the mesh alone runs, for the 组网
+    /// page (`mesh_dns::issues`).
+    pub fn mesh_dns_issues(&self) -> Vec<serde_json::Value> {
+        if !self.mesh_only_running() {
+            return Vec::new();
+        }
+        crate::gui::mesh_dns::issues(
+            self.mesh_dns.failure.is_some(),
+            self.mesh_dns.outcome,
+            &self.mesh_dns.left_out,
+        )
     }
 
     /// Whether the engine for the mesh alone was started and has since ended by itself.
@@ -133,19 +229,46 @@ impl DesktopCore {
             serde_json::from_slice(&answer?).map_err(|error| error.to_string())?;
         let tunnel = client_core::backend::mesh::Tunnel::from_status(&status);
         let (routes, servers) = client_core::backend::mesh::Tunnel::routes_and_dns(tunnel.as_ref());
-        // The internal domain names: their suffixes go to the mesh's DNS server, every other name keeps the
-        // device's DNS. A failure goes to the log once; the next change tries again.
+        // The internal domain names: the mesh's suffixes and the reverse zones of the device's own subnets go to
+        // the mesh's DNS server, every other name keeps the device's DNS (`mesh_dns`).
         let domains = tunnel
             .as_ref()
             .map(|tunnel| tunnel.match_domains.clone())
             .unwrap_or_default();
-        let dns = crate::gui::mesh_dns::rules(&domains, &servers);
-        if dns != self.mesh_dns {
-            if let Err(error) = crate::gui::mesh_dns::apply(dns.as_ref()) {
-                let _ = append_managed_log("tauri-gui", &format!("mesh: {error}"));
+        let own = status.get("self");
+        let own_text = |key: &str| {
+            own.and_then(|own| own.get(key))
+                .and_then(serde_json::Value::as_str)
+        };
+        let subnets: Vec<String> = ["address", "addressV6"]
+            .into_iter()
+            .filter_map(own_text)
+            .map(str::to_string)
+            .collect();
+        let (dns, dns_left_out) =
+            crate::gui::mesh_dns::plan(&domains, &servers, &subnets, own_text("domain"));
+        if dns_left_out != self.mesh_dns.left_out {
+            if !dns_left_out.suffixes.is_empty() {
+                log_mesh(&format!(
+                    "internal domain suffixes left out (outside a mesh's namespace under internal): {}",
+                    dns_left_out.suffixes.join(", ")
+                ));
             }
-            self.mesh_dns = dns;
+            if !dns_left_out.reverse.is_empty() {
+                log_mesh(&format!(
+                    "reverse lookup left out (more than 16 zones): {}",
+                    dns_left_out.reverse.join(", ")
+                ));
+            }
+            self.mesh_dns.left_out = dns_left_out;
         }
+        let interface = self
+            .mesh_only
+            .as_ref()
+            .and_then(DesktopTun::interface_index);
+        self.mesh_dns.update(dns, Instant::now(), |plan| {
+            crate::gui::mesh_dns::apply(plan, interface)
+        });
         let (routes, mut left_out) = mesh_routes(&routes);
         if let Some(tunnel) = &tunnel {
             left_out.extend(tunnel.refused.iter().cloned());
@@ -712,6 +835,66 @@ mod tests {
         WindowsSystemProxyOwner, WINDOWS_MANAGED_CONFIG_SCHEMA_VERSION,
     };
     use platform_windows::system_integration::WindowsWinHttpProxy;
+
+    #[test]
+    fn a_failed_name_rule_write_is_tried_again_after_a_growing_wait() {
+        use crate::gui::mesh_dns::{Applied, Plan};
+        use std::cell::Cell;
+        use std::time::Duration;
+        let plan = Some(Plan {
+            namespaces: vec![".mesh.internal".into()],
+            servers: vec!["198.18.0.2".into()],
+            search: None,
+        });
+        let start = Instant::now();
+        let count = Cell::new(0);
+        let writes = &count;
+        let fail = |_: Option<&Plan>| {
+            writes.set(writes.get() + 1);
+            Err::<Applied, String>("refused".into())
+        };
+        let work = |policy_override| {
+            move |_: Option<&Plan>| {
+                writes.set(writes.get() + 1);
+                Ok(Applied { policy_override })
+            }
+        };
+        let mut dns = MeshDns::default();
+        dns.update(plan.clone(), start, fail);
+        assert_eq!(writes.get(), 1);
+        assert!(dns.in_place(), "a failed write may have left rules");
+        assert!(dns.failure.is_some(), "shown on the page");
+        // Not again before the wait (5 s), then once it is due.
+        dns.update(plan.clone(), start + Duration::from_secs(4), fail);
+        assert_eq!(writes.get(), 1);
+        dns.update(plan.clone(), start + Duration::from_secs(5), fail);
+        assert_eq!(writes.get(), 2);
+        assert_eq!(dns.failure.as_ref().map(|failure| failure.attempt), Some(1));
+        dns.update(plan.clone(), start + Duration::from_secs(14), fail);
+        assert_eq!(writes.get(), 2, "10 s after the second");
+        // New rules from the engine are tried at once.
+        let other = Some(Plan {
+            search: Some("eu.mesh.internal".into()),
+            ..plan.clone().unwrap()
+        });
+        dns.update(other.clone(), start + Duration::from_secs(6), work(true));
+        assert_eq!(writes.get(), 3);
+        assert!(dns.failure.is_none());
+        assert_eq!(dns.applied, other);
+        assert_eq!(
+            dns.outcome,
+            Some(Applied {
+                policy_override: true
+            })
+        );
+        // In place: nothing to write until they change.
+        dns.update(other, start + Duration::from_secs(60), work(false));
+        assert_eq!(writes.get(), 3);
+        dns.update(None, start + Duration::from_secs(61), work(false));
+        assert_eq!(writes.get(), 4);
+        assert!(!dns.in_place());
+        assert_eq!(dns.outcome, None);
+    }
 
     fn managed_config(
         owner: WindowsSystemProxyOwner,
