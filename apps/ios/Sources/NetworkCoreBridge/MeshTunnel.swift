@@ -14,6 +14,16 @@ public enum MeshSupport {
     public static let enabled = false
     #endif
 
+    /// Whether this build shows the kernel 0.4 parts of 组网 (regions, host groups, external networks, advertising,
+    /// relay and host switches). A second gate behind `enabled`, off until kernel 0.4 is complete and audited (the
+    /// same as client-core's `mesh::V04_ENABLED`); the `MESH04_PREVIEW` compilation condition turns it on for
+    /// testing. While it is off the app reads the snapshot through `MeshView.stripV04`.
+    #if MESH04_PREVIEW
+    public static let v04Enabled = enabled
+    #else
+    public static let v04Enabled = false
+    #endif
+
     public static var available: Bool {
         enabled && NetworkCoreRuntimeFFI.featureSetVersion >= minimumFeatureSet
     }

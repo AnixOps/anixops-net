@@ -187,6 +187,15 @@ public enum MeshView {
 
     static func children(_ member: [String: Any], devices: [Any]) -> [[String: Any]] {
         var children: [[String: Any]] = []
+        for vm in list(member, "vms") {
+            let object = vm as? [String: Any]
+            children.append([
+                "kind": "vm",
+                "name": text(vm, "name"),
+                "address": orNull(object?["address"]),
+                "domain": orNull(object?["domain"]),
+            ])
+        }
         let subnets = list(member, "subnets").compactMap { $0 as? String }
         for subnet in subnets {
             children.append(["kind": "subnet", "name": subnet])
@@ -205,15 +214,6 @@ public enum MeshView {
                     ])
                 }
             }
-        }
-        for vm in list(member, "vms") {
-            let object = vm as? [String: Any]
-            children.append([
-                "kind": "vm",
-                "name": text(vm, "name"),
-                "address": orNull(object?["address"]),
-                "domain": orNull(object?["domain"]),
-            ])
         }
         return children
     }
@@ -244,6 +244,7 @@ public enum MeshView {
         if !list(member, "duplicateOf").isEmpty { marks.append("duplicate") }
         let infrastructure = ["border", "gateway", "host", "server"].contains(text(member, "role"))
         if infrastructure && bool(member, "addressManaged") == false { marks.append("unmanaged") }
+        if bool(member, "bridgesExternal") == true { marks.append("external_bridge") }
         switch text(member, "pathState") {
         case "fallback": marks.append("fallback")
         case "first_hop_only": marks.append("first_hop_only")
@@ -339,6 +340,166 @@ public enum MeshView {
         return NSNull()
     }
 
+    // MARK: Subnets and regions
+
+    /// `lan` (the default, and what an unknown kind is read as), `host_group`, `external` or `summary`.
+    static func subnetKind(_ subnet: Any?) -> String {
+        let kind = text(subnet, "kind")
+        return ["host_group", "external", "summary"].contains(kind) ? kind : "lan"
+    }
+
+    /// `{ id, name }` of a member, `NSNull` for an empty id.
+    static func named(_ members: [[String: Any]], _ id: String) -> Any {
+        if id.isEmpty { return NSNull() }
+        return ["id": id, "name": memberName(members, id)] as [String: Any]
+    }
+
+    /// The member a subnet is in use through: its `inUse` advertiser.
+    static func inUseMember(_ subnet: Any?) -> String? {
+        list(subnet, "advertisers").first(where: { bool($0, "inUse") == true }).flatMap { optText($0, "member") }
+    }
+
+    /// A host group's gateway (the member advertising the range now, else the configured one) and backup.
+    static func hostGroup(_ members: [[String: Any]], _ subnet: Any?) -> Any {
+        guard subnetKind(subnet) == "host_group" else { return NSNull() }
+        let config = (subnet as? [String: Any])?["hostGroup"]
+        let gateway = inUseMember(subnet) ?? optText(config, "gateway")
+        return [
+            "gateway": gateway.map { named(members, $0) } ?? NSNull(),
+            "backup": optText(config, "backupGateway").map { named(members, $0) } ?? NSNull(),
+        ] as [String: Any]
+    }
+
+    /// An external one-address network without its prefix, any other subnet as given.
+    static func subnetDisplay(_ subnet: Any?) -> String {
+        let cidr = text(subnet, "cidr")
+        let single = Cidr(cidr).map { $0.prefix == ($0.address.v6 ? 128 : 32) } ?? false
+        if subnetKind(subnet) == "external" && single && cidr.contains("/") {
+            return bareAddress(cidr)
+        }
+        return cidr
+    }
+
+    static func subnetRow(_ status: Any?, _ members: [[String: Any]], _ subnet: Any?) -> [String: Any] {
+        let cidr = text(subnet, "cidr")
+        let kind = subnetKind(subnet)
+        let advertisers: [[String: Any]] = list(subnet, "advertisers").map { advertiser in
+            let id = text(advertiser, "member")
+            return ["id": id, "name": memberName(members, id), "inUse": bool(advertiser, "inUse") ?? false]
+        }
+        let inUse: Any = (advertisers.first { bool($0, "inUse") == true } ?? advertisers.first)?["name"] ?? NSNull()
+        let state = optText(subnet, "state") ?? "ok"
+        let route = optText(subnet, "route") ?? "mesh"
+        let overlaps = list(subnet, "overlaps")
+        var marks: [String] = []
+        if advertisers.count > 1 { marks.append("multi_source") }
+        if !overlaps.isEmpty { marks.append("overlap") }
+        if bool(subnet, "localOverlap") == true { marks.append("local_overlap") }
+        if state == "refused" { marks.append("refused") }
+        let path = list(subnet, "path").compactMap { $0 as? String }.map { memberName(members, $0) }
+        let region = optText(subnet, "region")
+        let tone: Any = state == "refused" ? NSNull() as Any : latencyTone(latency(subnet)) as Any
+        let bridge: Any = kind == "external" ? (optText(subnet, "bridge").map { named(members, $0) } ?? NSNull()) : NSNull()
+        var vms: [[String: Any]] = []
+        if kind == "host_group" {
+            for member in members {
+                for vm in list(member, "vms") where text(vm, "cidr") == cidr {
+                    let object = vm as? [String: Any]
+                    vms.append([
+                        "name": text(vm, "name"),
+                        "domain": orNull(object?["domain"]),
+                        "address": orNull(object?["address"]),
+                    ])
+                }
+            }
+        }
+        return [
+            "cidr": cidr,
+            "display": subnetDisplay(subnet),
+            "kind": kind,
+            "label": orNull(optText(subnet, "name")),
+            "hostGroup": hostGroup(members, subnet),
+            "bridge": bridge,
+            "vms": vms,
+            "region": orNull(region),
+            "regionName": orNull(region.map { regionName(status, $0) }),
+            "advertiser": inUse,
+            "advertisers": advertisers,
+            "path": path,
+            "latencyMs": orNull(latency(subnet)),
+            "tone": tone,
+            "state": state,
+            "route": route,
+            "overlaps": overlaps,
+            "marks": marks,
+        ]
+    }
+
+    static func subnetMatches(_ row: [String: Any], query: String, address: Address?) -> Bool {
+        let cidr = text(row, "cidr")
+        return query.isEmpty
+            || cidr.lowercased().contains(query)
+            || text(row, "label").lowercased().contains(query)
+            || (address.map { Cidr(cidr)?.contains($0) == true } ?? false)
+            || list(row, "advertisers").contains { text($0, "name").lowercased().contains(query) }
+    }
+
+    /// The cross-region link between the local region and `code`, in either direction.
+    static func linkBetween(_ status: Any?, _ local: String, _ code: String) -> Any? {
+        list(status, "links").first {
+            (text($0, "from") == local && text($0, "to") == code)
+                || (text($0, "from") == code && text($0, "to") == local)
+        }
+    }
+
+    /// What the member list and the notices know of another region, or `nil`. See `mesh::region_summary`.
+    static func regionSummary(_ status: Any?, _ members: [[String: Any]], _ local: String, _ code: String) -> [String: Any]? {
+        let link = linkBetween(status, local, code)
+        let reachable = list(status, "regions").first(where: { text($0, "code") == code }).flatMap { bool($0, "reachable") }
+        let ranges = list(status, "subnets").filter { subnetKind($0) == "summary" && text($0, "region") == code }
+        if link == nil && reachable == nil && ranges.isEmpty { return nil }
+        let state: String
+        if let link {
+            state = optText(link, "state") ?? "ok"
+        } else if let reachable {
+            state = reachable ? "ok" : "down"
+        } else {
+            state = ranges.allSatisfy { text($0, "state") == "unreachable" } ? "down" : "ok"
+        }
+        func inLocalRegion(_ id: String) -> Bool {
+            members.contains { text($0, "id") == id && text($0, "region") == local }
+        }
+        var exitId: String? = link.flatMap { optText($0, "localBorder") }
+        if exitId == nil, let link {
+            exitId = list(link, "borders").compactMap { $0 as? String }.first(where: inLocalRegion)
+        }
+        if exitId == nil {
+            exitId = ranges.compactMap { inUseMember($0) }.first
+        }
+        let via = link.flatMap { optText($0, "via") }
+        let latencyMs: Int? = link != nil ? latency(link) : ranges.compactMap { latency($0) }.min()
+        let loss: Any = orNull(((link as? [String: Any])?["loss"] as? NSNumber).flatMap { isBool($0) ? nil : $0.doubleValue })
+        return [
+            "state": state,
+            "exitBorder": exitId.map { named(members, $0) } ?? NSNull(),
+            "via": orNull(via),
+            "viaName": orNull(via.map { regionName(status, $0) }),
+            "latencyMs": orNull(latencyMs),
+            "loss": loss,
+            "subnets": ranges.map { subnetRow(status, members, $0) },
+        ]
+    }
+
+    /// The summaries of every region but the local one that has one, in the order of `regions`.
+    static func regionSummaries(_ status: Any?, _ members: [[String: Any]]) -> [(String, [String: Any])] {
+        guard let local = localRegion(status) else { return [] }
+        return list(status, "regions").map { text($0, "code") }
+            .filter { !$0.isEmpty && $0 != local }
+            .compactMap { code in regionSummary(status, members, local, code).map { (code, $0) } }
+    }
+
+    // MARK: Members list
+
     /// The member list, grouped (N28, N29). See `mesh::members` for the arguments and the answer.
     public static func members(
         status: Any?,
@@ -362,6 +523,7 @@ public enum MeshView {
         }
         let local = localRegion(status)
         let everyone = stableSorted(allMembers(status)) { ascending($0, $1, sort: sort) }
+        let summaries = groupBy == "region" ? regionSummaries(status, everyone) : []
 
         func key(_ member: [String: Any]) -> String? {
             switch groupBy {
@@ -373,6 +535,9 @@ public enum MeshView {
         var keys: [String?] = []
         for member in everyone where !keys.contains(key(member)) {
             keys.append(key(member))
+        }
+        for (code, _) in summaries where !keys.contains(code) {
+            keys.append(code)
         }
         switch groupBy {
         case "region":
@@ -401,23 +566,25 @@ public enum MeshView {
             let rows = inGroup
                 .filter { passes($0, filter: filter) }
                 .compactMap { memberRow($0, devices: devices, query: query, address: address) }
-            if narrowed && rows.isEmpty { continue }
+            let summary: [String: Any]? = summaries.first(where: { $0.0 == groupKey })?.1
+            // A region without listed members stays under a query that finds one of its ranges.
+            let rangeFound = !query.isEmpty && (filter.isEmpty || filter == "all")
+                && list(summary, "subnets").contains { subnetMatches($0 as? [String: Any] ?? [:], query: query, address: address) }
+            if narrowed && rows.isEmpty && !rangeFound { continue }
             matchedTotal += rows.count
             let attention = worst(inGroup)
             let isLocal = groupBy == "region" && groupKey == local
             var link: Any = NSNull()
             if groupBy == "region", let code = groupKey, let local, code != local,
-               let found = list(status, "links").first(where: {
-                   (text($0, "from") == local && text($0, "to") == code)
-                       || (text($0, "from") == code && text($0, "to") == local)
-               }) {
+               let found = linkBetween(status, local, code) {
                 link = [
                     "latencyMs": orNull(latency(found)),
                     "via": orNull((found as? [String: Any])?["via"]),
                     "state": text(found, "state"),
                 ] as [String: Any]
             }
-            let open = groupBy == "none" || isLocal || !(attention is NSNull) || narrowed
+            let down = text(summary, "state") == "down"
+            let open = groupBy == "none" || isLocal || !(attention is NSNull) || down || narrowed
             groups.append([
                 "key": orNull(groupKey),
                 "count": inGroup.count,
@@ -425,64 +592,97 @@ public enum MeshView {
                 "open": open,
                 "worst": attention,
                 "link": link,
+                "summary": orNull(summary),
                 "rows": rows,
             ])
         }
         return ["groupBy": groupBy, "groups": groups, "total": everyone.count, "matched": matchedTotal]
     }
 
-    // MARK: Subnets
-
     /// The subnet list. See `mesh::subnets`.
     public static func subnets(status: Any?, query rawQuery: String) -> [String: Any] {
         let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let address = Address(query)
         let members = allMembers(status)
-        var rows: [[String: Any]] = []
-        for subnet in list(status, "subnets") {
-            let cidr = text(subnet, "cidr")
-            let advertisers: [[String: Any]] = list(subnet, "advertisers").map { advertiser in
-                let id = text(advertiser, "member")
-                return ["id": id, "name": memberName(members, id), "inUse": bool(advertiser, "inUse") ?? false]
-            }
-            let matches = query.isEmpty
-                || cidr.lowercased().contains(query)
-                || (address.map { Cidr(cidr)?.contains($0) == true } ?? false)
-                || advertisers.contains { text($0, "name").lowercased().contains(query) }
-            if !matches { continue }
-            let inUse: Any = (advertisers.first { bool($0, "inUse") == true } ?? advertisers.first)?["name"] ?? NSNull()
-            let state = optText(subnet, "state") ?? "ok"
-            let route = optText(subnet, "route") ?? "mesh"
-            let overlaps = list(subnet, "overlaps")
-            var marks: [String] = []
-            if advertisers.count > 1 { marks.append("multi_source") }
-            if !overlaps.isEmpty { marks.append("overlap") }
-            if bool(subnet, "localOverlap") == true { marks.append("local_overlap") }
-            if state == "refused" { marks.append("refused") }
-            let path = list(subnet, "path").compactMap { $0 as? String }.map { memberName(members, $0) }
-            let region = optText(subnet, "region")
-            let tone: Any = state == "refused" ? NSNull() as Any : latencyTone(latency(subnet)) as Any
-            rows.append([
-                "cidr": cidr,
-                "region": orNull(region),
-                "regionName": orNull(region.map { regionName(status, $0) }),
-                "advertiser": inUse,
-                "advertisers": advertisers,
-                "path": path,
-                "latencyMs": orNull(latency(subnet)),
-                "tone": tone,
-                "state": state,
-                "route": route,
-                "overlaps": overlaps,
-                "marks": marks,
-            ])
-        }
+        var rows = list(status, "subnets")
+            .map { subnetRow(status, members, $0) }
+            .filter { subnetMatches($0, query: query, address: address) }
         rows = stableSorted(rows) { a, b in
             let (x, y) = (text(a, "state") == "refused", text(b, "state") == "refused")
             return x == y ? .orderedSame : (y ? .orderedAscending : .orderedDescending)
         }
         let refused = unsigned((status as? [String: Any])?["refusedAdvertisements"]) ?? 0
         return ["rows": rows, "refused": refused]
+    }
+
+    /// The region panel. See `mesh::region`.
+    public static func region(status: Any?) -> [String: Any] {
+        let own = (status as? [String: Any])?["self"]
+        let network = (status as? [String: Any])?["network"]
+        let local = localRegion(status)
+        var basis: Any = NSNull()
+        if let object = (own as? [String: Any])?["regionBasis"] as? [String: Any] {
+            basis = [
+                "border": orNull(object["border"]),
+                "latencyMs": orNull(latency(object)),
+                "kind": orNull(object["kind"]),
+            ] as [String: Any]
+        }
+        let state: String
+        switch optText(own, "regionState") {
+        case nil, "auto": state = "auto"
+        case "pinned": state = "pinned"
+        case "pending": state = "pending"
+        default: state = "other"
+        }
+        var request: Any = NSNull()
+        if let object = (own as? [String: Any])?["regionRequest"] as? [String: Any] {
+            request = [
+                "id": orNull(object["id"]),
+                "region": text(object, "region"),
+                "regionName": regionName(status, text(object, "region")),
+                "state": text(object, "state"),
+                "reason": orNull(optText(object, "reason")),
+                "rejectReason": orNull(optText(object, "rejectReason")),
+            ] as [String: Any]
+        }
+        let pending = text(request, "state") == "pending"
+        var suggestion: Any = NSNull()
+        if let object = (own as? [String: Any])?["regionSuggestion"] as? [String: Any], !pending {
+            let code = text(object, "region")
+            suggestion = [
+                "region": code,
+                "regionName": regionName(status, code),
+                "currentMedianMs": orNull(unsigned(object["currentMedianMs"])),
+                "suggestedMedianMs": orNull(unsigned(object["suggestedMedianMs"])),
+            ] as [String: Any]
+        }
+        let targets: [[String: Any]] = list(status, "regions").map { text($0, "code") }
+            .filter { !$0.isEmpty && $0 != local }
+            .map { code in
+                var toward: Any?
+                if let local {
+                    toward = list(status, "links").first { text($0, "from") == local && text($0, "to") == code }
+                }
+                return ["code": code, "name": regionName(status, code), "latencyMs": orNull(toward.flatMap { latency($0) })]
+            }
+        let canRequest = ["joined", "partial"].contains(text(network, "state"))
+            && optText(own, "region") != nil
+            && !list(status, "regions").isEmpty
+        var backbone: Any = NSNull()
+        if let object = (own as? [String: Any])?["backbone"] as? [String: Any] { backbone = object }
+        return [
+            "code": orNull(local),
+            "name": orNull(local.map { regionName(status, $0) }),
+            "basis": basis,
+            "state": state,
+            "canWithdraw": !(request is NSNull),
+            "request": request,
+            "suggestion": suggestion,
+            "targets": targets,
+            "canRequest": canRequest,
+            "backbone": backbone,
+        ]
     }
 
     // MARK: Paths
@@ -640,7 +840,57 @@ public enum MeshView {
                 push("mesh.notice.partial", "partial", [names.count, names], nil, false)
             }
         }
+        // Region notices (`mesh-ui.md`, 提示): a refused change request, a suggested move, then another region that
+        // cannot be reached.
+        let own = (status as? [String: Any])?["self"]
+        let request = (own as? [String: Any])?["regionRequest"] as? [String: Any]
+        if let request, text(request, "state") == "rejected" {
+            let region = text(request, "region")
+            var values: [Any] = [regionName(status, region)]
+            if let reason = optText(request, "rejectReason") { values.append(reason) }
+            let which = optText(request, "id") ?? region
+            push("mesh.notice.region_rejected", "region_rejected:\(which)", values, nil, true)
+        }
+        let pending = request.map { text($0, "state") == "pending" } ?? false
+        if let suggestion = (own as? [String: Any])?["regionSuggestion"] as? [String: Any], !pending {
+            let region = text(suggestion, "region")
+            push("mesh.notice.region_suggestion", "region_suggestion:\(region)", [regionName(status, region)], "request_region", false)
+        }
+        for (code, summary) in regionSummaries(status, members) where text(summary, "state") == "down" {
+            push("mesh.notice.link_down", "link_down:\(code)", [regionName(status, code)], nil, false)
+        }
+        for subnet in list(status, "subnets") where subnetKind(subnet) == "host_group" && text(subnet, "state") == "unreachable" {
+            let gateway = (hostGroup(members, subnet) as? [String: Any])?["gateway"] as? [String: Any]
+            let cidr = text(subnet, "cidr")
+            push("mesh.notice.host_group_unreachable", "host_group:\(cidr)", [cidr, orNull(gateway?["name"])], nil, false)
+        }
         return notices
+    }
+
+    // MARK: Release gate
+
+    /// The snapshot without the kernel 0.4 fields, for builds where `MeshSupport.v04Enabled` is off (the same as
+    /// client-core's `mesh::strip_v04`): the page then reads as it did on kernel 0.3.
+    public static func stripV04(_ status: [String: Any]) -> [String: Any] {
+        func removing(_ object: Any?, _ names: [String]) -> Any? {
+            guard var object = object as? [String: Any] else { return object }
+            for name in names { object.removeValue(forKey: name) }
+            return object
+        }
+        var status = status
+        for name in ["regions", "links", "regionRequests", "externalBridge"] { status.removeValue(forKey: name) }
+        if status["self"] != nil {
+            status["self"] = removing(status["self"], [
+                "region", "regionBasis", "regionState", "regionRequest", "regionSuggestion", "backbone", "hostMode",
+            ])
+        }
+        if let members = status["members"] as? [Any] {
+            status["members"] = members.map { removing($0, ["region", "vms", "externalBridge", "bridgesExternal"]) ?? $0 }
+        }
+        if let subnets = status["subnets"] as? [Any] {
+            status["subnets"] = subnets.map { removing($0, ["region", "kind", "hostGroup", "bridge", "name"]) ?? $0 }
+        }
+        return status
     }
 
     // MARK: Entry
@@ -662,7 +912,12 @@ public enum MeshView {
             "security": orNull(optText(network, "security")),
             "online": online,
             "total": others.count,
-            "attention": !notices(status: status).isEmpty,
+            // The suggestion, a refused request and an unreachable host group show where they belong, not on the
+            // entry's dot.
+            "attention": notices(status: status).contains {
+                !["mesh.notice.region_rejected", "mesh.notice.region_suggestion", "mesh.notice.host_group_unreachable"]
+                    .contains(text($0, "id"))
+            },
         ]
     }
 }

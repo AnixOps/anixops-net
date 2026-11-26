@@ -1700,11 +1700,22 @@ async fn runtime_control(
                 return Ok(mesh::offline_status(&core, &request));
             }
             if let Some(answer) = core.mesh_only_control(&request) {
-                return serde_json::from_slice(&answer?).map_err(|error| error.to_string());
+                let mut answer: Value =
+                    serde_json::from_slice(&answer?).map_err(|error| error.to_string())?;
+                if mesh_status {
+                    client_core::backend::mesh::gate_status(&mut answer);
+                }
+                return Ok(answer);
             }
         }
         let answer = core.control(&request)?;
-        serde_json::from_slice(&answer).map_err(|error| error.to_string())
+        let mut answer: Value =
+            serde_json::from_slice(&answer).map_err(|error| error.to_string())?;
+        // Without the kernel 0.4 fields while that gate is closed (`mesh::V04_ENABLED`).
+        if mesh_status {
+            client_core::backend::mesh::gate_status(&mut answer);
+        }
+        Ok(answer)
     })
     .await
 }

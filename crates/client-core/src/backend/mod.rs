@@ -2084,8 +2084,16 @@ impl Backend {
             return None;
         }
         if self.mesh_only.is_running() {
+            let status = command == "mesh_status";
             return Some(
-                engine::activity_request(request).and_then(|_| self.mesh_only.request(request)),
+                engine::activity_request(request)
+                    .and_then(|_| self.mesh_only.request(request))
+                    .map(|mut answer| {
+                        if status {
+                            mesh::gate_status(&mut answer);
+                        }
+                        answer
+                    }),
             );
         }
         if command == "mesh_status" && mesh::supported() {

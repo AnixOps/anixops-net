@@ -129,10 +129,10 @@
 
 多源子网用 `advertisers` 的多项表示，`inUse` 标出使用中的一项。子网内手动命名的设备只存在客户端本机，不经内核。
 
-### 1.2 待内核确定的字段
+### 1.2 内核 0.4 的字段
 
-以下字段客户端已按夹具实现，名字与形态以内核 `mesh-status.md` 最终写定的为准（已向规范、区域、宿主组、骨干、外部桥接线程提出）；
-缺省时界面按「没有该信息」降级，不推断。
+以下字段的名字与形态取自内核 `mesh-status.md`（AnixOps-core #384）；客户端按夹具实现，缺省时界面按「没有该信息」降级，不推断。
+`links[]` 只在边界成员上给出，普通成员的快照没有 `links`，其他地区的状态改由 `regions[].reachable` 和汇总网段推出（见下）。
 
 | 字段 | 形态 | 用途 |
 |---|---|---|
@@ -140,14 +140,26 @@
 | `subnets[].hostGroup` | `{ "gateway": 实例 id, "backupGateway": 实例 id 或 null }`，仅 `host_group`；取自配置 `host_groups` | 「网关 X 通告的组地址段」，X 取 `advertisers` 中 `inUse` 的成员（备用网关只在主网关离线时通告） |
 | `members[].vms[].cidr` | 所属组地址段；`vms` 来自面板下发的名单，挂在当前通告该组地址段的成员下 | 组地址段行展开列出虚拟机 |
 | `subnets[].bridge`、`subnets[].name` | 桥接成员 id；面板给出的名称（可缺省），仅 `external` | 「经 X 桥接」 |
-| `members[].externalBridge` | 布尔，缺省 `false` | 「外部网络桥接」标记 |
-| `self.regionRequest` | `null` 或 `{ "id", "region", "state": "pending" \| "rejected", "reason", "decisionReason", "updatedAt" }`；批准后为 `null` | 待批准的目标地区、已拒绝及原因 |
-| `self.regionSuggestion` | `null` 或 `{ "region", "rttMs", "currentRttMs", "since" }`（中位 RTT） | 迁区建议 |
-| `self.backbone` | `null` 或 `{ "state": "ok" \| "partial" \| "down", "linksUp", "linksTotal" }`，仅边界成员 | 本机页「骨干」行 |
-| `mesh_cancel_region_request` | 命令，参数 `network` | 「撤回申请」 |
+| `members[].bridgesExternal` | 布尔，缺省 `false`（顶层的 `externalBridge` 是另一个对象） | 「外部网络桥接」标记 |
+| `self.regionRequest` | `null` 或 `{ "id", "region", "state": "pending" \| "rejected", "reason", "rejectReason" }`；批准后为 `null`。`rejected` 与撤回只在内核 `features` 列出 `mesh_region_request_state` 时出现 | 待批准的目标地区、已拒绝及管理者原因 |
+| `self.regionSuggestion` | `null` 或 `{ "region", "currentMedianMs", "suggestedMedianMs", "since" }`（中位 RTT） | 迁区建议 |
+| `self.regionState` | `auto`、`pinned`、`pending`；可能另有 `migrating`、`measuring`、`unassigned`，一律按 `other` | 地区行 |
+| `self.regionBasis` | `{ "border", "latencyMs" }`，可能另加 `kind` | 归属依据 |
+| `self.backbone` | `null` 或 `{ "state": "ok" \| "partial" \| "down" \| "unavailable", "linksUp", "linksTotal", "failure" }`，仅边界成员 | 本机页「骨干」行 |
+| `regions[]` | `{ "code", "name", "local" }`，另有可选的 `prefixes[]`、`borders[]`（本地区边界成员 id）、`remoteBorders[]`、`reachable`（布尔） | 其他地区的可达状态（没有 `links` 时） |
+| `links[]` | `{ "from", "to", "via", "borders", "latencyMs", "loss", "state", "reason" }`，另有 `localBorder`、`remoteBorder`；仅边界成员给出 | 其他地区的状态、出口边界成员、绕行 |
+| `mesh_withdraw_region_request` | 命令，参数 `network`；需 `mesh_region_request_state` | 「撤回申请」 |
 
-其他地区的可达状态取自 `links[]` 中 `from` 为本地区的一项：`ok` 为可达，`detour` 为已绕行，`down` 为中断；没有这一项时不显示状态。
-汇总网段为 `kind` 为 `summary` 的子网，按其 `region` 归入对应地区的摘要行。
+其他地区的摘要行（`view.mesh_members` 的 `groups[].summary`）按以下顺序取值：
+
+- 有 `links[]` 中本地区与它之间的一项：`ok` 为可达，`detour` 为已绕行，`down` 为中断；出口边界成员取 `localBorder`，没有则取 `borders`
+  中属于本地区的第一个，再没有则取其汇总网段中 `inUse` 的通告者；延迟、丢包、绕行地区取自该项。
+- 没有 `links[]`（普通成员）：`regions[].reachable` 为 `false` 是中断、`true` 是可达；该字段缺省时，汇总网段全部不可达为中断，否则可达；
+  延迟取汇总网段中最低的，出口边界成员取汇总网段 `inUse` 的通告者，没有绕行与丢包。
+- 三者都没有的地区不出现摘要行。
+- 汇总网段为 `kind` 为 `summary` 的子网，按其 `region` 归入对应地区的摘要行。
+
+连接 `cross_region` 保留，内核 0.4 不给出；界面照旧处理。
 
 ## 控制
 
@@ -162,7 +174,7 @@
 | `mesh_set_relay` / `mesh_set_host_mode` | `enabled`（仅完整节点） | 1.2 |
 | `mesh_advertise` / `mesh_withdraw` | `cidr`（仅完整节点） | 1.2 |
 | `mesh_request_region` | `region`、可省的 `reason`（交由网络管理者批准） | 1.2 |
-| `mesh_cancel_region_request` | `network`（撤回待批准或已拒绝的申请） | 1.2 |
+| `mesh_withdraw_region_request` | `network`（撤回待批准或已拒绝的申请；需内核 `features` 列出 `mesh_region_request_state`） | 1.2 |
 | `mesh_set_policy` | `policy` | 1.3 |
 | `mesh_set_paths` | `paths`（与内核 `routing.paths` 同结构） | 1.3 |
 | `mesh_join_credential` | 一次性入网凭据（个人电脑） | 1.3 |
@@ -269,8 +281,8 @@
 - `client-core`：`mesh::V04_ENABLED` 由构建变量 `ANIXOPS_MESH04_PREVIEW=1` 打开；Apple 为编译条件 `MESH04_PREVIEW`。
 - 关闭时 `mesh_status` 的回答在交给界面前去掉内核 0.4 的字段（`regions`、`links`、`regionRequests`、`externalBridge`，
   `self` 的 `region`、`regionBasis`、`regionState`、`regionRequest`、`regionSuggestion`、`backbone`、`hostMode`，
-  成员的 `region`、`vms`、`externalBridge`，子网的 `region`、`kind`、`hostGroup`、`bridge`、`name`），界面按 0.3 降级；
-  `mesh_set_relay`、`mesh_set_host_mode`、`mesh_advertise`、`mesh_withdraw`、`mesh_request_region`、`mesh_cancel_region_request`
+  成员的 `region`、`vms`、`externalBridge`、`bridgesExternal`，子网的 `region`、`kind`、`hostGroup`、`bridge`、`name`），界面按 0.3 降级；
+  `mesh_set_relay`、`mesh_set_host_mode`、`mesh_advertise`、`mesh_withdraw`、`mesh_request_region`、`mesh_withdraw_region_request`
   被拒绝（`unsupported`）。
 - `mesh-release-gate.sh` 对两个变量做同样的检查；CI 测试步骤两道都打开。
 
@@ -282,9 +294,10 @@
 |---|---|---|
 | `view.mesh_entry` | `status` | 概览与侧栏入口：名称、状态、在线数 / 总数、加密模式标记、是否有提示 |
 | `view.mesh_members` | `status`、`groupBy`（`region` \| `role` \| `none`）、`filter`、`sort`、`query` | 分组后的成员行，含折叠、所含数量、最差状态和标记 |
-| `view.mesh_subnets` | `status`、`query` | 子网行与标注 |
+| `view.mesh_subnets` | `status`、`query` | 子网行与标注；含 `kind`、`display`、`label`、`hostGroup`、`bridge`、`vms` |
 | `view.mesh_paths` | `status` | 默认选路、跨区链路、自定义路径 |
 | `view.mesh_notices` | `status` | 页面提示条，按 `mesh-ui.md`「提示」表的顺序 |
+| `view.mesh_region` | `status` | 地区面板：本地区与归属依据、变更申请、迁区建议、可选目标地区（含延迟）、能否申请与撤回、骨干 |
 | `view.mesh_latency_tone` | `latencyMs` | `fast`（< 120 ms）、`medium`（< 250 ms）、`slow`、`timeout` |
 
 Windows、Linux 的组网页在共用界面里（`apps/windows-gui/ui/src/pages/MeshPage.tsx`，文案与表单规则在 `mesh.ts`）：

@@ -34,6 +34,7 @@ final class MeshViewTests: XCTestCase {
         case "view.mesh_subnets": return MeshView.subnets(status: status, query: string("query"))
         case "view.mesh_paths": return MeshView.paths(status: status)
         case "view.mesh_notices": return MeshView.notices(status: status)
+        case "view.mesh_region": return MeshView.region(status: status)
         case "view.mesh_latency_tone": return MeshView.latencyTone(MeshView.unsigned(args["latencyMs"]))
         default: return nil
         }
@@ -68,5 +69,24 @@ final class MeshViewTests: XCTestCase {
         XCTAssertFalse(v6.contains(try XCTUnwrap(MeshView.Address("fd00:ab::5"))))
         XCTAssertNil(MeshView.Cidr("10.0.0.0/33"))
         XCTAssertNil(MeshView.Cidr("example"))
+    }
+
+    func testStripV04LeavesTheKernel03Fields() throws {
+        let status: [String: Any] = [
+            "network": ["state": "joined"],
+            "regions": [["code": "eu"]],
+            "links": [],
+            "self": ["id": "a", "region": "eu", "regionBasis": [:], "regionState": "auto", "hostMode": true, "address": "10.0.0.1/24"],
+            "members": [["id": "b", "region": "eu", "vms": [], "bridgesExternal": true, "role": "host"]],
+            "subnets": [["cidr": "10.1.0.0/24", "region": "eu", "kind": "lan", "name": "x", "state": "ok"]],
+        ]
+        let expected: [String: Any] = [
+            "network": ["state": "joined"],
+            "self": ["id": "a", "address": "10.0.0.1/24"],
+            "members": [["id": "b", "role": "host"]],
+            "subnets": [["cidr": "10.1.0.0/24", "state": "ok"]],
+        ]
+        let got = try Self.normalised(MeshView.stripV04(status)) as AnyObject
+        XCTAssertTrue(got.isEqual(try Self.normalised(expected) as AnyObject), "\(got)")
     }
 }

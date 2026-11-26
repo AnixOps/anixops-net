@@ -129,7 +129,7 @@ final class MeshModel {
             status = nil
             return
         }
-        status = object
+        status = MeshSupport.v04Enabled ? object : MeshView.stripV04(object)
     }
 
     /// Joins or leaves the network the snapshot names. Joining and leaving do not touch the proxy (R23); the saved

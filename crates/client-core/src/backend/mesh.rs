@@ -414,6 +414,76 @@ pub const ENABLED: bool = match option_env!("ANIXOPS_MESH_PREVIEW") {
     None => false,
 };
 
+/// Whether this build offers the kernel 0.4 parts of 组网 (regions, host groups, external networks, advertising,
+/// relaying and host mode; client 1.2), a second release gate behind [`ENABLED`] that stays closed until kernel 0.4
+/// is complete and audited. A build made with `ANIXOPS_MESH04_PREVIEW=1` in the environment turns it on for testing.
+/// While off, a `mesh_status` answer loses the 0.4 fields ([`strip_v04`]) and [`V04_COMMANDS`] are refused
+/// ([`super::engine::activity_request`]).
+pub const V04_ENABLED: bool = ENABLED
+    && match option_env!("ANIXOPS_MESH04_PREVIEW") {
+        Some(value) => matches!(value.as_bytes(), [b'1']),
+        None => false,
+    };
+
+/// The commands only kernel 0.4 answers; refused while [`V04_ENABLED`] is off.
+pub const V04_COMMANDS: [&str; 6] = [
+    "mesh_set_relay",
+    "mesh_set_host_mode",
+    "mesh_advertise",
+    "mesh_withdraw",
+    "mesh_request_region",
+    "mesh_withdraw_region_request",
+];
+
+/// Removes the kernel 0.4 fields from a `mesh_status` answer (mesh-client.md, 发布闸门), so that the page reads as it
+/// did on kernel 0.3: top-level `regions`, `links`, `regionRequests` and `externalBridge`; `self`'s `region`,
+/// `regionBasis`, `regionState`, `regionRequest`, `regionSuggestion`, `backbone` and `hostMode`; each member's `region`,
+/// `vms`, `externalBridge` and `bridgesExternal`; each subnet's `region`, `kind`, `hostGroup`, `bridge` and `name`.
+pub fn strip_v04(status: &mut Value) {
+    fn remove(value: &mut Value, names: &[&str]) {
+        if let Some(object) = value.as_object_mut() {
+            for name in names {
+                object.remove(*name);
+            }
+        }
+    }
+    remove(
+        status,
+        &["regions", "links", "regionRequests", "externalBridge"],
+    );
+    if let Some(own) = status.get_mut("self") {
+        remove(
+            own,
+            &[
+                "region",
+                "regionBasis",
+                "regionState",
+                "regionRequest",
+                "regionSuggestion",
+                "backbone",
+                "hostMode",
+            ],
+        );
+    }
+    for (list, names) in [
+        ("members", &["region", "vms", "externalBridge", "bridgesExternal"][..]),
+        ("subnets", &["region", "kind", "hostGroup", "bridge", "name"][..]),
+    ] {
+        if let Some(items) = status.get_mut(list).and_then(Value::as_array_mut) {
+            for item in items {
+                remove(item, names);
+            }
+        }
+    }
+}
+
+/// A `mesh_status` answer as a window may see it: without the 0.4 fields while [`V04_ENABLED`] is off.
+pub fn gate_status(status: &mut Value) {
+    if !V04_ENABLED {
+        strip_v04(status);
+    }
+}
+
 /// Whether this build runs mesh networks: [`ENABLED`], and its engine accepts a mesh-only profile. Known without an
 /// engine running, so the 组网 entry shows while disconnected.
 pub fn supported() -> bool {
@@ -981,5 +1051,46 @@ mod tests {
         assert!(!carried.iter().any(|route| too_wide(route)), "{carried:?}");
         assert!(!too_wide("not a route"));
         assert!(!too_wide("10.0.0.0/x"));
+    }
+
+    #[test]
+    fn strip_v04_leaves_the_kernel_0_3_fields() {
+        let mut status = json!({
+            "network": { "state": "joined" },
+            "regions": [{ "code": "eu" }],
+            "links": [],
+            "regionRequests": [],
+            "externalBridge": {},
+            "refusedAdvertisements": 1,
+            "self": {
+                "id": "a", "region": "eu", "regionBasis": {}, "regionState": "auto", "regionRequest": null,
+                "regionSuggestion": null, "backbone": null, "hostMode": true, "address": "10.0.0.1/24"
+            },
+            "members": [{ "id": "b", "region": "eu", "vms": [], "externalBridge": true, "bridgesExternal": true, "role": "host" }],
+            "subnets": [{ "cidr": "10.1.0.0/24", "region": "eu", "kind": "lan", "hostGroup": null, "bridge": "b", "name": "x", "state": "ok" }],
+        });
+        strip_v04(&mut status);
+        assert_eq!(
+            status,
+            json!({
+                "network": { "state": "joined" },
+                "refusedAdvertisements": 1,
+                "self": { "id": "a", "address": "10.0.0.1/24" },
+                "members": [{ "id": "b", "role": "host" }],
+                "subnets": [{ "cidr": "10.1.0.0/24", "state": "ok" }],
+            })
+        );
+        // A snapshot that is not an object is left alone.
+        let mut other = json!(null);
+        strip_v04(&mut other);
+        assert_eq!(other, json!(null));
+    }
+
+    #[test]
+    fn the_0_4_gate_is_inside_the_mesh_gate() {
+        assert!(!V04_ENABLED || ENABLED);
+        let mut status = json!({ "regions": [], "members": [{ "id": "b", "vms": [] }] });
+        gate_status(&mut status);
+        assert_eq!(status.get("regions").is_some(), V04_ENABLED);
     }
 }
