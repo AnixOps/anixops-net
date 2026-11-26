@@ -6,15 +6,10 @@
 //! take it out of the user's store again.
 
 use std::fs;
-use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use platform_windows::managed::{append_managed_log, windows_managed_data_directory};
 use windows_data::trusted_roots;
-
-/// Keeps PowerShell and rundll32 from flashing a console window.
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// The copy Windows' certificate dialog opens; `.crt` is the extension Explorer knows.
 const DIALOG_FILE_NAME: &str = "AnixOps-Net-HTTPS-root.crt";
@@ -31,17 +26,8 @@ const THUMBPRINT_SCRIPT: &str = r#"$ErrorActionPreference = 'Stop'
 (New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 $env:ANIXOPS_ROOT_CERTIFICATE).Thumbprint"#;
 
 fn run_script(script: &str, certificate: &Path, what: &str) -> Result<String, String> {
-    let output = Command::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            script,
-        ])
+    let output = super::system_programs::powershell(script)
         .env("ANIXOPS_ROOT_CERTIFICATE", certificate)
-        .creation_flags(CREATE_NO_WINDOW)
         .output()
         .map_err(|error| format!("the {what} could not run: {error}"))?;
     if !output.status.success() {
@@ -113,10 +99,9 @@ pub fn open_dialog(certificate: &Path) -> Result<PathBuf, String> {
         .ok_or("the root certificate has no folder")?;
     fs::write(&copy, pem)
         .map_err(|error| format!("the root certificate could not be copied: {error}"))?;
-    Command::new("rundll32.exe")
+    super::system_programs::rundll32()
         .arg("cryptext.dll,CryptExtOpenCER")
         .arg(&copy)
-        .creation_flags(CREATE_NO_WINDOW)
         .spawn()
         .map_err(|error| format!("the Windows certificate dialog could not open: {error}"))?;
     Ok(copy)

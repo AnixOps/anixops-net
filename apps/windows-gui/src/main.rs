@@ -78,6 +78,7 @@ mod gui {
     mod runtime_status;
     mod session_end;
     mod startup;
+    mod system_programs;
     mod tauri_ui;
     mod tun_mode;
     mod ui_state;
@@ -442,7 +443,7 @@ mod gui {
     /// registered; the root certificates and drivers recorded as installed
     /// machine-wide; the HTTPS decryption roots out of the own certificate
     /// stores of the users signed in now (a user who is not signed in keeps
-    /// it); and the decryption root's private key. It also puts back the
+    /// it); the 组网 name resolution rules; and the decryption root's private key. It also puts back the
     /// system proxy the window set and did not put back itself
     /// (`owned_proxy::restore_for_removal`): the machine's WinHTTP proxy, and
     /// the WinINet settings of each recorded user who is signed in, when they
@@ -454,6 +455,11 @@ mod gui {
         let mut errors = Vec::new();
         if let Err(error) = integration.uninstall_service() {
             errors.push(format!("service: {error}"));
+        }
+        // The name resolution rules for the 组网 internal domain names that a window left behind (a crash, or a
+        // window the removal ended), with the adapter's connection suffix.
+        if let Err(error) = mesh_dns::apply(None, None) {
+            errors.push(format!("mesh name resolution rules: {error}"));
         }
         let mut managed = read_managed_state(&state_path).ok();
         let mut desktop = startup::load_desktop_state().ok();

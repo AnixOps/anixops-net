@@ -233,7 +233,7 @@ export const meshApi = {
       invoke<MeshPaths>("view.mesh_paths", { status }),
       invoke<MeshNotice[]>("view.mesh_notices", { status }),
     ]);
-    return { status: status as MeshStatus, head: status as MeshHead, entry, members, subnets, paths, notices };
+    return { status: status as MeshStatus, head: status as MeshHead, entry, members, subnets, paths, notices: [...notices, ...localDnsNotices(status)] };
   },
   networks: () => invoke<MeshSavedNetwork[]>("mesh_networks"),
   save: (config: Record<string, unknown>) => command("save_mesh_network", { config }),
@@ -699,6 +699,22 @@ function list(items: string[]): string {
   return items.join(t("、"));
 }
 
+/**
+ * What keeps the internal domain names from resolving on this device (Windows, `network.local_dns`): the name
+ * resolution rules could not be written (tried again), a group policy's rules take their place, or the engine named
+ * suffixes outside a mesh's namespace. Each is a notice of its own, after the shared ones.
+ */
+export function localDnsNotices(status: unknown): MeshNotice[] {
+  const raw = (status as { network?: { local_dns?: unknown } } | null)?.network?.local_dns;
+  const issues: unknown[] = Array.isArray(raw) ? raw : [];
+  return issues.flatMap((issue): MeshNotice[] => {
+    const code = (issue as { code?: unknown })?.code;
+    const detail = (issue as { detail?: unknown })?.detail;
+    if (code !== "write_failed" && code !== "policy_override" && code !== "suffix_refused") return [];
+    return [{ id: `mesh.notice.local_dns_${code}`, key: `local_dns:${code}`, values: typeof detail === "string" ? [detail] : [], action: null, notify: false }];
+  });
+}
+
 /** A notice's sentence, in the order of docs/mesh-ui.md 提示. */
 export function noticeText(notice: MeshNotice): string {
   const values = notice.values;
@@ -717,6 +733,12 @@ export function noticeText(notice: MeshNotice): string {
       return typeof values?.[3] === "number"
         ? t("{from}至{to}已改经{via}：直连链路延迟 {latency} ms。", { from: value(values, 0), to: value(values, 1), via: value(values, 2), latency: value(values, 3) })
         : t("{from}至{to}已改经{via}：直连链路延迟过高。", { from: value(values, 0), to: value(values, 1), via: value(values, 2) });
+    case "mesh.notice.local_dns_write_failed":
+      return t("内网域名暂不可用：无法写入名称解析规则，稍后自动重试。");
+    case "mesh.notice.local_dns_policy_override":
+      return t("内网域名不可用：本机的名称解析规则由组策略管理，本地规则不生效。");
+    case "mesh.notice.local_dns_suffix_refused":
+      return t("已忽略内网域名后缀 {suffixes}：后缀须位于 internal 之下。", { suffixes: value(values, 0) });
     case "mesh.notice.partial": {
       const names = Array.isArray(values?.[1]) ? (values?.[1] as unknown[]).filter((name): name is string => typeof name === "string") : [];
       return t("{count} 台成员不可达：{names}。", { count: names.length, names: list(names) });

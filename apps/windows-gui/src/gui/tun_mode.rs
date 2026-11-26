@@ -90,7 +90,10 @@ impl ProcessLock {
         }
     }
 
-    fn acquire(&'static self, path: &Path) -> Result<AdapterLease, TunStartError> {
+    pub(in crate::gui) fn acquire(
+        &'static self,
+        path: &Path,
+    ) -> Result<AdapterLease, TunStartError> {
         let mut held = self
             .held
             .lock()
@@ -141,7 +144,7 @@ const REPARSE_POINT: u32 = 0x0400;
 
 /// Opens the lock file without sharing. A link planted in its place is opened as the link itself and refused, so the
 /// lock never opens, creates or holds a file elsewhere.
-fn open_exclusive(path: &Path) -> io::Result<File> {
+pub(in crate::gui) fn open_exclusive(path: &Path) -> io::Result<File> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -166,6 +169,13 @@ static ADAPTER: ProcessLock = ProcessLock::new();
 
 fn adapter_lock_path() -> PathBuf {
     windows_managed_data_directory().join("tun-adapter.lock")
+}
+
+/// Holds the adapter for this process without opening it, for a change that must not reach another signed-in
+/// user's adapter (the name resolution rules a crash left behind, `mesh_dns::clear_leftovers`): `tun_in_use` while
+/// another user's window holds it.
+pub fn hold_adapter() -> Result<AdapterLease, TunStartError> {
+    ADAPTER.acquire(&adapter_lock_path())
 }
 
 impl DesktopTun {
@@ -274,6 +284,11 @@ impl DesktopTun {
             .ok_or_else(|| "the TUN adapter is closed".to_string())?
             .set_routes(routes)
             .map_err(|error| format!("the TUN routes could not be applied: {error}"))
+    }
+
+    /// The adapter's interface index while it is open.
+    pub fn interface_index(&self) -> Option<u32> {
+        self.tun.as_ref().map(WindowsTun::interface_index)
     }
 
     /// The routes the adapter carries now.
