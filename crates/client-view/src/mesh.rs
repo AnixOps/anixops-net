@@ -595,7 +595,7 @@ fn region_summary(status: &Value, members: &[Value], local: &str, code: &str) ->
                 list(link, "borders")
                     .iter()
                     .filter_map(Value::as_str)
-                    .find(|id| in_local_region(*id))
+                    .find(|id| in_local_region(id))
             })
         })
         .or_else(|| ranges.iter().find_map(|range| in_use_member(range)));
