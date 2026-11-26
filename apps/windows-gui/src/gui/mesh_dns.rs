@@ -5,8 +5,9 @@
 //! - the suffixes are held to a mesh's own namespace ([`internal_suffix`]): at least two labels under `internal`
 //!   (`mesh.internal`), since a rule applies to every program and user of the device, and a suffix such as `com`
 //!   would hand the device's lookups to whoever runs the network;
-//! - the reverse zones of the device's own mesh subnets go to the same server ([`reverse_zones`]), so that a mesh
-//!   address reads back as its name;
+//! - the reverse zones the engine names among them (`*.in-addr.arpa`, `*.ip6.arpa`; the kernel derives them from the
+//!   network's ranges and the private allowlist, core#375) go to the same server ([`reverse_zone`]), so that a mesh
+//!   address reads back as its name; the client derives none itself;
 //! - a bare host name resolves in the device's own region: the region's suffix (`eu.mesh.internal`) is the mesh
 //!   adapter's connection suffix, which Windows appends to a single-label name;
 //! - the DNS cache is cleared after each change, so that a failed lookup from before does not linger;
@@ -34,11 +35,12 @@ const COMMENT: &str = "AnixOps Net mesh";
 /// The label every internal suffix ends in (`mesh.internal`, R28).
 const PARENT_LABEL: &str = "internal";
 
-/// The most reverse zones one subnet may take: a prefix between label boundaries spreads over the zones of the next
-/// label (an IPv4 /12 over 16 zones); one wider than that is left out.
-const ZONES_PER_SUBNET: usize = 16;
+/// The adapter's fixed interface GUID (platform-windows `tun::ADAPTER_GUID`, which the proxy's adapter shares). Its
+/// connection suffix is kept by GUID, also while no adapter exists: taken away by GUID too, it cannot pass from a
+/// crashed engine for the mesh alone to the next adapter, the proxy's included.
+const ADAPTER_GUID: &str = "{4E3C5B8A-7D21-4F0B-9A6E-1C2D3E4F5A6B}";
 
-/// Removes this program's rules, then sets the adapter's connection suffix (or takes it away), adds one rule per
+/// Removes this program's rules, then sets the adapter's connection suffix (or takes it away, by GUID too), adds one rule per
 /// namespace, clears the DNS cache and answers whether a group policy sets the rules (`policy`) or the device's
 /// own rules apply (`local`). The values come through the environment, never through the script's text.
 const SCRIPT: &str = r#"$ErrorActionPreference = 'Stop'
@@ -52,6 +54,12 @@ foreach ($adapter in $adapters) {
     Set-DnsClient -InterfaceIndex $adapter.InterfaceIndex -ResetConnectionSpecificSuffix
   }
 }
+if (-not $env:ANIXOPS_MESH_DNS_SEARCH) {
+  $interface = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\$env:ANIXOPS_MESH_DNS_GUID"
+  if ((Test-Path $interface) -and (Get-ItemProperty -Path $interface -Name Domain -ErrorAction SilentlyContinue).Domain) {
+    Set-ItemProperty -Path $interface -Name Domain -Value ''
+  }
+}
 $servers = @($env:ANIXOPS_MESH_DNS_SERVERS -split ',' | Where-Object { $_ })
 foreach ($namespace in @($env:ANIXOPS_MESH_DNS_NAMESPACES -split ',' | Where-Object { $_ })) {
   Add-DnsClientNrptRule -Namespace $namespace -NameServers $servers -Comment $comment | Out-Null
@@ -63,8 +71,8 @@ if ((Test-Path $policy) -and @(Get-ChildItem $policy).Count -gt 0) { 'policy' } 
 /// The rules for the internal domain names.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Plan {
-    /// NRPT namespaces: each suffix (`.eu.mesh.internal`, which also covers its subdomains) and each reverse zone
-    /// (`.144.144.10.in-addr.arpa`).
+    /// NRPT namespaces: each suffix (`.eu.mesh.internal`, which also covers its subdomains) and each reverse zone the
+    /// engine names (`.144.144.10.in-addr.arpa`).
     pub namespaces: Vec<String>,
     /// The mesh's DNS servers, IPv4 first.
     pub servers: Vec<String>,
@@ -75,29 +83,32 @@ pub struct Plan {
 /// What the engine named and the rules leave out, for the log and the page.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LeftOut {
-    /// Suffixes outside a mesh's namespace, as plain text.
+    /// Names that are neither a mesh's suffix nor a reverse zone, as plain text.
     pub suffixes: Vec<String>,
-    /// Own subnets whose reverse zones would be too many.
-    pub reverse: Vec<String>,
 }
 
-/// The rules for the engine's `domains` answered by `servers`, with the reverse zones of the device's own
-/// `subnets` (`self.address`, `self.addressV6`) and its own name `own_domain` (`self.domain`). `None` when no suffix
-/// or no server is left.
+/// The rules for the engine's `domains` (`tunnel.dns.matchDomains`: the mesh's suffixes and the reverse zones the
+/// kernel derived) answered by `servers`, with the device's own name `own_domain` (`self.domain`) for bare host
+/// names. `None` when no name or no server is left.
 pub fn plan(
     domains: &[String],
     servers: &[String],
-    subnets: &[String],
     own_domain: Option<&str>,
 ) -> (Option<Plan>, LeftOut) {
     let mut left_out = LeftOut::default();
     let mut suffixes: Vec<String> = Vec::new();
+    let mut zones: Vec<String> = Vec::new();
     for domain in domains {
-        match internal_suffix(domain) {
-            Some(suffix) if !suffixes.contains(&suffix) => suffixes.push(suffix),
-            Some(_) => {}
-            None if domain.trim().is_empty() => {}
-            None => left_out.suffixes.push(printable(domain)),
+        if let Some(suffix) = internal_suffix(domain) {
+            if !suffixes.contains(&suffix) {
+                suffixes.push(suffix);
+            }
+        } else if let Some(zone) = reverse_zone(domain) {
+            if !zones.contains(&zone) {
+                zones.push(zone);
+            }
+        } else if !domain.trim().is_empty() {
+            left_out.suffixes.push(printable(domain));
         }
     }
     let mut addresses: Vec<IpAddr> = Vec::new();
@@ -112,7 +123,7 @@ pub fn plan(
     // An IPv4 server first: one reached over IPv6 alone fails on a device without IPv6.
     addresses.sort_by_key(IpAddr::is_ipv6);
     let servers: Vec<String> = addresses.iter().map(IpAddr::to_string).collect();
-    if suffixes.is_empty() || servers.is_empty() {
+    if (suffixes.is_empty() && zones.is_empty()) || servers.is_empty() {
         return (None, left_out);
     }
     let search = own_domain
@@ -123,20 +134,11 @@ pub fn plan(
                 .iter()
                 .any(|suffix| region == suffix || region.ends_with(&format!(".{suffix}")))
         });
-    let mut namespaces: Vec<String> = suffixes.iter().map(|suffix| format!(".{suffix}")).collect();
-    for subnet in subnets {
-        match reverse_zones(subnet) {
-            Some(zones) => {
-                for zone in zones {
-                    let namespace = format!(".{zone}");
-                    if !namespaces.contains(&namespace) {
-                        namespaces.push(namespace);
-                    }
-                }
-            }
-            None => left_out.reverse.push(printable(subnet)),
-        }
-    }
+    let namespaces = suffixes
+        .iter()
+        .chain(&zones)
+        .map(|name| format!(".{name}"))
+        .collect();
     (
         Some(Plan {
             namespaces,
@@ -147,11 +149,20 @@ pub fn plan(
     )
 }
 
-/// `domain` as a plain lowercase DNS name without the outer dots: labels of letters, digits and hyphens.
+/// The longest name a suffix may be (core#370, the panel's limit too).
+const NAME_MAX: usize = 172;
+
+/// `domain` as a plain lowercase DNS name (core#370): ASCII labels of letters, digits and hyphens (Punycode `xn--`
+/// included), 1–63 bytes each, not starting or ending with a hyphen, at most [`NAME_MAX`] bytes in all; one trailing
+/// dot is dropped. A leading dot, an empty label or a second trailing dot makes it no name.
 fn plain_name(domain: &str) -> Option<String> {
-    let domain = domain.trim().trim_matches('.').to_ascii_lowercase();
+    let domain = domain.trim();
+    let domain = domain
+        .strip_suffix('.')
+        .unwrap_or(domain)
+        .to_ascii_lowercase();
     let plain = !domain.is_empty()
-        && domain.len() <= 253
+        && domain.len() <= NAME_MAX
         && domain.split('.').all(|label| {
             !label.is_empty()
                 && label.len() <= 63
@@ -174,76 +185,32 @@ pub fn internal_suffix(domain: &str) -> Option<String> {
     })
 }
 
-/// The reverse zones of a subnet (`10.144.144.5/24`, host bits ignored; a bare address is one host): the labels of
-/// its prefix, spread over the next label's values when the prefix ends between labels. `None` when it is not a
-/// subnet, wider than a mesh route may be (IPv4 /8, IPv6 /7), or would take more than [`ZONES_PER_SUBNET`] zones.
-pub fn reverse_zones(subnet: &str) -> Option<Vec<String>> {
-    let subnet = subnet.trim();
-    let (address, length) = match subnet.split_once('/') {
-        Some((address, length)) => (address, Some(length.trim().parse::<u8>().ok()?)),
-        None => (subnet, None),
+/// `domain` as a reverse zone the engine named (core#375): a plain name under `in-addr.arpa` with one to four
+/// decimal labels of 0–255 (an IPv4 prefix of /8 or longer), or under `ip6.arpa` with two to 32 single hexadecimal
+/// labels (an IPv6 prefix of /7 or longer, which the kernel spreads over the zones of /8). The trees themselves
+/// (`in-addr.arpa`, `ip6.arpa`, `arpa`) and anything wider are never one.
+pub fn reverse_zone(domain: &str) -> Option<String> {
+    let name = plain_name(domain)?;
+    let (labels, ipv4) = match name.strip_suffix(".in-addr.arpa") {
+        Some(labels) => (labels, true),
+        None => (name.strip_suffix(".ip6.arpa")?, false),
     };
-    // Labels of `bits` bits each, most significant first, and the zone's tree.
-    let (labels, bits, max, min, tree): (Vec<u8>, u8, u8, u8, &str) =
-        match address.trim().parse::<IpAddr>().ok()? {
-            IpAddr::V4(address) => (
-                address.octets().to_vec(),
-                8,
-                32,
-                client_core::backend::mesh::ROUTE_MIN_PREFIX_V4,
-                "in-addr.arpa",
-            ),
-            IpAddr::V6(address) => (
-                address
-                    .octets()
-                    .iter()
-                    .flat_map(|byte| [byte >> 4, byte & 0x0f])
-                    .collect(),
-                4,
-                128,
-                client_core::backend::mesh::ROUTE_MIN_PREFIX_V6,
-                "ip6.arpa",
-            ),
-        };
-    let length = length.unwrap_or(max);
-    if length < min || length > max {
-        return None;
-    }
-    let full = usize::from(length / bits);
-    let rest = length % bits;
-    let zone = |labels: &[u8]| {
-        let mut parts: Vec<String> = labels
-            .iter()
-            .rev()
-            .map(|label| {
-                if bits == 8 {
-                    label.to_string()
-                } else {
-                    format!("{label:x}")
-                }
+    let labels: Vec<&str> = labels.split('.').collect();
+    let fits = if ipv4 {
+        (1..=4).contains(&labels.len())
+            && labels.iter().all(|label| {
+                label.len() <= 3
+                    && label.bytes().all(|byte| byte.is_ascii_digit())
+                    && (label.len() == 1 || !label.starts_with('0'))
+                    && label.parse::<u16>().is_ok_and(|value| value <= 255)
             })
-            .collect();
-        parts.push(tree.to_string());
-        parts.join(".")
+    } else {
+        (2..=32).contains(&labels.len())
+            && labels
+                .iter()
+                .all(|label| label.len() == 1 && label.bytes().all(|byte| byte.is_ascii_hexdigit()))
     };
-    if rest == 0 {
-        return Some(vec![zone(&labels[..full])]);
-    }
-    let count = 1usize << (bits - rest);
-    if count > ZONES_PER_SUBNET {
-        return None;
-    }
-    let mask = (0xffu8 << (bits - rest)) & (0xffu8 >> (8 - bits));
-    let base = labels[full] & mask;
-    Some(
-        (0..count)
-            .map(|offset| {
-                let mut prefix = labels[..full].to_vec();
-                prefix.push(base + offset as u8);
-                zone(&prefix[..])
-            })
-            .collect(),
-    )
+    fits.then_some(name)
 }
 
 /// Text from the engine fit for the log and the page: printable ASCII, at most 64 characters.
@@ -253,6 +220,32 @@ fn printable(text: &str) -> String {
         .filter(|character| character.is_ascii_graphic())
         .take(64)
         .collect()
+}
+
+/// Whether the rules' servers are all IPv6 and none can be reached from this device (IPv6 is off, or nothing routes
+/// to them), so that the names cannot resolve although the rules are in place. `reachable` tells for one server.
+pub fn ipv6_only_unreachable(plan: &Plan, reachable: impl Fn(IpAddr) -> bool) -> bool {
+    let servers: Vec<IpAddr> = plan
+        .servers
+        .iter()
+        .filter_map(|server| server.parse().ok())
+        .collect();
+    !servers.is_empty()
+        && servers.iter().all(IpAddr::is_ipv6)
+        && !servers.iter().any(|server| reachable(*server))
+}
+
+/// Whether this device can send to `server` on the DNS port: a socket of its family opens and a route leads there.
+/// Nothing is sent.
+pub fn reachable(server: IpAddr) -> bool {
+    let local: std::net::SocketAddr = if server.is_ipv6() {
+        (std::net::Ipv6Addr::UNSPECIFIED, 0).into()
+    } else {
+        (std::net::Ipv4Addr::UNSPECIFIED, 0).into()
+    };
+    std::net::UdpSocket::bind(local)
+        .and_then(|socket| socket.connect((server, 53)))
+        .is_ok()
 }
 
 /// What putting rules in place found.
@@ -274,7 +267,7 @@ pub fn apply(plan: Option<&Plan>, interface: Option<u32>) -> Result<Applied, Str
             )
         })
         .unwrap_or_default();
-    let output = super::system_programs::powershell(SCRIPT)
+    let output = super::system_programs::powershell(SCRIPT)?
         .env("ANIXOPS_MESH_DNS_COMMENT", COMMENT)
         .env("ANIXOPS_MESH_DNS_NAMESPACES", namespaces)
         .env("ANIXOPS_MESH_DNS_SERVERS", servers)
@@ -287,6 +280,7 @@ pub fn apply(plan: Option<&Plan>, interface: Option<u32>) -> Result<Applied, Str
             "ANIXOPS_MESH_DNS_ADAPTER",
             WindowsTunSettings::default().adapter_name,
         )
+        .env("ANIXOPS_MESH_DNS_GUID", ADAPTER_GUID)
         .output()
         .map_err(|error| format!("the name resolution rules could not be set: {error}"))?;
     if !output.status.success() {
@@ -341,12 +335,21 @@ fn clear_leftovers_with<Hold>(
 
 /// The state of the internal domain names while the engine for the mesh alone runs, as the 组网 page reads it
 /// (`network.local_dns`, Windows only): `[{code, detail}]` with `write_failed` (the rules could not be put in place;
-/// tried again), `policy_override` (a group policy's rules take their place) and `suffix_refused` (suffixes outside
-/// a mesh's namespace; `detail` names them).
-pub fn issues(failed: bool, applied: Option<Applied>, left_out: &LeftOut) -> Vec<Value> {
+/// tried again), `ipv6_unavailable` (the servers are IPv6 only and this device reaches none, [`ipv6_only_unreachable`]),
+/// `policy_override` (a group policy's rules take their place) and `suffix_refused` (suffixes outside a mesh's
+/// namespace; `detail` names them).
+pub fn issues(
+    failed: bool,
+    ipv6_unavailable: bool,
+    applied: Option<Applied>,
+    left_out: &LeftOut,
+) -> Vec<Value> {
     let mut issues = Vec::new();
     if failed {
         issues.push(json!({ "code": "write_failed", "detail": null }));
+    }
+    if ipv6_unavailable {
+        issues.push(json!({ "code": "ipv6_unavailable", "detail": null }));
     }
     if applied.is_some_and(|applied| applied.policy_override) {
         issues.push(json!({ "code": "policy_override", "detail": null }));
@@ -369,9 +372,8 @@ mod tests {
     #[test]
     fn each_internal_suffix_goes_to_the_mesh_dns_server() {
         let (rules, left_out) = super::plan(
-            &strings(&["office.internal", ".EU.Mesh.Internal.", "office.internal"]),
+            &strings(&["office.internal", "EU.Mesh.Internal.", "office.internal"]),
             &strings(&["fd00::53", "198.18.0.2", "198.18.0.2"]),
-            &[],
             None,
         );
         let rules = rules.unwrap();
@@ -411,19 +413,65 @@ mod tests {
         let (rules, left_out) = super::plan(
             &strings(&["com", "mesh.internal", "in-addr.arpa", "local"]),
             &strings(&["198.18.0.2"]),
-            &[],
             None,
         );
         assert_eq!(rules.unwrap().namespaces, [".mesh.internal"]);
         assert_eq!(left_out.suffixes, ["com", "in-addr.arpa", "local"]);
         // Nothing left: no rules at all, and the page names what was refused.
-        let (rules, left_out) =
-            super::plan(&strings(&["com"]), &strings(&["198.18.0.2"]), &[], None);
+        let (rules, left_out) = super::plan(&strings(&["com"]), &strings(&["198.18.0.2"]), None);
         assert_eq!(rules, None);
         assert_eq!(
-            issues(false, None, &left_out),
+            issues(false, false, None, &left_out),
             [json!({ "code": "suffix_refused", "detail": "com" })]
         );
+    }
+
+    #[test]
+    fn a_suffix_is_held_to_the_spec_names() {
+        // Punycode labels, and hyphens inside a label.
+        assert_eq!(
+            internal_suffix("xn--bcher-kva.mesh.internal").as_deref(),
+            Some("xn--bcher-kva.mesh.internal")
+        );
+        assert_eq!(
+            internal_suffix("eu-west.mesh.internal").as_deref(),
+            Some("eu-west.mesh.internal")
+        );
+        // One trailing dot is dropped; a leading dot, a second trailing dot or an empty label is no name.
+        assert_eq!(
+            internal_suffix("mesh.internal.").as_deref(),
+            Some("mesh.internal")
+        );
+        for refused in [
+            ".mesh.internal",
+            "..mesh.internal",
+            "mesh.internal..",
+            "eu..mesh.internal",
+            "-eu.mesh.internal",
+            "eu-.mesh.internal",
+            "mesh.-internal",
+            "bücher.mesh.internal",
+            "eu_west.mesh.internal",
+            " ",
+        ] {
+            assert_eq!(internal_suffix(refused), None, "{refused:?}");
+        }
+        // Labels of 1–63 bytes.
+        let label63 = "a".repeat(63);
+        assert!(internal_suffix(&format!("{label63}.internal")).is_some());
+        assert_eq!(internal_suffix(&format!("{label63}b.internal")), None);
+        // 172 bytes in all, not 173.
+        // Two labels of 62 bytes, then one that brings the whole name to `length` bytes.
+        let name = |length: usize| {
+            let long = "a".repeat(62);
+            let last = length - 2 * 63 - ".internal".len();
+            format!("{long}.{long}.{}.internal", "a".repeat(last))
+        };
+        assert_eq!(name(172).len(), 172);
+        assert_eq!(name(173).len(), 173);
+        assert!(internal_suffix(&name(172)).is_some());
+        assert_eq!(internal_suffix(&name(173)), None);
+        assert!(internal_suffix(&format!("{}.", name(172))).is_some());
     }
 
     #[test]
@@ -437,7 +485,6 @@ mod tests {
                 "",
             ]),
             &strings(&["198.18.0.2", "not an address"]),
-            &[],
             None,
         );
         let rules = rules.unwrap();
@@ -448,20 +495,17 @@ mod tests {
             ["a,b.internal", "x';Remove-ItemC:\\", "-bad.internal"]
         );
         assert_eq!(
-            super::plan(&strings(&["office.internal"]), &[], &[], None).0,
+            super::plan(&strings(&["office.internal"]), &[], None).0,
             None
         );
-        assert_eq!(
-            super::plan(&[], &strings(&["198.18.0.2"]), &[], None).0,
-            None
-        );
+        assert_eq!(super::plan(&[], &strings(&["198.18.0.2"]), None).0, None);
     }
 
     #[test]
     fn a_bare_host_name_resolves_in_the_own_region() {
         let domains = strings(&["mesh.internal"]);
         let servers = strings(&["198.18.0.2"]);
-        let search = |own: Option<&str>| plan(&domains, &servers, &[], own).0.unwrap().search;
+        let search = |own: Option<&str>| plan(&domains, &servers, own).0.unwrap().search;
         assert_eq!(
             search(Some("par-laptop.EU.mesh.internal")).as_deref(),
             Some("eu.mesh.internal")
@@ -473,65 +517,91 @@ mod tests {
     }
 
     #[test]
-    fn the_own_subnets_read_back_through_the_mesh() {
-        assert_eq!(
-            reverse_zones("10.144.144.5/24").unwrap(),
-            ["144.144.10.in-addr.arpa"]
-        );
-        assert_eq!(reverse_zones("10.0.0.0/8").unwrap(), ["10.in-addr.arpa"]);
-        assert_eq!(
-            reverse_zones("10.144.144.5").unwrap(),
-            ["5.144.144.10.in-addr.arpa"]
-        );
-        let spread = reverse_zones("10.150.1.2/12").unwrap();
-        assert_eq!(spread.len(), 16);
-        assert_eq!(spread[0], "144.10.in-addr.arpa");
-        assert_eq!(spread[15], "159.10.in-addr.arpa");
-        assert_eq!(
-            reverse_zones("10.144.0.0/22").unwrap(),
-            [
-                "0.144.10.in-addr.arpa",
-                "1.144.10.in-addr.arpa",
-                "2.144.10.in-addr.arpa",
-                "3.144.10.in-addr.arpa"
-            ]
-        );
-        assert_eq!(
-            reverse_zones("fd12:3456:789a::5/64").unwrap(),
-            ["0.0.0.0.a.9.8.7.6.5.4.3.2.1.d.f.ip6.arpa"]
-        );
-        assert_eq!(
-            reverse_zones("fd12:3456:789a::5/62").unwrap(),
-            [
-                "0.0.0.0.a.9.8.7.6.5.4.3.2.1.d.f.ip6.arpa",
-                "1.0.0.0.a.9.8.7.6.5.4.3.2.1.d.f.ip6.arpa",
-                "2.0.0.0.a.9.8.7.6.5.4.3.2.1.d.f.ip6.arpa",
-                "3.0.0.0.a.9.8.7.6.5.4.3.2.1.d.f.ip6.arpa"
-            ]
-        );
-        // Wider than a mesh route, too many zones, or not a subnet.
-        for refused in [
-            "10.0.0.0/7",
-            "0.0.0.0/0",
-            "10.128.0.0/9",
-            "fd00::/6",
-            "10.0.0.0/33",
-            "mesh",
-            "10.0.0.0/x",
+    fn the_reverse_zones_the_engine_names_read_back_through_the_mesh() {
+        for zone in [
+            "10.in-addr.arpa",
+            "144.10.in-addr.arpa",
+            "144.144.10.in-addr.arpa",
+            "5.144.144.10.in-addr.arpa",
+            "0.255.10.in-addr.arpa",
+            "d.f.ip6.arpa",
+            "0.0.0.0.a.9.8.7.6.5.4.3.2.1.d.f.ip6.arpa",
+            "C.F.IP6.ARPA.",
         ] {
-            assert_eq!(reverse_zones(refused), None, "{refused}");
+            assert!(reverse_zone(zone).is_some(), "{zone}");
+        }
+        assert_eq!(
+            reverse_zone("144.144.10.IN-ADDR.ARPA.").as_deref(),
+            Some("144.144.10.in-addr.arpa")
+        );
+        for refused in [
+            "arpa",
+            "in-addr.arpa",
+            "ip6.arpa",
+            "home.arpa",
+            "f.ip6.arpa",
+            "256.10.in-addr.arpa",
+            "010.10.in-addr.arpa",
+            "1.2.3.4.5.in-addr.arpa",
+            "a.10.in-addr.arpa",
+            "-1.10.in-addr.arpa",
+            "fd.ip6.arpa",
+            "g.f.ip6.arpa",
+            ".10.in-addr.arpa",
+            "10..in-addr.arpa",
+            "10.in-addr.arpa..",
+            "10.in-addr.arpa.com",
+        ] {
+            assert_eq!(reverse_zone(refused), None, "{refused}");
         }
         let (rules, left_out) = super::plan(
-            &strings(&["mesh.internal"]),
+            &strings(&[
+                "mesh.internal",
+                "144.144.10.in-addr.arpa",
+                "in-addr.arpa",
+                "144.144.10.in-addr.arpa",
+                "d.f.ip6.arpa",
+            ]),
             &strings(&["198.18.0.2"]),
-            &strings(&["10.144.144.5/24", "10.128.0.0/9", "10.144.144.9/24"]),
             None,
         );
         assert_eq!(
             rules.unwrap().namespaces,
-            [".mesh.internal", ".144.144.10.in-addr.arpa"]
+            [
+                ".mesh.internal",
+                ".144.144.10.in-addr.arpa",
+                ".d.f.ip6.arpa"
+            ]
         );
-        assert_eq!(left_out.reverse, ["10.128.0.0/9"]);
+        assert_eq!(left_out.suffixes, ["in-addr.arpa"]);
+        // A bare host name takes a mesh's suffix, never a reverse zone.
+        let (rules, _) = super::plan(
+            &strings(&["144.144.10.in-addr.arpa"]),
+            &strings(&["198.18.0.2"]),
+            Some("host.144.144.10.in-addr.arpa"),
+        );
+        assert_eq!(rules.unwrap().search, None);
+    }
+
+    #[test]
+    fn an_ipv6_only_resolver_this_device_cannot_reach_is_named() {
+        let with = |servers: &[&str]| Plan {
+            namespaces: vec![".mesh.internal".into()],
+            servers: strings(servers),
+            search: None,
+        };
+        let none = |_: IpAddr| false;
+        let all = |_: IpAddr| true;
+        assert!(ipv6_only_unreachable(&with(&["fd00::53"]), none));
+        assert!(!ipv6_only_unreachable(&with(&["fd00::53"]), all));
+        // An IPv4 server is there to fall back on.
+        assert!(!ipv6_only_unreachable(
+            &with(&["198.18.0.2", "fd00::53"]),
+            none
+        ));
+        assert!(!ipv6_only_unreachable(&with(&[]), none));
+        // The loopback address is reachable wherever the family is.
+        assert!(reachable("127.0.0.1".parse().unwrap()));
     }
 
     #[test]
@@ -597,6 +667,7 @@ mod tests {
     fn the_page_reads_what_keeps_the_names_from_resolving() {
         assert!(issues(
             false,
+            false,
             Some(Applied {
                 policy_override: false
             }),
@@ -606,19 +677,83 @@ mod tests {
         assert_eq!(
             issues(
                 true,
+                true,
                 Some(Applied {
                     policy_override: true
                 }),
                 &LeftOut {
                     suffixes: strings(&["com", "local"]),
-                    reverse: strings(&["10.128.0.0/9"]),
                 }
             ),
             [
                 json!({ "code": "write_failed", "detail": null }),
+                json!({ "code": "ipv6_unavailable", "detail": null }),
                 json!({ "code": "policy_override", "detail": null }),
                 json!({ "code": "suffix_refused", "detail": "com, local" }),
             ]
+        );
+    }
+
+    /// Writes and removes real rules on this Windows device (needs administrator rights; CI runs it in its own
+    /// step): only the rules with this program's comment go and another program's rule stays,
+    /// the DNS cache is cleared, and a connection suffix kept for the adapter's GUID is taken away while no adapter
+    /// exists, so that the next adapter with that GUID (the proxy's included) cannot inherit it.
+    #[test]
+    #[ignore = "changes this device's name resolution rules; run with --ignored as administrator"]
+    fn the_rules_are_written_and_removed_on_windows() {
+        let query = |script: &str| -> String {
+            let output = super::super::system_programs::powershell(script)
+                .unwrap()
+                .env("ANIXOPS_MESH_DNS_COMMENT", COMMENT)
+                .env("ANIXOPS_MESH_DNS_GUID", ADAPTER_GUID)
+                .output()
+                .expect("PowerShell runs");
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        };
+        let ours = r#"@(Get-DnsClientNrptRule | Where-Object { $_.Comment -eq $env:ANIXOPS_MESH_DNS_COMMENT } | ForEach-Object { $_.Namespace } | Sort-Object) -join ' '"#;
+        let interface = r#"$key = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\$env:ANIXOPS_MESH_DNS_GUID""#;
+        // Another program's rule.
+        query(
+            r#"Add-DnsClientNrptRule -Namespace '.ci-other.mesh.internal' -NameServers '10.255.255.54' -Comment 'AnixOps CI other' | Out-Null"#,
+        );
+        let (rules, _) = super::plan(
+            &strings(&["ci.mesh.internal", "255.255.10.in-addr.arpa"]),
+            &strings(&["10.255.255.53"]),
+            Some("host.ci.mesh.internal"),
+        );
+        let rules = Plan {
+            search: None,
+            ..rules.unwrap()
+        };
+        apply(Some(&rules), None).expect("the rules are written");
+        assert_eq!(query(ours), ".255.255.10.in-addr.arpa .ci.mesh.internal");
+        // A suffix left for the adapter's GUID by a crash (no adapter exists here), as the next start finds it.
+        query(&format!(
+            "{interface}; if (-not (Test-Path $key)) {{ New-Item -Path $key -Force | Out-Null }}; Set-ItemProperty -Path $key -Name Domain -Value 'eu.mesh.internal'"
+        ));
+        apply(None, None).expect("the rules are removed");
+        assert_eq!(query(ours), "");
+        assert_eq!(
+            query(
+                r#"@(Get-DnsClientNrptRule | Where-Object { $_.Comment -eq 'AnixOps CI other' }).Count"#
+            ),
+            "1",
+            "another program's rule stays"
+        );
+        assert_eq!(
+            query(&format!(
+                "{interface}; (Get-ItemProperty -Path $key -Name Domain).Domain"
+            )),
+            "",
+            "the suffix kept for the adapter's GUID is gone"
+        );
+        query(
+            r#"Get-DnsClientNrptRule | Where-Object { $_.Comment -eq 'AnixOps CI other' } | ForEach-Object { Remove-DnsClientNrptRule -Name $_.Name -Force }"#,
         );
     }
 }

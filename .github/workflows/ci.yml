@@ -542,6 +542,14 @@ jobs:
         shell: bash
         run: cargo test --locked --workspace --all-targets
 
+      # Writes and removes real name resolution rules for the mesh's internal domain names on this runner, which runs
+      # as an administrator; ignored in the plain test run above, since it changes the device it runs on.
+      - name: Mesh name resolution rules on Windows
+        shell: bash
+        run: |
+          cargo test --locked -p networkcore-windows-gui --bin networkcore-windows-gui -- \
+            --ignored --exact gui::mesh_dns::tests::the_rules_are_written_and_removed_on_windows
+
       # Two builds of the same source for the MSI upgrade test below: the older one with a lower file version,
       # as release.yml stamps each release's MSI version into the executable (TAURI_CONFIG).
       - name: Build the GUI

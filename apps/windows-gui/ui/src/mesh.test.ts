@@ -119,21 +119,23 @@ describe("words", () => {
       network: {
         local_dns: [
           { code: "write_failed", detail: null },
+          { code: "ipv6_unavailable", detail: null },
           { code: "policy_override", detail: null },
           { code: "suffix_refused", detail: "com, local" },
           { code: "later_code", detail: null },
         ],
       },
     });
-    expect(notices.map((notice) => notice.key)).toEqual(["local_dns:write_failed", "local_dns:policy_override", "local_dns:suffix_refused"]);
+    expect(notices.map((notice) => notice.key)).toEqual(["local_dns:write_failed", "local_dns:ipv6_unavailable", "local_dns:policy_override", "local_dns:suffix_refused"]);
     expect(notices.map(noticeText)).toEqual([
       "内网域名暂不可用：无法写入名称解析规则，稍后自动重试。",
+      "内网域名不可用：组网解析地址仅有 IPv6，本机无法通过 IPv6 访问。",
       "内网域名不可用：本机的名称解析规则由组策略管理，本地规则不生效。",
       "已忽略内网域名后缀 com, local：后缀须位于 internal 之下。",
     ]);
-    expect(notices.map(noticeDetail)).toEqual([null, null, null]);
+    expect(notices.map(noticeDetail)).toEqual([null, null, null, null]);
     setLanguage("en");
-    expect(noticeText(notices[2])).toBe("Internal domain suffixes ignored: com, local. A suffix must be under internal.");
+    expect(noticeText(notices[3])).toBe("Internal domain suffixes ignored: com, local. A suffix must be under internal.");
   });
 
   it("reads refusals and region names", () => {

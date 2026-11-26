@@ -26,7 +26,7 @@ const THUMBPRINT_SCRIPT: &str = r#"$ErrorActionPreference = 'Stop'
 (New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 $env:ANIXOPS_ROOT_CERTIFICATE).Thumbprint"#;
 
 fn run_script(script: &str, certificate: &Path, what: &str) -> Result<String, String> {
-    let output = super::system_programs::powershell(script)
+    let output = super::system_programs::powershell(script)?
         .env("ANIXOPS_ROOT_CERTIFICATE", certificate)
         .output()
         .map_err(|error| format!("the {what} could not run: {error}"))?;
@@ -99,7 +99,7 @@ pub fn open_dialog(certificate: &Path) -> Result<PathBuf, String> {
         .ok_or("the root certificate has no folder")?;
     fs::write(&copy, pem)
         .map_err(|error| format!("the root certificate could not be copied: {error}"))?;
-    super::system_programs::rundll32()
+    super::system_programs::rundll32()?
         .arg("cryptext.dll,CryptExtOpenCER")
         .arg(&copy)
         .spawn()

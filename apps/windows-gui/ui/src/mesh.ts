@@ -701,7 +701,8 @@ function list(items: string[]): string {
 
 /**
  * What keeps the internal domain names from resolving on this device (Windows, `network.local_dns`): the name
- * resolution rules could not be written (tried again), a group policy's rules take their place, or the engine named
+ * resolution rules could not be written (tried again), the resolver has only IPv6 addresses this device cannot
+ * reach, a group policy's rules take their place, or the engine named
  * suffixes outside a mesh's namespace. Each is a notice of its own, after the shared ones.
  */
 export function localDnsNotices(status: unknown): MeshNotice[] {
@@ -710,7 +711,7 @@ export function localDnsNotices(status: unknown): MeshNotice[] {
   return issues.flatMap((issue): MeshNotice[] => {
     const code = (issue as { code?: unknown })?.code;
     const detail = (issue as { detail?: unknown })?.detail;
-    if (code !== "write_failed" && code !== "policy_override" && code !== "suffix_refused") return [];
+    if (code !== "write_failed" && code !== "ipv6_unavailable" && code !== "policy_override" && code !== "suffix_refused") return [];
     return [{ id: `mesh.notice.local_dns_${code}`, key: `local_dns:${code}`, values: typeof detail === "string" ? [detail] : [], action: null, notify: false }];
   });
 }
@@ -737,6 +738,8 @@ export function noticeText(notice: MeshNotice): string {
         : t("{from}至{to}已改经{via}：直连链路延迟过高。", { from: value(values, 0), to: value(values, 1), via: value(values, 2) });
     case "mesh.notice.local_dns_write_failed":
       return t("内网域名暂不可用：无法写入名称解析规则，稍后自动重试。");
+    case "mesh.notice.local_dns_ipv6_unavailable":
+      return t("内网域名不可用：组网解析地址仅有 IPv6，本机无法通过 IPv6 访问。");
     case "mesh.notice.local_dns_policy_override":
       return t("内网域名不可用：本机的名称解析规则由组策略管理，本地规则不生效。");
     case "mesh.notice.local_dns_suffix_refused":
