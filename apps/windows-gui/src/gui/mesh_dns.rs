@@ -569,7 +569,7 @@ mod tests {
     }
 
     /// [`ADAPTER_GUID`] copies the private kernel's `tun::ADAPTER_GUID` (platform-windows, `src/tun.rs`; the kernel does
-    /// not export it), pinned in the workspace `Cargo.toml` at rev 0e92b164f7beac21be9ec0d37166771075924ae9. The kernel's
+    /// not export it), pinned in the workspace `Cargo.toml` at rev 7b2e638c61b17e4485296a9c4a2d36ca82f8b6ba. The kernel's
     /// value is `GUID { data1: 0x4e3c_5b8a, data2: 0x7d21, data3: 0x4f0b, data4: [0x9a, 0x6e, 0x1c, 0x2d, 0x3e, 0x4f,
     /// 0x5a, 0x6b] }`: whoever bumps that pin re-checks it against the new `tun.rs`, and this test fails when the copy
     /// here drifts from the literal below.
