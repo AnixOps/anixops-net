@@ -10,6 +10,7 @@ description = "The client service behind every AnixOps Net window, free of any w
 anx-license = { path = "../anx-license" }
 app-log = { path = "../app-log" }
 app-notifications = { path = "../app-notifications" }
+base64 = "0.22"
 client-health = { path = "../client-health" }
 client-mcp = { path = "../client-mcp" }
 client-session = { path = "../client-session" }
@@ -19,6 +20,7 @@ control-domain = { workspace = true }
 desktop-dns = { path = "../desktop-dns" }
 desktop-mitm = { path = "../desktop-mitm" }
 engine-embedded = { workspace = true }
+getrandom = "0.2"
 inbound-mixed = { workspace = true }
 network-watch = { path = "../network-watch" }
 node-edits = { path = "../node-edits" }

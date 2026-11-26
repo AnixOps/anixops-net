@@ -10,6 +10,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
@@ -119,6 +121,12 @@ pub fn save_network(
         .iter()
         .find(|network| network.joined && network.name != name)
         .map(|network| network.name.clone());
+    // The network's own static key: the saved one stays, else the incoming valid one, else a new one.
+    let existing = networks
+        .iter()
+        .find(|network| network.name == name)
+        .map(|network| &network.config);
+    let config = with_private_key(config, existing)?;
     store(dir, &saved(&networks, &name, config.clone()))?;
     if let Some(before) = before {
         request(json!({ "cmd": "mesh_leave", "network": before }));
@@ -144,13 +152,30 @@ pub fn set_joined(
         gate()?;
     }
     let networks = load(dir)?;
-    let next = self::joined(&networks, name, joined).ok_or_else(|| not_found(name))?;
+    let mut next = self::joined(&networks, name, joined).ok_or_else(|| not_found(name))?;
+    // A network saved before keys existed gets its own when it is joined; the engine is told before it joins.
+    let mut keyed_config = None;
+    if joined {
+        if let Some(network) = next.iter_mut().find(|network| network.name == name) {
+            if !has_private_key(&network.config) {
+                let config = with_private_key(network.config.clone(), None)?;
+                network.config = config.clone();
+                keyed_config = Some(config);
+            }
+        }
+    }
     if joined {
         for other in networks
             .iter()
             .filter(|network| network.joined && network.name != name)
         {
             request(json!({ "cmd": "mesh_leave", "network": other.name }));
+        }
+    }
+    if let Some(config) = keyed_config {
+        let saved = request(json!({ "cmd": "mesh_save_network", "config": config }));
+        if let Some(refused) = saved.filter(|answer| !took_effect(answer)) {
+            return Ok(refused);
         }
     }
     let cmd = if joined { "mesh_join" } else { "mesh_leave" };
@@ -245,6 +270,44 @@ pub fn validate(config: &Value) -> Result<String, String> {
         ));
     }
     Ok(name.to_string())
+}
+
+/// Whether `config` has a `node.private_key` that is standard base64 of exactly 32 bytes.
+fn has_private_key(config: &Value) -> bool {
+    config
+        .get("node")
+        .and_then(|node| node.get("private_key"))
+        .and_then(Value::as_str)
+        .is_some_and(|key| STANDARD.decode(key).is_ok_and(|bytes| bytes.len() == 32))
+}
+
+/// `config` with the network's static secure-mode private key as `node.private_key` (created `node` if missing):
+/// the one in `existing`, the network's already saved configuration, when valid, so that saving again never changes
+/// it; else a valid one `config` brings; else 32 random bytes from the operating system. The key is never logged,
+/// nor shown to a window ([`summaries`]). Fails only when the system cannot give random bytes.
+pub fn with_private_key(mut config: Value, existing: Option<&Value>) -> Result<Value, String> {
+    let key = match existing.filter(|existing| has_private_key(existing)) {
+        Some(existing) => existing["node"]["private_key"].clone(),
+        None if has_private_key(&config) => config["node"]["private_key"].clone(),
+        None => {
+            let mut bytes = [0u8; 32];
+            getrandom::getrandom(&mut bytes).map_err(|_| {
+                crate::refusal::coded("mesh.key", "the network key could not be generated")
+            })?;
+            Value::String(STANDARD.encode(bytes))
+        }
+    };
+    let Some(root) = config.as_object_mut() else {
+        return Ok(config);
+    };
+    let node = root
+        .entry("node")
+        .or_insert_with(|| Value::Object(Map::new()));
+    if !node.is_object() {
+        *node = Value::Object(Map::new());
+    }
+    node["private_key"] = key;
+    Ok(config)
 }
 
 /// `networks` with `config` saved under `name` in place of a network of the same name, joined: a device joins one
@@ -593,6 +656,121 @@ mod tests {
         assert!(validate(&config("office", ""))
             .unwrap_err()
             .starts_with("mesh.secret:"));
+    }
+
+    fn key_of(config: &Value) -> String {
+        config["node"]["private_key"].as_str().unwrap().to_string()
+    }
+
+    #[test]
+    fn a_new_network_gets_a_random_32_byte_key() {
+        let first = with_private_key(config("a", "k"), None).unwrap();
+        let second = with_private_key(config("a", "k"), None).unwrap();
+        assert_eq!(STANDARD.decode(key_of(&first)).unwrap().len(), 32);
+        assert_ne!(key_of(&first), key_of(&second));
+        assert_eq!(first["node"]["role"], "access");
+        // Without a node section, one is made.
+        let bare = with_private_key(json!({ "config_version": 1 }), None).unwrap();
+        assert!(has_private_key(&bare));
+    }
+
+    #[test]
+    fn saving_again_keeps_the_saved_key() {
+        let saved_config = with_private_key(config("a", "k"), None).unwrap();
+        let kept = with_private_key(config("a", "k2"), Some(&saved_config)).unwrap();
+        assert_eq!(key_of(&kept), key_of(&saved_config));
+        assert_eq!(kept["network"]["secret"], "k2");
+        // Even when the new configuration brings a different valid key.
+        let other = with_private_key(config("a", "k"), None).unwrap();
+        let kept = with_private_key(other, Some(&saved_config)).unwrap();
+        assert_eq!(key_of(&kept), key_of(&saved_config));
+    }
+
+    #[test]
+    fn a_valid_incoming_key_stays_and_an_invalid_one_is_replaced() {
+        let key = STANDARD.encode([7u8; 32]);
+        let mut incoming = config("a", "k");
+        incoming["node"]["private_key"] = json!(key);
+        let kept = with_private_key(incoming, None).unwrap();
+        assert_eq!(key_of(&kept), key);
+        // A saved configuration without a valid key does not count.
+        let mut old = config("a", "k");
+        old["node"]["private_key"] = json!("not base64");
+        let mut incoming = config("a", "k");
+        incoming["node"]["private_key"] = json!(key);
+        assert_eq!(
+            key_of(&with_private_key(incoming, Some(&old)).unwrap()),
+            key
+        );
+        for bad in [
+            json!("not base64!"),
+            json!(STANDARD.encode([1u8; 31])),
+            json!(STANDARD.encode([1u8; 33])),
+            json!(5),
+        ] {
+            let mut incoming = config("a", "k");
+            incoming["node"]["private_key"] = bad.clone();
+            let fixed = with_private_key(incoming, None).unwrap();
+            assert!(has_private_key(&fixed));
+            assert_ne!(fixed["node"]["private_key"], bad);
+        }
+    }
+
+    #[test]
+    fn saving_and_joining_store_one_key_per_network() {
+        if !ENABLED {
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("mesh-key-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        save_network(&dir, config("a", "s"), |_| None).unwrap();
+        let first = key_of(&load(&dir).unwrap()[0].config);
+        save_network(&dir, config("a", "s2"), |_| None).unwrap();
+        assert_eq!(key_of(&load(&dir).unwrap()[0].config), first);
+        // An old network without a key gets one when it is joined, and the engine hears of it.
+        store(
+            &dir,
+            &[SavedNetwork {
+                name: "old".into(),
+                joined: false,
+                config: config("old", "s"),
+            }],
+        )
+        .unwrap();
+        let mut sent = Vec::new();
+        set_joined(&dir, "old", true, |request| {
+            sent.push(request["cmd"].as_str().unwrap().to_string());
+            Some(json!({ "ok": true }))
+        })
+        .unwrap();
+        assert!(has_private_key(&load(&dir).unwrap()[0].config));
+        assert_eq!(sent, ["mesh_save_network", "mesh_join"]);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_network_with_no_key_is_known_before_it_is_joined() {
+        let old = config("old", "s");
+        assert!(!has_private_key(&old));
+        let keyed = with_private_key(old, None).unwrap();
+        assert!(has_private_key(&keyed));
+        let again = with_private_key(keyed.clone(), None).unwrap();
+        assert_eq!(key_of(&again), key_of(&keyed));
+    }
+
+    #[test]
+    fn summaries_and_the_offline_status_leave_the_key_out() {
+        let keyed = with_private_key(config("a", "s3cret"), None).unwrap();
+        let key = key_of(&keyed);
+        let networks = [SavedNetwork {
+            name: "a".into(),
+            joined: true,
+            config: keyed,
+        }];
+        assert!(!serde_json::to_string(&summaries(&networks))
+            .unwrap()
+            .contains(&key));
+        assert!(!offline_status(&networks).to_string().contains(&key));
     }
 
     #[test]
