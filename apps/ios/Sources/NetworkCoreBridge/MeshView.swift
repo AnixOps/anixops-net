@@ -610,6 +610,8 @@ public enum MeshView {
                 (id, values) = ("mesh.notice.path_hop_limit", [label])
             case "no_echo":
                 (id, values) = ("mesh.notice.path_no_echo", [memberName(members, unreachable), label])
+            case "pending_timeout":
+                (id, values) = ("mesh.notice.path_pending_timeout", [memberName(members, unreachable), label])
             default:
                 (id, values) = ("mesh.notice.path_fallback", [memberName(members, unreachable), label])
             }

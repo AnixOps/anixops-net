@@ -455,6 +455,8 @@ enum MeshText {
             return String(localized: "自定义路径已回落：\(text(0)) 不可达。\(text(1)) 使用默认路径。")
         case "mesh.notice.path_unsupported":
             return String(localized: "自定义路径已回落：\(text(0)) 不支持按此路径转发。\(text(1)) 使用默认路径。")
+        case "mesh.notice.path_pending_timeout":
+            return String(localized: "自定义路径已回落：\(text(0)) 确认超时。\(text(1)) 使用默认路径。")
         case "mesh.notice.path_no_echo":
             return String(localized: "自定义路径已回落：\(text(0)) 探测无响应。\(text(1)) 使用默认路径。")
         case "mesh.notice.path_hop_limit":

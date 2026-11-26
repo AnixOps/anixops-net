@@ -707,6 +707,8 @@ export function noticeText(notice: MeshNotice): string {
       return t("自定义路径已回落：{member} 不可达。{target} 使用默认路径。", { member: value(values, 0), target: value(values, 1) });
     case "mesh.notice.path_unsupported":
       return t("自定义路径已回落：{member} 不支持按此路径转发。{target} 使用默认路径。", { member: value(values, 0), target: value(values, 1) });
+    case "mesh.notice.path_pending_timeout":
+      return t("自定义路径已回落：{member} 确认超时。{target} 使用默认路径。", { member: value(values, 0), target: value(values, 1) });
     case "mesh.notice.path_no_echo":
       return t("自定义路径已回落：{member} 探测无响应。{target} 使用默认路径。", { member: value(values, 0), target: value(values, 1) });
     case "mesh.notice.path_hop_limit":
@@ -763,6 +765,8 @@ export function pathFallbackText(path: MeshCustomPath): string | null {
   switch (path.reason) {
     case "no_echo":
       return path.unreachable ? t("{name} 探测无响应", { name: path.unreachable }) : null;
+    case "pending_timeout":
+      return path.unreachable ? t("{name} 确认超时", { name: path.unreachable }) : null;
     case "unsupported":
     case "not_relay":
       return path.unreachable ? t("{name} 不支持按此路径转发", { name: path.unreachable }) : null;
