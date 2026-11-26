@@ -7,7 +7,9 @@
 //!   would hand the device's lookups to whoever runs the network;
 //! - the reverse zones the engine names among them (`*.in-addr.arpa`, `*.ip6.arpa`; the kernel derives them from the
 //!   network's ranges and the private allowlist, core#375) go to the same server ([`reverse_zone`]), so that a mesh
-//!   address reads back as its name; the client derives none itself;
+//!   address reads back as its name; the client derives none itself, and takes only a zone wholly inside the private
+//!   allowlist ([`PRIVATE_RANGES_V4`], [`PRIVATE_RANGES_V6`]: intranet-mesh §15.4), so that a rule can never send the
+//!   reverse lookups of public addresses to the mesh's server;
 //! - a bare host name resolves in the device's own region: the region's suffix (`eu.mesh.internal`) is the mesh
 //!   adapter's connection suffix, which Windows appends to a single-label name;
 //! - the DNS cache is cleared after each change, so that a failed lookup from before does not linger;
@@ -185,10 +187,26 @@ pub fn internal_suffix(domain: &str) -> Option<String> {
     })
 }
 
+/// The private IPv4 ranges (intranet-mesh §15.4) a reverse zone must lie wholly inside, as (address, prefix length):
+/// 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 and 100.64.0.0/10.
+const PRIVATE_RANGES_V4: [(u32, u32); 4] = [
+    (0x0a00_0000, 8),
+    (0xac10_0000, 12),
+    (0xc0a8_0000, 16),
+    (0x6440_0000, 10),
+];
+
+/// The private IPv6 ranges (intranet-mesh §15.4) a reverse zone must lie wholly inside, as (address, prefix length):
+/// fd00::/8.
+const PRIVATE_RANGES_V6: [(u128, u32); 1] = [(0xfd00_u128 << 112, 8)];
+
 /// `domain` as a reverse zone the engine named (core#375): a plain name under `in-addr.arpa` with one to four
 /// decimal labels of 0–255 (an IPv4 prefix of /8 or longer), or under `ip6.arpa` with two to 32 single hexadecimal
 /// labels (an IPv6 prefix of /7 or longer, which the kernel spreads over the zones of /8). The trees themselves
-/// (`in-addr.arpa`, `ip6.arpa`, `arpa`) and anything wider are never one.
+/// (`in-addr.arpa`, `ip6.arpa`, `arpa`) and anything wider are never one. Besides, the zone's prefix (its labels
+/// reversed, 8 bits per IPv4 label and 4 per IPv6 label) must lie wholly inside one private range of
+/// [`PRIVATE_RANGES_V4`] / [`PRIVATE_RANGES_V6`]: at least as long as the range and with its leading bits (`172` is
+/// wider than 172.16/12 and so refused, `16.172` is accepted, `15.172` is not).
 pub fn reverse_zone(domain: &str) -> Option<String> {
     let name = plain_name(domain)?;
     let (labels, ipv4) = match name.strip_suffix(".in-addr.arpa") {
@@ -210,7 +228,41 @@ pub fn reverse_zone(domain: &str) -> Option<String> {
                 .iter()
                 .all(|label| label.len() == 1 && label.bytes().all(|byte| byte.is_ascii_hexdigit()))
     };
-    fits.then_some(name)
+    if !fits {
+        return None;
+    }
+    // The labels are the prefix's leading octets / nibbles, last label first.
+    let inside = if ipv4 {
+        let prefix = labels
+            .iter()
+            .rev()
+            .enumerate()
+            .fold(0u32, |prefix, (at, label)| {
+                prefix | (label.parse::<u32>().unwrap_or(0) << (24 - 8 * at))
+            });
+        let length = 8 * labels.len() as u32;
+        PRIVATE_RANGES_V4
+            .iter()
+            .any(|&(base, range)| length >= range && (prefix ^ base) >> (32 - range) == 0)
+    } else {
+        let prefix = labels
+            .iter()
+            .rev()
+            .enumerate()
+            .fold(0u128, |prefix, (at, label)| {
+                let nibble = label
+                    .chars()
+                    .next()
+                    .and_then(|c| c.to_digit(16))
+                    .unwrap_or(0);
+                prefix | (u128::from(nibble) << (124 - 4 * at))
+            });
+        let length = 4 * labels.len() as u32;
+        PRIVATE_RANGES_V6
+            .iter()
+            .any(|&(base, range)| length >= range && (prefix ^ base) >> (128 - range) == 0)
+    };
+    inside.then_some(name)
 }
 
 /// Text from the engine fit for the log and the page: printable ASCII, at most 64 characters.
@@ -516,6 +568,35 @@ mod tests {
         assert_eq!(search(None), None);
     }
 
+    /// [`ADAPTER_GUID`] copies the private kernel's `tun::ADAPTER_GUID` (platform-windows, `src/tun.rs`; the kernel does
+    /// not export it), pinned in the workspace `Cargo.toml` at rev d8b35441045670d4e5648be57ec1ada5a11e4529. The kernel's
+    /// value is `GUID { data1: 0x4e3c_5b8a, data2: 0x7d21, data3: 0x4f0b, data4: [0x9a, 0x6e, 0x1c, 0x2d, 0x3e, 0x4f,
+    /// 0x5a, 0x6b] }`: whoever bumps that pin re-checks it against the new `tun.rs`, and this test fails when the copy
+    /// here drifts from the literal below.
+    #[test]
+    fn the_adapter_guid_is_the_kernels() {
+        let inner = ADAPTER_GUID
+            .strip_prefix('{')
+            .and_then(|guid| guid.strip_suffix('}'))
+            .expect("braces around the GUID");
+        let groups: Vec<&str> = inner.split('-').collect();
+        assert_eq!(
+            groups.iter().map(|group| group.len()).collect::<Vec<_>>(),
+            [8, 4, 4, 4, 12]
+        );
+        let hex = |group: &str| u64::from_str_radix(group, 16).expect("hexadecimal group");
+        assert_eq!(hex(groups[0]), 0x4e3c_5b8a);
+        assert_eq!(hex(groups[1]), 0x7d21);
+        assert_eq!(hex(groups[2]), 0x4f0b);
+        let data4: Vec<u8> = [groups[3], groups[4]]
+            .concat()
+            .as_bytes()
+            .chunks(2)
+            .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap())
+            .collect();
+        assert_eq!(data4, [0x9a, 0x6e, 0x1c, 0x2d, 0x3e, 0x4f, 0x5a, 0x6b]);
+    }
+
     #[test]
     fn the_reverse_zones_the_engine_names_read_back_through_the_mesh() {
         for zone in [
@@ -526,7 +607,14 @@ mod tests {
             "0.255.10.in-addr.arpa",
             "d.f.ip6.arpa",
             "0.0.0.0.a.9.8.7.6.5.4.3.2.1.d.f.ip6.arpa",
-            "C.F.IP6.ARPA.",
+            "D.F.IP6.ARPA.",
+            "16.172.in-addr.arpa",
+            "31.172.in-addr.arpa",
+            "5.20.172.in-addr.arpa",
+            "168.192.in-addr.arpa",
+            "1.168.192.in-addr.arpa",
+            "64.100.in-addr.arpa",
+            "127.100.in-addr.arpa",
         ] {
             assert!(reverse_zone(zone).is_some(), "{zone}");
         }
@@ -551,6 +639,25 @@ mod tests {
             "10..in-addr.arpa",
             "10.in-addr.arpa..",
             "10.in-addr.arpa.com",
+            // Well formed, but not wholly inside the private allowlist.
+            "172.in-addr.arpa",
+            "15.172.in-addr.arpa",
+            "32.172.in-addr.arpa",
+            "192.in-addr.arpa",
+            "167.192.in-addr.arpa",
+            "169.192.in-addr.arpa",
+            "100.in-addr.arpa",
+            "63.100.in-addr.arpa",
+            "128.100.in-addr.arpa",
+            "8.in-addr.arpa",
+            "11.in-addr.arpa",
+            "0.in-addr.arpa",
+            "1.1.1.1.in-addr.arpa",
+            "c.f.ip6.arpa",
+            "C.F.IP6.ARPA.",
+            "e.f.ip6.arpa",
+            "0.2.ip6.arpa",
+            "8.b.d.0.1.0.0.2.ip6.arpa",
         ] {
             assert_eq!(reverse_zone(refused), None, "{refused}");
         }
@@ -715,6 +822,23 @@ mod tests {
             );
             String::from_utf8_lossy(&output.stdout).trim().to_string()
         };
+        // Cleans up even when an assertion below fails part-way (errors ignored).
+        struct Cleanup;
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let script = r#"$ErrorActionPreference = 'SilentlyContinue'
+Get-DnsClientNrptRule | Where-Object { $_.Comment -eq 'AnixOps CI other' -or $_.Comment -eq $env:ANIXOPS_MESH_DNS_COMMENT } | ForEach-Object { Remove-DnsClientNrptRule -Name $_.Name -Force }
+$key = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\$env:ANIXOPS_MESH_DNS_GUID"
+if (Test-Path $key) { Set-ItemProperty -Path $key -Name Domain -Value '' }"#;
+                if let Ok(mut command) = super::super::system_programs::powershell(script) {
+                    let _ = command
+                        .env("ANIXOPS_MESH_DNS_COMMENT", COMMENT)
+                        .env("ANIXOPS_MESH_DNS_GUID", ADAPTER_GUID)
+                        .output();
+                }
+            }
+        }
+        let _cleanup = Cleanup;
         let ours = r#"@(Get-DnsClientNrptRule | Where-Object { $_.Comment -eq $env:ANIXOPS_MESH_DNS_COMMENT } | ForEach-Object { $_.Namespace } | Sort-Object) -join ' '"#;
         let interface = r#"$key = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\$env:ANIXOPS_MESH_DNS_GUID""#;
         // Another program's rule.
