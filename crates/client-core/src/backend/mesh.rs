@@ -425,6 +425,9 @@ pub const V04_ENABLED: bool = ENABLED
         None => false,
     };
 
+// The 0.4 gate never opens without the 组网 gate.
+const _: () = assert!(!V04_ENABLED || ENABLED);
+
 /// The commands only kernel 0.4 answers; refused while [`V04_ENABLED`] is off.
 pub const V04_COMMANDS: [&str; 6] = [
     "mesh_set_relay",
@@ -1094,7 +1097,6 @@ mod tests {
 
     #[test]
     fn the_0_4_gate_is_inside_the_mesh_gate() {
-        assert!(!V04_ENABLED || ENABLED);
         let mut status = json!({ "regions": [], "members": [{ "id": "b", "vms": [] }] });
         gate_status(&mut status);
         assert_eq!(status.get("regions").is_some(), V04_ENABLED);
