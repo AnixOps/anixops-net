@@ -86,9 +86,9 @@ public enum MeshKeyStore {
 
         static var system: Storage {
             Storage(
-                read: { try read(account: $0) },
-                write: { try write($1, account: $0) },
-                delete: { try delete(account: $0) },
+                read: { try MeshKeyStore.read(account: $0) },
+                write: { try MeshKeyStore.write($1, account: $0) },
+                delete: { try MeshKeyStore.delete(account: $0) },
                 legacy: { name in
                     #if os(macOS)
                     // The app handed keys to a macOS extension; none was ever readable in its keychain.
