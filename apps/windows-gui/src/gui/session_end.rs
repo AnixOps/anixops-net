@@ -79,8 +79,9 @@ fn release(reason: &str) {
     if let Some(hooks) = HOOKS.get() {
         (hooks.mesh_end)(&format!("session end, {reason}"));
     }
-    // The firewall rules were dropped with the engine (`mesh::end`); the session may end once they are removed.
-    super::mesh_firewall::finish(super::mesh_firewall::EXIT_WAIT);
+    // The firewall rules stay, and nothing waits for them: the proxy's engine is not stopped here and may still run
+    // the mesh in TUN mode, and the process ends with the session. What it leaves is removed by the next start's
+    // recovery (the adapter-block rule protects until then); a cancelled session end finds them in place.
     let Some(record) = owned_proxy::release_for_session_end() else {
         return;
     };

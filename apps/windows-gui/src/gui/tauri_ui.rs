@@ -1178,6 +1178,7 @@ fn start_network_watch(state: DesktopAppState) {
 
 fn start_core_recovery_monitor(app: AppHandle, state: DesktopAppState) {
     let mut watch = DisconnectWatch::default();
+    let mut firewall_polls = 0u32;
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_secs(2));
         let desktop = match state.desktop.lock() {
@@ -1211,6 +1212,13 @@ fn start_core_recovery_monitor(app: AppHandle, state: DesktopAppState) {
             }
             _ => false,
         };
+        // Rules of the joined networks that are missing while the proxy's engine runs them: tried again about every
+        // 30 s (the mesh-only engine's own watch does that when it runs).
+        if engine == ConnectionState::Connected {
+            mesh::retry_firewall(&state.direct_core, &mut firewall_polls);
+        } else {
+            firewall_polls = 0;
+        }
         // A stop between a connect of this window and a disconnect is notified once.
         let running = engine == ConnectionState::Connected;
         if !gui_started {
@@ -1704,7 +1712,13 @@ async fn runtime_control(
             }
         }
         let answer = core.control(&request)?;
-        serde_json::from_slice(&answer).map_err(|error| error.to_string())
+        let answer: Value = serde_json::from_slice(&answer).map_err(|error| error.to_string())?;
+        // The proxy's engine runs the mesh too: what is wrong with the rules on this device shows on the page.
+        Ok(if mesh_status {
+            mesh::with_local_dns(answer, super::mesh_firewall::issues())
+        } else {
+            answer
+        })
     })
     .await
 }
@@ -2267,11 +2281,8 @@ fn stop_desktop_core_for_exit(state: DesktopAppState) {
         return;
     }
     // First the engine for the mesh alone, with its adapter and routes, so that nothing starts it again while the
-    // proxy stops.
+    // proxy stops. The firewall rules stay for now: the proxy's engine may still run the mesh in TUN mode.
     mesh::end(&state.direct_core, "exit");
-    // The rules of the joined networks go with the engine; their removal is awaited for a while only, and what is
-    // left is removed by the next start.
-    super::mesh_firewall::finish(super::mesh_firewall::EXIT_WAIT);
     if let Ok(mut recorder) = state.traffic.lock() {
         recorder.save();
     }
@@ -2292,6 +2303,10 @@ fn stop_desktop_core_for_exit(state: DesktopAppState) {
     // The engine is stopped whatever happened to the proxy: keep the recovery monitor from restarting it while
     // the process exits.
     mark_gui_connection_stopped(&state);
+    // Both engines are stopped: now the rules of the joined networks go, and their removal is awaited for a while
+    // only; what is left is removed by the next start.
+    super::mesh_firewall::clear();
+    super::mesh_firewall::finish(super::mesh_firewall::EXIT_WAIT);
     match result {
         Ok(_) => {
             if let Ok(mut persisted) = state.desktop.lock() {
