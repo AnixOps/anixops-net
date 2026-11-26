@@ -9,7 +9,7 @@
 | 客户端 | 内核 | 界面内容 |
 |---|---|---|
 | 1.1 | 0.3 | 加入开关（独立于连接开关）、网络状态与加密模式、成员与子网视图、内网域名、添加与移除网络 |
-| 1.2 | 0.4 | 地区分组与归属依据、边界与宿主组、地址分配（固定 / 自动）、跨区链路状态 |
+| 1.2 | 0.4 | 地区分组与归属依据、迁区建议与申请（R24）、边界与宿主组（组地址段，R21、R26）、地址分配（固定 / 自动）、其他地区与骨干的可达状态（R19）、外部网络（R36） |
 | 1.3 | 0.5 | 自定义路径与回落提示、个人电脑用入网凭据加入 |
 
 内核没有组网能力（`capabilities.mesh` 不存在或为 `false`）时，各平台不显示组网入口。版本内尚未提供的字段缺省即可，
@@ -129,6 +129,26 @@
 
 多源子网用 `advertisers` 的多项表示，`inUse` 标出使用中的一项。子网内手动命名的设备只存在客户端本机，不经内核。
 
+### 1.2 待内核确定的字段
+
+以下字段客户端已按夹具实现，名字与形态以内核 `mesh-status.md` 最终写定的为准（已向规范、区域、宿主组、骨干、外部桥接线程提出）；
+缺省时界面按「没有该信息」降级，不推断。
+
+| 字段 | 形态 | 用途 |
+|---|---|---|
+| `subnets[].kind` | `lan`（缺省）、`host_group`、`external`、`summary`；未知按 `lan` | 子网类型标记 |
+| `subnets[].hostGroup` | `{ "gateway": 实例 id, "backupGateway": 实例 id 或 null }`，仅 `host_group`；取自配置 `host_groups` | 「网关 X 通告的组地址段」，X 取 `advertisers` 中 `inUse` 的成员（备用网关只在主网关离线时通告） |
+| `members[].vms[].cidr` | 所属组地址段；`vms` 来自面板下发的名单，挂在当前通告该组地址段的成员下 | 组地址段行展开列出虚拟机 |
+| `subnets[].bridge`、`subnets[].name` | 桥接成员 id；面板给出的名称（可缺省），仅 `external` | 「经 X 桥接」 |
+| `members[].externalBridge` | 布尔，缺省 `false` | 「外部网络桥接」标记 |
+| `self.regionRequest` | `null` 或 `{ "id", "region", "state": "pending" \| "rejected", "reason", "decisionReason", "updatedAt" }`；批准后为 `null` | 待批准的目标地区、已拒绝及原因 |
+| `self.regionSuggestion` | `null` 或 `{ "region", "rttMs", "currentRttMs", "since" }`（中位 RTT） | 迁区建议 |
+| `self.backbone` | `null` 或 `{ "state": "ok" \| "partial" \| "down", "linksUp", "linksTotal" }`，仅边界成员 | 本机页「骨干」行 |
+| `mesh_cancel_region_request` | 命令，参数 `network` | 「撤回申请」 |
+
+其他地区的可达状态取自 `links[]` 中 `from` 为本地区的一项：`ok` 为可达，`detour` 为已绕行，`down` 为中断；没有这一项时不显示状态。
+汇总网段为 `kind` 为 `summary` 的子网，按其 `region` 归入对应地区的摘要行。
+
 ## 控制
 
 | 命令 | 参数 | 版本 |
@@ -141,7 +161,8 @@
 | `mesh_set_subnet_route` | `cidr`、`route`（`local` \| `mesh`）；写入本机覆盖设置，不改网络配置 | 1.1 |
 | `mesh_set_relay` / `mesh_set_host_mode` | `enabled`（仅完整节点） | 1.2 |
 | `mesh_advertise` / `mesh_withdraw` | `cidr`（仅完整节点） | 1.2 |
-| `mesh_request_region` | `region`（交由网络管理者批准） | 1.2 |
+| `mesh_request_region` | `region`、可省的 `reason`（交由网络管理者批准） | 1.2 |
+| `mesh_cancel_region_request` | `network`（撤回待批准或已拒绝的申请） | 1.2 |
 | `mesh_set_policy` | `policy` | 1.3 |
 | `mesh_set_paths` | `paths`（与内核 `routing.paths` 同结构） | 1.3 |
 | `mesh_join_credential` | 一次性入网凭据（个人电脑） | 1.3 |
@@ -242,6 +263,16 @@
   `play-bundle.yml` 与 `ci.yml` 中运行：运行环境设了该变量，或发布构建读取的文件（其余 workflow、composite action、
   `.github/scripts`、`.cargo`、各 `build.rs`、Tauri 配置、Apple 工程与 Package、Android 构建脚本）在非注释行打开闸门时失败。
 - 解除闸门：内核线程确认内核 0.3 完成并通过审计后，随下一次内核固定一起修改。
+
+客户端 1.2 的界面另有一道闸门，在内核 0.4 完成并通过审计之前不进入发布版（先开上一道闸门，这一道才有意义）：
+
+- `client-core`：`mesh::V04_ENABLED` 由构建变量 `ANIXOPS_MESH04_PREVIEW=1` 打开；Apple 为编译条件 `MESH04_PREVIEW`。
+- 关闭时 `mesh_status` 的回答在交给界面前去掉内核 0.4 的字段（`regions`、`links`、`regionRequests`、`externalBridge`，
+  `self` 的 `region`、`regionBasis`、`regionState`、`regionRequest`、`regionSuggestion`、`backbone`、`hostMode`，
+  成员的 `region`、`vms`、`externalBridge`，子网的 `region`、`kind`、`hostGroup`、`bridge`、`name`），界面按 0.3 降级；
+  `mesh_set_relay`、`mesh_set_host_mode`、`mesh_advertise`、`mesh_withdraw`、`mesh_request_region`、`mesh_cancel_region_request`
+  被拒绝（`unsupported`）。
+- `mesh-release-gate.sh` 对两个变量做同样的检查；CI 测试步骤两道都打开。
 
 ## 共用的界面逻辑
 
