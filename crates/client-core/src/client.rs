@@ -174,6 +174,12 @@ pub trait Platform: Send + Sync + 'static {
         Err("this platform keeps the capture session key itself".to_string())
     }
 
+    /// The key that seals the saved mesh networks file, as base64, kept by the platform's key store (Android: the
+    /// Keystore, its own key beside the capture session key), made on first use.
+    fn mesh_file_key(&self) -> Result<String, String> {
+        Err("this platform keeps the mesh networks file key itself".to_string())
+    }
+
     /// The network the device is on, for the Wi-Fi rules; `ask` asks for the permission that reveals the
     /// Wi-Fi name when it is withheld. `None` where the platform does not read it (Linux desktop).
     fn current_network(&self, ask: bool) -> Option<Network> {
@@ -276,6 +282,18 @@ impl Client {
             &crate::backend::capture_dir(&dir).join("sessions"),
             desktop_mitm::sessions::now_ms(),
         );
+        // Android seals the saved mesh networks with a Keystore key; the backend may read them as it opens.
+        #[cfg(target_os = "android")]
+        {
+            let platform = platform.clone();
+            mesh::set_key_source(Box::new(move || {
+                let key = desktop_mitm::capture::decode_base64(&platform.mesh_file_key()?)?;
+                desktop_mitm::sessions::SessionKey::new(
+                    &key,
+                    desktop_mitm::sessions::Protection::Keystore,
+                )
+            }));
+        }
         let backend = Backend::open(Store::new(dir), session);
         let auto_connect = backend.auto_connect();
         let shared = Arc::new(Mutex::new(backend));

@@ -4,11 +4,14 @@
 //! `{"type":"mesh"}` outbound; the engine sends the network's routes to it ahead of the rules (R23), so no rule names
 //! it. Joining, leaving, saving and removing also go to a running engine directly, without a restart. Windows never
 //! see a secret: [`summaries`] leaves it out. On Windows the file is sealed for the Windows account with Data
-//! Protection, as the LAN share's password is.
+//! Protection, as the LAN share's password is. On Android it is sealed with AES-GCM under a key the Android Keystore
+//! wraps ([`set_key_source`]); without the key nothing is read or written.
 
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "android")]
+use std::sync::Mutex;
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
@@ -23,6 +26,13 @@ pub const FILE: &str = "mesh-networks.json";
 pub const FILE: &str = "mesh-networks.dpapi";
 #[cfg(windows)]
 const WHAT: &str = "mesh networks file";
+
+/// The file under the client's data folder, sealed with the Keystore-wrapped key. A plain [`FILE`] left by an older
+/// version is read once, sealed into this file, and deleted.
+#[cfg(any(target_os = "android", test))]
+pub const SEALED_FILE: &str = "mesh-networks.sealed";
+#[cfg(any(target_os = "android", test))]
+const SEALED_WHAT: &str = "mesh networks file";
 
 /// The device's instance ID file under the client's data folder, beside [`FILE`].
 pub const INSTANCE_FILE: &str = "mesh-instance-id";
@@ -56,12 +66,142 @@ pub struct NetworkSummary {
 }
 
 pub fn path(dir: &Path) -> PathBuf {
+    #[cfg(target_os = "android")]
+    return dir.join(SEALED_FILE);
+    #[cfg(not(target_os = "android"))]
     dir.join(FILE)
+}
+
+/// Where the Keystore-wrapped key comes from: called until it succeeds, then the key is kept for the process.
+#[cfg(target_os = "android")]
+type KeySource = Box<dyn Fn() -> Result<desktop_mitm::sessions::SessionKey, String> + Send + Sync>;
+
+#[cfg(target_os = "android")]
+struct KeySlot {
+    source: Option<KeySource>,
+    key: Option<desktop_mitm::sessions::SessionKey>,
+}
+
+#[cfg(target_os = "android")]
+static KEY: Mutex<KeySlot> = Mutex::new(KeySlot {
+    source: None,
+    key: None,
+});
+
+/// Android: names where the file's key comes from (the platform's Keystore); the client calls it once before the
+/// backend opens. Until it is called, or while the source fails, [`load`] and [`store`] refuse.
+#[cfg(target_os = "android")]
+pub fn set_key_source(source: KeySource) {
+    if let Ok(mut slot) = KEY.lock() {
+        slot.source = Some(source);
+        slot.key = None;
+    }
+}
+
+#[cfg(target_os = "android")]
+fn file_key() -> Result<desktop_mitm::sessions::SessionKey, String> {
+    let mut slot = KEY
+        .lock()
+        .map_err(|_| "the mesh networks file key is not available".to_string())?;
+    if let Some(key) = &slot.key {
+        return Ok(key.clone());
+    }
+    let source = slot
+        .source
+        .as_ref()
+        .ok_or_else(|| "the mesh networks file key is not available".to_string())?;
+    let key = source()
+        .map_err(|error| format!("the mesh networks file key is not available: {error}"))?;
+    slot.key = Some(key.clone());
+    Ok(key)
+}
+
+/// Seals `bytes` for the file.
+#[cfg(any(target_os = "android", test))]
+fn seal(bytes: &[u8], key: Option<&desktop_mitm::sessions::SessionKey>) -> Result<Vec<u8>, String> {
+    key.ok_or_else(|| "the mesh networks file key is not available".to_string())?
+        .seal(bytes, SEALED_WHAT)
+}
+
+/// Opens sealed bytes with `key`. No key, a wrong key or damage is an error, never an empty list.
+#[cfg(any(target_os = "android", test))]
+fn open(bytes: &[u8], key: Option<&desktop_mitm::sessions::SessionKey>) -> Result<Vec<u8>, String> {
+    key.ok_or_else(|| "the mesh networks file key is not available".to_string())?
+        .open(bytes, SEALED_WHAT)
+}
+
+/// Whether `bytes` are a legacy plain file: JSON whose first non-blank byte is `[`.
+#[cfg(any(target_os = "android", test))]
+fn is_legacy_plain(bytes: &[u8]) -> bool {
+    bytes.iter().find(|byte| !byte.is_ascii_whitespace()) == Some(&b'[')
+}
+
+/// Android's [`load`]: the sealed file, else the legacy plain one (sealed into the sealed file at once when the
+/// key is there, and the plain file deleted). A failure leaves every file as it was.
+#[cfg(any(target_os = "android", test))]
+fn load_sealed(
+    dir: &Path,
+    key: Option<&desktop_mitm::sessions::SessionKey>,
+) -> Result<Vec<SavedNetwork>, String> {
+    let sealed = dir.join(SEALED_FILE);
+    let plain = dir.join(FILE);
+    match fs::read(&sealed) {
+        Ok(bytes) => {
+            let bytes = open(&bytes, key)?;
+            return serde_json::from_slice(&bytes)
+                .map_err(|error| format!("the mesh networks file is not valid: {error}"));
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(format!("the mesh networks file could not be read: {error}")),
+    }
+    let bytes = match fs::read(&plain) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(format!("the mesh networks file could not be read: {error}")),
+    };
+    if !is_legacy_plain(&bytes) {
+        return Err("the mesh networks file is not valid".to_string());
+    }
+    let networks: Vec<SavedNetwork> = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("the mesh networks file is not valid: {error}"))?;
+    // Sealed at once when the key is there; the networks stay readable when it is not, and nothing is written.
+    if key.is_some() {
+        let _ = store_sealed(dir, &networks, key);
+    }
+    Ok(networks)
+}
+
+/// Android's [`store`]: seals with `key` (no key: nothing is written), then deletes a legacy plain file.
+#[cfg(any(target_os = "android", test))]
+fn store_sealed(
+    dir: &Path,
+    networks: &[SavedNetwork],
+    key: Option<&desktop_mitm::sessions::SessionKey>,
+) -> Result<(), String> {
+    let bytes = serde_json::to_vec_pretty(networks).map_err(|error| error.to_string())?;
+    let bytes = seal(&bytes, key)?;
+    desktop_mitm::sessions::write_private(&dir.join(SEALED_FILE), &bytes)
+        .map_err(|error| format!("the mesh networks could not be saved: {error}"))?;
+    match fs::remove_file(dir.join(FILE)) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!(
+            "the old mesh networks file could not be deleted: {error}"
+        )),
+    }
 }
 
 /// The saved networks; none when nothing was saved yet. A file that cannot be read or understood is an error, so
 /// that the next save does not replace it with fewer networks.
 pub fn load(dir: &Path) -> Result<Vec<SavedNetwork>, String> {
+    #[cfg(target_os = "android")]
+    return load_sealed(dir, file_key().ok().as_ref());
+    #[cfg(not(target_os = "android"))]
+    load_plain(dir)
+}
+
+#[cfg(not(target_os = "android"))]
+fn load_plain(dir: &Path) -> Result<Vec<SavedNetwork>, String> {
     let bytes = match fs::read(path(dir)) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -73,8 +213,16 @@ pub fn load(dir: &Path) -> Result<Vec<SavedNetwork>, String> {
         .map_err(|error| format!("the mesh networks file is not valid: {error}"))
 }
 
-/// Keeps `networks`, through a temporary file and a rename: owner-only, and on Windows sealed for this account.
+/// Keeps `networks`, through a temporary file and a rename: owner-only, and on Windows and Android sealed.
 pub fn store(dir: &Path, networks: &[SavedNetwork]) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    return store_sealed(dir, networks, file_key().ok().as_ref());
+    #[cfg(not(target_os = "android"))]
+    store_plain(dir, networks)
+}
+
+#[cfg(not(target_os = "android"))]
+fn store_plain(dir: &Path, networks: &[SavedNetwork]) -> Result<(), String> {
     let bytes = serde_json::to_vec_pretty(networks).map_err(|error| error.to_string())?;
     #[cfg(windows)]
     let bytes = super::session_key::crypt(&bytes, true, WHAT)?;
@@ -813,6 +961,83 @@ mod tests {
             "node": { "role": "access" },
             "peers": [{ "server": "203.0.113.10", "port": 11010, "transport": "tcp" }],
         })
+    }
+
+    fn test_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("mesh-sealed-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn key(byte: u8) -> desktop_mitm::sessions::SessionKey {
+        desktop_mitm::sessions::SessionKey::new(
+            &[byte; desktop_mitm::sessions::KEY_LEN],
+            desktop_mitm::sessions::Protection::Keystore,
+        )
+        .unwrap()
+    }
+
+    fn saved_one() -> Vec<SavedNetwork> {
+        vec![SavedNetwork {
+            name: "office".into(),
+            joined: true,
+            config: config("office", "s3cret"),
+        }]
+    }
+
+    #[test]
+    fn sealed_file_round_trips_and_hides_the_secret() {
+        let dir = test_dir("round");
+        let key = key(1);
+        store_sealed(&dir, &saved_one(), Some(&key)).unwrap();
+        let raw = fs::read(dir.join(SEALED_FILE)).unwrap();
+        assert!(!String::from_utf8_lossy(&raw).contains("s3cret"));
+        assert!(serde_json::from_slice::<Value>(&raw).is_err());
+        assert_eq!(load_sealed(&dir, Some(&key)).unwrap(), saved_one());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn legacy_plain_file_is_read_sealed_and_deleted() {
+        let dir = test_dir("legacy");
+        let plain = serde_json::to_vec_pretty(&saved_one()).unwrap();
+        assert!(is_legacy_plain(&plain));
+        assert!(is_legacy_plain(b"  \n[]"));
+        assert!(!is_legacy_plain(b"{}"));
+        fs::write(dir.join(FILE), &plain).unwrap();
+        let key = key(1);
+        assert_eq!(load_sealed(&dir, Some(&key)).unwrap(), saved_one());
+        assert!(!dir.join(FILE).exists());
+        assert_eq!(load_sealed(&dir, Some(&key)).unwrap(), saved_one());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn legacy_plain_file_stays_when_there_is_no_key() {
+        let dir = test_dir("legacy-nokey");
+        let plain = serde_json::to_vec_pretty(&saved_one()).unwrap();
+        fs::write(dir.join(FILE), &plain).unwrap();
+        assert_eq!(load_sealed(&dir, None).unwrap(), saved_one());
+        assert_eq!(fs::read(dir.join(FILE)).unwrap(), plain);
+        assert!(!dir.join(SEALED_FILE).exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn wrong_or_missing_key_is_an_error_and_changes_nothing() {
+        let dir = test_dir("wrong");
+        store_sealed(&dir, &saved_one(), Some(&key(1))).unwrap();
+        let before = fs::read(dir.join(SEALED_FILE)).unwrap();
+        assert!(load_sealed(&dir, Some(&key(2))).is_err());
+        assert!(load_sealed(&dir, None).is_err());
+        assert!(store_sealed(&dir, &[], None).is_err());
+        assert_eq!(fs::read(dir.join(SEALED_FILE)).unwrap(), before);
+        let _ = fs::remove_dir_all(&dir);
+        let dir = test_dir("nokey-store");
+        assert!(store_sealed(&dir, &saved_one(), None).is_err());
+        assert!(!dir.join(SEALED_FILE).exists());
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
