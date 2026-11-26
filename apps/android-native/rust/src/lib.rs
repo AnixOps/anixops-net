@@ -116,6 +116,11 @@ impl<B: Bridge> Platform for BridgePlatform<B> {
         Self::string_field(&answer, "keyBase64", "captureSessionKey")
     }
 
+    fn mesh_file_key(&self) -> Result<String, String> {
+        let answer = self.request("meshFileKey", json!({}))?;
+        Self::string_field(&answer, "keyBase64", "meshFileKey")
+    }
+
     fn current_network(&self, ask: bool) -> Option<Network> {
         let answer = self.request("currentNetwork", json!({"ask": ask})).ok()?;
         let kind = answer.get("kind")?.as_str()?;

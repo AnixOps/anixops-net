@@ -62,6 +62,7 @@ class AndroidPlatform(context: Context) : PlatformBridge {
             }
             "saveToDownloads" -> saveToDownloads(arguments)
             "captureSessionKey" -> buildJsonObject { put("keyBase64", JsonPrimitive(sessionKeys.keyBase64())) }
+            "meshFileKey" -> buildJsonObject { put("keyBase64", JsonPrimitive(sessionKeys.meshKeyBase64())) }
             "currentNetwork" -> currentNetwork()
             "postNotice" -> postNotice(arguments)
             else -> throw IllegalArgumentException("Unknown platform call $method")

@@ -15,6 +15,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use ring::aead;
 use ring::rand::{SecureRandom, SystemRandom};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -68,6 +69,52 @@ impl SessionKey {
             .try_into()
             .map_err(|_| "the capture session key has the wrong length".to_string())?;
         Ok(Self { key, protection })
+    }
+
+    /// Seals `plaintext` with AES-256-GCM under this key: a fresh random 12-byte nonce, then the ciphertext and
+    /// tag. `what` names the data in errors.
+    pub fn seal(&self, plaintext: &[u8], what: &str) -> Result<Vec<u8>, String> {
+        let mut nonce = [0u8; aead::NONCE_LEN];
+        SystemRandom::new()
+            .fill(&mut nonce)
+            .map_err(|_| format!("a nonce for the {what} could not be generated"))?;
+        let mut body = plaintext.to_vec();
+        self.aead(what)?
+            .seal_in_place_append_tag(
+                aead::Nonce::assume_unique_for_key(nonce),
+                aead::Aad::empty(),
+                &mut body,
+            )
+            .map_err(|_| format!("the {what} could not be sealed"))?;
+        let mut out = nonce.to_vec();
+        out.extend_from_slice(&body);
+        Ok(out)
+    }
+
+    /// Opens what [`SessionKey::seal`] made; a wrong key or damaged data is an error.
+    pub fn open(&self, sealed: &[u8], what: &str) -> Result<Vec<u8>, String> {
+        let bad = || {
+            format!(
+                "the {what} cannot be opened with the key (damaged, or sealed under another key)"
+            )
+        };
+        if sealed.len() < aead::NONCE_LEN + aead::AES_256_GCM.tag_len() {
+            return Err(bad());
+        }
+        let (nonce, body) = sealed.split_at(aead::NONCE_LEN);
+        let nonce = aead::Nonce::try_assume_unique_for_key(nonce).map_err(|_| bad())?;
+        let mut body = body.to_vec();
+        let plain = self
+            .aead(what)?
+            .open_in_place(nonce, aead::Aad::empty(), &mut body)
+            .map_err(|_| bad())?;
+        Ok(plain.to_vec())
+    }
+
+    fn aead(&self, what: &str) -> Result<aead::LessSafeKey, String> {
+        aead::UnboundKey::new(&aead::AES_256_GCM, &self.key)
+            .map(aead::LessSafeKey::new)
+            .map_err(|_| format!("the key for the {what} is not valid"))
     }
 }
 
