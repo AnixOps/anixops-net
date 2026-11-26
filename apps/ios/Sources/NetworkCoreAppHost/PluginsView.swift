@@ -119,6 +119,19 @@ struct PluginsSection: View {
                 model.refreshTrust()
             }
         }
+        .confirmationDialog(
+            "启用这个插件？",
+            isPresented: Binding(get: { model.pluginToReview != nil }, set: { if !$0 { model.pluginToReview = nil } }),
+            titleVisibility: .visible,
+            presenting: model.pluginToReview
+        ) { plugin in
+            Button("确认启用") {
+                Task { await model.setEnabled(true, for: plugin.id, tunnel: tunnel) }
+            }
+            Button("保持关闭", role: .cancel) {}
+        } message: { plugin in
+            Text(PluginsModel.reviewMessage(for: plugin))
+        }
     }
 
     private var scriptSection: some View {
@@ -320,6 +333,7 @@ final class PluginsModel: ObservableObject {
     @Published private(set) var trustState = MitmTrustState.notGenerated
     @Published private(set) var note: String?
     @Published private(set) var isDownloading = false
+    @Published var pluginToReview: MitmPlugin?
 
     func load() {
         do {
@@ -443,20 +457,42 @@ final class PluginsModel: ObservableObject {
             return
         }
         var next = library
+        var imported: MitmPlugin?
         do {
-            let plugin = try MitmPlugin(
+            var plugin = try MitmPlugin(
                 text: text,
                 fallbackName: name ?? String(localized: "未命名插件"),
                 sourceURL: sourceURL,
                 inspection: MitmPluginInspector.inspect(text)
             )
+            plugin.isEnabled = false
             try next.add(plugin, reserving: tunnel.debugMappings.pluginBytes)
+            imported = plugin
         } catch {
             note = Self.describe(error)
             return
         }
         await commit(next, tunnel: tunnel)
+        if let imported {
+            pluginToReview = imported
+        }
         await fetchMissingResources(tunnel: tunnel)
+    }
+
+    static func reviewMessage(for plugin: MitmPlugin) -> String {
+        let hostnames = MitmPlugin.summarize(plugin.text).hostnames.filter { !$0.hasPrefix("-") }
+        let isBroad = hostnames.contains { host in
+            host == "*" || host == "*.*" || (host.hasPrefix("*.") && host.dropFirst(2).contains(".") == false)
+        }
+        if isBroad {
+            return String(localized: "“\(plugin.name)”包含通配符（如 * 或顶级域名），启用后可能解密几乎所有 HTTPS 流量。请确认来源可信。")
+        }
+        if hostnames.isEmpty {
+            return String(localized: "“\(plugin.name)”已导入但尚未启用。开启前请确认插件来源可信。")
+        }
+        let preview = hostnames.prefix(5).joined(separator: "、")
+        let suffix = hostnames.count > 5 ? String(localized: " 等 \(hostnames.count) 个域名") : ""
+        return String(localized: "“\(plugin.name)”将解密以下域名的 HTTPS 流量：\(preview)\(suffix)。")
     }
 
     /// Downloads the `[Map Local]` bodies the enabled plugins name and does not have yet. A body that fails to

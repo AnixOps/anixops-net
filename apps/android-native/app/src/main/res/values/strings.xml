@@ -1042,4 +1042,6 @@
         <item quantity="one">%1$d member unreachable: %2$s.</item>
         <item quantity="other">%1$d members unreachable: %2$s.</item>
     </plurals>
+    <string name="rules_empty_title">Rules and routing</string>
+    <string name="rules_empty_message">After importing a subscription or node, choose Rules, Global, or Direct mode here. Rules mode routes by custom rules, or by the subscription\'s rules and policy groups when provided.</string>
 </resources>

@@ -1297,4 +1297,6 @@ export const english: Record<string, string> = {
   "入网凭据": "Join credential",
   "入网凭据由面板生成，仅可使用一次。": "Join credentials are issued by the panel and work once.",
   "填写入网凭据。": "Enter the join credential.",
+  "规则与分流": "Rules and routing",
+  "导入订阅或节点后，可在此选择规则、全局或直连模式。规则模式按自定义规则分流；带规则和策略组的订阅按订阅规则分流。": "After importing a subscription or node, choose Rules, Global, or Direct mode here. Rules mode routes by custom rules, or by the subscription's rules and policy groups when provided.",
 };

@@ -464,7 +464,9 @@ struct MeshPage: View {
         if !notices.isEmpty {
             Section {
                 ForEach(Array(notices.enumerated()), id: \.offset) { _, notice in
-                    MeshNoticeRow(text: MeshText.notice(notice), detail: MeshText.noticeDetail(notice), dismiss: nil)
+                    let key = notice.string("key") ?? ""
+                    let showDetail = key == "failure:join_failed" || key.hasPrefix("failure:peer_not_native:")
+                    MeshNoticeRow(text: MeshText.notice(notice), detail: showDetail ? MeshText.noticeDetail(notice) : nil, dismiss: nil)
                 }
             }
         }

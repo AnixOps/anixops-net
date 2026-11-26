@@ -185,7 +185,10 @@ export function MeshPage({ mesh }: { mesh: ReturnType<typeof useMesh> }) {
         />
       </section>
       {refusal && <NoticeBar text={failureText(refusal.code)} detail={refusal.detail} onDismiss={() => setRefusal(null)} />}
-      {view.notices.map((notice) => <NoticeBar key={notice.key} text={noticeText(notice)} detail={noticeDetail(notice) ?? undefined} />)}
+      {view.notices.map((notice) => {
+        const showDetail = notice.key === "failure:join_failed" || notice.key.startsWith("failure:peer_not_native:");
+        return <NoticeBar key={notice.key} text={noticeText(notice)} detail={showDetail ? noticeDetail(notice) ?? undefined : undefined} />;
+      })}
       <div className="mesh-tools">
         <Segmented<Tab>
           label={t("组网")}
