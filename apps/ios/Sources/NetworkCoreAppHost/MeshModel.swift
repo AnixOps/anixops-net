@@ -502,8 +502,14 @@ extension MeshSupport {
     /// Whether the page shows the kernel 0.4 parts: the release gate (`v04Enabled`), or the made-up demo snapshot of
     /// the screenshots (`-AnixOpsDemo YES`), which has no engine behind it and sends no 0.4 command.
     @MainActor static var showsV04: Bool {
+        // The demo flag exists only in debug builds (`TunnelController.isDemo` is `#if DEBUG`), like the other demo
+        // checks; a release archive sees the release gate alone.
+        #if DEBUG
         // `||` takes its right side as a nonisolated autoclosure, so read the main-actor flag first.
         let demo = TunnelController.isDemo
         return v04Enabled || demo
+        #else
+        return v04Enabled
+        #endif
     }
 }
