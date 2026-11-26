@@ -71,6 +71,7 @@ mod gui {
     mod linked_sources;
     mod mesh;
     mod mesh_dns;
+    mod mesh_firewall;
     mod mitm_plugins;
     mod owned_proxy;
     mod reconnect;
@@ -518,6 +519,12 @@ mod gui {
                     errors.push(format!("desktop state: {error}"));
                 }
             }
+        }
+        // The firewall rules of the joined networks that a window left behind (another process that holds the
+        // host changes keeps its own). Last, because the firewall and translation cmdlets can take tens of seconds,
+        // and the steps above must not wait on them.
+        if let Err(error) = mesh_firewall::recover() {
+            errors.push(format!("mesh firewall rules: {error}"));
         }
         let _ = append_managed_log(
             "gui",

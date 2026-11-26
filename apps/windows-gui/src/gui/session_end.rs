@@ -79,6 +79,8 @@ fn release(reason: &str) {
     if let Some(hooks) = HOOKS.get() {
         (hooks.mesh_end)(&format!("session end, {reason}"));
     }
+    // The firewall rules were dropped with the engine (`mesh::end`); the session may end once they are removed.
+    super::mesh_firewall::finish(super::mesh_firewall::EXIT_WAIT);
     let Some(record) = owned_proxy::release_for_session_end() else {
         return;
     };
