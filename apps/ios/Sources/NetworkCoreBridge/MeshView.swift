@@ -177,13 +177,12 @@ public enum MeshView {
     }
 
     /// The other networks whose records the tunnel merges into the answer for this member's name: the
-    /// `duplicateNetworks` of the top-level `names[]` entries with the same name (ASCII case-insensitive),
-    /// as network names where `networks[]` has them, else ids. Empty when `names` is absent (older kernels).
+    /// `duplicateNetworks` of the top-level `names[]` entry for the member (ASCII case-insensitive), as network
+    /// names where `networks[]` has them, else ids. Empty when `names` is absent (older kernels).
     public static func duplicateNetworks(_ status: Any?, _ member: [String: Any]) -> [String] {
-        let name = asciiLowercased(text(member, "name"))
-        guard !name.isEmpty else { return [] }
+        guard let key = nameKey(status, member) else { return [] }
         var shown: [String] = []
-        for entry in list(status, "names") where asciiLowercased(text(entry, "name")) == name {
+        for entry in list(status, "names") where asciiLowercased(text(entry, "name")) == key {
             for case let id as String in list(entry, "duplicateNetworks") {
                 let label = list(status, "networks").first(where: { text($0, "id") == id })
                     .flatMap { optText($0, "name") } ?? id
@@ -191,6 +190,21 @@ public enum MeshView {
             }
         }
         return shown
+    }
+
+    /// The member's entry in `names[]`: its domain without the network's suffix, `名.地区` (lowercase). The first
+    /// two labels when the domain does not end in the suffix; nil without a domain.
+    static func nameKey(_ status: Any?, _ member: [String: Any]) -> String? {
+        var domain = asciiLowercased(text(member, "domain"))
+        while domain.hasSuffix(".") { domain.removeLast() }
+        guard !domain.isEmpty else { return nil }
+        let network = (status as? [String: Any])?["network"]
+        let suffix = asciiLowercased(text(network, "dnsSuffix")).trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        if !suffix.isEmpty, domain.hasSuffix("." + suffix) {
+            return String(domain.dropLast(suffix.count + 1))
+        }
+        let labels = domain.split(separator: ".", omittingEmptySubsequences: false)
+        return labels.count >= 2 ? labels[0..<2].joined(separator: ".") : nil
     }
 
     private static func asciiLowercased(_ value: String) -> String {

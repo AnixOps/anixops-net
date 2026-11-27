@@ -151,16 +151,15 @@ fn all_members(status: &Value) -> Vec<Value> {
 }
 
 /// The other networks whose records the tunnel merges into the answer for this member's name: the
-/// `duplicateNetworks` of the top-level `names[]` entries with the same name (ASCII case-insensitive),
-/// as network names where `networks[]` has them, else ids. Empty when `names` is absent (older kernels).
+/// `duplicateNetworks` of the top-level `names[]` entry for the member (ASCII case-insensitive), as network
+/// names where `networks[]` has them, else ids. Empty when `names` is absent (older kernels).
 fn duplicate_networks(status: &Value, member: &Value) -> Vec<String> {
-    let name = text(member, "name");
     let mut shown: Vec<String> = Vec::new();
-    if name.is_empty() {
+    let Some(key) = name_key(status, member) else {
         return shown;
-    }
+    };
     for entry in list(status, "names") {
-        if !text(entry, "name").eq_ignore_ascii_case(name) {
+        if !text(entry, "name").eq_ignore_ascii_case(&key) {
             continue;
         }
         for id in list(entry, "duplicateNetworks")
@@ -178,6 +177,30 @@ fn duplicate_networks(status: &Value, member: &Value) -> Vec<String> {
         }
     }
     shown
+}
+
+/// The member's entry in `names[]`: its domain without the network's suffix, `名.地区` (lowercase). The
+/// first two labels when the domain does not end in the suffix; none without a domain.
+fn name_key(status: &Value, member: &Value) -> Option<String> {
+    let domain = text(member, "domain")
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
+    if domain.is_empty() {
+        return None;
+    }
+    let suffix = status
+        .get("network")
+        .map(|network| text(network, "dnsSuffix"))
+        .unwrap_or("")
+        .trim_matches('.')
+        .to_ascii_lowercase();
+    if !suffix.is_empty() {
+        if let Some(key) = domain.strip_suffix(&format!(".{suffix}")) {
+            return Some(key.to_owned());
+        }
+    }
+    let labels: Vec<&str> = domain.split('.').collect();
+    (labels.len() >= 2).then(|| labels[..2].join("."))
 }
 
 fn member_name<'a>(members: &'a [Value], id: &'a str) -> &'a str {
@@ -1466,16 +1489,24 @@ mod tests {
     #[test]
     fn a_name_another_network_answers_marks_the_member() {
         let status = json!({
-            "self": { "id": "m-self", "name": "Par-Laptop" },
-            "members": [{ "id": "m-1", "name": "nas", "state": "online" }, { "id": "m-2", "name": "tv" }],
+            "network": { "id": "office", "dnsSuffix": "mesh.internal" },
+            "self": { "id": "m-self", "name": "Par-Laptop", "domain": "Par-Laptop.lon.mesh.internal" },
+            "members": [
+                { "id": "m-1", "name": "nas", "domain": "nas.lon.mesh.internal", "state": "online" },
+                { "id": "m-2", "name": "tv", "domain": "tv.lon.mesh.internal" },
+                { "id": "m-3", "name": "nas", "domain": "nas.par.mesh.internal" },
+                { "id": "m-4", "name": "cam" },
+            ],
             "networks": [{ "id": "home", "name": "Home" }],
             "names": [
-                { "name": "par-laptop", "addresses": ["10.0.0.5"], "source": "member", "duplicate": true,
+                { "name": "par-laptop.lon", "addresses": ["10.0.0.5"], "source": "member", "duplicate": true,
                   "answerable": true, "duplicateNetworks": ["lab", "home"] },
-                { "name": "nas", "addresses": ["10.0.0.6"], "source": "member", "duplicate": true,
+                { "name": "nas.lon", "addresses": ["10.0.0.6"], "source": "member", "duplicate": true,
                   "answerable": true, "duplicateNetworks": ["home"] },
-                { "name": "tv", "addresses": ["10.0.0.7"], "source": "member", "duplicate": true,
-                  "answerable": true, "duplicateNetworks": [] },
+                { "name": "tv.lon", "addresses": ["10.0.0.7"], "source": "member", "duplicate": true,
+                  "answerable": true },
+                { "name": "cam.lon", "addresses": ["10.0.0.8"], "source": "member", "duplicate": true,
+                  "answerable": true, "duplicateNetworks": ["home"] },
             ],
         });
         let everyone = all_members(&status);
@@ -1491,6 +1522,26 @@ mod tests {
         let tv = member_row(&everyone[2], &[], "", None).unwrap();
         assert_eq!(tv["marks"], json!([]));
         assert!(tv.get("duplicateNetworks").is_none());
+        // The same host name in another region is another entry (`nas.par`), not `nas.lon`.
+        let other_region = member_row(&everyone[3], &[], "", None).unwrap();
+        assert_eq!(other_region["marks"], json!([]));
+        // Without a domain the member has no entry to match.
+        let no_domain = member_row(&everyone[4], &[], "", None).unwrap();
+        assert_eq!(no_domain["marks"], json!([]));
+    }
+
+    #[test]
+    fn without_a_known_suffix_the_entry_is_the_first_two_labels() {
+        let status = json!({
+            "members": [{ "id": "m-1", "name": "nas", "domain": "nas.lon.corp.internal" }],
+            "names": [{ "name": "nas.lon", "addresses": [], "source": "member", "duplicate": true,
+                        "answerable": true, "duplicateNetworks": ["lab"] }],
+        });
+        let everyone = all_members(&status);
+        assert_eq!(
+            member_row(&everyone[0], &[], "", None).unwrap()["duplicateNetworks"],
+            json!(["lab"])
+        );
     }
 
     #[test]

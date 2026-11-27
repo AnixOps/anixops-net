@@ -1048,7 +1048,7 @@ struct MeshMemberDetail: View {
                 }
                 if !networks.isEmpty {
                     let shown = networks.formatted(.list(type: .and))
-                    Text("与网络 \(shown) 中的同名设备重名，域名解析会返回全部地址。")
+                    Text("网络 \(shown) 也应答这个名字，域名解析会返回全部地址。")
                         .font(.subheadline)
                         .listRowBackground(brand.surface)
                 }

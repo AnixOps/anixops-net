@@ -73,16 +73,24 @@ final class MeshViewTests: XCTestCase {
 
     func testANameAnotherNetworkAnswersMarksTheMember() throws {
         let status: [String: Any] = [
-            "self": ["id": "m-self", "name": "Par-Laptop"],
-            "members": [["id": "m-1", "name": "nas", "state": "online"], ["id": "m-2", "name": "tv"]],
+            "network": ["id": "office", "dnsSuffix": "mesh.internal"],
+            "self": ["id": "m-self", "name": "Par-Laptop", "domain": "Par-Laptop.lon.mesh.internal"],
+            "members": [
+                ["id": "m-1", "name": "nas", "domain": "nas.lon.mesh.internal", "state": "online"],
+                ["id": "m-2", "name": "tv", "domain": "tv.lon.mesh.internal"],
+                ["id": "m-3", "name": "nas", "domain": "nas.par.mesh.internal"],
+                ["id": "m-4", "name": "cam"],
+            ],
             "networks": [["id": "home", "name": "Home"]],
             "names": [
-                ["name": "par-laptop", "addresses": ["10.0.0.5"], "source": "member", "duplicate": true,
+                ["name": "par-laptop.lon", "addresses": ["10.0.0.5"], "source": "member", "duplicate": true,
                  "answerable": true, "duplicateNetworks": ["lab", "home"]],
-                ["name": "nas", "addresses": ["10.0.0.6"], "source": "member", "duplicate": true,
+                ["name": "nas.lon", "addresses": ["10.0.0.6"], "source": "member", "duplicate": true,
                  "answerable": true, "duplicateNetworks": ["home"]],
-                ["name": "tv", "addresses": ["10.0.0.7"], "source": "member", "duplicate": true,
-                 "answerable": true, "duplicateNetworks": [String]()],
+                ["name": "tv.lon", "addresses": ["10.0.0.7"], "source": "member", "duplicate": true,
+                 "answerable": true],
+                ["name": "cam.lon", "addresses": ["10.0.0.8"], "source": "member", "duplicate": true,
+                 "answerable": true, "duplicateNetworks": ["home"]],
             ],
         ]
         let everyone = MeshView.allMembers(status)
@@ -95,6 +103,12 @@ final class MeshViewTests: XCTestCase {
         let tv = try XCTUnwrap(MeshView.memberRow(everyone[2], devices: [], query: "", address: nil))
         XCTAssertEqual(tv["marks"] as? [String], [])
         XCTAssertNil(tv["duplicateNetworks"])
+        // The same host name in another region is another entry (`nas.par`), not `nas.lon`.
+        XCTAssertEqual(MeshView.duplicateNetworks(status, everyone[3]), [])
+        // Without a domain the member has no entry to match.
+        XCTAssertEqual(MeshView.duplicateNetworks(status, everyone[4]), [])
+        // Without a known suffix the entry is the first two labels.
+        XCTAssertEqual(MeshView.nameKey([:] as [String: Any], ["domain": "nas.lon.corp.internal"]), "nas.lon")
     }
 
     func testWithoutNamesTheDuplicateMarkComesFromDuplicateOfOnly() throws {

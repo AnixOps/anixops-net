@@ -401,7 +401,7 @@ function MemberDetail({ view, row }: { view: MeshView; row: MeshMemberRow }) {
       {roleLabel(row.role) && <Row label={t("角色")} value={roleLabel(row.role)} />}
       {(row.duplicateInRegion || ((row.marks ?? []).includes("duplicate") && (row.duplicateNetworks ?? []).length === 0)) && <Row label={t("重名")} hint={t("本地区有同名成员。")} />}
       {(row.duplicateNetworks ?? []).length > 0 && (
-        <Row label={t("重名")} hint={t("与网络 {networks} 中的同名设备重名，域名解析会返回全部地址。", { networks: (row.duplicateNetworks ?? []).join(t("、")) })} />
+        <Row label={t("重名")} hint={t("网络 {networks} 也应答这个名字，域名解析会返回全部地址。", { networks: (row.duplicateNetworks ?? []).join(t("、")) })} />
       )}
       {(row.marks ?? []).includes("unmanaged") && <Row label={t("地址未受管")} hint={t("地址未受管：虚拟地址可能变化，内网域名可能随之失效。")} />}
     </Card>

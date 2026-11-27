@@ -852,7 +852,7 @@
     <string name="mesh_via">經 %1$s</string>
     <string name="mesh_self">本機</string>
     <string name="mesh_duplicate_detail">本地區有同名成員。</string>
-    <string name="mesh_duplicate_networks_detail">與網路 %1$s 中的同名裝置重名，網域名稱解析會傳回全部位址。</string>
+    <string name="mesh_duplicate_networks_detail">網路 %1$s 也應答這個名稱，網域名稱解析會傳回全部位址。</string>
     <string name="mesh_list_separator">、</string>
     <string name="mesh_unmanaged_detail">位址未受管：虛擬位址可能變更，內網網域名稱可能隨之失效。</string>
     <string name="mesh_subnet_refused">公用網段，未安裝路由</string>

@@ -23065,18 +23065,18 @@
         }
       }
     },
-    "与网络 %@ 中的同名设备重名，域名解析会返回全部地址。": {
+    "网络 %@ 也应答这个名字，域名解析会返回全部地址。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Shares its name with a device in network %@. Name lookups return all addresses."
+            "value": "Also answered by: %@. Name lookups return all addresses."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "與網路 %@ 中的同名裝置重名，網域名稱解析會傳回全部位址。"
+            "value": "網路 %@ 也應答這個名稱，網域名稱解析會傳回全部位址。"
           }
         }
       }
