@@ -323,10 +323,14 @@
   `networkcore_ios_runtime_init` 只返回 `CONFIG_REJECTED` 而不带消息，漏过客户端门的配置在 Apple 上显示为通用的「配置被拒绝」。
   只做校验的 `from_json`（保存 DNS、规则、数据列表、设备名、重定向，Windows 的「检查配置」）经 `mesh::check_envelope`，同样写入 `allow_mesh`。
   Windows 的本地代理模式与 client-core 的本地代理不带组网（`capabilities.mesh` 恒为 `false`）：运行的引擎是本地代理时，`mesh_*` 答
-  `unsupported`，入口随运行的引擎（`Backend::mesh_supported`）。
+  `unsupported`（`Backend::runtime_control` 的捷径，引擎自己也这样答）；`Backend::mesh_supported` 只在没有引擎运行时被问到，那时等于 `mesh::supported()`。
   `mesh-release-gate.sh` 断言各启动文件里这些调用都在预期的函数内（不计注释行），锁定两处写入点的取值（`set_allow_mesh(config, ENABLED)`、
-  Swift 的 `settingAllowMesh(MeshSupport.enabled)`），并检查非测试源码里没有任何形式把 `allow_mesh` 写成 `true`（含带参数的助手、`Value::Bool(true)`、
-  下标赋值与转义的 JSON 文本）；Rust 从第一个 `#[cfg(test)]` 起视为测试代码，所以生产代码里不得写函数级的 `#[cfg(test)]`。
+  Swift 的 `settingAllowMesh(MeshSupport.enabled)`），并在非测试源码里拦截把 `allow_mesh` 写成 `true` 的字面写法（同一行出现 `allow_mesh`、`allowMesh` 或 `AllowMesh` 与单词 `true`，含带参数的助手、
+  `Value::Bool(true)`、下标赋值与转义的 JSON 文本）。拦不住的是变量传值、`!false`、常量、宏、折行的 `insert`、改名的 serde 字段；所以脚本另外按整个仓库
+  统计各写入助手（`allow_mesh_text`、`prepared_start`、`check_envelope`、`withAllowMesh` 等）在非测试代码里的调用次数，要求与清单**恰好相等**，新增启动路径必须同时改脚本。
+  测试代码的边界以脚本为准：Rust 跳过每个 `#[cfg(test)]` 条目（`mod`、`use`、`fn`、`impl`），从该条目起到与它配对的右花括号（无花括号的到分号）为止，
+  花括号在字符串和注释之外计数，之后的生产代码照常扫描；`#![cfg(test)]` 的文件整个跳过。Swift、Kotlin、TypeScript 不按条目区分，只排除路径中含
+  `test`、`tests`、`Tests`、`androidTest` 的目录。行尾 `//` 注释在字符串字面量之外才剥离（只认单行的 `"..."`，TypeScript 另认 `'...'`；原始字符串与跨行字符串不处理）。
 - 组网是否可用由引擎回答，不由特性集版本推断：内核固定后 `networkcore_ios_feature_set_version` 为 7，且不随 `mesh` feature 变化。Apple 的
   `MeshSupport.available` 为 `enabled`（发布门）且引擎对 `{"cmd":"capabilities"}` 回答 `capabilities.mesh` 为 `true`；应用在启动时
   （`EngineCapabilities.install`）装上探测：在应用进程内以带发布门 `allow_mesh` 的最小配置建一个不启动的运行时，在后台线程问，成功的回答才缓存，失败（无应答或不是应答）不缓存，之后的读取隔 5 秒再问；不在主线程等引擎。

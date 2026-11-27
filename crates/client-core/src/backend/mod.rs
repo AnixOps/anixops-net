@@ -640,8 +640,9 @@ impl Backend {
     }
 
     /// Whether mesh networks run here now: this build's engine runs them ([`mesh::supported`]) and the engine that
-    /// runs, if one does, carries them (the local proxy does not: the 组网 entry follows the running engine, as
-    /// `capabilities.mesh` does).
+    /// runs, if one does, carries them (the local proxy does not, as `capabilities.mesh` says). Both callers
+    /// ([`Self::wants_mesh_only`], [`Self::mesh_control`]) ask only while no engine runs, where this is
+    /// `mesh::supported()`; the running-engine clause is a safeguard for a caller that asks otherwise.
     pub fn mesh_supported(&self) -> bool {
         mesh::supported() && (!self.engine.is_running() || self.engine.carries_mesh())
     }
@@ -2082,7 +2083,9 @@ impl Backend {
                 .and_then(serde_json::Value::as_str)
                 .is_some_and(|command| command.starts_with("mesh_"))
         {
-            // The local proxy carries no mesh: the same refusal the engine gives, without asking it.
+            // A running local proxy carries no mesh: answer `unsupported` here, the same code the engine itself gives,
+            // without asking it. A redundant guard (the engine answers the same), pinned by
+            // `a_running_local_proxy_answers_mesh_commands_unsupported`.
             return Ok(serde_json::json!({ "ok": false, "error": { "code": "unsupported" } }));
         }
         self.engine.control(request)
@@ -3070,6 +3073,37 @@ mod tests {
         backend.set_https_decryption(false).unwrap();
         assert!(!backend.envelope().unwrap().contains("\"mitm\""));
         assert!(backend.mitm_root().exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A running local proxy carries no mesh: `mesh_*` window requests get `unsupported` (the shortcut in
+    /// `runtime_control`), the mesh entry does not follow it, and other commands still reach the engine.
+    #[test]
+    fn a_running_local_proxy_answers_mesh_commands_unsupported() {
+        use serde_json::json;
+
+        let (mut backend, dir) = backend("proxy-mesh-unsupported");
+        backend.set_direct_egress(true).unwrap();
+        backend.state.listen_port = 0;
+        backend
+            .connect()
+            .expect("the engine starts on the node-less profile");
+        assert!(backend.engine.is_running());
+        assert!(!backend.engine.carries_mesh());
+        assert!(!backend.mesh_supported());
+        for command in ["mesh_status", "mesh_join", "mesh_leave"] {
+            let answer = backend.runtime_control(&json!({ "cmd": command })).unwrap();
+            assert_eq!(answer["ok"], false, "{command}: {answer}");
+            assert_eq!(
+                answer["error"]["code"], "unsupported",
+                "{command}: {answer}"
+            );
+        }
+        let status = backend
+            .runtime_control(&json!({ "cmd": "capture" }))
+            .unwrap();
+        assert!(status.get("enabled").is_some(), "{status}");
+        backend.engine.stop();
         let _ = std::fs::remove_dir_all(dir);
     }
 

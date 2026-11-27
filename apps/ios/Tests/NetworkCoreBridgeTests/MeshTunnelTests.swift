@@ -85,6 +85,10 @@ final class MeshTunnelTests: XCTestCase {
         MeshSupport.installCapabilitiesProbe { Data(#"{"capabilities":{"mesh":true}}"#.utf8) }
         defer { MeshSupport.installCapabilitiesProbe { nil } }
         XCTAssertEqual(MeshSupport.askEngine(), true)
+        // The release gate is closed in a normal build; only the `MESH_PREVIEW` test step opens it.
+        #if !MESH_PREVIEW
+        XCTAssertFalse(MeshSupport.enabled)
+        #endif
         XCTAssertEqual(MeshSupport.available, MeshSupport.enabled)
         XCTAssertTrue(MeshSupport.available(enabled: true))
         XCTAssertFalse(MeshSupport.available(enabled: false))

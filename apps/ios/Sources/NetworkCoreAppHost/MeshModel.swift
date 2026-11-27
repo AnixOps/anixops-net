@@ -64,6 +64,18 @@ final class MeshModel {
     private(set) var busy = false
     /// The networks saved on this device (`MeshNetworkLibrary`).
     private(set) var saved = MeshNetworkLibrary.load()
+    /// Counts the engine's answers to the capabilities probe (`MeshSupport.availabilityDidChange`): `shown` reads it, so
+    /// the entry is read again once the first answer arrives, which `MeshSupport.available` itself cannot announce.
+    private(set) var availabilityVersion = 0
+
+    init() {
+        // The block holds the model weakly; the observer itself lives as long as the process (a handful of models).
+        NotificationCenter.default.addObserver(
+            forName: MeshSupport.availabilityDidChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.availabilityVersion += 1 }
+        }
+    }
 
     /// The snapshot the entry and page show: the engine's while it runs; otherwise, with an engine that runs mesh
     /// networks, one made from the saved networks (the joined one, else the first), without members.
@@ -71,6 +83,7 @@ final class MeshModel {
         if let status {
             return status
         }
+        _ = availabilityVersion
         guard MeshSupport.available else {
             return nil
         }

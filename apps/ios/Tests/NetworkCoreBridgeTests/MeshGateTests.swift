@@ -3,6 +3,25 @@ import XCTest
 
 /// The release gate refuses a profile with a mesh outbound while it is closed: the engine has mesh compiled in and
 /// its only switch is `allow_mesh` (docs/architecture/mesh-client.md, 发布闸门).
+/// What a probe answers, set by the test thread and read by the probe's background thread.
+private final class ReplyBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var reply: Data?
+
+    var value: Data? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return reply
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            reply = newValue
+        }
+    }
+}
+
 final class MeshGateTests: XCTestCase {
     private func data(_ text: String) -> Data {
         Data(text.utf8)
@@ -148,27 +167,54 @@ final class MeshGateTests: XCTestCase {
     /// probe is not kept and the next ask answers; the answer kept stays. (The gate is a parameter here: a test cannot
     /// rebuild the app with the other condition.)
     func testAvailabilityIsTheGateAndTheEnginesAnswerForBothGateValues() {
-        var reply: Data? = nil
-        MeshSupport.installCapabilitiesProbe { reply }
+        let reply = ReplyBox()
+        MeshSupport.installCapabilitiesProbe { reply.value }
         defer { MeshSupport.installCapabilitiesProbe { nil } }
         XCTAssertFalse(MeshSupport.available(enabled: false))
         // A failed probe: no, and not kept.
         XCTAssertNil(MeshSupport.askEngine())
         XCTAssertFalse(MeshSupport.available(enabled: true))
         // The engine answers: yes with the gate open, no with it closed; kept.
-        reply = data(#"{"capabilities":{"mesh":true}}"#)
+        reply.value = data(#"{"capabilities":{"mesh":true}}"#)
         XCTAssertEqual(MeshSupport.askEngine(), true)
         XCTAssertTrue(MeshSupport.available(enabled: true))
         XCTAssertFalse(MeshSupport.available(enabled: false))
-        reply = nil
+        reply.value = nil
         XCTAssertTrue(MeshSupport.available(enabled: true), "a kept answer is not asked again")
         // An engine that says no stays no with either gate.
-        reply = data(#"{"capabilities":{"mesh":false}}"#)
-        MeshSupport.installCapabilitiesProbe { reply }
+        reply.value = data(#"{"capabilities":{"mesh":false}}"#)
+        MeshSupport.installCapabilitiesProbe { reply.value }
         XCTAssertEqual(MeshSupport.askEngine(), false)
         XCTAssertFalse(MeshSupport.available(enabled: true))
         XCTAssertFalse(MeshSupport.available(enabled: false))
         XCTAssertFalse(MeshSupport.available)
+    }
+
+    /// A probe asked before a newer install answers into nothing: its answer is handed back but not kept.
+    func testAStaleProbeAnswerDoesNotOverwriteANewerInstall() {
+        MeshSupport.installCapabilitiesProbe { nil }
+        defer { MeshSupport.installCapabilitiesProbe { nil } }
+        let stale = MeshSupport.probeGeneration
+        MeshSupport.installCapabilitiesProbe { nil }
+        XCTAssertNotEqual(MeshSupport.probeGeneration, stale)
+        let late = MeshSupport.askEngine(probe: { self.data(#"{"capabilities":{"mesh":true}}"#) }, generation: stale)
+        XCTAssertEqual(late, true, "the caller still gets the answer")
+        XCTAssertFalse(MeshSupport.available(enabled: true), "but the newer install does not cache it")
+    }
+
+    /// The first answer announces itself, so the entry can be read again; the same answer twice does not.
+    func testTheFirstAnswerPostsAvailabilityDidChange() {
+        let reply = ReplyBox()
+        MeshSupport.installCapabilitiesProbe { reply.value }
+        defer { MeshSupport.installCapabilitiesProbe { nil } }
+        reply.value = data(#"{"capabilities":{"mesh":true}}"#)
+        let posted = expectation(forNotification: MeshSupport.availabilityDidChange, object: nil)
+        XCTAssertEqual(MeshSupport.askEngine(), true)
+        wait(for: [posted], timeout: 1)
+        let again = expectation(forNotification: MeshSupport.availabilityDidChange, object: nil)
+        again.isInverted = true
+        XCTAssertEqual(MeshSupport.askEngine(), true)
+        wait(for: [again], timeout: 0.2)
     }
 
     // MARK: call sites

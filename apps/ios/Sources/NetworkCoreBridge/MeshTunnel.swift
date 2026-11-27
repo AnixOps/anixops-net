@@ -35,8 +35,22 @@ public enum MeshSupport {
     private static var probed: Bool?
     private static var probing = false
     private static var retryAfter = Date.distantPast
+    /// Counts the installs: a probe that was asked before the latest install answers into nothing (its answer is
+    /// returned to its caller, never kept), so a late answer cannot overwrite what a newer install has cached.
+    private static var generation = 0
     /// How long after a failed probe the next read asks again.
     static let retryDelay: TimeInterval = 5
+    /// Posted (on the thread that got the answer) when the engine's answer to the capabilities probe arrives or
+    /// changes, so what reads `available` can read it again: the first read answers no while the engine is asked in
+    /// the background.
+    public static let availabilityDidChange = Notification.Name("MeshSupport.availabilityDidChange")
+
+    /// The install the current probe belongs to (for tests of a stale answer).
+    static var probeGeneration: Int {
+        probeLock.lock()
+        defer { probeLock.unlock() }
+        return generation
+    }
 
     /// Installs how the app asks an engine for its capabilities: the answer to `capabilitiesRequest` from an engine
     /// built with the release gate's `allow_mesh` (the Bridge links no engine). Until then no engine runs mesh. With
@@ -44,6 +58,7 @@ public enum MeshSupport {
     public static func installCapabilitiesProbe(_ probe: @escaping () -> Data?) {
         probeLock.lock()
         self.probe = probe
+        generation += 1
         probed = nil
         probing = false
         retryAfter = .distantPast
@@ -63,9 +78,10 @@ public enum MeshSupport {
         if let probed {
             return probed
         }
-        if probe != nil, !probing, Date() >= retryAfter {
+        if let probe, !probing, Date() >= retryAfter {
             probing = true
-            DispatchQueue.global(qos: .utility).async { _ = askEngine() }
+            let generation = self.generation
+            DispatchQueue.global(qos: .utility).async { _ = askEngine(probe: probe, generation: generation) }
         }
         return false
     }
@@ -77,15 +93,32 @@ public enum MeshSupport {
     static func askEngine() -> Bool? {
         probeLock.lock()
         let probe = self.probe
+        let generation = self.generation
         probeLock.unlock()
+        return askEngine(probe: probe, generation: generation)
+    }
+
+    /// Asks `probe`, which was installed as `generation`; the answer is kept only while that is still the latest
+    /// install.
+    @discardableResult
+    static func askEngine(probe: (() -> Data?)?, generation: Int) -> Bool? {
         let answer = probe.flatMap { meshCapability(capabilitiesAnswer: $0()) }
         probeLock.lock()
-        defer { probeLock.unlock() }
+        guard generation == self.generation else {
+            probeLock.unlock()
+            return answer
+        }
         probing = false
+        var changed = false
         if let answer {
+            changed = probed != answer
             probed = answer
         } else {
             retryAfter = Date().addingTimeInterval(retryDelay)
+        }
+        probeLock.unlock()
+        if changed {
+            NotificationCenter.default.post(name: availabilityDidChange, object: nil)
         }
         return answer
     }
